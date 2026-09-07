@@ -46,7 +46,14 @@ less than the flag names suggest:
 | `-host <addr>` | yes | yes | yes | waits for `-players`, or for its first guest when unset | `migrate` |
 | `-serve <addr>` | yes | no | no | always its first guest | `host` |
 | `:host <addr>` | yes | yes | yes | none — the session opens at the tick it is running | `migrate` |
-| `-join <addr>` | no | yes | yes | waits for the host's start gate | adopted from the offer |
+| `-join <addr>` | in a migrate session, one of its own | yes | yes | waits for the host's start gate | adopted from the offer |
+
+The guest's port is what makes migration mean anything: it is dialled back once to
+confirm it, published to the other participants, and used only after a handoff.
+`-listen <addr>` pins it, the default is the host's own port falling back to an
+OS-assigned one, and `-no-advertise` — or a bind that fails, or an `-authority
+host` session — leaves the participant a leaf that plays normally and is never
+elected. See [Multiplayer](multi-player-enhancement.md) §5.3.
 
 Everything else about the session is now one implementation. `-players` is a
 ceiling on every one of them and unset means the whole roster; the mid-run gate is
@@ -244,9 +251,11 @@ It also outlives its own authority, and that is why `-serve` defaults to
 `-authority host`. A dedicated host *is* the session: its address is what the
 allocator handed out and what every guest holds, so if the process goes, the answer
 is an orchestrator putting another one at that address and the guests dialling back
-— not a guest none of the others can reach declaring itself the host. See
-[Multiplayer](multi-player-enhancement.md) §5.0 for what migration does and does
-not move.
+— not a guest declaring itself the host. That is a policy rather than a limit now:
+a migrate session's guests are dialable and its successor is one the session
+confirmed it could reach ([Multiplayer](multi-player-enhancement.md) §5.3), and
+`-serve` still pins authorship because the address it was allocated at is the
+session's identity.
 
 The arming happens after `scheduler.Start` rather than before it, because the gate
 waits for a capture one playout lead ahead of the current tick and a clock that has

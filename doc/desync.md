@@ -73,7 +73,7 @@ supersedes the staged recommendation in §8 below and the table that follows.
 | Inbound poll queue drops | Counter and warning | No |
 | Outbound send queue refuses | Counter and warning | No |
 | Epoch gap/delayed artifact | Consequence or lateness telemetry | No retransmit |
-| Peer exits | Disconnect and `NET:DOWN`; explicit current-branch status | Roster departure only |
+| Peer exits | Disconnect and `Net: down`; explicit current-branch status | Roster departure only |
 | Host disappears from guest | Explicit unrecoverable-host status | No host election |
 | Network partition | Loss on remaining edges | No authority or merge |
 
@@ -378,8 +378,8 @@ Attribute cause from the first unequal tick, not the boss visible later.
    mismatch, late artifact, or transport-loss counter.
 2. Move/type/fire both cursors concurrently through storm, then issue `:new` on
    the host; require the same reset and shared digest.
-3. Quit the host cleanly; require the guest host-loss message and
-   `NET:DOWN/LOCK` immediately, rather than by way of any parity report.
+3. Quit the host cleanly; require the guest host-loss message and `Net: down`
+   immediately, rather than by way of any parity report.
 4. Black-hole the connection without closing either process; require the same
    message after the configured silent timeout (30 seconds by default) and record
    the observed duration.

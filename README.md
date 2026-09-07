@@ -90,6 +90,12 @@ constrained xterm.js/WASM build and an experimental Windows cross-build.
   it can be combined with `-host` or `-join` for repeatable two-process runs.
 - `-host <bind-address>` hosts a session and `-players <n>` sets the lobby size;
   `-join <host:port>` joins it and adopts the host's seed/config/content identity.
+- `-authority host|migrate` decides where authorship goes when the participant
+  holding it leaves — default `host` with `-serve`, `migrate` otherwise. In a
+  migrate session every guest also binds a port so the session can reach it after a
+  handoff: `-listen <addr>` pins one, the default is the host's own port falling
+  back to an OS-assigned one, and `-no-advertise` keeps this participant out of the
+  address map, which leaves it playing normally and never elected.
 - `-serve <bind-address>` runs a dedicated host: no terminal, no renderer, no
   audio and no cursor of its own. It starts on its first guest and admits the rest
   as they arrive, where `-players <n>` is a ceiling rather than a requirement.

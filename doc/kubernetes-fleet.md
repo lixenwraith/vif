@@ -112,7 +112,14 @@ What already bounds a stranger:
   the coordinator;
 - the join identity check, which refuses a peer that is not running this session
   before it is given a roster slot;
-- the network policy: one game port reachable, everything else denied, no egress.
+- the network policy: one game port reachable, everything else denied, no egress;
+- `-authority host`, which is the fleet's default and what keeps that one port the
+  only one. A migrate session gives every participant a listening port and
+  publishes the addresses inside the session; a guest's peer link is refused unless
+  it names a participant the receiver's roster holds under a term not behind its
+  own, but that is the same structural check the rest of the protocol makes and the
+  same non-answer to a peer that can claim another's identity. A fleet session is
+  its address, so it has no reason to want the other shape.
 
 What does not, and is H1:
 

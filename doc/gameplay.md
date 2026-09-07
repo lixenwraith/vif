@@ -170,7 +170,12 @@ an ellipse around the cursor, not a rectangular grid range. It:
 - supplies the bounds shown in Visual mode;
 - consumes a percentage of current energy over time as passive drain.
 
-Because passive drain converges to zero, keeping a shield active is never free.
+Because passive drain converges to zero, keeping a shield active is never free. The
+drain interval starts when the shield does rather than inheriting whatever instant
+the component was carrying, and a stamp ahead of this instance's clock — which a
+cursor materialised from an authority further along carries — restarts the interval
+instead of starving it. `energy.passive_count` and `energy.passive_drained` are how
+to tell a drain that has stopped from one that is working and being outpaced.
 Collision behavior still varies by attacker through combat/species profiles.
 
 ## 6. Collectibles

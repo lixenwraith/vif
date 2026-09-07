@@ -409,13 +409,18 @@ Mismatches increment drift telemetry and name position, kinetics, combat, contex
 status, or combined surface. Guests are expected to differ provisionally, so a
 digest is diagnostic rather than a failure state.
 
-The player-visible distinction is:
+The player-visible distinction is one badge, chosen by severity so a worse fact
+hides a lesser one rather than sitting beside it:
 
-- `COR n`: the last correction changed n entities/cells;
-- `LAG n`: this instance is far enough behind that the receive lead is being
-  missed;
-- `LINK!`: no feasible cadence satisfies the keyframe floor;
-- `HOST LOST:LOCAL`: this instance is an explicit local fork.
+- `Net: n ~m`: the last correction changed m shared entities;
+- `Net: n lag t`: this instance is t ticks behind, far enough that the receive lead
+  is being missed;
+- `Net: n slow`: the cadence backed off and prediction is carrying more;
+- `Net: n slow!`: no feasible cadence satisfies the keyframe floor;
+- `Migrating [k]`: a handoff is in flight, k passes down the succession list so far;
+- `Host lost`: this instance is an explicit local fork.
+
+The measurements behind each are in the status snapshot and in `:session`.
 
 ### 4.4 Membership and session control
 
@@ -529,24 +534,36 @@ departing cursor, and reconnect must take a current world.
 |---|---|
 | Trust | Transport, participant claims and handoff records are unauthenticated and plaintext. Structural checks prevent races, not hostility. |
 | Guest replay | Suffix membership uses the capture's per-source fence, so a frame that missed the playout lead is replayed rather than discarded. Remote entries are a maximum rather than a contiguous prefix: on a relay a frame that overtakes a lower one can leave the lower one looking contained for one cadence. |
-| Playout | The three-tick receive lead is fixed and not graph-diameter aware. |
-| Topology | The protocol relays over a graph, but `-join` dials one address, so ordinary CLI sessions form a star. |
-| Partition | The roster's lowest survivor succeeds without a vote; losing it as well as the authority elects nobody and every survivor forks. Merging an explicit local fork does not work. An instance with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
+| Playout | The receive lead is chosen once at lobby close from the worst measured round trip and the topology's hop count, floored at the constant and capped at a second. A session that closes before a probe completes keeps the floor, and a session opened mid-run with `:host` has no lobby to choose at. |
+| Topology | The protocol relays over a graph. `-join` dials one address, and in a migrate session every participant but the designated successor then dials the successor from the published address map, so the shape is a star with a successor chain over it. |
+| Partition | The roster's lowest survivor **that the session confirmed it could reach** succeeds without a vote; losing it as well as the authority elects nobody and the survivors fork, because a chain gives nobody but the successor a link to anyone. Merging an explicit local fork does not work. An instance with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
 | Relay scheduling | A relayed participant inherits its neighbour's cadence and repair pricing. |
-| Operator API | Interactive mutation is session-aware; programmatic map/FSM mutation still relies on caller discipline. |
+| Operator API | Interactive and programmatic mutation are both session-aware, through one guard that reads the event's declared replication class. |
 | Tower ownership | Optional tower configurations still bind to slot zero rather than an explicit session-owned/cursor-owned rule. |
 | Progression | `kills.drain` is a session total, so quasar progression is session-wide rather than per cursor. |
 | Presentation | Small terminals clip the map; remote cursor presentation has no interpolation beyond receive scheduling. |
 | Portability | `float64` determinism is a same-build guarantee, not arbitrary cross-platform bit-exact lockstep. |
 
-Domain-boundary debt remains visible:
+Domain-boundary debt is now named rather than merely present. `internal/system`
+carries a `domain_exemptions.go` whose job is to hold every deliberate crossing of
+the boundary, with the condition it is exact under and a test for that condition;
+an exemption anywhere else is one nobody agreed to. What is on that list, and what
+came off it:
 
-- remove the remaining ambient-Shared exemptions for Local-class events;
-- route `event.EmitDeath` through the ordinary event boundary;
-- remove Shared-only entity casts from gateway/adaptation code;
-- split mixed combat telemetry so Shared results can be compared directly;
-- close the programmatic operator surface;
-- define tower and per-cursor progression ownership together.
+- the ambient-Shared pushes of Local-class events are **pinned** by
+  `TestAmbientLocalPushesArePinned` rather than fixed: each is a shared mechanic
+  raising a per-instance effect (D-6), fixing them is thirty gameplay judgements
+  rather than one refactor, and the pin is what makes each deliberate and every new
+  one a test failure;
+- the Shared-only entity narrowing in gateway route anchors is named
+  `system.routeAnchorID`, with `TestRouteAnchorsAreShared` pinning the condition;
+- `event.EmitDeath` is **gone**: the domain split is `World.EmitDeath` and the push
+  goes through the ordinary boundary, naming `OriginSystem` explicitly;
+- the programmatic operator surface is **closed**: `App.SetupLevel`, `App.Region`
+  and `App.Reset` share one guard that reads the event's declared class;
+- splitting mixed combat telemetry so Shared results compare directly is what
+  remains, and it is a telemetry redesign rather than a boundary fix;
+- tower and per-cursor progression ownership still have to be defined together.
 
 Authentication is the next security-shaped change. Per-source applied crossing
 fences are the next correction-ordering refinement if late-link guest rollback is

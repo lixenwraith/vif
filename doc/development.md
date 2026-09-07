@@ -222,12 +222,14 @@ from terminal 2 — the guest arrives holding the host's world at the tick it ha
 reached. `:session` on either side reports the role, address, identity, peers and
 tick.
 
-Both sides should show `NET:1P/LOCK`, two cursors, and the same shared actors and
+Both sides should show `Net: 1`, two cursors, and the same shared actors and
 score/progression after either participant moves, types and fires. Use terminals
 of different sizes and resize one mid-run: the shared map must not follow either
-terminal. Quit the joiner and continue on the host; its indicator becomes
-`NET:DOWN/LOCK` — a run that opened a session keeps its map latched — and only
-the remote cursor disappears. For a LAN, bind `:7777` and join the host's
+terminal. Quit the joiner and continue on the host; its badge becomes `Net: down`
+and only the remote cursor disappears. The map stays latched either way — a run
+that opened a session keeps its bounds — which `:session` names rather than the
+status bar, along with the peers, the tick and how many participants are confirmed
+reachable. For a LAN, bind `:7777` and join the host's
 reachable address. Public-internet routing uses the same socket code, but the
 current operator path is plaintext and unauthenticated, so it is for trusted
 peers only.

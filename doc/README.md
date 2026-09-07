@@ -37,7 +37,6 @@ reader can start with the application shape and then descend into a subsystem.
 | [Session fleet plan](kubernetes-fleet.md) | Operational detail | What is deployed, what is still open, and what was decided against? Holds the work list. |
 | [K3s and container deployment](kube_docker_deploy.md) | Operational detail | How is the Arch/bhyve guest, K3s, the image, and the ten-session fleet actually installed and operated? |
 | [Manual test scenarios](../test/README.md) | Operational detail | Which command runs which game setup, and which ones assert? |
-| [Gap closure brief](gap-closure-brief.md) | Working brief | What is left open in the multiplayer plan's §8, in what order to close it, and which items are blocked on a decision. Retired when they close. |
 
 Existing focused references remain useful:
 

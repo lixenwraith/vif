@@ -311,7 +311,7 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `network.drift_part` (string) | The surface the last disagreement was in: positions, kinetics, combat, context, status or snapshot. |
 | `network.drift_tick` (int) | The tick it was seen on. |
 | `network.lag_ticks` (int) | How far behind the newest tick any peer has been seen closing this instance stands, measured every tick. |
-| `network.stale` (bool) | Whether that lag exceeds the playout lead, past which this participant's own crossings reach the host after the ticks they name. Shown in the status bar as `LAG n`. |
+| `network.stale` (bool) | Whether that lag exceeds the playout lead, past which this participant's own crossings reach the host after the ticks they name. Shown in the status bar as `Net: n lag t`. |
 | `network.connected` (bool) | Whether at least one session peer is currently connected. |
 | `network.frames_dropped` (int) | Transport frames rejected by encoding, framing, ordering or identity checks. |
 | `network.map_latched` (bool) | Whether the host-authored D-14 map dimensions are latched. |
@@ -343,7 +343,7 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `snapshot.corrections_refused` (int) | Corrections that could not be resolved — a delta naming a keyframe this instance does not hold, or a body its header does not describe. Not an error: the next keyframe is self-sufficient. |
 | `snapshot.corrections_superseded` (int) | Corrections a fresher one overtook before they were applied, plus any the queue dropped. |
 | `snapshot.correction_entries` (int) | Component cells the last correction moved: how far this instance's prediction had drifted when the authority arrived. |
-| `snapshot.correction_entities` (int) | The distinct shared entities behind them. Shown in the status bar as `COR n`. |
+| `snapshot.correction_entities` (int) | The distinct shared entities behind them. Shown in the status bar as `Net: n ~m`. |
 | `snapshot.correction_cells` (int) | The largest distance a shared placement moved — the correction a player would actually see. |
 | `snapshot.correction_tick` (int) | The tick the last applied correction described. |
 | `snapshot.cadence_ticks` (int) | The correction cadence in force, in ticks. The publication timeline's base — the fastest peer's plan — rather than any one peer's, which `:session` and `CadenceReport` name individually. |
@@ -354,7 +354,7 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `snapshot.cadence_budget_bps` (int) | What the tightest link was measured to allow after the utilisation share. Zero means no link has been measured *while saturated*, which on a loopback or a fat link is the ordinary case. |
 | `snapshot.cadence_floor_bps` (int) | What the convergence floor costs on a world this size: the cheapest schedule that still delivers a whole world per floor window. A budget below it is the unrecoverable condition. |
 | `snapshot.cadence_constrained` (bool) | The link moved the operating point *worse* than nominal. This is the design working: prediction carries more, the magnitude rises and stays bounded. Shown in the status bar as `LNK`. |
-| `snapshot.cadence_floor_breached` (bool) | No schedule the controller may choose delivers a whole world inside the guaranteed window, or none arrived. This is not the design working, and it is the one condition adaptation may not hide. Shown as `LINK!`. |
+| `snapshot.cadence_floor_breached` (bool) | No schedule the controller may choose delivers a whole world inside the guaranteed window, or none arrived. This is not the design working, and it is the one condition adaptation may not hide. Shown as `Net: n slow!`. |
 | `snapshot.manifests_sent` (int) | Correction indexes this host published. |
 | `snapshot.manifests_received` (int) | Indexes this receiver was sent, including the ones an older one was superseded by before it could be answered. |
 | `snapshot.manifest_bytes_sent` (int) | What those indexes cost, per peer served. On a converged link this is the whole of a correction. |
