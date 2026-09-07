@@ -171,9 +171,9 @@ serve)
 serve-fleet)
 	need_bin
 	note "ends 90s after start if nobody joins, or 90s after the last guest leaves"
-	note "join it with: $BIN -join vif://$HOST:$PORT/${NAME:-7f3c1a}"
+	note "join it with: $BIN -join $HOST:$PORT"
 	exec "$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" \
-		-d -size 120x40 -log-stdout -lv info -name "${NAME:-7f3c1a}" \
+		-d -size 120x40 -log-stdout -lv info -authority host \
 		-players "${PLAYERS:-4}" -first-join 90s -empty 90s -drain 20s
 	;;
 

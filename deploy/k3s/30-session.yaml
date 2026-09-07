@@ -91,12 +91,16 @@ spec:
             - ":7777"
             - "-probe"
             - ":7778"
-            # The name this session answers to. A player's link carries it, a front
-            # door routes on it, and this session refuses a dial that named another
-            # — which is what keeps a stale link out of the match that reused its
-            # port. See doc/kube_docker_deploy.md §8.
-            - "-name"
-            - "${SESSION_ID}"
+            # No -name: a session is reached by its own port, so a player's link
+            # names nothing and a pod that demanded a name would refuse every dial.
+            # It belongs to the front-door alternative alone; see §11.
+            #
+            # Stated rather than inherited from the -serve default: losing this pod
+            # ends the match, because no guest can be dialled and none of the others
+            # knows where it is. An orchestrator replaces the pod at the same
+            # address and the guests reconnect there.
+            - "-authority"
+            - "host"
             # A file rather than stdout: the sidecar tails the directory and puts
             # the same lines on its own stdout, so `kubectl logs -c logwisp` still
             # works and a live stream exists for readers that are not on the node.
@@ -244,13 +248,9 @@ spec:
   type: NodePort
   selector:
     vif.lixenwraith.dev/session: "${SESSION_ID}"
-  # Long-lived TCP sessions want the same backend for the life of the connection.
-  # With one pod behind the Service this changes nothing today; it is correct if a
-  # session ever gains a second endpoint.
-  sessionAffinity: ClientIP
-  # Traffic that arrives on a node that is not running this session is dropped
-  # rather than forwarded, which preserves the client source address and keeps a
-  # multi-node cluster from hiding a misdirected connection as a working one.
+  # No SNAT on the way in, so the pod sees the player's address rather than the
+  # node's. That is what the per-address admission limiter is keyed on, and with
+  # one pod behind this Service it is the whole of what the setting buys.
   externalTrafficPolicy: Local
   ports:
     - name: game

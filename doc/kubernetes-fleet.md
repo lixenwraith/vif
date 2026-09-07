@@ -20,7 +20,7 @@ are in [`deploy/`](../deploy/README.md); the scenarios that verify it by hand ar
 | Trigger | The website's allocator, on a player's request. Nothing runs when nobody is playing. |
 | Image | `scratch` + one static binary, ~13 MB, non-root, read-only root filesystem, no shell. |
 | Transport | Raw framed TCP, one long-lived connection per player. Unauthenticated by decision (§4). |
-| Session name | A player's link is `vif://host:port/name`. The name routes and the session refuses a dial that named another, so a stale link cannot enter the match that inherited its port. |
+| Reached by | Its own port, from a forwarded ten-port range. The port is the whole of the routing: nothing in a plaintext game connection names a session, so a firewall's destination port is the only signal there is. |
 | Logs and metrics | JSON lines to a shared volume; a LogWisp sidecar puts them on stdout and serves them as Server-Sent Events. |
 
 ```mermaid
@@ -29,7 +29,7 @@ flowchart LR
     Site --> Alloc["Allocator"]
     Alloc -->|"create Job + Service"| API["K3s API"]
     API --> Pod["vif -serve"]
-    Site -->|"vif://host:port/name"| Player
+    Site -->|"host:port"| Player
     Player -->|"vif -join, TCP"| NP["NodePort"] --> Pod
     Pod --> Logs["log volume"] --> Wisp["logwisp sidecar"]
 ```
@@ -43,7 +43,7 @@ flowchart LR
 | Capacity | `-players` is a ceiling on guests. At capacity the health body reports `ready=false`; the process stays healthy. |
 | Allocated lifetime | `-first-join`, `-empty` and `-drain` are enforced by `internal/lifecycle` over roster observations, and published on `/health`. |
 | Join identity | The coordinator refuses a peer whose protocol, simulation fingerprint, capture schema, journal schema, tick interval, seed, config or corpus differs from the offer it made. |
-| Session name | `-name` makes one address able to serve several sessions. The dialer sends it before the handshake, so a front door can route on it; the session refuses a name that is not its own. It is a routing key, not a credential. |
+| Session name | Optional. `-name` makes one address able to serve several sessions: the dialer sends it before the handshake, so a front door can route on it, and the session refuses a name that is not its own. A routing key, not a credential. Built and tested; the deployed manifest does not set one (H8). |
 | Crossing ordering | Ordinary crossings are judged by the capture's per-source sequence fence, not by their apply tick, so a link that misses the playout lead costs freshness rather than the player's action (§5). |
 | Shutdown | `SIGTERM` drains: readiness false, dials refused with `ErrSessionEnding`, exit when the roster empties or `-drain` elapses. |
 | Health | One `/health` path. Its code is liveness; the body carries `ready`, `phase`, `expires_in`, roster and tick. |
@@ -71,13 +71,14 @@ it does not move an in-memory session into an unrelated pod.
 | Reconnect on every host shape | The mid-run gate is installed on every host and armed once its clock runs, so a dropped guest dials back into the slot its departure released whatever opened the session. A departure clears the identity's crossing fence, so the next holder of that identity is not read as already-applied. |
 | Roster ceiling | `-players` is a ceiling and only a ceiling, unset meaning the whole roster. A pod no longer serves the number somebody guessed at start-up. |
 | Empty-session cost | A roster that empties parks the clock at once and restarts the run after `parameter.SessionVacantReset`. An empty session used to spin the gold cycle at 10 Hz forever. `/health` reports `clock=paused` with `phase=vacant` and stays `live=true`. |
-| Named sessions | `-name` on a host, `vif://host:port/name` in a player's link. One frame before the handshake, so a front door can put ten sessions behind one public port ([`deploy/frontdoor`](../deploy/frontdoor/haproxy.cfg)) and a stale link is refused rather than misrouted. |
+| Named sessions | `-name` on a host, `vif://host:port/name` in a player's link. One frame before the handshake, so a front door can put ten sessions behind one public port ([`deploy/frontdoor`](../deploy/frontdoor/haproxy.cfg)) and a stale link is refused rather than misrouted. Held in reserve for H8: the deployment reaches a session by port. |
 | Authority policy | `-authority host|migrate`, defaulting to `host` on `-serve`. A dedicated host's address *is* the session, so losing the pod is an orchestrator's job to fix rather than a guest's to inherit. See [Multiplayer](multi-player-enhancement.md) §5.0. |
 
 ### Open
 
 | ID | Priority | Item | Done when |
 |---|---|---|---|
+| H8 | later | **Revisit how a player reaches a session.** The port range is what the proof of concept runs: no component, the source address preserved, ten firewall entries. `-name` and [`deploy/frontdoor`](../deploy/frontdoor/haproxy.cfg) are the worked single-port alternative and cost the source address the admission limiter is keyed on. Neither gives a link a name without something reading the wire. | A third option is found or the two known ones are chosen between on measurement rather than on preference. TLS with SNI routing is the one Kubernetes answers natively and needs transport security this deployment has decided against. |
 | H1 | **next** | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do to a session has to be bounded. Two known holes: the startup ready gate has no timeout, and an abandoned startup gate ends the session — so a peer that reaches a fresh session first can hang it or end it. | A peer that connects and never confirms is dropped on a deadline; an abandoned lobby returns to waiting instead of ending the session; fuzz coverage for malformed, oversized, replayed and half-open handshakes passes. |
 | H2 | next | **Run the lab.** Install the pinned K3s, import the image, apply the boundary objects, create one session by hand. | [Deployment §3-§9](kube_docker_deploy.md) is executed and its versions recorded. |
 | H3 | after H2 | **Measure a full roster.** Four guests through a tower and a storm, and on `config/td`, for an hour. | Requests and limits in `deploy/k3s/30-session.yaml` come from the measurement rather than from single-guest history. Not a blocker: the current values are a starting point, not a claim. |

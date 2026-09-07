@@ -136,7 +136,7 @@ start/ready gate. Two flags activate the shared composition path:
 |---|---|
 | `-host <bind-address>` | Build the host App, start a listener, show or log the lobby, and hold the scheduler at tick zero until the requested peers are ready. |
 | `-join <host:port>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. Also accepts `[vif://]host:port/name`, which is the link shape a deployment hands a player. |
-| `-name <name>` | With `-host` or `-serve`, the name this session answers to, so one address can serve several. |
+| `-name <name>` | With `-host` or `-serve`, the name this session answers to, so one address can serve several. A host that sets one refuses a dial that names nothing, so it is taken with a front door that routes on the name or not at all. |
 | `:host <addr>` | Open a run that is **already playing**. The port is created, started and attached; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick. |
 | `:session` | Report the role, address, participant identity, peer count and tick. |
 

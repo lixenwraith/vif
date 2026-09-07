@@ -8,7 +8,7 @@ Command reference for verifying behaviour on a dev machine. Build first: `make d
 ```
 
 Overrides: `BIN` (default `./bin/vif`), `HOST`, `PORT`, `PROBE_PORT`, `PLAYERS`,
-`AUTHORITY`, `NAME`, `IMAGE`.
+`AUTHORITY`, `IMAGE`.
 
 ## Interactive
 
@@ -20,7 +20,7 @@ Each runs in the foreground until you stop it.
 | `host [players]` | `vif -d -host $HOST:$PORT`, with `-players` only when the argument is given |
 | `join [addr]` | `vif -join addr` |
 | `serve [players]` | dedicated host, **no lifetime bounds — runs until Ctrl-C** |
-| `serve-fleet` | dedicated host with the deployed `-name`, `-first-join 90s -empty 90s -drain 20s`; join it at `vif://host:port/name` |
+| `serve-fleet` | dedicated host with the deployed flag set: `-authority host -first-join 90s -empty 90s -drain 20s` |
 | `pair` | scripted host + scripted guest, both headless |
 | `watch` | scripted host presented on this terminal; join it by hand |
 
