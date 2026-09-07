@@ -448,10 +448,9 @@ exactly one producer and that producer is what went, so a participant two links 
 learns of the loss here or not at all. The successor's first act under the new term
 is to cross that departure itself.
 
-There is no vote. The successor is the lowest surviving identity in the closed
-roster, which every survivor computes from the roster it already holds, so at most
-one instance can conclude that it is the successor and at most one can claim the
-term — the property a quorum was there for, obtained without a round trip. A quorum
+There is no vote. The successor is the first survivor in the succession chain,
+which every survivor computes from state it already holds, so at most one instance
+can conclude that it is the successor and at most one can claim the term — the property a quorum was there for, obtained without a round trip. A quorum
 cannot supply it here anyway: a star's survivors are mutually unreachable the moment
 its centre goes, so none of them can ever collect a vote. The successor's one
 self-check is retention, because an instance with nothing retained has no baseline
@@ -592,12 +591,11 @@ this instance is a local continuation rather than part of a session, and
 `network.rejoin_attempts` beside it while a survivor with no link is walking the
 succession list. `Host lost` remains for the case where no succession is possible,
 and `:session` prints the term, the authority, the handoff count, the fork state,
-how many participants are confirmed reachable and whether this one is listening.
+how many succession candidates the chain holds and whether this one is listening.
 
 Reachability has a surface of its own: `network.listening` says this instance bound
-a port for the session to dial back, `network.reachable` how many participants the
-session has confirmed, and `network.barrier_delay_ticks` what the playout lead was
-chosen to be. See [Multiplayer](multi-player-enhancement.md) §5.3.
+a port for the session to dial back, `network.chain` how many candidates it holds,
+and `network.barrier_delay_ticks` what the playout lead was chosen to be. See [Multiplayer](multi-player-enhancement.md) §5.3.
 
 The relay's own surface is `snapshot.relay`: how many authoritative records this
 instance is holding for a neighbour to ask about, how many repairs it answered from

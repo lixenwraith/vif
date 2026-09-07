@@ -2,24 +2,10 @@ package status
 
 import "sync/atomic"
 
-// Per-slot metrics and the bare key that mirrors one of them.
-//
-// The bare key — energy.current, heat.current, shield.active — is what a config,
-// a status bar or an operator means by "the player". With one cursor per instance
-// that was slot zero and the two were the same thing. With a roster they are not:
-// slot zero is the coordinator's cursor, so on every guest the bare key named a
-// cursor that instance does not author and never publishes, and it sat still for
-// the whole session while the value it was supposed to describe moved.
-//
-// So the mirror follows the roster's local binding instead, which is the reading
-// that makes the bare key mean the same thing it always meant. Two consequences
-// are deliberate:
-//
-//   - The bare key is instance-local by construction. It is a presentation and
-//     operator value and must never be a shared FSM guard input (D-20); a guard
-//     that has to name a cursor names its slot.
-//   - A participant that drives no cursor — a dedicated host — mirrors nothing,
-//     and the bare key stays at its reset value rather than borrowing a guest's.
+// Per-slot metrics, plus a bare key mirroring the slot this instance drives. Slot
+// zero is the coordinator's cursor, so a slot-zero mirror named a cursor no guest
+// authors and never published. The bare key is therefore instance-local and must
+// never be a shared FSM guard input (D-20); a guard names its slot.
 
 // PlayerInt binds one per-slot int metric and the bare key the local slot mirrors.
 type PlayerInt struct {

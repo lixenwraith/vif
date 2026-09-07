@@ -150,12 +150,12 @@ func (t *Transport) listen(addr string, accept func(net.Conn) (PeerID, error)) e
 // DialPeer opens one outbound link to a participant that is already in this
 // session, completing handshake and admitting the stream under the identity it
 // answered with. It is the mesh half of reach.go: the coordinator is dialled by
-// its guests, and a guest is dialled by whoever the address map says to.
-func (t *Transport) DialPeer(addr string, local PeerID, term AuthorityTerm) error {
+// its guests, and a guest is dialled by whoever the chain says to.
+func (t *Transport) DialPeer(addr string, local PeerID) error {
 	if !t.running.Load() {
 		return errors.New("transport: not running")
 	}
-	conn, id, err := DialPeerLink(addr, t.config, local, term, false)
+	conn, id, err := DialPeerLink(addr, t.config, local)
 	if err != nil {
 		return err
 	}
@@ -247,12 +247,7 @@ func (t *Transport) handshake(conn net.Conn, accept func(net.Conn) (PeerID, erro
 	<-t.handshakes
 	if err != nil {
 		_ = conn.Close()
-		// A bind confirmation is a completed round trip rather than a failure: the
-		// dialer asked whether this address answers, it does, and the stream has
-		// done its whole job by ending here.
-		if !errors.Is(err, errPeerProbe) {
-			t.report(err)
-		}
+		t.report(err)
 		return
 	}
 	// AddConnectionAs closes the connection on every failure of its own.

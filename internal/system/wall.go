@@ -544,10 +544,10 @@ func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 	count := len(flashTargets) + len(fadeoutTargets) + len(silentTargets)
 
 	if len(flashTargets) > 0 {
-		s.world.EmitDeath(event.EventFlashSpawnOneRequest, flashTargets...)
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, flashTargets...)
 	}
 	if len(fadeoutTargets) > 0 {
-		s.world.EmitDeath(event.EventFadeoutSpawnOne, fadeoutTargets...)
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFadeoutSpawnOne, fadeoutTargets...)
 	}
 	if len(silentTargets) > 0 {
 		s.world.DestroyEntitiesBatch(silentTargets)
@@ -582,10 +582,10 @@ func (s *WallSystem) despawnAllWalls() {
 	count := len(flashTargets) + len(fadeoutTargets) + len(silentTargets)
 
 	if len(flashTargets) > 0 {
-		s.world.EmitDeath(event.EventFlashSpawnOneRequest, flashTargets...)
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, flashTargets...)
 	}
 	if len(fadeoutTargets) > 0 {
-		s.world.EmitDeath(event.EventFadeoutSpawnOne, fadeoutTargets...)
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFadeoutSpawnOne, fadeoutTargets...)
 	}
 	if len(silentTargets) > 0 {
 		s.world.DestroyEntitiesBatch(silentTargets)
@@ -742,7 +742,7 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int) int64 {
 		// Destroy non-cursor-owned combat entities that cannot escape
 		if combat, ok := s.world.Components.Combat.GetComponent(entity); ok {
 			if !s.world.Components.Cursor.HasEntity(combat.OwnerEntity) {
-				s.world.EmitDeath(0, entity)
+				event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
 			}
 		}
 	}

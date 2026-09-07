@@ -286,7 +286,6 @@ func (a *App) initWorld() {
 		r.OnCorrection = a.receiveCorrection
 		r.OnSelective = a.receiveSelective
 		r.OnAuthority = a.receiveAuthorityFrame
-		r.OnReachable = a.adoptReachable
 		r.OnPeerLost = a.reportPeerLost
 		// A session endpoint exists, so this run is shared for its whole life whether
 		// or not a peer is attached at a given tick. Latching here rather than

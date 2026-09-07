@@ -371,12 +371,12 @@ from weakening recovery.
 
 Losing the authority is answered by the session's `-authority` policy. With
 `migrate` the roster's lowest surviving identity — the first guest admitted —
-takes the next term, computed from the roster alone so no vote is needed and no
-two instances can claim it. With `host`, which is the default for `-serve`, the
-term never moves and every survivor continues alone. Either way a successor
-authors but does not bind a port and no artifact carries an address, so migration
-moves authorship rather than reachability; see
-[Multiplayer](multi-player-enhancement.md) §5.0 for what that costs in a star.
+takes the next term, computed from the succession chain so no vote is needed and
+no two instances can claim it. With `host`, which is the default for `-serve`, the
+term never moves and every survivor continues alone. In a migrate session every
+participant binds a port of its own and the chain carries the addresses, so
+migration moves the session and not only its authorship; see
+[Multiplayer](multi-player-enhancement.md) §5.3.
 
 Remaining limitations include unauthenticated plaintext links, an exact
 applied-sequence fence only for authority-authored crossings, a fixed three-tick

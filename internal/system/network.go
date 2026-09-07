@@ -481,7 +481,6 @@ func (s *NetworkSystem) EventTypes() []event.EventType {
 		event.EventGameResetRequest,
 		event.EventParticipantJoined,
 		event.EventParticipantDeparted,
-		event.EventParticipantReachable,
 	}
 }
 
@@ -501,22 +500,6 @@ func (s *NetworkSystem) HandleEvent(ev event.GameEvent) {
 		if p, ok := ev.Payload.(*event.ParticipantDepartedPayload); ok {
 			s.removeParticipant(p)
 		}
-	case event.EventParticipantReachable:
-		if p, ok := ev.Payload.(*event.ParticipantReachablePayload); ok {
-			s.markReachable(p)
-		}
-	}
-}
-
-// markReachable applies the confirmation crossing. It touches no world state: what
-// it records is a succession input, and it is here rather than in the session layer
-// only because this is where an artifact with an agreed apply tick lands.
-func (s *NetworkSystem) markReachable(p *event.ParticipantReachablePayload) {
-	if p.Participant == 0 {
-		return
-	}
-	if r := s.world.Resources.Network; r != nil && r.OnReachable != nil {
-		r.OnReachable(p.Participant)
 	}
 }
 
@@ -772,8 +755,7 @@ func (s *NetworkSystem) AppliedCrossingFences() network.CrossingFences {
 // participant's action.
 func barrierBound(et event.EventType) bool {
 	switch et {
-	case event.EventParticipantJoined, event.EventParticipantDeparted,
-		event.EventParticipantReachable, event.EventGameResetRequest:
+	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameResetRequest:
 		return true
 	default:
 		return false
@@ -2007,8 +1989,7 @@ func (s *NetworkSystem) applyDue(nextTick uint64) int {
 // until authentication is implemented.
 func (s *NetworkSystem) admissibleFromSource(et event.EventType, source uint32) bool {
 	switch et {
-	case event.EventParticipantJoined, event.EventParticipantDeparted,
-		event.EventParticipantReachable:
+	case event.EventParticipantJoined, event.EventParticipantDeparted:
 		return source == s.authorityParticipant()
 	default:
 		return true

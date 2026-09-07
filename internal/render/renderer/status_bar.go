@@ -455,25 +455,9 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 }
 
-// networkItem is the session, in one cell.
-//
-// It used to be four, and between them they could hold fifty characters of
-// uppercase — MIGRATING, HOST LOST:LOCAL, LNK 120±14ms 8x7 32K, LAG 7, COR 12,
-// NET:2P/LOCK — on a bar that also has to carry a mode, a command line, an FSM
-// phase and the player's own resources. A session in any state at all took the
-// whole right half and everything else was dropped from the end.
-//
-// Two of those were saying nothing. The D-14 latch is on for every session and
-// off for every solo run, so NET:.../LOCK printed a constant beside a state that
-// already implied it; NET:DOWN/LOCK read as two facts and was one. And the link
-// numbers are a diagnostic panel rather than a glance: round trip, jitter,
-// cadence, keyframe interval and byte rate are all in the status snapshot, under
-// network.link and snapshot.cadence, where they can be read against each other.
-//
-// So what is left is one badge, chosen by severity, and the rule is that a worse
-// fact hides a lesser one rather than sitting beside it. That also fixes the
-// reading a player could get before: a correction count outliving the link it
-// came from, still on screen next to DOWN, describing a host that had gone.
+// networkItem is the session in one badge, chosen by severity so a worse fact
+// hides a lesser one. The measurements behind it are in :session and the status
+// snapshot; five numbers beside a badge is a diagnostic panel, not a glance.
 func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 	// Losing the authority is a permanent change for this run and outranks
 	// everything, including the link state that described the host that went.
@@ -483,10 +467,7 @@ func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 	// Transient by construction: the badge is cleared a fixed number of ticks after
 	// the handoff is adopted, so the two states a player reads are either side of it.
 	if r.statMigrating.Load() {
-		// The count is the reconnect walking the succession list: a survivor with
-		// no link to whoever is taking over tries every candidate once a second,
-		// and a player watching a handoff should be able to tell "trying" from
-		// "stalled" without reading a log.
+		// The count is the reconnect walking the candidate list.
 		text := " Migrating "
 		if n := r.statRejoin.Load(); n > 0 {
 			text = fmt.Sprintf(" Migrating %d ", n)
@@ -505,20 +486,10 @@ func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 		return statusItem{text: " Net: wait ", fg: visual.RgbBlack, bg: visual.RgbGtBg}, true
 	}
 
-	// Connected, so the badge describes the picture rather than the link's
-	// existence. Severity order, and each of these has a fuller reading in the
-	// status snapshot:
-	//
-	//   slow!  no cadence the controller may choose delivers a whole authoritative
-	//          world inside the guaranteed window — the system cannot keep its
-	//          promise, rather than degrading gracefully.
-	//   lag n  this instance is n ticks behind the newest peer, far enough that its
-	//          own crossings reach the host after the ticks they name.
-	//   slow   the cadence backed off and prediction is carrying more. The system
-	//          working, on a small link.
-	//   ~n     the last correction moved n shared entities: how visibly the
-	//          authority disagreed with the prediction. Absent when it was exact,
-	//          which at rest it usually is.
+	// slow! no cadence delivers a whole world inside the guaranteed window;
+	// lag n  this instance is n ticks behind, so its crossings land late;
+	// slow   the cadence backed off and prediction carries more;
+	// ~n     the last correction moved n shared entities.
 	peers := r.statPeers.Load()
 	switch {
 	case r.statFloor.Load() && r.statCadence.Load() != 0:

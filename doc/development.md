@@ -228,9 +228,8 @@ of different sizes and resize one mid-run: the shared map must not follow either
 terminal. Quit the joiner and continue on the host; its badge becomes `Net: down`
 and only the remote cursor disappears. The map stays latched either way — a run
 that opened a session keeps its bounds — which `:session` names rather than the
-status bar, along with the peers, the tick and how many participants are confirmed
-reachable. For a LAN, bind `:7777` and join the host's
-reachable address. Public-internet routing uses the same socket code, but the
+status bar, along with the peers, the tick and how many succession candidates the
+chain holds. For a LAN, bind `:7777` and join the host's reachable address. Public-internet routing uses the same socket code, but the
 current operator path is plaintext and unauthenticated, so it is for trusted
 peers only.
 

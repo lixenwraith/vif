@@ -107,10 +107,10 @@ func (p *SocketPort) ListenAddr() string {
 	return ""
 }
 
-// DialPeer opens a link to a participant already in this session, from the address
-// map rather than from an operator's -join.
-func (p *SocketPort) DialPeer(addr string, term AuthorityTerm) error {
-	return p.transport.DialPeer(addr, p.config.ParticipantID, term)
+// DialPeer opens a link to a participant already in this session, from the
+// succession chain rather than from an operator's -join.
+func (p *SocketPort) DialPeer(addr string) error {
+	return p.transport.DialPeer(addr, p.config.ParticipantID)
 }
 
 // BarrierDelayTicks returns the playout lead negotiated by the handshake.

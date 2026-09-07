@@ -29,7 +29,7 @@ import (
 // while the world is this instance's alone, and that condition has to reproduce:
 // a replay or a catch-up holds no transport, so deriving it from one made the
 // reproduction crop where the run it reproduces did not.
-const JournalSchema = 12
+const JournalSchema = 11
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.

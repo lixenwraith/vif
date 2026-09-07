@@ -5,9 +5,20 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
+
+// eachRosterSlot hands fn every roster slot and the cursor in it, zero for empty.
+// D-2 stops a system writing a cursor it does not simulate; reporting one is not
+// writing, and a peer's values are as much a fact about this world as the local
+// ones. Empty slots are reported so a departure clears the previous holder.
+func eachRosterSlot(w *engine.World, fn func(slot uint8, cursor core.Entity)) {
+	for i := range parameter.MaxPlayers {
+		fn(uint8(i), w.Resources.Player.Slot(uint8(i)))
+	}
+}
 
 // bufferTelemetry tracks the largest live length reached by reusable buffers.
 // Names are stable field names so capacity changes can be compared across runs.

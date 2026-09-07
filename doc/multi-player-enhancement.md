@@ -49,8 +49,8 @@ roster slot, or encode host/guest roles in entity domains.
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
 | Playout lead | Chosen once, when the coordinator closes its roster, from the worst measured round trip: one way plus a reordering allowance, multiplied by the topology's hop count, floored at `NetworkBarrierDelayTicks` and capped at `NetworkBarrierMaxDelayTicks`. A session that closes before a probe completes keeps the floor. |
 | Mesh and relay | Epochs, owner state, corrections, and authority records flood with per-source duplicate suppression. A relay with retained authority content keeps selective repair available to participants behind it. |
-| Reachability | In a migrate session a guest binds a port of its own, the coordinator confirms it with one dial, and the confirmed address is published on `MsgPeerList` a hold later. Every participant but the designated successor holds a link to it. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is never elected (§5.3). |
-| Host loss | `-authority migrate` (default off `-serve`): the lowest surviving identity in the closed roster **that the session confirmed it could reach** takes the next term, with no vote, because every survivor computes it from state it already holds identically. `-authority host` (default on `-serve`): nobody takes it and every survivor continues alone. |
+| Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is never elected (§5.3). |
+| Host loss | `-authority migrate` (default off `-serve`): **the first survivor in the succession chain** takes the next term, with no vote, because every survivor computes it from state it already holds identically. `-authority host` (default on `-serve`): nobody takes it and every survivor continues alone. |
 | Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, seed, configuration and corpus, and a peer that does not match the offer is refused before it takes a roster slot. |
 | Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial with `ErrSessionEnding`, distinct from the retryable `ErrSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
@@ -211,7 +211,7 @@ answers:
 |---|---|
 | Who binds a port? | The coordinator always: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`. In a **migrate** session every other participant binds one too — `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one. `-no-advertise`, a bind that fails, and every `-authority host` session leave a participant with no port of its own. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
-| How is a participant reached? | The coordinator is reached by `-join <address>`, typed by the operator; there is still no discovery and no rendezvous. Everyone else is reached through the address map: the coordinator dials each declared address once, publishes the confirmed ones on `MsgPeerList`, and carries them in the offer and the handoff record beside the roster. |
+| How is a participant reached? | The coordinator is reached by `-join <address>`, typed by the operator; there is still no discovery and no rendezvous. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
 
 The three used to disagree, and the whole of `-authority migrate` was the cost.
 Nothing but the coordinator listened and no artifact in the protocol carried an
@@ -234,15 +234,13 @@ live on the machine that started it.
 
 ### 5.1 Succession
 
-If the authority disappears, the successor is **the lowest surviving identity in
-the closed roster that the session confirmed it could reach**: the first guest the
-coordinator admitted and dialled back, because identities are handed out
-lowest-free-first in arrival order. It is a pure function of the roster, the
-confirmed set and the participant that went, all three of which every survivor
-already holds identically, so every survivor names the same successor without
-exchanging anything. A session where nothing was ever confirmed — every
-participant a leaf, or a build that predates the map — falls back to the roster
-alone, which is the rule as it stood.
+If the authority disappears, the successor is **the first survivor in the
+succession chain**, falling back to the roster's lowest surviving identity when the
+chain names nobody still present. It is a pure function of the chain, the roster and
+the participant that went, all three of which every survivor already holds, so every
+survivor names the same successor without exchanging anything. The chain is
+append-only, so a survivor holding a prefix of it elects the same participant as one
+holding the whole — which is why it needs no agreement step.
 
 A *local* dial result is never an input, and that is the rule that matters most:
 if each instance filtered candidates by what it could reach, two survivors would
@@ -273,13 +271,13 @@ The procedure on each survivor is:
    first manifest with a whole world for every survivor at once. A join capture
    counts as retention, so a guest admitted seconds before the loss is eligible.
 3. **Otherwise wait for the record, dialling while it waits.** A handoff carries
-   the roster, the slot assignments, the session anchor, the barrier delay and both
-   reachability tables, so adopting it is one decision rather than a term change
-   followed by a roster negotiation. A receiver refuses one naming anyone but the
-   successor its *own* roster and *own* confirmed set designate, which is the half
-   of the rule a receiver checks for itself. A survivor with no link to whoever is
-   taking over walks the succession list from the address map — every candidate
-   once, the list again a second later — and the attempt count is on the status bar.
+   the roster, the slot assignments, the session anchor, the barrier delay and the
+   chain, so adopting it is one decision rather than a term change followed by a
+   roster negotiation. A survivor with no link to whoever is taking over walks the
+   succession list — every candidate once, the list again a second later, the
+   attempt count on the status bar — and announces itself on each link it opens, so
+   an authority elected before that link existed answers with its record instead of
+   letting the survivor time out.
 4. **After `parameter.NetworkSuccessionTicks`, give up.** No record arrived, so
    this instance cannot reach the successor and continues as an explicit local
    fork.
@@ -316,82 +314,63 @@ rule would then discard exactly those.
 ### 5.3 Reachability under `-authority migrate`
 
 Built. `-authority host` does not change: the address is the session, one instance
-binds it, and authorship never leaves the machine that started the world. What
-follows is what a migrate session adds.
+binds it, and authorship never leaves the machine that started the world.
 
-#### The sequence
+1. A guest binds a listening port before it answers the offer, so it declares the
+   port it *actually* bound. `-listen <addr>` pins one; the default is the
+   coordinator's own port, so a session is one firewall rule and the port a guest
+   opens is one somebody already chose to open. A machine already using it — two
+   guests on one machine — takes an OS-assigned port instead. `-no-advertise`, a
+   failed bind, or `-authority host` leaves a participant a **leaf**: it plays
+   normally, declares nothing and is never elected.
+2. The coordinator puts every declared address in the chain and publishes the whole
+   chain on `MsgPeerList`, again as the session opens so a participant admitted
+   early is not left holding a prefix. It completes a declared `:7777` from the join
+   connection's remote address, because a participant knows which port it bound and
+   not which address the world reaches it at.
+3. Every participant dials the current successor and keeps that link warm, so the
+   instance that will have to author already has one when it does. A **successor
+   chain** rather than a full mesh: N links instead of N², and the chain is the same
+   either way, so the shape is one dial policy and can be widened later without
+   changing an artifact.
+4. Two participants that dial each other exchange `MsgConnect`/`MsgAck` — who is
+   calling, running which build — and nothing else: they already hold identities the
+   coordinator assigned, so a peer link allocates nothing, offers nothing and
+   captures nothing. Admission is roster membership, read from the world rather than
+   from the coordinator's own list, and deliberately *not* the term: a survivor
+   still electing is exactly who needs to open one.
 
-1. A guest joins as it always did, and binds a listening port before it answers the
-   offer — which is why it can declare the port it *actually* bound rather than the
-   one it asked for. `-listen <addr>` pins one; the default is the coordinator's own
-   port, so a session is one firewall rule and the port a guest opens is one
-   somebody already chose to open; a machine already using it — two guests on one
-   machine, a guest on the host's — takes an OS-assigned port instead.
-2. It warns that the address will be shared with the other participants. Nothing is
-   published for a hold after the confirmation below, so quitting inside that window
-   costs nothing.
-3. The coordinator dials the declared address once. That round trip is the **bind
-   confirmation**: it turns "the guest says it is listening" into "the session has
-   reached it there". A guest behind NAT, behind a firewall, or on a port already
-   taken fails it and stays a leaf — it plays normally and is never elected. The
-   coordinator completes a declared `:7777` from the join connection's own remote
-   address, because a participant knows which port it bound and not which address
-   the world reaches it at.
-4. `parameter.NetworkAdvertiseHold` after confirmation, and only if the guest is
-   still connected, the authority publishes two things: the address, on
-   `MsgPeerList`; and the confirmation, as the barrier-bound
-   `EventParticipantReachable` crossing.
-5. Every participant but the designated successor dials the successor from the map.
-   A **successor chain** rather than a full mesh: N links instead of N², and the map
-   is the same either way, so the shape is one dial policy and can be widened later
-   without changing an artifact. Two participants that dial each other exchange
-   `MsgConnect`/`MsgAck` — who is calling, under which term, running which build —
-   and nothing else: they already hold identities the coordinator assigned, so a
-   peer link allocates nothing, offers nothing and captures nothing.
-
-#### Why there are two tables and not one
+#### Why the chain is beside the roster and not in it
 
 **An address is not roster identity.** `SessionParticipant` is compared by value:
 `SameRoster` sorts two rosters and calls `slices.Equal`, and
 `HandoffRecord.Validate` refuses a record whose roster is not byte-identical to the
 one the session closed on. An `Addr` field on that struct would make a guest that
-rebound its port look like a different roster and fail every handoff. The map is
-therefore a **separate replicated table keyed by identity**, carried beside the
-roster in the offer, the handoff and `MsgPeerList` — never inside it.
+rebound its port look like a different roster and fail every handoff.
 
-**Reachability must be decided globally or not at all.** The whole of the
-split-brain rule is that `DesignatedSuccessor` is a pure function of state every
-survivor holds identically. The proposal this section replaced made the *map* that
-input, and it cannot be: a broadcast is identical eventually, and the moment the
-set is read is the moment the authority died. Two survivors holding different
-publications of it would compute two successors — a lower candidate unconfirmed in
-one map and confirmed in the other is enough — which is exactly the outcome the
-design rules out.
+**Append-only is what makes it a legal succession input.** `DesignatedSuccessor`
+must be a pure function of state every survivor holds identically, and a broadcast
+is identical only eventually. Appending never reorders, so any two participants hold
+a chain and one of its prefixes — and a prefix and its extension name the same first
+survivor. That is the whole of the agreement, and it needs no barrier crossing.
 
-So the confirmation travels separately, as a **barrier-bound crossing**. Every
-instance applies it at one agreed tick, so the confirmed set is the same everywhere
-at every tick: the same guarantee the roster has, for the same reason, and only the
-authority may produce one because only the authority made the dial. The addresses
-stay on the broadcast, free to change as often as they like, because nothing
-decides anything from them.
-
-**A stale map must not resurrect a departed peer.** `MsgPeerList` carries the
+**A stale chain must not resurrect a departed peer.** `MsgPeerList` carries the
 authority's term and is refused below the term the receiver holds, like every other
-authoritative artifact; a departure drops the participant from both tables, because
-its identity returns to the pool and the next holder is somebody else.
+authoritative artifact. A departure drops the entry locally on every instance,
+because the departure crossing already reaches every instance at one agreed tick.
 
 **Binding is eager, not lazy.** Binding at the moment of succession would fail at
-the worst possible time and could not be confirmed in advance. The port is held for
-the session and used only after a handoff.
+the worst possible time. The port is held for the session and used only after a
+handoff.
 
 #### The decisions this was built on
 
 | Question | Decision |
 |---|---|
-| Mesh shape | Successor chain. Full mesh is N² links for redundancy nothing yet asks for; the map is the same either way, so widening it later is one dial policy. Moving authorship down the succession list for latency or loss is deliberately *not* here. |
+| Mesh shape | Successor chain. Full mesh is N² links for redundancy nothing yet asks for; the chain is the same either way, so widening it later is one dial policy. Moving authorship down the list for latency or loss is deliberately *not* here. |
 | Declining advertisement | `-no-advertise` plays as a leaf. Refusing such a participant would turn a privacy preference into a lockout. |
-| Default listen port | The coordinator's own port, falling back to ephemeral, declaring what was bound. A port that is harmless on the machine that chose it is not necessarily harmless on somebody else's, so the default is one the session already opened rather than one a guest's operator never picked. |
-| Rejoin after a handoff | Both. Every participant holds the map, so a survivor with no link walks the succession list — every candidate once, the list again a second later — and the status bar carries the attempt count. |
+| Default listen port | The coordinator's own port, falling back to ephemeral, declaring what was bound. A port that is harmless on the machine that chose it is not necessarily harmless on somebody else's. |
+| Rejoin after a handoff | Every participant holds the whole chain, so a survivor with no link walks it — every candidate once, the list again a second later — with the attempt count on the status bar. |
 
 ## 6. Current operating point
 
@@ -432,10 +411,9 @@ The useful runtime signals are:
 - `network.lag_ticks`, `network.stale`, and `network.barrier_late`: whether the
   receive lead is being missed, and `network.barrier_delay_ticks` what that lead
   was chosen to be;
-- `network.listening`, `network.reachable`, and `network.rejoin_attempts`: whether
-  this instance bound a port of its own, how many participants the session has
-  confirmed it can reach, and how far a survivor with no link has walked the
-  succession list;
+- `network.listening`, `network.chain`, and `network.rejoin_attempts`: whether this
+  instance bound a port of its own, how many succession candidates it holds, and how
+  far a survivor with no link has walked the succession list;
 - `energy.passive_count` and `energy.passive_drained`: the one energy delta class
   no player action produces, which is what separates a stopped shield drain from a
   working one;
@@ -512,17 +490,17 @@ entry says what is actually absent rather than what is imperfect, and how to see
    that closes before a probe completes keeps the constant, which is the answer it
    had before.
 
-3, 4, 5. **Reachability, and what it makes decidable.** A guest binds, the
-   coordinator confirms and publishes, and every participant but the successor
-   dials it (§5.3). Migration now moves the session rather than only its authorship,
-   and the succession rule reads a confirmed set, so a participant the session never
-   reached is skipped rather than elected into a game of its own.
+3, 4, 5. **Reachability, and what it makes decidable.** A guest binds and declares,
+   the coordinator publishes the whole chain, and every participant dials the current
+   successor (§5.3). Migration now moves the session rather than only its authorship,
+   and the succession rule reads the chain, so a leaf is skipped rather than elected
+   into a game of its own.
 
-   What remains of gap 5 is narrower and still real: losing the authority *and* the
-   participant elected after it leaves the rest to fork, because a successor chain
-   gives nobody but the successor a link to anyone. A full mesh would close it and
-   costs N² links; the decision was the chain, and widening it is one dial policy
-   rather than a protocol change.
+   Gap 5 closes with it. Every participant holds the whole chain, so losing the
+   authority *and* the participant elected after it leaves the rest walking the
+   list rather than forking; a link opened after the record was flooded asks for it
+   rather than timing out. Only a session whose survivors are all leaves still
+   forks, which is the leaf's own decision.
 
 6. **The programmatic operator surface is closed.** `App.SetupLevel` and
    `App.Region` now go through the same guard `App.Reset` does, and the guard reads
@@ -532,15 +510,12 @@ entry says what is actually absent rather than what is imperfect, and how to see
    so a `ClassShared` event reaches no peer whoever pushes it and the authority is
    refused too.
 
-7. **The domain exemptions are named.** `event.EmitDeath` is gone: the domain split
-   is `World.EmitDeath` and the push goes through the ordinary boundary, naming
-   `OriginSystem` explicitly rather than inheriting an ambient origin that would
-   journal a death and make a replay apply it *and* re-derive it. The route-anchor
-   narrowing has a named site and a test for the condition it is exact under. The
-   thirty ambient-Shared pushes of local-class events are pinned by
-   `TestAmbientLocalPushesArePinned` rather than fixed, because fixing them is
-   thirty gameplay judgements and not one refactor — what the pin buys is that each
-   is deliberate and a new one is a test failure.
+7. **The domain exemptions are named.** The thirty ambient-Shared pushes of
+   local-class events are pinned by `TestAmbientLocalPushesArePinned` rather than
+   fixed, because fixing them is thirty gameplay judgements and not one refactor —
+   what the pin buys is that each is deliberate and a new one is a test failure.
+   `event.EmitDeath` stays where it is: moving it to `World` was a preference, not
+   a boundary fix.
 
    What is left of gap 7 is the last item on its list: `combat.` and `kills.` are
    excluded from the compared shared surface because they aggregate both domains
@@ -601,7 +576,7 @@ The automated suite covers domain boundaries, deterministic continuation,
 two-participant and mesh convergence, selective repair and fallback, replay
 retention, correction ordering, join/reconnect, link shaping, relay retention,
 authority succession, the playout lead's choice over a shaped link, and the peer
-link, address map and confirmed-set rules that make a successor reachable. It also forces a capture to enter and retire a quasar while
+link and succession chain rules that make a successor reachable. It also forces a capture to enter and retire a quasar while
 the receiver skips the release transition, and round-trips a delayed transition
 action by compiled identity. Run the generation and repository gates after
 focused network tests:
@@ -679,8 +654,8 @@ path a two-terminal session never exercises:
 
 Each guest logs `peer listener bound` with the port it got — the second one falls
 back to an ephemeral port, because the first took the host's — and the host logs
-`participant address confirmed` for each and then `reachability map published`. On
-each guest `:session` names how many participants are confirmed reachable and
-whether this one is listening. Kill the host: the survivors elect the lowest
-confirmed identity and continue, rather than each continuing alone. Repeat with
-`-no-advertise` on the first guest and the second is elected instead.
+`succession chain published` as each is added. On each guest `:session` names how
+many candidates the chain holds and whether this one is listening. Kill the host:
+the survivors elect the chain's first survivor and continue in one session, rather
+than each continuing alone. Repeat with `-no-advertise` on the first guest and the
+second is elected instead.

@@ -16,11 +16,10 @@ import (
 // meshSession builds n participants on one seed and links them into the given
 // topology. Links are the pairs of participant IDs (one-based) that share a stream;
 // everything else has to be reached by relay.
-// reachable, when given, is the term's confirmed set: the participants a real
-// session would have dialled back and published. It travels in the offer for the
-// same reason the roster does — every participant of one term has to hold the same
-// one — so a fixture that wants a leaf in it says so here.
-func meshSession(t *testing.T, seed uint64, n int, links [][2]int, reachable ...network.PeerID) []*App {
+// chain, when given, is the succession candidate list a real session would have
+// confirmed and published. It travels in the offer, so a fixture that wants a leaf
+// out of the candidates simply leaves it out.
+func meshSession(t *testing.T, seed uint64, n int, links [][2]int, chain ...network.PeerID) []*App {
 	t.Helper()
 
 	offer := network.SessionOffer{
@@ -28,7 +27,7 @@ func meshSession(t *testing.T, seed uint64, n int, links [][2]int, reachable ...
 		Assigned:          2,
 		Term:              network.FirstTerm,
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
-		Reachable:         network.NormalizeReachable(reachable),
+		Chain:             meshChain(chain),
 	}
 	for i := range n {
 		offer.Participants = append(offer.Participants,
@@ -690,4 +689,14 @@ func TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies(t *testing.T) {
 	if got := apps[2].corrections.sessionRole(); got != network.RolePeer {
 		t.Fatalf("the leaf holds role %d, want the peer role", got)
 	}
+}
+
+// meshChain renders identities as chain entries; an in-process mesh needs no
+// addresses because its links already exist.
+func meshChain(ids []network.PeerID) network.SuccessionChain {
+	var out network.SuccessionChain
+	for _, id := range ids {
+		out = append(out, network.ChainEntry{ID: id, Addr: "mesh"})
+	}
+	return out
 }

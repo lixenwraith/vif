@@ -535,8 +535,8 @@ departing cursor, and reconnect must take a current world.
 | Trust | Transport, participant claims and handoff records are unauthenticated and plaintext. Structural checks prevent races, not hostility. |
 | Guest replay | Suffix membership uses the capture's per-source fence, so a frame that missed the playout lead is replayed rather than discarded. Remote entries are a maximum rather than a contiguous prefix: on a relay a frame that overtakes a lower one can leave the lower one looking contained for one cadence. |
 | Playout | The receive lead is chosen once at lobby close from the worst measured round trip and the topology's hop count, floored at the constant and capped at a second. A session that closes before a probe completes keeps the floor, and a session opened mid-run with `:host` has no lobby to choose at. |
-| Topology | The protocol relays over a graph. `-join` dials one address, and in a migrate session every participant but the designated successor then dials the successor from the published address map, so the shape is a star with a successor chain over it. |
-| Partition | The roster's lowest survivor **that the session confirmed it could reach** succeeds without a vote; losing it as well as the authority elects nobody and the survivors fork, because a chain gives nobody but the successor a link to anyone. Merging an explicit local fork does not work. An instance with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
+| Topology | The protocol relays over a graph. `-join` dials one address, and in a migrate session every participant then dials the current successor from the published succession chain, so the shape is a star with a successor chain over it. |
+| Partition | The **first survivor in the succession chain** succeeds without a vote; losing it as well as the authority elects nobody and the survivors fork, because a chain gives nobody but the successor a link to anyone. Merging an explicit local fork does not work. An instance with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
 | Relay scheduling | A relayed participant inherits its neighbour's cadence and repair pricing. |
 | Operator API | Interactive and programmatic mutation are both session-aware, through one guard that reads the event's declared replication class. |
 | Tower ownership | Optional tower configurations still bind to slot zero rather than an explicit session-owned/cursor-owned rule. |
@@ -544,21 +544,13 @@ departing cursor, and reconnect must take a current world.
 | Presentation | Small terminals clip the map; remote cursor presentation has no interpolation beyond receive scheduling. |
 | Portability | `float64` determinism is a same-build guarantee, not arbitrary cross-platform bit-exact lockstep. |
 
-Domain-boundary debt is now named rather than merely present. `internal/system`
-carries a `domain_exemptions.go` whose job is to hold every deliberate crossing of
-the boundary, with the condition it is exact under and a test for that condition;
-an exemption anywhere else is one nobody agreed to. What is on that list, and what
-came off it:
+Domain-boundary debt is named rather than merely present:
 
 - the ambient-Shared pushes of Local-class events are **pinned** by
   `TestAmbientLocalPushesArePinned` rather than fixed: each is a shared mechanic
   raising a per-instance effect (D-6), fixing them is thirty gameplay judgements
   rather than one refactor, and the pin is what makes each deliberate and every new
   one a test failure;
-- the Shared-only entity narrowing in gateway route anchors is named
-  `system.routeAnchorID`, with `TestRouteAnchorsAreShared` pinning the condition;
-- `event.EmitDeath` is **gone**: the domain split is `World.EmitDeath` and the push
-  goes through the ordinary boundary, naming `OriginSystem` explicitly;
 - the programmatic operator surface is **closed**: `App.SetupLevel`, `App.Region`
   and `App.Reset` share one guard that reads the event's declared class;
 - splitting mixed combat telemetry so Shared results compare directly is what

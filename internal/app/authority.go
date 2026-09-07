@@ -53,14 +53,14 @@ type authority struct {
 	anchor event.JoinAnchor
 	delay  uint64
 
-	// The two reachability tables, and they are not the same kind of thing.
-	// addresses is where each participant listens and may be replaced by any
-	// MsgPeerList this term or later; reachable is the confirmed set the term was
-	// opened with and is never touched inside it, because DesignatedSuccessor reads
-	// it and a succession input that moved would be two survivors electing two
-	// successors. See internal/network/reach.go.
-	addresses network.PeerAddresses
-	reachable []network.PeerID
+	// chain is the succession candidate list: every participant that declared a
+	// port, in join order, adopted whole from an offer, a handoff or MsgPeerList.
+	// See internal/network/reach.go.
+	chain network.SuccessionChain
+
+	// record is the handoff this instance is authoring under, kept so a survivor
+	// that links up after the record was flooded can be told who took the term.
+	record network.HandoffRecord
 
 	// accepted is the handoff record adopted for each term, so a second record for
 	// a term already adopted is recognised as the split-brain attempt it is rather
@@ -141,8 +141,7 @@ func (u *authority) open(o network.SessionOffer, local network.PeerID) {
 	u.roster = slices.Clone(o.Participants)
 	u.anchor = o.Anchor
 	u.delay = o.BarrierDelayTicks
-	u.addresses = o.Addresses.Normalized()
-	u.reachable = network.NormalizeReachable(o.Reachable)
+	u.chain = slices.Clone(o.Chain)
 	u.fixed = o.FixedAuthority
 	u.fork = false
 	u.mu.Unlock()
@@ -412,9 +411,9 @@ func (u *authority) trySucceed() {
 	u.mu.Unlock()
 
 	u.mu.Lock()
-	reachable := slices.Clone(u.reachable)
+	chain := slices.Clone(u.chain)
 	u.mu.Unlock()
-	if want, ok := network.DesignatedSuccessor(roster, lost, reachable); !ok || want != local {
+	if want, ok := network.DesignatedSuccessor(roster, lost, chain); !ok || want != local {
 		return // not this instance's term to take; the record or the window decides
 	}
 	evidenceTick, retained := u.a.corrections.retentionEvidence()
@@ -435,12 +434,9 @@ func (u *authority) trySucceed() {
 		Roster:            roster,
 		Anchor:            u.anchor,
 		BarrierDelayTicks: u.delay,
-		// The predecessor's address describes nobody now: its identity returns to
-		// the pool and the next holder of it is a different participant. The
-		// confirmed set moves whole, because the term it opens is the one every
-		// survivor will compute the *next* succession from.
-		Addresses:    u.addresses.Without(lost),
-		Reachable:    slices.Clone(u.reachable),
+		// The predecessor's identity returns to the pool, so its entry describes
+		// nobody now.
+		Chain:        u.chain.Without(lost),
 		EvidenceTick: evidenceTick,
 	}
 	u.mu.Unlock()
@@ -503,7 +499,7 @@ func (u *authority) giveUp() {
 func (u *authority) adopt(rec network.HandoffRecord, from uint32) error {
 	roster := u.currentRoster()
 	u.mu.Lock()
-	if err := rec.Validate(roster, u.reachable); err != nil {
+	if err := rec.Validate(roster, u.chain); err != nil {
 		u.mu.Unlock()
 		return err
 	}
@@ -532,8 +528,8 @@ func (u *authority) adopt(rec network.HandoffRecord, from uint32) error {
 	u.term, u.holder = rec.Term, rec.Authority
 	u.roster = slices.Clone(rec.Roster)
 	u.anchor, u.delay = rec.Anchor, rec.BarrierDelayTicks
-	u.addresses = rec.Addresses.Normalized()
-	u.reachable = network.NormalizeReachable(rec.Reachable)
+	u.chain = slices.Clone(rec.Chain)
+	u.record = rec
 	u.accepted[rec.Term] = rec
 	u.contested, u.reports, u.published = 0, nil, false
 	u.fork = false
@@ -563,18 +559,11 @@ func (u *authority) adopt(rec network.HandoffRecord, from uint32) error {
 
 // === reachability ===
 
-// Addresses is the map peers dial from, as this instance currently holds it.
-func (u *authority) Addresses() network.PeerAddresses {
+// Chain is the candidate list, which is also the address book peers dial from.
+func (u *authority) Chain() network.SuccessionChain {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	return slices.Clone(u.addresses)
-}
-
-// Reachable is the term's frozen confirmed set, which is what succession reads.
-func (u *authority) Reachable() []network.PeerID {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	return slices.Clone(u.reachable)
+	return slices.Clone(u.chain)
 }
 
 // Successor is the participant this instance would follow if the authority went
@@ -583,9 +572,9 @@ func (u *authority) Reachable() []network.PeerID {
 func (u *authority) Successor() (network.PeerID, bool) {
 	roster := u.currentRoster()
 	u.mu.Lock()
-	holder, reachable := u.holder, slices.Clone(u.reachable)
+	holder, chain := u.holder, slices.Clone(u.chain)
 	u.mu.Unlock()
-	return network.DesignatedSuccessor(roster, holder, reachable)
+	return network.DesignatedSuccessor(roster, holder, chain)
 }
 
 // SuccessionOrder is the succession list: every survivor of the authority's loss,
@@ -595,77 +584,76 @@ func (u *authority) Successor() (network.PeerID, bool) {
 func (u *authority) SuccessionOrder() []network.PeerID {
 	roster := u.currentRoster()
 	u.mu.Lock()
-	holder, local, reachable := u.holder, u.local, slices.Clone(u.reachable)
+	holder, local, chain := u.holder, u.local, slices.Clone(u.chain)
 	u.mu.Unlock()
-	confirmed, rest := []network.PeerID{}, []network.PeerID{}
+	alive := func(id network.PeerID) bool {
+		return id != 0 && id != holder && id != local &&
+			slices.ContainsFunc(roster, func(p network.SessionParticipant) bool { return p.ID == id })
+	}
+	var out []network.PeerID
+	for _, e := range chain {
+		if alive(e.ID) {
+			out = append(out, e.ID)
+		}
+	}
+	var rest []network.PeerID
 	for _, p := range roster {
-		if p.ID == 0 || p.ID == holder || p.ID == local {
-			continue
+		if alive(p.ID) && !slices.Contains(out, p.ID) {
+			rest = append(rest, p.ID)
 		}
-		if len(reachable) == 0 || slices.Contains(reachable, p.ID) {
-			confirmed = append(confirmed, p.ID)
-			continue
-		}
-		rest = append(rest, p.ID)
 	}
-	slices.Sort(confirmed)
 	slices.Sort(rest)
-	return append(confirmed, rest...)
+	return append(out, rest...)
 }
 
-// markReachable records one applied confirmation crossing. Every instance runs it
-// at the same agreed tick, which is what makes the set it builds identical
-// everywhere and therefore legal for DesignatedSuccessor to read.
-func (u *authority) markReachable(id network.PeerID) {
-	if id == 0 {
-		return
-	}
+// appendChain adds one participant that declared a port and publishes the whole
+// chain, which only the coordinator does. Reports whether anything changed.
+func (u *authority) appendChain(id network.PeerID, addr string) bool {
 	u.mu.Lock()
-	defer u.mu.Unlock()
-	if slices.Contains(u.reachable, id) {
-		return
-	}
-	u.reachable = network.NormalizeReachable(append(u.reachable, id))
-}
-
-// forgetReachable drops a departed participant from both tables. An identity
-// returns to the pool on departure, so what is left behind would describe whoever
-// takes it next.
-func (u *authority) forgetReachable(id network.PeerID) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.reachable = slices.DeleteFunc(u.reachable, func(p network.PeerID) bool { return p == id })
-	u.addresses = u.addresses.Without(id)
-}
-
-// publishAddresses replaces the map and broadcasts it, which only the authority
-// does. Reports whether anything changed.
-func (u *authority) publishAddresses(next network.PeerAddresses) bool {
-	next = next.Normalized()
-	u.mu.Lock()
-	if slices.Equal(u.addresses, next) {
+	next := u.chain.Append(id, addr)
+	if slices.Equal(u.chain, next) {
 		u.mu.Unlock()
 		return false
 	}
-	u.addresses = next
-	term, holder := u.term, u.holder
+	u.chain = next
 	u.mu.Unlock()
-
-	body, err := network.EncodePeerList(network.PeerListRecord{
-		Term: term, Authority: holder, Addresses: next,
-	})
-	if err != nil {
-		return false
-	}
-	u.flood(network.MsgPeerList, 0, body)
-	vlog.Info("app", "msg", "reachability map published",
-		"term", uint64(term), "addresses", len(next))
+	u.publishChain()
 	return true
 }
 
-// onPeerList adopts one address-map broadcast. It rides the term like every other
-// authoritative artifact and is refused below the term this instance holds, which
-// is what stops a stale one resurrecting a participant that has left.
+// publishChain floods the chain whole. The coordinator also runs it as the session
+// opens: each offer handed out during the lobby named the chain as it stood at that
+// moment, so a participant admitted early holds a prefix until it is told the rest.
+func (u *authority) publishChain() {
+	u.mu.Lock()
+	chain, holder := slices.Clone(u.chain), u.holder
+	term := max(u.term, network.FirstTerm)
+	u.mu.Unlock()
+	if len(chain) == 0 {
+		return
+	}
+	body, err := network.EncodePeerList(network.PeerListRecord{
+		Term: term, Authority: holder, Chain: chain,
+	})
+	if err != nil {
+		return
+	}
+	u.flood(network.MsgPeerList, 0, body)
+	vlog.Info("app", "msg", "succession chain published",
+		"term", uint64(term), "candidates", len(chain))
+}
+
+// forgetReachable drops a departed participant. Local only: the departure crossing
+// reaches every instance, so each drops the same entry without a broadcast — and
+// this runs under the world lock, which flooding would deadlock on.
+func (u *authority) forgetReachable(id network.PeerID) {
+	u.mu.Lock()
+	u.chain = u.chain.Without(id)
+	u.mu.Unlock()
+}
+
+// onPeerList adopts one chain broadcast, refused below the term this instance
+// holds so a stale one cannot resurrect a departed peer.
 func (u *authority) onPeerList(from uint32, body []byte) {
 	rec, err := network.DecodePeerList(body)
 	if err != nil {
@@ -679,9 +667,9 @@ func (u *authority) onPeerList(from uint32, body []byte) {
 		return
 	}
 	u.mu.Lock()
-	changed := !slices.Equal(u.addresses, rec.Addresses)
+	changed := !slices.Equal(u.chain, rec.Chain)
 	if changed {
-		u.addresses = rec.Addresses
+		u.chain = rec.Chain
 	}
 	u.mu.Unlock()
 	if changed {
@@ -717,7 +705,11 @@ func (u *authority) onReport(from uint32, body []byte) {
 	held, contested, holder, local := u.term, u.contested, u.holder, u.local
 	u.mu.Unlock()
 	if rep.Term <= held {
-		return // a succession this instance has already resolved
+		// A succession this instance has already resolved. The record that named
+		// the authority was flooded before this link existed, so the survivor still
+		// electing is told on it rather than left to time the election out.
+		u.answerElection(from)
+		return
 	}
 	if contested == 0 {
 		if rep.Lost != holder || local == holder {
@@ -730,6 +722,24 @@ func (u *authority) onReport(from uint32, body []byte) {
 	}
 	u.flood(network.MsgAuthorityReport, from, body)
 	u.drive()
+}
+
+// answerElection re-sends this instance's record to one survivor, when this
+// instance is the authority that record named.
+func (u *authority) answerElection(to uint32) {
+	u.mu.Lock()
+	rec, holder, local := u.record, u.holder, u.local
+	u.mu.Unlock()
+	if rec.Term == 0 || holder != local || to == 0 {
+		return
+	}
+	body, err := network.EncodeHandoff(rec)
+	if err != nil {
+		return
+	}
+	if port := u.a.sessionTransport(); port != nil {
+		port.Send(to, uint8(network.MsgAuthorityHandoff), body)
+	}
 }
 
 // onHandoff adopts, or refuses, one record.
@@ -997,14 +1007,6 @@ func (a *App) receiveAuthorityFrame(kind uint8, from uint32, body []byte) {
 		return
 	}
 	a.corrections.receiveAuthorityFrame(kind, from, body)
-}
-
-// adoptReachable applies one confirmation crossing at the tick every instance
-// applies it, which is what makes the set it builds a legal succession input.
-func (a *App) adoptReachable(participant uint32) {
-	if a.authority != nil {
-		a.authority.markReachable(network.PeerID(participant))
-	}
 }
 
 // reportPeerLost hands a departure to the succession. Caller holds the world lock.

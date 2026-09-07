@@ -132,27 +132,10 @@ func (a *App) Reset(purge bool) bool {
 	return a.shareOperator("reset", event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
 }
 
-// shareOperator publishes an operator request whose payload changes shared state,
-// and is the boundary the embedder API owes every such request. Outside a session
-// there is one world and the push is local; inside one the same push would be a
-// second author for state the session has exactly one author for, and a correction
-// cannot repair what it produces — entity allocation and run numbering are exactly
-// what a correction does not describe.
-//
-// The event's own declared class decides which refusal applies, so a method added
-// later inherits the right one from its type rather than from this list:
-//
-//   - ClassBus travels when its producer stamps it a crossing, so the authority
-//     publishes one for the whole session and a guest is refused.
-//   - Everything else does not travel at all. event.OnWire admits Bus and Stamped
-//     and nothing besides, so a ClassShared request — a level setup, an FSM region
-//     op — reaches no peer whoever pushes it; it is re-derived identically on every
-//     instance or it does not happen, and no participant may originate one,
-//     authority included. This is the same rule the :region and :system commands
-//     already apply on the interactive surface.
-//
-// The session's own adoption of its anchor is not an operator request and does not
-// come through here; see adoptMapLatch. Reports whether the request was published.
+// shareOperator refuses an operator request that would change shared state alone.
+// The event's declared class decides which refusal applies: ClassBus travels, so
+// the authority crosses it and a guest is refused; anything else reaches no peer
+// whoever pushes it (event.OnWire), so no participant may originate one.
 func (a *App) shareOperator(what string, et event.EventType, payload any) bool {
 	if a.world.LiveSession() {
 		switch {

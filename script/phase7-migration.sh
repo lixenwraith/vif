@@ -18,20 +18,17 @@
 # traffic on the machine** for the length of the run. The qdisc is removed on
 # exit, including on interrupt.
 #
-# WHAT THIS RUN CAN AND CANNOT SHOW
+# WHAT THIS RUN CHECKS
 #
-# The CLI dials one address, so three processes over sockets form a star: both
-# participants link to the coordinator and to nothing else. Killing the centre of
-# a star leaves each survivor able to reach one participant out of three, which is
-# not a strict majority — so the succession opens, finds nothing eligible, and
-# falls back to local continuation. That is a real acceptance of requirement 4:
-# a partition that cannot reach a majority does not elect, it says so, and it must
-# not quietly produce two authorities.
+# `-join` dials one address, so the processes start as a star. In a migrate session
+# each guest also binds a port and the coordinator publishes the succession chain,
+# so every participant holds a link to the current successor before it is needed:
+# killing the centre leaves the survivors linked to each other, and one of them
+# authors the next term. Killing that one too runs the succession a second time.
 #
-# The path where a successor *is* elected needs a topology a star is not, and the
-# CLI does not build one — multi-link beyond what the relay role needs is an
-# explicit non-goal. That half is proved by the mesh suite in internal/app, which
-# can express a chain and a full graph. This script says which half it ran.
+# The invariant is not that a succession happens — a session of leaves legitimately
+# falls back to local continuation, and this script says so when it does. It is
+# that no term is ever claimed by two authorities.
 set -eu
 
 DEV=${DEV:-lo}
@@ -72,6 +69,9 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# A previous run's logs are cleared, not kept: the readiness probe below greps them
+# and a stale "hosting opened" would send the participants at a port nothing holds.
+rm -rf "$LOGDIR"/phase7-host "$LOGDIR"/phase7-p2 "$LOGDIR"/phase7-p3
 mkdir -p "$LOGDIR"
 clear_shape
 
@@ -211,19 +211,20 @@ echo
 note "the invariant this run exists to check"
 terms=$(jq -r 'select(.sub=="stat" and .fields.msg=="network.authority") | .fields.term // 0' \
 	"$p2_log" "$p3_log" | sort -n | tail -1)
-authorities=$(jq -r 'select(.sub=="stat" and .fields.msg=="network.authority" and (.fields.term // 0) > 1)
-	| "\(.fields.term):\(.fields.authority)"' "$p2_log" "$p3_log" | sort -u | wc -l)
+# One line per (term, authority) actually observed; a term appearing twice in it is
+# two authorities for one term, which is the split brain this phase forbids.
+conflicts=$(jq -r 'select(.sub=="stat" and .fields.msg=="network.authority" and (.fields.term // 0) > 1)
+	| "\(.fields.term):\(.fields.authority)"' "$p2_log" "$p3_log" |
+	sort -u | cut -d: -f1 | uniq -d | wc -l)
 if [ "$terms" -le 1 ]; then
-	echo "no succession was possible from a star, which is the documented fallback:"
-	echo "both survivors continue locally and say so. See the header for why, and the"
-	echo "mesh suite in internal/app for the elected-successor half."
+	echo "no succession ran: every survivor was a leaf, so the documented fallback"
+	echo "applies and both continue locally and say so."
 	jq -r 'select(.sub=="stat" and .fields.msg=="network.authority")
 		| "  fork=\(.fields.fork) host_lost=\(.fields.host_lost // "n/a") term=\(.fields.term)"' \
 		"$p2_log" "$p3_log" | tail -2
 else
-	echo "term reached $terms with $authorities distinct (term, authority) pair(s);"
-	echo "more than one pair for a term would be the split brain this phase forbids."
-	[ "$authorities" -le 1 ] || die "two authorities claimed one term"
+	echo "term reached $terms with $conflicts term(s) claimed by more than one authority."
+	[ "$conflicts" -eq 0 ] || die "two authorities claimed one term"
 fi
 
 echo

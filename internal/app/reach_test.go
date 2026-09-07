@@ -5,19 +5,13 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/network"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
-// TestSuccessionSkipsAParticipantTheSessionNeverReached is what the address map
-// buys the election.
-//
-// The roster's lowest survivor is a leaf: it failed to bind, or is behind a NAT
-// the coordinator's confirmation dial never got through, or asked not to be
-// advertised. Under the roster rule alone it takes the term and then authors alone,
-// because no survivor can dial it — which is the outcome the whole of reach.go
-// exists to stop. The confirmed set travels in the offer, so every survivor skips
-// it and elects the same next candidate without exchanging anything.
-func TestSuccessionSkipsAParticipantTheSessionNeverReached(t *testing.T) {
+// TestSuccessionSkipsALeaf is what the chain buys the election: the roster's
+// lowest survivor declared no port, so no survivor could dial it, and under the
+// roster rule alone it would take the term and author alone. The chain travels in
+// the offer, so every survivor skips it and elects the same next candidate.
+func TestSuccessionSkipsALeaf(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}}, 3)
 	localCursors(t, apps)
@@ -34,20 +28,20 @@ func TestSuccessionSkipsAParticipantTheSessionNeverReached(t *testing.T) {
 	}
 	for i, a := range survivors {
 		if got := authorityOf(a).Authority; got != 3 {
-			t.Fatalf("participant %d elected %d, want the lowest survivor the session confirmed",
+			t.Fatalf("participant %d elected %d, want the first survivor in the chain",
 				i+2, got)
 		}
 	}
 	// The skipped participant is in the session and playing; it is only not a
 	// candidate. Refusing it outright would turn a firewall into a lockout.
 	if authorityOf(survivors[0]).Fork {
-		t.Fatal("the unconfirmed participant forked instead of following the successor")
+		t.Fatal("the leaf forked instead of following the successor")
 	}
 }
 
-// TestSuccessionSurvivesLosingTheAuthorityAndThenTheSuccessor is gap 5 in the shape
-// the map makes decidable: the participants that can still reach each other keep
-// the session rather than each forking into a game of their own.
+// TestSuccessionSurvivesLosingTheAuthorityAndThenTheSuccessor is gap 5: the
+// participants that can still reach each other keep the session rather than each
+// forking into a game of their own.
 func TestSuccessionSurvivesLosingTheAuthorityAndThenTheSuccessor(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 4,
@@ -89,9 +83,9 @@ func TestSuccessionSurvivesLosingTheAuthorityAndThenTheSuccessor(t *testing.T) {
 }
 
 // TestTheSuccessionOrderIsTheOrderTheRuleElects pins what a survivor with no link
-// retries down. It walks the same order the election runs in — confirmed
-// candidates first, lowest identity first — so a reconnect and a handoff cannot
-// disagree about who is being waited for.
+// retries down. It walks the same order the election runs in — the chain, then
+// any other survivor — so a reconnect and a handoff cannot disagree about who is
+// being waited for.
 func TestTheSuccessionOrderIsTheOrderTheRuleElects(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 4,
@@ -105,7 +99,7 @@ func TestTheSuccessionOrderIsTheOrderTheRuleElects(t *testing.T) {
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("succession order = %v, want the confirmed candidates first: %v", got, want)
+			t.Fatalf("succession order = %v, want the chain first: %v", got, want)
 		}
 	}
 }
@@ -186,9 +180,28 @@ func TestALeafDeclaresNothing(t *testing.T) {
 	if got := a.reach.declaredAddr(); got != "" {
 		t.Fatalf("a solo run declares %q", got)
 	}
-	if statOf(a, "network.reachable") != 0 {
-		t.Fatal("a solo run reports confirmed participants")
+	if statOf(a, "network.chain") != 0 {
+		t.Fatal("a solo run reports succession candidates")
 	}
 	a.Close()
-	_ = parameter.NetworkAdvertiseHold
+}
+
+// TestAGuestAdmitsAPeerLink is the failure a live session hit: admission read the
+// coordinator's roster, which a guest never fills, so a survivor's link to the
+// successor was refused and both forked.
+func TestAGuestAdmitsAPeerLink(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {1, 3}}, 2, 3)
+	localCursors(t, apps)
+
+	guest := apps[2]
+	if err := guest.admitPeerLink(2); err != nil {
+		t.Fatalf("a guest refused a participant of its own session: %v", err)
+	}
+	if err := guest.admitPeerLink(9); err == nil {
+		t.Fatal("a guest admitted a participant that is not in the session")
+	}
+	if err := guest.admitPeerLink(3); err == nil {
+		t.Fatal("a guest admitted a link from itself")
+	}
 }

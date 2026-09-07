@@ -144,6 +144,7 @@ func (a *App) HostSession(o network.SessionOffer) error {
 	}
 	a.adoptMapLatch(o.Anchor.Anchor)
 	a.openAuthority(o, o.Host)
+	a.authority.publishChain()
 	return a.configureSessionRoster(o, o.Host)
 }
 
@@ -299,11 +300,8 @@ func (a *App) localSlot() uint8 {
 // this is the confirmation rather than the adoption; it still runs the level setup
 // unconditionally, because that event is part of the session's record stream and a
 // participant reproducing the session by replay has to see the same one.
-// Exempt from App.shareOperator by construction, and the exemption is the point:
-// that guard refuses a level setup in a live session because one instance choosing
-// bounds for itself is a divergence no correction repairs. Here every participant
-// applies the same bounds from the same offer, which is the case the guard exists
-// to distinguish from.
+// Exempt from App.shareOperator: every participant applies the same bounds from
+// the same offer, which is the case that guard exists to distinguish from.
 func (a *App) adoptMapLatch(an event.JournalAnchor) {
 	a.ctx.PushEventOrigin(event.EventLevelSetup, &event.LevelSetupPayload{
 		Width: an.MapWidth, Height: an.MapHeight, CropOnResize: an.CropOnResize,
@@ -331,7 +329,6 @@ func (a *App) attachTransportLocked(port engine.NetworkPort) {
 	r.OnCorrection = a.receiveCorrection
 	r.OnSelective = a.receiveSelective
 	r.OnAuthority = a.receiveAuthorityFrame
-	r.OnReachable = a.adoptReachable
 	r.OnPeerLost = a.reportPeerLost
 	term, holder := a.authorityStamp()
 	if holder != 0 {

@@ -136,7 +136,7 @@ func (s *SplashSystem) Update() {
 			anchorEntity := splashComp.AnchorEntity
 			if anchorEntity != 0 && !s.world.Components.Header.HasEntity(anchorEntity) {
 				// Anchored to entity and anchor entity destroyed
-				s.world.EmitDeath(0, splashEntity)
+				event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
 				continue
 			}
 
@@ -145,7 +145,7 @@ func (s *SplashSystem) Update() {
 
 			if remainingSec <= 0 {
 				// Timer expired - destroy splash
-				s.world.EmitDeath(0, splashEntity)
+				event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
 				continue
 			}
 
@@ -216,7 +216,7 @@ func (s *SplashSystem) Update() {
 func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *component.SplashComponent) bool {
 	cursorPos, ok := s.world.LocalCursor()
 	if !ok {
-		s.world.EmitDeath(0, splashEntity)
+		event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
 		return false
 	}
 
@@ -239,13 +239,13 @@ func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *compo
 	}
 
 	if glyphEntity == 0 {
-		s.world.EmitDeath(0, splashEntity)
+		event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
 		return false
 	}
 
 	glyph, ok := s.world.Components.Glyph.GetComponent(glyphEntity)
 	if !ok {
-		s.world.EmitDeath(0, splashEntity)
+		event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
 		return false
 	}
 
@@ -307,7 +307,7 @@ func (s *SplashSystem) handleTimerCancel(anchorEntity core.Entity) {
 			continue
 		}
 		if splashComp.Slot == component.SlotTimer && splashComp.AnchorEntity == anchorEntity {
-			s.world.EmitDeath(0, splashEntity)
+			event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
 			return
 		}
 	}
@@ -322,7 +322,7 @@ func (s *SplashSystem) cleanupSplashesBySlot(slot component.SplashSlot) {
 			continue
 		}
 		if splashComp.Slot == slot {
-			s.world.EmitDeath(0, splashEntity)
+			event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
 		}
 	}
 }
@@ -336,7 +336,7 @@ func (s *SplashSystem) cleanupSplashesBySlotAndAnchor(slot component.SplashSlot,
 			continue
 		}
 		if splashComp.Slot == slot && splashComp.AnchorEntity == anchor {
-			s.world.EmitDeath(0, splashEntity)
+			event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
 		}
 	}
 }

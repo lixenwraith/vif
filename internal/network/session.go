@@ -34,13 +34,10 @@ type SessionOffer struct {
 	Participants      []SessionParticipant `json:"participants"`
 	BarrierDelayTicks uint64               `json:"barrier_delay_ticks"`
 
-	// Addresses is where each participant listens, and Reachable is which of them
-	// the session has confirmed there. Two tables rather than one field on
-	// SessionParticipant, and frozen for the term rather than live, for the reasons
-	// in reach.go: an address may change without disturbing a handoff, and a
-	// succession input may not change at all while the term runs.
-	Addresses PeerAddresses `json:"addresses,omitempty"`
-	Reachable []PeerID      `json:"reachable,omitempty"`
+	// Chain is the succession candidate list with the address each was confirmed
+	// at. Beside the roster rather than inside SessionParticipant, which SameRoster
+	// compares by value: an address change must not look like a different roster.
+	Chain SuccessionChain `json:"chain,omitempty"`
 
 	// FixedAuthority pins authorship to the participant that opened the session:
 	// losing it ends the session rather than moving it. It travels in the offer
@@ -87,9 +84,8 @@ type sessionReply struct {
 	// was not told.
 	Identity PeerIdentity `json:"identity"`
 
-	// Listen is the address this participant bound for itself, empty for one that
-	// bound nothing or chose not to advertise. Declared, not confirmed: the
-	// coordinator dials it once before it publishes it to anyone (see reach.go).
+	// Listen is the address this participant bound, empty for a leaf. Declared, not
+	// confirmed: the coordinator dials it once before publishing it.
 	Listen string `json:"listen,omitempty"`
 }
 
@@ -111,12 +107,9 @@ type JoinerReport struct {
 	Identity PeerIdentity
 
 	// Listen is the address this participant bound, declared and not yet confirmed.
+	// Remote is where the join stream came from, filled by the coordinator: a
+	// participant knows its port and not the address the world reaches it at.
 	Listen string
-
-	// Remote is the address the join stream arrived from, filled by the coordinator
-	// rather than by the joiner. A participant knows which port it bound and not
-	// which address the world reaches it at; only the far end of an established
-	// stream knows both, so the coordinator completes a declared ":7777" from here.
 	Remote string
 }
 

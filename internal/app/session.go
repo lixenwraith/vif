@@ -191,9 +191,8 @@ func (a *App) lobbyQuorum() int {
 // playing on it — which D-14 forbids for the same reason a terminal may not crop a
 // shared map. First is a number the session can commit to before it starts.
 func (a *App) noteJoinerReport(id network.PeerID, report network.JoinerReport) {
-	// The address the joiner declared, and the confirmation dial that decides
-	// whether it is worth publishing. It runs before the geometry check, because a
-	// participant that reported no terminal still reported a port.
+	// Before the geometry check: a participant that reported no terminal still
+	// reported a port.
 	a.reach.noteDeclared(id, report)
 	if !report.Sized() {
 		return
@@ -445,11 +444,8 @@ func (a *App) offerLocked(anchor event.JoinAnchor, assigned network.PeerID) netw
 		Term:              term,
 		Participants:      slices.Clone(a.sessionRoster),
 		BarrierDelayTicks: max(a.barrierDelay, parameter.NetworkBarrierDelayTicks),
-		// A joiner adopts both tables whole: the map so it can dial from it, and
-		// the confirmed set because it is the succession input every participant of
-		// this term has to hold identically (reach.go).
-		Addresses:      a.reachAddresses(),
-		Reachable:      a.reachConfirmed(),
+		// A joiner adopts the chain whole: candidate list and address book in one.
+		Chain:          a.sessionChain(),
 		FixedAuthority: a.cfg.FixedAuthority,
 		// Derived from the anchor this offer carries rather than read again, so
 		// what the coordinator later compares a joiner's report against is exactly
