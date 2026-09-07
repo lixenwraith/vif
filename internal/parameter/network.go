@@ -332,6 +332,18 @@ const (
 	// authoritative world inside.
 	NetworkSuccessionTicks = SnapshotFloorKeyframeTicks
 
+	// NetworkAdvertiseHold is how long a confirmed address waits before the
+	// authority publishes it, and it is the other half of the window a guest is
+	// warned about. A participant that quits inside it has shared nothing, which is
+	// what makes the warning true rather than a courtesy.
+	NetworkAdvertiseHold = 5 * time.Second
+
+	// NetworkRejoinPassInterval paces a survivor's walk down the succession list. A
+	// pass tries every candidate once; this is the pause before the list is walked
+	// again, so a successor that is merely slow is retried without the list
+	// becoming a spin.
+	NetworkRejoinPassInterval = time.Second
+
 	// NetworkMigrationBadgeTicks is how long the status bar shows MIGRATING after
 	// a handoff is adopted. The badge marks a transition rather than a state, so
 	// it is measured in ticks a person can read rather than held until something

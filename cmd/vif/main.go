@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -231,6 +232,8 @@ func buildConfig() app.Config {
 		HostAddress:   flagSession.host,
 		JoinAddress:   flagSession.join,
 		Participants:  flagSession.players,
+		ListenAddress: flagSession.listen,
+		NoAdvertise:   flagSession.noAdvertise,
 	}
 
 	if flagSession.serve != "" {
@@ -314,13 +317,15 @@ func (f *configFlags) register(fs *flag.FlagSet) {
 
 // sessionFlags expose startup hosting/joining and the cap a later :host inherits.
 type sessionFlags struct {
-	host      string
-	join      string
-	serve     string
-	probe     string
-	size      string
-	players   int
-	authority string
+	host        string
+	join        string
+	serve       string
+	probe       string
+	size        string
+	players     int
+	authority   string
+	listen      string
+	noAdvertise bool
 
 	// firstJoin, empty and drain bound an allocated session's life. They are zero
 	// on an interactively started host, which is supervised by the person who
@@ -353,6 +358,13 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 			"With -host it also sizes the startup lobby, which then waits for exactly that "+
 			"many; unset, a host starts on its first guest and admits the rest as they arrive",
 		parameter.MaxPlayers))
+	fs.StringVar(&f.listen, "listen", "", fmt.Sprintf(
+		"With -join in a %q session, the address this participant is dialled back on. "+
+			"Default the host's own port, falling back to an OS-assigned one when that "+
+			"port is taken; whatever is bound is what the session publishes",
+		authorityMigrate))
+	fs.BoolVar(&f.noAdvertise, "no-advertise", false,
+		"With -join, keep this participant's address out of the session. It plays normally and is never elected")
 	fs.StringVar(&f.authority, "authority", "", fmt.Sprintf(
 		"What losing the authoring participant does: %q hands the session to the "+
 			"roster's next survivor, %q ends it and leaves every survivor playing alone. "+
@@ -377,11 +389,23 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		return fmt.Errorf("-authority is the policy a host sets for its session; a guest adopts the one it is offered")
 	}
 	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0 ||
-		f.authority != "" || f.lifetime().Bounded()) && (schema || check || replay != "") {
-		return fmt.Errorf("-host, -join, -serve, -probe, -players, -authority and the session lifetime bounds are available only in interactive play")
+		f.authority != "" || f.listen != "" || f.noAdvertise || f.lifetime().Bounded()) &&
+		(schema || check || replay != "") {
+		return fmt.Errorf("-host, -join, -serve, -probe, -players, -authority, -listen, -no-advertise and the session lifetime bounds are available only in interactive play")
 	}
 	if f.players != 0 && f.join != "" {
 		return fmt.Errorf("-players configures a host, not -join")
+	}
+	if (f.listen != "" || f.noAdvertise) && f.join == "" {
+		return fmt.Errorf("-listen and -no-advertise describe a participant that joined a session; a host already binds one")
+	}
+	if f.listen != "" && f.noAdvertise {
+		return fmt.Errorf("-listen names an address to publish and -no-advertise refuses to publish one")
+	}
+	if f.listen != "" {
+		if _, _, err := net.SplitHostPort(f.listen); err != nil {
+			return fmt.Errorf("-listen %q is not an address: %w", f.listen, err)
+		}
 	}
 	if f.serve != "" && (f.host != "" || f.join != "") {
 		return fmt.Errorf("-serve is a host of its own; it does not combine with -host or -join")

@@ -148,6 +148,19 @@ type Config struct {
 	// simulation identity before the App is constructed.
 	JoinAddress string
 
+	// ListenAddress pins the port this participant is dialled back on, and
+	// NoAdvertise refuses to have one published at all.
+	//
+	// Only a migrate session uses either: where authorship never leaves the machine
+	// that started it there is nothing for a guest's port to be for. The default is
+	// the coordinator's own port — one firewall rule for a session, and a port
+	// somebody already chose to open rather than an arbitrary one — falling back to
+	// an OS-assigned port when that one is taken, and declaring whichever it got. A
+	// bind that fails entirely is not an error: the participant plays as a leaf,
+	// which is what every guest was before reach.go existed.
+	ListenAddress string
+	NoAdvertise   bool
+
 	// FixedAuthority pins authorship to the participant that opens the session, so
 	// losing it ends the session rather than moving it to a survivor.
 	//

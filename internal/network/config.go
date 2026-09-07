@@ -101,6 +101,21 @@ type Config struct {
 	// loop.
 	AcceptSession func(net.Conn) (PeerID, error)
 
+	// ListenAddress and AcceptPeer are the other half of the accept path: a
+	// participant that is not the coordinator binding a port of its own, so the
+	// session can reach it after a handoff (see reach.go). A guest never runs
+	// AcceptSession — it has no roster to assign from and no world to capture —
+	// and a coordinator never runs AcceptPeer, because everyone already dials it.
+	// Empty leaves a participant a leaf, which is what it was before this existed.
+	ListenAddress string
+	AcceptPeer    func(net.Conn) (PeerID, error)
+
+	// PreboundListener is a port already bound by the caller, served instead of
+	// ListenAddress. A guest declares the address it bound in its join reply, which
+	// is sent before its transport exists, so the bind has to happen first and the
+	// transport adopts it rather than repeating it.
+	PreboundListener net.Listener
+
 	// OnAdmit is called once an accepted stream has become a peer, on the accept
 	// goroutine. It is where a mid-run join sends its start gate and its capture,
 	// and the ordering is the reason it exists rather than being folded into

@@ -71,38 +71,105 @@ func (t *Transport) Start() error {
 	case RolePeer, RoleRelay:
 		// A relay dials like any other participant. Its role is what it does with
 		// the artifacts once they arrive, not how the stream was established.
-		return t.startClient()
+		//
+		// A participant with nothing to dial is not an error when it has a port of
+		// its own: that is a session member waiting to be reached rather than a
+		// misconfigured client, and it is what a successor left holding only its
+		// own listener is.
+		dialing := t.config.preconnected != nil || t.config.Address != ""
+		if !dialing && t.config.AcceptPeer == nil {
+			t.running.Store(false)
+			return errors.New("transport: peer has neither an address to dial nor a port to listen on")
+		}
+		if dialing {
+			if err := t.startClient(); err != nil {
+				return err
+			}
+		}
+		// And then it listens, if it was asked to. A bind that fails is not fatal:
+		// the participant plays as a leaf, which is what every participant but the
+		// coordinator was before reach.go existed.
+		if t.config.AcceptPeer != nil {
+			if err := t.serveAsPeer(); err != nil {
+				t.report(err)
+			}
+		}
+		return nil
 	default:
 		return nil // RoleNone, no-op
 	}
 }
 
-// startServer binds and accepts connections
+// serveAsPeer starts this participant's own listener, from a port the caller
+// already bound or from an address to bind now.
+func (t *Transport) serveAsPeer() error {
+	if ln := t.config.PreboundListener; ln != nil {
+		t.listener = ln
+		t.wg.Add(1)
+		go t.acceptLoop(ln, t.config.AcceptPeer)
+		return nil
+	}
+	if t.config.ListenAddress == "" {
+		return nil
+	}
+	return t.listen(t.config.ListenAddress, t.config.AcceptPeer)
+}
+
+// startServer binds and accepts joiners.
 func (t *Transport) startServer() error {
+	if err := t.listen(t.config.Address, nil); err != nil {
+		t.running.Store(false)
+		return err
+	}
+	return nil
+}
+
+// listen binds one address and serves it. accept is the per-connection handshake;
+// nil selects the coordinator's session handshake.
+func (t *Transport) listen(addr string, accept func(net.Conn) (PeerID, error)) error {
 	var ln net.Listener
 	var err error
 
 	if t.config.TLS != nil {
-		ln, err = tls.Listen("tcp", t.config.Address, t.config.TLS)
+		ln, err = tls.Listen("tcp", addr, t.config.TLS)
 	} else {
-		ln, err = net.Listen("tcp", t.config.Address)
+		ln, err = net.Listen("tcp", addr)
 	}
-
 	if err != nil {
-		t.running.Store(false)
 		return err
 	}
 
 	t.listener = ln
 
 	t.wg.Add(1)
-	go t.acceptLoop()
+	go t.acceptLoop(ln, accept)
 
 	return nil
 }
 
+// DialPeer opens one outbound link to a participant that is already in this
+// session, completing handshake and admitting the stream under the identity it
+// answered with. It is the mesh half of reach.go: the coordinator is dialled by
+// its guests, and a guest is dialled by whoever the address map says to.
+func (t *Transport) DialPeer(addr string, local PeerID, term AuthorityTerm) error {
+	if !t.running.Load() {
+		return errors.New("transport: not running")
+	}
+	conn, id, err := DialPeerLink(addr, t.config, local, term, false)
+	if err != nil {
+		return err
+	}
+	if _, err := t.peers.AddConnectionAs(conn, id); err != nil {
+		return err
+	}
+	if t.config.OnAdmit != nil {
+		t.config.OnAdmit(id)
+	}
+	return nil
+}
+
 // acceptLoop handles incoming connections
-func (t *Transport) acceptLoop() {
+func (t *Transport) acceptLoop(ln net.Listener, accept func(net.Conn) (PeerID, error)) {
 	defer t.wg.Done()
 
 	for {
@@ -112,7 +179,7 @@ func (t *Transport) acceptLoop() {
 		default:
 		}
 
-		conn, err := t.listener.Accept()
+		conn, err := ln.Accept()
 		if err != nil {
 			select {
 			case <-t.stopCh:
@@ -137,7 +204,11 @@ func (t *Transport) acceptLoop() {
 		// Accept order is not an identity: the barrier's per-source epoch window and
 		// every roster lookup are keyed by canonical participant ID, so admitting a
 		// stream under a connection-local number would corrupt both silently.
-		if t.config.AcceptSession == nil {
+		handshake := accept
+		if handshake == nil {
+			handshake = t.config.AcceptSession
+		}
+		if handshake == nil {
 			_ = conn.Close()
 			t.report(errors.New("transport: host accepted a connection with no session handshake"))
 			continue
@@ -157,7 +228,7 @@ func (t *Transport) acceptLoop() {
 			continue
 		}
 		t.wg.Add(1)
-		go t.handshake(conn)
+		go t.handshake(conn, handshake)
 	}
 }
 
@@ -167,16 +238,21 @@ func (t *Transport) acceptLoop() {
 // goroutine ends: the budget bounds unauthenticated work, and everything after
 // that point concerns a peer the session has already assigned an identity to,
 // which the roster ceiling bounds instead.
-func (t *Transport) handshake(conn net.Conn) {
+func (t *Transport) handshake(conn net.Conn, accept func(net.Conn) (PeerID, error)) {
 	defer t.wg.Done()
 	t.holdPending(conn)
 
-	id, err := t.config.AcceptSession(conn)
+	id, err := accept(conn)
 	t.releasePending(conn)
 	<-t.handshakes
 	if err != nil {
 		_ = conn.Close()
-		t.report(err)
+		// A bind confirmation is a completed round trip rather than a failure: the
+		// dialer asked whether this address answers, it does, and the stream has
+		// done its whole job by ending here.
+		if !errors.Is(err, errPeerProbe) {
+			t.report(err)
+		}
 		return
 	}
 	// AddConnectionAs closes the connection on every failure of its own.

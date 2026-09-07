@@ -95,6 +95,24 @@ func (p *SocketPort) Close() error {
 // ParticipantID is the canonical source order used by the barrier.
 func (p *SocketPort) ParticipantID() uint32 { return uint32(p.config.ParticipantID) }
 
+// ListenAddr is what this participant actually bound, empty when it bound nothing.
+// A guest declares this to the coordinator rather than the address it was asked
+// for: the default is the coordinator's own port and a machine already using it
+// falls back to an OS-assigned one, so what was requested and what answers are
+// routinely different.
+func (p *SocketPort) ListenAddr() string {
+	if a := p.transport.Addr(); a != nil {
+		return a.String()
+	}
+	return ""
+}
+
+// DialPeer opens a link to a participant already in this session, from the address
+// map rather than from an operator's -join.
+func (p *SocketPort) DialPeer(addr string, term AuthorityTerm) error {
+	return p.transport.DialPeer(addr, p.config.ParticipantID, term)
+}
+
 // BarrierDelayTicks returns the playout lead negotiated by the handshake.
 func (p *SocketPort) BarrierDelayTicks() uint64 { return p.config.BarrierDelayTicks }
 

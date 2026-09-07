@@ -34,6 +34,14 @@ type SessionOffer struct {
 	Participants      []SessionParticipant `json:"participants"`
 	BarrierDelayTicks uint64               `json:"barrier_delay_ticks"`
 
+	// Addresses is where each participant listens, and Reachable is which of them
+	// the session has confirmed there. Two tables rather than one field on
+	// SessionParticipant, and frozen for the term rather than live, for the reasons
+	// in reach.go: an address may change without disturbing a handoff, and a
+	// succession input may not change at all while the term runs.
+	Addresses PeerAddresses `json:"addresses,omitempty"`
+	Reachable []PeerID      `json:"reachable,omitempty"`
+
 	// FixedAuthority pins authorship to the participant that opened the session:
 	// losing it ends the session rather than moving it. It travels in the offer
 	// because it has to be the session's policy rather than each instance's — two
@@ -78,6 +86,11 @@ type sessionReply struct {
 	// both are refused for the same reason — the authority cannot verify what it
 	// was not told.
 	Identity PeerIdentity `json:"identity"`
+
+	// Listen is the address this participant bound for itself, empty for one that
+	// bound nothing or chose not to advertise. Declared, not confirmed: the
+	// coordinator dials it once before it publishes it to anyone (see reach.go).
+	Listen string `json:"listen,omitempty"`
 }
 
 // JoinerReport is what a joining participant tells the coordinator about itself.
@@ -96,6 +109,15 @@ type JoinerReport struct {
 	// the configuration, the corpus that actually loaded — does not exist until the
 	// joiner has built its world.
 	Identity PeerIdentity
+
+	// Listen is the address this participant bound, declared and not yet confirmed.
+	Listen string
+
+	// Remote is the address the join stream arrived from, filled by the coordinator
+	// rather than by the joiner. A participant knows which port it bound and not
+	// which address the world reaches it at; only the far end of an established
+	// stream knows both, so the coordinator completes a declared ":7777" from here.
+	Remote string
 }
 
 // Sized reports whether this report names a usable geometry.
@@ -249,7 +271,10 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 			return 0, err
 		}
 		if c.Report != nil {
-			c.Report(o.Assigned, JoinerReport{Width: reply.Width, Height: reply.Height})
+			c.Report(o.Assigned, JoinerReport{
+				Width: reply.Width, Height: reply.Height, Listen: reply.Listen,
+				Remote: conn.RemoteAddr().String(),
+			})
 		}
 		return o.Assigned, nil
 	}
@@ -343,7 +368,7 @@ func (p *PendingJoin) hold(msg *Message) bool {
 		// join — as soon as a session had a participant the host was already
 		// publishing an index to.
 		return true
-	case MsgAuthorityReport, MsgAuthorityHandoff:
+	case MsgAuthorityReport, MsgAuthorityHandoff, MsgPeerList:
 		// Held rather than swallowed. These say who is allowed to author, which is
 		// exactly what a joiner needs and cannot re-derive: it adopts a term from
 		// the offer, and a succession that ran between the offer and the install
@@ -472,6 +497,7 @@ func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
 	} else {
 		reply.Width, reply.Height = report.Width, report.Height
 		reply.Identity = report.Identity
+		reply.Listen = report.Listen
 	}
 	body, err := json.Marshal(reply)
 	if err == nil {

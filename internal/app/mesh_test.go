@@ -16,7 +16,11 @@ import (
 // meshSession builds n participants on one seed and links them into the given
 // topology. Links are the pairs of participant IDs (one-based) that share a stream;
 // everything else has to be reached by relay.
-func meshSession(t *testing.T, seed uint64, n int, links [][2]int) []*App {
+// reachable, when given, is the term's confirmed set: the participants a real
+// session would have dialled back and published. It travels in the offer for the
+// same reason the roster does — every participant of one term has to hold the same
+// one — so a fixture that wants a leaf in it says so here.
+func meshSession(t *testing.T, seed uint64, n int, links [][2]int, reachable ...network.PeerID) []*App {
 	t.Helper()
 
 	offer := network.SessionOffer{
@@ -24,6 +28,7 @@ func meshSession(t *testing.T, seed uint64, n int, links [][2]int) []*App {
 		Assigned:          2,
 		Term:              network.FirstTerm,
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
+		Reachable:         network.NormalizeReachable(reachable),
 	}
 	for i := range n {
 		offer.Participants = append(offer.Participants,

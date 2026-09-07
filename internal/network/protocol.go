@@ -84,6 +84,21 @@ const (
 	MsgAuthorityReport  MessageType = 0x2C // Live: a survivor's notice that the authority is gone
 	MsgAuthorityHandoff MessageType = 0x2E // Live: the record a successor authors under
 
+	// MsgPeerList is the reachability map: where each participant listens, so a
+	// survivor can dial the successor a handoff names. It rides the authority's
+	// term and is refused below the term the receiver holds, like every other
+	// authoritative artifact. It carries addresses only — the confirmed set a
+	// succession reads is frozen for the term and travels in the offer and the
+	// handoff record instead. See reach.go.
+	MsgPeerList MessageType = 0x20 // Live: the authority's confirmed address map
+
+	// MsgConnect and MsgAck are the peer link: two participants that already hold
+	// identities the coordinator assigned opening a stream between themselves.
+	// Deliberately not a join — nothing is allocated, offered or captured — and
+	// deliberately not the coordinator's handshake, which a guest could not serve.
+	MsgConnect MessageType = 0x02 // Live: a peer opening a link, or confirming a bind
+	MsgAck     MessageType = 0x04 // Live: the peer link answered
+
 	// Membership. A departure is observed only by a direct neighbour, so a neighbour
 	// that is not the coordinator forwards a notice rather than acting on it.
 	MsgDisconnect MessageType = 0x03 // Live: a participant's link was lost
@@ -94,18 +109,14 @@ const (
 	MsgStart     MessageType = 0x24 // Live: host releases the participants into tick zero
 	MsgReady     MessageType = 0x25 // Live: joiner confirms it received the start gate
 
-	// Reserved, unused: explicit connect and acknowledgement control, which the
-	// stream's own lifecycle carries today; roster and coordinator assignment beyond
-	// the startup offer; and authentication. 0x26 is no longer among them: it
-	// carried the retired replay-the-session-from-tick-zero join and now carries the
-	// authoritative state snapshot that replaced it. Neither is 0x27, which carries
-	// the periodic correction that snapshot became once the host was the authority,
-	// nor 0x14/0x15, which carry the round trip Phase 5 added, nor 0x28..0x2A,
-	// which carry Phase 6's manifest, request and repair, nor 0x2B..0x2E, which
-	// carry Phase 7's unserved answer and its succession.
-	MsgConnect      MessageType = 0x02
-	MsgAck          MessageType = 0x04
-	MsgPeerList     MessageType = 0x20
+	// Reserved, unused: coordinator assignment beyond the startup offer, and
+	// authentication. The list used to be longer. 0x26 carried the retired
+	// replay-the-session-from-tick-zero join and now carries the authoritative
+	// state snapshot that replaced it; 0x27 the periodic correction that snapshot
+	// became once the host was the authority; 0x14/0x15 the round trip Phase 5
+	// added; 0x28..0x2A Phase 6's manifest, request and repair; 0x2B..0x2E Phase
+	// 7's unserved answer and its succession; and 0x20, 0x02 and 0x04 the
+	// reachability map and the peer link that make a successor dialable.
 	MsgRoleAssign   MessageType = 0x21
 	MsgAuthRequest  MessageType = 0x30
 	MsgAuthResponse MessageType = 0x31

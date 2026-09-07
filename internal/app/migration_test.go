@@ -142,28 +142,28 @@ func TestTheSuccessorIsTheRostersLowestSurvivor(t *testing.T) {
 
 	// The host goes: the first guest the coordinator admitted takes over, because
 	// identities are handed out lowest-free-first in arrival order.
-	if got, ok := network.DesignatedSuccessor(roster, 1); !ok || got != 2 {
+	if got, ok := network.DesignatedSuccessor(roster, 1, nil); !ok || got != 2 {
 		t.Fatalf("successor to the host = %d (ok=%t), want the first guest", got, ok)
 	}
 	// A later loss skips whoever is gone and nothing else.
-	if got, ok := network.DesignatedSuccessor(roster, 2); !ok || got != 1 {
+	if got, ok := network.DesignatedSuccessor(roster, 2, nil); !ok || got != 1 {
 		t.Fatalf("successor to participant 2 = %d (ok=%t), want 1", got, ok)
 	}
 	// A cursorless coordinator is not in the world's roster at all, so the
 	// participant it lost is simply not among the candidates.
 	guests := []network.SessionParticipant{{ID: 2, Slot: 0}, {ID: 3, Slot: 1}}
-	if got, ok := network.DesignatedSuccessor(guests, 1); !ok || got != 2 {
+	if got, ok := network.DesignatedSuccessor(guests, 1, nil); !ok || got != 2 {
 		t.Fatalf("successor on a dedicated host's roster = %d (ok=%t), want 2", got, ok)
 	}
 	// The two-participant session, which a quorum could never serve: one survivor
 	// of a roster of two is not a majority of two, and it is the whole session.
 	if got, ok := network.DesignatedSuccessor(
-		[]network.SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}}, 1); !ok || got != 2 {
+		[]network.SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}}, 1, nil); !ok || got != 2 {
 		t.Fatalf("the sole survivor of a pair = %d (ok=%t), want it to take the term", got, ok)
 	}
 	// Nobody left is nothing to continue.
 	if got, ok := network.DesignatedSuccessor(
-		[]network.SessionParticipant{{ID: 1, Slot: 0}}, 1); ok {
+		[]network.SessionParticipant{{ID: 1, Slot: 0}}, 1, nil); ok {
 		t.Fatalf("a roster with no survivor designated %d", got)
 	}
 }
@@ -179,12 +179,12 @@ func TestOnlyTheDesignatedSuccessorMayHoldATerm(t *testing.T) {
 		Term: network.FirstTerm + 1, Authority: 2, Predecessor: 1,
 		Roster: roster, BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 	}
-	if err := base.Validate(roster); err != nil {
+	if err := base.Validate(roster, nil); err != nil {
 		t.Fatalf("the designated successor's own record was refused: %v", err)
 	}
 	rival := base
 	rival.Authority = 3
-	if err := rival.Validate(roster); err == nil {
+	if err := rival.Validate(roster, nil); err == nil {
 		t.Fatal("a record naming a participant the roster does not designate was accepted")
 	}
 }

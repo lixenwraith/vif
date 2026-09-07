@@ -59,5 +59,6 @@ func (a *App) joinerReport() network.JoinerReport {
 		Width:    a.ctx.Width,
 		Height:   a.ctx.Height,
 		Identity: a.sessionIdentity(),
+		Listen:   a.reach.declaredAddr(),
 	}
 }

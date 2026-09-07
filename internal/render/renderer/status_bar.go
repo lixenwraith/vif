@@ -56,6 +56,7 @@ type StatusBarRenderer struct {
 	statCadence     *atomic.Int64
 	statConstrained *atomic.Bool
 	statFloor       *atomic.Bool
+	statRejoin      *atomic.Int64
 
 	// FSM telemetry
 	statFSMName    *status.AtomicString
@@ -101,6 +102,7 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statCadence:     statusReg.Ints.Get("snapshot.cadence_ticks"),
 		statConstrained: statusReg.Bools.Get("snapshot.cadence_constrained"),
 		statFloor:       statusReg.Bools.Get("snapshot.cadence_floor_breached"),
+		statRejoin:      statusReg.Ints.Get("network.rejoin_attempts"),
 
 		statFSMName:    statusReg.Strings.Get("fsm.state"),
 		statFSMElapsed: statusReg.Ints.Get("fsm.elapsed"),
@@ -481,7 +483,15 @@ func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 	// Transient by construction: the badge is cleared a fixed number of ticks after
 	// the handoff is adopted, so the two states a player reads are either side of it.
 	if r.statMigrating.Load() {
-		return statusItem{text: " Migrating ", fg: visual.RgbBlack, bg: visual.RgbOrange}, true
+		// The count is the reconnect walking the succession list: a survivor with
+		// no link to whoever is taking over tries every candidate once a second,
+		// and a player watching a handoff should be able to tell "trying" from
+		// "stalled" without reading a log.
+		text := " Migrating "
+		if n := r.statRejoin.Load(); n > 0 {
+			text = fmt.Sprintf(" Migrating %d ", n)
+		}
+		return statusItem{text: text, fg: visual.RgbBlack, bg: visual.RgbOrange}, true
 	}
 	state := r.statNet.Load()
 	if state == "" || state == "off" {

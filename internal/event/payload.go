@@ -140,6 +140,25 @@ type ParticipantDepartedPayload struct {
 	Slot        uint8  `toml:"slot"`
 }
 
+// ParticipantReachablePayload records that the session dialled a participant back
+// at the address it declared, and is a crossing for the same reason the other two
+// are — with one more that is the whole point of it.
+//
+// The confirmed set is what DesignatedSuccessor filters candidates by, and that
+// rule holds only while every survivor computes it from *identical* state. A table
+// the authority merely broadcast would be identical eventually and not at the
+// moment the authority dies, which is the one moment it is read: two survivors
+// would compute two successors and the split-brain rule would be gone. A
+// barrier-bound crossing is applied at one agreed tick on every instance, so the
+// set is the same everywhere at every tick — exactly the property the roster has,
+// and for exactly the same reason.
+//
+// Only the authority may produce one (admissibleFromSource), because only the
+// authority made the dial that proves it.
+type ParticipantReachablePayload struct {
+	Participant uint32 `toml:"participant"`
+}
+
 // NetworkDisconnectPayload signals peer disconnection
 type NetworkDisconnectPayload struct {
 	PeerID uint32 `toml:"peer_id"`

@@ -849,6 +849,15 @@ type OffTickDrainPort interface {
 	DrainOffTick(dst []network.Inbound) int
 }
 
+// PeerDialingPort is a transport a participant may open its own links on, which is
+// what makes a session more than the star `-join` builds. It is asserted for rather
+// than required for the same reason LinkMeasuringPort is: a transport that cannot
+// dial is still a perfectly good one, and a session on it is simply a star.
+type PeerDialingPort interface {
+	Connected(peerID uint32) bool
+	DialPeer(addr string, term network.AuthorityTerm) error
+}
+
 // NetworkSessionPort exposes barrier metadata negotiated before simulation starts.
 type NetworkSessionPort interface {
 	ParticipantID() uint32
@@ -951,6 +960,11 @@ type NetworkResource struct {
 	// nothing. Succession is a decision about who may author, which belongs beside
 	// the correction protocol rather than inside the transport.
 	OnAuthority func(kind uint8, from uint32, body []byte)
+
+	// OnReachable hands the session layer one applied reachability confirmation.
+	// It arrives as a barrier-bound crossing, so every instance calls this at the
+	// same tick — which is what makes the confirmed set a legal succession input.
+	OnReachable func(participant uint32)
 
 	// OnPeerLost reports a direct neighbour's departure to the session layer,
 	// beside the identity release OnDeparture does. It is a different question:

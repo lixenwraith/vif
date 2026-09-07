@@ -111,6 +111,8 @@ const (
 	EventParticipantJoined
 	// EventParticipantDeparted (ParticipantDepartedPayload) [bus] removes a participant from the session roster
 	EventParticipantDeparted
+	// EventParticipantReachable (ParticipantReachablePayload) [bus] records the session's confirmation that a participant can be dialled
+	EventParticipantReachable
 	// EventCursorStateSync (CursorStatePayload) [local] carries one cursor's owner-authored state to the instances that do not simulate it
 	EventCursorStateSync
 

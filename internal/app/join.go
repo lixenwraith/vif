@@ -331,6 +331,7 @@ func (a *App) attachTransportLocked(port engine.NetworkPort) {
 	r.OnCorrection = a.receiveCorrection
 	r.OnSelective = a.receiveSelective
 	r.OnAuthority = a.receiveAuthorityFrame
+	r.OnReachable = a.adoptReachable
 	r.OnPeerLost = a.reportPeerLost
 	term, holder := a.authorityStamp()
 	if holder != 0 {

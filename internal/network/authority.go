@@ -22,13 +22,16 @@
 // quorum:
 //
 //   - **The successor is the roster's, not the survivors'.** It is the lowest
-//     surviving identity in the closed roster — the first guest the coordinator
-//     admitted, because identities are handed out lowest-free-first in arrival
-//     order. Every instance computes it from the roster it already holds (D-11
-//     makes that roster identical everywhere), with no messages and no agreement
-//     step, so at most one instance can ever conclude that it is the successor.
-//     That is what makes split brain impossible rather than unlikely, and it is
-//     why succession needs neither a vote nor a randomized timer.
+//     surviving identity in the closed roster that the session confirmed it could
+//     reach — the first guest the coordinator admitted and dialled back, because
+//     identities are handed out lowest-free-first in arrival order. Every instance
+//     computes it from the roster it already holds (D-11 makes that roster
+//     identical everywhere) and the confirmed set the term froze (reach.go), with
+//     no messages and no agreement step, so at most one instance can ever conclude
+//     that it is the successor. That is what makes split brain impossible rather
+//     than unlikely, and it is why succession needs neither a vote nor a
+//     randomized timer. A *local* dial result is never an input: two survivors
+//     filtering by their own reach would compute two successors.
 //
 //   - **A term is never adopted, only granted.** A receiver ignores an artifact
 //     from a term older than the one it holds and refuses one from a term it has
@@ -48,7 +51,10 @@
 // What the rule gives up, and knowingly: a designated successor that went with the
 // authority elects nobody, even where other survivors could have agreed on one, so
 // the session forks. Deciding that needs agreement on whether the designated one is
-// dead, which is the quorum the topology cannot supply.
+// dead, which is the quorum the topology cannot supply. The confirmed set narrows
+// this rather than closing it — a candidate the session never reached is skipped
+// before it can be elected, so the case left is one that was reachable and then
+// went with the authority.
 //
 // Nothing here authenticates. A participant that can claim another's identity can
 // make itself the successor, which is a strictly larger exposure than Phase 6's and
@@ -102,6 +108,13 @@ type HandoffRecord struct {
 	Anchor            event.JoinAnchor     `json:"anchor"`
 	BarrierDelayTicks uint64               `json:"barrier_delay_ticks"`
 
+	// The reachability tables, moved whole for the same reason the roster is: a
+	// participant that adopts this record is adopting the successor's whole view of
+	// who can be reached and where. Reachable is the term's frozen confirmed set
+	// and is a succession input; Addresses is the live map and is not. See reach.go.
+	Addresses PeerAddresses `json:"addresses,omitempty"`
+	Reachable []PeerID      `json:"reachable,omitempty"`
+
 	// EvidenceTick is the newest retained authoritative tick the successor holds.
 	// It is reported rather than enforced: a receiver reads how far back the world
 	// it is about to adopt was last proved authoritative, which is the number that
@@ -123,7 +136,14 @@ func IsHandoffRefusal(err error) bool {
 
 // Validate refuses a handoff record that could not have been produced by the
 // succession rule, before any of it is adopted.
-func (h HandoffRecord) Validate(roster []SessionParticipant) error {
+//
+// reachable is the receiver's *own* frozen confirmed set, not the record's, for
+// exactly the reason the roster is its own: the check a receiver makes for itself
+// is the half of the split-brain rule it can make. Both are identical across the
+// term by construction — the roster because D-11 makes the world's cursors
+// identical, the confirmed set because it is written by the artifact that opened
+// the term and never changed inside it.
+func (h HandoffRecord) Validate(roster []SessionParticipant, reachable []PeerID) error {
 	if h.Term < FirstTerm {
 		return errors.New("handoff carries no authority term")
 	}
@@ -141,7 +161,7 @@ func (h HandoffRecord) Validate(roster []SessionParticipant) error {
 	// rather than counting evidence the record brought with it: the successor a
 	// term may name is a function of the roster above, which this instance already
 	// holds and has just been shown to agree with.
-	want, ok := DesignatedSuccessor(roster, h.Predecessor)
+	want, ok := DesignatedSuccessor(roster, h.Predecessor, reachable)
 	if !ok {
 		return errors.New("handoff names a successor for a roster with no survivor")
 	}
@@ -170,27 +190,52 @@ func SameRoster(a, b []SessionParticipant) bool {
 }
 
 // DesignatedSuccessor is the succession rule: the lowest surviving identity in the
-// closed roster.
+// closed roster that the session has confirmed it can reach.
 //
 // It takes no reports, no links and no votes, and that is the point. Every
-// instance computes it from a roster D-11 makes identical everywhere, so every
-// instance names the same successor without exchanging anything — which is what
-// makes "at most one authority per term" hold in a star, where survivors cannot
-// exchange anything at all. A quorum rule cannot: the star's survivors are
-// mutually unreachable the moment its centre goes, so none of them can ever
-// collect a vote and the session forks every time.
+// instance computes it from a roster D-11 makes identical everywhere and a
+// confirmed set the term froze, so every instance names the same successor without
+// exchanging anything — which is what makes "at most one authority per term" hold
+// in a star, where survivors cannot exchange anything at all. A quorum rule cannot:
+// the star's survivors are mutually unreachable the moment its centre goes, so none
+// of them can ever collect a vote and the session forks every time.
 //
-// Lowest identity is the first guest the coordinator admitted. Identities are
-// handed out lowest-free-first in arrival order, so the roster's order is arrival
-// order, and a session that loses its host continues under the participant that
-// has been in it longest.
+// The two inputs answer different halves. Lowest identity is the first guest the
+// coordinator admitted — identities are handed out lowest-free-first in arrival
+// order — so a session that loses its host continues under the participant that has
+// been in it longest. The confirmed set is what makes that participant one the
+// others can actually reach: a guest behind NAT, behind a firewall, or that chose
+// not to advertise plays normally and is skipped here, where before the map existed
+// it would take the term and author alone.
+//
+// A *local* dial result is never an input, and this is the one rule that matters
+// most: if each instance filtered candidates by what it could reach, two survivors
+// would compute two successors, which is the single outcome this design rules out.
+// A survivor that cannot reach the elected successor falls back to the timeout and
+// forks — strictly better than the previous behaviour, where nobody reached anybody.
+//
+// An empty confirmed set is "nothing was ever confirmed" rather than "nobody is
+// eligible", so the rule falls back to the roster alone, which is what a session of
+// leaves and a session from a build that predates this both get.
 //
 // The second return is false for a roster with nobody left, which is a session
 // with nothing to continue.
-func DesignatedSuccessor(roster []SessionParticipant, lost PeerID) (PeerID, bool) {
+func DesignatedSuccessor(roster []SessionParticipant, lost PeerID, reachable []PeerID) (PeerID, bool) {
+	if id, ok := lowestSurvivor(roster, lost, reachable); ok {
+		return id, true
+	}
+	return lowestSurvivor(roster, lost, nil)
+}
+
+// lowestSurvivor is the rule over one candidate filter; an empty filter admits
+// every survivor.
+func lowestSurvivor(roster []SessionParticipant, lost PeerID, admit []PeerID) (PeerID, bool) {
 	best, found := PeerID(0), false
 	for _, p := range roster {
 		if p.ID == 0 || p.ID == lost {
+			continue
+		}
+		if len(admit) != 0 && !slices.Contains(admit, p.ID) {
 			continue
 		}
 		if !found || p.ID < best {

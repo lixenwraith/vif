@@ -195,6 +195,15 @@ func (a *App) sessionSummaryLocked() string {
 			line += "; " + s
 		}
 	}
+	// Reachability, which is what decides whether losing the authority moves the
+	// session or forks it. A participant that binds nothing plays normally and is
+	// never elected, so it is worth saying which one this is.
+	if n := reg.Ints.Get("network.reachable").Load(); n > 0 {
+		line += fmt.Sprintf(", %d confirmed reachable", n)
+	}
+	if reg.Bools.Get("network.listening").Load() {
+		line += ", listening"
+	}
 	if reg.Bools.Get("network.host_lost").Load() {
 		return line + "; HOST LOST, continuing locally from the last authoritative state"
 	}

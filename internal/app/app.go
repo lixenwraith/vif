@@ -139,6 +139,10 @@ type App struct {
 	// instance sends and applies, authority is whether it is allowed to.
 	authority *authority
 
+	// reach owns this instance's listening port, the addresses it has learned, and
+	// the links it opens from them. See reach.go.
+	reach *reach
+
 	// staging is the second world a capture resolves into before it is written into
 	// this one, built on first use and re-used for the life of the run: building one
 	// per install costs 9 to 31 ms, which a correction five times a second cannot
@@ -282,6 +286,7 @@ func (a *App) initWorld() {
 		r.OnCorrection = a.receiveCorrection
 		r.OnSelective = a.receiveSelective
 		r.OnAuthority = a.receiveAuthorityFrame
+		r.OnReachable = a.adoptReachable
 		r.OnPeerLost = a.reportPeerLost
 		// A session endpoint exists, so this run is shared for its whole life whether
 		// or not a peer is attached at a given tick. Latching here rather than
@@ -337,6 +342,7 @@ func (a *App) initWorld() {
 	ensureAuthorityCells(a.world.Resources.Status)
 	a.snapshotTelemetry = newSnapshotTelemetry(a.world.Resources.Status)
 	a.authority = newAuthority(a)
+	a.reach = newReach(a)
 
 	// Initial rate; ParseScale rejects "" so a bare run stays at real time
 	if s, ok := engine.ParseScale(a.cfg.TimeScaleSpec); ok {
@@ -511,6 +517,7 @@ func (a *App) Close() {
 	if a.corrections != nil {
 		a.corrections.close()
 	}
+	a.reach.close()
 	a.closeProbe()
 	a.closeMidRunPort()
 	a.closeStagingWorld()
