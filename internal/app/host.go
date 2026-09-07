@@ -102,6 +102,10 @@ func (a *App) beginHostingLocked(addr string) error {
 	roster := slices.Clone(a.sessionRoster)
 	a.sessionMu.Unlock()
 
+	// A lobby binds this through the roster it closes on; a session opened mid-run
+	// has no lobby, and an unattributed cursor is one no successor can see leave.
+	a.bindCursorOwnersLocked(roster, hostParticipantID)
+
 	// The run that opens a session authors its first term. Everything downstream
 	// reads authorship from here rather than from the identity the handshake
 	// assigns, which is what lets a later handoff move it.

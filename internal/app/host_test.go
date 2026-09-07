@@ -46,6 +46,29 @@ func TestMidRunHostUsesConfiguredCapOrMaximum(t *testing.T) {
 	}
 }
 
+// TestAMidRunHostAttributesItsOwnCursor is what a succession is decided from: the
+// roster is re-derived from the participant stamped on each cursor, and it travels
+// in every capture. A session opened without a lobby left the coordinator's own
+// cursor unattributed, so no survivor's handoff record named the participant that
+// had just gone and its cursor stayed on the map.
+func TestAMidRunHostAttributesItsOwnCursor(t *testing.T) {
+	host := mustHeadless(t, 0x3017, 120, 40)
+	defer host.Close()
+	tickUntilCursor(t, host)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("begin hosting: %v", err)
+	}
+	var owner uint32
+	host.World().RunSafe(func() {
+		c, _ := host.World().Components.Cursor.GetComponent(host.World().Resources.Player.Slot(0))
+		owner = c.PeerID
+	})
+	if owner != uint32(hostParticipantID) {
+		t.Fatalf("the coordinator's own cursor names participant %d, want %d",
+			owner, hostParticipantID)
+	}
+}
+
 // TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun drives the mid-run join over
 // a real socket at a tick that is not zero.
 //
