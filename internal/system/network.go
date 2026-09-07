@@ -86,6 +86,7 @@ type NetworkSystem struct {
 	statAppliedLocal   *atomic.Int64
 	statAppliedPeer    *atomic.Int64
 	statLate           *atomic.Int64
+	statDelayTicks     *atomic.Int64
 	statRanWithout     *atomic.Int64
 	statPeerLag        *atomic.Int64
 	statPeerArtifacts  *atomic.Int64
@@ -348,6 +349,7 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statAppliedLocal = s.intStat(reg, "network.barrier_applied_local")
 	s.statAppliedPeer = s.intStat(reg, "network.barrier_applied_peer")
 	s.statLate = s.intStat(reg, "network.barrier_late")
+	s.statDelayTicks = s.intStat(reg, "network.barrier_delay_ticks")
 	s.statRanWithout = s.intStat(reg, "network.barrier_ran_without_peer")
 	s.statPeerLag = s.intStat(reg, "network.barrier_peer_lag_ticks")
 	s.statPeerArtifacts = s.intStat(reg, "network.barrier_peer_artifacts")
@@ -904,6 +906,7 @@ func (s *NetworkSystem) refreshLink(p engine.NetworkPort) bool {
 		s.mu.Unlock()
 	}
 	s.barrierActive.Store(active)
+	s.statDelayTicks.Store(int64(s.barrierDelayTicks()))
 	return active
 }
 

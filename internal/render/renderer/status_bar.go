@@ -39,26 +39,21 @@ type StatusBarRenderer struct {
 	statTicks *atomic.Int64
 
 	// Time control telemetry
-	statSpeed      *status.AtomicString
-	statStep       *atomic.Int64
-	statBreak      *status.AtomicString
-	statNet        *status.AtomicString
-	statStale      *atomic.Bool
-	statLag        *atomic.Int64
-	statCorrection *atomic.Int64
-	statPeers      *atomic.Int64
-	statLatch      *atomic.Bool
-	statHostLost   *atomic.Bool
-	statMigrating  *atomic.Bool
+	statSpeed *status.AtomicString
+	statStep  *atomic.Int64
+	statBreak *status.AtomicString
 
-	// The operating point. Phase 5 made the correction cadence a function of the
-	// link, and a player whose picture has gone coarse needs to be told which of
-	// the two it is — a constrained link, or a link that cannot converge at all.
+	// The session, in the one badge networkItem renders. The measurements behind
+	// the badge — round trip, jitter, cadence, keyframe interval, byte rate, the
+	// map latch — are read in the status snapshot and in :session, not here.
+	statNet         *status.AtomicString
+	statStale       *atomic.Bool
+	statLag         *atomic.Int64
+	statCorrection  *atomic.Int64
+	statPeers       *atomic.Int64
+	statHostLost    *atomic.Bool
+	statMigrating   *atomic.Bool
 	statCadence     *atomic.Int64
-	statKeyframe    *atomic.Int64
-	statLinkRTT     *atomic.Int64
-	statLinkJitter  *atomic.Int64
-	statLinkBps     *atomic.Int64
 	statConstrained *atomic.Bool
 	statFloor       *atomic.Bool
 
@@ -100,15 +95,10 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statLag:        statusReg.Ints.Get("network.lag_ticks"),
 		statCorrection: statusReg.Ints.Get("snapshot.correction_entities"),
 		statPeers:      statusReg.Ints.Get("network.peers"),
-		statLatch:      statusReg.Bools.Get("network.map_latched"),
 		statHostLost:   statusReg.Bools.Get("network.host_lost"),
 		statMigrating:  statusReg.Bools.Get("network.migrating"),
 
 		statCadence:     statusReg.Ints.Get("snapshot.cadence_ticks"),
-		statKeyframe:    statusReg.Ints.Get("snapshot.cadence_keyframe_interval"),
-		statLinkRTT:     statusReg.Ints.Get("network.link_rtt_ms"),
-		statLinkJitter:  statusReg.Ints.Get("network.link_jitter_ms"),
-		statLinkBps:     statusReg.Ints.Get("network.link_bps"),
 		statConstrained: statusReg.Bools.Get("snapshot.cadence_constrained"),
 		statFloor:       statusReg.Bools.Get("snapshot.cadence_floor_breached"),
 
@@ -148,26 +138,12 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	var rightItems []statusItem
 
-	// Priority 0: losing the game host is a permanent change of authority for this
-	// run. It must survive even the narrowest useful status bar.
-	if item, ok := r.migratingItem(); ok {
-		rightItems = append(rightItems, item)
-	}
-	if item, ok := r.hostLossItem(); ok {
-		rightItems = append(rightItems, item)
-	}
-	// A link that cannot converge, and the staleness beside it, come next.
-	if item, ok := r.linkItem(); ok {
-		rightItems = append(rightItems, item)
-	}
-	if item, ok := r.syncItem(); ok {
+	// Priority 0: one cell for the whole session. See networkItem.
+	if item, ok := r.networkItem(); ok {
 		rightItems = append(rightItems, item)
 	}
 	// Time control is absent at real time with nothing pending.
 	if item, ok := r.timeItem(); ok {
-		rightItems = append(rightItems, item)
-	}
-	if item, ok := r.networkItem(); ok {
 		rightItems = append(rightItems, item)
 	}
 
@@ -477,145 +453,90 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 }
 
-// migratingItem marks the moment between one authority and the next.
+// networkItem is the session, in one cell.
 //
-// It sits where NET:.../LOCK sits and replaces the latch half of it, because what
-// it is saying is about the same thing: the session is still one session, and the
-// instance authoring it is changing. It is transient by construction — the badge
-// is cleared a fixed number of ticks after the handoff is adopted — so the two
-// states a player actually reads are the ones on either side of it.
-func (r *StatusBarRenderer) migratingItem() (statusItem, bool) {
-	if !r.statMigrating.Load() {
+// It used to be four, and between them they could hold fifty characters of
+// uppercase — MIGRATING, HOST LOST:LOCAL, LNK 120±14ms 8x7 32K, LAG 7, COR 12,
+// NET:2P/LOCK — on a bar that also has to carry a mode, a command line, an FSM
+// phase and the player's own resources. A session in any state at all took the
+// whole right half and everything else was dropped from the end.
+//
+// Two of those were saying nothing. The D-14 latch is on for every session and
+// off for every solo run, so NET:.../LOCK printed a constant beside a state that
+// already implied it; NET:DOWN/LOCK read as two facts and was one. And the link
+// numbers are a diagnostic panel rather than a glance: round trip, jitter,
+// cadence, keyframe interval and byte rate are all in the status snapshot, under
+// network.link and snapshot.cadence, where they can be read against each other.
+//
+// So what is left is one badge, chosen by severity, and the rule is that a worse
+// fact hides a lesser one rather than sitting beside it. That also fixes the
+// reading a player could get before: a correction count outliving the link it
+// came from, still on screen next to DOWN, describing a host that had gone.
+func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
+	// Losing the authority is a permanent change for this run and outranks
+	// everything, including the link state that described the host that went.
+	if r.statHostLost.Load() {
+		return statusItem{text: " Host lost ", fg: visual.RgbBlack, bg: visual.RgbCursorError}, true
+	}
+	// Transient by construction: the badge is cleared a fixed number of ticks after
+	// the handoff is adopted, so the two states a player reads are either side of it.
+	if r.statMigrating.Load() {
+		return statusItem{text: " Migrating ", fg: visual.RgbBlack, bg: visual.RgbOrange}, true
+	}
+	state := r.statNet.Load()
+	if state == "" || state == "off" {
 		return statusItem{}, false
 	}
-	return statusItem{
-		text: " MIGRATING ", fg: visual.RgbBlack, bg: visual.RgbOrange,
-	}, true
-}
-
-// hostLossItem marks the guest's independent continuation after authority loss.
-// Unlike the transient status message and NET:DOWN, this remains visible through
-// game resets so the player cannot mistake the local fork for a connected session.
-func (r *StatusBarRenderer) hostLossItem() (statusItem, bool) {
-	if !r.statHostLost.Load() {
-		return statusItem{}, false
+	switch state {
+	case "down":
+		return statusItem{text: " Net: down ", fg: visual.RgbBlack, bg: visual.RgbCursorError}, true
+	case "connected":
+	default:
+		return statusItem{text: " Net: wait ", fg: visual.RgbBlack, bg: visual.RgbGtBg}, true
 	}
-	return statusItem{
-		text: " HOST LOST:LOCAL ", fg: visual.RgbBlack, bg: visual.RgbCursorError,
-	}, true
-}
 
-// syncItem renders what a participant needs to know about its own picture, which
-// Phase 4 changed from a verdict into two measurements.
-//
-// It used to say DESYNC and then DIVERGED: two instances re-derived the shared
-// world from one artifact stream, so a disagreement meant one of them had lost an
-// artifact and nothing would ever re-derive it — the second state was a statement
-// about the rest of the session rather than about a moment. Under an authority
-// neither is true. A guest predicts between corrections and is expected to differ;
-// the host's next snapshot replaces whatever it drifted to; there is no state a
-// session can enter that the next correction does not leave.
-//
-// What is worth showing instead is the two things that are not automatically fine.
-// LAG says this instance is far enough behind the session that its own crossings
-// are reaching the host after the ticks they name — the link, not the game. COR is
-// the size of the last correction in shared entities, which is how visibly the
-// authority disagreed with the prediction; it is absent when the prediction was
-// exact, which at rest it usually is.
-func (r *StatusBarRenderer) syncItem() (statusItem, bool) {
-	if r.statStale.Load() {
+	// Connected, so the badge describes the picture rather than the link's
+	// existence. Severity order, and each of these has a fuller reading in the
+	// status snapshot:
+	//
+	//   slow!  no cadence the controller may choose delivers a whole authoritative
+	//          world inside the guaranteed window — the system cannot keep its
+	//          promise, rather than degrading gracefully.
+	//   lag n  this instance is n ticks behind the newest peer, far enough that its
+	//          own crossings reach the host after the ticks they name.
+	//   slow   the cadence backed off and prediction is carrying more. The system
+	//          working, on a small link.
+	//   ~n     the last correction moved n shared entities: how visibly the
+	//          authority disagreed with the prediction. Absent when it was exact,
+	//          which at rest it usually is.
+	peers := r.statPeers.Load()
+	switch {
+	case r.statFloor.Load() && r.statCadence.Load() != 0:
 		return statusItem{
-			text: fmt.Sprintf(" LAG %d ", r.statLag.Load()),
+			text: fmt.Sprintf(" Net: %d slow! ", peers),
+			fg:   visual.RgbBlack, bg: visual.RgbCursorError,
+		}, true
+	case r.statStale.Load():
+		return statusItem{
+			text: fmt.Sprintf(" Net: %d lag %d ", peers, r.statLag.Load()),
+			fg:   visual.RgbBlack, bg: visual.RgbOrange,
+		}, true
+	case r.statConstrained.Load() && r.statCadence.Load() != 0:
+		return statusItem{
+			text: fmt.Sprintf(" Net: %d slow ", peers),
 			fg:   visual.RgbBlack, bg: visual.RgbOrange,
 		}, true
 	}
 	if n := r.statCorrection.Load(); n > 0 {
 		return statusItem{
-			text: fmt.Sprintf(" COR %d ", n),
-			fg:   visual.RgbBlack, bg: visual.RgbGtBg,
+			text: fmt.Sprintf(" Net: %d ~%d ", peers, n),
+			fg:   visual.RgbBlack, bg: visual.RgbBoostBg,
 		}, true
 	}
-	return statusItem{}, false
-}
-
-// linkItem reports the operating point the link put this session at, and it is
-// absent while there is nothing to say.
-//
-// A player whose picture has gone coarse has two very different problems and
-// deserves to be told which. A *constrained* link is the system working: the
-// cadence has slowed, prediction is carrying more, and the correction magnitude
-// is rising and bounded — the game is fine and the link is small. A link *below
-// the convergence floor* is not: no cadence the controller may choose delivers a
-// whole authoritative world inside the guaranteed window, so this instance may
-// stop converging, and the plan's boundary is that this is said rather than
-// silently adapted past.
-//
-// The item carries all of it because the operating point is not one number: the
-// round trip and its variation say what the link is, the cadence and keyframe
-// interval say what was chosen, and the rate says how much of the link that
-// choice is spending. It is only ever on screen when the link is constrained, so
-// the width it costs is width a healthy session never pays.
-func (r *StatusBarRenderer) linkItem() (statusItem, bool) {
-	if r.statHostLost.Load() {
-		return statusItem{}, false
-	}
-	cadence := r.statCadence.Load()
-	if cadence == 0 {
-		return statusItem{}, false
-	}
-	breached := r.statFloor.Load()
-	if !breached && !r.statConstrained.Load() {
-		return statusItem{}, false
-	}
-	label := "LNK"
-	bg := visual.RgbOrange
-	if breached {
-		label, bg = "LINK!", visual.RgbCursorError
-	}
 	return statusItem{
-		text: fmt.Sprintf(" %s %d±%dms %dx%d %s ", label,
-			r.statLinkRTT.Load(), r.statLinkJitter.Load(),
-			cadence, r.statKeyframe.Load(), byteRate(r.statLinkBps.Load())),
-		fg: visual.RgbBlack, bg: bg,
+		text: fmt.Sprintf(" Net: %d ", peers),
+		fg:   visual.RgbBlack, bg: visual.RgbBoostBg,
 	}, true
-}
-
-// byteRate renders a bandwidth estimate in the width a status bar has, which is
-// three or four characters rather than the nine a byte count wants.
-func byteRate(bps int64) string {
-	switch {
-	case bps <= 0:
-		return "-"
-	case bps < 1000:
-		return fmt.Sprintf("%dB", bps)
-	case bps < 1000*1000:
-		return fmt.Sprintf("%dK", bps/1000)
-	default:
-		return fmt.Sprintf("%.1fM", float64(bps)/1e6)
-	}
-}
-
-// networkItem reports connection, peer count and the D-14 map latch.
-func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
-	state := r.statNet.Load()
-	if state == "" || state == "off" {
-		return statusItem{}, false
-	}
-	label := "WAIT"
-	bg := visual.RgbGtBg
-	switch state {
-	case "connected":
-		label = fmt.Sprintf("%dP", r.statPeers.Load())
-		bg = visual.RgbBoostBg
-	case "down":
-		label = "DOWN"
-		bg = visual.RgbCursorError
-	}
-	latch := "OPEN"
-	if r.statLatch.Load() {
-		latch = "LOCK"
-	}
-	return statusItem{text: fmt.Sprintf(" NET:%s/%s ", label, latch), fg: visual.RgbBlack, bg: bg}, true
 }
 
 // timeItem builds the time control indicator, present only when the simulation is

@@ -6,8 +6,25 @@ import "time"
 // a periodic value sync whose interval trades freshness against traffic.
 const (
 	// NetworkBarrierDelayTicks gives an artifact 150ms to reach every participant.
-	// The session carries this value so a higher-latency deployment can negotiate more.
+	// It is the floor and the default: a session with nothing measured, and a
+	// session on a link faster than this, both use it. The negotiated value travels
+	// in the offer and the handoff record.
 	NetworkBarrierDelayTicks = 3
+
+	// NetworkBarrierMaxDelayTicks is one second, and bounds what a measurement may
+	// ask for. Past this the lead has stopped being an interpolation buffer and
+	// become input latency the player feels on every remote actor; a link that
+	// wants more is one the cadence controller should be reporting rather than one
+	// the barrier should be absorbing. Missing the lead is survivable — §3.2's
+	// fences make a late artifact harmless — so the ceiling errs toward the
+	// responsive side.
+	NetworkBarrierMaxDelayTicks = 20
+
+	// NetworkBarrierJitterMargin multiplies the measured variation added on top of
+	// the one-way estimate. Two is the usual reordering allowance: it covers the
+	// tail of an ordinary distribution without letting one outlier set the lead
+	// for the session.
+	NetworkBarrierJitterMargin = 2
 
 	// NetworkSyncTicks is the period between owner-authored state syncs (D-13).
 	// One cursor's payload is small; this keeps remote presentation responsive.

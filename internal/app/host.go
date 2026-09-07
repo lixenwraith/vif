@@ -181,8 +181,15 @@ func (a *App) sessionSummaryLocked() string {
 		addr, role = a.cfg.JoinAddress, "guest"
 	}
 	reg := a.world.Resources.Status
-	line := fmt.Sprintf("Session %s %s, participant %d, %d peer(s), tick %d",
-		role, addr, participant, peers, a.Position().Tick)
+	// The D-14 latch used to sit in the status bar beside every connection state,
+	// where it was a constant: on for every session and off for every solo run. It
+	// is a fact about the run rather than a thing to watch, so it is named here.
+	latch := "map open"
+	if reg.Bools.Get("network.map_latched").Load() {
+		latch = "map latched"
+	}
+	line := fmt.Sprintf("Session %s %s, participant %d, %d peer(s), tick %d, %s",
+		role, addr, participant, peers, a.Position().Tick, latch)
 	if a.authority != nil {
 		if s := a.authority.summary(); s != "" {
 			line += "; " + s

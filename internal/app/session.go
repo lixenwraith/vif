@@ -403,7 +403,7 @@ func (a *App) offerLocked(anchor event.JoinAnchor, assigned network.PeerID) netw
 		Assigned:          assigned,
 		Term:              term,
 		Participants:      slices.Clone(a.sessionRoster),
-		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
+		BarrierDelayTicks: max(a.barrierDelay, parameter.NetworkBarrierDelayTicks),
 		FixedAuthority:    a.cfg.FixedAuthority,
 		// Derived from the anchor this offer carries rather than read again, so
 		// what the coordinator later compares a joiner's report against is exactly
@@ -418,6 +418,9 @@ func (a *App) offerLocked(anchor event.JoinAnchor, assigned network.PeerID) netw
 // set to its own identity.
 func (a *App) hostOffer() (network.SessionOffer, error) {
 	anchor := a.JoinAnchor()
+	// Read before sessionMu for the same reason the anchor is: both take the world
+	// lock, and a departure released from under that lock takes sessionMu.
+	link, _ := a.sessionTransport().(engine.LinkMeasuringPort)
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
 	if len(a.sessionRoster) == 0 {
@@ -433,6 +436,10 @@ func (a *App) hostOffer() (network.SessionOffer, error) {
 			break
 		}
 	}
+	// The one moment the lead may be chosen: the roster is closed, the links to
+	// everyone in it have been up for as long as the lobby took, and no
+	// participant holds a value yet. See barrier.go.
+	a.adoptBarrierDelayLocked(link)
 	a.sessionOffer = a.offerLocked(anchor, assigned)
 	return a.sessionOffer, a.sessionOffer.Validate()
 }

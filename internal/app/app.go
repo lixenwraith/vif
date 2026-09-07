@@ -61,6 +61,11 @@ type App struct {
 	// entry per accepted connection and closes into the offer the start gate sends.
 	sessionRoster []network.SessionParticipant
 
+	// barrierDelay is the session's playout lead in ticks, chosen once when the
+	// coordinator closes its roster and carried by every offer it builds after
+	// that. See barrier.go. Zero until the first offer, which reads as the default.
+	barrierDelay uint64
+
 	// midRunPort is the socket a solo run opened for itself with :host. A run
 	// started with -host takes its endpoint from NetworkService instead, which the
 	// hub owns and closes; this one is owned here because nothing else knows it
