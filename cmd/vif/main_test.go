@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
 func TestLogFlags(t *testing.T) {
@@ -228,4 +230,98 @@ func newDiagnosticFlagSet() (*flag.FlagSet, *logFlags, *setFlag[bool]) {
 	dev := newSetFlag(true, parseBoolFlag)
 	fs.Var(&dev, "dev", "")
 	return fs, logs, &dev
+}
+
+// TestHelpListsEveryFlag is what keeps two lists of the same flags from drifting.
+//
+// Flags are registered where the group that owns them lives and presented from one
+// table in usage.go, which is the only way a short and a long form can share a
+// line. The cost of that split is that a flag can be added to one and not the
+// other — registered and unmentioned, or documented and gone — so the walk runs in
+// both directions.
+func TestHelpListsEveryFlag(t *testing.T) {
+	registered := map[string]bool{}
+	for _, name := range registeredFlagNames() {
+		registered[name] = true
+	}
+
+	documented := map[string]bool{}
+	for _, section := range helpSections() {
+		if section.title == "" {
+			t.Error("a help section has no heading")
+		}
+		for _, line := range section.lines {
+			if len(line.names) == 0 || line.hint == "" {
+				t.Errorf("%s: a line has no name or no hint", section.title)
+			}
+			if strings.Contains(line.hint, "\n") {
+				t.Errorf("-%s: the hint is more than one line", line.names[0])
+			}
+			for _, name := range line.names {
+				if documented[name] {
+					t.Errorf("-%s appears in the help twice", name)
+				}
+				documented[name] = true
+				if !registered[name] {
+					t.Errorf("-%s is in the help and is not a registered flag", name)
+				}
+			}
+		}
+	}
+	for name := range registered {
+		if !documented[name] {
+			t.Errorf("-%s is registered and absent from the help", name)
+		}
+	}
+}
+
+// TestScopeNoteMatchesTheParser feeds the -ls note back through the parser it
+// describes, so a scope renamed in vlog fails here rather than in a help text
+// nobody re-reads.
+func TestScopeNoteMatchesTheParser(t *testing.T) {
+	var union vlog.Scope
+	for _, row := range scopeRows {
+		byName, err := vlog.ParseScopes(row.name, vlog.ScopeNone)
+		if err != nil {
+			t.Fatalf("the help offers scope %q, which the parser refuses: %v", row.name, err)
+		}
+		byLetter, err := vlog.ParseScopes(row.letter, vlog.ScopeNone)
+		if err != nil {
+			t.Fatalf("the help offers letter %q, which the parser refuses: %v", row.letter, err)
+		}
+		if byName != byLetter {
+			t.Errorf("scope %q and letter %q select different sets", row.name, row.letter)
+		}
+		union |= byName
+	}
+	// The claim the old hint got wrong: `all` is every scope, so `all+dispatch`
+	// says the same thing twice.
+	all, err := vlog.ParseScopes("all", vlog.ScopeNone)
+	if err != nil {
+		t.Fatalf("parse all: %v", err)
+	}
+	if union != all {
+		t.Errorf("the listed scopes union to %v, and all is %v", union, all)
+	}
+}
+
+// TestHelpRendersOneLinePerFlag pins the shape rather than the words: every flag
+// occupies one line, which is what makes the output greppable.
+func TestHelpRendersOneLinePerFlag(t *testing.T) {
+	var out strings.Builder
+	writeUsage(&out)
+	text := out.String()
+
+	for _, section := range helpSections() {
+		for _, line := range section.lines {
+			want := line.render()
+			n := strings.Count(text, "  "+want+" ")
+			if n != 1 {
+				t.Errorf("%q appears %d times in the help, want once", want, n)
+			}
+		}
+	}
+	if strings.Contains(text, "Alias of") {
+		t.Error("the help still describes a flag as an alias instead of sharing its line")
+	}
 }

@@ -73,7 +73,8 @@ be detected by this probe.
 The supervisor can move to an untried candidate if the active process exits.
 Backend lifecycle has its own mutex because failover and shutdown can race.
 
-`-ab <name>` restricts selection to one backend. Two explicit-only synthetic
+`-ab <name>`, long form `-audio-backend <name>`, restricts selection to one
+backend. Two explicit-only synthetic
 backends are useful in automation:
 
 - `-ab null` runs the full mixer and discards samples;
@@ -153,8 +154,9 @@ documents must use names, not numeric IDs.
 ## 6. Mixer buses, mute, and pause
 
 Effects and music have independent mute bits. `Ctrl-S` cycles the composed game
-mask through silence, effects-only, music-only, and both. CLI `-am` starts
-muted, while system/config events can change channels independently.
+mask through silence, effects-only, music-only, and both. The CLI starts muted
+by default, and `-mute=false` starts with sound; system and config events can
+change channels independently.
 
 Pause is a device/output state, not merely a gameplay-system toggle. It applies
 even if `AudioSystem` is disabled and ramps the master gain over 250 ms to avoid

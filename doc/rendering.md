@@ -238,8 +238,8 @@ area. Setting `RgbVoid` to `RgbBackground` restores the undifferentiated look.
 Finalization is immediately followed by the terminal module's full-buffer
 `Flush`.
 
-The CLI can force xterm-256 (`-cx`) or truecolor (`-ct`); otherwise the terminal
-capability selects the mode. Visual parameter files provide truecolor and
+The CLI can force xterm-256 (`-color 256`) or truecolor (`-color true`);
+`-color auto`, the default, lets the terminal capability select the mode. Visual parameter files provide truecolor and
 palette-specific values. Renderer logic should not assume every color channel
 contains RGB.
 

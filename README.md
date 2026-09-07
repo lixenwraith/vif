@@ -66,7 +66,8 @@ Useful targets include `make dev`, `make test`, `make verify`, `make tools`,
 `make wasm`, and `make serve`. `make install-config` safely installs editable
 game, keymap, and content files under the user config root without replacing
 existing files. Audio starts muted; press `Ctrl-S` to cycle audio channels or
-launch with `-au`. Run `./bin/vif -h` for all flags.
+launch with `-mute=false`. Run `./bin/vif -h` for all flags — it prints to
+stdout, so it pipes into `grep` without redirecting stderr.
 
 Primary native targets are Linux and FreeBSD. The repository also contains a
 constrained xterm.js/WASM build and an experimental Windows cross-build.
@@ -100,8 +101,9 @@ constrained xterm.js/WASM build and an experimental Windows cross-build.
   allocated on somebody's behalf: end it if no guest arrives, end it after the last
   one leaves, and let a termination signal wait for the roster instead of cutting
   the match. Omitting them is the long-lived host an operator starts by hand.
-- `-l`, `-ls`, `-lt`, and `-lr` enable structured logging, scoped snapshots,
-  and flight-recorder history.
+- `-l`, `-ls`, `-lt`, and `-lr` — long forms `-log`, `-log-scope`, `-log-stat`,
+  `-log-recorder` — enable structured logging, scoped snapshots, and
+  flight-recorder history.
 - `cmd/soundlab` authors and auditions sounds/music.
 - `cmd/ascimage` converts and previews dual-mode `.vifimg` assets.
 

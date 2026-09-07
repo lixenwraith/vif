@@ -99,48 +99,95 @@ useful CI addition even though the current workflow does not perform one.
 
 ## 4. CLI reference
 
+`-h`, `-help` and `--help` print the table below to **stdout** and exit zero, so
+`./bin/vif -h | grep authority` works without redirecting stderr. A malformed
+flag still goes to stderr with exit 2, which is the `flag` package's contract for
+a usage error. Short and long forms of the same option share one line here and
+one line in the program's own help; they are the same flag, not aliases, so
+`-g` and `-config-game` write the same field and the last one on the command
+line wins.
+
+### Session
+
 | Flag | Purpose |
 |---|---|
-| `-cx`, `-ct` | Force xterm-256 or truecolor; neither means auto-detect. |
-| `-ab <backend>` | Force audio backend (`pacat`, `pw-cat`, `aplay`, `sox`, `ffplay`, `oss`, `null`, or `wav:path`). |
-| `-am`, `-au` | Start muted/unmuted; default is muted. |
-| `-config-dir <root>` | Search one categorized config root before user/system roots. |
-| `-f <path>` | Content directory or single pinned `.txt`/`.toml` file. |
-| `-g <path>` | FSM `game.toml` or directory containing it. |
-| `-d` | Force embedded FSM/content; mutually exclusive with `-g`/`-f`. |
-| `-k <path>` | Keymap override TOML. |
-| `-config-music`, `-config-sounds` | Strict optional audio TOML paths. |
-| `-config-game`, `-config-content`, `-config-keymap`, `-config-embedded` | Discoverable aliases for `-g`, `-f`, `-k`, and `-d`. |
-| `-check` | Resolve and validate FSM, keymap, audio, and content; print result and exit. |
-| `-schema` | Print FSM/event schema JSON, exit. |
-| `-speed <rate>` | Initial play-mode rate: `1/8`, `1/4`, `1/2`, `1`, `2`, `4`, or `8`. With `-script` it is the run's wall pace instead, and additionally accepts `max`. |
-| `-seed <uint64>` | Root RNG seed; zero draws a seed and logs it. |
-| `-j[=DIR]`, `-journal[=DIR]` | Record non-system-origin events to a dedicated replay journal. |
-| `-replay <file>` | Present a recorded journal instead of starting interactive play. |
-| `-script <file>` | Run a bounded authored TOML schedule; may be combined with `-host` or `-join`. |
-| `-watch` | Present a `-script` run on this terminal instead of running it headlessly. |
-| `-host <address>` | Bind a session, for example `:7777`. |
-| `-serve <address>` | Bind a headless session with no local player: a dedicated host. |
-| `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own, such as `-serve`. Omitted on a server, the first guest's terminal sizes the session. |
-| `-probe <address>` | Serve `/health` and `/metrics` for a `-serve` run. |
-| `-first-join <d>` | End a `-serve` run if no guest has connected within `d`; zero waits forever. |
-| `-empty <d>` | End a `-serve` run `d` after the last guest leaves; zero keeps the session. Also the window a dropped guest has to reclaim its slot. |
-| `-drain <d>` | How long a termination signal waits for a `-serve` roster to empty before exiting anyway; zero exits at once, and a second signal always does. |
-| `-log-stdout` | Write the session log to stdout as JSON instead of to a file; implies `-l`. |
-| `-join <address>` | Join a session at `host:port`; the host supplies seed/config/content identity. |
-| `-players <n>` | Participants a `-host` lobby waits for, itself included; 2 by default, up to `parameter.MaxPlayers`. With `-serve` it counts guests instead, because the server is not one of them, and it is a ceiling rather than a requirement: the session starts on its first guest and admits the rest as they arrive, defaulting to the full roster. |
-| `-l` / `-log` | Enable structured logging; use `-l=DIR` for another directory. |
-| `-lv <level>` | `trace`, `debug`, `info`, `warn`, or `error`; implies logging. |
-| `-ls <scope>` | Scope mask such as `app+fsm+stat`, `afs`, `+event`, or `-lock`; implies logging. |
-| `-lt <ticks>` | Status snapshot period; zero disables; implies logging. |
-| `-lr <ticks>` | Flight recorder depth in ticks; zero disables; implies logging. |
-| `-dev[=bool]` | Capture runtime stderr; defaults on in race builds. |
+| `-host <addr>` | Bind a session and play in it, for example `:7777`. |
+| `-serve <addr>` | Bind a headless session with no local cursor: a dedicated host. |
+| `-join <addr>` | Join a session at `host:port`; the host supplies seed, config and content identity. |
+| `-players <n>` | Roster ceiling including self, `2`..`parameter.MaxPlayers`. Unset holds the whole roster. With `-serve` it counts guests, because the server is not one of them, and the session starts on its first guest and admits the rest as they arrive. |
+| `-authority host\|migrate` | Where authorship goes when the authoring participant leaves. `host` pins it; `migrate` hands it to the lowest surviving identity. Default `host` with `-serve`, `migrate` otherwise. |
+| `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own. Omitted on a server, the first guest's terminal sizes the session. |
+| `-probe <addr>` | Serve `/health` and `/metrics`; `-serve` only. |
+| `-first-join <dur>` | End a `-serve` run if no guest has connected within `dur`; zero waits forever. |
+| `-empty <dur>` | End a `-serve` run `dur` after the last guest leaves; zero keeps the session. Also the window a dropped guest has to reclaim its slot. |
+| `-drain <dur>` | How long a termination signal waits for a `-serve` roster to empty before exiting anyway; zero exits at once, and a second signal always does. |
 
-When both color flags are passed, truecolor wins because config translation
-checks `-ct` first. When both audio start flags are passed, unmute wins.
-`-lv`, `-ls`, `-lt`, and `-lr` each imply `-l`; `-ls` is parsed before
-terminal startup. A bare `-l` remains boolean, so a directory requires
-`-l=DIR`, not `-l DIR`.
+### Configuration
+
+| Flag | Purpose |
+|---|---|
+| `-d`, `-config-embedded` | Use the embedded FSM and content; mutually exclusive with `-g` and `-f`. |
+| `-config-dir <dir>` | Search one categorized config root (`game/ input/ audio/ content/`) before the user and system roots. |
+| `-g`, `-config-game <path>` | FSM `game.toml`, or a directory containing it. |
+| `-f`, `-config-content <path>` | Content directory, or a single pinned `.txt`/`.toml` file. |
+| `-k`, `-config-keymap <path>` | Keymap override TOML. |
+| `-config-music <path>` | Music pattern override TOML; strict optional. |
+| `-config-sounds <path>` | Sound definition override TOML; strict optional. |
+
+### Presentation and audio
+
+| Flag | Purpose |
+|---|---|
+| `-color auto\|256\|true` | Colour depth. `auto` (the default) detects the terminal; `256` forces xterm-256; `true` forces truecolor. |
+| `-mute[=false]` | Start muted, which is the default. `-mute=false` starts with sound. |
+| `-ab`, `-audio-backend <name>` | Force an audio backend: `pacat`, `pw-cat`, `aplay`, `sox`, `ffplay`, `oss`, `null`, or `wav:path`. |
+
+### Run
+
+| Flag | Purpose |
+|---|---|
+| `-seed <n>` | Root RNG seed; zero draws one and logs it. |
+| `-speed <rate>` | Initial play-mode rate: `1/8`, `1/4`, `1/2`, `1`, `2`, `4`, `8`. With `-script` it is the run's wall pace instead and additionally accepts `max`. |
+| `-script <path>` | Run a bounded authored TOML tick schedule; may be combined with `-host` or `-join`. |
+| `-watch` | Present a `-script` run on this terminal instead of running it headlessly. |
+| `-replay <path>` | Present a recorded journal instead of starting interactive play. |
+| `-check` | Resolve and validate FSM, keymap, audio and content; print the result and exit. |
+| `-schema` | Print the FSM and event schema as JSON, then exit. |
+
+### Diagnostics
+
+| Flag | Purpose |
+|---|---|
+| `-l`, `-log[=DIR]` | Enable structured logging; `DIR` overrides the user-state log directory. |
+| `-lv`, `-log-level <level>` | `trace`, `debug`, `info`, `warn` or `error`; implies `-l`. |
+| `-ls`, `-log-scope <spec>` | Which subsystems log (see below); implies `-l`. |
+| `-lt`, `-log-stat <ticks>` | Status snapshot period in game ticks; zero disables; implies `-l`. |
+| `-lr`, `-log-recorder <ticks>` | Flight recorder depth in game ticks; zero disables; implies `-l`. |
+| `-log-stdout` | Write the log to stdout as JSON instead of to a file; implies `-l`. |
+| `-j`, `-journal[=DIR]` | Record non-system-origin events to a replay journal; `DIR` overrides the user-state journal directory. |
+| `-dev[=false]` | Capture runtime stderr to a file; on by default for `-race` builds. |
+
+### Log scopes
+
+`-ls` and `:log scope` share one grammar, printed at the foot of `-h`:
+
+| Row | Meaning |
+|---|---|
+| Names | `app` `fsm` `event` `dispatch` `push` `input` `stat` `rec` `lock` `tap` |
+| Letters | `a` `f` `e` `d` `p` `i` `s` `r` `l` `t`, positionally the same list |
+| Sets | `all` is every scope — `dispatch` included — and `none` is nothing |
+| Combine | join names or letters with `+`, `,` or a space: `app+fsm+stat` and `afs` are one set |
+| Adjust | a leading `+` or `-` adds to or removes from the set already selected, instead of replacing it |
+
+So `-ls afs` replaces the mask, `-ls +d` adds dispatch to it, and `-ls -t`
+silences taps. `-ls all+dispatch` is `all` said twice.
+
+### Combination rules
+
+`-lv`, `-ls`, `-lt` and `-lr` each imply `-l`; `-ls` is parsed through
+`vlog.ParseScopes` during flag parsing, before terminal startup, so a bad spec
+fails before the screen is taken. A bare `-l` and a bare `-j` remain boolean, so
+a directory requires `-l=DIR` and `-j=DIR`, not a space.
 
 `-first-join`, `-empty` and `-drain` are refused without `-serve`, for the reason
 `-probe` is: an interactive run is ended by the person who started it, and a flag

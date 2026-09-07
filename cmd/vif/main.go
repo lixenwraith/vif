@@ -28,39 +28,63 @@ const (
 
 const logShutdownTimeout = 2 * time.Second
 
-// CLI flags
-var (
-	flagColor256     = flag.Bool("cx", false, "Force 256-color mode")
-	flagColorTrue    = flag.Bool("ct", false, "Force truecolor mode")
-	flagAudioBackend = flag.String("ab", "", "Force audio backend by name")
-	flagAudioMute    = flag.Bool("am", false, "Start with audio muted")
-	flagAudioUnmute  = flag.Bool("au", false, "Start with audio unmuted")
-	flagCheck        = flag.Bool("check", false, "Validate resolved game, keymap, audio, and content config, then exit")
-	flagSchema       = flag.Bool("schema", false, "Print FSM schema JSON and exit")
-	flagSpeed        = flag.String("speed", "", "Simulation rate: 1/8 1/4 1/2 1 2 4 8; with -script also \"max\" for no wall pacing")
-	flagSeed         = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
-	flagReplay       = flag.String("replay", "", "Replay a recorded journal file instead of playing")
-	flagScript       = flag.String("script", "", "Run an authored deterministic TOML script")
-	flagWatch        = flag.Bool("watch", false, "Present a -script run on this terminal instead of running it headlessly")
+// colourModes are the -color words. Auto is the default and means "ask the
+// terminal", which is what every run that does not care wants.
+const (
+	colourAuto = "auto"
+	colour256  = "256"
+	colourTrue = "true"
+)
 
-	flagConfig  = newConfigFlags()
-	flagLogs    = newLogFlags()
-	flagSession sessionFlags
-	flagJournal = newSetFlag(true, parseOutputDirFlag)
-	flagDev     = newSetFlag(true, parseBoolFlag)
+// CLI flags. Every one of them is described in helpSections; the usage strings
+// here are what `flag` prints on a parse error before that table is reachable, and
+// are deliberately the same sentence.
+var (
+	flagColor  = flag.String("color", colourAuto, "Colour depth: auto, 256 or true")
+	flagMute   = flag.Bool("mute", true, "Start muted; -mute=false starts with sound")
+	flagCheck  = flag.Bool("check", false, "Validate the resolved config, then exit")
+	flagSchema = flag.Bool("schema", false, "Print the FSM schema as JSON, then exit")
+	flagSpeed  = flag.String("speed", "", "Simulation rate: 1/8 1/4 1/2 1 2 4 8, or max with -script")
+	flagSeed   = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
+	flagReplay = flag.String("replay", "", "Replay a recorded journal instead of playing")
+	flagScript = flag.String("script", "", "Run an authored deterministic TOML tick script")
+	flagWatch  = flag.Bool("watch", false, "Present a -script run on this terminal")
+	flagHelp   = flag.Bool("h", false, "Print the flag help and exit")
+
+	flagAudioBackend string
+	flagConfig       = newConfigFlags()
+	flagLogs         = newLogFlags()
+	flagSession      sessionFlags
+	flagJournal      = newSetFlag(true, parseOutputDirFlag)
+	flagDev          = newSetFlag(true, parseBoolFlag)
 )
 
 func init() {
 	flagConfig.register(flag.CommandLine)
 	flagLogs.register(flag.CommandLine)
 	flagSession.register(flag.CommandLine)
-	flag.Var(&flagJournal, "j", "Record a replay journal; -j=DIR overrides the user-state directory")
-	flag.Var(&flagJournal, "journal", "Alias of -j")
-	flag.Var(&flagDev, "dev", "Capture runtime stderr to a file; defaults on for -race builds, -dev=false disables")
+	audioHint := "Force an audio backend instead of detecting one"
+	flag.StringVar(&flagAudioBackend, "ab", "", audioHint)
+	flag.StringVar(&flagAudioBackend, "audio-backend", "", audioHint)
+	flag.BoolVar(flagHelp, "help", false, "Print the flag help and exit")
+	journalHint := "Record a replay journal; -j=DIR overrides the user-state directory"
+	flag.Var(&flagJournal, "j", journalHint)
+	flag.Var(&flagJournal, "journal", journalHint)
+	flag.Var(&flagDev, "dev", "Capture runtime stderr to a file; -dev=false disables")
+
+	// The `flag` package writes its own usage to stderr and exits non-zero, which
+	// is right for a mistake and wrong for a question. Asking is handled in main.
+	flag.Usage = func() { writeUsage(flag.CommandLine.Output()) }
 }
 
 func main() {
 	flag.Parse()
+	if *flagHelp {
+		// Asked for, so it is output rather than a diagnostic: stdout, exit zero,
+		// greppable without redirecting stderr.
+		writeUsage(os.Stdout)
+		return
+	}
 
 	setupDiagnostics()
 
@@ -195,8 +219,8 @@ func logRuntimeReport(r core.RuntimeReport) {
 // buildConfig translates parsed flags into the runtime configuration
 func buildConfig() app.Config {
 	cfg := app.Config{
-		AudioBackend:  *flagAudioBackend,
-		AudioMuted:    true, // default muted
+		AudioBackend:  flagAudioBackend,
+		AudioMuted:    true, // -mute defaults on
 		Resources:     flagConfig.options(),
 		LogScope:      flagLogs.scope.value,
 		StatTicks:     flagLogs.stat.value,
@@ -226,19 +250,15 @@ func buildConfig() app.Config {
 		cfg.Width, cfg.Height, _ = parseSize(flagSession.size) // validated in validateInvocation
 	}
 
-	if *flagAudioUnmute {
-		cfg.AudioMuted = false
-	} else if *flagAudioMute {
-		cfg.AudioMuted = true
-	}
+	cfg.AudioMuted = *flagMute
 
-	switch {
-	case *flagColorTrue:
+	switch *flagColor {
+	case colourTrue:
 		cfg.ColorMode, cfg.ColorModeSet = terminal.ColorModeTrueColor, true
-	case *flagColor256:
+	case colour256:
 		cfg.ColorMode, cfg.ColorModeSet = terminal.ColorMode256, true
 	}
-	// Neither flag: terminal auto-detects
+	// colourAuto leaves ColorModeSet false, which is the terminal deciding.
 
 	return cfg
 }
@@ -271,20 +291,25 @@ func (f *configFlags) options() resource.Options {
 }
 
 func (f *configFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&f.dir, "config-dir", "", "Configuration root (game/, input/, audio/, content/)")
+	fs.StringVar(&f.dir, "config-dir", "", "Configuration root holding game/ input/ audio/ content/")
+	fs.StringVar(&f.music, "config-music", "", "Music pattern override TOML")
+	fs.StringVar(&f.sounds, "config-sounds", "", "Sound definition override TOML")
 
-	fs.StringVar(&f.game, "g", "", "Game config: game.toml path or map directory")
-	fs.StringVar(&f.game, "config-game", "", "Alias of -g")
-	fs.StringVar(&f.content, "f", "", "Content directory or single content file")
-	fs.StringVar(&f.content, "config-content", "", "Alias of -f")
-	fs.StringVar(&f.keymap, "k", "", "Keymap config file path (TOML)")
-	fs.StringVar(&f.keymap, "config-keymap", "", "Alias of -k")
-	fs.StringVar(&f.music, "config-music", "", "Music pattern override file (TOML)")
-	fs.StringVar(&f.sounds, "config-sounds", "", "Sound definition override file (TOML)")
+	for _, alias := range []struct {
+		short, long, hint string
+		into              *string
+	}{
+		{"g", "config-game", "game.toml, or a map directory", &f.game},
+		{"f", "config-content", "Content directory, or a single content file", &f.content},
+		{"k", "config-keymap", "Keymap TOML", &f.keymap},
+	} {
+		fs.StringVar(alias.into, alias.short, "", alias.hint)
+		fs.StringVar(alias.into, alias.long, "", alias.hint)
+	}
 
-	usage := "Force embedded FSM script and content, ignoring -g and -f"
-	fs.BoolVar(&f.embedded, "d", false, usage)
-	fs.BoolVar(&f.embedded, "config-embedded", false, "Alias of -d")
+	embedded := "Use the embedded FSM and content, ignoring -g and -f"
+	fs.BoolVar(&f.embedded, "d", false, embedded)
+	fs.BoolVar(&f.embedded, "config-embedded", false, embedded)
 }
 
 // sessionFlags expose startup hosting/joining and the cap a later :host inherits.
@@ -466,16 +491,21 @@ func newLogFlags() *logFlags {
 
 // register installs the logging flags and their aliases.
 func (f *logFlags) register(fs *flag.FlagSet) {
-	usage := "Enable logging; -l=DIR overrides " + paths.DefaultLogDir()
-	fs.Var(&f.dir, "l", usage)
-	fs.Var(&f.dir, "log", "Alias of -l")
-	fs.Var(&f.level, "lv", "Log level: trace, debug, info, warn, error; implies -l")
-	fs.Var(&f.scope, "ls", "Log scope: app+fsm+stat | afs | all | none | +dispatch | -event; implies -l")
-	fs.Var(&f.scope, "log-scope", "Alias of -ls")
-	fs.Var(&f.stat, "lt", "Status snapshot period in game ticks, 0 disables; implies -l")
-	fs.Var(&f.rec, "lr", "Flight recorder depth in game ticks, 0 disables; implies -l")
+	for _, alias := range []struct {
+		short, long, hint string
+		value             flag.Value
+	}{
+		{"l", "log", "Enable logging; -l=DIR overrides " + paths.DefaultLogDir(), &f.dir},
+		{"lv", "log-level", "Log level: trace, debug, info, warn or error; implies -l", &f.level},
+		{"ls", "log-scope", "Which subsystems log; see the Scopes note in -h; implies -l", &f.scope},
+		{"lt", "log-stat", "Status snapshot period in game ticks, 0 disables; implies -l", &f.stat},
+		{"lr", "log-recorder", "Flight recorder depth in game ticks, 0 disables; implies -l", &f.rec},
+	} {
+		fs.Var(alias.value, alias.short, alias.hint)
+		fs.Var(alias.value, alias.long, alias.hint)
+	}
 	fs.BoolVar(&f.console, "log-stdout", false,
-		"Write the session log to stdout as JSON instead of to a file; implies -l")
+		"Write the log to stdout as JSON instead of to a file; implies -l")
 }
 
 // enabled reports whether any logging flag was supplied.

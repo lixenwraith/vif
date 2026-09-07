@@ -132,7 +132,7 @@ is a long name, `all`, `none`/`off`, or a run of short letters.
 
 | Spec | Result |
 |---|---|
-| `all` | every scope |
+| `all` | every scope, `dispatch` included |
 | `none` | no scope; errors still emit |
 | `app+fsm+stat` | exactly those three |
 | `afs` | same, short form |
@@ -740,10 +740,10 @@ removed. `-dev` defaults **on** for race builds and is disabled with
 |---|---|
 | `-l`, `-log` | Enable logging in the platform user-state log directory |
 | `-l=DIR` | Enable logging in `DIR`; the space form is not supported |
-| `-lv <level>` | `trace`, `debug`, `info`, `warn`, `error`; implies `-l` |
-| `-ls <spec>` | Scope spec (§4); implies `-l` |
-| `-lt <ticks>` | Status snapshot period, `0` disables; implies `-l` |
-| `-lr <ticks>` | Flight recorder depth, `0` disables; implies `-l` |
+| `-lv`, `-log-level <level>` | `trace`, `debug`, `info`, `warn`, `error`; implies `-l` |
+| `-ls`, `-log-scope <spec>` | Scope spec (§4); implies `-l` |
+| `-lt`, `-log-stat <ticks>` | Status snapshot period, `0` disables; implies `-l` |
+| `-lr`, `-log-recorder <ticks>` | Flight recorder depth, `0` disables; implies `-l` |
 | `-j`, `-journal` | Capture replay input in the user-state journal directory; does not imply a session log |
 | `-j=DIR`, `-journal=DIR` | Capture replay input in `DIR`; the space form is not supported |
 | `-script <file>` | Execute an authored headless tick schedule; may also host/join and may be journaled with `-j` |
