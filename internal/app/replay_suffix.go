@@ -1,37 +1,3 @@
-// Replaying this participant's own actions after a correction.
-//
-// A correction describes the host's world at tick T. A guest applying one stands
-// past T — it has been predicting — and what it produced in between is real:
-// keystrokes that typed a gold sequence, shots fired, cursor motion the player
-// watched. Discarding that suffix lets a correction undo a fast sequence and the
-// receive schedule re-do it later.
-//
-// Three rules make the repair exact rather than approximate:
-//
-//   - One canonical suffix. What is retained is the artifact the transport already
-//     encoded: event.ScheduledWireFrame, the same value the host will apply and the
-//     same payload text the journal writes. Retention lives in NetworkSystem beside
-//     the barrier, because the barrier decides an artifact's apply tick and the apply
-//     tick decides whether the correction already contains it.
-//
-//   - One membership test, and it is a sequence rather than a tick. A capture
-//     describes a world; what that world holds of this participant's stream is the
-//     sequence its fence names, because a producer applies its own crossing
-//     immediately and everyone else waits for the agreed tick. A copy whose apply
-//     tick is already past can therefore be missing from a capture taken before it
-//     arrived, and judging by tick discarded exactly those — which is how a guest's
-//     own action came to disappear for one cadence whenever its link missed the
-//     playout lead. AdoptSnapshot and scheduleCrossings apply the same fence to the
-//     schedule, for every source rather than only the authority.
-//
-//   - No partial answer. Retention is bounded by tick span, record count and bytes,
-//     and dropping a record the suffix would need makes the suffix unavailable rather
-//     than shorter: a shorter suffix is a different history, not a smaller one.
-//
-// Not replayed: anything a peer produced, anything a shared system re-derives (D-5,
-// it would apply twice), and the three barrier-bound artifacts that decide what the
-// world is rather than what happens in it — arrival, departure and reset.
-
 package app
 
 import (
@@ -51,18 +17,10 @@ type replaySource interface {
 }
 
 // replayLocalSuffix re-applies this instance's own accepted crossings that the
-// correction it just installed does not contain.
-//
-// It runs after the commit and between two ticks, where the install left the
-// world: shared state is the authority's as of tick T, and these are the artifacts
-// the session agreed will apply after T. Pushing them here is the same publication
-// the producing tick made, in the same order.
-//
-// The origin is the artifact's own rather than OriginNetwork: it is this
-// participant's action either way, and the journal records what the run did. The
-// queue does not cross it a second time — the crossing was flushed in the epoch
-// that produced it, and AdoptSnapshot rebases the barrier past that epoch before
-// this runs.
+// correction it just installed does not contain: shared state is the authority's
+// as of tick T, and these are the artifacts the session agreed apply after T.
+// Retention is bounded, and a suffix missing a record is unavailable rather than
+// shorter — a shorter suffix is a different history. See doc/multi-player-enhancement.md.
 func (a *App) replayLocalSuffix(header snapshot.CaptureHeader) (replayed int, ok bool) {
 	src, local := a.replaySource()
 	if src == nil {

@@ -113,24 +113,18 @@ type Config struct {
 	// 0 = parameter default, negative = disabled
 	RecTicks int
 
-	// TimeScaleSpec is the initial simulation rate ladder token; "" = real time.
-	//
-	// An authored script reads it as the rate its ticks are paced against the wall,
-	// where "1" is real time and ScriptPaceMax is as fast as the driver can go. A
-	// solo script defaults to ScriptPaceMax and one in a session to real time,
-	// because a participant that outran its peer would not be in the session it is
-	// simulating.
+	// TimeScaleSpec is the initial simulation rate ladder token; "" = real time. An
+	// authored script reads it as the wall rate its ticks are paced at, defaulting
+	// to ScriptPaceMax solo and to real time in a session.
 	TimeScaleSpec string
 
 	// System seed for RNG
 	Seed uint64
 
 	// Session is the RNG session a run reproduces rather than counts to: the seed
-	// says which family of streams a run draws from, and this says which game in
-	// that family. A run started for itself leaves it zero and counts from one; a
-	// join and a replay adopt the number the anchor carries, because a session that
-	// has been restarted is several games in and every stream it draws is a
-	// function of that number.
+	// names the family of streams, this names the game in it. Zero counts from one;
+	// a join and a replay adopt the anchor's number, because a restarted session is
+	// several games in and every stream it draws is a function of that number.
 	Session uint64
 
 	// Journal enables the replay journal, written to its own file
@@ -155,42 +149,25 @@ type Config struct {
 	SessionName string
 
 	// ListenAddress pins the port this participant is dialled back on, and
-	// NoAdvertise refuses to have one published at all.
-	//
-	// Only a migrate session uses either: where authorship never leaves the machine
-	// that started it there is nothing for a guest's port to be for. The default is
-	// the coordinator's own port — one firewall rule for a session, and a port
-	// somebody already chose to open rather than an arbitrary one — falling back to
-	// an OS-assigned port when that one is taken, and declaring whichever it got. A
-	// bind that fails entirely is not an error: the participant plays as a leaf,
-	// which is what every guest was before reach.go existed.
+	// NoAdvertise refuses to publish one. Only a migrate session uses either. The
+	// default is the coordinator's own port — one firewall rule for a session —
+	// falling back to an OS-assigned one, and a bind that fails leaves the
+	// participant a leaf rather than failing the run.
 	ListenAddress string
 	NoAdvertise   bool
 
 	// FixedAuthority pins authorship to the participant that opens the session, so
-	// losing it ends the session rather than moving it to a survivor.
-	//
-	// It is a session property rather than an instance one — the coordinator's value
-	// travels in the offer and every participant adopts it — and the default differs
-	// by shape. A dedicated host is the session: if the process goes, an
-	// orchestrator replaces it at the same address and the guests dial back, which
-	// is a reconnect a migration would only get in the way of. An interactive host
-	// is a person's machine, and there the surviving guest continuing the game is
-	// worth more than the address staying put. See doc/multi-player-enhancement.md
-	// §5 for what migration can and cannot reconstitute.
+	// losing it ends the session rather than moving it. It is a session property:
+	// the coordinator's value travels in the offer. Default on for a dedicated host,
+	// which an orchestrator replaces at the same address, off for an interactive
+	// one. See doc/multi-player-enhancement.md §5.
 	FixedAuthority bool
 
-	// Participants is a ceiling on the roster, itself included, and zero means the
-	// whole roster rather than a default party size. It is the same ceiling on
-	// every host shape; only the subtraction differs, because a dedicated host
-	// holds a roster entry and no cursor while an interactive one holds both.
-	//
-	// On an interactive host it carries a second meaning, which is the one the
-	// zero value drops: a party that says how big it is is a party that starts
-	// together, so an explicit value is also what the startup lobby waits for.
-	// Unset, the lobby starts on its first guest and the rest arrive through the
-	// mid-run gate — the path a reconnect already uses. A dedicated host always
-	// works that way, because nobody is watching its lobby.
+	// Participants is a ceiling on the roster, itself included; zero means the whole
+	// roster. On an interactive host an explicit value is also what the startup
+	// lobby waits for — a party that says how big it is starts together. Unset, the
+	// lobby starts on its first guest and the rest arrive through the mid-run gate,
+	// which is what a dedicated host always does.
 	Participants int
 
 	// Width and Height are the terminal-equivalent dimensions a caller-driven run
@@ -199,12 +176,9 @@ type Config struct {
 	Width, Height int
 
 	// MapWidth, MapHeight and CropOnResize are the D-14 map latch a joining run
-	// adopts instead of deriving from its own terminal. They are applied to the
-	// world before the FSM boots, because the boot script spawns cursor slot zero
-	// centred on the map: a joiner that adopted the latch after construction would
-	// already hold that cursor on a different cell than the host, which is a shared
-	// position and diverges permanently. Zero width or height means no latch and the
-	// terminal decides, which is what a solo or hosting run does.
+	// adopts instead of deriving from its terminal. Applied before the FSM boots:
+	// the boot script spawns cursor slot zero centred on the map, so a latch adopted
+	// later leaves that shared cursor on the wrong cell. Zero means no latch.
 	MapWidth, MapHeight int
 	CropOnResize        bool
 
@@ -213,22 +187,16 @@ type Config struct {
 	// the screen is the probe.
 	ProbeAddress string
 
-	// Lifetime bounds an allocated session: how long it waits for a first guest,
-	// how long it survives an empty roster, and how long a termination request
-	// waits for the roster to empty. The zero policy is a host nothing times out,
-	// which is what an interactively started one wants — the person who started it
-	// is the supervisor. A fleet session has no such person, so a deployment sets
-	// all three. See internal/lifecycle.
+	// Lifetime bounds an allocated session: the first-guest window, the empty-roster
+	// grace, and the drain a termination request opens. The zero policy times out
+	// nothing, which is what an interactively started host wants. See
+	// internal/lifecycle.
 	Lifetime lifecycle.Policy
 
 	// LockMap latches the world as shared before the FSM boots, so this run's
 	// terminal never rewrites shared map bounds and its crossings take the session's
-	// playout lead. A hosting run sets it, because its bounds are what every joiner
-	// adopts from the anchor and a crop between the offer a participant dialled and
-	// the gate that starts it would move bounds that participant has already built
-	// its world on. A run reproducing a session sets it from the anchor's
-	// SessionShared, which is how a replay and a catch-up reach the same bounds and
-	// the same apply ticks as the run they reproduce.
+	// playout lead. A hosting run sets it because its bounds are what joiners adopt;
+	// a run reproducing a session sets it from the anchor's SessionShared.
 	LockMap bool
 
 	// networkConfig is prepared by Run after host/join negotiation. Keeping the
@@ -239,14 +207,10 @@ type Config struct {
 	// performs the startup gate and owns wall pacing.
 	scriptedSession bool
 
-	// geometryDefaulted records that Normalize supplied Width or Height because
-	// nobody named one. It is what lets a dedicated host tell "size me from the
-	// session" apart from "serve exactly this": a server with no -size has no
-	// terminal to derive a map from and would otherwise serve the fallback one.
-	//
-	// Normalize runs more than once on the way to a session — once resolving the
-	// handshake and once inside New — so it is set only on the pass that actually
-	// fills a zero, and a later pass finds the value the earlier one wrote.
+	// geometryDefaulted records that Normalize supplied Width or Height, which is
+	// how a dedicated host tells "size me from the session" apart from "serve
+	// exactly this". Normalize runs more than once on the way to a session, so only
+	// the pass that fills a zero sets it.
 	geometryDefaulted bool
 }
 

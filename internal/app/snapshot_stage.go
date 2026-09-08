@@ -1,23 +1,3 @@
-// The staged install.
-//
-// InstallShared writes into the world it is called on. That is the right shape for a
-// harness, which owns both worlds and ticks neither, and the wrong one for a join:
-// the instance being installed into is running, and a capture that turns out to be
-// unloadable halfway through would leave it holding a world that is neither its own
-// nor the session's.
-//
-// A stage resolves the whole capture into a second world first — a real one, with
-// this build's system set, its FSM and its RNG stream inventory — and only then
-// writes the same bytes into the live world, between two ticks. What survives the
-// staging pass is what the live pass cannot fail on: identical code, identical input,
-// and no dependence on the state being written over.
-//
-// Cost bounds the design. Building a second App per install costs 9 to 31 ms, which
-// suits a join that happens once and not a correction five times a second, so the
-// staging world is built on first use and re-used for the life of the run. Commit
-// reconciles the live world onto the capture rather than clearing and re-inserting
-// it, so it writes the size of the correction, not of the world.
-
 package app
 
 import (
@@ -31,13 +11,11 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
-// StagedInstall is a capture that has been resolved against a second world and is
-// waiting for its tick boundary. Nothing in the live world has been touched.
-//
-// The handle borrows the staging world and must release it — Commit does that on
-// the way out, Discard on the way out of a join that failed for some other reason.
-// Releasing hands the world back to the run rather than closing it: it is built
-// once and every later correction resolves into the same one.
+// StagedInstall is a capture resolved against a second world and waiting for its
+// tick boundary; nothing in the live world has been touched. The handle borrows the
+// staging world and must release it — Commit on the way out, Discard otherwise —
+// which hands it back to the run rather than closing it, because every later
+// correction resolves into the same one.
 type StagedInstall struct {
 	live    *App
 	staging *App
@@ -56,13 +34,9 @@ type StagedInstall struct {
 }
 
 // StageShared resolves a capture into a second world without touching this one.
-//
-// The order is deliberate. Identity and integrity are checked against the *live*
-// instance, because those are questions about whether this participant is in the
-// sender's session at all and a staging world built from the same config would
-// answer them the same way twice. Everything after that is a question about
-// whether the capture can be loaded by this build — carrier names, stream names,
-// FSM regions, every carrier's own decode — and that is what the second world is
+// Identity and integrity are checked against the live instance — they ask whether
+// this participant is in the sender's session at all — and everything after that
+// asks whether this build can load the capture, which is what the second world is
 // for.
 func (a *App) StageShared(cap snapshot.SharedCapture) (*StagedInstall, error) {
 	started := time.Now() // [wall] telemetry only; the install carries no instant
@@ -75,13 +49,10 @@ func (a *App) StageShared(cap snapshot.SharedCapture) (*StagedInstall, error) {
 		return nil, fmt.Errorf("stage: %w", err)
 	}
 	if fresh {
-		// The FSM boot script's queued spawn is what declares the cursor template a
-		// late arrival is created from, and it is still queued: the machine enters
-		// its boot state inside New and nothing has ticked. Settling it here makes
-		// the staging world the same shape as the instance it stands in for — a
-		// joiner settles the same queue before it installs, for the same reason.
-		// A re-used staging world has settled it already and has never ticked
-		// since, so there is nothing queued to settle a second time.
+		// The FSM boot script's queued spawn declares the cursor template a late
+		// arrival is created from, and nothing has ticked yet. Settling it makes the
+		// staging world the same shape as the instance it stands in for; a re-used
+		// one has settled it already and never ticked since.
 		staging.Settle()
 	}
 	if err := staging.installSharedResolved(cap); err != nil {
@@ -108,14 +79,10 @@ func (s *StagedInstall) Capture() snapshot.SharedCapture { return s.capture }
 func (s *StagedInstall) StagingWorld() *App { return s.staging }
 
 // Commit writes the staged capture into the live world and releases the staging
-// world. World.RunSafe holds the update mutex, and a tick runs entirely inside one
-// acquisition of it, so a commit is between two ticks by construction rather than
-// by a scheduler handshake.
-//
-// A failure here is not a rejected capture: the same bytes loaded into the same
-// build a moment ago. It is reported as the inconsistency it is, and the live world
-// is left holding whatever the partial write reached — there is nothing better to
-// do, and pretending otherwise would hide it.
+// world. A tick runs entirely inside one acquisition of the update mutex, so a
+// commit that takes it is between two ticks by construction. A failure here is not a
+// rejected capture but an inconsistency — the same bytes loaded into the same build
+// a moment ago — so it is reported rather than hidden.
 func (s *StagedInstall) Commit() error {
 	switch {
 	case s.committed:
@@ -163,15 +130,10 @@ func (s *StagedInstall) Discard() {
 }
 
 // stagingWorld returns the second world captures resolve into, building it the first
-// time and re-using it after. The second return says whether it was just built,
-// which decides whether its FSM boot queue still needs settling.
-//
-// A staging world that kept anything from the previous install — a carrier that
-// merged rather than replaced, an entity a store did not drop — would resolve the
-// next capture against a world the sender never had;
-// TestStagingWorldIsBuiltOnceAndReused holds that. What it cannot re-use is a world
-// built on different bounds: the D-14 map latch decides what the level setup reflows
-// and what a capture's placements mean.
+// time and re-using it after; the second return says whether its FSM boot queue
+// still needs settling. A world that kept anything from the previous install would
+// resolve the next capture against a world the sender never had. Different map
+// bounds cannot be re-used: the D-14 latch decides what a capture's placements mean.
 func (a *App) stagingWorld(cap snapshot.SharedCapture) (*App, bool, error) {
 	a.stageMu.Lock()
 	defer a.stageMu.Unlock()
@@ -218,18 +180,11 @@ func (s *StagedInstall) Timings() (stage, commit time.Duration) { return s.stage
 // a correction pay for a construction.
 func (s *StagedInstall) release() { s.staging = nil }
 
-// newStagingApp builds the second world a capture is resolved into.
-//
-// It is this instance's own configuration with every outward-facing part removed:
-// no transport (it would dial or bind a second time), no journal (it would record a
-// run that never happened), no recorder or status cadence (they are telemetry about
-// a world nobody plays). What it keeps is what decides whether a capture loads —
-// the seed, the FSM config, the corpus, and therefore the whole system set.
-//
-// The map latch comes from the capture rather than from this instance: the FSM boot
-// spawns cursor slot zero centred on the map inside New, and a staging world built
-// on different bounds would reject nothing but would answer a different question
-// from the one being asked.
+// newStagingApp builds the second world a capture is resolved into: this instance's
+// configuration with every outward-facing part removed — no transport, no journal,
+// no telemetry cadence — keeping what decides whether a capture loads, which is the
+// seed, the FSM config and the corpus. The map latch comes from the capture, because
+// a world built on different bounds would answer a different question.
 func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 	cfg := a.cfg
 	cfg.Mode = ModeHeadless
@@ -263,11 +218,9 @@ func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 	return NewHeadless(cfg)
 }
 
-// installSharedResolved is InstallShared without the identity check.
-//
-// The live instance answers "is this my session" once, in StageShared. The staging
-// world is built from that same instance's configuration, so asking it again would
-// re-derive the same verdict from the same inputs — and would fail outright after a
+// installSharedResolved is InstallShared without the identity check: StageShared has
+// already asked the live instance, and a staging world built from the same
+// configuration would re-derive the same verdict — and would fail outright after a
 // reset, whose session counter a freshly constructed world has not reached.
 func (a *App) installSharedResolved(cap snapshot.SharedCapture) error {
 	// The staging world proves that the position resolves; it does not present or

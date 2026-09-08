@@ -1,20 +1,3 @@
-// The correction protocol across a change of authority. Three things change and
-// nothing else:
-//
-//   - Which role this run plays. A guest that is elected keeps its apply loop and
-//     gains a publication cadence. It does not restart the protocol: the capture it
-//     last installed is the keyframe every other survivor also holds, so it becomes
-//     the baseline the successor's first delta names.
-//
-//   - What a term admits. The gate is applied where the artifact is decoded rather
-//     than where it is queued: an inbound frame arrives under the world lock and the
-//     queue may only take bytes.
-//
-//   - What the successor inherits. The retained ring, which is what lets it answer a
-//     request naming a manifest the previous authority published; the per-peer
-//     schedule starts again, because the links are this instance's rather than its
-//     predecessor's.
-
 package app
 
 import (
@@ -87,19 +70,11 @@ func (c *corrections) driveAuthority() {
 	u.drive()
 }
 
-// becomeAuthority turns a receiver into the publisher for a new term.
-//
-// The seeding is the whole of requirement 5. A successor that started from no
-// baseline would publish a keyframe to every survivor at once — a keyframe storm
-// exactly where the session can least afford one — and it does not have to: the
-// last whole capture this instance installed is the capture every other survivor
-// installed too, so it is already the baseline a delta may name and the state a
-// manifest may be compared against. What the successor adds is the new term, and
-// a receiver whose world agrees answers the first manifest with a hash and no
-// state at all.
-//
-// The per-peer schedule is deliberately not inherited. A plan is a statement about
-// a link, and these are this instance's links rather than its predecessor's.
+// becomeAuthority turns a receiver into the publisher for a new term, seeded from
+// the last whole capture it installed. That capture is the one every other survivor
+// installed too, so it is already the baseline a delta may name — without it the
+// successor would publish a keyframe to everyone at once. The per-peer schedule is
+// not inherited: a plan is a statement about this instance's links.
 func (c *corrections) becomeAuthority(rec network.HandoffRecord) {
 	c.publishMu.Lock()
 	c.installedMu.Lock()
@@ -131,13 +106,9 @@ func (c *corrections) becomeAuthority(rec network.HandoffRecord) {
 }
 
 // followAuthority resets what a receiver holds about the authority it was talking
-// to, without touching the world.
-//
-// The outstanding baselines go because they name manifests the previous authority
-// published and no one can answer any more; the keyframe wait goes because the
-// successor's first manifest is the answer to it. The installed capture stays: it
-// is the state this instance holds, and the successor's first index is compared
-// against exactly that.
+// to, without touching the world. Outstanding baselines name manifests nobody can
+// answer any more and the keyframe wait is answered by the successor's first
+// manifest; the installed capture stays, because that index is compared against it.
 func (c *corrections) followAuthority(rec network.HandoffRecord) {
 	c.selectiveMu.Lock()
 	c.selective.awaiting = nil

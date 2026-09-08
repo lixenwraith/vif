@@ -1,7 +1,3 @@
-// Reachability under -authority migrate: a participant binds a port and declares
-// it, the coordinator puts every declared address in the succession chain and
-// publishes the whole chain to everyone, and a survivor dials down it.
-
 package app
 
 import (

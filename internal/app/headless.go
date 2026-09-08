@@ -1,12 +1,3 @@
-// Caller-driven harness. A driven App runs on a ManualClock advanced only by Tick,
-// with no scheduler or event goroutine, so a run is a pure function of its seed, its
-// config and the injected event sequence. Headless adds no I/O; replay adds a
-// terminal and renderer but takes its geometry from the journal. Close is the
-// caller's responsibility.
-//
-// Driven Apps own recorder triggers, navigation debug state, help bindings and
-// correlation stamps, so several harness runtimes may coexist in one process.
-
 package app
 
 import (
@@ -44,13 +35,10 @@ func newDriven(cfg Config) (*App, error) {
 	return a, nil
 }
 
-// Tick advances the simulation by n ticks, servicing a pending FSM reset before
-// each one. Pause does not gate a stepped tick, so n ticks always execute.
-//
-// Authority that has arrived is applied first, which is what makes a driven run a
-// participant rather than an observer: a correction installs between two ticks, and
-// on this path the caller is the thing between two ticks. An interactive run has no
-// caller here and runs the same drain on a goroutine of its own.
+// Tick advances the simulation by n ticks, servicing a pending FSM reset before each
+// one; pause does not gate a stepped tick. Authority that has arrived is applied
+// first, which is what makes a driven run a participant rather than an observer: on
+// this path the caller is the thing between two ticks.
 func (a *App) Tick(n int) {
 	if n < 0 {
 		return

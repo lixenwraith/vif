@@ -91,12 +91,9 @@ func (a *App) hostNetworkConfig() *network.Config {
 		Name:    a.cfg.SessionName,
 	}, netCfg.ConnectTimeout)
 	// Every host outlives its guests, so every host admits a dial after its lobby
-	// has closed: a dropped participant comes back into the slot its departure
-	// released, through the one gate a reconnect has ever had. It used to be a
-	// dedicated host's alone, which left every other shape accepting the stream,
-	// sending no start record, and holding the dialer in a read it could not leave.
-	// The hook answers nothing until the run arms it, because until then the gate
-	// is the startup lobby's own.
+	// closed: a dropped participant comes back into the slot its departure released,
+	// through the one gate a reconnect has ever had. The hook answers nothing until
+	// the run arms it, because until then the gate is the startup lobby's own.
 	netCfg.OnAdmit = a.admitLateJoiner
 	return netCfg
 }
@@ -113,31 +110,21 @@ func (a *App) admitLateJoiner(id network.PeerID) {
 	a.releaseMidRunJoiner(id)
 }
 
-// openMidRunJoins ends the lobby's closing window and arms the mid-run gate, in
-// that order: a dial refused a moment ago retries into a gate that now exists.
-//
-// Every run that owns a frame loop calls it once its clock is running — interactive
-// play, a dedicated host, and an authored script alike. The gate reads a capture a
-// playout lead ahead of the current tick, so arming it over a clock that has not
-// started would time out every dial it was meant to admit.
+// openMidRunJoins ends the lobby's closing window and arms the mid-run gate, in that
+// order: a dial refused a moment ago retries into a gate that now exists. Every run
+// that owns a frame loop calls it once its clock is running — the gate reads a
+// capture a playout lead ahead, so arming it over a stopped clock times every dial
+// out instead of admitting it.
 func (a *App) openMidRunJoins() {
 	a.lateJoins.Store(true)
 	a.lobbyClosing.Store(false)
 }
 
 // sessionCapacity is how many guests this host will ever hold, excluding itself.
-//
-// `-players` is a ceiling and only a ceiling, on every host shape. Unset means the
-// whole roster: a host that had to be told how many people were coming would be a
-// host that only ever served the number it was told, and the number a person types
-// at the start of a session is a guess about who is going to turn up rather than a
-// property of the session. What the lobby *waits* for is lobbyQuorum below, which
-// is the other half of the same flag and the reason the two used to be confused.
-//
-// The subtraction is the only difference between the shapes. An interactive host
-// holds one of the cursors itself, so its ceiling counts one fewer guest; a
-// dedicated host holds a roster entry and no slot on the map, so its ceiling is
-// the number of guests exactly.
+// `-players` is a ceiling and only a ceiling; unset means the whole roster. What the
+// lobby waits for is lobbyQuorum, the flag's other half. The subtraction is the only
+// difference between the shapes: an interactive host holds one of the cursors
+// itself, a dedicated one holds a roster entry and no slot on the map.
 func (a *App) sessionCapacity() int {
 	n := a.cfg.Participants
 	if n <= 0 {
@@ -164,21 +151,11 @@ func (a *App) guestCount() int {
 	return n
 }
 
-// lobbyQuorum is how many guests the start gate waits for before it closes the
-// lobby and releases tick zero.
-//
-// One, unless `-players` named a party. A session exists to be joined rather than
-// to be assembled, so the first guest is what there is to wait for and every guest
-// after it arrives through the mid-run gate — which is the same path a guest that
-// dropped comes back through, and is therefore already the path that has to work.
-// A dedicated host is always this shape: nobody is watching its lobby, so waiting
-// on a number would make a pod's readiness a function of how many people happened
-// to want to play.
-//
-// An explicit `-players` is the exception and the reason the flag still has a
-// second meaning on an interactive host: a party that says it is four is a party
-// that starts together, so there the ceiling and the number the gate waits for are
-// one value.
+// lobbyQuorum is how many guests the start gate waits for before it closes the lobby
+// and releases tick zero. One, unless `-players` named a party: every guest after
+// the first arrives through the mid-run gate, the same path a reconnect uses. A
+// dedicated host is always this shape, because waiting on a number would make a
+// pod's readiness a function of how many people wanted to play.
 func (a *App) lobbyQuorum() int {
 	if a.cfg.Mode.Serves() || a.cfg.Participants <= 0 {
 		return 1
@@ -205,17 +182,11 @@ func (a *App) noteJoinerReport(id network.PeerID, report network.JoinerReport) {
 	}
 }
 
-// adoptLobbyGeometry sizes a dedicated host's map from its first guest.
-//
-// A server has no terminal, so without this it serves whatever Config.Normalize
-// defaulted to — 80x24, which is a 77x21 map that every guest then adopts however
-// large its own terminal is. The operator's -size still wins where it was given;
-// this is only for the case where nobody said.
-//
-// It runs before the roster closes, so the bounds it produces are the ones the
-// offer names, the tick-zero capture contains, and every later guest adopts. A
-// scenario that fixes its own map (crop off) is left alone: those bounds are the
-// scenario's statement, not a stand-in for a terminal nobody has.
+// adoptLobbyGeometry sizes a dedicated host's map from its first guest, since a
+// server has no terminal of its own and would otherwise serve Normalize's 80x24. The
+// operator's -size still wins. It runs before the roster closes, so these bounds are
+// the ones the offer names and every later guest adopts; a scenario that fixes its
+// own map (crop off) is left alone.
 func (a *App) adoptLobbyGeometry() {
 	if !a.cfg.Mode.Serves() || !a.cfg.geometryDefaulted {
 		return
@@ -348,12 +319,10 @@ func (a *App) assignParticipant() (network.SessionOffer, error) {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
 
-	// A dial that lands mid-succession is refused rather than admitted. The offer
-	// this call would write names a term that is about to end, and a participant
-	// admitted under one is in a session nobody owns: it holds a roster slot the
-	// successor's record does not carry and receives an authority that has
-	// already stopped publishing. The refusal is distinguishable so the joiner can
-	// retry against whatever authority emerges.
+	// A dial mid-succession is refused: the offer would name a term that is about to
+	// end, so the participant would hold a roster slot the successor's record does
+	// not carry. The refusal is distinguishable, so the joiner retries against
+	// whatever authority emerges.
 	if a.authority != nil && a.authority.Migrating() {
 		return network.SessionOffer{}, ErrSessionHandoff
 	}
@@ -497,19 +466,11 @@ func (a *App) startHostSession(signals <-chan os.Signal) error {
 	return a.startHostSessionOn(port, signals)
 }
 
-// startHostSessionOn runs the production gate against the supplied endpoint.
-//
-// The lobby closes on a quorum rather than on a full roster: an interactive -host
-// is a party that starts together and its quorum is its capacity, and a dedicated
-// host starts on its first guest and takes the rest through the mid-run gate. What
-// it closes *on* is the same either way — whoever is actually in the roster at
-// that moment — because that roster is what every instance builds its cursors
-// from, and a count agreed in advance is not the same thing as the participants
-// that arrived.
-//
-// From the moment the roster is read until the caller opens the mid-run gate,
-// dials are refused: a dialer admitted in that window would hold an identity and
-// wait for a start gate no longer being sent.
+// startHostSessionOn runs the production gate against the supplied endpoint. The
+// lobby closes on a quorum rather than a full roster, but what it closes *on* is
+// whoever is in the roster at that moment, because that is what every instance
+// builds its cursors from. From the roster read until the caller opens the mid-run
+// gate, dials are refused: no gate can serve one in that window.
 func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Signal) error {
 	quorum, capacity := a.lobbyQuorum(), a.sessionCapacity()
 	addr := a.cfg.HostAddress
@@ -605,12 +566,10 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 		return err
 	}
 
-	// The lobby's links have been up for the whole wait, so several round trips
-	// have completed on each and the convergence floor can be decided per link
-	// rather than from the gate's aggregate transfer. A participant that cannot
-	// carry a whole world per floor window is refused here for the same reason a
-	// mid-run join is: it would play, it would drift, and nothing would be
-	// scheduled that repairs it.
+	// The lobby's links have been up for the whole wait, so the convergence floor is
+	// decided per link rather than from the gate's aggregate transfer. A participant
+	// that cannot carry a whole world per floor window is refused here for the same
+	// reason a mid-run join is.
 	for _, participant := range offer.Participants {
 		if participant.ID == offer.Host {
 			continue
@@ -661,18 +620,11 @@ func (a *App) startJoinSession(signals <-chan os.Signal) error {
 	return nil
 }
 
-// awaitStartGate reads the host's start record without freezing this instance.
-//
-// The gate carries no deadline, and that is right: it is the host waiting for the
-// rest of its lobby, a human-paced wait with no bound worth guessing at. What was
-// wrong is that it was also a wait nobody could leave — the whole of a join runs
-// before the frame loop exists, so a blocking read here answered no key and no
-// signal, and a host that never sent the record froze the game, quit included.
-//
-// So the read runs on a goroutine while the terminal is polled here, as the host's
-// own lobby already does. Cancelling closes the stream, which turns the read in
-// flight into an error rather than a goroutine outliving the run; waiting for it to
-// return is what keeps the App single-threaded either way.
+// awaitStartGate reads the host's start record without freezing this instance. The
+// gate carries no deadline — it is a human-paced wait — so the read runs on a
+// goroutine while the terminal is polled here, and a join stays answerable to keys
+// and signals. Cancelling closes the stream, which turns the read in flight into an
+// error rather than a goroutine outliving the run.
 func (a *App) awaitStartGate(signals <-chan os.Signal) (network.SessionOffer, error) {
 	type gate struct {
 		offer network.SessionOffer

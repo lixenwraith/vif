@@ -1,16 +1,3 @@
-// The dedicated host: the interactive runtime with its two ends removed. No
-// terminal, no renderer, no audio, and no cursor of its own — what is left is the
-// part a session cannot do without, running on the real clock and the scheduler
-// goroutine, because a session's simulation has to advance whether or not anybody is
-// watching it here.
-//
-// Holding no cursor is a roster property rather than an absence. The coordinator
-// keeps its participant identity, its authority term and its vote; its slot is
-// parameter.NoPlayerSlot, so every "is this my cursor" test answers no without a
-// special case. The FSM's boot cursor is not suppressed: it is created as always and
-// the roster hands it to the first guest, which keeps shared creation order identical
-// to an ordinary host's.
-
 package app
 
 import (
@@ -52,13 +39,10 @@ func RunServer(cfg Config) error {
 	return a.Serve()
 }
 
-// Serve holds the session open until a signal stops it.
-//
-// The loop is App.Loop with the presentation removed and one thing kept: the frame
-// handshake. The scheduler applies render backpressure at real time and slower, so
-// a run that never released the handshake would tick at the timeout rather than at
-// the interval. A server has no renderer, so it releases the same handshake on the
-// same interval and draws nothing.
+// Serve holds the session open until a signal stops it. It is App.Loop with the
+// presentation removed and the frame handshake kept: the scheduler applies render
+// backpressure at real time and slower, so a run that never released it would tick
+// at the timeout rather than at the interval.
 func (a *App) Serve() error {
 	if a.cfg.Mode != ModeServer {
 		return fmt.Errorf("%s mode is not a dedicated host", a.cfg.Mode)
@@ -92,16 +76,11 @@ func (a *App) Serve() error {
 			a.logSessionEnd(a.life.State(time.Now()))
 			return nil
 		case errors.Is(err, errLobbyAbandoned):
-			// The first guest connected and then left before confirming it had
-			// installed the world. On a host somebody started by hand that is a
-			// failure worth reporting; here it is a session with nobody in it and
-			// nobody watching, so it ends the way an unclaimed one does — cleanly,
-			// with a reason, so the Job completes rather than failing and the
-			// allocator can place the next request.
-			//
-			// It is also, until the lobby can be restarted in place, a window in
-			// which any peer that reaches the port first can end a session somebody
-			// else was allocated. See the hardening notes in doc/kubernetes-fleet.md.
+			// The first guest connected and left before confirming it installed the
+			// world. Here that is a session with nobody in it and nobody watching, so
+			// it ends the way an unclaimed one does — cleanly, with a reason, so the
+			// Job completes and the allocator can place the next request. Until the
+			// lobby can restart in place this is a window; see doc/kubernetes-fleet.md.
 			a.logSessionEnd(a.life.Expire(time.Now(), "lobby abandoned before the session started"))
 			return nil
 		}
@@ -115,11 +94,9 @@ func (a *App) Serve() error {
 	a.frameReady <- struct{}{}
 	a.scheduler.Start()
 	// After the scheduler, not before it. From here a dial is a mid-run join rather
-	// than a lobby member — which is what lets a guest that dropped come back into
-	// the slot its departure released, and what lets the rest of the roster arrive
-	// in its own time rather than being waited for. The gate reads a capture a
-	// playout lead ahead of the current tick, so arming it over a clock that has
-	// not started would time every such dial out instead of admitting it.
+	// than a lobby member, so a dropped guest comes back into the slot its departure
+	// released. The gate reads a capture a playout lead ahead, so arming it over a
+	// stopped clock would time every such dial out.
 	a.openMidRunJoins()
 	vlog.Info("app", "msg", "server running",
 		"address", a.cfg.HostAddress, "capacity", a.sessionCapacity())
@@ -165,45 +142,19 @@ func (a *App) Serve() error {
 }
 
 // interrupt folds the roster in at the instant of the signal and only then asks the
-// policy what a termination request means.
-//
-// The order is the point. A drain waits for the guests the session holds, and the
-// loop's last observation can be a whole lifecycleInterval old — so a signal that
-// arrived just after a guest connected would otherwise read a stale empty roster
-// and end a session somebody had only just joined.
+// policy what a termination request means. A drain waits for the guests the session
+// holds, and the loop's last observation can be a whole lifecycleInterval old, so a
+// stale empty roster would end a session somebody had only just joined.
 func (a *App) interrupt(now time.Time, reason string) lifecycle.State {
 	a.life.Observe(a.guestCount(), now)
 	return a.life.Interrupt(now, reason)
 }
 
-// holdVacant parks a session nobody is in, and restarts it if nobody comes back.
-//
-// The park is immediate and has no bound, because an empty session has nothing to
-// simulate for and simulating it anyway is not free: with no cursor on the map the
-// gold cycle cannot place a sequence, so it fails, retries a tenth of a second
-// later, and fails again for as long as the process runs. It is also what makes "a
-// guest that dropped comes back into the slot its departure released" mean
-// something — the world it returns to is the world it left rather than one that
-// aged without it.
-//
-// The restart is the other half. A world nobody came back to inside
-// SessionVacantReset is not the world the next guest should be dropped into, so it
-// is replaced by a fresh run, once. The reset is dispatched by the event loop and
-// executed by the scheduler's own reset path, both of which run while the clock is
-// stopped, so nothing has to be unparked to apply it — but the reset releases the
-// clock itself, as the last phase of rebuilding a world for someone to play. Which
-// is why the park is asserted on every reading rather than on the transition into
-// vacancy: a session nobody has come back to must not be left running by its own
-// restart.
-//
-// The resume is here as well as on the accept path, and that is what closes the
-// race between them: a dial that lands in the instant between this reading and the
-// park it decided on is followed a second later by a reading that sees the guest,
-// well inside the join gate's own bound.
-//
-// A bounded session never reaches the restart: its vacancy grace ends the process
-// first, which is the whole difference between an allocated session and a host
-// somebody left running.
+// holdVacant parks a session nobody is in, and restarts it once if nobody comes
+// back. The park is immediate and unbounded, and asserted on every reading rather
+// than on the transition, because the restart releases the clock as its last phase.
+// The resume is here as well as on the accept path, which closes the race between
+// them. A bounded session never gets this far: its vacancy grace ends the process.
 func (a *App) holdVacant(st lifecycle.State) {
 	if st.Phase != lifecycle.PhaseVacant {
 		// The vacancy is over rather than merely interrupted, so the restart it
@@ -233,14 +184,10 @@ func (a *App) holdVacant(st lifecycle.State) {
 }
 
 // dropOwnerlessCursors is the roster half of an empty session: a dedicated host
-// drives no cursor, so with no guest in the roster every cursor on the map belongs
-// to nobody.
-//
-// It exists for the restart above. That rebuilds the world through the ordinary
-// boot, and the boot spawns the cursor a solo run starts with — which a startup
-// lobby hands to its first guest and a mid-run join cannot, because an arrival
-// creates a cursor in a free slot and finds this one occupied. The guest would be
-// admitted, receive the world, and drive nothing in it.
+// drives no cursor, so with no guest every cursor on the map belongs to nobody. It
+// exists for the restart above, whose boot spawns the cursor a solo run starts with
+// — which a mid-run join cannot take, because an arrival creates a cursor in a free
+// slot and would find this one occupied.
 func (a *App) dropOwnerlessCursors() {
 	var held int
 	a.world.RunSafe(func() { held = a.world.Resources.Player.Count() })

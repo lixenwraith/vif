@@ -1,11 +1,3 @@
-// The supervised run's answer about itself.
-//
-// A dedicated host has nobody watching its screen, because it has no screen. What
-// a person reads from a status bar — is it ticking, can it be joined, how many are
-// in it — an orchestrator has to be able to read over a socket, and this is where
-// the run decides what those answers are. internal/probe decides only how to say
-// them.
-
 package app
 
 import (
@@ -45,23 +37,11 @@ func (a *App) closeProbe() {
 	a.probe = nil
 }
 
-// probeSnapshot answers the endpoint from one read of the run.
-//
-// Live is the tick counter moving, which is the one thing that distinguishes a
-// host still simulating its session from a process that is merely still resident.
-// It is sampled across reads rather than measured inside one: a probe cannot wait
-// for a tick, so it compares this read against the last and calls the run stalled
-// only when the clock is running, is not paused, and has not moved in
-// ProbeStallInterval.
-//
-// Ready is whether a dial would be admitted, which is deliberately not the same
-// question and deliberately not the status code. A lobby waiting for its first
-// guest is ready — being dialled is what it is waiting for — and a session at
-// capacity or on its way out is not, but neither is a process to restart.
-//
-// A reason is written only when one of the two is false. A healthy session has
-// nothing to explain, and a line explaining it anyway is a line an operator learns
-// to read past.
+// probeSnapshot answers the endpoint from one read of the run. Live is the tick
+// counter moving, sampled across reads because a probe cannot wait for a tick: the
+// run is stalled only when the clock is running, unpaused and has not moved in
+// ProbeStallInterval. Ready is whether a dial would be admitted, a different question
+// and not the status code. A reason is written only when one of the two is false.
 func (a *App) probeSnapshot() probe.Snapshot {
 	tick := a.Position().Tick
 	now := time.Now() // [wall] a stall is a wall-clock condition, not a game one

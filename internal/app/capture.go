@@ -53,14 +53,9 @@ func sharedCells[C any](keys []string, cell func(string) C) []C {
 	return out
 }
 
-// installStatusLocked writes the captured surface back.
-//
-// A key this build does not carry is skipped rather than refused: the registry is
-// frozen after construction, so writing an unknown key would be counted late
-// rather than stored, and a metric added or removed between builds is a
-// telemetry difference, not a simulation one. The identity check has already
-// established the two are the same build.
-//
+// installStatusLocked writes the captured surface back. An unknown key is skipped
+// rather than refused: the registry is frozen after construction, and a metric
+// added between builds is a telemetry difference rather than a simulation one.
 // Caller MUST hold updateMutex.
 func (a *App) installStatusLocked(state snapshot.StatusState) {
 	reg := a.world.Resources.Status
@@ -188,12 +183,9 @@ func (a *App) captureSystemStatesLocked() ([]snapshot.SystemStateRecord, error) 
 }
 
 // InstallShared replaces this instance's shared world with a capture: identity,
-// then integrity, then every system's state offered, and only then is anything
-// written. A world half-installed is worse than one not installed at all — it is a
-// divergence that looks like a working session.
-//
-// This is the direct form, writing into the world it is called on. A running
-// instance takes StageShared instead.
+// then integrity, then every carrier's offer, and only then is anything written. A
+// half-installed world is a divergence that looks like a working session. This is
+// the direct form; a running instance takes StageShared instead.
 func (a *App) InstallShared(cap snapshot.SharedCapture) error {
 	if err := a.VerifyCapture(cap); err != nil {
 		return err
@@ -209,22 +201,17 @@ func (a *App) installShared(cap snapshot.SharedCapture, reconcileLocal bool) err
 }
 
 // reconcileShared writes a capture by moving the live world onto it rather than
-// replacing it, and reports how far apart the two were.
-//
-// The difference is read first and inside the same critical section as the write,
-// because it is a statement about one instant: the world this instance predicted
-// against the world the authority is handing it. Read a tick later and it would be
-// the magnitude of a correction that had already happened.
+// replacing it, and reports how far apart the two were. The difference is read
+// inside the same critical section as the write: it is a statement about one
+// instant, and a tick later it would describe a correction already applied.
 func (a *App) reconcileShared(cap snapshot.SharedCapture) (engine.WorldDifference, error) {
 	return a.writeShared(cap, true, true)
 }
 
 // writeShared is the one install, with the store pass chosen by the caller.
-//
 // Everything outside that pass is identical and has to be: the roster rebind, the
-// tick and record rebase, the stream positions, every declared carrier, the FSM
-// and the compared surface are what make the world the sender's, and a correction
-// that skipped any of them would leave an instance that looks corrected and is not.
+// tick and record rebase, the streams, every carrier, the FSM and the compared
+// surface are what make the world the sender's.
 func (a *App) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal bool) (engine.WorldDifference, error) {
 	var (
 		err  error
@@ -232,16 +219,10 @@ func (a *App) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal 
 	)
 	a.world.RunSafe(func() {
 		// Dry run first: a carrier that rejects its record must do so before the
-		// stores are touched.
-		//
-		// Two questions, and the second is the one a staging pass cannot answer. A
-		// capture naming a system this build does not run is a build mismatch, and
-		// any world would say so. A capture a carrier refuses because of state the
-		// *live* world holds — a genetic registry whose species set this instance
-		// entered a level ahead of the authority to reach — is invisible to a
-		// staging world that has never been in that state, so it would arrive as a
-		// failure after the store pass had already rewritten everything. Asking the
-		// live carrier here is what keeps the refusal atomic.
+		// stores are touched. A staging pass cannot answer the second question — a
+		// carrier that refuses because of state the *live* world holds is invisible
+		// to a world that has never been in that state — so the live carrier is
+		// asked here, which is what keeps the refusal atomic.
 		savers := a.sharedStateSaversLocked()
 		for _, rec := range cap.Systems {
 			saver, ok := savers[rec.System]
@@ -351,13 +332,10 @@ func (a *App) sharedStateSaversLocked() map[string]engine.SharedStateSaver {
 	return out
 }
 
-// VerifyCapture reports whether this instance can install a capture: whether it
-// is intact, and whether it describes the same build, configuration and corpus.
-//
-// The identity set is anchorIdentity's, deliberately. A capture and a journal
-// anchor answer the same question — "are these two instances running the same
-// simulation" — and one of them drifting from the other would let a join succeed
-// where a replay of the same pair fails.
+// VerifyCapture reports whether this instance can install a capture: whether it is
+// intact, and whether it describes the same build, configuration and corpus. The
+// identity set is anchorIdentity's, so a join and a replay of the same pair cannot
+// reach opposite verdicts.
 func (a *App) VerifyCapture(cap snapshot.SharedCapture) error {
 	if cap.Header.Schema != snapshot.Schema {
 		return fmt.Errorf("capture schema %d, this build reads %d",

@@ -1,15 +1,3 @@
-// Authority and correction: the host's publication cadence and a guest's apply
-// loop, in one object because a run is one or the other and never both.
-//
-// The cadence is a bounded per-peer controller driven by measured round trip,
-// delivery rate, and how much of what the next correction moves is near that
-// participant. What it decides is send time; the correction itself is one capture,
-// one encode and one chunking, whoever receives it. See the package doc for the
-// four properties the protocol rests on.
-//
-// Magnitude is measured rather than asserted: how far a guest's prediction had
-// drifted when the correction landed is what says whether the cadence is right.
-
 package app
 
 import (
@@ -220,18 +208,11 @@ func (c *corrections) startPump() {
 	c.pumpOnce.Do(func() { go c.pump() })
 }
 
-// pump publishes on the cadence and whenever a join asks for a keyframe.
-//
-// It runs on its own goroutine rather than on the tick loop: the world read is one
-// lock acquisition (1.2 ms at the storm high water, 2.4% of a tick) but the encode,
-// diff and chunking are the expensive part and hold nothing. Inside a tick they
-// would charge the simulation; on the accept goroutine a join would be a
-// per-participant world read.
-//
-// The ticker runs at the fastest cadence the bounds allow rather than the one in
-// force, and the schedule is checked against the simulation's tick. A wake with
-// nothing due reads no world and sends nothing, so asking often costs a channel
-// receive and a peer whose link just improved does not wait out the old cadence.
+// pump publishes on the cadence and whenever a join asks for a keyframe. It runs
+// on its own goroutine because the encode, diff and chunking hold no lock and
+// would otherwise charge the simulation. The ticker runs at the fastest cadence
+// the bounds allow rather than the one in force, and a wake with nothing due reads
+// no world — so a peer whose link improved does not wait out the old cadence.
 func (c *corrections) pump() {
 	defer close(c.pumpDone)
 	interval := parameter.SnapshotCadenceMinTicks * parameter.GameUpdateInterval
@@ -248,13 +229,9 @@ func (c *corrections) pump() {
 		if c.driven.Load() {
 			continue // this run's caller paces its own corrections
 		}
-		// The authority's half of the selective exchange runs here. Both halves of
-		// it belong between two ticks — serving a request means hashing and
-		// compressing, answering a manifest means reading a world — and on an
-		// interactive host this goroutine is the only thing that is. Without it a
-		// host published manifests, received the answers and never served one: the
-		// exchange fell back to a whole body after SnapshotManifestSilenceCorrections
-		// and stayed there until the next keyframe reset it.
+		// The authority's half of the selective exchange. Both halves belong between
+		// two ticks — serving hashes and compresses, answering reads a world — and
+		// on an interactive host this goroutine is the only thing that is.
 		c.apply()
 		if err := c.publishDue(); err != nil {
 			vlog.Warn("app", "msg", "correction not published", "error", err.Error())
@@ -275,20 +252,11 @@ func (c *corrections) publish() error {
 // the pump calls.
 func (c *corrections) publishDue() error { return c.publishRound(false) }
 
-// publishRound is one decision and at most one world read. The ordering is what
-// makes the cadence a function of the link:
-//
-//  1. Every peer's controller decides from its own measured link and demand — a
-//     participant whose neighbourhood is churning asks for the minimum cadence, one
-//     with nothing near it settles for the quiet one, and neither can ask for more
-//     than its link carries.
-//  2. The session composes those into one timeline: base cadence is the fastest
-//     peer's, keyframe period the *longest* any peer planned, capped by the floor.
-//     Longest because every peer has to hold the keyframe a delta names, so the
-//     session pays the cheapest whole-world period that honours everyone's floor.
-//  3. One capture, one encode, one chunking. What is per peer is who receives it.
-//  4. Due peers are served in priority order, so a bounded uplink spends itself on
-//     the participants that need it first.
+// publishRound is one decision and at most one world read. Each peer's controller
+// decides from its own link and demand; the session composes those into one
+// timeline, base cadence the fastest peer's and keyframe period the longest any
+// peer planned, because every peer must hold the keyframe a delta names. One
+// capture, one encode, one chunking; what is per peer is who receives it and when.
 func (c *corrections) publishRound(force bool) error {
 	port := c.a.sessionTransport()
 	if port == nil || !port.IsRunning() || port.PeerCount() == 0 {
@@ -411,11 +379,8 @@ func (c *corrections) publishRound(force bool) error {
 }
 
 // publishBroadcast is the unmeasured path: one correction to everyone on the
-// nominal schedule. It exists so a transport without link measurement — a
-// harness port, an embedder's own — keeps a working authority rather than a
-// silent one.
-//
-// Caller MUST hold publishMu.
+// nominal schedule, so a transport without link measurement keeps a working
+// authority rather than a silent one. Caller MUST hold publishMu.
 func (c *corrections) publishBroadcast(port engine.NetworkPort, force bool) error {
 	c.forgetRestartedRunLocked()
 	tick := c.a.Position().Tick
@@ -444,19 +409,11 @@ func (c *corrections) publishBroadcast(port engine.NetworkPort, force bool) erro
 	return nil
 }
 
-// encodeBodyLocked encodes one capture into the shape the schedule asked for, and
-// returns what the encode cost so the caller can report it.
-//
-// A keyframe is encoded twice, and the second is not waste. A correction travels in
-// an envelope that says which of the two shapes it is; the join handshake predates
-// that envelope and sends a bare capture, because there a capture is the only thing
-// the message can be. Keeping the bare form is what lets a join and a keyframe be
-// one object, and it is paid once per keyframe rather than once per correction.
-//
-// want is false when the round is sending nobody a body, which the selective
-// exchange makes the ordinary case: there is then nothing to encode.
-//
-// Caller MUST hold publishMu.
+// encodeBodyLocked encodes one capture into the shape the schedule asked for and
+// returns what it cost. A keyframe is encoded twice: the bare capture is what the
+// join handshake sends, and keeping it is what lets a join and a keyframe be one
+// object. want is false when nobody is owed a body, which the selective exchange
+// makes the ordinary case. Caller MUST hold publishMu.
 func (c *corrections) encodeBodyLocked(
 	cap snapshot.SharedCapture, keyframe, want bool,
 ) (body, joinBody []byte, took time.Duration, err error) {
@@ -502,13 +459,9 @@ func (c *corrections) recordPublicationLocked(
 }
 
 // sendTo delivers one correction's chunks to one participant, reporting whether
-// the whole of it was taken.
-//
-// A chunk the peer's send queue refuses ends the transfer for that peer rather
-// than continuing into a body that can only reassemble as a truncated one. There
-// is nothing to repair — the next correction is self-sufficient and a keyframe
-// supersedes everything before it — so the refusal is counted and the peer moves
-// on, which is the same answer the rest of this protocol gives to loss.
+// the whole of it was taken. A refused chunk ends that peer's transfer rather than
+// continuing into a body that can only reassemble truncated; the next correction
+// is self-sufficient, so the refusal is counted and the peer moves on.
 func (c *corrections) sendTo(port engine.NetworkPort, id uint32, chunks [][]byte) bool {
 	for _, chunk := range chunks {
 		if !port.Send(id, uint8(network.MsgStateCorrection), chunk) {
@@ -597,17 +550,10 @@ func (c *corrections) decideLocked(ids []uint32, link engine.LinkMeasuringPort) 
 	c.base, c.keyPeriod, c.breached = base, keyPeriod, breached
 }
 
-// dueLocked returns the peers to serve, in priority order. Caller MUST hold
-// publishMu.
-//
-// A keyframe goes to every peer whatever their cadence: a guest that missed one
-// refuses every delta that follows it, so withholding a keyframe from a slow peer
-// would not save it bytes, it would cost it the rest of the interval.
-//
-// The order matters when the uplink cannot serve everyone in one round. Highest
-// demand first — the participant whose neighbourhood is churning or whose
-// prediction has drifted furthest — then whoever has waited longest, so priority
-// is a preference and never a starvation.
+// dueLocked returns the peers to serve, in priority order: highest demand first,
+// then whoever has waited longest, so priority is a preference and never a
+// starvation. A keyframe goes to every peer whatever their cadence — a guest that
+// missed one refuses every delta after it. Caller MUST hold publishMu.
 func (c *corrections) dueLocked(ids []uint32, tick uint64, force, keyframe bool) []uint32 {
 	due := make([]uint32, 0, len(ids))
 	for _, id := range ids {
@@ -643,15 +589,9 @@ func urgency(d linkpace.Demand) int {
 }
 
 // driftPercent folds the far end's reported correction magnitude into a running
-// level and returns how far this one stands above it.
-//
-// The level is what a busy world produces and is not by itself a reason to
-// publish sooner: measured on the shipped storm scenario, a correction moves the
-// whole shared population every cadence, so a threshold on the level fires
-// permanently and spends the entire uplink on a condition that is simply what a
-// storm looks like. A *rise* above the peer's own level is the thing worth
-// reacting to, because it says the prediction is now drifting faster than the
-// cadence repairs it.
+// level and returns how far this one stands above it. The rise rather than the
+// level: on the storm scenario a correction moves the whole shared population every
+// cadence, so any threshold on the level fires permanently.
 func (p *peerPublisher) driftPercent(magnitude int) int {
 	const smoothing = 0.25
 	cur := float64(magnitude)
@@ -678,12 +618,10 @@ func (c *corrections) sizesLocked() linkpace.Sizes {
 	return linkpace.Sizes{}
 }
 
-// recordSizeLocked folds the correction just encoded into the cost model.
-// Caller MUST hold publishMu.
-//
-// It is an exponential average rather than the last value because the two shapes
-// alternate and both are needed: a controller repriced from whichever frame went
-// out last would swing sixfold every keyframe on this world.
+// recordSizeLocked folds the correction just encoded into the cost model. An
+// exponential average rather than the last value: the two shapes alternate, and a
+// controller repriced from whichever went out last would swing sixfold every
+// keyframe on this world. Caller MUST hold publishMu.
 func (c *corrections) recordSizeLocked(keyframe bool, bytes int) {
 	const smoothing = 0.25
 	blend := func(cur int64) int64 {
@@ -724,17 +662,9 @@ func (c *corrections) readWorld() (snapshot.SharedCapture, error) {
 }
 
 // forgetRestartedRunLocked drops the keyframe this host holds when it describes a
-// game the run has since restarted.
-//
-// A reset re-bases the tick counter, and every decision below reads ticks: the
-// keyframe period would see a capture from the previous run as arbitrarily fresh
-// and publish a delta against a baseline no receiver has, and the join gate would
-// hand a joiner a world carrying the session it was taken in — which that joiner
-// then refuses, because it is not the session it was offered. A run number is what
-// distinguishes them, since it is the one header field a reset advances rather than
-// re-bases.
-//
-// Caller MUST hold publishMu.
+// game the run has since restarted. A reset re-bases the tick counter and every
+// decision here reads ticks, so the stale keyframe would read as arbitrarily fresh.
+// The run number is what distinguishes them. Caller MUST hold publishMu.
 func (c *corrections) forgetRestartedRunLocked() {
 	if !c.haveKey || c.baseline.Header.Run == c.a.Position().Run {
 		return
@@ -745,18 +675,10 @@ func (c *corrections) forgetRestartedRunLocked() {
 }
 
 // keyframeAt returns a keyframe describing the world at or after minTick, taking
-// one if the newest is older than that.
-//
-// minTick is not a preference. D-22 admits a joiner before the world is read for
-// it, so that the epochs produced in between reach it rather than falling into the
-// gap — but an epoch produced *before* the admission and flushed before it was
-// registered reaches nobody, and it is not in a capture taken at the admission tick
-// either, because its apply tick is still ahead. The caller therefore asks for a
-// capture far enough ahead that every such artifact has already been applied into
-// it, and the barrier's floor then drops the copies that do arrive.
-//
-// Reuse is the second half: a join takes whichever keyframe the cadence has
-// already produced and reads the world itself only when none is fresh enough.
+// one if the newest is older than that. minTick is not a preference: an epoch
+// flushed just before the admission reaches nobody and is not in a capture taken at
+// the admission tick either, so the caller asks for one far enough ahead that every
+// such artifact has been applied into it. A join reuses whatever the cadence made.
 func (c *corrections) keyframeAt(minTick uint64, deadline time.Time) ([]byte, uint64, error) {
 	for {
 		c.publishMu.Lock()
@@ -812,13 +734,10 @@ func (c *corrections) takeKeyframe() ([]byte, uint64, error) {
 
 // === guest: reception ===
 
-// receive takes one reassembled correction body. It runs under the world lock, from
-// the tick that drained the last chunk, so it does exactly one thing.
-//
-// The queue drops the *oldest* when it is full. A correction supersedes every
-// earlier one, so an instance that cannot keep up should lose the stale corrections
-// rather than the fresh ones — the opposite choice would make a slow guest apply an
-// ever-older authority.
+// receive takes one reassembled correction body under the world lock, from the tick
+// that drained the last chunk, so it does exactly one thing. A full queue drops the
+// oldest: a correction supersedes every earlier one, so a guest that cannot keep up
+// should lose the stale ones rather than the fresh.
 func (c *corrections) receive(body []byte) {
 	if c.a.authoring() {
 		return // this instance's own publication, back round a mesh flood with cycles
@@ -836,12 +755,9 @@ func (c *corrections) receive(body []byte) {
 	}
 }
 
-// startCorrector runs the guest's apply loop.
-//
-// A correction is applied between two ticks, and World.RunSafe is what makes that
-// true by construction rather than by a handshake: a tick runs entirely inside one
-// acquisition of the update mutex, so a commit that takes the mutex is necessarily
-// between two of them. That is why this can be its own goroutine at all.
+// startCorrector runs the guest's apply loop. A tick runs entirely inside one
+// acquisition of the update mutex, so a commit that takes it is between two ticks
+// by construction — which is why this can be its own goroutine.
 func (c *corrections) startCorrector() {
 	c.correctOnce.Do(func() { go c.correct() })
 }
@@ -863,31 +779,19 @@ func (c *corrections) correct() {
 	}
 }
 
-// apply drains every correction waiting and installs the newest one that resolves.
-//
-// It is serialised against itself: a driven run reaches it from Tick and an
-// interactive one from its own goroutine, and a run that is somehow both would have
-// two installs sharing one staging world.
-//
-// Only the newest is installed and the rest are counted as superseded: installing an
-// older authority after a newer one would move this instance backwards, and a
-// keyframe carries no information the one after it lacks.
-// The exception is a delta, which is only meaningful against the baseline it names
-// — so the queue is walked in order, each entry resolved against whatever baseline
-// the previous ones left, and the last one that resolves is the one installed.
+// apply drains every correction waiting and installs the newest one that resolves;
+// the rest are counted as superseded. It is serialised against itself, because two
+// installs would share one staging world. The queue is walked in order because a
+// delta is only meaningful against the baseline the entries before it left.
 func (c *corrections) apply() {
 	c.applyMu.Lock()
 	defer c.applyMu.Unlock()
 
-	// Whatever the transport is holding is translated first, without advancing a
-	// tick: the same drain the join makes mid-run, which lets the exchange complete
-	// inside one cadence instead of paying a tick per leg.
-	//
-	// It is also what makes the comparison tick-aligned. A receiver that could only
-	// see a manifest as part of a tick would index a world one tick past the one the
-	// manifest describes, and the clock-derived half of the compared surface moves
-	// every tick — so it would never agree with the authority about anything and the
-	// cheapest correction the protocol has would be unreachable in principle.
+	// Whatever the transport holds is translated first, without advancing a tick, so
+	// the exchange completes inside one cadence rather than paying a tick per leg.
+	// It is also what keeps the comparison tick-aligned: a receiver that saw a
+	// manifest only as part of a tick would index a world one tick past the one it
+	// describes, and never agree with the authority about anything.
 	c.drainTransport()
 
 	// The succession runs here for the same reason both halves of the selective
@@ -999,12 +903,9 @@ func (c *corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
 }
 
 // install stages a correction into the persistent staging world and commits it,
-// publishing how far this instance had drifted on the way.
-//
-// The only correction refused here is one the authority already superseded, and what
-// that is measured against is the last correction *installed*, never this instance's
-// own tick: a guest's tick is a prediction like everything else about it, so a
-// correction that rebases it backwards is the ordinary case rather than an error.
+// publishing how far this instance had drifted. The only refusal is a correction
+// the authority superseded, measured against the last one installed and never
+// against this instance's own tick, which is itself a prediction.
 func (c *corrections) install(cap snapshot.SharedCapture) error {
 	c.installedMu.Lock()
 	stale := c.lastInstalled > 0 && cap.Header.Tick <= c.lastInstalled
@@ -1063,17 +964,11 @@ func (c *corrections) setBaseline(cap snapshot.SharedCapture) {
 	c.retainInstalled(cap)
 }
 
-// observeFloor is the guest's half of the convergence guarantee, and a different
-// claim from the host's: the controller says whether the link *can* carry a whole
-// world per floor window, this says whether one arrived. They disagree in both
-// directions and both are worth having — a host whose uplink looks adequate can be
-// failing a guest whose downlink is not, and a guest can keep converging across a
-// window the host had given up on.
-//
-// The grace is not slack in the promise. The floor is a *publication* guarantee and
-// a receiver additionally pays the transfer, the reassembly and the install, so
-// reporting the instant the window elapses would fire on every ordinary slow
-// keyframe. One nominal keyframe period is the smallest margin that cannot.
+// observeFloor is the guest's half of the convergence guarantee: the controller
+// says whether the link can carry a whole world per floor window, this says whether
+// one arrived. The grace is not slack — the floor is a publication guarantee and a
+// receiver also pays transfer, reassembly and install, so reporting the instant the
+// window elapses would fire on every ordinary slow keyframe.
 func (c *corrections) observeFloor() {
 	c.installedMu.Lock()
 	have, since := c.haveBase, c.keyTick
@@ -1150,11 +1045,8 @@ func (c *corrections) close() {
 // === App surface ===
 
 // receiveCorrection queues one reassembled correction. It is the seam every
-// transport binds to — the one a service contributes at construction and the one a
-// mid-run `:host` or a join attaches later — so a correction reaches the same queue
-// however this run came to be in a session.
-//
-// Caller holds the world lock: this must do nothing but take the bytes.
+// transport binds to, so a correction reaches the same queue however this run came
+// to be in a session. Caller holds the world lock: take the bytes and nothing else.
 func (a *App) receiveCorrection(_ uint64, body []byte) {
 	if a.corrections != nil {
 		a.corrections.receive(body)
@@ -1220,12 +1112,9 @@ type PeerCadence struct {
 	Near      int
 }
 
-// CadenceReport is the session's operating point: the timeline the host is
-// publishing on, and the per-link decisions it was composed from.
-//
-// It exists because the aggregate telemetry cannot answer the question an
-// operator actually has when one participant's picture is coarse — *which* link
-// is the constrained one. The status bar shows the worst; this names it.
+// CadenceReport is the session's operating point: the timeline the host publishes
+// on, and the per-link decisions it was composed from. The status bar shows the
+// worst link; this names which one it is.
 type CadenceReport struct {
 	CadenceTicks        uint64
 	KeyframePeriodTicks uint64
@@ -1293,21 +1182,11 @@ func (a *App) cadenceSizes() linkpace.Sizes {
 	return a.corrections.sizes
 }
 
-// admitLink refuses a participant whose link cannot carry the convergence floor.
-//
-// This is the requirement's refusal path, and it is a deliberate refusal rather
-// than a degraded session. A participant admitted onto a link that cannot deliver
-// one whole authoritative world per floor window would play, would drift, and
-// would have nothing scheduled that repairs it — the failure the whole
-// authoritative model exists to prevent. Refusing is the same answer the join
-// already gives when its catch-up gap exceeds the playout lead.
-//
-// The measurement is the join's own transfer, which is the one rate available
-// before a probe has completed a round trip: the bytes went out, the joiner
-// answered when it had them all, and the host was pushing the whole time. It
-// includes the joiner's install, so it *understates* the link — which errs toward
-// refusing a marginal one, and the margin between a working link and the floor is
-// two orders of magnitude on this world.
+// admitLink refuses a participant whose link cannot carry the convergence floor: it
+// would play, drift, and have nothing scheduled that repairs it. The measurement is
+// the join's own transfer, the one rate available before a probe has completed a
+// round trip. It includes the joiner's install, so it understates the link — which
+// errs toward refusing a marginal one.
 func (a *App) admitLink(port *network.SocketPort, id network.PeerID, bytes int, elapsed time.Duration) error {
 	if bytes <= 0 || elapsed <= 0 {
 		return nil

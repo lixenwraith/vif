@@ -1,16 +1,3 @@
-// Hosting a run that is already going.
-//
-// The startup lobby freezes tick zero until a fixed roster arrives. This is the other
-// join: an instance that is already playing opens a socket, and a participant that
-// dials it receives the world rather than reproducing it.
-//
-// The ordering is the design. A joiner is admitted as a peer before the world is read
-// for it, so the crossings this instance produces during the transfer reach it
-// instead of falling into the gap between the capture and the admission; the joiner
-// holds them until the world they apply to exists, and the barrier discards the ones
-// the capture already contains. Reading the world and then admitting loses every
-// artifact produced in between, silently.
-
 package app
 
 import (
@@ -29,12 +16,10 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
-// sessionControl adapts App to engine.SessionController.
-//
-// Every method here is the locked form. The operator command surface runs inside
-// App.handleIntent's critical section — mode/ must never acquire the world lock
-// itself — so a controller method that took the lock would deadlock the instance
-// at the moment the command fired.
+// sessionControl adapts App to engine.SessionController. Every method is the locked
+// form: the operator command surface runs inside App.handleIntent's critical
+// section, so a controller method that took the world lock would deadlock the
+// instance at the moment the command fired.
 type sessionControl struct{ a *App }
 
 func (c sessionControl) BeginHosting(addr string) error { return c.a.beginHostingLocked(addr) }
@@ -48,18 +33,11 @@ func (a *App) BeginHosting(addr string) error {
 	return err
 }
 
-// beginHostingLocked opens a running instance to participants.
-//
-// It is the same session every other path builds — the same acceptor, the same
-// identity allocation, the same capture — started at a tick that is not zero. What
-// it adds is the transport, because a solo run has none: the port is created,
-// started and attached here, and this App owns it for the rest of the run.
-//
-// Binding the socket happens under the world lock, which is a tick this instance
-// does not run. It is the same deliberate operator cost `:log on` pays to open a
-// file, and it is bounded by one `listen(2)`.
-//
-// Caller MUST hold updateMutex.
+// beginHostingLocked opens a running instance to participants: the same session
+// every other path builds, started at a tick that is not zero. What it adds is the
+// transport, which this App then owns for the rest of the run. Binding under the
+// world lock costs a tick, bounded by one listen(2) — the same deliberate operator
+// cost `:log on` pays. Caller MUST hold updateMutex.
 func (a *App) beginHostingLocked(addr string) error {
 	if addr == "" {
 		return errors.New("host: no address")
@@ -91,11 +69,9 @@ func (a *App) beginHostingLocked(addr string) error {
 	a.lateJoins.Store(true)
 
 	// Everything the accept goroutine reads is published before the listener that
-	// wakes it exists. Start returns with the accept loop already running, so a
-	// participant dialling in that instant reaches OnAdmit; finding no port there
-	// would leave it admitted with no gate and no world, waiting forever. Its
-	// capture read then blocks on the world lock this call holds, which is what
-	// makes the attach below happen first.
+	// wakes it exists: Start returns with the loop already running, and a dial in
+	// that instant reaches OnAdmit. Its capture read then blocks on the world lock
+	// this call holds, which is what makes the attach below happen first.
 	a.sessionMu.Lock()
 	a.midRunPort = port
 	a.sessionRoster = []network.SessionParticipant{{ID: hostParticipantID, Slot: 0}}
@@ -240,12 +216,10 @@ func (a *App) sessionSummaryLocked() string {
 		state)
 }
 
-// releaseMidRunJoiner completes the gate for a participant the accept loop has
-// just admitted. It runs on the accept goroutine, so it must not assume the world
-// lock is free and must not hold it longer than one capture.
-//
-// A tick-zero lobby does not come through here: it closes on a roster and releases
-// everyone together, and its gate is startHostSessionOn's.
+// releaseMidRunJoiner completes the gate for a participant the accept loop just
+// admitted. It runs on the accept goroutine, so it must not assume the world lock is
+// free and must not hold it longer than one capture. A tick-zero lobby releases
+// everyone together and does not come through here.
 func (a *App) releaseMidRunJoiner(id network.PeerID) {
 	// One at a time. The handshakes that reach here run concurrently, and this gate
 	// waits on a ready count that is cumulative over the session: two of them at
@@ -278,20 +252,10 @@ func (a *App) releaseMidRunJoiner(id network.PeerID) {
 }
 
 // sendMidRunGate sends one joiner the closed roster and the world it names, then
-// crosses its arrival.
-//
-// The world is the cadence's keyframe rather than a read taken for this join: a
-// host publishes keyframes anyway, so a join takes whichever one is fresh enough
-// and reads the world itself only when none is. Two joins arriving together then
-// share that read instead of taking one each.
-//
-// "Fresh enough" is not the current tick. D-22 admits a participant before the
-// world is read for it so the epochs produced in between reach it, but an epoch
-// produced before the admission was flushed to the peers this instance held at
-// that moment and never reaches this one. A capture at the admission tick does not
-// contain it either: its apply tick is still a playout lead ahead, so the barrier
-// does not drop it and nothing delivers it. Waiting for a capture one lead further
-// on closes that window by construction, at a cost of three ticks.
+// crosses its arrival. The world is the cadence's keyframe rather than a read taken
+// for this join, so two joins arriving together share one read. "Fresh enough" is a
+// playout lead past the admission, not the current tick: an epoch flushed just
+// before the admission reaches nobody and is in no capture taken at that tick.
 func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error {
 	offer, err := a.midRunOffer(id)
 	if err != nil {
@@ -380,12 +344,10 @@ func (a *App) awaitJoinerReady(port *network.SocketPort, id network.PeerID, was 
 		id, parameter.NetworkJoinReadyTimeout)
 }
 
-// crossParticipantArrival announces a mid-run arrival as a D-3 crossing.
-//
-// It is not a local reaction to a connect and cannot be: the cursor it creates is a
-// shared entity, so every instance has to create it at one agreed tick or their
-// shared creation order diverges from that point on (D-11). The coordinator is the
-// only producer, for the same reason it is the only producer of a departure.
+// crossParticipantArrival announces a mid-run arrival as a D-3 crossing rather than
+// as a local reaction to a connect: the cursor it creates is a shared entity, so
+// every instance must create it at one agreed tick or their creation order diverges
+// (D-11). The coordinator is the only producer, as it is for a departure.
 func (a *App) crossParticipantArrival(id network.PeerID, slot uint8) {
 	a.world.RunSafe(func() {
 		a.world.PushEventFull(event.EventParticipantJoined,
@@ -394,21 +356,11 @@ func (a *App) crossParticipantArrival(id network.PeerID, slot uint8) {
 	})
 }
 
-// resumeJoinedSession is the joiner's half of the ordering: the session traffic
-// the gate held is handed to the port, and the gap between the world this instance
-// installed and the tick the session has reached is closed by simulating it.
-//
-// The gap is real and it is not an error. A capture is read at tick T and installed
-// some milliseconds later, by which time the session is at T+k; k is the transfer
-// and the install, so it is a function of world size and link speed rather than of
-// how long the session has been running. Left open it would be permanent, and a
-// participant k ticks behind produces every crossing k ticks late — under the
-// playout lead that is still on time, over it the session diverges from the first
-// artifact this participant sends.
-//
-// Call after the transport has taken the stream and before game time is released:
-// the catch-up runs on the paused clock's step path, and releasing first would
-// start this instance's own pacing at the wrong tick.
+// resumeJoinedSession hands the traffic the gate held to the port and closes the gap
+// between the installed world and the tick the session has reached by simulating it.
+// The gap is the transfer and the install, so it is a function of world size and
+// link speed; left open it is permanent, and every crossing goes out k ticks late.
+// Call after the transport takes the stream and before game time is released.
 func (a *App) resumeJoinedSession() error {
 	if a.pendingJoin == nil {
 		return nil
@@ -431,13 +383,10 @@ func (a *App) resumeJoinedSession() error {
 		return nil
 	}
 
-	// The gap is only partly readable from what the gate held. Epochs the host
-	// closed while this instance was reading its world land in the held set; epochs
-	// it closed during the install sat in the socket until the port started, and the
-	// barrier learns of those only once something drains them. So it is closed by
-	// rounds: catch up to the newest tick known so far, let that draining reveal the
-	// next, and stop when it stops moving. The host is still advancing while the
-	// catch-up runs, which is what the second and third rounds are for.
+	// The gap is only partly readable from what the gate held: epochs closed during
+	// the install sat in the socket until the port started, and the barrier learns of
+	// those only once something drains them. So it closes by rounds — catch up to the
+	// newest tick known, let that draining reveal the next, stop when it stops moving.
 	caught := uint64(0)
 	for range joinCatchUpRounds {
 		local := a.Position().Tick

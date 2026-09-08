@@ -1,9 +1,3 @@
-// Presented playback. One loop presents any driven stream on a live terminal: a
-// recorded journal, or an authored script. The simulation runs at the stream's own
-// geometry and is advanced only by that stream's driver, so the world is
-// bit-identical to the headless form and the terminal supplies pacing, pan and
-// playback control only.
-
 package app
 
 import (

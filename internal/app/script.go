@@ -1,18 +1,3 @@
-// Authored script runtime. A script is a deterministic list of inputs at named
-// simulation positions; two things about how it is run are policy rather than
-// content, and both are here.
-//
-// Pacing. A solo script runs as fast as the caller can drive it, which is what a test
-// wants. A script in a session runs at the wall rate its peers do, because a
-// participant that outran them would produce epochs faster than the barrier delivers
-// them. -speed selects the rate explicitly, and ScriptPaceMax removes pacing.
-//
-// Presentation. ModeHeadless runs a script with no terminal at all; ModeScript
-// presents the same run on this terminal, over the same manual clock and the same
-// script geometry, so the two simulate identically. That is what makes a scripted
-// participant watchable: a scripted host can play a fixed sequence while a person
-// joins and plays against it.
-
 package app
 
 import (
@@ -33,12 +18,10 @@ import (
 // ScriptPaceMax is the -speed token that removes wall pacing from a script run.
 const ScriptPaceMax = "max"
 
-// scriptPacing resolves a run's wall pace: the interval one simulation tick is
-// allowed to occupy, and whether pacing applies at all.
-//
-// An empty spec is the default, and the default is a property of the run rather
-// than of the flags: a script that starts in a session is paced from its first
-// tick, and a solo one runs flat out until it opens a session itself with :host.
+// scriptPacing resolves a run's wall pace: the interval one simulation tick may
+// occupy, and whether pacing applies. An empty spec takes the default from the run
+// rather than the flags — a script that starts in a session is paced from its first
+// tick, a solo one runs flat out until it opens a session with :host.
 func scriptPacing(cfg Config) (interval time.Duration, paced bool, err error) {
 	if cfg.TimeScaleSpec == "" {
 		inSession := cfg.HostAddress != "" || cfg.JoinAddress != ""

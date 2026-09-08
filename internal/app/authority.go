@@ -1,28 +1,3 @@
-// Who authors, and what happens when that instance goes.
-//
-// Losing the authority without a successor ends the session's shared identity: the
-// survivors keep ticking separately, with no roster authority and no way to admit
-// anyone. That is the fallback; the succession here is the other outcome.
-//
-// Notice, handoff. A survivor floods the news that the authority is gone, so a
-// participant two links away learns of a loss only its neighbour observed; the
-// participant the roster names as successor — its lowest surviving identity, which
-// is the first guest admitted — publishes the record it authors under, at once and
-// without asking anyone. network.DesignatedSuccessor is why there is no vote here:
-// it is a function of a roster every survivor already holds, so at most one
-// instance can conclude that it is the successor. A quorum could not serve the
-// shape a session actually has — see that file's header.
-//
-// The record carries roster, slot assignments, anchor and barrier delay, so adopting
-// it is one decision rather than a term change followed by a roster negotiation, and
-// a joiner dialling mid-handoff is refused with a distinguishable error rather than
-// half-admitted into a term about to end.
-//
-// What a successor may author is unchanged: the Shared domain and nothing else. It
-// does not begin authoring the D-13 owner-authored cells of cursors it does not
-// simulate, its correction index keeps the same two exclusions, and no Player-domain
-// state crosses as part of the transfer.
-
 package app
 
 import (
@@ -186,13 +161,9 @@ func (u *authority) Fork() bool {
 }
 
 // admit is the wire gate: whether an artifact produced under term may be acted on.
-//
-// The three answers are the three rules. Older is ignored, because the session has
-// moved past it. Equal is acted on. Newer is *refused* — not adopted — because the
-// only thing that may raise this instance's term is a handoff record, and an
-// artifact arriving under a term nobody handed it is either a fork that has been
-// running separately or an instance that has skipped a succession. Both are
-// reported; neither is followed.
+// Older is ignored, equal acted on, newer refused rather than adopted — only a
+// handoff record may raise this instance's term, so an artifact under a term nobody
+// handed it is a fork or a skipped succession. Both are reported, neither followed.
 func (u *authority) admit(term network.AuthorityTerm, from uint32) bool {
 	u.mu.Lock()
 	held, fork := u.term, u.fork
@@ -264,13 +235,10 @@ func (u *authority) beginSuccession(lost network.PeerID) {
 	u.drive()
 }
 
-// sendReport floods the news that the authority is gone.
-//
-// It decides nothing — the successor is a function of the roster — but only a
-// direct neighbour of the authority sees the link drop, and the departure crossing
-// that used to carry that news is produced by the participant that is gone. So the
-// notice travels instead, and a survivor two links away opens the same succession
-// from it.
+// sendReport floods the news that the authority is gone. It decides nothing — the
+// successor is a function of the roster — but only a direct neighbour sees the link
+// drop, and the crossing that would carry the news is produced by the participant
+// that is gone, so the notice travels instead.
 func (u *authority) sendReport() {
 	u.mu.Lock()
 	term, local, lost := u.contested, u.local, u.lost
@@ -287,17 +255,11 @@ func (u *authority) sendReport() {
 	u.flood(network.MsgAuthorityReport, 0, body)
 }
 
-// currentRoster is the closed roster as the *world* holds it rather than as the
-// offer that admitted this instance described it.
-//
-// The difference matters for a session that grew after this participant arrived. A
-// mid-run joiner's offer names the lobby at the moment it dialled, so two
-// participants admitted a minute apart hold two different lists — and a succession
-// computed over them would use two different majorities. The cursor roster does
-// not have that problem: an arrival and a departure are barrier-bound crossings
-// that every instance applies at one agreed tick (D-11), so what the world holds is
-// the same list everywhere. The stored offer stays as the fallback for a run whose
-// world has not built its cursors yet.
+// currentRoster is the closed roster as the world holds it rather than as the offer
+// that admitted this instance described it. A mid-run joiner's offer names the lobby
+// at the moment it dialled, so two participants would hold two lists; arrivals and
+// departures are barrier-bound crossings, so the cursor roster is the same list
+// everywhere. The offer stays as the fallback before the cursors exist.
 func (u *authority) currentRoster() []network.SessionParticipant {
 	var out []network.SessionParticipant
 	u.a.world.RunSafe(func() {
@@ -388,18 +350,10 @@ func (u *authority) drive() {
 }
 
 // trySucceed takes the term, when this instance is the one the roster names.
-//
-// There is nothing to collect and nobody to ask. DesignatedSuccessor is a pure
-// function of the closed roster and the participant that went, both of which every
-// survivor already holds, so exactly one instance reaches the publish below and it
-// reaches it as soon as it notices the loss. That immediacy is the point: the
-// session is stalled from the moment the authority goes until somebody authors, and
-// a quorum round would add a round trip that a star cannot complete at all.
-//
-// The one self-check is retention. A successor with no retained authoritative
-// record has no baseline for a delta to name, so it would answer the first manifest
-// with a whole world for every survivor at once; without one it stands down and the
-// succession window turns this into a local fork.
+// DesignatedSuccessor is a pure function of the closed roster and the participant
+// that went, so exactly one instance reaches the publish below and reaches it as
+// soon as it notices — a quorum round would add a trip a star cannot complete. The
+// one self-check is retention: without a baseline the successor stands down.
 func (u *authority) trySucceed() {
 	roster := u.currentRoster()
 	u.mu.Lock()
@@ -886,13 +840,9 @@ func (a *App) openAuthorityLocked(o network.SessionOffer, local network.PeerID) 
 }
 
 // applyAuthorityChange moves the membership a handoff carries into the places the
-// session actually reads it from, and switches this instance's role.
-//
-// Nothing here re-derives anything: the roster, the slot assignments, the anchor
-// and the barrier delay are adopted exactly as the record carries them, which is
-// what makes them byte-identical on every survivor. What changes is which
-// participant the admission surface names and which half of the correction
-// protocol this run is.
+// session reads it from, and switches this instance's role. Nothing is re-derived:
+// roster, slots, anchor and barrier delay are adopted exactly as carried, which is
+// what makes them byte-identical on every survivor.
 func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 	a.sessionMu.Lock()
 	a.sessionRoster = slices.Clone(rec.Roster)
@@ -915,15 +865,10 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 	a.corrections.followAuthority(rec)
 }
 
-// crossPredecessorDeparture removes the authority that was lost from the roster.
-//
-// A departure is a shared entity's destruction, so it may be produced by exactly
-// one instance at exactly one tick (D-11) — and the instance the protocol names is
-// the authority. That is precisely what was missing when the authority itself was
-// what went: the neighbour that saw the link drop floods a notice, and the
-// participant that would have turned it into a crossing is the one that is gone.
-// The successor is the first instance that may, so it does, as its first act under
-// the new term.
+// crossPredecessorDeparture removes the authority that was lost from the roster. A
+// departure is a shared entity's destruction, so exactly one instance may produce it
+// (D-11) and that instance is the authority — which is the one that went. The
+// successor is the first instance that may, so it does, under the new term.
 func (a *App) crossPredecessorDeparture(rec network.HandoffRecord) {
 	if rec.Predecessor == 0 {
 		return
@@ -938,22 +883,10 @@ func (a *App) crossPredecessorDeparture(rec network.HandoffRecord) {
 }
 
 // dropAbandonedCursors removes the participants an instance left alone will never
-// hear from again.
-//
-// Both outcomes of a lost authority reach it. A successor of a star takes the term
-// and finds itself the only participant it can reach; a survivor that could not
-// reach that successor continues as an explicit local fork. Either way each cursor
-// this instance does not simulate belongs to a participant nothing will ever move
-// again — the authority that went, and behind it the guests only ever reachable
-// through it. Left there they are players that cannot be played and cannot leave.
-//
-// Having no link is also what makes the removal local rather than a crossing, and
-// that is exact rather than convenient: a departure is produced once at one agreed
-// tick (D-11) because two instances must destroy the same shared entity together or
-// their allocators diverge from there on, and here there is no second instance. An
-// instance that still holds links is left alone for the mirror of that reason,
-// which is the partition case doc/multi-player-enhancement.md §8 records as
-// unfinished.
+// hear from again: every cursor it does not simulate belongs to someone nothing will
+// move again. Having no link is what makes the removal local rather than a crossing
+// — a departure is produced once at one agreed tick because two instances must
+// destroy a shared entity together, and here there is no second instance.
 func (a *App) dropAbandonedCursors(roster []network.SessionParticipant, local network.PeerID) {
 	if p := a.sessionTransport(); p != nil && p.IsRunning() && p.PeerCount() > 0 {
 		return
@@ -972,13 +905,10 @@ func (a *App) crossDeparture(id network.PeerID, slot uint8) {
 }
 
 // pushDeparture emits one participant's removal and returns its identity to the
-// pool this instance allocates from.
-//
-// The domain is the whole of the difference between the two producers above. Player
-// puts the artifact on the wire, where every instance applies it at one agreed tick;
-// shared keeps it here, which is this instance re-deriving its own roster because
-// there is nobody left to agree with. Both are recorded, so a replay of either run
-// reaches the same world the same way.
+// pool. The domain is the whole difference between the two producers above: player
+// puts the artifact on the wire for every instance to apply at one agreed tick,
+// shared keeps it here. Both are recorded, so a replay of either reaches the same
+// world the same way.
 func (a *App) pushDeparture(id network.PeerID, slot uint8, domain core.Domain) {
 	a.world.RunSafe(func() {
 		a.world.PushEventFull(event.EventParticipantDeparted,

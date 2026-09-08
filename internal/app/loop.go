@@ -172,14 +172,11 @@ func (a *App) handleResize(width, height int) {
 	a.orchestrator.Resize(a.ctx.Width, a.ctx.Height)
 }
 
-// renderContext reads everything a frame draws from, in one critical section.
-//
-// Config (Map/Viewport/Camera/crop) is mutated under updateMutex by LevelSetup and
-// reset handlers on the event-loop and tick goroutines, so the context has to be
-// built inside the same section that reads the cursor and the clock. The clock read
-// is the continuous one: the tick-written stamps are quantised to the tick, which
-// shows as stepped animation once the rate is slowed. Everything taken here is a
-// local copy — a render never writes a tick-owned resource.
+// renderContext reads everything a frame draws from, in one critical section: Config
+// is mutated under updateMutex by LevelSetup and reset handlers, so it has to be read
+// with the cursor and the clock. The clock read is the continuous one — tick-written
+// stamps are quantised and show as stepped animation at a slowed rate. Everything
+// taken here is a local copy; a render never writes a tick-owned resource.
 func (a *App) renderContext() render.RenderContext {
 	var (
 		snapTime         engine.TimeResource

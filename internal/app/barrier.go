@@ -1,8 +1,3 @@
-// Choosing the session's playout lead. The value is session-wide because a replay
-// must defer its re-derived crossings by the same lead the run it reproduces did,
-// and chosen once at lobby close because no artifact between offers and handoffs
-// could tell participants it had changed.
-
 package app
 
 import (

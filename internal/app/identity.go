@@ -1,19 +1,3 @@
-// What this instance is, as the other side of a session needs to hear it.
-//
-// The join used to be self-policed. The coordinator sent its anchor, the joiner
-// compared it against its own build, and a joiner that did not perform that
-// comparison — an older client, a modified one, one that simply skipped it — was
-// admitted on its word. The host is the authority over the session, so the host has
-// to be the one that refuses: the joiner reports what it actually is, and the
-// coordinator decides whether that is the same game.
-//
-// Two of the three fields the anchor cannot supply are new here. The wire contract
-// is network's own constant. The simulation is the manifest's fingerprint: which
-// components exist, which systems run, in which order and domain, and which of them
-// carry state a capture moves — the thing that actually decides whether two
-// participants converge. The third is the capture layout, which snapshot has always
-// versioned but which nothing checked until a world was already being installed.
-
 package app
 
 import (

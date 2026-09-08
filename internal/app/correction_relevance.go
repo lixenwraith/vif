@@ -1,17 +1,3 @@
-// Relevance, priority, and the operating point a player can see.
-//
-// Relevance here is a scheduling input and never a filter. The tempting shape — send
-// each participant only the entities near it — cannot carry D-23's exactness proof: a
-// delta is verified by reconstructing the sender's capture and re-hashing it, so a
-// correction carrying a subset of the world reconstructs a capture nobody holds and
-// has no proof left to offer, and it would leave the receiver holding a world
-// assembled from two ticks.
-//
-// So what relevance moves is when a participant's next correction goes out, not what
-// is in it. Scoping the content is the selective exchange's job, which needs its own
-// integrity contract over the subset and a partial reconcile that does not adopt the
-// authority's tick.
-
 package app
 
 import (
@@ -24,20 +10,11 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
 )
 
-// relevanceLocked scores, per peer, how many of the shared entities this
-// correction moves stand near that participant's own cursor.
-//
-// The cursor comes back on the peer's link echo, which makes it a transport
-// value rather than a simulation one: it is read here to decide a send time and
-// is never written anywhere a tick can see. A stale or missing one costs a
-// correction sent sooner than it needed to be.
-//
-// A keyframe moves the whole world by definition, so scoring one entity by entity
-// would say "everything is relevant to everyone" and tell the schedule nothing.
-// What is scored instead is the shared population near each participant, which is
-// the same question asked of the frame that carries it.
-//
-// Caller MUST hold publishMu.
+// relevanceLocked scores, per peer, how many of the shared entities this correction
+// moves stand near that participant's cursor. The cursor comes back on the link
+// echo, so it is a transport value: read to decide a send time and never written
+// where a tick can see it. A keyframe moves the whole world, so what is scored there
+// is the shared population near each participant. Caller MUST hold publishMu.
 func (c *corrections) relevanceLocked(
 	cap snapshot.SharedCapture, keyframe bool, link engine.LinkMeasuringPort, ids []uint32,
 ) map[uint32]int {
@@ -81,13 +58,10 @@ func near(p component.PositionComponent, c linkpace.Cell, radius int) bool {
 	return dx >= -radius && dx <= radius && dy >= -radius && dy <= radius
 }
 
-// movedEntities is the set of shared entities a delta against the current
-// baseline would touch. A keyframe carries the world whole, so the set is not
-// computed for one — the caller scores the whole population instead.
-//
-// Only placement and motion are consulted. They are what a participant standing
-// near an entity actually perceives, and they are the two stores whose delta says
-// "this entity is doing something" rather than "a counter on it changed".
+// movedEntities is the set of shared entities a delta against the current baseline
+// would touch; nil for a keyframe, which carries the world whole. Only placement and
+// motion are consulted: they are what a participant standing near an entity
+// perceives, and the two stores whose delta says the entity is doing something.
 func movedEntities(base, next snapshot.SharedCapture, keyframe bool) map[core.Entity]struct{} {
 	if keyframe {
 		return nil
@@ -103,18 +77,11 @@ func movedEntities(base, next snapshot.SharedCapture, keyframe bool) map[core.En
 	return out
 }
 
-// scoreRelevanceLocked turns each participant's raw near-count into the
-// comparative share the controller and the priority order read.
-//
-// Comparative rather than absolute, and that is the whole of why relevance is
-// usable as a scheduling signal at all. A count is a fact about the world: in a
-// storm every participant has hundreds of moved entities beside it, so any fixed
-// threshold fires for everyone at once and the signal says nothing. What is worth
-// acting on is that *this* participant has more at stake in the next correction
-// than the others do — which with one guest is nobody, and the whole link is
-// already its own.
-//
-// Caller MUST hold publishMu.
+// scoreRelevanceLocked turns each participant's raw near-count into the comparative
+// share the controller and the priority order read. Comparative rather than
+// absolute: in a storm every participant has hundreds of moved entities beside it,
+// so a fixed threshold fires for everyone and says nothing. Caller MUST hold
+// publishMu.
 func (c *corrections) scoreRelevanceLocked(ids []uint32, near map[uint32]int) {
 	total := 0
 	counted := 0
@@ -144,12 +111,9 @@ func (c *corrections) scoreRelevanceLocked(ids []uint32, near map[uint32]int) {
 	}
 }
 
-// publishPlanTelemetryLocked publishes the operating point: what cadence is in
-// force, how long the session leaves between whole worlds, what the link was
-// measured to carry, and whether either of the two conditions a player should be
-// told about holds.
-//
-// Caller MUST hold publishMu.
+// publishPlanTelemetryLocked publishes the operating point: the cadence in force,
+// the interval between whole worlds, what the link was measured to carry, and the
+// two conditions a player should be told about. Caller MUST hold publishMu.
 func (c *corrections) publishPlanTelemetryLocked(ids []uint32) {
 	m := c.a.telemetry
 	m.CadenceTicks.Store(int64(c.base))
@@ -188,17 +152,10 @@ func (c *corrections) publishPlanTelemetryLocked(ids []uint32) {
 	c.reportFloorLocked()
 }
 
-// reportFloorLocked says out loud, once per onset, that a link cannot carry the
-// convergence floor.
-//
-// This is the boundary the plan states as a must-not: adaptation may not reach a
-// rate at which convergence is not guaranteed. It does not — the controller
-// clamps at the floor — and the condition it clamped against is unrecoverable by
-// any cadence, so the honest thing is to name it rather than to keep publishing a
-// schedule that cannot deliver what it promises. It is said once on the way in
-// and once on the way out, because a message per correction is not a report.
-//
-// Caller MUST hold publishMu.
+// reportFloorLocked says out loud, once per onset and once on the way out, that a
+// link cannot carry the convergence floor. The controller clamps at the floor, so
+// the condition it clamped against is unrecoverable by any cadence and naming it is
+// the only honest answer. Caller MUST hold publishMu.
 func (c *corrections) reportFloorLocked() {
 	if c.breached == c.saidFloor {
 		return

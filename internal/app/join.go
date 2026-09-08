@@ -1,12 +1,3 @@
-// The join handshake.
-//
-// A second participant reproduces a session rather than receiving it: same seed,
-// same session counter, same config and corpus, so shared entity identity and
-// creation order are identical from the first tick (D-11). Only the D-14 map latch
-// is adopted rather than re-derived — the joiner's terminal must not decide the
-// shared bounds. The carrier is JournalAnchor, which already describes exactly this
-// set for replay; the join adds the latch and drops the recording terminal.
-
 package app
 
 import (
@@ -50,12 +41,10 @@ func (a *App) joinAnchorLocked() event.JoinAnchor {
 	return event.JoinAnchor{Anchor: an}
 }
 
-// Join admits this App into the session an anchor describes: it verifies that this
-// instance reproduces the identity, refuses a position it cannot reconstruct, and
-// adopts the map latch. Call after NewHeadless, before the first Tick.
-//
-// Reproducing the position is what a capture removes the need for; JoinAt is the
-// same admission for a participant that receives the world instead of re-deriving it.
+// Join admits this App into the session an anchor describes: it verifies the
+// identity, refuses a position it cannot reconstruct, and adopts the map latch. Call
+// after NewHeadless, before the first Tick. JoinAt is the same admission for a
+// participant that receives the world instead of re-deriving it.
 func (a *App) Join(j event.JoinAnchor) error { return a.join(j, false) }
 
 // JoinAt admits this App into a session at whatever tick the host has reached. The
@@ -93,19 +82,11 @@ func (a *App) JoinSession(o network.SessionOffer) error {
 	return a.configureSessionRoster(o, o.Assigned)
 }
 
-// JoinSessionAt admits this instance into a running session by installing the
-// host's world rather than reproducing it.
-//
-// The order is the whole of the join. The map latch first, because the bounds
-// decide what the level setup reflows and a capture's placements are relative to
-// them. Then the FSM boot's queued spawn is settled — not because the entities it
-// creates are wanted, but because it is what declares the cursor template a late
-// arrival is armed from, and because leaving it queued would spawn a second cursor
-// into slot zero after the install. Then the capture is staged into a second world
-// and swapped in, which is where this instance stops being its own session and
-// becomes part of the host's. The roster is configured last, on the installed
-// world: every cursor the offer names is already there, so what is left is which of
-// them this participant drives (D-13).
+// JoinSessionAt admits this instance into a running session by installing the host's
+// world rather than reproducing it. The order is the whole of the join: map latch,
+// because a capture's placements are relative to those bounds; the FSM boot's queued
+// spawn, which declares the cursor template; the staged install; then the roster on
+// the installed world, where all that is left is which cursors this instance drives.
 func (a *App) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCapture) error {
 	if err := a.validateSessionOffer(o, o.Assigned); err != nil {
 		return err
@@ -239,16 +220,11 @@ func (a *App) configureSessionRoster(o network.SessionOffer, local network.PeerI
 	return nil
 }
 
-// bindSessionControl applies the D-13 control assignment for this instance over a
-// roster that already exists: which participant owns each cursor, and which of them
-// this one drives. It creates nothing.
-//
-// It is the whole of a mid-run join's roster work. The cursors the offer names came
-// from the capture, and the one this participant is about to take does not exist on
-// any instance yet — it arrives as the EventParticipantJoined crossing, at one
-// agreed tick, which is the only way a shared entity may be created after tick zero
-// (D-11). A slot the offer names and the world does not hold is therefore normal
-// here rather than an error.
+// bindSessionControl applies the D-13 control assignment over a roster that already
+// exists: who owns each cursor, and which this instance drives. It creates nothing —
+// the cursor this participant takes arrives as the EventParticipantJoined crossing at
+// one agreed tick, the only way a shared entity may be created after tick zero
+// (D-11), so a slot the offer names and the world does not hold is normal here.
 func (a *App) bindSessionControl(o network.SessionOffer, local network.PeerID) error {
 	a.world.RunSafe(func() { a.bindCursorOwnersLocked(o.Participants, local) })
 	localAssignment, ok := o.Participant(local)
@@ -307,16 +283,10 @@ func (a *App) localSlot() uint8 {
 }
 
 // adoptMapLatch applies the host's bounds through the D-14 authority — the level
-// setup path — rather than by writing Config, so the grid, the camera and every
-// cursor reflow exactly as they would for a map script. Entities are kept: the
-// joiner's world is the same seed's world, not a fresh one.
-//
-// A joining run now installs the latch before the FSM boots (Config.MapWidth), so
-// this is the confirmation rather than the adoption; it still runs the level setup
-// unconditionally, because that event is part of the session's record stream and a
-// participant reproducing the session by replay has to see the same one.
-// Exempt from App.shareOperator: every participant applies the same bounds from
-// the same offer, which is the case that guard exists to distinguish from.
+// setup path — rather than by writing Config, so grid, camera and cursors reflow as
+// they would for a map script and entities are kept. Config.MapWidth has already
+// installed the latch, so this is the confirmation; it runs unconditionally because
+// the event is part of the session's record stream a replay has to see.
 func (a *App) adoptMapLatch(an event.JournalAnchor) {
 	a.ctx.PushEventOrigin(event.EventLevelSetup, &event.LevelSetupPayload{
 		Width: an.MapWidth, Height: an.MapHeight, CropOnResize: an.CropOnResize,
