@@ -12,21 +12,11 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
-// Staged link shaping, over a real socket, under `tc netem`.
-//
-// Everything else in this package shapes an in-process mesh, which is
-// deterministic and reproducible and is exactly why it is not sufficient on its
-// own: it models when a frame becomes visible and how many bytes a tick will
-// pass, and it does not model a kernel queue, a TCP retransmit, a Nagle
-// interaction or a send buffer that fills. Those are where a cadence chosen from
-// a delivery-rate estimate is most likely to be wrong, so the estimate is taken
-// once over a link the kernel is actually shaping.
-//
-// It is opt-in for a reason that is not squeamishness. Shaping `lo` shapes every
-// loopback flow on the machine, including whatever else is running the test
-// suite, so a gate that armed itself would be a gate that broke unrelated builds.
-// VIF_NETEM=1, root, and a working `tc` are all required, and the skip says which
-// one is missing.
+// Staged link shaping over a real socket under `tc netem`. The in-process mesh
+// everything else uses models when a frame becomes visible, not a kernel queue, a TCP
+// retransmit or a send buffer that fills — which is where a cadence chosen from a
+// delivery-rate estimate is most likely to be wrong. Opt-in because shaping `lo`
+// shapes every loopback flow on the machine: VIF_NETEM=1, root and `tc` are required.
 
 // netemStage is one shaped condition and what it is meant to exercise.
 type netemStage struct {

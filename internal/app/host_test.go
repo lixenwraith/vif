@@ -69,17 +69,11 @@ func TestAMidRunHostAttributesItsOwnCursor(t *testing.T) {
 	}
 }
 
-// TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun drives the mid-run join over
-// a real socket at a tick that is not zero.
-//
-// The whole claim is in this one path. A run that was solo opens a
-// socket without restarting. A participant dials it hundreds of ticks in, receives
-// the world instead of re-deriving it, and installs it. The crossings the host
-// produced while that was happening reach the joiner rather than falling into the
-// gap, because the joiner was admitted before the world was read for it. The joiner
-// closes the remaining tick gap by simulating it. Its cursor is created by a
-// crossing, at one agreed tick, on both instances. And the two then hold the same
-// shared world.
+// TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun drives the whole mid-run join
+// over a real socket at a tick that is not zero: a solo run opens a socket without
+// restarting, a participant dials hundreds of ticks in and installs the world it
+// receives, the crossings produced during the transfer reach it rather than falling
+// into the gap, and the two then hold the same shared world.
 func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
 	const seed = 0x3017
@@ -147,12 +141,10 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 			offset, parameter.NetworkJoinLagTicks)
 	}
 
-	// The authority's cadence is stopped for the rest of this test, and everything
-	// it already sent is drained. The subject here is the join, and a correction is
-	// a *clock* as much as a world — installing one pins this guest's tick to the
-	// host's at the moment the capture was read — so one landing between two
-	// assertions would move the very thing they compare. The correction criteria
-	// elsewhere are where a correction is the subject.
+	// The cadence is stopped for the rest of this test and everything already sent is
+	// drained. A correction is a clock as much as a world — installing one pins this
+	// guest's tick to the host's — so one landing between two assertions would move
+	// the thing they compare. The correction criteria elsewhere own that subject.
 	settleCorrections(t, host, guest)
 
 	// Bring the two onto one tick, then hold them there. The residual offset is this
@@ -181,25 +173,11 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 	}
 }
 
-// TestAReconnectIsTheSameJoin asserts there is no fourth join mechanism, on the
-// host shape where that used to be false.
-//
-// A participant that drops leaves a departure crossing behind, and the coordinator
-// returns its identity to the pool. What comes back is a new dial: the same
-// acceptor, the same identity allocation, the same capture at whatever tick the
-// host has now reached, the same install, the same arrival crossing. Nothing here
-// is reconnect-specific, and that is the whole claim.
-//
-// The host is started through its startup lobby rather than with :host, because
-// the lobby is the shape the claim used to be false for. The mid-run gate was a
-// dedicated host's alone, so a -host or a scripted host closed its lobby and then
-// admitted a re-dial onto no gate at all: the transport took the stream, no start
-// record was ever sent, and the guest sat in a blocking read it could not even quit
-// out of while the host's status line reported a peer.
-//
-// So this is the join run twice against one lobby host — once through the start
-// gate and once through the mid-run one — with a disconnect in between, asserting
-// the second arrival lands on a world the host has moved well past since the first.
+// TestAReconnectIsTheSameJoin asserts there is no fourth join mechanism: a dropped
+// participant leaves a departure crossing and its identity returns to the pool, and
+// what comes back is an ordinary dial. The join runs twice against one lobby host —
+// once through the start gate, once through the mid-run one — with a disconnect
+// between, asserting the second arrival lands on a world the host has moved past.
 func TestAReconnectIsTheSameJoin(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
 	const seed = 0x3019
@@ -287,12 +265,10 @@ func joinDeadline(d time.Duration) <-chan os.Signal {
 	return ch
 }
 
-// dialSession dials until the coordinator answers with an offer.
-//
-// Both things it retries past are the protocol's own: a host that binds on a
-// goroutine of its own is not listening yet when a test reaches it, and a refusal —
-// a lobby mid-close, an identity a dropped stream has not finished returning — is
-// exactly the answer the design tells a dialer to retry rather than give up on.
+// dialSession dials until the coordinator answers with an offer. Both things it
+// retries past are the protocol's own: a host binding on its own goroutine is not
+// listening yet, and a refusal — a lobby mid-close, an identity a dropped stream has
+// not returned — is the answer the design tells a dialer to retry on.
 func dialSession(t *testing.T, addr string) (*network.PendingJoin, network.SessionOffer) {
 	t.Helper()
 	deadline := time.Now().Add(socketWait) // [wall] a link bound, not a game one
@@ -310,17 +286,10 @@ func dialSession(t *testing.T, addr string) (*network.PendingJoin, network.Sessi
 }
 
 // tickInBackground keeps one instance running while the caller does something that
-// needs a live host, and returns the stop.
-//
-// The host has to keep ticking through a join: the capture is read under the world
-// lock from the accept goroutine, and the gap the joiner then closes is exactly the
-// ticks the host completed while its world was in transit. A host frozen for the
-// transfer would prove the easy half of it.
-//
-// The pacing is faster than the game interval on purpose. At one tick per 50 ms a
-// loopback transfer finishes inside a single tick and the gap is never there to
-// close; compressing it is the honest stand-in for the slow link or the large world
-// that produces one.
+// needs a live host, and returns the stop. The gap a joiner closes is exactly the
+// ticks the host completed while its world was in transit, so a host frozen for the
+// transfer would prove the easy half. The pacing is faster than the game interval on
+// purpose: at 50 ms a loopback transfer finishes inside one tick and there is no gap.
 func tickInBackground(a *App) (stop func()) {
 	done, stopped := make(chan struct{}), make(chan struct{})
 	go func() {
@@ -389,14 +358,10 @@ func pumpHost(t *testing.T, host *App, ticks int) {
 	}
 }
 
-// TestHostCommandRunsUnderTheWorldLock is the regression for a deadlock, and it
-// exists because the unit test that did not have it passed.
-//
-// The whole router path runs inside App.handleIntent's critical section — mode/
-// must never acquire the world lock itself — so a SessionController method that
-// took the lock wedges the instance at the moment the operator presses enter, with
-// neither a tick nor a signal able to get it back. Calling BeginHosting directly
-// cannot see that; only the real input path can, so this test takes it.
+// TestHostCommandRunsUnderTheWorldLock is the regression for a deadlock. The router
+// path runs inside App.handleIntent's critical section, so a SessionController method
+// that took the world lock wedges the instance at the moment the operator presses
+// enter. Calling BeginHosting directly cannot see that; only the real input path can.
 func TestHostCommandRunsUnderTheWorldLock(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
 	a := mustHeadless(t, 0x301A, 120, 40)
@@ -525,15 +490,10 @@ func settleCorrections(t *testing.T, host, guest *App) {
 	guest.ApplyPendingCorrections()
 }
 
-// waitForRosterPair ticks both instances until the arrival crossing has applied on
-// each, and fails if the entity it created is not the same one.
-// waitForRosterPair ticks both instances until the arrival crossing has created
-// the same shared cursor on each.
-//
-// The bound is wall time rather than a tick count. The arrival is produced on the
-// accept goroutine and travels over a real socket, so counting ticks lets a loaded
-// machine spin through the whole budget before the frame has crossed loopback at
-// all; the sleep is what makes each iteration an opportunity for it to arrive.
+// waitForRosterPair ticks both instances until the arrival crossing has created the
+// same shared cursor on each. The bound is wall time rather than a tick count: the
+// arrival travels over a real socket, so counting ticks lets a loaded machine spend
+// the whole budget before the frame has crossed loopback.
 func waitForRosterPair(t *testing.T, host, guest *App) {
 	t.Helper()
 	deadline := time.Now().Add(socketWait) // [wall] a link bound, not a game one
@@ -732,16 +692,11 @@ func TestExplosionPresentationStaysWithItsProducer(t *testing.T) {
 	}
 }
 
-// TestRuntimeDigestIsADriftGaugeRatherThanAVerdict is what the divergence report
-// became.
-//
-// An escalation — DESYNC after two disagreeing samples, DIVERGED after five,
-// SYNCED once the state agreed again — states that two instances re-deriving one
-// world have lost an artifact and will never get it back. That holds while both
-// re-derive and does not hold for a guest that predicts and is corrected. The
-// escalation is therefore gone and the measurement stayed:
-// a mismatch is counted and the surface that disagrees is named, and neither is a
-// failure state a session can be stuck in.
+// TestRuntimeDigestIsADriftGaugeRatherThanAVerdict. An escalation to DESYNC or
+// DIVERGED states that two instances re-deriving one world have lost an artifact for
+// good, which holds while both re-derive and not for a guest that predicts and is
+// corrected. The escalation is gone and the measurement stayed: a mismatch is counted
+// and the disagreeing surface named, and neither is a state a session is stuck in.
 func TestRuntimeDigestIsADriftGaugeRatherThanAVerdict(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0xD165E57, 2, [][2]int{{1, 2}})
@@ -808,20 +763,11 @@ func TestRuntimeDigestIsADriftGaugeRatherThanAVerdict(t *testing.T) {
 	assertCorrected(t, want, apps[1], "guest after a corrupted position")
 }
 
-// TestSharedSnapshotExcludesLocalSchedulerTiming pins the distinction the live
-// digest needs but the manual-clock harness cannot produce naturally: two real
-// schedulers have different wall origins and can miss different deadlines even
-// while they complete the same absolute simulation tick.
-//
-// The set is narrow for two reasons. Elapsed game time is excluded on
-// the same argument, and that argument was wrong in a way that cost a session: it
-// was true only because the simulation instant came from the pacing clock.
-// engine.SimTime derives it from the tick instead, so it is tick * interval
-// everywhere, and TestSharedSnapshotComparesElapsedGameTime below asserts it is
-// compared. The gold sequence's remaining time was here for a different reason —
-// a tick-zero joiner reached MainSpawnGold one tick before its host — and a joiner
-// installs the host's world rather than reproducing it, so it is compared too;
-// TestSnapshotJoinCarriesTheGoldDeadline holds it.
+// TestSharedSnapshotExcludesLocalSchedulerTiming pins what the live digest needs and
+// the manual-clock harness cannot produce: two real schedulers have different wall
+// origins and miss different deadlines while completing the same absolute tick. The
+// set is narrow — engine.SimTime derives elapsed game time from the tick, so it is
+// compared, and so is the gold deadline a joiner installs rather than re-derives.
 func TestSharedSnapshotExcludesLocalSchedulerTimingAndComparesGameTime(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, 0xD165E58, 120, 40)

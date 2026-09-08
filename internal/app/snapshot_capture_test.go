@@ -17,14 +17,11 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
-// TestCaptureReconstructsTheSharedWorld is the construction proof at its
-// simplest: a capture taken from one run, encoded, decoded and installed into a
-// second run that had reached a different state, must leave the second run's
-// shared surface equal to the first's.
-//
-// Equality is asserted on SnapshotShared, not on the capture bytes. Two worlds
-// holding the same state through different insertion histories are the same
-// world, and it is the state a session has to agree on.
+// TestCaptureReconstructsTheSharedWorld is the construction proof at its simplest: a
+// capture encoded, decoded and installed into a run that had reached a different
+// state leaves that run's shared surface equal to the sender's. Equality is asserted
+// on SnapshotShared rather than on bytes — two worlds holding the same state through
+// different insertion histories are the same world.
 func TestCaptureReconstructsTheSharedWorld(t *testing.T) {
 	t.Parallel()
 	origin := mustHeadless(t, 0x5A4E, 120, 40)
@@ -201,23 +198,11 @@ func TestCaptureCarriesEveryDeclaredSystem(t *testing.T) {
 	}
 }
 
-// TestACaptureExcludesThePlayerDomainByStoreAndByReference pins the boundary at
-// both levels it can be crossed, over one armed world.
-//
-// A capture describes the shared world; a participant's own simulation does not
-// exist on any other instance (D-2) and its effects are per-instance (D-6), so a
-// capture carrying one would install another participant's private world. Every
-// store loop skips player-domain *entities* by construction — that is the first
-// assertion.
-//
-// The second is the one that would have caught the orb defect at its source. A
-// shared entity's components are copied whole and a component field is free to hold
-// whatever entity its writer put there: CursorViewComponent held an array of the
-// local cursor's orb entities, player-domain handles on a shared cursor, in every
-// capture. So the assertion is on the reference rather than on the store — no
-// core.Entity anywhere in a capture's world may name a player-domain entity — and it
-// is made by reflection, so a field added to any shared component is covered without
-// anyone remembering the rule.
+// TestACaptureExcludesThePlayerDomainByStoreAndByReference pins the boundary at both
+// levels it can be crossed. Every store loop skips player-domain entities by
+// construction, which is the first assertion; the second is on the *reference*, since
+// a shared component field is free to hold whatever entity its writer put there. It
+// is made by reflection, so a new field on any shared component is covered.
 func TestACaptureExcludesThePlayerDomainByStoreAndByReference(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, 0x5A4E, 120, 40)
@@ -352,27 +337,11 @@ func sharedSurfacesDiffer(a, b *App) bool {
 	return differs
 }
 
-// TestInstalledWorldStaysIdenticalForFiveHundredTicks is the continuation
-// proof: not that a capture reproduces a world, but that it reproduces a world
-// whose *future* is the same.
-//
-// Equal state at the install tick is necessary and nowhere near sufficient.
-// Everything the hidden-state survey listed — RNG positions, the maze generator,
-// EXP3 route weights, genetic populations, the D-17 recompute phase, the FSM's
-// time in state, the telemetry throttles — is invisible at the install tick and
-// decides what happens after it. A capture missing any of them passes an equality
-// check and then drifts, which is exactly how each of them was found: the loop
-// below named one carrier at a time until nothing moved for 500 ticks.
-//
-// The player domain is stopped in both runs first, and that is the honest limit
-// of what this phase can assert. A capture carries no player state by design
-// (D-2, D-6), so two instances holding one shared world still hold different
-// drains, and a drain defeated on one advances the shared escalation FSM there
-// and nowhere else. That is not a capture defect — it is a crossing, and
-// delivering crossings is the correction protocol's subject. What is provable here is the shared
-// simulation's own evolution, which is what every piece of hidden state feeds.
-// The plan's record-stream-driven, cross-process form of this gate belongs with
-// the wire that carries a capture, and is named in the phase's remaining work.
+// TestInstalledWorldStaysIdenticalForFiveHundredTicks is the continuation proof: not
+// that a capture reproduces a world, but that it reproduces a world whose future is
+// the same. Everything hidden at the install tick — RNG positions, the maze generator,
+// route weights, genetic populations, the recompute phase — decides what follows. The
+// player domain is stopped first: crossings are the correction protocol's subject.
 func TestInstalledWorldStaysIdenticalForFiveHundredTicks(t *testing.T) {
 	t.Parallel()
 	for _, seed := range []uint64{0x5A4E, 0xC0FFEE, 0x1234ABCD} {
@@ -396,24 +365,11 @@ func TestInstalledWorldStaysIdenticalForFiveHundredTicks(t *testing.T) {
 			quiescePlayerDomain(t, origin)
 			quiescePlayerDomain(t, receiver)
 
-			// Shared species are what draw the shared streams and exercise the
-			// navigation phase, the genetic populations and the route learning.
-			// Without them the 500 ticks are quiet and the gate proves far less
-			// than it appears to: a capture that dropped every stream position
-			// still passed until this was added.
-			//
-			// Advance to a status-cadence boundary before capturing. Gauges like
-			// spatial.indexed_shared are published every StatSnapshotTicks, which
-			// is a function of the tick counter, so two instances agree on them at
-			// a boundary and need not between two. Capturing on one keeps the
-			// comparison about the capture rather than about publish phase.
-			//
-			// The species have to survive that advance. They did not, for a while:
-			// the boundary can be nearly a whole cadence away, the escalation FSM
-			// sweeps in the meantime, and the capture this comment claims carries
-			// three swarms carried none — so the 500 ticks below ran on a world
-			// with no shared species in it and proved much less than they read as.
-			// The species are spawned after the advance now, and asserted alive.
+			// Shared species draw the shared streams and exercise the navigation
+			// phase, the genetic populations and the route learning; without them the
+			// 500 ticks are quiet. The capture is taken on a status-cadence boundary,
+			// where two instances agree on the gauges. The species are spawned after
+			// that advance — the escalation FSM sweeps during it — and asserted alive.
 			tickToStatBoundary(origin)
 			spawnSharedSpecies(t, origin)
 			origin.Tick(1)
@@ -462,13 +418,10 @@ func seedName(seed uint64) string {
 	return "seed_" + strconv.FormatUint(seed, 16)
 }
 
-// quiescePlayerDomain stops the player-domain systems whose output crosses into
-// the shared world (D-3), so two instances holding one shared world evolve it the
-// same way. Without this the comparison measures crossing delivery, which no
-// capture provides and the correction protocol does.
-//
-// Drains are the load-bearing one: they are player-domain entities whose defeat
-// crosses as EventDrainDefeated and drives the shared escalation FSM, so two
+// quiescePlayerDomain stops the player-domain systems whose output crosses into the
+// shared world (D-3), so two instances evolve it the same way; without it the
+// comparison measures crossing delivery instead. Drains are load-bearing: their
+// defeat crosses as EventDrainDefeated and drives the shared escalation FSM, so two
 // runs with different drain populations reach MainSpawnGold on different ticks.
 func quiescePlayerDomain(t *testing.T, a *App) {
 	t.Helper()
@@ -512,16 +465,10 @@ func tickToStatBoundary(a *App) {
 }
 
 // A refusal has to arrive before the world is written, and the staging pass cannot
-// always make it.
-//
-// StageShared asks "can this build load this capture" of a second world, and for
-// most carriers that is the whole question. It is not the whole question for a
-// carrier whose acceptance depends on state the staging world does not have: the
-// genetic registry's registered species set is entered by a level region the
-// staging world has never been in, so it accepts what the live world refuses — and
-// the refusal then arrives after the store pass has already rewritten every shared
-// entity. That is the shape of the desync reported at the tower transition, and it
-// is what the pre-flight below is for.
+// always make it. StageShared asks whether this build can load the capture, which is
+// the whole question for most carriers but not for one whose acceptance depends on
+// state the staging world lacks: the genetic registry's species set is entered by a
+// level region a staging world has never been in. The pre-flight below is for that.
 
 // TestACarrierRefusalLeavesTheLiveWorldUntouched drives the refusal through the
 // live install path and asserts the world is exactly what it was.

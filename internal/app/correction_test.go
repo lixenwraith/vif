@@ -15,48 +15,27 @@ import (
 )
 
 // correctionSteps is how often the two-participant criteria assert convergence.
-//
-// Weakened D-11 does not say two instances agree at every tick: the local path
-// carries no playout lead, so each participant's own artifacts land a lead earlier
-// on it than on anyone else. It says a guest is equal to the host as of the last
-// applied correction, which is what these tests assert, at the only moments the
-// rule makes a claim about.
+// Weakened D-11 does not claim agreement at every tick — each participant's own
+// artifacts land a playout lead earlier on it — but equality as of the last applied
+// correction, which is the only moment the rule makes a claim about.
 const correctionSteps = 8
 
 // The selective exchange's settling budget between two ticks.
-//
-// correctionExchangeFastPasses is what an in-process link needs: the manifest is
-// answered on the first pass, the repair it provoked is served and applied on the
-// second, and the third is the margin a keyframe fallback takes. The passes past it
-// exist for a socket, which delivers on its own goroutine and costs nothing when
-// the exchange has already completed. The budget is generous because the suite
-// runs its parallel tests on every core: a loopback round trip competes with the
-// race detector, not with the network.
+// correctionExchangeFastPasses is what an in-process link needs: manifest, repair,
+// and a margin for the keyframe fallback. The passes past it exist for a socket,
+// which delivers on its own goroutine; the budget is generous because a loopback
+// round trip here competes with every other parallel test on the machine.
 const (
 	correctionExchangeFastPasses = 3
 	correctionExchangePasses     = 250
 	correctionExchangePoll       = 200 * time.Microsecond
 )
 
-// deliverCorrection publishes one authoritative correction from the host and gets
-// it applied on the guest, returning the host's shared state at the instant it was
-// read.
-//
-// The delivery loop is the transport's, not the test's: chunks reach a guest
-// through the ordinary inbound drain, which is part of a tick, and a relayed
-// session needs one tick per hop. The install is between two ticks, which on a
-// driven run is where Tick puts it.
-// deliverCorrection quiesces the session first, so what it asserts is convergence
-// rather than the absence of traffic.
-//
-// Not everything SnapshotShared compares is in a capture, and the difference
-// matters here. `context.crop_on_resize` is this instance's answer to a resize, so
-// no capture carries it and no correction can converge it — what makes two
-// participants agree on it is the crossing that changed it, and that crossing
-// lands a playout lead earlier on its producer than on anyone else.
-// Letting the lead drain before the world is read is what separates "the guest has
-// the host's world" from "the guest has not caught up with an artifact yet", and
-// only the first is a claim about corrections.
+// deliverCorrection publishes one authoritative correction and gets it applied on
+// every guest, returning the host's shared state at the instant it was read. It
+// drains the playout lead first: not everything SnapshotShared compares is in a
+// capture, so a crossing still in flight would read as a guest that had not
+// converged rather than as one that had not caught up.
 func deliverCorrection(t *testing.T, host *App, guests []*App, advance func()) []string {
 	t.Helper()
 	for range parameter.NetworkBarrierDelayTicks + 1 {
@@ -82,12 +61,10 @@ func deliverCorrectionNow(t *testing.T, host *App, guests []*App, advance func()
 	for i, g := range guests {
 		before[i] = statOf(g, "snapshot.corrections_applied")
 	}
-	// The exchange is driven before the clock is: a manifest is answered and the
-	// repair it provokes served between two ticks, so a correction over a direct
-	// link completes without the participants moving and the comparison is at the
-	// tick the correction describes. A tick is still advanced when a round did not
-	// complete, which is what a relayed session needs: its bodies travel as chunks
-	// and every hop costs one.
+	// The exchange is driven before the clock is, so a correction over a direct link
+	// completes without the participants moving and the comparison is at the tick
+	// the correction describes. A tick is advanced only when a round did not
+	// complete, which is what a relayed session needs: every hop costs one.
 	applied := func() bool {
 		done := true
 		for i, g := range guests {
@@ -99,19 +76,11 @@ func deliverCorrectionNow(t *testing.T, host *App, guests []*App, advance func()
 		return done
 	}
 	for range parameter.NetworkRelayHopLimit {
-		// Each leg of the exchange is drained, answered and served between
-		// two ticks, so the whole round trip completes without the participants
-		// moving: the manifest is answered on one pass and the repair it provoked
-		// is served and applied on the next. Settling it here is what makes the
-		// comparison below one about the tick the correction describes rather than
-		// about a guest that has predicted past it.
-		//
-		// The later passes wait a moment first. An in-process link hands a frame
-		// over inside the call that sent it, so the exchange finishes in the first
-		// two passes and no wait is paid; a socket delivers on its own goroutine,
-		// and without the wait the harness would advance a tick before the manifest
-		// had crossed the loopback interface — turning an asynchronous transport
-		// into a divergence the protocol never had.
+		// Each leg is drained, answered and served between two ticks, so the round
+		// trip completes without the participants moving. The later passes wait
+		// first: an in-process link hands a frame over inside the call that sent it
+		// and pays nothing, while a socket delivers on its own goroutine and would
+		// otherwise see a tick advance before the manifest crossed loopback.
 		for pass := range correctionExchangePasses {
 			if pass >= correctionExchangeFastPasses {
 				time.Sleep(correctionExchangePoll) // [wall] a transport wait, not a game one
@@ -140,14 +109,11 @@ func assertCorrected(t *testing.T, want []string, guest *App, label string) {
 	}
 }
 
-// TestGuestConvergesOnEveryCorrection is the headline criterion, and the
-// replacement for a lockstep one.
-//
-// A guest applies its own input immediately and extrapolates between corrections,
-// so it is expected to differ from the host; what the rule claims is that every
-// correction closes the difference exactly. The magnitude in between is telemetry —
-// it is asserted to be non-zero here, because a criterion that passed with a guest
-// that never predicted anything would be proving nothing.
+// TestGuestConvergesOnEveryCorrection is the headline criterion and the replacement
+// for a lockstep one. A guest applies its own input immediately and extrapolates, so
+// it is expected to differ; the claim is that every correction closes the difference
+// exactly. The magnitude is asserted non-zero, because a guest that never predicted
+// anything would pass a convergence criterion while proving nothing.
 func TestGuestConvergesOnEveryCorrection(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF
@@ -224,11 +190,9 @@ func TestCorrectionMagnitudeIsMeasuredNotAsserted(t *testing.T) {
 }
 
 // TestCorrectionDeltaRoundTripsExactly is the delta's whole claim: applying it to
-// the baseline it names reproduces the sender's capture byte for byte.
-//
-// The integrity hash is what says "byte for byte" rather than "equivalent". A delta
-// that rebuilt the same entities in a different store order would pass every value
-// comparison and fail this, which is why the delta carries entity order at all.
+// the baseline it names reproduces the sender's capture byte for byte. The integrity
+// hash is what makes that "byte for byte" rather than "equivalent" — a delta that
+// rebuilt the same entities in a different order would fail only this.
 func TestCorrectionDeltaRoundTripsExactly(t *testing.T) {
 	t.Parallel()
 	for _, seed := range []uint64{0x5EEDBEEF, 0xC0FFEE, 0x1234} {
@@ -322,12 +286,9 @@ func TestCorrectionDeltaRefusesAForeignBaseline(t *testing.T) {
 }
 
 // TestStagingWorldIsBuiltOnceAndReused. A second App per install costs 9 to 31 ms,
-// which suits a join and not a correction at cadence.
-//
-// Re-use is only sound if the second install leaves exactly what a world built for
-// it alone would: a carrier that merged rather than replaced, or a store that kept
-// an entity the next capture does not have, would resolve the following correction
-// against a world the sender never held.
+// which suits a join and not a correction at cadence. Re-use is sound only if the
+// second install leaves what a world built for it alone would: a carrier that merged
+// rather than replaced would resolve the next correction against a world nobody had.
 func TestStagingWorldIsBuiltOnceAndReused(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF
@@ -446,14 +407,11 @@ func TestReconcileMatchesAFullInstall(t *testing.T) {
 	}
 }
 
-// TestCrossingApplyTimes covers both halves of the ordering rule over one pair.
-//
-// An ordinary crossing applies on its producer in the tick that produced it; the
-// peers keep the playout lead, which is an interpolation buffer for remote action
-// rather than a barrier on anyone's input. Arrival and departure are the exception:
-// they create and destroy shared cursors, and a shared entity's identity and
-// creation order are what every capture references by, so they apply at one agreed
-// tick on the producer too.
+// TestCrossingApplyTimes covers both halves of the ordering rule over one pair. An
+// ordinary crossing applies on its producer in the tick that produced it and a
+// playout lead later everywhere else. Arrival and departure are the exception: they
+// create and destroy shared cursors, whose identity every capture references by, so
+// they apply at one agreed tick on the producer too.
 func TestCrossingApplyTimes(t *testing.T) {
 	t.Parallel()
 	a, b := pair(t, 0x5EEDBEEF, 0)
@@ -663,12 +621,9 @@ func TestWorldDifferenceCountsWhatMoved(t *testing.T) {
 }
 
 // TestJoinReusesTheCadencesKeyframe is the world-lock half of a mid-run join.
-//
-// Reading the world once per participant on the accept goroutine makes a second
-// participant dialling mid-join wait behind the first one's read as well as behind
-// its transfer. A host publishes keyframes on a cadence, so a join takes whichever
-// one is fresh enough and reads the world only when none is: the read is
-// per-cadence rather than per-join, and two joins arriving together share one.
+// Reading the world once per participant makes a second dialler wait behind the
+// first one's read as well as its transfer. A host publishes keyframes anyway, so a
+// join takes whichever is fresh enough: the read is per-cadence, not per-join.
 func TestJoinReusesTheCadencesKeyframe(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, 0x5EEDBEEF, 120, 40)
@@ -733,18 +688,11 @@ func TestJoinReusesTheCadencesKeyframe(t *testing.T) {
 	}
 }
 
-// TestMidRunJoinWaitsOutThePlayoutLead is the window this phase closed.
-//
-// D-22 admits a participant before the world is read for it, so that the epochs
-// produced in between reach it rather than falling into the gap. What that ordering
-// does not cover is an epoch produced *before* the admission and flushed to the
-// peers this instance had at that moment: it reaches the joiner not at all, and a
-// capture taken at the admission tick does not contain it either, because its apply
-// tick is still a playout lead ahead and the barrier's floor does not drop it.
-//
-// A join therefore asks for a world a lead further on. By then every artifact
-// produced before the admission has applied into the capture, and the copies that do
-// arrive are recognised as already-contained.
+// TestMidRunJoinWaitsOutThePlayoutLead. D-22 admits a participant before the world
+// is read for it, but an epoch flushed just *before* the admission reaches the
+// joiner not at all and is in no capture taken at the admission tick either. A join
+// therefore asks for a world a playout lead further on, by which point every such
+// artifact has applied into it and the copies that arrive are already contained.
 func TestMidRunJoinWaitsOutThePlayoutLead(t *testing.T) {
 	t.Parallel()
 	host := mustHeadless(t, 0x5EEDBEEF, 120, 40)
@@ -783,24 +731,10 @@ func TestMidRunJoinWaitsOutThePlayoutLead(t *testing.T) {
 }
 
 // TestCorrectionsLeaveOneOrbPerArmedWeapon is the D-4/D-13 boundary a correction
-// crosses, and the shape of the defect is worth stating because nothing in
-// the suite could see it.
-//
-// A weapon orb is a player-domain entity, and its handle means nothing on any other
-// instance. The index that named a cursor's orbs by weapon type lived on
-// `CursorViewComponent`, which is attached to the *shared* cursor, so it travelled
-// in every capture: the host does not simulate a guest's weapons, its copy of that
-// array is zero, and each correction handed the guest back zeroes over its own live
-// handles. The next tick found three missing references and spawned three
-// replacements. The entities the zeroes had named stayed in the Orb store —
-// protected from decay, no longer followed by updateOrbs, and drawn by a renderer
-// that iterates the store — so an armed guest accumulated three permanently
-// rendered, permanently frozen orbs per correction until the player-domain per-cell
-// limit started rejecting them.
-//
-// The index is derived from the Orb store now and no shared component names a
-// player entity at all, which is what this asserts: after repeated corrections the
-// guest holds exactly one orb per armed weapon, and every one of them is its own.
+// crosses: a player-domain handle carried on a shared component means nothing on the
+// receiving instance, so every correction overwrote a guest's live orb handles with
+// the host's zeroes and the next tick spawned replacements over the orphans. No
+// shared component names a player entity now, which is what this asserts.
 func TestCorrectionsLeaveOneOrbPerArmedWeapon(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF
@@ -847,15 +781,10 @@ func TestCorrectionsLeaveOneOrbPerArmedWeapon(t *testing.T) {
 }
 
 // TestCorrectionKeepsTheReceiversOwnCursorState is the other half of the same
-// boundary. The owner-authored set has exactly one author and travels as values on
-// its own stream (D-13); what a capture holds for a cursor the *receiver* drives is
-// the sender's mirror of that stream, a sync period behind at best. A correction
-// that adopted it rolled the guest's own energy, heat and loadout back to whatever
-// the host had last heard, five times a second.
-//
-// The grant is settled and the correction published with no tick in between, so the
-// host cannot have been told: what it publishes is provably its stale mirror, and
-// the guest's own value is the only one with an author.
+// boundary: the owner-authored set has one author (D-13), and what a capture holds
+// for a cursor the receiver drives is the sender's mirror, a sync period behind. The
+// grant is settled and the correction published with no tick in between, so the host
+// provably publishes a stale mirror and the guest's own value is the only authored one.
 func TestCorrectionKeepsTheReceiversOwnCursorState(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF
@@ -946,27 +875,19 @@ func selectivePair(t *testing.T, seed uint64) (host, guest *App, advance func())
 	return host, guest, advance
 }
 
-// deliverSameTick publishes a correction and settles the whole exchange without
-// advancing either participant.
-//
-// It is the only shape that can assert what was *not* sent. Every tick moves the
-// clock-derived half of the compared surface — a region's time in state, the gold
-// deadline — so a comparison across one is a comparison of two different instants
-// and will always find something. Holding the clock still is what makes "the guest
-// already agreed, so nothing travelled" a statement about the protocol rather than
-// about the tick it straddled.
+// deliverSameTick publishes a correction and settles the exchange without advancing
+// either participant. It is the only shape that can assert what was *not* sent:
+// every tick moves the clock-derived half of the compared surface, so a comparison
+// across one always finds something.
 func deliverSameTick(t *testing.T, host *App, guests []*App) []string {
 	t.Helper()
 	return deliverCorrectionNow(t, host, guests, func() {})
 }
 
 // divergeGuest perturbs one shared cell on a guest and nowhere else, which is the
-// disagreement a repair exists to close.
-//
-// A crossing would not do: the producer applies it immediately and the authority
-// applies it a playout lead later, so the two converge on their own. This is a
-// difference the session has no artifact for, which is what a lost frame or a
-// mispredicted step actually leaves behind.
+// disagreement a repair exists to close. A crossing would not do — the two converge
+// on their own — so this is a difference the session has no artifact for, which is
+// what a lost frame or a mispredicted step leaves behind.
 func divergeGuest(t *testing.T, guest *App) {
 	t.Helper()
 	moved := false
@@ -1068,12 +989,10 @@ func TestASelectiveRepairRestoresTheAuthority(t *testing.T) {
 	}
 }
 
-// TestOwnerAuthoredDisagreementNeverDegradesToKeyframes's second
-// half and the failure the plan names by hand: a guest keeps its own energy, heat
-// and loadout over the host's mirror for the cursor it drives, so those cells
-// disagree for the life of the session. A hashed surface that carried them would
-// produce a root mismatch no repair could close, and the protocol would fall back
-// to a whole world every correction, forever.
+// TestOwnerAuthoredDisagreementNeverDegradesToKeyframes: a guest keeps its own
+// energy, heat and loadout over the host's mirror, so those cells disagree for the
+// life of the session. A hashed surface carrying them would produce a root mismatch
+// no repair could close, and the protocol would fall back to a whole world forever.
 func TestOwnerAuthoredDisagreementNeverDegradesToKeyframes(t *testing.T) {
 	t.Parallel()
 	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
@@ -1169,16 +1088,11 @@ func TestASilentPeerIsSentWholeBodies(t *testing.T) {
 	t.Fatal("the fallback body never reached the guest")
 }
 
-// TestAWidenedPeerIsServedForItsWholeWindow: a peer dropped out of the selective
-// exchange because its last repair came out wider than the world that repair was
-// aiming at is owed the whole body for every round it is out for, the final one
-// included.
-//
-// The skip and the fallback are one decision. Deriving the second from the
-// counter the first had already spent left the last round of the window sending
-// that peer neither an index nor a body, and a correction that reaches nobody is
-// a stall the protocol has no answer for: the next publication re-enters the
-// exchange rather than re-sending what was lost.
+// TestAWidenedPeerIsServedForItsWholeWindow: a peer dropped out of the exchange for
+// a repair wider than the world it aimed at is owed the whole body for every round
+// it is out, the final one included. The skip and the fallback are one decision —
+// deriving the second from the counter the first spent left the last round sending
+// neither an index nor a body, which is a stall the protocol has no answer for.
 func TestAWidenedPeerIsServedForItsWholeWindow(t *testing.T) {
 	t.Parallel()
 	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
@@ -1328,12 +1242,9 @@ func TestSupersededRepairsAreRefusedRatherThanCombined(t *testing.T) {
 
 // outstandingRepair drives the exchange far enough for the guest to be awaiting a
 // repair, then builds the repair the host would have sent — optionally corrupted —
-// without letting the guest apply it.
-//
-// The interception is white-box on purpose. A repair reaches the receiver's queue
-// and is applied in the same drain, so there is no moment in the live path where a
-// test could reach in and change one; building the same message from the same two
-// indexes is the only way to ask what the receiver does with a bad one.
+// without letting the guest apply it. The interception is white-box on purpose: a
+// repair is queued and applied in one drain, so building the same message from the
+// same two indexes is the only way to ask what the receiver does with a bad one.
 func outstandingRepair(t *testing.T, host, guest *App, corrupt func(*snapshot.CorrectionShardSet)) ([]byte, uint64) {
 	t.Helper()
 	if err := host.PublishCorrection(); err != nil {

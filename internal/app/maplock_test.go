@@ -89,19 +89,10 @@ func TestMapSizeFollowsTheTerminalOnlyUntilASecondCursor(t *testing.T) {
 }
 
 // TestJoinerOnAnotherTerminalSharesTheMapFromTickZero is the regression for the
-// divergence two windows of different size produced from the first tick: the FSM
-// boot script spawns cursor slot zero at the centre of the map, inside New and
-// before anything is joined, so a participant that adopted the session's bounds
-// afterwards held that shared cursor on its own terminal's centre instead. Nothing
-// in the model corrects a shared position, so the two never agreed again.
-//
-// It runs the production sequence rather than half of it. The host closes its
-// roster and captures the world that produced; the guest adopts the bounds before
-// its own FSM boots — which is what mustJoiner is for and what the criterion below
-// still measures — and then installs the capture instead of re-deriving it. A
-// reproducing guest ran the level setup alone, so the two settled the boot queue at
-// different points and reached MainSpawnGold a tick apart; gold.timer was excluded
-// from the compared surface for that reason and is compared here.
+// divergence two windows of different size produced from the first tick: the FSM boot
+// script spawns cursor slot zero at the centre of the map inside New, so a joiner
+// adopting the bounds afterwards held that shared cursor on its own centre. It runs
+// the production sequence — bounds before the FSM boots, then an install.
 func TestJoinerOnAnotherTerminalSharesTheMapFromTickZero(t *testing.T) {
 	t.Parallel()
 	host := mustHeadless(t, 0x14AD, 160, 48)
@@ -115,7 +106,7 @@ func TestJoinerOnAnotherTerminalSharesTheMapFromTickZero(t *testing.T) {
 		t.Fatalf("host session: %v", err)
 	}
 	host.Tick(1)
-	if err := guest.JoinSessionAt(offer, mustCapture(t, host)); err != nil {
+	if err := guest.JoinSessionAt(offer, mustRoundTrip(t, host)); err != nil {
 		t.Fatalf("join session: %v", err)
 	}
 	assertSharedParity(t, host, guest, 0)
@@ -168,18 +159,10 @@ func TestSessionRunNeverCropsItsMap(t *testing.T) {
 }
 
 // TestLocalViewChangesLeaveTheFlowFieldPhaseAlone covers D-17 at its two producers.
-//
-// NavigationSystem's flow-field cache is throttled: MarkDirty only latches, and a
-// field is recomputed once the interval allows, so the cache's phase is shared
-// state and every producer of a dirty mark has to be shared. EventCursorMoved is
-// one such producer, and two purely local view changes were announcing it — a
-// resize that reconciled cursors the locked map had not moved, and the rebind that
-// binds this participant's own slot. Either put the two instances on different
-// recompute phases, after which they steer shared species along fields of different
-// ages: a divergence that begins in kinetics, long before any cell moves.
-//
-// The rebind is the one that matters most, because it fires at session start on
-// every participant but slot zero.
+// The flow-field cache is throttled, so its phase is shared state and every producer
+// of a dirty mark has to be shared. Two purely local view changes were announcing
+// EventCursorMoved — a resize reconciling cursors the locked map had not moved, and
+// the rebind of this participant's own slot, which fires at every session start.
 func TestLocalViewChangesLeaveTheFlowFieldPhaseAlone(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, 0x14AF, 200, 60)

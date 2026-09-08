@@ -281,16 +281,11 @@ func TestJournalDoesNotPerturb(t *testing.T) {
 	}
 }
 
-// TestReplayReproducesRecordedRuns drives one authored script per record-stream
-// shape and requires each to reproduce bit-identically:
-//
-//   - gameplay covers mode, pause, command origin and ping bounds;
-//   - overlay settles whether debug-overlay mode belongs in the stream — everything
-//     the snapshot observes on that path is event-driven, so it reproduces;
-//   - split-settle reproduces the multi-settle tick boundaries App.Loop produces
-//     for every live input event;
-//   - reset spans game resets, where the tick counter restarts and a run-blind
-//     driver would reject the stream outright.
+// TestReplayReproducesRecordedRuns drives one authored script per record-stream shape
+// and requires each to reproduce bit-identically: gameplay for mode, pause, command
+// origin and ping bounds; overlay for the debug path, which is event-driven
+// throughout; split-settle for the multi-settle tick boundaries App.Loop produces;
+// and reset for the run boundaries a run-blind driver would reject outright.
 func TestReplayReproducesRecordedRuns(t *testing.T) {
 	t.Parallel()
 	for name, script := range map[string]func(*testing.T, *App) int{
@@ -530,13 +525,11 @@ func TestReplayAcrossAPMFold(t *testing.T) {
 	}
 }
 
-// TestResizeReflowsAndRejects covers the whole resize boundary: ScreenSize stays
-// an exact inverse of the forward derivation so a margin change cannot desync the
-// anchor from the geometry it describes, a degenerate report is dropped rather
-// than clamped, and a replayed mid-run change reproduces in both crop modes. Crop
-// destroys out-of-bounds entities and resets the camera; no-crop preserves the map
-// and clamps the camera, so the two exercise different halves of
-// HandleResizeLocked.
+// TestResizeReflowsAndRejects covers the whole resize boundary: ScreenSize stays an
+// exact inverse of the forward derivation, a degenerate report is dropped rather than
+// clamped, and a replayed mid-run change reproduces in both crop modes — crop destroys
+// out-of-bounds entities and resets the camera, no-crop preserves the map and clamps
+// it, so the two exercise different halves of HandleResizeLocked.
 func TestResizeReflowsAndRejects(t *testing.T) {
 	t.Parallel()
 	a, err := NewHeadless(Config{Resources: resource.Options{Embedded: true}, Seed: fixtureSeed, Width: 100, Height: 40})

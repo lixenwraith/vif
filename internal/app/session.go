@@ -641,10 +641,6 @@ func (a *App) awaitStartGate(signals <-chan os.Signal) (network.SessionOffer, er
 		return network.SessionOffer{}, errSessionCanceled
 	}
 
-	var events <-chan terminal.Event
-	if a.termSvc != nil {
-		events = a.termSvc.Events()
-	}
 	for {
 		select {
 		case g := <-done:
@@ -654,19 +650,35 @@ func (a *App) awaitStartGate(signals <-chan os.Signal) (network.SessionOffer, er
 			return g.offer, nil
 		case <-signals:
 			return cancel()
-		case ev := <-events:
-			switch ev.Type {
-			case terminal.EventClosed, terminal.EventError:
+		case ev := <-a.lobbyEvents():
+			if a.lobbyEventCancels(ev) {
 				return cancel()
-			case terminal.EventResize:
-				a.handleResize(ev.Width, ev.Height)
-			case terminal.EventKey:
-				if ev.Key == terminal.KeyCtrlC || ev.Key == terminal.KeyCtrlQ {
-					return cancel()
-				}
 			}
 		}
 	}
+}
+
+// lobbyEvents is the terminal source a gate polls, nil when this run has no
+// terminal — a receive on which blocks forever, which is what a headless gate wants.
+func (a *App) lobbyEvents() <-chan terminal.Event {
+	if a.termSvc == nil {
+		return nil
+	}
+	return a.termSvc.Events()
+}
+
+// lobbyEventCancels applies one terminal event to a gate and reports whether it
+// ends the wait. A resize is applied rather than deferred: the gate can outlast it.
+func (a *App) lobbyEventCancels(ev terminal.Event) bool {
+	switch ev.Type {
+	case terminal.EventClosed, terminal.EventError:
+		return true
+	case terminal.EventResize:
+		a.handleResize(ev.Width, ev.Height)
+	case terminal.EventKey:
+		return ev.Key == terminal.KeyCtrlC || ev.Key == terminal.KeyCtrlQ
+	}
+	return false
 }
 
 // waitForStartup treats rejected handshakes as recoverable while no peer was admitted.
@@ -676,10 +688,6 @@ func (a *App) awaitStartGate(signals <-chan os.Signal) (network.SessionOffer, er
 // the two gates this serves is inside the window that deadline belongs to.
 func (a *App) waitForStartup(port *network.SocketPort, signals <-chan os.Signal,
 	expectedPeers int, failOnDisconnect bool, deadline time.Time, ready func() bool) error {
-	var events <-chan terminal.Event
-	if a.termSvc != nil {
-		events = a.termSvc.Events()
-	}
 	// A pod nobody dialled is precisely the case the first-guest window exists for,
 	// and it is also the case this gate would otherwise wait in forever. A run with
 	// no bounded policy is given no deadline and waits as it always has.
@@ -696,16 +704,9 @@ func (a *App) waitForStartup(port *network.SocketPort, signals <-chan os.Signal,
 		case now := <-expiry:
 			a.life.State(now) // settles the deadline so the reason is recorded once
 			return errSessionExpired
-		case ev := <-events:
-			switch ev.Type {
-			case terminal.EventClosed, terminal.EventError:
+		case ev := <-a.lobbyEvents():
+			if a.lobbyEventCancels(ev) {
 				return errSessionCanceled
-			case terminal.EventResize:
-				a.handleResize(ev.Width, ev.Height)
-			case terminal.EventKey:
-				if ev.Key == terminal.KeyCtrlC || ev.Key == terminal.KeyCtrlQ {
-					return errSessionCanceled
-				}
 			}
 		case err := <-port.Errors():
 			logSessionError(err)

@@ -18,12 +18,11 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
-// The manifest suite works on captures rather than on sessions, deliberately.
-//
-// A session test proves the protocol converges; it cannot easily prove what was
-// not sent, which is the selective exchange's whole claim. These drive the index,
-// the descent and the repair directly, so a mismatch can be injected in one named
-// cell and the shard set that answers it can be counted.
+// The manifest suite works on captures rather than on sessions, deliberately: a
+// session test proves the protocol converges but cannot easily prove what was *not*
+// sent, which is the selective exchange's whole claim. These drive the index, the
+// descent and the repair directly, so a mismatch can be injected in one named cell
+// and the shard set that answers it counted.
 
 // manifestFixture is a capture of a warmed world, and the index over it.
 func manifestFixture(t *testing.T) (snapshot.SharedCapture, *snapshot.Manifest) {
@@ -476,28 +475,11 @@ func spawnRemoteCursor(t *testing.T, a *App, slot uint8, peer uint32) core.Entit
 	return e
 }
 
-// TestCostAtTheStormHighWater prices every shape the session puts on the wire
-// against the fullest world this game produces — the encounter that puts the most
-// shared entities on the map at once, which is what the cadence has to survive.
-//
-// One world, four measurements, because they are four answers to one question and
-// building the storm four times measured nothing extra:
-//
-//  1. the capture, whose time is taken under the world lock and is therefore a
-//     tick the host does not run, and whose stage and commit are the joiner's cost;
-//  2. the correction, keyframe against exact delta, which is the operating point;
-//  3. the selective exchange, which has to beat that delta to justify its round
-//     trip;
-//  4. the succession, and what a relayed repair costs against a direct one.
-//
-// The byte and duration figures are reported rather than asserted: a threshold on
-// them would be a performance test wearing a correctness test's clothes, failing
-// on a loaded machine for reasons that say nothing about the code. What is
-// asserted is every claim the design rests on — that the storm reached its high
-// water, that a delta reproduces the capture it was computed for and is smaller
-// than it, that a converged exchange costs materially less than that delta, that a
-// repair reproduces the authority's root, and that a relay serving the authority's
-// own pages does not charge more than the authority would.
+// TestCostAtTheStormHighWater prices every shape the session puts on the wire against
+// the fullest world this game produces: the capture, the keyframe against the exact
+// delta, the selective exchange that has to beat it, and the relayed repair. Bytes and
+// durations are reported rather than asserted — a threshold would fail on a loaded
+// machine — but every claim the design rests on is asserted.
 func TestCostAtTheStormHighWater(t *testing.T) {
 	t.Parallel()
 	peakTick, peakShared := findStormHighWater(t)
@@ -779,42 +761,6 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 
 // mustCaptureShared, mustEncode, mustEncodeCorrection, mustEncodeRequest and mustInstall
 // are the capture pipeline with the errors folded into the test.
-
-func mustCaptureShared(t *testing.T, a *App) snapshot.SharedCapture {
-	t.Helper()
-	cap, err := a.CaptureShared()
-	if err != nil {
-		t.Fatalf("capture: %v", err)
-	}
-	return cap
-}
-
-func mustEncode(t *testing.T, cap snapshot.SharedCapture) []byte {
-	t.Helper()
-	body, err := snapshot.EncodeCapture(cap)
-	if err != nil {
-		t.Fatalf("encode: %v", err)
-	}
-	return body
-}
-
-func mustEncodeCorrection(t *testing.T, cap snapshot.SharedCapture) []byte {
-	t.Helper()
-	body, err := snapshot.EncodeCorrection(cap)
-	if err != nil {
-		t.Fatalf("correction encode: %v", err)
-	}
-	return body
-}
-
-func mustEncodeRequest(t *testing.T, req snapshot.CorrectionRequest) []byte {
-	t.Helper()
-	body, err := snapshot.EncodeCorrectionRequest(req)
-	if err != nil {
-		t.Fatalf("request encode: %v", err)
-	}
-	return body
-}
 
 func mustInstall(t *testing.T, a *App, cap snapshot.SharedCapture) (stage, commit time.Duration, diff engine.WorldDifference) {
 	t.Helper()

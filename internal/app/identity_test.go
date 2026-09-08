@@ -11,12 +11,9 @@ import (
 )
 
 // TestTheHostRefusesAPeerThatSkippedItsOwnCheck is the whole point of moving the
-// verdict to the authority.
-//
-// A joiner compares the anchor it was offered and refuses itself, and that is
-// enough exactly while every peer is running code that does it. The host is the
-// authority over the session, so it has to be able to refuse a peer that did not —
-// an older client, a modified one, or one that simply reported something else.
+// verdict to the authority. A joiner comparing the anchor it was offered is enough
+// exactly while every peer runs code that does it; the host owns the session, so it
+// has to be able to refuse one that did not.
 func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 	// Not parallel: a real socket against wall-clock deadlines.
 	host := mustHeadless(t, 0x1DEA, 120, 40)

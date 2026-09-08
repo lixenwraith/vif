@@ -18,16 +18,11 @@ import (
 // coordinator takes 1 and the first joiner takes 2.
 const guestParticipant network.PeerID = 2
 
-// The replay suite is about the seam between two claims that pull in opposite
-// directions: a correction makes a guest hold the authority's world, and a
-// participant's own accepted actions must not disappear when one arrives.
-//
-// The window is what reconciles them. Production ticks bound retention; the
-// capture's fence for this source decides membership. A capture contains what its
-// producer's sequence says it contains — not what the receive schedule says was due
-// — because an ordinary crossing applies immediately on its producer and a lead
-// later everywhere else, so a copy already past its apply tick can still be missing
-// from a capture read before it arrived.
+// The seam between two claims that pull opposite ways: a correction makes a guest
+// hold the authority's world, and its own accepted actions must not disappear when
+// one arrives. Production ticks bound retention; the capture's fence for this source
+// decides membership, because a crossing applies immediately on its producer and a
+// lead later elsewhere — so a copy past its apply tick can still be missing from it.
 
 // TestLocalCrossingsAfterTheBaselineSurviveExactlyOnce: A guest
 // produces a crossing, then installs an authority taken before it, and the effect
@@ -553,15 +548,11 @@ func hostFence(t *testing.T, host *App, participant network.PeerID) uint64 {
 	return cap.Header.Crossings.Seq(participant)
 }
 
-// TestADepartedParticipantLeavesNoCrossingFenceBehind is the other half of the same
-// disappearing keystroke, on a reconnect rather than on a late link.
-//
-// An identity is returned to the pool when its participant leaves and handed to
-// whoever dials next, and a participant's crossing sequence starts at one. So a
-// fence the authority kept from the previous holder claims a captured world already
-// contains crossings the new one has not produced — and the install then drops the
-// rejoined participant's first crossings from the queue that had not been sent yet
-// and from the replay suffix, exactly as if a correction had undone them.
+// TestADepartedParticipantLeavesNoCrossingFenceBehind is the same disappearing
+// keystroke on a reconnect. An identity returns to the pool when its participant
+// leaves and a crossing sequence starts at one, so a fence kept from the previous
+// holder claims a captured world already contains crossings the new one has not
+// produced — and the install drops its first crossings as if a correction undid them.
 func TestADepartedParticipantLeavesNoCrossingFenceBehind(t *testing.T) {
 	t.Parallel()
 	host, guest := pair(t, 0x5EEDBEEF, 0)
@@ -621,25 +612,11 @@ func goldRun(t *testing.T, a *App) []goldMember {
 	return run
 }
 
-// TestALateGuestActionIsNotUndoneByTheCorrectionThatMissedIt is the regression this
-// whole fence exists for, driven end to end.
-//
-// What a player sees when it is wrong: they press a key, their cursor moves, and a
-// fifth of a second later it jumps back to where it was — then moves again. On one
-// machine the link never misses the playout lead and it almost never happens; add
-// Internet delay and it is the ordinary case for every action a correction
-// straddles.
-//
-// The mechanism is a boundary that asks the wrong question. The guest produces a
-// crossing for tick T+3 and applies it at once; the host has not received it when it
-// reads its world at T+9, so the capture cannot contain it. Judging membership by
-// tick, the guest sees an apply tick six ticks in the past, concludes the correction
-// already holds the action, and drops it — undoing its own keystroke. The host
-// applies the late frame when it finally arrives and the next capture puts it back,
-// which is the second half of the flicker.
-//
-// The fence asks the right question: the capture says how much of this guest's
-// stream the authority had, and everything past that is replayed.
+// TestALateGuestActionIsNotUndoneByTheCorrectionThatMissedIt is the regression the
+// fence exists for. A guest produces a crossing for T+3 and applies it at once; the
+// host has not received it at T+9. Judging membership by tick, the guest sees an apply
+// tick in the past, concludes the correction holds the action and drops it — undoing
+// its own keystroke. The fence asks what the authority actually had of that stream.
 func TestALateGuestActionIsNotUndoneByTheCorrectionThatMissedIt(t *testing.T) {
 	t.Parallel()
 	host, guest := pair(t, 0x5EEDBEEF, 0)

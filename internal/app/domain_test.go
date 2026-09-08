@@ -116,22 +116,11 @@ func repoRoot(t *testing.T) string {
 	return ""
 }
 
-// TestFSMTriggersAreReplicated is D-20 made mechanical.
-//
-// Every FSM region is shared state: each instance re-derives the same region
-// in the same state at the same tick, and fsm.<region> is compared across the
-// session. A region can only stay in agreement if every event that moves it is an
-// event every instance holds. A ClassLocal trigger is not: by definition it never
-// replicates, so the region advances on the one instance whose participant
-// produced it and nowhere else, and the two never converge again — nothing
-// re-derives a missing local event.
-//
-// This is not hypothetical. MonitorActive transitioned on EventHeatBurst, which
-// HeatSystem pushes with PushLocal for the cursor that overheated. In the
-// 2026-08-31 session that fired at tick 1903; the shared surface reported
-// reg|stat|fsm.monitor divergent from tick 1914 and the session was marked
-// DIVERGED at 1934. The sweep it wanted is a per-instance effect (D-6) and
-// HeatSystem emits it directly now.
+// TestFSMTriggersAreReplicated is D-20 made mechanical: every FSM region is shared
+// state, so a region stays in agreement only if every event that moves it is an
+// event every instance holds. A ClassLocal trigger never replicates, so the region
+// advances on the producing instance and nowhere else, and nothing re-derives the
+// missing event — which is how MonitorActive on EventHeatBurst diverged a session.
 func TestFSMTriggersAreReplicated(t *testing.T) {
 	t.Parallel()
 	event.EnsureRegistry()
@@ -208,15 +197,6 @@ var targetFields = map[string]bool{
 
 var entityType = reflect.TypeOf(core.Entity(0))
 
-// TestBusPayloadsNameOnlySharedEntities asserts D-4 over a soak: a record that
-// replicates names only shared entities. The transported set comes from the class
-// table, so this runs against the declared set rather than a hand-list — a Stamped
-// type resolves through the domain its producer stamped, which for a combat hit is
-// the target's own domain. A record that does not replicate constrains nothing and
-// is skipped whole; its player entities are this instance's business.
-//
-// The tap runs on the caller's goroutine — a driven App has no scheduler — so no
-// synchronization is needed.
 // TestAnInstalledPositionReconcilesItsRegionsSystems is D-20's per-instance half.
 // A region's declared system toggles are an effect of the Shared position that
 // owns them, so they are re-derived from it — and a participant that reaches that
@@ -253,6 +233,11 @@ func TestAnInstalledPositionReconcilesItsRegionsSystems(t *testing.T) {
 	}
 }
 
+// TestBusPayloadsNameOnlySharedEntities asserts D-4 over a soak: a record that
+// replicates names only shared entities. The transported set comes from the class
+// table rather than a hand-list, and a record that does not replicate constrains
+// nothing and is skipped whole. The tap runs on the caller's goroutine — a driven
+// App has no scheduler — so it needs no synchronization.
 func TestBusPayloadsNameOnlySharedEntities(t *testing.T) {
 	t.Parallel()
 	const seed, steps = 0x4B15, 1500 // This seed produces no crossing inside the old 300-step short horizon.
@@ -327,14 +312,9 @@ func entityScan(v reflect.Value, path, field string, crossing bool, named *int, 
 }
 
 // unstampedLocal pins the Local-class types some producer still pushes in the
-// ambient domain. The owner-authored grants, the D-6 effects, internal/mode and
-// every artifact an FSM region emits now stamp; app, engine and the shared species
-// systems still push these unstamped.
-// The set must only shrink: an entry that stops appearing fails, and a type not
-// listed here fails on first sight.
-// Not a transport gate — the class keeps a Local type off the wire whatever its
-// tag — but a per-instance effect journaled as shared is a record two instances
-// legitimately differ on while claiming they should not.
+// ambient domain. The set must only shrink: an entry that stops appearing fails, a
+// type not listed here fails on first sight. A per-instance effect journaled as
+// shared is a record two instances legitimately differ on.
 // TODO: empty this, then delete it and the exemption with it.
 var unstampedLocal = map[string]bool{
 	"EventCombatAttackAreaRequest":  true,
@@ -351,12 +331,9 @@ var unstampedLocal = map[string]bool{
 }
 
 // TestLocalEventsCarryThePlayerDomain asserts that a Local-class record is tagged
-// player. The class already keeps it out of the transported set, so this is about
-// the record being honest: a per-instance effect journaled as shared is a record
-// two instances will legitimately differ on while claiming they should not.
-//
-// core.DomainShared is the zero value and the ambient domain defaults to it, so
-// every type reported here is a push site that never stamped.
+// player. The class already keeps it off the wire, so this is about the record being
+// honest. core.DomainShared is the zero value and the ambient domain defaults to it,
+// so every type reported here is a push site that never stamped.
 func TestLocalEventsCarryThePlayerDomain(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
@@ -398,18 +375,11 @@ func TestLocalEventsCarryThePlayerDomain(t *testing.T) {
 	t.Logf("%d local-class types still push unstamped", len(unstamped))
 }
 
-// The quasar is fused from one cursor's drains, and its two standing effects — the
-// grayout and the drain pause — belong to that cursor.
-//
-// The region that raises them does not: it is shared, so every instance runs the
-// same machine, enters QuasarFuse and executes the same on_enter actions. Before
-// the scope payload that made one participant's quasar darken every participant's
-// screen and stop every participant's drains. The unit tests in internal/system pin
-// the two handlers; this one drives the whole path — a shared drain defeat, the
-// MainEscalate capture, the spawned region, the emitted effects, the region's end —
-// across two linked instances, which is the only place the fan-out was visible.
-
-// TestAQuasarsEffectsReachOnlyTheCursorItWasFusedFrom is the reported defect.
+// TestAQuasarsEffectsReachOnlyTheCursorItWasFusedFrom is the reported defect. A
+// quasar's grayout and drain pause belong to the cursor it was fused from, but the
+// region that raises them is shared, so every instance runs the same on_enter
+// actions: before the scope payload, one participant's quasar darkened everyone's
+// screen. This drives the whole path across two linked instances.
 func TestAQuasarsEffectsReachOnlyTheCursorItWasFusedFrom(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0xA6A6, 2, [][2]int{{1, 2}})
@@ -480,13 +450,10 @@ func TestAQuasarsEffectsReachOnlyTheCursorItWasFusedFrom(t *testing.T) {
 		}
 	}
 
-	// The shared half is unchanged: one logical fusion producing one spawn request
-	// on each instance, not one per participant.
-	//
-	// Full snapshot parity is not the assertion here. Both machines run the region
-	// and both leave it, but they enter it a barrier apart, so the states they hold
-	// afterwards differ by that lead in elapsed time — a property of the delivery
-	// lead rather than of the scope this test is about.
+	// The shared half is unchanged: one logical fusion producing one spawn request on
+	// each instance, not one per participant. Full snapshot parity is not asserted —
+	// both machines enter the region a barrier apart, so their elapsed times differ by
+	// the delivery lead rather than by anything this test is about.
 	for i, got := range spawns {
 		if got != 1 {
 			t.Fatalf("participant %d observed %d quasar spawn requests, want 1", i+1, got)
@@ -584,16 +551,11 @@ func TestAppsScopeOperatorState(t *testing.T) {
 // occur — which is exactly why every criterion built on it missed this.
 const corpusDir = "../../data"
 
-// TestParticipantsShareTheCorpusFingerprintNotItsCursor is the criterion for a
-// leak the harness could not see: content glyphs are player-domain, so two
-// participants who type differently consume blocks at different rates, and the
-// corpus cursor is a position in a shared file list rather than shared state.
-//
-// The fingerprint — how many files, blocks and lines the corpus holds, and where it
-// came from — is shared and stays compared. The file the cursor has reached is not,
-// and comparing it desynchronised a live session the moment the two participants
-// rolled onto different files: a permanent DESYNC with a world that agreed
-// completely.
+// TestParticipantsShareTheCorpusFingerprintNotItsCursor: content glyphs are
+// player-domain, so two participants who type differently consume blocks at
+// different rates. The fingerprint — files, blocks, lines and source — is shared and
+// stays compared; the file the cursor has reached is not, and comparing it
+// desynchronised a live session with a world that agreed completely.
 func TestParticipantsShareTheCorpusFingerprintNotItsCursor(t *testing.T) {
 	t.Parallel()
 	const seed = 0xC0FFEE
@@ -676,16 +638,11 @@ func TestParticipantsShareTheCorpusFingerprintNotItsCursor(t *testing.T) {
 	}
 }
 
-// TestEmbedderSharedMutationIsRefusedInALiveSession is gap 6 of the multiplayer
-// plan, and the half of it the plan got wrong.
-//
-// SetupLevel and Region carry ClassShared payloads. Applied locally they change one
-// instance's map bounds or FSM regions and nobody else's, and no correction repairs
-// the result — entity allocation and run numbering are exactly what a correction
-// does not describe. The plan proposed App.Reset's shape, refusing on a guest and
-// crossing on the authority, but event.OnWire admits only Bus and Stamped: a
-// ClassShared event reaches no peer whoever pushes it. So the authority is refused
-// too, and Reset keeps its crossing because EventGameResetRequest is ClassBus.
+// TestEmbedderSharedMutationIsRefusedInALiveSession. SetupLevel and Region carry
+// ClassShared payloads: applied locally they change one instance's map bounds or FSM
+// regions and no correction repairs the result. event.OnWire admits only Bus and
+// Stamped, so a ClassShared event reaches no peer whoever pushes it — the authority
+// is refused too, and Reset keeps its crossing because its request is ClassBus.
 func TestEmbedderSharedMutationIsRefusedInALiveSession(t *testing.T) {
 	t.Parallel()
 	host, guest := pair(t, 0x5EEDBEEF, 0)

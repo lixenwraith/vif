@@ -92,7 +92,7 @@ func (s *StagedInstall) Commit() error {
 	}
 	var err error
 	started := time.Now() // [wall] telemetry only
-	s.difference, err = s.live.reconcileSharedResolved(s.capture)
+	s.difference, err = s.live.reconcileShared(s.capture)
 	s.commitDur = time.Since(started)
 	s.committed = true
 	s.release()
@@ -169,9 +169,6 @@ func (a *App) discardStagingWorld() {
 	}
 }
 
-// closeStagingWorld releases the run's staging world. Called from Close.
-func (a *App) closeStagingWorld() { a.discardStagingWorld() }
-
 // Timings reports what the two halves cost, for choosing the cadence.
 func (s *StagedInstall) Timings() (stage, commit time.Duration) { return s.stageDur, s.commitDur }
 
@@ -227,11 +224,4 @@ func (a *App) installSharedResolved(cap snapshot.SharedCapture) error {
 	// simulate this participant's local effects. Reconciliation belongs only to
 	// the live commit, where its emitted lifecycle events can reach those systems.
 	return a.installShared(cap, false)
-}
-
-// reconcileSharedResolved is the live half of a staged install: the same capture,
-// already proved loadable by the staging pass, written onto the world this instance
-// is holding rather than over the top of it.
-func (a *App) reconcileSharedResolved(cap snapshot.SharedCapture) (engine.WorldDifference, error) {
-	return a.reconcileShared(cap)
 }

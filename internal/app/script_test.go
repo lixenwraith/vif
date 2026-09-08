@@ -251,27 +251,11 @@ func TestRunScriptPairsHeadlessNetworkInstances(t *testing.T) {
 	}
 }
 
-// The cross-process gate. An in-process 500-tick gate runs two worlds in one
-// address space: the capture never left the address space, both halves read one
-// process's clock, and any instant that happened to be a process-wide constant
-// agreed for free. This is the same gate with the two halves in different
-// processes, which is the form the plan owed and the form a join actually is.
-//
-// What the separation buys, in the order it matters:
-//
-//   - The capture is bytes on a disk. Anything the in-process gate got by sharing
-//     a pointer — a slice the sender still owns, a map iterated in one process's
-//     order — is gone.
-//   - The two processes start at different wall times and pace their ticks
-//     differently. A simulation that read the pacing clock would diverge; D-21 says
-//     it cannot, and this is where that is demonstrated rather than asserted.
-//   - The receiver installs into a world it built itself, from the same seed but at
-//     a different tick, and then runs 500 ticks against the sender's continuation.
-//     Equal state at the install tick is the easy half; equal futures is the gate.
-//
-// The child is a second copy of this test binary. That is the whole point: a
-// helper that imported the package and ran in-process would be the gate this
-// replaces.
+// The cross-process gate: the 500-tick continuation proof with the two halves in
+// different processes, which is what a join actually is. The capture becomes bytes on
+// a disk, so nothing survives by sharing a pointer; the two processes start at
+// different wall times, so a simulation reading the pacing clock would diverge (D-21).
+// The child is a second copy of this test binary, which is the whole point.
 const (
 	crossProcessRoleEnv = "VIF_CROSS_ROLE"
 	crossProcessDirEnv  = "VIF_CROSS_DIR"
@@ -329,21 +313,11 @@ func TestCaptureContinuesInAnotherProcess(t *testing.T) {
 		info.Size(), crossProcessContinueTicks)
 }
 
-// TestSimulationEpochIsSessionIdentity is the negative control, and it documents
-// the one part of the shared-identity hazard that D-21 relocated rather than removed.
-//
-// A shared component carries absolute instants — a genotype's spawn time, a
-// quasar's last speed step, a shield's last drain — and a capture carries them as
-// they are, not as durations. That is sound, but only for one reason: SimEpoch is a
-// build constant, so tick N names the same instant in every process of the same
-// build. It is not a per-process origin any more, so there is nothing left for a
-// transfer to get wrong.
-//
-// The way to show that reason is load-bearing is to break it. A receiver whose
-// SimEpoch differs installs the same bytes and diverges, because every
-// now.Sub(stored) it computes is wrong by the offset. So SimEpoch belongs to
-// session identity as much as the seed does, and a build that changes it cannot
-// receive a capture from one that did not.
+// TestSimulationEpochIsSessionIdentity is the negative control for the part of the
+// shared-identity hazard D-21 relocated rather than removed. A capture carries
+// absolute instants as they stand, which is sound only because SimEpoch is a build
+// constant. A receiver whose epoch differs installs the same bytes and diverges, every
+// now.Sub(stored) wrong by the offset — so the epoch is session identity like the seed.
 func TestSimulationEpochIsSessionIdentity(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
 	if os.Getenv(crossProcessRoleEnv) != "" {
@@ -478,13 +452,10 @@ func crossProcessReceiver(t *testing.T, dir string, seed uint64, out string) {
 }
 
 // spawnCrossProcessQuasar puts the one species whose future depends on an absolute
-// instant into the captured world.
-//
-// QuasarSystem steps SpeedMultiplier when now.Sub(LastSpeedIncreaseAt) passes an
-// interval, and that instant travels inside the shared component as it stands. It is
-// the entity behind the 2026-08-31 kinetics divergence and it is the entity the
-// epoch control needs: without one in the world, a receiver on a different
-// simulation epoch has nothing to get wrong.
+// instant into the captured world. QuasarSystem steps SpeedMultiplier when
+// now.Sub(LastSpeedIncreaseAt) passes an interval, and that instant travels inside the
+// shared component as it stands — so without one in the world a receiver on a
+// different simulation epoch has nothing to get wrong.
 func spawnCrossProcessQuasar(t *testing.T, a *App) {
 	t.Helper()
 	a.World().RunSafe(func() {

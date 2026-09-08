@@ -44,12 +44,10 @@ func seatGuests(a *App, n int) {
 }
 
 // TestAnUnclaimedSessionEndsItsOwnLobby is the whole reason the first-guest window
-// exists. A session created on a player's behalf that the player never reaches must
-// cost the fleet one window rather than one pod: nothing else is watching, and the
-// lobby is a wait with no other end.
-//
-// It ends cleanly rather than as a failure. The run did what it was told to do with
-// a slot nobody claimed, and a supervisor reading a non-zero exit would restart it.
+// exists: a session the player never reaches must cost the fleet one window rather
+// than one pod. It ends cleanly rather than as a failure — the run did what it was
+// told to do with a slot nobody claimed, and a supervisor reading a non-zero exit
+// would restart it.
 func TestAnUnclaimedSessionEndsItsOwnLobby(t *testing.T) {
 	t.Parallel()
 	cfg := Config{
@@ -95,13 +93,9 @@ func TestAnUnboundedLobbyKeepsWaiting(t *testing.T) {
 
 // TestWhatTheProbeReportsAboutAdmission pins the one field that is not the status
 // code. Readiness is "would a dial be admitted", which is neither liveness nor "the
-// session has started": a lobby waiting for its first guest is ready, because being
-// dialled is what it is waiting for.
-//
-// The refusals stay distinguishable. A full session and a draining one are both
-// unready and mean opposite things — one takes a player as soon as a slot frees, the
-// other never will — and an allocator that read them the same way would keep
-// choosing a session on its way out.
+// session has started". The refusals stay distinguishable: a full session and a
+// draining one are both unready and mean opposite things, and an allocator reading
+// them the same way would keep choosing a session on its way out.
 func TestWhatTheProbeReportsAboutAdmission(t *testing.T) {
 	t.Parallel()
 	a := supervisedServer(t, 2, lifecycle.Policy{Empty: time.Minute, Drain: time.Minute})
@@ -208,13 +202,10 @@ func TestASignalReadsTheRosterItArrivesWith(t *testing.T) {
 }
 
 // TestOnlyTheLobbyWaitCarriesTheFirstGuestDeadline is the boundary between the two
-// gates a session start runs.
-//
-// The lobby is inside the first-guest window and must end when it closes. The ready
-// gate that follows is not: its guest has already arrived, and re-arming the window
-// there would end a session because installing the world took the last second of
-// it. The deadline is therefore the caller's argument rather than a policy read
-// inside the wait.
+// gates a session start runs. The lobby is inside the first-guest window and must end
+// when it closes; the ready gate that follows is not — its guest has arrived, and
+// re-arming there would end a session because installing the world took the last
+// second. The deadline is the caller's argument rather than a policy read inside.
 func TestOnlyTheLobbyWaitCarriesTheFirstGuestDeadline(t *testing.T) {
 	t.Parallel()
 	a := supervisedServer(t, 4, lifecycle.Policy{FirstJoin: 80 * time.Millisecond})

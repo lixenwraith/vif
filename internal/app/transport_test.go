@@ -19,14 +19,11 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
-// pair builds two joined participants on one seed, linked by an in-process
-// transport. Each spawns its own cursor in its own slot and mirrors the other's as
-// a remote, which is the roster a real join produces.
-//
-// The two terminals are deliberately unequal. Two participants of one size share
-// every viewport-derived value by accident, so a criterion built on them cannot see
-// a shared value that was derived from the local terminal — which is exactly the
-// divergence a second window, a tmux pane or a resize produces.
+// pair builds two joined participants on one seed over an in-process transport,
+// each driving its own slot and mirroring the other's, which is the roster a real
+// join produces. The two terminals are deliberately unequal: participants of one
+// size share every viewport-derived value by accident, so a criterion built on them
+// cannot see a shared value derived from the local terminal.
 func pair(t *testing.T, seed uint64, steps int) (*App, *App) {
 	t.Helper()
 
@@ -65,15 +62,10 @@ func pair(t *testing.T, seed uint64, steps int) (*App, *App) {
 }
 
 // liveScript is the action set a two-participant criterion drives. The harness owns
-// the clock and holds the operator mutations no artifact carries fixed: FSM regions,
-// the programmatic level setup, commands and the overlay round trip.
-//
-// Resizes and viewport-relative motions are deliberately not among them. Each
-// participant drives its own terminal and its own camera, so a resize has to reflow
-// this instance's view without touching shared state and a screen-relative motion
-// has to resolve locally and cross as the absolute cell it selected — which is
-// exactly what they failed to do, and what no parity criterion could see while every
-// one of them held both fixed.
+// the clock and holds fixed the operator mutations no artifact carries. Resizes and
+// viewport-relative motions are deliberately included: each participant drives its
+// own terminal and camera, so a resize must reflow this view without touching shared
+// state and a screen-relative motion must cross as the absolute cell it selected.
 func liveScript(seed uint64, steps int) journal.FuzzOptions {
 	opt := parityScript(seed, steps)
 	opt.Regions, opt.MapSetups = false, false
@@ -82,18 +74,11 @@ func liveScript(seed uint64, steps int) journal.FuzzOptions {
 	return opt
 }
 
-// mirrorCursors splits ownership of a two-slot roster. Both instances run the
-// same spawn requests, so the two rosters hold the same shared entities in the same
-// slots (D-11); what differs is Control and the local binding, which is the whole
-// of what D-2 keys on. a drives slot 0 and mirrors slot 1; b is its inverse.
-//
-// Both cursors are stamped with the participant identity that owns them — pair
-// links the two through NewLoopbackPair(1, 2), so slot 0 is participant 1 and slot
-// 1 is participant 2. That is not decoration. An install re-derives control from
-// the identity rather than adopting the capture's answer (D-13), so a roster whose
-// PeerIDs name nobody leaves *every* cursor ControlRemote on the guest at its first
-// correction: the guest stops simulating its own cursor, and every criterion that
-// drives it past a correction quietly proves nothing after the first one.
+// mirrorCursors splits ownership of a two-slot roster: a drives slot 0 and mirrors
+// slot 1, b is its inverse. Both cursors are stamped with the owning participant
+// identity, which is not decoration — an install re-derives control from that
+// identity rather than from the capture (D-13), so a roster whose PeerIDs name
+// nobody leaves every cursor remote on the guest at its first correction.
 func mirrorCursors(t *testing.T, a, b *App) (localA, remoteA core.Entity) {
 	t.Helper()
 
@@ -399,12 +384,9 @@ func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
 }
 
 // TestTwoLiveParticipantsConvergeOverTCP proves the same session through stream
-// framing, the anchor handshake and canonical socket participant IDs — including
-// the correction, which is chunked and reassembled off a real socket rather than
-// handed across in one piece.
-//
-// It does not end in a mid-run join: that leg belongs to the authoritative snapshot
-// join, which join_test.go proves on its own.
+// framing, the anchor handshake and canonical socket participant IDs — including the
+// correction, chunked and reassembled off a real socket. It does not end in a mid-run
+// join: that leg belongs to join_test.go.
 func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
 	const seed = 0x5EEDBEEF
@@ -512,14 +494,11 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 
 }
 
-// proveTwoLive drives two live participants and asserts the criterion that
-// replaced lockstep with: the guest is equal to the host as of every correction.
-//
-// Between corrections the two are *expected* to disagree — each applies its own
-// artifacts a playout lead before the other does — so asserting parity per tick
-// would now be asserting the thing this phase removed. What has to stay true is
-// that each participant is really driving something, which the moved/sent/apm
-// checks below are for, and that the disagreement is closed rather than tolerated.
+// proveTwoLive drives two live participants and asserts the criterion that replaced
+// lockstep: the guest is equal to the host as of every correction. Between
+// corrections the two are expected to disagree, so what has to stay true is that each
+// is really driving something — the moved/sent/apm checks below — and that the
+// disagreement is closed rather than tolerated.
 func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA journal.FuzzOptions, tickPair func()) {
 	t.Helper()
 	steps := optA.Steps
@@ -569,14 +548,10 @@ func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA jour
 	}
 }
 
-// socketStep advances both instances one tick and lets the wire catch up.
-//
-// The criterion is that neither direction stops delivering, not that a frame
-// lands inside the tick that produced it. A loaded machine puts two epochs into
-// one wait and none into the next, and failing on that would be asserting the
-// runner's scheduling rather than the transport. A direction that has delivered
-// nothing across socketStallTicks consecutive ticks has stopped, and that is the
-// failure worth reporting.
+// socketStep advances both instances one tick and lets the wire catch up. The
+// criterion is that neither direction stops delivering, not that a frame lands inside
+// the tick that produced it: a loaded machine puts two epochs into one wait and none
+// into the next. A direction silent across socketStallTicks has stopped.
 type socketStep struct {
 	t           *testing.T
 	host, guest *network.SocketPort
@@ -792,15 +767,10 @@ func testCursorStateRoundTrip(t *testing.T) {
 	}
 }
 
-// The local-input goal is an equality: a session's local
-// cursor and typing must respond exactly as a solo run does. Every test here
-// therefore measures the same probe twice — once solo, once on the producing
-// instance of a live two-participant session — and asserts the two agree.
-//
-// The session figures these replaced are recorded in
-// The local-first input criterion: one keypress reaching the store only after
-// the playout lead, one cell of five, and five typing errors out of six correct
-// keystrokes. D-18's prediction is what closes the gap; the barrier below it is
+// The local-input goal is an equality: a session's local cursor and typing must
+// respond exactly as a solo run does. Every test here measures the same probe twice
+// — once solo, once on the producing instance of a live session — and asserts the
+// two agree. D-18's prediction is what closes the gap; the barrier under it is
 // deliberately unchanged, and the first test asserts that too.
 
 // soloInstance is one participant with a cursor and no session.
@@ -948,13 +918,10 @@ func TestFiveKeypressesBetweenTicksReachFiveCells(t *testing.T) {
 }
 
 // glyphRun writes runes into the cells the local cursor stands on and to its right,
-// so a keystroke that lands on its own cell finds its own character there.
-//
-// The run is player-domain, which is what a corpus glyph is — every shared glyph is
-// a gold composite member. Whatever the corpus already put on those cells is
-// destroyed first, because the typing path answers with the first glyph it finds in
-// the cell; a shared one would make the probe measure a composite instead, and the
-// test says so rather than quietly measuring something else.
+// so a keystroke landing on its own cell finds its own character. The run is
+// player-domain, as a corpus glyph is; whatever the corpus put there is destroyed
+// first, because the typing path answers with the first glyph in the cell and a
+// shared one would make the probe measure a composite instead.
 func glyphRun(t *testing.T, a *App, runes string) {
 	t.Helper()
 	pos, ok := localCell(a)
@@ -1127,12 +1094,10 @@ func TestPredictedLocalCursorReconcilesAndSnaps(t *testing.T) {
 		t.Fatalf("store after an unpredicted placement = %#v, want %#v", got, snap)
 	}
 
-	// Discarded, not merged, and nothing comes back to un-discard it. Dropping
-	// the playout lead off the local path, so the two crossings the prediction
-	// described had already applied on this instance before the authoritative
-	// placement replaced them; what is still in flight is the peers' copies, which
-	// land at the agreed tick and are then corrected by the host like any other
-	// disagreement.
+	// Discarded, not merged, and nothing comes back to un-discard it: the local path
+	// carries no playout lead, so the crossings the prediction described had already
+	// applied here before the authoritative placement replaced them. The peers'
+	// copies land at the agreed tick and are corrected like any other disagreement.
 	for range parameter.NetworkBarrierDelayTicks + 1 {
 		tickAll(apps)
 	}
@@ -1159,13 +1124,11 @@ func parityScript(seed uint64, steps int) journal.FuzzOptions {
 	return opt
 }
 
-// TestSharedSnapshotParityAcrossTerminalSizes is the D-11 criterion: two
-// instances of one seed on different terminals agree on every shared record.
-//
-// Both are constructed at one size and diverge only after SetupLevel decouples the
-// map from the viewport with crop off. Constructing them at different sizes instead
-// would bake different map bounds into the FSM's entry actions, which run inside New,
-// before any Tick.
+// TestSharedSnapshotParityAcrossTerminalSizes is the D-11 criterion: two instances of
+// one seed on different terminals agree on every shared record. Both are constructed
+// at one size and diverge only after SetupLevel decouples the map from the viewport
+// — different sizes would bake different map bounds into the FSM's entry actions,
+// which run inside New.
 func TestSharedSnapshotParityAcrossTerminalSizes(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF

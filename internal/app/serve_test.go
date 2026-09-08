@@ -32,12 +32,10 @@ func cursorlessOffer(an event.JoinAnchor, guests int) network.SessionOffer {
 }
 
 // TestADedicatedHostDrivesNoCursor is what "zero players" has to mean: the
-// coordinator keeps its participant identity and its authority, the roster is
-// exactly the guests, and nothing on the map is this instance's to simulate.
-//
-// The boot cursor is not suppressed. It is created as it always is and the roster
-// hands it to the first guest, which is what keeps shared creation order identical
-// to an ordinary host's.
+// coordinator keeps its identity and its authority, the roster is exactly the guests,
+// and nothing on the map is this instance's to simulate. The boot cursor is not
+// suppressed — it is created as always and handed to the first guest, which keeps
+// shared creation order identical to an ordinary host's.
 func TestADedicatedHostDrivesNoCursor(t *testing.T) {
 	t.Parallel()
 	host := mustHeadless(t, 0x5E4E, 120, 40)
@@ -222,16 +220,11 @@ func TestADedicatedHostCorrectsItsGuests(t *testing.T) {
 	}
 }
 
-// TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone covers the seam that lets a
-// host outlive its guests: the mid-run gate is installed from construction,
-// answers nothing until the run arms it, and finds the endpoint NetworkService
-// contributed rather than one the run opened for itself with :host.
-//
-// Both host shapes, because it used to be a dedicated host's alone. An interactive
-// or scripted -host closed its lobby and then admitted a re-dial onto no gate: the
-// transport took the stream, no start record was ever sent, and the guest sat in a
-// read it could not leave. The window between the two gates is the third state
-// here, and the only one where the honest answer is a refusal the dialer retries.
+// TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone covers the seam that lets a host
+// outlive its guests: the mid-run gate is installed from construction, answers
+// nothing until the run arms it, and finds the endpoint NetworkService contributed.
+// Both host shapes are driven, and the window between the two gates is the third
+// state — the only one whose honest answer is a refusal the dialer retries.
 func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 	// Not parallel: this binds a real socket.
 	for _, tt := range []struct {
@@ -296,12 +289,9 @@ func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 	}
 }
 
-// TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers pins what -players means
-// on a server: a ceiling, never a requirement.
-//
-// The two numbers used to be one. A lobby that waited for its full roster made a
-// fleet host's readiness a function of how many people happened to want to play,
-// and gave a host started with no -players a session of exactly one guest.
+// TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers pins what -players means on a
+// server: a ceiling, never a requirement. A lobby that waited for its full roster
+// would make a fleet host's readiness a function of how many people wanted to play.
 func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
@@ -337,16 +327,11 @@ func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
 	}
 }
 
-// TestPlayersIsACeilingAndOnlySometimesAParty pins both meanings of one flag.
-//
-// It is a ceiling on every host shape and always a ceiling: unset means the whole
-// roster, because a host that had to be told how many people were coming would be
-// a host that only ever served the number it was told. What an explicit value adds
-// on an interactive host is the *lobby* — a party that says it is four starts
-// together — and that second meaning is exactly what the zero value drops, leaving
-// a host that starts on its first guest and admits the rest through the mid-run
-// gate. A dedicated host is always that shape, because nobody is watching its
-// lobby to decide it is full.
+// TestPlayersIsACeilingAndOnlySometimesAParty pins both meanings of one flag: always
+// a ceiling, with unset meaning the whole roster. What an explicit value adds on an
+// interactive host is the lobby — a party that says it is four starts together — and
+// the zero value drops exactly that, leaving a host that starts on its first guest.
+// A dedicated host is always that shape, because nobody is watching its lobby.
 func TestPlayersIsACeilingAndOnlySometimesAParty(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
@@ -382,15 +367,11 @@ func TestPlayersIsACeilingAndOnlySometimesAParty(t *testing.T) {
 	}
 }
 
-// TestAVacantDedicatedHostParksAndRestarts is what an empty session used to cost.
-//
-// A host nobody was in kept simulating, and simulating it was not free: with no
-// cursor on the map the gold cycle cannot place a sequence, so it failed, retried a
-// tenth of a second later, and failed again for as long as the process ran — a spin
-// with a log line per transition, and a world aging away from the guest that might
-// come back to it. So the clock stops as soon as the roster empties, and a world
-// nobody returned to inside the window is replaced rather than handed to whoever
-// dials next.
+// TestAVacantDedicatedHostParksAndRestarts is what an empty session used to cost: with
+// no cursor on the map the gold cycle cannot place a sequence, so it failed and
+// retried for as long as the process ran, aging a world away from the guest that
+// might come back. The clock stops as soon as the roster empties, and a world nobody
+// returned to inside the window is replaced rather than handed to the next dialer.
 func TestAVacantDedicatedHostParksAndRestarts(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, 0x5E8E, 120, 40)

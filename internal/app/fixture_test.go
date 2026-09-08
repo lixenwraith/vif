@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/resource"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // mustHeadless builds a driven App on the embedded assets, failing the test on error
@@ -22,15 +23,10 @@ func mustHeadless(t *testing.T, seed uint64, w, h int) *App {
 }
 
 // mustJoiner builds a participant the way ConfigForJoin does for a real join: it
-// adopts the session's D-14 bounds before its FSM boots, and it latches the world
-// as shared. Its terminal is its own.
-//
-// Both halves matter and for different reasons. A joiner whose world took its
-// bounds from that terminal would spawn cursor slot zero on a different cell than
-// the host and never recover (D-11). And one that did not latch would leave the
-// playout barrier disengaged, so every crossing it re-derives would apply a lead
-// earlier than the session applied it — which is invisible until an FSM deadline
-// falls inside that lead.
+// adopts the session's D-14 bounds before its FSM boots and latches the world as
+// shared, with its own terminal. Bounds from that terminal would spawn cursor slot
+// zero on a different cell than the host (D-11); no latch would leave the playout
+// barrier disengaged, which is invisible until an FSM deadline falls inside the lead.
 func mustJoiner(t *testing.T, seed uint64, w, h int, an event.JoinAnchor) *App {
 	t.Helper()
 	a, err := NewHeadless(Config{
@@ -96,4 +92,52 @@ func statBoolOf(a *App, key string) (v bool) {
 func cursorPosition(a *App, e core.Entity) (pos component.PositionComponent) {
 	a.World().RunSafe(func() { pos, _ = a.World().Positions.GetPosition(e) })
 	return pos
+}
+
+// mustCaptureShared reads the shared world, failing the test on error.
+func mustCaptureShared(t *testing.T, a *App) snapshot.SharedCapture {
+	t.Helper()
+	cap, err := a.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+	return cap
+}
+
+// mustRoundTrip is that capture after the encode and decode a receiver performs,
+// which is what an install actually holds.
+func mustRoundTrip(t *testing.T, a *App) snapshot.SharedCapture {
+	t.Helper()
+	cap, err := snapshot.DecodeCapture(mustEncode(t, mustCaptureShared(t, a)))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	return cap
+}
+
+func mustEncode(t *testing.T, cap snapshot.SharedCapture) []byte {
+	t.Helper()
+	body, err := snapshot.EncodeCapture(cap)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	return body
+}
+
+func mustEncodeCorrection(t *testing.T, cap snapshot.SharedCapture) []byte {
+	t.Helper()
+	body, err := snapshot.EncodeCorrection(cap)
+	if err != nil {
+		t.Fatalf("correction encode: %v", err)
+	}
+	return body
+}
+
+func mustEncodeRequest(t *testing.T, req snapshot.CorrectionRequest) []byte {
+	t.Helper()
+	body, err := snapshot.EncodeCorrectionRequest(req)
+	if err != nil {
+		t.Fatalf("request encode: %v", err)
+	}
+	return body
 }

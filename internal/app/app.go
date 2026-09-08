@@ -515,7 +515,7 @@ func (a *App) Close() {
 	a.reach.close()
 	a.closeProbe()
 	a.closeMidRunPort()
-	a.closeStagingWorld()
+	a.discardStagingWorld()
 	a.hub.StopAll()
 
 	if a.recorder != nil {

@@ -14,18 +14,11 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
-// The navigation phase, demonstrated rather than asserted.
-//
-// D-17 throttles the flow-field recompute: a field is derived at most once every
-// few ticks, and *which* ticks decides how old the field is a shared species steers
-// by. The phase is therefore shared state, it is in no component store, and the
-// navigation system declares and carries it under D-19.
-//
-// A gate that passes with the carrier present says nothing about a world without
-// one, so each test here sabotages one part of what the carrier promises — in the
-// encoded capture rather than in the system — and requires the gate to notice, with
-// an unmodified control installed beside it to show the gate is catching the
-// sabotage and not the setup.
+// D-17 throttles the flow-field recompute, and which ticks it fires on decides how
+// old the field a shared species steers by is. The phase is shared state in no
+// component store, carried under D-19. Each test here sabotages one part of what the
+// carrier promises — in the encoded capture rather than in the system — with an
+// unmodified control beside it to show the gate catches the sabotage, not the setup.
 
 // navRecord returns the navigation system's record from a capture.
 func navRecord(t *testing.T, cap snapshot.SharedCapture) (int, map[string]any) {
@@ -63,18 +56,10 @@ func resealCapture(t *testing.T, cap snapshot.SharedCapture, idx int, body map[s
 }
 
 // TestNavigationPhaseIsLoadBearing is the failing case the carrier needs, with its
-// own control beside it.
-//
-// A capture whose navigation phase says something else installs cleanly, produces
-// an identical world at the install tick, and then recomputes its flow fields on
-// different ticks from the run it came from. The compared surface has to catch
-// that, and the tick it catches it on is the first recompute either side makes.
-// The unmodified capture through the same path must not be caught, or the
-// sabotages are catching the setup rather than the sabotage.
-//
-// One origin serves every case: each receiver installs a differently sabotaged
-// copy of one capture and is then driven against the same evolution, so what
-// separates a caught case from the control is the sabotage and nothing else.
+// control beside it. A capture whose phase says something else installs cleanly,
+// holds an identical world at the install tick, and then recomputes on different
+// ticks. One origin serves every case, so what separates a caught case from the
+// control is the sabotage and nothing else.
 func TestNavigationPhaseIsLoadBearing(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -205,22 +190,7 @@ func navGateOrigin(t *testing.T) (*App, snapshot.SharedCapture) {
 		t.Fatal("no shared species navigate this world; the phase decides nothing")
 	}
 
-	cap, err := a.CaptureShared()
-	if err != nil {
-		a.Close()
-		t.Fatalf("capture: %v", err)
-	}
-	encoded, err := snapshot.EncodeCapture(cap)
-	if err != nil {
-		a.Close()
-		t.Fatalf("encode: %v", err)
-	}
-	decoded, err := snapshot.DecodeCapture(encoded)
-	if err != nil {
-		a.Close()
-		t.Fatalf("decode: %v", err)
-	}
-	return a, decoded
+	return a, mustRoundTrip(t, a)
 }
 
 // navRouteSeed is the world the gateway scenario builds on top of.
@@ -228,19 +198,9 @@ const navRouteSeed = 0x0FA57
 
 // TestTheGatewayWorldKeepsItsRebuildScheduleAndGeneticStream is the route-rebuild
 // budget's failing case, its control, and the genetic continuation gate over one
-// scenario.
-//
-// The sabotage is the value a world with no carrier holds: a zeroed budget, which
-// puts the next rebuild a whole interval away from where the sender had it. The
-// receiver installs cleanly, holds the sender's world at the install tick, and then
-// rebuilds its gateways' routes on different ticks. The unmodified capture beside
-// it must rebuild on the sender's ticks *and* keep the genotype stream equal —
-// including pending evaluations already attached to live eyes — as the gateway
-// world keeps spawning GA-managed eyes.
-//
-// One origin drives both, because the tower scenario is the most expensive fixture
-// in this package and the two receivers are answering the same question from
-// opposite sides.
+// scenario. The sabotage is the value a world with no carrier holds — a zeroed
+// budget — and the control must rebuild on the sender's ticks and keep the genotype
+// stream equal. One origin drives both: the tower scenario is the costliest fixture.
 func TestTheGatewayWorldKeepsItsRebuildScheduleAndGeneticStream(t *testing.T) {
 	t.Parallel()
 	origin, cap := navRouteOrigin(t)
@@ -269,18 +229,11 @@ func TestTheGatewayWorldKeepsItsRebuildScheduleAndGeneticStream(t *testing.T) {
 		t.Fatalf("sabotaged install: %v", err)
 	}
 
-	// The motion is the point. A route graph is stale only when its target has moved
-	// off the cell it was computed for, so a world whose target stands still rebuilds
-	// nothing and the budget decides nothing — which is exactly the state the shipped
-	// scenario leaves it in, and why this had no failing case. The same placement is
-	// written to every instance at the same tick, so what differs is the schedule the
-	// carrier restored and not the input.
-	//
-	// The route graph is the narrow observable — the cell each gateway was computed
-	// to reach and how many routes came out — so an unrelated shared-state difference
-	// cannot masquerade as a route-rebuild phase failure. A rebuild is precisely the
-	// moment a graph adopts the target's current cell, so two instances whose budgets
-	// stand apart hold graphs aimed at different cells for as long as the gap lasts.
+	// The motion is the point: a route graph is stale only once its target has moved
+	// off the cell it was computed for, and the shipped scenario leaves it standing
+	// still. The same placement is written to every instance at the same tick, so what
+	// differs is the restored schedule. The graph is the narrow observable — the cell
+	// each gateway aims at — so an unrelated difference cannot masquerade as this one.
 	_, initialMax := genotypeSignature(origin)
 	diverged, spawned := 0, false
 	for step := range navSabotageTicks {
@@ -360,14 +313,11 @@ func routeGraphSignature(a *App) string {
 	return b.String()
 }
 
-// moveRouteTarget walks the gateways' target group in a slow rectangle.
-//
-// It writes the placement directly rather than emitting a request, for the same
-// reason the sabotages above edit an encoded capture: what is being tested is the
-// schedule, and the cleanest way to hold everything else equal is to give both
-// instances the identical write at the identical tick. Group zero is the cursors and
-// is not what a gateway steers by; the tower chain's gateways name group one, whose
-// target is the anchor this moves.
+// moveRouteTarget walks the gateways' target group in a slow rectangle. It writes
+// the placement directly rather than emitting a request, because what is tested is
+// the schedule and the cleanest way to hold everything else equal is the identical
+// write at the identical tick. Group one is the tower chain's gateways; group zero
+// is the cursors, which a gateway does not steer by.
 func moveRouteTarget(a *App, step int) {
 	if step%navRouteTargetStride != 0 {
 		return
@@ -391,13 +341,11 @@ func moveRouteTarget(a *App, step int) {
 // budget is what decides which tick that is.
 const navRouteTargetStride = parameter.NavRouteRebuildInterval / 2
 
-// navRouteWorld builds the one scenario this game has that engages gateways.
-//
-// The tower region is it: its chain spawns four pylons and attaches a route-graph
-// gateway to each, which is the only path in any shipped config that makes
-// route_rebuild_ticks pace anything. Nothing in the default escalation reaches it
-// inside a test-length run, so the region is entered outright — the same thing the
-// tower soak does, for the same reason.
+// navRouteWorld builds the one scenario this game has that engages gateways: the
+// tower region's chain spawns four pylons and attaches a route-graph gateway to
+// each, the only path in any shipped config that makes route_rebuild_ticks pace
+// anything. Nothing in the default escalation reaches it inside a test-length run,
+// so the region is entered outright, as the tower soak does.
 func navRouteWorld(t *testing.T) *App {
 	t.Helper()
 	a, err := NewHeadless(towerConfig(t, navRouteSeed))
@@ -453,22 +401,7 @@ func navRouteOrigin(t *testing.T) (*App, snapshot.SharedCapture) {
 		t.Fatal("no entity follows a route graph; a rebuild would change nothing observable")
 	}
 
-	cap, err := a.CaptureShared()
-	if err != nil {
-		a.Close()
-		t.Fatalf("capture: %v", err)
-	}
-	encoded, err := snapshot.EncodeCapture(cap)
-	if err != nil {
-		a.Close()
-		t.Fatalf("encode: %v", err)
-	}
-	decoded, err := snapshot.DecodeCapture(encoded)
-	if err != nil {
-		a.Close()
-		t.Fatalf("decode: %v", err)
-	}
-	return a, decoded
+	return a, mustRoundTrip(t, a)
 }
 
 // navRouteWarmupTicks is long enough for the tower chain to have attached its four

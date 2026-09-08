@@ -24,15 +24,11 @@ const (
 	soakSteps    = 200
 )
 
-// soakScale picks one of three effort profiles for a repetition count or a step
-// count. The default is what a change is validated against and what CI runs; the
-// long profile is the wide seed sweep, which is a nightly or a pre-release job
-// rather than something every edit pays for. Under the race detector the
-// difference was six minutes against two.
+// soakScale picks one of three effort profiles for a repetition or step count. The
+// default is what a change is validated against and what CI runs; full is the wide
+// seed sweep, a nightly rather than something every edit pays for.
 //
-//	go test ./...                     # normal
-//	go test -short ./...              # smoke
-//	VIF_SOAK=full go test ./...       # the wide sweep
+//	go test ./...  |  go test -short ./...  |  VIF_SOAK=full go test ./...
 func soakScale(short, normal, full int) int {
 	if testing.Short() {
 		return short

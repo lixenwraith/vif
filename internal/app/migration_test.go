@@ -14,13 +14,10 @@ import (
 )
 
 // settleAuthority runs the succession to a conclusion without advancing anyone's
-// clock further than it has to.
-//
-// The election is driven from the correction loop, which is what every instance
-// runs between two ticks, so a round of ApplyPendingCorrections plus one tick is
-// one round of report, vote and handoff. The bound is the succession deadline
-// itself: past it the instances have fallen back to local continuation, which is a
-// conclusion too and one several of these tests are about.
+// clock further than it has to. The election is driven from the correction loop, so
+// a round of ApplyPendingCorrections plus one tick is one round of report, vote and
+// handoff. The bound is the succession deadline: past it the instances have fallen
+// back to local continuation, which is a conclusion several of these tests are about.
 func settleAuthority(t *testing.T, apps []*App, done func() bool) bool {
 	t.Helper()
 	for range parameter.NetworkSuccessionTicks + 4 {
@@ -129,13 +126,11 @@ func TestSuccessionElectsOneParticipantOnEverySurvivor(t *testing.T) {
 	}
 }
 
-// TestTheSuccessorIsTheRostersLowestSurvivor pins the succession rule itself.
-//
-// It takes no reports, no links and no votes, and the star is why. When the centre
-// of a star goes, every survivor is alone: none can reach another, so none can ever
-// collect a vote, and a quorum rule elects nobody in the one shape the CLI builds.
-// A function of the roster elects the same participant on every survivor without
-// any of them exchanging anything, which is the property a quorum was there for.
+// TestTheSuccessorIsTheRostersLowestSurvivor pins the succession rule itself: no
+// reports, no links, no votes. When the centre of a star goes every survivor is
+// alone, so a quorum rule elects nobody in the one shape the CLI builds; a function
+// of the roster elects the same participant on every survivor without any of them
+// exchanging anything.
 func TestTheSuccessorIsTheRostersLowestSurvivor(t *testing.T) {
 	t.Parallel()
 	roster := []network.SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}}
@@ -189,15 +184,11 @@ func TestOnlyTheDesignatedSuccessorMayHoldATerm(t *testing.T) {
 	}
 }
 
-// TestTheFirstGuestSucceedsAHostThatLeaves is the case every real session is, and
-// the one a quorum rule could never serve.
-//
-// Two participants, which is what the CLI's star is when one person hosts and one
-// joins. The host goes; the survivor is one instance out of a roster of two, so it
-// is not a majority of anything and under a vote it could only ever fork — which
-// is what it did: the guest kept playing with a host cursor nobody would move
-// again, in a session with no authority and no way to admit anyone. The roster
-// rule names it instead, and it continues the session as its own host.
+// TestTheFirstGuestSucceedsAHostThatLeaves is the case every real session is, and the
+// one a quorum rule could never serve: one survivor out of a roster of two is a
+// majority of nothing, so under a vote it could only fork — a guest playing on with a
+// host cursor nobody would move again. The roster rule names it, and it continues the
+// session as its own host.
 func TestTheFirstGuestSucceedsAHostThatLeaves(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 2, [][2]int{{1, 2}})
@@ -246,18 +237,10 @@ func TestTheFirstGuestSucceedsAHostThatLeaves(t *testing.T) {
 }
 
 // TestAPinnedAuthorityDoesNotMove is the option a deployment needs and a person
-// hosting a game does not.
-//
-// A successor authors but does not listen, and the record naming it never reaches
-// a participant that had no link to it — so migration reconstitutes a session only
-// where the survivors already share links, and in a star it produces one solo game
-// per survivor wearing the session's name. Where the address is the session — a
-// dedicated host an orchestrator replaces, or a host that must stay the only
-// machine holding the world — the honest answer is that losing it ends the session.
-//
-// The policy is the coordinator's and travels in the offer, because two
-// participants disagreeing about whether the term may move is one electing while
-// the other refuses to follow.
+// hosting a game does not. Migration reconstitutes a session only where the survivors
+// already share links; where the address *is* the session, the honest answer is that
+// losing it ends the session. The policy is the coordinator's and travels in the
+// offer, because a disagreement about it is one instance electing and one refusing.
 func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 2, [][2]int{{1, 2}})
@@ -301,20 +284,11 @@ func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 	}
 }
 
-// TestAnUnreachableSuccessorLeavesTheRestForking is the rule's cost and its
-// benefit in one run.
-//
-// A chain with the authority in the middle. Losing it leaves participants 1 and 3
-// with no link to each other at all — the star's shape, in miniature. The roster
-// designates 1, so 1 takes the term alone and with nobody to tell; 3 computes the
-// same successor, cannot hear it, and continues as an explicit local fork. That is
-// the trade the roster rule makes: the designated survivor always continues the
-// session, and a survivor cut off from it always forks, with no case in between
-// where two of them both author.
-//
-// Both of them then hold a roster of participants they will never hear from again,
-// and both drop them, for the same reason: with no link left there is no second
-// instance to agree a destruction tick with.
+// TestAnUnreachableSuccessorLeavesTheRestForking is the rule's cost and its benefit
+// in one run. A chain with the authority in the middle: losing it leaves 1 and 3 with
+// no link at all, so 1 takes the term alone and 3 computes the same successor, cannot
+// hear it, and forks explicitly. Both then drop the participants they will never hear
+// from again, because with no link left there is no destruction tick to agree.
 func TestAnUnreachableSuccessorLeavesTheRestForking(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}})

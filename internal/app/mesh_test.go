@@ -14,11 +14,10 @@ import (
 )
 
 // meshSession builds n participants on one seed and links them into the given
-// topology. Links are the pairs of participant IDs (one-based) that share a stream;
-// everything else has to be reached by relay.
-// chain, when given, is the succession candidate list a real session would have
-// confirmed and published. It travels in the offer, so a fixture that wants a leaf
-// out of the candidates simply leaves it out.
+// topology; links are the pairs of participant IDs that share a stream, and
+// everything else is reached by relay. chain, when given, is the succession
+// candidate list a real session would publish — it travels in the offer, so a
+// fixture that wants a leaf out of the candidates leaves it out.
 func meshSession(t *testing.T, seed uint64, n int, links [][2]int, chain ...network.PeerID) []*App {
 	t.Helper()
 
@@ -215,13 +214,11 @@ func TestMeshPropagatesEveryParticipantToEveryOther(t *testing.T) {
 	}
 }
 
-// correctMesh publishes one authoritative correction from the coordinator and
-// asserts every other participant converged on it.
-//
-// The relay is what is being proved as much as the correction. A correction is
-// broadcast to the coordinator's direct links only, so participants 4 and 5 — three
-// links away — hold the host's world at all only because every node forwards the
-// chunks it admitted, on the same termination argument the artifact flood uses.
+// correctMesh publishes one authoritative correction from the coordinator and asserts
+// every other participant converged on it. The relay is proved as much as the
+// correction: a correction reaches the coordinator's direct links only, so a
+// participant three links away holds the host's world only because every node
+// forwards the chunks it admitted.
 func correctMesh(t *testing.T, apps []*App, advance func(), step int) {
 	t.Helper()
 	want := deliverCorrection(t, apps[0], apps[1:], advance)
@@ -421,13 +418,11 @@ func driveCorrections(t *testing.T, apps []*App, n int) {
 	}
 }
 
-// TestARelayedParticipantKeepsTheSelectiveStream is the headline case.
-//
-// In the chain 1—2—3 participant 3 shares no link with the authority. Before this
-// design that fact alone would put the whole session back on whole bodies, for
-// everyone, for its life. Participant 2 now retains what it forwards and answers
-// from it, so the session keeps the index — and the proof is that participant 3
-// converges through a repair 2 served rather than through a body 1 flooded.
+// TestARelayedParticipantKeepsTheSelectiveStream is the headline case. In the chain
+// 1—2—3 participant 3 shares no link with the authority, which alone would put the
+// whole session back on whole bodies for its life. Participant 2 retains what it
+// forwards and answers from it, and the proof is that 3 converges through a repair 2
+// served rather than through a body 1 flooded.
 func TestARelayedParticipantKeepsTheSelectiveStream(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}})
@@ -473,14 +468,11 @@ func TestARelayedParticipantKeepsTheSelectiveStream(t *testing.T) {
 	}
 }
 
-// TestARelayCannotForgeAPage is the proof that a relay serving pages it did not
-// author cannot substitute one.
-//
-// The binding is the authority's own root, twice over: the set must declare the
-// root the receiver was sent in the manifest, and the repaired capture must
-// reproduce it. Mutating a page at the relay breaks the page hash first and the
-// root second, and the receiver reaches the bounded keyframe fallback rather than
-// installing anything.
+// TestARelayCannotForgeAPage proves that a relay serving pages it did not author
+// cannot substitute one. The binding is the authority's own root twice over: the set
+// must declare the root the receiver was sent, and the repaired capture must
+// reproduce it. Mutating a page breaks the page hash first and the root second, and
+// the receiver reaches the bounded keyframe fallback rather than installing anything.
 func TestARelayCannotForgeAPage(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}})
@@ -566,7 +558,7 @@ func (c *corrections) applyRepairFromRelay(t *testing.T, set snapshot.Correction
 	}
 	c.selectiveMu.Lock()
 	c.selective.awaiting = append(c.selective.awaiting, &awaitingRepair{
-		tick: want.Header.Tick, capture: mustCapture(t, c.a), index: mustIndex(t, c.a, want),
+		tick: want.Header.Tick, capture: mustRoundTrip(t, c.a), index: mustIndex(t, c.a, want),
 		manifest: want, from: 2,
 	})
 	c.selectiveMu.Unlock()
@@ -604,7 +596,7 @@ func TestARelayThatDroppedTheManifestSaysSo(t *testing.T) {
 	// A request naming a tick far outside the ring.
 	before := statOf(relay, "snapshot.relay_unserved")
 	relay.corrections.receiveSelective(uint8(network.MsgStateRequest), uint32(3),
-		mustRequestBody(t, snapshot.CorrectionRequest{
+		mustEncodeRequest(t, snapshot.CorrectionRequest{
 			Version: snapshot.ManifestVersion, Schema: snapshot.Schema,
 			Tick: 1, Run: relayRun(relay), Session: relaySession(relay),
 			Term:     relay.AuthorityState().Term,
@@ -621,15 +613,6 @@ func TestARelayThatDroppedTheManifestSaysSo(t *testing.T) {
 	tickAll(apps)
 	driveCorrections(t, apps, 2)
 	assertMeshParity(t, apps, -1)
-}
-
-func mustRequestBody(t *testing.T, req snapshot.CorrectionRequest) []byte {
-	t.Helper()
-	body, err := snapshot.EncodeCorrectionRequest(req)
-	if err != nil {
-		t.Fatalf("encode request: %v", err)
-	}
-	return body
 }
 
 func relayRun(a *App) uint64     { return a.Position().Run }

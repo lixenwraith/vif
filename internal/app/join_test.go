@@ -30,41 +30,11 @@ func sessionOfferFor(an event.JoinAnchor, n int) network.SessionOffer {
 	return o
 }
 
-// mustCapture reads a capture through the encoder, so a test exercises the same
-// bytes a join would and not a value that never left the process.
-func mustCapture(t *testing.T, a *App) snapshot.SharedCapture {
-	t.Helper()
-	cap, err := a.CaptureShared()
-	if err != nil {
-		t.Fatalf("capture: %v", err)
-	}
-	body, err := snapshot.EncodeCapture(cap)
-	if err != nil {
-		t.Fatalf("encode: %v", err)
-	}
-	decoded, err := snapshot.DecodeCapture(body)
-	if err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	return decoded
-}
-
 // TestSnapshotJoinCarriesTheGoldDeadline closes the gold-deadline defect a
-// reproducing joiner had.
-//
-// The gold sequence's remaining time is measured from the tick the sequence
-// spawned on. A joiner that reproduced the session from tick zero settled the FSM
-// boot queue at a different point than its host — the join's level setup settled it,
-// the host's construction did not — so the two entered MainSpawnGold a tick apart
-// and carried origins 50 ms apart for the life of every sequence. gold.timer was
-// excluded from the compared surface for that reason alone, which meant the one
-// thing the exclusion hid was also the only thing that would have caught it.
-//
-// A joiner no longer reproduces anything. It installs the host's world, and the
-// gold carrier writes both instants relative to the capture's tick, so the origin
-// is the host's on every instance. The key is compared now, and this is the case
-// that would have failed before: a host well into a sequence, a joiner arriving in
-// the middle of it, and the two asked for the same remaining time.
+// reproducing joiner had: it settled the FSM boot queue at a different point than its
+// host, so the two entered MainSpawnGold a tick apart and carried origins 50 ms apart
+// for every sequence. A joiner installs the host's world now and the gold carrier
+// writes both instants relative to the capture's tick, so gold.timer is compared.
 func TestSnapshotJoinCarriesTheGoldDeadline(t *testing.T) {
 	t.Parallel()
 	host := mustHeadless(t, 0x14AD, 160, 48)
@@ -86,7 +56,7 @@ func TestSnapshotJoinCarriesTheGoldDeadline(t *testing.T) {
 	}
 	before := goldTimer(host)
 
-	if err := guest.JoinSessionAt(offer, mustCapture(t, host)); err != nil {
+	if err := guest.JoinSessionAt(offer, mustRoundTrip(t, host)); err != nil {
 		t.Fatalf("join session: %v", err)
 	}
 	if got := goldTimer(guest); got != before {
@@ -134,7 +104,7 @@ func TestSnapshotJoinTakesTheHostsWorldNotItsOwn(t *testing.T) {
 		t.Fatal("the two runs already agree; the install would prove nothing")
 	}
 
-	cap := mustCapture(t, host)
+	cap := mustRoundTrip(t, host)
 	if err := guest.JoinSessionAt(offer, cap); err != nil {
 		t.Fatalf("join session: %v", err)
 	}
@@ -149,11 +119,10 @@ func TestSnapshotJoinTakesTheHostsWorldNotItsOwn(t *testing.T) {
 }
 
 // TestSnapshotJoinLeavesEachParticipantDrivingItsOwnCursor is the D-13 half of an
-// install. Every cursor is a shared entity and the whole component travels, so a
-// capture also carries the sender's answer to which of them it drives — its own is
-// ControlHuman and everyone else's is ControlRemote. A receiver that adopted that
-// would start simulating the host's cursor and stop simulating its own, which is
-// two participants writing one cell and one participant writing none.
+// install: the whole cursor component travels, so a capture carries the sender's
+// answer to which cursor it drives. A receiver that adopted it would simulate the
+// host's cursor and not its own — two participants writing one cell, and none writing
+// the other.
 func TestSnapshotJoinLeavesEachParticipantDrivingItsOwnCursor(t *testing.T) {
 	t.Parallel()
 	host := mustHeadless(t, 0x2B0C, 120, 40)
@@ -167,7 +136,7 @@ func TestSnapshotJoinLeavesEachParticipantDrivingItsOwnCursor(t *testing.T) {
 		t.Fatalf("host session: %v", err)
 	}
 	host.Tick(30)
-	if err := guest.JoinSessionAt(offer, mustCapture(t, host)); err != nil {
+	if err := guest.JoinSessionAt(offer, mustRoundTrip(t, host)); err != nil {
 		t.Fatalf("join session: %v", err)
 	}
 
@@ -222,19 +191,11 @@ func goldTimer(a *App) int64 {
 	return a.World().Resources.Status.Ints.Get("gold.timer").Load()
 }
 
-// TestReproducingJoinAdmissionAndRefusals covers the tick-zero handshake in all
-// three outcomes: a second instance of one seed reproduces the session's identity
-// and adopts the host's D-14 map latch while keeping its own terminal, a
-// participant whose streams derive from another seed is refused before it ticks,
-// and a host that has already moved is refused because nothing on this path
-// transports world state.
-// TestAJoinerAdoptsTheHostsRngSession is what a restarted host needs from a join.
-//
-// The seed says which family of streams a run draws from; the session counter says
-// which game in that family, and a reset advances it. A joiner that counted from
-// one would build a different world and be refused on the identity check — which is
-// what made a host that had ever reset unjoinable, and what a dedicated host now
-// reaches routinely, because it restarts a session nobody came back to.
+// TestAJoinerAdoptsTheHostsRngSession is what a restarted host needs from a join. The
+// seed says which family of streams a run draws from and the session counter which
+// game in that family, which a reset advances. A joiner that counted from one would
+// build a different world and be refused on the identity check — which made a host
+// that had ever reset unjoinable, and a dedicated host restarts routinely.
 func TestAJoinerAdoptsTheHostsRngSession(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF
