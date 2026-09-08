@@ -9,7 +9,11 @@
 #   ./render-session.sh 7f3c1a 31707 | sudo kubectl apply -f -
 #   ./render-session.sh 7f3c1a 31707 | sudo kubectl delete -f -
 #   FIRST_JOIN=20m EMPTY_GRACE=20m ./render-session.sh 7f3c1a 31707
-#   LOGWISP_IMAGE=none ./render-session.sh 7f3c1a 31707
+#   LOGWISP_IMAGE=logwisp:dev ./render-session.sh 7f3c1a 31707
+#
+# The default is one container writing to stdout, which is what the deployment
+# runs: the allocator reads the pod log and the node aggregator serves it. Naming
+# an image adds the sidecar, and with it a second way for the pod to be unready.
 #
 # The Service's owner reference is dropped here rather than filled in: the Job's
 # UID does not exist until the Job does. The orphaned Service must be deleted by
@@ -28,7 +32,7 @@ GAME_NODEPORT=$2
 IMAGE=${3:-vi-fighter:dev}
 PLAYERS=${4:-4}
 MAP_SIZE=${5:-120x40}
-LOGWISP_IMAGE=${6:-${LOGWISP_IMAGE:-logwisp:dev}}
+LOGWISP_IMAGE=${6:-${LOGWISP_IMAGE:-none}}
 FIRST_JOIN=${FIRST_JOIN:-90s}
 EMPTY_GRACE=${EMPTY_GRACE:-90s}
 

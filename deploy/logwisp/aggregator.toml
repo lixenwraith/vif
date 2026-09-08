@@ -1,0 +1,65 @@
+# The fleet's log fan-in, on the Arch guest rather than in a pod.
+#
+# The allocator follows each live session's pod log through the Kubernetes API,
+# splices the session ID and public port into every line, and writes the result to
+# this process's standard input. LogWisp serves the merged stream as Server-Sent
+# Events on the loopback address, and the allocator reverse-proxies it to the one
+# same-origin path the website reads. See doc/kube_docker_deploy.md §10.3.
+#
+# Run it as a child of the allocator so one process holds the cluster credential
+# and the stream ends with the writer:
+#
+#   logwisp -c /etc/logwisp/aggregator.toml
+quiet = false
+status_reporter = false
+auto_reload = false
+
+# Operational output to stderr: stdin is the data path and stdout carries nothing.
+[logging]
+output = "stderr"
+level = "warn"
+
+[[pipelines]]
+name = "fleet"
+
+# The console source puts the whole line in the entry message and leaves the
+# structured fields empty, which is the one combination `raw` passes through
+# untouched. Every key vi-fighter wrote — sub, run, tick, frame — survives.
+[pipelines.flow.format]
+type = "raw"
+sanitizer_policy = "raw"
+
+# One session at 10 Hz emits a snapshot record per visible group; ten of them is a
+# stream no browser panel needs in full. Drop rather than pass, so the cap holds.
+[pipelines.flow.rate_limit]
+rate = 400.0
+burst = 800.0
+policy = "drop"
+max_entry_size_bytes = 65536
+
+# Filters match "<source> <level> <message>", and the message here is the whole
+# JSON line, so the envelope this pipeline never parses is still selectable.
+[[pipelines.flow.filters]]
+type = "exclude"
+logic = "or"
+patterns = ["\"level\":\"TRACE\""]
+
+[[pipelines.plugin_sources]]
+id = "fleet"
+type = "console"
+[pipelines.plugin_sources.config]
+buffer_size = 4096
+
+# Loopback only. The allocator is the sole reader and the only component the
+# FreeBSD host's nginx reaches, so this port never crosses the bridge.
+[[pipelines.plugin_sinks]]
+id = "stream"
+type = "http"
+[pipelines.plugin_sinks.config]
+host = "127.0.0.1"
+port = 8081
+stream_path = "/stream"
+status_path = "/status"
+max_connections = 32
+client_buffer_size = 512
+write_timeout_ms = 5000

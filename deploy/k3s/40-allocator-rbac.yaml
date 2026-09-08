@@ -38,6 +38,13 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
+  # The session's own output, for the website's log panel. A pod log is the
+  # process's stdout verbatim, which is the only path that carries vi-fighter's
+  # JSON envelope intact; the sidecar's file source does not. Read-only, and it
+  # is not pods/exec by another name — nothing can be written into the container.
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
   # Why a session ended, for the allocator's own log. Events are read-only for the
   # same reason pods are.
   - apiGroups: [""]

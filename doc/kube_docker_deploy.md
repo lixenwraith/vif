@@ -22,7 +22,7 @@ because most of them change what that step should say.
 | A3 | **The jails are already using `rdr` rules.** The fleet's port range must not collide with theirs, and the fleet's rules must be evaluated in the same pass. §3 puts them in a named anchor so the two rulesets stay separable. | §3 |
 | A4 | **The Arch guest is on a private /24 behind a bhyve bridge.** The FreeBSD host is that subnet's gateway; the guest reaches the Internet and nothing reaches it unasked. The only public inbound path is the `rdr` in §3. §6 adds an `nftables` ruleset on the guest so that stays true of the guest's own network too, and so it survives a `pf` mistake. | §4 |
 | A5 | **Docker is a build tool here, not a runtime.** K3s runs containerd. Docker exists on the guest to build the image and is stopped afterwards, because its `iptables` rules and K3s's share one table. | §5 |
-| A6 | **One node, no registry.** Both the vi-fighter and LogWisp images are imported straight into the node's containerd and use `imagePullPolicy: IfNotPresent`. A second node or a real registry changes §7 and nothing else. | §7 |
+| A6 | **One node, no registry.** The vi-fighter image is imported straight into the node's containerd and every session container uses `imagePullPolicy: IfNotPresent`. A second node or a real registry changes §7 and nothing else. | §7 |
 | A7 | **A session is reached on its own port.** Ten NodePorts, one per container, forwarded as one range. It is the whole of the routing, and it is why the deployed session manifest sets no `-name`. §2 says what a single fixed public port would cost instead; §11 is that alternative, worked but not pursued. | §2 |
 | A8 | **The website path and the game connection are independent.** Hugo pages and the allocator API are HTTPS through the host's nginx; the game is raw TCP straight to a forwarded port and never passes through nginx. Page TLS therefore has no bearing on a join, and the allocator commissions the route without proxying it. | §2 |
 | A9 | **There is no authentication and no transport encryption, by decision.** Anyone who can reach a forwarded port can join the session behind it, and the link is public. What bounds a stranger is the forwarded surface being ten ports and nothing else. | §2 |
@@ -30,9 +30,10 @@ because most of them change what that step should say.
 | A11 | **The session's playout lead is chosen from its *first* guest's link** and holds for the life of the match. A session opened by a nearby player and joined by a distant one runs at the near player's lead. The late-crossing fence makes that cost freshness rather than correctness (fleet plan §5), but it is the reason a full-roster measurement (H3) is worth doing over real links rather than a LAN. | §9 |
 | A12 | **The resource envelope is unmeasured at a full roster.** The requests and limits in the manifest come from single-guest runs. Ten sessions per node is a claim until an hour of four-player play says otherwise. | §8 |
 | A13 | **Cluster commands in this procedure run through `sudo kubectl`.** K3s is installed with kubeconfig mode `0640`; the install script self-escalates, but the resulting kubeconfig is not made readable to the ordinary login user. | §6 |
-| A14 | **The LogWisp sidecar is a second local image, not a published image.** Its container, file hand-off and `/stream` endpoint are designed but have not run in a pod. The verified manual session used `-log-stdout` with the sidecar removed. | §7 |
+| A14 | **The fleet's log stream is fanned in on the node, not served from each pod.** A session writes its JSON lines to stdout, the allocator follows the pod log through the Kubernetes API, and one LogWisp on the guest serves the merged result. The in-pod sidecar is retained as the H9 experiment because its file source cannot carry the envelope intact; the acceptance run used the same `-log-stdout` shape with no sidecar. | §10 |
 | A15 | **Source-address preservation is intended, not proved.** `externalTrafficPolicy: Local` and `pf rdr` should leave the off-box player's address visible to the pod, but the acceptance run did not record it. The per-address admission bound depends on this. | §9 |
 | A16 | **The allocator and Hugo integration are designed, not built.** §10 fixes their location, credentials and API/page contract; none of that path was exercised by the acceptance run. | §10 |
+| A17 | **The pod log is the log contract.** `-log-stdout` puts vi-fighter's own JSON line on stdout and the Kubernetes pod-log endpoint returns it verbatim, so nothing between the session and the browser reinterprets the envelope. Anything that parses a line — the sidecar's file source today — is a component that can drop fields, and is therefore kept off this path. | §10 |
 
 ## 1. The shape
 
@@ -44,7 +45,8 @@ flowchart TD
     API --> Pod["vif -serve pod"]
     Alloc -->|"health + log stream"| Pod
     Term["Player's vif -join"] -->|"raw TCP, no nginx"| PF["FreeBSD pf rdr"] --> NP["NodePort"] --> Pod
-    Pod --> Vol["log volume"] --> Wisp["LogWisp sidecar"]
+    Pod -->|"stdout"| Log["pod log"] --> Alloc
+    Alloc -->|"stdin"| Wisp["LogWisp on the guest"] -->|"SSE"| Alloc
 ```
 
 What a session is, what bounds its life, and what it costs are in the fleet plan's
@@ -455,55 +457,46 @@ docker build --network host \
   --build-arg REVISION="$VIF_REVISION" \
   -t "vi-fighter:$VIF_TAG" .
 make image-check IMAGE_TAG="$VIF_TAG"
-
-LOGWISP_TAG=$(git -C "$LOGWISP_ROOT" rev-parse --short HEAD)
-LOGWISP_REVISION=$(git -C "$LOGWISP_ROOT" rev-parse HEAD)
-docker build --network host \
-  -f "$VIF_ROOT/deploy/docker/Dockerfile.logwisp" \
-  --build-arg VERSION="$LOGWISP_TAG" \
-  --build-arg REVISION="$LOGWISP_REVISION" \
-  -t "logwisp:$LOGWISP_TAG" "$LOGWISP_ROOT"
 ```
 
 `image-check` runs vi-fighter's own `-check` as UID 65532, read-only, with no
-network and no capabilities. LogWisp's main package is `./cmd/logwisp`, as its own
-Makefile declares; `Dockerfile.logwisp` builds that package with `CGO_ENABLED=0`,
-`-trimpath -ldflags="-s -w"`, then copies only the binary into `scratch` under the
-same numeric user. Its builder is pinned to the deployment's Go 1.27.1 baseline;
-the separate LogWisp repository still declares 1.26.5 and should raise that module
-minimum in its own follow-up change, not in this repository.
+network and no capabilities.
 
-With no registry (A6), import each image into the node's containerd and verify both
-names before stopping Docker. `IfNotPresent` in every session container is load
-bearing: a floating `:latest` would default to `Always` and bypass these imports.
+With no registry (A6), import the image into the node's containerd and verify the
+name before stopping Docker. `IfNotPresent` in every session container is load
+bearing: a floating `:latest` would default to `Always` and bypass this import.
 
 ```sh
 docker save "vi-fighter:$VIF_TAG" | sudo k3s ctr images import -
-docker save "logwisp:$LOGWISP_TAG" | sudo k3s ctr images import -
-sudo k3s ctr images ls | grep -E 'vi-fighter|logwisp'
+sudo k3s ctr images ls | grep vi-fighter
 sudo systemctl stop docker docker.socket
 sudo iptables -S FORWARD | head -1
 ```
 
-The sidecar's configured pipeline needs no writable filesystem. It reads
-`/var/log/vif` through the read-only shared mount, writes normalized JSON events to
-its own stdout, and serves them from the HTTP SSE sink on 8080; internal LogWisp
-output goes to stderr and no file sink is configured. The ConfigMap is mounted read-only
-at `/etc/logwisp`, config reload is disabled, the root filesystem is read-only, and
-the pod runs it as UID 65532 under the `restricted` policy. Separate containers do
-not share stdout, so a LogWisp console source cannot consume vif's `-log-stdout`;
-the shared JSONL file is the required hand-off.
+LogWisp is a host binary here, not an image: it runs beside the allocator on the
+guest and never enters a pod (A14). Its own Makefile builds `./cmd/logwisp`:
 
-Both `/stream` and `/status` are unauthenticated, and `/stream` emits
-`Access-Control-Allow-Origin: *`. `20-networkpolicy.yaml` is therefore the only
-thing keeping port 8080 off the player path; treat it exactly like the probe port.
-LogWisp supports TLS and mTLS with certificate-identity authorization, which is the
-eventual shape for an off-node stream reader. This proof of concept does not enable
-either.
+```sh
+make -C "$LOGWISP_ROOT" build
+"$LOGWISP_ROOT"/bin/logwisp --version
+sudo install -m 0755 "$LOGWISP_ROOT"/bin/logwisp /usr/local/bin/logwisp
+sudo install -d -m 0755 /etc/logwisp
+sudo install -m 0644 deploy/logwisp/aggregator.toml /etc/logwisp/aggregator.toml
+```
 
-For anything past the lab, publish both images and reference each **by digest**, not
-by tag. A tag can be moved; a session's logs then name a revision that is no longer
-what ran.
+`deploy/docker/Dockerfile.logwisp` builds the same package into a `scratch` layer
+under UID 65532 and is what H9 imports when the in-pod sidecar is tested; it is not
+needed to run the fleet. That sidecar's `/stream` and `/status` are unauthenticated
+and the stream sends a wildcard CORS header, so `20-networkpolicy.yaml` is the only
+thing keeping 8080 off the player path — treat it exactly like the probe port, and
+note that LogWisp's TLS and mTLS identity authorization, unused here, is the eventual
+answer for a reader that is not on the node. Both repositories pin Go 1.27.1 for the
+builder, and LogWisp's module still declares 1.26.5 — raise that in its own
+repository, not here.
+
+For anything past the lab, publish the vi-fighter image and reference it **by
+digest**, not by tag. A tag can be moved; a session's logs then name a revision that
+is no longer what ran.
 
 ## 8. Apply the fleet objects
 
@@ -512,7 +505,7 @@ sudo kubectl apply -f deploy/k3s/00-namespace.yaml
 sudo kubectl apply -f deploy/k3s/10-quota.yaml
 sudo kubectl apply -f deploy/k3s/20-networkpolicy.yaml
 sudo kubectl apply -f deploy/k3s/40-allocator-rbac.yaml
-sudo kubectl apply -f deploy/k3s/50-logwisp.yaml
+sudo kubectl apply -f deploy/k3s/50-logwisp.yaml   # only for an H9 sidecar render
 ```
 
 These are the boundary. The namespace enforces `restricted` Pod Security, the quota
@@ -549,28 +542,20 @@ and `EMPTY_GRACE` overrides. Use an extended value for the path and reboot gates
 then test the defaults separately.
 
 The session ID names the Kubernetes objects; the player sees only the port (A7).
-Choose one of two modes. The ordinary render uses the locally imported LogWisp
-image; the isolation render removes that container, both shared volumes, and changes
-vif from `-l=/var/log/vif` to `-log-stdout`:
+The default render is the deployed shape: one container, `-log-stdout`, no shared
+volume. Naming a LogWisp image instead adds the sidecar, which is the H9 experiment
+and not the log path this deployment uses:
 
 ```sh
 SESSION_ID=s1
 VIF_TAG=$(git rev-parse --short HEAD)
-LOGWISP_TAG=$(git -C "$LOGWISP_ROOT" rev-parse --short HEAD)
 
-# Sidecar mode.
-FIRST_JOIN=20m EMPTY_GRACE=20m LOGWISP_IMAGE="logwisp:$LOGWISP_TAG" \
-  ./deploy/k3s/render-session.sh "$SESSION_ID" 31700 "vi-fighter:$VIF_TAG" \
-  | sudo kubectl apply -f -
-
-# Isolation mode; use this instead when only the vif workload is under test.
-LOGWISP_IMAGE=none FIRST_JOIN=20m EMPTY_GRACE=20m \
+FIRST_JOIN=20m EMPTY_GRACE=20m \
   ./deploy/k3s/render-session.sh "$SESSION_ID" 31700 "vi-fighter:$VIF_TAG" \
   | sudo kubectl apply -f -
 ```
 
-Do not apply both examples to the same Job. Inspect the pod first, then make the
-EndpointSlice the first network check:
+Inspect the pod first, then make the EndpointSlice the first network check:
 
 ```sh
 SERVICE="vif-session-$SESSION_ID"
@@ -579,11 +564,11 @@ sudo kubectl -n vif get endpointslice \
   -l "kubernetes.io/service-name=$SERVICE" -o wide
 ```
 
-A pod showing `0/2`, including one healthy container and a sidecar in
-`ImagePullBackOff`, is not Ready. A Service with no ready endpoint makes kube-proxy
-install a reject path, so an outside client receives immediate `connection refused`.
-That symptom is not evidence of a `pf` or nftables fault. Resolve image and container
-readiness before sending any client traffic.
+A pod is Ready only when every container is, so a healthy session beside a second
+container in `ImagePullBackOff` shows `0/2` and is not Ready. A Service with no ready
+endpoint makes kube-proxy install a reject path, so an outside client receives
+immediate `connection refused`. That symptom is not evidence of a `pf` or nftables
+fault, and it is why the default render carries no second container.
 
 Once an endpoint exists, walk outward from the pod rather than inward from the
 Internet. `bash -c "</dev/tcp/host/port"` is enough when `nc` is absent:
@@ -643,20 +628,24 @@ sudo iptables-save -c | grep 'KUBE-POD-FW-'
 sudo iptables-save -c | grep 'KUBE-POD-FW-'
 ```
 
-The operator ports stay off the player path. `/health` always belongs to the
-session; port 8080 exists only in sidecar mode:
+The operator ports stay off the player path, and the pod log is the log contract
+(A17). Check that the line the API returns is the line the session wrote — the
+envelope keys, not just the payload — because everything in §10.3 rests on it:
 
 ```sh
 sudo kubectl -n vif port-forward job/vif-session-$SESSION_ID 7778:7778 &
 curl -s localhost:7778/health
 curl -s localhost:7778/metrics | head
 
-# Sidecar mode only; these checks remain unverified until Part C runs in-pod.
-sudo kubectl -n vif port-forward job/vif-session-$SESSION_ID 8080:8080 &
-curl -sN localhost:8080/stream | head
-curl -s localhost:8080/status
-sudo kubectl -n vif logs job/vif-session-$SESSION_ID -c logwisp | head
+sudo kubectl -n vif logs job/vif-session-$SESSION_ID --tail=1 \
+  | python3 -c 'import json,sys; print(sorted(json.loads(sys.stdin.read())))'
+# expect: the vif envelope, ['fields', 'frame', 'level', 'run', 'sub', 'tick', 'time']
 ```
+
+A `sub` or `tick` missing here means the runtime prefixed or rewrote the line, and
+the aggregator's raw pass-through is carrying something other than what was written.
+The sidecar's `/stream`, `/status` and `kubectl logs -c logwisp` are checked only
+when H9 renders one; they are not part of this gate.
 
 There is one health path. Its code answers whether the process should live; the
 body carries `ready`, `phase`, `guests`, `capacity`, and `expires_in`. A vacant pod
@@ -669,12 +658,14 @@ guest, wait for the node and endpoint to return, then repeat the `FORWARD` check
 the nftables table audit, and one off-box NodePort join. That proves the loaded
 ruleset matches its files; it does not claim an in-memory match survived the boot.
 
-Source preservation remains a separate open gate (A15). A successful accepted-peer
-log record must show the off-box player's address, not the node, bridge gateway, or
-pod network. The current build does not include that remote address on its successful
-admission log, so this cannot yet be proved from the run's journal. Add that field in
-a separate code change, then repeat the remote join. If the address is rewritten,
-the per-address admission limiter becomes one shared budget for the whole fleet.
+Source preservation remains a separate open gate (A15) and is the one place this
+deployment needs a code change. The address is already carried —
+`network.JoinerReport.Remote` holds `conn.RemoteAddr()` and reaches
+`App.noteJoinerReport` — but only `reach.noteDeclared` reads it, so no record names
+it and the run's journal cannot settle the question. Add the field to the admitted-
+participant record in `internal/app/host.go`, then repeat the remote join. If the
+address is rewritten, the per-address admission limiter becomes one shared budget
+for the whole fleet.
 
 The following lifecycle cases were **not** proved by the run because every manual
 session used extended timers. They remain gates rather than results:
@@ -709,10 +700,11 @@ traffic still bypasses nginx and the allocator completely (A8).
 
 The allocator runs on the Arch guest; this is not an interchangeable placement.
 The run showed kube-router installing a node-local-source allowance before the pod
-policy path. A process on the node can therefore read a session pod's `/health` and
-LogWisp endpoints directly on the pod IP. A process on the FreeBSD host or another
-machine cannot: `allow-operator-ports` admits 7778 and 8080 only from the monitoring
-namespace, and moving the allocator there would require widening that policy.
+policy path. A process on the node can therefore read a session pod's `/health`
+directly on the pod IP. A process on the FreeBSD host or another machine cannot:
+`allow-operator-ports` admits 7778 and 8080 only from the monitoring namespace, and
+moving the allocator there would require widening that policy. It also holds the
+node aggregator's loopback stream (§10.3), which nothing off the guest can reach.
 
 Port 6443 never leaves the Arch guest. The allocator connects to
 `https://127.0.0.1:6443`; the FreeBSD host reaches only the allocator's HTTP port
@@ -763,10 +755,12 @@ CORS from the design; do not replace it with `Access-Control-Allow-Origin: *`.
 ### 10.2 Credential and API
 
 [`40-allocator-rbac.yaml`](../deploy/k3s/40-allocator-rbac.yaml) defines the entire
-permission surface: create/read/watch/delete Jobs and Services, and read/watch pods
-and events in `vif`. The allocator must not use `/etc/rancher/k3s/k3s.yaml` or a copy
-of the node's root kubeconfig. Mint a token for the `vif-allocator` ServiceAccount
-and construct a dedicated kubeconfig around that identity:
+permission surface: create/read/watch/delete Jobs and Services, read/watch pods and
+events, and read pod logs, in `vif` and nowhere else. `pods/log` is what §10.3 reads
+and is the only addition the log panel needs; `pods/exec`, `pods/portforward` and
+every write verb stay absent. The allocator must not use
+`/etc/rancher/k3s/k3s.yaml` or a copy of the node's root kubeconfig. Mint a token
+for the `vif-allocator` ServiceAccount and build a kubeconfig around that identity:
 
 ```sh
 ALLOC_KUBECONFIG=/etc/vif-allocator/kubeconfig
@@ -799,23 +793,64 @@ The page-facing session API has two endpoints:
 | `POST /api/vif/sessions` | Refuse before creation when all ten ports are held; otherwise create the Job, read its UID, create its owner-referenced Service, wait for `live=true ready=true`, and return the session page URL, join target, and health-derived state. |
 | `GET /api/vif/sessions` | List live, non-completed Jobs and return one row per session. `guests`/`capacity`, `phase`, and `expires_in` come from that pod's `/health`; only the process can report the last field. |
 
-The log panel uses a third, read-only stream:
+The log panel uses a third, read-only stream, built in §10.3:
 
 | Method and path | Contract |
 |---|---|
-| `GET /api/vif/logs` | After H9 makes the source lossless, fan in each live pod's node-local LogWisp `/stream`, attach the session ID and public port to every event, and serve one same-origin SSE feed. Never expose a pod IP or its unauthenticated 8080 endpoint to the browser. |
+| `GET /api/vif/logs` | Reverse-proxy the node aggregator's SSE stream, unbuffered. Never expose a pod IP, a pod port, or the aggregator's own address to the browser. |
 
 An iframe is an acceptable first rendering only if it targets this same-origin
-fan-in. The ordinary page should use `EventSource`, bound its retained rows and
+path. The ordinary page should use `EventSource`, bound its retained rows and
 reconnect delay, and keep the allocator between the browser and every pod.
 
-### 10.3 Reconciliation and page obligations
+### 10.3 The log path
+
+The website's panel wants every session's output in one stream. What decides the
+shape is that **vi-fighter's log envelope survives exactly one path** (A17):
+
+| Path | What arrives |
+|---|---|
+| Pod stdout → Kubernetes pod log | The line as written. `-log-stdout` puts vi-fighter's own JSON on stdout and the API returns it byte for byte. |
+| LogWisp console source → `raw` format | The line as written. The source puts the whole line in the entry's message and leaves its fields empty, which is the one combination `raw` passes through. |
+| LogWisp file source → any format | `time`, `level` and `fields` only. It unmarshals every valid JSON object into a narrower envelope, so `sub`, `run`, `tick` and `frame` are gone before the formatter is consulted and `raw` cannot restore them. |
+
+The first two compose and the third is why the in-pod sidecar is not on this path.
+So: the session writes to stdout, the allocator follows each live pod's log, and
+one LogWisp on the guest reads the merged lines on standard input and serves them
+as SSE on loopback — [`deploy/logwisp/aggregator.toml`](../deploy/logwisp/aggregator.toml).
+
+```sh
+sudo install -m 0644 deploy/logwisp/aggregator.toml /etc/logwisp/aggregator.toml
+logwisp -c /etc/logwisp/aggregator.toml        # the allocator spawns this
+curl -sN 127.0.0.1:8081/stream | head          # one vif JSON line per data: field
+```
+
+Run it as a child of the allocator rather than as its own service. One process then
+holds the cluster credential, the stream ends when its writer does, and no second
+component needs a token. LogWisp is there for what the allocator would otherwise
+build: the SSE server, the per-client queues, the connection ceiling, the rate limit
+and the filters.
+
+Four obligations on the allocator's side of that pipe:
+
+| Obligation | Why |
+|---|---|
+| Splice `"session"` and `"port"` into each line after the opening brace, preserving every original key. | The panel must name the session, and the pass-through has no other place to carry it. Re-serializing the object instead is the field loss this path exists to avoid. |
+| Follow each pod's log with a bounded restart, and never re-read from the start on reconnect. | A follow that restarts from the beginning replays a whole match into the panel. |
+| Bound what it writes, and let a slow stream drop rather than block. | Ten sessions emitting a status snapshot per group at 10 Hz will outrun a browser; the aggregator's rate limit is the second half of that bound, not the first. |
+| Reverse-proxy `/api/vif/logs` to `127.0.0.1:8081/stream` with response buffering off. | The aggregator must not bind an address the bridge can reach, so the allocator's one open port stays the whole guest surface (§10.1). |
+
+The panel is a viewer of operational data. `fields.msg` is the record discriminator
+on every line; `sub="stat"` marks the status snapshots that carry the metric values,
+and a panel that does not want them filters on that key rather than on a group name.
+
+### 10.4 Reconciliation and page obligations
 
 | Obligation | Why it is required |
 |---|---|
 | Rebuild the port map by listing Jobs on allocator start. | Kubernetes is the state; allocator memory is a cache. |
 | Create the Job first, then set the Service's `ownerReferences` to that Job UID. | The endpoint must disappear with the match rather than hold a NodePort after it. |
-| Wait for `live=true ready=true`, not pod `Running`. | One failed sidecar leaves no ready endpoint, and a running game process may still be building its world. |
+| Wait for `live=true ready=true`, not pod `Running`. | Any unready container leaves the Service with no endpoint, and a running game process may still be building its world. |
 | Refuse at ten before calling the API. | The quota is a backstop, not the player-facing capacity response. |
 | Never resurrect a completed Job. | A completed Job is a finished in-memory match; its former port has returned to the pool. |
 
@@ -861,21 +896,17 @@ against.
 
 ## 12. Operating
 
-**Where a session is designed to say what it did.** In sidecar mode, vif writes JSON
-lines to the shared volume; LogWisp tails them, puts normalized events on its stdout
-(`kubectl logs -c logwisp`), and serves them on `/stream`. The metric field values
-enter that stream because `internal/status` emits the registry as `sub="stat"`
-records, although the current normalizer loses that top-level classification.
-This path is not yet an operating claim: the sidecar has not run in a pod (A14).
-The verified manual sessions instead used `-log-stdout` with the sidecar stripped.
+**Where a session says what it did.** `kubectl logs job/vif-session-<id>` is the
+whole of it: the session writes its JSON lines to stdout and the API returns them
+unchanged, metric values included, because `internal/status` emits the registry as
+`sub="stat"` records into the same log. §10.3 fans that into one stream for the
+website; nothing between the two reinterprets a line.
 
-The current LogWisp file source parses vif's JSON into a narrower envelope before
-formatting. It does not carry vif's top-level `sub`, `run`, `tick`, or `frame`, so
-`type = "raw"` would emit the parsed message/map rather than preserve the input; the
-ConfigMap uses normalized JSON instead. A lossless/pass-through source is still
-needed before the website can treat `sub="stat"` or the original timing envelope as
-intact. The source also seeks to the end when it first discovers an existing file,
-so concurrent startup can skip lines written before the watcher attaches. One line
+Two LogWisp behaviours decide that shape and are worth keeping in mind before
+anyone moves the source. Its file source keeps only `time`, `level`, top-level
+`msg` and `fields`, so a vif line loses `sub`, `run`, `tick` and `frame` there
+whatever the format says. It also seeks to end-of-file when it first discovers an
+existing file, so lines written before the watcher attaches are skipped. One line
 is intended to end every session and name why:
 
 ```json
@@ -935,12 +966,14 @@ verified ones. The full gap register is the fleet plan's
   successful accepted connection's remote address, so the run could not prove the
   admission limiter sees each player rather than one rewritten address for the
   whole fleet.
-- **The LogWisp sidecar has never run in a pod** (A14). Lossless preservation of
-  vif's envelope, `/stream`, its status path, `kubectl logs -c logwisp`, the
-  read-only filesystem boundary, and early-line behaviour all remain open checks.
+- **The node log aggregator has not been run against a live session** (A14). The
+  pieces are each verified in isolation — `-log-stdout` in a pod during the run, and
+  LogWisp's console source and `raw` format from its own contract — but no allocator
+  has yet spliced a session ID into a followed pod log and served the result.
+  The in-pod sidecar remains a separate, deferred experiment (H9).
 - **The allocator and website integration are not built** (A16). The API, restricted
-  kubeconfig, nginx bridge path, Hugo session page, and aggregate log feed in §10
-  are contracts for the next task.
+  kubeconfig, nginx bridge path, Hugo session page, and the log path in §10 are
+  contracts for the next task.
 - **The lifecycle gates were not exercised.** First-join expiry, empty grace and the
   drain after deleting a Job were all bypassed by extended debugging timers.
 - **Losing the pod ends the session, and that is intended.** The manifest pins

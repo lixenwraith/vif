@@ -105,11 +105,10 @@ spec:
             # address and the guests reconnect there.
             - "-authority"
             - "host"
-            # A file rather than stdout: the sidecar tails the directory and puts
-            # normalized events on its own stdout, so `kubectl logs -c logwisp`
-            # works and a live stream exists for readers that are not on the node.
-            # Drop the sidecar and this volume and use -log-stdout instead if a
-            # deployment wants nothing but `kubectl logs`.
+            # The sidecar shape, which is not what the deployment runs: render-session.sh
+            # and the allocator substitute -log-stdout and drop the container, because
+            # only the pod log carries this envelope intact (doc §10.3). Kept because
+            # H9 tests the in-pod stream against exactly this.
             - "-l=/var/log/vif"
             - "-lv"
             - "info"
@@ -182,12 +181,10 @@ spec:
           # decision and it refuses at the handshake; the allocator reads the same
           # answer from the health body's `ready` and `phase` fields when it is
           # choosing where to send the next player.
-        # The log sidecar. It reads what the session wrote and serves it as
-        # Server-Sent Events on a cluster-internal port; the session's own metrics
-        # travel in that stream, because internal/status emits the whole registry
-        # into the log on a tick cadence. Not linked into vif: a session process
-        # that also served a log stream would have a second listener and a second
-        # failure mode, for something the sidecar does without touching the game.
+        # The log sidecar, rendered only when an image is named. It serves what the
+        # session wrote as Server-Sent Events on a cluster-internal port, metrics
+        # included, since internal/status emits the whole registry into the log. Not
+        # linked into vif: a second listener in the session is a second failure mode.
         - name: logwisp
           image: ${LOGWISP_IMAGE}
           imagePullPolicy: IfNotPresent

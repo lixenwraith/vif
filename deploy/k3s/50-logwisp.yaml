@@ -1,20 +1,13 @@
-# Live log streaming beside a session.
+# The log sidecar's configuration, for the H9 in-pod experiment only.
 #
-# The metrics a session publishes are already in its log: internal/status emits the
-# whole registry as `sub="stat"` records on a tick cadence, one record per group, so
-# a reader of the log stream is reading the gauges too. What was missing was a way
-# to read that stream while the session is running, from somewhere other than the
-# node — `kubectl logs -f` is that for an operator with cluster access, and nothing
-# for anyone else.
+# LogWisp (github.com/lixenwraith/logwisp) tails a directory of JSON lines and
+# serves them as Server-Sent Events. A sidecar rather than a second listener in
+# vif, and a session's metrics ride the same stream because internal/status emits
+# the whole registry into the log.
 #
-# LogWisp (github.com/lixenwraith/logwisp) is the piece that closes it: a single
-# static binary that tails a directory of JSON lines and serves them as
-# Server-Sent Events. It runs as a sidecar rather than being linked into vif,
-# because a session process that also served a log stream would be a session
-# process with a second listener and a second failure mode.
-#
-# Apply this ConfigMap once; the session template mounts it when the sidecar is
-# enabled. See doc/kube_docker_deploy.md §9.
+# What the deployment actually runs is the node-level fan-in in
+# deploy/logwisp/aggregator.toml: the file source below cannot carry vi-fighter's
+# envelope intact and the pod log can. See doc/kube_docker_deploy.md §10.3.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -37,13 +30,16 @@ data:
     [[pipelines]]
     name = "session"
 
-    # The file source parses each input line into LogWisp's narrower envelope.
-    # JSON keeps the current output structured; H9 tracks lossless pass-through.
+    # The file source unmarshals every valid JSON object into LogWisp's narrower
+    # envelope, keeping only time, level, top-level msg and fields — so sub, run,
+    # tick and frame are gone before the formatter runs, and `raw` cannot restore
+    # them. JSON is therefore the honest setting here; H9 is the fix.
     [pipelines.flow.format]
     type = "json"
 
-    # Containers do not share stdout. The read-only shared file is the hand-off;
-    # a console source cannot consume the session container's stdout.
+    # Containers do not share stdout, so a console source cannot consume the
+    # session container's; inside the pod the read-only shared file is the only
+    # hand-off there is.
     [[pipelines.plugin_sources]]
     id = "vif"
     type = "file"
