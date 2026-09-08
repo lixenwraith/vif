@@ -176,9 +176,9 @@ func (a *App) sessionSummaryLocked() string {
 		}
 	}
 	// Reachability, which is what decides whether losing the authority moves the
-	// session or forks it. A participant that binds nothing plays normally and is
-	// never elected, so it is worth saying which one this is.
-	if n := reg.Ints.Get("network.reachable").Load(); n > 0 {
+	// session or forks it. The chain is the address book a survivor dials down, so
+	// its size is how many participants can be reached at all.
+	if n := reg.Ints.Get("network.chain").Load(); n > 0 {
 		line += fmt.Sprintf(", %d confirmed reachable", n)
 	}
 	if reg.Bools.Get("network.listening").Load() {

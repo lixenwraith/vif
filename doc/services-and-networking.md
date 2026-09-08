@@ -273,7 +273,7 @@ free to dial a hand-built fixture.
 dialer before it costs the session anything. The expensive part of a join is not
 the handshake but what follows it: on a running host the admission reads, encodes
 and sends a whole world, so a peer that joins and leaves in a loop spends one
-connect per capture. `app.admissionLimiter` gives each dialling host
+connect per capture. `network.AdmissionLimiter` gives each dialling host
 `parameter.NetworkAdmitBurst` admissions per `NetworkAdmitWindow`, keyed by address
 rather than by identity — an identity is what the attack consumes and is released
 the moment the connection drops. A refusal is written back as a `MsgJoinReply`

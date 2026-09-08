@@ -87,7 +87,7 @@ func persistentTelemetryKey(kind, key string) bool {
 	// This instance's own listening port and the addresses it holds belong to the
 	// session too: a reset starts a new run inside it and does not unbind a socket
 	// or forget where the other participants are.
-	case "network.listening", "network.reachable":
+	case "network.listening", "network.chain":
 		return true
 	}
 	switch kind {

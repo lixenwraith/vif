@@ -1,7 +1,9 @@
 package app
 
 import (
+	"fmt"
 	"net"
+	"strings"
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/network"
@@ -203,5 +205,30 @@ func TestAGuestAdmitsAPeerLink(t *testing.T) {
 	}
 	if err := guest.admitPeerLink(3); err == nil {
 		t.Fatal("a guest admitted a link from itself")
+	}
+}
+
+// TestTheSessionLineReportsTheAddressesItHolds pins a summary field against the
+// counter that actually carries it. "confirmed reachable" is the size of the
+// address book a survivor dials down, which is network.chain; reading an
+// unregistered key would return a detached cell, so the line could never say it
+// and every read would count itself late.
+func TestTheSessionLineReportsTheAddressesItHolds(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {1, 3}}, 2, 3)
+	host := apps[0]
+	host.corrections.driveAuthority()
+
+	chain := statOf(host, "network.chain")
+	if chain == 0 {
+		t.Fatal("a session with a published chain reports no candidates")
+	}
+	late := statOf(host, "stat.late")
+	summary := host.SessionSummary()
+	if want := fmt.Sprintf("%d confirmed reachable", chain); !strings.Contains(summary, want) {
+		t.Fatalf("session line %q does not report %q", summary, want)
+	}
+	if got := statOf(host, "stat.late"); got != late {
+		t.Fatalf("the session line registered %d late metric(s)", got-late)
 	}
 }

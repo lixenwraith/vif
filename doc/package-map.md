@@ -62,11 +62,11 @@ render abstraction, while the orchestrator owns the terminal capability.
 |---|---|
 | `cmd/vif` | Grouped config/log/session flags including startup host/join selection, logging/journal/runtime-capture setup, replay/script/watch/check/schema selection, process exit policy. |
 | `internal/content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. Internal because it depends on game `core.CodeBlock`. |
-| `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, drive frame/input/playback/script loops, capture and install the shared world, run the correction cadence and authority succession, choose the session's playout lead, own this participant's listening port and the reachability map peers dial from, and verify anchor/config identity. |
+| `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, drive frame/input/playback/script loops, capture and install the shared world, run the correction cadence and authority succession, choose the session's playout lead, own this participant's listening port and the reachability map peers dial from, and verify anchor/config identity. It owns the correction and authority protocol rather than delegating it: both read and write the live world under its lock, so a package boundary between them would be an interface over `*App` rather than a smaller unit. |
 | `internal/asset` | Embedded default FSM files, embedded tutorial corpus, built-in splash bitmap font. |
 | `internal/component` | Pure ECS component data and related enums/masks. Position is declared here but stored specially by `engine`. |
 | `internal/core` | Small shared value types, entity ID and replication domain, modes, code blocks, the deterministic dependency resolver both `service` and `engine` order with, crash and stderr-capture support. |
-| `internal/engine` | World, typed stores, positions/spatial grid, resources, game context/state, pausable/manual clocks, time control, scheduler, locking. |
+| `internal/engine` | World, typed stores, positions/spatial grid, resources, game context/state, pausable/manual clocks, time control, scheduler, locking, and the roster/control re-derivation an install performs over the cursor store. |
 | `internal/event` | Event catalog/payload registry, producer origins, replay record/anchor schema, MPSC queue, handler router, pooled/batched payload support. |
 | `internal/fsm` | Generic hierarchical, parallel-region machine; TOML graph loader; transitions, delayed actions, variables, per-region trigger masks, and optional transition/region observation hooks. |
 | `internal/fsm/std` | Reusable HFSM actions/guards and host capability interface. It does not import the game engine. |
@@ -75,7 +75,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/lifecycle` | The allocated session's lifetime policy: a pure state machine over an injected clock turning roster observations into a phase (waiting, occupied, vacant, draining, expired), a deadline, and whether a dial may still be admitted. It opens nothing, reads no roster, and terminates nothing — the run supplies the observations and acts on the phase. |
 | `internal/manifest` | Authoritative component/system/renderer lists, the simulation fingerprint two participants must share,, generated builders, game binding for the generic FSM, and the JSON schema dump the map editor consumes. |
 | `internal/mode` | Mode ownership, intent execution, motions/operators/search, mouse handling, macros, command mode, undo/history. |
-| `internal/network` | Length-prefixed TCP transport, optional TLS configuration, anchor/start/ready session protocol, the peer-link handshake two participants open a stream with, the succession chain a handoff reads, peers, sequence/ack fields, and bounded inbound notifications. |
+| `internal/network` | Length-prefixed TCP transport, optional TLS configuration, anchor/start/ready session protocol, the peer-link handshake two participants open a stream with, the succession chain a handoff reads, peers, sequence/ack fields, bounded inbound notifications, and the per-address dial budget the coordinator admits against. |
 | `internal/parameter` | Gameplay constants, timing, priorities, effect/audio tuning, and navigation/genetics settings. |
 | `internal/parameter/visual` | Renderer-facing characters, masks, palettes, gradients, shapes, and post-process settings. |
 | `internal/paths` | Platform config-root and user-state discovery, categorized resource names, and deprecated fallback names; performs no resource I/O. |
@@ -85,7 +85,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |
 | `internal/service` | Dependency-ordered lifecycle hub and mode-selected adapters for terminal, content, audio, and network transport. |
-| `internal/snapshot` | Shared-capture wire model: the capture and its header, the compressed JSON envelope, the correction manifest with its pages and section hashes, the selective shard set, and the comparison-surface key filters with their line format and diff. Reads no world and takes no lock. |
+| `internal/snapshot` | Shared-capture wire model: the capture and its header, the compressed JSON envelope, the correction manifest with its pages and section hashes, and the selective shard set — none of which reads a world. Also the comparison surface: the key filters, the line format and diff, the per-store digest, the assembled shared and whole-instance line sets, and the capture/correction telemetry cells. The surface readers take the caller's world lock and never acquire one. |
 | `internal/status` | Registered atomic metrics closed by `Freeze`, per-slot player metrics and the bare key that mirrors this instance's own slot, sorted/grouped snapshots, duration formatting, and the tick-sampled flight recorder. |
 | `internal/system` | Gameplay mechanics and event handlers. Systems are constructed from the manifest and run in priority order. |
 | `internal/vlog` | Build-tagged logger facade: levels, scopes, correlation stamps, correlated sets, standalone files, crash flush, and the ungated journal sink; no-op on WASM/`novlog`. |
@@ -157,7 +157,7 @@ The practical dependency rules are:
 
 1. `cmd` may depend on `internal/app`, `internal/resource` and `internal/manifest`; lower packages must not depend on `cmd`.
 2. `app` may compose all runtime layers; domain packages should not import it.
-3. `snapshot` and `resource` are leaf packages below `app`: the first owns the capture wire model and the comparison surface, the second the config-root precedence rule. Neither reads a world or holds a lock, and neither imports `app`.
+3. `snapshot` and `resource` sit below `app`: the first owns the capture wire model and the comparison surface, the second the config-root precedence rule. Neither imports `app`, and neither acquires a lock — the surface readers walk a world the caller has already locked, and the wire model reads none at all.
 4. `journal` owns deterministic input-stream mechanics and may depend on event and input values, while App-specific construction, presentation, and session startup stay above it.
 5. `engine` owns data/lifecycle infrastructure but should not import concrete
    gameplay systems or renderers.
