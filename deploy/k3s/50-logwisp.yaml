@@ -28,6 +28,7 @@ data:
     # One pipeline: the session's log directory in, two sinks out.
     quiet = false
     status_reporter = false
+    auto_reload = false
 
     [logging]
     output = "stderr"
@@ -36,21 +37,23 @@ data:
     [[pipelines]]
     name = "session"
 
-    # raw, because the entries are already the JSON lines vif wrote. Reformatting
-    # them would re-wrap one JSON document inside another and cost every reader a
-    # second parse for nothing.
+    # The file source parses each input line into LogWisp's narrower envelope.
+    # JSON keeps the current output structured; H9 tracks lossless pass-through.
     [pipelines.flow.format]
-    type = "raw"
+    type = "json"
 
+    # Containers do not share stdout. The read-only shared file is the hand-off;
+    # a console source cannot consume the session container's stdout.
     [[pipelines.plugin_sources]]
     id = "vif"
     type = "file"
     [pipelines.plugin_sources.config]
     directory = "/var/log/vif"
     pattern = "vif-log-*.jsonl"
+    check_interval_ms = 100
 
-    # The container's own stdout, so `kubectl logs -c logwisp` shows the session's
-    # log even though the session writes to a file rather than to stdout.
+    # The container's stdout carries normalized events for `kubectl logs`; the
+    # session writes the source JSONL to the shared file instead.
     [[pipelines.plugin_sinks]]
     id = "stdout"
     type = "console"
@@ -70,3 +73,6 @@ data:
     stream_path = "/stream"
     status_path = "/status"
     max_connections = 8
+
+    # There is no file sink and internal logs go to stderr. This pipeline opens
+    # the mounted log directory only for reading and needs no writable path.

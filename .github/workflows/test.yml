@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Build and Test on Go 1.26
+    name: Build and Test on Go 1.27.1
     runs-on: ubuntu-latest
 
     steps:
@@ -18,7 +18,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.26.x'
+        go-version: '1.27.1'
         cache: true
 
     - name: Download dependencies
@@ -43,4 +43,3 @@ jobs:
         name: race-detector-logs
         path: race.*
         retention-days: 7
-

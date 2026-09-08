@@ -15,7 +15,9 @@
 #
 # The result is one layer of about 13 MB. See doc/kube_docker_deploy.md.
 
-ARG GO_VERSION=1.26.5
+# Keep this pin equal to the go directive in ../../go.mod. The dependency layer
+# downloads before an older builder reports the mismatch, so drift fails late.
+ARG GO_VERSION=1.27.1
 
 # --- builder -------------------------------------------------------------------
 # The builder is not thin and does not need to be; nothing from it is shipped

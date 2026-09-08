@@ -53,7 +53,7 @@ for headless recordings, not arbitrary live sessions or across platforms.
 
 ## Build and run
 
-The module currently declares Go 1.26.5.
+The module currently declares Go 1.27.1.
 
 ```bash
 git clone https://github.com/lixenwraith/vi-fighter --depth 1

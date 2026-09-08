@@ -9,7 +9,9 @@
 #   ${GAME_NODEPORT}   the node port this session is reachable on (30000-32767)
 #   ${PLAYERS}         the guest ceiling for this session (1-16)
 #   ${MAP_SIZE}        the shared map geometry, WxH (e.g. 120x40)
-#   ${LOGWISP_IMAGE}   the logwisp sidecar image; omit the sidecar to drop it
+#   ${LOGWISP_IMAGE}   the locally available logwisp sidecar image
+#   ${FIRST_JOIN}      the first-guest deadline (normally 90s)
+#   ${EMPTY_GRACE}     the empty-roster grace (normally 90s)
 #
 # Why a Job rather than a Deployment: an allocated session is a thing that ends.
 # It ends when nobody claimed it, when everybody left, or when it was asked to go,
@@ -69,6 +71,7 @@ spec:
         # pod that never became ready.
         - name: config-check
           image: ${IMAGE}
+          imagePullPolicy: IfNotPresent
           args: ["-check", "-d"]
           securityContext: &container_security
             allowPrivilegeEscalation: false
@@ -86,6 +89,7 @@ spec:
       containers:
         - name: session
           image: ${IMAGE}
+          imagePullPolicy: IfNotPresent
           args:
             - "-serve"
             - ":7777"
@@ -102,7 +106,7 @@ spec:
             - "-authority"
             - "host"
             # A file rather than stdout: the sidecar tails the directory and puts
-            # the same lines on its own stdout, so `kubectl logs -c logwisp` still
+            # normalized events on its own stdout, so `kubectl logs -c logwisp`
             # works and a live stream exists for readers that are not on the node.
             # Drop the sidecar and this volume and use -log-stdout instead if a
             # deployment wants nothing but `kubectl logs`.
@@ -125,9 +129,9 @@ spec:
             # session survives after the last of them leaves, which is also the
             # window a player who dropped has to dial back into their own slot.
             - "-first-join"
-            - "90s"
+            - "${FIRST_JOIN}"
             - "-empty"
-            - "90s"
+            - "${EMPTY_GRACE}"
             # A termination signal stops admitting and waits this long for the
             # roster to empty before exiting anyway. Kept under the grace period
             # above so the process, not the kubelet, decides when the match ends.
@@ -183,9 +187,10 @@ spec:
         # travel in that stream, because internal/status emits the whole registry
         # into the log on a tick cadence. Not linked into vif: a session process
         # that also served a log stream would have a second listener and a second
-        # failure mode, for something a 4 MiB sidecar does without touching the game.
+        # failure mode, for something the sidecar does without touching the game.
         - name: logwisp
           image: ${LOGWISP_IMAGE}
+          imagePullPolicy: IfNotPresent
           args: ["-c", "/etc/logwisp/logwisp.toml"]
           ports:
             - name: logstream

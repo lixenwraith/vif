@@ -6,7 +6,7 @@ responsibility map is in [Package map](package-map.md).
 
 ## 1. Toolchain and dependencies
 
-`go.mod` declares Go `1.26.5`; use that version or a compatible newer toolchain.
+`go.mod` declares Go `1.27.1`; use that version or a compatible newer toolchain.
 The application has no CGO requirement, but it is not standard-library-only.
 Direct modules currently provide:
 
@@ -500,7 +500,7 @@ manual smoke test because unit tests do not reproduce every emulator.
 ## 6. Current CI workflow
 
 `.github/workflows/test.yml` runs on pushes to selected development branches
-and pull requests to `main`, `master`, or `develop`. Its single Go 1.26 job
+and pull requests to `main`, `master`, or `develop`. Its single Go 1.27.1 job
 downloads modules, runs `go vet ./...`, builds `./...`, and runs
 `go test -race -v ./...` with race output redirected to `race.*`; those files
 are uploaded for seven days on failure.

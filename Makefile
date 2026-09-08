@@ -68,7 +68,7 @@ check-go:
 			esac; \
 		else \
 			echo "Automatic installation unavailable (or apt packages outdated)."; \
-			echo "Install Go 1.26+ manually:"; \
+			echo "Install Go 1.27.1+ manually:"; \
 			echo "  1. Download: https://go.dev/dl/"; \
 			echo "  2. Extract to /usr/local"; \
 			echo "  3. Add /usr/local/go/bin to PATH"; \

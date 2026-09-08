@@ -51,7 +51,7 @@ The status bar reports an active selection as `dom:shared` in the filter stack s
 
 ## Build & Run
 
-Requires Go 1.26+ (Wayland environment natively supported via underlying TUI library).
+Requires Go 1.27.1+ (Wayland environment natively supported via underlying TUI library).
 
 `vif-log` lives in the `vi-fighter` module. From the repository root:
 
