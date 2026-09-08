@@ -204,7 +204,7 @@ func (u *authority) admit(term network.AuthorityTerm, from uint32) bool {
 		u.refuse(from, term, "carries no authority term")
 		return false
 	case term < held:
-		u.a.snapshotTelemetry.staleTerm.Add(1)
+		u.a.telemetry.StaleTerm.Add(1)
 		return false
 	case term == held:
 		return true

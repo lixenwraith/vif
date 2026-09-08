@@ -25,6 +25,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/render"
 	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/service"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 	"github.com/lixenwraith/vi-fighter/internal/system"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
@@ -122,11 +123,11 @@ type App struct {
 	// with the App rather than with the session because a run can open one later
 	// with :host, and a budget that started when hosting did would be a budget
 	// reset by whatever closed the last session.
-	admissions *admissionLimiter
+	admissions *network.AdmissionLimiter
 
-	// snapshotTelemetry is reserved during construction so a capture or an install
-	// can publish its cost into a registry that is frozen by then.
-	snapshotTelemetry snapshotTelemetry
+	// telemetry is reserved during construction so a capture or an install can
+	// publish its cost into a registry that is frozen by then.
+	telemetry snapshot.Telemetry
 
 	// corrections is the authority half of a session: the host's publication
 	// cadence or a guest's apply loop, whichever this run turns out to be. It
@@ -164,7 +165,7 @@ func New(cfg Config) (*App, error) {
 	a := &App{
 		cfg:        cfg,
 		hub:        service.NewHub(),
-		admissions: newAdmissionLimiter(),
+		admissions: network.NewAdmissionLimiter(),
 		life:       lifecycle.New(cfg.Lifetime),
 	}
 	// Before init, because initWorld binds the correction queue to whatever
@@ -339,7 +340,7 @@ func (a *App) initWorld() {
 	service.MustGet[*service.ContentService](a.hub, "content").
 		PublishStatus(a.world.Resources.Status)
 	ensureAuthorityCells(a.world.Resources.Status)
-	a.snapshotTelemetry = newSnapshotTelemetry(a.world.Resources.Status)
+	a.telemetry = snapshot.NewTelemetry(a.world.Resources.Status)
 	a.authority = newAuthority(a)
 	a.reach = newReach(a)
 

@@ -260,7 +260,7 @@ func (a *App) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal 
 		// The roster and every cursor's control assignment are read before the
 		// stores are replaced, because both are re-derived from this instance's own
 		// position afterwards rather than adopted (D-13).
-		local := a.captureCursorControlLocked()
+		local := a.world.CaptureCursorControl()
 
 		if reconcile {
 			// The measurement and the write are one pass over the same stores.
@@ -269,7 +269,7 @@ func (a *App) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal 
 		} else {
 			a.world.InstallSharedWorld(cap.World)
 		}
-		a.rebindCursorRosterLocked(local)
+		a.world.RebindCursorRoster(local)
 
 		// The tick is shared identity. Adopting it also adopts the simulation
 		// clock, because engine.SimTime derives the instant from the tick — which

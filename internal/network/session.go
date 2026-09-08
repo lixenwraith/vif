@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/event"
@@ -652,4 +653,95 @@ func (p *PendingJoin) Close() error {
 		return nil
 	}
 	return p.conn.Close()
+}
+
+// AdmissionLimiter is a fixed-window dial counter per dialling host, the default
+// Coordinator.Admit. A fixed window rather than a sliding one: the budget is two
+// orders of magnitude above ordinary use, so the burst a boundary allows costs
+// nothing and the state stays one integer and one timestamp per key.
+//
+// The key is the dialling address rather than the participant identity, because an
+// identity is what the attack consumes and is released the moment the connection
+// drops. A NAT is one key, so the budget is far above what a person reconnecting
+// after a crash needs.
+type AdmissionLimiter struct {
+	mu     sync.Mutex
+	window time.Duration
+	burst  int
+	max    int
+	seen   map[string]*admissionCount
+}
+
+type admissionCount struct {
+	opened time.Time
+	count  int
+}
+
+func NewAdmissionLimiter() *AdmissionLimiter {
+	return &AdmissionLimiter{
+		window: parameter.NetworkAdmitWindow,
+		burst:  parameter.NetworkAdmitBurst,
+		max:    parameter.NetworkAdmitTracked,
+		seen:   make(map[string]*admissionCount),
+	}
+}
+
+// Admit records one dial from addr and reports whether it may proceed.
+func (l *AdmissionLimiter) Admit(addr net.Addr) error {
+	key := admissionKey(addr)
+	if key == "" {
+		return nil // nothing to attribute a budget to; the transport is not a socket
+	}
+	now := time.Now() // [wall] a rate over real time, not a game one
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	entry, ok := l.seen[key]
+	switch {
+	case ok && now.Sub(entry.opened) >= l.window:
+		entry.opened, entry.count = now, 0
+	case !ok:
+		l.sweepLocked(now)
+		if len(l.seen) >= l.max {
+			// Fails closed: a completed TCP handshake proves the source address, so
+			// a table this wide is many real hosts dialling at once rather than one
+			// forging them, and a roster of sixteen has no reading of that in which
+			// the next dial is the one it was waiting for.
+			return fmt.Errorf("admission: %d dialling hosts already tracked", len(l.seen))
+		}
+		entry = &admissionCount{opened: now}
+		l.seen[key] = entry
+	}
+
+	if entry.count >= l.burst {
+		return fmt.Errorf("admission: %s has joined %d times within %s",
+			key, entry.count, l.window)
+	}
+	entry.count++
+	return nil
+}
+
+// sweepLocked drops the keys whose window has passed. It runs only when a new key
+// arrives, so the table is walked once per unseen host rather than per dial.
+// Caller MUST hold mu.
+func (l *AdmissionLimiter) sweepLocked(now time.Time) {
+	for key, entry := range l.seen {
+		if now.Sub(entry.opened) >= l.window {
+			delete(l.seen, key)
+		}
+	}
+}
+
+// admissionKey is the host half of a network address. The port is what a dialer
+// changes for free, so counting it would count nothing.
+func admissionKey(addr net.Addr) string {
+	if addr == nil {
+		return ""
+	}
+	s := addr.String()
+	if host, _, err := net.SplitHostPort(s); err == nil {
+		return host
+	}
+	return s
 }

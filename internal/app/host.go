@@ -178,7 +178,7 @@ func (a *App) sessionSummaryLocked() string {
 		return "Solo run; :host <addr> opens it to participants"
 	}
 	peers := a.world.Resources.Status.Ints.Get("network.peers").Load()
-	participant := a.localParticipantLocked()
+	participant := a.world.LocalParticipant()
 	addr := a.cfg.HostAddress
 	role := "host"
 	if a.cfg.JoinAddress != "" {
@@ -487,7 +487,7 @@ func (a *App) finishCatchUp(held []*network.Message, caught uint64) error {
 	a.reportJoinLag(remaining)
 	vlog.Info("app", "msg", "join caught up", "held_frames", len(held),
 		"caught_up_ticks", caught, "tick", a.Position().Tick, "lag_ticks", remaining)
-	a.snapshotTelemetry.catchUp.Store(int64(caught))
+	a.telemetry.CatchUp.Store(int64(caught))
 	if remaining > parameter.NetworkJoinLagTicks {
 		return fmt.Errorf("join: still %d ticks behind the session after catching up, lead is %d",
 			remaining, parameter.NetworkJoinLagTicks)

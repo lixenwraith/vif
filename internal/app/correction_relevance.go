@@ -151,11 +151,11 @@ func (c *corrections) scoreRelevanceLocked(ids []uint32, near map[uint32]int) {
 //
 // Caller MUST hold publishMu.
 func (c *corrections) publishPlanTelemetryLocked(ids []uint32) {
-	m := c.a.snapshotTelemetry
-	m.cadenceTicks.Store(int64(c.base))
-	m.keyframePeriod.Store(int64(c.keyPeriod))
+	m := c.a.telemetry
+	m.CadenceTicks.Store(int64(c.base))
+	m.KeyframePeriod.Store(int64(c.keyPeriod))
 	if c.base > 0 {
-		m.keyframeInterval.Store(int64(c.keyPeriod / c.base))
+		m.KeyframeInterval.Store(int64(c.keyPeriod / c.base))
 	}
 
 	// The session is as constrained as its most constrained edge, and the budget
@@ -179,11 +179,11 @@ func (c *corrections) publishPlanTelemetryLocked(ids []uint32) {
 			budget = b
 		}
 	}
-	m.uplinkBps.Store(int64(planned))
-	m.budgetBps.Store(int64(budget))
-	m.floorBps.Store(int64(floor))
-	m.constrained.Store(constrained)
-	m.floorBreached.Store(c.breached)
+	m.UplinkBps.Store(int64(planned))
+	m.BudgetBps.Store(int64(budget))
+	m.FloorBps.Store(int64(floor))
+	m.Constrained.Store(constrained)
+	m.FloorBreached.Store(c.breached)
 
 	c.reportFloorLocked()
 }
@@ -213,8 +213,8 @@ func (c *corrections) reportFloorLocked() {
 	}
 	vlog.Warn("app", "msg", "link cannot sustain the convergence floor",
 		"floor_ticks", c.bounds.FloorKeyframeTicks,
-		"floor_bps", int64(c.a.snapshotTelemetry.floorBps.Load()),
-		"budget_bps", int64(c.a.snapshotTelemetry.budgetBps.Load()))
+		"floor_bps", int64(c.a.telemetry.FloorBps.Load()),
+		"budget_bps", int64(c.a.telemetry.BudgetBps.Load()))
 	c.a.ctx.SetStatusMessage(
 		"Link cannot carry a whole world within the convergence floor; corrections may not converge",
 		4*parameter.StatusMessageDefaultTimeout, true)

@@ -23,13 +23,11 @@ package app
 import (
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/lifecycle"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
-	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -137,10 +135,10 @@ func (s *StagedInstall) Commit() error {
 		return fmt.Errorf("commit a staged capture: %w", err)
 	}
 	s.live.world.RunSafe(func() {
-		m := s.live.snapshotTelemetry
-		m.stageUS.Store(s.stageDur.Microseconds())
-		m.commitUS.Store(s.commitDur.Microseconds())
-		m.installTick.Store(int64(s.capture.Header.Tick))
+		m := s.live.telemetry
+		m.StageUS.Store(s.stageDur.Microseconds())
+		m.CommitUS.Store(s.commitDur.Microseconds())
+		m.InstallTick.Store(int64(s.capture.Header.Tick))
 	})
 	vlog.Info("app", "msg", "capture installed",
 		"tick", s.capture.Header.Tick,
@@ -211,218 +209,6 @@ func (a *App) discardStagingWorld() {
 
 // closeStagingWorld releases the run's staging world. Called from Close.
 func (a *App) closeStagingWorld() { a.discardStagingWorld() }
-
-// snapshotTelemetry is the capture and install cost, reserved before the metric set
-// is frozen so a join can publish into it.
-//
-// It is per-instance and excluded from the compared surface: a host publishes what a
-// read cost it and a joiner what an install cost it, and neither is a fact about the
-// world they share. The numbers are for the cadence, which has to be chosen from a
-// measurement rather than a guess.
-type snapshotTelemetry struct {
-	captureUS   *atomic.Int64
-	encodeUS    *atomic.Int64
-	bytes       *atomic.Int64
-	stageUS     *atomic.Int64
-	commitUS    *atomic.Int64
-	installTick *atomic.Int64
-	catchUp     *atomic.Int64
-
-	// The correction counters. sent/sent_bytes/keyframes are the host's side of
-	// the cadence — what it published and how much of it had to be whole — and
-	// applied/refused/superseded are the guest's. None of them is an error count:
-	// a refused delta is one whose keyframe this instance does not hold, and a
-	// superseded correction is one a fresher correction overtook, both of which a
-	// keyframe resolves on its own.
-	sent       *atomic.Int64
-	sentBytes  *atomic.Int64
-	keyframes  *atomic.Int64
-	applied    *atomic.Int64
-	refused    *atomic.Int64
-	superseded *atomic.Int64
-
-	// The correction magnitude: how far this instance's prediction had drifted from
-	// the authority at the moment the authority arrived — component cells, the
-	// distinct entities behind them, and the largest distance a shared placement
-	// moved, which is the one a player would actually see.
-	correctionEntries  *atomic.Int64
-	correctionEntities *atomic.Int64
-	correctionCells    *atomic.Int64
-	correctionTick     *atomic.Int64
-
-	// The operating point in force. cadenceTicks and keyframeInterval are what the
-	// controller currently holds; keyframePeriod is their product, which is what the
-	// convergence floor bounds and therefore the one worth reading first.
-	//
-	// The three rates are all bytes per second and are three different claims:
-	// uplinkBps is what the schedule in force costs, budgetBps what the tightest link
-	// was measured to allow after the utilisation share, and floorBps what the floor
-	// costs on a world this size. A budget under floorBps is the unrecoverable
-	// condition floorBreached names.
-	cadenceTicks     *atomic.Int64
-	keyframeInterval *atomic.Int64
-	keyframePeriod   *atomic.Int64
-	uplinkBps        *atomic.Int64
-	budgetBps        *atomic.Int64
-	floorBps         *atomic.Int64
-	constrained      *atomic.Bool
-	floorBreached    *atomic.Bool
-
-	// keyframeAge is how long this instance has gone without a whole
-	// authoritative world, in ticks. It is the *receiving* end of the same
-	// guarantee: the host promises to publish one per floor window, and this is
-	// what says whether one actually arrived.
-	keyframeAge *atomic.Int64
-
-	// The selective-correction counters, grouped by the question each answers. What
-	// the index cost: manifests published and received and their bytes, the traffic
-	// that replaces a whole delta on a healthy link. How often it proved convergence
-	// outright: hashOnly is the case the design is for, and sectionsCompared and
-	// pagesCompared say what finding that answer took. And the repair itself, counted
-	// at every point a shard can be at — asked for, sent, arrived, refused, applied —
-	// so a gap between two of them names which side dropped it.
-	manifestSent      *atomic.Int64
-	manifestRecv      *atomic.Int64
-	manifestBytesSent *atomic.Int64
-	manifestBytesRecv *atomic.Int64
-	hashOnly          *atomic.Int64
-	sectionsCompared  *atomic.Int64
-	pagesCompared     *atomic.Int64
-
-	shardsRequested *atomic.Int64
-	shardsSent      *atomic.Int64
-	shardsRecv      *atomic.Int64
-	shardsRefused   *atomic.Int64
-	shardsApplied   *atomic.Int64
-	shardBytesSent  *atomic.Int64
-	shardBytesRecv  *atomic.Int64
-	requestBytes    *atomic.Int64
-	selectiveBytes  *atomic.Int64
-
-	// What a repair moved, and what refused one. proofFailures counts a shard
-	// whose rows did not reproduce their declared page hash or whose root did not
-	// verify; baselineRefusals a set naming a tick, run or session this instance
-	// is not holding. Neither is an error condition on its own — both end at the
-	// keyframe fallback, which keyframeFallbacks counts.
-	pagesRepaired    *atomic.Int64
-	entitiesRepaired *atomic.Int64
-	cellsRepaired    *atomic.Int64
-	proofFailures    *atomic.Int64
-	baselineRefusals *atomic.Int64
-	keyframeFallback *atomic.Int64
-
-	// hashUS is what indexing and comparing one capture cost outside the world
-	// lock, beside captureUS which is the bounded read inside it. The pair is the
-	// whole of requirement 8 as a measurement: if the second grows with the first,
-	// work has moved under the lock that should not have.
-	hashUS *atomic.Int64
-
-	// The bounded replay suffix (deliverable 2). retained is what this instance is
-	// currently holding, replayed what the last correction re-applied, overflowed
-	// how many records retention dropped, and skipped how many corrections found
-	// the suffix unavailable and fell back to the authority alone.
-	replaySuffix   *atomic.Int64
-	replayReplayed *atomic.Int64
-	replayOverflow *atomic.Int64
-	replaySkipped  *atomic.Int64
-	replayUnusable *atomic.Bool
-
-	// Authority continuity. staleTerm counts artifacts the term gate dropped as
-	// belonging to a generation the session has left, which is the ordinary in-flight
-	// case across a handoff rather than an error; handoffBytes is what one handoff
-	// cost this instance on the wire.
-	staleTerm    *atomic.Int64
-	handoffBytes *atomic.Int64
-
-	// The relay role's retention. retained is how many authoritative records this
-	// instance is currently holding for a neighbour to ask about, served how many
-	// repairs it answered from them, and unserved how many requests it had to turn
-	// down — the bounded staleness made countable. The bytes are priced against
-	// the relaying participant's own link, never the authority's.
-	relayRetained  *atomic.Int64
-	relayServed    *atomic.Int64
-	relayUnserved  *atomic.Int64
-	relayBytesSent *atomic.Int64
-	relayBytesRecv *atomic.Int64
-}
-
-// newSnapshotTelemetry reserves the cells. Called during construction, because a
-// key first written after Freeze is counted late rather than stored.
-func newSnapshotTelemetry(reg *status.Registry) snapshotTelemetry {
-	return snapshotTelemetry{
-		captureUS:   reg.Ints.Get("snapshot.capture_us"),
-		encodeUS:    reg.Ints.Get("snapshot.encode_us"),
-		bytes:       reg.Ints.Get("snapshot.bytes"),
-		stageUS:     reg.Ints.Get("snapshot.stage_us"),
-		commitUS:    reg.Ints.Get("snapshot.commit_us"),
-		installTick: reg.Ints.Get("snapshot.install_tick"),
-		catchUp:     reg.Ints.Get("snapshot.catch_up_ticks"),
-
-		sent:       reg.Ints.Get("snapshot.corrections_sent"),
-		sentBytes:  reg.Ints.Get("snapshot.correction_bytes_sent"),
-		keyframes:  reg.Ints.Get("snapshot.keyframes"),
-		applied:    reg.Ints.Get("snapshot.corrections_applied"),
-		refused:    reg.Ints.Get("snapshot.corrections_refused"),
-		superseded: reg.Ints.Get("snapshot.corrections_superseded"),
-
-		correctionEntries:  reg.Ints.Get("snapshot.correction_entries"),
-		correctionEntities: reg.Ints.Get("snapshot.correction_entities"),
-		correctionCells:    reg.Ints.Get("snapshot.correction_cells"),
-		correctionTick:     reg.Ints.Get("snapshot.correction_tick"),
-
-		cadenceTicks:     reg.Ints.Get("snapshot.cadence_ticks"),
-		keyframeInterval: reg.Ints.Get("snapshot.cadence_keyframe_interval"),
-		keyframePeriod:   reg.Ints.Get("snapshot.cadence_keyframe_period_ticks"),
-		uplinkBps:        reg.Ints.Get("snapshot.cadence_uplink_bps"),
-		budgetBps:        reg.Ints.Get("snapshot.cadence_budget_bps"),
-		floorBps:         reg.Ints.Get("snapshot.cadence_floor_bps"),
-		constrained:      reg.Bools.Get("snapshot.cadence_constrained"),
-		floorBreached:    reg.Bools.Get("snapshot.cadence_floor_breached"),
-		keyframeAge:      reg.Ints.Get("snapshot.cadence_keyframe_age_ticks"),
-
-		manifestSent:      reg.Ints.Get("snapshot.manifests_sent"),
-		manifestRecv:      reg.Ints.Get("snapshot.manifests_received"),
-		manifestBytesSent: reg.Ints.Get("snapshot.manifest_bytes_sent"),
-		manifestBytesRecv: reg.Ints.Get("snapshot.manifest_bytes_received"),
-		hashOnly:          reg.Ints.Get("snapshot.corrections_hash_only"),
-		sectionsCompared:  reg.Ints.Get("snapshot.sections_compared"),
-		pagesCompared:     reg.Ints.Get("snapshot.pages_compared"),
-
-		shardsRequested: reg.Ints.Get("snapshot.shards_requested"),
-		shardsSent:      reg.Ints.Get("snapshot.shards_sent"),
-		shardsRecv:      reg.Ints.Get("snapshot.shards_received"),
-		shardsRefused:   reg.Ints.Get("snapshot.shards_refused"),
-		shardsApplied:   reg.Ints.Get("snapshot.shards_applied"),
-		shardBytesSent:  reg.Ints.Get("snapshot.shard_bytes_sent"),
-		shardBytesRecv:  reg.Ints.Get("snapshot.shard_bytes_received"),
-		requestBytes:    reg.Ints.Get("snapshot.request_bytes"),
-		selectiveBytes:  reg.Ints.Get("snapshot.selective_bytes"),
-
-		staleTerm:    reg.Ints.Get("network.term_stale"),
-		handoffBytes: reg.Ints.Get("network.handoff_bytes"),
-
-		relayRetained:  reg.Ints.Get("snapshot.relay_retained"),
-		relayServed:    reg.Ints.Get("snapshot.relay_served"),
-		relayUnserved:  reg.Ints.Get("snapshot.relay_unserved"),
-		relayBytesSent: reg.Ints.Get("snapshot.relay_bytes_sent"),
-		relayBytesRecv: reg.Ints.Get("snapshot.relay_bytes_received"),
-
-		pagesRepaired:    reg.Ints.Get("snapshot.pages_repaired"),
-		entitiesRepaired: reg.Ints.Get("snapshot.entities_repaired"),
-		cellsRepaired:    reg.Ints.Get("snapshot.cells_repaired"),
-		proofFailures:    reg.Ints.Get("snapshot.proof_failures"),
-		baselineRefusals: reg.Ints.Get("snapshot.baseline_refusals"),
-		keyframeFallback: reg.Ints.Get("snapshot.keyframe_fallbacks"),
-
-		hashUS: reg.Ints.Get("snapshot.hash_us"),
-
-		replaySuffix:   reg.Ints.Get("snapshot.replay_suffix_records"),
-		replayReplayed: reg.Ints.Get("snapshot.replay_records"),
-		replayOverflow: reg.Ints.Get("snapshot.replay_overflow"),
-		replaySkipped:  reg.Ints.Get("snapshot.replay_skipped"),
-		replayUnusable: reg.Bools.Get("snapshot.replay_suffix_unavailable"),
-	}
-}
 
 // Timings reports what the two halves cost, for choosing the cadence.
 func (s *StagedInstall) Timings() (stage, commit time.Duration) { return s.stageDur, s.commitDur }

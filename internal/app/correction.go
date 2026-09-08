@@ -491,13 +491,13 @@ func (c *corrections) recordPublicationLocked(
 	if keyframe {
 		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, joinBody, true, cap.Header.Tick
 	}
-	m := c.a.snapshotTelemetry
-	m.encodeUS.Store(took.Microseconds())
-	m.bytes.Store(int64(len(body)))
-	m.sent.Add(1)
-	m.sentBytes.Add(int64(len(body) * bodies))
+	m := c.a.telemetry
+	m.EncodeUS.Store(took.Microseconds())
+	m.Bytes.Store(int64(len(body)))
+	m.Sent.Add(1)
+	m.SentBytes.Add(int64(len(body) * bodies))
 	if keyframe {
-		m.keyframes.Add(1)
+		m.Keyframes.Add(1)
 	}
 }
 
@@ -719,7 +719,7 @@ func (c *corrections) readWorld() (snapshot.SharedCapture, error) {
 	if err != nil {
 		return snapshot.SharedCapture{}, fmt.Errorf("session capture: %w", err)
 	}
-	c.a.snapshotTelemetry.captureUS.Store(dur.Microseconds())
+	c.a.telemetry.CaptureUS.Store(dur.Microseconds())
 	return cap, nil
 }
 
@@ -802,8 +802,8 @@ func (c *corrections) takeKeyframe() ([]byte, uint64, error) {
 	}
 	c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, body, true, cap.Header.Tick
 	c.recordSizeLocked(true, len(body))
-	c.a.snapshotTelemetry.bytes.Store(int64(len(body)))
-	c.a.snapshotTelemetry.keyframes.Add(1)
+	c.a.telemetry.Bytes.Store(int64(len(body)))
+	c.a.telemetry.Keyframes.Add(1)
 	vlog.Info("app", "msg", "session capture",
 		"tick", cap.Header.Tick, "bytes", len(body),
 		"streams", len(cap.Streams), "systems", len(cap.Systems))
@@ -913,11 +913,11 @@ func (c *corrections) apply() {
 
 	if len(pending) == 0 {
 		if dropped > 0 {
-			c.a.snapshotTelemetry.superseded.Add(dropped)
+			c.a.telemetry.Superseded.Add(dropped)
 		}
 		return
 	}
-	c.a.snapshotTelemetry.superseded.Add(dropped)
+	c.a.telemetry.Superseded.Add(dropped)
 
 	var (
 		newest snapshot.SharedCapture
@@ -926,16 +926,16 @@ func (c *corrections) apply() {
 	for _, body := range pending {
 		cap, err := c.resolve(body)
 		if err != nil {
-			c.a.snapshotTelemetry.refused.Add(1)
+			c.a.telemetry.Refused.Add(1)
 			vlog.Debug("app", "msg", "correction refused", "error", err.Error())
 			continue
 		}
 		if found && cap.Header.Tick <= newest.Header.Tick {
-			c.a.snapshotTelemetry.superseded.Add(1)
+			c.a.telemetry.Superseded.Add(1)
 			continue
 		}
 		if found {
-			c.a.snapshotTelemetry.superseded.Add(1)
+			c.a.telemetry.Superseded.Add(1)
 		}
 		newest, found = cap, true
 	}
@@ -1010,7 +1010,7 @@ func (c *corrections) install(cap snapshot.SharedCapture) error {
 	stale := c.lastInstalled > 0 && cap.Header.Tick <= c.lastInstalled
 	c.installedMu.Unlock()
 	if stale {
-		c.a.snapshotTelemetry.superseded.Add(1)
+		c.a.telemetry.Superseded.Add(1)
 		return nil
 	}
 	staged, err := c.a.StageShared(cap)
@@ -1037,12 +1037,12 @@ func (c *corrections) install(cap snapshot.SharedCapture) error {
 	// and a relay's ability to answer for a participant behind it.
 	c.retainInstalled(cap)
 
-	m := c.a.snapshotTelemetry
-	m.applied.Add(1)
-	m.correctionEntries.Store(int64(diff.Entries))
-	m.correctionEntities.Store(int64(diff.Entities))
-	m.correctionCells.Store(int64(diff.CellShift))
-	m.correctionTick.Store(int64(cap.Header.Tick))
+	m := c.a.telemetry
+	m.Applied.Add(1)
+	m.CorrectionEntries.Store(int64(diff.Entries))
+	m.CorrectionEntities.Store(int64(diff.Entities))
+	m.CorrectionCells.Store(int64(diff.CellShift))
+	m.CorrectionTick.Store(int64(cap.Header.Tick))
 	return nil
 }
 
@@ -1087,17 +1087,17 @@ func (c *corrections) observeFloor() {
 	if tick > since {
 		age = tick - since
 	}
-	m := c.a.snapshotTelemetry
-	m.keyframeAge.Store(int64(age))
+	m := c.a.telemetry
+	m.KeyframeAge.Store(int64(age))
 
 	// The authoring instance is not a receiver: it produces the world every floor
 	// window is measured against, so a successor that installed until it took the
 	// term would report its own publication as an absence.
 	breached := !c.a.authoring() &&
 		age > parameter.SnapshotFloorKeyframeTicks+parameter.SnapshotFloorGraceTicks
-	m.floorBreached.Store(breached)
+	m.FloorBreached.Store(breached)
 	if breached {
-		m.constrained.Store(true)
+		m.Constrained.Store(true)
 	}
 
 	c.installedMu.Lock()
@@ -1344,10 +1344,10 @@ func (a *App) admitMeasuredLink(port *network.SocketPort, id network.PeerID) err
 // correctionMagnitude reports the last correction's size, for a caller that wants
 // the number without reading the registry.
 func (a *App) correctionMagnitude() engine.WorldDifference {
-	m := a.snapshotTelemetry
+	m := a.telemetry
 	return engine.WorldDifference{
-		Entries:   int(m.correctionEntries.Load()),
-		Entities:  int(m.correctionEntities.Load()),
-		CellShift: int(m.correctionCells.Load()),
+		Entries:   int(m.CorrectionEntries.Load()),
+		Entities:  int(m.CorrectionEntities.Load()),
+		CellShift: int(m.CorrectionCells.Load()),
 	}
 }

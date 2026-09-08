@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 func testOffer() SessionOffer {
@@ -197,5 +198,86 @@ func TestANamedSessionAdmitsOnlyTheDialerThatNamedIt(t *testing.T) {
 	defer pending.Close()
 	if got.Assigned != offer.Assigned {
 		t.Fatalf("offer assigned %d, want %d", got.Assigned, offer.Assigned)
+	}
+}
+
+func admitFrom(host string, port int) net.Addr {
+	return &net.TCPAddr{IP: net.ParseIP(host), Port: port}
+}
+
+// TestAdmissionSpendsABudgetPerDiallingHost covers the amplification this bounds:
+// a join costs the session a whole world read and the dialer one connect, so a
+// peer that cycles is free to it and expensive to everything else.
+func TestAdmissionSpendsABudgetPerDiallingHost(t *testing.T) {
+	t.Parallel()
+	l := NewAdmissionLimiter()
+
+	for i := range parameter.NetworkAdmitBurst {
+		if err := l.Admit(admitFrom("10.0.0.1", 7777)); err != nil {
+			t.Fatalf("admission %d of the burst was refused: %v", i+1, err)
+		}
+	}
+	if err := l.Admit(admitFrom("10.0.0.1", 7777)); err == nil {
+		t.Fatal("the budget did not run out")
+	}
+	if err := l.Admit(admitFrom("10.0.0.2", 7777)); err != nil {
+		t.Fatalf("a second host was refused on the first host's budget: %v", err)
+	}
+}
+
+// TestAdmissionIgnoresThePort pins the key: the port is what a dialer changes for
+// free, so counting it would count nothing.
+func TestAdmissionIgnoresThePort(t *testing.T) {
+	t.Parallel()
+	l := NewAdmissionLimiter()
+	for i := range parameter.NetworkAdmitBurst {
+		if err := l.Admit(admitFrom("10.0.0.3", 40000+i)); err != nil {
+			t.Fatalf("admission %d was refused: %v", i+1, err)
+		}
+	}
+	if err := l.Admit(admitFrom("10.0.0.3", 55555)); err == nil {
+		t.Fatal("a new source port bought a fresh budget")
+	}
+}
+
+// TestAdmissionRefillsWithItsWindow is the non-vacuous half: a budget that never
+// refilled would turn one crash-and-reconnect into a permanent exclusion.
+func TestAdmissionRefillsWithItsWindow(t *testing.T) {
+	t.Parallel()
+	l := NewAdmissionLimiter()
+	l.window = time.Millisecond
+
+	for range l.burst {
+		if err := l.Admit(admitFrom("10.0.0.4", 7777)); err != nil {
+			t.Fatalf("burst refused: %v", err)
+		}
+	}
+	if err := l.Admit(admitFrom("10.0.0.4", 7777)); err == nil {
+		t.Fatal("the budget did not run out")
+	}
+	time.Sleep(3 * time.Millisecond)
+	if err := l.Admit(admitFrom("10.0.0.4", 7777)); err != nil {
+		t.Fatalf("the window did not refill: %v", err)
+	}
+}
+
+// TestAdmissionDoesNotGrowWithoutBound keeps the defence from becoming the leak:
+// a spray of addresses costs one window's worth of keys rather than one per dial.
+func TestAdmissionDoesNotGrowWithoutBound(t *testing.T) {
+	t.Parallel()
+	l := NewAdmissionLimiter()
+	l.window = time.Millisecond
+
+	for i := range l.max * 4 {
+		_ = l.Admit(&net.TCPAddr{IP: net.IPv4(10, byte(i>>16), byte(i>>8), byte(i)), Port: 1})
+		if i%256 == 0 {
+			time.Sleep(2 * time.Millisecond) // let the window pass so the sweep has work
+		}
+	}
+	l.mu.Lock()
+	tracked := len(l.seen)
+	l.mu.Unlock()
+	if tracked > l.max {
+		t.Fatalf("the limiter tracks %d hosts, ceiling is %d", tracked, l.max)
 	}
 }

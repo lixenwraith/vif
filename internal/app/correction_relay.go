@@ -90,7 +90,7 @@ func (c *corrections) forwardManifest(body []byte, from uint32, tick uint64) {
 	if sent == 0 {
 		return
 	}
-	c.a.snapshotTelemetry.relayBytesSent.Add(int64(len(body) * sent))
+	c.a.telemetry.RelayBytesSent.Add(int64(len(body) * sent))
 	vlog.Debug("app", "msg", "manifest relayed", "tick", tick, "from", from, "to", sent)
 }
 
@@ -195,14 +195,14 @@ func (c *corrections) serveRelayed(port engine.NetworkPort, pending pendingReque
 		return true
 	}
 	if port == nil || !port.Send(pending.from, uint8(network.MsgStateShard), body) {
-		c.a.snapshotTelemetry.shardsRefused.Add(1)
+		c.a.telemetry.ShardsRefused.Add(1)
 		return true
 	}
-	m := c.a.snapshotTelemetry
-	m.shardsSent.Add(int64(pages))
-	m.shardBytesSent.Add(int64(len(body)))
-	m.relayServed.Add(1)
-	m.relayBytesSent.Add(int64(len(body)))
+	m := c.a.telemetry
+	m.ShardsSent.Add(int64(pages))
+	m.ShardBytesSent.Add(int64(len(body)))
+	m.RelayServed.Add(1)
+	m.RelayBytesSent.Add(int64(len(body)))
 	// Priced here rather than at the authority: these bytes left this instance's
 	// uplink, so they belong to this instance's plan.
 	c.publishMu.Lock()
@@ -222,7 +222,7 @@ func (c *corrections) serveRelayed(port engine.NetworkPort, pending pendingReque
 // repair and takes the next whole authoritative world, which the keyframe cadence
 // is flooding anyway.
 func (c *corrections) sendUnserved(port engine.NetworkPort, to uint32, req snapshot.CorrectionRequest, why string) {
-	c.a.snapshotTelemetry.relayUnserved.Add(1)
+	c.a.telemetry.RelayUnserved.Add(1)
 	if port == nil {
 		return
 	}
@@ -245,16 +245,16 @@ func (c *corrections) applyUnserved(body []byte) {
 	if err != nil {
 		return
 	}
-	m := c.a.snapshotTelemetry
-	m.relayBytesRecv.Add(int64(len(body)))
-	m.relayUnserved.Add(1)
+	m := c.a.telemetry
+	m.RelayBytesRecv.Add(int64(len(body)))
+	m.RelayUnserved.Add(1)
 	if awaiting := c.takeAwaiting(u.Tick); awaiting == nil {
 		return // already superseded; nothing was waiting on this
 	}
 	c.selectiveMu.Lock()
 	c.selective.wantKeyframe = true
 	c.selectiveMu.Unlock()
-	m.keyframeFallback.Add(1)
+	m.KeyframeFallback.Add(1)
 	vlog.Debug("app", "msg", "repair unavailable from the relaying neighbour",
 		"peer", u.From, "tick", u.Tick, "reason", u.Reason)
 }

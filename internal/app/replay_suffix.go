@@ -77,12 +77,12 @@ func (a *App) replayLocalSuffix(header snapshot.CaptureHeader) (replayed int, ok
 	frames, origins, available := src.LocalReplaySuffix(fence)
 	retained, dropped := src.ReplaySuffixSize()
 
-	m := a.snapshotTelemetry
-	m.replaySuffix.Store(int64(retained))
-	m.replayOverflow.Store(dropped)
-	m.replayUnusable.Store(!available)
+	m := a.telemetry
+	m.ReplaySuffix.Store(int64(retained))
+	m.ReplayOverflow.Store(dropped)
+	m.ReplayUnusable.Store(!available)
 	if !available {
-		m.replaySkipped.Add(1)
+		m.ReplaySkipped.Add(1)
 		vlog.Warn("app", "msg", "local replay skipped",
 			"tick", tick, "retained", retained, "dropped", dropped)
 		return 0, false
@@ -115,12 +115,12 @@ func (a *App) replayLocalSuffix(header snapshot.CaptureHeader) (replayed int, ok
 		}
 	})
 	if pushed < 0 {
-		m.replaySkipped.Add(1)
-		m.replayUnusable.Store(true)
+		m.ReplaySkipped.Add(1)
+		m.ReplayUnusable.Store(true)
 		return 0, false
 	}
 	a.scheduler.Settle()
-	m.replayReplayed.Add(int64(pushed))
+	m.ReplayReplayed.Add(int64(pushed))
 	vlog.Debug("app", "msg", "local crossings replayed",
 		"tick", tick, "records", pushed, "retained", retained)
 	return pushed, true
@@ -135,7 +135,7 @@ func (a *App) replaySource() (replaySource, uint32) {
 		local uint32
 	)
 	a.world.RunSafe(func() {
-		local = a.localParticipantLocked()
+		local = a.world.LocalParticipant()
 		for _, sys := range a.world.Systems() {
 			if r, ok := sys.(replaySource); ok {
 				out = r

@@ -86,7 +86,7 @@ func (a *App) hostNetworkConfig() *network.Config {
 	netCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
 		Assign:  a.assignParticipant,
 		Release: a.releaseParticipant,
-		Admit:   a.admissions.admit,
+		Admit:   a.admissions.Admit,
 		Report:  a.noteJoinerReport,
 		Name:    a.cfg.SessionName,
 	}, netCfg.ConnectTimeout)

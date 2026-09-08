@@ -394,6 +394,16 @@ func (w *World) LiveSession() bool {
 	return net != nil && net.Port != nil && net.Port.IsRunning() && net.Port.PeerCount() > 0
 }
 
+// LocalParticipant is this instance's session identity, zero when no transport is
+// attached. It is the seam every owner-authored rule turns on.
+func (w *World) LocalParticipant() uint32 {
+	r := w.Resources.Network
+	if r == nil || r.Port == nil {
+		return 0
+	}
+	return r.ParticipantID
+}
+
 // IsSessionCoordinator reports whether this instance owns the host identity.
 func (w *World) IsSessionCoordinator() bool {
 	return w.Resources.Network != nil && w.Resources.Network.ParticipantID == 1

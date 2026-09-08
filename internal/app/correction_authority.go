@@ -81,7 +81,7 @@ func (c *corrections) driveAuthority() {
 		u.peerLost(id)
 	}
 	for _, f := range frames {
-		c.a.snapshotTelemetry.handoffBytes.Add(int64(len(f.body)))
+		c.a.telemetry.HandoffBytes.Add(int64(len(f.body)))
 		u.receive(f.kind, f.from, f.body)
 	}
 	u.drive()
