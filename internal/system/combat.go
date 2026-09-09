@@ -40,6 +40,7 @@ type CombatSystem struct {
 	statKineticImmune *atomic.Int64
 	statStunImmune    *atomic.Int64
 
+	statLive            [component.CombatEntityCount]*atomic.Int64
 	statDamageAttacker  [component.CombatEntityCount]*atomic.Int64
 	statDamageDefender  [component.CombatEntityCount]*atomic.Int64
 	statAbsorbAttacker  [component.CombatEntityCount]*atomic.Int64
@@ -98,6 +99,7 @@ func NewCombatSystem(world *engine.World) engine.System {
 	s.statChainDepthTotal = reg.Ints.Get("combat.chain_depth_total")
 	s.statChainDepthMax = reg.Ints.Get("combat.chain_depth_max")
 	for i, name := range combatEntityNames {
+		s.statLive[i] = reg.Ints.Get("combat.live_" + name)
 		s.statDamageAttacker[i] = reg.Ints.Get("combat.damage_attacker_" + name)
 		s.statDamageDefender[i] = reg.Ints.Get("combat.damage_defender_" + name)
 		s.statAbsorbAttacker[i] = reg.Ints.Get("combat.absorbed_attacker_" + name)
@@ -139,6 +141,7 @@ func (s *CombatSystem) Init() {
 		stat.Store(0)
 	}
 	for i := range component.CombatEntityCount {
+		s.statLive[i].Store(0)
 		s.statDamageAttacker[i].Store(0)
 		s.statDamageDefender[i].Store(0)
 		s.statAbsorbAttacker[i].Store(0)
@@ -235,10 +238,16 @@ func (s *CombatSystem) Update() {
 	combatCount := int64(combats.CountEntities())
 	s.statCount.Store(combatCount)
 	s.statActive.Store(combatCount > 0)
+
+	// Population by type, so a count that outlives its species names the leak
+	var live [component.CombatEntityCount]int64
 	for _, combatEntity := range combats.Entities() {
 		combatComp, ok := combats.GetPtr(combatEntity)
 		if !ok {
 			continue
+		}
+		if t := combatComp.CombatEntityType; t >= 0 && t < component.CombatEntityCount {
+			live[t]++
 		}
 
 		// Update stun timer
@@ -272,7 +281,10 @@ func (s *CombatSystem) Update() {
 				combatComp.RemainingHitFlash = 0
 			}
 		}
+	}
 
+	for i := range component.CombatEntityCount {
+		s.statLive[i].Store(live[i])
 	}
 }
 

@@ -27,6 +27,7 @@ type Position struct {
 	statOccupiedCells   *atomic.Int64
 	statIndexedEntities *atomic.Int64
 	statIndexedShared   *atomic.Int64
+	statUnindexed       *atomic.Int64
 	statMaxOccupancy    *atomic.Int64
 	statOccupancyHWM    *atomic.Int64
 	statPositionsHWM    *atomic.Int64
@@ -55,6 +56,7 @@ func (p *Position) BindTelemetry(reg *status.Registry) {
 	p.statOccupiedCells = reg.Ints.Get("spatial.occupied_cells")
 	p.statIndexedEntities = reg.Ints.Get("spatial.indexed_entities")
 	p.statIndexedShared = reg.Ints.Get("spatial.indexed_shared")
+	p.statUnindexed = reg.Ints.Get("spatial.unindexed")
 	p.statMaxOccupancy = reg.Ints.Get("spatial.max_cell_occupancy")
 	p.statOccupancyHWM = reg.Ints.Get("spatial.cell_occupancy_hwm")
 	p.statPositionsHWM = reg.Ints.Get("spatial.positions_hwm")
@@ -71,6 +73,7 @@ func (p *Position) ResetTelemetry() {
 		p.statOccupiedCells,
 		p.statIndexedEntities,
 		p.statIndexedShared,
+		p.statUnindexed,
 		p.statMaxOccupancy,
 		p.statOccupancyHWM,
 		p.statPositionsHWM,
@@ -92,6 +95,9 @@ func (p *Position) PublishTelemetry() {
 	p.statIndexedEntities.Store(int64(stats.EntitiesTotal))
 	p.statIndexedShared.Store(int64(stats.EntitiesShared))
 	p.statMaxOccupancy.Store(int64(stats.MaxOccupancy))
+	// Positioned but held in no cell: off-map after a crop, or dropped by a full
+	// cell. Either way nothing renders them and no grid query reaches them.
+	p.statUnindexed.Store(int64(len(p.entities) - stats.EntitiesTotal))
 }
 
 // SetPosition inserts or updates an entity's position, multiple entities at one position are allowed, overflow silently ignored

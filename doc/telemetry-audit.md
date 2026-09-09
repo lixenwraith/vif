@@ -36,7 +36,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Missile | `missile.{count,spawned,impacts,expired,wall_collisions,boundary_hits,grid_steps,disabled_rejects}` | `NewMissileSystem` | Resolved spawn/impact/expiry and swept update | `Init` | Generic only |
 | Navigation | `nav.{entities,recomputes,roi_cells,buf_groups_hwm}` | `NewNavigationSystem` | Recompute/update paths and group observation | `Init` | Generic only |
 | Soft collision | `soft_collision.{collisions,immune_rejects,buf_{drains,swarms,quasars,storms,pylons}_hwm}` | `NewSoftCollisionSystem` | Resolved collision pass and buffer observation | `Init` | Generic only |
-| Combat | `combat.{active,count,hits_direct,hits_area,knockbacks,stuns,damage_dealt,immune_rejects,unprofiled,*_rejects,effect_*,chain_*,damage_{attacker,defender}_*,absorbed_{attacker,defender}_*}` | `NewCombatSystem` | Resolved direct/area attacks | `Init` | Generic only |
+| Combat | `combat.{active,count,live_*,hits_direct,hits_area,knockbacks,stuns,damage_dealt,immune_rejects,unprofiled,*_rejects,effect_*,chain_*,damage_{attacker,defender}_*,absorbed_{attacker,defender}_*}` | `NewCombatSystem` | Resolved direct/area attacks | `Init` | Generic only |
 | Drain | `drain.{count,pending,paused,collisions,suicides,spawned,fusions,despawned,spawn_failures,killed_by_*,wall_collisions,boundary_reflections,grid_steps,protected_rejects,buf_*_hwm}` | `NewDrainSystem` | Spawn/lifecycle/collision/movement paths | `Init` | Generic only |
 | Quasar | `quasar.{active,count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewQuasarSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
 | Swarm | `swarm.{active,count,player_kills,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewSwarmSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
@@ -77,7 +77,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Time control | `engine.{speed_pct,speed,step,breakpoint,paused}` | `NewTimeControl` | Time-control mutation under its owner lock | Time-control reset/persistent operator state | Status bar and app snapshot read these keys |
 | Clock scheduler / world | `engine.{ticks,apm,music_apm,tick_slips}`, `entity.{count,created_total,destroyed_total}`, `time.game_elapsed_ms`, `event.{backoffs,dispatches,dead,dropped,queue_len,queue_max,invalid,settle_*}`, `fsm.*` | `NewClockScheduler`; schema-derived region keys bind before `Prepare` | Dispatch/tick tail while the world mutex is held | `resetTelemetry` during reset | Status bar reads tick/APM/FSM; region/debug metrics are generic |
 | Event queue | Per-type `[EventTypeCount]atomic.Int64` dispatch/dead arrays; surfaced as `event.{dispatch_by_type,dead_by_type}` | Fixed arrays in `NewEventQueue`; strings in scheduler constructor | Scheduler records after routing; strings publish every `StatSnapshotTicks` | `ResetTelemetry` after stale-event drain | Generic only |
-| Position/spatial grid | `spatial.{cell_saturations,cell_overflows,occupied_cells,indexed_entities,max_cell_occupancy,cell_occupancy_hwm,positions_hwm,position_batch_hwm}` | `BindTelemetry` immediately after registry construction | Position mutations under the world mutex; expensive gauges on snapshot cadence | `World.Clear` | Generic only |
+| Position/spatial grid | `spatial.{cell_saturations,cell_overflows,occupied_cells,indexed_entities,unindexed,max_cell_occupancy,cell_occupancy_hwm,positions_hwm,position_batch_hwm}` | `BindTelemetry` immediately after registry construction | Position mutations under the world mutex; expensive gauges on snapshot cadence | `World.Clear` | Generic only |
 
 ## Phase 1 defects and dispositions
 
@@ -188,6 +188,7 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `combat.effect_stun` (int) | Stun effect applications that changed target state. |
 | `combat.effect_vampire` (int) | Vampire effect applications that emitted an energy reward. |
 | `combat.kinetic_immune_rejects` (int) | Kinetic effects rejected by kinetic immunity, enrage, or a dead target. |
+| `combat.live_<type>` (int) | Live population of the Combat store per entity type, one key per `combatEntityNames` entry. Decomposes `combat.count`: a type still counted while its species reports inactive is a lifecycle leak. |
 | `combat.relation_rejects` (int) | Direct-hit requests rejected because the hit entity was not a member of the target composite. |
 | `combat.stun_immune_rejects` (int) | Stun effects rejected by species/state immunity. |
 | `combat.target_rejects` (int) | Attack requests rejected because the target or required target member lacked combat state. |
@@ -452,6 +453,7 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `spatial.player_budget_rejects` (int) | Player-domain insertions refused because the cell's per-domain budget was already spent. A shared entity is never refused for a player one. |
 | `spatial.position_batch_hwm` (int) | Largest pending position batch committed during the session. |
 | `spatial.positions_hwm` (int) | Highest live length of the dense position store. |
+| `spatial.unindexed` (int) | Snapshot-cadence gauge of positioned entities the grid holds no cell for: outside the map after a crop, or dropped by a full cell. Nothing renders them and no grid query reaches them. |
 | `spirit.buf_destroy_next_tick_hwm` (int) | High-water live length of the reusable destroy next tick buffer/state collection. |
 | `storm.boundary_reflections` (int) | Resolved storm reflections at simulation bounds. |
 | `storm.buf_ellipse_offsets_hwm` (int) | High-water live length of the reusable ellipse offsets buffer/state collection. |

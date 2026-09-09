@@ -208,6 +208,12 @@ detects missing members, tombstones dead entries, and compacts the member list.
 It emits integrity-breach events instead of silently leaving broken backlinks.
 Species-specific systems still own special formation motion and lifecycle.
 
+A breach reports a loss, not a death: an ablative owner retires the composite
+only on `RemainingCount == 0`, because a partial loss is what ablative damage is.
+Retiring means destroying the header, not clearing an alive flag — the survivors
+of a header nobody destroyed stay in the Combat store and in the spatial grid,
+targetable by systems that no longer render them.
+
 Typing and combat deliberately work at either layer: a typed member can report
 to its header for ordered word mechanics, while a combat hitbox can route damage
 according to the composite type.

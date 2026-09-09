@@ -72,6 +72,22 @@ func ResolveTargetFromEntity(w *engine.World, entity, selfEntity core.Entity) (c
 	return 0, 0, false
 }
 
+// targetCell returns an entity's cell, rejecting one outside the map. The finders
+// below walk component stores rather than the spatial grid, which holds no off-map
+// cell; without this an entity a crop left outside the bounds stays targetable
+// while nothing renders it.
+func targetCell(w *engine.World, e core.Entity) (int, int, bool) {
+	pos, ok := w.Positions.GetPosition(e)
+	if !ok {
+		return 0, 0, false
+	}
+	config := w.Resources.Config
+	if pos.X < 0 || pos.X >= config.MapWidth || pos.Y < 0 || pos.Y >= config.MapHeight {
+		return 0, 0, false
+	}
+	return pos.X, pos.Y, true
+}
+
 // HasCombatTargetAt reports whether a non-player combat target occupies a cell.
 // scope selects the enumerated domains; shared species pass ScopeShared, weapons ScopeBoth.
 // It excludes self, every cursor, cursor-owned orbs, and entities owned by ownerEntity.
@@ -120,8 +136,8 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64,
 		if isOwnedBy(w, e, ownerEntity) {
 			continue
 		}
-		pos, ok := w.Positions.GetPosition(e)
-		if !ok || !vmath.EllipseContainsPointF(pos.X, pos.Y, cx, cy, invRxSq, invRySq) {
+		x, y, ok := targetCell(w, e)
+		if !ok || !vmath.EllipseContainsPointF(x, y, cx, cy, invRxSq, invRySq) {
 			continue
 		}
 		index[e] = len(result)
@@ -153,8 +169,8 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64,
 		if isOwnedBy(w, headerEntity, ownerEntity) {
 			continue
 		}
-		pos, ok := w.Positions.GetPosition(memberEntity)
-		if !ok || !vmath.EllipseContainsPointF(pos.X, pos.Y, cx, cy, invRxSq, invRySq) {
+		x, y, ok := targetCell(w, memberEntity)
+		if !ok || !vmath.EllipseContainsPointF(x, y, cx, cy, invRxSq, invRySq) {
 			continue
 		}
 
@@ -202,11 +218,11 @@ func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, scope 
 		if isOwnedBy(w, e, ownerEntity) {
 			continue
 		}
-		pos, ok := w.Positions.GetPosition(e)
+		x, y, ok := targetCell(w, e)
 		if !ok {
 			continue
 		}
-		px, py := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+		px, py := vmath.Point{X: x, Y: y}.CenterF()
 		distSq := vmath.MagnitudeSqF(px-fromX, py-fromY)
 		singles = append(singles, TargetAssignment{Target: e, Hit: e, DistSq: distSq})
 	}
@@ -234,11 +250,11 @@ func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, scope 
 		if isOwnedBy(w, headerEntity, ownerEntity) {
 			continue
 		}
-		pos, ok := w.Positions.GetPosition(memberEntity)
+		x, y, ok := targetCell(w, memberEntity)
 		if !ok {
 			continue
 		}
-		px, py := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+		px, py := vmath.Point{X: x, Y: y}.CenterF()
 		distSq := vmath.MagnitudeSqF(px-fromX, py-fromY)
 
 		if i, exists := compositeIdx[headerEntity]; exists {

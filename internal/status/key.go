@@ -191,6 +191,7 @@ var combatMetricPartitions = [...]struct {
 	{"absorbed_defender_", "combat.absorbed.defender"},
 	{"damage_attacker_", "combat.damage.attacker"},
 	{"damage_defender_", "combat.damage.defender"},
+	{"live_", "combat.live"},
 }
 
 // activityGatedGroups names group prefixes whose cards are noise until something

@@ -172,7 +172,7 @@ func (s *StormSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventCompositeIntegrityBreach:
 		if payload, ok := ev.Payload.(*event.CompositeIntegrityBreachPayload); ok {
-			if payload.Behavior == component.BehaviorStorm {
+			if payload.Behavior == component.BehaviorStorm && payload.RemainingCount == 0 {
 				s.handleCircleBreach(payload.HeaderEntity)
 			}
 		}
@@ -931,7 +931,10 @@ func (s *StormSystem) destroyCircle(stormComp *component.StormComponent, index i
 	}
 }
 
-// handleCircleBreach processes external destruction of a circle
+// handleCircleBreach retires a circle whose last member died outside combat.
+// A partial loss is ordinary ablative damage and never reaches here: retiring on
+// one would strand the survivors, since render, physics and member reaping all
+// key off CirclesAlive.
 func (s *StormSystem) handleCircleBreach(headerEntity core.Entity) {
 	if s.rootEntity == 0 {
 		return
@@ -946,6 +949,12 @@ func (s *StormSystem) handleCircleBreach(headerEntity core.Entity) {
 	for i := range component.StormCircleCount {
 		if stormComp.Circles[i] == headerEntity && stormComp.CirclesAlive[i] {
 			stormComp.CirclesAlive[i] = false
+
+			// The flag alone leaves the header entity live and combat-resolvable
+			s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
+				HeaderEntity: headerEntity,
+				Effect:       0,
+			})
 
 			if s.AliveCount(stormComp) == 0 {
 				// The last circle disappeared through lifecycle cleanup rather than
@@ -1409,9 +1418,10 @@ func (s *StormSystem) terminateStorm() {
 
 	stormComp, ok := s.world.Components.Storm.GetComponent(s.rootEntity)
 	if ok {
-		// Destroy remaining circles
+		// Keyed on the entity, not on CirclesAlive: a circle retired without its
+		// header destroyed would outlive the storm, unrendered and still targetable
 		for i := range component.StormCircleCount {
-			if stormComp.CirclesAlive[i] {
+			if s.world.Components.Header.HasEntity(stormComp.Circles[i]) {
 				s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 					HeaderEntity: stormComp.Circles[i],
 					Effect:       0,
