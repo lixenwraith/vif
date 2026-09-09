@@ -30,10 +30,10 @@ because most of them change what that step should say.
 | A11 | **The session's playout lead is chosen from its *first* guest's link** and holds for the life of the match. A session opened by a nearby player and joined by a distant one runs at the near player's lead. The late-crossing fence makes that cost freshness rather than correctness (fleet plan §5), but it is the reason a full-roster measurement (H3) is worth doing over real links rather than a LAN. | §9 |
 | A12 | **The resource envelope is unmeasured at a full roster.** The requests and limits in the manifest come from single-guest runs. Ten sessions per node is a claim until an hour of four-player play says otherwise. | §8 |
 | A13 | **Cluster commands in this procedure run through `sudo kubectl`.** K3s is installed with kubeconfig mode `0640`; the install script self-escalates, but the resulting kubeconfig is not made readable to the ordinary login user. | §6 |
-| A14 | **The fleet's log stream is fanned in on the node, not served from each pod.** A session writes its JSON lines to stdout, the allocator follows the pod log through the Kubernetes API, and one LogWisp on the guest serves the merged result. The in-pod sidecar is retained as the H9 experiment because its file source cannot carry the envelope intact; the acceptance run used the same `-log-stdout` shape with no sidecar. | §10 |
+| A14 | **The fleet's log stream is fanned in on the node, not served from each pod.** A session writes its JSON lines to stdout, the allocator follows the pod log through the Kubernetes API, and one LogWisp on the guest serves the merged result. One component then holds the cluster credential and a session costs the pod nothing; the acceptance run used the same `-log-stdout` shape with no sidecar. The in-pod sidecar stays the H9 experiment, now on its merits rather than on a field-loss blocker. | §10 |
 | A15 | **Source-address preservation is intended, not proved.** `externalTrafficPolicy: Local` and `pf rdr` should leave the off-box player's address visible to the pod, but the acceptance run did not record it. The per-address admission bound depends on this. | §9 |
 | A16 | **The allocator and Hugo integration are designed, not built.** §10 fixes their location, credentials and API/page contract; none of that path was exercised by the acceptance run. | §10 |
-| A17 | **The pod log is the log contract.** `-log-stdout` puts vi-fighter's own JSON line on stdout and the Kubernetes pod-log endpoint returns it verbatim, so nothing between the session and the browser reinterprets the envelope. Anything that parses a line — the sidecar's file source today — is a component that can drop fields, and is therefore kept off this path. | §10 |
+| A17 | **The pod log is the log contract.** `-log-stdout` puts vi-fighter's own JSON line on stdout and the Kubernetes pod-log endpoint returns it verbatim, so nothing between the session and the browser reinterprets the envelope. A component that reparses a line is one that can reshape the envelope, so every hop on this path is chosen to carry bytes: `-log-stdout`, the pod-log endpoint, and LogWisp under a pass-through source with `raw` format. | §10 |
 
 ## 1. The shape
 
@@ -484,15 +484,14 @@ sudo install -d -m 0755 /etc/logwisp
 sudo install -m 0644 deploy/logwisp/aggregator.toml /etc/logwisp/aggregator.toml
 ```
 
-`deploy/docker/Dockerfile.logwisp` builds the same package into a `scratch` layer
-under UID 65532 and is what H9 imports when the in-pod sidecar is tested; it is not
-needed to run the fleet. That sidecar's `/stream` and `/status` are unauthenticated
-and the stream sends a wildcard CORS header, so `20-networkpolicy.yaml` is the only
-thing keeping 8080 off the player path — treat it exactly like the probe port, and
-note that LogWisp's TLS and mTLS identity authorization, unused here, is the eventual
-answer for a reader that is not on the node. Both repositories pin Go 1.27.1 for the
-builder, and LogWisp's module still declares 1.26.5 — raise that in its own
-repository, not here.
+LogWisp's own root `Dockerfile` builds the same package into a `scratch` layer under
+UID 65532 and is what H9 imports when the in-pod sidecar is tested; it is not needed
+to run the fleet. That sidecar's `/stream` and `/status` are unauthenticated and the
+stream sends a wildcard CORS header, so `20-networkpolicy.yaml` is the only thing
+keeping 8080 off the player path — treat it exactly like the probe port, and note
+that LogWisp's TLS and mTLS identity authorization, unused here, is the eventual
+answer for a reader that is not on the node. Both repositories now declare and pin
+Go 1.27.1, so the check above applies to `$LOGWISP_ROOT` unchanged.
 
 For anything past the lab, publish the vi-fighter image and reference it **by
 digest**, not by tag. A tag can be moved; a session's logs then name a revision that
@@ -811,10 +810,11 @@ shape is that **vi-fighter's log envelope survives exactly one path** (A17):
 | Path | What arrives |
 |---|---|
 | Pod stdout → Kubernetes pod log | The line as written. `-log-stdout` puts vi-fighter's own JSON on stdout and the API returns it byte for byte. |
-| LogWisp console source → `raw` format | The line as written. The source puts the whole line in the entry's message and leaves its fields empty, which is the one combination `raw` passes through. |
-| LogWisp file source → any format | `time`, `level` and `fields` only. It unmarshals every valid JSON object into a narrower envelope, so `sub`, `run`, `tick` and `frame` are gone before the formatter is consulted and `raw` cannot restore them. |
+| LogWisp console source → `raw` format | The line as written. The source puts the whole line in the entry's message and leaves its fields empty, and `raw` emits that message unchanged. |
+| LogWisp file source, `raw = true` → `raw` format | The line as written. The source never parses, so the envelope survives whatever keys it carries. |
+| LogWisp file source, defaults | The line as written, carried as text. The JSON branch is refused for any line holding a key outside `time`, `level`, `msg` and `fields` — which every vif line does. |
 
-The first two compose and the third is why the in-pod sidecar is not on this path.
+All three compose; the last two need LogWisp at or past the pass-through change.
 So: the session writes to stdout, the allocator follows each live pod's log, and
 one LogWisp on the guest reads the merged lines on standard input and serves them
 as SSE on loopback — [`deploy/logwisp/aggregator.toml`](../deploy/logwisp/aggregator.toml).
@@ -902,12 +902,10 @@ unchanged, metric values included, because `internal/status` emits the registry 
 `sub="stat"` records into the same log. §10.3 fans that into one stream for the
 website; nothing between the two reinterprets a line.
 
-Two LogWisp behaviours decide that shape and are worth keeping in mind before
-anyone moves the source. Its file source keeps only `time`, `level`, top-level
-`msg` and `fields`, so a vif line loses `sub`, `run`, `tick` and `frame` there
-whatever the format says. It also seeks to end-of-file when it first discovers an
-existing file, so lines written before the watcher attaches are skipped. One line
-is intended to end every session and name why:
+One LogWisp behaviour is worth keeping in mind before anyone moves the source: a
+file watcher seeks to end-of-file when it first discovers an existing file, so lines
+written before it attaches are skipped unless the source sets `from = "start"`. One
+line is intended to end every session and name why:
 
 ```json
 {"msg":"session ended","phase":"expired","reason":"roster empty for 1m30s","guests":0,"tick":240}
@@ -970,7 +968,8 @@ verified ones. The full gap register is the fleet plan's
   pieces are each verified in isolation — `-log-stdout` in a pod during the run, and
   LogWisp's console source and `raw` format from its own contract — but no allocator
   has yet spliced a session ID into a followed pod log and served the result.
-  The in-pod sidecar remains a separate, deferred experiment (H9).
+  The in-pod sidecar remains a separate, deferred experiment (H9), no longer
+  blocked on LogWisp.
 - **The allocator and website integration are not built** (A16). The API, restricted
   kubeconfig, nginx bridge path, Hugo session page, and the log path in §10 are
   contracts for the next task.

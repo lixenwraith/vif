@@ -6,8 +6,8 @@
 # the whole registry into the log.
 #
 # What the deployment actually runs is the node-level fan-in in
-# deploy/logwisp/aggregator.toml: the file source below cannot carry vi-fighter's
-# envelope intact and the pod log can. See doc/kube_docker_deploy.md §10.3.
+# deploy/logwisp/aggregator.toml. This sidecar needs a LogWisp at or past the file
+# source's pass-through mode. See doc/kube_docker_deploy.md §10.3.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -30,12 +30,11 @@ data:
     [[pipelines]]
     name = "session"
 
-    # The file source unmarshals every valid JSON object into LogWisp's narrower
-    # envelope, keeping only time, level, top-level msg and fields — so sub, run,
-    # tick and frame are gone before the formatter runs, and `raw` cannot restore
-    # them. JSON is therefore the honest setting here; H9 is the fix.
+    # raw = true below leaves the line unparsed, and this leaves it unformatted:
+    # every key vi-fighter wrote reaches both sinks byte for byte.
     [pipelines.flow.format]
-    type = "json"
+    type = "raw"
+    sanitizer_policy = "raw"
 
     # Containers do not share stdout, so a console source cannot consume the
     # session container's; inside the pod the read-only shared file is the only
@@ -47,6 +46,10 @@ data:
     directory = "/var/log/vif"
     pattern = "vif-log-*.jsonl"
     check_interval_ms = 100
+    # The session writes before the watcher attaches, so a file discovered with
+    # content already in it is read whole rather than from its end.
+    raw = true
+    from = "start"
 
     # The container's stdout carries normalized events for `kubectl logs`; the
     # session writes the source JSONL to the shared file instead.

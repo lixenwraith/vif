@@ -23,8 +23,8 @@ level = "warn"
 name = "fleet"
 
 # The console source puts the whole line in the entry message and leaves the
-# structured fields empty, which is the one combination `raw` passes through
-# untouched. Every key vi-fighter wrote — sub, run, tick, frame — survives.
+# structured fields empty, and `raw` emits that message unchanged. Every key
+# vi-fighter wrote — sub, run, tick, frame — survives.
 [pipelines.flow.format]
 type = "raw"
 sanitizer_policy = "raw"
