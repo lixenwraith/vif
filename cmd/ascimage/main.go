@@ -49,19 +49,19 @@ func main() {
 	inputPath := flag.Arg(0)
 	colorMode := parseColorMode(colorStr)
 
-	if isVfimg(inputPath) {
-		runVfimgInput(inputPath, colorMode, output, noStatus)
+	if isVifimg(inputPath) {
+		runVifimgInput(inputPath, colorMode, output, noStatus)
 	} else {
 		runImageInput(inputPath, modeStr, colorMode, width, output, dualOutput,
 			fitMode, noStatus, zoomLevel, anchorX, anchorY)
 	}
 }
 
-func isVfimg(path string) bool {
+func isVifimg(path string) bool {
 	return strings.HasSuffix(strings.ToLower(path), ".vifimg")
 }
 
-func runVfimgInput(path string, colorMode terminal.ColorMode, output string, noStatus bool) {
+func runVifimgInput(path string, colorMode terminal.ColorMode, output string, noStatus bool) {
 	dual, err := ascimage.LoadDualMode(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading vifimg: %v\n", err)
@@ -80,7 +80,7 @@ func runVfimgInput(path string, colorMode terminal.ColorMode, output string, noS
 		return
 	}
 
-	viewer := ascimage.NewViewerFromDual(dual)
+	viewer := NewViewerFromDual(dual)
 	viewer.ColorMode = colorMode
 	viewer.ShowStatus = !noStatus
 
@@ -205,16 +205,16 @@ func runFileOutput(img image.Image, renderMode ascimage.RenderMode, colorMode te
 }
 
 func runInteractive(img image.Image, renderMode ascimage.RenderMode, colorMode terminal.ColorMode, fitMode, noStatus bool, zoomLevel int) {
-	viewer := ascimage.NewViewer(img)
+	viewer := NewViewer(img)
 	viewer.RenderMode = renderMode
 	viewer.ColorMode = colorMode
 	viewer.ShowStatus = !noStatus
 
 	if !fitMode {
-		viewer.ViewMode = ascimage.ViewActual
+		viewer.ViewMode = ViewActual
 	}
 	if zoomLevel != 100 {
-		viewer.ViewMode = ascimage.ViewCustom
+		viewer.ViewMode = ViewCustom
 		viewer.ZoomLevel = zoomLevel
 	}
 
@@ -224,7 +224,7 @@ func runInteractive(img image.Image, renderMode ascimage.RenderMode, colorMode t
 	}
 }
 
-func runViewer(viewer *ascimage.Viewer, colorMode terminal.ColorMode) error {
+func runViewer(viewer *Viewer, colorMode terminal.ColorMode) error {
 	term := terminal.New(colorMode)
 
 	if err := term.Init(); err != nil {
@@ -272,7 +272,7 @@ const (
 	actionRedraw
 )
 
-func handleKey(ev terminal.Event, viewer *ascimage.Viewer, termW, termH int) keyAction {
+func handleKey(ev terminal.Event, viewer *Viewer, termW, termH int) keyAction {
 	smallStep := 1
 	largeStep := 10
 	pageStep := termH / 2
@@ -304,7 +304,7 @@ func handleKey(ev terminal.Event, viewer *ascimage.Viewer, termW, termH int) key
 			return actionRedraw
 		case '0':
 			viewer.ZoomLevel = 100
-			viewer.ViewMode = ascimage.ViewCustom
+			viewer.ViewMode = ViewCustom
 			return actionRedraw
 		case 'h':
 			viewer.Pan(-smallStep, 0, termW, termH)
@@ -365,7 +365,7 @@ func handleKey(ev terminal.Event, viewer *ascimage.Viewer, termW, termH int) key
 	return actionNone
 }
 
-func renderFrame(viewer *ascimage.Viewer, buf *render.RenderBuffer, term terminal.Terminal, termW, termH int) {
+func renderFrame(viewer *Viewer, buf *render.RenderBuffer, term terminal.Terminal, termW, termH int) {
 	buf.Clear()
 	viewer.Render(buf, termW, termH)
 	buf.FlushToTerminal(term)

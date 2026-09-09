@@ -20,6 +20,16 @@ It is the contract, not a suggestion.
 - Prefer editing an existing file over adding one.
 - Refactor comments as you review and edit the files, there are pre-existing files that do not follow the guidelines.
 
+## Data
+
+- Embedded files live in `internal/asset/`. External files live in `wad/`, laid
+  out exactly as they install. Nowhere else, and never beside the code that
+  reads them.
+- `pkg/` never imports `internal/`. A leaf package that needs game data takes it
+  from its caller.
+- Resolution is flag, `-config-dir`, user root, XDG system roots, embedded.
+  Never add a working-directory probe.
+
 ## Scope
 
 - Implement what was asked. Do not add tables, indirection, telemetry, tests or
@@ -39,6 +49,7 @@ It is the contract, not a suggestion.
 ## Docs and commits
 
 - `doc/` is already long. Condense when you touch it; do not append unless new concept or scope is being added.
+- A gap you are deferring goes in `doc/todo.md` as one line, not a comment.
 - PR bodies: what changed, why, how it was verified.
 
 ## Gates

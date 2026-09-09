@@ -24,11 +24,9 @@ const (
 	MusicConfigFile  = "music.toml"
 	SoundConfigFile  = "sounds.toml"
 
-	// LegacyLocalConfigDir and LegacyLocalContentDir are compatibility-only
-	// working-directory fallbacks. New installations use ConfigRoots.
-	LegacyLocalConfigDir  = "config"
-	LegacyLocalContentDir = "data"
-	LegacyLocalLogDir     = "log"
+	// FallbackLogDir is used only when no platform state or cache root can be
+	// established; every normal target resolves one.
+	FallbackLogDir = "log"
 )
 
 // ExternalFiles reports whether this target has a host filesystem available
@@ -69,8 +67,8 @@ func ConfigRoots(override string) []string {
 }
 
 // DefaultLogDir returns the writable session-log directory. The XDG state
-// hierarchy is preferred; the historical ./log directory is the final
-// fallback when no platform user directory can be established.
+// hierarchy is preferred; ./log is the final fallback when no platform user
+// directory can be established.
 func DefaultLogDir() string { return stateDir(LogDirName) }
 
 // DefaultJournalDir returns the writable replay-journal directory. Journals
@@ -83,7 +81,7 @@ func stateDir(kind string) string {
 			return filepath.Join(base, AppDirName, kind)
 		}
 	}
-	return filepath.Join(".", LegacyLocalLogDir)
+	return filepath.Join(".", FallbackLogDir)
 }
 
 func stateBase() string {

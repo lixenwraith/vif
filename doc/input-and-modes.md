@@ -303,10 +303,9 @@ refuses a disable that a system declares required, naming the dependents.
 Resolution order is:
 
 1. path passed with `-k`;
-2. `input/keymap.toml`, then legacy `keymap.toml`, under `-config-dir`;
-3. the same pair under the user root, then under each system root;
-4. deprecated `./keymap.toml` and `./config/keymap.toml`;
-5. the embedded `internal/input/default_keymap.toml` document.
+2. `input/keymap.toml` under `-config-dir`;
+3. the same under the user root, then under each system root;
+4. the embedded `internal/asset/input/keymap.toml` document.
 
 The exact embedded document is installed to the user input directory by
 `make install-config`, so the editable and WASM-safe defaults cannot drift. See

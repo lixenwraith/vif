@@ -212,7 +212,7 @@ monitor. Alternate configurations include a blank authoring scaffold, an
 expanded main encounter, and a tower-defense scenario.
 
 See [HFSM and configuration](fsm-and-configuration.md) and the detailed
-[authoring reference](../config/README.md).
+[authoring reference](fsm-reference.md).
 
 ## 7. Input as a semantic boundary
 

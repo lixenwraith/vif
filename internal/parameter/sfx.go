@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lixenwraith/vi-fighter/internal/asset"
 	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
@@ -40,6 +41,12 @@ type SoundSet struct {
 // their own struct at construction: manifest.BuildSystems runs during
 // App.init, before Hub.StartAll resolves the table.
 var Sfx SoundSet
+
+// BuiltinSounds parses the shipped sound bank. pkg/audio carries no specs of
+// its own, so this is what AudioService and soundlab register at Start.
+func BuiltinSounds() ([]*audio.SoundDef, error) {
+	return audio.LoadSoundsFS(asset.DefaultSounds, asset.DefaultSoundFiles...)
+}
 
 // soundSpec binds one registry name to its ID destination and mix policy.
 type soundSpec struct {
@@ -98,7 +105,7 @@ func init() {
 // engine latched silent mode, and a later failover is audible without a
 // re-resolve.
 //
-// A name with no spec is a mismatch between soundTable and the built-in TOML —
+// A name with no spec is a mismatch between soundTable and the shipped bank —
 // a build-time error, not a runtime state. The user's sounds.toml overrides
 // existing names and cannot remove one, so it cannot produce this. Unresolved
 // slots are still written (SoundNone), keeping the call idempotent and correct

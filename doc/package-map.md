@@ -63,14 +63,14 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `cmd/vif` | Grouped config/log/session flags including startup host/join selection, logging/journal/runtime-capture setup, replay/script/watch/check/schema selection, process exit policy. |
 | `internal/content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. Internal because it depends on game `core.CodeBlock`. |
 | `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, drive frame/input/playback/script loops, capture and install the shared world, run the correction cadence and authority succession, choose the session's playout lead, own this participant's listening port and the reachability map peers dial from, and verify anchor/config identity. It owns the correction and authority protocol rather than delegating it: both read and write the live world under its lock, so a package boundary between them would be an interface over `*App` rather than a smaller unit. |
-| `internal/asset` | Embedded default FSM files, embedded tutorial corpus, built-in splash bitmap font. |
+| `internal/asset` | Every embedded shipped file — fallback FSM bundle, tutorial corpus, default keymap, built-in sound bank — plus the splash bitmap font. The only package with an `embed` directive for shipped data. |
 | `internal/component` | Pure ECS component data and related enums/masks. Position is declared here but stored specially by `engine`. |
 | `internal/core` | Small shared value types, entity ID and replication domain, modes, code blocks, the deterministic dependency resolver both `service` and `engine` order with, crash and stderr-capture support. |
 | `internal/engine` | World, typed stores, positions/spatial grid, resources, game context/state, pausable/manual clocks, time control, scheduler, locking, and the roster/control re-derivation an install performs over the cursor store. |
 | `internal/event` | Event catalog/payload registry, producer origins, replay record/anchor schema, MPSC queue, handler router, pooled/batched payload support. |
 | `internal/fsm` | Generic hierarchical, parallel-region machine; TOML graph loader; transitions, delayed actions, variables, per-region trigger masks, and optional transition/region observation hooks. |
 | `internal/fsm/std` | Reusable HFSM actions/guards and host capability interface. It does not import the game engine. |
-| `internal/input` | Terminal-event parser, semantic intents, embedded/installable default keymap TOML, override decoding/merging. It does not import the ECS. |
+| `internal/input` | Terminal-event parser, semantic intents, keymap override decoding/merging; the default document comes from `internal/asset`. It does not import the ECS. |
 | `internal/journal` | Runtime-agnostic deterministic-run machinery: recording lifecycle, in-memory capture, rotated JSONL loading, replay ordering/payload decoding, seeded fuzz input, and versioned authored tick scripts. Drivers depend on narrow target interfaces and never import `internal/app`. |
 | `internal/lifecycle` | The allocated session's lifetime policy: a pure state machine over an injected clock turning roster observations into a phase (waiting, occupied, vacant, draining, expired), a deadline, and whether a dial may still be admitted. It opens nothing, reads no roster, and terminates nothing — the run supplies the observations and acts on the phase. |
 | `internal/manifest` | Authoritative component/system/renderer lists, the simulation fingerprint two participants must share,, generated builders, game binding for the generic FSM, and the JSON schema dump the map editor consumes. |
@@ -78,9 +78,9 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/network` | Length-prefixed TCP transport, optional TLS configuration, anchor/start/ready session protocol, the peer-link handshake two participants open a stream with, the succession chain a handoff reads, peers, sequence/ack fields, bounded inbound notifications, and the per-address dial budget the coordinator admits against. |
 | `internal/parameter` | Gameplay constants, timing, priorities, effect/audio tuning, and navigation/genetics settings. |
 | `internal/parameter/visual` | Renderer-facing characters, masks, palettes, gradients, shapes, and post-process settings. |
-| `internal/paths` | Platform config-root and user-state discovery, categorized resource names, and deprecated fallback names; performs no resource I/O. |
+| `internal/paths` | Platform config-root and user-state discovery and categorized resource names; performs no resource I/O. |
 | `internal/resource` | Resolve the game config, keymap, corpus and audio overrides against the config-root precedence rule, and validate what those paths resolve to for `-check`. |
-| `internal/pattern` | Convert ascimage/dual-image assets into wall/pattern spawn data; translate, mask, tile, and merge patterns. |
+| `internal/pattern` | Convert a dual-mode `.vifimg` asset into wall spawn cells. One file, one path, no drawing. |
 | `internal/probe` | The supervised run's HTTP endpoint: `/health` and `/metrics`. Stdlib only and stateless — a snapshot function supplies the run's answer and a status registry supplies the metrics, so the run decides what its words mean and this decides only how to say them. |
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |
@@ -104,8 +104,8 @@ flowchart TD
 
 | Package | Public purpose | Important coupling |
 |---|---|---|
-| `pkg/ascimage` | Convert images to terminal cells/dual assets and provide a viewer. | Viewer uses the in-repo render buffer; conversion uses external terminal/color types. |
-| `pkg/audio` | Synthesis, sound registry/cache, PCM mixer, patterns, harmony, voices, sequencer, backend detection, WAV sink. | Game policy is injected; the package does not import `internal/system` or APM state. |
+| `pkg/ascimage` | Convert images to terminal cells and read/write dual-mode `.vifimg` assets. | External terminal/color types only. The interactive viewer lives in `cmd/ascimage` because it needs the in-repo render buffer. |
+| `pkg/audio` | Synthesis, sound registry/cache, PCM mixer, patterns, harmony, voices, sequencer, backend detection, WAV sink. | Game policy *and the sound bank* are injected; the package ships no specs and imports nothing under `internal/`. |
 | `pkg/genetic` | Generic generational and caller-driven streaming genetic engines, deterministic PCG streams, exact continuation checkpoints, and operators. | Core package uses the standard library only. |
 | `pkg/genetic/fitness` | Convert lifetime metric bundles to scalar fitness. | Depends on tracking types. |
 | `pkg/genetic/tracking` | Pooled lifetime metric collectors for simple and composite subjects. | No game-specific component dependency. |
@@ -113,14 +113,14 @@ flowchart TD
 | `pkg/genetic/persistence` | Atomic file saves and TOML/JSON codecs for population DTOs. | TOML codec imports the external TOML module. |
 | `pkg/linkpace` | Per-peer link estimation (round trip, jitter, delivery rate, saturation) and the bounded controller that turns it into a correction cadence and keyframe interval inside a convergence floor. | Standard library only, deliberately: the package cannot see a world, an event or a component, which is what makes "network timing may not enter the simulation" (D-24) structural rather than remembered. |
 | `pkg/maze` | Recursive-backtracker maze generation, rooms, braiding, and solution data. | Uses shared point/value types and is surfaced through wall/maze events. |
-| `pkg/navigation` | Flow fields, recompute caches, flow steering, composite passability, multi-route graphs. | Uses shared points and tuning constants; wall access is callback-based. |
+| `pkg/navigation` | Flow fields, recompute caches, flow steering, composite passability, multi-route graphs. | Owns its route-graph tuning; wall access is callback-based. |
 | `pkg/vmath/physics` | `float64` kinetic state, integration, bounce, homing/arrival, collisions, orbital and 3D operations. | Owns `physics.Kinetic`; depends only on the standard library and `pkg/vmath`. |
 | `pkg/vmath` | `float64` scalar/vector math, LUTs, shapes, arcs, grid traversal, cell topology, and seeded randomness. | Standard-library-only foundation; integer `Point`/`Area` values are grid indices, not fixed-point numbers. |
 
-Although these packages are under `pkg`, not all of them are guaranteed to be
-drop-in libraries outside this module: for example, `pkg/ascimage` imports the
-in-repository renderer and `pkg/navigation` imports game tuning. The numeric
-stack is cleanly one-way: `pkg/vmath` imports only the standard library,
+No package under `pkg` imports anything under `internal`; `make arch-check`
+enforces it. That is what lets a leaf take game data — the sound bank, wall
+callbacks, fitness policy — from its caller instead of reaching for it. The
+numeric stack is cleanly one-way: `pkg/vmath` imports only the standard library,
 `pkg/vmath/physics` imports `pkg/vmath`, and neither exposes the removed
 fixed-point types or conversion API. `pkg/audio`, the core `pkg/genetic`
 package, `pkg/linkpace` and the numeric stack have the clearest game-independent

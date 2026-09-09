@@ -1,6 +1,7 @@
 # ascimage Pipeline
 
-Terminal image converter and viewer for `vif` wall/backdrop system.
+Terminal image converter and viewer for the `vif` wall/backdrop system. Assets
+live in `wad/image`; see [filesystem layout](../../doc/filesystem-layout.md).
 
 ## Conversion
 
@@ -63,11 +64,14 @@ EventWallPatternSpawnRequest { Path, X, Y, BlockMask: WallBlockNone }
 ### Example:
 vifimg creation (width 140):
 ```
-bin/ascimage -dual ./ascimage/test.vifimg -w 140 -m quadrant ~/image/test.jpeg
+bin/ascimage -dual wad/image/backdrop.vifimg -w 140 -m quadrant ~/image/test.jpeg
 ```
 
-Game command to drop it as non-blocking wall background:
-`event WallPatternSpawnRequest {path="./ascimage/test.vifimg",x=0,y=0,block_mask=0}`
+Game command to drop the shipped sample as a non-blocking wall background:
+`event WallPatternSpawnRequest {path="wad/image/test.vifimg",x=0,y=0,block_mask=0}`
+
+The path is resolved against the process working directory, so run `vif` from
+the repository root — or give an absolute path.
 
 ### Sizing
 

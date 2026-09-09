@@ -263,7 +263,7 @@ vacant)
 
 check)
 	need_bin
-	for tree in "" "-g config/main" "-g config/td"; do
+	for tree in "" "-g wad/game" "-g wad/games/td"; do
 		# shellcheck disable=SC2086
 		"$BIN" -check $tree >/dev/null || fail "config check: ${tree:--d embedded}"
 	done

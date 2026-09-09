@@ -1,12 +1,12 @@
 package input
 
 import (
-	_ "embed"
 	"fmt"
 	"maps"
 	"sync"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/asset"
 )
 
 // KeyBehavior classifies how a key is processed.
@@ -57,13 +57,9 @@ type KeyTable struct {
 	TextNavKeys map[terminal.Key]KeyEntry
 }
 
-//go:embed default_keymap.toml
-var defaultKeymapTOML []byte
-
-// The embedded document is source-controlled and validated by package tests.
 // Panicking on a broken build artifact matches the other embedded defaults.
 var defaultKeyTable = sync.OnceValue(func() *KeyTable {
-	kt, err := LoadKeyConfig(defaultKeymapTOML)
+	kt, err := LoadKeyConfig(asset.DefaultKeymap)
 	if err != nil {
 		panic(fmt.Sprintf("input: embedded default keymap: %v", err))
 	}

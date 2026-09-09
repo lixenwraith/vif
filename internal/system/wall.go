@@ -466,35 +466,15 @@ func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnReque
 	})
 }
 
-// handlePatternSpawn loads .vifimg pattern and spawns as composite wall
-// Converts pattern cells to WallCellDef and delegates to executeBatchSpawn
+// handlePatternSpawn loads a .vifimg pattern and spawns it as a composite wall.
 func (s *WallSystem) handlePatternSpawn(payload *event.WallPatternSpawnRequestPayload) {
-	colorMode := s.world.Resources.Config.ColorMode
-
-	patternResult, err := pattern.LoadDualModePattern(payload.Path, colorMode)
+	result, err := pattern.LoadDualModePattern(payload.Path, s.world.Resources.Config.ColorMode)
 	if err != nil {
 		s.world.DebugPrint("pattern load failed: " + err.Error())
 		return
 	}
-
-	if patternResult.Empty() {
+	if result.Empty() {
 		return
-	}
-
-	cells := make([]component.WallCellDef, len(patternResult.Cells))
-	for i, c := range patternResult.Cells {
-		cells[i] = component.WallCellDef{
-			OffsetX: c.OffsetX,
-			OffsetY: c.OffsetY,
-			WallVisualConfig: component.WallVisualConfig{
-				Char:     c.Rune,
-				FgColor:  c.Fg,
-				BgColor:  c.Bg,
-				RenderFg: c.RenderFg,
-				RenderBg: c.RenderBg,
-			},
-			Attrs: c.Attrs,
-		}
 	}
 
 	s.executeBatchSpawn(&event.WallBatchSpawnRequestPayload{
@@ -503,7 +483,7 @@ func (s *WallSystem) handlePatternSpawn(payload *event.WallPatternSpawnRequestPa
 		BlockMask:     payload.BlockMask,
 		CollisionMode: payload.CollisionMode,
 		Composite:     true,
-		Cells:         cells,
+		Cells:         result.ToWallCellDefs(),
 	})
 }
 

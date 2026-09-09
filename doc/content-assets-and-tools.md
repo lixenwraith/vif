@@ -29,13 +29,12 @@ Source resolution is:
 
 1. `-f <path>`: an explicit directory, or a single file pinned within its
    parent directory;
-2. `content/`, then legacy `data/`, under `-config-dir`;
-3. the same pair under the user root, then under each system root;
-4. deprecated repository-relative `./data`;
-5. embedded tutorial content.
+2. `content/` under `-config-dir`;
+3. the same under the user root, then under each system root;
+4. embedded tutorial content.
 
-`make install-config` copies the repository corpus into the categorized user
-directory. The complete common precedence is documented in
+`make install-config` copies `wad/content` into the categorized user directory.
+The complete common precedence is documented in
 [External filesystem layout](filesystem-layout.md).
 
 `-d` skips discovery and forces the embedded FSM and corpus. It is mutually
@@ -154,18 +153,26 @@ counts so replay rejects a corpus that changed behind the same path.
 
 ## 7. Embedded assets
 
-`internal/asset` compiles three fallback asset groups into the executable:
+`internal/asset` is the only package that embeds shipped data, and it embeds
+everything a build must be able to play without a filesystem:
 
 | Asset | Source | Purpose |
 |---|---|---|
-| FSM bundle | `internal/asset/config/*.toml` | Default campaign and region files. |
+| FSM bundle | `internal/asset/config/*.toml` | Fallback campaign and region files. |
 | Content bundle | `internal/asset/content/*.toml` | Always-available tutorial corpus. |
+| Keymap | `internal/asset/input/keymap.toml` | Default bindings; also what `make install-config` installs. |
+| Sound bank | `internal/asset/audio/*.toml` | Built-in specs `pkg/audio` renders. |
 | Splash font | `internal/asset/splash_font.go` | 95 printable ASCII glyphs plus fallback, each a 12-row bitmap. |
 
 The embedded filesystems are narrowed with `fs.Sub`, so their runtime root is
-the asset directory rather than `internal/asset/...`. Missing embedded bundles
-panic during package initialization because they represent a broken build
-artifact, not a recoverable user configuration error.
+the category directory rather than `internal/asset/...`. Missing embedded
+bundles panic during package initialization because they represent a broken
+build artifact, not a recoverable user configuration error.
+
+`pkg/audio` holds no specs, which is what keeps `pkg/` free of `internal/`
+imports: `parameter.BuiltinSounds` parses the embedded bank and the embedder
+passes it as `AudioConfig.BaseSounds`. A user `sounds.toml` overrides that set
+by name.
 
 The splash renderer consumes the built-in bitmap font for large text overlays.
 The font editor updates the source representation; it is not loaded from a
@@ -192,20 +199,20 @@ transparency, rune, dimensions, and an optional anchor hint. The pattern loader
 selects the active color representation, preserves palette attributes, skips
 transparent cells, and creates `PatternCell` offsets.
 
-`PatternResult` supports translation, rectangular/function masking, tiling, and
-last-write-wins merging. It converts cells to `WallCellDef` values and emits an
-`EventWallCompositeSpawnRequest` with a block mask and optional box style.
-Thus images participate in wall collision, ECS lifecycle, camera cropping, and
-the normal wall renderer rather than drawing directly to the terminal.
+`WallSystem` converts a `PatternResult` to `WallCellDef` values and spawns them
+as one composite wall with a block mask and optional box style, so images
+participate in wall collision, ECS lifecycle, camera cropping, and the normal
+wall renderer rather than drawing directly to the terminal.
 
 A pattern can be blocking (`WallBlockAll` or directional mask) or a nonblocking
-visual backdrop (`WallBlockNone`). Authored anchors are suggestions; the spawn
-event still supplies the actual map coordinate.
+visual backdrop (`WallBlockNone`). The spawn event supplies the map coordinate;
+the authored anchor is carried through the loader but nothing reads it.
 
-The documented extension is `.vifimg`. The repository currently contains a
-fixture named `cmd/ascimage/test.vfimg`; that shorter extension is inconsistent
-with the command's actual `.vifimg` detection and should not be copied as a
-format example.
+The extension is `.vifimg`, which is what `cmd/ascimage` detects and what the
+shipped `wad/image/test.vifimg` sample uses. `WallPatternSpawnRequest.path` is
+still resolved against the process working directory rather than the config
+roots, so an installed `image/` tree cannot yet be named portably from a
+configuration; see [TODO](todo.md).
 
 ## 9. Ascimage tool
 
@@ -265,6 +272,7 @@ experimental dependencies.
 | Authored TOML | `internal/content/toml.go` |
 | Selection cursor | `internal/content/cursor.go` |
 | Service/resolution | `internal/service/adapter_content.go`, `internal/resource/resolve.go`, `internal/paths` |
-| Embedded assets | `internal/asset/*.go`, `internal/asset/config`, `internal/asset/content` |
-| Pattern conversion | `internal/pattern/*.go` |
-| Image codec/tool | `pkg/ascimage`, `cmd/ascimage` |
+| Embedded assets | `internal/asset/asset.go` and its `config`, `content`, `input`, `audio` directories |
+| Pattern conversion | `internal/pattern/pattern.go` |
+| Image codec | `pkg/ascimage` |
+| Image tool and viewer | `cmd/ascimage` |

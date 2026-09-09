@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/paths"
 	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
@@ -32,6 +35,12 @@ func NewSession(backend string, masterVol float64, out io.Writer) (*Session, err
 	cfg.Enabled = true
 	cfg.MasterVolume = masterVol
 	cfg.ForceBackend = backend
+	// The same bank the game registers, from the same embedded asset.
+	base, err := parameter.BuiltinSounds()
+	if err != nil {
+		return nil, err
+	}
+	cfg.BaseSounds = base
 
 	eng, err := audio.NewAudioEngine(cfg)
 	if err != nil {
@@ -122,7 +131,7 @@ func (s *Session) loadPatternFile(file string, replace bool) error {
 }
 
 func (s *Session) seedBuiltinSounds() error {
-	defs, err := audio.BuiltinSounds() // fresh parse of embedded TOML; no registry aliasing
+	defs, err := parameter.BuiltinSounds() // fresh parse; no registry aliasing
 	if err != nil {
 		return err
 	}
@@ -149,12 +158,30 @@ func (s *Session) seedBuiltinPatterns() error {
 	return nil
 }
 
+// overridePath is where the game reads a user audio override, so an untitled
+// document saves straight into the path the next run picks up.
+func overridePath(name string) (string, error) {
+	roots := paths.ConfigRoots("")
+	if len(roots) == 0 {
+		return "", errors.New("no user config root; name a file")
+	}
+	dir := filepath.Join(roots[0], paths.AudioDirName)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, name), nil
+}
+
 func (s *Session) saveSounds(file string) error {
 	if file == "" {
 		file = s.sounds.src
 	}
 	if file == "" {
-		return fmt.Errorf("no provenance path; use: save sound <file>")
+		p, err := overridePath(paths.SoundConfigFile)
+		if err != nil {
+			return err
+		}
+		file = p
 	}
 	// Name-shadow model: the root re-emits every sound in the document.
 	// Includes still load first and are overridden per name, so reloading
@@ -181,7 +208,11 @@ func (s *Session) savePatterns(file string) error {
 		file = s.pats.src
 	}
 	if file == "" {
-		return fmt.Errorf("no provenance path; use: save pattern <file>")
+		p, err := overridePath(paths.MusicConfigFile)
+		if err != nil {
+			return err
+		}
+		file = p
 	}
 	data, err := audio.MarshalPatternDefs(s.pats.all())
 	if err != nil {

@@ -52,6 +52,7 @@ var (
 	flagScript = flag.String("script", "", "Run an authored deterministic TOML tick script")
 	flagWatch  = flag.Bool("watch", false, "Present a -script run on this terminal")
 	flagHelp   = flag.Bool("h", false, "Print the flag help and exit")
+	flagVer    = flag.Bool("version", false, "Print the build version and exit")
 
 	flagAudioBackend string
 	flagConfig       = newConfigFlags()
@@ -85,6 +86,10 @@ func main() {
 		// Asked for, so it is output rather than a diagnostic: stdout, exit zero,
 		// greppable without redirecting stderr.
 		writeUsage(os.Stdout)
+		return
+	}
+	if *flagVer {
+		writeVersion(os.Stdout)
 		return
 	}
 

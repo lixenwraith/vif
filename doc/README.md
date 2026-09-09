@@ -32,7 +32,8 @@ reader can start with the application shape and then descend into a subsystem.
 | [AI, navigation, physics, and evolution](ai-physics-and-evolution.md) | Domain detail | How do flow fields, route learning, genetics, float64 geometry, and collision/steering work together? |
 | [Content, assets, and tools](content-assets-and-tools.md) | Domain detail | How are corpora and embedded assets resolved, parsed, validated, and authored? |
 | [Services and networking](services-and-networking.md) | Domain detail | How are I/O resources managed, and how do startup sessions, framing, polling, and disconnect work? |
-| [External filesystem layout](filesystem-layout.md) | Operational detail | Where are config, content, logs, and journals discovered, installed, and migrated? |
+| [External filesystem layout](filesystem-layout.md) | Operational detail | Where do the `wad/` and embedded payloads live, and how are config, content, logs, and journals discovered and installed? |
+| [Packaging](packaging.md) | Operational detail | What must hold for a distribution package, and what is still missing per repository? |
 | [Development and operations](development.md) | Operational detail | How is the project built, generated, tested, diagnosed, and deployed on native and WASM targets? |
 | [Session fleet plan](kubernetes-fleet.md) | Operational detail | What is deployed, what is still open, and what was decided against? Holds the work list. |
 | [Deploying the session fleet](kube_docker_deploy.md) | Operational detail | How are the FreeBSD host's `pf` rules, the Arch/bhyve guest, Docker, K3s, the image and the ten-session fleet installed, linked and operated? |
@@ -40,10 +41,9 @@ reader can start with the application shape and then descend into a subsystem.
 
 Existing focused references remain useful:
 
-- [FSM authoring reference](../config/README.md) documents the TOML surface in
+- [FSM authoring reference](fsm-reference.md) documents the TOML surface in
   detail.
-- [Content corpus reference](../data/README.md) describes `.txt` and authored
-  `.toml` corpora.
+- [TODO](todo.md) is the running work list the packaging checklists feed.
 - [Keymap example](../internal/input/README.md) shows sparse key overrides.
 - [Genetic package reference](../pkg/genetic/README.md) documents the reusable
   optimization library.
@@ -67,10 +67,12 @@ changing a subsystem, update the source that actually owns its shape.
 | Cursor lifecycle, roster, and local selection | `internal/system/cursor.go`, `internal/engine/resource.go` | FSM cursor events, mode routing, per-slot metrics |
 | Shared-world capture layout and its declared carriers | `internal/snapshot/capture.go`, `internal/app/capture.go`, `SystemDef.Snapshot` in `internal/manifest/definition.go` | `internal/engine/snapshot_world_gen.go`, `internal/app/snapshot_stage.go`, `internal/network/snapshot.go` |
 | Input enum string forms | input enum definitions | `internal/input/strings_gen.go` |
-| Default encounter progression | `internal/asset/config/*.toml` | `internal/fsm`, `internal/engine.ClockScheduler` |
-| Alternate scenarios | `config/blank`, `config/main`, `config/td` | selected with `-g` |
+| Shipped encounter progression | `wad/game/*.toml` | `internal/fsm`, `internal/engine.ClockScheduler` |
+| Embedded fallback progression | `internal/asset/config/*.toml` | the same, when no root supplies one |
+| Alternate scenarios | `wad/games/blank`, `wad/games/td` | selected with `-g` |
 | Gameplay tuning | `internal/parameter` and `internal/parameter/visual` | systems and renderers |
 | Embedded fallback corpus | `internal/asset/content/*.toml` | content service |
+| Built-in sound bank | `internal/asset/audio/*.toml` | `parameter.BuiltinSounds`, `AudioConfig.BaseSounds` |
 | External package versions | `go.mod` | Go module resolver |
 
 Run `make generate` after changing a manifest or generator input. Do not edit a

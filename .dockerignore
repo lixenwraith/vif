@@ -1,7 +1,10 @@
 # The build context is the repository root. Everything the image needs is Go
 # source, the embedded assets those sources declare, and .git for the revision
 # stamp; nothing else belongs in a context that is transferred on every build.
+# The image serves -d, so the external wad never reaches it.
 bin/
+tmp/
+wad/
 web/lib/
 web/*.wasm
 sandbox/

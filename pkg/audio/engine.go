@@ -119,10 +119,12 @@ func (ae *AudioEngine) Start() error {
 	}
 
 	// Registration then render, both before the mixer goroutine exists.
-	// A bad user spec degrades to the built-ins rather than to silence.
-	if err := registerBuiltinSounds(); err != nil {
-		ae.running.Store(false)
-		return fmt.Errorf("built-in sounds: %w", err)
+	// A bad user spec degrades to the base bank rather than to silence.
+	for _, d := range ae.config.BaseSounds {
+		if _, err := RegisterSound(d); err != nil {
+			ae.running.Store(false)
+			return fmt.Errorf("base sounds: %w", err)
+		}
 	}
 	if len(ae.config.SoundTOML) > 0 {
 		defs, err := LoadSoundsTOML(ae.config.SoundTOML)

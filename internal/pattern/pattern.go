@@ -1,10 +1,12 @@
+// Package pattern turns an authored .vifimg into wall cells. It is the one
+// path from image asset to ECS entity; nothing here draws to the terminal.
 package pattern
 
 import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/pkg/ascimage"
 )
 
 // PatternCell holds visual data + offset for one cell
@@ -19,7 +21,7 @@ type PatternCell struct {
 	RenderBg bool
 }
 
-// PatternResult is the output of any pattern generator
+// PatternResult is one loaded image, in pattern-local coordinates.
 type PatternResult struct {
 	Cells   []PatternCell
 	Width   int // Bounding width
@@ -48,61 +50,70 @@ func (p *PatternResult) ToWallCellDefs() []component.WallCellDef {
 	return defs
 }
 
-// SpawnAsComposite emits WallCompositeSpawnRequest event
-func (p *PatternResult) SpawnAsComposite(
-	queue *event.EventQueue,
-	anchorX, anchorY int,
-	mask component.WallBlockMask,
-	boxStyle component.BoxDrawStyle,
-) {
-	if len(p.Cells) == 0 {
-		return
-	}
-
-	queue.Push(event.GameEvent{
-		Type: event.EventWallCompositeSpawnRequest,
-		Payload: &event.WallCompositeSpawnRequestPayload{
-			X:         anchorX,
-			Y:         anchorY,
-			BlockMask: mask,
-			Cells:     p.ToWallCellDefs(),
-			BoxStyle:  boxStyle,
-		},
-	})
-}
-
-// Bounds returns the bounding rectangle of the pattern
-func (p *PatternResult) Bounds() (minX, minY, maxX, maxY int) {
-	if len(p.Cells) == 0 {
-		return 0, 0, 0, 0
-	}
-
-	minX, minY = p.Cells[0].OffsetX, p.Cells[0].OffsetY
-	maxX, maxY = minX, minY
-
-	for _, cell := range p.Cells[1:] {
-		if cell.OffsetX < minX {
-			minX = cell.OffsetX
-		}
-		if cell.OffsetX > maxX {
-			maxX = cell.OffsetX
-		}
-		if cell.OffsetY < minY {
-			minY = cell.OffsetY
-		}
-		if cell.OffsetY > maxY {
-			maxY = cell.OffsetY
-		}
-	}
-	return minX, minY, maxX, maxY
-}
-
-// Count returns number of cells in pattern
-func (p *PatternResult) Count() int {
-	return len(p.Cells)
-}
-
-// Empty returns true if pattern has no cells
 func (p *PatternResult) Empty() bool {
 	return len(p.Cells) == 0
+}
+
+// fromDualModeImage converts a dual-mode image using the given color mode.
+func fromDualModeImage(img *ascimage.DualModeImage, colorMode terminal.ColorMode) PatternResult {
+	if img == nil || len(img.Cells) == 0 {
+		return PatternResult{}
+	}
+
+	cells := make([]PatternCell, 0, len(img.Cells))
+
+	for y := range img.Height {
+		for x := range img.Width {
+			idx := y*img.Width + x
+			src := img.Cells[idx]
+
+			if src.Transparent {
+				continue
+			}
+
+			renderFg := src.Rune != 0 && src.Rune != ' '
+			renderBg := true
+
+			var fg, bg color.RGB
+			var attrs terminal.Attr
+
+			if colorMode == terminal.ColorMode256 {
+				fg = color.RGB{R: src.Palette256Fg}
+				bg = color.RGB{R: src.Palette256Bg}
+				attrs = terminal.AttrFg256 | terminal.AttrBg256
+			} else {
+				fg = src.TrueFg
+				bg = src.TrueBg
+			}
+
+			cells = append(cells, PatternCell{
+				OffsetX:  x,
+				OffsetY:  y,
+				Rune:     src.Rune,
+				Fg:       fg,
+				Bg:       bg,
+				Attrs:    attrs,
+				RenderFg: renderFg,
+				RenderBg: renderBg,
+			})
+		}
+	}
+
+	return PatternResult{
+		Cells:   cells,
+		Width:   img.Width,
+		Height:  img.Height,
+		AnchorX: img.AnchorX,
+		AnchorY: img.AnchorY,
+	}
+}
+
+// LoadDualModePattern reads a .vifimg from disk. The path is the caller's;
+// nothing here resolves it against a config root.
+func LoadDualModePattern(path string, colorMode terminal.ColorMode) (PatternResult, error) {
+	img, err := ascimage.LoadDualMode(path)
+	if err != nil {
+		return PatternResult{}, err
+	}
+	return fromDualModeImage(img, colorMode), nil
 }

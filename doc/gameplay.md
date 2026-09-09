@@ -330,10 +330,10 @@ The actual flow is:
    tracking and the damage multiplier, clears/rebuilds the level, and preserves
    and re-arms the complete roster before restarting `main`.
 
-This is data, not a guaranteed product rule. `config/main` extends the game
-with a tower scenario; `config/td` is a standalone 500-by-250 tower-defense
+This is data, not a guaranteed product rule. `wad/game` extends the game
+with a tower scenario; `wad/games/td` is a standalone 500-by-250 tower-defense
 configuration using towers, pylons, gateways, route pressure, quasars, and a
-storm finale. `config/blank` is a minimal authoring scaffold with most gameplay
+storm finale. `wad/games/blank` is a minimal authoring scaffold with most gameplay
 and audio systems disabled.
 
 ## 11. System inventory
@@ -373,7 +373,7 @@ Each entry declares a domain profile and its dependencies in
 | Drop routing and homing | `internal/system/loot.go`, `internal/profile/homing.go` |
 | System behavior | Matching files in `internal/system` |
 | Default progression | `internal/asset/config/*.toml` |
-| External scenarios | `config/main`, `config/td`, `config/blank` |
+| External scenarios | `wad/game`, `wad/games/td`, `wad/games/blank` |
 
 Changing a number in `parameter` changes a mechanic; changing a transition in
 TOML changes when that mechanic is invoked. Keep that distinction intact when

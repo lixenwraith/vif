@@ -51,7 +51,7 @@ type GeneticSystem struct {
 	//
 	// It is here because a registration is a *shared* fact with a private effect.
 	// The declaration arrives as EventGeneticRegisterSpecies from an FSM region's
-	// entry actions (config/main/tower.toml raises the one this game has), so both
+	// entry actions (wad/game/tower.toml raises the one this game has), so both
 	// participants derive it — but not at the same tick, because a guest predicts
 	// the transition and may reach it before the authority does. The registered set
 	// then differs, and Registry.Import refuses a state whose set does not match:

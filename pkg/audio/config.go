@@ -15,8 +15,12 @@ type AudioConfig struct {
 	EffectVolumes map[string]float64
 	EffectShapes  map[string]SFXParams
 	ForceBackend  string
-	PatternTOML   []byte // raw music.toml; nil = built-in patterns only
-	SoundTOML     []byte // raw sounds.toml; nil = built-in sounds only
+	// BaseSounds is the sound bank registered at Start. The package ships no
+	// specs of its own: the embedder owns them, and SoundTOML overrides this
+	// set by name.
+	BaseSounds  []*SoundDef
+	PatternTOML []byte // raw music.toml; nil = built-in patterns only
+	SoundTOML   []byte // raw sounds.toml; overrides BaseSounds by name
 }
 
 // DefaultAudioConfig returns a neutral configuration

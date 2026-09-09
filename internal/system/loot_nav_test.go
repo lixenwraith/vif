@@ -218,7 +218,7 @@ func TestLootSettlesInsteadOfOrbitingItsOwner(t *testing.T) {
 }
 
 // TestLootReachesItsOwnerAcrossAMaze is the tower region's own geometry: the maze
-// that config/main/tower.toml builds, with drops scattered across it.
+// that wad/game/tower.toml builds, with drops scattered across it.
 func TestLootReachesItsOwnerAcrossAMaze(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 120, 40, engine.NewManualClock())

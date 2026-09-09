@@ -77,7 +77,7 @@ the wasted work; the quasar zap ellipse does.
 A map smaller than the viewport is centered inside it, and the margin that
 leaves belongs to no cell any entity, effect, or field can occupy. It appears
 whenever the render area outgrows the simulation: a `crop_on_resize = false`
-scenario such as `config/td`, a multi-participant session whose bounds were
+scenario such as `wad/games/td`, a multi-participant session whose bounds were
 latched by the first joiner, or a tmux pane zoomed after the map was fixed.
 
 Three rectangles describe it, all derived from `RenderContext`:
@@ -327,10 +327,10 @@ pipeline but are visibility-gated.
 
 ## 10. Patterns and image-derived assets
 
-`internal/pattern` bridges terminal image assets into the game. It converts
-`pkg/ascimage` images or dual image data into wall/pattern cells and supports
-translation, masks, tiling, and merging. Pattern results become simulation
-spawn data; they are not drawn by bypassing the ECS/render pipeline.
+`internal/pattern` bridges terminal image assets into the game: it converts a
+dual-mode `.vifimg` into wall cells, which `WallSystem` spawns as one composite
+wall. Pattern results become simulation spawn data; they are not drawn by
+bypassing the ECS/render pipeline.
 
 The `cmd/ascimage` tool performs image conversion and viewing. The external
 terminal/color modules now own general terminal and RGB primitives; Vi-Fighter

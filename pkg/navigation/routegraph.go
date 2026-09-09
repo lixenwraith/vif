@@ -1,8 +1,34 @@
 package navigation
 
-import (
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+import "github.com/lixenwraith/vi-fighter/pkg/vmath"
+
+// Route graph tuning. It lives here rather than in the game's parameter package
+// so this leaf stays free of internal imports.
+// Route Graph — Computation
+const (
+	// RouteGraphMinWeightFloor ensures every route gets minimum traffic share
+	RouteGraphMinWeightFloor = 0.05
+
+	// RouteGraphMaxRoutes caps accepted routes per graph
+	RouteGraphMaxRoutes = 8
+
+	// RouteGraphExtraAttempts is the rejected-candidate budget above the route cap
+	RouteGraphExtraAttempts = 8
+
+	// RouteTolerancePct caps route length as a percentage above the optimum
+	RouteTolerancePct = 50
+
+	// RouteGraphMaxOverlapPct: reject route candidate sharing more than this
+	// percentage of its cells with already-accepted routes (dilated)
+	RouteGraphMaxOverlapPct = 70
+
+	// RouteCorridorRadius: BFS dilation (cells) around a route path; sets
+	// penalty spread and per-route flow-field corridor width. Raise if
+	// knockback deaths outside corridors produce excessive zero-fitness noise
+	RouteCorridorRadius = 2
+
+	// RouteGraphWaypointStride: path decimation interval for Route.Waypoints
+	RouteGraphWaypointStride = 8
 )
 
 // Waypoint is a navigation decision point along a route
@@ -66,8 +92,8 @@ func ComputeRouteGraph(
 	var acceptedPaths [][]int
 	optDist := -1
 
-	maxAttempts := parameter.RouteGraphMaxRoutes + parameter.RouteGraphExtraAttempts
-	for attempt := 0; attempt < maxAttempts && len(rg.Routes) < parameter.RouteGraphMaxRoutes; attempt++ {
+	maxAttempts := RouteGraphMaxRoutes + RouteGraphExtraAttempts
+	for attempt := 0; attempt < maxAttempts && len(rg.Routes) < RouteGraphMaxRoutes; attempt++ {
 		path, trueCost := sc.penalizedShortestPath(sourceX, sourceY, targetX, targetY, mapW, mapH, isBlocked, penalty)
 		if path == nil {
 			break
@@ -89,10 +115,10 @@ func ComputeRouteGraph(
 			}
 		}
 		distinct := len(rg.Routes) == 0 ||
-			shared*100 <= len(path)*parameter.RouteGraphMaxOverlapPct
+			shared*100 <= len(path)*RouteGraphMaxOverlapPct
 
 		// Penalize regardless of acceptance to drive out near-duplicates
-		sc.dilate(path, parameter.RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
+		sc.dilate(path, RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
 			penalty[idx] += routeCellPenalty
 		})
 
@@ -100,7 +126,7 @@ func ComputeRouteGraph(
 			continue
 		}
 
-		sc.dilate(path, parameter.RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
+		sc.dilate(path, RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
 			usedDilated[idx] = true
 		})
 
@@ -137,7 +163,7 @@ func stepCost(from, to, mapW int) int {
 
 // decimateWaypoints returns Waypoints as decimated path samples
 func decimateWaypoints(path []int, mapW int) []Waypoint {
-	stride := parameter.RouteGraphWaypointStride
+	stride := RouteGraphWaypointStride
 	wps := make([]Waypoint, 0, len(path)/stride+2)
 	for i := 0; i < len(path); i += stride {
 		wps = append(wps, Waypoint{X: path[i] % mapW, Y: path[i] / mapW})
@@ -159,7 +185,7 @@ func computePathFields(rg *RouteGraph, paths [][]int, mapW, mapH int, isBlocked 
 	for ri, path := range paths {
 		gen++
 		g := gen
-		sc.dilate(path, parameter.RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
+		sc.dilate(path, RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
 			allowed[idx] = g
 		})
 
@@ -202,8 +228,8 @@ func computeRouteWeights(rg *RouteGraph) {
 			d = 1
 		}
 		w := float64(maxDist) / float64(d)
-		if w < parameter.RouteGraphMinWeightFloor {
-			w = parameter.RouteGraphMinWeightFloor
+		if w < RouteGraphMinWeightFloor {
+			w = RouteGraphMinWeightFloor
 		}
 		rg.Routes[i].Weight = w
 		total += w
@@ -218,7 +244,7 @@ func computeRouteWeights(rg *RouteGraph) {
 
 // routeTolerance returns additive distance tolerance relative to the optimum
 func routeTolerance(optDist int) int {
-	return (optDist * parameter.RouteTolerancePct) / 100
+	return (optDist * RouteTolerancePct) / 100
 }
 
 // routeScratch holds reusable buffers for one ComputeRouteGraph invocation

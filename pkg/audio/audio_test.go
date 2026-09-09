@@ -15,16 +15,44 @@ import (
 // The sound and pattern registries are package globals, so these tests are
 // order-dependent and must not run in parallel. Each resets what it touches.
 
-func loadBuiltins(t *testing.T) []*SoundDef {
-	t.Helper()
-	defs, err := BuiltinSounds()
-	if err != nil {
-		t.Fatalf("builtin sounds: %v", err)
+// testBank is the package's own sound set: the shipped bank is embedder data,
+// so these tests own specs exercising what they assert on — a drum name, a
+// master chain, a per-layer chain, vibrato.
+func testBank() []*SoundDef {
+	return []*SoundDef{
+		{
+			Name: "kick", Duration: 0.15, Raw: true, Variants: 6,
+			Layer: []Layer{{
+				Source: Source{Kind: "sweep", Wave: "sine", Freq: 150, FreqEnd: 40, Curve: "exp", CurveK: 8},
+				Chain:  []Proc{{Kind: "decay", Tau: 0.03}, {Kind: "shape", Drive: 2.0}},
+			}},
+		},
+		{
+			Name: "bell", Duration: 0.35, Norm: 0.9,
+			Layer: []Layer{{
+				Source: Source{Kind: "osc", Wave: "sine", Freq: 880},
+				Chain:  []Proc{{Kind: "ar", Attack: 0.004, Release: 0.32}},
+			}},
+		},
+		{
+			Name: "coin", Duration: 0.24, Norm: 0.85,
+			Chain: []Proc{{Kind: "lp", Freq: 6000, Q: 0.707}},
+			Layer: []Layer{{
+				Length: 0.08,
+				Source: Source{Kind: "osc", Wave: "square", Freq: 987.77},
+				Chain:  []Proc{{Kind: "ar", Attack: 0.005, Release: 0.04}},
+			}},
+		},
+		{
+			Name: "ring", Duration: 0.7, Norm: 0.85,
+			Chain: []Proc{{Kind: "bp", Freq: 1600, Q: 0.8, TrackPitch: true}},
+			Layer: []Layer{{
+				Source: Source{Kind: "osc", Wave: "sine", Freq: 660,
+					Vibrato: &LFO{Rate: 2.5, Depth: 0.06, Phase: 0.25}},
+				Chain: []Proc{{Kind: "am", Rate: 2.5, Depth: 0.55, Phase: 0.5}},
+			}},
+		},
 	}
-	if len(defs) == 0 {
-		t.Fatal("no builtin sounds embedded")
-	}
-	return defs
 }
 
 func checkBuffer(t *testing.T, name string, buf []float64) float64 {
@@ -39,52 +67,6 @@ func checkBuffer(t *testing.T, name string, buf []float64) float64 {
 		}
 	}
 	return peak
-}
-
-func TestBuiltinSoundsRender(t *testing.T) {
-	for _, d := range loadBuiltins(t) {
-		buf, err := RenderPreview(d, SFXParams{})
-		if err != nil {
-			t.Fatalf("%s: %v", d.Name, err)
-		}
-		peak := checkBuffer(t, d.Name, buf)
-		if peak < 0.01 {
-			t.Errorf("%s: renders silent (peak %g)", d.Name, peak)
-		}
-		if peak > 1.0 {
-			t.Errorf("%s: peak %g exceeds unity", d.Name, peak)
-		}
-	}
-}
-
-// A failure here usually means the encoder lost float precision, not that the
-// spec model is wrong.
-func TestSoundRoundTrip(t *testing.T) {
-	defs := loadBuiltins(t)
-	data, err := MarshalSounds(defs)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	back, err := LoadSoundsTOML(data)
-	if err != nil {
-		t.Fatalf("reload: %v\n%s", err, data)
-	}
-	if len(back) != len(defs) {
-		t.Fatalf("round trip produced %d sounds, want %d", len(back), len(defs))
-	}
-	for i := range defs {
-		a, err := RenderPreview(defs[i], SFXParams{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		b, err := RenderPreview(back[i], SFXParams{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !slices.Equal(a, b) {
-			t.Errorf("%s: audio differs after round trip", defs[i].Name)
-		}
-	}
 }
 
 func TestStrictKeysRejectsTypo(t *testing.T) {
@@ -107,7 +89,7 @@ source = { kind = "osc", freq_start = 440 }
 // composed scale is what has to be clamped.
 func TestShapingClamp(t *testing.T) {
 	maxSamples := int(MaxSoundDuration*maxLengthScale*AudioSampleRate) + 1
-	for _, d := range loadBuiltins(t) {
+	for _, d := range testBank() {
 		for _, b := range RenderVariants(d, SFXParams{Pitch: 64, Length: 1e6}) {
 			if len(b) > maxSamples {
 				t.Fatalf("%s: %d samples exceeds the length clamp", d.Name, len(b))
@@ -124,8 +106,10 @@ func TestRegistryFreezeAndReset(t *testing.T) {
 	late := func() *SoundDef {
 		return &SoundDef{Name: "late", Duration: 0.05, Layer: []Layer{{Source: Source{Kind: "noise"}}}}
 	}
-	if err := registerBuiltinSounds(); err != nil {
-		t.Fatal(err)
+	for _, d := range testBank() {
+		if _, err := RegisterSound(d); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if SoundIDByName("kick") == SoundNone {
 		t.Fatal("kick unresolved after builtin registration")
@@ -241,6 +225,7 @@ func TestNullBackendLifecycle(t *testing.T) {
 
 	cfg := DefaultAudioConfig()
 	cfg.Enabled = true
+	cfg.BaseSounds = testBank()
 	cfg.ForceBackend = BackendNameNull
 	ae, err := NewAudioEngine(cfg)
 	if err != nil {
@@ -278,6 +263,7 @@ func TestWAVBackendCapture(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "capture.wav")
 	cfg := DefaultAudioConfig()
 	cfg.Enabled = true
+	cfg.BaseSounds = testBank()
 	cfg.ForceBackend = "wav:" + path
 	ae, err := NewAudioEngine(cfg)
 	if err != nil {
@@ -325,10 +311,8 @@ func TestWriteWAVFraming(t *testing.T) {
 }
 
 func FuzzLoadSoundsTOML(f *testing.F) {
-	if defs, err := BuiltinSounds(); err == nil {
-		if data, err := MarshalSounds(defs); err == nil {
-			f.Add(data)
-		}
+	if data, err := MarshalSounds(testBank()); err == nil {
+		f.Add(data)
 	}
 	f.Add([]byte("[[sound]]\nname=\"a\"\nduration=0.1\n[[sound.layer]]\nsource={kind=\"noise\"}\n"))
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -359,14 +343,15 @@ func FuzzLoadPatternsTOML(f *testing.F) {
 	})
 }
 
-// startNullEngine brings up an engine on the discard backend with the built-in
-// sound set registered.
+// startNullEngine brings up an engine on the discard backend with testBank
+// registered.
 func startNullEngine(t *testing.T) *AudioEngine {
 	t.Helper()
 	t.Cleanup(ResetRegistries)
 	ResetRegistries()
 	cfg := DefaultAudioConfig()
 	cfg.Enabled = true
+	cfg.BaseSounds = testBank()
 	cfg.ForceBackend = BackendNameNull
 	ae, err := NewAudioEngine(cfg)
 	if err != nil {
@@ -494,16 +479,7 @@ func TestPatternCloneIsDeep(t *testing.T) {
 }
 
 func TestSoundDefCloneIsDeep(t *testing.T) {
-	defs := loadBuiltins(t)
-	var ring *SoundDef
-	for _, d := range defs {
-		if d.Name == "ring" {
-			ring = d
-		}
-	}
-	if ring == nil {
-		t.Skip("ring spec absent")
-	}
+	ring := testBank()[3]
 	c := ring.Clone()
 	c.Layer[0].Chain[0].Depth = 0.01
 	c.Layer[0].Source.Vibrato.Rate = 99

@@ -626,8 +626,8 @@ scope gate: `:log off`, `-lv error`, or
 `-ls none` cannot silence a capture.
 
 Its default is the separate `$XDG_STATE_HOME/vi-fighter/journal/` directory.
-Only a platform with no resolvable user-state/cache location falls back to the
-deprecated `./log/` destination. See
+Only a platform with no resolvable user-state/cache location falls back to
+`./log/`. See
 [External filesystem layout](filesystem-layout.md).
 
 `event.Origin` identifies the producer, not the consumer:

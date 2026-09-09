@@ -11,8 +11,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
-// AudioSource names optional external overrides. Empty paths retain pkg/audio's
-// embedded sounds and patterns.
+// AudioSource names optional external overrides. Empty paths retain the
+// shipped sound bank and the built-in patterns.
 type AudioSource struct {
 	MusicPath string
 	SoundPath string
@@ -46,6 +46,13 @@ func (s *AudioService) Init() error {
 	// Inject game-specific parameters, breaking cyclic dependency
 	config.EffectVolumes = parameter.GameEffectVolumes
 	config.EffectShapes = parameter.GameEffectShapes
+
+	// pkg/audio ships no specs; the bank is embedder data.
+	base, err := parameter.BuiltinSounds()
+	if err != nil {
+		return fmt.Errorf("built-in sounds: %w", err)
+	}
+	config.BaseSounds = base
 
 	if s.src.MusicPath != "" {
 		data, err := os.ReadFile(s.src.MusicPath)
@@ -89,7 +96,7 @@ func (s *AudioService) Start() error {
 	// or not a device was found. Hub.StartAll precedes scheduler.Start in
 	// App.Loop, so no system has emitted EventSoundRequest yet.
 	//
-	// Fatal by design: a missing name means soundTable and the built-in TOML
+	// Fatal by design: a missing name means soundTable and the shipped bank
 	// disagree. Degrading would reinstate the failure this call fixes — every
 	// Play discarded on the SoundNone guard, with no counter and no log.
 	if err := parameter.ResolveSounds(); err != nil {

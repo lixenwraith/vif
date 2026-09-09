@@ -134,7 +134,8 @@ structure before rendering.
 
 At startup the engine:
 
-1. registers built-in sounds from `pkg/audio/builtin/sfx.toml`;
+1. registers `AudioConfig.BaseSounds`, which the game fills from the embedded
+   bank in `internal/asset/audio` via `parameter.BuiltinSounds`;
 2. loads a resolved optional `audio/sounds.toml`, replacing same-name
    definitions;
 3. freezes the name-to-ID registry;
@@ -227,11 +228,10 @@ hierarchy:
 - `music.toml` supplies pattern definitions.
 
 The categorized locations are `audio/sounds.toml` and `audio/music.toml`.
-`-config-sounds` and `-config-music` are strict individual overrides; legacy
-flat and working-directory files remain migration fallbacks. See
+`-config-sounds` and `-config-music` are strict individual overrides. See
 [External filesystem layout](filesystem-layout.md).
 
-Malformed user definitions currently degrade to successfully loaded built-ins;
+Malformed user definitions currently degrade to the shipped bank;
 the engine retains a combined specification error, but the game service does
 not yet present that error during play. `vi-fighter -check` now validates and
 reports both documents before startup; soundlab remains the interactive
@@ -253,6 +253,11 @@ same engine. It offers:
 - validation, live registry apply/revert, audition, sequencer slot assignment,
   TOML save, and WAV export.
 
+Soundlab registers the same bank the game does, so its registry and the game's
+hold identical specs. An untitled `save sound` / `save pattern` writes to
+`audio/sounds.toml` / `audio/music.toml` under the user config root, which is
+where the next run reads its override from.
+
 The working document and live registry are separate: edits do not affect audio
 until `apply`; `revert` restores the document from the canonical registry. Its
 dotted path grammar follows TOML tags and Go types, while domain validation
@@ -264,7 +269,7 @@ reference.
 For a new game sound:
 
 1. author and validate a named sound definition;
-2. add it to built-ins or a tested override document;
+2. add it to `internal/asset/audio` or a tested override document;
 3. add the semantic name to the game's sound table and volume/shape policy;
 4. run startup resolution so a missing mapping fails early;
 5. emit `EventSoundRequest` from the mechanic rather than calling the engine
@@ -282,6 +287,7 @@ events and keep the sequencer unaware of gameplay concepts.
 | Engine/backend lifecycle | `pkg/audio/engine.go`, `detector.go`, `wav.go` |
 | Mixer/SFX admission | `pkg/audio/mixer.go`, `cache.go`, `sound_render.go` |
 | Sound schema | `pkg/audio/sound_spec.go`, `sound_valid.go` |
+| Shipped sound bank | `internal/asset/audio/*.toml`, `internal/parameter.BuiltinSounds` |
 | Sequencer/patterns | `pkg/audio/sequencer.go`, `pattern*.go`, `track.go`, `voice.go` |
 | Game service | `internal/service/adapter_audio.go` |
 | Game event adapters | `internal/system/audio.go`, `music.go` |

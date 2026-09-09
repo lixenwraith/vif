@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"runtime/debug"
 	"strings"
 
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -110,6 +111,7 @@ func helpSections() []flagSection {
 		title: "Help",
 		lines: []flagLine{
 			{names: []string{"h", "help"}, hint: "Print this and exit"},
+			{names: []string{"version"}, hint: "Print the module version and commit a package should report"},
 		},
 	}}
 }
@@ -198,4 +200,24 @@ func registeredFlagNames() []string {
 		out = append(out, f.Name)
 	})
 	return out
+}
+
+// writeVersion prints what a downstream package and a bug report need. The Go
+// toolchain stamps both from VCS, so no build flag has to supply them; a build
+// from an unversioned tree reports "(devel)" and no commit.
+func writeVersion(w io.Writer) {
+	version, revision := "unknown", ""
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		version = bi.Main.Version
+		for _, s := range bi.Settings {
+			if s.Key == "vcs.revision" {
+				revision = s.Value
+			}
+		}
+	}
+	if revision != "" {
+		fmt.Fprintf(w, "vif %s (%s)\n", version, revision)
+		return
+	}
+	fmt.Fprintf(w, "vif %s\n", version)
 }

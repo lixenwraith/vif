@@ -83,12 +83,12 @@ func fsmConfigTrees(t *testing.T) map[string]func() (map[string]any, error) {
 			return fsm.ResolveConfig(asset.DefaultFSMConfig, asset.DefaultFSMEntry)
 		},
 	}
-	for _, dir := range []string{"main", "td", "blank"} {
-		d := filepath.Join(root, "config", dir)
+	for _, dir := range []string{"game", "games/td", "games/blank"} {
+		d := filepath.Join(root, "wad", dir)
 		if _, err := os.Stat(filepath.Join(d, "game.toml")); err != nil {
 			continue
 		}
-		trees["config/"+dir] = func() (map[string]any, error) {
+		trees["wad/"+dir] = func() (map[string]any, error) {
 			return fsm.ResolveConfig(os.DirFS(d), "game.toml")
 		}
 	}
@@ -171,7 +171,7 @@ func TestFSMTriggersAreReplicated(t *testing.T) {
 					}
 				}
 			}
-			// config/blank declares no transitions at all, so a per-tree floor
+			// wad/games/blank declares no transitions at all, so a per-tree floor
 			// would fail it; the suite-wide floor below is what keeps the check
 			// from passing vacuously.
 			totalChecked += checked
@@ -549,7 +549,7 @@ func TestAppsScopeOperatorState(t *testing.T) {
 // corpusDir is the multi-file corpus the parity criterion needs. The embedded one
 // is a single file, so its cursor never rolls over and the divergence below cannot
 // occur — which is exactly why every criterion built on it missed this.
-const corpusDir = "../../data"
+const corpusDir = "../../wad/content"
 
 // TestParticipantsShareTheCorpusFingerprintNotItsCursor: content glyphs are
 // player-domain, so two participants who type differently consume blocks at

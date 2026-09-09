@@ -28,7 +28,7 @@ func newGeneticFixture(t *testing.T) *GeneticSystem {
 // A species declaration is a shared fact with a private effect, and the two
 // participants reach it at different ticks.
 //
-// The declaration lives in an FSM region's entry actions — config/main/tower.toml
+// The declaration lives in an FSM region's entry actions — wad/game/tower.toml
 // raises the one this game has — so both instances derive it rather than
 // transporting it. A guest predicts the transition, so it can register a species
 // several hundred ticks before the authority does, or not yet when the authority

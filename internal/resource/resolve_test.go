@@ -18,44 +18,38 @@ func writeFixture(t *testing.T, path string) {
 	}
 }
 
-// TestResolutionPrecedence pins the whole ordering rule in one fixture: root
-// ownership outranks layout generation, the categorized layout supersedes the flat
-// one within a root, and the working directory is consulted last.
+// TestResolutionPrecedence pins the ordering rule: an earlier root wins over a
+// later one, for files and for directories alike.
 func TestResolutionPrecedence(t *testing.T) {
 	base := t.TempDir()
-	user, system, local := filepath.Join(base, "user"), filepath.Join(base, "system"), filepath.Join(base, "work")
+	user, system := filepath.Join(base, "user"), filepath.Join(base, "system")
 
-	userFlat := filepath.Join(user, paths.GameConfigFile)
-	writeFixture(t, userFlat)
-	writeFixture(t, filepath.Join(system, paths.GameDirName, paths.GameConfigFile))
-	writeFixture(t, filepath.Join(local, paths.GameConfigFile))
-
-	r := resolver{roots: []string{user, system}, localRoot: local, external: true}
-	if got := r.file(paths.GameDirName, paths.GameConfigFile, paths.GameConfigFile); got != userFlat {
-		t.Fatalf("game path = %q, want the user root's flat file %q", got, userFlat)
+	systemGame := filepath.Join(system, paths.GameDirName, paths.GameConfigFile)
+	writeFixture(t, systemGame)
+	r := resolver{roots: []string{user, system}}
+	if got := r.file(paths.GameDirName, paths.GameConfigFile); got != systemGame {
+		t.Fatalf("game path = %q, want the system root's file %q", got, systemGame)
 	}
 
-	userCategorized := filepath.Join(user, paths.GameDirName, paths.GameConfigFile)
-	writeFixture(t, userCategorized)
-	if got := r.file(paths.GameDirName, paths.GameConfigFile, paths.GameConfigFile); got != userCategorized {
-		t.Fatalf("game path = %q, want the categorized file %q", got, userCategorized)
+	userGame := filepath.Join(user, paths.GameDirName, paths.GameConfigFile)
+	writeFixture(t, userGame)
+	if got := r.file(paths.GameDirName, paths.GameConfigFile); got != userGame {
+		t.Fatalf("game path = %q, want the user root's file %q", got, userGame)
 	}
 
-	// Directories follow the same rule, with the deprecated working-directory name
-	// as the last candidate.
-	legacy := filepath.Join(local, paths.LegacyLocalContentDir)
-	if err := os.MkdirAll(legacy, 0o755); err != nil {
+	systemContent := filepath.Join(system, paths.ContentDirName)
+	if err := os.MkdirAll(systemContent, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := r.dir(paths.ContentDirName, paths.LegacyLocalContentDir); got != legacy {
-		t.Fatalf("content dir = %q, want the legacy fallback %q", got, legacy)
+	if got := r.dir(paths.ContentDirName); got != systemContent {
+		t.Fatalf("content dir = %q, want the system root %q", got, systemContent)
 	}
-	preferred := filepath.Join(user, paths.ContentDirName)
-	if err := os.MkdirAll(preferred, 0o755); err != nil {
+	userContent := filepath.Join(user, paths.ContentDirName)
+	if err := os.MkdirAll(userContent, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := r.dir(paths.ContentDirName, paths.LegacyLocalContentDir); got != preferred {
-		t.Fatalf("content dir = %q, want the user root %q", got, preferred)
+	if got := r.dir(paths.ContentDirName); got != userContent {
+		t.Fatalf("content dir = %q, want the user root %q", got, userContent)
 	}
 }
 

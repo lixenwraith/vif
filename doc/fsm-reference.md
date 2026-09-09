@@ -5,18 +5,17 @@
 Entry config search order:
 
 1. `-g <path>` — file, or directory containing `game.toml`;
-2. `game/game.toml`, then legacy `game.toml`, under `-config-dir <root>`;
-3. the same pair under `$XDG_CONFIG_HOME/vi-fighter` (normally
+2. `game/game.toml` under `-config-dir <root>`;
+3. the same under `$XDG_CONFIG_HOME/vi-fighter` (normally
    `~/.config/vi-fighter`);
-4. the same pair under each corresponding root in `$XDG_CONFIG_DIRS`;
-5. `./game.toml`, then `./config/game.toml`;
-6. embedded default (`internal/asset/config/`; forced with `-d`).
+4. the same under each corresponding root in `$XDG_CONFIG_DIRS`;
+5. embedded default (`internal/asset/config/`; forced with `-d`).
 
 `-d` is mutually exclusive with both `-g` and `-f`; by itself it selects the
 embedded FSM and content corpus. For the runtime design behind this reference, see
-[`doc/fsm-and-configuration.md`](../doc/fsm-and-configuration.md). The complete
+[`doc/fsm-and-configuration.md`](fsm-and-configuration.md). The complete
 cross-resource order and migration policy are in
-[`doc/filesystem-layout.md`](../doc/filesystem-layout.md).
+[`doc/filesystem-layout.md`](filesystem-layout.md).
 
 Region `file` references resolve relative to the entry config's directory and
 cannot escape it (`..` is rejected). Installed layout:

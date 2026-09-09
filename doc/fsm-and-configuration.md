@@ -34,13 +34,11 @@ The result is a strict policy/mechanism split:
 Entry configuration is resolved in this order:
 
 1. `-g <path>`, where the path is `game.toml` or a directory containing it;
-2. `game/game.toml`, then legacy `game.toml`, under a root passed with
-   `-config-dir`;
-3. the same pair under the user config root, normally
-   `$XDG_CONFIG_HOME/vi-fighter` or `~/.config/vi-fighter`;
-4. the same pair under each `$XDG_CONFIG_DIRS` system root;
-5. `./game.toml`, then `./config/game.toml`;
-6. the embedded default.
+2. `game/game.toml` under a root passed with `-config-dir`;
+3. the same under the user config root, normally `$XDG_CONFIG_HOME/vi-fighter`
+   or `~/.config/vi-fighter`;
+4. the same under each `$XDG_CONFIG_DIRS` system root;
+5. the embedded default.
 
 All external resources share this root hierarchy; see
 [External filesystem layout](filesystem-layout.md) for the categorized tree and
@@ -420,7 +418,7 @@ flowchart TD
 The embedded config demonstrates this structure with `main`, `quasar`, `storm`,
 `monitor`, and `placeholder`; its monitor also owns the cursor boot/retry
 sequence. The full current flow is summarized in [Gameplay design](gameplay.md),
-and [the authoring reference](../config/README.md) shows cursor spawn payloads
+and [the authoring reference](fsm-reference.md) shows cursor spawn payloads
 and capture.
 
 ## 12. Validation rules and diagnostics
@@ -481,5 +479,5 @@ event counter plus an outer tick transition.
 | Standard actions/guards | `internal/fsm/std/*.go` |
 | Game host adapter | `internal/manifest/fsm_bridge.go` |
 | Current embedded campaign | `internal/asset/config/*.toml` |
-| External examples | `config/main`, `config/td`, `config/blank` |
-| Extended syntax examples | `config/README.md` |
+| External examples | `wad/game`, `wad/games/td`, `wad/games/blank` |
+| Extended syntax examples | `doc/fsm-reference.md` |

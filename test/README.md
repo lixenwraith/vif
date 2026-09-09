@@ -60,7 +60,7 @@ them believes it is hosting one. See
 
 | Scenario | Asserts |
 |---|---|
-| `check` | embedded, `config/main` and `config/td` all resolve |
+| `check` | embedded, `wad/game` and `wad/games/td` all resolve |
 | `lifetime` | an unclaimed session exits 0 on its first-guest window; an emptied one exits 0 on its vacancy grace, each naming why |
 | `drain` | `SIGTERM` keeps the match running, reports `live=true ready=false phase=draining`, then exits on the drain deadline |
 | `identity` | a peer running a different build or session is refused (runs the Go tests that can construct one) |

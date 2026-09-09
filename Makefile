@@ -14,10 +14,15 @@ IMAGE_VERSION ?= $(IMAGE_TAG)
 VIF_CONFIG_BASE := $(if $(XDG_CONFIG_HOME),$(XDG_CONFIG_HOME),$(HOME)/.config)
 VIF_CONFIG_DIR ?= $(VIF_CONFIG_BASE)/vi-fighter
 VIF_CONFIG_FORCE ?= 0
+WAD_DIR := wad
+KEYMAP_SRC := internal/asset/input/keymap.toml
+DESTDIR ?=
+PREFIX ?= /usr
+SYSCONFDIR ?= /etc
 
 .DEFAULT_GOAL := help
 
-.PHONY: help generate dev release nolog wasm windows run test verify arch-check clean check-go tools serve install-config install-config-force image image-check
+.PHONY: help generate dev release nolog wasm windows run test verify arch-check clean check-go tools serve install install-config install-config-force image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -31,7 +36,8 @@ help:
 	@echo "  tools    Build all auxiliary tools and cmds (includes vif-log, the log/journal viewer)"
 	@echo "  serve    Build wasm and http-server, then serve web/ directory (use PORT=8080 to change)"
 	@echo "  run      Build (dev) and run the game"
-	@echo "  install-config Install external game/input/content files under $(VIF_CONFIG_DIR)"
+	@echo "  install  Stage binary, wad and docs under DESTDIR/PREFIX for a distro package"
+	@echo "  install-config Install the wad and default keymap under $(VIF_CONFIG_DIR)"
 	@echo "  install-config-force Replace files previously installed there"
 	@echo "  image    Build the dedicated-session container image (scratch, static, non-root)"
 	@echo "  image-check Run the image's own config validation as its numeric user"
@@ -117,30 +123,44 @@ verify: generate test
 run: dev
 	./$(BIN_DIR)/$(BINARY)
 
-# User configuration is installed without replacing edits by default. Override
-# VIF_CONFIG_DIR for packaging/staging; use the force target only deliberately.
+# The wad is the whole external payload and mirrors the installed layout, so a
+# copy is the install. Edits are never replaced by default; override
+# VIF_CONFIG_DIR for staging and use the force target only deliberately.
 install-config:
 	@set -eu; \
 	root='$(VIF_CONFIG_DIR)'; force='$(VIF_CONFIG_FORCE)'; \
-	install -d -m 0755 "$$root/game" "$$root/input" "$$root/audio" "$$root/content" \
-		"$$root/games/blank" "$$root/games/td"; \
 	copy_file() { \
-		src="$$1"; dst="$$2"; \
-		if [ -e "$$dst" ] && [ "$$force" != 1 ]; then \
-			echo "keep    $$dst"; \
+		if [ -e "$$2" ] && [ "$$force" != 1 ]; then \
+			echo "keep    $$2"; \
 		else \
-			install -m 0644 "$$src" "$$dst"; \
-			echo "install $$dst"; \
+			install -D -m 0644 "$$1" "$$2"; \
+			echo "install $$2"; \
 		fi; \
 	}; \
-	for src in config/main/*.toml; do copy_file "$$src" "$$root/game/$${src##*/}"; done; \
-	for src in config/blank/*.toml; do copy_file "$$src" "$$root/games/blank/$${src##*/}"; done; \
-	for src in config/td/*.toml; do copy_file "$$src" "$$root/games/td/$${src##*/}"; done; \
-	for src in data/*.txt; do copy_file "$$src" "$$root/content/$${src##*/}"; done; \
-	copy_file internal/input/default_keymap.toml "$$root/input/keymap.toml"
+	for src in $$(find $(WAD_DIR) -type f); do copy_file "$$src" "$$root/$${src#$(WAD_DIR)/}"; done; \
+	copy_file $(KEYMAP_SRC) "$$root/input/keymap.toml"; \
+	install -d -m 0755 "$$root/audio"
 
 install-config-force:
 	@$(MAKE) --no-print-directory install-config VIF_CONFIG_FORCE=1
+
+# install stages a distro package: the binary, the wad as a system config root
+# ($(SYSCONFDIR)/xdg is the XDG_CONFIG_DIRS default the resolver already
+# searches), the licence, and the documentation. Build first; nothing here
+# compiles, so a packager controls the build flags.
+install:
+	install -D -m 0755 $(BIN_DIR)/$(BINARY) $(DESTDIR)$(PREFIX)/bin/$(BINARY)
+	@set -eu; \
+	root='$(DESTDIR)$(SYSCONFDIR)/xdg/vi-fighter'; \
+	for src in $$(find $(WAD_DIR) -type f); do \
+		install -D -m 0644 "$$src" "$$root/$${src#$(WAD_DIR)/}"; \
+	done; \
+	install -D -m 0644 $(KEYMAP_SRC) "$$root/input/keymap.toml"
+	install -D -m 0644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/vi-fighter/LICENSE
+	@set -eu; \
+	for src in README.md doc/*.md; do \
+		install -D -m 0644 "$$src" "$(DESTDIR)$(PREFIX)/share/doc/vi-fighter/$${src#doc/}"; \
+	done
 
 # image builds the deployment artifact from the repository root, which is the
 # context deploy/docker/Dockerfile expects. The revision is stamped as an OCI

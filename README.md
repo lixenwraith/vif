@@ -63,9 +63,9 @@ make release
 ```
 
 Useful targets include `make dev`, `make test`, `make verify`, `make tools`,
-`make wasm`, and `make serve`. `make install-config` safely installs editable
-game, keymap, and content files under the user config root without replacing
-existing files. Audio starts muted; press `Ctrl-S` to cycle audio channels or
+`make wasm`, and `make serve`. `make install-config` copies the `wad/` payload
+and the default keymap under the user config root without replacing existing
+files; `make install` stages the same payload for a distribution package. Audio starts muted; press `Ctrl-S` to cycle audio channels or
 launch with `-mute=false`. Run `./bin/vif -h` for all flags — it prints to
 stdout, so it pipes into `grep` without redirecting stderr.
 
@@ -82,6 +82,7 @@ constrained xterm.js/WASM build and an experimental Windows cross-build.
 - `-check` validates resolved FSM, keymap, audio, and content without opening
   the game.
 - `-schema` exports the current event/action/guard schema as JSON.
+- `-version` prints the module version and commit a package should report.
 - `-seed <n>` selects the root RNG seed and `-speed <rate>` selects an exact
   startup rate from `1/8` through `8`.
 - `-j[=DIR]` records replay input to a dedicated journal; `-replay <file>`
@@ -113,10 +114,13 @@ constrained xterm.js/WASM build and an experimental Windows cross-build.
 - `cmd/soundlab` authors and auditions sounds/music.
 - `cmd/ascimage` converts and previews dual-mode `.vifimg` assets.
 
-User configuration defaults to `$XDG_CONFIG_HOME/vi-fighter`; logs and journals
+Editable files ship in `wad/`, laid out exactly as they install; everything the
+binary can play without a filesystem is embedded in `internal/asset`. User
+configuration defaults to `$XDG_CONFIG_HOME/vi-fighter`; logs and journals
 default to separate directories under `$XDG_STATE_HOME/vi-fighter`. See the
 [external filesystem layout](doc/filesystem-layout.md) for exact precedence,
-legacy fallbacks, installation, and WASM behavior.
+installation, and WASM behavior, and [packaging](doc/packaging.md) for the
+distribution checklists.
 
 For a local two-terminal session, run `./bin/vif -d -host 127.0.0.1:7777`
 in the first terminal and `./bin/vif -join 127.0.0.1:7777` in the second; add

@@ -1,4 +1,4 @@
-package ascimage
+package main
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	lcolor "github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/render"
+	"github.com/lixenwraith/vi-fighter/pkg/ascimage"
 )
 
 // ViewMode determines how the image is displayed
@@ -21,15 +22,15 @@ const (
 // Viewer manages image display with viewport and navigation
 type Viewer struct {
 	img     image.Image
-	dualImg *DualModeImage
+	dualImg *ascimage.DualModeImage
 
 	srcWidth  int
 	srcHeight int
 
-	converted *ConvertedImage
+	converted *ascimage.ConvertedImage
 	convWidth int
 
-	RenderMode RenderMode
+	RenderMode ascimage.RenderMode
 	ColorMode  terminal.ColorMode
 	ViewMode   ViewMode
 	ZoomLevel  int
@@ -46,7 +47,7 @@ func NewViewer(img image.Image) *Viewer {
 		img:        img,
 		srcWidth:   bounds.Dx(),
 		srcHeight:  bounds.Dy(),
-		RenderMode: ModeQuadrant,
+		RenderMode: ascimage.ModeQuadrant,
 		ColorMode:  terminal.ColorModeTrueColor,
 		ViewMode:   ViewFit,
 		ZoomLevel:  100,
@@ -55,7 +56,7 @@ func NewViewer(img image.Image) *Viewer {
 }
 
 // NewViewerFromDual creates a viewer for a pre-converted .vifimg file
-func NewViewerFromDual(dual *DualModeImage) *Viewer {
+func NewViewerFromDual(dual *ascimage.DualModeImage) *Viewer {
 	return &Viewer{
 		dualImg:    dual,
 		srcWidth:   dual.Width,
@@ -89,7 +90,7 @@ func (v *Viewer) calculateTargetWidth(termW, termH int) int {
 
 	switch v.ViewMode {
 	case ViewFit:
-		_, h := CalculateOutputSize(v.srcWidth, v.srcHeight, termW)
+		_, h := ascimage.CalculateOutputSize(v.srcWidth, v.srcHeight, termW)
 		if h <= availH {
 			return termW
 		}
@@ -100,14 +101,14 @@ func (v *Viewer) calculateTargetWidth(termW, termH int) int {
 		return w
 
 	case ViewActual:
-		if v.RenderMode == ModeQuadrant {
+		if v.RenderMode == ascimage.ModeQuadrant {
 			return (v.srcWidth + 1) / 2
 		}
 		return v.srcWidth
 
 	case ViewCustom:
 		baseW := v.srcWidth
-		if v.RenderMode == ModeQuadrant {
+		if v.RenderMode == ascimage.ModeQuadrant {
 			baseW = (v.srcWidth + 1) / 2
 		}
 		w := (baseW * v.ZoomLevel) / 100
@@ -136,7 +137,7 @@ func (v *Viewer) Update(termW, termH int) {
 		return
 	}
 
-	v.converted = ConvertImage(v.img, targetW, v.RenderMode, v.ColorMode)
+	v.converted = ascimage.ConvertImage(v.img, targetW, v.RenderMode, v.ColorMode)
 	v.convWidth = targetW
 	v.clampViewport(termW, termH)
 }
@@ -226,10 +227,10 @@ func (v *Viewer) ToggleRenderMode() {
 	if v.dualImg != nil {
 		return
 	}
-	if v.RenderMode == ModeBackgroundOnly {
-		v.RenderMode = ModeQuadrant
+	if v.RenderMode == ascimage.ModeBackgroundOnly {
+		v.RenderMode = ascimage.ModeQuadrant
 	} else {
-		v.RenderMode = ModeBackgroundOnly
+		v.RenderMode = ascimage.ModeBackgroundOnly
 	}
 }
 

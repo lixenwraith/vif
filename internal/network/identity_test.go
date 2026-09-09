@@ -35,7 +35,7 @@ func TestVerifyNamesTheFirstDifference(t *testing.T) {
 		"tick_ns":        func(p *PeerIdentity) { p.TickIntervalNS = 33_000_000 },
 		"seed":           func(p *PeerIdentity) { p.Seed = 1 },
 		"session":        func(p *PeerIdentity) { p.Session = 2 },
-		"config_id":      func(p *PeerIdentity) { p.ConfigID = "config/td/game.toml" },
+		"config_id":      func(p *PeerIdentity) { p.ConfigID = "wad/games/td/game.toml" },
 		"content_id":     func(p *PeerIdentity) { p.ContentID = "elsewhere" },
 		"content_pin":    func(p *PeerIdentity) { p.ContentPin = "tutorial.toml" },
 		"content_files":  func(p *PeerIdentity) { p.ContentFiles = 2 },

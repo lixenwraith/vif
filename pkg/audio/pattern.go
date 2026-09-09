@@ -314,3 +314,20 @@ func rollingBass() []Step {
 	}
 	return ev
 }
+
+// BuiltinPatternDefs returns the built-in patterns in authoring form. It must
+// register first: the built-ins are Go literals, not loaded data. Same
+// preconditions as InitDefaultPatterns — setup goroutine, no mixer. Anonymous
+// patterns are skipped; without a name they cannot be reloaded or overridden.
+func BuiltinPatternDefs() []*PatternDef {
+	InitDefaultPatterns()
+	pats := RegisteredPatterns()
+	out := make([]*PatternDef, 0, len(pats))
+	for _, p := range pats {
+		if p == nil || p.Name == "" {
+			continue
+		}
+		out = append(out, p.Def())
+	}
+	return out
+}
