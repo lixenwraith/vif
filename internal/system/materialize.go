@@ -98,7 +98,7 @@ func (s *MaterializeSystem) Update() {
 	}
 
 	// Cap delta time to prevent tunneling on lag spikes
-	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
 	// Full progress (1.0) over the animation duration
 	progressDelta := dtSec / parameter.MaterializeAnimationDuration.Seconds()

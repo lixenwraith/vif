@@ -14,7 +14,6 @@ const (
 	AudioBytesPerFrame = AudioChannels * (AudioBitDepth / 8) // 4
 
 	// AudioBufferDuration sets mixer tick rate and output latency
-	// TODO: make it adjustable?
 	AudioBufferDuration = 50 * time.Millisecond
 
 	// AudioBufferSamples is frames per mixer tick

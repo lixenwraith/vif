@@ -207,7 +207,7 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 		})
 
 	case event.EventDecaySpawnOne:
-		s.world.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
+		s.world.PushLocal(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
 			X:             entityPos.X,
 			Y:             entityPos.Y,
 			Char:          char,

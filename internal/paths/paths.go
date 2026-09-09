@@ -13,6 +13,7 @@ const (
 	AppDirName = "vi-fighter"
 
 	GameDirName    = "game"
+	MainGameName   = "main"
 	InputDirName   = "input"
 	AudioDirName   = "audio"
 	ContentDirName = "content"

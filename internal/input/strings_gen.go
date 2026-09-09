@@ -14,8 +14,6 @@ func (i IntentType) String() string {
 		return "IntentEscape"
 	case IntentToggleAudioCycle:
 		return "IntentToggleAudioCycle"
-	case IntentResize:
-		return "IntentResize"
 	case IntentMotion:
 		return "IntentMotion"
 	case IntentCharMotion:

@@ -211,7 +211,7 @@ func (s *StormSystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	dtSec := min(dt.Seconds(), 0.1)
+	dtSec := min(dt.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
 	// Process each alive circle
 	s.updateCirclePhysics(&stormComp, dtSec)
@@ -799,7 +799,7 @@ func (s *StormSystem) resolveCircleCollision(a, b *component.StormCircleComponen
 		parameter.StormRestitution,
 	)
 	if collided {
-		s.world.PushEvent(event.EventDustAllRequest, nil)
+		s.world.PushLocal(event.EventDustAllRequest, nil)
 	}
 }
 

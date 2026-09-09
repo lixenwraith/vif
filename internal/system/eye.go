@@ -135,7 +135,7 @@ func (s *EyeSystem) Update() {
 		return
 	}
 
-	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
 	// Detached copy: despawnEye may remove from the Eye store mid-iteration
 	headerEntities := s.world.Components.Eye.GetAllEntities()
@@ -564,7 +564,7 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 			}
 
 			if len(hitMembers) > 0 {
-				s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+				s.world.PushLocal(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 					AttackType:   component.CombatAttackSelfDestruct,
 					OwnerEntity:  headerEntity,
 					OriginEntity: headerEntity,
@@ -585,7 +585,7 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 			dx := eyePos.X - targetPos.X
 			dy := eyePos.Y - targetPos.Y
 			if dx*dx+dy*dy <= radiusSq {
-				s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+				s.world.PushLocal(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 					AttackType:   component.CombatAttackSelfDestruct,
 					OwnerEntity:  headerEntity,
 					OriginEntity: headerEntity,

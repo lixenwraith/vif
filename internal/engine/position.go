@@ -526,27 +526,9 @@ func (p *Position) HasLineOfSightUnsafe(x0, y0, x1, y1 int, mask component.WallB
 	}
 }
 
-// --- Unsafe operation ---
-
-// TODO: remove stubs after refactor
-
-// Lock manually acquires the write lock for bulk operations, MUST be paired with Unlock()
-func (p *Position) Lock() {
-}
-
-// Unlock releases the write lock manually
-func (p *Position) Unlock() {
-}
-
-// GetUnsafe retrieves a position; identical to GetPosition
-// "Unsafe" name retained for source compatibility
-func (p *Position) GetUnsafe(e core.Entity) (component.PositionComponent, bool) {
-	return p.GetPosition(e)
-}
-
-// MoveUnsafe updates position of an existing entity; no-op if entity has no position
-// "Unsafe" name retained for source compatibility
-func (p *Position) MoveUnsafe(e core.Entity, newPos component.PositionComponent) {
+// Move updates the position of an existing entity; it is a no-op when the entity
+// has no position. Position access is serialized by World.updateMutex.
+func (p *Position) Move(e core.Entity, newPos component.PositionComponent) {
 	i, ok := p.index[e]
 	if !ok {
 		return
@@ -556,22 +538,6 @@ func (p *Position) MoveUnsafe(e core.Entity, newPos component.PositionComponent)
 	p.dense[i] = newPos
 	// Explicit ignore for OOB and Cell full
 	p.setGrid(e, newPos.X, newPos.Y, old.X != newPos.X || old.Y != newPos.Y)
-}
-
-// RemoveEntityUnsafe deletes an entity from store and grid without clearing
-// the component mask (original semantic); equivalent to RemoveEntity(e, true)
-func (p *Position) RemoveEntityUnsafe(e core.Entity) {
-	p.RemoveEntity(e, true)
-}
-
-// RemoveBatchUnsafe deletes multiple entities without clearing component masks
-func (p *Position) RemoveBatchUnsafe(entities []core.Entity) {
-	p.RemoveBatch(entities, true)
-}
-
-// ClearAllComponentsUnsafe removes all data
-func (p *Position) ClearAllComponentsUnsafe() {
-	p.ClearAllComponents()
 }
 
 // --- Batch Implementation ---

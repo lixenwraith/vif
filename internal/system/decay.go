@@ -201,7 +201,7 @@ func (s *DecaySystem) spawnDecayWave() {
 // updateDecayEntities updates entity positions and applies decay
 func (s *DecaySystem) updateDecayEntities() {
 	// Cap delta time to prevent tunneling on lag spikes
-	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
 	gameWidth := s.world.Resources.Config.MapWidth
 

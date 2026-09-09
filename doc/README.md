@@ -67,9 +67,9 @@ changing a subsystem, update the source that actually owns its shape.
 | Cursor lifecycle, roster, and local selection | `internal/system/cursor.go`, `internal/engine/resource.go` | FSM cursor events, mode routing, per-slot metrics |
 | Shared-world capture layout and its declared carriers | `internal/snapshot/capture.go`, `internal/app/capture.go`, `SystemDef.Snapshot` in `internal/manifest/definition.go` | `internal/engine/snapshot_world_gen.go`, `internal/app/snapshot_stage.go`, `internal/network/snapshot.go` |
 | Input enum string forms | input enum definitions | `internal/input/strings_gen.go` |
-| Shipped encounter progression | `wad/game/*.toml` | `internal/fsm`, `internal/engine.ClockScheduler` |
+| Shipped encounter progression | `wad/game/main/*.toml` | `internal/fsm`, `internal/engine.ClockScheduler` |
 | Embedded fallback progression | `internal/asset/config/*.toml` | the same, when no root supplies one |
-| Alternate scenarios | `wad/games/blank`, `wad/games/td` | selected with `-g` |
+| Alternate scenarios | `wad/game/blank`, `wad/game/td` | selected by name or path with `-g` |
 | Gameplay tuning | `internal/parameter` and `internal/parameter/visual` | systems and renderers |
 | Embedded fallback corpus | `internal/asset/content/*.toml` | content service |
 | Built-in sound bank | `internal/asset/audio/*.toml` | `parameter.BuiltinSounds`, `AudioConfig.BaseSounds` |

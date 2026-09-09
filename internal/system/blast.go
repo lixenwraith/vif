@@ -87,7 +87,7 @@ func strikePlayerTargets(w *engine.World, owner core.Entity, area *blastArea, at
 		if !hit {
 			continue
 		}
-		w.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+		w.PushLocal(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   attack,
 			OwnerEntity:  cursor,
 			OriginEntity: cursor,

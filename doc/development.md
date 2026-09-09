@@ -130,7 +130,7 @@ line wins.
 |---|---|
 | `-d`, `-config-embedded` | Use the embedded FSM and content; mutually exclusive with `-g` and `-f`. |
 | `-config-dir <dir>` | Search one categorized config root (`game/ input/ audio/ content/`) before the user and system roots. |
-| `-g`, `-config-game <path>` | FSM `game.toml`, or a directory containing it. |
+| `-g`, `-config-game <name-or-path>` | Installed game name, FSM `game.toml`, or a directory containing it. |
 | `-f`, `-config-content <path>` | Content directory, or a single pinned `.txt`/`.toml` file. |
 | `-k`, `-config-keymap <path>` | Keymap override TOML. |
 | `-config-music <path>` | Music pattern override TOML; strict optional. |
@@ -480,6 +480,7 @@ Configuration work should also run:
 
 ```bash
 go run ./cmd/vif -check -g path/to/scenario
+go run ./cmd/vif -check -g td                    # named installed game
 go run ./cmd/vif -schema > /tmp/vif-schema.json
 ```
 

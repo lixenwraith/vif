@@ -33,8 +33,9 @@ The result is a strict policy/mechanism split:
 
 Entry configuration is resolved in this order:
 
-1. `-g <path>`, where the path is `game.toml` or a directory containing it;
-2. `game/game.toml` under a root passed with `-config-dir`;
+1. `-g <path-or-name>`, where a path is `game.toml` or a directory containing
+   it, and a name resolves under `game/<name>/` in the configured roots;
+2. `game/main/game.toml` under a root passed with `-config-dir`;
 3. the same under the user config root, normally `$XDG_CONFIG_HOME/vi-fighter`
    or `~/.config/vi-fighter`;
 4. the same under each `$XDG_CONFIG_DIRS` system root;
@@ -54,7 +55,7 @@ declarations or other top-level keys are rejected. Circular includes and
 duplicate state names are errors, and filesystem traversal outside the config
 root is not accepted.
 
-Use `vi-fighter -check [-g <path>]` to resolve, parse, assemble, and validate
+Use `vi-fighter -check [-g <name-or-path>]` to resolve, parse, assemble, and validate
 the FSM plus keymap, audio overrides, and content without starting the terminal
 game. `vi-fighter -schema`
 prints generated JSON describing known events, actions, guards, and payloads.
@@ -479,5 +480,5 @@ event counter plus an outer tick transition.
 | Standard actions/guards | `internal/fsm/std/*.go` |
 | Game host adapter | `internal/manifest/fsm_bridge.go` |
 | Current embedded campaign | `internal/asset/config/*.toml` |
-| External examples | `wad/game`, `wad/games/td`, `wad/games/blank` |
+| External examples | `wad/game/main`, `wad/game/td`, `wad/game/blank` |
 | Extended syntax examples | `doc/fsm-reference.md` |

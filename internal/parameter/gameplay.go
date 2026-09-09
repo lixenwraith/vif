@@ -85,6 +85,10 @@ const (
 
 	// GoldSpawnMaxAttempts is the maximum number of attempts to find valid gold sequence position
 	GoldSpawnMaxAttempts = 100
+
+	// MotionJumpSearchMaxRadius bounds the fallback search for an unblocked map
+	// origin, centre, or end target.
+	MotionJumpSearchMaxRadius = 20
 )
 
 // Macro and Mouse

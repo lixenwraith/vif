@@ -17,14 +17,14 @@ import (
 // deliberate and the class check still applies to the type they push.
 var pushMethods = map[string]bool{
 	"PushEvent": true, "PushLocal": true, "PushCrossing": true,
-	"PushEventDomain": true, "PushEventFull": true, "PushEventOrigin": true,
+	"PushEventDomain": true, "PushEventFull": true, "PushEventOrigin": true, "PushLocalOrigin": true,
 }
 
 // stampingPush names a domain at the call site, rather than inheriting the ambient
 // one. A Stamped type is only meaningful if its producers use one of these, or push
 // inside a WithDomain scope.
 var stampingPush = map[string]bool{
-	"PushLocal": true, "PushEventDomain": true, "PushEventFull": true, "PushCrossing": true,
+	"PushLocal": true, "PushLocalOrigin": true, "PushEventDomain": true, "PushEventFull": true, "PushCrossing": true,
 }
 
 // crossingHelpers are World methods that wrap exactly one D-3 crossing, so their

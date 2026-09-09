@@ -263,9 +263,9 @@ vacant)
 
 check)
 	need_bin
-	for tree in "" "-g wad/game" "-g wad/games/td"; do
+	for tree in "-d" "-config-dir wad" "-config-dir wad -g td"; do
 		# shellcheck disable=SC2086
-		"$BIN" -check $tree >/dev/null || fail "config check: ${tree:--d embedded}"
+		"$BIN" -check $tree >/dev/null || fail "config check: $tree"
 	done
 	pass "every shipped config tree resolves"
 	;;

@@ -166,7 +166,7 @@ func (a *App) handleIntent(intent *input.Intent) bool {
 // handler has already written; the render pipeline is main-loop state, so it stays
 // here rather than in the handler.
 func (a *App) handleResize(width, height int) {
-	a.ctx.PushEventOrigin(event.EventScreenResize,
+	a.ctx.PushLocalOrigin(event.EventScreenResize,
 		&event.ScreenResizePayload{Width: width, Height: height}, event.OriginInput)
 	a.scheduler.DispatchEventsImmediately()
 	a.orchestrator.Resize(a.ctx.Width, a.ctx.Height)

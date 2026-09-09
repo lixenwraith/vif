@@ -101,7 +101,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventGamePauseRequest,
 		event.EventGameSpeedRequest,
 		event.EventGameStepRequest,
-		event.EventSpeciesKilled, // TODO: move kill telemetry to combat, not a meta concept, all happens in world
+		event.EventSpeciesKilled,
 		event.EventDrainDefeated,
 		event.EventCursorDefeatState,
 		event.EventCursorSpawned,
@@ -515,7 +515,7 @@ func (s *MetaSystem) handlePauseRequest(paused bool) {
 	if !s.ctx.TimeCtl.SetPaused(paused) {
 		return
 	}
-	s.ctx.PushEvent(event.EventGamePauseChanged, &event.GamePausePayload{Paused: paused})
+	s.ctx.PushLocal(event.EventGamePauseChanged, &event.GamePausePayload{Paused: paused})
 }
 
 // handleSpeedRequest applies the time scale through its single owner, then
@@ -535,7 +535,7 @@ func (s *MetaSystem) handleSpeedRequest(p *event.GameSpeedPayload) {
 	}
 	s.ctx.TimeCtl.SetScale(scale)
 	vlog.Info("app", "msg", "time scale", "scale", scale.String())
-	s.ctx.PushEvent(event.EventGameSpeedChanged, &event.GameSpeedPayload{Num: scale.Num, Den: scale.Den})
+	s.ctx.PushLocal(event.EventGameSpeedChanged, &event.GameSpeedPayload{Num: scale.Num, Den: scale.Den})
 }
 
 // handleStepRequest arms a tick allowance or a run-until breakpoint; pause and

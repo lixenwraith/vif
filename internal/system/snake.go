@@ -132,7 +132,7 @@ func (s *SnakeSystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	dtSec := min(dt.Seconds(), 0.1)
+	dtSec := min(dt.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
 	snakes := s.world.Components.Snake
 	snakeEntities := snakes.Entities()

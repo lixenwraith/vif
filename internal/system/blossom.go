@@ -202,7 +202,7 @@ func (s *BlossomSystem) spawnBlossomWave() {
 // updateBlossomEntities updates entity positions and applies blossom effects
 func (s *BlossomSystem) updateBlossomEntities() {
 	// Cap delta time to prevent tunneling on lag spikes
-	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
 	gameWidth := s.world.Resources.Config.MapWidth
 
@@ -326,7 +326,6 @@ func (s *BlossomSystem) updateBlossomEntities() {
 	s.buffers.Observe(1, len(s.processedGridCells))
 }
 
-// TODO: check if this can be refactored
 // applyBlossomToCharacter applies blossom effect to a glyph character, returns true if blossom should be destroyed (hit Red)
 func (s *BlossomSystem) applyBlossomToCharacter(entity core.Entity) bool {
 	glyphComp, ok := s.world.Components.Glyph.GetPtr(entity)

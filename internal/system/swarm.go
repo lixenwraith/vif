@@ -158,7 +158,7 @@ func (s *SwarmSystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	dtSec := min(dt.Seconds(), 0.1)
+	dtSec := min(dt.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
 	swarms := s.world.Components.Swarm
 	headerEntities := swarms.Entities()

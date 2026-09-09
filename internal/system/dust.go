@@ -297,7 +297,7 @@ func (s *DustSystem) Update() {
 	}
 
 	// 2. Setup Physics Constants
-	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
 	const (
 		baseStiffness    = parameter.DustAttractionBase
@@ -307,13 +307,9 @@ func (s *DustSystem) Update() {
 	// Cursor position precise adjustment at the center of the cell to avoid skewed render
 	cursorCenterX, cursorCenterY := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.CenterF()
 
-	// 3. LOCK Spatial Grid (Optimization: Global Batch Lock)
-	s.world.Positions.Lock()
-	defer s.world.Positions.Unlock()
-
 	s.deathBuf = s.deathBuf[:0]
 
-	// 4. MAIN LOOP
+	// 3. MAIN LOOP
 	for _, dustEntity := range dusts.Entities() {
 		dustComp, ok := dusts.GetPtr(dustEntity)
 		if !ok {
@@ -446,8 +442,7 @@ func (s *DustSystem) Update() {
 		if newX != dustComp.LastIntX || newY != dustComp.LastIntY {
 			dustComp.LastIntX = newX
 			dustComp.LastIntY = newY
-			// Use Unsafe Move (we hold the lock)
-			s.world.Positions.MoveUnsafe(dustEntity, component.PositionComponent{X: newX, Y: newY})
+			s.world.Positions.Move(dustEntity, component.PositionComponent{X: newX, Y: newY})
 		}
 
 		// --- Color Update ---
@@ -729,7 +724,6 @@ func (s *DustSystem) convertGlyphs(cursorX, cursorY int, area *blastArea) {
 	s.statCreated.Add(int64(len(s.transformBuf)))
 }
 
-// TODO: move to parameter/particle.go and visual/color.go?
 func (s *DustSystem) dustProperties(level component.GlyphLevel) (time.Duration, color.RGB) {
 	switch level {
 	case component.GlyphDark:

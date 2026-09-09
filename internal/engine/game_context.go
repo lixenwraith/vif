@@ -490,8 +490,8 @@ func (ctx *GameContext) ResetSessionState() {
 // === Viewport and Bounds ===
 
 // clampCamera constrains camera position to valid range
-// TODO: renderer handling viewport larger than map
-// When Viewport >= Map on an axis, camera is 0 (renderer handles centering)
+// When Viewport >= Map on an axis, camera is 0 and ConfigResource.MapOffset
+// centers that axis in the renderer and inverse input transform.
 func (ctx *GameContext) clampCamera(config *ConfigResource) {
 	maxCameraX := config.MapWidth - config.ViewportWidth
 	maxCameraY := config.MapHeight - config.ViewportHeight
@@ -599,6 +599,11 @@ func (ctx *GameContext) PushEventOrigin(eventType event.EventType, payload any, 
 	ctx.World.PushEventOrigin(eventType, payload, origin)
 }
 
+// PushLocalOrigin stamps both an explicit producer and the player domain.
+func (ctx *GameContext) PushLocalOrigin(eventType event.EventType, payload any, origin event.Origin) {
+	ctx.World.PushLocalOrigin(eventType, payload, origin)
+}
+
 // WithOrigin scopes the ambient producer tag; caller MUST hold updateMutex.
 // CI guard: rg 'WithOrigin' internal/ must show only locked call sites.
 func (ctx *GameContext) WithOrigin(o event.Origin, fn func()) { ctx.World.WithOrigin(o, fn) }
@@ -625,7 +630,7 @@ func (ctx *GameContext) SetMode(m core.GameMode) {
 func (ctx *GameContext) RequestMode(m core.GameMode) {
 	ctx.SetMode(m)
 	ctx.World.UpdateBoundsRadius()
-	ctx.PushEvent(event.EventModeChanged, &event.ModeChangedPayload{Mode: m})
+	ctx.PushLocal(event.EventModeChanged, &event.ModeChangedPayload{Mode: m})
 }
 
 // IsInsertMode returns true if in insert mode
@@ -822,5 +827,5 @@ func (ctx *GameContext) syncOverlaySelection(content *core.OverlayContent) {
 // === Pause ===
 
 func (ctx *GameContext) SetPaused(paused bool) {
-	ctx.PushEvent(event.EventGamePauseRequest, &event.GamePausePayload{Paused: paused})
+	ctx.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: paused})
 }

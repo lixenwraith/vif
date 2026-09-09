@@ -49,10 +49,10 @@ type soakRun struct {
 
 // soakConfigDir is the external map set the tower soak drives; the tower region is
 // the only path that engages gateway, eye and route-graph navigation
-const soakConfigDir = "../../wad/game"
+const soakConfigDir = "../../wad/game/main"
 const soakContentDir = "../../wad/content"
 
-// towerRegions mirrors wad/game's declared regions and their entry states
+// towerRegions mirrors wad/game/main's declared regions and their entry states
 var towerRegions = []journal.FuzzRegion{
 	{Name: "main", State: "MainSpawnGold"},
 	{Name: "quasar", State: "QuasarFuse"},
@@ -86,7 +86,7 @@ func TestExternalConfigsOwnTheirTowers(t *testing.T) {
 		// it inside a test-length run.
 		spawn bool
 	}{
-		{"td", "../../wad/games/td", false},
+		{"td", "../../wad/game/td", false},
 		{"main", soakConfigDir, true},
 	}
 	for _, tc := range cases {

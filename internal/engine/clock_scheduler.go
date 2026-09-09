@@ -265,7 +265,7 @@ func (cs *ClockScheduler) applyRegionOp(p *event.FSMRegionPayload) error {
 
 // report surfaces a scheduler-side message in the status bar
 func (cs *ClockScheduler) report(msg string) {
-	cs.world.PushEvent(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
+	cs.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
 		Message:          msg,
 		DurationOverride: true,
 	})
@@ -673,9 +673,9 @@ func (cs *ClockScheduler) breakHit(bs *BreakState, cause string) {
 		"on", bs.Label, "cause", cause, "scale", bs.Restore.String(), "pause", bs.Pause)
 
 	if bs.Pause {
-		cs.world.PushEvent(event.EventGamePauseRequest, &event.GamePausePayload{Paused: true})
+		cs.world.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: true})
 	}
-	cs.world.PushEvent(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
+	cs.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
 		Message: "Break: " + cause, DurationOverride: true,
 	})
 }
@@ -1068,7 +1068,7 @@ func (cs *ClockScheduler) executeReset() {
 
 	// 6. Unpause via the single owner so clock, context, and audio move
 	//    together; settled below while the world lock is still held.
-	cs.world.PushEvent(event.EventGamePauseRequest, &event.GamePausePayload{Paused: false})
+	cs.world.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: false})
 
 	// 7. Settle FSM-reset and unpause events before releasing the lock. No boundary
 	//    bump: this is a phase of the reset, reached identically by a run and its replay.

@@ -218,7 +218,6 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 				s.tier = p.Intensity
 				s.manualTier = true
 				if s.player.IsMusicPlaying() {
-					// TODO: test reveal (last arg) toggle impact on music
 					s.applyArrangement(true, s.fadeSamples(p.TransitionTime, rising), true)
 				}
 			}

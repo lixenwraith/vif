@@ -346,6 +346,12 @@ func (w *World) PushEventOrigin(eventType event.EventType, payload any, origin e
 	w.pushEvent(eventType, payload, origin, core.Domain(w.domain.Load()))
 }
 
+// PushLocalOrigin emits an explicitly attributed event that must never
+// replicate. It is the out-of-band counterpart to PushLocal.
+func (w *World) PushLocalOrigin(eventType event.EventType, payload any, origin event.Origin) {
+	w.pushEvent(eventType, payload, origin, core.DomainPlayer)
+}
+
 // PushEventDomain emits with an explicit domain tag, for producers outside any WithDomain scope
 func (w *World) PushEventDomain(eventType event.EventType, payload any, domain core.Domain) {
 	w.pushEvent(eventType, payload, event.Origin(w.origin.Load()), domain)
@@ -786,7 +792,7 @@ func (w *World) clearNonProtectedEntities() {
 
 // DebugPrint prints a message in status bar via meta system
 func (w *World) DebugPrint(msg string) {
-	w.PushEvent(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
+	w.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
 		Message:          msg,
 		Duration:         0,
 		DurationOverride: true,

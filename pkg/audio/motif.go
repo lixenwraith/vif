@@ -56,9 +56,6 @@ func (g *melodyGen) regenerate(phraseBar int, rng *rand.Rand) {
 		k = 3 // thin out under the fill bar
 	}
 
-	// TODO: test difference
-	// mask := EuclidMask(k, 16, rng.IntN(4))
-
 	// fixed rotation with anchored strong beats. A fresh rng.IntN(4)
 	// rotation every bar moved the onset grid under the chord-tone targeting
 	// at pos 0 and 8, which then rarely had an onset to land on

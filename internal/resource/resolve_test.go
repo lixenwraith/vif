@@ -24,16 +24,16 @@ func TestResolutionPrecedence(t *testing.T) {
 	base := t.TempDir()
 	user, system := filepath.Join(base, "user"), filepath.Join(base, "system")
 
-	systemGame := filepath.Join(system, paths.GameDirName, paths.GameConfigFile)
+	systemGame := filepath.Join(system, paths.GameDirName, paths.MainGameName, paths.GameConfigFile)
 	writeFixture(t, systemGame)
 	r := resolver{roots: []string{user, system}}
-	if got := r.file(paths.GameDirName, paths.GameConfigFile); got != systemGame {
+	if got := r.game(paths.MainGameName); got != systemGame {
 		t.Fatalf("game path = %q, want the system root's file %q", got, systemGame)
 	}
 
-	userGame := filepath.Join(user, paths.GameDirName, paths.GameConfigFile)
+	userGame := filepath.Join(user, paths.GameDirName, paths.MainGameName, paths.GameConfigFile)
 	writeFixture(t, userGame)
-	if got := r.file(paths.GameDirName, paths.GameConfigFile); got != userGame {
+	if got := r.game(paths.MainGameName); got != userGame {
 		t.Fatalf("game path = %q, want the user root's file %q", got, userGame)
 	}
 
@@ -57,7 +57,7 @@ func TestResolutionPrecedence(t *testing.T) {
 // end, and the strictness the explicit overrides apply.
 func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 	root := t.TempDir()
-	game := filepath.Join(root, paths.GameDirName, paths.GameConfigFile)
+	game := filepath.Join(root, paths.GameDirName, paths.MainGameName, paths.GameConfigFile)
 	keymap := filepath.Join(root, paths.InputDirName, paths.KeymapConfigFile)
 	music := filepath.Join(root, paths.AudioDirName, paths.MusicConfigFile)
 	sounds := filepath.Join(root, paths.AudioDirName, paths.SoundConfigFile)
@@ -81,6 +81,20 @@ func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 	}
 	if got, err := Audio(o); err != nil || got.MusicPath != music || got.SoundPath != sounds {
 		t.Fatalf("audio = %+v, %v; want %q and %q", got, err, music, sounds)
+	}
+}
+
+func TestGameNameResolvesInsideConfigurationRoots(t *testing.T) {
+	root := t.TempDir()
+	td := filepath.Join(root, paths.GameDirName, "td", paths.GameConfigFile)
+	writeFixture(t, td)
+
+	got, err := GameConfig(Options{Dir: root, Game: "td"})
+	if err != nil || got != td {
+		t.Fatalf("named game = %q, %v; want %q", got, err, td)
+	}
+	if _, err := GameConfig(Options{Dir: root, Game: "missing"}); err == nil {
+		t.Fatal("missing named game accepted")
 	}
 }
 

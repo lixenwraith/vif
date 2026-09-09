@@ -669,7 +669,7 @@ func (s *CombatSystem) applyVampireDrain(ownerEntity, targetEntity core.Entity, 
 		lightningColor = component.LightningPurple
 	}
 
-	s.world.PushEvent(event.EventLightningSpawnRequest, &event.LightningSpawnRequestPayload{
+	s.world.PushLocal(event.EventLightningSpawnRequest, &event.LightningSpawnRequestPayload{
 		Owner:        ownerEntity,
 		OriginX:      originX,
 		OriginY:      originY,

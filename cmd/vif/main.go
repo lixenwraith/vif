@@ -312,7 +312,7 @@ func (f *configFlags) register(fs *flag.FlagSet) {
 		short, long, hint string
 		into              *string
 	}{
-		{"g", "config-game", "game.toml, or a map directory", &f.game},
+		{"g", "config-game", "installed game name, game.toml, or a game directory", &f.game},
 		{"f", "config-content", "Content directory, or a single content file", &f.content},
 		{"k", "config-keymap", "Keymap TOML", &f.keymap},
 	} {

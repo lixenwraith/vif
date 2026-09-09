@@ -17,8 +17,6 @@ const (
 	TierPeakAPM     = 300
 )
 
-// TODO: move logic to music system, keep parameters only
-
 // APMToBPM maps burst APM to target tempo; the sequencer re-clamps to
 // [audio.MinBPM, audio.MaxBPM]. The calm floor must stay >= audio.MinBPM.
 //

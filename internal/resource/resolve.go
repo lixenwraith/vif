@@ -23,7 +23,7 @@ type Options struct {
 	// discovery.
 	Dir string
 
-	// Game is a game.toml path or a map directory.
+	// Game is a game name, a game.toml path, or a map directory.
 	Game string
 
 	// Content is a corpus directory or a single content file.
@@ -72,21 +72,34 @@ func GameConfig(o Options) (string, error) {
 	}
 	if o.Game != "" {
 		info, err := os.Stat(o.Game)
-		if err != nil {
+		if err == nil {
+			if info.IsDir() {
+				p := filepath.Join(o.Game, paths.GameConfigFile)
+				if !fileExists(p) {
+					return "", fmt.Errorf("%s not found in %s", paths.GameConfigFile, o.Game)
+				}
+				return p, nil
+			}
+			return o.Game, nil // explicit file: entry filename override
+		}
+		if !errors.Is(err, os.ErrNotExist) || !isGameName(o.Game) {
 			return "", err
 		}
-		if info.IsDir() {
-			p := filepath.Join(o.Game, paths.GameConfigFile)
-			if !fileExists(p) {
-				return "", fmt.Errorf("%s not found in %s", paths.GameConfigFile, o.Game)
-			}
+		if p := newResolver(o).game(o.Game); p != "" {
 			return p, nil
 		}
-		return o.Game, nil // explicit file: entry filename override
+		return "", fmt.Errorf("game %q not found as a path or in any configuration root", o.Game)
 	}
 
 	r := newResolver(o)
-	return r.file(paths.GameDirName, paths.GameConfigFile), nil
+	return r.game(paths.MainGameName), nil
+}
+
+// isGameName distinguishes the installed shorthand from an explicit path.
+// A path always wins when it exists; only a single clean path element falls
+// back to game/<name>/game.toml under the configured roots.
+func isGameName(name string) bool {
+	return name != "." && name != ".." && filepath.Base(name) == name
 }
 
 // Keymap returns the external keymap path. An empty path selects the embedded
@@ -156,6 +169,10 @@ func (r resolver) file(category, name string) string {
 		}
 	}
 	return ""
+}
+
+func (r resolver) game(name string) string {
+	return r.file(filepath.Join(paths.GameDirName, name), paths.GameConfigFile)
 }
 
 func (r resolver) dir(category string) string {

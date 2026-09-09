@@ -768,7 +768,7 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 				hits[i] = a.Hit
 			}
 
-			s.world.PushEvent(event.EventMissileSpawnRequest, &event.MissileSpawnRequestPayload{
+			s.world.PushLocal(event.EventMissileSpawnRequest, &event.MissileSpawnRequestPayload{
 				OwnerEntity: cursor,
 				OriginX:     originX,
 				OriginY:     originY,

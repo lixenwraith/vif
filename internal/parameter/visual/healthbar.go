@@ -1,6 +1,5 @@
 package visual
 
-// TODO: move these to parameters
 // HealthBarPosition defines bar placement relative to entity
 type HealthBarPosition uint8
 

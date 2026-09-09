@@ -71,7 +71,7 @@ func helpSections() []flagSection {
 		lines: []flagLine{
 			{names: []string{"d", "config-embedded"}, hint: "Use the embedded FSM and content, ignoring -g and -f"},
 			{names: []string{"config-dir"}, arg: "<dir>", hint: "Configuration root holding game/ input/ audio/ content/"},
-			{names: []string{"g", "config-game"}, arg: "<path>", hint: "game.toml, or a map directory"},
+			{names: []string{"g", "config-game"}, arg: "<name|path>", hint: "Installed game name, game.toml, or a game directory"},
 			{names: []string{"f", "config-content"}, arg: "<path>", hint: "Content directory, or a single content file"},
 			{names: []string{"k", "config-keymap"}, arg: "<path>", hint: "Keymap TOML"},
 			{names: []string{"config-music"}, arg: "<path>", hint: "Music pattern override TOML"},

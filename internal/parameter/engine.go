@@ -13,6 +13,10 @@ const (
 	// GameUpdateInterval is the game logic update interval (clock tick) [game]
 	GameUpdateInterval = 50 * time.Millisecond
 
+	// MaxSimulationDeltaSeconds caps continuous integration after a delayed live
+	// tick or a configured tick-interval change.
+	MaxSimulationDeltaSeconds = 0.1
+
 	// EventLoopInterval is the frequency at which events are attempted to be processed
 	EventLoopInterval = 4 * time.Millisecond
 

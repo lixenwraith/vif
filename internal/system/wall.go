@@ -193,9 +193,7 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 		case event.WallBatchOverwrite:
 			var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 			var toDestroy []core.Entity
-			s.world.Positions.Lock()
 			n := s.world.Positions.GetEntitiesAtInto(payload.X, payload.Y, engine.ScopeShared, entityBuf[:])
-			s.world.Positions.Unlock()
 			for j := range n {
 				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
 					toDestroy = append(toDestroy, entityBuf[j])
@@ -310,7 +308,6 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		var toDestroy []core.Entity
 		var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 
-		s.world.Positions.Lock()
 		for _, rc := range resolved {
 			n := s.world.Positions.GetEntitiesAtInto(rc.x, rc.y, engine.ScopeShared, entityBuf[:])
 			for j := range n {
@@ -319,7 +316,6 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 				}
 			}
 		}
-		s.world.Positions.Unlock()
 
 		if len(toDestroy) > 0 {
 			s.world.DestroyEntitiesBatch(toDestroy)
@@ -738,7 +734,6 @@ func (s *WallSystem) getMaskForEntity(entity core.Entity) component.WallBlockMas
 	if s.world.Components.Decay.HasEntity(entity) || s.world.Components.Blossom.HasEntity(entity) {
 		return component.WallBlockParticle
 	}
-	// TODO: test with all species
 	// Phantom heads are non-physical anchors, not subject to wall displacement
 	if s.world.Components.Header.HasEntity(entity) {
 		return component.WallBlockNone

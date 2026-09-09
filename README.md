@@ -74,7 +74,8 @@ constrained xterm.js/WASM build and an experimental Windows cross-build.
 
 ## Configuration and tools
 
-- `-g <game.toml|directory>` selects an encounter configuration.
+- `-g <name|game.toml|directory>` selects an installed named game or an explicit
+  encounter configuration.
 - `-f <content-file|directory>` selects typeable `.txt`/`.toml` content.
 - `-k <keymap.toml>` applies sparse key overrides.
 - `-config-dir <root>` puts one categorized config tree ahead of user/system

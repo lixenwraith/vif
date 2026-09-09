@@ -123,12 +123,9 @@ func (r *ExplosionRenderer) resetDirtyRects() {
 
 func (r *ExplosionRenderer) accumulateCenter(ctx render.RenderContext, c *engine.ExplosionCenter) {
 	// Transform center from map coords to viewport coords
-	centerVX, centerVY, visible := ctx.MapToViewport(c.X, c.Y)
-	if !visible {
-		// TODO: visible unused
-		// Center off-screen but explosion might still be visible at edges
-		// Continue with clamped bounds
-	}
+	// MapToViewport returns the projection even when the center is off-screen;
+	// the radius can still intersect the viewport, so the bounds below decide.
+	centerVX, centerVY, _ := ctx.MapToViewport(c.X, c.Y)
 
 	// Time decay via LUT
 	durationNano := c.DurNano

@@ -16,18 +16,13 @@ func NewCameraSystem(world *engine.World) engine.System {
 	s := &CameraSystem{
 		world: world,
 	}
-
 	s.Init()
 	return s
 }
 
-func (s *CameraSystem) Init() {
-	// TODO: duplicated with game context, to be refactored
-	// Reset camera to origin on init/reset
-	config := s.world.Resources.Config
-	config.CameraX = 0
-	config.CameraY = 0
-}
+// Init has no camera state to reset. ConfigResource owns camera initialization
+// and reset alongside map and viewport geometry.
+func (s *CameraSystem) Init() {}
 
 func (s *CameraSystem) Name() string {
 	return "camera"

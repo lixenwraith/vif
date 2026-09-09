@@ -103,9 +103,6 @@ func (s *AudioService) Start() error {
 		return fmt.Errorf("audio service: %w", err)
 	}
 
-	// TODO: audioEngine.SpecError() still has no in-game surface — malformed
-	// user specs degrade to built-ins during play. The -check startup mode does
-	// validate and report the same resolved documents.
 	return nil
 }
 

@@ -108,7 +108,7 @@ func (a *App) SetupLevel(width, height int, clearEntities, cropOnResize bool) bo
 // terminal, so this is its only resize path; a live run records the same event from
 // App.Loop, which is what makes a resize replayable.
 func (a *App) Resize(width, height int) {
-	a.ctx.PushEventOrigin(event.EventScreenResize,
+	a.ctx.PushLocalOrigin(event.EventScreenResize,
 		&event.ScreenResizePayload{Width: width, Height: height}, event.OriginDebug)
 	a.scheduler.Settle()
 }

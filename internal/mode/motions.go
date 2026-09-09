@@ -5,6 +5,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/input"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 // MotionLeft implements 'h' motion
@@ -502,7 +503,7 @@ func MotionEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	if isCursorBlocked(ctx, rightX, botY) {
 		newX, newY, found := ctx.World.Positions.FindFreeFromPattern(
 			rightX, botY, 1, 1,
-			engine.PatternCardinalFirst, 1, 20, false,
+			engine.PatternCardinalFirst, 1, parameter.MotionJumpSearchMaxRadius, false,
 			component.WallBlockCursor, nil,
 		)
 		if found {
@@ -526,10 +527,9 @@ func MotionCenter(ctx *engine.GameContext, x, y, count int) MotionResult {
 	midY := ctx.World.Resources.Config.MapHeight / 2
 
 	if isCursorBlocked(ctx, midX, midY) {
-		// TODO: arbitrary 20 max radius to be put in parameters
 		newX, newY, found := ctx.World.Positions.FindFreeFromPattern(
 			midX, midY, 1, 1,
-			engine.PatternCardinalFirst, 1, 20, false,
+			engine.PatternCardinalFirst, 1, parameter.MotionJumpSearchMaxRadius, false,
 			component.WallBlockCursor, nil,
 		)
 		if found {
@@ -554,7 +554,7 @@ func MotionOrigin(ctx *engine.GameContext, x, y, count int) MotionResult {
 	if isCursorBlocked(ctx, originX, originY) {
 		newX, newY, found := ctx.World.Positions.FindFreeFromPattern(
 			originX, originY, 1, 1,
-			engine.PatternCardinalFirst, 1, 20, false,
+			engine.PatternCardinalFirst, 1, parameter.MotionJumpSearchMaxRadius, false,
 			component.WallBlockCursor, nil,
 		)
 		if found {

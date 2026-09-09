@@ -238,7 +238,7 @@ func (s *SoftCollisionSystem) Update() {
 		return
 	}
 
-	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
 	s.rebuildCaches()
 	s.processAllCollisions()

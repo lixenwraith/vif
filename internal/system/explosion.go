@@ -204,7 +204,7 @@ func (s *ExplosionSystem) resolveArea(cursor core.Entity, centerX, centerY int, 
 	s.buffers.Observe(0, len(s.compositeBuf))
 
 	for i := range s.compositeBuf {
-		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+		s.world.PushLocal(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   attack,
 			OwnerEntity:  cursor,
 			OriginEntity: cursor,

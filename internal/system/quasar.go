@@ -457,7 +457,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	}
 
 	// Cap delta to prevent tunneling
-	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
 	// Periodic speed scaling with cap (game logic, not physics)
 	speedIncreaseInterval := time.Duration(parameter.QuasarSpeedIncreaseTicks) * parameter.GameUpdateInterval
@@ -579,7 +579,7 @@ func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *compon
 		return
 	}
 
-	s.world.PushEvent(event.EventLightningSpawnRequest, &event.LightningSpawnRequestPayload{
+	s.world.PushLocal(event.EventLightningSpawnRequest, &event.LightningSpawnRequestPayload{
 		Owner:        headerEntity,
 		OriginX:      headerPos.X,
 		OriginY:      headerPos.Y,

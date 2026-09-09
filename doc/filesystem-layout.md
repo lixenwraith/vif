@@ -20,13 +20,18 @@ file a user edits are one source.
 
 ```text
 wad/                          internal/asset/
-├── game/       entry bundle  ├── config/    fallback FSM bundle
-├── games/      alternates    ├── content/   fallback corpus
-│   ├── blank/                ├── input/     default keymap
-│   └── td/                   ├── audio/     built-in sound bank
+├── game/       named games   ├── config/    fallback FSM bundle
+│   ├── main/   default       ├── content/   fallback corpus
+│   ├── blank/  scaffold      ├── input/     default keymap
+│   └── td/     tower defence ├── audio/     built-in sound bank
 ├── content/    typing corpus └── splash_font.go
 └── image/      .vifimg assets
 ```
+
+The external `main` game and embedded fallback are intentionally separate. The
+external game is an editable, extended scenario; the embedded bundle is the
+self-contained fallback required by native and browser binaries. They need not
+contain the same optional regions.
 
 ## 2. Installed configuration tree
 
@@ -36,24 +41,29 @@ On Linux and FreeBSD the user root is `$XDG_CONFIG_HOME/vi-fighter` (normally
 
 ```text
 vi-fighter/
-├── game/        game.toml and the regions it references
-├── games/       named alternates selected with -g
+├── game/        named bundles, each rooted at game.toml
+│   ├── main/    discovered default
+│   ├── blank/   authoring scaffold
+│   └── td/      tower-defence scenario
 ├── input/       keymap.toml
 ├── audio/       music.toml, sounds.toml (optional overrides)
 ├── content/     .txt and .toml typing corpus
 └── image/       .vifimg wall assets
 ```
 
-`game/` is the discovered encounter bundle. `games/` is packaging structure,
-not an additional automatic search path. `audio/` is empty until a user or
-`soundlab` writes an override. `image/` holds assets addressed by path in a
-`WallPatternSpawnRequest`; it is not itself a discovery category.
+`game/main/` is the automatically discovered encounter bundle. The other
+directories under `game/` are selected by name (`-g td`) or explicit path.
+`audio/` is empty until a user or `soundlab` writes an override. `image/` holds
+assets addressed by path in a `WallPatternSpawnRequest`; it is not itself a
+discovery category.
 
 ## 3. Resolution policy
 
 An individual resource flag (`-g`, `-f`, `-k`, `-config-music`, or
-`-config-sounds`) is strict and always wins. Without one, every resource walks
-the same roots in order:
+`-config-sounds`) is strict and always wins. `-g` first accepts an existing
+`game.toml` path or bundle directory; a single name such as `td` then resolves
+as `game/td/game.toml` through the roots below. Without an override, every
+resource walks the same roots in order:
 
 1. `-config-dir <root>`;
 2. the user configuration root;
@@ -65,15 +75,16 @@ the embedded fallback.
 
 | Resource | Path in each root | Final fallback |
 |---|---|---|
-| FSM entry | `game/game.toml` | embedded FSM bundle |
+| FSM entry | `game/main/game.toml` | embedded FSM bundle |
 | Keymap | `input/keymap.toml` | embedded keymap |
 | Music | `audio/music.toml` | built-in patterns |
 | Sounds | `audio/sounds.toml` | built-in sound bank |
 | Content | `content/` | embedded tutorial corpus |
 
 An explicit game directory means a bundle whose entry is directly at
-`<directory>/game.toml`. An explicit content file pins delivery to that file.
-Missing explicit paths are errors; absent discovered overrides are normal.
+`<directory>/game.toml`. A named game is searched under `game/<name>/` in root
+priority order. An explicit content file pins delivery to that file. Missing
+explicit paths or names are errors; absent discovered overrides are normal.
 
 `-d` bypasses FSM and content discovery only. Keymap and audio overrides remain
 local participant preferences and retain their ordinary resolution.

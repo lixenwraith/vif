@@ -1,7 +1,7 @@
 package parameter
 
-// TODO: review and reorder, use iota? add comment for all
-// System Execution Priorities (lower runs first)
+// System execution priorities are a contiguous, deterministic order; lower runs
+// first. Inline comments call out the non-obvious producer/consumer constraints.
 const (
 	PriorityNetwork int = iota // Before every consumer: a peer's crossing must be queued for this tick's settle
 	PriorityCursor

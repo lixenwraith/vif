@@ -248,7 +248,6 @@ func (s *DrainSystem) Update() {
 		return
 	}
 
-	// TODO: old logic, refactor
 	currentTick := s.world.Resources.Game.State.GetGameTicks()
 
 	// Process pending materialize spawn queue first
@@ -944,7 +943,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 					})
 				}
 
-				s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+				s.world.PushLocal(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 					AttackType:   component.CombatAttackShield,
 					OwnerEntity:  overlap.Cursor,
 					OriginEntity: overlap.Cursor,
@@ -1073,8 +1072,7 @@ func (s *DrainSystem) handleEntityCollisions() {
 func (s *DrainSystem) updateDrainMovement() {
 	config := s.world.Resources.Config
 
-	// TODO: cap dtSec to become configurable, live game tick change
-	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
 	gameWidth := config.MapWidth
 	gameHeight := config.MapHeight

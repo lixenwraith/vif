@@ -434,7 +434,6 @@ func Clip[S ~[]E, E any](r S) S {
 	return r[:len(r):len(r)]
 }
 
-// TODO: There are other rotate algorithms.
 // This algorithm has the desirable property that it moves each element at most twice.
 // The follow-cycles algorithm can be 1-write but it is not very cache friendly.
 
@@ -458,7 +457,6 @@ func overlaps[E any](a, b []E) bool {
 	if elemSize == 0 {
 		return false
 	}
-	// TODO: use a runtime/unsafe facility once one becomes available. See issue 12445.
 	// Also see crypto/internal/fips140/alias/alias.go:AnyOverlap
 	return uintptr(unsafe.Pointer(&a[0])) <= uintptr(unsafe.Pointer(&b[len(b)-1]))+(elemSize-1) &&
 		uintptr(unsafe.Pointer(&b[0])) <= uintptr(unsafe.Pointer(&a[len(a)-1]))+(elemSize-1)
@@ -473,7 +471,6 @@ func startIdx[E any](haystack, needle []E) int {
 			return i
 		}
 	}
-	// TODO: what if the overlap is by a non-integral number of Es?
 	panic("needle not found")
 }
 

@@ -4,8 +4,9 @@
 
 Entry config search order:
 
-1. `-g <path>` — file, or directory containing `game.toml`;
-2. `game/game.toml` under `-config-dir <root>`;
+1. `-g <path-or-name>` — file, directory containing `game.toml`, or a name
+   resolved as `game/<name>/game.toml` under the configured roots;
+2. `game/main/game.toml` under `-config-dir <root>`;
 3. the same under `$XDG_CONFIG_HOME/vi-fighter` (normally
    `~/.config/vi-fighter`);
 4. the same under each corresponding root in `$XDG_CONFIG_DIRS`;
@@ -23,17 +24,22 @@ cannot escape it (`..` is rejected). Installed layout:
 ```text
 ~/.config/vi-fighter/
 ├── game/
-│   ├── game.toml
-│   ├── main.toml
-│   ├── quasar.toml
-│   ├── storm.toml
-│   ├── monitor.toml
-│   └── tower.toml
+│   ├── main/
+│   │   ├── game.toml
+│   │   ├── main.toml
+│   │   ├── quasar.toml
+│   │   ├── storm.toml
+│   │   ├── monitor.toml
+│   │   └── tower.toml
+│   ├── blank/
+│   │   └── game.toml
+│   └── td/
+│       └── game.toml
 └── input/
     └── keymap.toml
 ```
 
-`vi-fighter -check [-g <path>]` validates resolved FSM, keymap, audio, and
+`vi-fighter -check [-g <name-or-path>]` validates resolved FSM, keymap, audio, and
 content config and exits; all state-level FSM errors are reported in one pass.
 `vi-fighter -schema` prints the machine schema (events, guards, actions) as JSON.
 

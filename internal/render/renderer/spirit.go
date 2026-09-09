@@ -30,13 +30,6 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	// TODO: move to parameter
-	// Configuration for the trail effect
-	const (
-		trailSteps = 10         // Number of segments (Head + 9 trail segments)
-		trailLag   = 1.0 / 60.0 // Progress lag per segment (~1.6%)
-	)
-
 	spirits.Each(func(_ core.Entity, spiritComp *component.SpiritComponent) bool {
 		// Pre-calculate invariant vector and aspect-corrected Y for spiral math
 		relX := spiritComp.StartX - spiritComp.TargetX
@@ -44,9 +37,9 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		relYCirc := vmath.ScaleToCircularF(relY)
 
 		// Render loop: Draw head (i=0) and trailing segments (i>0)
-		for i := range trailSteps {
+		for i := range visual.SpiritTrailSteps {
 			// Calculate progress for this segment
-			p := spiritComp.Progress - float64(i)*trailLag
+			p := spiritComp.Progress - float64(i)*visual.SpiritTrailLag
 			if p < 0 {
 				continue // Segment hasn't spawned yet
 			}
@@ -93,14 +86,14 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 				c = color.Scale(c, intensity)
 			} else {
 				// Trail: inherit cycled color with linear fade + boosted alpha
-				trailProgress := p - float64(i-1)*trailLag
+				trailProgress := p - float64(i-1)*visual.SpiritTrailLag
 				if trailProgress < 0 {
 					trailProgress = 0
 				}
 				c = spiritProgressColor(spiritComp.BaseColor, trailProgress)
 
 				// Normalized position in trail (0.0 to 1.0)
-				trailPos := float64(i) / float64(trailSteps)
+				trailPos := float64(i) / float64(visual.SpiritTrailSteps)
 
 				fade := 1.0 - trailPos
 				fade = fade * 1.3

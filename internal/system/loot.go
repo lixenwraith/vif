@@ -193,7 +193,7 @@ func (s *LootSystem) Update() {
 	}
 
 	config := s.world.Resources.Config
-	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
 	s.refreshOwnerRoutes(lootEntities)
 

@@ -83,7 +83,7 @@ func fsmConfigTrees(t *testing.T) map[string]func() (map[string]any, error) {
 			return fsm.ResolveConfig(asset.DefaultFSMConfig, asset.DefaultFSMEntry)
 		},
 	}
-	for _, dir := range []string{"game", "games/td", "games/blank"} {
+	for _, dir := range []string{"game/main", "game/td", "game/blank"} {
 		d := filepath.Join(root, "wad", dir)
 		if _, err := os.Stat(filepath.Join(d, "game.toml")); err != nil {
 			continue
@@ -171,7 +171,7 @@ func TestFSMTriggersAreReplicated(t *testing.T) {
 					}
 				}
 			}
-			// wad/games/blank declares no transitions at all, so a per-tree floor
+			// wad/game/blank declares no transitions at all, so a per-tree floor
 			// would fail it; the suite-wide floor below is what keeps the check
 			// from passing vacuously.
 			totalChecked += checked
@@ -311,29 +311,9 @@ func entityScan(v reflect.Value, path, field string, crossing bool, named *int, 
 	}
 }
 
-// unstampedLocal pins the Local-class types some producer still pushes in the
-// ambient domain. The set must only shrink: an entry that stops appearing fails, a
-// type not listed here fails on first sight. A per-instance effect journaled as
-// shared is a record two instances legitimately differ on.
-// TODO: empty this, then delete it and the exemption with it.
-var unstampedLocal = map[string]bool{
-	"EventCombatAttackAreaRequest":  true,
-	"EventDecaySpawnOne":            true,
-	"EventDustAllRequest":           true,
-	"EventGamePauseChanged":         true,
-	"EventGamePauseRequest":         true,
-	"EventGameSpeedChanged":         true,
-	"EventLightningSpawnRequest":    true,
-	"EventMetaStatusMessageRequest": true,
-	"EventMissileSpawnRequest":      true,
-	"EventModeChanged":              true,
-	"EventScreenResize":             true,
-}
-
 // TestLocalEventsCarryThePlayerDomain asserts that a Local-class record is tagged
 // player. The class already keeps it off the wire, so this is about the record being
-// honest. core.DomainShared is the zero value and the ambient domain defaults to it,
-// so every type reported here is a push site that never stamped.
+// honest. core.DomainShared is the zero value and the ambient domain defaults to it.
 func TestLocalEventsCarryThePlayerDomain(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
@@ -358,21 +338,12 @@ func TestLocalEventsCarryThePlayerDomain(t *testing.T) {
 
 	var bad []string
 	for name, n := range unstamped {
-		if !unstampedLocal[name] {
-			bad = append(bad, fmt.Sprintf(
-				"%s: %d records tagged shared; stamp the push site or add it to unstampedLocal", name, n))
-		}
-	}
-	for name := range unstampedLocal {
-		if unstamped[name] == 0 {
-			bad = append(bad, name+": listed in unstampedLocal but every push now stamps; drop the entry")
-		}
+		bad = append(bad, fmt.Sprintf("%s: %d records tagged shared", name, n))
 	}
 	if len(bad) > 0 {
 		sort.Strings(bad)
 		t.Fatalf("local-class stamping drifted:\n  %s", strings.Join(bad, "\n  "))
 	}
-	t.Logf("%d local-class types still push unstamped", len(unstamped))
 }
 
 // TestAQuasarsEffectsReachOnlyTheCursorItWasFusedFrom is the reported defect. A

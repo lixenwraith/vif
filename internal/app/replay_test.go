@@ -312,7 +312,7 @@ func TestModeChangedAppliesWithoutRouter(t *testing.T) {
 	defer a.Close()
 
 	a.Tick(1)
-	a.Context().PushEventOrigin(event.EventModeChanged,
+	a.Context().PushLocalOrigin(event.EventModeChanged,
 		&event.ModeChangedPayload{Mode: core.ModeVisual}, event.OriginDebug)
 	a.Settle()
 

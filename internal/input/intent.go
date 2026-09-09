@@ -10,7 +10,6 @@ const (
 	IntentQuit             // Ctrl+Q, Ctrl+C
 	IntentEscape           // ESC key (context-dependent)
 	IntentToggleAudioCycle // Ctrl+S
-	IntentResize           // Terminal resize; never emitted, App.Loop owns resize
 
 	// Normal mode navigation
 	IntentMotion     // h,j,k,l,w,b,0,$,G,gg,arrows,etc

@@ -17,7 +17,8 @@ import (
 type CleanerSystem struct {
 	world *engine.World
 
-	entityBuf []core.Entity
+	entityBuf  []core.Entity
+	destroyBuf []core.Entity
 
 	statActive         *atomic.Int64
 	statSpawned        *atomic.Int64
@@ -34,8 +35,9 @@ type CleanerSystem struct {
 // NewCleanerSystem creates a new cleaner system
 func NewCleanerSystem(world *engine.World) engine.System {
 	s := &CleanerSystem{
-		world:     world,
-		entityBuf: make([]core.Entity, 0),
+		world:      world,
+		entityBuf:  make([]core.Entity, 0),
+		destroyBuf: make([]core.Entity, 0, 16),
 	}
 
 	s.statActive = s.world.Resources.Status.Ints.Get("cleaner.active")
@@ -45,7 +47,7 @@ func NewCleanerSystem(world *engine.World) engine.System {
 	s.statGridSteps = s.world.Resources.Status.Ints.Get("cleaner.grid_steps")
 	s.statCursorRejects = s.world.Resources.Status.Ints.Get("cleaner.cursor_rejects")
 	s.statDisabled = s.world.Resources.Status.Ints.Get("cleaner.disabled_rejects")
-	s.buffers = newBufferTelemetry(s.world.Resources.Status, "cleaner", "entities")
+	s.buffers = newBufferTelemetry(s.world.Resources.Status, "cleaner", "entities", "destroy")
 
 	s.Init()
 	return s
@@ -53,6 +55,8 @@ func NewCleanerSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *CleanerSystem) Init() {
+	s.entityBuf = s.entityBuf[:0]
+	s.destroyBuf = s.destroyBuf[:0]
 	s.statActive.Store(0)
 	s.statSpawned.Store(0)
 	s.statWallCollisions.Store(0)
@@ -147,7 +151,7 @@ func (s *CleanerSystem) Update() {
 		return
 	}
 
-	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 	gameWidth := config.MapWidth
 	gameHeight := config.MapHeight
 
@@ -496,8 +500,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity, owner core.Entity,
 
 // processPositiveEnergy handles Red destruction with Blossom spawn
 func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, selfEntity core.Entity) {
-	// TODO: move toDestroy to system level buffer
-	var toDestroy []core.Entity
+	s.destroyBuf = s.destroyBuf[:0]
 
 	// Iterate candidates with self-exclusion pattern
 	for _, targetEntity := range targetEntities {
@@ -510,16 +513,17 @@ func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, self
 		}
 		if glyphComp, ok := s.world.Components.Glyph.GetPtr(targetEntity); ok {
 			if glyphComp.Type == component.GlyphRed {
-				toDestroy = append(toDestroy, targetEntity)
+				s.destroyBuf = append(s.destroyBuf, targetEntity)
 			}
 		}
 	}
+	s.buffers.Observe(1, len(s.destroyBuf))
 
-	if len(toDestroy) == 0 {
+	if len(s.destroyBuf) == 0 {
 		return
 	}
 
-	event.EmitDeath(s.world.Resources.Event.Queue, event.EventBlossomSpawnOne, toDestroy...)
+	event.EmitDeath(s.world.Resources.Event.Queue, event.EventBlossomSpawnOne, s.destroyBuf...)
 }
 
 // processNegativeEnergy handles Blue mutation to Green with Decay spawn
@@ -543,7 +547,7 @@ func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.En
 		glyphComp.Type = component.GlyphGreen
 
 		// Spawn decay at same position (particle skips starting cell via LastIntX/Y)
-		s.world.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
+		s.world.PushLocal(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
 			X:             x,
 			Y:             y,
 			Char:          glyphComp.Rune,
