@@ -195,9 +195,12 @@ flowchart TD
 - background mode: one terminal background cell per sampled pixel.
 
 Dual `.vifimg` files store truecolor and xterm-256 foreground/background data,
-transparency, rune, dimensions, and an optional anchor hint. The pattern loader
-selects the active color representation, preserves palette attributes, skips
-transparent cells, and creates `PatternCell` offsets.
+transparency, rune, dimensions, render mode, and authored anchor-offset metadata.
+The current version compresses the fixed-width cell stream with the
+standard-library deflate codec; the reader also accepts legacy uncompressed
+files. The pattern loader selects the active color representation, preserves
+palette attributes and anchor offsets, skips transparent cells, and creates
+`PatternCell` offsets.
 
 `WallSystem` converts a `PatternResult` to `WallCellDef` values and spawns them
 as one composite wall with a block mask and optional box style, so images
@@ -205,14 +208,19 @@ participate in wall collision, ECS lifecycle, camera cropping, and the normal
 wall renderer rather than drawing directly to the terminal.
 
 A pattern can be blocking (`WallBlockAll` or directional mask) or a nonblocking
-visual backdrop (`WallBlockNone`). The spawn event supplies the map coordinate;
-the authored anchor is carried through the loader but nothing reads it.
+visual backdrop (`WallBlockNone`). The spawn event currently supplies the map
+coordinate. The `.vifimg` anchor offset remains available in `PatternResult` as
+authored image metadata, but `WallSystem` does not consume it yet.
 
 The extension is `.vifimg`, which is what `cmd/ascimage` detects and what the
-shipped `wad/image/test.vifimg` sample uses. `WallPatternSpawnRequest.path` is
-still resolved against the process working directory rather than the config
-roots, so an installed `image/` tree cannot yet be named portably from a
-configuration; see [TODO](todo.md).
+shipped `wad/image/test.vifimg` sample uses. An existing absolute or relative path
+in `WallPatternSpawnRequest.path` is explicit. Otherwise it is a logical name
+below `image/`, resolved through `-config-dir`, the user configuration root, and
+XDG system roots in that order. Thus `path="test.vifimg"` works both with
+`-config-dir wad` and from an installed tree, independent of the process working
+directory; the existing-relative-path check is retained only for compatibility.
+Runtime image opens cross the generic `FileService` capability contributed to
+the world, so `WallSystem` neither discovers roots nor opens host paths itself.
 
 ## 9. Ascimage tool
 

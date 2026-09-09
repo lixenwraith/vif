@@ -1,50 +1,108 @@
 # TODO
 
-Scratch note that travels with the repository. One line per item: what, and the
-smallest thing that would close it. Delete an entry when it lands — this file is
-not a changelog. Source files do not carry parallel TODO comments; a code-originated
-item names its source here.
+Scratch notes that travel with the repository. Each item states what remains and
+the smallest thing that would close it. Delete an item when it lands; this file
+is not a changelog. Source files do not carry parallel TODO comments, so a
+code-originated item names its source here.
 
-Priority is P0 blocks a release, P1 wanted next, P2 when convenient, P3 idea.
+Priorities: P0 blocks a release, P1 is wanted next, P2 is convenient follow-up,
+and P3 is an idea.
 
 ## Packaging
 
-Detail and per-distribution steps are in [Packaging](packaging.md).
+Distribution-specific detail lives in [Packaging](packaging.md).
 
-| P | Item |
-|---|---|
-| P0 | Tag a `v0.1.0` release with a published source tarball and checksum. |
-| P1 | Man page `vif.1` generated from the flag table, installed by `make install`. |
-| P2 | `.desktop` entry with `Terminal=true`, and an icon. |
-| P2 | Shell completion for `vif`. |
-| P3 | `vi-fighter-git` AUR package alongside the release one. |
+### Publish the first release
 
-## Assets and configuration
+- Priority: P0
+- Affected files: release artifacts and `doc/packaging.md`
+- Prerequisite: choose a release commit after the complete verification gate
+  passes
 
-| P | Item |
-|---|---|
-| P1 | `WallPatternSpawnRequest.path` resolves against the process working directory, so an installed `image/` tree cannot be named portably from a config. Decide whether it resolves against config roots, then document `image/` as a real category. |
-| P2 | `.vifimg` carries an author anchor (`-ax`/`-ay`) that `PatternResult` loads and nothing reads; the spawn event supplies the coordinate instead. Either consume it as the default anchor or drop it from the format. |
+Tag `v0.1.0` and publish a byte-stable source tarball with its checksum.
+
+### Install a manual page
+
+- Priority: P1
+- Affected files: `cmd/vif/usage.go`, `doc/vif.1`, `Makefile`
+- Prerequisite: keep the flag table as the source of truth
+
+Generate `vif.1` from the flag table and install it through `make install`.
+
+### Add a desktop launcher
+
+- Priority: P2
+- Affected files: packaging assets and `Makefile`
+- Prerequisite: select an installable icon
+
+Add a `.desktop` entry with `Terminal=true` and install its icon.
+
+### Add shell completion
+
+- Priority: P2
+- Affected files: `cmd/vif/usage.go`, completion assets, `Makefile`
+- Prerequisite: choose generated or maintained completion definitions
+
+Provide shell completion for `vif` and install it in the appropriate data path.
+
+### Publish a development AUR package
+
+- Priority: P3
+- Affected files: AUR packaging metadata and `doc/packaging.md`
+- Prerequisite: establish the release-package metadata first
+
+Publish `vi-fighter-git` alongside the release-based AUR package.
 
 ## Audio
 
-| P | Item | Source | Prerequisite |
-|---|---|---|---|
-| P1 | Surface a malformed user `sounds.toml` during play; fallback currently succeeds silently while `-check` reports the error. | `internal/service/adapter_audio.go` | Choose the in-game surface, then expose the latched `AudioEngine.SpecError()` without making fallback fatal. |
-| P2 | Move built-in music patterns from Go literals to `internal/asset/audio/music.toml`, so `soundlab` can edit the same data the game loads. | `cmd/soundlab/session.go`, `pkg/audio` | Define and validate the pattern document before replacing registry seeding. |
-| P3 | Make the 50 ms mixer buffer adjustable instead of a compile-time constant. | `pkg/audio/params.go` | Define a construction-time option and recompute dependent buffer sizes before either mixer or backend starts. |
-| P3 | Decide whether manual intensity decreases should use per-bar track reveal; manual changes currently always reveal while automatic changes reveal only when rising. | `internal/system/music.go` | Add deterministic rising/falling transition coverage around `applyArrangement` before changing the policy. |
+### Surface malformed user sound configuration during play
+
+- Priority: P1
+- Affected files: `internal/service/adapter_audio.go`
+- Prerequisite: choose the in-game error surface
+
+Fallback currently succeeds silently during play while `-check` reports the
+error. Expose the latched `AudioEngine.SpecError()` without making fallback
+fatal.
+
+### Move built-in music patterns into an editable asset
+
+- Priority: P2
+- Affected files: `cmd/soundlab/session.go`, `pkg/audio`,
+  `internal/asset/audio/music.toml`
+- Prerequisite: define and validate the pattern document
+
+Replace the built-in Go registry literals with `internal/asset/audio/music.toml`
+so `soundlab` edits the same data the game loads.
+
+### Make the mixer buffer configurable
+
+- Priority: P3
+- Affected files: `pkg/audio/params.go`
+- Prerequisite: define a construction-time option and recompute dependent buffer
+  sizes before the mixer or backend starts
+
+Replace the compile-time 50 ms mixer buffer with a construction-time setting.
+
+### Decide reveal behavior for manual intensity decreases
+
+- Priority: P3
+- Affected files: `internal/system/music.go`
+- Prerequisite: deterministic rising and falling transition coverage around
+  `applyArrangement`
+
+Manual intensity changes always use per-bar track reveal, while automatic
+changes reveal only when intensity rises. Decide whether manual decreases should
+retain that distinction.
 
 ## Runtime structure
 
-| P | Item | Source | Prerequisite |
-|---|---|---|---|
-| P2 | Refactor drain population reconciliation: target count, pending materialization, stagger timing, and failed-placement backoff currently share one update block. | `internal/system/drain.go` | Pin spawn, pause/resume, materialize-completion, and exponential-backoff behavior with focused deterministic tests. |
-| P3 | Fold context-scoped systems into the main manifest system list. `MetaSystem` is still constructed separately because it needs `GameContext`, not only `World`. | `internal/manifest/definition.go`, `internal/app/app.go` | Give generated construction a capability/context input without weakening dependency and snapshot-profile checks. |
+### Separate drain population reconciliation concerns
 
-## Testing
+- Priority: P2
+- Affected files: `internal/system/drain.go`
+- Prerequisite: focused deterministic coverage for spawn, pause/resume,
+  materialization completion, and exponential backoff
 
-| P | Item | Source | Prerequisite |
-|---|---|---|---|
-| P2 | Cover wall displacement classification for every species, including kinetic headers, non-physical composite anchors, particles, and ordinary spawn blockers. | `internal/system/wall.go` | Write down the expected header/member mask for each species, then encode it as a table-driven fixture. |
-| P2 | Split the port-binding scenarios from checks that can run in a packaging chroot or alongside `go test`. | `test/scenario.sh` | Classify the scenarios by socket and process requirements. |
+Refactor the update block that currently combines target count, pending
+materialization, stagger timing, and failed-placement backoff.

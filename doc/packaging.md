@@ -38,8 +38,7 @@ Ordered by what blocks a package review.
 | 2 | No man page | Arch and Debian both expect `vif.1`. The flag table in `cmd/vif/usage.go` is the source; generate or hand-write `doc/vif.1` and install it in the `install` target. |
 | 3 | No `.desktop` entry | Optional for a TUI game, but expected if it should appear in a menu. Needs `Terminal=true` and an icon. |
 | 4 | Shell completion | Not generated. `flag` gives no completion data; a hand-written `_vif` is the cheapest route. |
-| 5 | `image/` assets are path-addressed | `WallPatternSpawnRequest.path` is resolved against the process working directory, so an installed `image/` tree cannot be referenced portably from a config. Decide whether the path resolves against config roots before advertising the directory. |
-| 6 | No upstream checksum policy | Distributions verify a tarball hash. GitHub's generated archives are not guaranteed byte-stable; publish a release asset instead. |
+| 5 | No upstream checksum policy | Distributions verify a tarball hash. GitHub's generated archives are not guaranteed byte-stable; publish a release asset instead. |
 
 ## 3. Arch (AUR)
 

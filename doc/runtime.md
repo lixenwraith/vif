@@ -316,10 +316,10 @@ The detailed construction order is significant:
    scope.
 2. Initialize the generated event registry. FSM trigger resolution and
    `:emit` reflection depend on it.
-3. Register services selected by the mode: content always; terminal for
-   presenting modes; audio for play/replay; network for play in `RoleNone`,
-   or for play/headless script sessions in `RoleHost` or `RolePeer` according
-   to startup configuration.
+3. Register services selected by the mode: files and content always; terminal
+   for presenting modes; audio for play/replay; network for play in `RoleNone`,
+   or for play/headless script sessions in `RoleHost` or `RolePeer` according to
+   startup configuration.
 4. Create an empty world and initialize services in deterministic topological
    order.
 5. Let initialized services contribute typed resources to the world.

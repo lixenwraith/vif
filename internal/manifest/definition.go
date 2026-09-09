@@ -211,8 +211,10 @@ var Systems = []SystemDef{
 	{Name: "music", Constructor: "NewMusicSystem", Domain: "player", Optional: []string{"audio"}}, // player stream; tracks intensity silently without audio
 }
 
-// ContextSystems are context-scoped systems App registers directly: they take a
-// GameContext rather than a World, so BuildSystems cannot construct them.
+// ContextSystems deliberately stay separate from generated World-only
+// construction. App registers them after GameContext exists; keeping their
+// profiles here still subjects them to fingerprint, dependency, and domain
+// validation without widening every ordinary system constructor.
 var ContextSystems = []SystemDef{
 	{Name: "meta", Constructor: "NewMetaSystem", Domain: "shared"}, // world writes are replicated or the D-14 map writer; publishes context and kill counters
 }

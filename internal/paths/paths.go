@@ -17,6 +17,7 @@ const (
 	InputDirName   = "input"
 	AudioDirName   = "audio"
 	ContentDirName = "content"
+	ImageDirName   = "image"
 	LogDirName     = "log"
 	JournalDirName = "journal"
 

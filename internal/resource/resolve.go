@@ -19,8 +19,8 @@ import (
 // corpus and rejects Game and Content.
 type Options struct {
 	// Dir is an optional root searched before the user and system roots, in the
-	// categorized game/, input/, audio/, content/ layout. Empty selects platform
-	// discovery.
+	// categorized game/, input/, audio/, content/, image/ layout. Empty selects
+	// platform discovery.
 	Dir string
 
 	// Game is a game name, a game.toml path, or a map directory.
@@ -110,6 +110,13 @@ func Keymap(o Options) (string, error) {
 	}
 	r := newResolver(o)
 	return r.file(paths.InputDirName, paths.KeymapConfigFile), nil
+}
+
+// Files supplies the ordered configuration roots to FileService. Resolution
+// and host I/O stay in that service; this package remains the composition-time
+// owner of root selection.
+func Files(o Options) service.FileSource {
+	return service.FileSource{Roots: paths.ConfigRoots(o.Dir)}
 }
 
 // Corpus locates the content corpus. An empty source selects embedded content.

@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"errors"
+	"io"
 	"sort"
 	"strconv"
 	"sync"
@@ -56,6 +58,7 @@ type Resource struct {
 	Status *status.Registry
 
 	// Bridged resources from services
+	Files   *FileResource
 	Content *ContentResource
 	Audio   *AudioResource
 	Network *NetworkResource
@@ -798,6 +801,27 @@ func (gr *GeneticResource) SampleScout(speciesID uint8, populationID uint32) ([]
 }
 
 // === Bridged Resources from Service ===
+
+// ErrFileCapabilityUnavailable reports a World composed without FileService.
+var ErrFileCapabilityUnavailable = errors.New("file capability unavailable")
+
+// FileProvider opens categorized external files without exposing filesystem
+// discovery or host paths to simulation code.
+type FileProvider interface {
+	Open(category, name string) (io.ReadCloser, error)
+}
+
+// FileResource is the narrow filesystem capability contributed by FileService.
+type FileResource struct {
+	Provider FileProvider
+}
+
+func (r *FileResource) Open(category, name string) (io.ReadCloser, error) {
+	if r == nil || r.Provider == nil {
+		return nil, ErrFileCapabilityUnavailable
+	}
+	return r.Provider.Open(category, name)
+}
 
 // ContentProvider supplies spawn content; implementations are goroutine-safe
 type ContentProvider interface {

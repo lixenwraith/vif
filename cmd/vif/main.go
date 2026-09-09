@@ -304,7 +304,7 @@ func (f *configFlags) options() resource.Options {
 }
 
 func (f *configFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&f.dir, "config-dir", "", "Configuration root holding game/ input/ audio/ content/")
+	fs.StringVar(&f.dir, "config-dir", "", "Configuration root holding game/ input/ audio/ content/ image/")
 	fs.StringVar(&f.music, "config-music", "", "Music pattern override TOML")
 	fs.StringVar(&f.sounds, "config-sounds", "", "Sound definition override TOML")
 

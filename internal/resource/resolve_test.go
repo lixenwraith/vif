@@ -82,6 +82,9 @@ func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 	if got, err := Audio(o); err != nil || got.MusicPath != music || got.SoundPath != sounds {
 		t.Fatalf("audio = %+v, %v; want %q and %q", got, err, music, sounds)
 	}
+	if roots := Files(o).Roots; len(roots) == 0 || roots[0] != root {
+		t.Fatalf("file roots = %v, want operator root %q first", roots, root)
+	}
 }
 
 func TestGameNameResolvesInsideConfigurationRoots(t *testing.T) {

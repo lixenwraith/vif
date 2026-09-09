@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/internal/paths"
 	"github.com/lixenwraith/vi-fighter/internal/pattern"
 	"github.com/lixenwraith/vi-fighter/pkg/maze"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
@@ -464,7 +465,14 @@ func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnReque
 
 // handlePatternSpawn loads a .vifimg pattern and spawns it as a composite wall.
 func (s *WallSystem) handlePatternSpawn(payload *event.WallPatternSpawnRequestPayload) {
-	result, err := pattern.LoadDualModePattern(payload.Path, s.world.Resources.Config.ColorMode)
+	file, err := s.world.Resources.Files.Open(paths.ImageDirName, payload.Path)
+	if err != nil {
+		s.world.DebugPrint("pattern file failed: " + err.Error())
+		return
+	}
+	defer file.Close()
+
+	result, err := pattern.ReadDualModePattern(file, s.world.Resources.Config.ColorMode)
 	if err != nil {
 		s.world.DebugPrint("pattern load failed: " + err.Error())
 		return

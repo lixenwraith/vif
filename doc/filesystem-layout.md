@@ -53,9 +53,8 @@ vi-fighter/
 
 `game/main/` is the automatically discovered encounter bundle. The other
 directories under `game/` are selected by name (`-g td`) or explicit path.
-`audio/` is empty until a user or `soundlab` writes an override. `image/` holds
-assets addressed by path in a `WallPatternSpawnRequest`; it is not itself a
-discovery category.
+`audio/` is empty until a user or `soundlab` writes an override. `image/` is the
+discovery category for `.vifimg` assets named by a `WallPatternSpawnRequest`.
 
 ## 3. Resolution policy
 
@@ -80,10 +79,15 @@ the embedded fallback.
 | Music | `audio/music.toml` | built-in patterns |
 | Sounds | `audio/sounds.toml` | built-in sound bank |
 | Content | `content/` | embedded tutorial corpus |
+| Wall image | `image/<name>.vifimg` | none; failure is reported in the game status |
 
 An explicit game directory means a bundle whose entry is directly at
 `<directory>/game.toml`. A named game is searched under `game/<name>/` in root
-priority order. An explicit content file pins delivery to that file. Missing
+priority order. An explicit content file pins delivery to that file. For a wall
+image, an existing absolute or relative path is explicit; otherwise the event's
+path is a logical name below each root's `image/` directory, and it may include
+nested directories but not `..`. New configurations should use a logical name or
+an absolute path; the relative-path check remains for compatibility. Missing
 explicit paths or names are errors; absent discovered overrides are normal.
 
 `-d` bypasses FSM and content discovery only. Keymap and audio overrides remain
@@ -122,10 +126,12 @@ boolean-style flags, a directory must use the equals form.
 ## 6. Package ownership and WASM
 
 `internal/paths` owns platform directory discovery and names. `internal/resource`
-owns resource selection and strict explicit-path behavior. Loaders in
-`internal/fsm`, `internal/input`, `internal/content`, and `internal/service`
-receive already-resolved files or filesystem capabilities; they do not invent
-search orders.
+owns composition-time resource selection. Loaders in `internal/fsm`,
+`internal/input`, `internal/content`, and `internal/service` receive
+already-resolved files or filesystem capabilities; they do not invent search
+orders. Runtime categorized opens, including strict explicit-path handling,
+cross the generic `FileService` capability contributed to the world; systems do
+not open host paths directly.
 
 `internal/asset` owns every embedded group and is the only package with an
 `embed` directive for shipped data. `pkg/audio` carries no specs of its own:

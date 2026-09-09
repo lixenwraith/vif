@@ -1041,7 +1041,7 @@ type WallCompositeSpawnRequestPayload struct {
 
 // WallPatternSpawnRequestPayload contains parameters for pattern-based wall creation
 type WallPatternSpawnRequestPayload struct {
-	Path          string                  `toml:"path"`       // Path to .vifimg file
+	Path          string                  `toml:"path"`       // Existing path or name below a config root's image/
 	X             int                     `toml:"x"`          // Anchor X position
 	Y             int                     `toml:"y"`          // Anchor Y position
 	BlockMask     component.WallBlockMask `toml:"block_mask"` // Applied to all cells

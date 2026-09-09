@@ -129,7 +129,7 @@ line wins.
 | Flag | Purpose |
 |---|---|
 | `-d`, `-config-embedded` | Use the embedded FSM and content; mutually exclusive with `-g` and `-f`. |
-| `-config-dir <dir>` | Search one categorized config root (`game/ input/ audio/ content/`) before the user and system roots. |
+| `-config-dir <dir>` | Search one categorized config root (`game/ input/ audio/ content/ image/`) before the user and system roots. |
 | `-g`, `-config-game <name-or-path>` | Installed game name, FSM `game.toml`, or a directory containing it. |
 | `-f`, `-config-content <path>` | Content directory, or a single pinned `.txt`/`.toml` file. |
 | `-k`, `-config-keymap <path>` | Keymap override TOML. |

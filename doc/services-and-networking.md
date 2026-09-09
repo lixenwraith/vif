@@ -1,11 +1,12 @@
 # Services and Networking
 
 Services own process/host resources whose lifecycle differs from ECS systems:
-terminal raw mode, audio output, the immutable content corpus, and an optional
-network transport. Networking is assembled for a trusted-peer session of up to
-`parameter.MaxPlayers` participants; a normal run still contributes no active
-network capability. The current failure model and recovery alternatives are
-analysed in [Desynchronisation and recovery](desync.md).
+external file access, terminal raw mode, audio output, the immutable content
+corpus, and an optional network transport. Networking is assembled for a
+trusted-peer session of up to `parameter.MaxPlayers` participants; a normal run
+still contributes no active network capability. The current failure model and
+recovery alternatives are analysed in
+[Desynchronisation and recovery](desync.md).
 
 ## 1. Service lifecycle contract
 
@@ -64,6 +65,7 @@ an arbitrary order.
 
 | Service | `Init` | `Start` | Resource contribution |
 |---|---|---|---|
+| `file` | Retain the ordered configuration roots. | No-op. | `FileResource.Provider`, a generic categorized open capability. |
 | `terminal` | Construct terminal, enter raw/alternate-screen state, detect/force color mode. | Start blocking poll loop. | Exposed directly to app/render/input rather than as an ECS resource. |
 | `content` | Resolve, load, sanitize, and freeze corpus/cursor. | No-op. | `ContentResource.Provider`. |
 | `audio` | Build engine/config and load optional documents. | Freeze/register sounds, probe backend, start mixer/supervisor. | `AudioResource.Engine` when available. |
@@ -73,11 +75,11 @@ Assembly is mode-dependent:
 
 | App mode | Registered services |
 |---|---|
-| `ModePlay` | terminal, content, audio, and network; `RoleNone` normally, `RoleHost`/`RolePeer` with startup flags |
-| `ModeHeadless` | content only for ordinary harnesses; `app.RunScript` additionally registers `RoleHost`/`RolePeer` network when a startup flag is present |
-| `ModeReplay` | terminal, content, and audio |
-| `ModeScript` | terminal, content, audio, and the same `RoleHost`/`RolePeer` network a headless script registers |
-| `ModeServer` | content and `RoleHost` network; no terminal and no audio |
+| `ModePlay` | file, terminal, content, audio, and network; `RoleNone` normally, `RoleHost`/`RolePeer` with startup flags |
+| `ModeHeadless` | file and content for ordinary harnesses; `app.RunScript` additionally registers `RoleHost`/`RolePeer` network when a startup flag is present |
+| `ModeReplay` | file, terminal, content, and audio |
+| `ModeScript` | file, terminal, content, audio, and the same `RoleHost`/`RolePeer` network a headless script registers |
+| `ModeServer` | file, content, and `RoleHost` network; no terminal and no audio |
 
 The predicates in `internal/app/config.go` are authoritative for terminal and
 audio capabilities. Network is role-selected separately: play always constructs
@@ -121,8 +123,9 @@ flowchart LR
 ```
 
 This direction prevents the I/O layer from directly mutating component stores.
-Content exposes `NextBlock`; audio exposes the audio engine; networking exposes
-a `NetworkPort` that drains notifications and sends opaque framed messages.
+Files expose a categorized `Open` capability; content exposes `NextBlock`; audio
+exposes the audio engine; networking exposes a `NetworkPort` that drains
+notifications and sends opaque framed messages.
 
 ## 6. Operator session surface
 
@@ -872,6 +875,7 @@ metric stream. See [Runtime](runtime.md) §1.2 for the flags and the phases.
 |---|---|
 | Service contract/hub | `internal/service/interface.go`, `hub.go` |
 | Mode-to-service policy | `internal/app/config.go`, `app.go` |
+| File adapter | `internal/service/adapter_file.go` |
 | Terminal adapter | `internal/service/adapter_terminal.go` |
 | Content/audio adapters | `internal/service/adapter_content.go`, `adapter_audio.go` |
 | Network adapter | `internal/service/adapter_network.go` |

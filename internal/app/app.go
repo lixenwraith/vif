@@ -254,6 +254,7 @@ func (a *App) initServices() error {
 		}
 		_ = a.hub.Register(service.NewAudioService(a.cfg.AudioMuted, a.cfg.AudioBackend, audioSrc))
 	}
+	_ = a.hub.Register(service.NewFileService(resource.Files(a.cfg.Resources)))
 
 	contentSrc, err := resource.Corpus(a.cfg.Resources)
 	if err != nil {
@@ -425,7 +426,9 @@ func (a *App) initScheduler() error {
 		return err
 	}
 
-	// MetaSystem is context-scoped, so it joins the set here rather than via the manifest
+	// MetaSystem needs the completed GameContext and therefore joins here. Its
+	// profile remains in manifest.ContextSystems for the ordinary validation and
+	// fingerprint checks.
 	meta := system.NewMetaSystem(a.ctx)
 	a.world.AddSystem(meta, manifest.ProfileFor(meta.Name()))
 

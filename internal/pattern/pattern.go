@@ -3,6 +3,8 @@
 package pattern
 
 import (
+	"io"
+
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -26,8 +28,8 @@ type PatternResult struct {
 	Cells   []PatternCell
 	Width   int // Bounding width
 	Height  int // Bounding height
-	AnchorX int // Suggested spawn anchor X
-	AnchorY int // Suggested spawn anchor Y
+	AnchorX int // Authored anchor X offset
+	AnchorY int // Authored anchor Y offset
 }
 
 // ToWallCellDefs converts pattern cells to wall spawn payload format
@@ -108,10 +110,10 @@ func fromDualModeImage(img *ascimage.DualModeImage, colorMode terminal.ColorMode
 	}
 }
 
-// LoadDualModePattern reads a .vifimg from disk. The path is the caller's;
-// nothing here resolves it against a config root.
-func LoadDualModePattern(path string, colorMode terminal.ColorMode) (PatternResult, error) {
-	img, err := ascimage.LoadDualMode(path)
+// ReadDualModePattern decodes a .vifimg supplied by an external file
+// capability. The pattern package does not discover or open host paths.
+func ReadDualModePattern(r io.Reader, colorMode terminal.ColorMode) (PatternResult, error) {
+	img, err := ascimage.ReadDualMode(r)
 	if err != nil {
 		return PatternResult{}, err
 	}

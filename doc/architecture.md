@@ -38,7 +38,7 @@ flowchart TD
     Entry["cmd/vif: flags and diagnostics"] --> App["internal/app: composition root"]
     App --> Journal["internal/journal: deterministic run streams"]
     App --> Runtime["World, scheduler, FSM, input router"]
-    App --> IO["Service hub: terminal, content, audio, network"]
+    App --> IO["Service hub: files, terminal, content, audio, network"]
     Runtime --> Presentation["Render orchestrator and renderers"]
     Runtime --> Libraries["audio, navigation, vmath, physics, genetics"]
 ```
@@ -53,7 +53,7 @@ The main architectural planes are:
 | Interaction | `internal/input`, `internal/mode` | Parse terminal events into semantic intents and apply them under the world lock. |
 | Deterministic run streams | `internal/journal` | Attach recording sinks, capture/load journals, order replay records, generate seeded fuzz input, and execute authored tick scripts through App-independent target contracts. |
 | Presentation | `internal/render`, `internal/render/renderer`, `internal/parameter/visual` | Snapshot frame context, layer cells, apply masks/effects, and flush to the terminal. |
-| I/O boundaries | `internal/service`, `internal/content`, `internal/network`, external modules | Terminal polling, corpus loading, audio device/process management, and framed network sessions. |
+| I/O boundaries | `internal/service`, `internal/content`, `internal/network`, external modules | Categorized file access, terminal polling, corpus loading, audio device/process management, and framed network sessions. |
 | Reusable algorithms | `pkg/*` | Audio, float64 math/physics, navigation, maze generation, evolution, and terminal-image conversion. |
 
 See [Package map](package-map.md) for the medium-level dependency view.
@@ -64,11 +64,11 @@ See [Package map](package-map.md) for the medium-level dependency view.
 
 | Shape | I/O and presentation | Clock/owner |
 |---|---|---|
-| `ModePlay` | terminal, content, audio, and optional startup host/join networking; live input and geometry | pause/rate-aware clock; scheduler and event goroutines |
-| `ModeHeadless` | content; caller supplies geometry and events; authored scripts may add startup host/join networking | manual clock advanced by a harness or `journal.ScriptDriver` |
-| `ModeReplay` | terminal, content, audio; recorded input and geometry | manual clock advanced by `journal.ReplayDriver` |
-| `ModeScript` | terminal, content, audio, and the same optional host/join networking as a headless script; scripted input and geometry | manual clock advanced by `journal.ScriptDriver`, wall-paced |
-| `ModeServer` | content and network only; configured geometry, no input, no local cursor | pause/rate-aware clock; scheduler and event goroutines, as `ModePlay` |
+| `ModePlay` | files, terminal, content, audio, and optional startup host/join networking; live input and geometry | pause/rate-aware clock; scheduler and event goroutines |
+| `ModeHeadless` | files and content; caller supplies geometry and events; authored scripts may add startup host/join networking | manual clock advanced by a harness or `journal.ScriptDriver` |
+| `ModeReplay` | files, terminal, content, audio; recorded input and geometry | manual clock advanced by `journal.ReplayDriver` |
+| `ModeScript` | files, terminal, content, audio, and the same optional host/join networking as a headless script; scripted input and geometry | manual clock advanced by `journal.ScriptDriver`, wall-paced |
+| `ModeServer` | files, content, and network only; configured geometry, no input, no local cursor | pause/rate-aware clock; scheduler and event goroutines, as `ModePlay` |
 
 The `Presents`, `Driven`, `OwnsGeometry`, `OwnsInput`, and `Audio` predicates
 are the composition policy. A driven App spawns no scheduler/event goroutines,
