@@ -199,7 +199,7 @@ func TestParticleProtectionAndTerminalGlyphRules(t *testing.T) {
 	}
 }
 
-func TestParticleMutualAnnihilationKeepsDecayBeforeBlossom(t *testing.T) {
+func TestParticleMutualAnnihilationIsImmediateAndSilent(t *testing.T) {
 	w, particles := newParticleWorld(0xA6611A7E)
 	particles.spawnOne(component.ParticleDecay, 5, 5, 'd', false)
 	particles.spawnOne(component.ParticleBlossom, 5, 5, 'b', false)
@@ -210,51 +210,55 @@ func TestParticleMutualAnnihilationKeepsDecayBeforeBlossom(t *testing.T) {
 	if got := w.Components.Particle.CountEntities(); got != 0 {
 		t.Fatalf("particle count after mutual collision = %d, want 0", got)
 	}
-	events := w.Resources.Event.Queue.Consume()
-	if len(events) != 2 {
-		t.Fatalf("queued decay-side deaths = %d, want 2", len(events))
-	}
-	for _, ev := range events {
-		if ev.Type != event.EventDeathBatch {
-			t.Errorf("queued event = %v, want EventDeathBatch", ev.Type)
-		}
-		if payload, ok := ev.Payload.(*event.DeathRequestPayload); ok {
-			event.ReleaseDeathRequest(payload)
-		}
+	if events := w.Resources.Event.Queue.Consume(); len(events) != 0 {
+		t.Fatalf("mutual annihilation queued %d events, want direct removal", len(events))
 	}
 }
 
-func TestParticleRNGStreamsRemainBehaviorIndependent(t *testing.T) {
-	w1, first := newParticleWorld(0x5EED)
-	first.spawnOne(component.ParticleDecay, 1, 1, 'd', false)
-	firstEntity := w1.Components.Particle.Entities()[0]
-	firstKinetic, _ := w1.Components.Kinetic.GetComponent(firstEntity)
+func TestParticleBehaviorsShareOneRNGStream(t *testing.T) {
+	w1, decayFirst := newParticleWorld(0x5EED)
+	decayFirst.spawnOne(component.ParticleDecay, 1, 1, 'd', false)
+	decayEntity := w1.Components.Particle.Entities()[0]
+	decayKinetic, _ := w1.Components.Kinetic.GetComponent(decayEntity)
 
-	w2, second := newParticleWorld(0x5EED)
-	second.spawnOne(component.ParticleBlossom, 2, 2, 'b', false)
-	second.spawnOne(component.ParticleDecay, 1, 1, 'd', false)
-	secondEntity := w2.Components.Particle.Entities()[1]
-	secondKinetic, _ := w2.Components.Kinetic.GetComponent(secondEntity)
+	w2, blossomFirst := newParticleWorld(0x5EED)
+	blossomFirst.spawnOne(component.ParticleBlossom, 2, 2, 'b', false)
+	blossomEntity := w2.Components.Particle.Entities()[0]
+	blossomKinetic, _ := w2.Components.Kinetic.GetComponent(blossomEntity)
+	if decayKinetic.VelY != -blossomKinetic.VelY {
+		t.Fatalf("first draw differs by behavior: decay %v, blossom %v", decayKinetic.VelY, blossomKinetic.VelY)
+	}
 
-	if firstKinetic.VelY != secondKinetic.VelY {
-		t.Fatalf("decay speed changed after blossom RNG use: %v != %v", firstKinetic.VelY, secondKinetic.VelY)
+	blossomFirst.spawnOne(component.ParticleDecay, 1, 1, 'd', false)
+	secondDecay := w2.Components.Particle.Entities()[1]
+	secondDecayKinetic, _ := w2.Components.Kinetic.GetComponent(secondDecay)
+	if decayKinetic.VelY == secondDecayKinetic.VelY {
+		t.Fatalf("blossom spawn did not advance shared stream: both decay speeds are %v", decayKinetic.VelY)
 	}
 }
 
-func TestParticleWallMasksPreserveBehavior(t *testing.T) {
-	decay, ok := particleProfileFor(component.ParticleDecay)
-	if !ok {
-		t.Fatal("decay profile is missing")
-	}
-	if got := decay.wallMask; got != component.WallBlockSpawn {
-		t.Errorf("decay wall mask = %v, want WallBlockSpawn", got)
-	}
-	blossom, ok := particleProfileFor(component.ParticleBlossom)
-	if !ok {
-		t.Fatal("blossom profile is missing")
-	}
-	if got := blossom.wallMask; got != component.WallBlockParticle {
-		t.Errorf("blossom wall mask = %v, want WallBlockParticle", got)
+func TestParticleBehaviorsUseCommonWallDestruction(t *testing.T) {
+	for _, behavior := range particleBehaviorOrder {
+		t.Run(behavior.String(), func(t *testing.T) {
+			w, particles := newParticleWorld(0x5EED)
+			wall := w.CreateEntity(core.DomainShared)
+			w.Positions.SetPosition(wall, component.PositionComponent{X: 5, Y: 5})
+			w.Components.Wall.SetComponent(wall, component.WallComponent{BlockMask: component.WallBlockParticle})
+			particles.spawnOne(behavior, 5, 5, 'p', false)
+			w.Resources.Time.DeltaTime = 0
+
+			particles.Update()
+
+			if got := w.Components.Particle.CountEntities(); got != 0 {
+				t.Fatalf("particle count after wall collision = %d, want 0", got)
+			}
+			if got := w.Resources.Status.Ints.Get(behavior.String() + ".wall_collisions").Load(); got != 1 {
+				t.Fatalf("wall collisions = %d, want 1", got)
+			}
+			if events := w.Resources.Event.Queue.Consume(); len(events) != 0 {
+				t.Fatalf("wall collision queued %d events, want direct removal", len(events))
+			}
+		})
 	}
 }
 

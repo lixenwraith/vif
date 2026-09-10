@@ -623,9 +623,8 @@ type CompositeIntegrityBreachPayload struct {
 
 // CompositeDestroyRequestPayload requests centralized composite destruction
 type CompositeDestroyRequestPayload struct {
-	HeaderEntity     core.Entity                `toml:"header_entity"`
-	Effect           EventType                  `toml:"effect"` // 0 = silent, EventFlashSpawnOneRequest, etc.
-	ParticleBehavior component.ParticleBehavior `toml:"particle_behavior"`
+	HeaderEntity core.Entity `toml:"header_entity"`
+	Effect       EventType   `toml:"effect"` // 0 = silent, EventFlashSpawnOneRequest, etc.
 }
 
 // --- Cursor ---

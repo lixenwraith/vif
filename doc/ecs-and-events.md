@@ -146,9 +146,10 @@ weapon types, loot profiles, or glyph levels.
 
 `ParticleComponent` is the unified data shape for the Player-domain decay and
 blossom behaviors. `ParticleBehavior` is the discriminator used by the component,
-spawn/wave payloads, and pooled death effects; `ParticleSystem` keeps their RNG
-streams and per-tick collision bookkeeping separate while sharing traversal and
-movement code.
+spawn/wave payloads, and pooled death effects. `ParticleSystem` uses one Player-domain
+RNG stream and common movement, wall, boundary, and particle-annihilation paths;
+only collision bookkeeping and the actual gameplay transformations remain
+behavior-specific.
 
 ## 5. Singleton resources
 

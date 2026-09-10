@@ -78,7 +78,7 @@ func (s *CompositeSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventCompositeDestroyRequest:
 		if payload, ok := ev.Payload.(*event.CompositeDestroyRequestPayload); ok {
-			s.destroyComposite(payload.HeaderEntity, payload.Effect, payload.ParticleBehavior)
+			s.destroyComposite(payload.HeaderEntity, payload.Effect)
 		}
 	}
 }
@@ -161,7 +161,7 @@ func (s *CompositeSystem) countLiving(header *component.HeaderComponent) int {
 }
 
 // destroyComposite handles centralized composite destruction via death system
-func (s *CompositeSystem) destroyComposite(headerEntity core.Entity, effect event.EventType, particleBehavior component.ParticleBehavior) {
+func (s *CompositeSystem) destroyComposite(headerEntity core.Entity, effect event.EventType) {
 	header, ok := s.world.Components.Header.GetComponent(headerEntity)
 	if !ok {
 		return
@@ -177,11 +177,7 @@ func (s *CompositeSystem) destroyComposite(headerEntity core.Entity, effect even
 
 	// Route members through death system
 	if len(members) > 0 {
-		if effect == event.EventParticleSpawnOne {
-			event.EmitParticleDeath(s.world.Resources.Event.Queue, particleBehavior, members...)
-		} else {
-			event.EmitDeath(s.world.Resources.Event.Queue, effect, members...)
-		}
+		event.EmitDeath(s.world.Resources.Event.Queue, effect, members...)
 	}
 
 	// Destroy phantom head

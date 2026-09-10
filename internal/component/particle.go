@@ -17,7 +17,7 @@ func (b ParticleBehavior) Valid() bool {
 	return b > ParticleNone && b < ParticleBehaviorCount
 }
 
-// String returns the stable name used for RNG streams and telemetry.
+// String returns the stable behavior name used for telemetry.
 func (b ParticleBehavior) String() string {
 	switch b {
 	case ParticleDecay:

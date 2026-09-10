@@ -21,43 +21,33 @@ var particleBehaviorOrder = [...]component.ParticleBehavior{
 	component.ParticleBlossom,
 }
 
-// particleBehaviorProfile centralizes the movement, presentation, spawn-edge,
-// and wall policy that varies without changing a behavior's collision rules.
+// particleBehaviorProfile contains only the gameplay properties that genuinely
+// differ between particle behaviors.
 type particleBehaviorProfile struct {
-	direction   float64
-	color       color.RGB
-	wallMask    component.WallBlockMask
-	spawnBottom bool
+	direction float64
+	color     color.RGB
 }
 
 func particleProfileFor(behavior component.ParticleBehavior) (particleBehaviorProfile, bool) {
 	switch behavior {
 	case component.ParticleDecay:
-		// Decay historically tested WallBlockSpawn rather than the narrower
-		// particle mask. Preserve that policy until wall behavior changes explicitly.
 		return particleBehaviorProfile{
 			direction: 1,
 			color:     visual.RgbDecay,
-			wallMask:  component.WallBlockSpawn,
 		}, true
 	case component.ParticleBlossom:
 		return particleBehaviorProfile{
-			direction:   -1,
-			color:       visual.RgbBlossom,
-			wallMask:    component.WallBlockParticle,
-			spawnBottom: true,
+			direction: -1,
+			color:     visual.RgbBlossom,
 		}, true
 	default:
 		return particleBehaviorProfile{}, false
 	}
 }
 
-// particleBehaviorState keeps behavior-specific deterministic and diagnostic
-// state separate. In particular, adding blossom particles must not advance the
-// decay RNG stream, or vice versa.
+// particleBehaviorState keeps behavior-specific collision bookkeeping and
+// diagnostics separate while all particles share their system RNG.
 type particleBehaviorState struct {
-	rng *vmath.FastRand
-
 	hitThisFrame       map[core.Entity]bool
 	processedGridCells map[int]bool
 
@@ -73,6 +63,7 @@ type particleBehaviorState struct {
 // ParticleSystem handles decay and blossom movement and collision rules.
 type ParticleSystem struct {
 	world *engine.World
+	rng   *vmath.FastRand
 
 	behavior [component.ParticleBehaviorCount]particleBehaviorState
 	entities []core.Entity
@@ -112,11 +103,9 @@ func NewParticleSystem(world *engine.World) engine.System {
 func (s *ParticleSystem) Init() {
 	s.entities = s.entities[:0]
 	s.deathBuf = s.deathBuf[:0]
+	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	for _, behavior := range particleBehaviorOrder {
 		state := &s.behavior[behavior]
-		// Retain the historical labels so this consolidation does not couple or
-		// re-key the two deterministic Player-domain streams.
-		state.rng = s.world.Rand(core.DomainPlayer, behavior.String())
 		clear(state.hitThisFrame)
 		clear(state.processedGridCells)
 		state.statCount.Store(0)
@@ -237,8 +226,7 @@ func (s *ParticleSystem) spawnOne(behavior component.ParticleBehavior, x, y int,
 		return
 	}
 
-	state := &s.behavior[behavior]
-	speed := parameter.ParticleMinSpeed + state.rng.Float64()*(parameter.ParticleMaxSpeed-parameter.ParticleMinSpeed)
+	speed := parameter.ParticleMinSpeed + s.rng.Float64()*(parameter.ParticleMaxSpeed-parameter.ParticleMinSpeed)
 
 	entity := s.world.CreateEntity(core.DomainPlayer)
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
@@ -276,12 +264,11 @@ func (s *ParticleSystem) spawnWave(behavior component.ParticleBehavior) {
 	}
 
 	y := 0
-	if profile.spawnBottom {
+	if profile.direction < 0 {
 		y = s.world.Resources.Config.MapHeight - 1
 	}
 	for column := range s.world.Resources.Config.MapWidth {
-		state := &s.behavior[behavior]
-		char := parameter.AlphanumericRunes[state.rng.Intn(len(parameter.AlphanumericRunes))]
+		char := parameter.AlphanumericRunes[s.rng.Intn(len(parameter.AlphanumericRunes))]
 		s.spawnOne(behavior, column, y, char, false)
 	}
 }
@@ -290,8 +277,7 @@ func (s *ParticleSystem) spawnWave(behavior component.ParticleBehavior) {
 // traversal makes new particle behaviors cheap to add while the behavior switch
 // isolates the collision rules that genuinely differ.
 func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
-	profile, ok := particleProfileFor(behavior)
-	if !ok {
+	if _, ok := particleProfileFor(behavior); !ok {
 		return
 	}
 	state := &s.behavior[behavior]
@@ -330,7 +316,7 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 				destroyParticle = true
 				break
 			}
-			if s.world.Positions.HasBlockingWallAt(x, y, profile.wallMask) {
+			if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockParticle) {
 				state.statWallCollisions.Add(1)
 				destroyParticle = true
 				break
@@ -346,11 +332,12 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 			}
 
 			n := s.world.Positions.GetAllEntitiesAtInto(x, y, collisionBuf[:])
+			targets := collisionBuf[:n]
 			switch behavior {
 			case component.ParticleDecay:
-				s.processDecayTargets(state, entity, collisionBuf[:n])
+				destroyParticle = s.processDecayTargets(state, entity, targets)
 			case component.ParticleBlossom:
-				destroyParticle = s.processBlossomTargets(state, entity, collisionBuf[:n])
+				destroyParticle = s.processBlossomTargets(state, entity, targets)
 			}
 
 			state.processedGridCells[flatIdx] = true
@@ -360,17 +347,15 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 		}
 
 		if destroyParticle {
-			if behavior == component.ParticleDecay {
-				event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
-			} else {
-				s.world.DestroyEntity(entity)
-			}
+			// Particles have no death effect of their own, so collision, wall, and
+			// boundary removal all use the same immediate path.
+			s.world.DestroyEntity(entity)
 			continue
 		}
 
 		if particle.LastIntX != curX || particle.LastIntY != curY {
-			if state.rng.Float64() < parameter.ParticleChangeChance {
-				particle.Rune = parameter.AlphanumericRunes[state.rng.Intn(len(parameter.AlphanumericRunes))]
+			if s.rng.Float64() < parameter.ParticleChangeChance {
+				particle.Rune = parameter.AlphanumericRunes[s.rng.Intn(len(parameter.AlphanumericRunes))]
 				if sigil, ok := s.world.Components.Sigil.GetPtr(entity); ok {
 					sigil.Rune = particle.Rune
 				}
@@ -391,18 +376,26 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 	state.buffers.Observe(1, len(state.processedGridCells))
 }
 
-// processDecayTargets preserves decay's death/event semantics, including its
-// queued mutual annihilation with blossom and local nugget lifecycle event.
-func (s *ParticleSystem) processDecayTargets(state *particleBehaviorState, particleEntity core.Entity, targets []core.Entity) {
+// annihilateOpposingParticle applies the one collision rule shared by decay
+// and blossom: the pair consumes each other immediately and without a death
+// effect. Other behavior pairings remain available for future rules.
+func (s *ParticleSystem) annihilateOpposingParticle(behavior component.ParticleBehavior, target core.Entity) bool {
+	other, ok := s.world.Components.Particle.GetComponent(target)
+	if !ok || !((behavior == component.ParticleDecay && other.Behavior == component.ParticleBlossom) ||
+		(behavior == component.ParticleBlossom && other.Behavior == component.ParticleDecay)) {
+		return false
+	}
+	s.world.DestroyEntity(target)
+	return true
+}
+
+func (s *ParticleSystem) processDecayTargets(state *particleBehaviorState, particleEntity core.Entity, targets []core.Entity) bool {
 	for _, target := range targets {
 		if target == 0 || target == particleEntity || state.hitThisFrame[target] {
 			continue
 		}
-
-		if other, ok := s.world.Components.Particle.GetComponent(target); ok && other.Behavior == component.ParticleBlossom {
-			event.EmitDeath(s.world.Resources.Event.Queue, 0, target)
-			event.EmitDeath(s.world.Resources.Event.Queue, 0, particleEntity)
-			break
+		if s.annihilateOpposingParticle(component.ParticleDecay, target) {
+			return true
 		}
 
 		if s.world.Components.Nugget.HasEntity(target) {
@@ -422,6 +415,7 @@ func (s *ParticleSystem) processDecayTargets(state *particleBehaviorState, parti
 
 		state.hitThisFrame[target] = true
 	}
+	return false
 }
 
 // processBlossomTargets returns true when the current blossom is consumed.
@@ -434,9 +428,7 @@ func (s *ParticleSystem) processBlossomTargets(state *particleBehaviorState, par
 		if target.Domain() != core.DomainPlayer || state.hitThisFrame[target] {
 			continue
 		}
-
-		if other, ok := s.world.Components.Particle.GetComponent(target); ok && other.Behavior == component.ParticleDecay {
-			s.world.DestroyEntity(target)
+		if s.annihilateOpposingParticle(component.ParticleBlossom, target) {
 			return true
 		}
 

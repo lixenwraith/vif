@@ -113,9 +113,10 @@ cursor and retries only a bounded number of positions.
 Decay is an explicit wave mechanic. `ParticleSystem` selects decay or blossom
 rules from `ParticleComponent.Behavior`: decay marks eligible glyphs and removes
 them over time while blossom spreads the inverse level transformation. Both
-respect `ProtectFromParticle`, retain separate deterministic RNG streams, and remain
-Player-domain. Dust, flash, fade, splash, marker, explosion, and motion-marker
-systems are transient feedback rather than durable text state.
+respect `ProtectFromParticle`, share a deterministic Player-domain RNG stream and
+the same wall/boundary destruction rules, and remain Player-domain. Dust, flash,
+fade, splash, marker, explosion, and motion-marker systems are transient feedback
+rather than durable text state.
 
 ## 5. Energy, heat, boost, and shield
 
