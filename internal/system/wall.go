@@ -739,7 +739,7 @@ func (s *WallSystem) getMaskForEntity(entity core.Entity) component.WallBlockMas
 	if s.world.Components.Kinetic.HasEntity(entity) {
 		return component.WallBlockKinetic
 	}
-	if s.world.Components.Decay.HasEntity(entity) || s.world.Components.Blossom.HasEntity(entity) {
+	if s.world.Components.Particle.HasEntity(entity) {
 		return component.WallBlockParticle
 	}
 	// Phantom heads are non-physical anchors, not subject to wall displacement

@@ -727,14 +727,14 @@ func handleDemonCommand(ctx *engine.GameContext) CommandResult {
 
 // handleBlossomCommand triggers a blossom wave
 func handleBlossomCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushLocal(event.EventBlossomWave, nil)
+	ctx.PushLocal(event.EventParticleWave, &event.ParticleWavePayload{Behavior: component.ParticleBlossom})
 	ctx.SetLastCommand(":blossom")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleDecayCommand triggers a decay wave
 func handleDecayCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushLocal(event.EventDecayWave, nil)
+	ctx.PushLocal(event.EventParticleWave, &event.ParticleWavePayload{Behavior: component.ParticleDecay})
 	ctx.SetLastCommand(":decay")
 	return CommandResult{Continue: true, KeepPaused: false}
 }

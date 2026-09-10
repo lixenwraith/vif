@@ -71,7 +71,7 @@ initial = "MainStart"
 file = "main.toml"
 background = false
 enabled_systems = ["glyph"]
-disabled_systems = ["decay"]
+disabled_systems = ["particle"]
 
 [regions.boss]
 file = "boss.toml" # no initial: dynamic region

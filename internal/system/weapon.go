@@ -290,8 +290,8 @@ func (s *WeaponSystem) triggerOrbFlash(orbEntity core.Entity) {
 // This is what a lost reference used to cost. The index lived on the cursor's
 // shared view component, a correction overwrote it with the sender's zeroes, and
 // ensureOrbs read a zero and spawned a replacement: the entity the zero had named
-// stayed in the store, protected from decay, no longer followed by updateOrbs and
-// still drawn, once per correction for the life of the run.
+// stayed in the store, protected from particle effects, no longer followed by
+// updateOrbs and still drawn, once per correction for the life of the run.
 func (s *WeaponSystem) reapOrbs() {
 	s.orbs = [parameter.MaxPlayers]orbSlots{}
 	s.reapBuf = s.reapBuf[:0]
@@ -436,7 +436,7 @@ func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType compon
 	}
 
 	protComp := component.ProtectionComponent{
-		Mask: component.ProtectFromSpecies | component.ProtectFromDecay,
+		Mask: component.ProtectFromSpecies | component.ProtectFromParticle,
 	}
 
 	s.world.Components.Protection.SetComponent(orbEntity, protComp)

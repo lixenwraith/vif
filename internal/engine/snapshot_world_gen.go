@@ -53,8 +53,7 @@ type SharedWorldState struct {
 	Orb          []StoreEntry[component.OrbComponent]          `json:"orb,omitempty"`
 	Ping         []StoreEntry[component.PingComponent]         `json:"ping,omitempty"`
 	CursorView   []StoreEntry[component.CursorViewComponent]   `json:"cursorview,omitempty"`
-	Decay        []StoreEntry[component.DecayComponent]        `json:"decay,omitempty"`
-	Blossom      []StoreEntry[component.BlossomComponent]      `json:"blossom,omitempty"`
+	Particle     []StoreEntry[component.ParticleComponent]     `json:"particle,omitempty"`
 	Cleaner      []StoreEntry[component.CleanerComponent]      `json:"cleaner,omitempty"`
 	Dust         []StoreEntry[component.DustComponent]         `json:"dust,omitempty"`
 	Navigation   []StoreEntry[component.NavigationComponent]   `json:"navigation,omitempty"`
@@ -246,20 +245,12 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			s.CursorView = append(s.CursorView, StoreEntry[component.CursorViewComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
-	for _, e := range w.Components.Decay.Entities() {
+	for _, e := range w.Components.Particle.Entities() {
 		if e.Domain() != core.DomainShared {
 			continue
 		}
-		if v, ok := w.Components.Decay.GetComponent(e); ok {
-			s.Decay = append(s.Decay, StoreEntry[component.DecayComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Blossom.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Blossom.GetComponent(e); ok {
-			s.Blossom = append(s.Blossom, StoreEntry[component.BlossomComponent]{Entity: e, Value: DetachSnapshotValue(v)})
+		if v, ok := w.Components.Particle.GetComponent(e); ok {
+			s.Particle = append(s.Particle, StoreEntry[component.ParticleComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Cleaner.Entities() {
@@ -591,11 +582,8 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	for _, en := range s.CursorView {
 		w.Components.CursorView.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
-	for _, en := range s.Decay {
-		w.Components.Decay.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
-	}
-	for _, en := range s.Blossom {
-		w.Components.Blossom.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
+	for _, en := range s.Particle {
+		w.Components.Particle.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Cleaner {
 		w.Components.Cleaner.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
@@ -739,8 +727,7 @@ type SharedWorldDelta struct {
 	Orb          StoreDelta[component.OrbComponent]          `json:"orb,omitzero"`
 	Ping         StoreDelta[component.PingComponent]         `json:"ping,omitzero"`
 	CursorView   StoreDelta[component.CursorViewComponent]   `json:"cursorview,omitzero"`
-	Decay        StoreDelta[component.DecayComponent]        `json:"decay,omitzero"`
-	Blossom      StoreDelta[component.BlossomComponent]      `json:"blossom,omitzero"`
+	Particle     StoreDelta[component.ParticleComponent]     `json:"particle,omitzero"`
 	Cleaner      StoreDelta[component.CleanerComponent]      `json:"cleaner,omitzero"`
 	Dust         StoreDelta[component.DustComponent]         `json:"dust,omitzero"`
 	Navigation   StoreDelta[component.NavigationComponent]   `json:"navigation,omitzero"`
@@ -803,8 +790,7 @@ func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
 	d.Orb = diffStore(base.Orb, next.Orb)
 	d.Ping = diffStore(base.Ping, next.Ping)
 	d.CursorView = diffStore(base.CursorView, next.CursorView)
-	d.Decay = diffStore(base.Decay, next.Decay)
-	d.Blossom = diffStore(base.Blossom, next.Blossom)
+	d.Particle = diffStore(base.Particle, next.Particle)
 	d.Cleaner = diffStore(base.Cleaner, next.Cleaner)
 	d.Dust = diffStore(base.Dust, next.Dust)
 	d.Navigation = diffStore(base.Navigation, next.Navigation)
@@ -863,8 +849,7 @@ func ApplySharedWorldDelta(base SharedWorldState, d SharedWorldDelta) SharedWorl
 	s.Orb = applyStore(base.Orb, d.Orb)
 	s.Ping = applyStore(base.Ping, d.Ping)
 	s.CursorView = applyStore(base.CursorView, d.CursorView)
-	s.Decay = applyStore(base.Decay, d.Decay)
-	s.Blossom = applyStore(base.Blossom, d.Blossom)
+	s.Particle = applyStore(base.Particle, d.Particle)
 	s.Cleaner = applyStore(base.Cleaner, d.Cleaner)
 	s.Dust = applyStore(base.Dust, d.Dust)
 	s.Navigation = applyStore(base.Navigation, d.Navigation)
@@ -922,8 +907,7 @@ func (d SharedWorldDelta) DeltaEntries() int {
 	n += d.Orb.Entries()
 	n += d.Ping.Entries()
 	n += d.CursorView.Entries()
-	n += d.Decay.Entries()
-	n += d.Blossom.Entries()
+	n += d.Particle.Entries()
 	n += d.Cleaner.Entries()
 	n += d.Dust.Entries()
 	n += d.Navigation.Entries()
@@ -984,8 +968,7 @@ func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
 	w.Entries += countStoreDifference(a.Orb, b.Orb, touched)
 	w.Entries += countStoreDifference(a.Ping, b.Ping, touched)
 	w.Entries += countStoreDifference(a.CursorView, b.CursorView, touched)
-	w.Entries += countStoreDifference(a.Decay, b.Decay, touched)
-	w.Entries += countStoreDifference(a.Blossom, b.Blossom, touched)
+	w.Entries += countStoreDifference(a.Particle, b.Particle, touched)
 	w.Entries += countStoreDifference(a.Cleaner, b.Cleaner, touched)
 	w.Entries += countStoreDifference(a.Dust, b.Dust, touched)
 	w.Entries += countStoreDifference(a.Navigation, b.Navigation, touched)
@@ -1103,10 +1086,7 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	for _, en := range s.CursorView {
 		target[en.Entity] = struct{}{}
 	}
-	for _, en := range s.Decay {
-		target[en.Entity] = struct{}{}
-	}
-	for _, en := range s.Blossom {
+	for _, en := range s.Particle {
 		target[en.Entity] = struct{}{}
 	}
 	for _, en := range s.Cleaner {
@@ -1243,8 +1223,7 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	reconcileStore(w.Components.Orb, s.Orb)
 	reconcileStore(w.Components.Ping, s.Ping)
 	reconcileStore(w.Components.CursorView, s.CursorView)
-	reconcileStore(w.Components.Decay, s.Decay)
-	reconcileStore(w.Components.Blossom, s.Blossom)
+	reconcileStore(w.Components.Particle, s.Particle)
 	reconcileStore(w.Components.Cleaner, s.Cleaner)
 	reconcileStore(w.Components.Dust, s.Dust)
 	reconcileStore(w.Components.Navigation, s.Navigation)

@@ -4,11 +4,11 @@ import (
 	"time"
 )
 
-// Decay / Blossom Entities
+// Particle entities (decay and blossom behaviors)
 const (
-	// ParticleMinSpeed is minimum initial cell per second velocity of decay/blossom components
+	// ParticleMinSpeed is the minimum initial particle velocity in cells per second
 	ParticleMinSpeed = 8.0
-	// ParticleMaxSpeed is maximum initial cell per second velocity of decay/blossom components
+	// ParticleMaxSpeed is the maximum initial particle velocity in cells per second
 	ParticleMaxSpeed = 15.0
 	// ParticleAcceleration is acceleration (velocity increase) per second
 	ParticleAcceleration = 2.0

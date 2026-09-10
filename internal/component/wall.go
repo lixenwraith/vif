@@ -12,7 +12,7 @@ const (
 	WallBlockNone     WallBlockMask = 0
 	WallBlockCursor   WallBlockMask = 1 << 0
 	WallBlockKinetic  WallBlockMask = 1 << 1 // Drain, Swarm, Quasar
-	WallBlockParticle WallBlockMask = 1 << 2 // Decay, Blossom, Dust
+	WallBlockParticle WallBlockMask = 1 << 2 // Particle and Dust
 	WallBlockSpawn    WallBlockMask = 1 << 3 // All entity spawning
 	WallBlockAll      WallBlockMask = 0xFF
 )

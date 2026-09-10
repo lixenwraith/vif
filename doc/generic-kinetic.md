@@ -88,8 +88,7 @@ wind or a generic integration pass.
 | Bullet | Ballistic position-only integration plus swept wall/shield/cursor collision | A projectile should not inherit environmental forces merely because it stores precise motion. |
 | Loot | Owner-specific line of sight/flow homing, cornering brake or velocity bleed, swept bounce | It is Player-domain and owned; current wind scope excludes it. |
 | Dust | Random jitter, orbital equilibrium, aspect-corrected orbital damping, quadratic drag, position-only integration, damped wall reflection | It has bespoke field dynamics and is explicitly deferred until mass/physical interaction are designed. Dust also batches impulses onto drains. |
-| Decay | Initial downward velocity and persistent downward acceleration, normal integration, swept transform/destruction | It already owns `AccelY`, has no mass, and is explicitly outside wind for now. |
-| Blossom | Initial upward velocity and persistent upward acceleration, normal integration, swept transform/destruction | Same limitation as decay, with the opposite acceleration. |
+| Particle | Decay moves down and blossom moves up under opposite persistent acceleration; both use normal integration and swept transform/destruction | `ParticleBehavior` selects the rules. Particles already own `AccelY`, have no mass, and are explicitly outside wind for now. |
 | Weapon orb | Orbit angle and cursor position are authoritative; `Kinetic.Precise` is overwritten as a positional mirror | It is a scripted attachment, not an integrated body. |
 | Cursor | No `Kinetic`; position changes through owner-authored absolute-cell events and local prediction | Adding forces requires an authority and prediction design before adding a component. |
 
@@ -151,7 +150,7 @@ Collapsing all four into “set velocity” would make priority bugs difficult t
 
 Ordinary composite movers can share swept bounce math because the caller supplies
 the footprint offset, valid header bounds, restitution, and wall query. Drain,
-dust, cleaner, missile, bullet, decay, and blossom instead traverse the precise
+dust, cleaner, missile, bullet, and particles instead traverse the precise
 segment because entering intermediate cells has gameplay consequences. Storm
 destroys walls in an ellipse while integrating. Those contact callbacks may emit
 death, damage, collection, or transformation events, so they cannot be moved
@@ -188,7 +187,7 @@ Wind writes acceleration only to the ordinary mobile species: drain, swarm,
 quasar, eye, and snake head. Storm receives an equivalent per-tick velocity delta
 on its 2D mirror for the 3D system to absorb. Pylon is typed but currently
 immobile. Tower, cursor, snake body members, cleaner, missile, bullet, loot, weapon
-orbs, dust, decay, and blossom are not affected.
+orbs, dust, and particles are not affected.
 
 The environment runs after soft collision and before every ordinary species
 mover. This makes external acceleration the last velocity contribution before the
@@ -222,11 +221,12 @@ install the existing wind state locally. Reclassifying the re-derived
 ### Current limitation exposed by wind
 
 `Kinetic.Accel` has no source separation. The current eligible species otherwise
-leave it zero, so Environment can own those fields safely. Decay and blossom are
-excluded partly because they already use intrinsic acceleration. Before a second
-external force or those particles are added, the representation should distinguish
-intrinsic acceleration from per-tick external contributions. Otherwise one system
-will overwrite another or stale force will survive a skipped integration.
+leave it zero, so Environment can own those fields safely. The decay and blossom
+particle behaviors are excluded partly because they already use intrinsic
+acceleration. Before a second external force or those particles are added, the
+representation should distinguish intrinsic acceleration from per-tick external
+contributions. Otherwise one system will overwrite another or stale force will
+survive a skipped integration.
 
 ## 7. Why a registered `KineticSystem` is not yet safe
 
@@ -292,13 +292,13 @@ For external forces, prefer a fixed, ordered source representation over a map. O
 option is a per-tick accumulator component with force/acceleration and impulse
 channels, cleared exactly once by the owning integrator. Another is a fixed array
 indexed by a `KineticForceSource` enum and reduced in enum order. Either makes
-wind additive with future gravity/status fields, avoids overwriting decay's native
-acceleration, and keeps floating-point summation order deterministic.
+wind additive with future gravity/status fields, avoids overwriting particle's
+native acceleration, and keeps floating-point summation order deterministic.
 
 Mass lookup should likewise become explicit. A `PhysicalBodyComponent` or
 profile resolver can carry mass and motion kind; a bare `KineticComponent` should
 remain valid for precise scripted motion that has no collision mass. Tower,
-cursor, decay, blossom, and new actors then opt in through a deliberate profile
+cursor, particle, and new actors then opt in through a deliberate profile
 instead of acquiring behavior accidentally.
 
 Adding a new helper file changes the pinned unattributed-file set in
@@ -389,8 +389,8 @@ Required cursor work includes:
   an undocumented velocity difference only after parity tests cover combat, dust,
   wind, stun, damping, and collision.
 - Represent snake body follow/spring as an explicit constrained-body mode.
-- Add mass/physical profiles for dust, decay, and blossom only when their gameplay
-  interaction is designed; then opt them into wind deliberately.
+- Add mass/physical profiles for dust and particle behaviors only when their
+  gameplay interaction is designed; then opt them into wind deliberately.
 
 ### Phase 5 — add cursor kinetics
 

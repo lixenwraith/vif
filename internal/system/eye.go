@@ -362,7 +362,7 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 			s.world.Positions.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})
 
 			s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-				Mask: component.ProtectFromDecay | component.ProtectFromSpecies,
+				Mask: component.ProtectFromParticle | component.ProtectFromSpecies,
 			})
 
 			s.world.Components.Member.SetComponent(entity, component.MemberComponent{

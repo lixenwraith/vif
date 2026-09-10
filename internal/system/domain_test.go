@@ -14,8 +14,7 @@ import (
 // keyed "system:Store". Shared consequences remain cell-derived; player victims
 // and their lifecycle notifications remain local.
 var allowedDomainAccess = map[string]string{
-	"wall:Decay":    "D-12 push-out classifies any occupant; read-only mask lookup",
-	"wall:Blossom":  "D-12 push-out classifies any occupant; read-only mask lookup",
+	"wall:Particle": "D-12 push-out classifies any occupant; read-only mask lookup",
 	"drain:Wall":    "GetPtr reads BlockMask for spawn denial; the wall is never written",
 	"death:Wall":    "GetPtr reads BlockMask while resolving a shared wall death",
 	"quasar:Nugget": "D-12 footprint sweep classifies a personal victim for local lifecycle notification",

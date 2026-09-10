@@ -32,7 +32,7 @@ func TestWallDisplacementMaskUsesEntityCapabilities(t *testing.T) {
 		{
 			name: "particle",
 			setup: func(w *engine.World, e core.Entity) {
-				w.Components.Decay.SetComponent(e, component.DecayComponent{})
+				w.Components.Particle.SetComponent(e, component.ParticleComponent{Behavior: component.ParticleDecay})
 			},
 			want: component.WallBlockParticle,
 		},

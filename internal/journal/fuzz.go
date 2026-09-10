@@ -247,7 +247,7 @@ var fuzzCommands = [...]string{
 	"speed 2", "speed 1/2", "speed reset", "step off",
 	"d hud", "d unpin", "flow", "graph", "flow 0",
 	"system typing disable", "system typing enable",
-	"system decay disable", "system decay enable",
+	"system particle disable", "system particle enable",
 	"region list",
 }
 

@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 174
+const EventTypeCount = 171
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -95,12 +95,9 @@ func InitRegistry() {
 	RegisterType("EventDustSpawnOneRequest", EventDustSpawnOneRequest, &DustSpawnOneRequestPayload{})
 	RegisterType("EventDustSpawnBatchRequest", EventDustSpawnBatchRequest, nil)
 	RegisterType("EventDustAllRequest", EventDustAllRequest, nil)
-	RegisterType("EventBlossomSpawnOne", EventBlossomSpawnOne, &BlossomSpawnPayload{})
-	RegisterType("EventBlossomSpawnBatch", EventBlossomSpawnBatch, nil)
-	RegisterType("EventBlossomWave", EventBlossomWave, nil)
-	RegisterType("EventDecaySpawnOne", EventDecaySpawnOne, &DecaySpawnPayload{})
-	RegisterType("EventDecaySpawnBatch", EventDecaySpawnBatch, nil)
-	RegisterType("EventDecayWave", EventDecayWave, nil)
+	RegisterType("EventParticleSpawnOne", EventParticleSpawnOne, &ParticleSpawnPayload{})
+	RegisterType("EventParticleSpawnBatch", EventParticleSpawnBatch, nil)
+	RegisterType("EventParticleWave", EventParticleWave, &ParticleWavePayload{})
 	RegisterType("EventDeathBatch", EventDeathBatch, &DeathRequestPayload{})
 	RegisterType("EventTimerStart", EventTimerStart, &TimerStartPayload{})
 	RegisterType("EventCompositeMemberDestroyed", EventCompositeMemberDestroyed, &CompositeMemberDestroyedPayload{})
@@ -275,12 +272,9 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventDustSpawnOneRequest:             ClassLocal,
 	EventDustSpawnBatchRequest:           ClassLocal,
 	EventDustAllRequest:                  ClassLocal,
-	EventBlossomSpawnOne:                 ClassLocal,
-	EventBlossomSpawnBatch:               ClassLocal,
-	EventBlossomWave:                     ClassLocal,
-	EventDecaySpawnOne:                   ClassLocal,
-	EventDecaySpawnBatch:                 ClassLocal,
-	EventDecayWave:                       ClassLocal,
+	EventParticleSpawnOne:                ClassLocal,
+	EventParticleSpawnBatch:              ClassLocal,
+	EventParticleWave:                    ClassLocal,
 	EventDeathBatch:                      ClassStamped,
 	EventTimerStart:                      ClassStamped,
 	EventCompositeMemberDestroyed:        ClassBus,

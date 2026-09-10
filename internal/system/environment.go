@@ -184,7 +184,7 @@ func (s *EnvironmentSystem) sampleWind() (force, direction float64) {
 // applyPlanarWind writes acceleration only to the mobile species currently
 // backed by the ordinary 2D integrators. In particular it deliberately does not
 // range every Kinetic component, so cleaners, missiles, bullets, loot, weapon
-// orbs, dust, decay, and blossom are excluded.
+// orbs, dust, and particle behaviors are excluded.
 func (s *EnvironmentSystem) applyPlanarWind(forceX, forceY float64) {
 	apply := func(entities []core.Entity, mass profile.Mass) {
 		accelX := forceX / mass

@@ -9,7 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/render"
 )
 
-// SigilRenderer draws non-typeable moving entities (decay, blossom particles)
+// SigilRenderer draws non-typeable moving entities, including particles.
 type SigilRenderer struct {
 	gameCtx *engine.GameContext
 }

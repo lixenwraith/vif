@@ -8,8 +8,8 @@ const (
 	// ProtectNone provides no immunity (default)
 	ProtectNone ProtectionFlags = 0
 
-	// ProtectFromDecay makes entity immune to decay characters
-	ProtectFromDecay ProtectionFlags = 1 << iota
+	// ProtectFromParticle makes an entity immune to decay and blossom particles.
+	ProtectFromParticle ProtectionFlags = 1 << iota
 
 	// ProtectFromSpecies makes entity immune to species interactions (e.g. destruction by collision)
 	ProtectFromSpecies

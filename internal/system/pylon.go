@@ -404,7 +404,7 @@ func (s *PylonSystem) createDiscMembers(
 
 			// Protection from game mechanics, not combat
 			s.world.Components.Protection.SetComponent(memberEntity, component.ProtectionComponent{
-				Mask: component.ProtectFromDecay | component.ProtectFromSpecies,
+				Mask: component.ProtectFromParticle | component.ProtectFromSpecies,
 			})
 
 			// Per-member combat component (ablative HP)

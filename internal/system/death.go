@@ -198,22 +198,6 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 			Char: char,
 		})
 
-	case event.EventBlossomSpawnOne:
-		s.world.PushEvent(event.EventBlossomSpawnOne, &event.BlossomSpawnPayload{
-			X:             entityPos.X,
-			Y:             entityPos.Y,
-			Char:          char,
-			SkipStartCell: true,
-		})
-
-	case event.EventDecaySpawnOne:
-		s.world.PushLocal(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
-			X:             entityPos.X,
-			Y:             entityPos.Y,
-			Char:          char,
-			SkipStartCell: true,
-		})
-
 	case event.EventDustSpawnOneRequest:
 		s.world.PushEvent(event.EventDustSpawnOneRequest, &event.DustSpawnOneRequestPayload{
 			X:     entityPos.X,
@@ -262,12 +246,21 @@ func (s *DeathSystem) processBatch(p *event.DeathRequestPayload) {
 	case event.EventFlashSpawnOneRequest:
 		s.statBatchFlash.Add(1)
 		processBatchWith(s, event.FlashBatchPool, event.EventFlashSpawnBatchRequest, p.Entities, s.extractFlash)
-	case event.EventBlossomSpawnOne:
-		s.statBatchBlossom.Add(1)
-		processBatchWith(s, event.BlossomBatchPool, event.EventBlossomSpawnBatch, p.Entities, s.extractBlossom)
-	case event.EventDecaySpawnOne:
-		s.statBatchDecay.Add(1)
-		processBatchWith(s, event.DecayBatchPool, event.EventDecaySpawnBatch, p.Entities, s.extractDecay)
+	case event.EventParticleSpawnOne:
+		switch p.Behavior {
+		case component.ParticleDecay:
+			s.statBatchDecay.Add(1)
+		case component.ParticleBlossom:
+			s.statBatchBlossom.Add(1)
+		default:
+			s.statBatchOther.Add(1)
+			s.processBatchSilent(p.Entities)
+			return
+		}
+		processBatchWith(s, event.ParticleBatchPool, event.EventParticleSpawnBatch, p.Entities,
+			func(entity core.Entity) (event.ParticleSpawnEntry, bool) {
+				return s.extractParticle(entity, p.Behavior)
+			})
 	case event.EventFadeoutSpawnOne:
 		s.statBatchFadeout.Add(1)
 		processBatchWith(s, event.FadeoutBatchPool, event.EventFadeoutSpawnBatch, p.Entities, s.extractFadeout)
@@ -383,20 +376,14 @@ func (s *DeathSystem) extractFlash(entity core.Entity) (event.FlashSpawnEntry, b
 	return event.FlashSpawnEntry{X: x, Y: y, Char: char}, true
 }
 
-func (s *DeathSystem) extractBlossom(entity core.Entity) (event.BlossomSpawnEntry, bool) {
+func (s *DeathSystem) extractParticle(entity core.Entity, behavior component.ParticleBehavior) (event.ParticleSpawnEntry, bool) {
 	x, y, char, _, ok := s.extractPosChar(entity)
 	if !ok {
-		return event.BlossomSpawnEntry{}, false
+		return event.ParticleSpawnEntry{}, false
 	}
-	return event.BlossomSpawnEntry{X: x, Y: y, Char: char, SkipStartCell: true}, true
-}
-
-func (s *DeathSystem) extractDecay(entity core.Entity) (event.DecaySpawnEntry, bool) {
-	x, y, char, _, ok := s.extractPosChar(entity)
-	if !ok {
-		return event.DecaySpawnEntry{}, false
-	}
-	return event.DecaySpawnEntry{X: x, Y: y, Char: char, SkipStartCell: true}, true
+	return event.ParticleSpawnEntry{
+		Behavior: behavior, X: x, Y: y, Char: char, SkipStartCell: true,
+	}, true
 }
 
 func (s *DeathSystem) extractDust(entity core.Entity) (event.DustSpawnEntry, bool) {

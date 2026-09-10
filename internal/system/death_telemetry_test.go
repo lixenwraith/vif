@@ -49,3 +49,41 @@ func TestDeathTelemetrySeparatesEffectTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestDeathBatchesParticleEffectWithBehavior(t *testing.T) {
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	deaths := NewDeathSystem(w).(*DeathSystem)
+
+	entity := w.CreateEntity(core.DomainPlayer)
+	w.Positions.SetPosition(entity, component.PositionComponent{X: 7, Y: 8})
+	w.Components.Glyph.SetComponent(entity, component.GlyphComponent{Rune: 'x'})
+
+	p := event.AcquireDeathRequest(event.EventParticleSpawnOne)
+	p.Behavior = component.ParticleBlossom
+	p.Entities = append(p.Entities, entity)
+	deaths.HandleEvent(event.GameEvent{Type: event.EventDeathBatch, Payload: p})
+
+	if _, ok := w.Components.Glyph.GetComponent(entity); ok {
+		t.Fatal("source entity survived particle-effect death")
+	}
+	events := w.Resources.Event.Queue.Consume()
+	if len(events) != 1 || events[0].Type != event.EventParticleSpawnBatch {
+		t.Fatalf("effect events = %#v, want one EventParticleSpawnBatch", events)
+	}
+	batch, ok := events[0].Payload.(*event.BatchPayload[event.ParticleSpawnEntry])
+	if !ok {
+		t.Fatalf("effect payload = %T, want particle batch", events[0].Payload)
+	}
+	defer event.ParticleBatchPool.Release(batch)
+	if len(batch.Entries) != 1 {
+		t.Fatalf("particle entries = %d, want 1", len(batch.Entries))
+	}
+	entry := batch.Entries[0]
+	if entry.Behavior != component.ParticleBlossom || entry.X != 7 || entry.Y != 8 || entry.Char != 'x' || !entry.SkipStartCell {
+		t.Fatalf("particle entry = %+v", entry)
+	}
+	if got := w.Resources.Status.Ints.Get("death.batch_blossom").Load(); got != 1 {
+		t.Fatalf("death.batch_blossom = %d, want 1", got)
+	}
+}

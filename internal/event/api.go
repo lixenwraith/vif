@@ -1,6 +1,7 @@
 package event
 
 import (
+	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 )
 
@@ -13,6 +14,16 @@ import (
 // (D-12), so mixed input is split into one batch per domain: a shared death record
 // never names a player entity.
 func EmitDeath(q *EventQueue, effect EventType, entities ...core.Entity) {
+	emitDeath(q, effect, component.ParticleNone, entities...)
+}
+
+// EmitParticleDeath requests destruction followed by a particle effect. The
+// behavior travels beside the unified particle event discriminator.
+func EmitParticleDeath(q *EventQueue, behavior component.ParticleBehavior, entities ...core.Entity) {
+	emitDeath(q, EventParticleSpawnOne, behavior, entities...)
+}
+
+func emitDeath(q *EventQueue, effect EventType, behavior component.ParticleBehavior, entities ...core.Entity) {
 	if len(entities) == 0 {
 		return
 	}
@@ -21,18 +32,19 @@ func EmitDeath(q *EventQueue, effect EventType, entities ...core.Entity) {
 	for _, e := range entities[1:] {
 		if e.Domain() != domain {
 			// Rare: callers that sweep cells already split by hand.
-			pushDeathBatch(q, effect, core.DomainShared, entities, true)
-			pushDeathBatch(q, effect, core.DomainPlayer, entities, true)
+			pushDeathBatch(q, effect, behavior, core.DomainShared, entities, true)
+			pushDeathBatch(q, effect, behavior, core.DomainPlayer, entities, true)
 			return
 		}
 	}
-	pushDeathBatch(q, effect, domain, entities, false)
+	pushDeathBatch(q, effect, behavior, domain, entities, false)
 }
 
 // pushDeathBatch emits one domain-pure batch, selecting members when the caller
 // mixed domains. An empty selection returns its payload rather than pushing.
-func pushDeathBatch(q *EventQueue, effect EventType, domain core.Domain, entities []core.Entity, filter bool) {
+func pushDeathBatch(q *EventQueue, effect EventType, behavior component.ParticleBehavior, domain core.Domain, entities []core.Entity, filter bool) {
 	p := AcquireDeathRequest(effect)
+	p.Behavior = behavior
 	if filter {
 		for _, e := range entities {
 			if e.Domain() == domain {
@@ -60,9 +72,12 @@ func pushDeathBatch(q *EventQueue, effect EventType, domain core.Domain, entitie
 // Pattern 2: Individual Kill with Flash Effect (e.g., Typing correct char)
 // event.EmitDeath(s.res.Event.Queue, event.EventFlashSpawnOneRequest, entity)
 //
-// Pattern 3: Batch Kill (e.g., Cleaner sweep, Decay row)
+// Pattern 3: Batch Kill (e.g., Cleaner sweep, particle row)
 // 'toDestroy' is prepared []core.Entity slice
 // event.EmitDeath(s.res.Event.Queue, event.EventFlashSpawnOneRequest, toDestroy...)
 //
-// **Pattern 4: Silent Batch (e.g., Range delete)**
+// Pattern 4: Particle Effect
+// event.EmitParticleDeath(s.res.Event.Queue, component.ParticleBlossom, toDestroy...)
+//
+// Pattern 5: Silent Batch (e.g., Range delete)
 // event.EmitDeath(s.res.Event.Queue, 0, toDestroy...)

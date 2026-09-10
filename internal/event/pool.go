@@ -25,6 +25,7 @@ func AcquireDeathRequest(effectEvent EventType) *DeathRequestPayload {
 	p := deathRequestPool.Get().(*DeathRequestPayload)
 	p.Entities = p.Entities[:0]
 	p.EffectEvent = effectEvent
+	p.Behavior = component.ParticleNone
 	return p
 }
 
@@ -37,6 +38,8 @@ func ReleaseDeathRequest(p *DeathRequestPayload) {
 		p.Entities[i] = 0
 	}
 	p.Entities = p.Entities[:0]
+	p.EffectEvent = EventNone
+	p.Behavior = component.ParticleNone
 	deathRequestPool.Put(p)
 }
 

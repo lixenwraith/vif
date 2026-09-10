@@ -45,9 +45,8 @@ func (p *BatchPool[T]) Release(bp *BatchPayload[T]) {
 // --- Pool instances ---
 
 var (
-	FlashBatchPool   = NewBatchPool[FlashSpawnEntry](512)
-	BlossomBatchPool = NewBatchPool[BlossomSpawnEntry](128)
-	DecayBatchPool   = NewBatchPool[DecaySpawnEntry](128)
-	DustBatchPool    = NewBatchPool[DustSpawnEntry](2048)
-	FadeoutBatchPool = NewBatchPool[FadeoutSpawnEntry](512)
+	FlashBatchPool    = NewBatchPool[FlashSpawnEntry](512)
+	ParticleBatchPool = NewBatchPool[ParticleSpawnEntry](128)
+	DustBatchPool     = NewBatchPool[DustSpawnEntry](2048)
+	FadeoutBatchPool  = NewBatchPool[FadeoutSpawnEntry](512)
 )

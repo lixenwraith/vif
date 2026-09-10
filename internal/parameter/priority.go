@@ -38,8 +38,7 @@ const (
 	PriorityEye     // After Gateway
 	PriorityCombat
 	PriorityLoot // After species entities and combat
-	PriorityDecay
-	PriorityBlossom
+	PriorityParticle
 	PriorityLightning // After Quasar
 	PriorityMissile   // After Weapon
 	PriorityFlash

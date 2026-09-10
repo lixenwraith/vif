@@ -126,7 +126,7 @@ generated typed store and mask bit.
 |---|---|
 | Identity and presentation | `Glyph`, `Sigil`, `Nugget`, `Cursor`, `Protection`, `Kinetic`, `Wall`, `Loot`, `Gateway` |
 | Player state | `Energy`, `Heat`, `Shield`, `Boost`, `Weapon`, `Orb`, `Ping`, `CursorView` |
-| General behavior | `Decay`, `Blossom`, `Cleaner`, `Dust`, `Navigation`, `Combat`, `Genotype`, `Lightning`, `Missile`, `Pulse`, `Spirit`, `Materialize` |
+| General behavior | `Particle`, `Cleaner`, `Dust`, `Navigation`, `Combat`, `Genotype`, `Lightning`, `Missile`, `Pulse`, `Spirit`, `Materialize` |
 | Species and structures | `Target`, `TargetAnchor`, `Drain`, `Quasar`, `Swarm`, `Storm`, `StormCircle`, `Bullet`, `Pylon`, `Snake`, `SnakeHead`, `SnakeBody`, `SnakeMember`, `Eye`, `Tower` |
 | Composite entities | `Header`, `Member` |
 | Transient effects | `Flash`, `Fadeout`, `Splash`, `Marker` |
@@ -143,6 +143,12 @@ Components should remain data-oriented. Behavior belongs in systems, and
 cross-system requests belong in events. Related enum values and static profiles
 live alongside a component when they define the meaning of that data, such as
 weapon types, loot profiles, or glyph levels.
+
+`ParticleComponent` is the unified data shape for the Player-domain decay and
+blossom behaviors. `ParticleBehavior` is the discriminator used by the component,
+spawn/wave payloads, and pooled death effects; `ParticleSystem` keeps their RNG
+streams and per-tick collision bookkeeping separate while sharing traversal and
+movement code.
 
 ## 5. Singleton resources
 

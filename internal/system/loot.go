@@ -528,7 +528,7 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 
 	// Protection
 	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-		Mask: component.ProtectFromSpecies | component.ProtectFromDecay,
+		Mask: component.ProtectFromSpecies | component.ProtectFromParticle,
 	})
 }
 

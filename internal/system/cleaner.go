@@ -498,7 +498,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity, owner core.Entity,
 	return blocked
 }
 
-// processPositiveEnergy handles Red destruction with Blossom spawn
+// processPositiveEnergy handles Red destruction with a blossom particle spawn.
 func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, selfEntity core.Entity) {
 	s.destroyBuf = s.destroyBuf[:0]
 
@@ -523,10 +523,10 @@ func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, self
 		return
 	}
 
-	event.EmitDeath(s.world.Resources.Event.Queue, event.EventBlossomSpawnOne, s.destroyBuf...)
+	event.EmitParticleDeath(s.world.Resources.Event.Queue, component.ParticleBlossom, s.destroyBuf...)
 }
 
-// processNegativeEnergy handles Blue mutation to Green with Decay spawn
+// processNegativeEnergy handles Blue mutation to Green with a decay particle spawn.
 func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.Entity, selfEntity core.Entity) {
 	// Iterate candidates with self-exclusion pattern
 	for _, targetEntity := range targetEntities {
@@ -547,7 +547,8 @@ func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.En
 		glyphComp.Type = component.GlyphGreen
 
 		// Spawn decay at same position (particle skips starting cell via LastIntX/Y)
-		s.world.PushLocal(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
+		s.world.PushLocal(event.EventParticleSpawnOne, &event.ParticleSpawnPayload{
+			Behavior:      component.ParticleDecay,
 			X:             x,
 			Y:             y,
 			Char:          glyphComp.Rune,

@@ -106,7 +106,8 @@ per-target combat requests derived from that geometry do not.
 ### D-6 — Presentation and personal effects are Player-domain
 
 Lightning, flash, fadeout, splash, motion markers, explosion smoke, materialise
-beams, dust, decay, blossom, orbs, bullets, missiles, and loot are Player-domain.
+beams, dust, particles (decay and blossom), orbs, bullets, missiles, and loot are
+Player-domain.
 They may depend on local view state and must not decide a Shared outcome.
 
 Player-domain does not mean that only one participant sees an effect. A shared FSM
@@ -376,7 +377,7 @@ is the Shared placement gate.
 | Domain | Entities |
 |---|---|
 | **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, tower, gateway, wall, gold, marker, FSM, time |
-| **Player** | glyph, nugget, dust, drain, decay, blossom, bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, explosion presentation, loot |
+| **Player** | glyph, nugget, dust, drain, particle (decay/blossom), bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, explosion presentation, loot |
 | **Stamped** | cleaner, materialise, spirit; domain is resolved per request |
 
 Gold is contested Shared state: typing contribution is tallied per roster slot and

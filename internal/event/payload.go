@@ -567,33 +567,31 @@ type DustSpawnOneRequestPayload struct {
 	Level component.GlyphLevel `toml:"level"`
 }
 
-// --- Blossom ---
+// --- Particle ---
 
-// BlossomSpawnPayload contains parameters to spawn a single blossom entity
-type BlossomSpawnPayload struct {
-	X             int  `toml:"x"`
-	Y             int  `toml:"y"`
-	Char          rune `toml:"char"`
-	SkipStartCell bool `toml:"skip_start_cell"` // True: particle skips interaction at spawn position
+// ParticleSpawnPayload contains parameters to spawn one behavior-selected particle.
+type ParticleSpawnPayload struct {
+	Behavior      component.ParticleBehavior `toml:"behavior"`
+	X             int                        `toml:"x"`
+	Y             int                        `toml:"y"`
+	Char          rune                       `toml:"char"`
+	SkipStartCell bool                       `toml:"skip_start_cell"` // True: particle skips interaction at spawn position
 }
 
-// --- Decay ---
-
-// DecaySpawnPayload contains parameters to spawn a single decay entity
-type DecaySpawnPayload struct {
-	X             int  `toml:"x"`
-	Y             int  `toml:"y"`
-	Char          rune `toml:"char"`
-	SkipStartCell bool `toml:"skip_start_cell"` // True: particle skips interaction at spawn position
+// ParticleWavePayload selects the behavior of a full-width particle wave.
+type ParticleWavePayload struct {
+	Behavior component.ParticleBehavior `toml:"behavior"`
 }
 
 // --- Death ---
 
 // DeathRequestPayload contains a death request for one or more entities.
-// EffectEvent: 0 = silent death, EventFlashSpawnOneRequest = flash, future: explosion, chain death
+// EffectEvent selects the emitted effect; Behavior discriminates the unified
+// particle effect when EffectEvent is EventParticleSpawnOne.
 type DeathRequestPayload struct {
-	Entities    []core.Entity `toml:"entities"`
-	EffectEvent EventType     `toml:"effect_event"`
+	Entities    []core.Entity              `toml:"entities"`
+	EffectEvent EventType                  `toml:"effect_event"`
+	Behavior    component.ParticleBehavior `toml:"behavior"`
 }
 
 // --- Timer ---
@@ -625,8 +623,9 @@ type CompositeIntegrityBreachPayload struct {
 
 // CompositeDestroyRequestPayload requests centralized composite destruction
 type CompositeDestroyRequestPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
-	Effect       EventType   `toml:"effect"` // 0 = silent, EventFlashSpawnOneRequest, etc.
+	HeaderEntity     core.Entity                `toml:"header_entity"`
+	Effect           EventType                  `toml:"effect"` // 0 = silent, EventFlashSpawnOneRequest, etc.
+	ParticleBehavior component.ParticleBehavior `toml:"particle_behavior"`
 }
 
 // --- Cursor ---

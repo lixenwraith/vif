@@ -110,11 +110,12 @@ Spawn pacing adapts to screen occupancy: sparse maps receive text faster while
 dense maps sharply reduce new placement. Placement excludes a region around the
 cursor and retries only a bounded number of positions.
 
-Decay is an explicit wave mechanic. `DecaySystem` marks eligible glyphs and
-removes them over time, respecting `ProtectFromDecay`. Blossom creates a
-different spreading/transforming behavior. Dust, flash, fade, splash, marker,
-explosion, and motion-marker systems are transient feedback rather than durable
-text state.
+Decay is an explicit wave mechanic. `ParticleSystem` selects decay or blossom
+rules from `ParticleComponent.Behavior`: decay marks eligible glyphs and removes
+them over time while blossom spreads the inverse level transformation. Both
+respect `ProtectFromParticle`, retain separate deterministic RNG streams, and remain
+Player-domain. Dust, flash, fade, splash, marker, explosion, and motion-marker
+systems are transient feedback rather than durable text state.
 
 ## 5. Energy, heat, boost, and shield
 
@@ -194,7 +195,7 @@ nugget and spends one percent energy when a target exists.
 
 A gold encounter creates a protected, bright, 10-character alphanumeric
 composite at a free horizontal span. It lasts 10 seconds and must be typed in
-left-to-right member order. Gold members resist deletion and decay.
+left-to-right member order. Gold members resist deletion and particle effects.
 
 `Shift-Tab` jumps to the first remaining gold member and spends ten percent
 energy. Completion, timeout, external damage, and explicit cancellation emit
@@ -299,9 +300,9 @@ the current wind and `EventWindCancel` ends it. Each tick varies force by up to
 10% and direction by about five degrees from a deterministic Shared RNG stream,
 then applies `force / mass` to mobile species. Drains, swarm, quasar, eye, snake
 head, and storm are affected. Cursor kinetics, snake body-local deformation,
-pylons/towers, weapons/projectiles/loot, dust, decay, and blossom are not yet wind
-targets. See [Generic kinetic analysis](generic-kinetic.md) for the exact motion
-paths and extension plan.
+pylons/towers, weapons/projectiles/loot, dust, and the decay/blossom particle
+behaviors are not yet wind targets. See [Generic kinetic analysis](generic-kinetic.md)
+for the exact motion paths and extension plan.
 
 ## 10. Embedded campaign progression
 
@@ -356,7 +357,7 @@ declares for itself:
 | Group | Systems |
 |---|---|
 | Frame/player | `cursor`, `ping`, `transient`, `camera`, `energy`, `shield`, `heat`, `boost`, `weapon` |
-| Typing/world | `typing`, `composite`, `wall`, `tower`, `gateway`, `loot`, `glyph`, `nugget`, `decay`, `blossom`, `gold` |
+| Typing/world | `typing`, `composite`, `wall`, `tower`, `gateway`, `loot`, `glyph`, `nugget`, `particle`, `gold` |
 | Spawning/effects | `materialize`, `cleaner`, `fuse`, `spirit`, `lightning`, `missile` |
 | Motion/environment/combat | `navigation`, `soft_collision`, `environment`, `combat` |
 | Species | `drain`, `quasar`, `swarm`, `storm`, `pylon`, `snake`, `eye`, `bullet` |

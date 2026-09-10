@@ -25,8 +25,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Loot | `loot.{drops,active,collects,routes,route_recomputes,unreachable,wall_collisions,boundary_reflections,physics_steps,buf_pity_hwm,buf_routes_hwm}` | `NewLootSystem` | Drop/collect handlers, owner-route maintenance, bounce integration, buffer observation | `Init` | Generic only |
 | Glyph | `glyph.{enabled,next_spawn_ms,orphan_glyph,density,rate_mult,buf_placement_hwm}` | `NewGlyphSystem` | Spawn/update and snapshot publication | `Init` | Generic only |
 | Nugget | `nugget.{active,spawned,collected,jumps,spawn_failures,cursor_rejects,disabled_rejects}` | `NewNuggetSystem` | Resolved nugget handlers/update | `Init` | Generic only |
-| Decay | `decay.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}` | `NewDecaySystem` | Spawn/apply/update paths | `Init` | Generic only |
-| Blossom | `blossom.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}` | `NewBlossomSystem` | Spawn/apply/update paths | `Init` | Generic only |
+| Particle | `decay.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}`, `blossom.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}` | `NewParticleSystem` | Behavior-selected spawn/apply/update paths | `Init` | Separate decay/blossom series preserve the operator surface |
 | Gold | `gold.{active,header_entity,timer,spawn_failures,cursor_rejects,disabled_rejects}` | `NewGoldSystem` | Resolved sequence handlers/update | `Init` | Generic only |
 | Materialize | None | — | — | — | — |
 | Cleaner | `cleaner.{active,spawned,wall_collisions,boundary_steps,grid_steps,cursor_rejects,disabled_rejects,buf_entities_hwm}` | `NewCleanerSystem` | Resolved requests and swept update | `Init` | Generic only |
@@ -192,9 +191,9 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `combat.relation_rejects` (int) | Direct-hit requests rejected because the hit entity was not a member of the target composite. |
 | `combat.stun_immune_rejects` (int) | Stun effects rejected by species/state immunity. |
 | `combat.target_rejects` (int) | Attack requests rejected because the target or required target member lacked combat state. |
-| `death.batch_blossom` (int) | Death requests routed through the blossom-effect processor. |
+| `death.batch_blossom` (int) | Death requests routed to the particle effect with blossom behavior. |
 | `death.batch_count` (int) | Resolved unified `EventDeathBatch` payloads. |
-| `death.batch_decay` (int) | Death requests routed through the decay-effect processor. |
+| `death.batch_decay` (int) | Death requests routed to the particle effect with decay behavior. |
 | `death.batch_dust` (int) | Death requests routed through the dust-effect processor. |
 | `death.batch_entities_total` (int) | Total entity entries presented across resolved death requests. |
 | `death.batch_fadeout` (int) | Death requests routed through the fadeout-effect processor. |

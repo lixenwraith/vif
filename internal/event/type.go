@@ -291,23 +291,14 @@ const (
 	// EventDustAllRequest [local] signals intent to convert all glyphs on the map to dust
 	EventDustAllRequest
 
-	// --- Blossom ---
+	// --- Particle ---
 
-	// EventBlossomSpawnOne (BlossomSpawnPayload) [local] signals intent to spawn a single blossom entity
-	EventBlossomSpawnOne
-	// EventBlossomSpawnBatch (BatchPayload[BlossomSpawnEntry]) [local] signals batch spawn of blossom entities
-	EventBlossomSpawnBatch
-	// EventBlossomWave [local] signals start of a full width rising blossom wave
-	EventBlossomWave
-
-	// --- Decay ---
-
-	// EventDecaySpawnOne (DecaySpawnPayload) [local] signals intent to spawn a single decay entity
-	EventDecaySpawnOne
-	// EventDecaySpawnBatch (BatchPayload[DecaySpawnEntry]) [local] signals batch spawn of decay entities
-	EventDecaySpawnBatch
-	// EventDecayWave [local] signals start of a full width falling decay wave
-	EventDecayWave
+	// EventParticleSpawnOne (ParticleSpawnPayload) [local] signals intent to spawn one behavior-selected particle
+	EventParticleSpawnOne
+	// EventParticleSpawnBatch (BatchPayload[ParticleSpawnEntry]) [local] signals batch spawn of behavior-selected particles
+	EventParticleSpawnBatch
+	// EventParticleWave (ParticleWavePayload) [local] signals a full-width wave selected by behavior
+	EventParticleWave
 
 	// --- Death ---
 

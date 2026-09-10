@@ -314,9 +314,9 @@ func (s *GoldSystem) spawnGold() bool {
 			HeaderEntity: headerEntity,
 		})
 
-		// Protect gold entities from decay/delete
+		// Protect gold entities from particles and explicit deletion.
 		s.world.Components.Protection.SetComponent(ed.entity, component.ProtectionComponent{
-			Mask: component.ProtectFromDelete | component.ProtectFromDecay,
+			Mask: component.ProtectFromDelete | component.ProtectFromParticle,
 		})
 
 		// Set gold entity to composite member entities

@@ -116,5 +116,5 @@ func (s *FlashSystem) spawnDestructionFlash(x, y int, char rune) {
 	s.world.Positions.SetPosition(entity,
 		component.PositionComponent{X: x, Y: y})
 	s.world.Components.Protection.SetComponent(entity,
-		component.ProtectionComponent{Mask: component.ProtectFromDecay})
+		component.ProtectionComponent{Mask: component.ProtectFromParticle})
 }

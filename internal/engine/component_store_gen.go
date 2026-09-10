@@ -27,8 +27,7 @@ const (
 	OrbBit
 	PingBit
 	CursorViewBit
-	DecayBit
-	BlossomBit
+	ParticleBit
 	CleanerBit
 	DustBit
 	NavigationBit
@@ -85,8 +84,7 @@ type Component struct {
 	Orb          *Store[component.OrbComponent]
 	Ping         *Store[component.PingComponent]
 	CursorView   *Store[component.CursorViewComponent]
-	Decay        *Store[component.DecayComponent]
-	Blossom      *Store[component.BlossomComponent]
+	Particle     *Store[component.ParticleComponent]
 	Cleaner      *Store[component.CleanerComponent]
 	Dust         *Store[component.DustComponent]
 	Navigation   *Store[component.NavigationComponent]
@@ -142,8 +140,7 @@ func initComponents(w *World) {
 	w.Components.Orb = NewStore[component.OrbComponent](w, OrbBit)
 	w.Components.Ping = NewStore[component.PingComponent](w, PingBit)
 	w.Components.CursorView = NewStore[component.CursorViewComponent](w, CursorViewBit)
-	w.Components.Decay = NewStore[component.DecayComponent](w, DecayBit)
-	w.Components.Blossom = NewStore[component.BlossomComponent](w, BlossomBit)
+	w.Components.Particle = NewStore[component.ParticleComponent](w, ParticleBit)
 	w.Components.Cleaner = NewStore[component.CleanerComponent](w, CleanerBit)
 	w.Components.Dust = NewStore[component.DustComponent](w, DustBit)
 	w.Components.Navigation = NewStore[component.NavigationComponent](w, NavigationBit)
@@ -248,11 +245,8 @@ func (w *World) removeEntity(e core.Entity) {
 	if mask&CursorViewBit != 0 {
 		w.Components.CursorView.RemoveEntity(e, true)
 	}
-	if mask&DecayBit != 0 {
-		w.Components.Decay.RemoveEntity(e, true)
-	}
-	if mask&BlossomBit != 0 {
-		w.Components.Blossom.RemoveEntity(e, true)
+	if mask&ParticleBit != 0 {
+		w.Components.Particle.RemoveEntity(e, true)
 	}
 	if mask&CleanerBit != 0 {
 		w.Components.Cleaner.RemoveEntity(e, true)
@@ -426,11 +420,8 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	if union&CursorViewBit != 0 {
 		w.Components.CursorView.RemoveBatch(entities, true)
 	}
-	if union&DecayBit != 0 {
-		w.Components.Decay.RemoveBatch(entities, true)
-	}
-	if union&BlossomBit != 0 {
-		w.Components.Blossom.RemoveBatch(entities, true)
+	if union&ParticleBit != 0 {
+		w.Components.Particle.RemoveBatch(entities, true)
 	}
 	if union&CleanerBit != 0 {
 		w.Components.Cleaner.RemoveBatch(entities, true)
@@ -560,8 +551,7 @@ func (w *World) wipeAll() {
 	w.Components.Orb.ClearAllComponents()
 	w.Components.Ping.ClearAllComponents()
 	w.Components.CursorView.ClearAllComponents()
-	w.Components.Decay.ClearAllComponents()
-	w.Components.Blossom.ClearAllComponents()
+	w.Components.Particle.ClearAllComponents()
 	w.Components.Cleaner.ClearAllComponents()
 	w.Components.Dust.ClearAllComponents()
 	w.Components.Navigation.ClearAllComponents()

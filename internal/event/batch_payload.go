@@ -29,16 +29,9 @@ type FlashSpawnEntry struct {
 	Char rune
 }
 
-// BlossomSpawnEntry is a value type for batch blossom spawning
-type BlossomSpawnEntry struct {
-	X             int
-	Y             int
-	Char          rune
-	SkipStartCell bool
-}
-
-// DecaySpawnEntry is a value type for batch decay spawning
-type DecaySpawnEntry struct {
+// ParticleSpawnEntry is a value type for behavior-selected batch particle spawning.
+type ParticleSpawnEntry struct {
+	Behavior      component.ParticleBehavior
 	X             int
 	Y             int
 	Char          rune
