@@ -790,6 +790,18 @@ type SwarmSpawnRequestPayload struct {
 	Y int `toml:"y"`
 }
 
+// --- Environment ---
+
+// WindStartPayload configures a global gameplay wind. Direction is the direction
+// of travel in radians in terminal-map coordinates: zero points right and pi/2
+// points down. Force is expressed in relative-mass cells/second squared; each
+// affected species receives acceleration Force / its profile mass.
+type WindStartPayload struct {
+	Force     float64       `toml:"force"`
+	Direction float64       `toml:"direction"`
+	Duration  time.Duration `toml:"duration"`
+}
+
 // --- Post-Process ---
 
 // StrobeRequestPayload configures screen flash effect.

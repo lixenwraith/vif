@@ -397,6 +397,13 @@ const (
 	// EventStormCancelRequest [shared] signals destruction of all storm entities
 	EventStormCancelRequest
 
+	// --- Environment ---
+
+	// EventWindStart (WindStartPayload) [shared] starts or replaces the global wind
+	EventWindStart
+	// EventWindCancel [shared] cancels the global wind
+	EventWindCancel
+
 	// --- Post-Process ---
 
 	// EventGrayoutStart (CursorScopePayload) [local] signals persistent grayout activation for one cursor, or for every cursor when it names none

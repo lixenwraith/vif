@@ -31,6 +31,18 @@ func TestApplyHomingDeadZoneRequiresLowSpeed(t *testing.T) {
 	}
 }
 
+func TestApplyHomingDeadZoneDoesNotEraseExternalAcceleration(t *testing.T) {
+	k := newKin(10.2, 10.1, 0.1, 0)
+	k.AccelX = 2
+
+	if ApplyHoming(&k, 10, 10, &profBraked, tickDt) {
+		t.Fatal("body under external acceleration must not settle")
+	}
+	if k.PreciseX != 10.2 || k.PreciseY != 10.1 {
+		t.Fatalf("position snapped under external acceleration: (%v,%v)", k.PreciseX, k.PreciseY)
+	}
+}
+
 func TestApplyHomingBrakedProfileSettles(t *testing.T) {
 	k := newKin(0, 0, 0, 0)
 
@@ -123,6 +135,24 @@ func TestIntegrateWithBounceBoundaryRestitution(t *testing.T) {
 	}
 	if m := math.Abs(k.VelX); math.Abs(m-100) > 1 {
 		t.Fatalf("elastic restitution changed speed: %v", m)
+	}
+}
+
+func TestIntegrateWithBounceAppliesAccelerationOnce(t *testing.T) {
+	k := newKin(5.5, 5.5, 0, 0)
+	k.AccelX = 8
+	k.AccelY = -4
+
+	gx, gy, stats := IntegrateWithBounceStats(&k, 0.25, 0, 0, -20, 20, -20, 20, 1, noWall)
+
+	if k.VelX != 2 || k.VelY != -1 {
+		t.Fatalf("velocity = (%v,%v), want (2,-1)", k.VelX, k.VelY)
+	}
+	if math.Abs(k.PreciseX-6.0) > 1e-12 || math.Abs(k.PreciseY-5.25) > 1e-12 {
+		t.Fatalf("precise position = (%v,%v), want (6,5.25)", k.PreciseX, k.PreciseY)
+	}
+	if gx != 6 || gy != 5 || stats.Steps != 2 {
+		t.Fatalf("grid/stats = (%d,%d,%+v), want (6,5) in two swept steps", gx, gy, stats)
 	}
 }
 

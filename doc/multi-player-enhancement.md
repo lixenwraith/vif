@@ -40,6 +40,7 @@ roster slot, or encode host/guest roles in entity domains.
 | Local input | The producer applies ordinary crossings immediately. Remote copies retain the receive-side playout lead. |
 | Shared authority | The host's Shared world is canonical. A guest's predicted result is provisional until the next correction. |
 | Player state | Each instance simulates only its Player domain. Owner-authored cursor values have one writer and travel as values; a receiver keeps the values it authors across an install. |
+| Global environment | Shared wind events are re-derived rather than sent. Every instance consumes two draws from the same Shared environment stream, applies the gust to its own drains and predicted Shared species, and restores active wind state through corrections. |
 | Corrections | A correction starts with a versioned hash index. Equal roots send no state. Mismatches descend to independently proved pages. Compressed whole keyframes remain the bounded fallback. |
 | Local replay | A guest retains a bounded canonical suffix of its own accepted crossings and replays the portion later than the installed authority baseline. |
 | Crossing ordering | Snapshot schema 5 carries one applied-sequence fence per participant. A receiver removes ordinary frames the installed world already holds — including ones whose nominal receive tick is still ahead — and keeps the ones it does not, including ones whose receive tick is long past. |
@@ -79,6 +80,14 @@ Participant arrival, participant departure, and full reset are `barrierBound`.
 They create or destroy shared identity, so their producer also waits for the
 agreed apply tick. A correction must not repair divergent entity allocation or run
 numbering.
+
+Wind start/cancel are the opposite case: they are `ClassShared` outputs suitable
+for a Shared FSM transition. They appear identically in every journal but never
+on the wire, because a transported copy would duplicate the transition's local
+output. Wind variation is sampled once per tick, before entity iteration, so a
+participant's private drain count cannot perturb Shared RNG order. If a future
+Player mechanic starts wind, it must cross a separate Bus request whose Shared
+resolution installs the wind at the agreed tick.
 
 ### 3.2 The capture boundary
 
@@ -174,6 +183,12 @@ each direct peer according to that link's cadence:
    reusable staging world, and commit between ticks.
 6. Refuse stale, foreign, malformed, or unverifiable repairs and recover at the
    next compressed keyframe.
+
+The environment is a declared system-state carrier. A capture therefore includes
+its base force, normalized direction, remaining duration and application phase;
+the general RNG section includes the environment stream position, and Shared
+component pages include the species kinetic result. Player drains remain local
+and resume from the same per-tick samples after an install.
 
 Owner-authored cursor cells are excluded when the receiver owns that cursor, and
 cursor control assignment is normalised for both hashing and repair. Those values

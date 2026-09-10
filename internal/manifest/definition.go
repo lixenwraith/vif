@@ -196,7 +196,7 @@ var Systems = []SystemDef{
 	{Name: "splash", Constructor: "NewSplashSystem", Domain: "player", Requires: []string{"cursor"}},              // local-cursor viewport overlay (D-6)
 
 	// --- Environment ---
-	{Name: "environment", Constructor: "NewEnvironmentSystem", Domain: "shared"}, // shared stream and state derived from the map and clock
+	{Name: "environment", Constructor: "NewEnvironmentSystem", Domain: "dual", Snapshot: "state"}, // one shared wind stream/state, applied explicitly to player drains and shared species
 
 	// --- Lifecycle ---
 	{Name: "death", Constructor: "NewDeathSystem", Domain: "dual"},                              // routes one death batch per domain; effect systems subscribe to its output

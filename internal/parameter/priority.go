@@ -24,6 +24,7 @@ const (
 	PrioritySpirit     // After Fuse, before Drain
 	PriorityNavigation // Before systems that move entities
 	PrioritySoftCollision
+	PriorityEnvironment // Applies external forces before every species integrator
 	PriorityDrain
 	PriorityMaterialize // After Drain
 	PriorityQuasar      // After Drain

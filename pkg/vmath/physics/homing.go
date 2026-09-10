@@ -61,7 +61,12 @@ func applyHomingInternal(
 	}
 
 	// Squared comparison: avoids a sqrt on the settle check
-	if dist < deadZone && vmath.MagnitudeSqF(k.VelX, k.VelY) < homingSettleSpeedSq {
+	// Do not let the controller's dead-zone snap erase a concurrent external
+	// acceleration. The owning integrator applies that acceleration later in the
+	// tick; settling here would otherwise pin a body against any modest steady
+	// field (such as wind) by resetting its displacement and velocity every tick.
+	if dist < deadZone && vmath.MagnitudeSqF(k.VelX, k.VelY) < homingSettleSpeedSq &&
+		k.AccelX == 0 && k.AccelY == 0 {
 		k.PreciseX = targetX
 		k.PreciseY = targetY
 		k.VelX = 0

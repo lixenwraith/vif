@@ -280,7 +280,7 @@ not genetic species. Species systems own formation-specific movement and
 spawning; common damage is delegated to `CombatSystem`, common movement math to
 `pkg/vmath/physics`, and path selection to `pkg/navigation`.
 
-## 9. Walls, maps, and navigation
+## 9. Walls, maps, navigation, and environment
 
 Walls are grid entities with directional masks and optional energy/visual
 properties. Level setup can size the logical map independently of the terminal
@@ -291,6 +291,17 @@ Maze events can generate a maze, rooms, braiding, entrance/exit data, and a
 solution path. Pattern assets can also become wall layouts. Navigation then uses
 either flow fields toward a target or precomputed multi-route graphs. More
 detail is in [AI, physics, and evolution](ai-physics-and-evolution.md).
+
+`EnvironmentSystem` owns map-wide gameplay effects rather than rendering
+post-process effects. Its first effect is wind: `EventWindStart` supplies force,
+direction in terminal-plane radians, and duration; a later valid start replaces
+the current wind and `EventWindCancel` ends it. Each tick varies force by up to
+10% and direction by about five degrees from a deterministic Shared RNG stream,
+then applies `force / mass` to mobile species. Drains, swarm, quasar, eye, snake
+head, and storm are affected. Cursor kinetics, snake body-local deformation,
+pylons/towers, weapons/projectiles/loot, dust, decay, and blossom are not yet wind
+targets. See [Generic kinetic analysis](generic-kinetic.md) for the exact motion
+paths and extension plan.
 
 ## 10. Embedded campaign progression
 
@@ -347,10 +358,10 @@ declares for itself:
 | Frame/player | `cursor`, `ping`, `transient`, `camera`, `energy`, `shield`, `heat`, `boost`, `weapon` |
 | Typing/world | `typing`, `composite`, `wall`, `tower`, `gateway`, `loot`, `glyph`, `nugget`, `decay`, `blossom`, `gold` |
 | Spawning/effects | `materialize`, `cleaner`, `fuse`, `spirit`, `lightning`, `missile` |
-| Motion/combat | `navigation`, `soft_collision`, `combat` |
+| Motion/environment/combat | `navigation`, `soft_collision`, `environment`, `combat` |
 | Species | `drain`, `quasar`, `swarm`, `storm`, `pylon`, `snake`, `eye`, `bullet` |
 | Particles | `dust`, `flash`, `fadeout`, `marker`, `explosion`, `motion_marker`, `splash` |
-| Lifecycle/learning | `environment`, `death`, `timer`, `adaptation`, `genetic` |
+| Lifecycle/learning | `death`, `timer`, `adaptation`, `genetic` |
 | Sound | `audio`, `music` |
 
 The table uses runtime `Name()` values, which the manifest keys now match;
@@ -371,6 +382,7 @@ Each entry declares a domain profile and its dependencies in
 | Combat matrix and profiles | `internal/component/combat.go`, `internal/system/combat.go` |
 | Drop tables and rewards | `internal/component/loot.go`, `internal/parameter/loot.go` |
 | Drop routing and homing | `internal/system/loot.go`, `internal/profile/homing.go` |
+| Environment effects | `internal/system/environment.go`, `internal/parameter/environment.go`, `internal/profile/mass.go` |
 | System behavior | Matching files in `internal/system` |
 | Default progression | `internal/asset/config/*.toml` |
 | External scenarios | `wad/game/main`, `wad/game/td`, `wad/game/blank` |

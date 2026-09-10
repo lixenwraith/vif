@@ -73,6 +73,12 @@ func IntegrateWithBounceStats(
 	wallRestitution float64,
 	checkWall WallQueryFunc,
 ) (int, int, BounceStats) {
+	// Match Integrate's semi-implicit Euler ordering. Acceleration is applied
+	// once for the whole tick before swept step sizing; applying it inside each
+	// sub-step would make the result depend on collision/tunnelling work.
+	k.VelX += k.AccelX * dt
+	k.VelY += k.AccelY * dt
+
 	// 1. Calculate step count to prevent tunneling
 	maxDist := math.Max(math.Abs(k.VelX*dt), math.Abs(k.VelY*dt))
 

@@ -267,8 +267,9 @@ evaluation IDs; it does not restart evolution from the scored archive.
 | 3D | `float64` vector integration/constraint helpers projected into the terminal plane |
 
 `IntegrateWithBounce` limits a substep to roughly 0.45 cells to reduce wall
-tunneling, moves one axis at a time, restores the prior axis position on a wall,
-and scales reflected velocity by restitution. Projectiles with stricter swept
+tunneling, applies acceleration once before selecting the step count, moves one
+axis at a time, restores the prior axis position on a wall, and scales reflected
+velocity by restitution. Projectiles with stricter swept
 collision needs use grid traversal in their owning system rather than relying
 only on final-cell overlap.
 
@@ -370,5 +371,6 @@ the resulting boolean grid and solution metadata into ECS walls/level state.
 | Registry/tracking/persistence | `pkg/genetic/{registry,tracking,fitness,persistence}` |
 | Game genetic adapter | `internal/system/genetic.go`, `internal/system/eye.go` |
 | Physics | `pkg/vmath/physics/*.go` |
+| Kinetic inventory and refactor plan | `doc/generic-kinetic.md` |
 | Numeric/geometry | `pkg/vmath/*.go` |
 | Mazes | `pkg/maze/generator.go` |

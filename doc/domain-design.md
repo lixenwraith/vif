@@ -130,6 +130,10 @@ Every issued stream is inventoried by `RandResource`, and a capture stores its
 generator position, not merely its seed. Restoring a seed restarts a sequence;
 restoring a position continues it.
 
+The environment is a deliberate dual-domain exception with one Shared stream.
+An active wind draws force and direction exactly once per tick before iterating
+entities, so different local drain populations cannot move the Shared RNG.
+
 ### D-9 — Entity identity is domain-local and deterministic
 
 `CreateEntity(domain)` uses one counter per domain. Shared entity creation order
@@ -151,6 +155,12 @@ Each event type declares one class:
 `event.OnWire` answers whether another peer must receive it. The wire set is
 narrower: sending a re-derived Shared event would apply it twice. A Bus type is on
 the wire only when a Player producer explicitly used the crossing path.
+
+`EventWindStart` and `EventWindCancel` are Shared events: a Shared FSM can
+re-derive them on every instance, so sending them would apply the same wind
+twice. Each instance applies the sampled wind to its own Player drains as well as
+the predicted Shared species. A future player-originated wind trigger needs a
+separate Bus artifact rather than changing these derived events into wire data.
 
 ### D-11 — The host is exact; guests converge
 
@@ -262,6 +272,7 @@ Declared system carriers are:
 | `genetic` | streaming checkpoints, archives, pending evaluations, IDs, scout state, fitness accumulators |
 | `navigation` | recompute phase, targets, route rebuild budget, route endpoints |
 | `gold` | sequence liveness, header, deadlines, per-slot contribution |
+| `environment` | active base wind, remaining duration, enable/applied phase |
 
 A capture also carries every RNG stream position, FSM runtime state, Shared
 component stores, allocator counters, and the compared status surface. Durations
