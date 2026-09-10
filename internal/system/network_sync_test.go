@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 // syncFor builds one owner-authored state message for a cursor (D-13).
@@ -55,6 +56,54 @@ func TestCursorStateSyncWritesOnlyACoherentRemoteCursor(t *testing.T) {
 	net.writeCursorState(syncFor(local, 0, 1, 77))
 	if got := energyOf(local); got != before {
 		t.Fatalf("local energy after peer sync = %d, want %d", got, before)
+	}
+}
+
+// TestAnInstalledGoldSequenceRaisesItsTimerSplash: the countdown is a
+// player-domain effect spawnGold raises, so a receiver whose FSM was corrected
+// past the spawn holds the sequence and shows no timer. The carrier is the only
+// thing that can tell it the sequence is running here (D-6, D-19).
+func TestAnInstalledGoldSequenceRaisesItsTimerSplash(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	gold := NewGoldSystem(w).(*GoldSystem)
+
+	header := w.CreateEntity(core.DomainShared)
+	data, err := json.Marshal(goldSnapshot{
+		Active: true, SpawnEnabled: true, HeaderEntity: header,
+		ExpiresIn: parameter.GoldDuration,
+	})
+	if err != nil {
+		t.Fatalf("marshal a captured sequence: %v", err)
+	}
+	if err := gold.LoadShared(data); err != nil {
+		t.Fatalf("LoadShared: %v", err)
+	}
+	w.Resources.Event.Queue.Consume()
+
+	anchors := func() []core.Entity {
+		var out []core.Entity
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if ev.Type != event.EventSplashTimerRequest {
+				continue
+			}
+			if p, ok := ev.Payload.(*event.SplashTimerRequestPayload); ok {
+				out = append(out, p.AnchorEntity)
+			}
+		}
+		return out
+	}
+
+	gold.Update()
+	if got := anchors(); len(got) != 1 || got[0] != header {
+		t.Fatalf("timer requests after an install = %v, want one anchored to %d",
+			got, uint64(header))
+	}
+
+	// The splash outlives the tick that raised it; a second one would replace it
+	// every cadence and reset the placement search.
+	gold.Update()
+	if got := anchors(); len(got) != 0 {
+		t.Fatalf("timer requests on the next tick = %v, want none", got)
 	}
 }
 

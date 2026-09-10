@@ -1,6 +1,8 @@
 package system
 
 import (
+	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -33,11 +35,16 @@ type MetaSystem struct {
 
 	// Kill counters gate FSM region transitions, so they live in a system with
 	// no enable/disable toggle
-	statKills           [component.SpeciesCount]*atomic.Int64
-	statKillsTotal      *atomic.Int64
-	statKillsUncredited *atomic.Int64
-	statAllDefeated     *atomic.Bool
-	defeated            [parameter.MaxPlayers]bool
+	statKills            [component.SpeciesCount]*atomic.Int64
+	statKillsTotal       *atomic.Int64
+	statKillsUncredited  *atomic.Int64
+	statAllDefeated      *atomic.Bool
+	statDamageMultiplier *atomic.Int64
+	defeated             [parameter.MaxPlayers]bool
+
+	// Cycle difficulty scaling: a world property the shared FSM raises, applied
+	// by EnergySystem to penalties
+	damageMultiplier int64
 }
 
 // NewMetaSystem creates a new meta system
@@ -59,6 +66,7 @@ func NewMetaSystem(ctx *engine.GameContext) engine.System {
 	s.statKillsTotal = reg.Ints.Get("kills.total")
 	s.statKillsUncredited = reg.Ints.Get("kills.uncredited")
 	s.statAllDefeated = reg.Bools.Get("session.all_defeated")
+	s.statDamageMultiplier = reg.Ints.Get("energy.damage_multiplier")
 	s.Init()
 	return s
 }
@@ -73,6 +81,7 @@ func (s *MetaSystem) Init() {
 	s.statPlayerY.Reset()
 	s.defeated = [parameter.MaxPlayers]bool{}
 	s.statAllDefeated.Store(false)
+	s.setDamageMultiplier(1)
 	s.resetKills()
 }
 
@@ -106,6 +115,8 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventCursorDefeatState,
 		event.EventCursorSpawned,
 		event.EventCursorDespawned,
+		event.EventCycleDamageMultiplierIncrease,
+		event.EventCycleDamageMultiplierReset,
 		event.EventGameResetRequest,
 	}
 }
@@ -208,7 +219,19 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 			s.defeated[p.Slot] = false
 			s.publishAllDefeated()
 		}
+
+	case event.EventCycleDamageMultiplierIncrease:
+		s.setDamageMultiplier(s.damageMultiplier * 2)
+
+	case event.EventCycleDamageMultiplierReset:
+		s.setDamageMultiplier(1)
 	}
+}
+
+// setDamageMultiplier is the single writer of the cycle scaling factor.
+func (s *MetaSystem) setDamageMultiplier(v int64) {
+	s.damageMultiplier = v
+	s.statDamageMultiplier.Store(v)
 }
 
 // setCursorDefeated applies an owner-authored lifecycle artifact to one roster slot.
@@ -275,6 +298,50 @@ func (s *MetaSystem) recordKill(p *event.SpeciesKilledPayload) {
 	if killer == 0 {
 		s.statKillsUncredited.Add(1)
 	}
+}
+
+// metaSnapshot is this system's D-19 record. Kill tallies, the combined defeat
+// latch and the cycle damage multiplier all steer shared FSM transitions, and none
+// of them is re-derivable on a receiver: the compared status surface excludes
+// kills.* as a mixed-domain aggregate, an installed state never runs the on_enter
+// action that raises the multiplier, and a pruned crossing never reaches a counter.
+type metaSnapshot struct {
+	Kills            [component.SpeciesCount]int64 `json:"kills"`
+	KillsTotal       int64                         `json:"kills_total"`
+	KillsUncredited  int64                         `json:"kills_uncredited"`
+	Defeated         [parameter.MaxPlayers]bool    `json:"defeated"`
+	DamageMultiplier int64                         `json:"damage_multiplier"`
+}
+
+// SaveShared carries shared progression (D-19).
+func (s *MetaSystem) SaveShared() ([]byte, error) {
+	snap := metaSnapshot{
+		KillsTotal:       s.statKillsTotal.Load(),
+		KillsUncredited:  s.statKillsUncredited.Load(),
+		Defeated:         s.defeated,
+		DamageMultiplier: s.damageMultiplier,
+	}
+	for i := component.SpeciesType(1); i < component.SpeciesCount; i++ {
+		snap.Kills[i] = s.statKills[i].Load()
+	}
+	return json.Marshal(snap)
+}
+
+// LoadShared installs captured progression and republishes what derives from it.
+func (s *MetaSystem) LoadShared(data []byte) error {
+	var snap metaSnapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return fmt.Errorf("meta: %w", err)
+	}
+	for i := component.SpeciesType(1); i < component.SpeciesCount; i++ {
+		s.statKills[i].Store(snap.Kills[i])
+	}
+	s.statKillsTotal.Store(snap.KillsTotal)
+	s.statKillsUncredited.Store(snap.KillsUncredited)
+	s.defeated = snap.Defeated
+	s.publishAllDefeated()
+	s.setDamageMultiplier(max(snap.DamageMultiplier, 1))
+	return nil
 }
 
 // resetKills zeroes every species counter for a new game

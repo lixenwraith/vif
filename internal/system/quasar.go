@@ -256,9 +256,10 @@ func (s *QuasarSystem) Update() {
 		isActiveState := quasarComp.IsCharging || quasarComp.IsZapping
 		combatComp.IsEnraged = isActiveState
 
-		// Damage immunity requires explicit refresh (not handled by IsEnraged)
+		// Damage immunity requires explicit refresh (not handled by IsEnraged).
+		// A shield refuses every attacker, not one per window.
 		if quasarComp.IsShielded {
-			combatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+			combatComp.SealDamageImmunity(parameter.CombatDamageImmunityDuration)
 		}
 
 		activeCount++

@@ -266,11 +266,12 @@ func (s *CombatSystem) Update() {
 			}
 		}
 
-		// Update damage immunity timer
+		// Update damage immunity timer; a closed window owes nobody a budget
 		if combatComp.RemainingDamageImmunity > 0 {
 			combatComp.RemainingDamageImmunity -= dt
-			if combatComp.RemainingDamageImmunity < 0 {
+			if combatComp.RemainingDamageImmunity <= 0 {
 				combatComp.RemainingDamageImmunity = 0
+				combatComp.DamageImmunitySpent = 0
 			}
 		}
 
@@ -286,6 +287,13 @@ func (s *CombatSystem) Update() {
 	for i := range component.CombatEntityCount {
 		s.statLive[i].Store(live[i])
 	}
+}
+
+// attackerBit names the roster slot spending a target's immunity window, so one
+// participant's hit does not consume another's budget (D-3, D-16).
+func (s *CombatSystem) attackerBit(cursor core.Entity) uint32 {
+	slot, ok := s.world.CursorSlot(cursor)
+	return component.AttackerBit(slot, ok)
 }
 
 // knockbackStream selects the impulse stream by the recipient's domain, so a
@@ -352,6 +360,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	if damageCursor == 0 {
 		s.statCursor.Add(1)
 	}
+	attacker := s.attackerBit(damageCursor)
 
 	// Damage routing based on CompositeType
 	var damageTargetDead bool
@@ -360,7 +369,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		// Ablative: damage the HitEntity (member)
 		if memberCombat, ok := s.world.Components.Combat.GetPtr(hitEntity); ok && hitEntity != targetEntity {
 			if attack.DamageValue != 0 {
-				if memberCombat.RemainingDamageImmunity != 0 {
+				if memberCombat.DamageImmuneTo(attacker) {
 					s.statImmune.Add(1)
 					s.recordDamage(attackerType, memberCombat.CombatEntityType, 0, attack.DamageValue)
 				} else {
@@ -370,7 +379,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 					resolved = true
 
 					memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
-					memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+					memberCombat.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
 					memberCombat.LastDamagedBy = damageCursor
 					targetCombatComp.LastDamagedBy = damageCursor
 					damageTargetDead = memberCombat.HitPoints == 0
@@ -382,7 +391,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	} else {
 		// Unit or Simple: damage the TargetEntity
 		if attack.DamageValue != 0 {
-			if targetCombatComp.RemainingDamageImmunity != 0 {
+			if targetCombatComp.DamageImmuneTo(attacker) {
 				s.statImmune.Add(1)
 				s.recordDamage(attackerType, targetCombatComp.CombatEntityType, 0, attack.DamageValue)
 			} else {
@@ -392,7 +401,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 				resolved = true
 
 				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
-				targetCombatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+				targetCombatComp.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
 				targetCombatComp.LastDamagedBy = damageCursor
 				damageTargetDead = targetCombatComp.HitPoints == 0
 			}
@@ -518,6 +527,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	if damageCursor == 0 {
 		s.statCursor.Add(1)
 	}
+	attacker := s.attackerBit(damageCursor)
 
 	// Damage routing
 	var targetDead bool
@@ -533,7 +543,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				if !ok {
 					continue
 				}
-				if memberCombat.RemainingDamageImmunity > 0 {
+				if memberCombat.DamageImmuneTo(attacker) {
 					s.statImmune.Add(1)
 					s.recordDamage(attackerType, memberCombat.CombatEntityType, 0, attack.DamageValue)
 					continue
@@ -542,7 +552,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				memberCombat.HitPoints -= dealt
 				s.recordDamage(attackerType, memberCombat.CombatEntityType, dealt, 0)
 				memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
-				memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+				memberCombat.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
 				memberCombat.LastDamagedBy = damageCursor
 				damageApplied = true
 				resolved = true
@@ -565,7 +575,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				}
 			}
 			damageValue := attack.DamageValue * validHitCount
-			if targetCombatComp.RemainingDamageImmunity != 0 {
+			if targetCombatComp.DamageImmuneTo(attacker) {
 				s.statImmune.Add(1)
 				s.recordDamage(attackerType, targetCombatComp.CombatEntityType, 0, damageValue)
 			} else if validHitCount > 0 {
@@ -573,7 +583,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				targetCombatComp.HitPoints -= dealt
 				s.recordDamage(attackerType, targetCombatComp.CombatEntityType, dealt, 0)
 				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
-				targetCombatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+				targetCombatComp.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
 				targetCombatComp.LastDamagedBy = damageCursor
 				damageApplied = true
 				resolved = true

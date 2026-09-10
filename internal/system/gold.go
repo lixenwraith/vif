@@ -30,6 +30,10 @@ type GoldSystem struct {
 	active       bool
 	spawnEnabled bool
 
+	// An installed sequence this instance never spawned has no timer splash:
+	// spawnGold raises it and an install replaces state without replaying it (D-6)
+	splashDue bool
+
 	// Cached metric pointers
 	statActive        *atomic.Bool
 	stateHeaderEntity *atomic.Int64
@@ -65,6 +69,7 @@ func (s *GoldSystem) Init() {
 	s.timeoutTime = time.Time{}
 	s.contrib = [parameter.MaxPlayers]int{}
 	s.spawnEnabled = true
+	s.splashDue = false
 	s.statActive.Store(false)
 	s.stateHeaderEntity.Store(0)
 	s.statTimer.Store(0)
@@ -179,8 +184,13 @@ func (s *GoldSystem) Update() {
 		}
 		s.statTimer.Store(int64(remaining))
 		s.stateHeaderEntity.Store(int64(s.headerEntity))
+		if s.splashDue {
+			s.splashDue = false
+			s.requestTimerSplash(remaining)
+		}
 	} else {
 		s.statTimer.Store(0)
+		s.splashDue = false
 		return
 	}
 
@@ -346,16 +356,22 @@ func (s *GoldSystem) spawnGold() bool {
 		Length:       parameter.GoldSequenceLength,
 		Duration:     parameter.GoldDuration,
 	})
-	// Splash timer spawn event, no need for splash cancel event, automatically cancelled when anchor is destroyed
+	s.splashDue = false
+	s.requestTimerSplash(parameter.GoldDuration)
+
+	return true
+}
+
+// requestTimerSplash raises the countdown anchored to the sequence header. No
+// cancel counterpart: the splash dies with its anchor.
+func (s *GoldSystem) requestTimerSplash(remaining time.Duration) {
 	s.world.PushLocal(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
-		AnchorEntity: headerEntity,
+		AnchorEntity: s.headerEntity,
 		Color:        visual.RgbSplashWhite,
 		MarginRight:  parameter.GoldSequenceLength,
 		MarginBottom: 1, // One line height
-		Duration:     parameter.GoldDuration,
+		Duration:     remaining,
 	})
-
-	return true
 }
 
 // handleMemberTyped processes a gold character being typed
@@ -576,6 +592,9 @@ func (s *GoldSystem) LoadShared(data []byte) error {
 		return fmt.Errorf("gold: %w", err)
 	}
 	now := s.world.Resources.Time.GameTime
+	// A header this instance did not spawn arrived with the capture rather than
+	// through spawnGold, so its timer splash was never raised here.
+	s.splashDue = snap.Active && snap.HeaderEntity != s.headerEntity
 	s.active = snap.Active
 	s.spawnEnabled = snap.SpawnEnabled
 	s.headerEntity = snap.HeaderEntity

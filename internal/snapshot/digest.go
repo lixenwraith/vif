@@ -114,7 +114,8 @@ func DigestWorld(w *engine.World, scope engine.DomainScope) WorldDigest {
 			i64(int64(c.HitPoints)).b(c.IsEnraged).
 			i64(int64(c.StunnedRemaining)).
 			i64(int64(c.RemainingKineticImmunity)).
-			i64(int64(c.RemainingDamageImmunity))
+			i64(int64(c.RemainingDamageImmunity)).
+			u64(uint64(c.DamageImmunitySpent))
 	}
 
 	wd.Entities = newHash().

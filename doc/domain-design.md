@@ -273,7 +273,15 @@ Declared system carriers are:
 | `genetic` | streaming checkpoints, archives, pending evaluations, IDs, scout state, fitness accumulators |
 | `navigation` | recompute phase, targets, route rebuild budget, route endpoints |
 | `gold` | sequence liveness, header, deadlines, per-slot contribution |
+| `storm` | live root entity, swarm spawns pending a blue attack |
+| `meta` | kill tallies, combined defeat latch, cycle damage multiplier |
 | `environment` | active base wind, remaining duration, enable/applied phase |
+
+A carrier is also where a status cell the compared surface excludes has to live.
+`SharedKey` answers what two instances must agree on, and a capture reads through
+it, so an excluded cell is carried by nobody: `kills.*` is a mixed-domain
+aggregate and `energy.damage_multiplier` sits under a player-profile prefix, yet
+both steer shared FSM regions. `meta` carries them.
 
 A capture also carries every RNG stream position, FSM runtime state, Shared
 component stores, allocator counters, and the compared status surface. Durations

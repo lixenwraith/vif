@@ -271,7 +271,7 @@ var systemSnapshots = map[string]engine.SnapshotProfile{
 	"drain":          engine.SnapshotNone,
 	"quasar":         engine.SnapshotNone,
 	"swarm":          engine.SnapshotNone,
-	"storm":          engine.SnapshotNone,
+	"storm":          engine.SnapshotState,
 	"pylon":          engine.SnapshotNone,
 	"snake":          engine.SnapshotNone,
 	"eye":            engine.SnapshotNone,
@@ -290,5 +290,5 @@ var systemSnapshots = map[string]engine.SnapshotProfile{
 	"genetic":        engine.SnapshotState,
 	"audio":          engine.SnapshotNone,
 	"music":          engine.SnapshotNone,
-	"meta":           engine.SnapshotNone,
+	"meta":           engine.SnapshotState,
 }

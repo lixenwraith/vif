@@ -95,6 +95,72 @@ Manual intensity changes always use per-bar track reveal, while automatic
 changes reveal only when intensity rises. Decide whether manual decreases should
 retain that distinction.
 
+## Multiplayer
+
+Diagnoses and what each item follows from are in
+[Troubleshooting](troubleshooting.md).
+
+### Split "compared" from "carried" in the status surface
+
+- Priority: P1
+- Affected files: `internal/snapshot/surface.go`, `internal/app/capture.go`
+- Prerequisite: name every excluded cell an FSM guard or system reads
+
+`SharedKey` decides both what two instances compare and what a capture carries,
+so a mixed-domain cell is dropped from the correction as well. `meta` carries
+`kills.*` and `energy.damage_multiplier` around it; a second predicate removes the
+workaround.
+
+### Audit what a pruned crossing loses
+
+- Priority: P1
+- Affected files: `internal/system/network.go`, `internal/app/barrier.go`
+- Prerequisite: the split above, so a counter can be carried instead of replayed
+
+An authority frame the capture's fence already claims is discarded on the
+receiver. That is correct for shared component state and wrong for every other
+effect the frame would have had. Enumerate them.
+
+### Decide whether kinetic immunity is per attacker
+
+- Priority: P2
+- Affected files: `internal/system/combat.go`, `internal/component/combat.go`
+- Prerequisite: a two-participant repro of a swarm that stops steering
+
+Damage immunity is now budgeted per attacker; kinetic immunity is still one
+window per target, and it suppresses homing as well as knockback. Two impulses on
+one body is a physics decision, not a networking one.
+
+### Give a splash anchor a generation
+
+- Priority: P2
+- Affected files: `internal/system/splash.go`, `internal/component/splash.go`
+- Prerequisite: decide whether shared ids may be re-issued at all
+
+A capture restores `NextEntity`, so an install that rolls the allocator back
+re-issues shared ids. A timer splash whose anchor died can find a different
+composite under the same id and keep counting.
+
+### Confirm the storm skip
+
+- Priority: P2
+- Affected files: `wad/game/main/storm.toml`, `internal/system/storm.go`
+- Prerequisite: a run that reaches three quasar kills with a crowded map centre
+
+The spawn retry and the carried kill counters address both candidate mechanisms
+without either being confirmed. `storm.spawn_failures` and a `StormSetupRetry` in
+`fsm.storm` tell them apart. `wad/game/td/td_storm.toml` still waits blind.
+
+### Keep shared FSM guards off owner-authored keys
+
+- Priority: P3
+- Affected files: `wad/game/main/monitor.toml`
+- Prerequisite: a replicated liveness signal to replace the slot mirror
+
+`MonitorWarmup` guards on `player.0.heat.current` and `player.0.energy.current`.
+Both are owner-authored, so a receiver never writes them and no capture carries
+them. The state is unreachable today, which is why it is a latent hole.
+
 ## Runtime structure
 
 ### Separate drain population reconciliation concerns

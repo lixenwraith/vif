@@ -15,7 +15,22 @@ on_enter = [
     { action = "EmitEvent", event = "EventStormSpawnRequest" },
 ]
 transitions = [
-    { trigger = "Tick", target = "StormActive", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+    { trigger = "EventSpeciesCreated", target = "StormActive", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 4 } },
+    # An installed state never runs the on_enter above, so liveness rather than the
+    # creation event admits a receiver whose FSM was corrected into this region.
+    { trigger = "Tick", target = "StormActive", guard = "And", guard_args = { guards = [
+        { name = "StateTimeExceeds", args = { ms = 500 } },
+        { name = "StatusBoolEquals", args = { key = "storm.active", value = true } },
+    ] } },
+    # The request was refused: ask again instead of falling through StormActive's
+    # defensive timeout, which retires the region as if the storm had been fought.
+    { trigger = "Tick", target = "StormSetupRetry", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.StormSetupRetry]
+parent = "StormHold"
+transitions = [
+    { trigger = "Tick", target = "StormSetup", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
 ]
 
 [states.StormActive]

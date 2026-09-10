@@ -24,6 +24,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Multi-instance domain model](domain-design.md) | Medium/detail | How are entities, events, RNG streams and systems split between shared and player domains, who holds authority over what, and what is still missing? |
 | [Multiplayer enhancement plan](multi-player-enhancement.md) | Medium/detail | Why does the current session feel slow and diverge, what replaces it, and in what order does the work land? **Start here for multiplayer.** |
 | [Desynchronisation and recovery](desync.md) | Medium/detail | Diagnosis of the 2026-08-30 divergence and a survey of the recovery option space. Its recommendation is superseded by the plan above. |
+| [Troubleshooting](troubleshooting.md) | Medium/detail | Diagnosis of the 2026-09-10 two-instance defects: what an installed FSM state does not run, what a pruned crossing loses, and why a contested immunity window reads as no damage. |
 | [Gameplay systems](gameplay.md) | Domain detail | What are the player mechanics, world mechanics, species, encounters, and system responsibilities? |
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |

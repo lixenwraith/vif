@@ -235,7 +235,7 @@ func (s *SnakeSystem) Update() {
 
 		// Sync head immunity based on shield
 		if snakeComp.IsShielded {
-			headCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+			headCombat.SealDamageImmunity(parameter.CombatDamageImmunityDuration)
 			headCombat.RemainingKineticImmunity = parameter.CombatKineticImmunityDuration
 		}
 

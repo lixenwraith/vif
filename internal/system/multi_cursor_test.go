@@ -693,6 +693,46 @@ func TestDirectDamageAppliesExactlyOnce(t *testing.T) {
 	}
 }
 
+// TestDamageImmunityBudgetIsPerAttacker: the window belongs to the target, its
+// budget to each attacker. One shared window divides a target's damage between the
+// roster, and with the receive lead a guest's hits land inside the host's shadow.
+func TestDamageImmunityBudgetIsPerAttacker(t *testing.T) {
+	w, first, second := testCursorWorld(t)
+	combat := NewCombatSystem(w).(*CombatSystem)
+
+	target := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
+	w.Components.Combat.SetComponent(target, component.CombatComponent{
+		OwnerEntity:      target,
+		CombatEntityType: component.CombatEntityDrain,
+		HitPoints:        parameter.CombatInitialHPDrain,
+	})
+
+	hit := func(owner core.Entity) {
+		combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
+			OwnerEntity: owner, OriginEntity: owner,
+			TargetEntity: target, HitEntity: target,
+			AttackType: component.CombatAttackProjectile,
+		})
+	}
+
+	// Two cursors, one hit each, then a second round inside the same window.
+	hit(first)
+	hit(second)
+	hit(first)
+	hit(second)
+
+	got, _ := w.Components.Combat.GetComponent(target)
+	want := parameter.CombatInitialHPDrain - 2*parameter.CombatDamageCleaner
+	if got.HitPoints != want {
+		t.Fatalf("hit points = %d, want %d: one hit per cursor per window", got.HitPoints, want)
+	}
+	if got.RemainingDamageImmunity != parameter.CombatDamageImmunityDuration {
+		t.Fatalf("window = %v, want %v: a later attacker extended it",
+			got.RemainingDamageImmunity, parameter.CombatDamageImmunityDuration)
+	}
+}
+
 // TestPassiveDrainSurvivesATransportedStamp covers the other way a per-cursor
 // shield can stop draining: LastDrainTime is an absolute simulation instant and
 // the component is captured, so a cursor materialised from an authority further

@@ -15,14 +15,14 @@ import (
 type EnergySystem struct {
 	world *engine.World
 
-	// Cycle difficulty scaling: a world property, not a player one
-	damageMultiplier int64
-
 	// Per-cursor state
 	statCurrent *status.PlayerInt
 
-	// Roster-wide occurrence counters
+	// Cycle difficulty scaling is world state MetaSystem owns and carries (D-19);
+	// this reads it to scale penalties
 	statDamageMultiplier *atomic.Int64
+
+	// Roster-wide occurrence counters
 	statPenaltyCount     *atomic.Int64
 	statRewardCount      *atomic.Int64
 	statSpendCount       *atomic.Int64
@@ -61,10 +61,7 @@ func NewEnergySystem(world *engine.World) engine.System {
 
 // Init resets session state for a new game
 func (s *EnergySystem) Init() {
-	s.damageMultiplier = 1
-
 	s.statCurrent.Reset()
-	s.statDamageMultiplier.Store(1)
 	s.statPenaltyCount.Store(0)
 	s.statRewardCount.Store(0)
 	s.statSpendCount.Store(0)
@@ -94,8 +91,6 @@ func (s *EnergySystem) EventTypes() []event.EventType {
 		event.EventEnergyGlyphConsumed,
 		event.EventEnergyBlinkStart,
 		event.EventEnergyBlinkStop,
-		event.EventCycleDamageMultiplierIncrease,
-		event.EventCycleDamageMultiplierReset,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
@@ -132,16 +127,6 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 		if p, ok := ev.Payload.(*event.CursorDespawnedPayload); ok {
 			s.statCurrent.Store(p.Slot, 0)
 		}
-		return
-
-	case event.EventCycleDamageMultiplierIncrease:
-		s.damageMultiplier *= 2
-		s.statDamageMultiplier.Store(s.damageMultiplier)
-		return
-
-	case event.EventCycleDamageMultiplierReset:
-		s.damageMultiplier = 1
-		s.statDamageMultiplier.Store(1)
 		return
 	}
 
@@ -278,7 +263,7 @@ func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage boo
 
 	// Apply cycle damage multiplier to penalties
 	if deltaType == component.EnergyDeltaPenalty {
-		absDelta *= s.damageMultiplier
+		absDelta *= max(s.statDamageMultiplier.Load(), 1)
 	}
 
 	var newEnergy int64

@@ -662,8 +662,9 @@ type CursorStatePayload struct {
 	BoostTotal       int64 `toml:"boost_total"`
 	MainFireCooldown int64 `toml:"main_fire_cooldown"`
 
-	HitPoints      int   `toml:"hit_points"`
-	DamageImmunity int64 `toml:"damage_immunity"`
+	HitPoints           int    `toml:"hit_points"`
+	DamageImmunity      int64  `toml:"damage_immunity"`
+	DamageImmunitySpent uint32 `toml:"damage_immunity_spent"`
 
 	ErrorFlash     int64 `toml:"error_flash"`
 	BurstFlash     int64 `toml:"burst_flash"`

@@ -1,6 +1,8 @@
 package system
 
 import (
+	"encoding/json"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -222,6 +224,41 @@ func (s *StormSystem) Update() {
 
 	s.world.Components.Storm.SetComponent(s.rootEntity, stormComp)
 	s.statCircleCount.Store(int64(aliveCount))
+}
+
+// stormSnapshot is this system's D-19 record. The live storm's root and the swarm
+// spawns waiting on a blue attack decide future shared outcomes and live outside
+// any store: a receiver whose FSM was moved past StormSetup by an install never ran
+// the spawn, so without these it holds the storm's entities and simulates none of
+// them. Timers are relative already.
+type stormSnapshot struct {
+	RootEntity core.Entity        `json:"root_entity"`
+	Pending    []pendingBlueSpawn `json:"pending_blue_spawns"`
+}
+
+// SaveShared carries the storm's private state (D-19).
+func (s *StormSystem) SaveShared() ([]byte, error) {
+	return json.Marshal(stormSnapshot{RootEntity: s.rootEntity, Pending: s.pendingBlueSpawns})
+}
+
+// LoadShared adopts a captured storm and republishes what derives from it.
+func (s *StormSystem) LoadShared(data []byte) error {
+	var snap stormSnapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return fmt.Errorf("storm: %w", err)
+	}
+	s.rootEntity = snap.RootEntity
+	s.pendingBlueSpawns = append(s.pendingBlueSpawns[:0], snap.Pending...)
+
+	alive := 0
+	if stormComp, ok := s.world.Components.Storm.GetComponent(s.rootEntity); ok {
+		alive = s.AliveCount(&stormComp)
+	} else {
+		s.rootEntity = 0
+	}
+	s.statActive.Store(s.rootEntity != 0)
+	s.statCircleCount.Store(int64(alive))
+	return nil
 }
 
 // buildEllipseOffsets populates the LUT of cell offsets inside the circle ellipse
@@ -1050,7 +1087,7 @@ func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormCompo
 			if !ok {
 				continue
 			}
-			memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+			memberCombat.SealDamageImmunity(parameter.CombatDamageImmunityDuration)
 		}
 	}
 }

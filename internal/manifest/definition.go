@@ -174,7 +174,7 @@ var Systems = []SystemDef{
 		Optional: []string{"navigation", "combat", "lightning"}}, // shared stream and composite species with a D-12 footprint sweep
 	{Name: "swarm", Constructor: "NewSwarmSystem", Domain: "shared", Requires: []string{"composite"},
 		Optional: []string{"navigation", "combat"}}, // shared stream and composite species with a D-12 footprint sweep
-	{Name: "storm", Constructor: "NewStormSystem", Domain: "shared", Requires: []string{"composite"},
+	{Name: "storm", Constructor: "NewStormSystem", Domain: "shared", Snapshot: "state", Requires: []string{"composite"}, // the live root and pending blue spawns live outside any store
 		Optional: []string{"navigation", "combat", "bullet", "dust", "wall"}}, // shared stream and composite species with a D-12 footprint sweep
 	{Name: "pylon", Constructor: "NewPylonSystem", Domain: "shared", Requires: []string{"composite"},
 		Optional: []string{"navigation", "combat"}}, // shared stream and composite species state
@@ -214,7 +214,7 @@ var Systems = []SystemDef{
 // profiles here still subjects them to fingerprint, dependency, and domain
 // validation without widening every ordinary system constructor.
 var ContextSystems = []SystemDef{
-	{Name: "meta", Constructor: "NewMetaSystem", Domain: "shared"}, // world writes are replicated or the D-14 map writer; publishes context and kill counters
+	{Name: "meta", Constructor: "NewMetaSystem", Domain: "shared", Snapshot: "state"}, // world writes are replicated or the D-14 map writer; carries the kill counters, defeat latch and cycle multiplier that gate shared FSM regions
 }
 
 // Renderers is the authoritative renderer list

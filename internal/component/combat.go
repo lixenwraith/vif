@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 type CombatEntityType int
@@ -80,6 +81,11 @@ type CombatComponent struct {
 	// RemainingDamageImmunity is remaining immunity time for damage
 	RemainingDamageImmunity time.Duration
 
+	// DamageImmunitySpent names the attackers that have already landed a hit in
+	// the open window: one bit per roster slot, the top bit for an attack no
+	// cursor owns. The window is the target's, its budget is per attacker.
+	DamageImmunitySpent uint32
+
 	// RemainingHitFlash is the remaining duration of hit visual feedback
 	RemainingHitFlash time.Duration
 
@@ -88,4 +94,40 @@ type CombatComponent struct {
 
 	// StunnedRemaining is remaining stun duration (movement suppressed)
 	StunnedRemaining time.Duration
+}
+
+// unownedAttacker is the immunity bit for an attack no cursor owns
+const unownedAttacker = 1 << parameter.MaxPlayers
+
+// DamageImmuneTo reports whether this attacker already spent its hit in the open
+// window. A window one participant opened does not consume another's budget: a
+// shared cooldown would divide one target's damage between the roster.
+func (c *CombatComponent) DamageImmuneTo(attacker uint32) bool {
+	return c.RemainingDamageImmunity != 0 && c.DamageImmunitySpent&attacker != 0
+}
+
+// SpendDamageImmunity records a landed hit, opening the window when it is closed.
+// An attacker joining a window late may land twice inside one duration; the rate
+// stays bounded at two hits per window and the alternative is a timer per slot.
+func (c *CombatComponent) SpendDamageImmunity(attacker uint32, d time.Duration) {
+	if c.RemainingDamageImmunity == 0 {
+		c.RemainingDamageImmunity = d
+		c.DamageImmunitySpent = 0
+	}
+	c.DamageImmunitySpent |= attacker
+}
+
+// SealDamageImmunity opens a window no attacker may spend, for species-authored
+// invulnerability rather than the per-attacker hit rate limit.
+func (c *CombatComponent) SealDamageImmunity(d time.Duration) {
+	c.RemainingDamageImmunity = d
+	c.DamageImmunitySpent = ^uint32(0)
+}
+
+// AttackerBit names an attacking cursor's slot inside a target's immunity window.
+func AttackerBit(slot uint8, owned bool) uint32 {
+	if owned && int(slot) < parameter.MaxPlayers {
+		return 1 << slot
+	}
+	return unownedAttacker
 }
