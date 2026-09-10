@@ -11,3 +11,4 @@ catalog.txt
 combined.txt
 web/*.wasm
 cmd/vif/vif
+tmp/

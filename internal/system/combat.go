@@ -847,6 +847,13 @@ func (s *CombatSystem) recordChain(depth uint8, count int) {
 // applyStunEffect applies stun to target entity
 // Returns false if target is immune to stun
 func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatComp *component.CombatComponent) bool {
+	// A running stun is not refreshed. Refreshing it made every later hit — the
+	// other participant's included — extend the lockdown, so a target under
+	// continuous fire never left it.
+	if targetCombatComp.StunnedRemaining > 0 {
+		return false
+	}
+
 	// Quasar immunity: shielded state
 	if quasarComp, ok := s.world.Components.Quasar.GetPtr(targetEntity); ok {
 		if quasarComp.IsShielded {

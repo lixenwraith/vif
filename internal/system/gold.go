@@ -34,6 +34,9 @@ type GoldSystem struct {
 	// spawnGold raises it and an install replaces state without replaying it (D-6)
 	splashDue bool
 
+	// Footprint clearing collector
+	sweep cellSweep
+
 	// Cached metric pointers
 	statActive        *atomic.Bool
 	stateHeaderEntity *atomic.Int64
@@ -304,7 +307,9 @@ func (s *GoldSystem) spawnGold() bool {
 		return false
 	}
 
-	// 4. Set Phantom Head to Positions AFTER batch success
+	// 4. Clear the footprint of this instance's own occupants, then set the
+	// Phantom Head position AFTER batch success
+	s.clearGoldSpawnArea(x, y, parameter.GoldSequenceLength)
 	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: x, Y: y})
 	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll ^ component.ProtectFromDeath,
@@ -360,6 +365,21 @@ func (s *GoldSystem) spawnGold() bool {
 	s.requestTimerSplash(parameter.GoldDuration)
 
 	return true
+}
+
+// clearGoldSpawnArea empties the sequence footprint of player-domain occupants.
+// The cells are shared geometry claimed by a shared spawn (D-12), and each
+// participant's own glyphs, drains and nuggets sit in them differently; leaving
+// them there is a per-instance difference inside a replicated footprint. Shared
+// occupancy stays CommitShared's to refuse.
+func (s *GoldSystem) clearGoldSpawnArea(x, y, length int) {
+	s.sweep.reset()
+	for i := range length {
+		s.sweep.collect(s.world, x+i, y, func(e core.Entity) bool {
+			return e.Domain() == core.DomainPlayer && speciesClearable(s.world, e, nil, nil)
+		})
+	}
+	s.sweep.destroy(s.world)
 }
 
 // requestTimerSplash raises the countdown anchored to the sequence header. No
@@ -507,9 +527,19 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 		return -1, -1
 	}
 
-	for range parameter.GoldSpawnMaxAttempts {
-		x := s.rng.Intn(config.MapWidth)
-		y := s.rng.Intn(config.MapHeight)
+	// Every candidate is drawn before any is examined. The filters below read
+	// cursor positions, and two instances hold a cursor at different points of the
+	// receive lead (§3.1), so a draw count that depended on them would leave the
+	// shared gold stream at a different position on each — and every later
+	// sequence, not just this one, would then differ until a correction.
+	var cx, cy [parameter.GoldSpawnMaxAttempts]int
+	for i := range parameter.GoldSpawnMaxAttempts {
+		cx[i] = s.rng.Intn(config.MapWidth)
+		cy[i] = s.rng.Intn(config.MapHeight)
+	}
+
+	for i := range parameter.GoldSpawnMaxAttempts {
+		x, y := cx[i], cy[i]
 
 		// Check if far enough from every cursor.
 		nearCursor := false
@@ -533,8 +563,8 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 
 		// Check for overlaps with existing characters
 		overlaps := false
-		for i := range seqLength {
-			if s.world.Positions.IsBlocked(x+i, y, component.WallBlockParticle) {
+		for c := range seqLength {
+			if s.world.Positions.IsBlocked(x+c, y, component.WallBlockParticle) {
 				overlaps = true
 				break
 			}

@@ -129,7 +129,9 @@ effect the frame would have had. Enumerate them.
 
 Damage immunity is now budgeted per attacker; kinetic immunity is still one
 window per target, and it suppresses homing as well as knockback. Two impulses on
-one body is a physics decision, not a networking one.
+one body is a physics decision, not a networking one. Stun is deliberately not
+per attacker: a running one is refused rather than refreshed, which is what a
+lockdown window should be.
 
 ### Give a splash anchor a generation
 
@@ -150,6 +152,29 @@ composite under the same id and keep counting.
 The spawn retry and the carried kill counters address both candidate mechanisms
 without either being confirmed. `storm.spawn_failures` and a `StormSetupRetry` in
 `fsm.storm` tell them apart. `wad/game/td/td_storm.toml` still waits blind.
+
+### Prove or rule out a stale gold surviving a correction
+
+- Priority: P1
+- Affected files: `internal/app/correction_selective.go`, `internal/snapshot/manifest.go`
+- Prerequisite: a two-instance repro that leaves the guest holding two sequences
+
+A guest was seen holding a gold the host had destroyed, and once two at a time.
+Every destruction path clears the carrier and destroys the composite, and
+`ReconcileSharedWorld` drops shared entities the capture does not name, so the
+remaining candidate is a selective repair whose page reconstruction keeps an
+entity only the receiver holds.
+
+### Let a scripted participant survive a tick jump
+
+- Priority: P2
+- Affected files: `internal/journal/script.go`
+- Prerequisite: decide whether a replay must still refuse the same overshoot
+
+`ScriptDriver.applyCurrent` fails the run when the world tick has passed an
+action's target tick. A correction moves the world tick, so a scripted guest in a
+live session ends itself for a reason the session is entitled to. A replay has no
+corrections and should keep refusing it.
 
 ### Keep shared FSM guards off owner-authored keys
 

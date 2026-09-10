@@ -174,17 +174,9 @@ func (s *SwarmSystem) Update() {
 		if !ok {
 			continue
 		}
-		// Stun check: skip movement, reset state machine
-		if combatComp.StunnedRemaining > 0 {
-			// Reset state machine on first stunned tick
-			if swarmComp.State != component.SwarmStateChase {
-				s.resetSwarmState(swarmComp)
-			}
-			// Animation frozen during stun - no pattern cycle update via updatePatternCycle
-			continue
-		}
-
-		// HP check → player kill, despawn
+		// HP check → player kill, despawn. Ahead of the stun check, as every other
+		// species orders it: a stunned swarm that skips this never dies however
+		// much damage it takes.
 		if combatComp.HitPoints <= 0 {
 			killX, killY := -1, -1
 			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
@@ -206,6 +198,17 @@ func (s *SwarmSystem) Update() {
 		if swarmComp.ChargesCompleted >= parameter.SwarmMaxCharges {
 			s.lifecycle.killedLifecycle.Add(1)
 			s.despawnSwarm(headerEntity)
+			continue
+		}
+
+		// Stun check: skip movement, reset state machine
+		if combatComp.StunnedRemaining > 0 {
+			// Reset state machine on first stunned tick
+			if swarmComp.State != component.SwarmStateChase {
+				s.resetSwarmState(swarmComp)
+			}
+			// Animation frozen during stun - no pattern cycle update via updatePatternCycle
+			activeCount++
 			continue
 		}
 

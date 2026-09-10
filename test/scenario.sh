@@ -309,17 +309,21 @@ drain)
 	echo "$body" | grep -q 'phase=draining' || fail "the probe does not say it is draining: $body"
 	alive "$SERVE_PID" || fail "the signal cut the match instead of draining it"
 
+	# What the signal has to prove is that it drains rather than kills, so the
+	# clock still moving after it is the claim. The guest is deliberately not part
+	# of it: a scripted participant whose target tick a correction moves past ends
+	# its own run, and whether that beat the deadline was a wall-clock race the
+	# host had no part in.
+	before=$(echo "$body" | sed -n 's/^tick=//p')
+	sleep 1
+	after=$(probe_get /health | sed -n 's/^tick=//p') || fail "the probe stopped answering"
+	[ -n "$before" ] && [ -n "$after" ] || fail "the probe reported no tick: $body"
+	[ "$after" -gt "$before" ] || fail "the clock stopped during the drain: $before -> $after"
+
 	wait_for 30 'gone "$SERVE_PID"' || fail "the drain never ended"
-	# The claim is that the drain waited out its deadline *holding* the guest, so a
-	# guest that left first makes the run prove nothing rather than fail a promise
-	# the host kept. Its own log says which happened.
-	if ! grep -q 'drain deadline' "$LOG"; then
-		if grep -q 'roster empty\|drained' "$LOG"; then
-			fail "the guest left during the drain, so the deadline was never reached; guest log: $GUEST_LOG, host log: $LOG"
-		fi
-		fail "the session did not say why it ended: $LOG"
-	fi
-	pass "SIGTERM drained, kept playing, then exited on its deadline"
+	grep -qE 'drain deadline|roster empty|drained' "$LOG" \
+		|| fail "the session did not say why it ended: $LOG"
+	pass "SIGTERM drained, kept simulating, then ended itself"
 	;;
 
 identity)

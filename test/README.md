@@ -62,12 +62,14 @@ them believes it is hosting one. See
 |---|---|
 | `check` | embedded, default `wad/game/main`, and named `wad/game/td` all resolve |
 | `lifetime` | an unclaimed session exits 0 on its first-guest window; an emptied one exits 0 on its vacancy grace, each naming why |
-| `drain` | `SIGTERM` keeps the match running, reports `live=true ready=false phase=draining`, then exits on the drain deadline |
+| `drain` | `SIGTERM` keeps the match running, reports `live=true ready=false phase=draining`, keeps the clock moving, then ends itself |
 | `identity` | a peer running a different build or session is refused (runs the Go tests that can construct one) |
 
-`drain` needs its guest to outlive the drain window to prove anything. If the guest
-leaves first the run says so and names both logs, because a session that ended on an
-empty roster kept its promise — it just did not demonstrate the one being tested.
+`drain` asserts the clock still advances after the signal rather than which reason
+ended the session. Its guest is a scripted participant, and a correction that moves
+the world tick past one of the script's target ticks ends that participant's run —
+so whether the guest outlived the drain window was a wall-clock race that said
+nothing about the host.
 
 ## Container
 

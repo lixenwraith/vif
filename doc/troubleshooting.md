@@ -1,12 +1,12 @@
-# Troubleshooting: four two-instance defects (2026-09-10)
+# Troubleshooting: two-instance defects (2026-09-10)
 
-Four defects observed with host and guest on one machine, so the receive lead is
-the only latency in play. Sources: `bin/vif -host :7777 -lv trace -ls all`
-(participant 1) and `bin/vif -join :7777` (participant 2), captured as
-`tmp/vif-log-260910-0227{17,18}.jsonl`.
+Defects observed with host and guest on one machine, so the receive lead is the
+only latency in play. Sources are trace logs of a `-host` and a `-join` run; the
+figures quoted are from them and the logs themselves are not kept in the tree.
+Section 7 is a second round after the first five landed.
 
-Three of the four are the same defect wearing different clothes, so that shape is
-stated once and each issue refers to it. The invariants are in
+Three of the first four are the same defect wearing different clothes, so that
+shape is stated once and each issue refers to it. The invariants are in
 [Multi-instance domain model](domain-design.md); the operating contract is in
 [Multiplayer architecture](multi-player-enhancement.md).
 
@@ -139,6 +139,9 @@ homing as well as knockback — a swarm under continuous two-player fire barely
 steers. Whether two participants should be able to knock one body around twice as
 hard is a physics question, not a networking one. See `doc/todo.md`.
 
+**Incomplete.** This was the right change and not the whole one: the swarms that
+would not die were not being refused damage, they were never asked. §7.1.
+
 ## 5. Issue 4 — the storm region retires as soon as it spawns
 
 Not in either log: neither run reached three quasar kills. Two mechanisms are
@@ -193,3 +196,93 @@ silent 2.5 s in `StormActive`.
   latent D-20 hole rather than a live defect.
 
 Each of these is one line in [TODO](todo.md).
+
+## 7. Second round (2026-09-10, after the above landed)
+
+### 7.1 The undying swarm
+
+Per-attacker damage windows (§4) were a real fix and the wrong suspect. A swarm
+that will not die is not being refused damage; its own system never looks.
+
+```go
+// SwarmSystem.Update, before
+if combatComp.StunnedRemaining > 0 { ...; continue }   // stun
+if combatComp.HitPoints <= 0 { ...despawn...; continue } // hit points
+```
+
+A stunned swarm returned before the hit-point check, so it did not die however
+much damage it took, and before `activeCount++`, so it left the tally as well.
+The session log says both halves in one line: `swarm.count 0` beside
+`combat.live.swarm 3`, with `swarm.spawned 31` and `killed_by_player 28` — three
+swarms alive, unkillable, and invisible to the system that owns them.
+
+Quasar and eye order the same two checks the other way round, with the stun
+branch counting itself active. Swarm was the outlier.
+
+The stun stayed on because `applyStunEffect` wrote
+`StunnedRemaining = PulseStunDuration` unconditionally on every pulse hit — a
+2-second window refreshed by each of the two participants in turn. That is the
+timer reset §4 looked for and did not find: the reported behaviour was a stun
+lock, not a damage window.
+
+**Fix.** The hit-point and charge checks move ahead of the stun check and the
+stun branch counts as active, matching quasar and eye. A running stun is no
+longer refreshed: a second hit is refused (`combat.rejects.stun_immune`) rather
+than extending the lockdown. Damage and kinetic windows already behaved this way
+— neither is extended by a later hit, and after §4 damage is budgeted per
+attacker as well.
+
+### 7.2 Gold: what the spawn actually depends on
+
+The hypothesis was that gold's spawn clearance reads both domains. It does not:
+`findValidPosition` rejects a cell through `IsBlocked` → `HasBlockingWallAt`,
+which views `ScopeShared` and matches only walls, and `PositionBatch.CommitShared`
+gates on `HasAnySharedEntityAt`. Both were already shared-only, so neither is a
+source of divergence.
+
+What the search does read is **cursor positions**, and that is a source. An
+ordinary crossing applies at once on its producer and a playout lead later
+everywhere else (§3.1 of the plan), so at any tick the two instances hold the
+guest's cursor at different cells. The exclusion band is `|dx| <= 5` **or**
+`|dy| <= 3` around every cursor — roughly a quarter of the map per cursor — so
+the two instances accept and reject different candidates. Each rejected candidate
+had already consumed two draws from the shared gold stream, so a single
+disagreement left the stream at a different position on each instance, and every
+*later* sequence and position differed too, not just this one. That is the
+"one gold here, another gold there" report, and it is why it did not settle.
+
+**Fix.** Every candidate is drawn before any is examined, so the stream advances
+by a fixed amount whatever the filters decide. A mispredicted gold is now one
+gold's worth of divergence that the next correction closes, instead of a
+permanently offset stream.
+
+**Also fixed, as asked.** Gold now clears its footprint of player-domain
+occupants before it takes the cells, the way every other shared spawner does
+(D-12). It was the only shared spawn landing on top of each participant's own
+glyphs, drains and nuggets — a different set on each instance inside a replicated
+footprint. Shared occupancy stays `CommitShared`'s to refuse, which is what keeps
+the change to the domain the report named.
+
+**Not closed.** Neither of these explains a guest holding a gold the host has
+destroyed, or two at once. Every destruction path pushes
+`EventCompositeDestroyRequest` and clears the carrier's state, and
+`ReconcileSharedWorld` removes shared entities the capture does not name, so a
+stale sequence should not survive a correction. The remaining candidate is the
+selective repair: an entity only the receiver holds must land in a page whose
+hash differs, and the reconstruction must then drop it. That path is not proved
+either way here. See `doc/todo.md`.
+
+### 7.3 `scenario.sh drain`
+
+Reworked rather than removed. It asserted that the drain "waited out its deadline
+*holding* the guest", which needed a scripted guest to outlive a wall-clock
+window. `ScriptDriver.applyCurrent` fails the run when the world tick has passed
+an action's target tick — and a correction moves the world tick, so on a loaded
+machine the guest ended itself and the scenario reported a failure the host had
+no part in.
+
+The scenario now asserts what the signal is actually promising: the probe reports
+`live=true ready=false phase=draining`, the process survives the signal, **the
+tick advances while draining**, and the session ends itself naming a reason. The
+guest is no longer part of the claim. That a scripted participant cannot survive
+a tick jump is real and is in `doc/todo.md`.

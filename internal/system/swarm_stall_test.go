@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
@@ -86,6 +87,71 @@ func TestSwarmKeepsIntegratingWhenLockCannotResolve(t *testing.T) {
 
 	if stalls := w.Resources.Status.Ints.Get("swarm.transition_stalls").Load(); stalls == 0 {
 		t.Fatal("a refused lock entry was not counted; the condition is invisible in a session log")
+	}
+}
+
+// TestAStunnedSwarmStillDies is the regression for the swarm found unkillable on
+// 2026-09-10. The stun check preceded the hit-point check and returned, so a
+// stunned swarm never noticed zero hit points; it also skipped the active tally,
+// so swarm.count read 0 while combat.live.swarm read 3. Pulse refreshed the stun
+// on every hit, and with two participants firing the stun never lapsed.
+func TestAStunnedSwarmStillDies(t *testing.T) {
+	w, s, header := newStalledSwarm(t)
+
+	tick := func() {
+		w.Resources.Time.Update(engine.SimTime(0, parameter.GameUpdateInterval),
+			engine.SimTime(0, parameter.GameUpdateInterval), parameter.GameUpdateInterval)
+		s.Update()
+	}
+
+	combat, _ := w.Components.Combat.GetPtr(header)
+	combat.StunnedRemaining = parameter.PulseStunDuration
+
+	// A stun suspends movement, not membership: swarm.count and combat.live.swarm
+	// disagreeing is what named this defect in the session log.
+	tick()
+	if n := w.Resources.Status.Ints.Get("swarm.count").Load(); n != 1 {
+		t.Fatalf("swarm.count = %d while stunned, want 1", n)
+	}
+
+	combat.HitPoints = 0
+	w.Resources.Event.Queue.Consume()
+	tick()
+
+	killed, destroyed := false, false
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		switch ev.Type {
+		case event.EventSpeciesKilled:
+			killed = true
+		case event.EventCompositeDestroyRequest:
+			destroyed = true
+		}
+	}
+	if !killed || !destroyed {
+		t.Fatalf("stunned swarm at zero hit points: killed=%v destroyed=%v, want both",
+			killed, destroyed)
+	}
+}
+
+// TestAStunIsNotRefreshedWhileItRuns: the window belongs to the target, so a
+// later hit — the other participant's included — cannot extend it.
+func TestAStunIsNotRefreshedWhileItRuns(t *testing.T) {
+	w, _, header := newStalledSwarm(t)
+	combat := NewCombatSystem(w).(*CombatSystem)
+
+	c, _ := w.Components.Combat.GetPtr(header)
+	if !combat.applyStunEffect(header, c) {
+		t.Fatal("the first stun was refused")
+	}
+	c.StunnedRemaining -= parameter.GameUpdateInterval
+	held := c.StunnedRemaining
+
+	if combat.applyStunEffect(header, c) {
+		t.Fatal("a second stun was applied while one was running")
+	}
+	if c.StunnedRemaining != held {
+		t.Fatalf("stun = %v, want %v: a refused stun still moved the timer",
+			c.StunnedRemaining, held)
 	}
 }
 
