@@ -251,6 +251,7 @@ for its complete flag/control reference.
 | `tool/blend-tester` | Inspect compositing operations, masks, effects, truecolor, and palette interactions. |
 | `tool/hierarchy-map` | Analyze Go imports and browse package hierarchy/dependency direction. |
 | `tool/http-server` | Minimal static file server used by the WASM development target. |
+| `tool/vif-allocator` | Narrow host service that turns website session requests into fixed K3s Jobs and Services. |
 | `sandbox/*` | Standalone visual/interaction prototypes, intentionally outside application assembly. |
 | `benchmark/*` | Standalone math/random/render experiments rather than `go test -bench` packages. |
 

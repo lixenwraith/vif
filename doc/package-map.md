@@ -194,5 +194,6 @@ duplicating version strings that would become stale.
 | `tool/font-editor` | Edit the bitmap splash font. |
 | `tool/hierarchy-map` | Analyze and visualize Go package/import hierarchy. |
 | `tool/http-server` | Minimal static server used by `make serve` for the WASM bundle. |
+| `tool/vif-allocator` | Website-to-K3s session allocator; a host service, not part of the game binary. |
 | `sandbox/*` | Isolated prototypes and visual/interaction experiments; not part of application assembly. |
 | `benchmark/*` | Standalone math, random, and render experiments; not Go benchmark test packages. |

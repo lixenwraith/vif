@@ -1,0 +1,11 @@
+[Unit]
+Description=Regularly rotate the Vi-Fighter allocator token
+
+[Timer]
+OnBootSec=2m
+OnUnitActiveSec=6h
+RandomizedDelaySec=5m
+Unit=vif-allocator-token.service
+
+[Install]
+WantedBy=timers.target

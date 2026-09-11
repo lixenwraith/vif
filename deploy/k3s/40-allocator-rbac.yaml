@@ -1,10 +1,8 @@
 # What the website's allocator is allowed to do.
 #
-# The allocator is not in this repository — it is the component the website calls
-# when a player asks for a game, and it lives with the server configuration task.
-# Its permissions are here because they are part of the contract this repository's
-# workload defines: these are exactly the verbs needed to create, observe and
-# remove a session, in one namespace, and nothing else.
+# The allocator is tool/vif-allocator: the component the website calls when a
+# player asks for a game. These are exactly the verbs it needs to create, observe
+# and remove a session, in one namespace, and nothing else.
 #
 # Read it as a limit rather than a grant. An allocator with this Role cannot read a
 # Secret, cannot exec into a session, cannot touch another namespace, and cannot

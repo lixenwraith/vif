@@ -1,0 +1,20 @@
+[Unit]
+Description=Rotate the Vi-Fighter allocator ServiceAccount token
+After=k3s.service
+Requires=k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/vif-allocator-refresh-token
+TimeoutStartSec=70s
+User=root
+Group=root
+UMask=0077
+
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/etc/vif-allocator
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

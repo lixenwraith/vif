@@ -46,6 +46,7 @@ The Makefile targets are:
 | `verify` | Generate, test, default/`novlog`/WASM build, then `go vet ./...`. |
 | `arch-check` | Report `pkg/*` packages that import `internal/*`; diagnostic and separate from `verify`. |
 | `tools` | Build `cmd/ascimage`, `cmd/soundlab`, and every `tool/*` command. |
+| `allocator` | Build the website-to-K3s session allocator as `bin/vif-allocator`. |
 | `serve` | Build WASM and the small HTTP server, then serve `web/`. |
 | `install-config` | Copy `wad/` and the embedded keymap into the user config root, keeping existing files. |
 | `install-config-force` | Replace files in the selected user config root. |

@@ -1,0 +1,46 @@
+[Unit]
+Description=Vi-Fighter Kubernetes session allocator
+After=network-online.target k3s.service vif-allocator-token.service
+Requires=k3s.service
+Wants=network-online.target vif-allocator-token.service
+ConditionPathExists=/etc/vif-allocator/allocator.env
+ConditionPathExists=/etc/vif-allocator/server-ca.crt
+
+[Service]
+Type=simple
+User=vif-allocator
+Group=vif-allocator
+EnvironmentFile=/etc/vif-allocator/allocator.env
+ExecStart=/usr/local/bin/vif-allocator \
+    -listen ${VIF_ALLOCATOR_LISTEN} \
+    -image ${VIF_ALLOCATOR_IMAGE} \
+    -join-host ${VIF_ALLOCATOR_JOIN_HOST} \
+    -page-base ${VIF_ALLOCATOR_PAGE_BASE}
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=20s
+UMask=0077
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target

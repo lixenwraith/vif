@@ -22,7 +22,7 @@ SYSCONFDIR ?= /etc
 
 .DEFAULT_GOAL := help
 
-.PHONY: help generate dev release nolog wasm windows run test verify arch-check clean check-go tools serve install install-config install-config-force image image-check
+.PHONY: help generate dev release nolog wasm windows run test verify arch-check clean check-go tools allocator serve install install-config install-config-force image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -34,6 +34,7 @@ help:
 	@echo "  wasm     Build WebAssembly binary for xterm.js (sound and logging disabled)"
 	@echo "  windows  Cross-compile for Windows (amd64, requires Windows Terminal, sound/log disabled)"
 	@echo "  tools    Build all auxiliary tools and cmds (includes vif-log, the log/journal viewer)"
+	@echo "  allocator Build the website-to-K3s session allocator"
 	@echo "  serve    Build wasm and http-server, then serve web/ directory (use PORT=8080 to change)"
 	@echo "  run      Build (dev) and run the game"
 	@echo "  install  Stage binary, wad and docs under DESTDIR/PREFIX for a distro package"
@@ -109,6 +110,9 @@ windows: generate | $(BIN_DIR)
 
 tools: | $(BIN_DIR)
 	go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/ ./cmd/ascimage ./cmd/soundlab ./tool/...
+
+allocator: | $(BIN_DIR)
+	go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/vif-allocator ./tool/vif-allocator
 
 test: generate
 	go test -race ./...

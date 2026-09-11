@@ -13,7 +13,7 @@ the plan and the gap register behind it are
 | `k3s/10-quota.yaml` | The fleet ceiling: ten concurrent sessions, and the compute total ten of them may occupy. |
 | `k3s/20-networkpolicy.yaml` | Default deny in both directions; the game port from anywhere, the operator ports from monitoring only, no egress. |
 | `k3s/30-session.yaml` | The per-session template — one Job, one Service, and the sidecar the render drops unless an image is named. Rendered per session; not applied as it stands. |
-| `k3s/40-allocator-rbac.yaml` | The exact namespace permissions prepared for the website's allocator, and no others. The allocator is not implemented yet. |
+| `k3s/40-allocator-rbac.yaml` | The exact namespace permissions used by `tool/vif-allocator`, and no others. |
 | `k3s/50-logwisp.yaml` | The optional in-pod LogWisp sidecar configuration used only by the deferred H9 experiment. |
 | `k3s/render-session.sh` | Renders the template with lifetime overrides. `JOB_UID=<uid>` retains the Service owner reference; `LOGWISP_IMAGE=<tag>` adds the optional sidecar. |
 | `k3s/session.sh` | Repeatable manual create/list/delete path. It creates the Job first, owns the Service by the returned Job UID, selects a free fleet port when omitted, and cleans a partial create. |
@@ -21,6 +21,11 @@ the plan and the gap register behind it are
 | `frontdoor/haproxy.cfg` | Not deployed. The worked alternative: every session behind one public port, routed on the name a dialer sends before the handshake. Kept for the routing exploration; the deployed shape reaches a session on its own port. |
 | `guest/nftables.conf` | The guest's own filter: one `inet vif` table, replaced on every load, never `flush ruleset`. Its input hook runs after kube-proxy so an endpoint-less NodePort consistently rejects. |
 | `guest/vif-operator.nft.example` | Site values the filter includes: the one address allowed to reach the node directly and the node ports it may open. Install as `/etc/nftables.d/vif-operator.nft`. |
+| `guest/vif-allocator.env.example` | Site values for the allocator's imported image, public join host and session-page base URL. |
+| `guest/vif-allocator.service` | Hardened host service for the website-to-K3s allocator on the Arch guest. |
+| `guest/vif-allocator-token.service` / `.timer` | Root-only, atomic rotation of the allocator's short-lived ServiceAccount token. |
+| `guest/vif-allocator-refresh-token.sh` | Token rotation implementation used by the oneshot service. |
+| `guest/update-vif-image.sh` | Repeatable manual release path: one Docker build/check, K3s import, allocator image update, old-image cleanup, then build daemons disabled again. |
 
-Nothing here is applied automatically. A session is created when a player asks for
-one; between requests, the namespace holds no pods.
+Nothing here installs itself. Once installed, the allocator creates a session only
+when a player asks for one; between requests, the namespace holds no pods.

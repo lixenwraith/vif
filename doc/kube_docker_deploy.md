@@ -32,7 +32,7 @@ because most of them change what that step should say.
 | A13 | **Cluster commands in this procedure run through `sudo kubectl`.** K3s is installed with kubeconfig mode `0640`; the install script self-escalates, but the resulting kubeconfig is not made readable to the ordinary login user. | §6 |
 | A14 | **The fleet's log stream will be fanned in on the node, not served from each pod.** A session writes JSON lines to stdout; the planned allocator follows the pod log and one LogWisp on the guest serves the merged result. The pod-log half is verified, but LogWisp has not yet been run in this path. The in-pod sidecar stays the H9 experiment. | §10 |
 | A15 | **Source-address preservation is intended, not proved.** `externalTrafficPolicy: Local` and `pf rdr` should leave the off-box player's address visible to the pod, but the acceptance run did not record it. The per-address admission bound depends on this. | §9 |
-| A16 | **The allocator and Hugo integration are designed, not built.** §10 fixes their location, credentials and `/vif/api/` contract; none of that path was exercised by the acceptance run. | §10 |
+| A16 | **The allocator is implemented; Hugo and the LogWisp fan-in are not.** §10 installs the allocator, fixes its narrow `/vif/api/` contract, and leaves the website and log stream as the next integration step. | §10 |
 | A17 | **The pod log is the log contract.** `-log-stdout` puts vi-fighter's own JSON line on stdout and the Kubernetes pod-log endpoint returns it verbatim, so nothing between the session and the browser reinterprets the envelope. A component that reparses a line is one that can reshape the envelope, so every hop on this path is chosen to carry bytes: `-log-stdout`, the pod-log endpoint, and LogWisp under a pass-through source with `raw` format. | §10 |
 
 ## 1. The shape
@@ -68,7 +68,8 @@ Two strings, and keeping them apart is the whole of the design:
 
 The page will be what a player clicks and forwards to a friend; its contract is to
 show the join command, the roster the allocator read from `/health`, and how long
-the session has left. That page and allocator are not built yet (A16). The game
+the session has left. The allocator now supplies that data; the page is not built
+yet (A16). The game
 connection they describe does not pass through nginx, is not TLS, and is not
 affected by page rendering — which is why a certificate problem cannot break a
 join, and why the game needs no HTTP anything (A8).
@@ -420,6 +421,12 @@ hand-written `nftables` one — pick the one you will remember to read.
 
 ## 7. Build and load the session image
 
+The container build does not use `bin/vif`. Do not run `make release` for this
+deployment, and do not run both `make image` and the explicit `docker build`
+below: `make image` is a wrapper around `docker build`. The command below is the
+single image build and is written explicitly to retain the required
+`--network host`, revision label, and commit-derived tag.
+
 No earlier step creates a source tree. Clone both repositories once, then remain in
 the vi-fighter repository root: every `make` and `kubectl apply` command in §7-§9
 assumes that working directory.
@@ -478,6 +485,23 @@ sudo k3s ctr images ls | grep vi-fighter
 sudo systemctl stop docker.service docker.socket containerd.service
 sudo iptables -S FORWARD | head -1
 ```
+
+For subsequent releases, the checked-in helper performs this sequence once rather
+than asking an operator to repeat it piecemeal:
+
+```sh
+# Run only with a clean worktree and no session Jobs or pods (including TTL remnants).
+./deploy/guest/update-vif-image.sh             # current commit's eight-character tag
+./deploy/guest/update-vif-image.sh v1.2.3      # or an explicit release tag
+```
+
+It pauses an active allocator, starts Docker, restores `FORWARD ACCEPT`, builds and
+checks one image, imports it into K3s, updates `VIF_ALLOCATOR_IMAGE` when the
+allocator environment exists, removes older vi-fighter image references, disables
+Docker and the distribution containerd, then restores the allocator. It deliberately
+refuses an occupied fleet: changing the configured image does not require killing a
+match, while deleting an image out from under one has no operational value. This is
+the manual release boundary the future CI job should invoke or reproduce.
 
 LogWisp is planned as a host binary beside the allocator, not as part of a session
 pod (A14). Its repository already builds `./cmd/logwisp`; installation and the live
@@ -699,14 +723,14 @@ unowned render:
 ./deploy/k3s/session.sh delete "$SESSION_ID"
 ```
 
-## 10. The allocator and website contract (designed, not built)
+## 10. The allocator and website contract
 
-Everything in this section is a design outcome from the proof-of-concept run; none
-of it has been implemented or exercised (A16). The website is Hugo output served by
-the FreeBSD host's nginx. Static JavaScript cannot hold Kubernetes credentials, so
-nginx reverse-proxies one same-origin API prefix to a small long-running allocator.
-The allocator holds the credential and creates or observes sessions. Raw game
-traffic still bypasses nginx and the allocator completely (A8).
+[`tool/vif-allocator`](../tool/vif-allocator/README.md) implements the session API
+and fixed Kubernetes transaction described here. The website is still Hugo output
+served by the FreeBSD host's nginx. Static JavaScript cannot hold Kubernetes
+credentials, so nginx reverse-proxies one same-origin API prefix to the allocator.
+The allocator holds the restricted credential and creates or observes sessions.
+Raw game traffic still bypasses nginx and the allocator completely (A8).
 
 Kubernetes remains the scheduler and lifecycle owner. It deliberately has no
 anonymous application endpoint that means "allocate one safe vi-fighter session";
@@ -764,6 +788,8 @@ location /vif/api/ {
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 120s;
+    client_max_body_size 1k;
 }
 ```
 
@@ -777,47 +803,77 @@ permission surface: create/read/watch/delete Jobs and Services, read/watch pods 
 events, and read pod logs, in `vif` and nowhere else. `pods/log` is what §10.3 reads
 and is the only addition the log panel needs; `pods/exec`, `pods/portforward` and
 every write verb stay absent. The allocator must not use
-`/etc/rancher/k3s/k3s.yaml` or a copy of the node's root kubeconfig. Mint a token
-for the `vif-allocator` ServiceAccount and build a kubeconfig around that identity:
+`/etc/rancher/k3s/k3s.yaml` or a copy of the node's root kubeconfig. It reads the
+cluster CA and a short-lived `vif-allocator` ServiceAccount token from separate
+files. The token is re-read on every Kubernetes request, so a root timer can replace
+it atomically without restarting the process.
+
+Build and install the host service after §8 has applied its ServiceAccount and Role:
 
 ```sh
-ALLOC_KUBECONFIG=/etc/vif-allocator/kubeconfig
-ALLOCATOR_USER=vif-allocator
-ALLOC_TOKEN=$(sudo kubectl -n vif create token vif-allocator --duration=24h)
-sudo install -d -m 0750 /etc/vif-allocator
-sudo kubectl config --kubeconfig="$ALLOC_KUBECONFIG" set-cluster vif \
-  --server=https://127.0.0.1:6443 \
-  --certificate-authority=/var/lib/rancher/k3s/server/tls/server-ca.crt \
-  --embed-certs=true
-sudo kubectl config --kubeconfig="$ALLOC_KUBECONFIG" set-credentials vif-allocator \
-  --token="$ALLOC_TOKEN"
-sudo kubectl config --kubeconfig="$ALLOC_KUBECONFIG" set-context vif \
-  --cluster=vif --user=vif-allocator --namespace=vif
-sudo kubectl config --kubeconfig="$ALLOC_KUBECONFIG" use-context vif
-sudo chmod 0600 "$ALLOC_KUBECONFIG"
-sudo chown "$ALLOCATOR_USER:$ALLOCATOR_USER" "$ALLOC_KUBECONFIG"
-unset ALLOC_TOKEN
+make allocator
+
+getent group vif-allocator >/dev/null || sudo groupadd --system vif-allocator
+id -u vif-allocator >/dev/null 2>&1 || sudo useradd --system \
+  --gid vif-allocator --home-dir / --shell /usr/bin/nologin vif-allocator
+
+sudo install -d -o root -g vif-allocator -m 0750 /etc/vif-allocator
+sudo install -d -o root -g root -m 0755 /usr/local/libexec
+sudo install -o root -g root -m 0755 bin/vif-allocator /usr/local/bin/vif-allocator
+sudo install -o root -g vif-allocator -m 0640 \
+  /var/lib/rancher/k3s/server/tls/server-ca.crt \
+  /etc/vif-allocator/server-ca.crt
+sudo install -o root -g vif-allocator -m 0640 \
+  deploy/guest/vif-allocator.env.example /etc/vif-allocator/allocator.env
+sudo install -o root -g root -m 0755 \
+  deploy/guest/vif-allocator-refresh-token.sh \
+  /usr/local/libexec/vif-allocator-refresh-token
+sudo install -o root -g root -m 0644 \
+  deploy/guest/vif-allocator.service \
+  deploy/guest/vif-allocator-token.service \
+  deploy/guest/vif-allocator-token.timer /etc/systemd/system/
+
+# Set the imported image tag and the public hostname/page URL; there are no secrets
+# in this file, but keep its write permission with root.
+sudoedit /etc/vif-allocator/allocator.env
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now vif-allocator-token.timer vif-allocator.service
 ```
 
-Give that file only to the allocator's system user. A TokenRequest token expires and
-the API server may shorten the requested duration, so the service must rotate it or
-be restarted with a newly minted token before expiry. A permanent root credential
-is not an acceptable substitute for implementing rotation.
+A TokenRequest token expires and the API server may shorten the requested 24-hour
+duration. The service retries a boot-time mint for one minute; the timer refreshes
+it every six hours with a randomized delay, leaving several attempts before the
+requested expiry. A failed refresh leaves the previous file intact and is visible
+in the unit status. A
+permanent root credential is not an acceptable substitute.
 
-The page-facing session API has two endpoints:
+The page-facing API is deliberately small:
 
-| Method and path | Contract |
-|---|---|
-| `POST /vif/api/sessions` | Refuse before creation when all ten ports are held; otherwise create the Job, read its UID, create its owner-referenced Service, wait for `live=true ready=true`, and return the session page URL, join target, and health-derived state. |
-| `GET /vif/api/sessions` | List live, non-completed Jobs and return one row per session. `guests`/`capacity`, `phase`, and `expires_in` come from that pod's `/health`; only the process can report the last field. |
+| Method and path | Success | Contract |
+|---|---:|---|
+| `GET /healthz` | `200` | Process liveness only. |
+| `GET /readyz` | `200` | The current token can list Services through the K3s API; otherwise `503`. |
+| `POST /vif/api/sessions` | `201` | Accept only an empty body or `{}`. Refuse before creation when all ten ports are held; otherwise create the fixed Job, read its UID, create its owner-referenced Service, and return only after the pod, EndpointSlice and `live=true ready=true` agree. |
+| `GET /vif/api/sessions` | `200` | Return `{ "sessions": [...] }` for live, non-completed Jobs. `guests`, `capacity`, `phase`, and `expires_in` come directly from each pod's text `/health` response. |
+| `GET /vif/api/logs` | `501` for now | Explicitly reports `log_stream_not_configured` until §10.3 is implemented. |
 
-The log panel uses a third, read-only stream, built in §10.3:
+Creation returns `503 fleet_full`, `504 session_not_ready`, or
+`502 kubernetes_error` as appropriate. A failed or canceled readiness wait removes the
+partial Service and Job. There is intentionally no public delete endpoint: an
+anonymous website caller must not be able to terminate somebody else's session.
+Operators use `deploy/k3s/session.sh delete <id>` when cleanup cannot wait for the
+normal application and Job TTL lifecycle.
 
-| Method and path | Contract |
-|---|---|
-| `GET /vif/api/logs` | Reverse-proxy the node aggregator's SSE stream, unbuffered. Never expose a pod IP, a pod port, or the aggregator's own address to the browser. |
+Malformed create bodies return `400`, bodies over 1 KiB return `413`, and a
+non-empty body without `application/json` returns `415`. A canceled create returns
+`408` when the connection still exists to receive it. The full-fleet response also
+sets `Retry-After: 10`; website code should honor that instead of immediately
+retrying and churning the API.
 
-An iframe is an acceptable first rendering only if it targets this same-origin
+Once §10.3 is complete, the logs endpoint will reverse-proxy the node aggregator's
+SSE stream without exposing a pod IP, pod port, or aggregator address. An iframe is
+an acceptable first rendering only if it targets this same-origin
 path. The ordinary page should use `EventSource`, bound its retained rows and
 reconnect delay, and keep the allocator between the browser and every pod.
 
@@ -862,7 +918,7 @@ Four obligations on the allocator's side of that pipe:
 | Splice `"session"` and `"port"` into each line after the opening brace, preserving every original key. | The panel must name the session, and the pass-through has no other place to carry it. Re-serializing the object instead is the field loss this path exists to avoid. |
 | Follow each pod's log with a bounded restart, and never re-read from the start on reconnect. | A follow that restarts from the beginning replays a whole match into the panel. |
 | Bound what it writes, and let a slow stream drop rather than block. | Ten sessions emitting a status snapshot per group at 10 Hz will outrun a browser; the aggregator's rate limit is the second half of that bound, not the first. |
-| Reverse-proxy `/vif/api/logs` to `127.0.0.1:8081/stream` with response buffering off. | The aggregator must not bind an address the bridge can reach, so the allocator's one open port stays the whole guest surface (§10.1). |
+| Reverse-proxy `/vif/api/logs` to `127.0.0.1:8081/stream` with response buffering off and a write timeout separate from the bounded create API. | The aggregator must not bind an address the bridge can reach, so the allocator's one open port stays the whole guest surface (§10.1); the current finite HTTP write timeout must not truncate a long-lived SSE response. |
 
 The panel is a viewer of operational data. `fields.msg` is the record discriminator
 on every line; `sub="stat"` marks the status snapshots that carry the metric values,
@@ -963,7 +1019,7 @@ chain counters, conntrack, and `cni0` to find the boundary. So is the fleet sitt
 at the ten-session quota, which is a player being told there is no game.
 
 **Upgrades.** Sessions are ephemeral, so a rollout is mostly a matter of not starting
-new sessions on the old image. Once the allocator exists, point it at the new digest;
+new sessions on the old image. The §7 helper points the allocator at the new image;
 existing sessions finish 90 seconds after their last player leaves. Delete old Jobs
 only if you mean to drain them.
 
@@ -998,9 +1054,9 @@ The remaining gap register is the fleet plan's
   has yet spliced a session ID into a followed pod log and served the result.
   The in-pod sidecar remains a separate, deferred experiment (H9), no longer
   blocked on LogWisp.
-- **The allocator and website integration are not built** (A16). The API, restricted
-  kubeconfig, nginx bridge path, Hugo session page, and the log path in §10 are
-  contracts for the next task.
+- **The website and LogWisp integrations are not built** (A16). The allocator and
+  restricted rotating credential now implement the session API; nginx, the Hugo
+  session page, and the log follower/aggregator path remain the next task.
 - **The occupied lifecycle gates remain open.** Join then quit, rejoin inside the
   empty grace, drain while joined, and the one-player capacity case still need the
   production-timer run in §9. First-join expiry and owned-Service cleanup passed.
@@ -1009,5 +1065,134 @@ The remaining gap register is the fleet plan's
   and none of the others knows where it is. `backoffLimit: 0` means no replacement
   pod is advertised as that match. Do not set `-authority migrate` on a fleet
   session; it would leave guests in private continuations with no public endpoint.
-- **Automated image delivery is not built.** The verified path still builds with
-  Docker on demand, imports into K3s containerd, and disables Docker afterwards.
+- **CI image delivery is not built.** The repeatable manual helper in §7 now builds
+  once, checks and imports the image, updates the allocator, removes old images,
+  and restores the build-daemon baseline. CI still needs to trigger that boundary
+  from a verified release artifact.
+
+## 14. Quick status and verification handbook
+
+Run the guest checks from the vi-fighter repository root. They are read-only unless
+the block explicitly says it creates a verification session.
+
+### Node, runtimes, image and firewall
+
+```sh
+sudo systemctl is-active k3s
+sudo kubectl get nodes -o wide
+sudo kubectl get --raw /readyz; echo
+sudo kubectl -n kube-system get pods
+
+sudo k3s crictl images | awk 'NR == 1 || /vi-fighter/'
+sudo systemctl show docker.service docker.socket containerd.service \
+  -p Id -p ActiveState -p UnitFileState
+sudo iptables -S FORWARD | sed -n '1p'
+
+sudo nft list chain inet vif input | sed -n '/type filter hook input/p'
+sudo nft list chain inet vif forward | sed -n '/type filter hook forward/p'
+sudo awk '/^[[:space:]]*define / {print $2}' /etc/nftables.d/vif-operator.nft
+sudo systemctl show nftables -p Type -p RemainAfterExit -p ActiveState -p UnitFileState
+```
+
+Expected: K3s and the node are ready; Docker, its socket and the distribution
+containerd are inactive/disabled; `FORWARD` is `ACCEPT`; the vif input hook is
+`priority filter + 10` with `policy drop`. Arch's nftables unit is intentionally a
+non-remaining oneshot, so `enabled` plus `inactive` is normal after a successful
+load. Investigate any extra base chain with a drop policy using `sudo nft list
+ruleset`; nftables verdicts from separate tables are cumulative.
+
+### Fleet boundary and current sessions
+
+```sh
+sudo kubectl -n vif get resourcequota,limitrange,networkpolicy
+sudo kubectl -n vif get job,pod,service,endpointslice \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet -o wide
+sudo kubectl -n vif describe resourcequota vif-fleet-ceiling
+
+sudo kubectl auth can-i create jobs.batch \
+  --as=system:serviceaccount:vif:vif-allocator -n vif
+sudo kubectl auth can-i get secrets \
+  --as=system:serviceaccount:vif:vif-allocator -n vif
+```
+
+The two authorization answers must be `yes` and `no`. A session with a ready route
+has one active Job, one Running pod, one NodePort Service, and an EndpointSlice
+whose endpoint is the pod IP. For one session's process view:
+
+```sh
+SESSION_ID=replace-with-session-id
+POD_IP=$(sudo kubectl -n vif get pod \
+  -l "vif.lixenwraith.dev/session=$SESSION_ID" \
+  -o jsonpath='{.items[0].status.podIP}')
+curl --connect-timeout 2 --max-time 5 -fsS "http://$POD_IP:7778/health"
+sudo kubectl -n vif logs "job/vif-session-$SESSION_ID" --tail=20
+```
+
+### Allocator and token rotation
+
+```sh
+sudo systemctl show vif-allocator.service vif-allocator-token.timer \
+  -p Id -p ActiveState -p UnitFileState -p Result
+sudo systemctl status vif-allocator-token.service --no-pager
+sudo grep '^VIF_ALLOCATOR_IMAGE=' /etc/vif-allocator/allocator.env
+curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/healthz
+curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/readyz
+curl --connect-timeout 2 --max-time 10 -fsS http://127.0.0.1:9080/vif/api/sessions
+sudo journalctl -u vif-allocator.service -u vif-allocator-token.service -n 50 --no-pager
+```
+
+Liveness only says the HTTP process exists; readiness additionally proves the
+current token reaches K3s. The session list is the final joined view of Jobs,
+Services, EndpointSlices and pod health. The token service is a non-remaining
+oneshot, so `inactive (dead)` after `status=0/SUCCESS` is normal; the timer must be
+active and enabled.
+
+### Create and connect to one allocator session
+
+Have the remote client terminal ready before running this block: `POST` can wait up
+to 75 seconds for readiness, and after it returns the default first-join window is
+90 seconds. No simultaneous guest-side command is needed while `POST` waits.
+
+On the guest:
+
+```sh
+allocation=$(curl --connect-timeout 2 --max-time 120 -fsS \
+  -X POST -H 'Content-Type: application/json' -d '{}' \
+  http://127.0.0.1:9080/vif/api/sessions)
+printf '%s\n' "$allocation"
+session_id=$(printf '%s' "$allocation" | python3 -c \
+  'import json,sys; print(json.load(sys.stdin)["id"])')
+join_target=$(printf '%s' "$allocation" | python3 -c \
+  'import json,sys; print(json.load(sys.stdin)["join_target"])')
+printf 'session=%s join=%s\n' "$session_id" "$join_target"
+```
+
+Immediately on the remote development machine, use the printed target:
+
+```sh
+./bin/vif -join '<join_target>'
+```
+
+After leaving the client, verify the session is vacant and then remove the temporary
+test rather than waiting for its empty grace and TTL:
+
+```sh
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/vif/api/sessions
+./deploy/k3s/session.sh delete "$session_id"
+sudo kubectl -n vif wait --for=delete "job/vif-session-$session_id" --timeout=60s
+```
+
+### FreeBSD edge
+
+Run these on the host, not in the guest:
+
+```sh
+sudo pfctl -sr | grep '31700:31709'
+sudo pfctl -sn | grep '31700:31709'
+sudo pfctl -si
+```
+
+The rules must show only the ten game ports forwarded to the guest. Neither K3s
+6443 nor allocator 9080 receives a public `rdr`; nginx reaches 9080 only over the
+private bridge.
