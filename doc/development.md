@@ -310,11 +310,10 @@ term and its vote, and its slot is `parameter.NoPlayerSlot`.
 resolves is the D-14 map latch every joiner adopts. It logs a session summary
 periodically rather than drawing a status bar, so `-l -lv info` is how the run is
 watched. A server whose roster empties parks: it stops its clock at once, so the
-world a returning guest reclaims is the world it left, and restarts the run after
-`parameter.SessionVacantReset` so the next guest is not dropped into somebody
-else's unfinished match. A participant that dropped can dial back in either way —
-the dial releases the park — and receives the world at whatever tick the session
-has reached, into the slot its departure released. See
+world a returning guest reclaims is the world it left. An unbounded server starts a
+fresh run after `parameter.SessionVacantReset`; one with `-empty` preserves the same
+run until that grace expires. A returning participant releases the park and receives
+the world at its stopped tick, into the slot its departure released. See
 [Runtime](runtime.md) §1.2.
 
 A server started this way runs until somebody stops it. One that was *allocated* —

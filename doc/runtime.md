@@ -219,16 +219,11 @@ makes "a guest that dropped reclaims the slot its departure released" mean
 something — the world it comes back to is the world it left rather than one that
 aged without it.
 
-A world nobody came back to inside `parameter.SessionVacantReset` is replaced: the
-run restarts, once, and stays parked over the fresh world, so the next guest is
-dropped into a session rather than into somebody else's unfinished match. Two
-things follow from the restart that are easy to miss and are handled where they
-arise. The reset releases the clock as the last phase of rebuilding a world for
-somebody to play, so the park is asserted on every reading rather than on the
-transition into vacancy. And the boot spawns the cursor a solo run starts with,
-which on a host that drives none belongs to nobody and would occupy the slot a
-mid-run join needs, so a parked session drops the cursors it has no participant
-for.
+On an unbounded host, a world nobody reclaimed inside
+`parameter.SessionVacantReset` is replaced once and stays parked over the fresh
+world. The reset briefly releases the clock, so the park is asserted on every
+vacant reading. Its boot cursor belongs to nobody on a dedicated host, so the park
+drops it before a mid-run join needs that slot.
 
 A dial is what releases the park, on the accept goroutine and before the mid-run
 gate reads its capture: that gate waits for a tick a stopped clock never reaches,
@@ -236,10 +231,9 @@ so a dial served by one would time out instead of being admitted. `/health` says
 `clock=paused` beside `phase=vacant` throughout, and stays live — a park is not a
 stall.
 
-`-empty` is the other answer to the same condition and outranks this one: a
-bounded session ends rather than parks, because an allocated pod holding a frozen
-world is a pod the fleet cannot place anything else on. The park is what a host
-somebody left running does instead.
+`-empty` outranks the fresh-world reset. A bounded session still parks immediately,
+but keeps that exact world throughout the grace so a reconnect returns to the same
+match; expiry then ends the process. Only `-empty=0` permits an in-process reset.
 
 A server outlives its guests. Its mid-run gate is installed at construction and
 armed once the scheduler is running, so a participant that dropped can dial back

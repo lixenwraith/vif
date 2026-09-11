@@ -27,6 +27,11 @@ rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
     verbs: ["create", "get", "list", "watch", "delete"]
+  # Portable admission of a Service with blockOwnerDeletion requires permission
+  # to protect its Job owner while foreground garbage collection is in progress.
+  - apiGroups: ["batch"]
+    resources: ["jobs/finalizers"]
+    verbs: ["update"]
   # The endpoint players are given. Create and delete only — a Service that is
   # updated in place is a session whose address changed under its players.
   - apiGroups: [""]
@@ -38,10 +43,13 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
+  # The Service is ready only when discovery publishes a ready endpoint.
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
   # The session's own output, for the website's log panel. A pod log is the
-  # process's stdout verbatim, which is the only path that carries vi-fighter's
-  # JSON envelope intact; the sidecar's file source does not. Read-only, and it
-  # is not pods/exec by another name — nothing can be written into the container.
+  # process's stdout verbatim. Read-only, and it is not pods/exec by another name:
+  # nothing can be written into the container.
   - apiGroups: [""]
     resources: ["pods/log"]
     verbs: ["get"]

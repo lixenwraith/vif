@@ -6,18 +6,17 @@
 # what makes "the allocator is broken" and "the workload is broken" separable
 # questions.
 #
-#   ./render-session.sh 7f3c1a 31707 | sudo kubectl apply -f -
-#   ./render-session.sh 7f3c1a 31707 | sudo kubectl delete -f -
+#   ./render-session.sh 7f3c1a 31707 > /tmp/7f3c1a.yaml
 #   FIRST_JOIN=20m EMPTY_GRACE=20m ./render-session.sh 7f3c1a 31707
 #   LOGWISP_IMAGE=logwisp:dev ./render-session.sh 7f3c1a 31707
+#   JOB_UID=<uid> ./render-session.sh 7f3c1a 31707
 #
 # The default is one container writing to stdout, which is what the deployment
 # runs: the allocator reads the pod log and the node aggregator serves it. Naming
 # an image adds the sidecar, and with it a second way for the pod to be unready.
 #
-# The Service's owner reference is dropped here rather than filled in: the Job's
-# UID does not exist until the Job does. The orphaned Service must be deleted by
-# hand after its Job or it keeps the NodePort allocated.
+# Without JOB_UID the Service owner reference is omitted because the Job does not
+# exist yet. deploy/k3s/session.sh performs the two-stage create and cleanup.
 set -eu
 
 usage() {
@@ -35,6 +34,7 @@ MAP_SIZE=${5:-120x40}
 LOGWISP_IMAGE=${6:-${LOGWISP_IMAGE:-none}}
 FIRST_JOIN=${FIRST_JOIN:-90s}
 EMPTY_GRACE=${EMPTY_GRACE:-90s}
+JOB_UID=${JOB_UID:-}
 
 case "$SESSION_ID" in
 	'' | *[!a-z0-9-]* ) echo "$0: SESSION_ID must be lowercase alphanumeric or '-'" >&2; exit 2 ;;
@@ -42,8 +42,8 @@ esac
 case "$GAME_NODEPORT" in
 	'' | *[!0-9]* ) echo "$0: GAME_NODEPORT must be a number" >&2; exit 2 ;;
 esac
-if [ "$GAME_NODEPORT" -lt 30000 ] || [ "$GAME_NODEPORT" -gt 32767 ]; then
-	echo "$0: GAME_NODEPORT $GAME_NODEPORT is outside the default NodePort range 30000-32767" >&2
+if [ "$GAME_NODEPORT" -lt 31700 ] || [ "$GAME_NODEPORT" -gt 31709 ]; then
+	echo "$0: GAME_NODEPORT $GAME_NODEPORT is outside the fleet range 31700-31709" >&2
 	exit 2
 fi
 
@@ -61,8 +61,12 @@ rendered=$(sed \
 	-e "s|\${LOGWISP_IMAGE}|$LOGWISP_IMAGE|g" \
 	-e "s|\${FIRST_JOIN}|$FIRST_JOIN|g" \
 	-e "s|\${EMPTY_GRACE}|$EMPTY_GRACE|g" \
-	-e '/ownerReferences:/,/blockOwnerDeletion: true/d' \
+	-e "s|\${JOB_UID}|$JOB_UID|g" \
 	"$template")
+
+if [ -z "$JOB_UID" ]; then
+	rendered=$(printf '%s\n' "$rendered" | sed '/ownerReferences:/,/blockOwnerDeletion: true/d')
+fi
 
 if [ "$LOGWISP_IMAGE" != none ]; then
 	printf '%s\n' "$rendered"

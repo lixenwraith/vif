@@ -150,11 +150,9 @@ func (a *App) interrupt(now time.Time, reason string) lifecycle.State {
 	return a.life.Interrupt(now, reason)
 }
 
-// holdVacant parks a session nobody is in, and restarts it once if nobody comes
-// back. The park is immediate and unbounded, and asserted on every reading rather
-// than on the transition, because the restart releases the clock as its last phase.
-// The resume is here as well as on the accept path, which closes the race between
-// them. A bounded session never gets this far: its vacancy grace ends the process.
+// holdVacant parks a session nobody is in. An unbounded host resets an abandoned
+// world once; a host with -empty preserves it until that grace ends the process, so
+// a reconnect inside the grace returns to the same match.
 func (a *App) holdVacant(st lifecycle.State) {
 	if st.Phase != lifecycle.PhaseVacant {
 		// The vacancy is over rather than merely interrupted, so the restart it
@@ -168,10 +166,18 @@ func (a *App) holdVacant(st lifecycle.State) {
 	}
 	if a.ctx.TimeCtl.SetPaused(true) {
 		a.parked.Store(true)
-		vlog.Info("app", "msg", "session parked", "tick", a.Position().Tick,
-			"restart_in", parameter.SessionVacantReset.String())
+		if a.life.Policy().Empty > 0 {
+			vlog.Info("app", "msg", "session parked", "tick", a.Position().Tick,
+				"expires_in", st.Remaining.Round(time.Second).String())
+		} else {
+			vlog.Info("app", "msg", "session parked", "tick", a.Position().Tick,
+				"restart_in", parameter.SessionVacantReset.String())
+		}
 	}
 	a.dropOwnerlessCursors()
+	if a.life.Policy().Empty > 0 {
+		return
+	}
 	if st.Vacant < parameter.SessionVacantReset || !a.vacantReset.CompareAndSwap(false, true) {
 		return
 	}

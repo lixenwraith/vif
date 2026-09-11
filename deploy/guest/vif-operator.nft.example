@@ -1,0 +1,4 @@
+# Site-local values consumed by /etc/nftables.conf. Replace the documentation
+# address and SSH port before installing as /etc/nftables.d/vif-operator.nft.
+define operator_addr = 192.0.2.1
+define operator_ports = { 22 }

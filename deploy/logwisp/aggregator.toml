@@ -1,4 +1,4 @@
-# The fleet's log fan-in, on the Arch guest rather than in a pod.
+# The planned fleet log fan-in, on the Arch guest rather than in a pod.
 #
 # The allocator follows each live session's pod log through the Kubernetes API,
 # splices the session ID and public port into every line, and writes the result to

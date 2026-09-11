@@ -5,9 +5,9 @@
 # vif, and a session's metrics ride the same stream because internal/status emits
 # the whole registry into the log.
 #
-# What the deployment actually runs is the node-level fan-in in
-# deploy/logwisp/aggregator.toml. This sidecar needs a LogWisp at or past the file
-# source's pass-through mode. See doc/kube_docker_deploy.md §10.3.
+# The planned deployment path is the node-level fan-in in
+# deploy/logwisp/aggregator.toml; it has not yet been run. This sidecar needs a
+# LogWisp at or past the file source's pass-through mode. See deploy doc §10.3.
 apiVersion: v1
 kind: ConfigMap
 metadata:

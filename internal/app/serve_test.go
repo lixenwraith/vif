@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/lifecycle"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/resource"
@@ -367,12 +368,12 @@ func TestPlayersIsACeilingAndOnlySometimesAParty(t *testing.T) {
 	}
 }
 
-// TestAVacantDedicatedHostParksAndRestarts is what an empty session used to cost: with
+// TestAVacantUnboundedHostParksAndRestarts is what an empty session used to cost: with
 // no cursor on the map the gold cycle cannot place a sequence, so it failed and
 // retried for as long as the process ran, aging a world away from the guest that
 // might come back. The clock stops as soon as the roster empties, and a world nobody
 // returned to inside the window is replaced rather than handed to the next dialer.
-func TestAVacantDedicatedHostParksAndRestarts(t *testing.T) {
+func TestAVacantUnboundedHostParksAndRestarts(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, 0x5E8E, 120, 40)
 	defer a.Close()
@@ -456,6 +457,37 @@ func TestAVacantDedicatedHostParksAndRestarts(t *testing.T) {
 	if !a.ctx.TimeCtl.IsPaused() || a.Position().Run != run+2 {
 		t.Fatalf("the second vacancy parked=%t at run %d, want parked at run %d",
 			a.ctx.TimeCtl.IsPaused(), a.Position().Run, run+2)
+	}
+}
+
+// TestABoundedVacantHostPreservesItsWorldUntilExpiry keeps -empty and the
+// unbounded-host reset from competing over the same vacancy.
+func TestABoundedVacantHostPreservesItsWorldUntilExpiry(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 0x5E9E, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	a.Tick(20)
+
+	const grace = 90 * time.Second
+	a.life = lifecycle.New(lifecycle.Policy{Empty: grace})
+	now := time.Now()
+	a.life.Start(now)
+	a.life.Observe(1, now)
+	vacantAt := now.Add(time.Second)
+	a.holdVacant(a.life.Observe(0, vacantAt))
+	run := a.Position().Run
+
+	// The unbounded-host reset point is inside the configured grace. The same run
+	// must still be parked there so a reconnect recovers the same match.
+	a.holdVacant(a.life.State(vacantAt.Add(parameter.SessionVacantReset)))
+	a.Tick(4)
+	if !a.ctx.TimeCtl.IsPaused() || a.Position().Run != run {
+		t.Fatalf("bounded vacancy parked=%t at run %d, want parked at run %d",
+			a.ctx.TimeCtl.IsPaused(), a.Position().Run, run)
+	}
+	if st := a.life.State(vacantAt.Add(grace - time.Second)); st.Expired {
+		t.Fatalf("bounded vacancy expired inside its grace: %q", st.Reason)
 	}
 }
 

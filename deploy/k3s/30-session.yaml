@@ -6,7 +6,8 @@
 #
 #   ${SESSION_ID}      a short, unique, DNS-safe session name (e.g. 7f3c1a)
 #   ${IMAGE}           the image, pinned by digest in anything but a lab
-#   ${GAME_NODEPORT}   the node port this session is reachable on (30000-32767)
+#   ${GAME_NODEPORT}   the node port this session is reachable on (31700-31709)
+#   ${JOB_UID}         the created Job UID used to own the Service
 #   ${PLAYERS}         the guest ceiling for this session (1-16)
 #   ${MAP_SIZE}        the shared map geometry, WxH (e.g. 120x40)
 #   ${LOGWISP_IMAGE}   the locally available logwisp sidecar image
@@ -100,15 +101,13 @@ spec:
             # It belongs to the front-door alternative alone; see §11.
             #
             # Stated rather than inherited from the -serve default: losing this pod
-            # ends the match, because no guest can be dialled and none of the others
-            # knows where it is. An orchestrator replaces the pod at the same
-            # address and the guests reconnect there.
+            # ends the match. The Job never replaces its in-memory world, and guests
+            # must not elect a private continuation that looks like the old session.
             - "-authority"
             - "host"
             # The sidecar shape, which is not what the deployment runs: render-session.sh
-            # and the allocator substitute -log-stdout and drop the container, because
-            # only the pod log carries this envelope intact (doc §10.3). Kept because
-            # H9 tests the in-pod stream against exactly this.
+            # and the allocator substitute -log-stdout and drop the container. The
+            # node fan-in costs each session no sidecar; H9 keeps this alternative.
             - "-l=/var/log/vif"
             - "-lv"
             - "info"
@@ -167,8 +166,8 @@ spec:
             httpGet: {path: /health, port: probe}
             periodSeconds: 2
             failureThreshold: 30
-          # Liveness is the tick counter moving when it should be. It restarts a
-          # wedged simulation; it must not restart a busy one, hence the threshold.
+          # The health status is liveness. A vacant session deliberately has a
+          # stopped tick and still answers 200 while its empty grace runs.
           livenessProbe:
             httpGet: {path: /health, port: probe}
             periodSeconds: 5
@@ -177,10 +176,9 @@ spec:
           # No readiness probe, deliberately. Readiness would take the pod out of a
           # Service, and this Service has exactly one backend that the allocator
           # chose on purpose — removing it would break the session rather than
-          # reroute it. Whether a dial is admitted is the application's own
-          # decision and it refuses at the handshake; the allocator reads the same
-          # answer from the health body's `ready` and `phase` fields when it is
-          # choosing where to send the next player.
+          # reroute it. The application refuses a dial at the handshake; the
+          # allocator reads the same answer from the health body's `ready` and
+          # `phase` fields when choosing where to send the next player.
         # The log sidecar, rendered only when an image is named. It serves what the
         # session wrote as Server-Sent Events on a cluster-internal port, metrics
         # included, since internal/status emits the whole registry into the log. Not

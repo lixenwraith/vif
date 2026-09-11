@@ -19,14 +19,13 @@ spec:
 ---
 # The game port, from anywhere.
 #
-# Player traffic arrives through a NodePort, so by the time it reaches the pod its
-# source is the node rather than a pod or namespace this could select — which means
-# this policy cannot be the thing that authenticates a player. It is not trying to.
+# Player traffic arrives through a NodePort from an address no pod or namespace
+# selector can identify, so this policy cannot authenticate a player. It is not
+# trying to. externalTrafficPolicy keeps the original source for the application.
 # What it does is confine the reachable surface to one port on one workload, so
 # that everything else in the namespace stays unreachable even from a source that
 # is allowed to play. Restricting *who* may reach 7777 is the firewall's job on the
-# FreeBSD host and the Arch guest, and eventually the authenticated gateway's; see
-# doc/kube_docker_deploy.md §7.
+# FreeBSD host and the Arch guest; see doc/kube_docker_deploy.md §3.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

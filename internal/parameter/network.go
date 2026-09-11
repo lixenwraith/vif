@@ -67,8 +67,8 @@ const (
 	// graph MaxPlayers participants can form.
 	NetworkRelayHopLimit = 16
 
-	// SessionVacantReset is how long a dedicated host holds an emptied session
-	// before starting a fresh one.
+	// SessionVacantReset is how long an unbounded dedicated host holds an emptied
+	// session before starting a fresh one.
 	//
 	// The park that precedes it is immediate and unbounded: an empty session has
 	// nothing to simulate for, and simulating it anyway is not free — the gold

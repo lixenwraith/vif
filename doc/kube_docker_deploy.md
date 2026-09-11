@@ -30,16 +30,16 @@ because most of them change what that step should say.
 | A11 | **The session's playout lead is chosen from its *first* guest's link** and holds for the life of the match. A session opened by a nearby player and joined by a distant one runs at the near player's lead. The late-crossing fence makes that cost freshness rather than correctness (fleet plan §5), but it is the reason a full-roster measurement (H3) is worth doing over real links rather than a LAN. | §9 |
 | A12 | **The resource envelope is unmeasured at a full roster.** The requests and limits in the manifest come from single-guest runs. Ten sessions per node is a claim until an hour of four-player play says otherwise. | §8 |
 | A13 | **Cluster commands in this procedure run through `sudo kubectl`.** K3s is installed with kubeconfig mode `0640`; the install script self-escalates, but the resulting kubeconfig is not made readable to the ordinary login user. | §6 |
-| A14 | **The fleet's log stream is fanned in on the node, not served from each pod.** A session writes its JSON lines to stdout, the allocator follows the pod log through the Kubernetes API, and one LogWisp on the guest serves the merged result. One component then holds the cluster credential and a session costs the pod nothing; the acceptance run used the same `-log-stdout` shape with no sidecar. The in-pod sidecar stays the H9 experiment, now on its merits rather than on a field-loss blocker. | §10 |
+| A14 | **The fleet's log stream will be fanned in on the node, not served from each pod.** A session writes JSON lines to stdout; the planned allocator follows the pod log and one LogWisp on the guest serves the merged result. The pod-log half is verified, but LogWisp has not yet been run in this path. The in-pod sidecar stays the H9 experiment. | §10 |
 | A15 | **Source-address preservation is intended, not proved.** `externalTrafficPolicy: Local` and `pf rdr` should leave the off-box player's address visible to the pod, but the acceptance run did not record it. The per-address admission bound depends on this. | §9 |
-| A16 | **The allocator and Hugo integration are designed, not built.** §10 fixes their location, credentials and API/page contract; none of that path was exercised by the acceptance run. | §10 |
+| A16 | **The allocator and Hugo integration are designed, not built.** §10 fixes their location, credentials and `/vif/api/` contract; none of that path was exercised by the acceptance run. | §10 |
 | A17 | **The pod log is the log contract.** `-log-stdout` puts vi-fighter's own JSON line on stdout and the Kubernetes pod-log endpoint returns it verbatim, so nothing between the session and the browser reinterprets the envelope. A component that reparses a line is one that can reshape the envelope, so every hop on this path is chosen to carry bytes: `-log-stdout`, the pod-log endpoint, and LogWisp under a pass-through source with `raw` format. | §10 |
 
 ## 1. The shape
 
 ```mermaid
 flowchart TD
-    Browser["Player's browser"] -->|"Hugo + /api/vif"| Site["FreeBSD nginx"]
+    Browser["Player's browser"] -->|"Hugo + /vif/api"| Site["FreeBSD nginx"]
     Site -->|"bridge only"| Alloc["Allocator on Arch guest"]
     Alloc -->|"Job + Service"| API["K3s API"]
     API --> Pod["vif -serve pod"]
@@ -228,11 +228,15 @@ that answered before and does not now is the symptom you are looking for.
 `systemctl stop docker` does not restore the policy Docker set; check it after the
 stop as well instead of treating a stopped daemon as a rollback.
 
-Stop the daemon when you are not building. A build host that is also a running
-container runtime is two things claiming one packet path:
+After the first build, keep Docker, its socket, and the system containerd disabled.
+K3s runs its own embedded containerd, so this does not stop the node. Start Docker
+explicitly for a build and stop it immediately afterwards:
 
 ```sh
-sudo systemctl stop docker docker.socket
+sudo systemctl disable --now docker.service docker.socket containerd.service
+sudo systemctl start docker
+# build, save and import the image (§7)
+sudo systemctl stop docker.service docker.socket containerd.service
 ```
 
 ## 6. K3s
@@ -308,16 +312,16 @@ alive under `ct state established` while every replacement login is locked out:
 set -- $SSH_CONNECTION
 [ "$#" -eq 4 ] || { echo 'SSH_CONNECTION is unavailable'; exit 1; }
 operator_addr=$1
-sshd_port=$4
+operator_port=$4
 sudo install -d -m 0755 /etc/nftables.d
-printf 'define operator_addr = %s\ndefine sshd_port = %s\n' \
-  "$operator_addr" "$sshd_port" | sudo tee /etc/nftables.d/vif-operator.nft
+printf 'define operator_addr = %s\ndefine operator_ports = { %s }\n' \
+  "$operator_addr" "$operator_port" | sudo tee /etc/nftables.d/vif-operator.nft
 ```
 
-The file those values feed is the only place the operator source and SSH port are
-accepted. Port 6443 is deliberately absent: the allocator runs on this guest and
-the operator reaches `kubectl` through SSH, so the Kubernetes API does not cross
-the bridge (A10).
+The file those values feed is the only place host-to-guest operator ports are
+accepted. It starts with SSH; §10 adds the allocator's 9080. Port 6443 is
+deliberately absent: the operator reaches `kubectl` through SSH, so the Kubernetes
+API does not cross the bridge (A10).
 
 ```nft
 #!/usr/bin/nft -f
@@ -330,7 +334,9 @@ delete table inet vif
 
 table inet vif {
 	chain input {
-		type filter hook input priority filter; policy drop;
+		# Run after kube-proxy so its endpoint-less NodePort REJECT is stable
+		# across both boot and a manual nftables reload.
+		type filter hook input priority filter + 10; policy drop;
 
 		ct state { established, related } accept
 		ct state invalid drop
@@ -342,8 +348,8 @@ table inet vif {
 
 		ip protocol icmp accept
 
-		# SSH from the address and non-default port derived above, nowhere else.
-		ip saddr $operator_addr tcp dport $sshd_port accept
+		# Operator ports from the host-derived address, nowhere else.
+		ip saddr $operator_addr tcp dport $operator_ports accept
 	}
 
 	chain forward {
@@ -412,14 +418,14 @@ through `iptables-nft`. That is exactly why the two coexist, and exactly why
 `flush ruleset` breaks them. Do not run both a hand-written `iptables` ruleset and a
 hand-written `nftables` one — pick the one you will remember to read.
 
-## 7. Build and load both images
+## 7. Build and load the session image
 
 No earlier step creates a source tree. Clone both repositories once, then remain in
 the vi-fighter repository root: every `make` and `kubectl apply` command in §7-§9
 assumes that working directory.
 
 ```sh
-mkdir vif-deploy && cd vif-deploy
+mkdir -p ~/git/lixenwraith && cd ~/git/lixenwraith
 git clone https://github.com/lixenwraith/vi-fighter
 git clone https://github.com/lixenwraith/logwisp
 cd vi-fighter
@@ -449,7 +455,7 @@ before §5 without re-auditing its interfaces.
 sudo systemctl start docker
 sudo iptables -S FORWARD | head -1
 
-VIF_TAG=$(git rev-parse --short HEAD)
+VIF_TAG=$(git rev-parse --short=8 HEAD)
 VIF_REVISION=$(git rev-parse HEAD)
 docker build --network host \
   -f deploy/docker/Dockerfile \
@@ -469,12 +475,13 @@ bearing: a floating `:latest` would default to `Always` and bypass this import.
 ```sh
 docker save "vi-fighter:$VIF_TAG" | sudo k3s ctr images import -
 sudo k3s ctr images ls | grep vi-fighter
-sudo systemctl stop docker docker.socket
+sudo systemctl stop docker.service docker.socket containerd.service
 sudo iptables -S FORWARD | head -1
 ```
 
-LogWisp is a host binary here, not an image: it runs beside the allocator on the
-guest and never enters a pod (A14). Its own Makefile builds `./cmd/logwisp`:
+LogWisp is planned as a host binary beside the allocator, not as part of a session
+pod (A14). Its repository already builds `./cmd/logwisp`; installation and the live
+stream remain §10.3 work:
 
 ```sh
 make -C "$LOGWISP_ROOT" build
@@ -541,17 +548,22 @@ and `EMPTY_GRACE` overrides. Use an extended value for the path and reboot gates
 then test the defaults separately.
 
 The session ID names the Kubernetes objects; the player sees only the port (A7).
-The default render is the deployed shape: one container, `-log-stdout`, no shared
-volume. Naming a LogWisp image instead adds the sidecar, which is the H9 experiment
-and not the log path this deployment uses:
+`session.sh` is the repeatable manual path: it creates the Job, reads its UID, then
+creates the owned Service. It chooses a free port when none is supplied, cleans a
+partial create, and refuses to overwrite an existing session. The default render
+is one container with `-log-stdout`; naming a LogWisp image is only the H9 test.
 
 ```sh
 SESSION_ID=s1
-VIF_TAG=$(git rev-parse --short HEAD)
+VIF_TAG=$(git rev-parse --short=8 HEAD)
 
 FIRST_JOIN=20m EMPTY_GRACE=20m \
-  ./deploy/k3s/render-session.sh "$SESSION_ID" 31700 "vi-fighter:$VIF_TAG" \
-  | sudo kubectl apply -f -
+  ./deploy/k3s/session.sh create "$SESSION_ID" 31700 \
+  "docker.io/library/vi-fighter:$VIF_TAG"
+
+./deploy/k3s/session.sh list
+# Before reusing the ID or port:
+./deploy/k3s/session.sh delete "$SESSION_ID"
 ```
 
 Inspect the pod first, then make the EndpointSlice the first network check:
@@ -564,10 +576,10 @@ sudo kubectl -n vif get endpointslice \
 ```
 
 A pod is Ready only when every container is, so a healthy session beside a second
-container in `ImagePullBackOff` shows `0/2` and is not Ready. A Service with no ready
-endpoint makes kube-proxy install a reject path, so an outside client receives
-immediate `connection refused`. That symptom is not evidence of a `pf` or nftables
-fault, and it is why the default render carries no second container.
+container in `ImagePullBackOff` shows `0/2` and is not Ready. With the checked-in
+guest filter, kube-proxy handles an endpoint-less NodePort first and returns
+`connection refused`. An older equal-priority filter could instead time out after
+a manual nftables reload; neither symptom proves a `pf` fault.
 
 Once an endpoint exists, walk outward from the pod rather than inward from the
 Internet. `bash -c "</dev/tcp/host/port"` is enough when `nc` is absent:
@@ -649,13 +661,15 @@ when H9 renders one; they are not part of this gate.
 There is one health path. Its code answers whether the process should live; the
 body carries `ready`, `phase`, `guests`, `capacity`, and `expires_in`. A vacant pod
 correctly reports `live=true ready=true clock=paused phase=vacant` while its tick
-stops. The allocator must read those words rather than treating a moving tick or a
-`Running` pod as readiness.
+stops. With `-empty`, the parked world is preserved for that whole grace; the
+one-minute fresh-world reset applies only when `-empty=0`. The allocator must read
+the health words rather than treating a moving tick or `Running` as readiness.
 
-Complete the reboot gate while this extended-lifetime endpoint exists. Reboot the
-guest, wait for the node and endpoint to return, then repeat the `FORWARD` check,
-the nftables table audit, and one off-box NodePort join. That proves the loaded
-ruleset matches its files; it does not claim an in-memory match survived the boot.
+Delete the manual session before the reboot gate. A reboot ends every in-memory
+match; no Job replacement may be advertised as the same session. After reboot,
+verify the node is Ready, the `vif` namespace is empty, Docker and the system
+containerd are inactive, `inet vif` exists, and the imported image remains. Then
+create and join a new session. This gate passed on 2026-09-11.
 
 Source preservation remains a separate open gate (A15) and is the one place this
 deployment needs a code change. The address is already carried —
@@ -666,24 +680,23 @@ participant record in `internal/app/host.go`, then repeat the remote join. If th
 address is rewritten, the per-address admission limiter becomes one shared budget
 for the whole fleet.
 
-The following lifecycle cases were **not** proved by the run because every manual
-session used extended timers. They remain gates rather than results:
+Production-timer status after the 2026-09-11 run:
 
-| Open check | Expected |
-|---|---|
-| Nobody joins for the default 90 s | Pod exits 0 and names `no guest connected`; the Job completes. |
-| A guest joins and quits | Pod exits 0 after the 90-second empty grace and names `roster empty for`. |
-| A guest quits and rejoins inside the grace | The same session continues into the released slot. |
-| Delete the Job while a guest plays | `phase=draining`, health stays 200 with `ready=false`, then exit on empty roster or after 20 s. |
-| Roster reaches `-players` | Health stays 200 with `ready=false reason=session at capacity`; existing guests continue. |
+| Check | Status | Expected evidence |
+|---|---|---|
+| Nobody joins for 90 s | **Passed** | Exit 0 at 90 s with `no guest connected`; Job Complete; its owned Service was garbage-collected after the 120 s Job TTL; quota returned to zero. |
+| A guest joins and quits | Open | Exit 0 after the 90-second empty grace, naming `roster empty for`. |
+| A guest quits and rejoins at about 75 s | Open | The same run and world continue in the released slot. |
+| Delete the Job while a guest plays | Open | `phase=draining`, health 200 with `ready=false`, then exit on an empty roster or after 20 s. |
+| Roster reaches `-players` | Open | Health 200 with `ready=false reason=session at capacity`; existing guests continue. |
 
-`render-session.sh` strips `ownerReferences` because the Job UID does not exist when
-the pair is rendered. Its Service is therefore orphaned and must be deleted by hand
-after the Job; otherwise it keeps the NodePort allocated against the ten-port pool:
+`render-session.sh` omits the Service owner when `JOB_UID` is unset. Use it only to
+inspect a render or supply the UID during a two-stage caller. `session.sh` is the
+manual transaction and its delete command also clears leftovers from an older,
+unowned render:
 
 ```sh
-sudo kubectl -n vif delete job "vif-session-$SESSION_ID"
-sudo kubectl -n vif delete service "vif-session-$SESSION_ID"
+./deploy/k3s/session.sh delete "$SESSION_ID"
 ```
 
 ## 10. The allocator and website contract (designed, not built)
@@ -694,6 +707,13 @@ the FreeBSD host's nginx. Static JavaScript cannot hold Kubernetes credentials, 
 nginx reverse-proxies one same-origin API prefix to a small long-running allocator.
 The allocator holds the credential and creates or observes sessions. Raw game
 traffic still bypasses nginx and the allocator completely (A8).
+
+Kubernetes remains the scheduler and lifecycle owner. It deliberately has no
+anonymous application endpoint that means "allocate one safe vi-fighter session";
+exposing its API would instead let a caller choose arbitrary workload fields. The
+allocator is only that narrow translation boundary: select one of ten ports, create
+the fixed Job and owned Service, read health, and reconcile. A shell CGI would still
+be an allocator with a cluster credential, only harder to constrain and recover.
 
 ### 10.1 Location and network boundary
 
@@ -710,10 +730,10 @@ Port 6443 never leaves the Arch guest. The allocator connects to
 across the bridge. There is no new `pf rdr`: the allocator is not public and the
 host-to-guest bridge path already exists.
 
-The guest's `input` policy is `drop`, so implementation adds one rule to `table inet
-vif` for the allocator port from the FreeBSD bridge address only. Derive that address
-from the guest's default route and use the same rollback procedure as §6 before
-loading the change:
+The guest's `input` policy is `drop`. At allocator installation, add 9080 to the
+`operator_ports` set created in §6; the existing rule then admits it only from the
+FreeBSD host. Confirm that address against the default route and use the same
+rollback procedure before loading the change:
 
 ```sh
 host_bridge_addr=$(ip route show default | awk 'NR == 1 { print $3 }')
@@ -721,10 +741,9 @@ printf 'host bridge: %s\n' "$host_bridge_addr"
 ```
 
 ```nft
-# The host's nginx is the allocator's only caller across the bridge.
-define host_bridge_addr = 192.0.2.1
-define allocator_port = 9080
-ip saddr $host_bridge_addr tcp dport $allocator_port accept
+# /etc/nftables.d/vif-operator.nft, using documentation values
+define operator_addr = 192.0.2.1
+define operator_ports = { 22, 9080 }
 ```
 
 The example allocator address below uses the documentation guest and an example
@@ -732,7 +751,7 @@ port. Substitute the derived bridge values; do not add the port to the public
 `vif_ports` range:
 
 ```nginx
-location = /api/vif/logs {
+location = /vif/api/logs {
     proxy_pass http://192.0.2.20:9080;
     proxy_http_version 1.1;
     proxy_set_header Connection "";
@@ -740,7 +759,7 @@ location = /api/vif/logs {
     proxy_read_timeout 1h;
 }
 
-location /api/vif/ {
+location /vif/api/ {
     proxy_pass http://192.0.2.20:9080;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
@@ -748,7 +767,7 @@ location /api/vif/ {
 }
 ```
 
-The browser calls `/api/vif/...` on the same origin as the Hugo page. That removes
+The browser calls `/vif/api/...` on the same origin as the Hugo page. That removes
 CORS from the design; do not replace it with `Access-Control-Allow-Origin: *`.
 
 ### 10.2 Credential and API
@@ -789,14 +808,14 @@ The page-facing session API has two endpoints:
 
 | Method and path | Contract |
 |---|---|
-| `POST /api/vif/sessions` | Refuse before creation when all ten ports are held; otherwise create the Job, read its UID, create its owner-referenced Service, wait for `live=true ready=true`, and return the session page URL, join target, and health-derived state. |
-| `GET /api/vif/sessions` | List live, non-completed Jobs and return one row per session. `guests`/`capacity`, `phase`, and `expires_in` come from that pod's `/health`; only the process can report the last field. |
+| `POST /vif/api/sessions` | Refuse before creation when all ten ports are held; otherwise create the Job, read its UID, create its owner-referenced Service, wait for `live=true ready=true`, and return the session page URL, join target, and health-derived state. |
+| `GET /vif/api/sessions` | List live, non-completed Jobs and return one row per session. `guests`/`capacity`, `phase`, and `expires_in` come from that pod's `/health`; only the process can report the last field. |
 
 The log panel uses a third, read-only stream, built in §10.3:
 
 | Method and path | Contract |
 |---|---|
-| `GET /api/vif/logs` | Reverse-proxy the node aggregator's SSE stream, unbuffered. Never expose a pod IP, a pod port, or the aggregator's own address to the browser. |
+| `GET /vif/api/logs` | Reverse-proxy the node aggregator's SSE stream, unbuffered. Never expose a pod IP, a pod port, or the aggregator's own address to the browser. |
 
 An iframe is an acceptable first rendering only if it targets this same-origin
 path. The ordinary page should use `EventSource`, bound its retained rows and
@@ -815,9 +834,10 @@ shape is that **vi-fighter's log envelope survives exactly one path** (A17):
 | LogWisp file source, defaults | The line as written, carried as text. The JSON branch is refused for any line holding a key outside `time`, `level`, `msg` and `fields` — which every vif line does. |
 
 All three compose; the last two need LogWisp at or past the pass-through change.
-So: the session writes to stdout, the allocator follows each live pod's log, and
-one LogWisp on the guest reads the merged lines on standard input and serves them
-as SSE on loopback — [`deploy/logwisp/aggregator.toml`](../deploy/logwisp/aggregator.toml).
+The intended path is session stdout, allocator pod-log follow, and one LogWisp on
+the guest serving merged lines on loopback. Its config is prepared in
+[`deploy/logwisp/aggregator.toml`](../deploy/logwisp/aggregator.toml), but this
+end-to-end path has not yet been run.
 
 ```sh
 sudo install -m 0644 deploy/logwisp/aggregator.toml /etc/logwisp/aggregator.toml
@@ -831,6 +851,10 @@ component needs a token. LogWisp is there for what the allocator would otherwise
 build: the SSE server, the per-client queues, the connection ceiling, the rate limit
 and the filters.
 
+Only vi-fighter session stdout belongs in the website feed. K3s service logs,
+kernel messages, and other node journal records remain operator-only; exposing them
+would turn an entertainment page into a control-plane information leak.
+
 Four obligations on the allocator's side of that pipe:
 
 | Obligation | Why |
@@ -838,7 +862,7 @@ Four obligations on the allocator's side of that pipe:
 | Splice `"session"` and `"port"` into each line after the opening brace, preserving every original key. | The panel must name the session, and the pass-through has no other place to carry it. Re-serializing the object instead is the field loss this path exists to avoid. |
 | Follow each pod's log with a bounded restart, and never re-read from the start on reconnect. | A follow that restarts from the beginning replays a whole match into the panel. |
 | Bound what it writes, and let a slow stream drop rather than block. | Ten sessions emitting a status snapshot per group at 10 Hz will outrun a browser; the aggregator's rate limit is the second half of that bound, not the first. |
-| Reverse-proxy `/api/vif/logs` to `127.0.0.1:8081/stream` with response buffering off. | The aggregator must not bind an address the bridge can reach, so the allocator's one open port stays the whole guest surface (§10.1). |
+| Reverse-proxy `/vif/api/logs` to `127.0.0.1:8081/stream` with response buffering off. | The aggregator must not bind an address the bridge can reach, so the allocator's one open port stays the whole guest surface (§10.1). |
 
 The panel is a viewer of operational data. `fields.msg` is the record discriminator
 on every line; `sub="stat"` marks the status snapshots that carry the metric values,
@@ -848,9 +872,11 @@ and a panel that does not want them filters on that key rather than on a group n
 
 | Obligation | Why it is required |
 |---|---|
-| Rebuild the port map by listing Jobs on allocator start. | Kubernetes is the state; allocator memory is a cache. |
+| Rebuild live sessions from Jobs, and reserve ports from every Service `nodePort`. | A finished Job's Service keeps its port until Job TTL and garbage collection finish; allocator memory is only a cache. |
 | Create the Job first, then set the Service's `ownerReferences` to that Job UID. | The endpoint must disappear with the match rather than hold a NodePort after it. |
-| Wait for `live=true ready=true`, not pod `Running`. | Any unready container leaves the Service with no endpoint, and a running game process may still be building its world. |
+| Roll back the Job when Service creation fails. | A half-created transaction otherwise consumes quota without a reachable session. |
+| Delete Jobs with background propagation. | A raw API delete without a propagation policy may orphan the pod and its Service. |
+| Parse `/health` as `key=value` text and wait for `live=true ready=true`, not pod `Running`. | A running process may still be building its world; the probe is not JSON. |
 | Refuse at ten before calling the API. | The quota is a backstop, not the player-facing capacity response. |
 | Never resurrect a completed Job. | A completed Job is a finished in-memory match; its former port has returned to the pool. |
 
@@ -925,6 +951,7 @@ beside them; each was a dead end in the proof-of-concept run when omitted:
 | Every rule in `iptables-save -c` accepts, but the connection still fails. | Another nftables table can drop on the same hook. Only `nft list ruleset` shows every table. |
 | One before/after connection changes a counter. | The last moving rule identifies the component that handled the packet; take both `iptables-save -c` and `nft list ruleset` immediately around one attempt. |
 | Forward counters move but the tuple has no conntrack entry. | The packet was accepted for forwarding and dropped by another hook before the routing decision completed. |
+| A finished session first refuses and later times out. | While its Service exists with no endpoint, kube-proxy rejects; after Job TTL garbage-collects the Service, the guest filter drops an unassigned port. |
 | Pod IP works, then ClusterIP, loopback NodePort, guest NodePort, host-to-guest, and finally off-box. | Each boundary names one component. Walking inward from the Internet combines all of them and names none. |
 
 **What to watch.** Sessions expiring with `no guest connected` far more often than
@@ -937,20 +964,21 @@ at the ten-session quota, which is a player being told there is no game.
 
 **Upgrades.** Sessions are ephemeral, so a rollout is mostly a matter of not starting
 new sessions on the old image. Once the allocator exists, point it at the new digest;
-existing sessions finish on their own within a match plus 90 seconds. Delete old
-Jobs only if you mean to drain them.
+existing sessions finish 90 seconds after their last player leaves. Delete old Jobs
+only if you mean to drain them.
 
-**Node maintenance.** Stop the allocator, wait for the running sessions to end (they
-will, within a match plus the grace), then `sudo kubectl drain`. A session that must go
-now is drained by deleting its Job, which is a `SIGTERM` and therefore the 20-second
-drain, not a kill.
+**Node maintenance.** Stop allocation, then wait for players to leave or explicitly
+drain the remaining Jobs before `sudo kubectl drain`; an occupied match has no time
+limit. Deleting a Job sends `SIGTERM`, so vi-fighter gets its 20-second drain before
+the kubelet's 30-second termination grace ends.
 
 ## 13. What this deployment does not yet have
 
-The acceptance run proved one important path: a real Internet client crossed the
-FreeBSD `pf rdr`, the Arch guest, the NodePort and kube-proxy DNAT, reached the pod,
-and joined the game. It did not turn the designed components around that path into
-verified ones. The full gap register is the fleet plan's
+The acceptance run proved the Internet path, reboot-safe node baseline, current
+image, and unclaimed-session cleanup. A real client crossed the FreeBSD `pf rdr`,
+the Arch guest, NodePort and kube-proxy DNAT into the pod. A production 90-second
+unclaimed session then exited 0, and Job TTL plus ownership removed every object.
+The remaining gap register is the fleet plan's
 [work list](kubernetes-fleet.md#3-work-list):
 
 - **The game port is open and unauthenticated, by decision** (A9). A forwarded port
@@ -973,16 +1001,13 @@ verified ones. The full gap register is the fleet plan's
 - **The allocator and website integration are not built** (A16). The API, restricted
   kubeconfig, nginx bridge path, Hugo session page, and the log path in §10 are
   contracts for the next task.
-- **The lifecycle gates were not exercised.** First-join expiry, empty grace and the
-  drain after deleting a Job were all bypassed by extended debugging timers.
+- **The occupied lifecycle gates remain open.** Join then quit, rejoin inside the
+  empty grace, drain while joined, and the one-player capacity case still need the
+  production-timer run in §9. First-join expiry and owned-Service cleanup passed.
 - **Losing the pod ends the session, and that is intended.** The manifest pins
   `-authority host`: no guest inherits the world, because a guest cannot be dialled
-  and none of the others knows where it is. What replaces the pod is the orchestrator,
-  at the same Service address. Do not set `-authority migrate` on a fleet session — it
-  would leave each guest playing a private continuation that looks like the session.
-- **`-empty` and the in-pod restart are two answers to one condition, and the
-  manifest picks one.** With `-empty` the pod exits when the roster has been empty
-  that long, which is what the fleet wants: one Job, one session, the allocator places
-  the next. Without it the pod stays and restarts its own world after a minute, which
-  suits a host somebody left running. The fleet objects set `-empty`, so the restart
-  path does not run there; see fleet plan H7.
+  and none of the others knows where it is. `backoffLimit: 0` means no replacement
+  pod is advertised as that match. Do not set `-authority migrate` on a fleet
+  session; it would leave guests in private continuations with no public endpoint.
+- **Automated image delivery is not built.** The verified path still builds with
+  Docker on demand, imports into K3s containerd, and disables Docker afterwards.

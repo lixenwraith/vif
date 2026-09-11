@@ -8,20 +8,23 @@ it is [Deploying the session fleet](kube_docker_deploy.md); the objects themselv
 are in [`deploy/`](../deploy/README.md); the scenarios that verify it by hand are in
 [`test/`](../test/README.md).
 
-## 1. What is deployed
+## 1. Current deployment
 
 | Property | Value |
 |---|---|
 | Session unit | One `vif -serve` process, one pod, one Job, one Service. |
-| Concurrency ceiling | 10, enforced by a namespace `ResourceQuota` as well as by the allocator. |
+| Concurrency ceiling | 10, enforced now by namespace `ResourceQuota`; the future allocator also refuses before attempting an eleventh. |
 | First-guest window | 90 s. A session nobody reaches exits 0 and is removed. |
 | Empty grace | 90 s after the last guest leaves; also the window a dropped player has to reclaim their slot. |
 | Drain | 20 s on `SIGTERM`, inside a 30 s termination grace period. A second signal exits at once. |
-| Trigger | The website's allocator, on a player's request. Nothing runs when nobody is playing. |
+| Trigger | Manual `deploy/k3s/session.sh` today. The website allocator is the next control-plane component; no session pod runs between requests. |
 | Image | `scratch` + one static binary, ~13 MB, non-root, read-only root filesystem, no shell. |
 | Transport | Raw framed TCP, one long-lived connection per player. Unauthenticated by decision (§4). |
 | Reached by | Its own port, from a forwarded ten-port range. The port is the whole of the routing: nothing in a plaintext game connection names a session, so a firewall's destination port is the only signal there is. |
-| Logs and metrics | JSON lines on the pod's stdout. The allocator follows each pod log and one LogWisp on the node serves the merged stream as Server-Sent Events. |
+| Logs and metrics | JSON lines on pod stdout, verified through `kubectl logs`. The allocator-to-LogWisp fan-in is configured but not deployed. |
+
+The diagram is the target request path; the allocator and LogWisp edges remain to
+be implemented.
 
 ```mermaid
 flowchart LR
@@ -31,7 +34,7 @@ flowchart LR
     API --> Pod["vif -serve"]
     Site -->|"host:port"| Player
     Player -->|"vif -join, TCP"| NP["NodePort"] --> Pod
-    Pod -->|"stdout"| Logs["pod log"] --> Alloc --> Wisp["logwisp on the node"]
+    Pod -->|"stdout"| Logs["pod log"] --> Alloc --> Wisp["LogWisp on the node"]
 ```
 
 ## 2. Runtime contract
@@ -65,12 +68,15 @@ it does not move an in-memory session into an unrelated pod.
 | Graceful termination | A signal drains rather than cutting a match; a second one exits. An abandoned startup gate ends cleanly rather than failing the Job. |
 | Join identity (was F2) | The **host** verifies. A joiner reports what it turned out to be and the coordinator refuses it; a peer that skipped its own check is refused anyway. Covers the wire protocol, the manifest's simulation fingerprint, both schemas, the tick interval, and the whole session identity. |
 | Fleet objects | Namespace with enforced `restricted` Pod Security, ten-session quota, default-deny network policy, per-session Job/Service, allocator RBAC. |
-| Proof-of-concept Internet path (H2) | Executed on an Arch bhyve guest under FreeBSD 15.1: an off-box vif client crossed `pf rdr`, the guest, a NodePort and kube-proxy DNAT into the pod, then joined a real game. This proves the game path only; source-address preservation, lifecycle timers, the log fan-in and the allocator/site remain open below. |
+| Proof-of-concept Internet path (H2) | An off-box client crossed FreeBSD 15.1 `pf rdr`, the Arch bhyve guest, NodePort and kube-proxy DNAT, then joined a real game. Source-address preservation remains H11. |
+| Reboot-safe node baseline | K3s v1.34.6+k3s1 returned Ready with no swap, `inet vif` loaded from files, Docker and the system containerd inactive and disabled, no stale `vif` objects, and both imported images retained. |
+| Unclaimed-session lifecycle | With production timers, the listener opened, exited 0 at 90 s with `no guest connected`, completed its Job, then Job TTL and garbage collection removed the owned Service and returned quota to zero. |
 | Correction correctness | Snapshot schema 5 local-lifecycle reconciliation, delayed-action identity, quasar map clipping. |
 | Late-crossing ordering (was F10/H5) | A capture carries one applied-sequence fence per participant, so a correction keeps an action it had not received instead of undoing it for a cadence. See §5. |
 | Reconnect on every host shape | The mid-run gate is installed on every host and armed once its clock runs, so a dropped guest dials back into the slot its departure released whatever opened the session. A departure clears the identity's crossing fence, so the next holder of that identity is not read as already-applied. |
 | Roster ceiling | `-players` is a ceiling and only a ceiling, unset meaning the whole roster. A pod no longer serves the number somebody guessed at start-up. |
-| Empty-session cost | A roster that empties parks the clock at once and restarts the run after `parameter.SessionVacantReset`. An empty session used to spin the gold cycle at 10 Hz forever. `/health` reports `clock=paused` with `phase=vacant` and stays `live=true`. |
+| Empty-session cost | A roster that empties parks immediately. With `-empty`, the same world is retained until the grace expires so a reconnect reclaims the match. An unbounded host (`-empty=0`) alone starts a fresh run after `SessionVacantReset`. |
+| Parked-session probe | `/health` remains live with `clock=paused phase=vacant`; liveness is the response code, not a moving tick. |
 | Named sessions | `-name` on a host, `vif://host:port/name` in a player's link. One frame before the handshake, so a front door can put ten sessions behind one public port ([`deploy/frontdoor`](../deploy/frontdoor/haproxy.cfg)) and a stale link is refused rather than misrouted. Held in reserve for H8: the deployment reaches a session by port. |
 | Authority policy | `-authority host|migrate`, defaulting to `host` on `-serve`. A dedicated host's address *is* the session, so losing the pod is an orchestrator's job to fix rather than a guest's to inherit. See [Multiplayer](multi-player-enhancement.md) §5.0. |
 
@@ -82,13 +88,14 @@ it does not move an in-memory session into an unrelated pod.
 | H1 | **next** | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do to a session has to be bounded. Two known holes: the startup ready gate has no timeout, and an abandoned startup gate ends the session — so a peer that reaches a fresh session first can hang it or end it. | A peer that connects and never confirms is dropped on a deadline; an abandoned lobby returns to waiting instead of ending the session; fuzz coverage for malformed, oversized, replayed and half-open handshakes passes. |
 | H3 | next | **Measure a full roster.** Four guests through a tower and a storm, and on `wad/game/td`, for an hour. | Requests and limits in `deploy/k3s/30-session.yaml` come from the measurement rather than from single-guest history. Not a blocker: the current values are a starting point, not a claim. |
 | H4 | later | **Server-only build.** The binary links terminal, render and audio packages `ModeServer` never initialises. | A server target drops them without changing simulation identity. Matters for pod density, not for ten sessions. |
-| H6 | next | **Probe words for a parked session.** A vacant pod answers `live=true ready=true clock=paused` and its tick counter stops. Correct, and exactly what a naive liveness rule reads as a hang. | The manifest's probes are written against `/health`'s body rather than against a moving tick, and [Deployment §9](kube_docker_deploy.md#9-create-one-session-by-hand) says so with a worked example. |
-| H7 | next | **Restart semantics under an orchestrator.** `SessionVacantReset` restarts the *world* inside a pod that an unbounded `-serve` keeps alive; `-empty` ends the *pod* instead. A fleet session sets `-empty`, so the restart never fires there — which means it is untested in the shape the fleet runs. | Either the fleet sets no `-empty` and the in-pod restart is the reuse path (one pod, many sessions), or it sets one and the restart is documented as interactive-only. Decide, then delete the other. |
 | H5 | later | **Spatial grid right-sizing.** ~30.5 MiB reserved per world at the current maximum. | Deferred until density matters; needs resize/play regression coverage. |
-| H9 | later | **Move the log stream back into the pod.** Not needed by the fleet: the node aggregator ([Deployment §10.3](kube_docker_deploy.md#103-the-log-path)) carries the envelope intact today and costs the pod nothing. It becomes worth doing when a reader must reach one session without the allocator between. No longer blocked: LogWisp's file source takes `raw = true` and `from = "start"`, which 50-logwisp.yaml now sets. | The sidecar runs against a LogWisp carrying both options; the commit-tagged image is imported; the two-container pod is Ready under read-only UID 65532; `/stream` and `kubectl logs -c logwisp` carry intact records including `sub="stat"` and the session's first line; no write is attempted. |
-| H10 | **next** | **Build the allocator and Hugo integration.** Their Arch-guest placement, ServiceAccount kubeconfig, bridge-only nginx route, POST/GET session API, log fan-in, reconciliation rules and page contract are designed in [Deployment §10](kube_docker_deploy.md#10-the-allocator-and-website-contract-designed-not-built), not implemented. | The allocator refuses at ten, reconciles Jobs and ports after restart, owner-references Services, waits for health readiness, ignores completed Jobs, and serves the same-origin API and log feed used by the project and session pages without exposing 6443, a pod port or the aggregator's address. |
+| H9 | later | **Move the log stream into each pod.** Not needed by the selected fleet design. LogWisp's file source supports `raw = true` and `from = "start"`, and `50-logwisp.yaml` prepares the experiment if per-session direct readers ever justify its cost. | The two-container pod is Ready under read-only UID 65532; `/stream` and `kubectl logs -c logwisp` retain the first record and the full envelope; no write is attempted. |
+| H10 | **next** | **Build the thin allocator.** It runs on the Arch guest and translates `/vif/api/sessions` into the fixed Job/Service transaction; Kubernetes still schedules, bounds, terminates and collects each session. The RBAC, bridge-only nginx route, reconciliation rules and API contract are in [Deployment §10](kube_docker_deploy.md#10-the-allocator-and-website-contract-designed-not-built). | It refuses at ten, reserves ports from Services, rolls back partial creates, uses background Job deletion, owner-references Services, parses health text, reconciles after restart, and never exposes 6443 or a pod port. |
 | H11 | **next** | **Verify the player's source address at the pod.** `externalTrafficPolicy: Local` plus `pf rdr` should preserve it, and the address is already carried — `network.JoinerReport.Remote` holds `conn.RemoteAddr()` and reaches `App.noteJoinerReport` — but only `reach.noteDeclared` consumes it, so no record names it and the run could not inspect one. | The admitted-participant record in `internal/app/host.go` carries the accepted socket's remote address, and a remote join names the off-box client. If it names the node or gateway, the routing is corrected before relying on admission limits; otherwise the limiter is one budget for the whole fleet. |
-| H12 | **next** | **Run the allocated-lifecycle gates with production timers.** Every proof-of-concept Job used extended debugging values, so first-join expiry, empty grace, reconnect within grace and drain on Job deletion were bypassed. | Each case in [Deployment §9](kube_docker_deploy.md#9-create-one-session-by-hand) produces its specified health transition, terminal log reason, Job completion and Service removal. |
+| H12 | **next** | **Finish the occupied lifecycle gates.** First-join expiry and owned-Service cleanup passed. Join/quit, rejoin near 75 s, drain on Job deletion, and `PLAYERS=1` capacity remain. | Each open case in [Deployment §9](kube_docker_deploy.md#9-create-one-session-by-hand) produces its specified transition and preserves the same run throughout the reconnect grace. |
+| H14 | next | **Run the node LogWisp fan-in.** The binary and `aggregator.toml` exist, but no live pod log has been piped through it. The public feed contains vi-fighter session stdout only, never K3s or host journal records. | A bounded `kubectl logs -f` test reaches loopback SSE intact; then the allocator enriches each line with session and port, owns the child process, and serves `/vif/api/logs` without replay or backpressure. |
+| H15 | after H10/H14 | **Integrate nginx and Hugo.** The website implementation waits for the real allocator response fields and status codes. | `https://lixen.com/vif/api/sessions` creates/lists sessions, the session page keeps its HTTPS URL distinct from the raw join target, and the bounded log panel degrades cleanly when the API is absent. |
+| H16 | later | **Automate image delivery.** The verified path is still an on-demand Docker build, `docker save | k3s ctr images import`, then Docker disabled. | A tagged release is resolved and verified on the guest, imported by digest without an inbound cluster credential, and new sessions use it while existing matches finish. |
 
 ### Dropped, with the reason
 
@@ -96,7 +103,6 @@ it does not move an in-memory session into an unrelated pod.
 |---|---|
 | F1 authentication | Deferred by decision. The website triggers a container and the player connects to it; neither hop is authenticated. Hardening (H1) is the requirement in its place, and it comes *before* any auth work, not after. |
 | F3 session credentials | The website and the container are joined by one commissioned endpoint. There is nothing for a credential to add that the endpoint's obscurity and H1's bounds do not, and building one now would be work spent away from a fleet that runs. |
-| F6 CI/CD, SBOM, signing | No value to the application until one instance runs under orchestration. Revisit when the fleet exists. |
 | F11 `SIGHUP` reload | No reload contract is planned. `SIGHUP` terminates like any other signal, which is the documented behaviour. |
 | F12 match-complete exit | There is no gameplay terminal state and none is planned. A session ends on emptiness. If one ever exists, it attaches to `lifecycle.Controller.Expire` and nothing else changes. |
 
@@ -240,22 +246,25 @@ By hand, on a dev machine — see [`test/README.md`](../test/README.md):
 
 Against a cluster, the checks that need one:
 
-| Check | Expected |
-|---|---|
-| Nobody joins for 90 s | Pod exits 0; log names `no guest connected`; the Job completes and the Service goes with it. |
-| A guest joins and quits | Exits 0 ninety seconds later, naming `roster empty for`. |
-| A guest quits and rejoins inside the grace | The session continues, into the slot the departure released. |
-| `kubectl delete job` while a guest plays | `phase=draining`, `/health` still 200, exit when the roster empties or after 20 s. |
-| Roster at `-players` | `ready=false` with `session at capacity`; the guests already in it keep playing. |
-| 60-minute full roster | No OOM, no liveness restart, no sustained tick slips, no growing correction magnitude. |
-| `tc netem` latency, loss, reordering | Recovers at the next bounded correction or keyframe. |
-| Pod delete / node failure | Connected-client behaviour is recorded; the allocator does not advertise a replacement as the same match. |
+| Check | Status | Expected |
+|---|---|---|
+| Reboot with no session | Passed | Node Ready, no swap, filter present, build daemons inactive, imported image retained, namespace empty. |
+| Nobody joins for 90 s | Passed | Exit 0 at 90 s; Job Complete; owned Service removed after the 120 s TTL. |
+| A guest joins and quits | Open | Exit 0 ninety seconds later, naming `roster empty for`. |
+| A guest quits and rejoins near 75 s | Open | The same run continues in the released slot; no one-minute reset occurs. |
+| `kubectl delete job` while a guest plays | Open | `phase=draining`, `/health` 200, exit when the roster empties or after 20 s. |
+| Roster at `-players` | Open | `ready=false` with `session at capacity`; existing guests keep playing. |
+| 60-minute full roster | Open | No OOM, liveness restart, sustained tick slips, or growing correction magnitude. |
+| `tc netem` latency, loss, reordering | Open | Recovers at the next bounded correction or keyframe. |
+| Pod delete / node failure | Open | Connected-client behaviour is recorded; no replacement is advertised as the same match. |
 
 ## 8. Decisions
 
 - **Allocated session, not a long-lived one.** A website creates the container, so
   the container ends itself. The long-lived shape remains available and is what the
   lifetime flags select when omitted.
+- **`-empty` owns a bounded vacancy.** It preserves the parked world until expiry;
+  the one-minute fresh-world reset is only for an unbounded hand-started server.
 - **Ninety seconds, twice.** The first-guest window and the empty grace are the same
   number and different bounds; the second doubles as the reconnect window.
 - **Ten sessions, enforced by quota as well as by the allocator.** A ceiling only the
@@ -264,12 +273,19 @@ Against a cluster, the checks that need one:
   into a session nobody is in.
 - **A NodePort per session from a fixed ten-port range.** The pool becomes a fact the
   API server enforces and the firewall forwards as one range.
+- **A thin allocator, not a second scheduler.** It exposes only the fixed session
+  transaction on `/vif/api/`; K3s still schedules, admits, limits, terminates and
+  garbage-collects every workload.
+- **Docker builds; K3s runs.** Docker and its system containerd stay disabled except
+  during an on-demand build. The image is imported into K3s's embedded containerd.
 - **One health path.** The code answers "should this process still be running";
   everything else is in the body, where the allocator reads it.
 - **The pod log is the log contract.** The session writes its own JSON envelope to
   stdout and every reader downstream forwards bytes rather than parsing them. A
   component that reinterprets a line is a component that can drop a field, which is
   what took the log stream out of the pod and put it on the node.
+- **The public stream is session output only.** K3s, kernel and host journal records
+  remain operator-only.
 - **The host is the authority over identity.** A joiner reports; the coordinator
   decides.
 - **No authentication, and hardening first.** See §4.
