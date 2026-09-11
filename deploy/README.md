@@ -5,6 +5,7 @@ procedure that uses them is [doc/kube_docker_deploy.md](../doc/kube_docker_deplo
 the plan and the gap register behind it are
 [doc/kubernetes-fleet.md](../doc/kubernetes-fleet.md).
 
+
 | Path | What it is |
 |---|---|
 | `docker/Dockerfile` | Multi-stage build: pinned Go builder, `scratch` final layer holding one static non-root binary and nothing else. Built with `make image` from the repository root. |
@@ -17,9 +18,8 @@ the plan and the gap register behind it are
 | `k3s/render-session.sh` | Renders the template from a shell, with lifetime overrides. Defaults to the deployed one-container shape; `LOGWISP_IMAGE=<tag>` adds the sidecar. |
 | `logwisp/aggregator.toml` | The deployed log path: one LogWisp on the Arch guest, fed session pod logs on standard input by the allocator and serving one merged SSE stream on loopback. |
 | `frontdoor/haproxy.cfg` | Not deployed. The worked alternative: every session behind one public port, routed on the name a dialer sends before the handshake. Kept for the routing exploration; the deployed shape reaches a session on its own port. |
-| `k3s/walk-session.sh` | Walks one live session outward from the pod: pod IP, ClusterIP, loopback and node NodePort, node-local `/health`, pod-log envelope. `CAPTURE=<s>` also records off-box SYNs at `cni0` and their conntrack tuple. |
-| `guest/nftables.conf` | The Arch guest's own filter: one `inet vif` table, replaced atomically, input evaluated after the iptables-nft tables. Site values come from `/etc/nftables.d/vif-operator.nft`. |
-| `guest/nftables.service.d/10-vif.conf` | Drop-in replacing the stock unit's `ExecStop=nft flush ruleset` with removal of `inet vif` only. |
+| `guest/nftables.conf` | The guest's own filter: one `inet vif` table, replaced on every load, never `flush ruleset`. Load with `systemctl restart nftables`; the stock unit is a oneshot and must not be given an `ExecStop`. |
+| `guest/vif-operator.nft.example` | Site values the filter includes: the one address allowed to reach the node directly and the node ports it may open. Install as `/etc/nftables.d/vif-operator.nft`. |
 
 Nothing here is applied automatically. A session is created when a player asks for
 one; between requests, the namespace holds no pods.

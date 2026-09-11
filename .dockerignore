@@ -4,7 +4,9 @@
 # The image serves -d, so the external wad never reaches it.
 bin/
 tmp/
-wad/
+dev/
+log/
+journal/
 web/lib/
 web/*.wasm
 sandbox/
@@ -14,3 +16,4 @@ script/
 *.md
 .github/
 .gitignore
+
