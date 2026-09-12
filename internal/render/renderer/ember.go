@@ -5,6 +5,7 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -94,37 +95,43 @@ func (r *EmberRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 
 	buf.SetWriteMask(visual.MaskField)
 
+	localEntity := roster.Entity
 	for slot := range parameter.MaxPlayers {
 		entity := roster.Slot(uint8(slot))
-		if entity == 0 {
+		if entity == 0 || entity == localEntity {
 			continue
 		}
-		if _, ok := shields.GetPtr(entity); !ok {
-			continue
-		}
-		heatComp, ok := world.Components.Heat.GetPtr(entity)
-		if !ok || !heatComp.EmberActive {
-			continue
-		}
-
-		// Drawn around the cursor it belongs to, so it reads the cell that cursor
-		// is on — the D-18 prediction for this instance's own, which is where the
-		// cursor glyph is; the store would trail it by a playout lead.
-		pos, ok := world.CursorCell(entity)
-		if !ok {
-			continue
-		}
-
-		skipX, skipY := -1, -1
-		blendScale := visual.PeerFieldBlend
-		if entity == roster.Entity {
-			skipX = pos.X
-			skipY = pos.Y
-			blendScale = 1
-		}
-
-		r.painter(slot).Paint(buf, ctx, pos.X, pos.Y, heatComp.Current, skipX, skipY, blendScale)
+		r.renderEmber(ctx, buf, slot, entity, false)
 	}
+	if localEntity != 0 {
+		r.renderEmber(ctx, buf, int(roster.LocalSlot()), localEntity, true)
+	}
+}
+
+func (r *EmberRenderer) renderEmber(ctx render.RenderContext, buf *render.RenderBuffer, slot int, entity core.Entity, local bool) {
+	world := r.gameCtx.World
+	if _, ok := world.Components.Shield.GetPtr(entity); !ok {
+		return
+	}
+	heatComp, ok := world.Components.Heat.GetPtr(entity)
+	if !ok || !heatComp.EmberActive {
+		return
+	}
+
+	// D-18 prediction supplies the local cell; every other cursor uses the store.
+	pos, ok := world.CursorCell(entity)
+	if !ok {
+		return
+	}
+
+	skipX, skipY := -1, -1
+	blendScale := visual.PeerFieldBlend
+	if local {
+		skipX = pos.X
+		skipY = pos.Y
+		blendScale = 1
+	}
+	r.painter(slot).Paint(buf, ctx, pos.X, pos.Y, heatComp.Current, skipX, skipY, blendScale)
 }
 
 // emberColors holds interpolated colors for current heat level

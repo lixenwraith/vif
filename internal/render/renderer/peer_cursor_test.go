@@ -224,3 +224,37 @@ func TestPeerEmberPaletteBlendsFromThemeBackground(t *testing.T) {
 		t.Fatalf("peer ember palette = (%d, %v), want (%d, bg256)", got.Bg.R, got.Attrs, want)
 	}
 }
+
+func TestPlayerFieldsRenderLocalLast(t *testing.T) {
+	t.Parallel()
+	gameCtx, cursors := peerWorld(t, 2)
+	gameCtx.World.Resources.Config.ColorMode = terminal.ColorMode256
+	rc := peerContext(gameCtx)
+	pos := component.PositionComponent{X: 40, Y: 10}
+
+	for _, cursor := range cursors {
+		gameCtx.World.Positions.SetPosition(cursor, pos)
+		gameCtx.World.Components.Shield.SetComponent(cursor, component.ShieldComponent{
+			Type: component.ShieldTypePlayer, Active: true,
+		})
+	}
+	gameCtx.World.Components.Energy.SetComponent(cursors[0], component.EnergyComponent{Current: -1000})
+	gameCtx.World.Components.Energy.SetComponent(cursors[1], component.EnergyComponent{Current: 1000})
+
+	buf := render.NewRenderBuffer(terminal.ColorMode256, 80, 24)
+	NewShieldRenderer(gameCtx).Render(rc, buf)
+	wantShield := visual.ShieldConfigs[component.ShieldTypePlayer].Palette256Alt
+	if got := buf.CellAt(pos.X+8, pos.Y); got.Attrs&terminal.AttrBg256 == 0 || got.Bg.R != wantShield {
+		t.Fatalf("overlapping shield palette = (%d, %v), want local (%d, bg256)", got.Bg.R, got.Attrs, wantShield)
+	}
+
+	for _, cursor := range cursors {
+		gameCtx.World.Components.Heat.SetComponent(cursor, component.HeatComponent{Current: 100, EmberActive: true})
+	}
+	buf.Clear()
+	NewEmberRenderer(gameCtx).Render(rc, buf)
+	wantEmber := visual.Ember256PaletteIndex(100)
+	if got := buf.CellAt(pos.X+5, pos.Y); got.Attrs&terminal.AttrBg256 == 0 || got.Bg.R != wantEmber {
+		t.Fatalf("overlapping ember palette = (%d, %v), want local (%d, bg256)", got.Bg.R, got.Attrs, wantEmber)
+	}
+}

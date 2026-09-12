@@ -298,7 +298,9 @@ Peer shield and ember fields keep their owner's color and geometry but compose a
 30% of local intensity over the existing or theme background. Indexed rendering
 quantizes the same dimmed blend. Ember walks the fixed roster instead of every
 shield, keeps one heat cache per slot, and commits its layers in one background
-write. The distinction remains render-only; no transported state changes.
+write. Both field renderers compose peers first and the local cursor last, without
+sorting or changing store/slot order. The distinction remains render-only; no
+transported state changes.
 
 ## 8. Renderer responsibilities
 

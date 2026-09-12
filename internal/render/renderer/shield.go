@@ -197,93 +197,95 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 	buf.SetWriteMask(visual.MaskField)
 
-	cursorEntity := r.gameCtx.World.Resources.Player.Entity
+	localEntity := r.gameCtx.World.Resources.Player.Entity
+	var localShield *component.ShieldComponent
 
 	shields.Each(func(shieldEntity core.Entity, shieldComp *component.ShieldComponent) bool {
-		if !shieldComp.Active {
+		if shieldEntity == localEntity {
+			localShield = shieldComp
 			return true
 		}
-
-		heatComp, hasHeat := r.gameCtx.World.Components.Heat.GetPtr(shieldEntity)
-		emberActive := hasHeat && heatComp.EmberActive
-
-		// Track ember transition state (player only)
-		var transitionIntensity float64
-		if shieldEntity == cursorEntity {
-			transition := r.getOrCreateTransition(shieldEntity)
-			transitionIntensity = r.updateTransition(transition, emberActive, ctx.GameTime)
-		}
-
-		// Skip shield render when ember is active
-		if emberActive {
-			return true
-		}
-
-		// The ellipse is centred on its owner, so it reads that owner's cell: the
-		// D-18 prediction for this instance's own cursor, the store for anything else.
-		shieldPos, ok := r.gameCtx.World.CursorCell(shieldEntity)
-		if !ok {
-			return true
-		}
-
-		cfg := &visual.ShieldConfigs[shieldComp.Type]
-
-		// Build minimal per-entity style
-		style := ShieldStyle{
-			Config:     cfg,
-			BlendScale: 1,
-			Color:      cfg.Color,
-			Palette256: cfg.Palette256,
-			GlowColor:  cfg.GlowColor,
-			GlowPeriod: cfg.GlowPeriod,
-			SkipX:      -1,
-			SkipY:      -1,
-		}
-
-		// Per-entity overrides
-		if shieldEntity == cursorEntity {
-			style.SkipX = int16(shieldPos.X)
-			style.SkipY = int16(shieldPos.Y)
-		}
-
-		switch shieldComp.Type {
-		case component.ShieldTypePlayer:
-			// Color based on energy polarity
-			if energy, ok := r.gameCtx.World.Components.Energy.GetPtr(shieldEntity); ok && energy.Current < 0 {
-				style.Color = cfg.ColorAlt
-				style.Palette256 = cfg.Palette256Alt
-			}
-			// Glow based on boost state
-			if boost, ok := r.gameCtx.World.Components.Boost.GetPtr(shieldEntity); ok && boost.Active {
-				style.GlowPeriod = parameter.ShieldBoostRotationDuration
-			} else {
-				style.GlowPeriod = 0
-			}
-
-		case component.ShieldTypeLoot:
-			// GlowColor from loot visual definition
-			if loot, ok := r.gameCtx.World.Components.Loot.GetPtr(shieldEntity); ok {
-				if vis, exists := visual.LootVisuals[loot.Type]; exists {
-					style.GlowColor = vis.GlowColor
-				}
-			}
-		}
-
-		if shieldComp.Type == component.ShieldTypePlayer && shieldEntity != cursorEntity {
-			style.BlendScale = visual.PeerFieldBlend
-			if r.gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
-				style.Palette256 = color.RGBTo256(color.Screen(visual.RgbBackground, style.Color, visual.PeerFieldBlend))
-			}
-		}
-
-		r.painter.Paint(buf, ctx, shieldPos.X, shieldPos.Y, style)
-
-		// Apply ember-to-shield transition overlay
-		if transitionIntensity > 0.001 {
-			r.renderTransitionOverlay(buf, ctx, shieldPos.X, shieldPos.Y, cfg, transitionIntensity)
-		}
+		r.renderShield(ctx, buf, shieldEntity, shieldComp, false)
 		return true
 	})
+	if localShield != nil {
+		r.renderShield(ctx, buf, localEntity, localShield, true)
+	}
+}
+
+func (r *ShieldRenderer) renderShield(ctx render.RenderContext, buf *render.RenderBuffer, shieldEntity core.Entity, shieldComp *component.ShieldComponent, local bool) {
+	if !shieldComp.Active {
+		return
+	}
+
+	heatComp, hasHeat := r.gameCtx.World.Components.Heat.GetPtr(shieldEntity)
+	emberActive := hasHeat && heatComp.EmberActive
+
+	var transitionIntensity float64
+	if local {
+		transition := r.getOrCreateTransition(shieldEntity)
+		transitionIntensity = r.updateTransition(transition, emberActive, ctx.GameTime)
+	}
+
+	if emberActive {
+		return
+	}
+
+	// D-18 prediction supplies the local cell; every other owner uses the store.
+	shieldPos, ok := r.gameCtx.World.CursorCell(shieldEntity)
+	if !ok {
+		return
+	}
+
+	cfg := &visual.ShieldConfigs[shieldComp.Type]
+	style := ShieldStyle{
+		Config:     cfg,
+		BlendScale: 1,
+		Color:      cfg.Color,
+		Palette256: cfg.Palette256,
+		GlowColor:  cfg.GlowColor,
+		GlowPeriod: cfg.GlowPeriod,
+		SkipX:      -1,
+		SkipY:      -1,
+	}
+
+	if local {
+		style.SkipX = int16(shieldPos.X)
+		style.SkipY = int16(shieldPos.Y)
+	}
+
+	switch shieldComp.Type {
+	case component.ShieldTypePlayer:
+		if energy, ok := r.gameCtx.World.Components.Energy.GetPtr(shieldEntity); ok && energy.Current < 0 {
+			style.Color = cfg.ColorAlt
+			style.Palette256 = cfg.Palette256Alt
+		}
+		if boost, ok := r.gameCtx.World.Components.Boost.GetPtr(shieldEntity); ok && boost.Active {
+			style.GlowPeriod = parameter.ShieldBoostRotationDuration
+		} else {
+			style.GlowPeriod = 0
+		}
+
+	case component.ShieldTypeLoot:
+		if loot, ok := r.gameCtx.World.Components.Loot.GetPtr(shieldEntity); ok {
+			if vis, exists := visual.LootVisuals[loot.Type]; exists {
+				style.GlowColor = vis.GlowColor
+			}
+		}
+	}
+
+	if shieldComp.Type == component.ShieldTypePlayer && !local {
+		style.BlendScale = visual.PeerFieldBlend
+		if r.gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+			style.Palette256 = color.RGBTo256(color.Screen(visual.RgbBackground, style.Color, visual.PeerFieldBlend))
+		}
+	}
+
+	r.painter.Paint(buf, ctx, shieldPos.X, shieldPos.Y, style)
+
+	if transitionIntensity > 0.001 {
+		r.renderTransitionOverlay(buf, ctx, shieldPos.X, shieldPos.Y, cfg, transitionIntensity)
+	}
 }
 
 // getOrCreateTransition returns existing or new transition state for entity
