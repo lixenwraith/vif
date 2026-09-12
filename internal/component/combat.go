@@ -55,7 +55,7 @@ type CombatEffectMask uint64
 
 const CombatEffectNone CombatEffectMask = 0
 const (
-	CombatEffectVampireDrain CombatEffectMask = 1 << iota
+	CombatEffectEnergyDrain CombatEffectMask = 1 << iota
 	CombatEffectKinetic
 	CombatEffectStun // Future
 )

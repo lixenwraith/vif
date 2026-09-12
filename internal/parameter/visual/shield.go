@@ -10,10 +10,10 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
-// Shield threshold constants
 const (
-	// ShieldPlayerGlowIntensity
 	ShieldPlayerGlowIntensity = 0.7
+	// PeerShieldBlend keeps remote shields subordinate to the local cursor.
+	PeerShieldBlend = 0.3
 	// Shield256Threshold is normalized distSq below which 256-color rim is transparent
 	Shield256Threshold = 0.64
 	// ShieldGlowEdgeThreshold is normalized distSq below which glow is suppressed

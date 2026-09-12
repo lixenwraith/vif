@@ -319,8 +319,8 @@ type SplashTimerCancelPayload struct {
 // EnergyAddPayload contains energy delta
 type EnergyAddPayload struct {
 	Entity     core.Entity               `toml:"entity"`
-	Delta      int                       `toml:"delta"`      // Positive or negative, sign ignored if flags except percentage is set
-	Percentage bool                      `toml:"percentage"` // True: percentage of current energy
+	Delta      int                       `toml:"delta"`      // Magnitude; the delta class supplies direction
+	Percentage bool                      `toml:"percentage"` // Delta is a percentage of current energy magnitude
 	Type       component.EnergyDeltaType `toml:"type"`
 }
 

@@ -40,17 +40,17 @@ type CombatSystem struct {
 	statKineticImmune *atomic.Int64
 	statStunImmune    *atomic.Int64
 
-	statLive            [component.CombatEntityCount]*atomic.Int64
-	statDamageAttacker  [component.CombatEntityCount]*atomic.Int64
-	statDamageDefender  [component.CombatEntityCount]*atomic.Int64
-	statAbsorbAttacker  [component.CombatEntityCount]*atomic.Int64
-	statAbsorbDefender  [component.CombatEntityCount]*atomic.Int64
-	statEffectVampire   *atomic.Int64
-	statEffectKinetic   *atomic.Int64
-	statEffectStun      *atomic.Int64
-	statChainFollowups  *atomic.Int64
-	statChainDepthTotal *atomic.Int64
-	statChainDepthMax   *atomic.Int64
+	statLive              [component.CombatEntityCount]*atomic.Int64
+	statDamageAttacker    [component.CombatEntityCount]*atomic.Int64
+	statDamageDefender    [component.CombatEntityCount]*atomic.Int64
+	statAbsorbAttacker    [component.CombatEntityCount]*atomic.Int64
+	statAbsorbDefender    [component.CombatEntityCount]*atomic.Int64
+	statEffectEnergyDrain *atomic.Int64
+	statEffectKinetic     *atomic.Int64
+	statEffectStun        *atomic.Int64
+	statChainFollowups    *atomic.Int64
+	statChainDepthTotal   *atomic.Int64
+	statChainDepthMax     *atomic.Int64
 
 	enabled bool
 }
@@ -92,7 +92,7 @@ func NewCombatSystem(world *engine.World) engine.System {
 	s.statCursor = reg.Ints.Get("combat.cursor_rejects")
 	s.statKineticImmune = reg.Ints.Get("combat.kinetic_immune_rejects")
 	s.statStunImmune = reg.Ints.Get("combat.stun_immune_rejects")
-	s.statEffectVampire = reg.Ints.Get("combat.effect_vampire")
+	s.statEffectEnergyDrain = reg.Ints.Get("combat.effect_energy_drain")
 	s.statEffectKinetic = reg.Ints.Get("combat.effect_kinetic")
 	s.statEffectStun = reg.Ints.Get("combat.effect_stun")
 	s.statChainFollowups = reg.Ints.Get("combat.chain_followups")
@@ -131,7 +131,7 @@ func (s *CombatSystem) Init() {
 		s.statCursor,
 		s.statKineticImmune,
 		s.statStunImmune,
-		s.statEffectVampire,
+		s.statEffectEnergyDrain,
 		s.statEffectKinetic,
 		s.statEffectStun,
 		s.statChainFollowups,
@@ -429,9 +429,9 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	}
 
 	// Apply effects
-	if attack.EffectMask&component.CombatEffectVampireDrain != 0 {
-		if s.applyVampireDrain(payload.OwnerEntity, payload.HitEntity, originX, originY, hasOriginPos) {
-			s.statEffectVampire.Add(1)
+	if attack.EffectMask&component.CombatEffectEnergyDrain != 0 {
+		if s.applyEnergyDrain(payload.OwnerEntity, payload.HitEntity, originX, originY, hasOriginPos) {
+			s.statEffectEnergyDrain.Add(1)
 			resolved = true
 		}
 	}
@@ -648,10 +648,8 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	}
 }
 
-// applyVampireDrain grants energy to the owner cursor and draws the zap from the
-// attack's emitter to the hit entity. The zap is player-domain: only the instance
-// owning the attack draws it.
-func (s *CombatSystem) applyVampireDrain(ownerEntity, targetEntity core.Entity, originX, originY int, hasOrigin bool) bool {
+// The zap stays local because only the player-domain owner renders it.
+func (s *CombatSystem) applyEnergyDrain(ownerEntity, targetEntity core.Entity, originX, originY int, hasOrigin bool) bool {
 	energyComp, ok := s.world.Components.Energy.GetPtr(ownerEntity)
 	if !ok {
 		return false
@@ -661,7 +659,7 @@ func (s *CombatSystem) applyVampireDrain(ownerEntity, targetEntity core.Entity, 
 	// Energy reward to the draining cursor
 	s.world.PushLocal(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 		Entity:     ownerEntity,
-		Delta:      parameter.VampireDrainEnergyValue,
+		Delta:      parameter.LightningEnergyDrainReward,
 		Percentage: false,
 		Type:       component.EnergyDeltaReward,
 	})

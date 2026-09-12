@@ -133,7 +133,7 @@ func init() {
 			Defender:    d,
 			DamageType:  component.CombatDamageDirect,
 			DamageValue: parameter.CombatDamageRod,
-			EffectMask:  component.CombatEffectVampireDrain,
+			EffectMask:  component.CombatEffectEnergyDrain,
 		}
 		register(&lightningProfiles[d])
 	}

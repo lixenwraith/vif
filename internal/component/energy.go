@@ -9,8 +9,8 @@ type EnergyComponent struct {
 type EnergyDeltaType int
 
 const (
-	EnergyDeltaPenalty EnergyDeltaType = iota // Penalties from interactions, absolute value decrease, clamp to zero
-	EnergyDeltaReward                         // Reward from actions, absolute value increase
-	EnergyDeltaSpend                          // Energy spent, convergent to zero and can cross zero
-	EnergyDeltaPassive                        // Passive drain, bypasses ember/boost, convergent clamp to zero
+	EnergyDeltaPenalty EnergyDeltaType = iota // Moves magnitude toward zero and clamps there
+	EnergyDeltaReward                         // Grows magnitude without changing polarity
+	EnergyDeltaSpend                          // Moves toward zero; an oversized spend can cross it
+	EnergyDeltaPassive                        // Penalty that bypasses protection and clamps at zero
 )

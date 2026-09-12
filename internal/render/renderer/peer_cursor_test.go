@@ -109,3 +109,33 @@ func TestEverySlotHasItsOwnColour(t *testing.T) {
 		t.Fatal("a slot past the palette did not wrap")
 	}
 }
+
+func TestPeerShieldBlendsAtThirtyPercent(t *testing.T) {
+	t.Parallel()
+	gameCtx, cursors := peerWorld(t, 2)
+	gameCtx.World.Resources.Config.ColorMode = terminal.ColorModeTrueColor
+	rc := peerContext(gameCtx)
+
+	positions := []component.PositionComponent{{X: 20, Y: 10}, {X: 50, Y: 10}}
+	for i, cursor := range cursors {
+		gameCtx.World.Positions.SetPosition(cursor, positions[i])
+		gameCtx.World.Components.Energy.SetComponent(cursor, component.EnergyComponent{Current: 1000})
+		gameCtx.World.Components.Shield.SetComponent(cursor, component.ShieldComponent{
+			Type: component.ShieldTypePlayer, Active: true,
+		})
+	}
+
+	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 80, 24)
+	NewShieldRenderer(gameCtx).Render(rc, buf)
+
+	cfg := &visual.ShieldConfigs[component.ShieldTypePlayer]
+	alpha := 0.8 * cfg.MaxOpacity
+	wantLocal := color.Screen(color.RGB{}, cfg.Color, alpha)
+	wantPeer := color.Screen(color.RGB{}, cfg.Color, alpha*visual.PeerShieldBlend)
+	if got := buf.CellAt(positions[0].X+8, positions[0].Y).Bg; got != wantLocal {
+		t.Fatalf("local shield = %v, want %v", got, wantLocal)
+	}
+	if got := buf.CellAt(positions[1].X+8, positions[1].Y).Bg; got != wantPeer {
+		t.Fatalf("peer shield = %v, want %v", got, wantPeer)
+	}
+}

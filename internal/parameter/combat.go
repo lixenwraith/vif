@@ -103,11 +103,7 @@ const (
 	DrainCollisionRadius = 0.5
 )
 
-// Vampire Drain
-const (
-	// VampireDrainEnergyValue is the amount of energy absorbed energy on hit
-	VampireDrainEnergyValue = 100
-)
+const LightningEnergyDrainReward = 100
 
 // Missile
 const (

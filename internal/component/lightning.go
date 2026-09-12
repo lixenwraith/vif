@@ -12,9 +12,9 @@ type LightningColorType uint8
 const (
 	LightningCyan   LightningColorType = iota // Default: convergent energy drain effect
 	LightningRed                              // Future: damage
-	LightningGold                             // positive energy vampire drain
+	LightningGold                             // Positive energy drain
 	LightningGreen                            // Future: something
-	LightningPurple                           // negative energy vampire drain
+	LightningPurple                           // Negative energy drain
 )
 
 // LightningComponent represents a transient electrical effect between two points

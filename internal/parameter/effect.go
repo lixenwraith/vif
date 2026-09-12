@@ -22,7 +22,7 @@ const (
 const (
 	LightningAlpha = 0.8
 
-	// LightningZapDuration is the visual duration of short zap effects (vampire, buff)
+	// LightningZapDuration is the visual duration of short zap effects (energy drain, buff)
 	// One tick: the shortest interval a game-time duration can span
 	LightningZapDuration = GameUpdateInterval
 )

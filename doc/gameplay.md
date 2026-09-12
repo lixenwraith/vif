@@ -132,6 +132,13 @@ activates the shield, while attack color/polarity derives from the sign.
 | Passive | Converges toward zero and clamps, but bypasses boost/ember protection. |
 | Spend | Converges toward zero and may cross it; used by explicit player actions such as jumps. |
 
+Energy loot and lightning energy drain are rewards, so both grow the current
+magnitude: positive energy rises and negative energy becomes more negative.
+Nugget and gold jumps spend 1% and 10% of the current magnitude, respectively;
+from either polarity they converge toward zero, while only an oversized fixed
+spend crosses zero in one change.
+Glyph changes remain signed by color and can move energy across zero.
+
 Blue, green, and red glyphs start with different signed base values. The energy
 system adjusts the actual change with current heat, so the relationship is part
 of the live resource economy rather than a fixed reward table. Completing a
@@ -241,7 +248,7 @@ weapon system.
 | Weapon | Model |
 |---|---|
 | Main cleaner | Directional player attack/effect originating at the owning cursor. |
-| Rod | Direct lightning against unique nearest targets, up to the number of charges. |
+| Rod | Direct lightning against unique nearest targets, rewarding energy in the attacker's current polarity. |
 | Launcher | Homing/area missiles assigned from the nearest-target set. |
 | Disruptor | Pulse/disruption behavior centered through its charged orb path. |
 

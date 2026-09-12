@@ -103,7 +103,9 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 
 ## Added key catalogue
 
-All 262 surviving additions are listed below. No key was renamed or repurposed; death API unification removed the two obsolete `death.one_*` path counters documented above.
+All 262 current additions are listed below. The combat energy-drain key follows
+the effect's current name; death API unification removed the two obsolete
+`death.one_*` path counters documented above.
 
 | Key | Description |
 |---|---|
@@ -185,7 +187,7 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `combat.disabled_rejects` (int) | Action requests dropped while the combat system was disabled. |
 | `combat.effect_kinetic` (int) | Kinetic effect applications that resolved to an impulse. |
 | `combat.effect_stun` (int) | Stun effect applications that changed target state. |
-| `combat.effect_vampire` (int) | Vampire effect applications that emitted an energy reward. |
+| `combat.effect_energy_drain` (int) | Energy-drain effect applications that emitted an energy reward. |
 | `combat.kinetic_immune_rejects` (int) | Kinetic effects rejected by kinetic immunity, enrage, or a dead target. |
 | `combat.live_<type>` (int) | Live population of the Combat store per entity type, one key per `combatEntityNames` entry. Decomposes `combat.count`: a type still counted while its species reports inactive is a lifecycle leak. |
 | `combat.relation_rejects` (int) | Direct-hit requests rejected because the hit entity was not a member of the target composite. |

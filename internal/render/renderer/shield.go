@@ -15,25 +15,17 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
-// ShieldStyle holds per-entity overrides for shield rendering
-// Field order optimized for cache: hot fields first, cold fields last
 type ShieldStyle struct {
-	// Hot: accessed every cell
-	Config *visual.ShieldConfig // 8 bytes - pointer to geometry/opacity
-	Color  color.RGB            // 3 bytes
-
-	// Warm: accessed for glow cells only
-	GlowColor  color.RGB     // 3 bytes
-	GlowPeriod time.Duration // 8 bytes
-
-	// Cold: accessed once per entity
-	Palette256 uint8   // 1 byte
-	_          [1]byte // padding for alignment
-	SkipX      int16   // 2 bytes (map coords fit in int16)
-	SkipY      int16   // 2 bytes
+	Config     *visual.ShieldConfig
+	GlowPeriod time.Duration
+	BlendScale float32
+	Color      color.RGB
+	GlowColor  color.RGB
+	Palette256 uint8
+	_          [1]byte
+	SkipX      int16
+	SkipY      int16
 }
-
-// Total: 8 + 3 + 3 + 8 + 1 + 1 + 2 + 2 = 28 bytes (fits in half cache line)
 
 // shieldCellFunc renders a single cell within the shield ellipse
 type shieldCellFunc func(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq float64)
@@ -110,6 +102,7 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 // shieldCellTrueColor renders linear gradient with feather fade
 func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq float64) {
 	cfg := p.style.Config
+	blendScale := float64(p.style.BlendScale)
 
 	// Linear distance for smoother falloff
 	normDist := math.Sqrt(normalizedDistSq)
@@ -136,7 +129,7 @@ func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, sc
 		return
 	}
 
-	buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.Color, render.BlendScreen, alpha, terminal.AttrNone)
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.Color, render.BlendScreen, alpha*blendScale, terminal.AttrNone)
 
 	// Glow overlay
 	if !p.glowActive || normalizedDistSq <= visual.ShieldGlowEdgeThreshold {
@@ -156,7 +149,7 @@ func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, sc
 		return
 	}
 	edgeFactor := (normalizedDistSq - visual.ShieldGlowEdgeThreshold) / edgeRange
-	intensity := dot * edgeFactor * cfg.GlowIntensity
+	intensity := dot * edgeFactor * cfg.GlowIntensity * blendScale
 
 	buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.GlowColor, render.BlendSoftLight, intensity, terminal.AttrNone)
 }
@@ -238,6 +231,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		// Build minimal per-entity style
 		style := ShieldStyle{
 			Config:     cfg,
+			BlendScale: 1,
 			Color:      cfg.Color,
 			Palette256: cfg.Palette256,
 			GlowColor:  cfg.GlowColor,
@@ -272,6 +266,13 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 				if vis, exists := visual.LootVisuals[loot.Type]; exists {
 					style.GlowColor = vis.GlowColor
 				}
+			}
+		}
+
+		if shieldComp.Type == component.ShieldTypePlayer && shieldEntity != cursorEntity {
+			style.BlendScale = visual.PeerShieldBlend
+			if r.gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+				style.Palette256 = color.RGBTo256(color.Scale(style.Color, visual.PeerShieldBlend))
 			}
 		}
 
