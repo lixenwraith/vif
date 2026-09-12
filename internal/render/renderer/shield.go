@@ -270,9 +270,9 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		}
 
 		if shieldComp.Type == component.ShieldTypePlayer && shieldEntity != cursorEntity {
-			style.BlendScale = visual.PeerShieldBlend
+			style.BlendScale = visual.PeerFieldBlend
 			if r.gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
-				style.Palette256 = color.RGBTo256(color.Screen(visual.RgbBackground, style.Color, visual.PeerShieldBlend))
+				style.Palette256 = color.RGBTo256(color.Screen(visual.RgbBackground, style.Color, visual.PeerFieldBlend))
 			}
 		}
 

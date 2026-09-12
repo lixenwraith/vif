@@ -12,8 +12,8 @@ import (
 
 const (
 	ShieldPlayerGlowIntensity = 0.7
-	// PeerShieldBlend keeps remote shields subordinate to the local cursor.
-	PeerShieldBlend = 0.3
+	// PeerFieldBlend keeps remote shield and ember fields subordinate to the local cursor.
+	PeerFieldBlend = 0.3
 	// Shield256Threshold is normalized distSq below which 256-color rim is transparent
 	Shield256Threshold = 0.64
 	// ShieldGlowEdgeThreshold is normalized distSq below which glow is suppressed

@@ -165,6 +165,9 @@ Focused helpers preserve the other channel:
 | `SetWithBg` | Opaque cell replacement with the current mask. |
 | `SetBg256` | Store a palette index in the background channel and set the palette attribute. |
 
+`BackgroundAt` supplies a caller-selected canvas color for an untouched staging
+cell, allowing a renderer to compose several layers locally and commit once.
+
 Terminal attributes identify whether RGB channel bytes represent truecolor or
 an xterm-256 palette index. Any effect that mutates colors must preserve those
 attributes and avoid treating an index as an RGB component.
@@ -291,11 +294,11 @@ happened to be projecting — its shield, its ember — so one holding none was 
 the map at all. Both renderers read the cell underneath through one
 `cursorCellContent`, so they cannot disagree about what is there.
 
-A peer player shield keeps its owner's polarity color and geometry but screen-
-composes at 30% of the local shield intensity over the existing background, or
-the theme background when no lower layer touched the cell. Indexed-color rendering
-quantizes that same dimmed screen blend. This keeps the local cursor legible when
-equal-polarity shields overlap without changing transported shield state.
+Peer shield and ember fields keep their owner's color and geometry but compose at
+30% of local intensity over the existing or theme background. Indexed rendering
+quantizes the same dimmed blend. Ember walks the fixed roster instead of every
+shield, keeps one heat cache per slot, and commits its layers in one background
+write. The distinction remains render-only; no transported state changes.
 
 ## 8. Renderer responsibilities
 

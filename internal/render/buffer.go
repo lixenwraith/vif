@@ -138,6 +138,19 @@ func (b *RenderBuffer) CellAt(x, y int) terminal.Cell {
 	return b.cells[y*b.width+x]
 }
 
+// BackgroundAt returns the composed background, substituting fallback for an
+// untouched cell whose staging value remains zero until finalization.
+func (b *RenderBuffer) BackgroundAt(x, y int, fallback color.RGB) color.RGB {
+	if !b.Bounds().Contains(x, y) {
+		return fallback
+	}
+	idx := y*b.width + x
+	if !b.touched[idx] {
+		return fallback
+	}
+	return b.cells[idx].Bg
+}
+
 // SetWriteMask sets the mask for subsequent draw operations
 func (b *RenderBuffer) SetWriteMask(mask uint8) {
 	b.currentMask = mask

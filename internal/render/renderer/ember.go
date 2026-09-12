@@ -5,9 +5,8 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
@@ -37,11 +36,12 @@ type EmberPainter struct {
 	renderCell emberCellFunc
 
 	// Per-Paint state
-	params   visual.EmberParams
-	colors   emberColors
-	gameTime float64
-	radiusX  float64
-	radiusY  float64
+	params     visual.EmberParams
+	colors     emberColors
+	gameTime   float64
+	radiusX    float64
+	radiusY    float64
+	blendScale float64
 
 	// Ring rotation state (computed once per paint)
 	ringStates [visual.EmberRingCount]emberRingState
@@ -52,62 +52,79 @@ type EmberPainter struct {
 	ringInvWidthSq   float64
 
 	// Caching and Precalculation States
-	lastHeat      int
-	colorLUT      [256]emberLayerColors
-	invRadiiSqLUT [256]struct{ invRxSq, invRySq float64 }
+	lastHeat         int
+	colorLUT         [256]emberLayerColors
+	invRadiiSqLUT    [256]struct{ invRxSq, invRySq float64 }
+	trueColor        bool
+	palette256       uint8
+	peerPalette256   uint8
+	renderPalette256 uint8
 }
 
 // EmberRenderer renders ember effect for entities with active ember state
 type EmberRenderer struct {
-	gameCtx *engine.GameContext
-	painter *EmberPainter
+	gameCtx   *engine.GameContext
+	colorMode terminal.ColorMode
+	painters  [parameter.MaxPlayers]*EmberPainter
 }
 
 // NewEmberRenderer creates the ember system renderer
 func NewEmberRenderer(gameCtx *engine.GameContext) *EmberRenderer {
 	return &EmberRenderer{
-		gameCtx: gameCtx,
-		painter: NewEmberPainter(gameCtx.World.Resources.Config.ColorMode),
+		gameCtx:   gameCtx,
+		colorMode: gameCtx.World.Resources.Config.ColorMode,
 	}
+}
+
+func (r *EmberRenderer) painter(slot int) *EmberPainter {
+	if r.painters[slot] == nil {
+		r.painters[slot] = NewEmberPainter(r.colorMode)
+	}
+	return r.painters[slot]
 }
 
 // Render draws all active ember effects
 func (r *EmberRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	shields := r.gameCtx.World.Components.Shield
-	if shields.CountEntities() == 0 {
+	world := r.gameCtx.World
+	shields := world.Components.Shield
+	roster := world.Resources.Player
+	if shields.CountEntities() == 0 || roster.Count() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskField)
 
-	var cursorEntity core.Entity
-	if r.gameCtx.World.Resources.Player.Valid() {
-		cursorEntity = r.gameCtx.World.Resources.Player.Entity
-	}
-
-	shields.Each(func(entity core.Entity, _ *component.ShieldComponent) bool {
-		heatComp, ok := r.gameCtx.World.Components.Heat.GetPtr(entity)
+	for slot := range parameter.MaxPlayers {
+		entity := roster.Slot(uint8(slot))
+		if entity == 0 {
+			continue
+		}
+		if _, ok := shields.GetPtr(entity); !ok {
+			continue
+		}
+		heatComp, ok := world.Components.Heat.GetPtr(entity)
 		if !ok || !heatComp.EmberActive {
-			return true
+			continue
 		}
 
 		// Drawn around the cursor it belongs to, so it reads the cell that cursor
 		// is on — the D-18 prediction for this instance's own, which is where the
 		// cursor glyph is; the store would trail it by a playout lead.
-		pos, ok := r.gameCtx.World.CursorCell(entity)
+		pos, ok := world.CursorCell(entity)
 		if !ok {
-			return true
+			continue
 		}
 
 		skipX, skipY := -1, -1
-		if entity == cursorEntity {
+		blendScale := visual.PeerFieldBlend
+		if entity == roster.Entity {
 			skipX = pos.X
 			skipY = pos.Y
+			blendScale = 1
 		}
 
-		r.painter.Paint(buf, ctx, pos.X, pos.Y, heatComp.Current, skipX, skipY)
-		return true
-	})
+		r.painter(slot).Paint(buf, ctx, pos.X, pos.Y, heatComp.Current, skipX, skipY, blendScale)
+	}
 }
 
 // emberColors holds interpolated colors for current heat level
@@ -131,9 +148,10 @@ func interpolateEmberColors(t float64) emberColors {
 // NewEmberPainter creates a painter for the specified color mode
 func NewEmberPainter(colorMode terminal.ColorMode) *EmberPainter {
 	p := &EmberPainter{
-		radiusX:  visual.EmberRadiusX,
-		radiusY:  visual.EmberRadiusY,
-		lastHeat: -1, // Force cache rebuild on first frame
+		radiusX:   visual.EmberRadiusX,
+		radiusY:   visual.EmberRadiusY,
+		lastHeat:  -1, // Force cache rebuild on first frame
+		trueColor: colorMode != terminal.ColorMode256,
 	}
 	if colorMode == terminal.ColorMode256 {
 		p.renderCell = emberCell256
@@ -144,39 +162,57 @@ func NewEmberPainter(colorMode terminal.ColorMode) *EmberPainter {
 }
 
 // Paint renders the ember effect centered at (centerX, centerY) in map coordinates
-func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, heat int, skipX, skipY int) {
+func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, heat int, skipX, skipY int, blendScale float64) {
+	if blendScale <= 0 {
+		return
+	}
+	p.blendScale = blendScale
 	p.gameTime = float64(ctx.GameTime.UnixNano()) / 1e9
 
 	// 1D Cache Rebuild: Only on heat change
 	if heat != p.lastHeat {
 		p.lastHeat = heat
 		p.params = visual.InterpolateEmberParams(heat)
-		p.colors = interpolateEmberColors(p.params.HeatFactor)
-		p.buildColorLUT()
+		if p.trueColor {
+			p.colors = interpolateEmberColors(p.params.HeatFactor)
+			p.buildColorLUT()
+		} else {
+			paletteHeat := min(max(100-int(p.params.RingAlpha*200.0), 0), 100)
+			p.palette256 = visual.Ember256PaletteIndex(paletteHeat)
+			dimColor := color.Screen(visual.RgbBackground, render.HeatGradientLUT[paletteHeat*255/100], visual.PeerFieldBlend)
+			p.peerPalette256 = color.RGBTo256(dimColor)
+		}
 	}
 
-	// Cache geometric reciprocals once per frame.
-	if p.params.RingWidth > 0 {
-		p.ringInvWidthSq = 1.0 / (p.params.RingWidth * p.params.RingWidth)
+	if p.trueColor {
+		// Cache geometric reciprocals once per frame.
+		if p.params.RingWidth > 0 {
+			p.ringInvWidthSq = 1.0 / (p.params.RingWidth * p.params.RingWidth)
+		} else {
+			p.ringInvWidthSq = 0
+		}
+
+		p.ringAlpha = p.params.RingAlpha
+		if p.params.RingVisible > 0 {
+			p.ringVisibleInvSq = 1.0 / (p.params.RingVisible * p.params.RingVisible)
+		} else {
+			p.ringVisibleInvSq = 0
+		}
+
+		// Compute ring rotation and pulse state once per frame.
+		for i := range visual.EmberRingCount {
+			effectiveSpeed := p.params.RingSpeed * visual.EmberRingVelocities[i]
+			angle := vmath.NormalizeAngleF(p.gameTime*effectiveSpeed + visual.EmberRingPhaseOffsets[i])
+
+			p.ringStates[i].cosA = vmath.CosF(angle)
+			p.ringStates[i].sinA = vmath.SinF(angle)
+			p.ringStates[i].pulseAlpha = p.ringAlpha + visual.PulseAmplitude*vmath.SinF(p.gameTime*visual.PulseFrequency+visual.EmberRingPulsePhases[i])
+		}
 	} else {
-		p.ringInvWidthSq = 0
-	}
-
-	p.ringAlpha = p.params.RingAlpha
-	if p.params.RingVisible > 0 {
-		p.ringVisibleInvSq = 1.0 / (p.params.RingVisible * p.params.RingVisible)
-	} else {
-		p.ringVisibleInvSq = 0
-	}
-
-	// Compute ring rotation and pulse state once per frame.
-	for i := range visual.EmberRingCount {
-		effectiveSpeed := p.params.RingSpeed * visual.EmberRingVelocities[i]
-		angle := vmath.NormalizeAngleF(p.gameTime*effectiveSpeed + visual.EmberRingPhaseOffsets[i])
-
-		p.ringStates[i].cosA = vmath.CosF(angle)
-		p.ringStates[i].sinA = vmath.SinF(angle)
-		p.ringStates[i].pulseAlpha = p.ringAlpha + visual.PulseAmplitude*vmath.SinF(p.gameTime*visual.PulseFrequency+visual.EmberRingPulsePhases[i])
+		p.renderPalette256 = p.palette256
+		if blendScale < 1 {
+			p.renderPalette256 = p.peerPalette256
+		}
 	}
 
 	// Precalculate jagged radii and ellipse reciprocals for the frame.
@@ -303,29 +339,33 @@ func emberCellTrueColor(p *EmberPainter, buf *render.RenderBuffer, screenX, scre
 	lutIdx := min(int(normDist*255.0), 255)
 	layerColors := &p.colorLUT[lutIdx]
 
-	// Apply corona (additive)
-	if layerColors.Edge.R|layerColors.Edge.G|layerColors.Edge.B != 0 {
-		buf.Set(screenX, screenY, 0, visual.RgbBlack, layerColors.Edge, render.BlendAdd, 1.0, terminal.AttrNone)
-	}
-
-	// Apply mid layer (screen blend)
-	if layerColors.Mid.R|layerColors.Mid.G|layerColors.Mid.B != 0 {
-		buf.Set(screenX, screenY, 0, visual.RgbBlack, layerColors.Mid, render.BlendScreen, 1.0, terminal.AttrNone)
-	}
-
-	// Apply core (additive)
-	if layerColors.Core.R|layerColors.Core.G|layerColors.Core.B != 0 {
-		buf.Set(screenX, screenY, 0, visual.RgbBlack, layerColors.Core, render.BlendAdd, 1.0, terminal.AttrNone)
-	}
-
-	// Render rings
+	ringVis := 0.0
 	if p.ringAlpha > 0 {
-		ringVis := p.computeRingVisibility(normDist, dx, dy)
-		if ringVis > 0.001 {
-			ringColor := scaleRGB(p.colors.Ring, ringVis)
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, ringColor, render.BlendOverlay, ringVis*0.7, terminal.AttrNone)
-		}
+		ringVis = p.computeRingVisibility(normDist, dx, dy)
 	}
+
+	edgeActive := layerColors.Edge.R|layerColors.Edge.G|layerColors.Edge.B != 0
+	midActive := layerColors.Mid.R|layerColors.Mid.G|layerColors.Mid.B != 0
+	coreActive := layerColors.Core.R|layerColors.Core.G|layerColors.Core.B != 0
+	if !edgeActive && !midActive && !coreActive && ringVis <= 0.001 {
+		return
+	}
+
+	bg := buf.BackgroundAt(screenX, screenY, visual.RgbBackground)
+	if edgeActive {
+		bg = color.Add(bg, layerColors.Edge, p.blendScale)
+	}
+	if midActive {
+		bg = color.Screen(bg, layerColors.Mid, p.blendScale)
+	}
+	if coreActive {
+		bg = color.Add(bg, layerColors.Core, p.blendScale)
+	}
+	if ringVis > 0.001 {
+		ringColor := scaleRGB(p.colors.Ring, ringVis)
+		bg = color.Overlay(bg, ringColor, ringVis*0.7*p.blendScale)
+	}
+	buf.SetBgOnly(screenX, screenY, bg)
 }
 
 // computeJaggedDisplacement returns radius displacement for an angle and phase.
@@ -358,10 +398,7 @@ func emberCell256(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY in
 		return
 	}
 
-	// Derive palette heat from the inverse ring-alpha ramp.
-	heat := min(max(100-int(p.params.RingAlpha*200.0), 0), 100)
-
-	buf.SetBg256(screenX, screenY, visual.Ember256PaletteIndex(heat))
+	buf.SetBg256(screenX, screenY, p.renderPalette256)
 }
 
 // powApprox approximates x^n without a per-cell transcendental call.
