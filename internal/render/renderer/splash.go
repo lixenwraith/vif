@@ -1,9 +1,6 @@
 package renderer
 
 import (
-	"math"
-	"strconv"
-
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/internal/asset"
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -36,29 +33,17 @@ func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	buf.SetWriteMask(visual.MaskTransient)
 
 	splashes.Each(func(_ core.Entity, splash *component.SplashComponent) bool {
-		if splash.Length == 0 {
+		length := min(max(splash.Length, 0), len(splash.Content))
+		if length == 0 {
 			return true
 		}
 
 		// Resolve anchor position (map coords)
 		anchorX, anchorY := r.resolveAnchor(splash)
 
-		// Use Slot for countdown detection
-		if splash.Slot == component.SlotTimer {
-			// Timer: render digits from remaining time (ceiling)
-			remainingSec := int(math.Ceil(splash.Remaining.Seconds()))
-
-			digits := strconv.Itoa(remainingSec)
-			for i, d := range digits {
-				charX := anchorX + i*parameter.SplashCharWidth
-				r.renderChar(ctx, buf, d, charX, anchorY, splash.Color)
-			}
-		} else {
-			// Transient: render content directly
-			for i := range splash.Length {
-				charX := anchorX + i*parameter.SplashCharWidth
-				r.renderChar(ctx, buf, splash.Content[i], charX, anchorY, splash.Color)
-			}
+		for i := range length {
+			charX := anchorX + i*parameter.SplashCharWidth
+			r.renderChar(ctx, buf, splash.Content[i], charX, anchorY, splash.Color)
 		}
 		return true
 	})

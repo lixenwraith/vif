@@ -1,8 +1,8 @@
 package system
 
 import (
-	"math"
 	"strconv"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -140,29 +140,13 @@ func (s *SplashSystem) Update() {
 				continue
 			}
 
-			// Display digits ceiling math - "1" shows for 1.0→0.001s, dies at 0
-			remainingSec := int(math.Ceil(splashComp.Remaining.Seconds()))
-
-			if remainingSec <= 0 {
+			if splashComp.Remaining <= 0 {
 				// Timer expired - destroy splash
 				event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
 				continue
 			}
 
-			// Multi-digit support
-			digits := strconv.Itoa(remainingSec)
-			newLength := len(digits)
-
-			// Defensive check
-			if newLength > parameter.SplashMaxLength {
-				newLength = parameter.SplashMaxLength
-			}
-
-			// Update content if changed
-			splashComp.Length = newLength
-			for i, d := range digits {
-				splashComp.Content[i] = d
-			}
+			setTimerContent(&splashComp)
 
 			// Recalculate offset with inter-timer collision (exclude self)
 			timerBBoxes := s.getTimerBBoxes(splashEntity)
@@ -263,12 +247,7 @@ func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *compo
 func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload) {
 	s.cleanupSplashesBySlotAndAnchor(component.SlotTimer, payload.AnchorEntity)
 
-	initialSec := int(math.Ceil(payload.Duration.Seconds()))
-	digits := strconv.Itoa(initialSec)
-	digitCount := len(digits)
-
 	splashComp := component.SplashComponent{
-		Length:       digitCount,
 		Color:        payload.Color,
 		AnchorEntity: payload.AnchorEntity,
 		MarginLeft:   payload.MarginLeft,
@@ -279,12 +258,7 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 		Remaining:    payload.Duration,
 		Duration:     payload.Duration,
 	}
-
-	for i, d := range digits {
-		if i < len(splashComp.Content) {
-			splashComp.Content[i] = d
-		}
-	}
+	setTimerContent(&splashComp)
 
 	// Get existing timer bboxes (new timer not yet created, no exclusion needed)
 	timerBBoxes := s.getTimerBBoxes(0)
@@ -295,6 +269,35 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 	s.world.Components.Protection.SetComponent(splashEntity, component.ProtectionComponent{
 		Mask: component.ProtectFromSpecies,
 	})
+}
+
+// setTimerContent is the single representation boundary for a countdown. A
+// duration can hold more decimal seconds than SplashComponent.Content can hold;
+// saturating that exceptional value preserves the component invariant and makes
+// both layout and rendering safe. Positive fractional seconds round up so "1"
+// remains visible until expiry.
+func setTimerContent(splash *component.SplashComponent) {
+	seconds := int64(splash.Remaining / time.Second)
+	if splash.Remaining > 0 && splash.Remaining%time.Second != 0 {
+		seconds++
+	}
+	if seconds < 0 {
+		seconds = 0
+	}
+
+	digits := strconv.FormatInt(seconds, 10)
+	if len(digits) > len(splash.Content) {
+		splash.Length = len(splash.Content)
+		for i := range splash.Content {
+			splash.Content[i] = '9'
+		}
+		return
+	}
+
+	splash.Length = len(digits)
+	for i := range digits {
+		splash.Content[i] = rune(digits[i])
+	}
 }
 
 // handleTimerCancel destroys existing timer splash

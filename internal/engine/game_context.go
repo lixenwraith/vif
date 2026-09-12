@@ -192,10 +192,13 @@ func newGameContext(world *World, width, height int, clock Clock, corr *vlog.Cor
 		CropOnResize:   true,
 	}
 
-	// 5. Time Resource (Initial state)
+	// 5. Time Resource (Initial state). Boot FSM actions can create deadlines
+	// before tick one, while a network lobby is paused. Seed their game clock at
+	// the same tick-derived origin processTick uses, never at the pacing clock's
+	// wall instant.
 	world.Resources.Time = &TimeResource{}
 	world.Resources.Time.Update(
-		ctx.TimeCtl.Now(),
+		SimEpoch,
 		ctx.TimeCtl.RealTime(),
 		parameter.GameUpdateInterval,
 	)

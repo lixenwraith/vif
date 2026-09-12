@@ -479,6 +479,12 @@ func TestJournalStampRebasesOnReset(t *testing.T) {
 	if n := a.World().Resources.Game.State.GetGameTicks(); n != 0 {
 		t.Fatalf("game ticks %d after reset, want 0", n)
 	}
+	// Service the scheduler-side reset without advancing to tick one. Its FSM
+	// entry actions run at tick zero and therefore need the rebased clock already.
+	a.Tick(0)
+	if got := a.World().Resources.Time.GameTime; !got.Equal(engine.SimEpoch) {
+		t.Fatalf("game time after reset = %v, want simulation epoch %v", got, engine.SimEpoch)
+	}
 
 	a.Tick(2)
 	if s := q.Stamp(); s.Run != 1 || s.Tick != 2 {

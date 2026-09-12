@@ -92,6 +92,29 @@ func TestADedicatedHostDrivesNoCursor(t *testing.T) {
 	}
 }
 
+// TestDedicatedHostBootUsesTheSimulationEpoch reproduces the server half of the
+// splash crash. A real-clock server settles its boot FSM while the lobby clock is
+// paused and before tick one. If TimeResource still holds the pacing clock's wall
+// instant then gold records a wall-based deadline; tick one jumps GameTime to the
+// tick-derived epoch and turns the ten-second timer into decades.
+func TestDedicatedHostBootUsesTheSimulationEpoch(t *testing.T) {
+	t.Parallel()
+	host := supervisedServer(t, 1, lifecycle.Policy{})
+	offer := cursorlessOffer(host.JoinAnchor(), 1)
+	if err := host.HostSession(offer); err != nil {
+		t.Fatalf("host session: %v", err)
+	}
+	host.Tick(1)
+	if !goldActive(host) {
+		t.Fatal("boot did not create a gold sequence; the deadline assertion is vacuous")
+	}
+
+	want := parameter.GoldDuration - parameter.GameUpdateInterval
+	if got := time.Duration(goldTimer(host)); got != want {
+		t.Fatalf("gold deadline after tick one = %v, want %v", got, want)
+	}
+}
+
 // TestAGuestOfADedicatedHostDrivesItsOwn is the other side of the same roster: a
 // participant that does hold a slot still binds it, and the cursorless entry in
 // the offer changes nothing about that.

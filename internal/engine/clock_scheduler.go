@@ -1055,6 +1055,13 @@ func (cs *ClockScheduler) executeReset() {
 	// the elapsed figure is derived from restarts with the run.
 	cs.nextTickDeadline = cs.ctl.Now().Add(cs.tickInterval)
 	cs.gameStartTime = SimEpoch
+	// Reset settles FSM entry actions before another tick can stamp TimeResource.
+	// Rebase it first so those actions create deadlines in the new run's timeline.
+	cs.world.Resources.Time.Update(
+		SimEpoch,
+		cs.ctl.RealTime(),
+		cs.tickInterval,
+	)
 
 	// 4. Reset FSM state - This will trigger OnEnter actions
 	if err := cs.fsm.Reset(cs.world); err != nil {
