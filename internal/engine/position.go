@@ -100,11 +100,16 @@ func (p *Position) PublishTelemetry() {
 	p.statUnindexed.Store(int64(len(p.entities) - stats.EntitiesTotal))
 }
 
-// SetPosition inserts or updates an entity's position, multiple entities at one position are allowed, overflow silently ignored
+// SetPosition inserts or updates an entity's position. An already-indexed write
+// to the same cell is a no-op; a soft-clipped entity at that cell still retries
+// insertion. Multiple entities at one position are allowed, overflow silently ignored.
 func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 	countSaturation := true
 	if i, ok := p.index[e]; ok {
 		old := p.dense[i]
+		if old == pos && p.grid.containsEntityAt(e, old.X, old.Y) {
+			return
+		}
 		countSaturation = old.X != pos.X || old.Y != pos.Y
 		p.grid.RemoveEntityAt(e, old.X, old.Y)
 		p.dense[i] = pos

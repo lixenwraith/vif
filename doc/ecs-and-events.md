@@ -107,8 +107,10 @@ flowchart LR
 
 The position layer provides point and area queries, out-of-bounds checks, wall
 masks, line-of-sight traversal, and free-space searches using patterns or a
-spiral. Bresenham-style grid traversal is used where a mechanic needs a line
-through cells.
+spiral. Reapplying an entity's existing cell is idempotent when the grid already
+contains it, avoiding remove/reinsert churn for composite members; a soft-clipped
+entity still retries insertion. Bresenham-style grid traversal is used where a
+mechanic needs a line through cells.
 
 Cell capacity is a performance contract, not a hard entity limit. If more than
 the configured maximum occupy one cell, the position store still contains the

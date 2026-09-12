@@ -171,6 +171,22 @@ func (g *SpatialGrid) HasAnyEntityAt(x, y int, scope DomainScope) bool {
 	return len(g.EntitiesAt(x, y, scope)) > 0
 }
 
+// containsEntityAt reports whether the spatial index currently holds e in its
+// domain partition. Position uses it to distinguish an idempotent write from a
+// soft-clipped entity that needs another insertion attempt.
+func (g *SpatialGrid) containsEntityAt(e core.Entity, x, y int) bool {
+	scope := ScopeShared
+	if e.Domain() == core.DomainPlayer {
+		scope = ScopePlayer
+	}
+	for _, occupant := range g.EntitiesAt(x, y, scope) {
+		if occupant == e {
+			return true
+		}
+	}
+	return false
+}
+
 // HasAnyEntityInArea checks if any in-scope entity within the rectangular area satisfies the predicate
 // It iterates only the intersection of the requested area and the grid bounds
 // Returns true immediately if the predicate returns true for any entity

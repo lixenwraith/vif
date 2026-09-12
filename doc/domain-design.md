@@ -115,6 +115,13 @@ may raise a local effect on every instance. Effects intended for one participant
 carry a cursor scope; entity zero means session-wide, while a non-zero cursor is
 admitted only by the instance that simulates it.
 
+Storm's red burst follows the same boundary. Its Shared circle component refreshes
+the nearest cursor's Shared aim coordinates on every active tick; every instance
+derives its own Player-domain bullets and muzzle from that common aim. Corrections
+therefore repair direction without putting Player-domain identity or a redundant
+target entity on the wire, and equal-distance choices use deterministic roster
+order.
+
 ### D-7 — Domain is explicit ambient context
 
 `World.WithDomain`, `PushEventDomain`, `PushLocal`, and `PushCrossing` stamp the

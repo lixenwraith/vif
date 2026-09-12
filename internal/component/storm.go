@@ -29,7 +29,7 @@ type StormCircleType uint8
 
 const (
 	StormCircleGreen StormCircleType = iota // Index 0: area pulse
-	StormCircleRed                          // Index 1: cone projectile
+	StormCircleRed                          // Index 1: directional projectile burst
 	StormCircleBlue                         // Index 2: TBD/no-op
 )
 
@@ -48,9 +48,10 @@ type StormCircleComponent struct {
 	CooldownRemaining time.Duration
 	AttackRemaining   time.Duration
 
-	// Red cone targeting (locked at attack start)
-	LockedTargetX int
-	LockedTargetY int
+	// Red refreshes these Shared aim coordinates as its target moves. Blue reuses
+	// them for its fixed spawn target. The JSON names preserve the wire schema.
+	AttackTargetX int `json:"LockedTargetX"`
+	AttackTargetY int `json:"LockedTargetY"`
 
 	// Visual data for renderer (0.0-1.0 progress)
 	AttackProgress float64

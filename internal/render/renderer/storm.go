@@ -17,10 +17,20 @@ import (
 
 // stormCircleRender holds data for depth-sorted rendering
 type stormCircleRender struct {
-	entity core.Entity
-	x, y   int     // Grid position
-	z      float64 // Z depth for sorting
-	index  int     // Circle index for color selection
+	entity    core.Entity
+	component *component.StormCircleComponent
+	x, y      int     // Grid position
+	z         float64 // Z depth for sorting
+	index     int     // Circle index for color selection
+}
+
+// stormSurfaceSample caches the circle-local geometry that does not change from
+// frame to frame. Lighting and depth remain dynamic.
+type stormSurfaceSample struct {
+	nx, ny   float64
+	nz       float64
+	rim      float64
+	coreGlow float64
 }
 
 // StormRenderer draws the storm boss entity with depth-based rendering
@@ -35,6 +45,9 @@ type StormRenderer struct {
 	invRadiusX, invRadiusY         float64
 	haloRadiusX, haloRadiusY       float64
 	glowMaxRadiusX, glowMaxRadiusY float64
+	surfaceRadiusX, surfaceRadiusY int
+	surfaceWidth                   int
+	surface                        []stormSurfaceSample
 
 	// Attack effect radii
 	greenAttackRadiusX, greenAttackRadiusY float64
@@ -43,6 +56,34 @@ type StormRenderer struct {
 func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
 	rx := parameter.StormCircleRadiusX
 	ry := parameter.StormCircleRadiusY
+	invRx := 1.0 / rx
+	invRy := 1.0 / ry
+	surfaceRadiusX := int(rx)
+	surfaceRadiusY := int(ry)
+	surfaceWidth := surfaceRadiusX*2 + 1
+	surface := make([]stormSurfaceSample, surfaceWidth*(surfaceRadiusY*2+1))
+	for y := -surfaceRadiusY; y <= surfaceRadiusY; y++ {
+		for x := -surfaceRadiusX; x <= surfaceRadiusX; x++ {
+			nx := float64(x) * invRx
+			ny := float64(y) * invRy
+			distSq := nx*nx + ny*ny
+			if distSq > 1.0 {
+				distSq = 1.0
+			}
+
+			nz := math.Sqrt(1.0 - distSq)
+			rim := 1.0 - math.Abs(nz)
+			rim = rim * rim * 0.8
+			coreGlow := 0.0
+			if coreDist := math.Sqrt(distSq) / 0.7; coreDist < 1.0 {
+				coreGlow = (1.0 - coreDist) * 0.6
+			}
+
+			surface[(y+surfaceRadiusY)*surfaceWidth+x+surfaceRadiusX] = stormSurfaceSample{
+				nx: nx, ny: ny, nz: nz, rim: rim, coreGlow: coreGlow,
+			}
+		}
+	}
 	haloExtendX := parameter.StormConcaveHaloExtend
 	haloExtendY := haloExtendX * (ry / rx)
 	glowExtend := parameter.StormConvexGlowExtend
@@ -53,12 +94,16 @@ func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
 
 		radiusX:        rx,
 		radiusY:        ry,
-		invRadiusX:     1.0 / rx,
-		invRadiusY:     1.0 / ry,
+		invRadiusX:     invRx,
+		invRadiusY:     invRy,
 		haloRadiusX:    rx + haloExtendX,
 		haloRadiusY:    ry + haloExtendY,
 		glowMaxRadiusX: rx + glowExtend,
 		glowMaxRadiusY: ry + glowExtend*(ry/rx),
+		surfaceRadiusX: surfaceRadiusX,
+		surfaceRadiusY: surfaceRadiusY,
+		surfaceWidth:   surfaceWidth,
+		surface:        surface,
 
 		greenAttackRadiusX: rx * parameter.StormGreenRadiusMultiplier,
 		greenAttackRadiusY: ry * parameter.StormGreenRadiusMultiplier,
@@ -100,11 +145,12 @@ func (r *StormRenderer) renderStorm(ctx render.RenderContext, buf *render.Render
 		}
 
 		r.sortBuffer = append(r.sortBuffer, stormCircleRender{
-			entity: circleEntity,
-			x:      pos.X,
-			y:      pos.Y,
-			z:      circleComp.Pos3D.Z,
-			index:  circleComp.Index,
+			entity:    circleEntity,
+			component: circleComp,
+			x:         pos.X,
+			y:         pos.Y,
+			z:         circleComp.Pos3D.Z,
+			index:     circleComp.Index,
 		})
 	}
 
@@ -123,16 +169,15 @@ func (r *StormRenderer) renderStorm(ctx render.RenderContext, buf *render.Render
 }
 
 func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender) {
-
 	// Render attack effects before body (background layer)
-	circleComp, ok := r.gameCtx.World.Components.StormCircle.GetPtr(circle.entity)
-	if ok && circleComp.AttackState == component.StormCircleAttackActive {
-		switch circle.index {
-		case 0: // Green - area pulse
+	circleComp := circle.component
+	if circleComp.AttackState == component.StormCircleAttackActive {
+		switch component.StormCircleType(circle.index) {
+		case component.StormCircleGreen:
 			r.renderGreenPulse(ctx, buf, circle, circleComp)
-		case 1: // Red - cone projectile
-			r.renderRedCone(ctx, buf, circle, circleComp)
-		case 2: // Blue - orbiting glow
+		case component.StormCircleRed:
+			r.renderRedMuzzleFlash(ctx, buf, circle, circleComp)
+		case component.StormCircleBlue:
 			r.renderBlueGlow(ctx, buf, circle, circleComp)
 		}
 	}
@@ -211,31 +256,13 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 			continue
 		}
 
-		// Normalized position within ellipse
-		nx := float64(member.OffsetX) * r.invRadiusX
-		ny := float64(member.OffsetY) * r.invRadiusY
-		distSq := nx*nx + ny*ny
-
-		// Members are validated at creation; clamp for shading math only.
-		if distSq > 1.0 {
-			distSq = 1.0
+		sample, ok := r.surfaceSample(member.OffsetX, member.OffsetY)
+		if !ok {
+			continue
 		}
-
-		// Sphere surface normal
-		nz := math.Sqrt(1.0 - distSq)
+		nx, ny, nz := sample.nx, sample.ny, sample.nz
 		if !isConvex {
 			nz = -nz
-		}
-
-		// Rim glow - bright at edges
-		rim := 1.0 - math.Abs(nz)
-		rim = rim * rim * 0.8
-
-		// Core glow - white center
-		coreDist := math.Sqrt(distSq) / 0.7
-		coreGlow := 0.0
-		if coreDist < 1.0 {
-			coreGlow = (1.0 - coreDist) * 0.6
 		}
 
 		// Blinn-Phong specular
@@ -252,11 +279,11 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 		}
 
 		// Combined intensity
-		intensity := (0.3 + diff*0.3 + rim*0.4) * depthBright
+		intensity := (0.3 + diff*0.3 + sample.rim*0.4) * depthBright
 
-		red := baseR*intensity + coreGlow*255 + spec*255
-		green := baseG*intensity + coreGlow*255 + spec*255
-		blue := baseB*intensity + coreGlow*255 + spec*255
+		red := baseR*intensity + sample.coreGlow*255 + spec*255
+		green := baseG*intensity + sample.coreGlow*255 + spec*255
+		blue := baseB*intensity + sample.coreGlow*255 + spec*255
 
 		// Clamp
 		if red > 255 {
@@ -272,6 +299,30 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 		c := color.RGB{R: uint8(red), G: uint8(green), B: uint8(blue)}
 		buf.SetBgOnly(screenX, screenY, c)
 	}
+}
+
+func (r *StormRenderer) surfaceSample(offsetX, offsetY int) (stormSurfaceSample, bool) {
+	if offsetX < -r.surfaceRadiusX || offsetX > r.surfaceRadiusX ||
+		offsetY < -r.surfaceRadiusY || offsetY > r.surfaceRadiusY {
+		return stormSurfaceSample{}, false
+	}
+	sample := r.surface[(offsetY+r.surfaceRadiusY)*r.surfaceWidth+offsetX+r.surfaceRadiusX]
+	return sample, true
+}
+
+// stormEffectBounds intersects an effect's map-space box with the visible map.
+// Large pulses then do no per-cell work for clipped portions of the world.
+func stormEffectBounds(
+	ctx render.RenderContext,
+	centerX, centerY int,
+	radiusX, radiusY float64,
+) (startX, endX, startY, endY int, ok bool) {
+	visibleMinX, visibleMinY, visibleMaxX, visibleMaxY := ctx.VisibleMapBounds()
+	startX = max(visibleMinX, centerX-int(radiusX)-1)
+	endX = min(visibleMaxX, centerX+int(radiusX)+1)
+	startY = max(visibleMinY, centerY-int(radiusY)-1)
+	endY = min(visibleMaxY, centerY+int(radiusY)+1)
+	return startX, endX, startY, endY, startX <= endX && startY <= endY
 }
 
 // cursorLighting computes per-circle light and half vectors so that the light appears to come from the cursor direction, making each sphere resemble an eye that tracks the cursor
@@ -292,11 +343,12 @@ func cursorLighting(cursorX, cursorY, circleX, circleY int) (lightX, lightY, lig
 }
 
 func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, depthBright, baseR, baseG, baseB float64) {
-	// Bounding box in map coords
-	mapStartX := max(0, circle.x-int(r.haloRadiusX)-1)
-	mapEndX := min(ctx.MapWidth-1, circle.x+int(r.haloRadiusX)+1)
-	mapStartY := max(0, circle.y-int(r.haloRadiusY)-1)
-	mapEndY := min(ctx.MapHeight-1, circle.y+int(r.haloRadiusY)+1)
+	mapStartX, mapEndX, mapStartY, mapEndY, ok := stormEffectBounds(
+		ctx, circle.x, circle.y, r.haloRadiusX, r.haloRadiusY,
+	)
+	if !ok {
+		return
+	}
 
 	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
 		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
@@ -344,10 +396,12 @@ func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderB
 }
 
 func (r *StormRenderer) renderConvexGlow(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, depthBright, baseR, baseG, baseB float64) {
-	mapStartX := max(0, circle.x-int(r.glowMaxRadiusX)-1)
-	mapEndX := min(ctx.MapWidth-1, circle.x+int(r.glowMaxRadiusX)+1)
-	mapStartY := max(0, circle.y-int(r.glowMaxRadiusY)-1)
-	mapEndY := min(ctx.MapHeight-1, circle.y+int(r.glowMaxRadiusY)+1)
+	mapStartX, mapEndX, mapStartY, mapEndY, ok := stormEffectBounds(
+		ctx, circle.x, circle.y, r.glowMaxRadiusX, r.glowMaxRadiusY,
+	)
+	if !ok {
+		return
+	}
 
 	// Pulse via game time and the sine LUT.
 	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
@@ -433,10 +487,12 @@ func (r *StormRenderer) renderGreenPulse(ctx render.RenderContext, buf *render.R
 	invRx := 1.0 / effectRadiusX
 	invRy := 1.0 / effectRadiusY
 
-	mapStartX := max(0, circle.x-int(effectRadiusX)-1)
-	mapEndX := min(ctx.MapWidth-1, circle.x+int(effectRadiusX)+1)
-	mapStartY := max(0, circle.y-int(effectRadiusY)-1)
-	mapEndY := min(ctx.MapHeight-1, circle.y+int(effectRadiusY)+1)
+	mapStartX, mapEndX, mapStartY, mapEndY, ok := stormEffectBounds(
+		ctx, circle.x, circle.y, effectRadiusX, effectRadiusY,
+	)
+	if !ok {
+		return
+	}
 
 	pulseColor := visual.RgbStormGreenPulse
 
@@ -468,14 +524,14 @@ func (r *StormRenderer) renderGreenPulse(ctx render.RenderContext, buf *render.R
 	}
 }
 
-// renderRedCone draws short muzzle flash effect at circle edge
-func (r *StormRenderer) renderRedCone(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, circleComp *component.StormCircleComponent) {
+// renderRedMuzzleFlash draws the short directional effect at the circle edge.
+func (r *StormRenderer) renderRedMuzzleFlash(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, circleComp *component.StormCircleComponent) {
 	if circleComp.AttackProgress <= 0 {
 		return
 	}
 
-	targetX := circleComp.LockedTargetX
-	targetY := circleComp.LockedTargetY
+	targetX := circleComp.AttackTargetX
+	targetY := circleComp.AttackTargetY
 
 	dx := float64(targetX - circle.x)
 	dy := float64(targetY - circle.y)
@@ -577,10 +633,12 @@ func (r *StormRenderer) renderBlueGlow(ctx render.RenderContext, buf *render.Ren
 	outerRx := r.radiusX + parameter.StormConvexGlowExtend + 1.0
 	outerRy := r.radiusY + (parameter.StormConvexGlowExtend+1.0)*(r.radiusY/r.radiusX)
 
-	mapStartX := max(0, circle.x-int(outerRx)-1)
-	mapEndX := min(ctx.MapWidth-1, circle.x+int(outerRx)+1)
-	mapStartY := max(0, circle.y-int(outerRy)-1)
-	mapEndY := min(ctx.MapHeight-1, circle.y+int(outerRy)+1)
+	mapStartX, mapEndX, mapStartY, mapEndY, ok := stormEffectBounds(
+		ctx, circle.x, circle.y, outerRx, outerRy,
+	)
+	if !ok {
+		return
+	}
 
 	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
 		for mapX := mapStartX; mapX <= mapEndX; mapX++ {

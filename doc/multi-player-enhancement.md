@@ -60,6 +60,13 @@ corrections, makes a converged exchange hash-only, and preserves responsive loca
 terminal input. Correction magnitude measures prediction distance; it is not a
 request to turn the guest into a renderer.
 
+Directional Storm fire uses a Shared aim and Player-domain results. On every active
+tick, the red circle selects the nearest Shared cursor in deterministic roster
+order and refreshes one aim point used by both bullets and muzzle presentation.
+The existing coordinates travel in the ordinary Shared component correction, so
+direction converges without adding target identity to the wire; bullets remain
+local effects.
+
 ## 3. Event timing and correction containment
 
 ### 3.1 Ordinary and barrier-bound crossings

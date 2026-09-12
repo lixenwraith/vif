@@ -268,7 +268,7 @@ a blocked cleaner drains to its stop point.
 | Drain | Baseline hostile species population tied to heat. Materializes, approaches the cursor, periodically drains energy inside the shield, and removes heat on an unshielded cursor collision. |
 | Quasar | Large composite, 5 cells wide by 3 high. Tracks the cursor and emits lightning when the cursor leaves its effective range. It is created by fusing drains in the default progression. |
 | Swarm | Fast composite, 4 cells wide by 2 high, created from enraged drains. It tracks/charges, may teleport around blocked line of sight, absorbs drains, and has bounded charges/lifetime. |
-| Storm | Multi-part boss with independently moving circles and 3D orbital dynamics. Circle types provide distinct attacks, including bullets and swarm pressure. |
+| Storm | Multi-part boss with independently moving circles and 3D orbital dynamics. The green circle pulses an area, the red circle tracks the nearest cursor with directional bullet bursts, and the blue circle creates swarm pressure. |
 | Pylon | Stationary ablative hostile structure/damage sponge that pushes nearby species. |
 | Snake | Segmented composite species with separately modeled head and body members and formation lifecycle. |
 | Eye | Five-by-three composite navigation attacker. It belongs to a target group, homes along routes, and self-destructs on contact; its parameters are evolution-managed. |

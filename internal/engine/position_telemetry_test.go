@@ -69,3 +69,38 @@ func TestPlayerBudgetRejectIsCountedSeparately(t *testing.T) {
 		t.Fatalf("cell overflows = %d, want 0 after filling the shared half exactly", got)
 	}
 }
+
+func TestSetPositionSameCellIsStableAndSoftClipStillRetries(t *testing.T) {
+	w := NewWorld()
+	NewGameContextWithClock(w, 40, 24, NewManualClock())
+
+	first := w.CreateEntity(core.DomainShared)
+	second := w.CreateEntity(core.DomainShared)
+	pos := component.PositionComponent{X: 4, Y: 5}
+	w.Positions.SetPosition(first, pos)
+	w.Positions.SetPosition(second, pos)
+	w.Positions.SetPosition(first, pos)
+
+	occupants := w.Positions.grid.EntitiesAt(pos.X, pos.Y, ScopeShared)
+	if len(occupants) != 2 || occupants[0] != first || occupants[1] != second {
+		t.Fatalf("same-cell write reordered occupants: %v", occupants)
+	}
+
+	var full [parameter.MaxEntitiesPerCell]core.Entity
+	fullPos := component.PositionComponent{X: 8, Y: 9}
+	for i := range full {
+		full[i] = w.CreateEntity(core.DomainShared)
+		w.Positions.SetPosition(full[i], fullPos)
+	}
+	overflow := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(overflow, fullPos)
+	if w.Positions.grid.containsEntityAt(overflow, fullPos.X, fullPos.Y) {
+		t.Fatal("overflow entity unexpectedly entered a full cell")
+	}
+
+	w.DestroyEntity(full[0])
+	w.Positions.SetPosition(overflow, fullPos)
+	if !w.Positions.grid.containsEntityAt(overflow, fullPos.X, fullPos.Y) {
+		t.Fatal("same-cell retry did not index a previously soft-clipped entity")
+	}
+}

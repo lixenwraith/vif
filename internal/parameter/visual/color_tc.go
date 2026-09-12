@@ -220,7 +220,6 @@ var (
 
 	// Storm attack effect colors
 	RgbStormGreenPulse = color.EmeraldGreen
-	RgbStormRedCone    = color.RedOrange
 
 	// Bullet colors
 	RgbBulletStormRed    = color.RoseRed

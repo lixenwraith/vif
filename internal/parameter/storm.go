@@ -87,18 +87,15 @@ const (
 	StormGreenDamageEnergy     = 10000
 	StormGreenDamageHeat       = 10
 
-	// Red circle: cone projectile attack
+	// Red circle: directional projectile burst
 	StormRedInitialCooldown    = 1 * time.Second
-	StormRedTravelDuration     = 2 * time.Second
-	StormRedPostAttackDelay    = 1 * time.Second // Wait after travel before next shot
-	StormRedConeWidthCells     = 40
-	StormRedConeHeightCells    = 60
-	StormRedDamageEnergy       = 10000
+	StormRedBurstDuration      = 2 * time.Second
+	StormRedPostAttackDelay    = 1 * time.Second // Wait after burst before the next one
 	StormRedDamageHeat         = 10
 	StormRedDamageBulletEnergy = 100
 
 	StormRedBulletSpeed           = 50.0 // cells/sec
-	StormRedBulletSpreadHalfAngle = 0.32 // radians (~18°)
+	StormRedBulletSpreadHalfAngle = 0.26 // radians (~15°)
 	StormRedBulletSpawnMargin     = 1.15 // multiplier outside ellipse boundary
 	StormRedBulletMaxLifetime     = 4 * time.Second
 
