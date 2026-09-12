@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
@@ -57,6 +58,68 @@ func TestCaptureReconstructsTheSharedWorld(t *testing.T) {
 
 	if idx, lx, ly, differs := snapshot.FirstDiff(origin.SnapshotShared(), receiver.SnapshotShared()); differs {
 		t.Fatalf("installed world differs at line %d\n  origin:   %s\n  receiver: %s", idx, lx, ly)
+	}
+}
+
+// TestCaptureStagingIgnoresLocalRuntimeOptions reproduces the join failure caused
+// by copying a presenting guest's whole Config into its internal headless staging
+// world. Presentation, input, audio and operator/session options describe the live
+// process; only simulation resources and identity may reach capture resolution.
+func TestCaptureStagingIgnoresLocalRuntimeOptions(t *testing.T) {
+	t.Parallel()
+	const seed = 0xC0104
+	source := mustHeadless(t, seed, 120, 40)
+	t.Cleanup(source.Close)
+	tickUntilCursor(t, source)
+	cap := mustCaptureShared(t, source)
+
+	for _, tc := range []struct {
+		name string
+		mode terminal.ColorMode
+	}{
+		{name: "true colour", mode: terminal.ColorModeTrueColor},
+		{name: "256 colour", mode: terminal.ColorMode256},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			receiver := mustHeadless(t, seed, 120, 40)
+			t.Cleanup(receiver.Close)
+
+			// These values stand in for valid options already consumed by a live
+			// ModePlay guest. Their paths need not exist here: a staging world must
+			// neither validate nor open any of them.
+			receiver.cfg.ColorMode = tc.mode
+			receiver.cfg.ColorModeSet = true
+			receiver.cfg.AudioBackend = "local-audio"
+			receiver.cfg.AudioMuted = true
+			receiver.cfg.LogScope = "afs"
+			receiver.cfg.Resources.Keymap = "local-keymap.toml"
+			receiver.cfg.Resources.Music = "local-music.toml"
+			receiver.cfg.Resources.Sounds = "local-sounds.toml"
+			receiver.cfg.SessionName = "local-session"
+			receiver.cfg.ListenAddress = "127.0.0.1:7777"
+			receiver.cfg.NoAdvertise = true
+			receiver.cfg.FixedAuthority = true
+
+			staged, err := receiver.StageShared(cap)
+			if err != nil {
+				t.Fatalf("stage with explicit local options: %v", err)
+			}
+			stageCfg := staged.StagingWorld().cfg
+			if stageCfg.ColorModeSet || stageCfg.AudioBackend != "" || stageCfg.AudioMuted ||
+				stageCfg.LogScope != "" || stageCfg.Resources.Keymap != "" ||
+				stageCfg.Resources.Music != "" || stageCfg.Resources.Sounds != "" ||
+				stageCfg.SessionName != "" || stageCfg.ListenAddress != "" ||
+				stageCfg.NoAdvertise || stageCfg.FixedAuthority {
+				t.Fatalf("staging inherited local runtime options: %+v", stageCfg)
+			}
+			if stageCfg.Seed != receiver.cfg.Seed || stageCfg.Session != receiver.cfg.Session ||
+				stageCfg.Resources.Embedded != receiver.cfg.Resources.Embedded {
+				t.Fatalf("staging lost simulation identity: %+v", stageCfg)
+			}
+			if err := staged.Commit(); err != nil {
+				t.Fatalf("commit: %v", err)
+			}
+		})
 	}
 }
 

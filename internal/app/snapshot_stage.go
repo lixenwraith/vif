@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/lifecycle"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
@@ -183,26 +183,33 @@ func (s *StagedInstall) release() { s.staging = nil }
 // seed, the FSM config and the corpus. The map latch comes from the capture, because
 // a world built on different bounds would answer a different question.
 func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
-	cfg := a.cfg
-	cfg.Mode = ModeHeadless
-	cfg.Journal = false
-	cfg.JournalSink = nil
-	cfg.HostAddress, cfg.JoinAddress = "", ""
-	cfg.networkConfig = nil
-	cfg.scriptedSession = false
-	cfg.Participants = 0
-	// A staging world is not a supervised session and is not an allocated one: it
-	// answers no probe and nothing may end the live run because a capture resolved
-	// into it. Both are refused outright by a non-serving mode, so leaving them set
-	// would make a correction on a dedicated host fail to stage at all.
-	cfg.ProbeAddress = ""
-	cfg.Lifetime = lifecycle.Policy{}
-	cfg.TimeScaleSpec = ""
-	cfg.RecTicks = -1
-	cfg.StatTicks = -1
-	cfg.LockMap = true
+	// Project only the inputs that can change the simulated world. Starting from
+	// the live Config and subtracting known I/O options is brittle: a newly added
+	// local option can otherwise reach NewHeadless and either alter staging or be
+	// rejected as unused. That is how an explicit guest colour mode used to abort
+	// join and every later correction; audio overrides had the same latent path.
+	//
+	// Dir remains part of the simulation resource set because installed game names,
+	// corpus discovery and files referenced by the FSM resolve through it. Keymap,
+	// music and sounds belong to the live instance's input and audio services.
+	cfg := Config{
+		Mode: ModeHeadless,
+		Resources: resource.Options{
+			Dir:      a.cfg.Resources.Dir,
+			Game:     a.cfg.Resources.Game,
+			Content:  a.cfg.Resources.Content,
+			Embedded: a.cfg.Resources.Embedded,
+		},
+		Seed:      a.cfg.Seed,
+		Session:   a.cfg.Session,
+		RecTicks:  -1,
+		StatTicks: -1,
+		LockMap:   true,
+	}
 	if cap.Header.MapWidth > 0 && cap.Header.MapHeight > 0 {
 		cfg.MapWidth, cfg.MapHeight = cap.Header.MapWidth, cap.Header.MapHeight
+	} else {
+		cfg.MapWidth, cfg.MapHeight = a.cfg.MapWidth, a.cfg.MapHeight
 	}
 	// CropOnResize is not in the capture: it decides how *this* instance answers a
 	// resize, which a staging world never receives. It is copied from the live
