@@ -267,6 +267,23 @@ func (b *RenderBuffer) SetBgOnly(x, y int, bg color.RGB) {
 	b.masks[idx] |= b.currentMask
 }
 
+// SetBgScreen screen-blends a background, using base only when no lower
+// renderer has supplied the cell's background yet.
+func (b *RenderBuffer) SetBgScreen(x, y int, bg, base color.RGB, alpha float64) {
+	if alpha <= 0 || !b.inBounds(x, y) {
+		return
+	}
+	idx := y*b.width + x
+	dst := &b.cells[idx]
+	if !b.touched[idx] {
+		dst.Bg = base
+	}
+
+	dst.Bg = color.Screen(dst.Bg, bg, alpha)
+	b.touched[idx] = true
+	b.masks[idx] |= b.currentMask
+}
+
 // SetWithBg writes a cell with explicit fg and bg colors (opaque replace)
 func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg color.RGB) {
 	if !b.inBounds(x, y) {

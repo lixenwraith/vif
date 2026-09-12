@@ -129,7 +129,7 @@ func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, sc
 		return
 	}
 
-	buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.Color, render.BlendScreen, alpha*blendScale, terminal.AttrNone)
+	buf.SetBgScreen(screenX, screenY, p.style.Color, visual.RgbBackground, alpha*blendScale)
 
 	// Glow overlay
 	if !p.glowActive || normalizedDistSq <= visual.ShieldGlowEdgeThreshold {
@@ -272,7 +272,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		if shieldComp.Type == component.ShieldTypePlayer && shieldEntity != cursorEntity {
 			style.BlendScale = visual.PeerShieldBlend
 			if r.gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
-				style.Palette256 = color.RGBTo256(color.Scale(style.Color, visual.PeerShieldBlend))
+				style.Palette256 = color.RGBTo256(color.Screen(visual.RgbBackground, style.Color, visual.PeerShieldBlend))
 			}
 		}
 
@@ -379,7 +379,7 @@ func (r *ShieldRenderer) renderTransitionOverlay(buf *render.RenderBuffer, ctx r
 			// Combine intensity with radial falloff
 			cellIntensity := intensity * (0.3 + 0.7*radialFactor)
 
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, overlayColor, render.BlendScreen, cellIntensity, terminal.AttrNone)
+			buf.SetBgScreen(screenX, screenY, overlayColor, visual.RgbBackground, cellIntensity)
 		}
 	}
 }

@@ -134,6 +134,9 @@ activates the shield, while attack color/polarity derives from the sign.
 
 Energy loot and lightning energy drain are rewards, so both grow the current
 magnitude: positive energy rises and negative energy becomes more negative.
+At exactly zero no polarity remains, so the next reward establishes positive
+polarity; a shield drain that first clamps negative energy to zero can therefore
+look like a reversal when a later reward arrives, but the reward did not cross zero.
 Nugget and gold jumps spend 1% and 10% of the current magnitude, respectively;
 from either polarity they converge toward zero, while only an oversized fixed
 spend crosses zero in one change.

@@ -130,12 +130,37 @@ func TestPeerShieldBlendsAtThirtyPercent(t *testing.T) {
 
 	cfg := &visual.ShieldConfigs[component.ShieldTypePlayer]
 	alpha := 0.8 * cfg.MaxOpacity
-	wantLocal := color.Screen(color.RGB{}, cfg.Color, alpha)
-	wantPeer := color.Screen(color.RGB{}, cfg.Color, alpha*visual.PeerShieldBlend)
+	wantLocal := color.Screen(visual.RgbBackground, cfg.Color, alpha)
+	wantPeer := color.Screen(visual.RgbBackground, cfg.Color, alpha*visual.PeerShieldBlend)
 	if got := buf.CellAt(positions[0].X+8, positions[0].Y).Bg; got != wantLocal {
 		t.Fatalf("local shield = %v, want %v", got, wantLocal)
 	}
 	if got := buf.CellAt(positions[1].X+8, positions[1].Y).Bg; got != wantPeer {
 		t.Fatalf("peer shield = %v, want %v", got, wantPeer)
+	}
+}
+
+func TestPeerShieldPaletteBlendsFromThemeBackground(t *testing.T) {
+	t.Parallel()
+	gameCtx, cursors := peerWorld(t, 2)
+	gameCtx.World.Resources.Config.ColorMode = terminal.ColorMode256
+	rc := peerContext(gameCtx)
+
+	peer := cursors[1]
+	pos := component.PositionComponent{X: 50, Y: 10}
+	gameCtx.World.Positions.SetPosition(peer, pos)
+	gameCtx.World.Components.Energy.SetComponent(peer, component.EnergyComponent{Current: 1000})
+	gameCtx.World.Components.Shield.SetComponent(peer, component.ShieldComponent{
+		Type: component.ShieldTypePlayer, Active: true,
+	})
+
+	buf := render.NewRenderBuffer(terminal.ColorMode256, 80, 24)
+	NewShieldRenderer(gameCtx).Render(rc, buf)
+
+	cfg := &visual.ShieldConfigs[component.ShieldTypePlayer]
+	want := color.RGBTo256(color.Screen(visual.RgbBackground, cfg.Color, visual.PeerShieldBlend))
+	got := buf.CellAt(pos.X+8, pos.Y)
+	if got.Attrs&terminal.AttrBg256 == 0 || got.Bg.R != want {
+		t.Fatalf("peer shield palette = (%d, %v), want (%d, bg256)", got.Bg.R, got.Attrs, want)
 	}
 }

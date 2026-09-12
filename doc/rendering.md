@@ -291,10 +291,11 @@ happened to be projecting — its shield, its ember — so one holding none was 
 the map at all. Both renderers read the cell underneath through one
 `cursorCellContent`, so they cannot disagree about what is there.
 
-A peer player shield keeps its owner's polarity color and geometry but composes at
-30% of the local shield intensity. Indexed-color rendering uses the corresponding
-dimmed palette color. This keeps the local cursor legible when equal-polarity
-shields overlap without changing transported shield state.
+A peer player shield keeps its owner's polarity color and geometry but screen-
+composes at 30% of the local shield intensity over the existing background, or
+the theme background when no lower layer touched the cell. Indexed-color rendering
+quantizes that same dimmed screen blend. This keeps the local cursor legible when
+equal-polarity shields overlap without changing transported shield state.
 
 ## 8. Renderer responsibilities
 

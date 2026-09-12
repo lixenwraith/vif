@@ -88,7 +88,8 @@ func TestClipRejectsEveryWritePathOutsideThePlayfield(t *testing.T) {
 		"SetFgOnly": func(b *RenderBuffer, x, y int) {
 			b.SetFgOnly(x, y, 'X', color.RGB{R: 255}, terminal.AttrNone)
 		},
-		"SetBgOnly": func(b *RenderBuffer, x, y int) { b.SetBgOnly(x, y, color.RGB{G: 255}) },
+		"SetBgOnly":   func(b *RenderBuffer, x, y int) { b.SetBgOnly(x, y, color.RGB{G: 255}) },
+		"SetBgScreen": func(b *RenderBuffer, x, y int) { b.SetBgScreen(x, y, color.RGB{G: 255}, visual.RgbBackground, 0.5) },
 		"SetWithBg": func(b *RenderBuffer, x, y int) {
 			b.SetWithBg(x, y, 'X', color.RGB{R: 255}, color.RGB{G: 255})
 		},
@@ -116,6 +117,25 @@ func TestClipRejectsEveryWritePathOutsideThePlayfield(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBgScreenUsesBaseOnlyForUntouchedCells(t *testing.T) {
+	t.Parallel()
+	buf := NewRenderBuffer(terminal.ColorModeTrueColor, 2, 1)
+	base := color.RGB{R: 20, G: 30, B: 40}
+	underlay := color.RGB{R: 80, G: 70, B: 60}
+	source := color.RGB{R: 200, G: 150, B: 100}
+
+	buf.SetBgScreen(0, 0, source, base, 0.3)
+	buf.SetBgOnly(1, 0, underlay)
+	buf.SetBgScreen(1, 0, source, base, 0.3)
+
+	if got, want := buf.CellAt(0, 0).Bg, color.Screen(base, source, 0.3); got != want {
+		t.Fatalf("untouched blend = %v, want base blend %v", got, want)
+	}
+	if got, want := buf.CellAt(1, 0).Bg, color.Screen(underlay, source, 0.3); got != want {
+		t.Fatalf("layered blend = %v, want underlay blend %v", got, want)
 	}
 }
 
