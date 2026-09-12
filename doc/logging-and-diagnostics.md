@@ -60,6 +60,16 @@ payload is an open key-value map.
 | `fields` | Record payload; `msg` is the discriminator by convention |
 | `trace` | Present only on `vlog.Trace` records: a `->` joined call chain |
 
+`-log-session-id=<id>` adds `fields.session_id` to every record emitted through
+the vi-fighter logging facade. The key is absent when the flag is absent. IDs
+use the DNS-safe lowercase alphanumeric-and-hyphen subset of multiplayer session
+names. With file output, the active file is `<id>.jsonl`, so concurrent fleet
+sessions cannot collide on the ordinary timestamp-derived filename.
+`session_id` is distinct from the RNG/replay field named `session`. The deployment
+field stays in the payload because `sub`, `run`, `tick`, and `frame` are
+the stable envelope consumed by `vif-log`; deployment components forward the
+JSON line without rewriting it.
+
 `fields.msg` is the first payload key on every record the game emits. Viewers
 index it as a column and filter on it directly. The second string field is
 conventionally the record's *follow key* — `region` on FSM records, `ev` on

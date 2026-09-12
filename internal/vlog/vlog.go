@@ -76,6 +76,7 @@ type Config struct {
 	JournalDir string
 	Level      string // debug, info, warn, error; empty means debug
 	Scope      string // scope spec; empty means all. Pre-validate with ParseScopes
+	SessionID  string // optional deployment identity added to every application record
 
 	// Console sends the session log to stdout as JSON instead of to a file.
 	//
@@ -103,6 +104,10 @@ var (
 	// to the game, so it is reported on shutdown instead
 	lastErr atomic.Pointer[string]
 
+	// sessionID is immutable for one configured process. It is separate from cfg
+	// so the hot emit path does not take the configuration mutex.
+	sessionID atomic.Pointer[string]
+
 	mu      sync.Mutex // serializes Start/Stop/Shutdown
 	cfg     Config
 	closing atomic.Bool
@@ -122,6 +127,12 @@ func Configure(c Config) {
 		c.JournalDir = c.Dir
 	}
 	cfg = c
+	if c.SessionID == "" {
+		sessionID.Store(nil)
+	} else {
+		id := c.SessionID
+		sessionID.Store(&id)
+	}
 	if lv, err := log.Level(c.Level); err == nil {
 		level.Store(lv)
 	}
@@ -175,9 +186,10 @@ func buildLogger(dir, name, levelName string, console bool) (*log.Logger, string
 	return l, p, nil
 }
 
-// Start opens a new log file and begins processing, returning its path.
-// Each call produces a distinct file. Performs disk I/O: acceptable for a
-// startup or an operator command, not for a hot path.
+// Start opens a log file and begins processing, returning its path. Ordinary
+// runs use a timestamped name; a commissioned session uses its validated ID so
+// concurrent fleet processes never select the same file. Performs disk I/O:
+// acceptable for startup or an operator command, not for a hot path.
 func Start() (string, error) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -193,6 +205,9 @@ func Start() (string, error) {
 	}
 
 	name := filePrefix + time.Now().Format(fileTimeFormat)
+	if id := sessionID.Load(); id != nil {
+		name = *id
+	}
 	l, p, err := buildLogger(cfg.Dir, name, cfg.Level, cfg.Console)
 	if err != nil {
 		return "", err
@@ -348,7 +363,7 @@ func emit(sub string, level int64, args []any) {
 	if level < LevelError && !scopeEnabled(sub) {
 		return
 	}
-	l.LogContext(context(sub), l.Flags()|log.FlagKV, level, 0, args...)
+	l.LogContext(context(sub), l.Flags()|log.FlagKV, level, 0, sessionArgs(args)...)
 }
 
 // Trace emits a record carrying a stack trace of depth frames
@@ -361,7 +376,22 @@ func Trace(sub string, level int64, depth int, args ...any) {
 	if level < LevelError && !scopeEnabled(sub) {
 		return
 	}
-	l.LogContext(context(sub), l.Flags()|log.FlagKV, level, int64(depth)+1, args...)
+	l.LogContext(context(sub), l.Flags()|log.FlagKV, level, int64(depth)+1, sessionArgs(args)...)
+}
+
+// sessionArgs returns args unchanged for ordinary runs. A commissioned fleet
+// session appends its identity to the payload while retaining fields.msg as the
+// first key and the logger's existing top-level correlation envelope unchanged.
+func sessionArgs(args []any) []any {
+	id := sessionID.Load()
+	if id == nil {
+		return args
+	}
+	tagged := make([]any, len(args)+2)
+	copy(tagged, args)
+	tagged[len(args)] = "session_id"
+	tagged[len(args)+1] = *id
+	return tagged
 }
 
 func context(sub string) log.Context {
@@ -398,10 +428,11 @@ func CrashHook(r any, stack []byte) {
 	if l == nil {
 		return
 	}
-	l.LogContext(context("crash"), l.Flags()|log.FlagKV, LevelError, 0,
+	l.LogContext(context("crash"), l.Flags()|log.FlagKV, LevelError, 0, sessionArgs([]any{
 		"msg", "panic",
 		"panic", fmt.Sprint(r),
-		"stack", string(stack))
+		"stack", string(stack),
+	})...)
 	_ = l.Flush(crashFlushTimeout)
 }
 
@@ -492,7 +523,7 @@ func Journal(sub string, args ...any) {
 	if l == nil {
 		return
 	}
-	l.LogContext(context(sub), l.Flags()|log.FlagKV, LevelInfo, 0, args...)
+	l.LogContext(context(sub), l.Flags()|log.FlagKV, LevelInfo, 0, sessionArgs(args)...)
 }
 
 // LastJournalPath returns the journal file, live or most recently closed

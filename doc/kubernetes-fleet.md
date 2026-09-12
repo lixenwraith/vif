@@ -8,6 +8,12 @@ it is [Deploying the session fleet](kube_docker_deploy.md); the objects themselv
 are in [`deploy/`](../deploy/README.md); the scenarios that verify it by hand are in
 [`test/`](../test/README.md).
 
+> **Logging direction changed on 2026-09-12.** The stdout/pod-log fan-in described
+> in H9, H14, §8, and the deployment guide is not implemented and is superseded
+> by [the fleet logging pivot](kube-todo.md). Until that plan's gates pass, the
+> current-deployment statements here (stdout logs and a 501 log endpoint) remain
+> accurate.
+
 ## 1. Current deployment
 
 | Property | Value |

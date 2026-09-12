@@ -15,6 +15,7 @@ func TestLogFlags(t *testing.T) {
 		args                []string
 		enabled             bool
 		dir, level, scope   string
+		session             string
 		statTicks, recTicks int
 	}{
 		{name: "unset"},
@@ -27,8 +28,8 @@ func TestLogFlags(t *testing.T) {
 		{name: "log alias", args: []string{"-log=./tmp"}, enabled: true, dir: "./tmp"},
 		{
 			name:    "all values",
-			args:    []string{"-lv", "trace", "-ls=afs", "-lt", "200", "-lr=0"},
-			enabled: true, level: "trace", scope: "afs", statTicks: 200, recTicks: -1,
+			args:    []string{"-lv", "trace", "-ls=afs", "-lt", "200", "-lr=0", "-log-session-id", "abc123"},
+			enabled: true, level: "trace", scope: "afs", session: "abc123", statTicks: 200, recTicks: -1,
 		},
 		{
 			name: "tick disables", args: []string{"-lt=0", "-lr=0"},
@@ -61,6 +62,9 @@ func TestLogFlags(t *testing.T) {
 			if got := logs.scope.value; got != tt.scope {
 				t.Errorf("scope = %q, want %q", got, tt.scope)
 			}
+			if got := logs.session.value; got != tt.session {
+				t.Errorf("session = %q, want %q", got, tt.session)
+			}
 			if got := logs.stat.value; got != tt.statTicks {
 				t.Errorf("stat ticks = %d, want %d", got, tt.statTicks)
 			}
@@ -77,6 +81,7 @@ func TestLogFlagsImplyLogging(t *testing.T) {
 		{"-ls", "afs"},
 		{"-lt", "1"},
 		{"-lr", "1"},
+		{"-log-session-id", "abc123"},
 	}
 	for _, args := range tests {
 		fs, logs, _ := newDiagnosticFlagSet()
@@ -85,6 +90,15 @@ func TestLogFlagsImplyLogging(t *testing.T) {
 		}
 		if !logs.enabled() {
 			t.Errorf("Parse(%v) did not enable logging", args)
+		}
+	}
+}
+
+func TestLogSessionIDRejectsUnsafeNames(t *testing.T) {
+	for _, id := range []string{"", "../other", "UPPER", "has space", "-edge", "edge-"} {
+		fs, _, _ := newDiagnosticFlagSet()
+		if err := fs.Parse([]string{"-log-session-id", id}); err == nil {
+			t.Errorf("-log-session-id %q was accepted", id)
 		}
 	}
 }

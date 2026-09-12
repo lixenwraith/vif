@@ -900,6 +900,12 @@ reconnect delay, and keep the allocator between the browser and every pod.
 
 ### 10.3 The log path
 
+> **Planning note:** the allocator/pod-log/child-process design in this subsection
+> was never implemented and is superseded by
+> [the fleet logging pivot](kube-todo.md). Keep the currently deployed stdout and
+> 501 behavior until that plan's staged storage, writer, and rollback gates pass;
+> do not implement the text below as a shortcut.
+
 The website's panel wants every session's output in one stream. What decides the
 shape is that **vi-fighter's log envelope survives exactly one path** (A17):
 

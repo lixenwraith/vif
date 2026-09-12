@@ -38,6 +38,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Packaging](packaging.md) | Operational detail | What must hold for a distribution package, and what is still missing per repository? |
 | [Development and operations](development.md) | Operational detail | How is the project built, generated, tested, diagnosed, and deployed on native and WASM targets? |
 | [Session fleet plan](kubernetes-fleet.md) | Operational detail | What is deployed, what is still open, and what was decided against? Holds the work list. |
+| [Fleet logging pivot](kube-todo.md) | Operational work plan | What replaces the proposed pod-log/allocator fan-in, in what order, with which security and rollback gates? **Use this for the next deployment session.** |
 | [Deploying the session fleet](kube_docker_deploy.md) | Operational detail | How are the FreeBSD host's `pf` rules, the Arch/bhyve guest, Docker, K3s, the image and the ten-session fleet installed, linked and operated? |
 | [Manual test scenarios](../test/README.md) | Operational detail | Which command runs which game setup, and which ones assert? |
 

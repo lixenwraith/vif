@@ -103,6 +103,7 @@ func helpSections() []flagSection {
 			{names: []string{"ls", "log-scope"}, arg: "<spec>", hint: "Which subsystems log; see Scopes below; implies -l"},
 			{names: []string{"lt", "log-stat"}, arg: "<ticks>", hint: "Status snapshot period in game ticks, 0 disables; implies -l"},
 			{names: []string{"lr", "log-recorder"}, arg: "<ticks>", hint: "Flight recorder depth in game ticks, 0 disables; implies -l"},
+			{names: []string{"log-session-id"}, arg: "<id>", hint: "Attach a session ID to every application log record; implies -l"},
 			{names: []string{"log-stdout"}, hint: "Write the log to stdout as JSON instead of to a file; implies -l"},
 			{names: []string{"j", "journal"}, arg: "[=DIR]", hint: "Record a replay journal; DIR overrides " + paths.DefaultJournalDir()},
 			{names: []string{"dev"}, arg: "[=false]", hint: "Capture runtime stderr to a file; on by default for -race builds"},

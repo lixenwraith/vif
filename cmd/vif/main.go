@@ -151,6 +151,7 @@ func setupDiagnostics() {
 		JournalDir: journalDir,
 		Level:      flagLogs.level.value,
 		Scope:      flagLogs.scope.value,
+		SessionID:  flagLogs.session.value,
 		Console:    flagLogs.console,
 		Spawn:      core.Go, // processor panics reach HandleCrash, terminal restored
 	})
@@ -554,16 +555,18 @@ type logFlags struct {
 	scope   setFlag[string]
 	stat    setFlag[int]
 	rec     setFlag[int]
+	session setFlag[string]
 	console bool
 }
 
 func newLogFlags() *logFlags {
 	return &logFlags{
-		dir:   newSetFlag(true, parseOutputDirFlag),
-		level: newSetFlag(false, parseStringFlag),
-		scope: newSetFlag(false, parseScopeFlag),
-		stat:  newSetFlag(false, parseTicksFlag),
-		rec:   newSetFlag(false, parseTicksFlag),
+		dir:     newSetFlag(true, parseOutputDirFlag),
+		level:   newSetFlag(false, parseStringFlag),
+		scope:   newSetFlag(false, parseScopeFlag),
+		stat:    newSetFlag(false, parseTicksFlag),
+		rec:     newSetFlag(false, parseTicksFlag),
+		session: newSetFlag(false, parseLogSessionIDFlag),
 	}
 }
 
@@ -582,13 +585,16 @@ func (f *logFlags) register(fs *flag.FlagSet) {
 		fs.Var(alias.value, alias.short, alias.hint)
 		fs.Var(alias.value, alias.long, alias.hint)
 	}
+	fs.Var(&f.session, "log-session-id",
+		"Attach a session ID to every application log record; implies -l")
 	fs.BoolVar(&f.console, "log-stdout", false,
 		"Write the log to stdout as JSON instead of to a file; implies -l")
 }
 
 // enabled reports whether any logging flag was supplied.
 func (f *logFlags) enabled() bool {
-	return f.dir.set || f.level.set || f.scope.set || f.stat.set || f.rec.set || f.console
+	return f.dir.set || f.level.set || f.scope.set || f.stat.set || f.rec.set ||
+		f.session.set || f.console
 }
 
 // parseOutputDirFlag keeps -l and -j boolean while accepting -l=DIR/-j=DIR.
@@ -604,6 +610,19 @@ func parseOutputDirFlag(s, current string) (string, bool, error) {
 }
 
 func parseStringFlag(s, _ string) (string, bool, error) {
+	return s, true, nil
+}
+
+func parseLogSessionIDFlag(s, _ string) (string, bool, error) {
+	if s == "" {
+		return "", false, fmt.Errorf("log session ID cannot be empty")
+	}
+	if err := validSessionName(s); err != nil {
+		return "", false, fmt.Errorf("log session ID: %w", err)
+	}
+	if s[0] == '-' || s[len(s)-1] == '-' {
+		return "", false, fmt.Errorf("log session ID must start and end with a letter or digit")
+	}
 	return s, true, nil
 }
 

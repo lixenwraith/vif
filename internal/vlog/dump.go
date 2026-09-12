@@ -40,7 +40,7 @@ func Dump(fill func(emit func(sub string, args ...any))) (string, error) {
 
 	// Correlation stamp matches the session so a snapshot joins on run/tick
 	fill(func(sub string, args ...any) {
-		l.LogContext(context(sub), l.Flags()|log.FlagKV, LevelInfo, 0, args...)
+		l.LogContext(context(sub), l.Flags()|log.FlagKV, LevelInfo, 0, sessionArgs(args)...)
 	})
 
 	if err := l.Shutdown(dumpTimeout); err != nil {
@@ -103,5 +103,7 @@ func EmitSet(sub string, run, tick, frame uint64, fill func(emit func(args ...an
 func emitSet(l *log.Logger, sub string, run, tick, frame uint64, fill func(emit func(args ...any))) {
 	ctx := log.Context{Tag: sub, Vals: [log.ContextSlots]uint64{run, tick, frame}}
 	flags := l.Flags() | log.FlagKV
-	fill(func(args ...any) { l.LogContext(ctx, flags, LevelInfo, 0, args...) })
+	fill(func(args ...any) {
+		l.LogContext(ctx, flags, LevelInfo, 0, sessionArgs(args)...)
+	})
 }

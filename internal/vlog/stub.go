@@ -50,6 +50,7 @@ type Config struct {
 	JournalDir string
 	Level      string
 	Scope      string
+	SessionID  string
 	Console    bool
 }
 
