@@ -17,14 +17,14 @@ are in [`deploy/`](../deploy/README.md); the scenarios that verify it by hand ar
 | First-guest window | 90 s. A session nobody reaches exits 0 and is removed. |
 | Empty grace | 90 s after the last guest leaves; also the window a dropped player has to reclaim their slot. |
 | Drain | 20 s on `SIGTERM`, inside a 30 s termination grace period. A second signal exits at once. |
-| Trigger | `deploy/k3s/session.sh` is the manual fallback. `tool/vif-allocator` implements the website-facing control-plane boundary; no session pod runs between requests. |
+| Trigger | `tool/vif-allocator` is deployed as a hardened Arch-guest service and implements the website-facing control-plane boundary. `deploy/k3s/session.sh` is the manual fallback; no session pod runs between requests. |
 | Image | `scratch` + one static binary, ~13 MB, non-root, read-only root filesystem, no shell. |
 | Transport | Raw framed TCP, one long-lived connection per player. Unauthenticated by decision (§4). |
 | Reached by | Its own port, from a forwarded ten-port range. The port is the whole of the routing: nothing in a plaintext game connection names a session, so a firewall's destination port is the only signal there is. |
 | Logs and metrics | JSON lines on pod stdout, verified through `kubectl logs`. The allocator-to-LogWisp fan-in is configured but not deployed. |
 
-The allocator-to-Kubernetes path is implemented. The website/nginx and LogWisp
-edges remain to be integrated.
+The allocator-to-Kubernetes path is implemented, deployed and verified through an
+off-box join. The website/nginx and LogWisp edges remain to be integrated.
 
 ```mermaid
 flowchart LR
@@ -79,7 +79,7 @@ it does not move an in-memory session into an unrelated pod.
 | Parked-session probe | `/health` remains live with `clock=paused phase=vacant`; liveness is the response code, not a moving tick. |
 | Named sessions | `-name` on a host, `vif://host:port/name` in a player's link. One frame before the handshake, so a front door can put ten sessions behind one public port ([`deploy/frontdoor`](../deploy/frontdoor/haproxy.cfg)) and a stale link is refused rather than misrouted. Held in reserve for H8: the deployment reaches a session by port. |
 | Authority policy | `-authority host|migrate`, defaulting to `host` on `-serve`. A dedicated host's address *is* the session, so losing the pod is an orchestrator's job to fix rather than a guest's to inherit. See [Multiplayer](multi-player-enhancement.md) §5.0. |
-| Thin allocator (H10) | `tool/vif-allocator` exposes only the fixed session create/list API. It reserves ports from Services, refuses a full fleet before creation, owns each Service by its Job UID, waits for pod/EndpointSlice/application readiness, rolls back partial creates, and reconciles Kubernetes state at startup. A rotating ServiceAccount token and hardened host unit are in `deploy/guest`. |
+| Thin allocator (H10) | `tool/vif-allocator` exposes only the fixed session create/list API. It reserves ports from Services, refuses a full fleet before creation, owns each Service by its Job UID, waits for pod/EndpointSlice/application readiness, rolls back partial creates, and reconciles Kubernetes state at startup. Its hardened Arch-guest unit and rotating ServiceAccount token are deployed; create, list, off-box join, occupied/vacant state observation and operator cleanup passed on 2026-09-12. |
 
 ### Open
 
@@ -92,7 +92,7 @@ it does not move an in-memory session into an unrelated pod.
 | H5 | later | **Spatial grid right-sizing.** ~30.5 MiB reserved per world at the current maximum. | Deferred until density matters; needs resize/play regression coverage. |
 | H9 | later | **Move the log stream into each pod.** Not needed by the selected fleet design. LogWisp's file source supports `raw = true` and `from = "start"`, and `50-logwisp.yaml` prepares the experiment if per-session direct readers ever justify its cost. | The two-container pod is Ready under read-only UID 65532; `/stream` and `kubectl logs -c logwisp` retain the first record and the full envelope; no write is attempted. |
 | H11 | **next** | **Verify the player's source address at the pod.** `externalTrafficPolicy: Local` plus `pf rdr` should preserve it, and the address is already carried — `network.JoinerReport.Remote` holds `conn.RemoteAddr()` and reaches `App.noteJoinerReport` — but only `reach.noteDeclared` consumes it, so no record names it and the run could not inspect one. | The admitted-participant record in `internal/app/host.go` carries the accepted socket's remote address, and a remote join names the off-box client. If it names the node or gateway, the routing is corrected before relying on admission limits; otherwise the limiter is one budget for the whole fleet. |
-| H12 | **next** | **Finish the occupied lifecycle gates.** First-join expiry and owned-Service cleanup passed. Join/quit, rejoin near 75 s, drain on Job deletion, and `PLAYERS=1` capacity remain. | Each open case in [Deployment §9](kube_docker_deploy.md#9-create-one-session-by-hand) produces its specified transition and preserves the same run throughout the reconnect grace. |
+| H12 | **next** | **Finish the occupied lifecycle gates.** First-join expiry and owned-Service cleanup passed. An allocator-created off-box join reached `occupied` then `vacant`; automatic empty-grace expiry, rejoin near 75 s, drain on Job deletion, and `PLAYERS=1` capacity remain. | Each open case in [Deployment §9](kube_docker_deploy.md#9-create-one-session-by-hand) produces its specified transition and preserves the same run throughout the reconnect grace. |
 | H14 | next | **Run the node LogWisp fan-in.** The binary and `aggregator.toml` exist, but no live pod log has been piped through it. The public feed contains vi-fighter session stdout only, never K3s or host journal records. | A bounded `kubectl logs -f` test reaches loopback SSE intact; then the allocator enriches each line with session and port, owns the child process, and serves `/vif/api/logs` without replay or backpressure. Its long-lived SSE response gets a timeout separate from the bounded session-create API. |
 | H15 | after H14 | **Integrate nginx and Hugo.** The website implementation now has the allocator's real response fields and status codes; it still waits for the log endpoint. | `https://lixen.com/vif/api/sessions` creates/lists sessions, the session page keeps its HTTPS URL distinct from the raw join target, and the bounded log panel degrades cleanly when the API is absent. |
 | H16 | later | **Automate image delivery.** `deploy/guest/update-vif-image.sh` is the repeatable manual boundary: one build/check/import, allocator image update, old-image removal, and build-daemon cleanup. | CI resolves and verifies a tagged release artifact, invokes or reproduces the same boundary without an inbound cluster credential, and new sessions use it while existing matches finish. |
@@ -250,7 +250,8 @@ Against a cluster, the checks that need one:
 |---|---|---|
 | Reboot with no session | Passed | Node Ready, no swap, filter present, build daemons inactive, imported image retained, namespace empty. |
 | Nobody joins for 90 s | Passed | Exit 0 at 90 s; Job Complete; owned Service removed after the 120 s TTL. |
-| A guest joins and quits | Open | Exit 0 ninety seconds later, naming `roster empty for`. |
+| Allocator create/list and off-box join | Passed | Restricted token and probes succeeded; `POST` returned a ready session; API state followed the join and quit; operator deletion cleared the test. |
+| A guest joins and quits | Partial | Occupied and vacant states passed; automatic exit ninety seconds later must still name `roster empty for`. |
 | A guest quits and rejoins near 75 s | Open | The same run continues in the released slot; no one-minute reset occurs. |
 | `kubectl delete job` while a guest plays | Open | `phase=draining`, `/health` 200, exit when the roster empties or after 20 s. |
 | Roster at `-players` | Open | `ready=false` with `session at capacity`; existing guests keep playing. |

@@ -32,7 +32,7 @@ because most of them change what that step should say.
 | A13 | **Cluster commands in this procedure run through `sudo kubectl`.** K3s is installed with kubeconfig mode `0640`; the install script self-escalates, but the resulting kubeconfig is not made readable to the ordinary login user. | §6 |
 | A14 | **The fleet's log stream will be fanned in on the node, not served from each pod.** A session writes JSON lines to stdout; the planned allocator follows the pod log and one LogWisp on the guest serves the merged result. The pod-log half is verified, but LogWisp has not yet been run in this path. The in-pod sidecar stays the H9 experiment. | §10 |
 | A15 | **Source-address preservation is intended, not proved.** `externalTrafficPolicy: Local` and `pf rdr` should leave the off-box player's address visible to the pod, but the acceptance run did not record it. The per-address admission bound depends on this. | §9 |
-| A16 | **The allocator is implemented; Hugo and the LogWisp fan-in are not.** §10 installs the allocator, fixes its narrow `/vif/api/` contract, and leaves the website and log stream as the next integration step. | §10 |
+| A16 | **The allocator is implemented and deployed; Hugo and the LogWisp fan-in are not.** §10 installs the allocator and fixes its narrow `/vif/api/` contract. The Arch-guest service, rotating credential, create/list API and off-box join path passed on 2026-09-12; the website and log stream remain the next integrations. | §10 |
 | A17 | **The pod log is the log contract.** `-log-stdout` puts vi-fighter's own JSON line on stdout and the Kubernetes pod-log endpoint returns it verbatim, so nothing between the session and the browser reinterprets the envelope. A component that reparses a line is one that can reshape the envelope, so every hop on this path is chosen to carry bytes: `-log-stdout`, the pod-log endpoint, and LogWisp under a pass-through source with `raw` format. | §10 |
 
 ## 1. The shape
@@ -704,12 +704,13 @@ participant record in `internal/app/host.go`, then repeat the remote join. If th
 address is rewritten, the per-address admission limiter becomes one shared budget
 for the whole fleet.
 
-Production-timer status after the 2026-09-11 run:
+Deployment status through the 2026-09-12 allocator run:
 
 | Check | Status | Expected evidence |
 |---|---|---|
 | Nobody joins for 90 s | **Passed** | Exit 0 at 90 s with `no guest connected`; Job Complete; its owned Service was garbage-collected after the 120 s Job TTL; quota returned to zero. |
-| A guest joins and quits | Open | Exit 0 after the 90-second empty grace, naming `roster empty for`. |
+| Allocator create, list, join and delete | **Passed** | The host service minted its restricted token, both probes answered, `POST` returned a ready EndpointSlice and pod-health state, an off-box client joined through the returned target, the API followed the occupied/vacant transition, and operator cleanup removed the test. |
+| A guest joins and quits | Partial | The allocator API reported the occupied then vacant transition; automatic exit after the 90-second empty grace remains to be observed without manual cleanup. |
 | A guest quits and rejoins at about 75 s | Open | The same run and world continue in the released slot. |
 | Delete the Job while a guest plays | Open | `phase=draining`, health 200 with `ready=false`, then exit on an empty roster or after 20 s. |
 | Roster reaches `-players` | Open | Health 200 with `ready=false reason=session at capacity`; existing guests continue. |
@@ -840,6 +841,26 @@ sudoedit /etc/vif-allocator/allocator.env
 sudo systemctl daemon-reload
 sudo systemctl enable --now vif-allocator-token.timer vif-allocator.service
 ```
+
+The allocator is a host process. Starting it does not create a Kubernetes Job,
+pod or Service; those appear only after `POST /vif/api/sessions`.
+`vif-allocator.service` is `Type=simple`, so systemd reports it active before its
+startup reconciliation finishes. Reconciliation has a 20-second deadline; wait
+for the listener before testing readiness or changing the bridge firewall:
+
+```sh
+for attempt in $(seq 1 25); do
+  curl --connect-timeout 1 --max-time 2 -fsS \
+    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
+  sleep 1
+done
+curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/healthz
+curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/readyz
+```
+
+Both final probes must print `ok`. If the listener never appears, inspect
+`systemctl show` with `SubState`, `MainPID` and `NRestarts`, `ss -ltnp`, and the
+allocator journal before restarting or changing its configuration.
 
 A TokenRequest token expires and the API server may shorten the requested 24-hour
 duration. The service retries a boot-time mint for one minute; the timer refreshes
@@ -1030,10 +1051,14 @@ the kubelet's 30-second termination grace ends.
 
 ## 13. What this deployment does not yet have
 
-The acceptance run proved the Internet path, reboot-safe node baseline, current
-image, and unclaimed-session cleanup. A real client crossed the FreeBSD `pf rdr`,
-the Arch guest, NodePort and kube-proxy DNAT into the pod. A production 90-second
-unclaimed session then exited 0, and Job TTL plus ownership removed every object.
+The acceptance runs proved the Internet path, reboot-safe node baseline, current
+image, unclaimed-session cleanup, and the deployed allocator path. A real client
+crossed the FreeBSD `pf rdr`, the Arch guest, NodePort and kube-proxy DNAT into a
+pod first created manually and then through the allocator. The allocator's
+restricted credential, enabled rotation timer, liveness/readiness probes,
+create/list API, health-state transitions and operator cleanup all passed. A
+production 90-second unclaimed session also exited 0, and Job TTL plus ownership
+removed every object.
 The remaining gap register is the fleet plan's
 [work list](kubernetes-fleet.md#3-work-list):
 
@@ -1057,9 +1082,11 @@ The remaining gap register is the fleet plan's
 - **The website and LogWisp integrations are not built** (A16). The allocator and
   restricted rotating credential now implement the session API; nginx, the Hugo
   session page, and the log follower/aggregator path remain the next task.
-- **The occupied lifecycle gates remain open.** Join then quit, rejoin inside the
-  empty grace, drain while joined, and the one-player capacity case still need the
-  production-timer run in §9. First-join expiry and owned-Service cleanup passed.
+- **The occupied lifecycle gates remain partly open.** An allocator-created remote
+  join reached `occupied` and then `vacant`; automatic empty-grace expiry, rejoin
+  inside the grace, drain while joined, and the one-player capacity case still
+  need the production-timer run in §9. First-join expiry and owned-Service cleanup
+  passed.
 - **Losing the pod ends the session, and that is intended.** The manifest pins
   `-authority host`: no guest inherits the world, because a guest cannot be dialled
   and none of the others knows where it is. `backoffLimit: 0` means no replacement
@@ -1135,6 +1162,13 @@ sudo systemctl show vif-allocator.service vif-allocator-token.timer \
   -p Id -p ActiveState -p UnitFileState -p Result
 sudo systemctl status vif-allocator-token.service --no-pager
 sudo grep '^VIF_ALLOCATOR_IMAGE=' /etc/vif-allocator/allocator.env
+
+for attempt in $(seq 1 25); do
+  curl --connect-timeout 1 --max-time 2 -fsS \
+    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
+  sleep 1
+done
+
 curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/healthz
 curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/readyz
 curl --connect-timeout 2 --max-time 10 -fsS http://127.0.0.1:9080/vif/api/sessions
