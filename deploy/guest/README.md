@@ -925,8 +925,410 @@ unset BATCH_E_CAPTURE BATCH_E_STREAM_PID
 unset BATCH_E_ONE_SNAPSHOT BATCH_E_TWO_SNAPSHOT
 ```
 
-The fleet query and final `find` must print nothing. Do not start the deliberate
-LogWisp outage/replay gate until this two-source byte-preservation gate passes.
+The fleet query and final `find` must print nothing. This gate passed on
+2026-09-13 with two simultaneously occupied sessions: 255 and 351 sampled
+non-TRACE records were preserved byte-for-byte with distinct session self-tags,
+zero sink drops, and zero rejected clients.
+
+### Batch E outage/replay and common session gate
+
+This is a deliberate availability test, not a logging deployment change. It
+briefly stops and restarts only `logwisp.service`; its binary and configuration,
+the tmpfs/PV/PVC, K3s, allocator, and session workload remain unchanged. Keep one
+remote game connected and visibly playing throughout the outage and restart.
+
+The allocation is deadline-sensitive: prepare the development-machine terminal
+with the matching `bin/vif` before creating the session. Later, the replay reader
+must start while LogWisp is still stopped, immediately before the announced
+service restart. Keep the node terminal open until all variables and temporary
+files are cleaned.
+
+Begin with an empty fleet and log directory, no LogWisp stream client, all five
+services active, and the persistent volumes still `Bound`:
+
+```sh
+unset SESSION_JSON SESSION_ID JOIN_TARGET
+unset OUTAGE_TICK_BEFORE OUTAGE_TICK_AFTER OUTAGE_TICK_RESTARTED
+unset OUTAGE_PROBE_JSON OUTAGE_PROBE_ID
+unset BATCH_E_REPLAY_SNAPSHOT BATCH_E_REPLAY_CAPTURE
+unset BATCH_E_REPLAY_STREAM_PID REPLAY_RECORDS REPLAY_SENTINEL
+
+systemctl is-active \
+  'var-log-vif\x2dfleet.mount' \
+  vif-fleet-log-cleanup.timer \
+  k3s.service \
+  vif-allocator.service \
+  logwisp.service
+
+sudo kubectl get persistentvolume vif-fleet-logs
+sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+sudo find /var/log/vif-fleet \
+  -mindepth 1 -maxdepth 1 -print
+
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status |
+  jq -e '
+    .server.active_clients == 0 and
+    .statistics.auth_rejected == 0 and
+    .statistics.dropped_writes == 0 and
+    .statistics.rejected_clients == 0'
+```
+
+The fleet query and `find` must print nothing. Allocate one session, reject empty
+response fields, and immediately join it from the prepared remote terminal:
+
+```sh
+SESSION_JSON=$(curl -fsS -X POST \
+  -H 'Content-Type: application/json' -d '{}' \
+  http://127.0.0.1:9080/vif/api/sessions) &&
+SESSION_ID=$(printf '%s' "$SESSION_JSON" |
+  jq -er '.id | strings | select(length > 0)') &&
+JOIN_TARGET=$(printf '%s' "$SESSION_JSON" |
+  jq -er '.join_target | strings | select(length > 0)') &&
+printf 'session=%s join=%s\n' \
+  "$SESSION_ID" "$JOIN_TARGET"
+```
+
+```sh
+bin/vif -join '<join_target>'
+```
+
+While the client remains connected, verify the common Restricted workload shape,
+occupied state, commissioned file, and its pre-outage tick:
+
+```sh
+sudo kubectl -n vif get job \
+  "vif-session-$SESSION_ID" -o json |
+  jq -e --arg id "$SESSION_ID" '
+    .spec.template.spec as $pod |
+    ($pod.automountServiceAccountToken == false) and
+    ($pod.containers | length == 1) and
+    ($pod.containers[0].name == "session") and
+    ($pod.containers[0].args |
+      index("-l=/var/log/vif-fleet") != null) and
+    ($pod.containers[0].args |
+      index("-log-session-id=" + $id) != null) and
+    ($pod.containers[0].args |
+      index("-log-stdout") == null) and
+    any($pod.containers[0].volumeMounts[]?;
+      .name == "fleet-logs" and
+      .mountPath == "/var/log/vif-fleet") and
+    any($pod.volumes[]?;
+      .name == "fleet-logs" and
+      .persistentVolumeClaim.claimName == "vif-fleet-logs") and
+    all($pod.volumes[]?;
+      has("hostPath") | not) and
+    all($pod.initContainers[]?;
+      ((.volumeMounts // []) | length) == 0) and
+    ($pod.containers[0].securityContext.allowPrivilegeEscalation == false) and
+    ($pod.containers[0].securityContext.readOnlyRootFilesystem == true) and
+    ($pod.containers[0].securityContext.runAsNonRoot == true) and
+    ($pod.containers[0].securityContext.capabilities.drop |
+      index("ALL") != null)'
+
+for attempt in $(seq 1 50); do
+  sudo test -s "/var/log/vif-fleet/$SESSION_ID.jsonl" && break
+  sleep 0.2
+done
+sudo test -s "/var/log/vif-fleet/$SESSION_ID.jsonl"
+
+OUTAGE_TICK_BEFORE=$(curl -fsS \
+  http://127.0.0.1:9080/vif/api/sessions |
+  jq -er --arg id "$SESSION_ID" '
+    .sessions[] | select(.id == $id) | .state |
+    select(.phase == "occupied" and .guests >= 1) |
+    .tick')
+printf 'tick_before_outage=%s\n' "$OUTAGE_TICK_BEFORE"
+```
+
+Announce the interruption to the remote player, who must keep moving or firing
+for the next several seconds. Stop only LogWisp and prove that its loopback
+listener is gone while the allocator stays healthy and ready:
+
+```sh
+sudo systemctl stop logwisp.service
+test "$(systemctl is-active logwisp.service)" = inactive
+test -z "$(sudo ss -ltnH 'sport = :8081')"
+
+if curl --connect-timeout 1 --max-time 2 -fsS \
+  http://127.0.0.1:8081/status >/dev/null 2>&1
+then
+  printf 'LogWisp unexpectedly remained reachable\n' >&2
+  false
+else
+  printf 'LogWisp unavailable as expected\n'
+fi
+
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/healthz
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/readyz
+```
+
+While LogWisp remains stopped, commission a second session to prove allocation
+does not depend on it. Do not join this probe. Verify the original session stays
+occupied, the new session is waiting, and the original game clock advances:
+
+```sh
+OUTAGE_PROBE_JSON=$(curl -fsS -X POST \
+  -H 'Content-Type: application/json' -d '{}' \
+  http://127.0.0.1:9080/vif/api/sessions) &&
+OUTAGE_PROBE_ID=$(printf '%s' "$OUTAGE_PROBE_JSON" |
+  jq -er '.id | strings | select(length > 0)') &&
+test "$OUTAGE_PROBE_ID" != "$SESSION_ID" &&
+printf 'outage_probe=%s\n' "$OUTAGE_PROBE_ID"
+
+curl -fsS http://127.0.0.1:9080/vif/api/sessions |
+  jq -e --arg primary "$SESSION_ID" \
+    --arg probe "$OUTAGE_PROBE_ID" '
+    any(.sessions[];
+      .id == $primary and
+      .state.phase == "occupied" and
+      .state.guests >= 1) and
+    any(.sessions[];
+      .id == $probe and
+      .state.phase == "waiting" and
+      .state.guests == 0)'
+
+sleep 2
+OUTAGE_TICK_AFTER=$(curl -fsS \
+  http://127.0.0.1:9080/vif/api/sessions |
+  jq -er --arg id "$SESSION_ID" '
+    .sessions[] | select(.id == $id) | .state |
+    select(.phase == "occupied" and .guests >= 1) |
+    .tick')
+test "$OUTAGE_TICK_AFTER" -gt "$OUTAGE_TICK_BEFORE"
+printf 'tick_during_outage=%s -> %s\n' \
+  "$OUTAGE_TICK_BEFORE" "$OUTAGE_TICK_AFTER"
+```
+
+Delete the unjoined probe while LogWisp is still stopped. Remove only its log
+files and retain the occupied session's JSONL for replay:
+
+```sh
+./deploy/k3s/session.sh delete "$OUTAGE_PROBE_ID"
+sudo kubectl -n vif wait --for=delete \
+  "job/vif-session-$OUTAGE_PROBE_ID" --timeout=60s
+sudo kubectl -n vif wait --for=delete pod \
+  -l "vif.lixenwraith.dev/session=$OUTAGE_PROBE_ID" \
+  --timeout=60s
+sudo find /var/log/vif-fleet -maxdepth 1 -type f \
+  \( -name "$OUTAGE_PROBE_ID.jsonl" \
+     -o -name "${OUTAGE_PROBE_ID}_*.jsonl" \) \
+  -delete
+sudo kubectl -n vif get job,pod,service \
+  -l "vif.lixenwraith.dev/session=$OUTAGE_PROBE_ID"
+```
+
+Snapshot the retained occupied-session file while LogWisp is stopped. The
+sentinel is an exact non-TRACE record that existed before the restart, so seeing
+it after restart proves replay rather than delivery of a new line:
+
+```sh
+BATCH_E_REPLAY_SNAPSHOT=$(mktemp \
+  /tmp/vif-logwisp-replay.XXXXXX.jsonl)
+sudo cp -- "/var/log/vif-fleet/$SESSION_ID.jsonl" \
+  "$BATCH_E_REPLAY_SNAPSHOT"
+
+REPLAY_RECORDS=$(awk '
+  index($0, "\"level\":\"TRACE\"") == 0 {count++}
+  END {print count + 0}
+' "$BATCH_E_REPLAY_SNAPSHOT")
+REPLAY_SENTINEL=$(awk '
+  index($0, "\"level\":\"TRACE\"") == 0 {print; exit}
+' "$BATCH_E_REPLAY_SNAPSHOT")
+test "$REPLAY_RECORDS" -gt 0
+test -n "$REPLAY_SENTINEL"
+printf 'retained_non_trace_records=%s\n' "$REPLAY_RECORDS"
+```
+
+This restart step is simultaneous: start the waiting reader first while port
+8081 is still closed, then immediately start LogWisp. The reader polls the local
+listen table for at most 30 seconds and replaces itself with `curl` as soon as
+the sink binds. Do not reverse these two commands or the source can replay before
+a client is listening:
+
+```sh
+BATCH_E_REPLAY_CAPTURE=$(mktemp \
+  /tmp/vif-logwisp-replay-capture.XXXXXX.sse)
+(
+  for attempt in $(seq 1 3000); do
+    if ss -ltnH 'sport = :8081' | grep -q .; then
+      exec curl --no-buffer --fail --silent --show-error \
+        --connect-timeout 1 \
+        http://127.0.0.1:8081/stream
+    fi
+    sleep 0.01
+  done
+  printf 'LogWisp listener did not return within 30 seconds\n' >&2
+  exit 1
+) >"$BATCH_E_REPLAY_CAPTURE" &
+BATCH_E_REPLAY_STREAM_PID=$!
+
+sudo systemctl start logwisp.service
+
+for attempt in $(seq 1 100); do
+  curl --connect-timeout 1 --max-time 2 -fsS \
+    http://127.0.0.1:8081/status |
+    jq -e '.server.active_clients == 1' \
+      >/dev/null 2>&1 && break
+  sleep 0.1
+done
+
+test -s "$BATCH_E_REPLAY_CAPTURE"
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status |
+  jq -e '
+    .server.active_clients == 1 and
+    .statistics.total_processed > 0 and
+    .statistics.auth_rejected == 0 and
+    .statistics.dropped_writes == 0 and
+    .statistics.rejected_clients == 0'
+```
+
+Wait for the exact pre-restart sentinel, stabilize the capture, and record the
+accepted replay evidence:
+
+```sh
+for attempt in $(seq 1 100); do
+  grep -Fqx -- "data: $REPLAY_SENTINEL" \
+    "$BATCH_E_REPLAY_CAPTURE" && break
+  sleep 0.1
+done
+grep -Fqx -- "data: $REPLAY_SENTINEL" \
+  "$BATCH_E_REPLAY_CAPTURE"
+
+printf 'replay_sentinel=accepted retained_records=%s\n' \
+  "$REPLAY_RECORDS"
+sed -n '1,8p' "$BATCH_E_REPLAY_CAPTURE"
+
+kill "$BATCH_E_REPLAY_STREAM_PID"
+wait "$BATCH_E_REPLAY_STREAM_PID" 2>/dev/null || true
+
+for attempt in $(seq 1 50); do
+  curl --connect-timeout 1 --max-time 2 -fsS \
+    http://127.0.0.1:8081/status |
+    jq -e '.server.active_clients == 0' \
+      >/dev/null 2>&1 && break
+  sleep 0.1
+done
+```
+
+The remote game must still be playable. Verify it remains occupied and advances
+again after LogWisp restarts, and inspect only LogWisp's service journal:
+
+```sh
+OUTAGE_TICK_RESTARTED=$(curl -fsS \
+  http://127.0.0.1:9080/vif/api/sessions |
+  jq -er --arg id "$SESSION_ID" '
+    .sessions[] | select(.id == $id) | .state |
+    select(.phase == "occupied" and .guests >= 1) |
+    .tick')
+test "$OUTAGE_TICK_RESTARTED" -gt "$OUTAGE_TICK_AFTER"
+printf 'tick_after_restart=%s -> %s\n' \
+  "$OUTAGE_TICK_AFTER" "$OUTAGE_TICK_RESTARTED"
+
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/healthz
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/readyz
+sudo journalctl -u logwisp.service -n 20 --no-pager
+```
+
+Quit the remote client. Finish the common gate by verifying vacancy and complete
+self-tagging before deleting the session:
+
+```sh
+curl -fsS http://127.0.0.1:9080/vif/api/sessions |
+  jq -e --arg id "$SESSION_ID" '
+    .sessions[] | select(.id == $id) | .state |
+    select(.phase == "vacant" and .guests == 0)'
+
+sudo test -s "/var/log/vif-fleet/$SESSION_ID.jsonl"
+sudo jq -s -e --arg id "$SESSION_ID" '
+  map(select(.sub != null)) as $records |
+  ($records | length > 0) and
+  all($records[];
+    .fields.session_id == $id)
+' "/var/log/vif-fleet/$SESSION_ID.jsonl"
+
+./deploy/k3s/session.sh delete "$SESSION_ID"
+sudo kubectl -n vif wait --for=delete \
+  "job/vif-session-$SESSION_ID" --timeout=60s
+sudo kubectl -n vif wait --for=delete pod \
+  -l "vif.lixenwraith.dev/session=$SESSION_ID" \
+  --timeout=60s
+sudo find /var/log/vif-fleet -maxdepth 1 -type f \
+  \( -name "$SESSION_ID.jsonl" \
+     -o -name "${SESSION_ID}_*.jsonl" \) \
+  -delete
+```
+
+Remove both temporary replay files using only their expected `mktemp` paths,
+then prove the full Batch E steady state:
+
+```sh
+for temporary in \
+  "$BATCH_E_REPLAY_SNAPSHOT" \
+  "$BATCH_E_REPLAY_CAPTURE"
+do
+  case "$temporary" in
+    /tmp/vif-logwisp-replay.*|\
+    /tmp/vif-logwisp-replay-capture.*)
+      rm -f -- "$temporary"
+      ;;
+    *)
+      printf 'refusing unsafe temporary path: %s\n' \
+        "$temporary" >&2
+      false
+      ;;
+  esac
+done
+
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+sudo find /var/log/vif-fleet \
+  -mindepth 1 -maxdepth 1 -print
+
+systemctl is-active \
+  'var-log-vif\x2dfleet.mount' \
+  vif-fleet-log-cleanup.timer \
+  k3s.service \
+  vif-allocator.service \
+  logwisp.service
+systemctl show vif-fleet-log-cleanup.service \
+  -p User -p Group -p Result -p ExecMainStatus
+
+sudo kubectl get namespace vif --show-labels
+sudo kubectl get persistentvolume vif-fleet-logs
+sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
+test "$(sudo kubectl auth can-i get pods --subresource=log \
+  --as=system:serviceaccount:vif:vif-allocator -n vif)" = no
+
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status |
+  jq -e '
+    .server.active_clients == 0 and
+    .statistics.total_processed > 0 and
+    .statistics.auth_rejected == 0 and
+    .statistics.dropped_writes == 0 and
+    .statistics.rejected_clients == 0'
+
+unset SESSION_JSON SESSION_ID JOIN_TARGET
+unset OUTAGE_TICK_BEFORE OUTAGE_TICK_AFTER OUTAGE_TICK_RESTARTED
+unset OUTAGE_PROBE_JSON OUTAGE_PROBE_ID
+unset BATCH_E_REPLAY_SNAPSHOT BATCH_E_REPLAY_CAPTURE
+unset BATCH_E_REPLAY_STREAM_PID REPLAY_RECORDS REPLAY_SENTINEL
+```
+
+The fleet query and `find` must print nothing; all five services must be active,
+the cleanup result successful as `vif-fleet`, Restricted labels intact, PV/PVC
+`Bound`, allocator Pod-log access denied, and final LogWisp expression `true`.
+If replay fails, keep the game connected, collect the capture, status, and
+journal, kill the retrying curl if it is still running, and do not proceed to
+Batch F.
 
 ### Batch E service rollback
 

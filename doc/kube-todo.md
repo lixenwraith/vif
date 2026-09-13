@@ -17,11 +17,13 @@ Status on 2026-09-13:
   control/readiness permission, and its common session gate passed; and
 - Batch E's pinned standalone service is deployed: its locked identity,
   read-only tmpfs view, hidden credential paths, loopback-only status/stream,
-  Docker cleanup, and allocator independence checks passed. Its fan-in and
-  outage/replay gates remain. Batches F-G have not started.
+  Docker cleanup, allocator independence, and two-session fan-in checks passed.
+  The fan-in run preserved 606 sampled non-TRACE source records byte-for-byte,
+  with distinct self-tags and no sink drops or rejections. Its outage/replay
+  gate remains. Batches F-G have not started.
 
 The live allocator creates the commissioned PVC-backed file workload. Batch E may
-now be deployed only through the node procedure in `deploy/guest/README.md`.
+now continue only through the node procedure in `deploy/guest/README.md`.
 
 ## 1. Invariants and batch discipline
 
@@ -56,21 +58,18 @@ service defaults differ.
 
 | Batch | State | Outcome |
 |---|---|---|
-| E — standalone LogWisp | Service deployed; two-session fan-in next | One hardened node service discovers all retained JSONL files and serves a bounded loopback SSE stream independently of games and allocator operations. |
+| E — standalone LogWisp | Fan-in passed; outage/replay next | One hardened node service discovers all retained JSONL files and serves a bounded loopback SSE stream independently of games and allocator operations. |
 | F — allocator byte proxy | Blocked on E | `/vif/api/logs` proxies SSE bytes with prompt flush/cancellation and a stable failure response while session APIs stay independent. |
 | G — final reconciliation | Blocked on F | Durable docs describe only the deployed design, bare Arch/Ubuntu rehearsals pass, sizing evidence is recorded, and the website handoff is ready. |
 
 ## 3. Batch E — deploy one standalone LogWisp
 
 The checked-in installer, pinned revision, raw file source, bounded loopback sink,
-locked identity, and hardened unit are deployed. The following live gates remain:
-
-1. Start two sessions close together. This is the simultaneous step: have both
-   remote clients ready before allocating.
-2. Prove LogWisp discovers both files, preserves each line byte-for-byte, and
-   keeps their `fields.session_id` values distinct.
-3. Stop LogWisp while a game remains occupied; allocation, state, and gameplay
-   must continue. Restart it and record the accepted replay from retained files.
+locked identity, hardened unit, and two-session fan-in gate are deployed and
+passed. One live gate remains: stop LogWisp while a game remains occupied;
+allocation, state, and gameplay must continue. Restart it with a waiting SSE
+client and record an exact replay from the retained file, then finish the common
+session and cleanup check in §5.
 
 `from = "start"` prevents loss before discovery. A LogWisp restart replays retained
 files from byte zero until persisted offsets exist; downstream consumers must
