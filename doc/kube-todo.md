@@ -1,14 +1,14 @@
 # Kubernetes fleet logging pivot: implementation plan
 
-Status: Batch A is deployed. Allocation, remote join, occupied/vacant state, and
-session completion passed on 2026-09-13; the stdout regression assertion must be
-repeated because the first run lacked `jq` and lost the session ID before the Job
-was removed. Batches B-G are not deployed. The allocator and session fleet remain
-on the stdout/CRI-log path until the migration gates below pass.
+Status: Batch A is deployed and passed its repository, CI, allocation, remote-join,
+occupied/vacant state, stdout logging, and cleanup gates on 2026-09-13; the Batch
+B preflight confirmed the fleet is empty. Batch B artifacts are prepared but not
+deployed, and Batches C-G have not started. The allocator and session fleet remain
+on the stdout/CRI-log path until the migration gates pass.
 PR #500 is merged on `main` at `beea7fe`.
 
 The target is one direct, bounded file path from every game process to one
-standalone LogWisp daemon on the Arch node. Kubernetes still creates and deletes
+standalone LogWisp daemon on the Linux node. Kubernetes still creates and deletes
 the session Jobs, but its API server is not in the log data path.
 
 ## 1. Starting point
@@ -187,9 +187,9 @@ that changes live objects while a Job is active.
 
 ### Batch A — finish the writer contract
 
-PR #501 merged and Batch A is deployed. Repository, CI, allocation, remote join,
-state, and completion checks passed; only the repeated stdout assertion below
-remains the gate before Batch B.
+PR #501 merged and Batch A's functional gates passed. The final cleanup query ran
+before Kubernetes removed its background-cascaded pod; Batch B may start only
+after the preflight below confirms an idle fleet.
 
 1. Confirm PR #500 is merged and run the Go suite in an environment with the
    repository's Go toolchain.
@@ -220,21 +220,71 @@ tests pass.
 
 ### Batch B — provision volatile node storage
 
+Preflight passed on the current single-node Arch deployment: 7.7 GiB RAM with
+6.8 GiB available, no swap, an empty fleet, Restricted enforcement, no prior
+fleet-log mount or PV/PVC, and no host account mapped to numeric UID/GID 65532.
+The provisional 256 MiB tmpfs is about 3.2% of node RAM and is accepted until H3
+replaces the estimate with a ten-session measurement. The same systemd artifacts
+and commands support a bare Ubuntu K3s node; distribution package names are split
+in `deploy/guest/README.md`. That procedure first verifies the exact deployment
+revision contains every Batch B artifact, before any privileged copy or service
+operation.
+
 1. Record `free -h`, the K3s node name, and the filesystem ownership expected by
    UID/GID 65532. Put placeholders, never machine IPs, in repository docs.
 2. Install and start the tmpfs mount unit. Add the K3s ordering drop-in, then
    restart K3s once during a declared maintenance window.
 3. Apply `deploy/k3s/05-log-volume.yaml` with the real node name supplied at
    deployment time.
-4. Verify the PV/PVC is Bound and the namespace still enforces Restricted.
-5. Run a temporary Restricted test pod mounting the PVC as UID/GID 65532, write
-   one JSONL file, observe it at the node path, then delete the pod and file.
+4. Verify the namespace still enforces Restricted. The local StorageClass uses
+   `WaitForFirstConsumer`, so an `Available` PV and `Pending` PVC are expected
+   until a pod requests the claim.
+5. Render and apply `deploy/k3s/06-log-volume-check.yaml`. This temporary
+   Restricted pod mounts the PVC as UID/GID 65532 and runs the current image for
+   five unclaimed seconds, producing `volume-check.jsonl` without a shell image.
+6. Verify the PV/PVC becomes Bound, observe and validate the JSONL at the node
+   path, prove a server-dry-run `hostPath` pod is rejected, then delete the test
+   pod and all `volume-check` files.
+
+Install the cleanup service and timer with the mount. It refuses to operate unless
+`/var/log/vif-fleet` is tmpfs, retains the two newest rotations per session after
+a five-minute reader grace, and removes any recognized JSONL file unmodified for
+five hours—the four-hour Job ceiling plus a one-hour margin. The hard tmpfs cap
+still owns bursts and LogWisp outages; H3 must validate the grace and generation
+count. Exact install, restart, validation, cleanup, and rollback commands are in
+`deploy/guest/README.md` §Batch B.
 
 Gate: `findmnt` reports tmpfs with the chosen cap, K3s depends on its mount unit,
-the PVC is Bound, and a direct `hostPath` admission test remains rejected.
+the cleanup timer is active, the PVC is Bound, a direct `hostPath` admission test
+is rejected, and the temporary pod and files are gone. Finish with §5 while the
+real workload still uses stdout.
 
 Rollback: stop K3s, remove only the K3s drop-in, unmount tmpfs, and restart K3s.
 Do not delete a bound PV/PVC or unmount the path while a pod uses it.
+
+Begin with this read-only preflight. It records the state needed to confirm the
+provisional `256MiB` cap and the correct K3s unit before any artifact is installed:
+
+```sh
+cat /etc/os-release
+free -h
+df -h /
+systemctl show k3s.service \
+  -p ActiveState -p UnitFileState -p FragmentPath -p DropInPaths
+sudo kubectl get nodes \
+  -o custom-columns='NAME:.metadata.name,OS:.status.nodeInfo.osImage,KERNEL:.status.nodeInfo.kernelVersion,ARCH:.status.nodeInfo.architecture'
+sudo kubectl get namespace vif --show-labels
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+sudo kubectl get storageclass,persistentvolume
+sudo kubectl -n vif get persistentvolumeclaim
+findmnt /var/log/vif-fleet || true
+getent passwd 65532 || true
+getent group 65532 || true
+```
+
+The fleet-object query must be empty before the maintenance step. Do not install
+or restart anything until the output has been reviewed.
 
 ### Batch C — switch session Jobs from stdout to files
 
@@ -364,6 +414,9 @@ After the deployed path passes, update these documents to describe reality:
 - remove all prose saying the allocator follows pod logs, splices JSON, or owns a
   LogWisp child; and
 - record that the namespace remained Restricted and the pod uses a local PVC.
+- rehearse the complete node procedure from a bare Arch installation and a bare
+  Ubuntu installation, retaining explicit distribution branches only where
+  package/service defaults differ.
 
 Then produce the separate website prompt. It must tell the site implementation
 to use `EventSource` on the same-origin `/vif/api/logs`, read
@@ -398,7 +451,10 @@ printf 'session=%s join=%s\n' "$SESSION_ID" "$JOIN_TARGET"
 The final line must print two non-empty values. Stop and fix parsing if it does
 not; never substitute an empty ID into a Kubernetes resource name.
 
-From the development machine, join the printed target, play briefly, and quit:
+Have the development-machine terminal ready before allocation. The 90-second
+first-join countdown is already running when `POST` returns, so join the printed
+target immediately. Keep the guest shell available to inspect state while the
+client remains connected:
 
 ```sh
 bin/vif -join '<join_target>'
@@ -442,6 +498,8 @@ TTL, then confirm its fleet objects are gone:
 ./deploy/k3s/session.sh delete "$SESSION_ID"
 sudo kubectl -n vif wait --for=delete \
   "job/vif-session-$SESSION_ID" --timeout=60s
+sudo kubectl -n vif wait --for=delete pod \
+  -l "vif.lixenwraith.dev/session=$SESSION_ID" --timeout=60s
 sudo kubectl -n vif get job,pod,service \
   -l "vif.lixenwraith.dev/session=$SESSION_ID"
 ```

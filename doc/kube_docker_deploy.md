@@ -1,9 +1,16 @@
-# Deploying the session fleet on a FreeBSD host
+# Deploying the session fleet
 
 This is the blueprint for the proof-of-concept deployment: a website asks for a
 game, one container appears on a K3s node, a player somewhere on the Internet dials
-it, and it ends itself when nobody is in it. The node is an Arch Linux bhyve guest
-on FreeBSD 15.1; the FreeBSD host owns routing and packet filtering with `pf`.
+it, and it ends itself when nobody is in it. The proven production node is an Arch
+Linux bhyve guest on FreeBSD 15.1; the FreeBSD host owns routing and packet
+filtering with `pf`.
+
+A bare systemd-based Arch or Ubuntu development node can begin at §4 and use the
+same Docker, K3s, systemd, Kubernetes, and allocator steps. Its operator supplies
+the equivalent inbound routing/firewall boundary instead of copying the FreeBSD
+`pf` sections. Distribution-specific package commands are explicit below and in
+[`deploy/guest/README.md`](../deploy/guest/README.md).
 
 The plan, the gap register and the acceptance gates are in
 [K3s dedicated-server fleet plan](kubernetes-fleet.md); the objects are in
@@ -48,9 +55,8 @@ flowchart TD
     Pod -->|"stdout"| Log["CRI pod log, operator only"]
 ```
 
-This is the deployed shape while Batch A's stdout regression gate is completed.
-The target logging shape and ordered B-F migration are in
-[`kube-todo.md`](kube-todo.md).
+This is the deployed shape after Batch A. The target logging shape and ordered
+B-F migration are in [`kube-todo.md`](kube-todo.md).
 
 What a session is, what bounds its life, and what it costs are in the fleet plan's
 [§1](kubernetes-fleet.md#1-what-is-deployed) and [§6](kubernetes-fleet.md#6-resources);
@@ -163,14 +169,14 @@ port — it works, and it costs the second row of the table above: an nginx `str
 proxy replaces the client's source address with the host's unless it is run
 transparently. Prefer the `rdr`.
 
-## 4. Arch guest prerequisites
+## 4. Linux node prerequisites
 
-Record every version with the acceptance run; Arch is rolling and an unrecorded
-upgrade must not silently change the baseline.
+Record every version with the acceptance run. Arch is rolling, Ubuntu releases
+change their kernel and package baseline, and neither may change silently.
 
 ```sh
 uname -a                                 # kernel, recorded
-systemd-detect-virt                      # expect: bhyve
+systemd-detect-virt                      # bhyve, another VM type, or none
 findmnt -no FSTYPE /sys/fs/cgroup        # expect: cgroup2fs
 timedatectl status                       # expect: synchronized
 lscpu | grep -E 'Model name|^CPU\(s\)'
@@ -178,13 +184,33 @@ ip -br link; ip route
 ```
 
 ```sh
-sudo pacman -Syu --needed curl git jq make python iptables-nft conntrack-tools ethtool tcpdump
+. /etc/os-release
+case "$ID" in
+  arch)
+    sudo pacman -Syu --needed \
+      curl git jq make python util-linux iptables-nft conntrack-tools \
+      ethtool tcpdump
+    ;;
+  ubuntu)
+    sudo apt-get update
+    sudo apt-get install -y \
+      ca-certificates curl git jq make python3 util-linux iptables conntrack \
+      ethtool tcpdump
+    ;;
+  *)
+    printf 'unsupported distribution: %s\n' "$ID" >&2
+    false
+    ;;
+esac
 sudo systemctl enable --now systemd-timesyncd
 
-# zram-generator can recreate swap after fstab is clean. Mask the generated swap
-# unit shown on this guest before switching it off.
+# A zram generator can recreate swap after fstab is clean. Mask every generated
+# swap unit that exists before switching swap off.
 systemctl list-units --all 'dev-zram*.swap'
-sudo systemctl mask --now dev-zram0.swap
+systemctl list-unit-files --no-legend 'dev-zram*.swap' | \
+  while read -r unit _; do
+    test -z "$unit" || sudo systemctl mask --now "$unit"
+  done
 sudo swapoff -a && sudo sed -i '/\sswap\s/s/^/#/' /etc/fstab
 free -m                                    # expect: Swap total 0
 
@@ -196,13 +222,13 @@ printf 'net.ipv4.ip_forward=1\nnet.bridge.bridge-nf-call-iptables=1\n' \
 sudo sysctl --system
 ```
 
-`swapoff -a` and an edited `fstab` are not sufficient when Arch's
-`zram-generator` recreates its generated unit. If `free -m` still reports swap and
+`swapoff -a` and an edited `fstab` are not sufficient when a zram generator
+recreates its generated unit. If `free -m` still reports swap and
 `k3s check-config` still warns, mask the actual `dev-zram*.swap` unit printed above,
 switch it off, and recheck before installing K3s.
 
-**Sizing, before anything is installed.** Reserve memory for FreeBSD, for the guest
-itself and for the K3s control plane before counting sessions. Ten sessions at the
+**Sizing, before anything is installed.** Reserve memory for the host or VM, the
+node OS, and the K3s control plane before counting sessions. Ten sessions at the
 manifest's 192 MiB limit is 1.9 GiB of game, and the quota in
 [`10-quota.yaml`](../deploy/k3s/10-quota.yaml) is what holds the number to it.
 
@@ -211,7 +237,11 @@ manifest's 192 MiB limit is 1.9 GiB of game, and the quota in
 Docker is here to build (A5). It is not what runs the sessions.
 
 ```sh
-sudo pacman -S --needed docker
+. /etc/os-release
+case "$ID" in
+  arch) sudo pacman -S --needed docker ;;
+  ubuntu) sudo apt-get install -y docker.io ;;
+esac
 sudo systemctl enable --now docker
 sudo usermod -aG docker "$USER"     # log out and back in
 docker info | grep -i 'storage driver'
@@ -365,11 +395,15 @@ table inet vif {
 ```
 
 ```sh
-sudo pacman -S --needed nftables
+. /etc/os-release
+case "$ID" in
+  arch) sudo pacman -S --needed nftables ;;
+  ubuntu) sudo apt-get install -y nftables ;;
+esac
 sudo install -m 0644 /path/to/the/file /etc/nftables.conf
 
-# Remove Arch's shipped forward-policy table explicitly; reload never does it.
-sudo nft delete table inet filter
+# Remove a distribution-shipped forward-policy table if one exists.
+sudo nft delete table inet filter 2>/dev/null || true
 
 # If the replacement locks out SSH, remove only this table in twenty minutes.
 # pf still guards the public perimeter while it is absent.
@@ -513,6 +547,12 @@ digest**, not by tag. A tag can be moved; a session's logs then name a revision 
 is no longer what ran.
 
 ## 8. Apply the fleet objects
+
+This base block establishes the Batch A namespace and permissions. After the
+image and allocator are installed and their common session check passes, a node
+at Batch B continues with [`deploy/guest/README.md`](../deploy/guest/README.md)
+§Batch B. That procedure installs the fail-closed tmpfs dependency and renders
+`05-log-volume.yaml`; never apply that file with `${NODE_NAME}` intact.
 
 ```sh
 sudo kubectl apply -f deploy/k3s/00-namespace.yaml
@@ -1039,9 +1079,10 @@ The remaining gap register is the fleet plan's
   successful accepted connection's remote address, so the run could not prove the
   admission limiter sees each player rather than one rewritten address for the
   whole fleet.
-- **The node-local log path is staged, not deployed** (A14). Batch A is deployed;
-  allocation, remote join, state, and completion passed, while its stdout
-  regression assertion awaits a clean repeat. B-F still need to
+- **The node-local log path is staged, not deployed** (A14). Batch A is deployed
+  and passed its repository, CI, allocation, remote-join, state, stdout, and
+  functional gates. Its final cleanup query still showed one terminating
+  Completed pod; the Batch B preflight must first confirm an empty fleet. B-F need to
   provision the capped tmpfs/PVC, switch the workload, remove `pods/log`, install
   standalone LogWisp, and make the allocator a byte proxy. The old console-source
   aggregator and in-pod sidecar are superseded artifacts, not fallbacks.

@@ -1,0 +1,12 @@
+[Unit]
+Description=Regularly prune volatile Vi-Fighter fleet logs
+
+[Timer]
+OnBootSec=5m
+OnUnitActiveSec=1m
+AccuracySec=15s
+RandomizedDelaySec=10s
+Unit=vif-fleet-log-cleanup.service
+
+[Install]
+WantedBy=timers.target

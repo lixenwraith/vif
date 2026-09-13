@@ -1,0 +1,52 @@
+# Render ${NODE_NAME} at deployment time; never commit a machine address here.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: vif-node-log
+  labels:
+    app.kubernetes.io/name: vi-fighter
+    app.kubernetes.io/part-of: vi-fighter-fleet
+provisioner: kubernetes.io/no-provisioner
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: false
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: vif-fleet-logs
+  labels:
+    app.kubernetes.io/name: vi-fighter
+    app.kubernetes.io/part-of: vi-fighter-fleet
+spec:
+  capacity:
+    storage: 256Mi
+  volumeMode: Filesystem
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: vif-node-log
+  local:
+    path: /var/log/vif-fleet
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: ["${NODE_NAME}"]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vif-fleet-logs
+  namespace: vif
+  labels:
+    app.kubernetes.io/name: vi-fighter
+    app.kubernetes.io/part-of: vi-fighter-fleet
+spec:
+  accessModes: [ReadWriteOnce]
+  volumeMode: Filesystem
+  storageClassName: vif-node-log
+  resources:
+    requests:
+      storage: 256Mi

@@ -1,0 +1,65 @@
+# Temporary Batch B probe. Render ${IMAGE}, apply it once, then delete the pod
+# and volume-check JSONL files. The pod mounts only the PVC, never hostPath.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vif-log-volume-check
+  namespace: vif
+  labels:
+    app.kubernetes.io/name: vi-fighter
+    app.kubernetes.io/component: storage-check
+    app.kubernetes.io/part-of: vi-fighter-fleet
+spec:
+  restartPolicy: Never
+  activeDeadlineSeconds: 30
+  terminationGracePeriodSeconds: 10
+  serviceAccountName: vif-session
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: writer
+      image: ${IMAGE}
+      imagePullPolicy: IfNotPresent
+      args:
+        - "-serve"
+        - ":7777"
+        - "-probe"
+        - ":7778"
+        - "-authority"
+        - "host"
+        - "-l=/var/log/vif-fleet"
+        - "-log-session-id=volume-check"
+        - "-lv=info"
+        - "-ls=all+dispatch"
+        - "-d"
+        - "-first-join=5s"
+        - "-empty=5s"
+        - "-drain=5s"
+      securityContext:
+        allowPrivilegeEscalation: false
+        privileged: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        capabilities:
+          drop: ["ALL"]
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests: {cpu: 50m, memory: 64Mi}
+        limits: {cpu: 500m, memory: 192Mi}
+      volumeMounts:
+        - name: fleet-logs
+          mountPath: /var/log/vif-fleet
+  volumes:
+    - name: fleet-logs
+      persistentVolumeClaim:
+        claimName: vif-fleet-logs

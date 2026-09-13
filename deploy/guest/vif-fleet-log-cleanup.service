@@ -1,0 +1,32 @@
+[Unit]
+Description=Prune volatile Vi-Fighter fleet logs
+RequiresMountsFor=/var/log/vif-fleet
+ConditionPathIsMountPoint=/var/log/vif-fleet
+
+[Service]
+Type=oneshot
+User=65532
+Group=65532
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /usr/local/libexec/vif-fleet-log-cleanup.py
+UMask=0007
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadWritePaths=/var/log/vif-fleet
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+LockPersonality=yes
+MemoryDenyWriteExecute=yes

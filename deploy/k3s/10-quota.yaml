@@ -25,9 +25,10 @@ spec:
     requests.memory: 960Mi
     limits.cpu: "5"
     limits.memory: 1920Mi
-    # Sessions are in memory and nothing is persisted. A session object that asked
-    # for storage is a session that is not the workload this fleet runs.
-    persistentvolumeclaims: "0"
+    # One shared, volatile local claim backs every commissioned log writer. It is
+    # not per-session persistence; the node tmpfs is the actual hard capacity.
+    persistentvolumeclaims: "1"
+    requests.storage: 256Mi
 ---
 # The default a session inherits if its manifest omits one. A pod with no request
 # is scheduled as if it were free and counts nothing against the quota above, which
