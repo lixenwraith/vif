@@ -433,9 +433,19 @@ sudo kubectl -n vif get job,pod,service \
   -l "vif.lixenwraith.dev/session=$SESSION_ID"
 ```
 
+From Batch C onward, remove the verification session's active and rotated files
+after the Job is gone and the logging assertion has passed:
+
+```sh
+sudo find /var/log/vif-fleet -maxdepth 1 -type f \
+  \( -name "$SESSION_ID.jsonl" -o -name "${SESSION_ID}_*.jsonl" \) \
+  -delete
+```
+
 Expected result: both probes return `ok`, the client connects, allocator state
-tracks occupied/vacant, and temporary Jobs/Services/files are removed. Batch A's
-stdout stays untagged; from Batch C onward the JSONL file matches the allocator ID.
+tracks occupied/vacant, and temporary Jobs/Services and test files are removed.
+Batch A's stdout stays untagged; from Batch C onward the JSONL file matches the
+allocator ID.
 
 ## 6. Remaining fleet work that the pivot does not replace
 
