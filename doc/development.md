@@ -550,13 +550,17 @@ asynchronous JSON Lines files named `vif-log-<timestamp>.jsonl`.
 |---|---|
 | Queue | 8,192 records |
 | Flush | 50 ms |
-| File rotation | 64 MiB |
-| Total log budget | 512 MiB |
-| Minimum free disk | 100 MiB |
+| File rotation | 64 MB |
+| Total log budget | 512 MB |
+| Minimum free disk | 100 MB |
 | Retention | 24 hours |
 | Heartbeat | 60 seconds |
 | Process-exit drain | 2 seconds |
 | Panic flush | 200 ms |
+
+With `-log-session-id`, the per-file cap is 8 MB and directory-wide cleanup is
+disabled so one commissioned writer cannot remove another session's files. The
+fleet node owns the shared-directory bound and cleanup policy.
 
 Every record can carry subsystem plus run/tick/frame correlation stamps.
 Scopes are `app`, `fsm`, `event`, `dispatch`, `push`, `input`, `stat`, `rec`,

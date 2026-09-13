@@ -30,10 +30,10 @@ because most of them change what that step should say.
 | A11 | **The session's playout lead is chosen from its *first* guest's link** and holds for the life of the match. A session opened by a nearby player and joined by a distant one runs at the near player's lead. The late-crossing fence makes that cost freshness rather than correctness (fleet plan §5), but it is the reason a full-roster measurement (H3) is worth doing over real links rather than a LAN. | §9 |
 | A12 | **The resource envelope is unmeasured at a full roster.** The requests and limits in the manifest come from single-guest runs. Ten sessions per node is a claim until an hour of four-player play says otherwise. | §8 |
 | A13 | **Cluster commands in this procedure run through `sudo kubectl`.** K3s is installed with kubeconfig mode `0640`; the install script self-escalates, but the resulting kubeconfig is not made readable to the ordinary login user. | §6 |
-| A14 | **The fleet's log stream will be fanned in on the node, not served from each pod.** A session writes JSON lines to stdout; the planned allocator follows the pod log and one LogWisp on the guest serves the merged result. The pod-log half is verified, but LogWisp has not yet been run in this path. The in-pod sidecar stays the H9 experiment. | §10 |
+| A14 | **The fleet's public log stream will use node-local files.** The current workload writes JSON lines to stdout for operator inspection. The selected path is a tmpfs-backed local PVC, one standalone LogWisp service, and an allocator byte proxy; Kubernetes and the allocator do not tail pod logs. | §10 |
 | A15 | **Source-address preservation is intended, not proved.** `externalTrafficPolicy: Local` and `pf rdr` should leave the off-box player's address visible to the pod, but the acceptance run did not record it. The per-address admission bound depends on this. | §9 |
-| A16 | **The allocator is implemented and deployed; Hugo and the LogWisp fan-in are not.** §10 installs the allocator and fixes its narrow `/vif/api/` contract. The Arch-guest service, rotating credential, create/list API and off-box join path passed on 2026-09-12; the website and log stream remain the next integrations. | §10 |
-| A17 | **The pod log is the log contract.** `-log-stdout` puts vi-fighter's own JSON line on stdout and the Kubernetes pod-log endpoint returns it verbatim, so nothing between the session and the browser reinterprets the envelope. A component that reparses a line is one that can reshape the envelope, so every hop on this path is chosen to carry bytes: `-log-stdout`, the pod-log endpoint, and LogWisp under a pass-through source with `raw` format. | §10 |
+| A16 | **The allocator is implemented and deployed; Hugo and the node-local log stream are not.** §10 installs the allocator and fixes its narrow `/vif/api/` contract. The Arch-guest service, rotating credential, create/list API and off-box join path passed on 2026-09-12; the website and B-F logging batches remain. | §10 |
+| A17 | **The vi-fighter JSON line is the log contract.** The current stdout path and the selected file path both originate in `internal/vlog`. Every public hop must preserve those bytes; no allocator parsing, field insertion, or serialization is allowed. | §10 |
 
 ## 1. The shape
 
@@ -43,11 +43,13 @@ flowchart TD
     Site -->|"bridge only"| Alloc["Allocator on Arch guest"]
     Alloc -->|"Job + Service"| API["K3s API"]
     API --> Pod["vif -serve pod"]
-    Alloc -->|"health + log stream"| Pod
+    Alloc -->|"health"| Pod
     Term["Player's vif -join"] -->|"raw TCP, no nginx"| PF["FreeBSD pf rdr"] --> NP["NodePort"] --> Pod
-    Pod -->|"stdout"| Log["pod log"] --> Alloc
-    Alloc -->|"stdin"| Wisp["LogWisp on the guest"] -->|"SSE"| Alloc
+    Pod -->|"stdout"| Log["CRI pod log, operator only"]
 ```
+
+This is the deployed shape while Batch A is validated. The target logging shape
+and the ordered B-F migration are in [`kube-todo.md`](kube-todo.md).
 
 What a session is, what bounds its life, and what it costs are in the fleet plan's
 [§1](kubernetes-fleet.md#1-what-is-deployed) and [§6](kubernetes-fleet.md#6-resources);
@@ -427,17 +429,14 @@ below: `make image` is a wrapper around `docker build`. The command below is the
 single image build and is written explicitly to retain the required
 `--network host`, revision label, and commit-derived tag.
 
-No earlier step creates a source tree. Clone both repositories once, then remain in
-the vi-fighter repository root: every `make` and `kubectl apply` command in §7-§9
-assumes that working directory.
+No earlier step creates a source tree. Clone vi-fighter once, then remain in its
+root: every `make` and `kubectl apply` command in §7-§9 assumes that directory.
 
 ```sh
 mkdir -p ~/git/lixenwraith && cd ~/git/lixenwraith
 git clone https://github.com/lixenwraith/vi-fighter
-git clone https://github.com/lixenwraith/logwisp
 cd vi-fighter
 VIF_ROOT=$PWD
-LOGWISP_ROOT=$PWD/../logwisp
 ```
 
 The vi-fighter builder pin and module directive are deliberately the same patch
@@ -503,26 +502,10 @@ refuses an occupied fleet: changing the configured image does not require killin
 match, while deleting an image out from under one has no operational value. This is
 the manual release boundary the future CI job should invoke or reproduce.
 
-LogWisp is planned as a host binary beside the allocator, not as part of a session
-pod (A14). Its repository already builds `./cmd/logwisp`; installation and the live
-stream remain §10.3 work:
-
-```sh
-make -C "$LOGWISP_ROOT" build
-"$LOGWISP_ROOT"/bin/logwisp --version
-sudo install -m 0755 "$LOGWISP_ROOT"/bin/logwisp /usr/local/bin/logwisp
-sudo install -d -m 0755 /etc/logwisp
-sudo install -m 0644 deploy/logwisp/aggregator.toml /etc/logwisp/aggregator.toml
-```
-
-LogWisp's own root `Dockerfile` builds the same package into a `scratch` layer under
-UID 65532 and is what H9 imports when the in-pod sidecar is tested; it is not needed
-to run the fleet. That sidecar's `/stream` and `/status` are unauthenticated and the
-stream sends a wildcard CORS header, so `20-networkpolicy.yaml` is the only thing
-keeping 8080 off the player path — treat it exactly like the probe port, and note
-that LogWisp's TLS and mTLS identity authorization, unused here, is the eventual
-answer for a reader that is not on the node. Both repositories now declare and pin
-Go 1.27.1, so the check above applies to `$LOGWISP_ROOT` unchanged.
+Do not install LogWisp during the image step. Batch E owns its binary, file-source
+configuration, unprivileged user, hardened unit, and loopback verification as one
+change after the writer and storage path pass. The checked-in console-source and
+sidecar experiments are superseded and must not be deployed.
 
 For anything past the lab, publish the vi-fighter image and reference it **by
 digest**, not by tag. A tag can be moved; a session's logs then name a revision that
@@ -535,8 +518,10 @@ sudo kubectl apply -f deploy/k3s/00-namespace.yaml
 sudo kubectl apply -f deploy/k3s/10-quota.yaml
 sudo kubectl apply -f deploy/k3s/20-networkpolicy.yaml
 sudo kubectl apply -f deploy/k3s/40-allocator-rbac.yaml
-sudo kubectl apply -f deploy/k3s/50-logwisp.yaml   # only for an H9 sidecar render
 ```
+
+Do not apply `50-logwisp.yaml`. It belongs to the rejected per-session sidecar
+experiment and remains only until Batch C removes that path.
 
 These are the boundary. The namespace enforces `restricted` Pod Security, the quota
 caps the fleet at ten, the policies deny everything not named, and the Role is the
@@ -575,7 +560,8 @@ The session ID names the Kubernetes objects; the player sees only the port (A7).
 `session.sh` is the repeatable manual path: it creates the Job, reads its UID, then
 creates the owned Service. It chooses a free port when none is supplied, cleans a
 partial create, and refuses to overwrite an existing session. The default render
-is one container with `-log-stdout`; naming a LogWisp image is only the H9 test.
+is one container with `-log-stdout`. Do not name a LogWisp image; that obsolete
+sidecar branch is removed in Batch C.
 
 ```sh
 SESSION_ID=s1
@@ -663,9 +649,8 @@ sudo iptables-save -c | grep 'KUBE-POD-FW-'
 sudo iptables-save -c | grep 'KUBE-POD-FW-'
 ```
 
-The operator ports stay off the player path, and the pod log is the log contract
-(A17). Check that the line the API returns is the line the session wrote — the
-envelope keys, not just the payload — because everything in §10.3 rests on it:
+The operator ports stay off the player path. Until Batch C, stdout is the operator
+copy of the JSON-line contract (A17). Check its envelope keys, not just the payload:
 
 ```sh
 sudo kubectl -n vif port-forward job/vif-session-$SESSION_ID 7778:7778 &
@@ -677,10 +662,8 @@ sudo kubectl -n vif logs job/vif-session-$SESSION_ID --tail=1 \
 # expect: the vif envelope, ['fields', 'frame', 'level', 'run', 'sub', 'tick', 'time']
 ```
 
-A `sub` or `tick` missing here means the runtime prefixed or rewrote the line, and
-the aggregator's raw pass-through is carrying something other than what was written.
-The sidecar's `/stream`, `/status` and `kubectl logs -c logwisp` are checked only
-when H9 renders one; they are not part of this gate.
+A `sub` or `tick` missing here means the runtime prefixed or rewrote the line. The
+sidecar's `/stream`, `/status` and logs are not part of this deployment or gate.
 
 There is one health path. Its code answers whether the process should live; the
 body carries `ready`, `phase`, `guests`, `capacity`, and `expires_in`. A vacant pod
@@ -801,9 +784,10 @@ CORS from the design; do not replace it with `Access-Control-Allow-Origin: *`.
 
 [`40-allocator-rbac.yaml`](../deploy/k3s/40-allocator-rbac.yaml) defines the entire
 permission surface: create/read/watch/delete Jobs and Services, read/watch pods and
-events, and read pod logs, in `vif` and nowhere else. `pods/log` is what §10.3 reads
-and is the only addition the log panel needs; `pods/exec`, `pods/portforward` and
-every write verb stay absent. The allocator must not use
+events, in `vif` and nowhere else. The current Role still contains an unused
+`pods/log` read grant; no allocator code calls it, and Batch D removes it after the
+file path passes. `pods/exec`, `pods/portforward` and every pod write verb stay
+absent. The allocator must not use
 `/etc/rancher/k3s/k3s.yaml` or a copy of the node's root kubeconfig. It reads the
 cluster CA and a short-lived `vif-allocator` ServiceAccount token from separate
 files. The token is re-read on every Kubernetes request, so a root timer can replace
@@ -900,52 +884,27 @@ reconnect delay, and keep the allocator between the browser and every pod.
 
 ### 10.3 The log path
 
-> **Planning note:** the allocator/pod-log/child-process design in this subsection
-> was never implemented and is superseded by
-> [the fleet logging pivot](kube-todo.md). Keep the currently deployed stdout and
-> 501 behavior until that plan's staged storage, writer, and rollback gates pass;
-> do not implement the text below as a shortcut.
+The deployed workload still uses `-log-stdout`, operators read it with `kubectl
+logs`, and `/vif/api/logs` returns `501 log_stream_not_configured`. No allocator
+pod-log follower, JSON splicer, or LogWisp child exists. Do not build one.
 
-The website's panel wants every session's output in one stream. What decides the
-shape is that **vi-fighter's log envelope survives exactly one path** (A17):
+The selected migration is staged in [`kube-todo.md`](kube-todo.md): the session
+writes `<session-id>.jsonl` through a tmpfs-backed local PVC, one independent
+LogWisp service reads `*.jsonl` with `raw = true` and `from = "start"`, and the
+allocator reverse-proxies its SSE bytes. The namespace remains Restricted, the
+pod mounts a PVC rather than `hostPath`, and LogWisp receives no Kubernetes token.
 
-| Path | What arrives |
-|---|---|
-| Pod stdout → Kubernetes pod log | The line as written. `-log-stdout` puts vi-fighter's own JSON on stdout and the API returns it byte for byte. |
-| LogWisp console source → `raw` format | The line as written. The source puts the whole line in the entry's message and leaves its fields empty, and `raw` emits that message unchanged. |
-| LogWisp file source, `raw = true` → `raw` format | The line as written. The source never parses, so the envelope survives whatever keys it carries. |
-| LogWisp file source, defaults | The line as written, carried as text. The JSON branch is refused for any line holding a key outside `time`, `level`, `msg` and `fields` — which every vif line does. |
+Batch A implements the commissioned writer without selecting it in the workload:
+each application record carries `fields.session_id`, `fields.msg` stays first, the
+file rotates at 8 MB, and per-process directory cleanup is disabled. The ordinary
+stdout contract remains unchanged until B provisions storage and C updates both
+workload sources. Follow the batch gates and rollback order; there is no supported
+shortcut deployment command in this section.
 
-All three compose; the last two need LogWisp at or past the pass-through change.
-The intended path is session stdout, allocator pod-log follow, and one LogWisp on
-the guest serving merged lines on loopback. Its config is prepared in
-[`deploy/logwisp/aggregator.toml`](../deploy/logwisp/aggregator.toml), but this
-end-to-end path has not yet been run.
-
-```sh
-sudo install -m 0644 deploy/logwisp/aggregator.toml /etc/logwisp/aggregator.toml
-logwisp -c /etc/logwisp/aggregator.toml        # the allocator spawns this
-curl -sN 127.0.0.1:8081/stream | head          # one vif JSON line per data: field
-```
-
-Run it as a child of the allocator rather than as its own service. One process then
-holds the cluster credential, the stream ends when its writer does, and no second
-component needs a token. LogWisp is there for what the allocator would otherwise
-build: the SSE server, the per-client queues, the connection ceiling, the rate limit
-and the filters.
-
-Only vi-fighter session stdout belongs in the website feed. K3s service logs,
-kernel messages, and other node journal records remain operator-only; exposing them
-would turn an entertainment page into a control-plane information leak.
-
-Four obligations on the allocator's side of that pipe:
-
-| Obligation | Why |
-|---|---|
-| Splice `"session"` and `"port"` into each line after the opening brace, preserving every original key. | The panel must name the session, and the pass-through has no other place to carry it. Re-serializing the object instead is the field loss this path exists to avoid. |
-| Follow each pod's log with a bounded restart, and never re-read from the start on reconnect. | A follow that restarts from the beginning replays a whole match into the panel. |
-| Bound what it writes, and let a slow stream drop rather than block. | Ten sessions emitting a status snapshot per group at 10 Hz will outrun a browser; the aggregator's rate limit is the second half of that bound, not the first. |
-| Reverse-proxy `/vif/api/logs` to `127.0.0.1:8081/stream` with response buffering off and a write timeout separate from the bounded create API. | The aggregator must not bind an address the bridge can reach, so the allocator's one open port stays the whole guest surface (§10.1); the current finite HTTP write timeout must not truncate a long-lived SSE response. |
+Only vi-fighter application records belong in the website feed. K3s, allocator,
+LogWisp service, kernel, and host journal records remain operator-only. Every hop
+after the writer preserves bytes and uses `fields.session_id`; the allocator never
+parses or inserts fields.
 
 The panel is a viewer of operational data. `fields.msg` is the record discriminator
 on every line; `sub="stat"` marks the status snapshots that carry the metric values,
@@ -1008,8 +967,8 @@ against.
 **Where a session says what it did.** `kubectl logs job/vif-session-<id>` is the
 whole of it: the session writes its JSON lines to stdout and the API returns them
 unchanged, metric values included, because `internal/status` emits the registry as
-`sub="stat"` records into the same log. §10.3 fans that into one stream for the
-website; nothing between the two reinterprets a line.
+`sub="stat"` records into the same log. This remains operator-only until the staged
+file path in §10.3 reaches Batch F.
 
 One LogWisp behaviour is worth keeping in mind before anyone moves the source: a
 file watcher seeks to end-of-file when it first discovers an existing file, so lines
@@ -1079,15 +1038,14 @@ The remaining gap register is the fleet plan's
   successful accepted connection's remote address, so the run could not prove the
   admission limiter sees each player rather than one rewritten address for the
   whole fleet.
-- **The node log aggregator has not been run against a live session** (A14). The
-  pieces are each verified in isolation — `-log-stdout` in a pod during the run, and
-  LogWisp's console source and `raw` format from its own contract — but no allocator
-  has yet spliced a session ID into a followed pod log and served the result.
-  The in-pod sidecar remains a separate, deferred experiment (H9), no longer
-  blocked on LogWisp.
+- **The node-local log path is staged, not deployed** (A14). Batch A implements
+  the commissioned writer and awaits the common guest check. B-F still need to
+  provision the capped tmpfs/PVC, switch the workload, remove `pods/log`, install
+  standalone LogWisp, and make the allocator a byte proxy. The old console-source
+  aggregator and in-pod sidecar are superseded artifacts, not fallbacks.
 - **The website and LogWisp integrations are not built** (A16). The allocator and
-  restricted rotating credential now implement the session API; nginx, the Hugo
-  session page, and the log follower/aggregator path remain the next task.
+  restricted rotating credential implement the session API; nginx, the Hugo
+  session page, and the standalone file-source stream wait for the logging gates.
 - **The occupied lifecycle gates remain partly open.** An allocator-created remote
   join reached `occupied` and then `vacant`; automatic empty-grace expiry, rejoin
   inside the grace, drain while joined, and the one-player capacity case still

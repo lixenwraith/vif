@@ -47,15 +47,16 @@ const journalDrainTimeout = 3 * time.Second
 // emit at LevelInfo, so the level field never collides with trace tooling
 const journalLevel = "info"
 
-// Rotation and buffering; tuned after live measurement
+// Ordinary policy is measured; the commissioned cap remains provisional until H3.
 const (
-	bufferSize      = 8192
-	maxSizeMB       = 64
-	maxTotalSizeMB  = 512
-	minDiskFreeMB   = 100
-	flushIntervalMs = 50 // one game tick; a crash loses at most one tick of records
-	retentionHrs    = 24.0
-	heartbeatS      = 60
+	bufferSize            = 8192
+	maxSizeMB             = 64
+	commissionedMaxSizeMB = 8
+	maxTotalSizeMB        = 512
+	minDiskFreeMB         = 100
+	flushIntervalMs       = 50 // one game tick; a crash loses at most one tick of records
+	retentionHrs          = 24.0
+	heartbeatS            = 60
 
 	crashFlushTimeout = 200 * time.Millisecond
 )
@@ -153,6 +154,13 @@ func Init(c Config) (string, error) {
 // console selects stdout over a file; the two are exclusive, because a run that
 // wants its log on stdout is one whose filesystem is not where anybody will look.
 func buildLogger(dir, name, levelName string, console bool) (*log.Logger, string, error) {
+	fileLimit, directoryLimit := int64(maxSizeMB), int64(maxTotalSizeMB)
+	minFree, retention := int64(minDiskFreeMB), retentionHrs
+	if sessionID.Load() != nil {
+		fileLimit, directoryLimit = commissionedMaxSizeMB, 0
+		minFree, retention = 0, 0
+	}
+
 	l, err := log.NewBuilder().
 		Directory(dir).
 		Name(name).
@@ -165,12 +173,12 @@ func buildLogger(dir, name, levelName string, console bool) (*log.Logger, string
 		EnableConsole(console). // a file run keeps it off: console writes corrupt the alternate screen
 		InternalErrorsToStderr(false).
 		BufferSize(bufferSize).
-		MaxSizeMB(maxSizeMB).
-		MaxTotalSizeMB(maxTotalSizeMB).
-		MinDiskFreeMB(minDiskFreeMB).
+		MaxSizeMB(fileLimit).
+		MaxTotalSizeMB(directoryLimit).
+		MinDiskFreeMB(minFree).
 		FlushIntervalMs(flushIntervalMs).
 		EnablePeriodicSync(true).
-		RetentionPeriodHrs(retentionHrs).
+		RetentionPeriodHrs(retention).
 		HeartbeatLevel(1). // drop and rotation counters, one-way into the log
 		HeartbeatIntervalS(heartbeatS).
 		ContextKeys("sub", "run", "tick", "frame").

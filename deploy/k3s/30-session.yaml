@@ -105,9 +105,9 @@ spec:
             # must not elect a private continuation that looks like the old session.
             - "-authority"
             - "host"
-            # The sidecar shape, which is not what the deployment runs: render-session.sh
-            # and the allocator substitute -log-stdout and drop the container. The
-            # node fan-in costs each session no sidecar; H9 keeps this alternative.
+            # The obsolete sidecar experiment, not what the deployment runs. The
+            # manual renderer defaults to stdout without this container; the
+            # allocator emits a separate stdout-only Job. Batch C replaces both.
             - "-l=/var/log/vif"
             - "-lv"
             - "info"

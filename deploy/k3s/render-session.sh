@@ -11,9 +11,9 @@
 #   LOGWISP_IMAGE=logwisp:dev ./render-session.sh 7f3c1a 31707
 #   JOB_UID=<uid> ./render-session.sh 7f3c1a 31707
 #
-# The default is one container writing to stdout, which is what the deployment
-# runs: the allocator reads the pod log and the node aggregator serves it. Naming
-# an image adds the sidecar, and with it a second way for the pod to be unready.
+# The default is the current one-container stdout workload. No allocator log
+# follower or node aggregator is deployed and `/vif/api/logs` returns 501. Naming
+# an image adds the obsolete sidecar experiment that Batch C removes.
 #
 # Without JOB_UID the Service owner reference is omitted because the Job does not
 # exist yet. deploy/k3s/session.sh performs the two-stage create and cleanup.
@@ -73,8 +73,7 @@ if [ "$LOGWISP_IMAGE" != none ]; then
 	exit 0
 fi
 
-# A stdout-only render removes the sidecar and both shared volumes. This keeps
-# session failures separable from an image or configuration failure in LogWisp.
+# A stdout-only render removes the obsolete sidecar and both shared volumes.
 printf '%s\n' "$rendered" | awk '
 	$0 == "            - \"-l=/var/log/vif\"" {
 		print "            - \"-log-stdout\""

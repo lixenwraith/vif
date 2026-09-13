@@ -823,14 +823,19 @@ so a command handler never waits on disk while holding the lock.
 |---|---|
 | Queue | 8,192 records |
 | Flush interval | 50 ms (one simulation tick) |
-| File rotation | 64 MiB |
-| Total budget | 512 MiB |
-| Minimum free disk | 100 MiB |
+| File rotation | 64 MB |
+| Total budget | 512 MB |
+| Minimum free disk | 100 MB |
 | Retention | 24 hours |
 | Heartbeat | 60 s, level 1 (drop and rotation counters) |
 | Process-exit drain | 2 s |
 | Panic flush | 200 ms |
 | Snapshot/recorder drain | 3 s |
+
+Commissioned `-log-session-id` processes use an 8 MB per-file rotation cap and
+disable the logger's directory-wide total-size, minimum-free-space cleanup, and
+age retention. The fleet's capped tmpfs and node cleanup unit own those shared
+directory limits; ordinary desktop logging keeps the policy above.
 
 The sink **drops** records when the queue is full rather than blocking a game
 goroutine. Drops are counted and reported in the periodic `PROC` heartbeat and

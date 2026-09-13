@@ -1,9 +1,9 @@
 # Kubernetes fleet logging pivot: implementation plan
 
-Status: approved direction, not yet deployed. This document is the source of
-truth for the next implementation session. The currently deployed allocator and
-session fleet remain on the stdout/CRI-log path until the migration gates below
-pass.
+Status: Batch A implemented and repository-verified; guest validation pending.
+Batches B-G are not deployed. The currently deployed allocator and session fleet
+remain on the stdout/CRI-log path until the migration gates below pass.
+PR #500 is merged on `main` at `beea7fe`.
 
 The target is one direct, bounded file path from every game process to one
 standalone LogWisp daemon on the Arch node. Kubernetes still creates and deletes
@@ -32,7 +32,7 @@ pivot now is that long-lived `pods/log` requests would put avoidable data traffi
 and reconnect state through the control plane and make the allocator own an
 unrelated stream processor.
 
-This planning PR also adds `vif -log-session-id=<id>`. When present it:
+PR #500 added `vif -log-session-id=<id>`. When present it:
 
 - validates the ID as a DNS-safe lowercase alphanumeric-and-hyphen session name;
 - adds `fields.session_id` to every application record emitted by `internal/vlog`;
@@ -44,7 +44,7 @@ also distinguishes the deployment ID from the existing RNG/replay payload key
 named `session`. The existing
 top-level `sub`, `run`, `tick`, and `frame` envelope is the stable contract used
 by `vif-log`, and the current logging library has one string context slot already
-used by `sub`. The public consumer can select `fields.session` without an
+used by `sub`. The public consumer can select `fields.session_id` without an
 allocator rewrite. If a top-level `session` key later proves necessary, extend
 `github.com/lixenwraith/log` with static envelope fields first; do not relocate
 `sub` or splice serialized JSON.
@@ -169,6 +169,13 @@ logging library's directory-wide retention against other sessions:
 - verify that full tmpfs causes bounded log drops while the game and health probe
   remain alive.
 
+Batch A sets commissioned files to an 8 MB per-file rotation cap and disables the
+logger's directory-wide total-size, minimum-free-space cleanup, and age retention.
+Ordinary desktop logging keeps its 64 MB / 512 MB / 100 MB / 24-hour policy. The
+commissioned cap is provisional: ten active files plus two complete rotated
+generations occupy at most 240 MB before filesystem overhead, beneath the initial
+256 MiB tmpfs candidate. The H3 measurement must confirm or revise both limits.
+
 The tmpfs is intentionally empty after reboot. No match state is stored there.
 
 ## 4. Implementation batches
@@ -178,17 +185,32 @@ that changes live objects while a Job is active.
 
 ### Batch A — finish the writer contract
 
-1. Merge this planning/self-tagging PR and run the Go suite in an environment
-   with the repository's Go toolchain.
+Repository implementation is complete; the live guest check below remains the
+gate before Batch B.
+
+1. Confirm PR #500 is merged and run the Go suite in an environment with the
+   repository's Go toolchain.
 2. Add commissioned-mode logger limits described in §3.3. Keep ordinary desktop
    logging unchanged.
 3. Test both flag states:
-   - absent: the filename and JSON schema are unchanged and `session` is absent;
+   - absent: the filename and JSON schema are unchanged and `fields.session_id`
+     is absent;
    - present: the active filename is `<id>.jsonl`, every application record has
      `fields.session_id=<id>`, `fields.msg` remains the first payload key, and an
      unsafe or empty ID is refused.
 4. Exercise rotation with two different IDs in one directory. Neither logger may
    delete, rename, or append to the other ID's active file.
+
+After this change is merged, update the guest only while the fleet is idle. The
+image helper stops new allocation, refuses to proceed if a Job or pod remains,
+builds and imports the current revision, updates the allocator image, and restores
+the disabled build-daemon baseline:
+
+```sh
+git switch main
+git pull --ff-only
+./deploy/guest/update-vif-image.sh
+```
 
 Gate: no Kubernetes change until the writer collision and cross-session cleanup
 tests pass.
@@ -239,7 +261,8 @@ config-check init container does not need the volume.
 
 Extend `tool/vif-allocator/manifest_test.go` to assert the new args, PVC mount,
 absence of `-log-stdout`, and unchanged hardening. Remove the obsolete sidecar
-shape and `${LOGWISP_IMAGE}` placeholder from `30-session.yaml`; there will be no
+shape and `${LOGWISP_IMAGE}` handling from `30-session.yaml` and
+`render-session.sh`, and delete the orphaned `50-logwisp.yaml`; there will be no
 LogWisp container per session.
 
 Gate: one allocator-created session becomes ready, can be joined remotely, and
@@ -360,23 +383,59 @@ SESSION_JSON=$(curl -fsS -X POST \
   -H 'Content-Type: application/json' -d '{}' \
   http://127.0.0.1:9080/vif/api/sessions)
 printf '%s\n' "$SESSION_JSON"
+SESSION_ID=$(printf '%s' "$SESSION_JSON" | jq -r '.id')
+JOIN_TARGET=$(printf '%s' "$SESSION_JSON" | jq -r '.join_target')
+printf 'session=%s join=%s\n' "$SESSION_ID" "$JOIN_TARGET"
 ```
 
-From the development machine, join the returned `join_target`, play briefly, and
-quit. Back on the guest, verify the same ID becomes `occupied`, then `vacant`, and
-delete it with `deploy/k3s/session.sh delete <id>` if the batch must not wait for
-empty-grace/TTL cleanup. A logging batch also verifies:
+From the development machine, join the printed target, play briefly, and quit:
 
 ```sh
-sudo test -s /var/log/vif-fleet/<id>.jsonl
-sudo jq -e --arg id '<id>' \
+bin/vif -join '<join_target>'
+```
+
+While connected and again after quitting, inspect the same row on the guest. Its
+`state.phase` and `state.guests` must move from occupied to vacant:
+
+```sh
+curl -fsS http://127.0.0.1:9080/vif/api/sessions | jq \
+  --arg id "$SESSION_ID" '.sessions[] | select(.id == $id) | .state'
+```
+
+Batch A deliberately leaves the workload on `-log-stdout`; its live logging check
+therefore proves the ordinary, untagged contract stayed intact:
+
+```sh
+sudo kubectl -n vif logs "job/vif-session-$SESSION_ID" \
+  | sed -n '/^{/p' \
+  | jq -s -e 'map(select(.sub != null)) as $r |
+      ($r | length > 0) and all($r[]; .fields | has("session_id") | not)'
+```
+
+The node-file assertion begins in Batch C, after Batch B has bound the PVC and the
+workload actually mounts it:
+
+```sh
+sudo test -s "/var/log/vif-fleet/$SESSION_ID.jsonl"
+sudo jq -e --arg id "$SESSION_ID" \
   'select(.fields.session_id == $id)' \
-  /var/log/vif-fleet/<id>.jsonl >/dev/null
+  "/var/log/vif-fleet/$SESSION_ID.jsonl" >/dev/null
+```
+
+Remove the verification session rather than waiting for the empty grace and Job
+TTL, then confirm its fleet objects are gone:
+
+```sh
+./deploy/k3s/session.sh delete "$SESSION_ID"
+sudo kubectl -n vif wait --for=delete \
+  "job/vif-session-$SESSION_ID" --timeout=60s
+sudo kubectl -n vif get job,pod,service \
+  -l "vif.lixenwraith.dev/session=$SESSION_ID"
 ```
 
 Expected result: both probes return `ok`, the client connects, allocator state
-tracks occupied/vacant, the JSONL file matches the allocator ID, and temporary
-Jobs/Services/files are eventually removed.
+tracks occupied/vacant, and temporary Jobs/Services/files are removed. Batch A's
+stdout stays untagged; from Batch C onward the JSONL file matches the allocator ID.
 
 ## 6. Remaining fleet work that the pivot does not replace
 

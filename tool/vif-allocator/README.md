@@ -34,7 +34,7 @@ atomically without restarting the allocator. See
 | `GET /vif/api/sessions` | `200` and `{ "sessions": [...] }` for live, non-completed Jobs. |
 | `GET /healthz` | Process liveness. |
 | `GET /readyz` | Verifies that the current token can reach the Kubernetes API. |
-| `GET /vif/api/logs` | `501` until the node LogWisp fan-in is installed. |
+| `GET /vif/api/logs` | `501` until the node-local file pipeline and standalone LogWisp byte proxy complete Batches B-F in `doc/kube-todo.md`. |
 
 One session row has this shape:
 

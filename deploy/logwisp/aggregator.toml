@@ -1,20 +1,13 @@
-# The planned fleet log fan-in, on the Arch guest rather than in a pod.
+# Superseded console-source experiment; do not deploy this configuration.
 #
-# The allocator follows each live session's pod log through the Kubernetes API,
-# splices the session ID and public port into every line, and writes the result to
-# this process's standard input. LogWisp serves the merged stream as Server-Sent
-# Events on the loopback address, and the allocator reverse-proxies it to the one
-# same-origin path the website reads. See doc/kube_docker_deploy.md §10.3.
-#
-# Run it as a child of the allocator so one process holds the cluster credential
-# and the stream ends with the writer:
-#
-#   logwisp -c /etc/logwisp/aggregator.toml
+# The live fleet still writes stdout and exposes no public stream. Batch E in
+# doc/kube-todo.md replaces this console input with one standalone file source;
+# LogWisp will not be owned by the allocator or use a Kubernetes credential.
 quiet = false
 status_reporter = false
 auto_reload = false
 
-# Operational output to stderr: stdin is the data path and stdout carries nothing.
+# Operational output to stderr; Batch E replaces the stdin data path.
 [logging]
 output = "stderr"
 level = "warn"
@@ -50,8 +43,8 @@ type = "console"
 [pipelines.plugin_sources.config]
 buffer_size = 4096
 
-# Loopback only. The allocator is the sole reader and the only component the
-# FreeBSD host's nginx reaches, so this port never crosses the bridge.
+# Loopback only. Batch F makes the allocator a byte proxy after this service is
+# independently deployed and verified.
 [[pipelines.plugin_sinks]]
 id = "stream"
 type = "http"

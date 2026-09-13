@@ -45,9 +45,8 @@ rules:
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]
-  # The session's own output, for the website's log panel. A pod log is the
-  # process's stdout verbatim. Read-only, and it is not pods/exec by another name:
-  # nothing can be written into the container.
+  # Unused transition grant: no allocator pod-log follower exists. Batch D removes
+  # it after the file writer and volume path pass their gates.
   - apiGroups: [""]
     resources: ["pods/log"]
     verbs: ["get"]
