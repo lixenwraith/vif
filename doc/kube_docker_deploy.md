@@ -37,9 +37,9 @@ because most of them change what that step should say.
 | A11 | **The session's playout lead is chosen from its *first* guest's link** and holds for the life of the match. A session opened by a nearby player and joined by a distant one runs at the near player's lead. The late-crossing fence makes that cost freshness rather than correctness (fleet plan §5), but it is the reason a full-roster measurement (H3) is worth doing over real links rather than a LAN. | §9 |
 | A12 | **The resource envelope is unmeasured at a full roster.** The requests and limits in the manifest come from single-guest runs. Ten sessions per node is a claim until an hour of four-player play says otherwise. | §8 |
 | A13 | **Cluster commands in this procedure run through `sudo kubectl`.** K3s is installed with kubeconfig mode `0640`; the install script self-escalates, but the resulting kubeconfig is not made readable to the ordinary login user. | §6 |
-| A14 | **The fleet's public log stream uses node-local files.** The capped tmpfs, local PV/PVC, live file-writing workload, pod-log RBAC removal, and standalone LogWisp installation/isolation/fan-in are deployed and passed. Batch E's outage/replay gate and Batch F's allocator byte proxy remain; Kubernetes and the allocator never tail pod logs. | §10 |
+| A14 | **The fleet's public log stream uses node-local files.** The capped tmpfs, local PV/PVC, live file-writing workload, pod-log RBAC removal, and standalone LogWisp installation, isolation, fan-in, outage, and retained-replay gates are deployed and passed. Batch F's tested allocator byte proxy awaits its live cutover; Kubernetes and the allocator never tail pod logs. | §10 |
 | A15 | **Source-address preservation is intended, not proved.** `externalTrafficPolicy: Local` and `pf rdr` should leave the off-box player's address visible to the pod, but the acceptance run did not record it. The per-address admission bound depends on this. | §9 |
-| A16 | **The allocator is implemented and deployed; Hugo and the public node-local stream are not.** §10 installs the allocator and fixes its narrow `/vif/api/` contract. The service, rotating credential, create/list API, off-box join, file path, reduced Role, and isolated loopback LogWisp fan-in passed; Batch E's outage/replay gate, Batch F, and the website remain. | §10 |
+| A16 | **The allocator control API is deployed; its tested stream proxy and the website are not.** §10 fixes the narrow `/vif/api/` contract. The service, rotating credential, create/list API, off-box join, file path, reduced Role, and isolated loopback LogWisp pipeline passed. Batch F deploys the proxy and a local bounded viewer before nginx/Hugo integration. | §10 |
 | A17 | **The vi-fighter JSON line is the log contract.** The current file records originate in `internal/vlog`; every public hop must preserve those bytes. No allocator parsing, field insertion, or serialization is allowed. | §10 |
 
 ## 1. The shape
@@ -56,11 +56,13 @@ flowchart TD
     Log -->|"read-only files"| Wisp["LogWisp, loopback only"]
 ```
 
-This is the live shape after Batch E's fan-in gate. The tmpfs-backed local PV/PVC
-is empty between sessions; LogWisp has no allocator or Kubernetes credential
-dependency, two simultaneous session sources streamed exact bytes without drops,
-and no public log route exists yet. The remaining ordered E-F migration is in
-[`kube-todo.md`](kube-todo.md).
+This is the live shape after Batch E. The tmpfs-backed local PV/PVC is empty
+between sessions; LogWisp has no allocator or Kubernetes credential dependency;
+two simultaneous sources streamed exact bytes without drops; and stopping it did
+not stop allocation, state, or gameplay. Restart replay preserved an exact source
+record while its bounded client queue dropped 86 of 1,841 processed records. The
+Batch F allocator proxy is implemented and tested but not yet deployed. Its live
+gate and the remaining order are in [`kube-todo.md`](kube-todo.md).
 
 What a session is, what bounds its life, and what it costs are in the fleet plan's
 [§1](kubernetes-fleet.md#1-what-is-deployed) and [§6](kubernetes-fleet.md#6-resources);
@@ -741,7 +743,7 @@ participant record in `internal/app/host.go`, then repeat the remote join. If th
 address is rewritten, the per-address admission limiter becomes one shared budget
 for the whole fleet.
 
-Deployment status through the 2026-09-13 Batch C run:
+Deployment status through the 2026-09-13 Batch E run:
 
 | Check | Status | Expected evidence |
 |---|---|---|
@@ -749,6 +751,8 @@ Deployment status through the 2026-09-13 Batch C run:
 | Allocator create, list, join and delete | **Passed** | The host service minted its restricted token, both probes answered, `POST` returned a ready EndpointSlice and pod-health state, an off-box client joined through the returned target, the API followed the occupied/vacant transition, and operator cleanup removed the test. |
 | Batch B volatile storage | **Passed** | The locked `vif-fleet` UID/GID 65532 identity, capped tmpfs, fail-closed K3s dependency, Bound local PV/PVC, Restricted writer, direct-`hostPath` rejection, cleanup timer, remote join, unchanged stdout, and empty steady state passed. |
 | Batch C file-writing Jobs | **Passed** | The live allocator created one tokenless Restricted session container with the PVC and no direct `hostPath` or `-log-stdout`. Off-box join, occupied/vacant state, complete application-record session tagging, Job/pod/Service deletion, file cleanup, and empty steady state passed. |
+| Batch D least-privilege allocator | **Passed** | The live Role denied `pods/log` while retaining the allocator permissions required for create, list, readiness, state, and cleanup. |
+| Batch E standalone LogWisp | **Passed** | The locked service, read-only tmpfs view, loopback listener, exact two-session fan-in, outage independence, exact retained replay, and common cleanup passed. Normal fan-in dropped nothing; restart replay recorded 86 bounded client-queue drops among 1,841 processed records. |
 | A guest joins and quits | Partial | The allocator API reported the occupied then vacant transition; automatic exit after the 90-second empty grace remains to be observed without manual cleanup. |
 | A guest quits and rejoins at about 75 s | Open | The same run and world continue in the released slot. |
 | Delete the Job while a guest plays | Open | `phase=draining`, health 200 with `ready=false`, then exit on an empty roster or after 20 s. |
@@ -921,7 +925,7 @@ The page-facing API is deliberately small:
 | `GET /readyz` | `200` | The current token can list Services through the K3s API; otherwise `503`. |
 | `POST /vif/api/sessions` | `201` | Accept only an empty body or `{}`. Refuse before creation when all ten ports are held; otherwise create the fixed Job, read its UID, create its owner-referenced Service, and return only after the pod, EndpointSlice and `live=true ready=true` agree. |
 | `GET /vif/api/sessions` | `200` | Return `{ "sessions": [...] }` for live, non-completed Jobs. `guests`, `capacity`, `phase`, and `expires_in` come directly from each pod's text `/health` response. |
-| `GET /vif/api/logs` | `501` for now | Explicitly reports `log_stream_not_configured` until §10.3 is implemented. |
+| `GET` or `HEAD /vif/api/logs` | `200` stream after Batch F | The repository allocator proxies the configured loopback LogWisp SSE response without parsing records; unavailable LogWisp returns stable `503 log_stream_unavailable`. The preceding live allocator still returns `501 log_stream_not_configured` until the Batch F cutover. |
 
 Creation returns `503 fleet_full`, `504 session_not_ready`, or
 `502 kubernetes_error` as appropriate. A failed or canceled readiness wait removes the
@@ -936,23 +940,25 @@ non-empty body without `application/json` returns `415`. A canceled create retur
 sets `Retry-After: 10`; website code should honor that instead of immediately
 retrying and churning the API.
 
-Once §10.3 is complete, the logs endpoint will reverse-proxy the node aggregator's
-SSE stream without exposing a pod IP, pod port, or aggregator address. An iframe is
-an acceptable first rendering only if it targets this same-origin
-path. The ordinary page should use `EventSource`, bound its retained rows and
-reconnect delay, and keep the allocator between the browser and every pod.
+The checked-in Batch F endpoint reverse-proxies the node aggregator's SSE stream
+without exposing a pod IP, pod port, or aggregator address. The local gate uses
+the bounded `deploy/guest/vif-log-viewer.html` EventSource client through an SSH
+loopback tunnel. The later website must use the same API path, bound retained rows
+and reconnect delay, and keep the allocator between the browser and every pod.
 
 ### 10.3 The log path
 
-The live Batch C allocator writes each session's commissioned JSONL through the
+The live allocator writes each session's commissioned JSONL through the
 Bound PVC to capped tmpfs; its workload, off-box join, state, record tags, and
 cleanup gates passed. Batch D also removed and denied allocator access to the Pod
-log subresource without breaking those operations. `/vif/api/logs` remains
-`501 log_stream_not_configured`.
+log subresource without breaking those operations. The currently deployed
+allocator still returns `501 log_stream_not_configured`; Batch F's repository
+version instead proxies the loopback stream byte-for-byte and returns stable 503
+JSON when LogWisp is unavailable.
 No allocator pod-log follower, JSON splicer, or LogWisp child exists. Do not build
 one.
 
-The selected migration is staged in [`kube-todo.md`](kube-todo.md): the session
+The selected migration is tracked in [`kube-todo.md`](kube-todo.md): the session
 writes `<session-id>.jsonl` through a tmpfs-backed local PVC, one independent
 LogWisp service reads `*.jsonl` with `raw = true` and `from = "start"`, and the
 allocator reverse-proxies its SSE bytes. The namespace remains Restricted, the
@@ -961,15 +967,22 @@ The pinned LogWisp revision, file-source configuration, locked identity, and
 hardened loopback-only unit are installed. Their identity, read-only tmpfs view,
 hidden credential paths, listener, Docker cleanup, and allocator probes passed;
 two-session fan-in then preserved 606 sampled non-TRACE records byte-for-byte
-without sink drops or rejected clients. The outage/replay gate remains in the
-staged Batch E procedure in `deploy/guest/README.md`.
+without sink drops or rejected clients. The outage gate proved gameplay and
+allocation independence; retained replay delivered an exact sentinel while the
+bounded client queue recorded 86 drops among 1,841 processed records.
 
 Batch A implements the commissioned writer, and Batch C selects it in the workload:
 each application record carries `fields.session_id`, `fields.msg` stays first, the
 file rotates at 8 MB, and per-process directory cleanup is disabled. Batch B's
 tmpfs/PVC and node cleanup service passed before either workload source changed.
-Follow the batch gates and rollback order; there is no supported shortcut
-deployment command in this section.
+Use `deploy/guest/update-logwisp.sh` to build the pinned upstream revision,
+replace only the standalone binary/config/unit, restart it, initialize its file
+sources, verify the listener, and retain one automatic rollback set. It neither
+stops nor rebuilds vi-fighter, K3s, the allocator, or live games. Use
+`deploy/guest/update-vif-allocator.sh` separately: it builds first, refuses a
+non-empty fleet, pauses only allocation for the short replacement, checks health
+and readiness, and retains one automatic rollback set. Exact preflight, update,
+viewer, live-gate, and cleanup commands are in `deploy/guest/README.md`.
 
 Only vi-fighter application records belong in the website feed. K3s, allocator,
 LogWisp service, kernel, and host journal records remain operator-only. Every hop
@@ -1037,7 +1050,8 @@ against.
 **Where a session says what it did.** The current source is
 `/var/log/vif-fleet/<session-id>.jsonl` on capped tmpfs, with metric values emitted
 as `sub="stat"` records and `fields.session_id` naming the writer. Kubernetes logs
-are not a fallback public path. The file remains operator-only until Batch F.
+are not a fallback public path. LogWisp has read-only access; browsers receive it
+only through the allocator after Batch F is deployed.
 
 One LogWisp behaviour is worth keeping in mind before anyone moves the source: a
 file watcher seeks to end-of-file when it first discovers an existing file, so lines
@@ -1107,17 +1121,20 @@ The remaining gap register is the fleet plan's
   successful accepted connection's remote address, so the run could not prove the
   admission limiter sees each player rather than one rewritten address for the
   whole fleet.
-- **The node-local log path is partially deployed** (A14). Batches A-D passed,
+- **The node-local log path is partially deployed** (A14). Batches A-E passed,
   including the capped tmpfs/PVC, Restricted file-writing workload, cleanup timer,
   remote join, record self-tags, empty steady state, and denial of allocator Pod
-  log reads. Batch E's standalone LogWisp service passed installation, isolation,
-  and two-session fan-in; its outage/replay gate and Batch F's byte proxy remain.
+  log reads. The standalone LogWisp service also passed installation, isolation,
+  exact two-session fan-in, outage independence, and retained replay. Batch F's
+  tested byte proxy still needs its live cutover and common session gate.
   The old console-source aggregator and in-pod sidecar are superseded, not
   fallbacks.
-- **The website integration and LogWisp public proxy are not built** (A16). The
+- **The website integration is not built and the LogWisp proxy is not deployed**
+  (A16). The
   allocator and restricted rotating credential implement the session API, and
-  the standalone file-source service is isolated on loopback; nginx, the Hugo
-  session page, and public byte proxy wait for the remaining logging gates.
+  the standalone file-source service is isolated on loopback. The repository has
+  the tested allocator byte proxy and bounded local viewer; nginx and the Hugo
+  session page wait for its live gate.
 - **The occupied lifecycle gates remain partly open.** An allocator-created remote
   join reached `occupied` and then `vacant`; automatic empty-grace expiry, rejoin
   inside the grace, drain while joined, and the one-player capacity case still
@@ -1188,8 +1205,11 @@ POD_IP=$(sudo kubectl -n vif get pod \
   -l "vif.lixenwraith.dev/session=$SESSION_ID" \
   -o jsonpath='{.items[0].status.podIP}')
 curl --connect-timeout 2 --max-time 5 -fsS "http://$POD_IP:7778/health"
-sudo kubectl -n vif logs "job/vif-session-$SESSION_ID" --tail=20
+sudo tail -n 20 -- "/var/log/vif-fleet/$SESSION_ID.jsonl"
 ```
+
+The commissioned tmpfs file is the process log. Do not restore or use the
+Kubernetes Pod-log subresource as an operator or public fallback.
 
 ### Allocator and token rotation
 

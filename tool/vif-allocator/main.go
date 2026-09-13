@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -51,7 +52,11 @@ func run(args []string, logger *slog.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	handler := newAPIServer(controller, logger)
+	logStreamURL, err := url.Parse(cfg.LogStreamURL)
+	if err != nil {
+		return fmt.Errorf("parse log stream URL: %w", err)
+	}
+	handler := newAPIServer(controller, logger, logStreamURL)
 	server := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           handler,

@@ -31,12 +31,16 @@ migration is authoritative in [doc/kube-todo.md](../doc/kube-todo.md).
 | `guest/vif-fleet-log-cleanup.service` / `.timer` | Runs the shared-directory cleanup as `vif-fleet` (UID/GID 65532) once per minute. |
 | `guest/logwisp.sysusers` | Creates the dedicated locked `logwisp` host identity; the service receives read access through the `vif-fleet` supplementary group only. |
 | `guest/logwisp.service` | Hardened standalone file reader with a read-only view of the fleet tmpfs, inaccessible Kubernetes/allocator credentials, and no dependency on games or the allocator. |
-| `guest/install-logwisp.sh` | Fail-fast Arch/Ubuntu installer for the pinned standalone reader. It can reuse an existing checkout through a temporary detached worktree, cleans all build resources, and restores the disabled Docker/containerd and `FORWARD ACCEPT` baseline. |
+| `guest/build-logwisp.sh` | Shared exact-revision builder used by the install and update helpers. It can reuse an existing checkout through a temporary detached worktree and restores the disabled Docker/containerd and `FORWARD ACCEPT` baseline. |
+| `guest/install-logwisp.sh` | First-install helper for the pinned standalone reader and its locked identity, configuration, and unit. |
+| `guest/update-logwisp.sh` | Independently rebuilds and replaces only LogWisp, retains one known-good binary/config/unit, restarts it, and verifies the new revision and listener. |
 | `guest/vif-allocator.env.example` | Site values for the allocator's imported image, public join host and session-page base URL. |
 | `guest/vif-allocator.service` | Hardened host service for the website-to-K3s allocator on the systemd K3s node. |
 | `guest/vif-allocator-token.service` / `.timer` | Root-only, atomic rotation of the allocator's short-lived ServiceAccount token. |
 | `guest/vif-allocator-refresh-token.sh` | Token rotation implementation used by the oneshot service. |
+| `guest/update-vif-allocator.sh` | Builds and updates the allocator as one guarded cutover after pausing allocation and proving the fleet empty; retains one known-good binary/config/unit. |
 | `guest/update-vif-image.sh` | Repeatable manual release path: one Docker build/check, K3s import, allocator image update, old-image cleanup, then build daemons disabled again. |
+| `guest/vif-log-viewer.html` | Bounded local-only EventSource viewer for the allocator-proxied fleet stream; use through an SSH loopback tunnel before nginx/website integration. |
 
 Nothing here installs itself. Once installed, the allocator creates a session only
 when a player asks for one; between requests, the namespace holds no pods.

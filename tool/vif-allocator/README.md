@@ -14,7 +14,9 @@ that Kubernetes has no anonymous endpoint for:
 Each Job mounts the node-affine `vif-fleet-logs` PVC only in its session
 container. The game writes `/var/log/vif-fleet/<session-id>.jsonl` and tags every
 application record with `fields.session_id`; the allocator neither reads nor
-rewrites those bytes.
+rewrites those bytes. One standalone LogWisp service reads those files and binds
+its SSE endpoint to loopback. The allocator's `/vif/api/logs` handler is a byte
+proxy: it does not parse, retain, or reserialize stream events.
 
 It has no database. Jobs and Services are the durable state, and startup
 reconciliation deletes a Job left without its Service or a Service left without a
@@ -39,7 +41,7 @@ atomically without restarting the allocator. See
 | `GET /vif/api/sessions` | `200` and `{ "sessions": [...] }` for live, non-completed Jobs. |
 | `GET /healthz` | Process liveness. |
 | `GET /readyz` | Verifies that the current token can reach the Kubernetes API. |
-| `GET /vif/api/logs` | `501` until the standalone LogWisp and allocator byte proxy complete Batches E-F in `doc/kube-todo.md`. |
+| `GET /vif/api/logs` | Proxies the loopback LogWisp SSE response byte-for-byte. `HEAD` is also accepted. An unavailable upstream returns `503 log_stream_unavailable`. |
 
 One session row has this shape:
 
@@ -68,3 +70,9 @@ The allocator deliberately exposes no public delete endpoint: this API is
 anonymous behind the site, and one player must not be able to terminate another
 player's match. Sessions expire themselves; operators retain `kubectl` and
 `deploy/k3s/session.sh delete` for exceptional cleanup.
+
+`-log-stream-url` is required and accepts only an absolute `http` URL with a
+loopback IP, explicit port, exact `/stream` path, and no credentials, query, or
+fragment. The production unit orders after and wants LogWisp for normal startup,
+but it does not require or execute it. Allocation, state, health, and readiness
+therefore remain independent while a missing stream produces only the stable 503.

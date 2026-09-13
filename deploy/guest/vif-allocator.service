@@ -1,8 +1,8 @@
 [Unit]
 Description=Vi-Fighter Kubernetes session allocator
-After=network-online.target k3s.service vif-allocator-token.service
+After=network-online.target k3s.service vif-allocator-token.service logwisp.service
 Requires=k3s.service
-Wants=network-online.target vif-allocator-token.service
+Wants=network-online.target vif-allocator-token.service logwisp.service
 ConditionPathExists=/etc/vif-allocator/allocator.env
 ConditionPathExists=/etc/vif-allocator/server-ca.crt
 
@@ -15,7 +15,8 @@ ExecStart=/usr/local/bin/vif-allocator \
     -listen ${VIF_ALLOCATOR_LISTEN} \
     -image ${VIF_ALLOCATOR_IMAGE} \
     -join-host ${VIF_ALLOCATOR_JOIN_HOST} \
-    -page-base ${VIF_ALLOCATOR_PAGE_BASE}
+    -page-base ${VIF_ALLOCATOR_PAGE_BASE} \
+    -log-stream-url ${VIF_ALLOCATOR_LOG_STREAM_URL}
 Restart=on-failure
 RestartSec=3s
 TimeoutStopSec=20s

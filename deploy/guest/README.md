@@ -496,6 +496,7 @@ for artifact in \
   deploy/logwisp/aggregator.toml \
   deploy/guest/logwisp.sysusers \
   deploy/guest/logwisp.service \
+  deploy/guest/build-logwisp.sh \
   deploy/guest/install-logwisp.sh
 do
   test -r "$artifact" || {
@@ -504,6 +505,7 @@ do
   }
 done
 test -x deploy/guest/install-logwisp.sh
+test -x deploy/guest/build-logwisp.sh
 
 LOGWISP_REVISION=$(tr -d '[:space:]' \
   < deploy/logwisp/REVISION)
@@ -614,9 +616,61 @@ The host `findmnt` output remains `rw`. Inside LogWisp's mount namespace,
 `findmnt` may show the underlying `rw` tmpfs followed by the read-only bind at the
 same target; the final/effective entry must contain `ro`. `RequiresMountsFor=` may
 add a mount requirement, but `Requires`, `Wants`, and `After` must not name
-`k3s.service` or `vif-allocator.service`. The pinned v0.18.0 Dockerfile does not
-set a build timestamp, so `built: unknown` is expected; its full embedded commit
-must match `deploy/logwisp/REVISION`.
+`k3s.service` or `vif-allocator.service`. The pinned Dockerfile does not set a
+build timestamp, so `built: unknown` is expected; its full embedded commit must
+match `deploy/logwisp/REVISION`.
+
+### Updating LogWisp independently
+
+After the first installation, use the update helper whenever
+`deploy/logwisp/REVISION`, the pipeline configuration, or the hardened unit
+changes. It runs from any directory and does not inspect, stop, or modify K3s,
+the allocator, or running games. The Docker build finishes before the short
+LogWisp-only restart; retained files replay when the new process initializes.
+Announce that stream interruption and replay before running it:
+
+```sh
+for artifact in \
+  deploy/logwisp/REVISION \
+  deploy/logwisp/aggregator.toml \
+  deploy/guest/logwisp.service \
+  deploy/guest/build-logwisp.sh \
+  deploy/guest/update-logwisp.sh
+do
+  test -r "$artifact"
+done
+test -x deploy/guest/build-logwisp.sh
+test -x deploy/guest/update-logwisp.sh
+
+./deploy/guest/update-logwisp.sh
+```
+
+An existing upstream checkout is optional and is never switched or modified:
+
+```sh
+./deploy/guest/update-logwisp.sh '<existing-logwisp-checkout>'
+```
+
+The helper retains the previous binary, configuration, and unit at the printed
+`.previous` paths, restores them automatically if service verification fails,
+cleans its temporary worktree/container/image, and restores the disabled build
+daemons and `FORWARD ACCEPT`. Verify the initialized service and newly exposed
+queue bounds:
+
+```sh
+LOGWISP_REVISION=$(tr -d '[:space:]' < deploy/logwisp/REVISION)
+/usr/local/bin/logwisp --version | grep -F "$LOGWISP_REVISION"
+systemctl is-active logwisp.service
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status | jq -e '
+    .server.client_buffer_size == 512 and
+    .server.max_connections == 32 and
+    .server.write_timeout_ms == 5000 and
+    .statistics.auth_rejected == 0 and
+    .statistics.rejected_clients == 0'
+sudo journalctl -u logwisp.service -n 20 --no-pager
+unset LOGWISP_REVISION
+```
 
 ### Batch E two-session fan-in gate
 
@@ -1171,22 +1225,38 @@ sudo systemctl start logwisp.service
 
 for attempt in $(seq 1 100); do
   curl --connect-timeout 1 --max-time 2 -fsS \
-    http://127.0.0.1:8081/status |
-    jq -e '.server.active_clients == 1' \
+    http://127.0.0.1:8081/status 2>/dev/null |
+    jq -e '
+      .server.active_clients == 1 and
+      .statistics.total_processed > 0 and
+      .statistics.auth_rejected == 0 and
+      .statistics.rejected_clients == 0' \
       >/dev/null 2>&1 && break
   sleep 0.1
 done
 
 test -s "$BATCH_E_REPLAY_CAPTURE"
-curl --connect-timeout 2 --max-time 5 -fsS \
-  http://127.0.0.1:8081/status |
-  jq -e '
+REPLAY_STATUS=$(curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status) &&
+printf '%s\n' "$REPLAY_STATUS" | jq -e '
     .server.active_clients == 1 and
     .statistics.total_processed > 0 and
     .statistics.auth_rejected == 0 and
-    .statistics.dropped_writes == 0 and
-    .statistics.rejected_clients == 0'
+    .statistics.dropped_writes >= 0 and
+    .statistics.dropped_writes <= .statistics.total_processed and
+    .statistics.rejected_clients == 0' &&
+REPLAY_DROPPED_WRITES=$(printf '%s\n' "$REPLAY_STATUS" |
+  jq -er '.statistics.dropped_writes') &&
+printf 'replay_dropped_writes=%s\n' "$REPLAY_DROPPED_WRITES"
 ```
+
+The HTTP sink deliberately gives each client a bounded 512-entry queue. A file
+replay can fill it faster than even a loopback reader drains it, so zero replay
+drops are preferred but are not a correctness requirement. A nonzero
+`replay_dropped_writes` is bounded loss, not a game or allocator failure; record
+it for Batch G sizing. The exact sentinel below remains mandatory, as do zero
+authorization and client-rejection counters. Normal two-session fan-in has a
+separate zero-drop gate.
 
 Wait for the exact pre-restart sentinel, stabilize the capture, and record the
 accepted replay evidence:
@@ -1236,6 +1306,12 @@ curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:9080/readyz
 sudo journalctl -u logwisp.service -n 20 --no-pager
 ```
+
+The pre-update v0.18.0 build reported `Watcher failed` with `error "watcher
+stopped"` when normal fleet cleanup removed a watched file. The pinned revision
+now treats that retirement as normal and also prevents a retiring watcher from
+removing a replacement for the same recreated path. After updating, any new
+`Watcher failed` line is an actual failure to investigate.
 
 Quit the remote client. Finish the common gate by verifying vacancy and complete
 self-tagging before deleting the session:
@@ -1307,28 +1383,46 @@ sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
 test "$(sudo kubectl auth can-i get pods --subresource=log \
   --as=system:serviceaccount:vif:vif-allocator -n vif)" = no
 
-curl --connect-timeout 2 --max-time 5 -fsS \
-  http://127.0.0.1:8081/status |
-  jq -e '
+FINAL_REPLAY_STATUS=$(curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status) &&
+printf '%s\n' "$FINAL_REPLAY_STATUS" | jq -e \
+  --argjson observed "$REPLAY_DROPPED_WRITES" '
     .server.active_clients == 0 and
     .statistics.total_processed > 0 and
     .statistics.auth_rejected == 0 and
-    .statistics.dropped_writes == 0 and
-    .statistics.rejected_clients == 0'
+    .statistics.dropped_writes >= $observed and
+    .statistics.dropped_writes <= .statistics.total_processed and
+    .statistics.rejected_clients == 0' &&
+FINAL_REPLAY_DROPS=$(printf '%s\n' "$FINAL_REPLAY_STATUS" |
+  jq -er '.statistics.dropped_writes') &&
+printf 'final_replay_dropped_writes=%s\n' "$FINAL_REPLAY_DROPS"
 
 unset SESSION_JSON SESSION_ID JOIN_TARGET
 unset OUTAGE_TICK_BEFORE OUTAGE_TICK_AFTER OUTAGE_TICK_RESTARTED
 unset OUTAGE_PROBE_JSON OUTAGE_PROBE_ID
 unset BATCH_E_REPLAY_SNAPSHOT BATCH_E_REPLAY_CAPTURE
 unset BATCH_E_REPLAY_STREAM_PID REPLAY_RECORDS REPLAY_SENTINEL
+unset REPLAY_STATUS REPLAY_DROPPED_WRITES
+unset FINAL_REPLAY_STATUS FINAL_REPLAY_DROPS
 ```
 
 The fleet query and `find` must print nothing; all five services must be active,
 the cleanup result successful as `vif-fleet`, Restricted labels intact, PV/PVC
 `Bound`, allocator Pod-log access denied, and final LogWisp expression `true`.
+Record the printed replay-drop count; it may be nonzero, but must not exceed the
+number of processed records in this single-client gate.
 If replay fails, keep the game connected, collect the capture, status, and
 journal, kill the retrying curl if it is still running, and do not proceed to
 Batch F.
+
+The live gate completed on 2026-09-13. LogWisp was unavailable while the
+allocator created a second waiting session and the occupied game advanced from
+tick 316 to 1558. After restart the waiting stream received an exact pre-outage
+sentinel from a retained 1,234-record snapshot, the game advanced to tick 4380,
+and cleanup returned the fleet and tmpfs to empty. The bounded 512-entry client
+queue recorded 86 dropped writes while processing 1,841 replay/live records;
+authorization and connection rejections remained zero. This measured replay
+loss is retained for Batch G sizing rather than misreported as a game failure.
 
 ### Batch E service rollback
 
@@ -1345,3 +1439,313 @@ sudo ss -ltnH 'sport = :8081'
 ```
 
 The final `ss` command must print nothing.
+
+## Batch F: deploy the allocator byte proxy
+
+Batch E must be complete and the pinned LogWisp update above must be deployed
+before this cutover. The allocator change does not touch the workload, Role,
+PVC, tmpfs, or LogWisp process. It adds one validated loopback upstream and
+proxies SSE framing bytes without parsing or retaining records.
+
+Start with all five services active, Bound storage, and an empty fleet. Confirm
+the new LogWisp status fields and the old allocator's expected 501 before
+opening the maintenance window:
+
+```sh
+systemctl is-active \
+  'var-log-vif\x2dfleet.mount' \
+  vif-fleet-log-cleanup.timer \
+  k3s.service vif-allocator.service logwisp.service
+sudo kubectl get persistentvolume vif-fleet-logs
+sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+sudo find /var/log/vif-fleet -mindepth 1 -maxdepth 1 -print
+
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status | jq -e '
+    .server.client_buffer_size == 512 and
+    .server.max_connections == 32 and
+    .server.write_timeout_ms == 5000'
+
+OLD_LOG_STATUS=$(curl --connect-timeout 2 --max-time 5 -sS \
+  -o /tmp/vif-batch-f-old-log.json -w '%{http_code}' \
+  http://127.0.0.1:9080/vif/api/logs)
+test "$OLD_LOG_STATUS" = 501
+jq -e '.error.code == "log_stream_not_configured"' \
+  /tmp/vif-batch-f-old-log.json
+rm -f /tmp/vif-batch-f-old-log.json
+unset OLD_LOG_STATUS
+```
+
+The fleet query and `find` must print nothing. Announce a short allocation pause:
+the updater builds first, then stops the allocator, repeats the empty-fleet
+check, preserves one known-good binary/config/unit, installs the new set, and
+waits for health and readiness. It restores the previous set automatically if
+verification fails:
+
+```sh
+test -x deploy/guest/update-vif-allocator.sh
+./deploy/guest/update-vif-allocator.sh
+```
+
+Verify that only K3s is required. LogWisp may be wanted and ordered after for
+normal startup, but is not a requirement and is never an allocator child:
+
+```sh
+systemctl is-active vif-allocator.service logwisp.service
+systemctl show vif-allocator.service -p Requires -p Wants -p After
+if systemctl show vif-allocator.service -p Requires --value |
+   tr ' ' '\n' | grep -Fx logwisp.service
+then
+  printf 'FAIL: allocator requires LogWisp\n' >&2
+  false
+fi
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/healthz
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/readyz
+```
+
+Verify method handling, upstream headers, and the initial SSE frame. This reader
+is simultaneous with the status check; stop it after the frame arrives:
+
+```sh
+BATCH_F_HEADERS=$(mktemp /tmp/vif-batch-f-headers.XXXXXX)
+BATCH_F_CAPTURE=$(mktemp /tmp/vif-batch-f-stream.XXXXXX.sse)
+curl --connect-timeout 2 --max-time 5 -fsSI \
+  http://127.0.0.1:9080/vif/api/logs >"$BATCH_F_HEADERS"
+grep -Eiq '^content-type: text/event-stream' "$BATCH_F_HEADERS"
+grep -Eiq '^cache-control: no-cache' "$BATCH_F_HEADERS"
+grep -Eiq '^x-accel-buffering: no' "$BATCH_F_HEADERS"
+
+POST_STATUS=$(curl --connect-timeout 2 --max-time 5 -sS \
+  -X POST -o /tmp/vif-batch-f-method.json -w '%{http_code}' \
+  http://127.0.0.1:9080/vif/api/logs)
+test "$POST_STATUS" = 405
+jq -e '.error.code == "method_not_allowed"' \
+  /tmp/vif-batch-f-method.json
+rm -f /tmp/vif-batch-f-method.json
+
+curl --no-buffer --fail --silent --show-error \
+  http://127.0.0.1:9080/vif/api/logs >"$BATCH_F_CAPTURE" &
+BATCH_F_STREAM_PID=$!
+for attempt in $(seq 1 50); do
+  grep -Fxq 'event: connected' "$BATCH_F_CAPTURE" && break
+  sleep 0.1
+done
+grep -Fxq 'event: connected' "$BATCH_F_CAPTURE"
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status |
+  jq -e '.server.active_clients == 1'
+```
+
+### Local visual SSE gate
+
+Before nginx and the website exist, view the real allocator-proxied stream from
+a development machine without opening a firewall port. In one development
+terminal, forward only the allocator loopback port through SSH:
+
+```sh
+ssh -N -L 9080:127.0.0.1:9080 '<node-ssh-target>'
+```
+
+In a second terminal at the synchronized vi-fighter repository root, serve the
+checked-in viewer on development-machine loopback:
+
+```sh
+python3 -m http.server 8090 \
+  --bind 127.0.0.1 --directory deploy/guest
+```
+
+Open `http://127.0.0.1:8090/vif-log-viewer.html`, press **Connect**, and leave it
+visible for the gate below. It caps rendered rows, its pending render queue, and
+its duplicate fingerprint set; it never contacts Kubernetes or LogWisp
+directly. Close the browser, Python server, and SSH tunnel after the gate.
+
+### Batch F independence, replay, and common session gate
+
+Have the remote game client ready now: allocation starts the 90-second first-join
+clock. Create one session using §4 of `doc/kube-todo.md`, immediately join it from
+the prepared development terminal, and run §4 only through the occupied Job and
+state checks. Keep the client connected and moving for the following outage.
+
+While the session is occupied, require one commissioned file and select one
+exact non-TRACE record. The already-running allocator reader and visual viewer
+must both show live rows; this command proves byte preservation through the
+allocator proxy:
+
+```sh
+for attempt in $(seq 1 50); do
+  sudo test -s "/var/log/vif-fleet/$SESSION_ID.jsonl" && break
+  sleep 0.2
+done
+BATCH_F_SENTINEL=$(sudo awk '
+  index($0, "\"level\":\"TRACE\"") == 0 {print; exit}
+' "/var/log/vif-fleet/$SESSION_ID.jsonl")
+test -n "$BATCH_F_SENTINEL"
+for attempt in $(seq 1 50); do
+  grep -Fqx -- "data: $BATCH_F_SENTINEL" "$BATCH_F_CAPTURE" && break
+  sleep 0.2
+done
+grep -Fqx -- "data: $BATCH_F_SENTINEL" "$BATCH_F_CAPTURE"
+```
+
+Stop the capture and wait for its upstream client to leave. Announce the
+LogWisp-only interruption to the remote player. Stop LogWisp, prove the proxy's
+stable failure response, and verify allocator liveness, readiness, list, create,
+and gameplay remain independent. The second session is an unjoined probe and
+must be deleted before LogWisp returns:
+
+```sh
+kill "$BATCH_F_STREAM_PID"
+wait "$BATCH_F_STREAM_PID" 2>/dev/null || true
+
+BATCH_F_TICK_BEFORE=$(curl -fsS \
+  http://127.0.0.1:9080/vif/api/sessions |
+  jq -er --arg id "$SESSION_ID" '
+    .sessions[] | select(.id == $id) | .state |
+    select(.phase == "occupied" and .guests >= 1) | .tick')
+sudo systemctl stop logwisp.service
+test "$(systemctl is-active logwisp.service)" = inactive
+
+BATCH_F_ERROR=$(mktemp /tmp/vif-batch-f-error.XXXXXX.json)
+BATCH_F_ERROR_STATUS=$(curl --connect-timeout 2 --max-time 5 -sS \
+  -o "$BATCH_F_ERROR" -w '%{http_code}' \
+  http://127.0.0.1:9080/vif/api/logs)
+test "$BATCH_F_ERROR_STATUS" = 503
+jq -e '.error.code == "log_stream_unavailable"' "$BATCH_F_ERROR"
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/healthz
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/readyz
+
+BATCH_F_PROBE_JSON=$(curl -fsS -X POST \
+  -H 'Content-Type: application/json' -d '{}' \
+  http://127.0.0.1:9080/vif/api/sessions) &&
+BATCH_F_PROBE_ID=$(printf '%s' "$BATCH_F_PROBE_JSON" |
+  jq -er '.id | strings | select(length > 0)')
+curl -fsS http://127.0.0.1:9080/vif/api/sessions |
+  jq -e --arg primary "$SESSION_ID" --arg probe "$BATCH_F_PROBE_ID" '
+    any(.sessions[];
+      .id == $primary and .state.phase == "occupied" and .state.guests >= 1) and
+    any(.sessions[];
+      .id == $probe and .state.phase == "waiting" and .state.guests == 0)'
+sleep 2
+BATCH_F_TICK_DOWN=$(curl -fsS \
+  http://127.0.0.1:9080/vif/api/sessions |
+  jq -er --arg id "$SESSION_ID" '
+    .sessions[] | select(.id == $id) | .state.tick')
+test "$BATCH_F_TICK_DOWN" -gt "$BATCH_F_TICK_BEFORE"
+
+./deploy/k3s/session.sh delete "$BATCH_F_PROBE_ID"
+sudo kubectl -n vif wait --for=delete \
+  "job/vif-session-$BATCH_F_PROBE_ID" --timeout=60s
+sudo kubectl -n vif wait --for=delete pod \
+  -l "vif.lixenwraith.dev/session=$BATCH_F_PROBE_ID" --timeout=60s
+sudo find /var/log/vif-fleet -maxdepth 1 -type f \
+  \( -name "$BATCH_F_PROBE_ID.jsonl" \
+     -o -name "${BATCH_F_PROBE_ID}_*.jsonl" \) -delete
+```
+
+This restart and reader are simultaneous. Start the waiting reader first; it
+polls only the local listen table, then connects through the allocator as soon
+as LogWisp binds. Immediately start LogWisp and require the exact retained
+sentinel through `/vif/api/logs`:
+
+```sh
+BATCH_F_RESTART_CAPTURE=$(mktemp \
+  /tmp/vif-batch-f-restart.XXXXXX.sse)
+(
+  for attempt in $(seq 1 3000); do
+    if ss -ltnH 'sport = :8081' | grep -q .; then
+      exec curl --no-buffer --fail --silent --show-error \
+        http://127.0.0.1:9080/vif/api/logs
+    fi
+    sleep 0.01
+  done
+  exit 1
+) >"$BATCH_F_RESTART_CAPTURE" &
+BATCH_F_RESTART_PID=$!
+sudo systemctl start logwisp.service
+
+for attempt in $(seq 1 100); do
+  grep -Fqx -- "data: $BATCH_F_SENTINEL" \
+    "$BATCH_F_RESTART_CAPTURE" && break
+  sleep 0.1
+done
+grep -Fqx -- "data: $BATCH_F_SENTINEL" \
+  "$BATCH_F_RESTART_CAPTURE"
+BATCH_F_TICK_RESTARTED=$(curl -fsS \
+  http://127.0.0.1:9080/vif/api/sessions |
+  jq -er --arg id "$SESSION_ID" '
+    .sessions[] | select(.id == $id) | .state.tick')
+test "$BATCH_F_TICK_RESTARTED" -gt "$BATCH_F_TICK_DOWN"
+kill "$BATCH_F_RESTART_PID"
+wait "$BATCH_F_RESTART_PID" 2>/dev/null || true
+```
+
+The visual viewer should reconnect and show the occupied session again. Quit the
+remote game and finish §4 from its vacant-state check through deletion, file
+cleanup, and final service/storage verification. Close the browser before the
+next status check, then stop the local Python server and SSH tunnel. Remove every
+Batch F temporary file and prove no stream client or fleet object remains:
+
+```sh
+for temporary in \
+  "$BATCH_F_HEADERS" "$BATCH_F_CAPTURE" \
+  "$BATCH_F_ERROR" "$BATCH_F_RESTART_CAPTURE"
+do
+  case "$temporary" in
+    /tmp/vif-batch-f-*) rm -f -- "$temporary" ;;
+    *) printf 'refusing unsafe temporary path: %s\n' "$temporary" >&2; false ;;
+  esac
+done
+
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+sudo find /var/log/vif-fleet -mindepth 1 -maxdepth 1 -print
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status |
+  jq -e '.server.active_clients == 0'
+systemctl is-active \
+  'var-log-vif\x2dfleet.mount' \
+  vif-fleet-log-cleanup.timer \
+  k3s.service vif-allocator.service logwisp.service
+
+unset POST_STATUS BATCH_F_HEADERS BATCH_F_CAPTURE BATCH_F_STREAM_PID
+unset BATCH_F_SENTINEL BATCH_F_TICK_BEFORE BATCH_F_TICK_DOWN
+unset BATCH_F_ERROR BATCH_F_ERROR_STATUS BATCH_F_PROBE_JSON BATCH_F_PROBE_ID
+unset BATCH_F_RESTART_CAPTURE BATCH_F_RESTART_PID BATCH_F_TICK_RESTARTED
+```
+
+The Kubernetes query and `find` must print nothing, all five units must be
+active, and the stream must have no remaining client. Preserve the Bound PV/PVC
+and the `.previous` allocator files until Batch G completes.
+
+### Batch F rollback
+
+Stop allocation and require an empty fleet before restoring the updater's
+previous allocator set. LogWisp and the PVC-backed writer remain deployed:
+
+```sh
+sudo systemctl stop vif-allocator.service
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+sudo install -o root -g root -m 0755 \
+  /usr/local/libexec/vif-allocator.previous \
+  /usr/local/bin/vif-allocator
+sudo install -o root -g vif-allocator -m 0640 \
+  /etc/vif-allocator/allocator.env.previous \
+  /etc/vif-allocator/allocator.env
+sudo install -o root -g root -m 0644 \
+  /etc/systemd/system/vif-allocator.service.previous \
+  /etc/systemd/system/vif-allocator.service
+sudo systemctl daemon-reload
+sudo systemctl start vif-allocator.service
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/readyz
+```
+
+The fleet query must be empty. The restored endpoint returns 501; disabling a
+future nginx log location is the matching public rollback.

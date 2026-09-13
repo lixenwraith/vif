@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -21,6 +22,7 @@ type runtimeConfig struct {
 	KubeAPI        string
 	KubeCAFile     string
 	KubeTokenFile  string
+	LogStreamURL   string
 	RequestTimeout time.Duration
 	Allocator      allocatorConfig
 }
@@ -37,6 +39,7 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	set.StringVar(&cfg.KubeAPI, "kube-api", "https://127.0.0.1:6443", "Kubernetes API URL")
 	set.StringVar(&cfg.KubeCAFile, "kube-ca", "/etc/vif-allocator/server-ca.crt", "Kubernetes CA certificate")
 	set.StringVar(&cfg.KubeTokenFile, "kube-token", "/etc/vif-allocator/token", "rotated ServiceAccount token file")
+	set.StringVar(&cfg.LogStreamURL, "log-stream-url", "", "loopback LogWisp SSE URL (required)")
 	set.DurationVar(&cfg.RequestTimeout, "kube-timeout", 10*time.Second, "timeout for one Kubernetes API request")
 	set.StringVar(&cfg.Allocator.Workload.Namespace, "namespace", "vif", "Kubernetes namespace")
 	set.StringVar(&cfg.Allocator.Workload.Image, "image", "", "session image reference (required)")
@@ -115,6 +118,38 @@ func validateConfig(cfg runtimeConfig) error {
 	}
 	if cfg.KubeCAFile == "" || cfg.KubeTokenFile == "" {
 		return fmt.Errorf("Kubernetes CA and token files are required")
+	}
+	if err := validateLogStreamURL(cfg.LogStreamURL); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateLogStreamURL(raw string) error {
+	if raw == "" {
+		return fmt.Errorf("-log-stream-url is required")
+	}
+	target, err := url.Parse(raw)
+	if err != nil || target.Scheme != "http" || target.Host == "" {
+		return fmt.Errorf("-log-stream-url must be an absolute http URL")
+	}
+	if target.User != nil || target.RawQuery != "" || target.Fragment != "" {
+		return fmt.Errorf("-log-stream-url must not contain credentials, a query, or a fragment")
+	}
+	if target.EscapedPath() != "/stream" {
+		return fmt.Errorf("-log-stream-url path must be /stream")
+	}
+	host := net.ParseIP(target.Hostname())
+	if host == nil || !host.IsLoopback() {
+		return fmt.Errorf("-log-stream-url host must be a loopback IP address")
+	}
+	port := target.Port()
+	if port == "" {
+		return fmt.Errorf("-log-stream-url must include a port")
+	}
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1 || portNumber > 65535 {
+		return fmt.Errorf("invalid -log-stream-url port %q", port)
 	}
 	return nil
 }

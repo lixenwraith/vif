@@ -11,6 +11,7 @@ func TestParseConfigUsesFleetDefaults(t *testing.T) {
 		"-image", "docker.io/library/vi-fighter:test",
 		"-join-host", "play.example.com",
 		"-page-base", "https://play.example.com/projects/vi-fighter/session/",
+		"-log-stream-url", "http://127.0.0.1:8081/stream",
 	}, io.Discard)
 	if err != nil {
 		t.Fatal(err)
@@ -33,12 +34,35 @@ func TestParseConfigUsesFleetDefaults(t *testing.T) {
 
 func TestParseConfigRequiresFixedSiteValues(t *testing.T) {
 	for _, args := range [][]string{
-		{"-join-host", "play.example.com", "-page-base", "https://play.example.com/session/"},
-		{"-image", "vi-fighter:test", "-page-base", "https://play.example.com/session/"},
-		{"-image", "vi-fighter:test", "-join-host", "play.example.com"},
+		{"-join-host", "play.example.com", "-page-base", "https://play.example.com/session/", "-log-stream-url", "http://127.0.0.1:8081/stream"},
+		{"-image", "vi-fighter:test", "-page-base", "https://play.example.com/session/", "-log-stream-url", "http://127.0.0.1:8081/stream"},
+		{"-image", "vi-fighter:test", "-join-host", "play.example.com", "-log-stream-url", "http://127.0.0.1:8081/stream"},
+		{"-image", "vi-fighter:test", "-join-host", "play.example.com", "-page-base", "https://play.example.com/session/"},
 	} {
 		if _, err := parseConfig(args, io.Discard); err == nil {
 			t.Fatalf("parseConfig(%q) succeeded", args)
+		}
+	}
+}
+
+func TestParseConfigRejectsUnsafeLogStreamURL(t *testing.T) {
+	base := []string{
+		"-image", "docker.io/library/vi-fighter:test",
+		"-join-host", "play.example.com",
+		"-page-base", "https://play.example.com/session/",
+	}
+	for _, target := range []string{
+		"https://127.0.0.1:8081/stream",
+		"http://localhost:8081/stream",
+		"http://192.0.2.10:8081/stream",
+		"http://127.0.0.1/stream",
+		"http://127.0.0.1:8081/status",
+		"http://127.0.0.1:8081/stream?token=value",
+		"http://user@127.0.0.1:8081/stream",
+	} {
+		args := append(append([]string{}, base...), "-log-stream-url", target)
+		if _, err := parseConfig(args, io.Discard); err == nil {
+			t.Fatalf("parseConfig accepted unsafe log stream URL %q", target)
 		}
 	}
 }

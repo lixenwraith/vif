@@ -10,6 +10,8 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"time"
 )
 
@@ -24,6 +26,7 @@ type sessionAllocator interface {
 type apiServer struct {
 	allocator sessionAllocator
 	log       *slog.Logger
+	logProxy  *httputil.ReverseProxy
 	mux       *http.ServeMux
 }
 
@@ -40,8 +43,11 @@ type apiErrorResponse struct {
 	Message string `json:"message"`
 }
 
-func newAPIServer(allocator sessionAllocator, logger *slog.Logger) *apiServer {
+func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL *url.URL) *apiServer {
 	server := &apiServer{allocator: allocator, log: logger, mux: http.NewServeMux()}
+	if logStreamURL != nil {
+		server.logProxy = newLogStreamProxy(logStreamURL, logger)
+	}
 	server.mux.HandleFunc("/healthz", server.handleHealth)
 	server.mux.HandleFunc("/readyz", server.handleReady)
 	server.mux.HandleFunc("/vif/api/sessions", server.handleSessions)
@@ -122,11 +128,25 @@ func (s *apiServer) handleSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) handleLogs(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		methodNotAllowed(w, http.MethodGet)
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodHead)
 		return
 	}
-	writeAPIError(w, http.StatusNotImplemented, "log_stream_not_configured", "The LogWisp stream is not configured")
+	if s.logProxy == nil {
+		writeAPIError(w, http.StatusNotImplemented, "log_stream_not_configured", "The LogWisp stream is not configured")
+		return
+	}
+
+	// The server keeps a finite WriteTimeout for create/list/health responses.
+	// Clear it only for this long-lived SSE response; request cancellation and
+	// allocator shutdown still cancel the upstream request.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
+
+	// Successful responses must retain LogWisp's cache and stream headers rather
+	// than the allocator's finite-API defaults.
+	w.Header().Del("Cache-Control")
+	w.Header().Del("X-Content-Type-Options")
+	s.logProxy.ServeHTTP(w, r)
 }
 
 func (s *apiServer) writeCreateError(w http.ResponseWriter, err error) {

@@ -29,7 +29,7 @@ func (f *fakeSessionAllocator) listSessions(context.Context) ([]session, error) 
 func (f *fakeSessionAllocator) ready(context.Context) error { return f.readyErr }
 
 func testServer(allocator sessionAllocator) *apiServer {
-	return newAPIServer(allocator, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return newAPIServer(allocator, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 }
 
 func TestPostSession(t *testing.T) {

@@ -11,8 +11,8 @@
 #   JOB_UID=<uid> ./render-session.sh 7f3c1a 31707
 #
 # The one session container writes directly to the shared tmpfs-backed local PVC.
-# No allocator log follower or per-session LogWisp sidecar exists, and
-# `/vif/api/logs` remains 501 until the standalone node service is deployed.
+# No allocator log follower or per-session LogWisp sidecar exists. One standalone
+# node service reads the files; the allocator only proxies its SSE bytes.
 #
 # Without JOB_UID the Service owner reference is omitted because the Job does not
 # exist yet. deploy/k3s/session.sh performs the two-stage create and cleanup.

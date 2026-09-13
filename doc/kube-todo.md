@@ -1,4 +1,4 @@
-# Kubernetes fleet logging: remaining implementation plan
+# Kubernetes fleet: remaining implementation plan
 
 This is the authoritative order for unfinished Kubernetes fleet work. Completed
 design and operating detail lives in:
@@ -15,15 +15,17 @@ Status on 2026-09-13:
   JSONL, cleanup, and empty steady-state gates;
 - Batch D's live Role denies the log subresource while retaining every allocator
   control/readiness permission, and its common session gate passed; and
-- Batch E's pinned standalone service is deployed: its locked identity,
-  read-only tmpfs view, hidden credential paths, loopback-only status/stream,
-  Docker cleanup, allocator independence, and two-session fan-in checks passed.
-  The fan-in run preserved 606 sampled non-TRACE source records byte-for-byte,
-  with distinct self-tags and no sink drops or rejections. Its outage/replay
-  gate remains. Batches F-G have not started.
+- Batch E's pinned standalone service passed installation, isolation,
+  two-session fan-in, outage independence, exact retained replay, and common
+  cleanup gates. Normal fan-in preserved 606 sampled records with no drops; the
+  bounded restart replay processed 1,841 records with 86 client-queue drops and
+  no authorization or connection rejections; and
+- Batch F's allocator proxy, independent update helpers, and bounded local
+  viewer are implemented and tested in the repository. Its live cutover and
+  common session gate remain; Batch G has not started.
 
-The live allocator creates the commissioned PVC-backed file workload. Batch E may
-now continue only through the node procedure in `deploy/guest/README.md`.
+The live allocator still runs the preceding 501 endpoint until the Batch F node
+procedure in `deploy/guest/README.md` is executed.
 
 ## 1. Invariants and batch discipline
 
@@ -45,7 +47,7 @@ These constraints apply to every remaining batch:
 - Put placeholders in repository commands; never commit real machine addresses.
 - Remove rendered files, probe pods, verification Jobs/Services, and verification
   JSONL after each gate. Preserve the mounted tmpfs and Bound PV/PVC.
-- Finish every batch with the common single-session check in §5 plus its
+- Finish every batch with the common single-session check in §4 plus its
   batch-specific gate.
 - Keep the previous allocator binary/configuration available until the next live
   gate passes.
@@ -58,27 +60,10 @@ service defaults differ.
 
 | Batch | State | Outcome |
 |---|---|---|
-| E — standalone LogWisp | Fan-in passed; outage/replay next | One hardened node service discovers all retained JSONL files and serves a bounded loopback SSE stream independently of games and allocator operations. |
-| F — allocator byte proxy | Blocked on E | `/vif/api/logs` proxies SSE bytes with prompt flush/cancellation and a stable failure response while session APIs stay independent. |
+| F — allocator byte proxy | Implementation ready; live gate next | `/vif/api/logs` proxies SSE bytes with prompt flush/cancellation and a stable failure response while session APIs stay independent. |
 | G — final reconciliation | Blocked on F | Durable docs describe only the deployed design, bare Arch/Ubuntu rehearsals pass, sizing evidence is recorded, and the website handoff is ready. |
 
-## 3. Batch E — deploy one standalone LogWisp
-
-The checked-in installer, pinned revision, raw file source, bounded loopback sink,
-locked identity, hardened unit, and two-session fan-in gate are deployed and
-passed. One live gate remains: stop LogWisp while a game remains occupied;
-allocation, state, and gameplay must continue. Restart it with a waiting SSE
-client and record an exact replay from the retained file, then finish the common
-session and cleanup check in §5.
-
-`from = "start"` prevents loss before discovery. A LogWisp restart replays retained
-files from byte zero until persisted offsets exist; downstream consumers must
-tolerate duplicates and a bounded replay burst.
-
-Rollback: stop/disable only LogWisp and remove its listener. Do not change the
-writer, PVC, allocator, K3s, or Restricted namespace.
-
-## 4. Batch F — make the allocator a byte proxy
+## 3. Batch F — make the allocator a byte proxy
 
 1. Add a validated `-log-stream-url` allocator option whose deployment value is
    the loopback LogWisp stream.
@@ -99,12 +84,12 @@ writer, PVC, allocator, K3s, or Restricted namespace.
    but must never `Require=` it or execute it.
 6. Verify create/list/health/readiness while LogWisp is stopped, then verify the
    same-origin log route after it restarts.
-7. Run §5 and remove the verification session/files.
+7. Run §4 and remove the verification session/files.
 
 Rollback: restore the allocator version whose log endpoint returns 501 or disable
 the nginx log route. Keep LogWisp and file-writing games independently operable.
 
-## 5. Common end-of-batch session check
+## 4. Common end-of-batch session check
 
 Run this after every remaining batch. Have the remote development-machine terminal
 ready before allocation: the 90-second first-join clock starts when `POST`
@@ -222,7 +207,7 @@ sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
 Expected: all four units active, cleanup last result successful as `vif-fleet`,
 Restricted labels intact, and PV/PVC Bound.
 
-## 6. Batch G — reconcile and hand off
+## 5. Batch G — reconcile and hand off
 
 After E-F pass live:
 
@@ -239,12 +224,12 @@ After E-F pass live:
    log rate, tick slips, rotations, LogWisp drops/replay, and browser reconnect
    behavior; revise provisional 256 MiB and 8 MB caps only from evidence.
 6. Reboot with no session and repeat node readiness, mount, timer, Restricted
-   labels, allocator probes, Bound PVC, empty directory, and §5.
+   labels, allocator probes, Bound PVC, empty directory, and §4.
 7. Produce the separate website implementation prompt: same-origin
    `EventSource`, `fields.session_id`, bounded retained rows/render rate/reconnect
    backoff, duplicate tolerance, and independent degradation from allocation.
 
-## 7. Remaining non-logging fleet gates
+## 6. Remaining non-logging fleet gates
 
 | Item | Required before | Completion evidence |
 |---|---|---|
@@ -255,7 +240,7 @@ After E-F pass live:
 | Automated image delivery (H16) | production release automation | CI reproduces the manual import/update boundary without inbound cluster credentials. |
 | Website/nginx integration (H15) | after Batch F | Same-origin create/list/log routes, session page, and raw game join all pass. |
 
-## 8. Final acceptance and rollback boundary
+## 7. Final acceptance and rollback boundary
 
 The logging pivot is complete only when:
 
@@ -268,7 +253,7 @@ The logging pivot is complete only when:
 - stopping LogWisp does not stop allocation, state, or gameplay;
 - SSE preserves source bytes and remains bounded under slow/reconnecting clients;
 - public logs exclude host, K3s, credential, and exact client-address data; and
-- §5 passes after reboot.
+- §4 passes after reboot.
 
 Keep the previous allocator binary and configuration until this gate passes.
 Rollback selects the preceding allocator/workload, restores the 501 handler or
