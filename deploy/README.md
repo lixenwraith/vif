@@ -19,7 +19,8 @@ migration is authoritative in [doc/kube-todo.md](../doc/kube-todo.md).
 | `k3s/40-allocator-rbac.yaml` | The namespace Role for the allocator's fixed Job/Service transaction and readiness observation. It deliberately cannot read `pods/log`. |
 | `k3s/render-session.sh` | Renders the file-logging template with lifetime overrides. `JOB_UID=<uid>` retains the Service owner reference; there is no per-session LogWisp branch. |
 | `k3s/session.sh` | Repeatable manual create/list/delete path. It creates the Job first, owns the Service by the returned Job UID, selects a free fleet port when omitted, and cleans a partial create. |
-| `logwisp/aggregator.toml` | Superseded console-source experiment, not deployed. Batch E replaces it with the standalone file-source configuration. |
+| `logwisp/REVISION` | Exact upstream LogWisp source revision used for the standalone node binary. |
+| `logwisp/aggregator.toml` | Standalone raw file-source pipeline over `/var/log/vif-fleet/*.jsonl`, with bounded flow/clients and a loopback-only HTTP sink. |
 | `frontdoor/haproxy.cfg` | Not deployed. The worked alternative: every session behind one public port, routed on the name a dialer sends before the handshake. Kept for the routing exploration; the deployed shape reaches a session on its own port. |
 | `guest/nftables.conf` | The guest's own filter: one `inet vif` table, replaced on every load, never `flush ruleset`. Its input hook runs after kube-proxy so an endpoint-less NodePort consistently rejects. |
 | `guest/vif-operator.nft.example` | Site values the filter includes: the one address allowed to reach the node directly and the node ports it may open. Install as `/etc/nftables.d/vif-operator.nft`. |
@@ -28,6 +29,8 @@ migration is authoritative in [doc/kube-todo.md](../doc/kube-todo.md).
 | `guest/vif-fleet.sysusers` | Portably creates the locked `vif-fleet` system identity at UID/GID 65532 for the host cleanup service. |
 | `guest/vif-fleet-log-cleanup.py` | Refuses non-tmpfs paths, keeps two recent rotations per session after a reader grace, and removes files stale beyond the match ceiling plus margin. |
 | `guest/vif-fleet-log-cleanup.service` / `.timer` | Runs the shared-directory cleanup as `vif-fleet` (UID/GID 65532) once per minute. |
+| `guest/logwisp.sysusers` | Creates the dedicated locked `logwisp` host identity; the service receives read access through the `vif-fleet` supplementary group only. |
+| `guest/logwisp.service` | Hardened standalone file reader with a read-only view of the fleet tmpfs, inaccessible Kubernetes/allocator credentials, and no dependency on games or the allocator. |
 | `guest/vif-allocator.env.example` | Site values for the allocator's imported image, public join host and session-page base URL. |
 | `guest/vif-allocator.service` | Hardened host service for the website-to-K3s allocator on the systemd K3s node. |
 | `guest/vif-allocator-token.service` / `.timer` | Root-only, atomic rotation of the allocator's short-lived ServiceAccount token. |

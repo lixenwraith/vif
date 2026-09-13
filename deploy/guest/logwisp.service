@@ -1,0 +1,56 @@
+[Unit]
+Description=Vi-Fighter standalone fleet log stream
+Documentation=https://github.com/lixenwraith/logwisp
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/var/log/vif-fleet
+ConditionPathIsMountPoint=/var/log/vif-fleet
+ConditionPathExists=/etc/logwisp/vif-fleet.toml
+
+[Service]
+Type=simple
+User=logwisp
+Group=logwisp
+SupplementaryGroups=vif-fleet
+ExecStart=/usr/local/bin/logwisp -c /etc/logwisp/vif-fleet.toml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=15s
+UMask=0077
+LimitNOFILE=4096
+TasksMax=64
+MemoryMax=128M
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+BindReadOnlyPaths=/var/log/vif-fleet
+BindReadOnlyPaths=/etc/logwisp/vif-fleet.toml
+InaccessiblePaths=-/etc/rancher/k3s -/var/lib/rancher/k3s -/run/k3s -/etc/vif-allocator
+RestrictAddressFamilies=AF_INET AF_UNIX
+IPAddressDeny=any
+IPAddressAllow=localhost
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target

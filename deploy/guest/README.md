@@ -454,3 +454,218 @@ curl --connect-timeout 2 --max-time 5 -fsS \
 Do not restore `pods/log` for a node-file, LogWisp, or public-stream failure: none
 of those components is allowed to use the Kubernetes log API. A rollback leaves
 the live Role different from the repository and must be diagnosed before Batch E.
+
+## Batch E: install the standalone LogWisp service
+
+Batch D must have passed before this section. This first Batch E slice installs
+and inspects the independent reader only; it does not change or restart the
+allocator, K3s, a session workload, or the PVC. Stop after the status inspection
+and record its output before attempting the later simultaneous-session and
+outage/replay gates in `doc/kube-todo.md`.
+
+Start from an empty fleet and empty log directory. The mount, K3s, allocator, and
+cleanup timer must stay active, the volumes must stay `Bound`, and the Role must
+still deny the explicit Pod log subresource:
+
+```sh
+systemctl is-active \
+  'var-log-vif\x2dfleet.mount' \
+  vif-fleet-log-cleanup.timer \
+  k3s.service \
+  vif-allocator.service
+
+sudo kubectl get persistentvolume vif-fleet-logs
+sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+sudo find /var/log/vif-fleet \
+  -mindepth 1 -maxdepth 1 -print
+
+test "$(sudo kubectl auth can-i get pods --subresource=log \
+  --as=system:serviceaccount:vif:vif-allocator -n vif)" = no
+```
+
+The fleet query and `find` must print nothing. Check every source artifact and
+the exact 40-character upstream revision before making host changes. A previous
+LogWisp installation is not an in-place Batch E upgrade; stop and inspect it if
+any of the three destination paths already exists:
+
+```sh
+for artifact in \
+  deploy/logwisp/REVISION \
+  deploy/logwisp/aggregator.toml \
+  deploy/guest/logwisp.sysusers \
+  deploy/guest/logwisp.service
+do
+  test -r "$artifact" || {
+    printf 'missing Batch E artifact: %s\n' "$artifact" >&2
+    false
+  }
+done
+
+LOGWISP_REVISION=$(tr -d '[:space:]' \
+  < deploy/logwisp/REVISION)
+printf 'LogWisp revision: %s\n' "$LOGWISP_REVISION"
+printf '%s\n' "$LOGWISP_REVISION" |
+  grep -Eq '^[0-9a-f]{40}$'
+
+test ! -e /usr/local/bin/logwisp
+test ! -e /etc/logwisp/vif-fleet.toml
+test ! -e /etc/systemd/system/logwisp.service
+getent group vif-fleet
+```
+
+The build is intentionally identical on bare Arch Linux and Ubuntu: use the
+pinned builder in LogWisp's own Dockerfile rather than depending on the host's Go
+minor release. Docker is temporary and returns to the inactive/disabled node
+baseline as soon as the binary has been extracted. The cleanup trap accepts only
+the `mktemp` directory it created:
+
+```sh
+test "$(systemctl is-active docker.service)" = inactive
+test "$(systemctl is-active docker.socket)" = inactive
+test "$(systemctl is-active containerd.service)" = inactive
+
+LOGWISP_BUILD_DIR=$(mktemp -d)
+case "$LOGWISP_BUILD_DIR" in
+  /tmp/*) ;;
+  *) printf 'unexpected temporary path: %s\n' \
+       "$LOGWISP_BUILD_DIR" >&2; false ;;
+esac
+LOGWISP_IMAGE="local/logwisp-build:$(printf '%.12s' \
+  "$LOGWISP_REVISION")"
+LOGWISP_CONTAINER=
+
+cleanup_logwisp_build() {
+  if test -n "$LOGWISP_CONTAINER"; then
+    sudo docker rm -f "$LOGWISP_CONTAINER" >/dev/null 2>&1 || true
+  fi
+  sudo docker image rm "$LOGWISP_IMAGE" >/dev/null 2>&1 || true
+  case "$LOGWISP_BUILD_DIR" in
+    /tmp/*) rm -rf -- "$LOGWISP_BUILD_DIR" ;;
+    *) return 1 ;;
+  esac
+  sudo systemctl disable --now \
+    docker.socket docker.service containerd.service
+}
+trap cleanup_logwisp_build EXIT HUP INT TERM
+
+git clone https://github.com/lixenwraith/logwisp.git \
+  "$LOGWISP_BUILD_DIR/source"
+git -C "$LOGWISP_BUILD_DIR/source" checkout \
+  --detach "$LOGWISP_REVISION"
+test "$(git -C "$LOGWISP_BUILD_DIR/source" rev-parse HEAD)" = \
+  "$LOGWISP_REVISION"
+
+sudo systemctl start docker.service
+sudo docker build --pull \
+  --build-arg VERSION=v0.18.0 \
+  --build-arg REVISION="$LOGWISP_REVISION" \
+  -t "$LOGWISP_IMAGE" \
+  "$LOGWISP_BUILD_DIR/source"
+LOGWISP_CONTAINER=$(sudo docker create "$LOGWISP_IMAGE")
+sudo docker cp "$LOGWISP_CONTAINER:/logwisp" \
+  "$LOGWISP_BUILD_DIR/logwisp"
+test -x "$LOGWISP_BUILD_DIR/logwisp"
+"$LOGWISP_BUILD_DIR/logwisp" --version
+
+sudo install -o root -g root -m 0755 \
+  "$LOGWISP_BUILD_DIR/logwisp" /usr/local/bin/logwisp
+
+cleanup_logwisp_build
+trap - EXIT HUP INT TERM
+unset -f cleanup_logwisp_build
+unset LOGWISP_BUILD_DIR LOGWISP_IMAGE LOGWISP_CONTAINER
+
+test "$(systemctl is-active docker.service)" = inactive
+test "$(systemctl is-active docker.socket)" = inactive
+test "$(systemctl is-active containerd.service)" = inactive
+```
+
+Install the dedicated locked identity, root-owned configuration, and unit. The
+service's supplementary `vif-fleet` group is used only to read the tmpfs; the
+unit gives the process a read-only mount view and hides K3s and allocator
+credential paths:
+
+```sh
+sudo install -D -o root -g root -m 0644 \
+  deploy/guest/logwisp.sysusers \
+  /etc/sysusers.d/logwisp.conf
+sudo systemd-sysusers /etc/sysusers.d/logwisp.conf
+getent passwd logwisp
+getent group logwisp
+
+sudo install -d -o root -g root -m 0755 /etc/logwisp
+sudo install -o root -g root -m 0644 \
+  deploy/logwisp/aggregator.toml \
+  /etc/logwisp/vif-fleet.toml
+sudo install -o root -g root -m 0644 \
+  deploy/guest/logwisp.service \
+  /etc/systemd/system/logwisp.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now logwisp.service
+```
+
+No simultaneous or deadline-sensitive client action occurs in this first slice.
+Inspect the service, its isolated read-only view, and the loopback endpoint. Do
+not proceed if the listener is wildcard/public, if the service is not in group
+65532, or if either installed text file differs from the repository:
+
+```sh
+systemctl is-active logwisp.service
+systemctl is-enabled logwisp.service
+/usr/local/bin/logwisp --version
+
+systemctl show logwisp.service \
+  -p User -p Group -p SupplementaryGroups \
+  -p Requires -p Wants -p After \
+  -p BindReadOnlyPaths -p InaccessiblePaths \
+  -p IPAddressDeny -p IPAddressAllow \
+  -p Result -p ExecMainStatus
+
+LOGWISP_PID=$(systemctl show logwisp.service \
+  -p MainPID --value)
+test "$LOGWISP_PID" -gt 1
+sudo grep '^Groups:' "/proc/$LOGWISP_PID/status" |
+  grep -Eq '(^|[[:space:]])65532([[:space:]]|$)'
+
+findmnt -no TARGET,FSTYPE,OPTIONS /var/log/vif-fleet
+sudo nsenter -t "$LOGWISP_PID" -m -- \
+  findmnt -no TARGET,FSTYPE,OPTIONS /var/log/vif-fleet
+
+sudo cmp -s deploy/logwisp/aggregator.toml \
+  /etc/logwisp/vif-fleet.toml
+sudo cmp -s deploy/guest/logwisp.service \
+  /etc/systemd/system/logwisp.service
+
+sudo ss -ltnp 'sport = :8081'
+test "$(sudo ss -ltnH 'sport = :8081' |
+  awk 'NR == 1 {print $4}')" = 127.0.0.1:8081
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status | jq -e .
+
+sudo journalctl -u logwisp.service -n 20 --no-pager
+unset LOGWISP_PID LOGWISP_REVISION
+```
+
+The host `findmnt` output remains `rw`; the view inside LogWisp's mount namespace
+must contain `ro`. `RequiresMountsFor=` may add a mount requirement, but `Requires`,
+`Wants`, and `After` must not name `k3s.service` or `vif-allocator.service`.
+The status JSON and journal are the evidence needed to select exact watcher and
+replay assertions for the next live slice.
+
+### Batch E initial-install rollback
+
+If the service, isolation, or loopback checks fail, remove only its live listener.
+Keep the pinned binary, configuration, and locked identity for diagnosis; do not
+touch the allocator, K3s, writer, PV/PVC, tmpfs, or Restricted namespace:
+
+```sh
+sudo systemctl disable --now logwisp.service
+sudo rm /etc/systemd/system/logwisp.service
+sudo systemctl daemon-reload
+test "$(systemctl is-active logwisp.service)" = inactive
+sudo ss -ltnH 'sport = :8081'
+```
+
+The final `ss` command must print nothing.

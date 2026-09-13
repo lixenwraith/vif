@@ -1,13 +1,11 @@
-# Superseded console-source experiment; do not deploy this configuration.
-#
-# The live fleet writes self-tagged files but exposes no public stream. Batch E in
-# doc/kube-todo.md replaces this console input with one standalone file source;
-# LogWisp will not be owned by the allocator or use a Kubernetes credential.
+# Standalone node-local fleet reader. Session Jobs write complete, self-tagged
+# JSONL records to the tmpfs-backed PVC; LogWisp relays those lines unchanged.
 quiet = false
 status_reporter = false
 auto_reload = false
 
-# Operational output to stderr; Batch E replaces the stdin data path.
+# LogWisp's own diagnostics stay in the host journal and never enter the public
+# application stream.
 [logging]
 output = "stderr"
 level = "warn"
@@ -15,23 +13,22 @@ level = "warn"
 [[pipelines]]
 name = "fleet"
 
-# The console source puts the whole line in the entry message and leaves the
-# structured fields empty, and `raw` emits that message unchanged. Every key
-# vi-fighter wrote — sub, run, tick, frame — survives.
+# With a raw file source, the entry message is the complete source line. The raw
+# formatter preserves it for the HTTP sink instead of parsing or reserializing it.
 [pipelines.flow.format]
 type = "raw"
 sanitizer_policy = "raw"
 
-# One session at 10 Hz emits a snapshot record per visible group; ten of them is a
-# stream no browser panel needs in full. Drop rather than pass, so the cap holds.
+# Bound both entry size and aggregate rate. Log loss is preferable to allowing a
+# log burst to consume resources needed by a running game.
 [pipelines.flow.rate_limit]
 rate = 400.0
 burst = 800.0
 policy = "drop"
 max_entry_size_bytes = 65536
 
-# Filters match "<source> <level> <message>", and the message here is the whole
-# JSON line, so the envelope this pipeline never parses is still selectable.
+# TRACE records are intentionally absent from the public operational feed. The
+# filter examines the unparsed message; every emitted line otherwise stays whole.
 [[pipelines.flow.filters]]
 type = "exclude"
 logic = "or"
@@ -39,12 +36,16 @@ patterns = ["\"level\":\"TRACE\""]
 
 [[pipelines.plugin_sources]]
 id = "fleet"
-type = "console"
+type = "file"
 [pipelines.plugin_sources.config]
-buffer_size = 4096
+directory = "/var/log/vif-fleet"
+pattern = "*.jsonl"
+check_interval_ms = 100
+raw = true
+from = "start"
 
-# Loopback only. Batch F makes the allocator a byte proxy after this service is
-# independently deployed and verified.
+# The unauthenticated stream is reachable only on loopback. Batch F exposes it
+# through the allocator as a byte proxy; no browser or remote host connects here.
 [[pipelines.plugin_sinks]]
 id = "stream"
 type = "http"
@@ -53,6 +54,7 @@ host = "127.0.0.1"
 port = 8081
 stream_path = "/stream"
 status_path = "/status"
+buffer_size = 4096
 max_connections = 32
 client_buffer_size = 512
 write_timeout_ms = 5000
