@@ -48,8 +48,9 @@ flowchart TD
     Pod -->|"stdout"| Log["CRI pod log, operator only"]
 ```
 
-This is the deployed shape while Batch A is validated. The target logging shape
-and the ordered B-F migration are in [`kube-todo.md`](kube-todo.md).
+This is the deployed shape while Batch A's stdout regression gate is completed.
+The target logging shape and ordered B-F migration are in
+[`kube-todo.md`](kube-todo.md).
 
 What a session is, what bounds its life, and what it costs are in the fleet plan's
 [§1](kubernetes-fleet.md#1-what-is-deployed) and [§6](kubernetes-fleet.md#6-resources);
@@ -177,7 +178,7 @@ ip -br link; ip route
 ```
 
 ```sh
-sudo pacman -Syu --needed curl git make iptables-nft conntrack-tools ethtool tcpdump
+sudo pacman -Syu --needed curl git jq make python iptables-nft conntrack-tools ethtool tcpdump
 sudo systemctl enable --now systemd-timesyncd
 
 # zram-generator can recreate swap after fstab is clean. Mask the generated swap
@@ -1038,8 +1039,9 @@ The remaining gap register is the fleet plan's
   successful accepted connection's remote address, so the run could not prove the
   admission limiter sees each player rather than one rewritten address for the
   whole fleet.
-- **The node-local log path is staged, not deployed** (A14). Batch A implements
-  the commissioned writer and awaits the common guest check. B-F still need to
+- **The node-local log path is staged, not deployed** (A14). Batch A is deployed;
+  allocation, remote join, state, and completion passed, while its stdout
+  regression assertion awaits a clean repeat. B-F still need to
   provision the capped tmpfs/PVC, switch the workload, remove `pods/log`, install
   standalone LogWisp, and make the allocator a byte proxy. The old console-source
   aggregator and in-pod sidecar are superseded artifacts, not fallbacks.

@@ -1,8 +1,10 @@
 # Kubernetes fleet logging pivot: implementation plan
 
-Status: Batch A implemented and repository-verified; guest validation pending.
-Batches B-G are not deployed. The currently deployed allocator and session fleet
-remain on the stdout/CRI-log path until the migration gates below pass.
+Status: Batch A is deployed. Allocation, remote join, occupied/vacant state, and
+session completion passed on 2026-09-13; the stdout regression assertion must be
+repeated because the first run lacked `jq` and lost the session ID before the Job
+was removed. Batches B-G are not deployed. The allocator and session fleet remain
+on the stdout/CRI-log path until the migration gates below pass.
 PR #500 is merged on `main` at `beea7fe`.
 
 The target is one direct, bounded file path from every game process to one
@@ -185,8 +187,9 @@ that changes live objects while a Job is active.
 
 ### Batch A — finish the writer contract
 
-Repository implementation is complete; the live guest check below remains the
-gate before Batch B.
+PR #501 merged and Batch A is deployed. Repository, CI, allocation, remote join,
+state, and completion checks passed; only the repeated stdout assertion below
+remains the gate before Batch B.
 
 1. Confirm PR #500 is merged and run the Go suite in an environment with the
    repository's Go toolchain.
@@ -201,10 +204,10 @@ gate before Batch B.
 4. Exercise rotation with two different IDs in one directory. Neither logger may
    delete, rename, or append to the other ID's active file.
 
-After this change is merged, update the guest only while the fleet is idle. The
-image helper stops new allocation, refuses to proceed if a Job or pod remains,
-builds and imports the current revision, updates the allocator image, and restores
-the disabled build-daemon baseline:
+For a fresh deployment or later repeat, update the guest only while the fleet is
+idle. The image helper stops new allocation, refuses to proceed if a Job or pod
+remains, builds and imports the current revision, updates the allocator image, and
+restores the disabled build-daemon baseline:
 
 ```sh
 git switch main
@@ -373,9 +376,11 @@ must not be sent to this public feed.
 
 Run this after every batch that changes the guest. It proves allocation and the
 actual game data path, not merely pod phase. Use the current imported image tag
-and public host; do not copy either into documentation.
+and public host; do not copy either into documentation. The guest prerequisites
+install `jq`; `command -v jq` must succeed before allocating a session.
 
 ```sh
+command -v jq
 curl -fsS http://127.0.0.1:9080/healthz
 curl -fsS http://127.0.0.1:9080/readyz
 
@@ -383,10 +388,15 @@ SESSION_JSON=$(curl -fsS -X POST \
   -H 'Content-Type: application/json' -d '{}' \
   http://127.0.0.1:9080/vif/api/sessions)
 printf '%s\n' "$SESSION_JSON"
-SESSION_ID=$(printf '%s' "$SESSION_JSON" | jq -r '.id')
-JOIN_TARGET=$(printf '%s' "$SESSION_JSON" | jq -r '.join_target')
+SESSION_ID=$(printf '%s' "$SESSION_JSON" | \
+  jq -er '.id | strings | select(length > 0)') &&
+JOIN_TARGET=$(printf '%s' "$SESSION_JSON" | \
+  jq -er '.join_target | strings | select(length > 0)') &&
 printf 'session=%s join=%s\n' "$SESSION_ID" "$JOIN_TARGET"
 ```
+
+The final line must print two non-empty values. Stop and fix parsing if it does
+not; never substitute an empty ID into a Kubernetes resource name.
 
 From the development machine, join the printed target, play briefly, and quit:
 
@@ -398,12 +408,15 @@ While connected and again after quitting, inspect the same row on the guest. Its
 `state.phase` and `state.guests` must move from occupied to vacant:
 
 ```sh
-curl -fsS http://127.0.0.1:9080/vif/api/sessions | jq \
+curl -fsS http://127.0.0.1:9080/vif/api/sessions | jq -e \
   --arg id "$SESSION_ID" '.sessions[] | select(.id == $id) | .state'
 ```
 
 Batch A deliberately leaves the workload on `-log-stdout`; its live logging check
-therefore proves the ordinary, untagged contract stayed intact:
+therefore proves the ordinary, untagged contract stayed intact. Run this one-shot
+read immediately after the vacant observation and before deletion. A completed
+pod remains readable only until Job TTL garbage collection; `NotFound` means the
+logging gate was not run and requires a fresh session.
 
 ```sh
 sudo kubectl -n vif logs "job/vif-session-$SESSION_ID" \
@@ -444,8 +457,8 @@ sudo find /var/log/vif-fleet -maxdepth 1 -type f \
 
 Expected result: both probes return `ok`, the client connects, allocator state
 tracks occupied/vacant, and temporary Jobs/Services and test files are removed.
-Batch A's stdout stays untagged; from Batch C onward the JSONL file matches the
-allocator ID.
+Batch A creates no node file: its stdout stays untagged. From Batch C onward the
+JSONL file matches the allocator ID.
 
 ## 6. Remaining fleet work that the pivot does not replace
 
