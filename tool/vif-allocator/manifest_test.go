@@ -26,7 +26,14 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 		`"image":"docker.io/library/vi-fighter:revision"`,
 		`"backoffLimit":0`,
 		`"ttlSecondsAfterFinished":120`,
-		`"-log-stdout"`,
+		`"-l=/var/log/vif-fleet","-log-session-id=abc123"`,
+		`"volumeMounts":[{"mountPath":"/var/log/vif-fleet","name":"fleet-logs"}]`,
+		`"volumes":[{"name":"fleet-logs","persistentVolumeClaim":{"claimName":"vif-fleet-logs"}}]`,
+		`"automountServiceAccountToken":false`,
+		`"readOnlyRootFilesystem":true`,
+		`"runAsNonRoot":true`,
+		`"capabilities":{"drop":["ALL"]}`,
+		`"seccompProfile":{"type":"RuntimeDefault"}`,
 		`"-first-join","90s"`,
 		`"-empty","90s"`,
 		`"-drain","20s"`,
@@ -35,10 +42,13 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 			t.Errorf("Job JSON does not contain %s", want)
 		}
 	}
-	for _, unwanted := range []string{`"logwisp"`, `"volumes"`, `"volumeMounts"`} {
+	for _, unwanted := range []string{`"-log-stdout"`, `"hostPath"`, `"logwisp"`} {
 		if strings.Contains(text, unwanted) {
-			t.Errorf("stdout-only Job unexpectedly contains %s", unwanted)
+			t.Errorf("file-logging Job unexpectedly contains %s", unwanted)
 		}
+	}
+	if got := strings.Count(text, `"mountPath":"/var/log/vif-fleet"`); got != 1 {
+		t.Errorf("fleet log volume is mounted %d times, want exactly once", got)
 	}
 }
 

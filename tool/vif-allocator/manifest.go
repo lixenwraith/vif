@@ -79,7 +79,8 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 								"-serve", ":7777",
 								"-probe", ":7778",
 								"-authority", "host",
-								"-log-stdout",
+								"-l=/var/log/vif-fleet",
+								"-log-session-id=" + id,
 								"-lv", "info",
 								"-ls", "all+dispatch",
 								"-d",
@@ -97,6 +98,12 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 								map[string]any{"name": "GOMEMLIMIT", "value": "160MiB"},
 							},
 							"securityContext": containerSecurity,
+							"volumeMounts": []any{
+								map[string]any{
+									"name":      "fleet-logs",
+									"mountPath": "/var/log/vif-fleet",
+								},
+							},
 							"resources": map[string]any{
 								"requests": map[string]string{"cpu": "100m", "memory": "96Mi"},
 								"limits":   map[string]string{"cpu": "500m", "memory": "192Mi"},
@@ -111,6 +118,14 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 								"periodSeconds":    5,
 								"timeoutSeconds":   2,
 								"failureThreshold": 3,
+							},
+						},
+					},
+					"volumes": []any{
+						map[string]any{
+							"name": "fleet-logs",
+							"persistentVolumeClaim": map[string]any{
+								"claimName": "vif-fleet-logs",
 							},
 						},
 					},

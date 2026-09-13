@@ -10,7 +10,6 @@
 #   ${JOB_UID}         the created Job UID used to own the Service
 #   ${PLAYERS}         the guest ceiling for this session (1-16)
 #   ${MAP_SIZE}        the shared map geometry, WxH (e.g. 120x40)
-#   ${LOGWISP_IMAGE}   the locally available logwisp sidecar image
 #   ${FIRST_JOIN}      the first-guest deadline (normally 90s)
 #   ${EMPTY_GRACE}     the empty-roster grace (normally 90s)
 #
@@ -105,10 +104,10 @@ spec:
             # must not elect a private continuation that looks like the old session.
             - "-authority"
             - "host"
-            # The obsolete sidecar experiment, not what the deployment runs. The
-            # manual renderer defaults to stdout without this container; the
-            # allocator emits a separate stdout-only Job. Batch C replaces both.
-            - "-l=/var/log/vif"
+            # The local PVC is backed by the node's capped tmpfs. The session ID
+            # selects this process's filename and tags every application record.
+            - "-l=/var/log/vif-fleet"
+            - "-log-session-id=${SESSION_ID}"
             - "-lv"
             - "info"
             - "-ls"
@@ -150,8 +149,8 @@ spec:
               value: "160MiB"
           securityContext: *container_security
           volumeMounts:
-            - name: logs
-              mountPath: /var/log/vif
+            - name: fleet-logs
+              mountPath: /var/log/vif-fleet
           resources:
             requests:
               cpu: 100m
@@ -179,39 +178,12 @@ spec:
           # reroute it. The application refuses a dial at the handshake; the
           # allocator reads the same answer from the health body's `ready` and
           # `phase` fields when choosing where to send the next player.
-        # The log sidecar, rendered only when an image is named. It serves what the
-        # session wrote as Server-Sent Events on a cluster-internal port, metrics
-        # included, since internal/status emits the whole registry into the log. Not
-        # linked into vif: a second listener in the session is a second failure mode.
-        - name: logwisp
-          image: ${LOGWISP_IMAGE}
-          imagePullPolicy: IfNotPresent
-          args: ["-c", "/etc/logwisp/logwisp.toml"]
-          ports:
-            - name: logstream
-              containerPort: 8080
-              protocol: TCP
-          securityContext: *container_security
-          volumeMounts:
-            - name: logs
-              mountPath: /var/log/vif
-              readOnly: true
-            - name: logwisp-config
-              mountPath: /etc/logwisp
-              readOnly: true
-          resources:
-            requests: {cpu: 10m, memory: 16Mi}
-            limits: {cpu: 100m, memory: 64Mi}
       volumes:
-        # Bounded, in memory, and gone with the pod — which is the right lifetime
-        # for a session's log: the match does not outlive the process either.
-        - name: logs
-          emptyDir:
-            medium: Memory
-            sizeLimit: 64Mi
-        - name: logwisp-config
-          configMap:
-            name: vif-logwisp
+        # This claim exposes only the node-affine, tmpfs-backed local PV. The pod
+        # remains Restricted and never mounts a direct hostPath.
+        - name: fleet-logs
+          persistentVolumeClaim:
+            claimName: vif-fleet-logs
 ---
 # The session's endpoint.
 #

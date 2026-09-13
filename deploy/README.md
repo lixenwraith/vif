@@ -15,10 +15,9 @@ migration is authoritative in [doc/kube-todo.md](../doc/kube-todo.md).
 | `k3s/06-log-volume-check.yaml` | Temporary Restricted Batch B writer probe. Render `${IMAGE}`, verify its JSONL on the node, then delete the pod and file. |
 | `k3s/10-quota.yaml` | The fleet ceiling: ten concurrent sessions, their compute total, and exactly one 256 MiB shared log claim. |
 | `k3s/20-networkpolicy.yaml` | Default deny in both directions; the game port from anywhere, the operator ports from monitoring only, no egress. |
-| `k3s/30-session.yaml` | The current per-session manual template — one Job, one Service, and an obsolete optional sidecar shape. The allocator still renders its own stdout workload; Batch C replaces both workload sources together. |
+| `k3s/30-session.yaml` | The per-session manual template: one Restricted Job writing its commissioned JSONL through the shared local PVC, and one owned NodePort Service. |
 | `k3s/40-allocator-rbac.yaml` | The current namespace Role. Its unused `pods/log` grant remains only until Batch D, after file output passes. |
-| `k3s/50-logwisp.yaml` | Obsolete in-pod LogWisp experiment, not deployed; Batch C removes the sidecar path. |
-| `k3s/render-session.sh` | Renders the current template with lifetime overrides. `JOB_UID=<uid>` retains the Service owner reference; `LOGWISP_IMAGE=<tag>` selects the obsolete sidecar experiment until Batch C removes it. |
+| `k3s/render-session.sh` | Renders the file-logging template with lifetime overrides. `JOB_UID=<uid>` retains the Service owner reference; there is no per-session LogWisp branch. |
 | `k3s/session.sh` | Repeatable manual create/list/delete path. It creates the Job first, owns the Service by the returned Job UID, selects a free fleet port when omitted, and cleans a partial create. |
 | `logwisp/aggregator.toml` | Superseded console-source experiment, not deployed. Batch E replaces it with the standalone file-source configuration. |
 | `frontdoor/haproxy.cfg` | Not deployed. The worked alternative: every session behind one public port, routed on the name a dialer sends before the handshake. Kept for the routing exploration; the deployed shape reaches a session on its own port. |

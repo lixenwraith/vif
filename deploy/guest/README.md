@@ -225,7 +225,7 @@ sudo find /var/log/vif-fleet -mindepth 1 -maxdepth 1 -print
 ```
 
 Both final commands must print nothing. Finish Batch B with the common session
-check in `doc/kube-todo.md` §5; the real workload still writes stdout until Batch
+check in `doc/kube-todo.md` §7; the real workload still writes stdout until Batch
 C.
 
 ## Batch B rollback
@@ -259,3 +259,79 @@ sudo systemctl start vif-allocator.service
 Keep the Retain PV/PVC for diagnosis. Do not schedule a PVC writer after rollback;
 either restore the mount/drop-in or deliberately remove the unused claim and PV
 before retrying Batch B.
+
+## Batch C: switch session Jobs to file logging
+
+Batch C changes only newly allocated sessions. It updates the host allocator
+binary and the manual manifest renderer together; the already imported game image
+is unchanged. Start with the Batch B gate intact and an empty fleet:
+
+```sh
+systemctl is-active \
+  'var-log-vif\x2dfleet.mount' vif-fleet-log-cleanup.timer \
+  k3s.service vif-allocator.service
+sudo kubectl get persistentvolume vif-fleet-logs
+sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+```
+
+The four units must be active, both volume objects must be `Bound`, and the final
+query must be empty. Build the allocator before opening the short maintenance
+window:
+
+```sh
+make allocator
+test -x bin/vif-allocator
+```
+
+Stop allocation, repeat the empty-fleet check, preserve the Batch B allocator for
+rollback, and install the new binary. The backup path must not already exist:
+
+```sh
+sudo systemctl stop vif-allocator.service
+test "$(systemctl is-active vif-allocator.service)" = inactive
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+test ! -e /usr/local/libexec/vif-allocator.batch-b
+sudo install -o root -g root -m 0755 \
+  /usr/local/bin/vif-allocator \
+  /usr/local/libexec/vif-allocator.batch-b
+sudo install -o root -g root -m 0755 \
+  bin/vif-allocator /usr/local/bin/vif-allocator
+sudo systemctl start vif-allocator.service
+for attempt in $(seq 1 25); do
+  curl --connect-timeout 1 --max-time 2 -fsS \
+    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
+  sleep 1
+done
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/healthz
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/readyz
+```
+
+Finish with `doc/kube-todo.md` §7. The session Job must have exactly one
+`session` container, mount the `vif-fleet-logs` claim only there, omit direct
+`hostPath` and `-log-stdout`, and produce `<session-id>.jsonl` whose application
+records all carry the same `fields.session_id`. Delete the Job and its files after
+the check.
+
+### Batch C rollback
+
+Rollback affects newly allocated sessions, so first stop the allocator and prove
+the fleet is empty. Restore the preserved Batch B binary; leave the mounted volume
+and its Bound PV/PVC in place:
+
+```sh
+sudo systemctl stop vif-allocator.service
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+sudo test -x /usr/local/libexec/vif-allocator.batch-b
+sudo install -o root -g root -m 0755 \
+  /usr/local/libexec/vif-allocator.batch-b \
+  /usr/local/bin/vif-allocator
+sudo systemctl start vif-allocator.service
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/readyz
+```

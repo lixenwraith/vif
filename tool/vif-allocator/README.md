@@ -11,6 +11,11 @@ that Kubernetes has no anonymous endpoint for:
 4. wait for a ready EndpointSlice and `live=true ready=true` from `/health`;
 5. return the page URL, raw-TCP join target and health-derived state.
 
+Each Job mounts the node-affine `vif-fleet-logs` PVC only in its session
+container. The game writes `/var/log/vif-fleet/<session-id>.jsonl` and tags every
+application record with `fields.session_id`; the allocator neither reads nor
+rewrites those bytes.
+
 It has no database. Jobs and Services are the durable state, and startup
 reconciliation deletes a Job left without its Service or a Service left without a
 valid Job owner. Completed Jobs are never resurrected.

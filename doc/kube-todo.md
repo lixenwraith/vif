@@ -1,359 +1,133 @@
-# Kubernetes fleet logging pivot: implementation plan
-
-Status: Batch A is deployed and passed its repository, CI, allocation, remote-join,
-occupied/vacant state, stdout logging, and cleanup gates on 2026-09-13. Batch B's
-tmpfs, K3s dependency, quota, PV/PVC, Restricted writer, file tag, and rejected
-`hostPath` gates passed. The first cleanup start exposed an unmapped numeric
-systemd user; its timer is stopped while the named system identity fix is applied.
-Batches C-G have not started, and the session fleet remains on stdout/CRI logs.
-PR #500 is merged on `main` at `beea7fe`.
-
-The target is one direct, bounded file path from every game process to one
-standalone LogWisp daemon on the Linux node. Kubernetes still creates and deletes
-the session Jobs, but its API server is not in the log data path.
-
-## 1. Starting point
-
-The following is implemented and verified:
-
-- one `vif -serve` process per K3s Job and one NodePort Service per session;
-- the host-side `vif-allocator` creates, lists, probes, reconciles, and cleans up
-  those objects;
-- allocator liveness/readiness, an allocator-created session, an off-box join,
-  and occupied/vacant state changes have passed;
-- session JSON logs currently go to container stdout and are available through
-  the CRI/Kubernetes pod-log path;
-- `/vif/api/logs` deliberately returns `501 log_stream_not_configured`;
-- `deploy/logwisp/aggregator.toml` describes an experiment, but LogWisp is not a
-  child of the allocator and no node fan-in is deployed.
-
-The old plan described pod-log following, JSON splicing, and a LogWisp child as
-though those were allocator code to remove. They were never implemented. The
-new work replaces that proposal; it does not refactor a running log pipeline.
-Nor has ten-session load proved that K3s would be overwhelmed. The reason to
-pivot now is that long-lived `pods/log` requests would put avoidable data traffic
-and reconnect state through the control plane and make the allocator own an
-unrelated stream processor.
-
-PR #500 added `vif -log-session-id=<id>`. When present it:
-
-- validates the ID as a DNS-safe lowercase alphanumeric-and-hyphen session name;
-- adds `fields.session_id` to every application record emitted by `internal/vlog`;
-- names the active file `<id>.jsonl` when the file sink is selected; and
-- changes nothing when the flag is absent.
-
-`fields.session_id`, rather than a new top-level key, is intentional. The suffix
-also distinguishes the deployment ID from the existing RNG/replay payload key
-named `session`. The existing
-top-level `sub`, `run`, `tick`, and `frame` envelope is the stable contract used
-by `vif-log`, and the current logging library has one string context slot already
-used by `sub`. The public consumer can select `fields.session_id` without an
-allocator rewrite. If a top-level `session` key later proves necessary, extend
-`github.com/lixenwraith/log` with static envelope fields first; do not relocate
-`sub` or splice serialized JSON.
-
-## 2. Target shape
-
-```mermaid
-flowchart LR
-    Web["Website EventSource"] --> Alloc["vif-allocator"]
-    Alloc -->|"byte proxy only"| Wisp["LogWisp systemd service"]
-    Wisp --> Files["node tmpfs files"]
-    Pod["vif session Job"] -->|"JSONL file"| Files
-    Alloc -->|"Job and Service only"| API["K3s API"]
-```
-
-The control and data paths have separate owners:
-
-| Concern | Owner |
-|---|---|
-| Allocate, probe, list, and delete session Jobs/Services | `vif-allocator` and K3s |
-| Produce the log envelope and session tag | `vif` |
-| Bound volatile node storage | systemd tmpfs mount and log cleanup unit |
-| Discover/tail files, apply stream limits, serve SSE | standalone LogWisp |
-| Preserve the same-origin public route | allocator byte proxy initially, nginx in front |
-| Bound rows, reconnects, and rendering work | website |
-
-The allocator will not fetch `pods/log`, parse JSON, insert fields, or supervise
-LogWisp. Retaining `/vif/api/logs` as a thin reverse proxy keeps one guest-facing
-HTTP boundary and the existing same-origin route. Direct nginx-to-LogWisp routing
-can be reconsidered later, but is not needed for this migration.
-
-Alternatives considered:
-
-| Alternative | Decision |
-|---|---|
-| Tail kubelet/containerd CRI files on the node | Keeps stdout and Restricted admission, but couples the public feed to runtime-specific paths and CRI framing and still needs pod-to-session discovery. Keep as rollback architecture, not the target. |
-| One LogWisp sidecar per session | Isolates files cleanly but multiplies processes, listeners, and memory for a ten-session fan-in. Drop it. |
-| Direct `hostPath` in each Job | Simple data path, but Baseline and Restricted both reject it. Drop it. |
-| Local PV/PVC backed by node tmpfs | Chosen: direct node files, no log API stream, one aggregator, and Restricted pod specs. |
-
-## 3. Corrected storage decision
-
-### 3.1 Keep Pod Security `restricted`
-
-Do **not** change `deploy/k3s/00-namespace.yaml` to `baseline`. Kubernetes Pod
-Security forbids `hostPath` in the Baseline policy, and Restricted includes every
-Baseline restriction. Namespace Pod Security Admission has no per-volume
-`hostPath` exemption.
-
-Instead, expose the node directory through a statically provisioned local
-PersistentVolume and one PersistentVolumeClaim. The pod spec mounts only a PVC,
-which is an allowed Restricted volume type. The PV supplies the required node
-affinity, so a future second node cannot schedule a writer away from the files.
-
-References:
-
-- [Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/)
-- [Local volumes](https://kubernetes.io/docs/concepts/storage/volumes/#local)
-- [PersistentVolume node affinity](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#node-affinity)
-
-### 3.2 Fail closed onto tmpfs
-
-The backing path is `/var/log/vif-fleet`, mounted as node tmpfs before K3s and
-LogWisp start. The mount must have an explicit size and
-`nodev,nosuid,noexec`; choose the size only after recording node RAM and the
-measured ten-session log rate. Start with a candidate such as `256MiB`, not an
-unbounded percentage.
-
-Add these deployment artifacts:
-
-- `deploy/guest/var-log-vif\x2dfleet.mount`, whose escaped name is required by
-  systemd for the path;
-- `deploy/guest/vif-fleet.sysusers`, which maps the locked host identity
-  `vif-fleet` to the containers' numeric UID/GID 65532;
-- a K3s systemd drop-in with `Requires=` and `After=` on that mount;
-- `deploy/k3s/05-log-volume.yaml` containing a no-provisioner StorageClass,
-  local PV, and `vif` namespace PVC; and
-- a bounded cleanup service/timer for rotated and completed-session files.
-
-Do not use `hostPath.type: DirectoryOrCreate`. If the tmpfs mount fails, that
-setting silently creates the directory on the root filesystem and converts a RAM
-log into disk wear. K3s must remain stopped when the mount is absent.
-
-The local PV should use:
-
-```yaml
-storageClassName: vif-node-log
-accessModes: [ReadWriteOnce]
-persistentVolumeReclaimPolicy: Retain
-volumeMode: Filesystem
-local:
-  path: /var/log/vif-fleet
-nodeAffinity:
-  required:
-    nodeSelectorTerms:
-      - matchExpressions:
-          - key: kubernetes.io/hostname
-            operator: In
-            values: ["${NODE_NAME}"]
-```
-
-`ReadWriteOnce` means one node, not one pod; all ten Jobs on this single node can
-mount the claim. The PV capacity advertises scheduling capacity, while the tmpfs
-`size=` option is the actual hard bound.
-
-### 3.3 Explicit residual risk and lifecycle
-
-All session containers currently run as UID/GID 65532. A shared writable claim
-therefore lets a compromised session process read or alter another session's
-public game log. These files are entertainment telemetry, not an audit trail or a
-secret, so this is accepted for the first single-node version. K3s, kernel, host,
-allocator, and LogWisp service logs remain outside the directory and must never
-enter the public stream.
-
-Before deployment, change the fleet logger policy so each process cannot run the
-logging library's directory-wide retention against other sessions:
-
-- retain a bounded per-file rotation size suitable for ten sessions;
-- disable the per-process directory-wide total-size and retention deletion in
-  commissioned (`-log-session-id`) mode;
-- let the node cleanup unit delete rotated files after LogWisp has consumed them
-  and delete inactive `<session>.jsonl` files after the four-hour Job ceiling plus
-  a safety margin; and
-- verify that full tmpfs causes bounded log drops while the game and health probe
-  remain alive.
-
-Batch A sets commissioned files to an 8 MB per-file rotation cap and disables the
-logger's directory-wide total-size, minimum-free-space cleanup, and age retention.
-Ordinary desktop logging keeps its 64 MB / 512 MB / 100 MB / 24-hour policy. The
-commissioned cap is provisional: ten active files plus two complete rotated
-generations occupy at most 240 MB before filesystem overhead, beneath the initial
-256 MiB tmpfs candidate. The H3 measurement must confirm or revise both limits.
-
-The tmpfs is intentionally empty after reboot. No match state is stored there.
-
-## 4. Implementation batches
-
-Each batch ends with the common game-session check in §5. Do not start a batch
-that changes live objects while a Job is active.
-
-### Batch A — finish the writer contract
-
-PR #501 merged and Batch A's functional gates passed. The final cleanup query ran
-before Kubernetes removed its background-cascaded pod; Batch B may start only
-after the preflight below confirms an idle fleet.
-
-1. Confirm PR #500 is merged and run the Go suite in an environment with the
-   repository's Go toolchain.
-2. Add commissioned-mode logger limits described in §3.3. Keep ordinary desktop
-   logging unchanged.
-3. Test both flag states:
-   - absent: the filename and JSON schema are unchanged and `fields.session_id`
-     is absent;
-   - present: the active filename is `<id>.jsonl`, every application record has
-     `fields.session_id=<id>`, `fields.msg` remains the first payload key, and an
-     unsafe or empty ID is refused.
-4. Exercise rotation with two different IDs in one directory. Neither logger may
-   delete, rename, or append to the other ID's active file.
-
-For a fresh deployment or later repeat, update the guest only while the fleet is
-idle. The image helper stops new allocation, refuses to proceed if a Job or pod
-remains, builds and imports the current revision, updates the allocator image, and
-restores the disabled build-daemon baseline:
-
-```sh
-git switch main
-git pull --ff-only
-./deploy/guest/update-vif-image.sh
-```
-
-Gate: no Kubernetes change until the writer collision and cross-session cleanup
-tests pass.
-
-### Batch B — provision volatile node storage
-
-Preflight passed on the current single-node Arch deployment: 7.7 GiB RAM with
-6.8 GiB available, no swap, an empty fleet, Restricted enforcement, and no prior
-fleet-log mount or PV/PVC. The absent UID/GID 65532 host mapping later caused
-systemd 261 to reject `User=65532` as an unknown user before executing cleanup;
-Batch B now provisions the locked `vif-fleet` name at that exact numeric identity
-with `systemd-sysusers`. The provisional 256 MiB tmpfs is about 3.2% of node RAM
-and is accepted until H3 replaces the estimate with a ten-session measurement.
-The same systemd artifacts and commands support a bare Ubuntu K3s node;
-distribution package names are split in `deploy/guest/README.md`. That procedure
-first verifies the exact deployment revision contains every Batch B artifact,
-before any privileged copy or service operation.
-
-1. Record `free -h`, the K3s node name, and the filesystem ownership expected by
-   UID/GID 65532. Put placeholders, never machine IPs, in repository docs.
-2. Stop the allocator and repeat the empty-fleet query so no allocation can race
-   the maintenance window.
-3. Provision the locked `vif-fleet` host identity at UID/GID 65532 with
-   `systemd-sysusers`. Install and start the tmpfs mount unit, add the K3s ordering
-   drop-in, then restart K3s once during a declared maintenance window.
-4. Apply `deploy/k3s/05-log-volume.yaml` with the real node name supplied at
-   deployment time.
-5. Verify the namespace still enforces Restricted. The local StorageClass uses
-   `WaitForFirstConsumer`, so an `Available` PV and `Pending` PVC are expected
-   until a pod requests the claim.
-6. Render and apply `deploy/k3s/06-log-volume-check.yaml`. This temporary
-   Restricted pod mounts the PVC as UID/GID 65532 and runs the current image for
-   five unclaimed seconds, producing `volume-check.jsonl` without a shell image.
-7. Verify the PV/PVC becomes Bound, observe and validate the JSONL at the node
-   path, prove a server-dry-run `hostPath` pod is rejected, then delete the test
-   pod and all `volume-check` files.
-
-Install the cleanup service and timer with the mount. It runs as the named
-`vif-fleet` account mapped to UID/GID 65532, refuses to operate unless
-`/var/log/vif-fleet` is tmpfs, retains the two newest rotations per session after
-a five-minute reader grace, and removes any recognized JSONL file unmodified for
-five hours—the four-hour Job ceiling plus a one-hour margin. The hard tmpfs cap
-still owns bursts and LogWisp outages; H3 must validate the grace and generation
-count. Exact install, restart, validation, cleanup, and rollback commands are in
-`deploy/guest/README.md` §Batch B.
-
-Gate: `findmnt` reports tmpfs with the chosen cap, `vif-fleet` resolves to UID/GID
-65532, K3s depends on its mount unit, the cleanup timer is active, the PVC is
-Bound, a direct `hostPath` admission test is rejected, and the temporary pod and
-files are gone. Finish with §5 while the real workload still uses stdout.
-
-Rollback: stop K3s, remove only the K3s drop-in, unmount tmpfs, and restart K3s.
-Do not delete a bound PV/PVC or unmount the path while a pod uses it.
-
-Begin with this read-only preflight. It records the state needed to confirm the
-provisional `256MiB` cap and the correct K3s unit before any artifact is installed:
-
-```sh
-cat /etc/os-release
-free -h
-df -h /
-systemctl show k3s.service \
-  -p ActiveState -p UnitFileState -p FragmentPath -p DropInPaths
-sudo kubectl get nodes \
-  -o custom-columns='NAME:.metadata.name,OS:.status.nodeInfo.osImage,KERNEL:.status.nodeInfo.kernelVersion,ARCH:.status.nodeInfo.architecture'
-sudo kubectl get namespace vif --show-labels
-sudo kubectl -n vif get job,pod,service \
-  -l app.kubernetes.io/part-of=vi-fighter-fleet
-sudo kubectl get storageclass,persistentvolume
-sudo kubectl -n vif get persistentvolumeclaim
-findmnt /var/log/vif-fleet || true
-getent passwd 65532 || true
-getent group 65532 || true
-```
-
-The fleet-object query must be empty before the maintenance step. Do not install
-or restart anything until the output has been reviewed.
-
-### Batch C — switch session Jobs from stdout to files
-
-Update both workload sources together:
-
-- `tool/vif-allocator/manifest.go`, which is the live allocator path; and
-- `deploy/k3s/30-session.yaml`, which is the human-readable/manual template.
-
-The session container arguments become:
-
-```text
--l=/var/log/vif-fleet
--log-session-id=${SESSION_ID}
--lv=info
--ls=all+dispatch
-```
-
-`-l` names a **directory**. Do not pass
-`-l=/var/log/vif-fleet/${SESSION_ID}.jsonl`; older binaries interpret that as a
-directory. `-log-session-id` supplies both the safe active filename and the
-record tag.
-
-Mount the `vif-fleet-logs` PVC at `/var/log/vif-fleet` only in the session
-container. Keep the root filesystem read-only, all capabilities dropped,
-`runAsNonRoot`, RuntimeDefault seccomp, and the empty ServiceAccount token. The
-config-check init container does not need the volume.
-
-Extend `tool/vif-allocator/manifest_test.go` to assert the new args, PVC mount,
-absence of `-log-stdout`, and unchanged hardening. Remove the obsolete sidecar
-shape and `${LOGWISP_IMAGE}` handling from `30-session.yaml` and
-`render-session.sh`, and delete the orphaned `50-logwisp.yaml`; there will be no
-LogWisp container per session.
-
-Gate: one allocator-created session becomes ready, can be joined remotely, and
-produces a node file whose JSON lines carry the returned session ID. `kubectl
-logs` may contain process startup text, but it is no longer the public log
-contract.
-
-Rollback: deploy the previous image/allocator manifest using `-log-stdout` and no
-PVC mount. The node volume may remain installed and empty.
-
-### Batch D — remove the unused Kubernetes log permission
-
-Delete the `pods/log` rule from `deploy/k3s/40-allocator-rbac.yaml` and apply the
-Role. There is no allocator tailing code to remove.
+# Kubernetes fleet logging: remaining implementation plan
+
+This is the authoritative order for unfinished Kubernetes fleet work. Completed
+design and operating detail lives in:
+
+- [the deployment procedure](kube_docker_deploy.md);
+- [the fleet architecture and verification matrix](kubernetes-fleet.md); and
+- [the Linux node artifacts and batch procedures](../deploy/guest/README.md).
+
+Status on 2026-09-13:
+
+- PR #500 and Batch A's commissioned writer are merged and deployed;
+- Batch B's named UID/GID 65532 identity, capped tmpfs, fail-closed K3s
+  dependency, local PV/PVC, Restricted writer probe, cleanup timer, allocation,
+  remote join, state, unchanged stdout, and cleanup gates passed;
+- Batch C repository changes are prepared, but the file-logging allocator binary
+  is not deployed; its assertions are updated but have not been run by operator
+  request; and
+- Batches D-G have not started.
+
+The live allocator therefore still creates the Batch B stdout workload. Do not
+start Batch D until Batch C's node-file gate passes.
+
+## 1. Invariants and batch discipline
+
+These constraints apply to every remaining batch:
+
+- Keep the `vif` namespace at Pod Security `restricted`.
+- Session pods mount only the `vif-fleet-logs` PVC. Never add a direct
+  `hostPath`; the PV alone maps the node's `/var/log/vif-fleet` tmpfs.
+- The game writes complete JSONL records. No component tails Kubernetes pod logs,
+  splices allocator JSON, or inserts a session field after serialization.
+- LogWisp is one independent node service. It is never an allocator child or a
+  per-session container and receives no Kubernetes credential.
+- The allocator may proxy LogWisp bytes but must not parse, normalize, buffer, or
+  own the stream processor.
+- Stop allocation and prove the fleet is empty before changing a live workload,
+  allocator binary, Role, mount, or logging service.
+- Announce restarts, simultaneous clients, and deadline-sensitive joins before
+  running them.
+- Put placeholders in repository commands; never commit real machine addresses.
+- Remove rendered files, probe pods, verification Jobs/Services, and verification
+  JSONL after each gate. Preserve the mounted tmpfs and Bound PV/PVC.
+- Finish every batch with the common single-session check in §7 plus its
+  batch-specific gate.
+- Keep the previous allocator binary/configuration available until the next live
+  gate passes.
+
+The node procedure must remain runnable from a bare systemd-based Arch Linux or
+Ubuntu installation. Distribution branches are allowed only where package or
+service defaults differ.
+
+## 2. Remaining phases
+
+| Batch | State | Outcome |
+|---|---|---|
+| C — file-writing Jobs | Repository prepared; live deployment next | Both allocator and manual renderers create one Restricted session container that writes `<session-id>.jsonl` through the shared PVC. |
+| D — remove pod-log RBAC | Blocked on C | The allocator can no longer read `pods/log`; create/list/readiness and file logging remain intact. |
+| E — standalone LogWisp | Blocked on D | One hardened node service discovers all retained JSONL files and serves a bounded loopback SSE stream independently of games and allocator operations. |
+| F — allocator byte proxy | Blocked on E | `/vif/api/logs` proxies SSE bytes with prompt flush/cancellation and a stable failure response while session APIs stay independent. |
+| G — final reconciliation | Blocked on F | Durable docs describe only the deployed design, bare Arch/Ubuntu rehearsals pass, sizing evidence is recorded, and the website handoff is ready. |
+
+## 3. Batch C — switch session Jobs to files
+
+Repository implementation:
+
+1. Update `tool/vif-allocator/manifest.go`, the live workload source, and
+   `deploy/k3s/30-session.yaml`, the manual/reference source, together.
+2. Give the session container these logging arguments:
+
+   ```text
+   -l=/var/log/vif-fleet
+   -log-session-id=<session-id>
+   -lv=info
+   -ls=all+dispatch
+   ```
+
+   `-l` names a directory. Never pass a constructed JSONL filename.
+3. Mount `vif-fleet-logs` at `/var/log/vif-fleet` only in the session container.
+   Keep the config-check init container volume-free.
+4. Preserve the read-only root filesystem, empty ServiceAccount token,
+   `runAsNonRoot`, UID/GID/fsGroup 65532, dropped capabilities, RuntimeDefault
+   seccomp, requests/limits, probes, and lifecycle bounds.
+5. Remove `-log-stdout`, the optional LogWisp sidecar branch, its ConfigMap, and
+   `${LOGWISP_IMAGE}` rendering. There is exactly one runtime container.
+6. Keep allocator manifest assertions for the arguments, single PVC mount,
+   missing `hostPath`, missing stdout flag, missing sidecar, and hardening.
+
+Deploy only through `deploy/guest/README.md` §Batch C. Build the allocator before
+the maintenance window, stop allocation, recheck the empty fleet, preserve the
+Batch B binary, install the Batch C binary, and wait for both allocator probes.
+The game image does not change: Batch A already deployed the commissioned writer.
 
 Gate:
 
-```sh
-sudo kubectl auth can-i get pods/log \
-  --as=system:serviceaccount:vif:vif-allocator -n vif
-```
+- one allocator-created Job has the exact shape above;
+- the session becomes ready and accepts an immediate off-box join;
+- allocator state changes from occupied to vacant;
+- `/var/log/vif-fleet/<session-id>.jsonl` exists and every application record has
+  the returned `fields.session_id`;
+- no public-path assertion depends on `kubectl logs`; and
+- the Job, pod, Service, active file, and rotations are removed afterward.
 
-must print `no`, while allocator `/readyz`, create, and list still work.
+Rollback: with allocation stopped and the fleet empty, restore the preserved
+Batch B allocator binary. Leave the tmpfs and Bound PV/PVC installed.
 
-### Batch E — deploy LogWisp as one focused change
+## 4. Batch D — remove unused Kubernetes log permission
 
-This batch owns all LogWisp work so the writer/storage path is already proven.
+1. Delete the `pods/log` rule from `deploy/k3s/40-allocator-rbac.yaml`.
+2. Stop allocation, confirm an empty fleet, and apply the updated Role.
+3. Verify:
 
-1. Replace the console source in `deploy/logwisp/aggregator.toml` with:
+   ```sh
+   sudo kubectl auth can-i get pods/log \
+     --as=system:serviceaccount:vif:vif-allocator -n vif
+   ```
+
+   It must print `no`.
+4. Confirm the allocator token can still list Services and create/delete the fixed
+   Job and Service.
+5. Run §7 and validate the node file; do not substitute a pod-log read.
+
+Rollback: reapply the previous Role only if allocator control operations actually
+lost a required permission. A logging failure is not a reason to restore
+`pods/log`.
+
+## 5. Batch E — deploy one standalone LogWisp
+
+1. Replace the superseded console-source experiment in
+   `deploy/logwisp/aggregator.toml` with one file source:
 
    ```toml
    [[pipelines.plugin_sources]]
@@ -367,141 +141,139 @@ This batch owns all LogWisp work so the writer/storage path is already proven.
    from = "start"
    ```
 
-   Keep the flow formatter `raw`, the entry-size/rate bounds, and the HTTP sink
-   at `127.0.0.1:8081/stream`.
-2. Add `deploy/guest/logwisp.service`. Run it as its own unprivileged user with
-   read-only access to the fleet directory and configuration, no Kubernetes
-   token, and the same systemd hardening style as the allocator. Order it after
-   the tmpfs mount and restart it on failure.
-3. Install the binary and config, start the service, and inspect its loopback
-   `/status` before changing the allocator.
-4. Start two sessions close together and prove the file source discovers both,
-   preserves each JSON line byte-for-byte, and keeps their `fields.session_id`
-   values distinct.
+2. Keep the flow formatter raw, retain explicit entry/rate/connection limits, and
+   bind the HTTP stream/status sink only to `127.0.0.1:8081`.
+3. Add a dedicated locked LogWisp identity and a hardened
+   `deploy/guest/logwisp.service`. Give it read-only access to the tmpfs and
+   configuration, no Kubernetes token, and mount ordering without making games or
+   the allocator require it.
+4. Install the exact binary/config/unit revision, start it, and inspect its
+   loopback status before changing the allocator.
+5. Start two sessions close together. This is the simultaneous step: have both
+   remote clients ready before allocating.
+6. Prove LogWisp discovers both files, preserves each line byte-for-byte, and
+   keeps their `fields.session_id` values distinct.
+7. Stop LogWisp while a game remains occupied; allocation, state, and gameplay
+   must continue. Restart it and record the accepted replay from retained files.
 
-`from="start"` prevents loss between file creation and the directory scanner's
-first discovery. It does **not** provide per-browser history: an SSE client sees
-entries emitted after it connects. Restarting LogWisp creates new watchers and
-replays every retained file from byte zero, so duplicate display rows and a
-bounded replay burst are accepted for this first version and must be tested. If
-that is unacceptable, the correct follow-up is persisted file offsets or stable
-record IDs—not silently changing to `from="end"` and losing early records.
+`from = "start"` prevents loss before discovery. A LogWisp restart replays retained
+files from byte zero until persisted offsets exist; downstream consumers must
+tolerate duplicates and a bounded replay burst.
 
-Gate: stopping LogWisp never stops a game or allocator session operation; starting
-it again restores the stream with the documented replay behavior.
+Rollback: stop/disable only LogWisp and remove its listener. Do not change the
+writer, PVC, allocator, K3s, or Restricted namespace.
 
-### Batch F — make the allocator a byte proxy
+## 6. Batch F — make the allocator a byte proxy
 
-1. Add a validated `-log-stream-url` allocator option defaulting to the loopback
-   LogWisp stream.
-2. Replace the `/vif/api/logs` 501 handler with an `httputil.ReverseProxy` that
-   accepts `GET`/`HEAD`, flushes SSE promptly, does not buffer or decode payloads,
-   and returns a stable `503 log_stream_unavailable` when LogWisp cannot be
-   reached.
-3. Separate the SSE lifetime from the finite create-response deadline. The
-   current server-wide `WriteTimeout` is intentionally finite and would terminate
-   SSE; use endpoint-specific deadlines or a separate HTTP server rather than
-   making all API writes unbounded by accident.
-4. Add `httptest` coverage for headers, streaming flush, cancellation, upstream
-   failure, and byte preservation.
-5. Keep `deploy/guest/vif-allocator.service` independent of the LogWisp binary.
-   It may order after or want `logwisp.service`, but must not `Require=` it.
+1. Add a validated `-log-stream-url` allocator option whose deployment value is
+   the loopback LogWisp stream.
+2. Replace `/vif/api/logs` status `501` with an `httputil.ReverseProxy` that:
 
-Gate: allocator create/list remain available while LogWisp is down, and
-`/vif/api/logs` streams the same JSON bytes when it is up. Allocator memory and
-goroutine counts remain bounded across repeated browser reconnects.
+   - accepts only `GET` and `HEAD`;
+   - preserves upstream status, headers, and event bytes;
+   - flushes SSE promptly;
+   - propagates client cancellation;
+   - does not decode or buffer records; and
+   - returns stable `503 log_stream_unavailable` when LogWisp is unavailable.
 
-### Batch G — reconcile documentation and prepare the website handoff
+3. Separate SSE lifetime from finite create/API deadlines. Do not make every HTTP
+   write unbounded to accommodate one streaming endpoint.
+4. Cover headers, first-event flush, byte preservation, cancellation, upstream
+   failure, unsupported methods, and repeated reconnect cleanup.
+5. Keep `vif-allocator.service` independent. It may order after or want LogWisp,
+   but must never `Require=` it or execute it.
+6. Verify create/list/health/readiness while LogWisp is stopped, then verify the
+   same-origin log route after it restarts.
+7. Run §7 and remove the verification session/files.
 
-After the deployed path passes, update these documents to describe reality:
+Rollback: restore the allocator version whose log endpoint returns 501 or disable
+the nginx log route. Keep LogWisp and file-writing games independently operable.
 
-- `doc/kube_docker_deploy.md` §§1, 8, 10, status checks, rollback, and
-  troubleshooting;
-- `doc/kubernetes-fleet.md` current shape, Work List, Decisions, security tradeoff,
-  and verification matrix;
-- `deploy/README.md`, `deploy/guest/README.md` if added, and allocator README;
-- remove all prose saying the allocator follows pod logs, splices JSON, or owns a
-  LogWisp child; and
-- record that the namespace remained Restricted and the pod uses a local PVC.
-- rehearse the complete node procedure from a bare Arch installation and a bare
-  Ubuntu installation, retaining explicit distribution branches only where
-  package/service defaults differ.
+## 7. Common end-of-batch session check
 
-Then produce the separate website prompt. It must tell the site implementation
-to use `EventSource` on the same-origin `/vif/api/logs`, read
-`fields.session_id`, cap retained rows/render rate/reconnect backoff, tolerate replay
-duplicates, and degrade independently from session creation. Exact admitted
-client addresses from the pending source-preservation check are operator data and
-must not be sent to this public feed.
+Run this after every remaining batch. Have the remote development-machine terminal
+ready before allocation: the 90-second first-join clock starts when `POST`
+returns.
 
-## 5. Common end-of-batch session check
-
-Run this after every batch that changes the guest. It proves allocation and the
-actual game data path, not merely pod phase. Use the current imported image tag
-and public host; do not copy either into documentation. The guest prerequisites
-install `jq`; `command -v jq` must succeed before allocating a session.
+On the node:
 
 ```sh
+unset SESSION_JSON SESSION_ID JOIN_TARGET
+
 command -v jq
 curl -fsS http://127.0.0.1:9080/healthz
 curl -fsS http://127.0.0.1:9080/readyz
 
 SESSION_JSON=$(curl -fsS -X POST \
   -H 'Content-Type: application/json' -d '{}' \
-  http://127.0.0.1:9080/vif/api/sessions)
-printf '%s\n' "$SESSION_JSON"
-SESSION_ID=$(printf '%s' "$SESSION_JSON" | \
+  http://127.0.0.1:9080/vif/api/sessions) &&
+SESSION_ID=$(printf '%s' "$SESSION_JSON" |
   jq -er '.id | strings | select(length > 0)') &&
-JOIN_TARGET=$(printf '%s' "$SESSION_JSON" | \
+JOIN_TARGET=$(printf '%s' "$SESSION_JSON" |
   jq -er '.join_target | strings | select(length > 0)') &&
 printf 'session=%s join=%s\n' "$SESSION_ID" "$JOIN_TARGET"
 ```
 
-The final line must print two non-empty values. Stop and fix parsing if it does
-not; never substitute an empty ID into a Kubernetes resource name.
-
-Have the development-machine terminal ready before allocation. The 90-second
-first-join countdown is already running when `POST` returns, so join the printed
-target immediately. Keep the guest shell available to inspect state while the
-client remains connected:
+Stop if either value is empty. Immediately join from the prepared development
+machine:
 
 ```sh
 bin/vif -join '<join_target>'
 ```
 
-While connected and again after quitting, inspect the same row on the guest. Its
-`state.phase` and `state.guests` must move from occupied to vacant:
+While it remains connected, verify the Job shape and occupied state:
 
 ```sh
-curl -fsS http://127.0.0.1:9080/vif/api/sessions | jq -e \
-  --arg id "$SESSION_ID" '.sessions[] | select(.id == $id) | .state'
+sudo kubectl -n vif get job "vif-session-$SESSION_ID" -o json |
+  jq -e --arg id "$SESSION_ID" '
+    .spec.template.spec as $pod |
+    ($pod.automountServiceAccountToken == false) and
+    ($pod.containers | length == 1) and
+    ($pod.containers[0].name == "session") and
+    ($pod.containers[0].args |
+      index("-l=/var/log/vif-fleet") != null) and
+    ($pod.containers[0].args |
+      index("-log-session-id=" + $id) != null) and
+    ($pod.containers[0].args | index("-log-stdout") == null) and
+    any($pod.containers[0].volumeMounts[]?;
+      .name == "fleet-logs" and
+      .mountPath == "/var/log/vif-fleet") and
+    any($pod.volumes[]?;
+      .name == "fleet-logs" and
+      .persistentVolumeClaim.claimName == "vif-fleet-logs") and
+    all($pod.volumes[]?; has("hostPath") | not) and
+    all($pod.initContainers[]?;
+      ((.volumeMounts // []) | length) == 0) and
+    ($pod.containers[0].securityContext.allowPrivilegeEscalation == false) and
+    ($pod.containers[0].securityContext.readOnlyRootFilesystem == true) and
+    ($pod.containers[0].securityContext.runAsNonRoot == true) and
+    ($pod.containers[0].securityContext.capabilities.drop |
+      index("ALL") != null)'
+
+curl -fsS http://127.0.0.1:9080/vif/api/sessions |
+  jq -e --arg id "$SESSION_ID" '
+    .sessions[] | select(.id == $id) | .state |
+    select(.phase == "occupied" and .guests >= 1)'
 ```
 
-Batch A deliberately leaves the workload on `-log-stdout`; its live logging check
-therefore proves the ordinary, untagged contract stayed intact. Run this one-shot
-read immediately after the vacant observation and before deletion. A completed
-pod remains readable only until Job TTL garbage collection; `NotFound` means the
-logging gate was not run and requires a fresh session.
+Quit the remote client and immediately verify vacancy and the commissioned file:
 
 ```sh
-sudo kubectl -n vif logs "job/vif-session-$SESSION_ID" \
-  | sed -n '/^{/p' \
-  | jq -s -e 'map(select(.sub != null)) as $r |
-      ($r | length > 0) and all($r[]; .fields | has("session_id") | not)'
-```
+curl -fsS http://127.0.0.1:9080/vif/api/sessions |
+  jq -e --arg id "$SESSION_ID" '
+    .sessions[] | select(.id == $id) | .state |
+    select(.phase == "vacant" and .guests == 0)'
 
-The node-file assertion begins in Batch C, after Batch B has bound the PVC and the
-workload actually mounts it:
-
-```sh
 sudo test -s "/var/log/vif-fleet/$SESSION_ID.jsonl"
-sudo jq -e --arg id "$SESSION_ID" \
-  'select(.fields.session_id == $id)' \
-  "/var/log/vif-fleet/$SESSION_ID.jsonl" >/dev/null
+sudo jq -s -e --arg id "$SESSION_ID" '
+  map(select(.sub != null)) as $records |
+  ($records | length > 0) and
+  all($records[]; .fields.session_id == $id)
+' "/var/log/vif-fleet/$SESSION_ID.jsonl"
 ```
 
-Remove the verification session rather than waiting for the empty grace and Job
-TTL, then confirm its fleet objects are gone:
+Delete the session before its empty grace/TTL removes the evidence, wait for the
+background-cascaded pod, and remove only that session's files:
 
 ```sh
 ./deploy/k3s/session.sh delete "$SESSION_ID"
@@ -511,55 +283,80 @@ sudo kubectl -n vif wait --for=delete pod \
   -l "vif.lixenwraith.dev/session=$SESSION_ID" --timeout=60s
 sudo kubectl -n vif get job,pod,service \
   -l "vif.lixenwraith.dev/session=$SESSION_ID"
-```
 
-From Batch C onward, remove the verification session's active and rotated files
-after the Job is gone and the logging assertion has passed:
-
-```sh
 sudo find /var/log/vif-fleet -maxdepth 1 -type f \
   \( -name "$SESSION_ID.jsonl" -o -name "${SESSION_ID}_*.jsonl" \) \
   -delete
+sudo find /var/log/vif-fleet \
+  -mindepth 1 -maxdepth 1 -print
 ```
 
-Expected result: both probes return `ok`, the client connects, allocator state
-tracks occupied/vacant, and temporary Jobs/Services and test files are removed.
-Batch A creates no node file: its stdout stays untagged. From Batch C onward the
-JSONL file matches the allocator ID.
+The two fleet queries and final `find` must be empty. Finish with:
 
-## 6. Remaining fleet work that the pivot does not replace
+```sh
+systemctl is-active \
+  'var-log-vif\x2dfleet.mount' k3s.service \
+  vif-allocator.service vif-fleet-log-cleanup.timer
+systemctl show vif-fleet-log-cleanup.service \
+  -p User -p Group -p Result -p ExecMainStatus
+sudo kubectl get namespace vif --show-labels
+sudo kubectl get persistentvolume vif-fleet-logs
+sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
+```
 
-Carry these existing items forward instead of hiding them inside logging work:
+Expected: all four units active, cleanup last result successful as `vif-fleet`,
+Restricted labels intact, and PV/PVC Bound.
 
-| Item | When | Completion gate |
+## 8. Batch G — reconcile and hand off
+
+After C-F pass live:
+
+1. Rewrite `doc/kube_docker_deploy.md` current topology, install order, status,
+   rollback, and troubleshooting to describe only the deployed file pipeline.
+2. Update `doc/kubernetes-fleet.md` current shape, work list, security tradeoff,
+   resources, decisions, and verification matrix with measured outcomes.
+3. Reconcile `deploy/README.md`, `deploy/guest/README.md`, and allocator
+   documentation; remove superseded console/sidecar/stdout-public-path prose.
+4. Rehearse the complete deployment from bare Arch Linux and bare Ubuntu. Record
+   package/service differences and fix every command that assumes the existing
+   node.
+5. Run the ten-session/four-player measurement. Record CPU, memory, tmpfs usage,
+   log rate, tick slips, rotations, LogWisp drops/replay, and browser reconnect
+   behavior; revise provisional 256 MiB and 8 MB caps only from evidence.
+6. Reboot with no session and repeat node readiness, mount, timer, Restricted
+   labels, allocator probes, Bound PVC, empty directory, and §7.
+7. Produce the separate website implementation prompt: same-origin
+   `EventSource`, `fields.session_id`, bounded retained rows/render rate/reconnect
+   backoff, duplicate tolerance, and independent degradation from allocation.
+
+## 9. Remaining non-logging fleet gates
+
+| Item | Required before | Completion evidence |
 |---|---|---|
-| Startup-handshake abuse bounds (H1) | before broad public exposure | silent/half-open first peers time out and an abandoned lobby returns to waiting |
-| Source-address preservation (H11) | before relying on per-address admission | operator-only record proves the pod sees the off-box source; never expose the address over SSE |
-| Occupied lifecycle matrix (H12) | before website launch | empty expiry, near-deadline rejoin, SIGTERM drain, and capacity gates pass |
-| Ten-session/full-roster measurement (H3) | after file logging, before final sizing | CPU, memory, tmpfs, tick slips, log rate, and LogWisp drops justify limits |
-| Automated image delivery (H16) | after the manual boundary is stable | release CI reproduces `deploy/guest/update-vif-image.sh` without inbound cluster credentials |
-| Website/nginx integration (H15) | after Batch F | same-origin create/list/log paths and remote game join all pass |
+| Startup-handshake abuse bounds (H1) | broad public exposure | Silent/half-open first peers time out and an abandoned lobby returns to waiting. |
+| Source-address preservation (H11) | per-address admission claims | An operator-only admitted-participant record names the off-box source; it never enters public SSE. |
+| Occupied lifecycle matrix (H12) | website launch | Empty expiry, near-deadline rejoin, SIGTERM drain, and capacity gates pass. |
+| Ten-session/full-roster sizing (H3) | final resource limits | One-hour measurements justify CPU, memory, tmpfs, rotation, and stream bounds. |
+| Automated image delivery (H16) | production release automation | CI reproduces the manual import/update boundary without inbound cluster credentials. |
+| Website/nginx integration (H15) | after Batch F | Same-origin create/list/log routes, session page, and raw game join all pass. |
 
-## 7. Final acceptance and rollback gate
+## 10. Final acceptance and rollback boundary
 
-The pivot is complete only when all of these hold:
+The logging pivot is complete only when:
 
-- ten concurrent session files have distinct names and matching self-tags;
-- session pods still pass Restricted admission and have no `hostPath` or token;
-- no component opens a long-lived `pods/log` request and allocator RBAC cannot;
-- tmpfs is hard-capped, K3s fails closed without its mount, and reboot clears it;
-- a full tmpfs degrades logging without terminating a match;
-- LogWisp runs independently, uses no Kubernetes credential, and binds only
-  loopback;
-- SSE preserves the original JSON object, is bounded under a slow client, and has
-  documented restart/replay behavior;
-- allocator create/list remain usable during LogWisp failure;
-- the public stream contains only game records and no host, K3s, credential, or
-  exact client-address data; and
-- the common game-session check passes after a reboot.
+- ten concurrent files have distinct names and matching self-tags;
+- session pods remain Restricted, tokenless, and free of direct `hostPath`;
+- allocator RBAC cannot read `pods/log`;
+- tmpfs is hard-capped, K3s fails closed without it, and reboot clears it;
+- a full tmpfs causes bounded log loss without ending a game;
+- standalone LogWisp has no Kubernetes credential and binds only loopback;
+- stopping LogWisp does not stop allocation, state, or gameplay;
+- SSE preserves source bytes and remains bounded under slow/reconnecting clients;
+- public logs exclude host, K3s, credential, and exact client-address data; and
+- §7 passes after reboot.
 
-Keep the previous imported image and allocator binary until this gate passes. A
-rollback selects the previous image/manifest (`-log-stdout`, no PVC), restores the
-501 log handler or disables its nginx route, and stops LogWisp. It does not lower
-Pod Security, delete active Kubernetes storage objects, or remove the tmpfs mount
-while K3s is running.
+Keep the previous allocator binary and configuration until this gate passes.
+Rollback selects the preceding allocator/workload, restores the 501 handler or
+disables its nginx route, and stops LogWisp. It never lowers Pod Security, mounts
+direct `hostPath`, deletes a Bound PV/PVC in use, or unmounts tmpfs while K3s is
+running.
