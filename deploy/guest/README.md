@@ -643,7 +643,7 @@ done
 test -x deploy/guest/build-logwisp.sh
 test -x deploy/guest/update-logwisp.sh
 
-(
+if (
   set -eu
   restart_allocator() {
     sudo systemctl start vif-allocator.service
@@ -661,15 +661,20 @@ test -x deploy/guest/update-logwisp.sh
 
   ./deploy/guest/update-logwisp.sh
 )
-for attempt in $(seq 1 25); do
-  curl --connect-timeout 1 --max-time 2 -fsS \
-    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
-  sleep 1
-done
-curl --connect-timeout 2 --max-time 5 -fsS \
-  http://127.0.0.1:9080/healthz
-curl --connect-timeout 2 --max-time 5 -fsS \
-  http://127.0.0.1:9080/readyz
+then
+  for attempt in $(seq 1 25); do
+    curl --connect-timeout 1 --max-time 2 -fsS \
+      http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
+    sleep 1
+  done
+  curl --connect-timeout 2 --max-time 5 -fsS \
+    http://127.0.0.1:9080/healthz
+  curl --connect-timeout 2 --max-time 5 -fsS \
+    http://127.0.0.1:9080/readyz
+else
+  printf 'LogWisp update gate failed; allocator was restarted\n' >&2
+  false
+fi
 ```
 
 The guarded subshell aborts before the updater when either fleet objects or files
