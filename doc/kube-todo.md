@@ -15,8 +15,8 @@ Status on 2026-09-13:
   JSONL, cleanup, and empty steady-state gates;
 - Batch D's live Role denies the log subresource while retaining every allocator
   control/readiness permission, and its common session gate passed; and
-- Batch E's pinned standalone service/configuration are prepared for deployment.
-  Batches F-G have not started.
+- Batch E's fail-fast installer and pinned standalone service/configuration are
+  prepared for deployment. Batches F-G have not started.
 
 The live allocator creates the commissioned PVC-backed file workload. Batch E may
 now be deployed only through the node procedure in `deploy/guest/README.md`.
@@ -60,9 +60,9 @@ service defaults differ.
 
 ## 3. Batch E — deploy one standalone LogWisp
 
-The checked-in pinned binary revision, raw file source, bounded loopback sink,
-locked identity, and hardened unit implement the repository half of this batch.
-The following live gates remain:
+The checked-in fail-fast installer, pinned binary revision, raw file source,
+bounded loopback sink, locked identity, and hardened unit implement the
+repository half of this batch. The following live gates remain:
 
 1. Install the exact revision, configuration, identity, and unit through
    `deploy/guest/README.md`; start it and inspect its loopback status before

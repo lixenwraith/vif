@@ -31,6 +31,7 @@ migration is authoritative in [doc/kube-todo.md](../doc/kube-todo.md).
 | `guest/vif-fleet-log-cleanup.service` / `.timer` | Runs the shared-directory cleanup as `vif-fleet` (UID/GID 65532) once per minute. |
 | `guest/logwisp.sysusers` | Creates the dedicated locked `logwisp` host identity; the service receives read access through the `vif-fleet` supplementary group only. |
 | `guest/logwisp.service` | Hardened standalone file reader with a read-only view of the fleet tmpfs, inaccessible Kubernetes/allocator credentials, and no dependency on games or the allocator. |
+| `guest/install-logwisp.sh` | Fail-fast Arch/Ubuntu installer for the pinned standalone reader. It can reuse an existing checkout through a temporary detached worktree, cleans all build resources, and restores the disabled Docker/containerd and `FORWARD ACCEPT` baseline. |
 | `guest/vif-allocator.env.example` | Site values for the allocator's imported image, public join host and session-page base URL. |
 | `guest/vif-allocator.service` | Hardened host service for the website-to-K3s allocator on the systemd K3s node. |
 | `guest/vif-allocator-token.service` / `.timer` | Root-only, atomic rotation of the allocator's short-lived ServiceAccount token. |

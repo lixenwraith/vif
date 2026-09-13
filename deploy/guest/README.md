@@ -485,23 +485,26 @@ test "$(sudo kubectl auth can-i get pods --subresource=log \
   --as=system:serviceaccount:vif:vif-allocator -n vif)" = no
 ```
 
-The fleet query and `find` must print nothing. Check every source artifact and
-the exact 40-character upstream revision before making host changes. A previous
-LogWisp installation is not an in-place Batch E upgrade; stop and inspect it if
-any of the three destination paths already exists:
+The fleet query and `find` must print nothing. The installer resolves the
+vi-fighter root from its own path, stops on the first error, and verifies the
+40-character upstream revision before making host changes. A previous LogWisp
+installation is not an in-place Batch E upgrade; stop and inspect it if any of
+the three destination paths already exists:
 
 ```sh
 for artifact in \
   deploy/logwisp/REVISION \
   deploy/logwisp/aggregator.toml \
   deploy/guest/logwisp.sysusers \
-  deploy/guest/logwisp.service
+  deploy/guest/logwisp.service \
+  deploy/guest/install-logwisp.sh
 do
   test -r "$artifact" || {
     printf 'missing Batch E artifact: %s\n' "$artifact" >&2
     false
   }
 done
+test -x deploy/guest/install-logwisp.sh
 
 LOGWISP_REVISION=$(tr -d '[:space:]' \
   < deploy/logwisp/REVISION)
@@ -515,98 +518,56 @@ test ! -e /etc/systemd/system/logwisp.service
 getent group vif-fleet
 ```
 
-The build is intentionally identical on bare Arch Linux and Ubuntu: use the
-pinned builder in LogWisp's own Dockerfile rather than depending on the host's Go
-minor release. Docker is temporary and returns to the inactive/disabled node
-baseline as soon as the binary has been extracted. The cleanup trap accepts only
-the `mktemp` directory it created:
+The build is intentionally identical on bare Arch Linux and Ubuntu: it uses the
+pinned builder in LogWisp's own Dockerfile rather than the host's Go minor
+release. Docker is temporary. The installer removes its container, image, and
+temporary worktree, stops and disables Docker plus the distribution containerd,
+and restores `FORWARD ACCEPT` before returning.
+
+If a prior manual attempt failed, first restore that build-daemon and forwarding
+baseline and prove no destination was partially installed:
 
 ```sh
+sudo systemctl disable \
+  docker.service docker.socket containerd.service
+sudo systemctl stop docker.socket
+sudo systemctl stop docker.service containerd.service
+
 test "$(systemctl is-active docker.service)" = inactive
 test "$(systemctl is-active docker.socket)" = inactive
 test "$(systemctl is-active containerd.service)" = inactive
 
-LOGWISP_REVISION=$(tr -d '[:space:]' \
-  < deploy/logwisp/REVISION)
-LOGWISP_BUILD_DIR=$(mktemp -d)
-case "$LOGWISP_BUILD_DIR" in
-  /tmp/*) ;;
-  *) printf 'unexpected temporary path: %s\n' \
-       "$LOGWISP_BUILD_DIR" >&2; false ;;
-esac
-LOGWISP_IMAGE="local/logwisp-build:$(printf '%.12s' \
-  "$LOGWISP_REVISION")"
-LOGWISP_CONTAINER=
+if test "$(sudo iptables -S FORWARD | sed -n '1p')" != \
+  '-P FORWARD ACCEPT'
+then
+  sudo iptables -P FORWARD ACCEPT
+fi
 
-cleanup_logwisp_build() {
-  if test -n "$LOGWISP_CONTAINER"; then
-    sudo docker rm -f "$LOGWISP_CONTAINER" >/dev/null 2>&1 || true
-  fi
-  sudo docker image rm "$LOGWISP_IMAGE" >/dev/null 2>&1 || true
-  case "$LOGWISP_BUILD_DIR" in
-    /tmp/*) rm -rf -- "$LOGWISP_BUILD_DIR" ;;
-    *) return 1 ;;
-  esac
-  sudo systemctl disable --now \
-    docker.socket docker.service containerd.service
-}
-trap cleanup_logwisp_build EXIT HUP INT TERM
-
-git clone https://github.com/lixenwraith/logwisp.git \
-  "$LOGWISP_BUILD_DIR/source"
-git -C "$LOGWISP_BUILD_DIR/source" checkout \
-  --detach "$LOGWISP_REVISION"
-test "$(git -C "$LOGWISP_BUILD_DIR/source" rev-parse HEAD)" = \
-  "$LOGWISP_REVISION"
-
-sudo systemctl start docker.service
-sudo docker build --pull \
-  --build-arg VERSION=v0.18.0 \
-  --build-arg REVISION="$LOGWISP_REVISION" \
-  -t "$LOGWISP_IMAGE" \
-  "$LOGWISP_BUILD_DIR/source"
-LOGWISP_CONTAINER=$(sudo docker create "$LOGWISP_IMAGE")
-sudo docker cp "$LOGWISP_CONTAINER:/logwisp" \
-  "$LOGWISP_BUILD_DIR/logwisp"
-test -x "$LOGWISP_BUILD_DIR/logwisp"
-"$LOGWISP_BUILD_DIR/logwisp" --version
-
-sudo install -o root -g root -m 0755 \
-  "$LOGWISP_BUILD_DIR/logwisp" /usr/local/bin/logwisp
-
-cleanup_logwisp_build
-trap - EXIT HUP INT TERM
-unset -f cleanup_logwisp_build
-unset LOGWISP_BUILD_DIR LOGWISP_IMAGE LOGWISP_CONTAINER
-
-test "$(systemctl is-active docker.service)" = inactive
-test "$(systemctl is-active docker.socket)" = inactive
-test "$(systemctl is-active containerd.service)" = inactive
+test ! -e /usr/local/bin/logwisp
+test ! -e /etc/logwisp/vif-fleet.toml
+test ! -e /etc/systemd/system/logwisp.service
 ```
 
-Install the dedicated locked identity, root-owned configuration, and unit. The
-service's supplementary `vif-fleet` group is used only to read the tmpfs; the
-unit gives the process a read-only mount view and hides K3s and allocator
-credential paths:
+On a node that already has a LogWisp checkout, pass it to the helper. The helper
+creates a temporary detached worktree at the pinned revision and does not switch,
+pull, clean, or modify the checkout's current branch. Use a placeholder rather
+than a site path in shared instructions:
 
 ```sh
-sudo install -D -o root -g root -m 0644 \
-  deploy/guest/logwisp.sysusers \
-  /etc/sysusers.d/logwisp.conf
-sudo systemd-sysusers /etc/sysusers.d/logwisp.conf
-getent passwd logwisp
-getent group logwisp
-
-sudo install -d -o root -g root -m 0755 /etc/logwisp
-sudo install -o root -g root -m 0644 \
-  deploy/logwisp/aggregator.toml \
-  /etc/logwisp/vif-fleet.toml
-sudo install -o root -g root -m 0644 \
-  deploy/guest/logwisp.service \
-  /etc/systemd/system/logwisp.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now logwisp.service
+./deploy/guest/install-logwisp.sh '<existing-logwisp-checkout>'
 ```
+
+On a bare Arch Linux or Ubuntu node without that checkout, omit the argument; the
+same helper clones only its temporary build source:
+
+```sh
+./deploy/guest/install-logwisp.sh
+```
+
+Both forms install the binary, dedicated locked identity, root-owned
+configuration, and unit, then start the service. The service's supplementary
+`vif-fleet` group is used only to read the tmpfs; its unit gives it a read-only
+mount view and hides K3s and allocator credential paths.
 
 No simultaneous or deadline-sensitive client action occurs in this first slice.
 Inspect the service, its isolated read-only view, and the loopback endpoint. Do
