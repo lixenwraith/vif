@@ -13,7 +13,9 @@ are in [`deploy/`](../deploy/README.md); the scenarios that verify it by hand ar
 > superseded by [the fleet logging pivot](kube-todo.md). Batches A-D are deployed
 > and passed: each live session writes its self-tagged JSONL through the
 > tmpfs-backed PVC, and allocator RBAC cannot read pod logs. The public log
-> endpoint remains 501 until Batches E-F finish.
+> endpoint remains 501 until Batches E-F finish. Batch E's standalone service is
+> installed with a read-only tmpfs view and loopback-only listener; its fan-in and
+> outage/replay gates are next.
 
 ## 1. Current deployment
 
@@ -28,10 +30,11 @@ are in [`deploy/`](../deploy/README.md); the scenarios that verify it by hand ar
 | Image | `scratch` + one static binary, ~13 MB, non-root, read-only root filesystem, no shell. |
 | Transport | Raw framed TCP, one long-lived connection per player. Unauthenticated by decision (§4). |
 | Reached by | Its own port, from a forwarded ten-port range. The port is the whole of the routing: nothing in a plaintext game connection names a session, so a firewall's destination port is the only signal there is. |
-| Logs and metrics | Each Job writes `<session-id>.jsonl` through the Bound local PVC to the capped node tmpfs. The file is operator-only until the standalone LogWisp stream and allocator proxy pass; `/vif/api/logs` still returns 501. |
+| Logs and metrics | Each Job writes `<session-id>.jsonl` through the Bound local PVC to the capped node tmpfs. The standalone LogWisp node service is installed with a read-only view and loopback-only listener; its fan-in/outage gates and the allocator proxy remain, so `/vif/api/logs` still returns 501. |
 
-The allocator-to-Kubernetes path is implemented, deployed and verified through an
-off-box join. The website/nginx and LogWisp edges remain to be integrated.
+The allocator-to-Kubernetes path is implemented and verified through an off-box
+join. The standalone LogWisp node edge is installed; its fan-in/outage gates and
+the website/nginx/allocator stream edge remain.
 
 ```mermaid
 flowchart LR
@@ -101,7 +104,7 @@ it does not move an in-memory session into an unrelated pod.
 | H5 | later | **Spatial grid right-sizing.** ~30.5 MiB reserved per world at the current maximum. | Deferred until density matters; needs resize/play regression coverage. |
 | H11 | **next** | **Verify the player's source address at the pod.** `externalTrafficPolicy: Local` plus `pf rdr` should preserve it, and the address is already carried — `network.JoinerReport.Remote` holds `conn.RemoteAddr()` and reaches `App.noteJoinerReport` — but only `reach.noteDeclared` consumes it, so no record names it and the run could not inspect one. | The admitted-participant record in `internal/app/host.go` carries the accepted socket's remote address, and a remote join names the off-box client. If it names the node or gateway, the routing is corrected before relying on admission limits; otherwise the limiter is one budget for the whole fleet. |
 | H12 | **next** | **Finish the occupied lifecycle gates.** First-join expiry and owned-Service cleanup passed. An allocator-created off-box join reached `occupied` then `vacant`; automatic empty-grace expiry, rejoin near 75 s, drain on Job deletion, and `PLAYERS=1` capacity remain. | Each open case in [Deployment §9](kube_docker_deploy.md#9-create-one-session-by-hand) produces its specified transition and preserves the same run throughout the reconnect grace. |
-| H14 | next | **Complete the node-local log pipeline.** Batches A-D are deployed and passed. E-F deploy standalone LogWisp and add the allocator byte proxy. | Every remaining gate and the final acceptance in `kube-todo.md` passes without lowering Restricted admission or putting Kubernetes in the log data path. |
+| H14 | next | **Complete the node-local log pipeline.** Batches A-D passed. Batch E's standalone service passed its installation/isolation gate; its fan-in/outage gates and Batch F's allocator byte proxy remain. | Every remaining gate and the final acceptance in `kube-todo.md` passes without lowering Restricted admission or putting Kubernetes in the log data path. |
 | H15 | after H14 | **Integrate nginx and Hugo.** The website implementation now has the allocator's real response fields and status codes; it still waits for the log endpoint. | `https://lixen.com/vif/api/sessions` creates/lists sessions, the session page keeps its HTTPS URL distinct from the raw join target, and the bounded log panel degrades cleanly when the API is absent. |
 | H16 | later | **Automate image delivery.** `deploy/guest/update-vif-image.sh` is the repeatable manual boundary: one build/check/import, allocator image update, old-image removal, and build-daemon cleanup. | CI resolves and verifies a tagged release artifact, invokes or reproduces the same boundary without an inbound cluster credential, and new sessions use it while existing matches finish. |
 

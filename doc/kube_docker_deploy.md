@@ -37,9 +37,9 @@ because most of them change what that step should say.
 | A11 | **The session's playout lead is chosen from its *first* guest's link** and holds for the life of the match. A session opened by a nearby player and joined by a distant one runs at the near player's lead. The late-crossing fence makes that cost freshness rather than correctness (fleet plan §5), but it is the reason a full-roster measurement (H3) is worth doing over real links rather than a LAN. | §9 |
 | A12 | **The resource envelope is unmeasured at a full roster.** The requests and limits in the manifest come from single-guest runs. Ten sessions per node is a claim until an hour of four-player play says otherwise. | §8 |
 | A13 | **Cluster commands in this procedure run through `sudo kubectl`.** K3s is installed with kubeconfig mode `0640`; the install script self-escalates, but the resulting kubeconfig is not made readable to the ordinary login user. | §6 |
-| A14 | **The fleet's public log stream uses node-local files.** The capped tmpfs, local PV/PVC, live file-writing session workload, and removal of allocator pod-log access are deployed and passed. Batches E-F add one standalone LogWisp service and an allocator byte proxy; Kubernetes and the allocator never tail pod logs. | §10 |
+| A14 | **The fleet's public log stream uses node-local files.** The capped tmpfs, local PV/PVC, live file-writing workload, pod-log RBAC removal, and standalone LogWisp installation/isolation are deployed and passed. Batch E's fan-in/outage gates and Batch F's allocator byte proxy remain; Kubernetes and the allocator never tail pod logs. | §10 |
 | A15 | **Source-address preservation is intended, not proved.** `externalTrafficPolicy: Local` and `pf rdr` should leave the off-box player's address visible to the pod, but the acceptance run did not record it. The per-address admission bound depends on this. | §9 |
-| A16 | **The allocator is implemented and deployed; Hugo and the public node-local stream are not.** §10 installs the allocator and fixes its narrow `/vif/api/` contract. The service, rotating credential, create/list API, off-box join, volatile storage, file-writing workload, and reduced Role passed; logging Batches E-F and the website remain. | §10 |
+| A16 | **The allocator is implemented and deployed; Hugo and the public node-local stream are not.** §10 installs the allocator and fixes its narrow `/vif/api/` contract. The service, rotating credential, create/list API, off-box join, file path, reduced Role, and isolated loopback LogWisp passed; the remainder of Batches E-F and the website remain. | §10 |
 | A17 | **The vi-fighter JSON line is the log contract.** The current file records originate in `internal/vlog`; every public hop must preserve those bytes. No allocator parsing, field insertion, or serialization is allowed. | §10 |
 
 ## 1. The shape
@@ -52,12 +52,14 @@ flowchart TD
     API --> Pod["vif -serve pod"]
     Alloc -->|"health"| Pod
     Term["Player's vif -join"] -->|"raw TCP, no nginx"| PF["FreeBSD pf rdr"] --> NP["NodePort"] --> Pod
-    Pod -->|"JSONL through PVC"| Log["Capped tmpfs, operator only"]
+    Pod -->|"JSONL through PVC"| Log["Capped tmpfs"]
+    Log -->|"read-only files"| Wisp["LogWisp, loopback only"]
 ```
 
-This is the live shape after Batch C. The tmpfs-backed local PV/PVC is empty
-between sessions; the ordered E-F migration is in
-[`kube-todo.md`](kube-todo.md).
+This is the live shape after the initial Batch E deployment. The tmpfs-backed
+local PV/PVC is empty between sessions; LogWisp has no allocator or Kubernetes
+credential dependency, and no public log route exists yet. The remaining ordered
+E-F migration is in [`kube-todo.md`](kube-todo.md).
 
 What a session is, what bounds its life, and what it costs are in the fleet plan's
 [§1](kubernetes-fleet.md#1-what-is-deployed) and [§6](kubernetes-fleet.md#6-resources);
@@ -955,8 +957,10 @@ LogWisp service reads `*.jsonl` with `raw = true` and `from = "start"`, and the
 allocator reverse-proxies its SSE bytes. The namespace remains Restricted, the
 pod mounts a PVC rather than `hostPath`, and LogWisp receives no Kubernetes token.
 The pinned LogWisp revision, file-source configuration, locked identity, and
-hardened loopback-only unit are checked in; install and validate them only through
-the staged Batch E procedure in `deploy/guest/README.md`.
+hardened loopback-only unit are installed. Their identity, read-only tmpfs view,
+hidden credential paths, listener, Docker cleanup, and allocator probes passed;
+the two-session fan-in and outage/replay gates remain in the staged Batch E
+procedure in `deploy/guest/README.md`.
 
 Batch A implements the commissioned writer, and Batch C selects it in the workload:
 each application record carries `fields.session_id`, `fields.msg` stays first, the
@@ -1104,12 +1108,13 @@ The remaining gap register is the fleet plan's
 - **The node-local log path is partially deployed** (A14). Batches A-D passed,
   including the capped tmpfs/PVC, Restricted file-writing workload, cleanup timer,
   remote join, record self-tags, empty steady state, and denial of allocator Pod
-  log reads. E-F still need to install standalone LogWisp and add the byte proxy.
-  The old console-source aggregator and in-pod sidecar are superseded, not
-  fallbacks.
-- **The website and LogWisp integrations are not built** (A16). The allocator and
-  restricted rotating credential implement the session API; nginx, the Hugo
-  session page, and the standalone file-source stream wait for the logging gates.
+  log reads. Batch E's standalone LogWisp service passed its installation and
+  isolation gate; its fan-in/outage gates and Batch F's byte proxy remain. The old
+  console-source aggregator and in-pod sidecar are superseded, not fallbacks.
+- **The website integration and LogWisp public proxy are not built** (A16). The
+  allocator and restricted rotating credential implement the session API, and
+  the standalone file-source service is isolated on loopback; nginx, the Hugo
+  session page, and public byte proxy wait for the remaining logging gates.
 - **The occupied lifecycle gates remain partly open.** An allocator-created remote
   join reached `occupied` and then `vacant`; automatic empty-grace expiry, rejoin
   inside the grace, drain while joined, and the one-player capacity case still

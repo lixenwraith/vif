@@ -457,11 +457,10 @@ the live Role different from the repository and must be diagnosed before Batch E
 
 ## Batch E: install the standalone LogWisp service
 
-Batch D must have passed before this section. This first Batch E slice installs
+Batch D must have passed before this section. The initial Batch E slice installs
 and inspects the independent reader only; it does not change or restart the
-allocator, K3s, a session workload, or the PVC. Stop after the status inspection
-and record its output before attempting the later simultaneous-session and
-outage/replay gates in `doc/kube-todo.md`.
+allocator, K3s, a session workload, or the PVC. Its isolation and loopback checks
+must pass before the later simultaneous-session and outage/replay gates.
 
 Start from an empty fleet and empty log directory. The mount, K3s, allocator, and
 cleanup timer must stay active, the volumes must stay `Bound`, and the Role must
@@ -548,20 +547,20 @@ test ! -e /etc/logwisp/vif-fleet.toml
 test ! -e /etc/systemd/system/logwisp.service
 ```
 
-On a node that already has a LogWisp checkout, pass it to the helper. The helper
-creates a temporary detached worktree at the pinned revision and does not switch,
-pull, clean, or modify the checkout's current branch. Use a placeholder rather
-than a site path in shared instructions:
-
-```sh
-./deploy/guest/install-logwisp.sh '<existing-logwisp-checkout>'
-```
-
-On a bare Arch Linux or Ubuntu node without that checkout, omit the argument; the
-same helper clones only its temporary build source:
+The portable default needs only the vi-fighter checkout. It clones LogWisp into
+the temporary build directory and removes that source before returning:
 
 ```sh
 ./deploy/guest/install-logwisp.sh
+```
+
+An existing LogWisp checkout is an optional download optimization, never a
+required working directory. If supplied, the helper creates a temporary detached
+worktree at the pinned revision and does not switch, pull, clean, or modify its
+current branch. Use a placeholder rather than a site path in shared instructions:
+
+```sh
+./deploy/guest/install-logwisp.sh '<existing-logwisp-checkout>'
 ```
 
 Both forms install the binary, dedicated locked identity, root-owned
@@ -611,13 +610,325 @@ sudo journalctl -u logwisp.service -n 20 --no-pager
 unset LOGWISP_PID LOGWISP_REVISION
 ```
 
-The host `findmnt` output remains `rw`; the view inside LogWisp's mount namespace
-must contain `ro`. `RequiresMountsFor=` may add a mount requirement, but `Requires`,
-`Wants`, and `After` must not name `k3s.service` or `vif-allocator.service`.
-The status JSON and journal are the evidence needed to select exact watcher and
-replay assertions for the next live slice.
+The host `findmnt` output remains `rw`. Inside LogWisp's mount namespace,
+`findmnt` may show the underlying `rw` tmpfs followed by the read-only bind at the
+same target; the final/effective entry must contain `ro`. `RequiresMountsFor=` may
+add a mount requirement, but `Requires`, `Wants`, and `After` must not name
+`k3s.service` or `vif-allocator.service`. The pinned v0.18.0 Dockerfile does not
+set a build timestamp, so `built: unknown` is expected; its full embedded commit
+must match `deploy/logwisp/REVISION`.
 
-### Batch E initial-install rollback
+### Batch E two-session fan-in gate
+
+This is the first simultaneous Batch E step. Prepare two development-machine
+terminals with the matching `bin/vif` before allocating. The first session's
+90-second join clock starts before the second `POST`, so do not begin until both
+clients are ready. The node terminal must remain open until its variables and
+temporary captures are cleaned.
+
+Start with the standalone service healthy, the fleet and directory empty, and no
+stream client connected:
+
+```sh
+unset SESSION_ONE_JSON SESSION_ONE_ID SESSION_ONE_JOIN
+unset SESSION_TWO_JSON SESSION_TWO_ID SESSION_TWO_JOIN
+unset BATCH_E_CAPTURE BATCH_E_STREAM_PID
+unset BATCH_E_ONE_SNAPSHOT BATCH_E_TWO_SNAPSHOT
+
+systemctl is-active \
+  'var-log-vif\x2dfleet.mount' \
+  vif-fleet-log-cleanup.timer \
+  k3s.service \
+  vif-allocator.service \
+  logwisp.service
+
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+sudo find /var/log/vif-fleet \
+  -mindepth 1 -maxdepth 1 -print
+
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status |
+  jq -e '
+    .service == "LogWisp" and
+    .version == "v0.18.0" and
+    .server.host == "127.0.0.1" and
+    .server.port == 8081 and
+    .server.auth == "none" and
+    .server.tls == false and
+    .server.buffer_size == 4096 and
+    .server.active_clients == 0 and
+    .statistics.auth_rejected == 0 and
+    .statistics.dropped_writes == 0 and
+    .statistics.rejected_clients == 0'
+```
+
+The fleet query and `find` must print nothing. Connect a temporary loopback SSE
+reader before creating either file, then prove LogWisp counted that client:
+
+```sh
+BATCH_E_CAPTURE=$(mktemp \
+  /tmp/vif-logwisp-baseline.XXXXXX.sse)
+curl --no-buffer --fail --silent --show-error \
+  http://127.0.0.1:8081/stream \
+  >"$BATCH_E_CAPTURE" &
+BATCH_E_STREAM_PID=$!
+
+for attempt in $(seq 1 50); do
+  curl --connect-timeout 1 --max-time 2 -fsS \
+    http://127.0.0.1:8081/status |
+    jq -e '.server.active_clients == 1' \
+      >/dev/null 2>&1 && break
+  sleep 0.1
+done
+
+test -s "$BATCH_E_CAPTURE"
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status |
+  jq -e '.server.active_clients == 1'
+```
+
+Allocate the two sessions sequentially. Stop if any assignment fails or either
+ID/target is empty:
+
+```sh
+SESSION_ONE_JSON=$(curl -fsS -X POST \
+  -H 'Content-Type: application/json' -d '{}' \
+  http://127.0.0.1:9080/vif/api/sessions) &&
+SESSION_ONE_ID=$(printf '%s' "$SESSION_ONE_JSON" |
+  jq -er '.id | strings | select(length > 0)') &&
+SESSION_ONE_JOIN=$(printf '%s' "$SESSION_ONE_JSON" |
+  jq -er '.join_target | strings | select(length > 0)') &&
+SESSION_TWO_JSON=$(curl -fsS -X POST \
+  -H 'Content-Type: application/json' -d '{}' \
+  http://127.0.0.1:9080/vif/api/sessions) &&
+SESSION_TWO_ID=$(printf '%s' "$SESSION_TWO_JSON" |
+  jq -er '.id | strings | select(length > 0)') &&
+SESSION_TWO_JOIN=$(printf '%s' "$SESSION_TWO_JSON" |
+  jq -er '.join_target | strings | select(length > 0)') &&
+test "$SESSION_ONE_ID" != "$SESSION_TWO_ID" &&
+printf 'client one: bin/vif -join %s\n' "$SESSION_ONE_JOIN" &&
+printf 'client two: bin/vif -join %s\n' "$SESSION_TWO_JOIN"
+```
+
+Immediately join from the two prepared development-machine terminals, one target
+per client:
+
+```sh
+bin/vif -join '<first_join_target>'
+```
+
+```sh
+bin/vif -join '<second_join_target>'
+```
+
+Once both clients are visibly running, prove both allocator states, files, and
+stream identities. Then snapshot each file while the stream remains connected:
+
+```sh
+curl -fsS http://127.0.0.1:9080/vif/api/sessions |
+  jq -e --arg one "$SESSION_ONE_ID" \
+    --arg two "$SESSION_TWO_ID" '
+    [.sessions[] |
+      select(.id == $one or .id == $two) |
+      select(.state.phase == "occupied" and
+             .state.guests >= 1)] |
+    length == 2'
+
+for attempt in $(seq 1 50); do
+  if sudo test -s "/var/log/vif-fleet/$SESSION_ONE_ID.jsonl" &&
+     sudo test -s "/var/log/vif-fleet/$SESSION_TWO_ID.jsonl" &&
+     grep -Fq "\"session_id\":\"$SESSION_ONE_ID\"" \
+       "$BATCH_E_CAPTURE" &&
+     grep -Fq "\"session_id\":\"$SESSION_TWO_ID\"" \
+       "$BATCH_E_CAPTURE"
+  then
+    break
+  fi
+  sleep 0.2
+done
+
+sudo test -s "/var/log/vif-fleet/$SESSION_ONE_ID.jsonl"
+sudo test -s "/var/log/vif-fleet/$SESSION_TWO_ID.jsonl"
+grep -Fq "\"session_id\":\"$SESSION_ONE_ID\"" \
+  "$BATCH_E_CAPTURE"
+grep -Fq "\"session_id\":\"$SESSION_TWO_ID\"" \
+  "$BATCH_E_CAPTURE"
+
+sudo jq -s -e --arg id "$SESSION_ONE_ID" '
+  map(select(.sub != null)) as $records |
+  ($records | length > 0) and
+  all($records[]; .fields.session_id == $id)
+' "/var/log/vif-fleet/$SESSION_ONE_ID.jsonl"
+sudo jq -s -e --arg id "$SESSION_TWO_ID" '
+  map(select(.sub != null)) as $records |
+  ($records | length > 0) and
+  all($records[]; .fields.session_id == $id)
+' "/var/log/vif-fleet/$SESSION_TWO_ID.jsonl"
+
+BATCH_E_ONE_SNAPSHOT=$(mktemp \
+  /tmp/vif-logwisp-baseline-one.XXXXXX.jsonl)
+BATCH_E_TWO_SNAPSHOT=$(mktemp \
+  /tmp/vif-logwisp-baseline-two.XXXXXX.jsonl)
+sudo cp -- "/var/log/vif-fleet/$SESSION_ONE_ID.jsonl" \
+  "$BATCH_E_ONE_SNAPSHOT"
+sudo cp -- "/var/log/vif-fleet/$SESSION_TWO_ID.jsonl" \
+  "$BATCH_E_TWO_SNAPSHOT"
+```
+
+Wait until the last non-TRACE snapshot line from each file reaches the stream,
+then stop the temporary reader so the capture is stable:
+
+```sh
+LAST_ONE=$(awk '
+  index($0, "\"level\":\"TRACE\"") == 0 {last = $0}
+  END {print last}
+' "$BATCH_E_ONE_SNAPSHOT")
+LAST_TWO=$(awk '
+  index($0, "\"level\":\"TRACE\"") == 0 {last = $0}
+  END {print last}
+' "$BATCH_E_TWO_SNAPSHOT")
+test -n "$LAST_ONE"
+test -n "$LAST_TWO"
+
+for attempt in $(seq 1 50); do
+  if grep -Fqx -- "data: $LAST_ONE" "$BATCH_E_CAPTURE" &&
+     grep -Fqx -- "data: $LAST_TWO" "$BATCH_E_CAPTURE"
+  then
+    break
+  fi
+  sleep 0.2
+done
+
+grep -Fqx -- "data: $LAST_ONE" "$BATCH_E_CAPTURE"
+grep -Fqx -- "data: $LAST_TWO" "$BATCH_E_CAPTURE"
+
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status |
+  jq -e '
+    .server.active_clients == 1 and
+    .statistics.total_processed > 0 and
+    .statistics.auth_rejected == 0 and
+    .statistics.dropped_writes == 0 and
+    .statistics.rejected_clients == 0'
+
+kill "$BATCH_E_STREAM_PID"
+wait "$BATCH_E_STREAM_PID" 2>/dev/null || true
+```
+
+Every non-TRACE source line in both snapshots must appear as one exact SSE data
+payload. This compares the original bytes rather than JSON reserialization:
+
+```sh
+verify_preserved_snapshot() {
+  snapshot=$1
+  capture=$2
+  records=0
+  while IFS= read -r line; do
+    case "$line" in
+      *'"level":"TRACE"'*) continue ;;
+    esac
+    records=$((records + 1))
+    grep -Fqx -- "data: $line" "$capture" || {
+      printf 'missing exact source line from %s\n' \
+        "$snapshot" >&2
+      return 1
+    }
+  done <"$snapshot"
+  test "$records" -gt 0
+  printf 'preserved_records=%s source=%s\n' \
+    "$records" "$snapshot"
+}
+
+verify_preserved_snapshot \
+  "$BATCH_E_ONE_SNAPSHOT" "$BATCH_E_CAPTURE"
+verify_preserved_snapshot \
+  "$BATCH_E_TWO_SNAPSHOT" "$BATCH_E_CAPTURE"
+
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status | jq .
+sed -n '1,12p' "$BATCH_E_CAPTURE"
+unset -f verify_preserved_snapshot
+unset LAST_ONE LAST_TWO
+```
+
+Quit both remote clients. Verify both sessions become vacant, then delete their
+objects, commissioned files, and every temporary capture from this gate:
+
+```sh
+curl -fsS http://127.0.0.1:9080/vif/api/sessions |
+  jq -e --arg one "$SESSION_ONE_ID" \
+    --arg two "$SESSION_TWO_ID" '
+    [.sessions[] |
+      select(.id == $one or .id == $two) |
+      select(.state.phase == "vacant" and
+             .state.guests == 0)] |
+    length == 2'
+
+for id in "$SESSION_ONE_ID" "$SESSION_TWO_ID"; do
+  ./deploy/k3s/session.sh delete "$id"
+  sudo kubectl -n vif wait --for=delete \
+    "job/vif-session-$id" --timeout=60s
+  sudo kubectl -n vif wait --for=delete pod \
+    -l "vif.lixenwraith.dev/session=$id" \
+    --timeout=60s
+  sudo find /var/log/vif-fleet -maxdepth 1 -type f \
+    \( -name "$id.jsonl" -o -name "${id}_*.jsonl" \) \
+    -delete
+done
+
+for temporary in \
+  "$BATCH_E_CAPTURE" \
+  "$BATCH_E_ONE_SNAPSHOT" \
+  "$BATCH_E_TWO_SNAPSHOT"
+do
+  case "$temporary" in
+    /tmp/vif-logwisp-baseline.*|\
+    /tmp/vif-logwisp-baseline-one.*|\
+    /tmp/vif-logwisp-baseline-two.*)
+      rm -f -- "$temporary"
+      ;;
+    *)
+      printf 'refusing unsafe temporary path: %s\n' \
+        "$temporary" >&2
+      false
+      ;;
+  esac
+done
+
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+sudo find /var/log/vif-fleet \
+  -mindepth 1 -maxdepth 1 -print
+systemctl is-active logwisp.service vif-allocator.service
+
+for attempt in $(seq 1 50); do
+  curl --connect-timeout 1 --max-time 2 -fsS \
+    http://127.0.0.1:8081/status |
+    jq -e '.server.active_clients == 0' \
+      >/dev/null 2>&1 && break
+  sleep 0.1
+done
+
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:8081/status |
+  jq -e '
+    .server.active_clients == 0 and
+    .statistics.total_processed > 0 and
+    .statistics.auth_rejected == 0 and
+    .statistics.dropped_writes == 0 and
+    .statistics.rejected_clients == 0'
+
+unset SESSION_ONE_JSON SESSION_ONE_ID SESSION_ONE_JOIN
+unset SESSION_TWO_JSON SESSION_TWO_ID SESSION_TWO_JOIN
+unset BATCH_E_CAPTURE BATCH_E_STREAM_PID
+unset BATCH_E_ONE_SNAPSHOT BATCH_E_TWO_SNAPSHOT
+```
+
+The fleet query and final `find` must print nothing. Do not start the deliberate
+LogWisp outage/replay gate until this two-source byte-preservation gate passes.
+
+### Batch E service rollback
 
 If the service, isolation, or loopback checks fail, remove only its live listener.
 Keep the pinned binary, configuration, and locked identity for diagnosis; do not
