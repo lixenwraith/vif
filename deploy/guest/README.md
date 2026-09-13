@@ -46,6 +46,7 @@ test "$(pwd -P)" = "$(git rev-parse --show-toplevel)"
 for artifact in \
   'deploy/guest/var-log-vif\x2dfleet.mount' \
   deploy/guest/k3s.service.d/10-vif-fleet-logs.conf \
+  deploy/guest/vif-fleet.sysusers \
   deploy/guest/vif-fleet-log-cleanup.py \
   deploy/guest/vif-fleet-log-cleanup.service \
   deploy/guest/vif-fleet-log-cleanup.timer \
@@ -63,9 +64,13 @@ This is a maintenance operation. Announce it, keep both allocators and operators
 from creating sessions, and verify the fleet-object query is empty before
 continuing. K3s restarts once after the mount dependency is installed.
 
-Capture the single K3s node name without placing it in the repository:
+Stop the allocator before the final empty-fleet check, then capture the single
+K3s node name without placing it in the repository. If any later step stops
+before the allocator is restored, keep it stopped while diagnosing the node:
 
 ```sh
+sudo systemctl stop vif-allocator.service
+test "$(systemctl is-active vif-allocator.service)" = inactive
 NODE_NAME=$(sudo kubectl get nodes \
   -o jsonpath='{.items[0].metadata.name}')
 test -n "$NODE_NAME"
@@ -79,6 +84,12 @@ cleanup units without starting them yet:
 
 ```sh
 MOUNT_UNIT='var-log-vif\x2dfleet.mount'
+sudo install -D -m 0644 \
+  deploy/guest/vif-fleet.sysusers \
+  /etc/sysusers.d/vif-fleet.conf
+sudo systemd-sysusers /etc/sysusers.d/vif-fleet.conf
+test "$(id -u vif-fleet)" = 65532
+test "$(id -g vif-fleet)" = 65532
 sudo install -D -m 0644 \
   "deploy/guest/$MOUNT_UNIT" "/etc/systemd/system/$MOUNT_UNIT"
 sudo install -D -m 0644 \
@@ -120,13 +131,16 @@ systemctl is-active "$MOUNT_UNIT" k3s.service vif-allocator.service
 systemctl is-enabled "$MOUNT_UNIT" vif-fleet-log-cleanup.timer
 systemctl cat k3s.service
 systemctl show k3s.service -p Requires -p After
+getent passwd vif-fleet
+getent group vif-fleet
 findmnt -no TARGET,FSTYPE,SIZE,OPTIONS /var/log/vif-fleet
 sudo stat -c 'mode=%a uid=%u gid=%g path=%n' /var/log/vif-fleet
 ```
 
 Expected: `tmpfs`, approximately `256M`, `nodev,nosuid,noexec`, mode `770`, and
-numeric owner/group `65532`. Apply the quota first, then render only the node-name
-placeholder in the storage template:
+numeric owner/group `65532`. The `vif-fleet` host identity must resolve to the
+same UID/GID; the containers continue to use only the numeric identity. Apply the
+quota first, then render only the node-name placeholder in the storage template:
 
 ```sh
 sudo kubectl apply -f deploy/k3s/10-quota.yaml
@@ -152,8 +166,10 @@ sudo kubectl -n vif wait \
 sudo kubectl get persistentvolume vif-fleet-logs
 sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
 sudo test -s /var/log/vif-fleet/volume-check.jsonl
-sudo jq -e 'select(.fields.session_id == "volume-check")' \
-  /var/log/vif-fleet/volume-check.jsonl >/dev/null
+sudo jq -s -e 'map(select(.sub != null)) as $records |
+    ($records | length > 0) and
+    all($records[]; .fields.session_id == "volume-check")' \
+  /var/log/vif-fleet/volume-check.jsonl
 ```
 
 Both volume objects must now be `Bound`. Prove Restricted admission still rejects

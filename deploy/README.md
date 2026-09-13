@@ -26,8 +26,9 @@ migration is authoritative in [doc/kube-todo.md](../doc/kube-todo.md).
 | `guest/vif-operator.nft.example` | Site values the filter includes: the one address allowed to reach the node directly and the node ports it may open. Install as `/etc/nftables.d/vif-operator.nft`. |
 | `guest/var-log-vif\x2dfleet.mount` | The 256 MiB `nodev,nosuid,noexec` tmpfs mount; numeric UID/GID 65532 owns its root. |
 | `guest/k3s.service.d/10-vif-fleet-logs.conf` | Makes K3s require and start after the fleet-log mount so failure cannot fall through to root storage. |
+| `guest/vif-fleet.sysusers` | Portably creates the locked `vif-fleet` system identity at UID/GID 65532 for the host cleanup service. |
 | `guest/vif-fleet-log-cleanup.py` | Refuses non-tmpfs paths, keeps two recent rotations per session after a reader grace, and removes files stale beyond the match ceiling plus margin. |
-| `guest/vif-fleet-log-cleanup.service` / `.timer` | Runs the shared-directory cleanup as numeric UID/GID 65532 once per minute. |
+| `guest/vif-fleet-log-cleanup.service` / `.timer` | Runs the shared-directory cleanup as `vif-fleet` (UID/GID 65532) once per minute. |
 | `guest/vif-allocator.env.example` | Site values for the allocator's imported image, public join host and session-page base URL. |
 | `guest/vif-allocator.service` | Hardened host service for the website-to-K3s allocator on the systemd K3s node. |
 | `guest/vif-allocator-token.service` / `.timer` | Root-only, atomic rotation of the allocator's short-lived ServiceAccount token. |

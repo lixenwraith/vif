@@ -551,7 +551,8 @@ is no longer what ran.
 This base block establishes the Batch A namespace and permissions. After the
 image and allocator are installed and their common session check passes, a node
 at Batch B continues with [`deploy/guest/README.md`](../deploy/guest/README.md)
-§Batch B. That procedure installs the fail-closed tmpfs dependency and renders
+§Batch B. That procedure creates the locked `vif-fleet` host identity at the
+containers' UID/GID 65532, installs the fail-closed tmpfs dependency, and renders
 `05-log-volume.yaml`; never apply that file with `${NODE_NAME}` intact.
 
 ```sh

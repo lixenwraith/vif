@@ -5,8 +5,8 @@ ConditionPathIsMountPoint=/var/log/vif-fleet
 
 [Service]
 Type=oneshot
-User=65532
-Group=65532
+User=vif-fleet
+Group=vif-fleet
 Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=/usr/bin/python3 /usr/local/libexec/vif-fleet-log-cleanup.py
 UMask=0007

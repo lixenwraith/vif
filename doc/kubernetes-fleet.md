@@ -257,6 +257,7 @@ Against a cluster, the checks that need one:
 | Nobody joins for 90 s | Passed | Exit 0 at 90 s; Job Complete; owned Service removed after the 120 s TTL. |
 | Allocator create/list and off-box join | Passed | Restricted token and probes succeeded; `POST` returned a ready session; API state followed the join and quit; operator deletion cleared the test. |
 | Batch A commissioned writer | Passed | Repository, CI, allocation, remote join, occupied/vacant state, stdout logging, and cleanup passed on 2026-09-13. The following Batch B preflight confirmed the namespace was empty; commissioned file behavior remains repository-tested until Batch C selects it. |
+| Batch B volatile storage | Live partial | The capped tmpfs, fail-closed K3s ordering, bound local PV/PVC, Restricted writer, commissioned tag, and rejected direct `hostPath` passed. The first cleanup start exposed systemd 261 rejecting the unmapped numeric `User=65532`; the timer is stopped pending the named UID/GID mapping and cleanup rerun. |
 | A guest joins and quits | Partial | Occupied and vacant states passed; automatic exit ninety seconds later must still name `roster empty for`. |
 | A guest quits and rejoins near 75 s | Open | The same run continues in the released slot; no one-minute reset occurs. |
 | `kubectl delete job` while a guest plays | Open | `phase=draining`, `/health` 200, exit when the roster empties or after 20 s. |
