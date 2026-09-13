@@ -65,11 +65,14 @@ service defaults differ.
 3. Verify:
 
    ```sh
-   sudo kubectl auth can-i get pods/log \
+   sudo kubectl auth can-i get pods --subresource=log \
      --as=system:serviceaccount:vif:vif-allocator -n vif
    ```
 
-   It must print `no`.
+   It must print `no`. Do not use positional `pods/log` here: `auth can-i`
+   accepts `TYPE/NAME`, so that spelling can ask whether the account may read a
+   pod named `log` and produce a false-positive `yes` from the retained `pods`
+   permission.
 4. Confirm the ServiceAccount can still create/delete Jobs and Services and read
    Pods, Services, and EndpointSlices for readiness.
 5. Restart the allocator, wait for health/readiness, then run §6 and validate the

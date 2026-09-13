@@ -395,7 +395,7 @@ The fleet query must be empty. Prove the removed subresource is denied and every
 allocator operation needed for allocation and readiness remains allowed:
 
 ```sh
-test "$(sudo kubectl auth can-i get pods/log \
+test "$(sudo kubectl auth can-i get pods --subresource=log \
   --as=system:serviceaccount:vif:vif-allocator -n vif)" = no
 test "$(sudo kubectl auth can-i create jobs.batch \
   --as=system:serviceaccount:vif:vif-allocator -n vif)" = yes
@@ -410,6 +410,10 @@ test "$(sudo kubectl auth can-i get pods \
 test "$(sudo kubectl auth can-i list endpointslices.discovery.k8s.io \
   --as=system:serviceaccount:vif:vif-allocator -n vif)" = yes
 ```
+
+Use the explicit `--subresource=log` form. Positional `pods/log` can be parsed as
+`TYPE/NAME` and return `yes` because this Role intentionally retains permission to
+read Pods; that does not test the log subresource.
 
 Restart the allocator and wait for both probes:
 
