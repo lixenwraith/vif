@@ -14,13 +14,13 @@ Install the command-line dependencies before the main deployment procedure:
 case "$ID" in
   arch)
     sudo pacman -Syu --needed \
-      curl git jq make python util-linux iptables-nft conntrack-tools \
+      curl git go jq make python util-linux iptables-nft conntrack-tools \
       ethtool tcpdump nftables docker
     ;;
   ubuntu)
     sudo apt-get update
     sudo apt-get install -y \
-      ca-certificates curl git jq make python3 util-linux iptables \
+      ca-certificates curl git golang-go jq make python3 util-linux iptables \
       conntrack ethtool tcpdump nftables docker.io
     ;;
   *)
@@ -64,13 +64,16 @@ This is a maintenance operation. Announce it, keep both allocators and operators
 from creating sessions, and verify the fleet-object query is empty before
 continuing. K3s restarts once after the mount dependency is installed.
 
-Stop the allocator before the final empty-fleet check, then capture the single
-K3s node name without placing it in the repository. If any later step stops
-before the allocator is restored, keep it stopped while diagnosing the node:
+On an upgrade, stop the allocator before the final empty-fleet check. A fresh node
+does not have that unit yet and skips only the stop. Then capture the single K3s
+node name without placing it in the repository. If any later step stops before an
+existing allocator is restored, keep it stopped while diagnosing the node:
 
 ```sh
-sudo systemctl stop vif-allocator.service
-test "$(systemctl is-active vif-allocator.service)" = inactive
+if systemctl cat vif-allocator.service >/dev/null 2>&1; then
+  sudo systemctl stop vif-allocator.service
+  test "$(systemctl is-active vif-allocator.service)" = inactive
+fi
 NODE_NAME=$(sudo kubectl get nodes \
   -o jsonpath='{.items[0].metadata.name}')
 test -n "$NODE_NAME"
@@ -120,14 +123,22 @@ for attempt in $(seq 1 60); do
 done
 sudo kubectl wait --for=condition=Ready \
   "node/$NODE_NAME" --timeout=120s
-sudo systemctl restart vif-allocator-token.service
-sudo systemctl start vif-allocator.service vif-fleet-log-cleanup.timer
+if systemctl cat vif-allocator-token.service >/dev/null 2>&1; then
+  sudo systemctl restart vif-allocator-token.service
+fi
+if systemctl cat vif-allocator.service >/dev/null 2>&1; then
+  sudo systemctl start vif-allocator.service
+fi
+sudo systemctl start vif-fleet-log-cleanup.timer
 ```
 
 Verify the mount and dependency before creating Kubernetes storage objects:
 
 ```sh
-systemctl is-active "$MOUNT_UNIT" k3s.service vif-allocator.service
+systemctl is-active "$MOUNT_UNIT" k3s.service vif-fleet-log-cleanup.timer
+if systemctl cat vif-allocator.service >/dev/null 2>&1; then
+  systemctl is-active vif-allocator.service
+fi
 systemctl is-enabled "$MOUNT_UNIT" vif-fleet-log-cleanup.timer
 systemctl cat k3s.service
 systemctl show k3s.service -p Requires -p After
@@ -155,9 +166,14 @@ exists. Render its image from the allocator's current imported image, apply it,
 and wait for the five-second unclaimed server to finish:
 
 ```sh
-VIF_IMAGE=$(sudo sed -n \
-  's/^VIF_ALLOCATOR_IMAGE=//p' /etc/vif-allocator/allocator.env)
+if test -r /etc/vif-allocator/allocator.env; then
+  VIF_IMAGE=$(sudo sed -n \
+    's/^VIF_ALLOCATOR_IMAGE=//p' /etc/vif-allocator/allocator.env)
+else
+  VIF_IMAGE="docker.io/library/vi-fighter:$(git rev-parse --short=8 HEAD)"
+fi
 test -n "$VIF_IMAGE"
+sudo k3s ctr images ls | grep -F "$VIF_IMAGE"
 sed "s|\${IMAGE}|$VIF_IMAGE|g" deploy/k3s/06-log-volume-check.yaml \
   | sudo kubectl apply -f -
 sudo kubectl -n vif wait \
@@ -224,9 +240,12 @@ sudo kubectl -n vif get job,pod,service \
 sudo find /var/log/vif-fleet -mindepth 1 -maxdepth 1 -print
 ```
 
-Both final commands must print nothing. Finish Batch B with the common session
-check in `doc/kube-todo.md` §7; the real workload still writes stdout until Batch
-C.
+Both final commands must print nothing. On an existing pre-Batch-C deployment,
+finish Batch B with the current common session check in `doc/kube-todo.md`; its
+workload still writes stdout until Batch C. On a fresh node, proceed to the manual
+session and allocator installation in `doc/kube_docker_deploy.md`; the current
+renderer and allocator already require this Bound PVC, and their first common
+session check validates file output.
 
 ## Batch B rollback
 
@@ -252,8 +271,12 @@ sudo chmod 000 /var/log/vif-fleet
 sudo rm /etc/systemd/system/k3s.service.d/10-vif-fleet-logs.conf
 sudo systemctl daemon-reload
 sudo systemctl restart k3s.service
-sudo systemctl restart vif-allocator-token.service
-sudo systemctl start vif-allocator.service
+if systemctl cat vif-allocator-token.service >/dev/null 2>&1; then
+  sudo systemctl restart vif-allocator-token.service
+fi
+if systemctl cat vif-allocator.service >/dev/null 2>&1; then
+  sudo systemctl start vif-allocator.service
+fi
 ```
 
 Keep the Retain PV/PVC for diagnosis. Do not schedule a PVC writer after rollback;
@@ -262,9 +285,11 @@ before retrying Batch B.
 
 ## Batch C: switch session Jobs to file logging
 
-Batch C changes only newly allocated sessions. It updates the host allocator
-binary and the manual manifest renderer together; the already imported game image
-is unchanged. Start with the Batch B gate intact and an empty fleet:
+Batch C is an upgrade procedure for a live Batch B node and changes only newly
+allocated sessions. A fresh node using the current repository already installs the
+file-writing renderer and allocator after Batch B and skips this upgrade section.
+For an existing node, the already imported game image is unchanged. Start with the
+Batch B gate intact and an empty fleet:
 
 ```sh
 systemctl is-active \
@@ -311,11 +336,11 @@ curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:9080/readyz
 ```
 
-Finish with `doc/kube-todo.md` §7. The session Job must have exactly one
-`session` container, mount the `vif-fleet-logs` claim only there, omit direct
-`hostPath` and `-log-stdout`, and produce `<session-id>.jsonl` whose application
-records all carry the same `fields.session_id`. Delete the Job and its files after
-the check.
+Finish with the common session check in `doc/kube-todo.md`. The session Job must
+have exactly one `session` container, mount the `vif-fleet-logs` claim only there,
+omit direct `hostPath` and `-log-stdout`, and produce `<session-id>.jsonl` whose
+application records all carry the same `fields.session_id`. Delete the Job and its
+files after the check.
 
 ### Batch C rollback
 
@@ -335,3 +360,93 @@ sudo systemctl start vif-allocator.service
 curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:9080/readyz
 ```
+
+## Batch D: remove the unused pod-log permission
+
+Batch C must have passed its allocator-created file, remote-join, state, and
+cleanup gates before this change. Batch D changes only the allocator Role; it does
+not restart K3s, rebuild an image, alter the session workload, or deploy LogWisp.
+Start with the file-writing allocator healthy, the volume Bound, and the fleet
+empty:
+
+```sh
+systemctl is-active \
+  'var-log-vif\x2dfleet.mount' vif-fleet-log-cleanup.timer \
+  k3s.service vif-allocator.service
+sudo kubectl get persistentvolume vif-fleet-logs
+sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+```
+
+Announce a short allocation pause. Stop the allocator before the final empty-fleet
+check so no request can race the Role update, then apply only the checked-in Role
+and RoleBinding:
+
+```sh
+sudo systemctl stop vif-allocator.service
+test "$(systemctl is-active vif-allocator.service)" = inactive
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+sudo kubectl apply -f deploy/k3s/40-allocator-rbac.yaml
+```
+
+The fleet query must be empty. Prove the removed subresource is denied and every
+allocator operation needed for allocation and readiness remains allowed:
+
+```sh
+test "$(sudo kubectl auth can-i get pods/log \
+  --as=system:serviceaccount:vif:vif-allocator -n vif)" = no
+test "$(sudo kubectl auth can-i create jobs.batch \
+  --as=system:serviceaccount:vif:vif-allocator -n vif)" = yes
+test "$(sudo kubectl auth can-i delete jobs.batch \
+  --as=system:serviceaccount:vif:vif-allocator -n vif)" = yes
+test "$(sudo kubectl auth can-i create services \
+  --as=system:serviceaccount:vif:vif-allocator -n vif)" = yes
+test "$(sudo kubectl auth can-i list services \
+  --as=system:serviceaccount:vif:vif-allocator -n vif)" = yes
+test "$(sudo kubectl auth can-i get pods \
+  --as=system:serviceaccount:vif:vif-allocator -n vif)" = yes
+test "$(sudo kubectl auth can-i list endpointslices.discovery.k8s.io \
+  --as=system:serviceaccount:vif:vif-allocator -n vif)" = yes
+```
+
+Restart the allocator and wait for both probes:
+
+```sh
+sudo systemctl start vif-allocator.service
+for attempt in $(seq 1 25); do
+  curl --connect-timeout 1 --max-time 2 -fsS \
+    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
+  sleep 1
+done
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/healthz
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/readyz
+```
+
+Finish with the common session check in `doc/kube-todo.md`. It must prove that
+create/list/readiness, off-box join, occupied/vacant state, the self-tagged node
+file, and cleanup still work without reading a pod log.
+
+### Batch D rollback
+
+If an allocator control operation fails specifically because the removed
+subresource is required, stop allocation, prove the fleet is empty, restore only
+that exact read grant, and restart the allocator:
+
+```sh
+sudo systemctl stop vif-allocator.service
+sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet
+sudo kubectl -n vif patch role vif-allocator --type=json \
+  -p='[{"op":"add","path":"/rules/-","value":{"apiGroups":[""],"resources":["pods/log"],"verbs":["get"]}}]'
+sudo systemctl start vif-allocator.service
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/readyz
+```
+
+Do not restore `pods/log` for a node-file, LogWisp, or public-stream failure: none
+of those components is allowed to use the Kubernetes log API. A rollback leaves
+the live Role different from the repository and must be diagnosed before Batch E.

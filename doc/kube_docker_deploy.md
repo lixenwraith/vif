@@ -37,10 +37,10 @@ because most of them change what that step should say.
 | A11 | **The session's playout lead is chosen from its *first* guest's link** and holds for the life of the match. A session opened by a nearby player and joined by a distant one runs at the near player's lead. The late-crossing fence makes that cost freshness rather than correctness (fleet plan §5), but it is the reason a full-roster measurement (H3) is worth doing over real links rather than a LAN. | §9 |
 | A12 | **The resource envelope is unmeasured at a full roster.** The requests and limits in the manifest come from single-guest runs. Ten sessions per node is a claim until an hour of four-player play says otherwise. | §8 |
 | A13 | **Cluster commands in this procedure run through `sudo kubectl`.** K3s is installed with kubeconfig mode `0640`; the install script self-escalates, but the resulting kubeconfig is not made readable to the ordinary login user. | §6 |
-| A14 | **The fleet's public log stream uses node-local files.** The capped tmpfs and local PV/PVC are deployed; the live Batch B allocator still selects stdout until Batch C installs its file-writing manifest. One standalone LogWisp service and an allocator byte proxy follow; Kubernetes and the allocator never tail pod logs. | §10 |
+| A14 | **The fleet's public log stream uses node-local files.** The capped tmpfs, local PV/PVC, and live file-writing session workload are deployed and passed. Batches D-F remove the transitional log-read grant, add one standalone LogWisp service, and add an allocator byte proxy; Kubernetes and the allocator never tail pod logs. | §10 |
 | A15 | **Source-address preservation is intended, not proved.** `externalTrafficPolicy: Local` and `pf rdr` should leave the off-box player's address visible to the pod, but the acceptance run did not record it. The per-address admission bound depends on this. | §9 |
-| A16 | **The allocator is implemented and deployed; Hugo and the public node-local stream are not.** §10 installs the allocator and fixes its narrow `/vif/api/` contract. The service, rotating credential, create/list API, off-box join, and Batch B storage passed; logging Batches C-F and the website remain. | §10 |
-| A17 | **The vi-fighter JSON line is the log contract.** The current stdout path and the selected file path both originate in `internal/vlog`. Every public hop must preserve those bytes; no allocator parsing, field insertion, or serialization is allowed. | §10 |
+| A16 | **The allocator is implemented and deployed; Hugo and the public node-local stream are not.** §10 installs the allocator and fixes its narrow `/vif/api/` contract. The service, rotating credential, create/list API, off-box join, volatile storage, and file-writing workload passed; logging Batches D-F and the website remain. | §10 |
+| A17 | **The vi-fighter JSON line is the log contract.** The current file records originate in `internal/vlog`; every public hop must preserve those bytes. No allocator parsing, field insertion, or serialization is allowed. | §10 |
 
 ## 1. The shape
 
@@ -52,11 +52,11 @@ flowchart TD
     API --> Pod["vif -serve pod"]
     Alloc -->|"health"| Pod
     Term["Player's vif -join"] -->|"raw TCP, no nginx"| PF["FreeBSD pf rdr"] --> NP["NodePort"] --> Pod
-    Pod -->|"stdout"| Log["CRI pod log, operator only"]
+    Pod -->|"JSONL through PVC"| Log["Capped tmpfs, operator only"]
 ```
 
-This is the live shape after Batch B. The tmpfs-backed local PV/PVC exists but is
-empty between checks; the ordered C-F migration is in
+This is the live shape after Batch C. The tmpfs-backed local PV/PVC is empty
+between sessions; the ordered D-F migration is in
 [`kube-todo.md`](kube-todo.md).
 
 What a session is, what bounds its life, and what it costs are in the fleet plan's
@@ -189,13 +189,13 @@ ip -br link; ip route
 case "$ID" in
   arch)
     sudo pacman -Syu --needed \
-      curl git jq make python util-linux iptables-nft conntrack-tools \
+      curl git go jq make python util-linux iptables-nft conntrack-tools \
       ethtool tcpdump
     ;;
   ubuntu)
     sudo apt-get update
     sudo apt-get install -y \
-      ca-certificates curl git jq make python3 util-linux iptables conntrack \
+      ca-certificates curl git golang-go jq make python3 util-linux iptables conntrack \
       ethtool tcpdump
     ;;
   *)
@@ -549,12 +549,14 @@ is no longer what ran.
 
 ## 8. Apply the fleet objects
 
-This base block establishes the Batch A namespace and permissions. After the
-image and allocator are installed and their common session check passes, a node
-at Batch B continues with [`deploy/guest/README.md`](../deploy/guest/README.md)
-§Batch B. That procedure creates the locked `vif-fleet` host identity at the
-containers' UID/GID 65532, installs the fail-closed tmpfs dependency, and renders
-`05-log-volume.yaml`; never apply that file with `${NODE_NAME}` intact.
+This base block establishes the namespace, policy, quota, and current least-
+privilege allocator identity. Immediately afterward, complete
+[`deploy/guest/README.md`](../deploy/guest/README.md) §Batch B before creating a
+manual session or installing the allocator: the current renderer and allocator
+both require the Bound `vif-fleet-logs` claim. Batch B creates the locked
+`vif-fleet` host identity at the containers' UID/GID 65532, installs the
+fail-closed tmpfs dependency, and renders `05-log-volume.yaml`; never apply that
+file with `${NODE_NAME}` intact.
 
 ```sh
 sudo kubectl apply -f deploy/k3s/00-namespace.yaml
@@ -735,13 +737,14 @@ participant record in `internal/app/host.go`, then repeat the remote join. If th
 address is rewritten, the per-address admission limiter becomes one shared budget
 for the whole fleet.
 
-Deployment status through the 2026-09-13 Batch B run:
+Deployment status through the 2026-09-13 Batch C run:
 
 | Check | Status | Expected evidence |
 |---|---|---|
 | Nobody joins for 90 s | **Passed** | Exit 0 at 90 s with `no guest connected`; Job Complete; its owned Service was garbage-collected after the 120 s Job TTL; quota returned to zero. |
 | Allocator create, list, join and delete | **Passed** | The host service minted its restricted token, both probes answered, `POST` returned a ready EndpointSlice and pod-health state, an off-box client joined through the returned target, the API followed the occupied/vacant transition, and operator cleanup removed the test. |
 | Batch B volatile storage | **Passed** | The locked `vif-fleet` UID/GID 65532 identity, capped tmpfs, fail-closed K3s dependency, Bound local PV/PVC, Restricted writer, direct-`hostPath` rejection, cleanup timer, remote join, unchanged stdout, and empty steady state passed. |
+| Batch C file-writing Jobs | **Passed** | The live allocator created one tokenless Restricted session container with the PVC and no direct `hostPath` or `-log-stdout`. Off-box join, occupied/vacant state, complete application-record session tagging, Job/pod/Service deletion, file cleanup, and empty steady state passed. |
 | A guest joins and quits | Partial | The allocator API reported the occupied then vacant transition; automatic exit after the 90-second empty grace remains to be observed without manual cleanup. |
 | A guest quits and rejoins at about 75 s | Open | The same run and world continue in the released slot. |
 | Delete the Job while a guest plays | Open | `phase=draining`, health 200 with `ready=false`, then exit on an empty roster or after 20 s. |
@@ -833,10 +836,11 @@ CORS from the design; do not replace it with `Access-Control-Allow-Origin: *`.
 
 [`40-allocator-rbac.yaml`](../deploy/k3s/40-allocator-rbac.yaml) defines the entire
 permission surface: create/read/watch/delete Jobs and Services, read/watch pods and
-events, in `vif` and nowhere else. The current Role still contains an unused
-`pods/log` read grant; no allocator code calls it, and Batch D removes it after the
-file path passes. `pods/exec`, `pods/portforward` and every pod write verb stay
-absent. The allocator must not use
+events, in `vif` and nowhere else. The checked-in Role deliberately omits
+`pods/log`; no allocator code calls it. Batch D applies that reduction to an
+upgraded node after the file path passes, while a fresh node receives it here.
+`pods/exec`, `pods/portforward` and every pod write verb stay absent. The allocator
+must not use
 `/etc/rancher/k3s/k3s.yaml` or a copy of the node's root kubeconfig. It reads the
 cluster CA and a short-lived `vif-allocator` ServiceAccount token from separate
 files. The token is re-read on every Kubernetes request, so a root timer can replace
@@ -891,9 +895,12 @@ curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/healthz
 curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/readyz
 ```
 
-Both final probes must print `ok`. If the listener never appears, inspect
-`systemctl show` with `SubState`, `MainPID` and `NRestarts`, `ss -ltnp`, and the
-allocator journal before restarting or changing its configuration.
+Both final probes must print `ok`. On a fresh node, finish installation with the
+common session check in `kube-todo.md`; that is the first allocator-created proof
+that the current Role, PVC workload, remote join, self-tagged file, and cleanup all
+work together. If the listener never appears, inspect `systemctl show` with
+`SubState`, `MainPID` and `NRestarts`, `ss -ltnp`, and the allocator journal before
+restarting or changing its configuration.
 
 A TokenRequest token expires and the API server may shorten the requested 24-hour
 duration. The service retries a boot-time mint for one minute; the timer refreshes
@@ -933,11 +940,11 @@ reconnect delay, and keep the allocator between the browser and every pod.
 
 ### 10.3 The log path
 
-The live Batch B allocator still uses `-log-stdout`, while its capped tmpfs and
-Bound PV/PVC are deployed and passed. Batch C's repository manifest switches new
-Jobs to commissioned files; `/vif/api/logs` remains
-`501 log_stream_not_configured`. No allocator pod-log follower, JSON splicer, or
-LogWisp child exists. Do not build one.
+The live Batch C allocator writes each session's commissioned JSONL through the
+Bound PVC to capped tmpfs; its workload, off-box join, state, record tags, and
+cleanup gates passed. `/vif/api/logs` remains `501 log_stream_not_configured`.
+No allocator pod-log follower, JSON splicer, or LogWisp child exists. Do not build
+one.
 
 The selected migration is staged in [`kube-todo.md`](kube-todo.md): the session
 writes `<session-id>.jsonl` through a tmpfs-backed local PVC, one independent
@@ -1015,8 +1022,7 @@ against.
 
 ## 12. Operating
 
-**Where a session says what it did.** Through live Batch B, one-shot `kubectl logs`
-is the operator-only source. From Batch C, the source is
+**Where a session says what it did.** The current source is
 `/var/log/vif-fleet/<session-id>.jsonl` on capped tmpfs, with metric values emitted
 as `sub="stat"` records and `fields.session_id` naming the writer. Kubernetes logs
 are not a fallback public path. The file remains operator-only until Batch F.
@@ -1089,11 +1095,11 @@ The remaining gap register is the fleet plan's
   successful accepted connection's remote address, so the run could not prove the
   admission limiter sees each player rather than one rewritten address for the
   whole fleet.
-- **The node-local log path is partially deployed** (A14). Batches A-B passed,
-  including the capped tmpfs/PVC, Restricted writer probe, cleanup timer, remote
-  join, and empty steady state. C-F still need to switch the live allocator,
-  remove `pods/log`, install standalone LogWisp, and add the byte proxy. The old
-  console-source aggregator and in-pod sidecar are superseded, not fallbacks.
+- **The node-local log path is partially deployed** (A14). Batches A-C passed,
+  including the capped tmpfs/PVC, Restricted file-writing workload, cleanup timer,
+  remote join, record self-tags, and empty steady state. D-F still need to remove
+  `pods/log`, install standalone LogWisp, and add the byte proxy. The old console-
+  source aggregator and in-pod sidecar are superseded, not fallbacks.
 - **The website and LogWisp integrations are not built** (A16). The allocator and
   restricted rotating credential implement the session API; nginx, the Hugo
   session page, and the standalone file-source stream wait for the logging gates.

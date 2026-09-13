@@ -10,9 +10,9 @@ are in [`deploy/`](../deploy/README.md); the scenarios that verify it by hand ar
 
 > **Logging direction changed on 2026-09-12.** The unimplemented pod-log follower,
 > allocator JSON splicing, allocator-owned LogWisp, and per-session sidecar are
-> superseded by [the fleet logging pivot](kube-todo.md). Batch B's node storage is
-> deployed and passed; until Batch C changes the live allocator, stdout remains
-> the operator log and the public log endpoint returns 501.
+> superseded by [the fleet logging pivot](kube-todo.md). Batches A-C are deployed
+> and passed: each live session now writes its self-tagged JSONL through the
+> tmpfs-backed PVC. The public log endpoint remains 501 until Batches D-F finish.
 
 ## 1. Current deployment
 
@@ -27,7 +27,7 @@ are in [`deploy/`](../deploy/README.md); the scenarios that verify it by hand ar
 | Image | `scratch` + one static binary, ~13 MB, non-root, read-only root filesystem, no shell. |
 | Transport | Raw framed TCP, one long-lived connection per player. Unauthenticated by decision (§4). |
 | Reached by | Its own port, from a forwarded ten-port range. The port is the whole of the routing: nothing in a plaintext game connection names a session, so a firewall's destination port is the only signal there is. |
-| Logs and metrics | The capped tmpfs and Bound local PV/PVC are deployed. Live Batch B Jobs still emit JSON lines on pod stdout; Batch C selects commissioned node files. `/vif/api/logs` returns 501 until the standalone stream and proxy pass. |
+| Logs and metrics | Each Job writes `<session-id>.jsonl` through the Bound local PVC to the capped node tmpfs. The file is operator-only until the standalone LogWisp stream and allocator proxy pass; `/vif/api/logs` still returns 501. |
 
 The allocator-to-Kubernetes path is implemented, deployed and verified through an
 off-box join. The website/nginx and LogWisp edges remain to be integrated.
@@ -40,7 +40,7 @@ flowchart LR
     API --> Pod["vif -serve"]
     Site -->|"host:port"| Player
     Player -->|"vif -join, TCP"| NP["NodePort"] --> Pod
-    Pod -->|"stdout"| Logs["CRI pod log, operator only"]
+    Pod -->|"JSONL through PVC"| Logs["capped node tmpfs, operator only"]
 ```
 
 ## 2. Runtime contract
@@ -56,7 +56,7 @@ flowchart LR
 | Crossing ordering | Ordinary crossings are judged by the capture's per-source sequence fence, not by their apply tick, so a link that misses the playout lead costs freshness rather than the player's action (§5). |
 | Shutdown | `SIGTERM` drains: readiness false, dials refused with `ErrSessionEnding`, exit when the roster empties or `-drain` elapses. |
 | Health | One `/health` path. Its code is liveness; the body carries `ready`, `phase`, `expires_in`, roster and tick. |
-| Storage | Match state is never persisted. A 256 MiB node tmpfs backs one Retain local PV/PVC for ephemeral public game logs; live Batch B Jobs do not mount it yet. |
+| Storage | Match state is never persisted. A 256 MiB node tmpfs backs one Retain local PV/PVC for ephemeral public game logs; each session Job mounts only that PVC in its game container. |
 
 Kubernetes restart and replication do not create game-level high availability.
 Authority succession helps already-connected participants after a host disappears;
@@ -86,7 +86,7 @@ it does not move an in-memory session into an unrelated pod.
 | Named sessions | `-name` on a host, `vif://host:port/name` in a player's link. One frame before the handshake, so a front door can put ten sessions behind one public port ([`deploy/frontdoor`](../deploy/frontdoor/haproxy.cfg)) and a stale link is refused rather than misrouted. Held in reserve for H8: the deployment reaches a session by port. |
 | Authority policy | `-authority host|migrate`, defaulting to `host` on `-serve`. A dedicated host's address *is* the session, so losing the pod is an orchestrator's job to fix rather than a guest's to inherit. See [Multiplayer](multi-player-enhancement.md) §5.0. |
 | Thin allocator (H10) | `tool/vif-allocator` exposes only the fixed session create/list API. It reserves ports from Services, refuses a full fleet before creation, owns each Service by its Job UID, waits for pod/EndpointSlice/application readiness, rolls back partial creates, and reconciles Kubernetes state at startup. Its hardened Arch-guest unit and rotating ServiceAccount token are deployed; create, list, off-box join, occupied/vacant state observation and operator cleanup passed on 2026-09-12. |
-| Commissioned writer and volatile storage (H14 A-B) | The image supports collision-safe `<session-id>.jsonl` files with self-tags and bounded per-file rotation. The node has a locked UID/GID 65532 cleanup identity, 256 MiB fail-closed tmpfs, Bound local PV/PVC, and successful cleanup timer. Restricted admission, a PVC writer, direct-`hostPath` rejection, remote join, unchanged Batch B stdout, and cleanup passed on 2026-09-13. |
+| Commissioned file workload and volatile storage (H14 A-C) | The image writes collision-safe `<session-id>.jsonl` files with self-tags and bounded per-file rotation. The node has a locked UID/GID 65532 cleanup identity, 256 MiB fail-closed tmpfs, Bound local PV/PVC, and successful cleanup timer. Restricted admission and direct-`hostPath` rejection passed; the live allocator's single-container PVC workload passed off-box join, occupied/vacant state, complete record tagging, deletion, file cleanup, and empty steady state on 2026-09-13. |
 
 ### Open
 
@@ -99,7 +99,7 @@ it does not move an in-memory session into an unrelated pod.
 | H5 | later | **Spatial grid right-sizing.** ~30.5 MiB reserved per world at the current maximum. | Deferred until density matters; needs resize/play regression coverage. |
 | H11 | **next** | **Verify the player's source address at the pod.** `externalTrafficPolicy: Local` plus `pf rdr` should preserve it, and the address is already carried — `network.JoinerReport.Remote` holds `conn.RemoteAddr()` and reaches `App.noteJoinerReport` — but only `reach.noteDeclared` consumes it, so no record names it and the run could not inspect one. | The admitted-participant record in `internal/app/host.go` carries the accepted socket's remote address, and a remote join names the off-box client. If it names the node or gateway, the routing is corrected before relying on admission limits; otherwise the limiter is one budget for the whole fleet. |
 | H12 | **next** | **Finish the occupied lifecycle gates.** First-join expiry and owned-Service cleanup passed. An allocator-created off-box join reached `occupied` then `vacant`; automatic empty-grace expiry, rejoin near 75 s, drain on Job deletion, and `PLAYERS=1` capacity remain. | Each open case in [Deployment §9](kube_docker_deploy.md#9-create-one-session-by-hand) produces its specified transition and preserves the same run throughout the reconnect grace. |
-| H14 | next | **Complete the node-local log pipeline.** Batches A-B are deployed and passed. C-F switch Jobs to files, remove `pods/log`, deploy standalone LogWisp, and add the allocator byte proxy. | Every remaining gate and the final acceptance in `kube-todo.md` passes without lowering Restricted admission or putting Kubernetes in the log data path. |
+| H14 | next | **Complete the node-local log pipeline.** Batches A-C are deployed and passed. D-F remove `pods/log`, deploy standalone LogWisp, and add the allocator byte proxy. | Every remaining gate and the final acceptance in `kube-todo.md` passes without lowering Restricted admission or putting Kubernetes in the log data path. |
 | H15 | after H14 | **Integrate nginx and Hugo.** The website implementation now has the allocator's real response fields and status codes; it still waits for the log endpoint. | `https://lixen.com/vif/api/sessions` creates/lists sessions, the session page keeps its HTTPS URL distinct from the raw join target, and the bounded log panel degrades cleanly when the API is absent. |
 | H16 | later | **Automate image delivery.** `deploy/guest/update-vif-image.sh` is the repeatable manual boundary: one build/check/import, allocator image update, old-image removal, and build-daemon cleanup. | CI resolves and verifies a tagged release artifact, invokes or reproduces the same boundary without an inbound cluster credential, and new sessions use it while existing matches finish. |
 
@@ -258,8 +258,9 @@ Against a cluster, the checks that need one:
 | Reboot with no session | Passed | Node Ready, no swap, filter present, build daemons inactive, imported image retained, namespace empty. |
 | Nobody joins for 90 s | Passed | Exit 0 at 90 s; Job Complete; owned Service removed after the 120 s TTL. |
 | Allocator create/list and off-box join | Passed | Restricted token and probes succeeded; `POST` returned a ready session; API state followed the join and quit; operator deletion cleared the test. |
-| Batch A commissioned writer | Passed | Repository, CI, allocation, remote join, occupied/vacant state, stdout logging, and cleanup passed on 2026-09-13. The following Batch B preflight confirmed the namespace was empty; commissioned file behavior remains repository-tested until Batch C selects it. |
+| Batch A commissioned writer | Passed | Repository, CI, allocation, remote join, occupied/vacant state, stdout logging, and cleanup passed on 2026-09-13. Batch C later selected the same writer's commissioned file mode. |
 | Batch B volatile storage | Passed | The named UID/GID 65532 identity, capped tmpfs, fail-closed K3s ordering, Bound local PV/PVC, Restricted writer and direct-`hostPath` rejection passed. The cleanup service/timer, allocation, off-box join, occupied/vacant state, unchanged stdout, file cleanup, and empty steady state passed on 2026-09-13. |
+| Batch C file-writing Jobs | Passed | The live allocator created one tokenless Restricted session container with the PVC and no direct `hostPath` or `-log-stdout`. Off-box join, occupied/vacant state, complete application-record session tagging, Job/pod/Service deletion, file cleanup, and empty steady state passed on 2026-09-13. |
 | A guest joins and quits | Partial | Occupied and vacant states passed; automatic exit ninety seconds later must still name `roster empty for`. |
 | A guest quits and rejoins near 75 s | Open | The same run continues in the released slot; no one-minute reset occurs. |
 | `kubectl delete job` while a guest plays | Open | `phase=draining`, `/health` 200, exit when the roster empties or after 20 s. |
@@ -291,9 +292,8 @@ Against a cluster, the checks that need one:
 - **One health path.** The code answers "should this process still be running";
   everything else is in the body, where the allocator reads it.
 - **The vi-fighter JSON line is the log contract.** The current workload writes it
-  to stdout for operators. The selected public path writes the same bytes to the
-  node-local PVC and carries them through LogWisp and the allocator without parsing
-  or reshaping them.
+  to the node-local PVC. The selected public path carries those same bytes through
+  LogWisp and the allocator without parsing or reshaping them.
 - **The public stream is session output only.** K3s, kernel and host journal records
   remain operator-only.
 - **The host is the authority over identity.** A joiner reports; the coordinator

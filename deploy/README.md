@@ -16,7 +16,7 @@ migration is authoritative in [doc/kube-todo.md](../doc/kube-todo.md).
 | `k3s/10-quota.yaml` | The fleet ceiling: ten concurrent sessions, their compute total, and exactly one 256 MiB shared log claim. |
 | `k3s/20-networkpolicy.yaml` | Default deny in both directions; the game port from anywhere, the operator ports from monitoring only, no egress. |
 | `k3s/30-session.yaml` | The per-session manual template: one Restricted Job writing its commissioned JSONL through the shared local PVC, and one owned NodePort Service. |
-| `k3s/40-allocator-rbac.yaml` | The current namespace Role. Its unused `pods/log` grant remains only until Batch D, after file output passes. |
+| `k3s/40-allocator-rbac.yaml` | The namespace Role for the allocator's fixed Job/Service transaction and readiness observation. It deliberately cannot read `pods/log`. |
 | `k3s/render-session.sh` | Renders the file-logging template with lifetime overrides. `JOB_UID=<uid>` retains the Service owner reference; there is no per-session LogWisp branch. |
 | `k3s/session.sh` | Repeatable manual create/list/delete path. It creates the Job first, owns the Service by the returned Job UID, selects a free fleet port when omitted, and cleans a partial create. |
 | `logwisp/aggregator.toml` | Superseded console-source experiment, not deployed. Batch E replaces it with the standalone file-source configuration. |

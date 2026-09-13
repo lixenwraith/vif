@@ -45,11 +45,6 @@ rules:
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]
-  # Unused transition grant: no allocator pod-log follower exists. Batch D removes
-  # it after the file writer and volume path pass their gates.
-  - apiGroups: [""]
-    resources: ["pods/log"]
-    verbs: ["get"]
   # Why a session ended, for the allocator's own log. Events are read-only for the
   # same reason pods are.
   - apiGroups: [""]

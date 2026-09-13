@@ -1,6 +1,6 @@
 # Superseded console-source experiment; do not deploy this configuration.
 #
-# The live fleet still writes stdout and exposes no public stream. Batch E in
+# The live fleet writes self-tagged files but exposes no public stream. Batch E in
 # doc/kube-todo.md replaces this console input with one standalone file source;
 # LogWisp will not be owned by the allocator or use a Kubernetes credential.
 quiet = false
