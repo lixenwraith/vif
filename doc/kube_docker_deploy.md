@@ -980,6 +980,9 @@ replace only the standalone binary/config/unit, restart it, initialize its file
 sources, verify the listener, and retain one automatic rollback set. It neither
 controls nor rebuilds vi-fighter, K3s, or the allocator; the fleet procedure in
 `deploy/guest/README.md` stops allocation and proves the fleet empty around it.
+`deploy/logwisp/REVISION` pins a commit reachable from upstream LogWisp `main`,
+never a pull-request head that a squash merge discards; the builder proves that
+ancestry and fails before Docker starts, leaving the running LogWisp in place.
 Use
 `deploy/guest/update-vif-allocator.sh` separately: it builds first, refuses a
 non-empty fleet, pauses only allocation for the short replacement, checks health

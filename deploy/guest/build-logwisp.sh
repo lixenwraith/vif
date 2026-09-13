@@ -1,6 +1,6 @@
 #!/bin/sh
-# Build the exact LogWisp revision selected by vi-fighter into one caller-owned
-# output path, then restore the disabled Docker/containerd node baseline.
+# Build the pinned LogWisp revision, which must be reachable from upstream main,
+# into one caller-owned output path, then restore the disabled Docker baseline.
 #
 #   build-logwisp.sh OUTPUT [LOGWISP_CHECKOUT]
 set -eu
@@ -98,6 +98,30 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+# A squash-merged pull-request head stops being reachable while a stale local
+# object still resolves, so only ancestry of freshly fetched upstream main
+# proves the pin. Fetching main last leaves it alone in FETCH_HEAD.
+assert_revision_on_upstream_main() {
+	repository=$1
+	git -C "$repository" fetch --quiet --tags origin ||
+		{ echo "$0: cannot fetch LogWisp tags" >&2; exit 1; }
+	git -C "$repository" fetch --quiet origin main ||
+		{ echo "$0: cannot fetch LogWisp main" >&2; exit 1; }
+	upstream_main=$(git -C "$repository" rev-parse FETCH_HEAD)
+	git -C "$repository" cat-file -e "$revision^{commit}" 2>/dev/null || {
+		echo "$0: pinned revision is absent from LogWisp main: $revision" >&2
+		echo "$0: upstream main is $upstream_main" >&2
+		echo "$0: repin deploy/logwisp/REVISION to a commit on upstream main" >&2
+		exit 1
+	}
+	git -C "$repository" merge-base --is-ancestor "$revision" "$upstream_main" || {
+		echo "$0: pinned revision is not an ancestor of LogWisp main: $revision" >&2
+		echo "$0: upstream main is $upstream_main" >&2
+		echo "$0: repin deploy/logwisp/REVISION to a commit on upstream main" >&2
+		exit 1
+	}
+}
+
 if [ "$#" -eq 2 ]; then
 	source_repository=$(CDPATH= cd -- "$2" && pwd)
 	git -C "$source_repository" rev-parse --git-dir >/dev/null
@@ -107,14 +131,12 @@ if [ "$#" -eq 2 ]; then
 		git@github.com:lixenwraith/logwisp|git@github.com:lixenwraith/logwisp.git) ;;
 		*) echo "$0: unexpected LogWisp origin: $origin_url" >&2; exit 1 ;;
 	esac
-	if ! git -C "$source_repository" cat-file -e "$revision^{commit}" 2>/dev/null; then
-		git -C "$source_repository" fetch --tags origin main
-	fi
-	[ "$(git -C "$source_repository" rev-parse "$revision^{commit}")" = "$revision" ]
+	assert_revision_on_upstream_main "$source_repository"
 	git -C "$source_repository" worktree add --detach "$build_source" "$revision"
 	worktree_added=true
 else
 	git clone --no-checkout https://github.com/lixenwraith/logwisp.git "$build_source"
+	assert_revision_on_upstream_main "$build_source"
 	git -C "$build_source" checkout --detach "$revision"
 fi
 

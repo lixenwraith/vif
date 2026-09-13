@@ -24,7 +24,10 @@ Status on 2026-09-13:
   viewer are implemented and tested in the repository. Its live cutover and
   common session gate remain; Batch G has not started.
 
-The live allocator still runs the preceding 501 endpoint until the Batch F node
+The live node still runs the pre-update LogWisp. Its guarded update failed
+because `deploy/logwisp/REVISION` named PR #5's squash-discarded head; the pin is
+now the merged `main` commit, so that gate reruns before the Batch F cutover. The
+live allocator still runs the preceding 501 endpoint until the Batch F node
 procedure in `deploy/guest/README.md` is executed.
 
 ## 1. Invariants and batch discipline
@@ -42,6 +45,8 @@ These constraints apply to every remaining batch:
   own the stream processor.
 - Stop allocation and prove the fleet is empty before changing a live workload,
   allocator binary, Role, mount, or logging service.
+- Pin LogWisp to a commit reachable from upstream `main`, never a pull-request
+  head, and judge its journal only by the invocation running the pinned binary.
 - Announce restarts, simultaneous clients, and deadline-sensitive joins before
   running them.
 - Put placeholders in repository commands; never commit real machine addresses.

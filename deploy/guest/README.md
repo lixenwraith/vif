@@ -486,7 +486,10 @@ test "$(sudo kubectl auth can-i get pods --subresource=log \
 
 The fleet query and `find` must print nothing. The installer resolves the
 vi-fighter root from its own path, stops on the first error, and verifies the
-40-character upstream revision before making host changes. A previous LogWisp
+40-character upstream revision before making host changes. The shared builder
+additionally fetches upstream `main` and its tags and requires the pin to be an
+ancestor of that head, so it fails before starting Docker when
+`deploy/logwisp/REVISION` names an unreachable commit. A previous LogWisp
 installation is not an in-place Batch E upgrade; stop and inspect it if any of
 the three destination paths already exists:
 
@@ -628,7 +631,15 @@ changes. It runs from any directory and does not inspect, stop, or modify K3s,
 the allocator, or the session workload, so it can also maintain a standalone
 LogWisp installation. On a fleet node, the plan still requires allocation to be
 stopped and the fleet to be empty before changing a logging service. Announce
-the allocation pause and LogWisp stream interruption before running this gate:
+the allocation pause and LogWisp stream interruption before running this gate.
+
+`deploy/logwisp/REVISION` must name a commit reachable from upstream LogWisp
+`main`, never a pull-request head: a squash merge replaces that head with a new
+commit and the original disappears from the repository. The builder fetches
+`main` and tags in both the default clone and the optional worktree, then
+requires the pin to be an ancestor of the fetched head, so an unreachable pin
+fails with a repin diagnostic before Docker starts and before LogWisp is
+touched. That single check is the authority; do not pre-resolve the pin by hand:
 
 ```sh
 for artifact in \
@@ -683,6 +694,12 @@ build finishes before the short LogWisp-only restart; no Kubernetes object,
 workload image, or allocator binary is changed. If the updater itself fails, it
 restores the previous LogWisp set before the allocator restart.
 
+A build that stops on the revision check leaves the running LogWisp, its binary,
+and every Kubernetes and tmpfs object untouched; only the allocator is restarted
+by the trap. The installed binary still answers with the previous revision and
+cannot satisfy the pin or status checks below, so repin and rerun the gate
+rather than reading that outcome as a failure of the new revision.
+
 An existing upstream checkout is optional and is never switched or modified:
 
 ```sh
@@ -699,6 +716,7 @@ queue bounds:
 LOGWISP_REVISION=$(tr -d '[:space:]' < deploy/logwisp/REVISION)
 /usr/local/bin/logwisp --version | grep -F "$LOGWISP_REVISION"
 systemctl is-active logwisp.service
+systemctl is-active vif-allocator.service
 curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:8081/status | jq -e '
     .server.client_buffer_size == 512 and
@@ -706,9 +724,21 @@ curl --connect-timeout 2 --max-time 5 -fsS \
     .server.write_timeout_ms == 5000 and
     .statistics.auth_rejected == 0 and
     .statistics.rejected_clients == 0'
-sudo journalctl -u logwisp.service -n 20 --no-pager
-unset LOGWISP_REVISION
+
+LOGWISP_INVOCATION=$(systemctl show logwisp.service \
+  -p InvocationID --value)
+test -n "$LOGWISP_INVOCATION"
+sudo journalctl "_SYSTEMD_INVOCATION_ID=$LOGWISP_INVOCATION" \
+  --no-pager
+unset LOGWISP_REVISION LOGWISP_INVOCATION
 ```
+
+Judge the journal only by the invocation currently running the updated binary,
+here and in every later gate. Earlier `Watcher failed` entries with
+`error "watcher stopped"` were emitted by the replaced binary when normal fleet
+cleanup retired a watched file; they are historical and say nothing about the
+installed revision. Retirement is proven by a later session create/delete cycle,
+not by this window, which precedes any session.
 
 ### Batch E two-session fan-in gate
 
@@ -1347,9 +1377,10 @@ sudo journalctl -u logwisp.service -n 20 --no-pager
 
 The pre-update v0.18.0 build reported `Watcher failed` with `error "watcher
 stopped"` when normal fleet cleanup removed a watched file. The pinned revision
-now treats that retirement as normal and also prevents a retiring watcher from
-removing a replacement for the same recreated path. After updating, any new
-`Watcher failed` line is an actual failure to investigate.
+treats that retirement as a normal exit and prevents a retiring watcher from
+removing a replacement for the same recreated path. Those entries persist in the
+journal; scope every later judgement to the invocation started by the update, in
+which any `Watcher failed` line is an actual failure to investigate.
 
 Quit the remote client. Finish the common gate by verifying vacancy and complete
 self-tagging before deleting the session:
@@ -1751,15 +1782,25 @@ systemctl is-active \
   vif-fleet-log-cleanup.timer \
   k3s.service vif-allocator.service logwisp.service
 
+BATCH_F_INVOCATION=$(systemctl show logwisp.service \
+  -p InvocationID --value)
+test -n "$BATCH_F_INVOCATION"
+! sudo journalctl "_SYSTEMD_INVOCATION_ID=$BATCH_F_INVOCATION" \
+  --no-pager | grep -F 'Watcher failed'
+
 unset POST_STATUS BATCH_F_HEADERS BATCH_F_CAPTURE BATCH_F_STREAM_PID
 unset BATCH_F_SENTINEL BATCH_F_TICK_BEFORE BATCH_F_TICK_DOWN
 unset BATCH_F_ERROR BATCH_F_ERROR_STATUS BATCH_F_PROBE_JSON BATCH_F_PROBE_ID
 unset BATCH_F_RESTART_CAPTURE BATCH_F_RESTART_PID BATCH_F_TICK_RESTARTED
+unset BATCH_F_INVOCATION
 ```
 
 The Kubernetes query and `find` must print nothing, all five units must be
-active, and the stream must have no remaining client. Preserve the Bound PV/PVC
-and the `.previous` allocator files until Batch G completes.
+active, and the stream must have no remaining client. This invocation covers the
+session whose file was just created and deleted, so its empty `Watcher failed`
+result is the retirement evidence; entries from earlier invocations belong to the
+replaced binary. Preserve the Bound PV/PVC and the `.previous` allocator files
+until Batch G completes.
 
 ### Batch F rollback
 

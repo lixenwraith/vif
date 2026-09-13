@@ -19,7 +19,7 @@ migration is authoritative in [doc/kube-todo.md](../doc/kube-todo.md).
 | `k3s/40-allocator-rbac.yaml` | The namespace Role for the allocator's fixed Job/Service transaction and readiness observation. It deliberately cannot read `pods/log`. |
 | `k3s/render-session.sh` | Renders the file-logging template with lifetime overrides. `JOB_UID=<uid>` retains the Service owner reference; there is no per-session LogWisp branch. |
 | `k3s/session.sh` | Repeatable manual create/list/delete path. It creates the Job first, owns the Service by the returned Job UID, selects a free fleet port when omitted, and cleans a partial create. |
-| `logwisp/REVISION` | Exact upstream LogWisp source revision used for the standalone node binary. |
+| `logwisp/REVISION` | Exact upstream LogWisp source revision used for the standalone node binary. It must be reachable from upstream `main`; a pull-request head does not survive a squash merge. |
 | `logwisp/aggregator.toml` | Standalone raw file-source pipeline over `/var/log/vif-fleet/*.jsonl`, with bounded flow/clients and a loopback-only HTTP sink. |
 | `frontdoor/haproxy.cfg` | Not deployed. The worked alternative: every session behind one public port, routed on the name a dialer sends before the handshake. Kept for the routing exploration; the deployed shape reaches a session on its own port. |
 | `guest/nftables.conf` | The guest's own filter: one `inet vif` table, replaced on every load, never `flush ruleset`. Its input hook runs after kube-proxy so an endpoint-less NodePort consistently rejects. |
@@ -31,7 +31,7 @@ migration is authoritative in [doc/kube-todo.md](../doc/kube-todo.md).
 | `guest/vif-fleet-log-cleanup.service` / `.timer` | Runs the shared-directory cleanup as `vif-fleet` (UID/GID 65532) once per minute. |
 | `guest/logwisp.sysusers` | Creates the dedicated locked `logwisp` host identity; the service receives read access through the `vif-fleet` supplementary group only. |
 | `guest/logwisp.service` | Hardened standalone file reader with a read-only view of the fleet tmpfs, inaccessible Kubernetes/allocator credentials, and no dependency on games or the allocator. |
-| `guest/build-logwisp.sh` | Shared exact-revision builder used by the install and update helpers. It can reuse an existing checkout through a temporary detached worktree and restores the disabled Docker/containerd and `FORWARD ACCEPT` baseline. |
+| `guest/build-logwisp.sh` | Shared exact-revision builder used by the install and update helpers. Both paths fetch upstream `main` and tags and fail before Docker unless the pin is an ancestor of that head. It can reuse an existing checkout through a temporary detached worktree and restores the disabled Docker/containerd and `FORWARD ACCEPT` baseline. |
 | `guest/install-logwisp.sh` | First-install helper for the pinned standalone reader and its locked identity, configuration, and unit. |
 | `guest/update-logwisp.sh` | Rebuilds and replaces only LogWisp, retains one known-good binary/config/unit, restarts it, and verifies the new revision and listener. It does not control K3s or the allocator; the fleet procedure supplies their empty-fleet maintenance gate. |
 | `guest/vif-allocator.env.example` | Site values for the allocator's imported image, public join host and session-page base URL. |
