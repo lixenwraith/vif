@@ -526,6 +526,8 @@ test "$(systemctl is-active docker.service)" = inactive
 test "$(systemctl is-active docker.socket)" = inactive
 test "$(systemctl is-active containerd.service)" = inactive
 
+LOGWISP_REVISION=$(tr -d '[:space:]' \
+  < deploy/logwisp/REVISION)
 LOGWISP_BUILD_DIR=$(mktemp -d)
 case "$LOGWISP_BUILD_DIR" in
   /tmp/*) ;;
