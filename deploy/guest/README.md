@@ -625,9 +625,10 @@ match `deploy/logwisp/REVISION`.
 After the first installation, use the update helper whenever
 `deploy/logwisp/REVISION`, the pipeline configuration, or the hardened unit
 changes. It runs from any directory and does not inspect, stop, or modify K3s,
-the allocator, or running games. The Docker build finishes before the short
-LogWisp-only restart; retained files replay when the new process initializes.
-Announce that stream interruption and replay before running it:
+the allocator, or the session workload, so it can also maintain a standalone
+LogWisp installation. On a fleet node, the plan still requires allocation to be
+stopped and the fleet to be empty before changing a logging service. Announce
+the allocation pause and LogWisp stream interruption before running this gate:
 
 ```sh
 for artifact in \
@@ -642,8 +643,40 @@ done
 test -x deploy/guest/build-logwisp.sh
 test -x deploy/guest/update-logwisp.sh
 
-./deploy/guest/update-logwisp.sh
+(
+  set -eu
+  restart_allocator() {
+    sudo systemctl start vif-allocator.service
+  }
+  trap restart_allocator EXIT
+  trap 'exit 1' HUP INT TERM
+
+  sudo systemctl stop vif-allocator.service
+  test "$(systemctl is-active vif-allocator.service)" = inactive
+  FLEET_OBJECTS=$(sudo kubectl -n vif get job,pod,service \
+    -l app.kubernetes.io/part-of=vi-fighter-fleet -o name)
+  test -z "$FLEET_OBJECTS"
+  test -z "$(sudo find /var/log/vif-fleet \
+    -mindepth 1 -maxdepth 1 -print -quit)"
+
+  ./deploy/guest/update-logwisp.sh
+)
+for attempt in $(seq 1 25); do
+  curl --connect-timeout 1 --max-time 2 -fsS \
+    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
+  sleep 1
+done
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/healthz
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/readyz
 ```
+
+The guarded subshell aborts before the updater when either fleet objects or files
+remain, and its trap restarts the allocator on success or failure. The Docker
+build finishes before the short LogWisp-only restart; no Kubernetes object,
+workload image, or allocator binary is changed. If the updater itself fails, it
+restores the previous LogWisp set before the allocator restart.
 
 An existing upstream checkout is optional and is never switched or modified:
 

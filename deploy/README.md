@@ -33,7 +33,7 @@ migration is authoritative in [doc/kube-todo.md](../doc/kube-todo.md).
 | `guest/logwisp.service` | Hardened standalone file reader with a read-only view of the fleet tmpfs, inaccessible Kubernetes/allocator credentials, and no dependency on games or the allocator. |
 | `guest/build-logwisp.sh` | Shared exact-revision builder used by the install and update helpers. It can reuse an existing checkout through a temporary detached worktree and restores the disabled Docker/containerd and `FORWARD ACCEPT` baseline. |
 | `guest/install-logwisp.sh` | First-install helper for the pinned standalone reader and its locked identity, configuration, and unit. |
-| `guest/update-logwisp.sh` | Independently rebuilds and replaces only LogWisp, retains one known-good binary/config/unit, restarts it, and verifies the new revision and listener. |
+| `guest/update-logwisp.sh` | Rebuilds and replaces only LogWisp, retains one known-good binary/config/unit, restarts it, and verifies the new revision and listener. It does not control K3s or the allocator; the fleet procedure supplies their empty-fleet maintenance gate. |
 | `guest/vif-allocator.env.example` | Site values for the allocator's imported image, public join host and session-page base URL. |
 | `guest/vif-allocator.service` | Hardened host service for the website-to-K3s allocator on the systemd K3s node. |
 | `guest/vif-allocator-token.service` / `.timer` | Root-only, atomic rotation of the allocator's short-lived ServiceAccount token. |

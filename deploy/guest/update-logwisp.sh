@@ -1,6 +1,7 @@
 #!/bin/sh
-# Build and deploy vi-fighter's pinned standalone LogWisp without stopping K3s,
-# the allocator, or running games. Retains one known-good binary/config/unit.
+# Build and deploy vi-fighter's pinned standalone LogWisp without controlling
+# K3s or the allocator. The fleet procedure separately enforces its empty-fleet
+# maintenance gate. Retains one known-good binary/config/unit.
 #
 #   ./deploy/guest/update-logwisp.sh
 #   ./deploy/guest/update-logwisp.sh /path/to/logwisp

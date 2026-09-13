@@ -978,7 +978,9 @@ tmpfs/PVC and node cleanup service passed before either workload source changed.
 Use `deploy/guest/update-logwisp.sh` to build the pinned upstream revision,
 replace only the standalone binary/config/unit, restart it, initialize its file
 sources, verify the listener, and retain one automatic rollback set. It neither
-stops nor rebuilds vi-fighter, K3s, the allocator, or live games. Use
+controls nor rebuilds vi-fighter, K3s, or the allocator; the fleet procedure in
+`deploy/guest/README.md` stops allocation and proves the fleet empty around it.
+Use
 `deploy/guest/update-vif-allocator.sh` separately: it builds first, refuses a
 non-empty fleet, pauses only allocation for the short replacement, checks health
 and readiness, and retains one automatic rollback set. Exact preflight, update,
