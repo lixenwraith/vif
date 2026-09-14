@@ -7,32 +7,16 @@ design and operating detail lives in:
 - [the fleet architecture and verification matrix](kubernetes-fleet.md); and
 - [the Linux node artifacts and batch procedures](../deploy/guest/README.md).
 
-Status on 2026-09-14:
+Status on 2026-09-14: Batches A-F are deployed and passed their live gates, and
+the site publishes the two API routes. What those gates established is recorded
+in the fleet plan and the deployment procedure linked above; this file holds only
+what is left.
 
-- Batches A-E are deployed and passed their live gates: the commissioned writer,
-  the fail-closed 256 MiB tmpfs behind one Bound local PV/PVC and its cleanup
-  timer, the Restricted single-container PVC workload, the allocator Role that
-  denies `pods/log`, and the standalone loopback LogWisp service. Measured:
-  two-session fan-in preserved 606 sampled non-TRACE records byte-for-byte with
-  no drops; a stop/restart replayed an exact pre-outage sentinel while processing
-  1,841 records with 86 bounded client-queue drops and no authorization or
-  connection rejections.
-- The pinned LogWisp revision update passed live on 2026-09-14 through the
-  guarded empty-fleet trap. `deploy/logwisp/REVISION` is
-  `6046f5c56b583ce3800f69c639874048b3dd8b69`; the installed binary reports that
-  commit, `/status` carries `client_buffer_size`, `max_connections`, and
-  `write_timeout_ms`, and allocator health and readiness returned `ok`. Its
-  watcher-retirement fix was then proven by Batch F's session cycle.
-- Batch F passed live on 2026-09-14. The proxy preserved a game record
-  byte-for-byte (`proxy sentinel: byte-exact`); with LogWisp stopped the route
-  returned stable `503 log_stream_unavailable` while health, readiness, listing
-  and creation continued and the occupied game advanced 189 → 3000; the restart
-  replayed the exact pre-outage sentinel from the retained file and the game
-  advanced 3000 → 3156; the session's own deletion left no `Watcher failed` entry
-  in that LogWisp invocation; and F7 returned the node to an empty, five-unit
-  steady state. The rollback path was then exercised, so the node runs the
-  previous allocator until `./deploy/guest/update-vif-allocator.sh` runs again.
-- H15, the public edge for the two API routes, is next; Batch G follows it.
+Two things a reader needs before continuing. `deploy/logwisp/REVISION` is
+`6046f5c56b583ce3800f69c639874048b3dd8b69`. The node runs the allocator that the
+Batch F rollback restored, which is one update behind the repository, so
+`./deploy/guest/update-vif-allocator.sh` is due before anything else is measured
+on it.
 
 ## 1. Invariants and batch discipline
 
@@ -56,7 +40,7 @@ These constraints apply to every remaining batch:
 - Put placeholders in repository commands; never commit real machine addresses.
 - Remove rendered files, probe pods, verification Jobs/Services, and verification
   JSONL after each gate. Preserve the mounted tmpfs and Bound PV/PVC.
-- Finish every batch with the common single-session check in §4 plus its
+- Finish every batch with the common single-session check in §3 plus its
   batch-specific gate.
 - Keep the previous allocator binary/configuration available until the next live
   gate passes.
@@ -73,58 +57,14 @@ Kubernetes pod log, hold a cluster credential, or end a game by failing.
 
 | Batch | Goal | State |
 |---|---|---|
-| F — allocator byte proxy | Make `/vif/api/logs` the same-origin edge for LogWisp's SSE bytes, so the website needs no second host, port, or credential, and neither service can take the other down. | Passed live 2026-09-14. |
-| H15 — public edge | Publish exactly the two API routes through the site's TLS front door, so a browser reads its own session's lines over one same-origin `EventSource` and the probe endpoints stay on the node. | Next; artifacts in `deploy/website/`, gate in [§10.5](kube_docker_deploy.md#105-publishing-the-two-api-routes-h15). |
-| G — final reconciliation | Leave a deployment a stranger can install from bare Arch or Ubuntu, described only as deployed, with limits justified by measurement instead of single-guest history. | Blocked on H15. |
+| H15 — public edge | A browser reads its own session's lines over one same-origin `EventSource`, and the probe endpoints stay on the node. | Routes published and verified live 2026-09-14; the site's own session page remains. |
+| G — final reconciliation | Leave a deployment a stranger can install from bare Arch or Ubuntu, described only as deployed, with limits justified by measurement instead of single-guest history. | Next. |
 
-§6 holds the remaining non-logging gates. H3's sizing measurement runs inside G;
+§5 holds the remaining non-logging gates. H3's sizing measurement runs inside G;
 H1, H11 and H12 bound what a stranger can do to an open game port, and gate
 public exposure rather than this pivot.
 
-## 3. Batch F — cut the allocator over to the byte proxy
-
-The validated `-log-stream-url` option, the `httputil.ReverseProxy` handler, the
-SSE lifetime separated from finite create/API deadlines, and their tests are
-merged. What remains is the live cutover. Each slice below is one reportable
-step, labelled as in `deploy/guest/README.md` "Batch F: deploy the allocator byte
-proxy", which holds the exact commands:
-
-1. **F1** preflight: five units active, PV/PVC Bound, fleet and tmpfs empty,
-   LogWisp `/status` carrying the three bounds, and the deployed allocator still
-   answering `501 log_stream_not_configured`.
-2. **F2** `./deploy/guest/update-vif-allocator.sh`. It builds first, refuses a
-   non-empty fleet, pauses only allocation for the replacement, and restores its
-   own previous set if health or readiness fails.
-3. **F3** independence: `vif-allocator.service` may want or order after LogWisp
-   and must never `Require=` or execute it; health and readiness return `ok`.
-4. **F4** proxy shape: `GET`/`HEAD` only with `405 method_not_allowed` otherwise,
-   upstream `text/event-stream`, `no-cache` and `x-accel-buffering: no` preserved,
-   the first `event: connected` frame flushed after a `HEAD` on the same route,
-   and one counted sink client.
-5. **F5** live session gate, in seven sub-steps. It needs a second machine: its
-   proofs all require an `occupied` session and the first-join window is 90
-   seconds. Reader started, session created and joined, occupancy confirmed, a
-   byte-exact non-TRACE sentinel through the proxy; then with LogWisp stopped,
-   stable `503 log_stream_unavailable` while create, list, health, readiness and
-   the occupied game continue; then an exact retained sentinel after restart;
-   then vacancy, deletion and cleanup. F5 is Batch F's §4 run, interleaved with
-   the outage, so §4 is not run separately for this batch. A missed join
-   invalidates the step: delete the session and restart it.
-6. **F6** watcher retirement: the LogWisp invocation that was running for F5's
-   session deletion carries no `Watcher failed` entry. An invocation that saw no
-   file removed proves nothing, and earlier ones ran the replaced binary.
-7. **F7** remove every verification session, file, and capture; keep the previous
-   allocator set until Batch G completes.
-
-The node has no display, so `deploy/website/vif-log-viewer.html` is not gated
-here; `curl` carries the byte proof and the viewer is verified in H15.
-
-Rollback: restore the previous allocator set — one update back, so its
-`/vif/api/logs` answers 501 only until a second update overwrites it — or
-disable the nginx log route. Keep LogWisp and file-writing games independently
-operable.
-
-## 4. Common end-of-batch session check
+## 3. Common end-of-batch session check
 
 Run this after every remaining batch. A batch whose own gate interleaves with it,
 as Batch F's F5 does, runs these blocks in that order instead of separately. Have
@@ -245,7 +185,7 @@ sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
 Expected: all four units active, cleanup last result successful as `vif-fleet`,
 Restricted labels intact, and PV/PVC Bound.
 
-## 5. Batch G — reconcile and hand off
+## 4. Batch G — reconcile and hand off
 
 After Batch F passes live:
 
@@ -259,13 +199,13 @@ After Batch F passes live:
    usage, log rate, tick slips, rotations, LogWisp drops/replay, and browser
    reconnect behavior; revise the provisional 256 MiB and 8 MB caps only from it.
 4. Reboot with no session and repeat node readiness, mount, timer, Restricted
-   labels, allocator probes, Bound PVC, empty directory, and §4.
+   labels, allocator probes, Bound PVC, empty directory, and §3.
 5. Produce the separate website implementation prompt (H15): same-origin
    `EventSource`, `fields.session_id`, bounded retained rows/render rate/reconnect
    backoff, duplicate tolerance, and degradation independent of allocation. Gate
    `deploy/website/vif-log-viewer.html`, the bounded browser reference, there.
 
-## 6. Remaining non-logging fleet gates
+## 5. Remaining non-logging fleet gates
 
 | Item | Required before | Completion evidence |
 |---|---|---|
@@ -274,9 +214,9 @@ After Batch F passes live:
 | Occupied lifecycle matrix (H12) | website launch | Empty expiry, near-deadline rejoin, SIGTERM drain, and capacity gates pass. |
 | Ten-session/full-roster sizing (H3) | final resource limits | One-hour measurements justify CPU, memory, tmpfs, rotation, and stream bounds. |
 | Automated image delivery (H16) | production release automation | CI reproduces the manual import/update boundary without inbound cluster credentials. |
-| Website/nginx integration (H15) | next; see §2 | Same-origin create/list/log routes, session page, and raw game join all pass. |
+| Website/nginx integration (H15) | website launch | Create/list and log routes pass (done 2026-09-14); the session page and raw game join remain. |
 
-## 7. Final acceptance and rollback boundary
+## 6. Final acceptance and rollback boundary
 
 The logging pivot is complete only when:
 
@@ -289,7 +229,7 @@ The logging pivot is complete only when:
 - stopping LogWisp does not stop allocation, state, or gameplay;
 - SSE preserves source bytes and remains bounded under slow/reconnecting clients;
 - public logs exclude host, K3s, credential, and exact client-address data; and
-- §4 passes after reboot.
+- §3 passes after reboot.
 
 Keep the previous allocator binary and configuration until this gate passes.
 Rollback selects the preceding allocator/workload, restores the 501 handler or

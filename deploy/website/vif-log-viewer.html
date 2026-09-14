@@ -12,7 +12,9 @@
     h1 { display: inline; margin: 0 18px 0 0; font-size: 16px; }
     .controls { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     input, select, button { padding: 5px 8px; border: 1px solid #465064; border-radius: 4px; background: #171e2b; color: inherit; font: inherit; }
-    input[type=url] { width: 330px; }
+    input[type=text] { width: 200px; }
+    input#url { width: 150px; }
+    input#limit { width: 70px; }
     button { cursor: pointer; }
     button:hover { background: #253047; }
     #state { padding: 3px 7px; border-radius: 999px; background: #384152; }
@@ -21,14 +23,15 @@
     #state.failed { background: #7b2936; }
     #stats { margin-top: 8px; color: #9aa6b7; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    th { position: sticky; top: 92px; z-index: 1; background: #151b26; color: #9aa6b7; text-align: left; }
+    th { position: sticky; top: var(--header-height, 92px); z-index: 1; background: #151b26; color: #9aa6b7; text-align: left; }
     th, td { padding: 5px 8px; border-bottom: 1px solid #202838; vertical-align: top; overflow-wrap: anywhere; }
-    th:nth-child(1), td:nth-child(1) { width: 185px; }
+    th:nth-child(1), td:nth-child(1) { width: 265px; white-space: nowrap; }
     th:nth-child(2), td:nth-child(2) { width: 58px; }
     th:nth-child(3), td:nth-child(3) { width: 145px; }
     th:nth-child(4), td:nth-child(4) { width: 75px; }
     tr:hover { background: #121a28; }
-    tr[data-level=ERROR], tr[data-level=FATAL] { color: #ff8796; }
+    tr[data-level=ERROR], tr[data-level=BAD] { color: #ff8796; }
+    tr[data-level=PROC] { color: #bb9af7; }
     tr[data-level=WARN] { color: #ffd479; }
     tr[data-level=INFO] { color: #a9c7ff; }
     details summary { cursor: pointer; }
@@ -43,14 +46,19 @@
       <button id="connect" type="button">Connect</button>
       <button id="pause" type="button">Pause</button>
       <button id="clear" type="button">Clear</button>
-      <label>Session <input id="session" placeholder="all sessions"></label>
-      <label>Level
+      <button id="export" type="button">Export</button>
+      <label>Rows <input id="limit" type="number" min="1" step="100"></label>
+      <label>Session <input id="session" type="text" placeholder="exact id"></label>
+      <label>Search <input id="search" type="text" placeholder="any text in record"></label>
+      <label>Level &ge;
         <select id="level">
-          <option value="">all</option>
-          <option>TRACE</option><option>DEBUG</option><option>INFO</option>
-          <option>PROC</option><option>WARN</option><option>ERROR</option><option>FATAL</option>
+          <option value="">TRACE</option>
+          <option>DEBUG</option><option>INFO</option>
+          <option>WARN</option><option>ERROR</option>
         </select>
       </label>
+      <label><input id="proc" type="checkbox" checked> PROC</label>
+      <label><input id="bad" type="checkbox" checked> BAD</label>
       <span id="state">idle</span>
     </div>
     <div id="stats">rows 0 · duplicates 0 · UI drops 0</div>

@@ -1064,6 +1064,10 @@ The probe endpoints must stay unreachable. `curl -o /dev/null -w '%{http_code}'`
 against `https://<site-host>/healthz` and `/readyz` must not return `200`; a
 site's own 404 page is the expected answer, since neither path is published.
 
+This gate passed on 2026-09-14: the list route answered, the stream delivered
+`event: connected` through TLS, both probe paths returned the site's 404, and the
+viewer showed a joined session's rows live.
+
 Publishing the session route makes creation reachable by anyone who can reach the
 site, which is the website contract rather than a regression: the ten-session
 quota, the 90-second first-join expiry, and the edge's own rate limit are what
