@@ -21,6 +21,8 @@ migration is authoritative in [doc/kube-todo.md](../doc/kube-todo.md).
 | `k3s/session.sh` | Repeatable manual create/list/delete path. It creates the Job first, owns the Service by the returned Job UID, selects a free fleet port when omitted, and cleans a partial create. |
 | `logwisp/REVISION` | Exact upstream LogWisp source revision used for the standalone node binary. It must be reachable from upstream `main`; a pull-request head does not survive a squash merge. |
 | `logwisp/aggregator.toml` | Standalone raw file-source pipeline over `/var/log/vif-fleet/*.jsonl`, with bounded flow/clients and a loopback-only HTTP sink. |
+| `website/vif.nginx.example` | Public edge for the two allocator API routes: finite timeouts for create/list, and an unbuffered, uncached, long-read location for the SSE stream. Placeholders only; the probe endpoints are not published. |
+| `website/vif-log-viewer.html` | Bounded same-origin browser reference for `/vif/api/logs`. Caps rendered rows, its pending render queue, and its duplicate fingerprint set; it reaches nothing but its own origin. |
 | `frontdoor/haproxy.cfg` | Not deployed. The worked alternative: every session behind one public port, routed on the name a dialer sends before the handshake. Kept for the routing exploration; the deployed shape reaches a session on its own port. |
 | `guest/nftables.conf` | The guest's own filter: one `inet vif` table, replaced on every load, never `flush ruleset`. Its input hook runs after kube-proxy so an endpoint-less NodePort consistently rejects. |
 | `guest/vif-operator.nft.example` | Site values the filter includes: the one address allowed to reach the node directly and the node ports it may open. Install as `/etc/nftables.d/vif-operator.nft`. |
@@ -40,7 +42,6 @@ migration is authoritative in [doc/kube-todo.md](../doc/kube-todo.md).
 | `guest/vif-allocator-refresh-token.sh` | Token rotation implementation used by the oneshot service. |
 | `guest/update-vif-allocator.sh` | Builds and updates the allocator as one guarded cutover after pausing allocation and proving the fleet empty; retains one known-good binary/config/unit. |
 | `guest/update-vif-image.sh` | Repeatable manual release path: one Docker build/check, K3s import, allocator image update, old-image cleanup, then build daemons disabled again. |
-| `guest/vif-log-viewer.html` | Bounded local-only EventSource viewer for the allocator-proxied fleet stream; use through an SSH loopback tunnel before nginx/website integration. |
 
 Nothing here installs itself. Once installed, the allocator creates a session only
 when a player asks for one; between requests, the namespace holds no pods.

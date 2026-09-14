@@ -925,7 +925,7 @@ The page-facing API is deliberately small:
 | `GET /readyz` | `200` | The current token can list Services through the K3s API; otherwise `503`. |
 | `POST /vif/api/sessions` | `201` | Accept only an empty body or `{}`. Refuse before creation when all ten ports are held; otherwise create the fixed Job, read its UID, create its owner-referenced Service, and return only after the pod, EndpointSlice and `live=true ready=true` agree. |
 | `GET /vif/api/sessions` | `200` | Return `{ "sessions": [...] }` for live, non-completed Jobs. `guests`, `capacity`, `phase`, and `expires_in` come directly from each pod's text `/health` response. |
-| `GET` or `HEAD /vif/api/logs` | `200` stream after Batch F | The repository allocator proxies the configured loopback LogWisp SSE response without parsing records; unavailable LogWisp returns stable `503 log_stream_unavailable`. The preceding live allocator still returns `501 log_stream_not_configured` until the Batch F cutover. |
+| `GET` or `HEAD /vif/api/logs` | `200` stream | The allocator proxies the configured loopback LogWisp SSE response without parsing records; unavailable LogWisp returns stable `503 log_stream_unavailable`, and an allocator built without the upstream returns `501 log_stream_not_configured`. |
 
 Creation returns `503 fleet_full`, `504 session_not_ready`, or
 `502 kubernetes_error` as appropriate. A failed or canceled readiness wait removes the
@@ -940,11 +940,11 @@ non-empty body without `application/json` returns `415`. A canceled create retur
 sets `Retry-After: 10`; website code should honor that instead of immediately
 retrying and churning the API.
 
-The checked-in Batch F endpoint reverse-proxies the node aggregator's SSE stream
-without exposing a pod IP, pod port, or aggregator address. The local gate uses
-the bounded `deploy/guest/vif-log-viewer.html` EventSource client through an SSH
-loopback tunnel. The later website must use the same API path, bound retained rows
-and reconnect delay, and keep the allocator between the browser and every pod.
+The deployed endpoint reverse-proxies the node aggregator's SSE stream without
+exposing a pod IP, pod port, or aggregator address.
+`deploy/website/vif-log-viewer.html` is the bounded same-origin EventSource
+reference; the site must use the same API path, bound retained rows and reconnect
+delay, and keep the allocator between the browser and every pod.
 
 ### 10.3 The log path
 
@@ -965,9 +965,10 @@ before two-session fan-in preserved 606 sampled non-TRACE records byte-for-byte
 with no sink drops or rejected clients. Its outage gate proved gameplay and
 allocation independence; retained replay delivered an exact sentinel while the
 bounded client queue recorded 86 drops among 1,841 processed records. LogWisp was
-updated live to the pinned revision on 2026-09-14. The deployed allocator still
-returns `501 log_stream_not_configured`; Batch F's merged version proxies the
-loopback stream byte-for-byte and returns stable 503 JSON when LogWisp is down.
+updated live to the pinned revision on 2026-09-14, and Batch F cut the allocator
+over the same day: `/vif/api/logs` proxies the loopback stream byte-for-byte and
+returns stable `503 log_stream_unavailable` when LogWisp is down, while
+allocation, health, readiness and an occupied game continue.
 
 Each application record carries `fields.session_id`, `fields.msg` stays first, the
 file rotates at 8 MB, and per-process directory cleanup is disabled.
@@ -1012,6 +1013,49 @@ shows the bounded aggregate log panel. The session template reads port `31703` f
 its own `/session/31703/` URL, queries the list endpoint for that row, and keeps the
 two user-facing strings distinct: the HTTPS page URL and the raw `lixen.com:31703`
 join target. Neither template speaks to Kubernetes or to a pod directly.
+
+### 10.5 Publishing the two API routes (H15)
+
+The allocator listens on `:9080` behind the node's own filter, which admits only
+the operator address. Publishing it means letting the TLS front door reach that
+port and mapping exactly two paths; `/healthz` and `/readyz` stay on the node.
+`deploy/website/vif.nginx.example` is the reference location set, with
+placeholders for the node address.
+
+On the node, add the allocator port to the operator allowance in
+`/etc/nftables.d/vif-operator.nft` and reload, then confirm the table carries it:
+
+```sh
+sudo systemctl restart nftables
+sudo nft list table inet vif | grep -A2 'saddr'
+```
+
+On the front door, copy the reference upstream into the `http` context and the
+two exact locations into the site's TLS server block, then reload after a syntax
+check. Three properties decide whether the stream survives the hop:
+`proxy_buffering off`, no cache, and a read timeout longer than a session. A finite read timeout truncates a live stream at exactly that
+interval, which reads as a flaky game rather than a proxy setting. The site's
+`Content-Security-Policy` needs `connect-src 'self'` for a same-origin
+`EventSource`; nothing else is added.
+
+Verify from a client, not from the node:
+
+```sh
+curl -fsS https://<site-host>/vif/api/sessions
+curl -fsSI https://<site-host>/vif/api/logs |
+  grep -Ei '^(content-type|cache-control|x-accel-buffering)'
+curl --no-buffer -fsS --max-time 5 \
+  https://<site-host>/vif/api/logs 2>/dev/null | head -n 1
+```
+
+Expect a session list, `text/event-stream` with `no-cache`, and
+`event: connected`. Then serve `deploy/website/vif-log-viewer.html` from the
+site's own document root and open it: its stream field defaults to the relative
+`/vif/api/logs`, so it reaches only its own origin. Allocate one session, join it,
+and require live rows carrying that session's id.
+
+The probe endpoints must stay unreachable. `curl -o /dev/null -w '%{http_code}'`
+against `https://<site-host>/healthz` and `/readyz` must not return `200`.
 
 ## 11. The alternative that is not taken: one fixed public port
 
@@ -1122,20 +1166,19 @@ The remaining gap register is the fleet plan's
   successful accepted connection's remote address, so the run could not prove the
   admission limiter sees each player rather than one rewritten address for the
   whole fleet.
-- **The node-local log path is partially deployed** (A14). Batches A-E passed,
+- **The node-local log path is deployed through the allocator** (A14). Batches A-F passed,
   including the capped tmpfs/PVC, Restricted file-writing workload, cleanup timer,
   remote join, record self-tags, empty steady state, and denial of allocator Pod
   log reads. The standalone LogWisp service also passed installation, isolation,
   exact two-session fan-in, outage independence, retained replay, and its
-  pinned-revision update. Batch F's tested byte proxy still needs its live cutover
-  and common session gate. The old console-source aggregator and in-pod sidecar
-  are superseded, not fallbacks.
-- **The website integration is not built and the LogWisp proxy is not deployed**
-  (A16). The
-  allocator and restricted rotating credential implement the session API, and
-  the standalone file-source service is isolated on loopback. The repository has
-  the tested allocator byte proxy and bounded local viewer; nginx and the Hugo
-  session page wait for its live gate.
+  pinned-revision update, and byte preservation through the deployed proxy.
+  Publishing the route (A16) and Batch G's reconciliation remain. The old
+  console-source aggregator and in-pod sidecar are superseded, not fallbacks.
+- **The website integration is not built** (A16). The allocator, its restricted
+  rotating credential and the deployed byte proxy serve the session and log APIs
+  on the node, and the file-source service stays isolated on loopback. Publishing
+  the two routes through the TLS front door and building the Hugo session page
+  remain; §10.5 is that gate and `deploy/website/` holds its artifacts.
 - **The occupied lifecycle gates remain partly open.** An allocator-created remote
   join reached `occupied` and then `vacant`; automatic empty-grace expiry, rejoin
   inside the grace, drain while joined, and the one-player capacity case still

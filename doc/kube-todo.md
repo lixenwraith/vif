@@ -22,18 +22,17 @@ Status on 2026-09-14:
   `6046f5c56b583ce3800f69c639874048b3dd8b69`; the installed binary reports that
   commit, `/status` carries `client_buffer_size`, `max_connections`, and
   `write_timeout_ms`, and allocator health and readiness returned `ok`. Its
-  watcher-retirement fix is running but not yet proven: proof needs a session
-  create/delete cycle, which Batch F's gate supplies.
-- Batch F's live cutover ran on 2026-09-14. F1-F3 passed; F4 confirmed `405`
-  method handling and an unstalled stream; F5 reached `occupied` and proved the
-  outage slice — stable `503 log_stream_unavailable`, `ok` health and readiness,
-  the occupied game still advancing, and a new session still created while
-  LogWisp was stopped; F6 and F7 returned the node to an empty, five-unit steady
-  state. F5.4's byte-exact sentinel and F5.6's retained replay through the proxy
-  printed no verdict under the procedure of the day and are the only outstanding
-  Batch F evidence. The rollback path was then exercised, so the node runs the
+  watcher-retirement fix was then proven by Batch F's session cycle.
+- Batch F passed live on 2026-09-14. The proxy preserved a game record
+  byte-for-byte (`proxy sentinel: byte-exact`); with LogWisp stopped the route
+  returned stable `503 log_stream_unavailable` while health, readiness, listing
+  and creation continued and the occupied game advanced 189 → 3000; the restart
+  replayed the exact pre-outage sentinel from the retained file and the game
+  advanced 3000 → 3156; the session's own deletion left no `Watcher failed` entry
+  in that LogWisp invocation; and F7 returned the node to an empty, five-unit
+  steady state. The rollback path was then exercised, so the node runs the
   previous allocator until `./deploy/guest/update-vif-allocator.sh` runs again.
-  Batch G has not started.
+- H15, the public edge for the two API routes, is next; Batch G follows it.
 
 ## 1. Invariants and batch discipline
 
@@ -74,12 +73,13 @@ Kubernetes pod log, hold a cluster credential, or end a game by failing.
 
 | Batch | Goal | State |
 |---|---|---|
-| F — allocator byte proxy | Make `/vif/api/logs` the same-origin edge for LogWisp's SSE bytes, so the website needs no second host, port, or credential, and neither service can take the other down. | Cut over 2026-09-14; two byte-preservation proofs outstanding. |
-| G — final reconciliation | Leave a deployment a stranger can install from bare Arch or Ubuntu, described only as deployed, with limits justified by measurement instead of single-guest history. | Blocked on F. |
+| F — allocator byte proxy | Make `/vif/api/logs` the same-origin edge for LogWisp's SSE bytes, so the website needs no second host, port, or credential, and neither service can take the other down. | Passed live 2026-09-14. |
+| H15 — public edge | Publish exactly the two API routes through the site's TLS front door, so a browser reads its own session's lines over one same-origin `EventSource` and the probe endpoints stay on the node. | Next; artifacts in `deploy/website/`, gate in [§10.5](kube_docker_deploy.md#105-publishing-the-two-api-routes-h15). |
+| G — final reconciliation | Leave a deployment a stranger can install from bare Arch or Ubuntu, described only as deployed, with limits justified by measurement instead of single-guest history. | Blocked on H15. |
 
-§6 holds the non-logging gates. H15 is what consumes F's route and unblocks with
-it; H3's sizing measurement runs inside G; H1, H11 and H12 bound what a stranger
-can do to an open game port, and gate public exposure rather than this pivot.
+§6 holds the remaining non-logging gates. H3's sizing measurement runs inside G;
+H1, H11 and H12 bound what a stranger can do to an open game port, and gate
+public exposure rather than this pivot.
 
 ## 3. Batch F — cut the allocator over to the byte proxy
 
@@ -116,10 +116,11 @@ proxy", which holds the exact commands:
 7. **F7** remove every verification session, file, and capture; keep the previous
    allocator set until Batch G completes.
 
-The node has no display, so `deploy/guest/vif-log-viewer.html` is not gated here;
-`curl` carries the byte proof and the viewer is verified with nginx in H15.
+The node has no display, so `deploy/website/vif-log-viewer.html` is not gated
+here; `curl` carries the byte proof and the viewer is verified in H15.
 
-Rollback: restore the previous allocator set, whose endpoint returns 501, or
+Rollback: restore the previous allocator set — one update back, so its
+`/vif/api/logs` answers 501 only until a second update overwrites it — or
 disable the nginx log route. Keep LogWisp and file-writing games independently
 operable.
 
@@ -187,8 +188,9 @@ sudo kubectl -n vif get job "vif-session-$SESSION_ID" -o json |
 
 curl -fsS http://127.0.0.1:9080/vif/api/sessions |
   jq -e --arg id "$SESSION_ID" '
-    .sessions[] | select(.id == $id) | .state |
-    select(.phase == "occupied" and .guests >= 1)'
+    any(.sessions[]; .id == $id and
+      .state.phase == "occupied" and .state.guests >= 1)' &&
+  printf 'session occupied\n'
 ```
 
 Quit the remote client and immediately verify vacancy and the commissioned file:
@@ -196,8 +198,9 @@ Quit the remote client and immediately verify vacancy and the commissioned file:
 ```sh
 curl -fsS http://127.0.0.1:9080/vif/api/sessions |
   jq -e --arg id "$SESSION_ID" '
-    .sessions[] | select(.id == $id) | .state |
-    select(.phase == "vacant" and .guests == 0)'
+    any(.sessions[]; .id == $id and
+      .state.phase == "vacant" and .state.guests == 0)' &&
+  printf 'session vacant\n'
 
 sudo test -s "/var/log/vif-fleet/$SESSION_ID.jsonl"
 sudo jq -s -e --arg id "$SESSION_ID" '
@@ -260,7 +263,7 @@ After Batch F passes live:
 5. Produce the separate website implementation prompt (H15): same-origin
    `EventSource`, `fields.session_id`, bounded retained rows/render rate/reconnect
    backoff, duplicate tolerance, and degradation independent of allocation. Gate
-   `deploy/guest/vif-log-viewer.html`, the bounded browser reference, there.
+   `deploy/website/vif-log-viewer.html`, the bounded browser reference, there.
 
 ## 6. Remaining non-logging fleet gates
 
@@ -271,7 +274,7 @@ After Batch F passes live:
 | Occupied lifecycle matrix (H12) | website launch | Empty expiry, near-deadline rejoin, SIGTERM drain, and capacity gates pass. |
 | Ten-session/full-roster sizing (H3) | final resource limits | One-hour measurements justify CPU, memory, tmpfs, rotation, and stream bounds. |
 | Automated image delivery (H16) | production release automation | CI reproduces the manual import/update boundary without inbound cluster credentials. |
-| Website/nginx integration (H15) | after Batch F | Same-origin create/list/log routes, session page, and raw game join all pass. |
+| Website/nginx integration (H15) | next; see §2 | Same-origin create/list/log routes, session page, and raw game join all pass. |
 
 ## 7. Final acceptance and rollback boundary
 

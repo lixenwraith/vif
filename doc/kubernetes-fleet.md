@@ -18,8 +18,11 @@ are in [`deploy/`](../deploy/README.md); the scenarios that verify it by hand ar
 > replay delivered an exact retained sentinel across 1,841 records with 86
 > client-queue drops. LogWisp was updated live on 2026-09-14 to the pinned
 > revision that retires a watched file without an error and exposes its queue and
-> connection bounds. Batch F's tested allocator byte proxy is the next live
-> cutover, so the deployed `/vif/api/logs` still returns 501.
+> connection bounds. Batch F cut the allocator over on 2026-09-14:
+> `/vif/api/logs` now proxies LogWisp's SSE bytes, preserving a game record
+> byte-for-byte and returning a stable 503 while allocation and gameplay continue
+> without LogWisp. Publishing that route through the site's front door (H15) is
+> next.
 
 ## 1. Current deployment
 
@@ -34,13 +37,13 @@ are in [`deploy/`](../deploy/README.md); the scenarios that verify it by hand ar
 | Image | `scratch` + one static binary, ~13 MB, non-root, read-only root filesystem, no shell. |
 | Transport | Raw framed TCP, one long-lived connection per player. Unauthenticated by decision (§4). |
 | Reached by | Its own port, from a forwarded ten-port range. The port is the whole of the routing: nothing in a plaintext game connection names a session, so a firewall's destination port is the only signal there is. |
-| Logs and metrics | Each Job writes `<session-id>.jsonl` through the Bound local PVC to the capped node tmpfs. The standalone LogWisp node service, at the revision pinned in `deploy/logwisp/REVISION` and updated live on 2026-09-14, has a read-only view and loopback-only listener. Normal fan-in preserved 606 sampled records byte-for-byte with zero drops; a stop/restart proved gameplay independence and exact retained replay with 86 bounded client-queue drops among 1,841 processed records. The tested allocator proxy awaits its Batch F live gate, so the deployed `/vif/api/logs` still returns 501. |
+| Logs and metrics | Each Job writes `<session-id>.jsonl` through the Bound local PVC to the capped node tmpfs. The standalone LogWisp node service, at the revision pinned in `deploy/logwisp/REVISION` and updated live on 2026-09-14, has a read-only view and loopback-only listener. Normal fan-in preserved 606 sampled records byte-for-byte with zero drops; a stop/restart proved gameplay independence and exact retained replay with 86 bounded client-queue drops among 1,841 processed records. `/vif/api/logs` proxies that stream byte-for-byte and answers a stable 503 when LogWisp is stopped; publishing it (H15) is what remains. |
 
 The allocator-to-Kubernetes path is implemented and verified through an off-box
 join. The standalone LogWisp node edge passed installation, fan-in, isolation,
 outage independence, retained replay, and a pinned-revision update under the
-guarded empty-fleet trap. The allocator stream edge is implemented and tested but
-not yet deployed; nginx and website routing follow its live gate.
+guarded empty-fleet trap. The allocator stream edge is deployed and passed the
+same gates through the proxy; nginx and website routing follow.
 
 ```mermaid
 flowchart LR
@@ -112,8 +115,8 @@ it does not move an in-memory session into an unrelated pod.
 | H5 | later | **Spatial grid right-sizing.** ~30.5 MiB reserved per world at the current maximum. | Deferred until density matters; needs resize/play regression coverage. |
 | H11 | **next** | **Verify the player's source address at the pod.** `externalTrafficPolicy: Local` plus `pf rdr` should preserve it, and the address is already carried — `network.JoinerReport.Remote` holds `conn.RemoteAddr()` and reaches `App.noteJoinerReport` — but only `reach.noteDeclared` consumes it, so no record names it and the run could not inspect one. | The admitted-participant record in `internal/app/host.go` carries the accepted socket's remote address, and a remote join names the off-box client. If it names the node or gateway, the routing is corrected before relying on admission limits; otherwise the limiter is one budget for the whole fleet. |
 | H12 | **next** | **Finish the occupied lifecycle gates.** First-join expiry and owned-Service cleanup passed. An allocator-created off-box join reached `occupied` then `vacant`; automatic empty-grace expiry, rejoin near 75 s, drain on Job deletion, and `PLAYERS=1` capacity remain. | Each open case in [Deployment §9](kube_docker_deploy.md#9-create-one-session-by-hand) produces its specified transition and preserves the same run throughout the reconnect grace. |
-| H14 | next | **Complete the node-local log pipeline.** Batches A-E passed, including standalone fan-in, outage independence, exact retained replay, and the pinned-revision LogWisp update. Batch F's tested allocator byte proxy awaits its live gate. | Every remaining gate and the final acceptance in `kube-todo.md` passes without lowering Restricted admission or putting Kubernetes in the log data path. |
-| H15 | after H14 | **Integrate nginx and Hugo.** The website implementation now has the allocator's real response fields and status codes; it still waits for the log endpoint. | `https://lixen.com/vif/api/sessions` creates/lists sessions, the session page keeps its HTTPS URL distinct from the raw join target, and the bounded log panel degrades cleanly when the API is absent. |
+| H14 | next | **Complete the node-local log pipeline.** Batches A-F passed, including standalone fan-in, outage independence, exact retained replay, the pinned-revision LogWisp update, and byte preservation through the deployed allocator proxy. Batch G's reconciliation remains. | Every remaining gate and the final acceptance in `kube-todo.md` passes without lowering Restricted admission or putting Kubernetes in the log data path. |
+| H15 | **next** | **Integrate nginx and Hugo.** The log endpoint is live, and `deploy/website/` holds the reference location set and the bounded same-origin viewer. | `https://lixen.com/vif/api/sessions` creates/lists sessions, the session page keeps its HTTPS URL distinct from the raw join target, and the bounded log panel degrades cleanly when the API is absent. |
 | H16 | later | **Automate image delivery.** `deploy/guest/update-vif-image.sh` is the repeatable manual boundary: one build/check/import, allocator image update, old-image removal, and build-daemon cleanup. | CI resolves and verifies a tagged release artifact, invokes or reproduces the same boundary without an inbound cluster credential, and new sessions use it while existing matches finish. |
 
 ### Dropped, with the reason

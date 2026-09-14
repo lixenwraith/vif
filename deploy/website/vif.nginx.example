@@ -1,0 +1,43 @@
+# Reference edge for the allocator API. Copy the two parts into their own
+# contexts; this file is not includable as a unit. Replace <node-address> with
+# the K3s node's address on the operator network, which must already admit that
+# source on 9080. Nothing here terminates or inspects a game connection.
+
+# --- http context ---
+upstream vif_allocator {
+    server <node-address>:9080;
+    keepalive 8;
+}
+
+# --- server context, inside the site's TLS server block ---
+
+# Create and list. Finite requests, so ordinary proxy timeouts apply.
+location = /vif/api/sessions {
+    proxy_pass http://vif_allocator;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 30s;
+    proxy_send_timeout 30s;
+}
+
+# One long-lived SSE response. Buffering, caching or a finite read timeout here
+# turns a live stream into a stalled or truncated one.
+location = /vif/api/logs {
+    proxy_pass http://vif_allocator;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+
+    proxy_buffering off;
+    proxy_cache off;
+    gzip off;
+    chunked_transfer_encoding on;
+
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
+
+# Exact locations, because /healthz, /readyz and every other allocator path stay
+# on the node: a /vif/ prefix would publish whatever is added there later.

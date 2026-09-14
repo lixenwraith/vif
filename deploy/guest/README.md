@@ -1414,8 +1414,9 @@ self-tagging before deleting the session:
 ```sh
 curl -fsS http://127.0.0.1:9080/vif/api/sessions |
   jq -e --arg id "$SESSION_ID" '
-    .sessions[] | select(.id == $id) | .state |
-    select(.phase == "vacant" and .guests == 0)'
+    any(.sessions[]; .id == $id and
+      .state.phase == "vacant" and .state.guests == 0)' &&
+  printf 'session vacant\n'
 
 sudo test -s "/var/log/vif-fleet/$SESSION_ID.jsonl"
 sudo jq -s -e --arg id "$SESSION_ID" '
@@ -1656,9 +1657,9 @@ or the stream answers `503 log_stream_unavailable` here while `logwisp.service`
 is active, the allocator predates the fix that stops a `HEAD` reply from stalling
 the next stream; re-run F2 from a checkout that contains it.
 
-`deploy/guest/vif-log-viewer.html` is the bounded browser reference for the same
-route. The node has no display and its loopback ports are not forwarded, so it is
-verified with nginx and the session page in Batch G's website handoff (H15).
+`deploy/website/vif-log-viewer.html` is the bounded browser reference for the
+same route. The node has no display, so it is verified behind nginx in H15, where
+`doc/kube_docker_deploy.md` §10.5 holds that gate.
 
 ### F5 - live session gate
 
@@ -1890,8 +1891,9 @@ this here rather than returning to §4:
 ```sh
 curl -fsS http://127.0.0.1:9080/vif/api/sessions |
   jq -e --arg id "$SESSION_ID" '
-    .sessions[] | select(.id == $id) | .state |
-    select(.phase == "vacant" and .guests == 0)'
+    any(.sessions[]; .id == $id and
+      .state.phase == "vacant" and .state.guests == 0)' &&
+  printf 'session vacant\n'
 
 sudo test -s "/var/log/vif-fleet/$SESSION_ID.jsonl"
 sudo jq -s -e --arg id "$SESSION_ID" '
@@ -1915,8 +1917,10 @@ sudo find /var/log/vif-fleet -mindepth 1 -maxdepth 1 -print
 unset SESSION_JSON SESSION_ID JOIN_TARGET
 ```
 
-**Expect:** two `true` verdicts, then `No resources found` and an empty `find`.
-Delete before the empty grace or Job TTL removes the evidence.
+**Expect:** `true` and `session vacant`, then `true` for the self-tag check, then
+`No resources found` and an empty `find`. A missing `session vacant` means the
+remote client is still connected. Delete before the empty grace or Job TTL
+removes the evidence.
 
 ### F6 - watcher retirement
 
@@ -2014,9 +2018,9 @@ curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:9080/healthz
 curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:9080/readyz
-ROLLBACK_LOG_STATUS=$(curl --connect-timeout 2 --max-time 5 -sS \
+ROLLBACK_LOG_STATUS=$(curl --connect-timeout 2 --max-time 2 -sS \
   -o /dev/null -w '%{http_code}' \
-  http://127.0.0.1:9080/vif/api/logs)
+  http://127.0.0.1:9080/vif/api/logs 2>/dev/null || true)
 printf 'restored /vif/api/logs status: %s\n' "$ROLLBACK_LOG_STATUS"
 unset FLEET_OBJECTS ROLLBACK_LOG_STATUS
 ```
@@ -2024,6 +2028,9 @@ unset FLEET_OBJECTS ROLLBACK_LOG_STATUS
 The allocator binds its listener after startup reconciliation, so probe only
 through the wait loop; a `curl` immediately after `systemctl start` reports a
 refused connection that means nothing.
+
+A proxying build answers `200` and then holds the stream open, so that probe is
+bounded and its timeout discarded; only the status is read.
 
 `.previous` is one update back, not a fixed version: each
 `update-vif-allocator.sh` run overwrites it. It holds the 501 allocator only
