@@ -24,8 +24,11 @@ if [ -n "$(git -C "$repo_root" status --porcelain)" ]; then
 	echo "$0: the vi-fighter worktree differs from HEAD" >&2
 	exit 1
 fi
+# /etc/vif-allocator is root:vif-allocator 0750, so an operator account cannot
+# stat inside it and an installed env file would read as missing.
 for installed in "$binary" "$installed_env" "$installed_unit"; do
-	[ -f "$installed" ] || { echo "$0: missing installed file: $installed" >&2; exit 1; }
+	sudo test -f "$installed" ||
+		{ echo "$0: missing installed file: $installed" >&2; exit 1; }
 done
 [ -r "$source_unit" ] || { echo "$0: missing unit: $source_unit" >&2; exit 1; }
 systemctl is-active --quiet vif-allocator.service || {

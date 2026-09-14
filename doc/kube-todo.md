@@ -75,29 +75,31 @@ exposure rather than this pivot.
 
 The validated `-log-stream-url` option, the `httputil.ReverseProxy` handler, the
 SSE lifetime separated from finite create/API deadlines, and their tests are
-merged. What remains is the live cutover, in the order of `deploy/guest/README.md`
-"Batch F: deploy the allocator byte proxy". Each step is one reportable slice:
+merged. What remains is the live cutover. Each slice below is one reportable
+step, labelled as in `deploy/guest/README.md` "Batch F: deploy the allocator byte
+proxy", which holds the exact commands:
 
-1. Preflight: five units active, PV/PVC Bound, fleet and tmpfs empty, LogWisp
-   `/status` carrying the three bounds, and the deployed allocator still
+1. **F1** preflight: five units active, PV/PVC Bound, fleet and tmpfs empty,
+   LogWisp `/status` carrying the three bounds, and the deployed allocator still
    answering `501 log_stream_not_configured`.
-2. `./deploy/guest/update-vif-allocator.sh`. It builds first, refuses a non-empty
-   fleet, pauses only allocation for the replacement, and restores its own
-   previous set if health or readiness fails.
-3. Independence: `vif-allocator.service` may want or order after LogWisp and must
-   never `Require=` or execute it; health and readiness return `ok`.
-4. Proxy shape: `GET`/`HEAD` only with `405 method_not_allowed` otherwise,
+2. **F2** `./deploy/guest/update-vif-allocator.sh`. It builds first, refuses a
+   non-empty fleet, pauses only allocation for the replacement, and restores its
+   own previous set if health or readiness fails.
+3. **F3** independence: `vif-allocator.service` may want or order after LogWisp
+   and must never `Require=` or execute it; health and readiness return `ok`.
+4. **F4** proxy shape: `GET`/`HEAD` only with `405 method_not_allowed` otherwise,
    upstream `text/event-stream`, `no-cache` and `x-accel-buffering: no` preserved,
    the first `event: connected` frame flushed, and one counted sink client.
-5. Local bounded viewer over an SSH forward of 9080 only; no firewall port opens.
-6. Session gate: a byte-exact non-TRACE sentinel through the proxy; then with
-   LogWisp stopped, stable `503 log_stream_unavailable` while create, list,
+5. **F5** local bounded viewer over an SSH forward of 9080 only; no firewall port
+   opens.
+6. **F6** session gate: a byte-exact non-TRACE sentinel through the proxy; then
+   with LogWisp stopped, stable `503 log_stream_unavailable` while create, list,
    health, readiness, and the occupied game continue; then an exact retained
    sentinel after restart; then §4 through vacancy, deletion, and cleanup.
-7. Watcher retirement: the LogWisp invocation spanning that create/delete cycle
-   carries no `Watcher failed` entry. Earlier invocations ran the replaced binary
-   and prove nothing.
-8. Remove every verification session, file, and capture; keep the previous
+7. **F7** watcher retirement: the LogWisp invocation spanning that create/delete
+   cycle carries no `Watcher failed` entry. Earlier invocations ran the replaced
+   binary and prove nothing.
+8. **F8** remove every verification session, file, and capture; keep the previous
    allocator set until Batch G completes.
 
 Rollback: restore the previous allocator set, whose endpoint returns 501, or

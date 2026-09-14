@@ -1522,6 +1522,11 @@ Batch E is complete and the pinned LogWisp update above was deployed on
 workload, Role, PVC, tmpfs, or LogWisp process. It adds one validated loopback
 upstream and proxies SSE framing bytes without parsing or retaining records.
 
+Its eight steps below are labelled F1-F8 and match `doc/kube-todo.md` §3. Report
+each step's output before starting the next.
+
+### F1 - preflight
+
 Start with all five services active, Bound storage, and an empty fleet. Confirm
 the new LogWisp status fields and the old allocator's expected 501 before
 opening the maintenance window:
@@ -1553,16 +1558,24 @@ rm -f /tmp/vif-batch-f-old-log.json
 unset OLD_LOG_STATUS
 ```
 
-The fleet query and `find` must print nothing. Announce a short allocation pause:
-the updater builds first, then stops the allocator, repeats the empty-fleet
-check, preserves one known-good binary/config/unit, installs the new set, and
-waits for health and readiness. It restores the previous set automatically if
-verification fails:
+The fleet query and `find` must print nothing.
+
+### F2 - install the proxying allocator
+
+Announce a short allocation pause: the updater builds first, then stops the
+allocator, repeats the empty-fleet check, preserves one known-good
+binary/config/unit, installs the new set, and waits for health and readiness. It
+restores the previous set automatically if verification fails. It requires a
+clean worktree at the revision being deployed, and reads
+`/etc/vif-allocator/allocator.env` through `sudo`, since that directory is
+`root:vif-allocator` 0750:
 
 ```sh
 test -x deploy/guest/update-vif-allocator.sh
 ./deploy/guest/update-vif-allocator.sh
 ```
+
+### F3 - service independence
 
 Verify that only K3s is required. LogWisp may be wanted and ordered after for
 normal startup, but is not a requirement and is never an allocator child:
@@ -1582,8 +1595,12 @@ curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:9080/readyz
 ```
 
-Verify method handling, upstream headers, and the initial SSE frame. This reader
-is simultaneous with the status check; stop it after the frame arrives:
+### F4 - proxy shape
+
+Verify method handling, upstream headers, and the initial SSE frame. The three
+header values and the `event: connected` frame all originate in LogWisp's HTTP
+sink; this step proves the proxy preserves them. This reader is simultaneous
+with the status check; stop it after the frame arrives:
 
 ```sh
 BATCH_F_HEADERS=$(mktemp /tmp/vif-batch-f-headers.XXXXXX)
@@ -1615,7 +1632,7 @@ curl --connect-timeout 2 --max-time 5 -fsS \
   jq -e '.server.active_clients == 1'
 ```
 
-### Local visual SSE gate
+### F5 - local visual SSE gate
 
 Before nginx and the website exist, view the real allocator-proxied stream from
 a development machine without opening a firewall port. In one development
@@ -1638,7 +1655,7 @@ visible for the gate below. It caps rendered rows, its pending render queue, and
 its duplicate fingerprint set; it never contacts Kubernetes or LogWisp
 directly. Close the browser, Python server, and SSH tunnel after the gate.
 
-### Batch F independence, replay, and common session gate
+### F6 - independence, replay, and common session gate
 
 Have the remote game client ready now: allocation starts the 90-second first-join
 clock. Create one session using §4 of `doc/kube-todo.md`, immediately join it from
@@ -1763,8 +1780,26 @@ wait "$BATCH_F_RESTART_PID" 2>/dev/null || true
 The visual viewer should reconnect and show the occupied session again. Quit the
 remote game and finish §4 from its vacant-state check through deletion, file
 cleanup, and final service/storage verification. Close the browser before the
-next status check, then stop the local Python server and SSH tunnel. Remove every
-Batch F temporary file and prove no stream client or fleet object remains:
+next status check, then stop the local Python server and SSH tunnel.
+
+### F7 - watcher retirement
+
+The session file just created and deleted is the retirement this proves. Run it
+after that deletion, against the LogWisp invocation that spanned it; entries from
+earlier invocations belong to the replaced binary and prove nothing:
+
+```sh
+BATCH_F_INVOCATION=$(systemctl show logwisp.service \
+  -p InvocationID --value)
+test -n "$BATCH_F_INVOCATION"
+! sudo journalctl "_SYSTEMD_INVOCATION_ID=$BATCH_F_INVOCATION" \
+  --no-pager | grep -F 'Watcher failed'
+```
+
+### F8 - cleanup and steady state
+
+Remove every Batch F temporary file and prove no stream client or fleet object
+remains:
 
 ```sh
 for temporary in \
@@ -1788,12 +1823,6 @@ systemctl is-active \
   vif-fleet-log-cleanup.timer \
   k3s.service vif-allocator.service logwisp.service
 
-BATCH_F_INVOCATION=$(systemctl show logwisp.service \
-  -p InvocationID --value)
-test -n "$BATCH_F_INVOCATION"
-! sudo journalctl "_SYSTEMD_INVOCATION_ID=$BATCH_F_INVOCATION" \
-  --no-pager | grep -F 'Watcher failed'
-
 unset POST_STATUS BATCH_F_HEADERS BATCH_F_CAPTURE BATCH_F_STREAM_PID
 unset BATCH_F_SENTINEL BATCH_F_TICK_BEFORE BATCH_F_TICK_DOWN
 unset BATCH_F_ERROR BATCH_F_ERROR_STATUS BATCH_F_PROBE_JSON BATCH_F_PROBE_ID
@@ -1802,11 +1831,8 @@ unset BATCH_F_INVOCATION
 ```
 
 The Kubernetes query and `find` must print nothing, all five units must be
-active, and the stream must have no remaining client. This invocation covers the
-session whose file was just created and deleted, so its empty `Watcher failed`
-result is the retirement evidence; entries from earlier invocations belong to the
-replaced binary. Preserve the Bound PV/PVC and the `.previous` allocator files
-until Batch G completes.
+active, and the stream must have no remaining client. Preserve the Bound PV/PVC
+and the `.previous` allocator files until Batch G completes.
 
 ### Batch F rollback
 
