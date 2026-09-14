@@ -89,18 +89,21 @@ proxy", which holds the exact commands:
    and must never `Require=` or execute it; health and readiness return `ok`.
 4. **F4** proxy shape: `GET`/`HEAD` only with `405 method_not_allowed` otherwise,
    upstream `text/event-stream`, `no-cache` and `x-accel-buffering: no` preserved,
-   the first `event: connected` frame flushed, and one counted sink client.
-5. **F5** local bounded viewer over an SSH forward of 9080 only; no firewall port
-   opens.
-6. **F6** session gate: a byte-exact non-TRACE sentinel through the proxy; then
-   with LogWisp stopped, stable `503 log_stream_unavailable` while create, list,
-   health, readiness, and the occupied game continue; then an exact retained
-   sentinel after restart; then §4 through vacancy, deletion, and cleanup.
-7. **F7** watcher retirement: the LogWisp invocation spanning that create/delete
+   the first `event: connected` frame flushed after a `HEAD` on the same route,
+   and one counted sink client.
+5. **F5** session gate: create and join one session, then a byte-exact non-TRACE
+   sentinel through the proxy; then with LogWisp stopped, stable
+   `503 log_stream_unavailable` while create, list, health, readiness, and the
+   occupied game continue; then an exact retained sentinel after restart; then §4
+   through vacancy, deletion, and cleanup.
+6. **F6** watcher retirement: the LogWisp invocation spanning that create/delete
    cycle carries no `Watcher failed` entry. Earlier invocations ran the replaced
    binary and prove nothing.
-8. **F8** remove every verification session, file, and capture; keep the previous
+7. **F7** remove every verification session, file, and capture; keep the previous
    allocator set until Batch G completes.
+
+The node has no display, so `deploy/guest/vif-log-viewer.html` is not gated here;
+`curl` carries the byte proof and the viewer is verified with nginx in H15.
 
 Rollback: restore the previous allocator set, whose endpoint returns 501, or
 disable the nginx log route. Keep LogWisp and file-writing games independently
@@ -241,7 +244,8 @@ After Batch F passes live:
    labels, allocator probes, Bound PVC, empty directory, and §4.
 5. Produce the separate website implementation prompt (H15): same-origin
    `EventSource`, `fields.session_id`, bounded retained rows/render rate/reconnect
-   backoff, duplicate tolerance, and degradation independent of allocation.
+   backoff, duplicate tolerance, and degradation independent of allocation. Gate
+   `deploy/guest/vif-log-viewer.html`, the bounded browser reference, there.
 
 ## 6. Remaining non-logging fleet gates
 

@@ -188,3 +188,53 @@ func TestLogProxyRepeatedReconnectsReleaseUpstream(t *testing.T) {
 		}
 	}
 }
+
+func TestLogProxyStreamsAfterHead(t *testing.T) {
+	// A stalled reply must not outlive the test: on regression the HEAD's
+	// handler keeps its connection and would block the server's Close.
+	release := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "event: connected\ndata: {}\n\n")
+		w.(http.Flusher).Flush()
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	defer upstream.Close()
+	defer close(release)
+	proxy := httptest.NewServer(proxyTestServer(t, upstream.URL+"/stream"))
+	defer proxy.Close()
+
+	head, err := http.Head(proxy.URL + "/vif/api/logs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = head.Body.Close()
+	if head.StatusCode != http.StatusOK {
+		t.Fatalf("HEAD status = %d", head.StatusCode)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, proxy.URL+"/vif/api/logs", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("GET status = %d, want a stream", response.StatusCode)
+	}
+	line, err := bufio.NewReader(response.Body).ReadString('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimRight(line, "\n") != "event: connected" {
+		t.Fatalf("first line = %q", line)
+	}
+}

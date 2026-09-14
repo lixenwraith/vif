@@ -1522,8 +1522,8 @@ Batch E is complete and the pinned LogWisp update above was deployed on
 workload, Role, PVC, tmpfs, or LogWisp process. It adds one validated loopback
 upstream and proxies SSE framing bytes without parsing or retaining records.
 
-Its eight steps below are labelled F1-F8 and match `doc/kube-todo.md` §3. Report
-each step's output before starting the next.
+Its seven steps below are labelled F1-F7 and match `doc/kube-todo.md` §3.
+Report each step's output before starting the next.
 
 ### F1 - preflight
 
@@ -1632,40 +1632,40 @@ curl --connect-timeout 2 --max-time 5 -fsS \
   jq -e '.server.active_clients == 1'
 ```
 
-### F5 - local visual SSE gate
+`deploy/guest/vif-log-viewer.html` is the bounded browser reference for the same
+route. The node has no display and its loopback ports are not forwarded, so it is
+verified with nginx and the session page in Batch G's website handoff (H15), not
+here; `curl` proves the stream's bytes in F4 and F5.
 
-Before nginx and the website exist, view the real allocator-proxied stream from
-a development machine without opening a firewall port. In one development
-terminal, forward only the allocator loopback port through SSH:
+### F5 - independence, replay, and common session gate
+
+The reader started in F4 must still be running; its capture is what this step
+greps. Have the remote game client ready before allocating: the 90-second
+first-join clock starts when `POST` returns. Create the session and keep the
+variables in this terminal:
 
 ```sh
-ssh -N -L 9080:127.0.0.1:9080 '<node-ssh-target>'
+unset SESSION_JSON SESSION_ID JOIN_TARGET
+SESSION_JSON=$(curl -fsS -X POST \
+  -H 'Content-Type: application/json' -d '{}' \
+  http://127.0.0.1:9080/vif/api/sessions) &&
+SESSION_ID=$(printf '%s' "$SESSION_JSON" |
+  jq -er '.id | strings | select(length > 0)') &&
+JOIN_TARGET=$(printf '%s' "$SESSION_JSON" |
+  jq -er '.join_target | strings | select(length > 0)') &&
+printf 'session=%s join=%s\n' "$SESSION_ID" "$JOIN_TARGET"
+test -n "$SESSION_ID"
 ```
 
-In a second terminal at the synchronized vi-fighter repository root, serve the
-checked-in viewer on development-machine loopback:
-
-```sh
-python3 -m http.server 8090 \
-  --bind 127.0.0.1 --directory deploy/guest
-```
-
-Open `http://127.0.0.1:8090/vif-log-viewer.html`, press **Connect**, and leave it
-visible for the gate below. It caps rendered rows, its pending render queue, and
-its duplicate fingerprint set; it never contacts Kubernetes or LogWisp
-directly. Close the browser, Python server, and SSH tunnel after the gate.
-
-### F6 - independence, replay, and common session gate
-
-Have the remote game client ready now: allocation starts the 90-second first-join
-clock. Create one session using §4 of `doc/kube-todo.md`, immediately join it from
-the prepared development terminal, and run §4 only through the occupied Job and
-state checks. Keep the client connected and moving for the following outage.
+Stop if either value is empty; every command below depends on `SESSION_ID`. That
+block is §4's creation step, so join immediately from the prepared development
+machine with `bin/vif -join '<join_target>'` and continue §4 of
+`doc/kube-todo.md` from its Job-shape check through its occupied state check,
+stopping there. Keep the client connected and moving for the outage that follows.
 
 While the session is occupied, require one commissioned file and select one
-exact non-TRACE record. The already-running allocator reader and visual viewer
-must both show live rows; this command proves byte preservation through the
-allocator proxy:
+exact non-TRACE record. This proves byte preservation through the allocator
+proxy:
 
 ```sh
 for attempt in $(seq 1 50); do
@@ -1777,12 +1777,10 @@ kill "$BATCH_F_RESTART_PID"
 wait "$BATCH_F_RESTART_PID" 2>/dev/null || true
 ```
 
-The visual viewer should reconnect and show the occupied session again. Quit the
-remote game and finish §4 from its vacant-state check through deletion, file
-cleanup, and final service/storage verification. Close the browser before the
-next status check, then stop the local Python server and SSH tunnel.
+Quit the remote game and finish §4 from its vacant-state check through deletion,
+file cleanup, and final service/storage verification.
 
-### F7 - watcher retirement
+### F6 - watcher retirement
 
 The session file just created and deleted is the retirement this proves. Run it
 after that deletion, against the LogWisp invocation that spanned it; entries from
@@ -1796,7 +1794,7 @@ test -n "$BATCH_F_INVOCATION"
   --no-pager | grep -F 'Watcher failed'
 ```
 
-### F8 - cleanup and steady state
+### F7 - cleanup and steady state
 
 Remove every Batch F temporary file and prove no stream client or fleet object
 remains:

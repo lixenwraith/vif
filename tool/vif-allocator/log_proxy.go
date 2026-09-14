@@ -13,6 +13,10 @@ func newLogStreamProxy(target *url.URL, logger *slog.Logger) *httputil.ReversePr
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
 	transport.DisableCompression = true
+	// A HEAD reply looks complete to the client while LogWisp's handler is still
+	// blocked on the same connection, so a pooled one stalls the next stream
+	// until ResponseHeaderTimeout. One connection per stream costs nothing here.
+	transport.DisableKeepAlives = true
 	transport.DialContext = (&net.Dialer{
 		Timeout:   2 * time.Second,
 		KeepAlive: 30 * time.Second,

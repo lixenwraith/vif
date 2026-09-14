@@ -197,3 +197,16 @@ them. The state is unreachable today, which is why it is a latent hole.
 
 Refactor the update block that currently combines target count, pending
 materialization, stagger timing, and failed-placement backoff.
+
+## Fleet logging
+
+### Bound a LogWisp stream client that never reads
+
+- Priority: P3
+- Affected files: `deploy/logwisp/aggregator.toml`
+- Prerequisite: the log route reaching anything wider than node loopback
+
+A `HEAD` on LogWisp's SSE path registers a client that only leaves when its
+connection closes, so `max_connections` (32) is reachable without reading a byte.
+The allocator proxy closes each upstream connection, which covers the deployed
+loopback path; a public route would need an upstream bound of its own.
