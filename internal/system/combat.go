@@ -411,6 +411,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	// Emit chain attack if present
 	if chainAttack := attack.Chain; chainAttack != nil {
 		depth := payload.ChainDepth + 1
+		chainX, chainY, chainHasOrigin := s.chainOrigin(payload.OwnerEntity, originX, originY, hasOriginPos)
 		// The class is per-event: a hit on a shared target is shared simulation, one
 		// on a player target is this instance's alone (D-10).
 		s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
@@ -419,9 +420,9 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 			OriginEntity: payload.OwnerEntity,
 			TargetEntity: payload.TargetEntity,
 			HitEntity:    payload.HitEntity,
-			HasOrigin:    hasOriginPos,
-			OriginX:      originX,
-			OriginY:      originY,
+			HasOrigin:    chainHasOrigin,
+			OriginX:      chainX,
+			OriginY:      chainY,
 			ChainDepth:   depth,
 		}, payload.TargetEntity.Domain())
 		s.recordChain(depth, 1)
@@ -627,6 +628,8 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	// Chain attack for area attacks - emit per hit entity as direct attacks
 	if chainAttack := attack.Chain; chainAttack != nil {
 		depth := payload.ChainDepth + 1
+		chainX, chainY, chainHasOrigin := s.chainOrigin(payload.OwnerEntity,
+			payload.OriginX, payload.OriginY, payload.HasOrigin)
 		for _, hitEntity := range hits {
 			s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 				AttackType:   chainAttack.AttackType,
@@ -634,9 +637,9 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				OriginEntity: payload.OwnerEntity,
 				TargetEntity: targetEntity,
 				HitEntity:    hitEntity,
-				HasOrigin:    payload.HasOrigin,
-				OriginX:      payload.OriginX,
-				OriginY:      payload.OriginY,
+				HasOrigin:    chainHasOrigin,
+				OriginX:      chainX,
+				OriginY:      chainY,
 				ChainDepth:   depth,
 			}, targetEntity.Domain())
 		}
@@ -646,6 +649,16 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	if resolved {
 		s.statArea.Add(1)
 	}
+}
+
+// chainOrigin is the emitter geometry of a chained attack. The chain declares the
+// owner as its emitter, so its geometry is the owner's: a cleaner's impact cell is
+// the target's own cell, and a drain zap drawn from it has no length.
+func (s *CombatSystem) chainOrigin(owner core.Entity, x, y int, has bool) (int, int, bool) {
+	if pos, ok := s.world.Positions.GetPosition(owner); ok {
+		return pos.X, pos.Y, true
+	}
+	return x, y, has
 }
 
 // The zap stays local because only the player-domain owner renders it.

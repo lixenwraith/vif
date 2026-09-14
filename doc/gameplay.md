@@ -250,7 +250,7 @@ weapon system.
 
 | Weapon | Model |
 |---|---|
-| Main cleaner | Directional player attack/effect originating at the owning cursor. |
+| Main cleaner | Directional player attack/effect originating at the owning cursor. Each impact chains into the rod's lightning, so the energy drain and its zap span the firing cursor and the species rather than the impact cell. |
 | Rod | Direct lightning against unique nearest targets, rewarding energy in the attacker's current polarity. |
 | Launcher | Homing/area missiles assigned from the nearest-target set. |
 | Disruptor | Pulse/disruption behavior centered through its charged orb path. |

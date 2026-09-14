@@ -1110,8 +1110,12 @@ func (s *NetworkSystem) ActivateSession() {
 		if p != nil {
 			peers = p.PeerCount()
 		}
+		// The slot is named beside the identity because they answer different
+		// questions: a dedicated host holds identity 1 and NoPlayerSlot, so its
+		// first guest is participant 2 driving the first cursor.
 		vlog.Info("app", "msg", "network session active",
-			"participant", s.participantID(), "coordinator", s.isCoordinator(),
+			"participant", s.participantID(), "slot", s.world.Resources.Player.LocalSlot(),
+			"coordinator", s.isCoordinator(),
 			"barrier_delay_ticks", s.barrierDelayTicks(), "peers", peers)
 	}
 }

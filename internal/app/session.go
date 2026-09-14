@@ -438,9 +438,10 @@ func (a *App) hostOffer() (network.SessionOffer, error) {
 	defer a.sessionMu.Unlock()
 	if len(a.sessionRoster) == 0 {
 		// No joiner ever arrived; describe the two-participant lobby this host opened.
-		a.sessionRoster = []network.SessionParticipant{
-			{ID: hostParticipantID, Slot: a.hostSlot()}, {ID: 2, Slot: 1},
-		}
+		// Through the allocator rather than beside it: a dedicated host holds no slot,
+		// so its guest takes slot zero and a second rule here would disagree.
+		a.sessionRoster = []network.SessionParticipant{{ID: hostParticipantID, Slot: a.hostSlot()}}
+		a.sessionRoster = append(a.sessionRoster, a.nextParticipantLocked())
 	}
 	assigned := a.authorityID()
 	for _, p := range a.sessionRoster {
