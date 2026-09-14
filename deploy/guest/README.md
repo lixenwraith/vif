@@ -5,6 +5,10 @@ guest; the same service and mount files also apply to a bare Ubuntu node. Follow
 the host/network boundary in `doc/kube_docker_deploy.md`, and use
 `doc/kube-todo.md` as the authoritative batch order.
 
+This file commissions a node. Once it is running, [`../runbook.md`](../runbook.md)
+holds the operations you repeat — emptying the fleet before an update helper,
+the updates, and what each refusal means.
+
 ## Distribution prerequisites
 
 Install the command-line dependencies before the main deployment procedure:

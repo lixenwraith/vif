@@ -3,6 +3,8 @@
 set -eu
 
 namespace=vif
+fleet_label=app.kubernetes.io/part-of=vi-fighter-fleet
+fleet_logs=${VIF_FLEET_LOGS:-/var/log/vif-fleet}
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 kube() {
@@ -17,7 +19,13 @@ usage() {
 	echo "usage: $0 create SESSION_ID [GAME_NODEPORT] [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
 	echo "       $0 delete SESSION_ID" >&2
 	echo "       $0 list" >&2
+	echo "       $0 status" >&2
+	echo "       $0 drain" >&2
 	exit 2
+}
+
+fleet_objects() {
+	kube -n "$namespace" get jobs,pods,services -l "$fleet_label" -o name
 }
 
 session_name() {
@@ -55,8 +63,52 @@ command=${1:-}
 case "$command" in
 	list)
 		[ "$#" -eq 1 ] || usage
-		kube -n "$namespace" get jobs,pods,services \
-			-l app.kubernetes.io/part-of=vi-fighter-fleet -o wide
+		kube -n "$namespace" get jobs,pods,services -l "$fleet_label" -o wide
+		;;
+	status)
+		[ "$#" -eq 1 ] || usage
+		echo '# fleet objects'
+		fleet_objects
+		echo '# fleet log files'
+		if [ -d "$fleet_logs" ]; then
+			sudo find "$fleet_logs" -mindepth 1 -maxdepth 1 -print
+		fi
+		echo '# units'
+		systemctl is-active 'var-log-vif\x2dfleet.mount' k3s.service \
+			vif-allocator.service logwisp.service \
+			vif-fleet-log-cleanup.timer || true
+		;;
+	drain)
+		# The update helpers refuse a non-empty fleet, and the LogWisp gate also
+		# requires an empty tmpfs. This is destructive: snapshot any log evidence
+		# before running it.
+		[ "$#" -eq 1 ] || usage
+		for object in $(kube -n "$namespace" get jobs,services -l "$fleet_label" -o name); do
+			kube -n "$namespace" delete "$object" \
+				--cascade=background --wait=false --ignore-not-found
+		done
+		remaining=$(fleet_objects)
+		attempt=0
+		while [ -n "$remaining" ] && [ "$attempt" -lt 60 ]; do
+			sleep 1
+			attempt=$((attempt + 1))
+			remaining=$(fleet_objects)
+		done
+		if [ -n "$remaining" ]; then
+			echo "$0: fleet did not drain within 60s:" >&2
+			printf '%s\n' "$remaining" >&2
+			exit 1
+		fi
+		if [ -d "$fleet_logs" ]; then
+			sudo find "$fleet_logs" -mindepth 1 -maxdepth 1 -name '*.jsonl' -delete
+			leftover=$(sudo find "$fleet_logs" -mindepth 1 -maxdepth 1 -print)
+			if [ -n "$leftover" ]; then
+				echo "$0: unexpected entries under $fleet_logs:" >&2
+				printf '%s\n' "$leftover" >&2
+				exit 1
+			fi
+		fi
+		echo 'fleet drained: no objects, no log files'
 		;;
 	delete)
 		[ "$#" -eq 2 ] || usage
