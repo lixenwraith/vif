@@ -1522,14 +1522,17 @@ Batch E is complete and the pinned LogWisp update above was deployed on
 workload, Role, PVC, tmpfs, or LogWisp process. It adds one validated loopback
 upstream and proxies SSE framing bytes without parsing or retaining records.
 
-Its seven steps below are labelled F1-F7 and match `doc/kube-todo.md` §3.
-Report each step's output before starting the next.
+What the batch proves: `/vif/api/logs` becomes the same-origin byte proxy for
+LogWisp's SSE stream, and neither service depends on the other. F1-F4 and F7 are
+node-only and can be run whenever; F5 needs a second machine and a 90-second join
+window, and F6 reads the journal F5 produced. Its seven steps are labelled F1-F7
+and match `doc/kube-todo.md` §3. Report each step's output before the next.
 
 ### F1 - preflight
 
-Start with all five services active, Bound storage, and an empty fleet. Confirm
-the new LogWisp status fields and the old allocator's expected 501 before
-opening the maintenance window:
+**Purpose.** Establish the before-state this cutover is measured against: the
+node at its Batch E steady state, and the deployed allocator still answering
+`501`. **Node terminal only; read-only.**
 
 ```sh
 systemctl is-active \
@@ -1562,7 +1565,9 @@ The fleet query and `find` must print nothing.
 
 ### F2 - install the proxying allocator
 
-Announce a short allocation pause: the updater builds first, then stops the
+**Purpose.** Replace the allocator binary, env and unit with the proxying set.
+**Announce a short allocation pause first**; existing games are untouched, but no
+session can be created while the service is down. The updater builds first, then stops the
 allocator, repeats the empty-fleet check, preserves one known-good
 binary/config/unit, installs the new set, and waits for health and readiness. It
 restores the previous set automatically if verification fails. It requires a
@@ -1577,8 +1582,9 @@ test -x deploy/guest/update-vif-allocator.sh
 
 ### F3 - service independence
 
-Verify that only K3s is required. LogWisp may be wanted and ordered after for
-normal startup, but is not a requirement and is never an allocator child:
+**Purpose.** Prove the new unit did not make allocation depend on logging. Only
+K3s may be required; LogWisp may be wanted and ordered after for normal startup,
+but is never a requirement and never an allocator child. **Node terminal only.**
 
 ```sh
 systemctl is-active vif-allocator.service logwisp.service
@@ -1597,14 +1603,14 @@ curl --connect-timeout 2 --max-time 5 -fsS \
 
 ### F4 - proxy shape
 
-Verify method handling, upstream headers, and the initial SSE frame. The three
-header values and the `event: connected` frame all originate in LogWisp's HTTP
-sink; this step proves the proxy preserves them. This reader is simultaneous
-with the status check; stop it after the frame arrives:
+**Purpose.** Prove the route accepts only `GET` and `HEAD`, and that LogWisp's
+own stream headers and first frame cross the proxy unchanged. **Node terminal
+only; nothing is time-sensitive.** The three header values and the
+`event: connected` frame all originate in LogWisp's HTTP sink, so this measures
+preservation, not allocator behaviour. Each reader here ends by itself:
 
 ```sh
 BATCH_F_HEADERS=$(mktemp /tmp/vif-batch-f-headers.XXXXXX)
-BATCH_F_CAPTURE=$(mktemp /tmp/vif-batch-f-stream.XXXXXX.sse)
 curl --connect-timeout 2 --max-time 5 -fsSI \
   http://127.0.0.1:9080/vif/api/logs >"$BATCH_F_HEADERS"
 grep -Eiq '^content-type: text/event-stream' "$BATCH_F_HEADERS"
@@ -1619,6 +1625,42 @@ jq -e '.error.code == "method_not_allowed"' \
   /tmp/vif-batch-f-method.json
 rm -f /tmp/vif-batch-f-method.json
 
+BATCH_F_FIRST=$(curl --no-buffer -fsS --max-time 5 \
+  http://127.0.0.1:9080/vif/api/logs 2>/dev/null | head -n 1)
+printf 'first frame: %s\n' "$BATCH_F_FIRST"
+test "$BATCH_F_FIRST" = 'event: connected'
+```
+
+A `HEAD` must not disturb the `GET` that follows it. If the first frame is empty
+or the stream answers `503 log_stream_unavailable` here while `logwisp.service`
+is active, the allocator predates the fix that stops a `HEAD` reply from stalling
+the next stream; re-run F2 from a checkout that contains it.
+
+`deploy/guest/vif-log-viewer.html` is the bounded browser reference for the same
+route. The node has no display and its loopback ports are not forwarded, so it is
+verified with nginx and the session page in Batch G's website handoff (H15).
+
+### F5 - live session gate
+
+**Purpose.** Prove the whole path with a real game on it: one player's records
+reach a stream client byte-for-byte through the proxy, the allocator keeps
+allocating and the game keeps running while LogWisp is stopped, and the retained
+file replays exactly when it returns.
+
+**This step is invalid without a second machine.** Its proofs all require an
+`occupied` session, and the first-join window is 90 seconds from the `POST` in
+F5.2. Have the development machine's `bin/vif` built and its terminal in the
+foreground before starting. If the join is missed, delete the session (F5.7) and
+restart at F5.1 rather than continuing: every later command reads state that only
+exists while a guest is connected.
+
+#### F5.1 - start the stream reader
+
+**Node terminal. Not time-sensitive, but it must precede F5.2** so the session's
+first records are captured live rather than replayed.
+
+```sh
+BATCH_F_CAPTURE=$(mktemp /tmp/vif-batch-f-stream.XXXXXX.sse)
 curl --no-buffer --fail --silent --show-error \
   http://127.0.0.1:9080/vif/api/logs >"$BATCH_F_CAPTURE" &
 BATCH_F_STREAM_PID=$!
@@ -1627,22 +1669,26 @@ for attempt in $(seq 1 50); do
   sleep 0.1
 done
 grep -Fxq 'event: connected' "$BATCH_F_CAPTURE"
+
+for attempt in $(seq 1 50); do
+  curl --connect-timeout 2 --max-time 5 -fsS \
+    http://127.0.0.1:8081/status |
+    jq -e '.server.active_clients == 1' >/dev/null 2>&1 && break
+  sleep 0.1
+done
 curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:8081/status |
   jq -e '.server.active_clients == 1'
 ```
 
-`deploy/guest/vif-log-viewer.html` is the bounded browser reference for the same
-route. The node has no display and its loopback ports are not forwarded, so it is
-verified with nginx and the session page in Batch G's website handoff (H15), not
-here; `curl` proves the stream's bytes in F4 and F5.
+One reader must mean exactly one upstream client. A larger count is a leak: print
+`.server.active_clients`, stop the reader, and re-check that it returns to zero
+before going on.
 
-### F5 - independence, replay, and common session gate
+#### F5.2 - allocate and join
 
-The reader started in F4 must still be running; its capture is what this step
-greps. Have the remote game client ready before allocating: the 90-second
-first-join clock starts when `POST` returns. Create the session and keep the
-variables in this terminal:
+**Time-critical: the 90-second first-join clock starts when `POST` returns.** Run
+the node block, then join from the waiting development machine immediately.
 
 ```sh
 unset SESSION_JSON SESSION_ID JOIN_TARGET
@@ -1657,15 +1703,34 @@ printf 'session=%s join=%s\n' "$SESSION_ID" "$JOIN_TARGET"
 test -n "$SESSION_ID"
 ```
 
-Stop if either value is empty; every command below depends on `SESSION_ID`. That
-block is §4's creation step, so join immediately from the prepared development
-machine with `bin/vif -join '<join_target>'` and continue §4 of
-`doc/kube-todo.md` from its Job-shape check through its occupied state check,
-stopping there. Keep the client connected and moving for the outage that follows.
+On the development machine, with the printed target:
 
-While the session is occupied, require one commissioned file and select one
-exact non-TRACE record. This proves byte preservation through the allocator
-proxy:
+```sh
+bin/vif -join '<join_target>'
+```
+
+That block is §4's creation step, so continue §4 of `doc/kube-todo.md` from its
+Job-shape check through its occupied state check, stopping there.
+
+#### F5.3 - occupancy gate
+
+**Node terminal, while the player stays connected and moving.** Stop here if this
+prints nothing: everything below reads an occupied session.
+
+```sh
+BATCH_F_TICK_BEFORE=$(curl -fsS \
+  http://127.0.0.1:9080/vif/api/sessions |
+  jq -er --arg id "$SESSION_ID" '
+    .sessions[] | select(.id == $id) | .state |
+    select(.phase == "occupied" and .guests >= 1) | .tick')
+test -n "$BATCH_F_TICK_BEFORE"
+printf 'occupied tick=%s\n' "$BATCH_F_TICK_BEFORE"
+```
+
+#### F5.4 - byte preservation
+
+Select one exact non-TRACE record from the commissioned file and require it,
+unchanged, in the reader's capture:
 
 ```sh
 for attempt in $(seq 1 50); do
@@ -1683,21 +1748,17 @@ done
 grep -Fqx -- "data: $BATCH_F_SENTINEL" "$BATCH_F_CAPTURE"
 ```
 
-Stop the capture and wait for its upstream client to leave. Announce the
-LogWisp-only interruption to the remote player. Stop LogWisp, prove the proxy's
-stable failure response, and verify allocator liveness, readiness, list, create,
-and gameplay remain independent. The second session is an unjoined probe and
-must be deleted before LogWisp returns:
+#### F5.5 - LogWisp outage independence
+
+**Announce the LogWisp-only interruption to the player first; the game must stay
+connected throughout.** Stop the reader, stop LogWisp, then prove the proxy's
+stable failure response while allocation, probes and gameplay continue. The
+second session is an unjoined probe and is deleted before LogWisp returns:
 
 ```sh
 kill "$BATCH_F_STREAM_PID"
 wait "$BATCH_F_STREAM_PID" 2>/dev/null || true
 
-BATCH_F_TICK_BEFORE=$(curl -fsS \
-  http://127.0.0.1:9080/vif/api/sessions |
-  jq -er --arg id "$SESSION_ID" '
-    .sessions[] | select(.id == $id) | .state |
-    select(.phase == "occupied" and .guests >= 1) | .tick')
 sudo systemctl stop logwisp.service
 test "$(systemctl is-active logwisp.service)" = inactive
 
@@ -1728,6 +1789,7 @@ BATCH_F_TICK_DOWN=$(curl -fsS \
   http://127.0.0.1:9080/vif/api/sessions |
   jq -er --arg id "$SESSION_ID" '
     .sessions[] | select(.id == $id) | .state.tick')
+test -n "$BATCH_F_TICK_DOWN"
 test "$BATCH_F_TICK_DOWN" -gt "$BATCH_F_TICK_BEFORE"
 
 ./deploy/k3s/session.sh delete "$BATCH_F_PROBE_ID"
@@ -1740,10 +1802,12 @@ sudo find /var/log/vif-fleet -maxdepth 1 -type f \
      -o -name "${BATCH_F_PROBE_ID}_*.jsonl" \) -delete
 ```
 
-This restart and reader are simultaneous. Start the waiting reader first; it
-polls only the local listen table, then connects through the allocator as soon
-as LogWisp binds. Immediately start LogWisp and require the exact retained
-sentinel through `/vif/api/logs`:
+#### F5.6 - retained replay
+
+**The reader and the restart are simultaneous; paste the whole block at once.**
+The waiting reader polls only the local listen table, then connects through the
+allocator as soon as LogWisp binds, and must receive the exact pre-outage
+sentinel from the retained file:
 
 ```sh
 BATCH_F_RESTART_CAPTURE=$(mktemp \
@@ -1772,19 +1836,27 @@ BATCH_F_TICK_RESTARTED=$(curl -fsS \
   http://127.0.0.1:9080/vif/api/sessions |
   jq -er --arg id "$SESSION_ID" '
     .sessions[] | select(.id == $id) | .state.tick')
+test -n "$BATCH_F_TICK_RESTARTED"
 test "$BATCH_F_TICK_RESTARTED" -gt "$BATCH_F_TICK_DOWN"
 kill "$BATCH_F_RESTART_PID"
 wait "$BATCH_F_RESTART_PID" 2>/dev/null || true
 ```
 
-Quit the remote game and finish §4 from its vacant-state check through deletion,
-file cleanup, and final service/storage verification.
+#### F5.7 - release the session
+
+**Required before F6, and required even if an earlier sub-step failed.** Quit the
+remote game, then finish §4 of `doc/kube-todo.md` from its vacant-state check
+through deletion, per-session file cleanup, and its final service/storage
+verification. F6 has nothing to observe until this deletion has happened with
+LogWisp running.
 
 ### F6 - watcher retirement
 
-The session file just created and deleted is the retirement this proves. Run it
-after that deletion, against the LogWisp invocation that spanned it; entries from
-earlier invocations belong to the replaced binary and prove nothing:
+**Purpose.** Prove the pinned LogWisp retires a watched file without logging a
+failure. The evidence is F5.7's deletion, so this is only valid if that deletion
+happened while the current LogWisp invocation was running: a clean journal from
+an invocation that saw no file removed proves nothing, and entries from earlier
+invocations belong to the replaced binary. Silence from the pipeline is a pass:
 
 ```sh
 BATCH_F_INVOCATION=$(systemctl show logwisp.service \
@@ -1796,8 +1868,9 @@ test -n "$BATCH_F_INVOCATION"
 
 ### F7 - cleanup and steady state
 
-Remove every Batch F temporary file and prove no stream client or fleet object
-remains:
+**Purpose.** Return the node to the Batch E steady state and prove the batch left
+nothing behind. Remove every Batch F temporary file, then require an empty fleet,
+an empty tmpfs, no stream client, and five active units:
 
 ```sh
 for temporary in \
@@ -1821,7 +1894,8 @@ systemctl is-active \
   vif-fleet-log-cleanup.timer \
   k3s.service vif-allocator.service logwisp.service
 
-unset POST_STATUS BATCH_F_HEADERS BATCH_F_CAPTURE BATCH_F_STREAM_PID
+unset POST_STATUS BATCH_F_FIRST BATCH_F_HEADERS BATCH_F_CAPTURE
+unset BATCH_F_STREAM_PID
 unset BATCH_F_SENTINEL BATCH_F_TICK_BEFORE BATCH_F_TICK_DOWN
 unset BATCH_F_ERROR BATCH_F_ERROR_STATUS BATCH_F_PROBE_JSON BATCH_F_PROBE_ID
 unset BATCH_F_RESTART_CAPTURE BATCH_F_RESTART_PID BATCH_F_TICK_RESTARTED

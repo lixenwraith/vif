@@ -91,14 +91,17 @@ proxy", which holds the exact commands:
    upstream `text/event-stream`, `no-cache` and `x-accel-buffering: no` preserved,
    the first `event: connected` frame flushed after a `HEAD` on the same route,
    and one counted sink client.
-5. **F5** session gate: create and join one session, then a byte-exact non-TRACE
-   sentinel through the proxy; then with LogWisp stopped, stable
-   `503 log_stream_unavailable` while create, list, health, readiness, and the
-   occupied game continue; then an exact retained sentinel after restart; then §4
-   through vacancy, deletion, and cleanup.
-6. **F6** watcher retirement: the LogWisp invocation spanning that create/delete
-   cycle carries no `Watcher failed` entry. Earlier invocations ran the replaced
-   binary and prove nothing.
+5. **F5** live session gate, in seven sub-steps. It needs a second machine: its
+   proofs all require an `occupied` session and the first-join window is 90
+   seconds. Reader started, session created and joined, occupancy confirmed, a
+   byte-exact non-TRACE sentinel through the proxy; then with LogWisp stopped,
+   stable `503 log_stream_unavailable` while create, list, health, readiness and
+   the occupied game continue; then an exact retained sentinel after restart;
+   then §4 through vacancy, deletion and cleanup. A missed join invalidates the
+   step: delete the session and restart it.
+6. **F6** watcher retirement: the LogWisp invocation that was running for F5's
+   session deletion carries no `Watcher failed` entry. An invocation that saw no
+   file removed proves nothing, and earlier ones ran the replaced binary.
 7. **F7** remove every verification session, file, and capture; keep the previous
    allocator set until Batch G completes.
 
