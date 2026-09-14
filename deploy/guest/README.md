@@ -634,12 +634,10 @@ stopped and the fleet to be empty before changing a logging service. Announce
 the allocation pause and LogWisp stream interruption before running this gate.
 
 `deploy/logwisp/REVISION` must name a commit reachable from upstream LogWisp
-`main`, never a pull-request head: a squash merge replaces that head with a new
-commit and the original disappears from the repository. The builder fetches
-`main` and tags in both the default clone and the optional worktree, then
-requires the pin to be an ancestor of the fetched head, so an unreachable pin
-fails with a repin diagnostic before Docker starts and before LogWisp is
-touched. That single check is the authority; do not pre-resolve the pin by hand:
+`main`, never a pull-request head, which a squash merge discards. The builder
+fetches `main` and tags on both the default clone and the optional worktree and
+requires the pin to be an ancestor of that head, failing with a repin diagnostic
+before Docker starts. That check is the authority; do not pre-resolve by hand:
 
 ```sh
 for artifact in \
@@ -696,9 +694,9 @@ restores the previous LogWisp set before the allocator restart.
 
 A build that stops on the revision check leaves the running LogWisp, its binary,
 and every Kubernetes and tmpfs object untouched; only the allocator is restarted
-by the trap. The installed binary still answers with the previous revision and
-cannot satisfy the pin or status checks below, so repin and rerun the gate
-rather than reading that outcome as a failure of the new revision.
+by the trap. The still-installed previous binary then fails the pin and status
+checks below — repin and rerun rather than reading that as a failure of the new
+revision.
 
 An existing upstream checkout is optional and is never switched or modified:
 
@@ -735,10 +733,18 @@ unset LOGWISP_REVISION LOGWISP_INVOCATION
 
 Judge the journal only by the invocation currently running the updated binary,
 here and in every later gate. Earlier `Watcher failed` entries with
-`error "watcher stopped"` were emitted by the replaced binary when normal fleet
-cleanup retired a watched file; they are historical and say nothing about the
-installed revision. Retirement is proven by a later session create/delete cycle,
-not by this window, which precedes any session.
+`error "watcher stopped"` came from the replaced binary retiring a watched file
+on normal fleet cleanup; they are historical and say nothing about the installed
+revision. Retirement is proven by a later session create/delete cycle, not by
+this window, which precedes any session.
+
+This gate passed on 2026-09-14. A first attempt failed inside the fresh clone
+because the pin named LogWisp PR #5's squash-discarded head; the trap restarted
+the allocator and nothing else changed. After repinning to the merged commit the
+build resolved, the binary was replaced during a LogWisp-only restart, the
+installed `--version` reported
+`6046f5c56b583ce3800f69c639874048b3dd8b69`, `/status` carried the three bounds,
+and allocator health and readiness returned `ok`.
 
 ### Batch E two-session fan-in gate
 
@@ -1511,10 +1517,10 @@ The final `ss` command must print nothing.
 
 ## Batch F: deploy the allocator byte proxy
 
-Batch E must be complete and the pinned LogWisp update above must be deployed
-before this cutover. The allocator change does not touch the workload, Role,
-PVC, tmpfs, or LogWisp process. It adds one validated loopback upstream and
-proxies SSE framing bytes without parsing or retaining records.
+Batch E is complete and the pinned LogWisp update above was deployed on
+2026-09-14, so this cutover may run. The allocator change does not touch the
+workload, Role, PVC, tmpfs, or LogWisp process. It adds one validated loopback
+upstream and proxies SSE framing bytes without parsing or retaining records.
 
 Start with all five services active, Bound storage, and an empty fleet. Confirm
 the new LogWisp status fields and the old allocator's expected 501 before

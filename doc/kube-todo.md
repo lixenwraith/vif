@@ -7,28 +7,27 @@ design and operating detail lives in:
 - [the fleet architecture and verification matrix](kubernetes-fleet.md); and
 - [the Linux node artifacts and batch procedures](../deploy/guest/README.md).
 
-Status on 2026-09-13:
+Status on 2026-09-14:
 
-- PR #500 and Batch A's commissioned writer are merged and deployed;
-- Batches B-C's volatile storage and file-writing workload are deployed and passed
-  their Restricted, allocation, remote-join, occupied/vacant state, self-tagged
-  JSONL, cleanup, and empty steady-state gates;
-- Batch D's live Role denies the log subresource while retaining every allocator
-  control/readiness permission, and its common session gate passed; and
-- Batch E's pinned standalone service passed installation, isolation,
-  two-session fan-in, outage independence, exact retained replay, and common
-  cleanup gates. Normal fan-in preserved 606 sampled records with no drops; the
-  bounded restart replay processed 1,841 records with 86 client-queue drops and
-  no authorization or connection rejections; and
-- Batch F's allocator proxy, independent update helpers, and bounded local
-  viewer are implemented and tested in the repository. Its live cutover and
-  common session gate remain; Batch G has not started.
-
-The live node still runs the pre-update LogWisp. Its guarded update failed
-because `deploy/logwisp/REVISION` named PR #5's squash-discarded head; the pin is
-now the merged `main` commit, so that gate reruns before the Batch F cutover. The
-live allocator still runs the preceding 501 endpoint until the Batch F node
-procedure in `deploy/guest/README.md` is executed.
+- Batches A-E are deployed and passed their live gates: the commissioned writer,
+  the fail-closed 256 MiB tmpfs behind one Bound local PV/PVC and its cleanup
+  timer, the Restricted single-container PVC workload, the allocator Role that
+  denies `pods/log`, and the standalone loopback LogWisp service. Measured:
+  two-session fan-in preserved 606 sampled non-TRACE records byte-for-byte with
+  no drops; a stop/restart replayed an exact pre-outage sentinel while processing
+  1,841 records with 86 bounded client-queue drops and no authorization or
+  connection rejections.
+- The pinned LogWisp revision update passed live on 2026-09-14 through the
+  guarded empty-fleet trap. `deploy/logwisp/REVISION` is
+  `6046f5c56b583ce3800f69c639874048b3dd8b69`; the installed binary reports that
+  commit, `/status` carries `client_buffer_size`, `max_connections`, and
+  `write_timeout_ms`, and allocator health and readiness returned `ok`. Its
+  watcher-retirement fix is running but not yet proven: proof needs a session
+  create/delete cycle, which Batch F's gate supplies.
+- Batch F's allocator byte proxy, update helper, and bounded local viewer are
+  implemented and tested in the repository; only the live cutover remains, so the
+  deployed `/vif/api/logs` still returns `501 log_stream_not_configured`.
+  Batch G has not started.
 
 ## 1. Invariants and batch discipline
 
@@ -65,34 +64,45 @@ service defaults differ.
 
 | Batch | State | Outcome |
 |---|---|---|
-| F — allocator byte proxy | Implementation ready; live gate next | `/vif/api/logs` proxies SSE bytes with prompt flush/cancellation and a stable failure response while session APIs stay independent. |
+| F — allocator byte proxy | Next; code merged and tested, live gate outstanding | `/vif/api/logs` proxies SSE bytes with prompt flush/cancellation and a stable failure response while session APIs stay independent. |
 | G — final reconciliation | Blocked on F | Durable docs describe only the deployed design, bare Arch/Ubuntu rehearsals pass, sizing evidence is recorded, and the website handoff is ready. |
 
-## 3. Batch F — make the allocator a byte proxy
+§6 holds the non-logging gates that follow. H15 unblocks with F; H3 is measured
+inside G; H1, H11, and H12 are independent of the log pipeline and gate public
+exposure rather than this pivot.
 
-1. Add a validated `-log-stream-url` allocator option whose deployment value is
-   the loopback LogWisp stream.
-2. Replace `/vif/api/logs` status `501` with an `httputil.ReverseProxy` that:
+## 3. Batch F — cut the allocator over to the byte proxy
 
-   - accepts only `GET` and `HEAD`;
-   - preserves upstream status, headers, and event bytes;
-   - flushes SSE promptly;
-   - propagates client cancellation;
-   - does not decode or buffer records; and
-   - returns stable `503 log_stream_unavailable` when LogWisp is unavailable.
+The validated `-log-stream-url` option, the `httputil.ReverseProxy` handler, the
+SSE lifetime separated from finite create/API deadlines, and their tests are
+merged. What remains is the live cutover, in the order of `deploy/guest/README.md`
+"Batch F: deploy the allocator byte proxy". Each step is one reportable slice:
 
-3. Separate SSE lifetime from finite create/API deadlines. Do not make every HTTP
-   write unbounded to accommodate one streaming endpoint.
-4. Cover headers, first-event flush, byte preservation, cancellation, upstream
-   failure, unsupported methods, and repeated reconnect cleanup.
-5. Keep `vif-allocator.service` independent. It may order after or want LogWisp,
-   but must never `Require=` it or execute it.
-6. Verify create/list/health/readiness while LogWisp is stopped, then verify the
-   same-origin log route after it restarts.
-7. Run §4 and remove the verification session/files.
+1. Preflight: five units active, PV/PVC Bound, fleet and tmpfs empty, LogWisp
+   `/status` carrying the three bounds, and the deployed allocator still
+   answering `501 log_stream_not_configured`.
+2. `./deploy/guest/update-vif-allocator.sh`. It builds first, refuses a non-empty
+   fleet, pauses only allocation for the replacement, and restores its own
+   previous set if health or readiness fails.
+3. Independence: `vif-allocator.service` may want or order after LogWisp and must
+   never `Require=` or execute it; health and readiness return `ok`.
+4. Proxy shape: `GET`/`HEAD` only with `405 method_not_allowed` otherwise,
+   upstream `text/event-stream`, `no-cache` and `x-accel-buffering: no` preserved,
+   the first `event: connected` frame flushed, and one counted sink client.
+5. Local bounded viewer over an SSH forward of 9080 only; no firewall port opens.
+6. Session gate: a byte-exact non-TRACE sentinel through the proxy; then with
+   LogWisp stopped, stable `503 log_stream_unavailable` while create, list,
+   health, readiness, and the occupied game continue; then an exact retained
+   sentinel after restart; then §4 through vacancy, deletion, and cleanup.
+7. Watcher retirement: the LogWisp invocation spanning that create/delete cycle
+   carries no `Watcher failed` entry. Earlier invocations ran the replaced binary
+   and prove nothing.
+8. Remove every verification session, file, and capture; keep the previous
+   allocator set until Batch G completes.
 
-Rollback: restore the allocator version whose log endpoint returns 501 or disable
-the nginx log route. Keep LogWisp and file-writing games independently operable.
+Rollback: restore the previous allocator set, whose endpoint returns 501, or
+disable the nginx log route. Keep LogWisp and file-writing games independently
+operable.
 
 ## 4. Common end-of-batch session check
 
@@ -214,25 +224,22 @@ Restricted labels intact, and PV/PVC Bound.
 
 ## 5. Batch G — reconcile and hand off
 
-After E-F pass live:
+After Batch F passes live:
 
-1. Rewrite `doc/kube_docker_deploy.md` current topology, install order, status,
-   rollback, and troubleshooting to describe only the deployed file pipeline.
-2. Update `doc/kubernetes-fleet.md` current shape, work list, security tradeoff,
-   resources, decisions, and verification matrix with measured outcomes.
-3. Reconcile `deploy/README.md`, `deploy/guest/README.md`, and allocator
-   documentation; remove superseded console/sidecar/stdout-public-path prose.
-4. Rehearse the complete deployment from bare Arch Linux and bare Ubuntu. Record
-   package/service differences and fix every command that assumes the existing
-   node.
-5. Run the ten-session/four-player measurement. Record CPU, memory, tmpfs usage,
-   log rate, tick slips, rotations, LogWisp drops/replay, and browser reconnect
-   behavior; revise provisional 256 MiB and 8 MB caps only from evidence.
-6. Reboot with no session and repeat node readiness, mount, timer, Restricted
+1. Reduce `doc/kube_docker_deploy.md`, `doc/kubernetes-fleet.md`,
+   `deploy/README.md`, and `deploy/guest/README.md` to the deployed design.
+   Replace batch-by-batch narration with measured outcomes, and delete the
+   superseded console/sidecar/stdout-public-path prose that remains.
+2. Rehearse the complete deployment from bare Arch Linux and bare Ubuntu. Record
+   package/service differences and fix every command that assumes this node.
+3. Run the ten-session/four-player measurement (H3). Record CPU, memory, tmpfs
+   usage, log rate, tick slips, rotations, LogWisp drops/replay, and browser
+   reconnect behavior; revise the provisional 256 MiB and 8 MB caps only from it.
+4. Reboot with no session and repeat node readiness, mount, timer, Restricted
    labels, allocator probes, Bound PVC, empty directory, and §4.
-7. Produce the separate website implementation prompt: same-origin
+5. Produce the separate website implementation prompt (H15): same-origin
    `EventSource`, `fields.session_id`, bounded retained rows/render rate/reconnect
-   backoff, duplicate tolerance, and independent degradation from allocation.
+   backoff, duplicate tolerance, and degradation independent of allocation.
 
 ## 6. Remaining non-logging fleet gates
 

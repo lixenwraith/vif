@@ -948,46 +948,42 @@ and reconnect delay, and keep the allocator between the browser and every pod.
 
 ### 10.3 The log path
 
-The live allocator writes each session's commissioned JSONL through the
-Bound PVC to capped tmpfs; its workload, off-box join, state, record tags, and
-cleanup gates passed. Batch D also removed and denied allocator access to the Pod
-log subresource without breaking those operations. The currently deployed
-allocator still returns `501 log_stream_not_configured`; Batch F's repository
-version instead proxies the loopback stream byte-for-byte and returns stable 503
-JSON when LogWisp is unavailable.
-No allocator pod-log follower, JSON splicer, or LogWisp child exists. Do not build
-one.
+The session writes `<session-id>.jsonl` through a tmpfs-backed local PVC, one
+independent LogWisp node service reads `*.jsonl` with `raw = true` and
+`from = "start"`, and the allocator reverse-proxies its SSE bytes. The namespace
+stays Restricted, the pod mounts a PVC rather than `hostPath`, and LogWisp
+receives no Kubernetes token. No allocator pod-log follower, JSON splicer, or
+LogWisp child exists. Do not build one. The migration order is
+[`kube-todo.md`](kube-todo.md).
 
-The selected migration is tracked in [`kube-todo.md`](kube-todo.md): the session
-writes `<session-id>.jsonl` through a tmpfs-backed local PVC, one independent
-LogWisp service reads `*.jsonl` with `raw = true` and `from = "start"`, and the
-allocator reverse-proxies its SSE bytes. The namespace remains Restricted, the
-pod mounts a PVC rather than `hostPath`, and LogWisp receives no Kubernetes token.
-The pinned LogWisp revision, file-source configuration, locked identity, and
-hardened loopback-only unit are installed. Their identity, read-only tmpfs view,
-hidden credential paths, listener, Docker cleanup, and allocator probes passed;
-two-session fan-in then preserved 606 sampled non-TRACE records byte-for-byte
-without sink drops or rejected clients. The outage gate proved gameplay and
+Deployed and passed: Batch A's commissioned writer, selected by Batch C's
+workload over Batch B's tmpfs/PVC and node cleanup timer; Batch D's Role, which
+denies the Pod log subresource without breaking allocation, join, state, tagging,
+or cleanup; and Batch E's pinned LogWisp, whose identity, read-only tmpfs view,
+hidden credential paths, listener, Docker cleanup, and allocator probes passed
+before two-session fan-in preserved 606 sampled non-TRACE records byte-for-byte
+with no sink drops or rejected clients. Its outage gate proved gameplay and
 allocation independence; retained replay delivered an exact sentinel while the
-bounded client queue recorded 86 drops among 1,841 processed records.
+bounded client queue recorded 86 drops among 1,841 processed records. LogWisp was
+updated live to the pinned revision on 2026-09-14. The deployed allocator still
+returns `501 log_stream_not_configured`; Batch F's merged version proxies the
+loopback stream byte-for-byte and returns stable 503 JSON when LogWisp is down.
 
-Batch A implements the commissioned writer, and Batch C selects it in the workload:
-each application record carries `fields.session_id`, `fields.msg` stays first, the
-file rotates at 8 MB, and per-process directory cleanup is disabled. Batch B's
-tmpfs/PVC and node cleanup service passed before either workload source changed.
-Use `deploy/guest/update-logwisp.sh` to build the pinned upstream revision,
-replace only the standalone binary/config/unit, restart it, initialize its file
-sources, verify the listener, and retain one automatic rollback set. It neither
-controls nor rebuilds vi-fighter, K3s, or the allocator; the fleet procedure in
-`deploy/guest/README.md` stops allocation and proves the fleet empty around it.
-`deploy/logwisp/REVISION` pins a commit reachable from upstream LogWisp `main`,
-never a pull-request head that a squash merge discards; the builder proves that
-ancestry and fails before Docker starts, leaving the running LogWisp in place.
-Use
-`deploy/guest/update-vif-allocator.sh` separately: it builds first, refuses a
-non-empty fleet, pauses only allocation for the short replacement, checks health
-and readiness, and retains one automatic rollback set. Exact preflight, update,
-viewer, live-gate, and cleanup commands are in `deploy/guest/README.md`.
+Each application record carries `fields.session_id`, `fields.msg` stays first, the
+file rotates at 8 MB, and per-process directory cleanup is disabled.
+
+`deploy/guest/update-logwisp.sh` builds the pinned upstream revision, replaces
+only the standalone binary/config/unit, restarts it, initializes its file sources,
+verifies the listener, and retains one automatic rollback set; it never controls
+or rebuilds K3s, the allocator, or vi-fighter. `deploy/logwisp/REVISION` pins a
+commit reachable from upstream LogWisp `main`, never a pull-request head that a
+squash merge discards; the builder proves that ancestry and fails before Docker
+starts, leaving the running LogWisp in place. `deploy/guest/update-vif-allocator.sh`
+is separate: it builds first, refuses a non-empty fleet, pauses only allocation for
+the short replacement, checks health and readiness, and retains one rollback set.
+The fleet procedure in `deploy/guest/README.md` stops allocation and proves the
+fleet empty around both, and holds the exact preflight, update, viewer, live-gate,
+and cleanup commands.
 
 Only vi-fighter application records belong in the website feed. K3s, allocator,
 LogWisp service, kernel, and host journal records remain operator-only. Every hop
@@ -1130,10 +1126,10 @@ The remaining gap register is the fleet plan's
   including the capped tmpfs/PVC, Restricted file-writing workload, cleanup timer,
   remote join, record self-tags, empty steady state, and denial of allocator Pod
   log reads. The standalone LogWisp service also passed installation, isolation,
-  exact two-session fan-in, outage independence, and retained replay. Batch F's
-  tested byte proxy still needs its live cutover and common session gate.
-  The old console-source aggregator and in-pod sidecar are superseded, not
-  fallbacks.
+  exact two-session fan-in, outage independence, retained replay, and its
+  pinned-revision update. Batch F's tested byte proxy still needs its live cutover
+  and common session gate. The old console-source aggregator and in-pod sidecar
+  are superseded, not fallbacks.
 - **The website integration is not built and the LogWisp proxy is not deployed**
   (A16). The
   allocator and restricted rotating credential implement the session API, and
