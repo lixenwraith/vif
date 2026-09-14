@@ -1049,13 +1049,25 @@ curl --no-buffer -fsS --max-time 5 \
 ```
 
 Expect a session list, `text/event-stream` with `no-cache`, and
-`event: connected`. Then serve `deploy/website/vif-log-viewer.html` from the
-site's own document root and open it: its stream field defaults to the relative
-`/vif/api/logs`, so it reaches only its own origin. Allocate one session, join it,
-and require live rows carrying that session's id.
+`event: connected`.
+
+Then copy `vif-log-viewer.html` and `vif-log-viewer.js` together into the site's
+document root, keeping them in one directory: the page loads the script by
+relative name. Its stream field defaults to the relative `/vif/api/logs`, so it
+reaches only its own origin. The script is external because a site whose
+`Content-Security-Policy` omits `'unsafe-inline'` from `script-src` blocks an
+inline one without rendering any error — the page appears, and its buttons do
+nothing. Allocate one session, join it from a prepared client, and require live
+rows carrying that session's id.
 
 The probe endpoints must stay unreachable. `curl -o /dev/null -w '%{http_code}'`
-against `https://<site-host>/healthz` and `/readyz` must not return `200`.
+against `https://<site-host>/healthz` and `/readyz` must not return `200`; a
+site's own 404 page is the expected answer, since neither path is published.
+
+Publishing the session route makes creation reachable by anyone who can reach the
+site, which is the website contract rather than a regression: the ten-session
+quota, the 90-second first-join expiry, and the edge's own rate limit are what
+bound it. Nothing else about the allocator becomes reachable.
 
 ## 11. The alternative that is not taken: one fixed public port
 

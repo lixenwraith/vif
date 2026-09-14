@@ -153,6 +153,10 @@ What already bounds a stranger:
   every player's link and travels in clear — so what it bounds is a session being
   walked into, not one whose link leaked;
 - the network policy: one game port reachable, everything else denied, no egress;
+- the allocator's published surface: exactly the create/list and log-stream
+  routes, bounded by the ten-session quota, the 90-second first-join expiry and
+  the edge's rate limit. Its probe endpoints and every other node port stay
+  behind the node filter, which admits only the front door;
 - `-authority host`, which is the fleet's default and what keeps that one port the
   only one. A migrate session gives every participant a listening port and
   publishes the addresses inside the session; a guest's peer link is refused unless
