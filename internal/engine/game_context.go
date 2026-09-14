@@ -541,7 +541,9 @@ func (ctx *GameContext) GetFrameNumber() int64 {
 	return ctx.FrameNumber.Load()
 }
 
-// IncrementFrameNumber advances the frame authority (called by Render Loop)
+// IncrementFrameNumber advances the frame authority (called by Render Loop).
+// The count is a metric rather than a log stamp: nothing logs from the render
+// goroutine, and a headless run never calls this at all.
 func (ctx *GameContext) IncrementFrameNumber() int64 {
 	// FPS calculation (once per second)
 	ctx.frameCountFPS++
@@ -554,7 +556,6 @@ func (ctx *GameContext) IncrementFrameNumber() int64 {
 
 	n := ctx.FrameNumber.Add(1)
 	ctx.statFrame.Store(n)
-	ctx.Correlation.SetFrame(uint64(n))
 	return n
 }
 

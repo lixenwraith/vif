@@ -44,7 +44,7 @@ func TestSessionIDTagsEveryApplicationRecord(t *testing.T) {
 		t.Fatalf("log filename = %q, want abc123.jsonl", got)
 	}
 	Info("app", "msg", "session test", "answer", 42)
-	if _, err := EmitSet("stat", 7, 8, 9, func(emit func(args ...any)) {
+	if _, err := EmitSet("stat", 7, 8, func(emit func(args ...any)) {
 		emit("msg", "status test", "value", true)
 	}); err != nil {
 		t.Fatal(err)
@@ -125,13 +125,13 @@ func TestSessionIDOmittedWhenUnset(t *testing.T) {
 		if sub != "app" {
 			continue
 		}
-		for _, key := range []string{"time", "level", "sub", "run", "tick", "frame", "fields"} {
+		for _, key := range []string{"time", "level", "sub", "run", "tick", "fields"} {
 			if _, ok := record[key]; !ok {
 				t.Errorf("ordinary record omitted %q: %s", key, line)
 			}
 		}
-		if len(record) != 7 {
-			t.Errorf("ordinary record has %d top-level keys, want 7: %s", len(record), line)
+		if len(record) != 6 {
+			t.Errorf("ordinary record has %d top-level keys, want 6: %s", len(record), line)
 		}
 		var fields map[string]any
 		if err := json.Unmarshal(record["fields"], &fields); err != nil {

@@ -181,7 +181,7 @@ func buildLogger(dir, name, levelName string, console bool) (*log.Logger, string
 		RetentionPeriodHrs(retention).
 		HeartbeatLevel(1). // drop and rotation counters, one-way into the log
 		HeartbeatIntervalS(heartbeatS).
-		ContextKeys("sub", "run", "tick", "frame").
+		ContextKeys("sub", "run", "tick").
 		Build()
 	if err != nil {
 		return nil, "", err
@@ -403,10 +403,10 @@ func sessionArgs(args []any) []any {
 }
 
 func context(sub string) log.Context {
-	run, tick, frame := defaultCorrelation.Stamp()
+	run, tick := defaultCorrelation.Stamp()
 	return log.Context{
 		Tag:  sub,
-		Vals: [log.ContextSlots]uint64{run, tick, frame},
+		Vals: [log.ContextSlots]uint64{run, tick},
 	}
 }
 
@@ -416,12 +416,9 @@ func SetRun(n uint64) { defaultCorrelation.SetRun(n) }
 // SetTick publishes the game tick stamped on subsequent records
 func SetTick(n uint64) { defaultCorrelation.SetTick(n) }
 
-// SetFrame publishes the render frame stamped on subsequent records
-func SetFrame(n uint64) { defaultCorrelation.SetFrame(n) }
-
 // Stamp returns the live correlation values, for callers that emit a set of
 // records describing one instant and need them to share a stamp.
-func Stamp() (uint64, uint64, uint64) { return defaultCorrelation.Stamp() }
+func Stamp() (uint64, uint64) { return defaultCorrelation.Stamp() }
 
 // CrashHook records a panic and flushes before the host restores the terminal.
 // Registered with core.SetCrashHook.
@@ -524,7 +521,7 @@ func currentJournalPath() string {
 	return ""
 }
 
-// Journal writes one record stamped with the live run, tick and frame.
+// Journal writes one record stamped with the live run and tick.
 // No level or scope gate: a replay capture is not debug output.
 func Journal(sub string, args ...any) {
 	l := jsink.Load()

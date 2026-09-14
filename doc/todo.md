@@ -111,6 +111,19 @@ so a mixed-domain cell is dropped from the correction as well. `meta` carries
 `kills.*` and `energy.damage_multiplier` around it; a second predicate removes the
 workaround.
 
+### Rename the participant identity type
+
+- Priority: P3
+- Affected files: `internal/network/connection.go` and the 230-odd sites naming
+  `PeerID`, `CursorComponent.PeerID` included
+- Prerequisite: none; it is mechanical, and the component field is a capture
+  schema change that both sides of a session already have to match on
+
+`network.PeerID` is a participant identity that the transport also uses to
+address a link. The vocabulary calls the first a participant and the second a
+peer, so the type contradicts the document that defines it. Presentation now
+says `participant` everywhere; the type is what remains.
+
 ### Audit what a pruned crossing loses
 
 - Priority: P1

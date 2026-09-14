@@ -141,7 +141,7 @@ start/ready gate. Two flags activate the shared composition path:
 | `-join <host:port>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. Also accepts `[vif://]host:port/name`, which is the link shape a deployment hands a player. |
 | `-name <name>` | With `-host` or `-serve`, the name this session answers to, so one address can serve several. A host that sets one refuses a dial that names nothing, so it is taken with a front door that routes on the name or not at all. |
 | `:host <addr>` | Open a run that is **already playing**. The port is created, started and attached; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick. |
-| `:session` | Report the role, address, participant identity, peer count and tick. |
+| `:session` | Report the role, address, participant identity, its cursor slot, peer count and tick. |
 
 The flags and the command reach the same place. `-host` freezes tick zero for a
 fixed lobby, which is the right shape when every participant is present before the
@@ -598,8 +598,9 @@ this instance is a local continuation rather than part of a session, and
 `NetworkMigrationBadgeTicks` after a handoff is adopted — carrying
 `network.rejoin_attempts` beside it while a survivor with no link is walking the
 succession list. `Host lost` remains for the case where no succession is possible,
-and `:session` prints the term, the authority, the handoff count, the fork state,
-how many succession candidates the chain holds and whether this one is listening.
+and `:session` prints the term, the authority when it is somebody else, the
+handoff count once there has been one, the fork state, how many succession
+candidates the chain holds and whether this one is listening.
 
 Reachability has a surface of its own: `network.listening` says this instance bound
 a port for the session to dial back, `network.chain` how many candidates it holds,

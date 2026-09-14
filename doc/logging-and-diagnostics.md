@@ -4,8 +4,8 @@ Vi-Fighter's diagnostic surface has five cooperating layers: a structured JSON
 Lines session log, a status metric registry with periodic snapshots, an
 in-memory flight recorder that flushes only on a trigger, a dedicated replay
 journal, and a runtime stderr capture that folds Go runtime output back into
-the log. Ordinary diagnostics join on `run`, `tick`, and `frame`; the journal
-uses its own replay position `(run, tick, boundary)`.
+the log. Ordinary diagnostics join on `run` and `tick`; the journal uses its own
+replay position `(run, tick, boundary)`.
 
 This document is the authoritative reference for what is emitted, how to
 control it, and what each record means. For the process lifecycle that
@@ -45,7 +45,7 @@ payload is an open key-value map.
 
 ```json
 {"time":"2026-08-06T02:48:31.124075906-04:00","level":"INFO","sub":"stat",
- "run":0,"tick":100,"frame":355,
+ "run":0,"tick":100,
  "fields":{"msg":"fsm","state":"MainDecayWait","state_index":1}}
 ```
 
@@ -56,7 +56,6 @@ payload is an open key-value map.
 | `sub` | Subsystem tag; resolves to a scope (§4) |
 | `run` | Reset generation; incremented by game reset, so `:new` starts run 1 |
 | `tick` | Simulation tick at emission |
-| `frame` | Render frame at emission |
 | `fields` | Record payload; `msg` is the discriminator by convention |
 | `trace` | Present only on `vlog.Trace` records: a `->` joined call chain |
 
@@ -66,9 +65,9 @@ use the DNS-safe lowercase alphanumeric-and-hyphen subset of multiplayer session
 names. With file output, the active file is `<id>.jsonl`, so concurrent fleet
 sessions cannot collide on the ordinary timestamp-derived filename.
 `session_id` is distinct from the RNG/replay field named `session`. The deployment
-field stays in the payload because `sub`, `run`, `tick`, and `frame` are
-the stable envelope consumed by `vif-log`; deployment components forward the
-JSON line without rewriting it.
+field stays in the payload because `sub`, `run`, and `tick` are the stable
+envelope consumed by `vif-log`; deployment components forward the JSON line
+without rewriting it.
 
 `fields.msg` is the first payload key on every record the game emits. Viewers
 index it as a column and filter on it directly. The second string field is
@@ -76,24 +75,36 @@ conventionally the record's *follow key* — `region` on FSM records, `ev` on
 per-event dispatch records — so a viewer's follow-value navigation walks one
 region or one event type.
 
+### Naming a participant
+
+One session identity space, one field name. `participant` is whoever the record
+is *about*; where a record describes both ends of a link, the far one keeps
+`participant` and the local one is `local`. The emitting instance is otherwise
+not repeated per record — it is stated once by `network session active`
+(`participant`, `slot`) and in every `session summary` — because within one log
+it is a constant, and across a fleet `session_id` already names the process.
+
+`peers` is a count of live transport links and never an identity. A `slot` of
+255 (`parameter.NoPlayerSlot`) is a participant that drives no cursor, which on
+a dedicated host is the coordinator.
+
 ### Correlation stamps
 
-`run`, `tick`, and `frame` are process-global atomics published by three
-owners:
+`run` and `tick` are process-global atomics published by two owners:
 
 | Stamp | Owner | Advances |
 |---|---|---|
 | `run` | `MetaSystem.handleGameReset` via `vlog.SetRun` | once per game reset, with the replay tick rebased to zero |
 | `tick` | `ClockScheduler.processTick` via `vlog.SetTick` | once per simulation tick, before the tick body |
-| `frame` | `GameContext.IncrementFrameNumber` via `vlog.SetFrame` | once per render frame |
 
 `tick` is stamped with the tick *about to execute*, so records emitted inside
 `processTick` carry the tick they describe rather than the previous one.
 
-Because `frame` advances on a different goroutine, a multi-record emission can
-straddle a frame boundary. Emitters that must be atomic in the stamp —
-snapshots and recorder flushes — use `vlog.EmitSet`, which binds one explicit
-stamp for the whole set.
+The render frame is not a stamp. Nothing logs from the render goroutine, so it
+correlates no record, and a headless run never advances it at all; the counter
+is published as the `context.frame` metric and read once per snapshot instead.
+Emitters describing one instant — snapshots and recorder flushes — use
+`vlog.EmitSet`, which binds one explicit stamp for the whole set.
 
 ## 3. Levels
 
@@ -164,7 +175,10 @@ Set with `-ls <spec>` at startup or `:log scope <spec>` at runtime.
 
 ## 5. Subsystem catalog
 
-Every record the game emits, by `sub` and `msg`.
+What each `sub` carries, and the records worth naming. `app` is the run's own
+narration and grows with the session paths; it is described by its field
+conventions (§2) rather than enumerated, because a pinned list of seventy
+records is a list that goes stale.
 
 ### `sub="app"`
 
@@ -181,6 +195,9 @@ Every record the game emits, by `sub` and `msg`.
 | `recorder flush` | INFO | `reason`, `t0`, `ticks`, `records`, `us` | recorder, when the session log absorbed the flush |
 | `recorder flush failed` | ERROR | `reason`, `error` | recorder |
 | `snapshot saved` | INFO | `path` | `:d save` |
+| `network session active` | INFO | `participant`, `slot`, `coordinator`, `barrier_delay_ticks`, `peers` | this instance's one statement of who it is |
+| `session summary` | INFO | `summary` | the `-serve` loop, every 30 s; the same line `:session` prints |
+| `peer link opened` / `peer link lost` | INFO / WARN | `participant`, plus `address` on the dial and `authority_lost`, `remaining_peers` on the loss | `reach.dial`, `NetworkSystem.reportDisconnect` |
 
 ### `sub="service"`
 
@@ -292,7 +309,7 @@ distinguishes replayed intents from physical input.
 | `context` / `player` / `world` | INFO | on-demand snapshot only (§7) |
 
 One record per metric group per snapshot. All records of one snapshot share
-`run`/`tick`/`frame` by construction. See §6.
+`run`/`tick` by construction. See §6.
 
 ### `sub="rec"`
 
@@ -455,8 +472,7 @@ committed. It:
 4. drains a pending recorder flush request.
 
 The snapshot emits through `vlog.EmitSet` with one explicit stamp, so all
-records of one snapshot share `run`/`tick`/`frame` even if the render goroutine
-advances the frame counter mid-emission.
+records of one snapshot name the instant they describe.
 
 A snapshot is stamped with tick *n*, but it is not a barrier. The world lock is
 released before `Registry.Tick` runs, so the event loop, the input path and the
@@ -876,7 +892,7 @@ for _, ev := range events {
 | `Debug`, `Info`, `Warn`, `Error` | ordinary records |
 | `Detail` | trace level without a stack trace; per-item taps |
 | `Trace(sub, level, depth, ...)` | records that need a call chain; depth is raised by one to skip the wrapper |
-| `EmitSet(sub, run, tick, frame, fill)` | a correlated set that must share one stamp |
+| `EmitSet(sub, run, tick, fill)` | a correlated set that must share one stamp |
 | `Dump(fill)` | a standalone file, blocking |
 
 **Never log inside the world lock at volume.** A guarded call is a channel send

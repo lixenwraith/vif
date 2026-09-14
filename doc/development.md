@@ -222,8 +222,8 @@ including reconnect. `:session` reports what a run is part of.
 
 Or, on a run that is already playing, type `:host :7777` in terminal 1 and dial it
 from terminal 2 — the guest arrives holding the host's world at the tick it had
-reached. `:session` on either side reports the role, address, identity, peers and
-tick.
+reached. `:session` on either side reports the role, address, identity, the cursor
+slot that identity drives, peers and tick.
 
 Both sides should show `Net: 1`, two cursors, and the same shared actors and
 score/progression after either participant moves, types and fires. Use terminals
@@ -562,7 +562,7 @@ With `-log-session-id`, the per-file cap is 8 MB and directory-wide cleanup is
 disabled so one commissioned writer cannot remove another session's files. The
 fleet node owns the shared-directory bound and cleanup policy.
 
-Every record can carry subsystem plus run/tick/frame correlation stamps.
+Every record can carry subsystem plus run/tick correlation stamps.
 Scopes are `app`, `fsm`, `event`, `dispatch`, `push`, `input`, `stat`, `rec`,
 `lock`, and `tap`; unknown subsystem labels fall into tap. Errors bypass scope
 filtering, while level still applies.

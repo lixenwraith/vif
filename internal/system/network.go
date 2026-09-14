@@ -1273,13 +1273,11 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 	return queued
 }
 
-// reportDisconnect makes link loss visible independently of digest comparison.
-// Once a link disappears there is no peer left on that edge to send a mismatching
-// digest, so waiting for DESYNC would make the most serious transport failure look
-// like silence. NET:DOWN remains the persistent indicator; this local message and
-// warning name the event when it happens. Losing participant one is called out on a
-// game guest: simulation continues from the last authoritative state, but the
-// current membership protocol does not coordinate that local fork with other peers.
+// reportDisconnect names link loss when it happens. A digest cannot: once the edge
+// is gone nothing on it sends a mismatching one, so the worst transport failure
+// would look like silence. Losing the authority is called out separately on a
+// guest, which continues from the last authoritative state — a fork rather than a
+// session until a succession adopts a term.
 func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
 	authorityLost := peerID == s.authorityParticipant() && !s.isCoordinator()
 	message := fmt.Sprintf("Participant %d disconnected", peerID)
@@ -1301,7 +1299,7 @@ func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
 	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
 		Message: message, Duration: 4 * parameter.StatusMessageDefaultTimeout, DurationOverride: true,
 	})
-	vlog.Warn("app", "msg", "network peer disconnected", "participant", s.participantID(), "peer", peerID,
+	vlog.Warn("app", "msg", "peer link lost", "participant", peerID,
 		"authority_lost", authorityLost, "remaining_peers", remaining)
 }
 
@@ -1516,7 +1514,7 @@ func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
 	if err != nil {
 		*asm = network.SnapshotAssembly{}
 		s.statDrop.Add(1)
-		vlog.Warn("app", "msg", "correction chunk refused", "peer", from, "error", err.Error())
+		vlog.Warn("app", "msg", "correction chunk refused", "participant", from, "error", err.Error())
 		return
 	}
 	if !admitted {
@@ -1939,7 +1937,7 @@ func (s *NetworkSystem) applyDue(nextTick uint64) int {
 		if !s.admissibleFromSource(et, a.source) {
 			s.statForged.Add(1)
 			vlog.Warn("app", "msg", "artifact refused",
-				"peer", a.source, "event", event.GetEventName(et), "apply_tick", a.applyTick)
+				"participant", a.source, "event", event.GetEventName(et), "apply_tick", a.applyTick)
 			continue
 		}
 		if a.applyTick < nextTick {

@@ -193,7 +193,7 @@ func (u *authority) admit(term network.AuthorityTerm, from uint32) bool {
 func (u *authority) refuse(from uint32, term network.AuthorityTerm, why string) {
 	u.statRefused.Add(1)
 	vlog.Warn("app", "msg", "authoritative artifact refused",
-		"peer", from, "term", uint64(term), "held", uint64(u.Term()), "reason", why)
+		"participant", from, "term", uint64(term), "held", uint64(u.Term()), "reason", why)
 }
 
 // === succession ===
@@ -230,7 +230,7 @@ func (u *authority) beginSuccession(lost network.PeerID) {
 
 	u.statMigrating.Store(true)
 	vlog.Warn("app", "msg", "authority lost; succession opened",
-		"lost", uint64(lost), "term", uint64(term), "participant", uint64(local))
+		"participant", uint64(lost), "term", uint64(term), "local", uint64(local))
 	u.sendReport()
 	u.drive()
 }
@@ -705,7 +705,7 @@ func (u *authority) onHandoff(from uint32, body []byte) {
 	if err := u.adopt(rec, from); err != nil {
 		u.statRefused.Add(1)
 		vlog.Warn("app", "msg", "handoff refused",
-			"peer", from, "term", uint64(rec.Term), "authority", uint64(rec.Authority),
+			"participant", from, "term", uint64(rec.Term), "authority", uint64(rec.Authority),
 			"error", err.Error())
 		u.a.ctx.SetStatusMessage("Refused a conflicting authority handoff: "+err.Error(),
 			4*parameter.StatusMessageDefaultTimeout, true)
@@ -745,12 +745,16 @@ func (u *authority) summary() string {
 	if term == 0 {
 		return ""
 	}
-	role := "following"
-	if local == holder {
-		role = "authoring"
+	// The holder is named only when it is somebody else: the session line has
+	// already printed this participant's own identity, and a handoff count of zero
+	// is what every session that has never migrated reports.
+	line := fmt.Sprintf("term %d, authoring", term)
+	if local != holder {
+		line = fmt.Sprintf("term %d, following participant %d", term, holder)
 	}
-	line := fmt.Sprintf("term %d, authority participant %d (%s), %d handoff(s)",
-		term, holder, role, migrations)
+	if migrations > 0 {
+		line += fmt.Sprintf(", %d handoff(s)", migrations)
+	}
 	if contested != 0 {
 		line += fmt.Sprintf("; electing term %d", contested)
 	}

@@ -10,7 +10,10 @@ and the work that remains.
 
 Use these terms consistently:
 
-- A **network peer** is an endpoint exchanging session frames.
+- A **network peer** is an endpoint exchanging session frames. "Peer" is
+  relational, not a second namespace: a link is addressed by the identity of the
+  participant on its far end, so `network.PeerID` is both who and which link, and
+  no instance is ever its own peer.
 - The **game host** owns the canonical Shared-domain world, session identity,
   roster, and correction stream. It is the participant currently authoring,
   which is participant 1 until a handoff moves authorship.
@@ -32,6 +35,14 @@ Use these terms consistently:
 Network role, simulation domain, roster ownership, topology, and authority term
 are orthogonal. Do not infer authorship from participant ID, infer topology from a
 roster slot, or encode host/guest roles in entity domains.
+
+Two numbering spaces, each with its own reserved zero. A **participant identity**
+runs `1..MaxPlayers+1`; zero means *no participant*, which is what makes an absent
+crossing fence, an unused epoch window and every `id == 0` guard answer the same
+way. A **roster slot** runs `0..MaxPlayers-1` and names a cursor, with
+`NoPlayerSlot` for a participant that drives none. Slot zero is the first cursor
+rather than the local one — an instance identifies itself by its participant
+identity, and giving it a second name would cost the identity space its sentinel.
 
 ## 2. Current contract
 

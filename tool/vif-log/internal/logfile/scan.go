@@ -164,12 +164,11 @@ func (x *Index) scanSource(src uint16, f *os.File, part *scanPart, live bool) {
 			idx := uint32(len(part.metas))
 
 			// A stat record whose (run,tick) differs from the previous stat
-			// record opens a new group. Frame is excluded: it is stamped by the
-			// render goroutine and can change mid-snapshot.
+			// record opens a new group.
 			if x.subN.table()[m.Sub] == SubStat {
 				if !haveSnap || curR != m.Run || curT != m.Tick {
 					part.snaps = append(part.snaps, Snapshot{
-						Head: idx, Run: m.Run, Tick: m.Tick, Frame: m.Frame, Src: src,
+						Head: idx, Run: m.Run, Tick: m.Tick, Src: src,
 					})
 					curID = uint32(len(part.snaps))
 					curR, curT, haveSnap = m.Run, m.Tick, true
@@ -294,8 +293,6 @@ func parseMeta(line []byte, off int64, src uint16, subN, msgN *interner) (m Meta
 			m.Run = parseUint32(v)
 		case "tick":
 			m.Tick = parseUint32(v)
-		case "frame":
-			m.Frame = parseUint32(v)
 		case "trace":
 			if kind == KStr && len(v) > 2 {
 				m.Flags |= FlagTrace

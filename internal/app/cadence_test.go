@@ -237,7 +237,7 @@ func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 	// The operator surface carries the same set in one line, which is what a
 	// person types :session for.
 	summary := host.SessionSummary()
-	for _, want := range []string{"cadence", "keyframe every", "link", "uplink", "floor", "constrained"} {
+	for _, want := range []string{"cadence", "keyframe", "link", "uplink", "floor", "constrained"} {
 		if !strings.Contains(summary, want) {
 			t.Errorf(":session does not report %q: %s", want, summary)
 		}

@@ -237,7 +237,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:free [on\|off]`, `:auto [on\|off]` | Toggle free mouse and auto-fire. |
 | `:mouse enable\|disable\|free` | Control terminal mouse input. |
 | `:host <addr>` | Open this running game to participants (`:host :7777`). Refused if the run is already in a session. |
-| `:session` | Report the session role, address, participant identity, peer count and tick. |
+| `:session` | Report the session role, address, participant identity, its cursor slot, peer count and tick. |
 | `:system <runtime-name> enable\|disable` | Toggle a system that honors meta-system commands. |
 | `:flow [group]`, `:graph [group]` | Toggle navigation flow-field or route-graph debug views. |
 | `:speed [rate\|+\|-\|reset]`, `:sp` | Report or set the rational simulation rate. |

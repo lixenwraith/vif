@@ -126,10 +126,10 @@ func (r *Registry) Tick(n uint64) {
 
 	if every := r.snapEvery.Load(); every != 0 && n%every == 0 &&
 		vlog.On(SubStat, vlog.LevelInfo) {
-		// One explicit stamp for the whole snapshot: the frame counter belongs
-		// to the render goroutine and can advance mid-emission
-		run, tick, frame := r.Correlation().Stamp()
-		_, _ = vlog.EmitSet(SubStat, run, tick, frame, r.emitGroups)
+		// One explicit stamp for the whole snapshot, so every group in it names
+		// the instant it describes
+		run, tick := r.Correlation().Stamp()
+		_, _ = vlog.EmitSet(SubStat, run, tick, r.emitGroups)
 	}
 
 	if rc != nil {

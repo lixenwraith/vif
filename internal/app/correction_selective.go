@@ -236,7 +236,7 @@ func (c *corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	if err != nil {
 		m.ShardsRefused.Add(1)
 		vlog.Debug("app", "msg", "correction request refused",
-			"peer", pending.from, "error", err.Error())
+			"participant", pending.from, "error", err.Error())
 		return
 	}
 	m.RequestBytes.Add(int64(len(pending.body)))
@@ -257,7 +257,7 @@ func (c *corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		c.publishMu.Unlock()
 		m.ShardsRefused.Add(1)
 		vlog.Debug("app", "msg", "correction request refused",
-			"peer", pending.from, "version", req.Version, "schema", req.Schema)
+			"participant", pending.from, "version", req.Version, "schema", req.Schema)
 		return
 	}
 	if req.Converged() {
@@ -299,7 +299,7 @@ func (c *corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	if err != nil {
 		m.ShardsRefused.Add(1)
 		vlog.Debug("app", "msg", "repair not built",
-			"peer", pending.from, "tick", req.Tick, "error", err.Error())
+			"participant", pending.from, "tick", req.Tick, "error", err.Error())
 		c.sendKeyframeTo(port, pending.from, req.Tick)
 		return
 	}
@@ -326,7 +326,7 @@ func (c *corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	c.recordSelectiveSizeLocked(len(body))
 	c.publishMu.Unlock()
 	vlog.Debug("app", "msg", "repair sent",
-		"peer", pending.from, "tick", req.Tick, "pages", pages, "bytes", len(body))
+		"participant", pending.from, "tick", req.Tick, "pages", pages, "bytes", len(body))
 }
 
 // widenLocked drops one peer out of the selective exchange for the next few
@@ -407,7 +407,7 @@ func (c *corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 	c.a.telemetry.SentBytes.Add(int64(len(body)))
 	c.a.telemetry.KeyframeFallback.Add(1)
 	vlog.Debug("app", "msg", "keyframe fallback sent",
-		"peer", id, "tick", cap.Header.Tick, "bytes", len(body))
+		"participant", id, "tick", cap.Header.Tick, "bytes", len(body))
 }
 
 // === guest: answering the index ===

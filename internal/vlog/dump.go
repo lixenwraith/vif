@@ -58,15 +58,15 @@ const recPrefix = "vif-rec-"
 const recTimeFormat = "060102-150405.000"
 
 // EmitSet writes a correlated set of records under one explicit stamp, so the
-// whole set shares run/tick/frame even when the render goroutine advances the
-// frame counter mid-emission. It targets the session log when one is running,
-// otherwise a standalone file. Returns the standalone path, empty otherwise.
-func EmitSet(sub string, run, tick, frame uint64, fill func(emit func(args ...any))) (string, error) {
+// whole set describes one instant rather than whichever tick each record reached
+// the sink at. It targets the session log when one is running, otherwise a
+// standalone file. Returns the standalone path, empty otherwise.
+func EmitSet(sub string, run, tick uint64, fill func(emit func(args ...any))) (string, error) {
 	if l := sink.Load(); l != nil {
 		if !l.Enabled(LevelInfo) || !scopeEnabled(sub) {
 			return "", nil
 		}
-		emitSet(l, sub, run, tick, frame, fill)
+		emitSet(l, sub, run, tick, fill)
 		return "", nil
 	}
 
@@ -91,7 +91,7 @@ func EmitSet(sub string, run, tick, frame uint64, fill func(emit func(args ...an
 		return "", err
 	}
 
-	emitSet(l, sub, run, tick, frame, fill)
+	emitSet(l, sub, run, tick, fill)
 
 	if err := l.Shutdown(dumpTimeout); err != nil {
 		return p, fmt.Errorf("record drain: %w", err)
@@ -100,8 +100,8 @@ func EmitSet(sub string, run, tick, frame uint64, fill func(emit func(args ...an
 }
 
 // emitSet feeds fill an emitter bound to one context stamp
-func emitSet(l *log.Logger, sub string, run, tick, frame uint64, fill func(emit func(args ...any))) {
-	ctx := log.Context{Tag: sub, Vals: [log.ContextSlots]uint64{run, tick, frame}}
+func emitSet(l *log.Logger, sub string, run, tick uint64, fill func(emit func(args ...any))) {
+	ctx := log.Context{Tag: sub, Vals: [log.ContextSlots]uint64{run, tick}}
 	flags := l.Flags() | log.FlagKV
 	fill(func(args ...any) {
 		l.LogContext(ctx, flags, LevelInfo, 0, sessionArgs(args)...)

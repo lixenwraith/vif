@@ -347,9 +347,9 @@ func (rc *Recorder) Flush(reason string) {
 
 	start := time.Now()
 	records := 0
-	run, tick, frame := rc.reg.Correlation().Stamp()
+	run, tick := rc.reg.Correlation().Stamp()
 
-	path, err := vlog.EmitSet(SubRec, run, tick, frame, func(emit func(args ...any)) {
+	path, err := vlog.EmitSet(SubRec, run, tick, func(emit func(args ...any)) {
 		emit("msg", "window", "reason", reason,
 			"t0", t0, "t1", t1, "n", n, "groups", visibleGroups)
 		records++

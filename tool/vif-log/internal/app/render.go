@@ -580,7 +580,6 @@ func (a *App) renderDetail(r tui.Region) {
 	}
 	appendWrapped("run", fmt.Sprint(m.Run), true)
 	appendWrapped("tick", fmt.Sprint(m.Tick), true)
-	appendWrapped("frame", fmt.Sprint(m.Frame), true)
 
 	if a.rec.Trace != "" {
 		key := "trace"

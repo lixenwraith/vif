@@ -155,10 +155,20 @@ func (a *App) sessionSummaryLocked() string {
 	}
 	peers := a.world.Resources.Status.Ints.Get("network.peers").Load()
 	participant := a.world.LocalParticipant()
-	addr := a.cfg.HostAddress
-	role := "host"
+	// The dial direction, which is not authorship: a guest holds the term after a
+	// handoff, and the authority clause below is what names who authors. A harness
+	// binds no address, so the word stands alone rather than trailing a blank.
+	where, addr := "hosting", a.cfg.HostAddress
 	if a.cfg.JoinAddress != "" {
-		addr, role = a.cfg.JoinAddress, "guest"
+		where, addr = "joined", a.cfg.JoinAddress
+	}
+	if addr != "" {
+		where += " " + addr
+	}
+	slot := a.world.Resources.Player.LocalSlot()
+	cursor := fmt.Sprintf("slot %d", slot)
+	if slot == parameter.NoPlayerSlot {
+		cursor = "no cursor"
 	}
 	reg := a.world.Resources.Status
 	// The D-14 latch used to sit in the status bar beside every connection state,
@@ -168,8 +178,8 @@ func (a *App) sessionSummaryLocked() string {
 	if reg.Bools.Get("network.map_latched").Load() {
 		latch = "map latched"
 	}
-	line := fmt.Sprintf("Session %s %s, participant %d, %d peer(s), tick %d, %s",
-		role, addr, participant, peers, a.Position().Tick, latch)
+	line := fmt.Sprintf("Session %s, participant %d (%s), %d peers, tick %d, %s",
+		where, participant, cursor, peers, a.Position().Tick, latch)
 	if a.authority != nil {
 		if s := a.authority.summary(); s != "" {
 			line += "; " + s
@@ -203,10 +213,12 @@ func (a *App) sessionSummaryLocked() string {
 	case reg.Bools.Get("snapshot.cadence_constrained").Load():
 		state = "constrained"
 	}
+	// Keyframe period in ticks only: the cadence count it is derived from is the
+	// same number divided by the cadence, and the floor it is checked against is
+	// stated in ticks.
 	return line + fmt.Sprintf(
-		"; cadence %d ticks, keyframe every %d (%d ticks), link %d ms ±%d, %d B/s, uplink %d B/s, floor %d B/s, %s",
+		"; cadence %d ticks, keyframe %d ticks, link %d ms ±%d, %d B/s, uplink %d B/s, floor %d B/s, %s",
 		cadence,
-		reg.Ints.Get("snapshot.cadence_keyframe_interval").Load(),
 		reg.Ints.Get("snapshot.cadence_keyframe_period_ticks").Load(),
 		reg.Ints.Get("network.link_rtt_ms").Load(),
 		reg.Ints.Get("network.link_jitter_ms").Load(),

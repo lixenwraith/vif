@@ -136,7 +136,7 @@ func (a *App) Serve() error {
 			a.holdVacant(st)
 
 		case <-report.C:
-			vlog.Info("app", "msg", "server", "summary", a.SessionSummary())
+			vlog.Info("app", "msg", "session summary", "summary", a.SessionSummary())
 		}
 	}
 }

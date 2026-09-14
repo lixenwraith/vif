@@ -15,7 +15,6 @@ type Meta struct {
 	Len   uint32
 	Run   uint32
 	Tick  uint32
-	Frame uint32
 	Msg   uint32 // interned fields.msg
 	Snap  uint32 // stat-snapshot group id, 0 = none
 	Sub   uint16 // interned sub
@@ -46,7 +45,6 @@ type Snapshot struct {
 	Count uint32
 	Run   uint32
 	Tick  uint32
-	Frame uint32
 	Src   uint16
 }
 
