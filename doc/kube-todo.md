@@ -97,8 +97,9 @@ proxy", which holds the exact commands:
    byte-exact non-TRACE sentinel through the proxy; then with LogWisp stopped,
    stable `503 log_stream_unavailable` while create, list, health, readiness and
    the occupied game continue; then an exact retained sentinel after restart;
-   then §4 through vacancy, deletion and cleanup. A missed join invalidates the
-   step: delete the session and restart it.
+   then vacancy, deletion and cleanup. F5 is Batch F's §4 run, interleaved with
+   the outage, so §4 is not run separately for this batch. A missed join
+   invalidates the step: delete the session and restart it.
 6. **F6** watcher retirement: the LogWisp invocation that was running for F5's
    session deletion carries no `Watcher failed` entry. An invocation that saw no
    file removed proves nothing, and earlier ones ran the replaced binary.
@@ -114,9 +115,10 @@ operable.
 
 ## 4. Common end-of-batch session check
 
-Run this after every remaining batch. Have the remote development-machine terminal
-ready before allocation: the 90-second first-join clock starts when `POST`
-returns.
+Run this after every remaining batch. A batch whose own gate interleaves with it,
+as Batch F's F5 does, runs these blocks in that order instead of separately. Have
+the remote development-machine terminal ready before allocation: the 90-second
+first-join clock starts when `POST` returns.
 
 On the node:
 

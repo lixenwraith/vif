@@ -1647,6 +1647,10 @@ reach a stream client byte-for-byte through the proxy, the allocator keeps
 allocating and the game keeps running while LogWisp is stopped, and the retained
 file replays exactly when it returns.
 
+**F5 is Batch F's §4 run**, interleaved with the outage, so §4 of
+`doc/kube-todo.md` is never run separately for this batch and its first block is
+never pasted again here: that creates a second session and discards `SESSION_ID`.
+
 **This step is invalid without a second machine.** Its proofs all require an
 `occupied` session, and the first-join window is 90 seconds from the `POST` in
 F5.2. Have the development machine's `bin/vif` built and its terminal in the
@@ -1668,7 +1672,8 @@ for attempt in $(seq 1 50); do
   grep -Fxq 'event: connected' "$BATCH_F_CAPTURE" && break
   sleep 0.1
 done
-grep -Fxq 'event: connected' "$BATCH_F_CAPTURE"
+grep -Fxq 'event: connected' "$BATCH_F_CAPTURE" &&
+  printf 'reader: connected\n'
 
 for attempt in $(seq 1 50); do
   curl --connect-timeout 2 --max-time 5 -fsS \
@@ -1709,8 +1714,12 @@ On the development machine, with the printed target:
 bin/vif -join '<join_target>'
 ```
 
-That block is §4's creation step, so continue §4 of `doc/kube-todo.md` from its
-Job-shape check through its occupied state check, stopping there.
+That block is §4's creation step. Run only §4's Job-shape block next — the one
+beginning `sudo kubectl -n vif get job "vif-session-$SESSION_ID" -o json` — and
+its occupied-state query, then stop and return here. Do not paste §4 from its
+top; F5.7 below carries the rest of §4 inline.
+
+**Expect:** a session id and join target, then `true` from both §4 queries.
 
 #### F5.3 - occupancy gate
 
@@ -1745,8 +1754,12 @@ for attempt in $(seq 1 50); do
   grep -Fqx -- "data: $BATCH_F_SENTINEL" "$BATCH_F_CAPTURE" && break
   sleep 0.2
 done
-grep -Fqx -- "data: $BATCH_F_SENTINEL" "$BATCH_F_CAPTURE"
+grep -Fqx -- "data: $BATCH_F_SENTINEL" "$BATCH_F_CAPTURE" &&
+  printf 'proxy sentinel: byte-exact\n'
 ```
+
+**Expect:** `proxy sentinel: byte-exact`. Its absence is a failure, whatever else
+the block printed.
 
 #### F5.5 - LogWisp outage independence
 
@@ -1790,7 +1803,9 @@ BATCH_F_TICK_DOWN=$(curl -fsS \
   jq -er --arg id "$SESSION_ID" '
     .sessions[] | select(.id == $id) | .state.tick')
 test -n "$BATCH_F_TICK_DOWN"
-test "$BATCH_F_TICK_DOWN" -gt "$BATCH_F_TICK_BEFORE"
+test "$BATCH_F_TICK_DOWN" -gt "$BATCH_F_TICK_BEFORE" &&
+  printf 'game advanced while LogWisp was down: %s -> %s\n' \
+    "$BATCH_F_TICK_BEFORE" "$BATCH_F_TICK_DOWN"
 
 ./deploy/k3s/session.sh delete "$BATCH_F_PROBE_ID"
 sudo kubectl -n vif wait --for=delete \
@@ -1831,24 +1846,57 @@ for attempt in $(seq 1 100); do
   sleep 0.1
 done
 grep -Fqx -- "data: $BATCH_F_SENTINEL" \
-  "$BATCH_F_RESTART_CAPTURE"
+  "$BATCH_F_RESTART_CAPTURE" &&
+  printf 'retained replay: exact pre-outage sentinel\n'
 BATCH_F_TICK_RESTARTED=$(curl -fsS \
   http://127.0.0.1:9080/vif/api/sessions |
   jq -er --arg id "$SESSION_ID" '
     .sessions[] | select(.id == $id) | .state.tick')
 test -n "$BATCH_F_TICK_RESTARTED"
-test "$BATCH_F_TICK_RESTARTED" -gt "$BATCH_F_TICK_DOWN"
+test "$BATCH_F_TICK_RESTARTED" -gt "$BATCH_F_TICK_DOWN" &&
+  printf 'game advanced after restart: %s -> %s\n' \
+    "$BATCH_F_TICK_DOWN" "$BATCH_F_TICK_RESTARTED"
 kill "$BATCH_F_RESTART_PID"
 wait "$BATCH_F_RESTART_PID" 2>/dev/null || true
 ```
 
 #### F5.7 - release the session
 
-**Required before F6, and required even if an earlier sub-step failed.** Quit the
-remote game, then finish §4 of `doc/kube-todo.md` from its vacant-state check
-through deletion, per-session file cleanup, and its final service/storage
-verification. F6 has nothing to observe until this deletion has happened with
-LogWisp running.
+**Required before F6, and required even if an earlier sub-step failed.** F6 has
+nothing to observe until this deletion happens with LogWisp running: removing the
+watched file is the retirement it measures. Quit the remote game first, then run
+this here rather than returning to §4:
+
+```sh
+curl -fsS http://127.0.0.1:9080/vif/api/sessions |
+  jq -e --arg id "$SESSION_ID" '
+    .sessions[] | select(.id == $id) | .state |
+    select(.phase == "vacant" and .guests == 0)'
+
+sudo test -s "/var/log/vif-fleet/$SESSION_ID.jsonl"
+sudo jq -s -e --arg id "$SESSION_ID" '
+  map(select(.sub != null)) as $records |
+  ($records | length > 0) and
+  all($records[]; .fields.session_id == $id)
+' "/var/log/vif-fleet/$SESSION_ID.jsonl"
+
+./deploy/k3s/session.sh delete "$SESSION_ID"
+sudo kubectl -n vif wait --for=delete \
+  "job/vif-session-$SESSION_ID" --timeout=60s
+sudo kubectl -n vif wait --for=delete pod \
+  -l "vif.lixenwraith.dev/session=$SESSION_ID" --timeout=60s
+sudo kubectl -n vif get job,pod,service \
+  -l "vif.lixenwraith.dev/session=$SESSION_ID"
+
+sudo find /var/log/vif-fleet -maxdepth 1 -type f \
+  \( -name "$SESSION_ID.jsonl" -o -name "${SESSION_ID}_*.jsonl" \) \
+  -delete
+sudo find /var/log/vif-fleet -mindepth 1 -maxdepth 1 -print
+unset SESSION_JSON SESSION_ID JOIN_TARGET
+```
+
+**Expect:** two `true` verdicts, then `No resources found` and an empty `find`.
+Delete before the empty grace or Job TTL removes the evidence.
 
 ### F6 - watcher retirement
 
@@ -1863,8 +1911,11 @@ BATCH_F_INVOCATION=$(systemctl show logwisp.service \
   -p InvocationID --value)
 test -n "$BATCH_F_INVOCATION"
 ! sudo journalctl "_SYSTEMD_INVOCATION_ID=$BATCH_F_INVOCATION" \
-  --no-pager | grep -F 'Watcher failed'
+  --no-pager | grep -F 'Watcher failed' &&
+  printf 'watcher retirement: no failure in this invocation\n'
 ```
+
+**Expect:** `watcher retirement: no failure in this invocation`.
 
 ### F7 - cleanup and steady state
 
@@ -1878,6 +1929,7 @@ for temporary in \
   "$BATCH_F_ERROR" "$BATCH_F_RESTART_CAPTURE"
 do
   case "$temporary" in
+    '') ;;
     /tmp/vif-batch-f-*) rm -f -- "$temporary" ;;
     *) printf 'refusing unsafe temporary path: %s\n' "$temporary" >&2; false ;;
   esac
