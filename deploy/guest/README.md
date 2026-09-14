@@ -349,16 +349,26 @@ the fleet is empty. Restore the preserved Batch B binary; leave the mounted volu
 and its Bound PV/PVC in place:
 
 ```sh
+FLEET_OBJECTS=$(sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet -o name)
+test -z "$FLEET_OBJECTS"
 sudo systemctl stop vif-allocator.service
-sudo kubectl -n vif get job,pod,service \
-  -l app.kubernetes.io/part-of=vi-fighter-fleet
 sudo test -x /usr/local/libexec/vif-allocator.batch-b
 sudo install -o root -g root -m 0755 \
   /usr/local/libexec/vif-allocator.batch-b \
   /usr/local/bin/vif-allocator
 sudo systemctl start vif-allocator.service
+for attempt in $(seq 1 25); do
+  curl --connect-timeout 1 --max-time 2 -fsS \
+    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
+  sleep 1
+done
+systemctl is-active vif-allocator.service
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/healthz
 curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:9080/readyz
+unset FLEET_OBJECTS
 ```
 
 ## Batch D: remove the unused pod-log permission
@@ -441,14 +451,24 @@ subresource is required, stop allocation, prove the fleet is empty, restore only
 that exact read grant, and restart the allocator:
 
 ```sh
+FLEET_OBJECTS=$(sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet -o name)
+test -z "$FLEET_OBJECTS"
 sudo systemctl stop vif-allocator.service
-sudo kubectl -n vif get job,pod,service \
-  -l app.kubernetes.io/part-of=vi-fighter-fleet
 sudo kubectl -n vif patch role vif-allocator --type=json \
   -p='[{"op":"add","path":"/rules/-","value":{"apiGroups":[""],"resources":["pods/log"],"verbs":["get"]}}]'
 sudo systemctl start vif-allocator.service
+for attempt in $(seq 1 25); do
+  curl --connect-timeout 1 --max-time 2 -fsS \
+    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
+  sleep 1
+done
+systemctl is-active vif-allocator.service
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/healthz
 curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:9080/readyz
+unset FLEET_OBJECTS
 ```
 
 Do not restore `pods/log` for a node-file, LogWisp, or public-stream failure: none
@@ -1964,9 +1984,14 @@ Stop allocation and require an empty fleet before restoring the updater's
 previous allocator set. LogWisp and the PVC-backed writer remain deployed:
 
 ```sh
+FLEET_OBJECTS=$(sudo kubectl -n vif get job,pod,service \
+  -l app.kubernetes.io/part-of=vi-fighter-fleet -o name)
+test -z "$FLEET_OBJECTS"
+sudo test -f /usr/local/libexec/vif-allocator.previous
+sudo test -f /etc/vif-allocator/allocator.env.previous
+sudo test -f /etc/systemd/system/vif-allocator.service.previous
 sudo systemctl stop vif-allocator.service
-sudo kubectl -n vif get job,pod,service \
-  -l app.kubernetes.io/part-of=vi-fighter-fleet
+
 sudo install -o root -g root -m 0755 \
   /usr/local/libexec/vif-allocator.previous \
   /usr/local/bin/vif-allocator
@@ -1978,9 +2003,32 @@ sudo install -o root -g root -m 0644 \
   /etc/systemd/system/vif-allocator.service
 sudo systemctl daemon-reload
 sudo systemctl start vif-allocator.service
+
+for attempt in $(seq 1 25); do
+  curl --connect-timeout 1 --max-time 2 -fsS \
+    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
+  sleep 1
+done
+systemctl is-active vif-allocator.service
+curl --connect-timeout 2 --max-time 5 -fsS \
+  http://127.0.0.1:9080/healthz
 curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:9080/readyz
+ROLLBACK_LOG_STATUS=$(curl --connect-timeout 2 --max-time 5 -sS \
+  -o /dev/null -w '%{http_code}' \
+  http://127.0.0.1:9080/vif/api/logs)
+printf 'restored /vif/api/logs status: %s\n' "$ROLLBACK_LOG_STATUS"
+unset FLEET_OBJECTS ROLLBACK_LOG_STATUS
 ```
 
-The fleet query must be empty. The restored endpoint returns 501; disabling a
-future nginx log location is the matching public rollback.
+The allocator binds its listener after startup reconciliation, so probe only
+through the wait loop; a `curl` immediately after `systemctl start` reports a
+refused connection that means nothing.
+
+`.previous` is one update back, not a fixed version: each
+`update-vif-allocator.sh` run overwrites it. It holds the 501 allocator only
+until a second update runs, after which this restores the prior proxying build
+instead — the printed `/vif/api/logs` status says which. To reach the 501
+endpoint again from a node that has updated twice, run the updater from a
+checkout at the pre-Batch-F revision. Disabling a future nginx log location is
+the matching public rollback.

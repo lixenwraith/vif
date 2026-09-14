@@ -24,9 +24,15 @@ Status on 2026-09-14:
   `write_timeout_ms`, and allocator health and readiness returned `ok`. Its
   watcher-retirement fix is running but not yet proven: proof needs a session
   create/delete cycle, which Batch F's gate supplies.
-- Batch F's allocator byte proxy, update helper, and bounded local viewer are
-  implemented and tested in the repository; only the live cutover remains, so the
-  deployed `/vif/api/logs` still returns `501 log_stream_not_configured`.
+- Batch F's live cutover ran on 2026-09-14. F1-F3 passed; F4 confirmed `405`
+  method handling and an unstalled stream; F5 reached `occupied` and proved the
+  outage slice — stable `503 log_stream_unavailable`, `ok` health and readiness,
+  the occupied game still advancing, and a new session still created while
+  LogWisp was stopped; F6 and F7 returned the node to an empty, five-unit steady
+  state. F5.4's byte-exact sentinel and F5.6's retained replay through the proxy
+  printed no verdict under the procedure of the day and are the only outstanding
+  Batch F evidence. The rollback path was then exercised, so the node runs the
+  previous allocator until `./deploy/guest/update-vif-allocator.sh` runs again.
   Batch G has not started.
 
 ## 1. Invariants and batch discipline
@@ -60,16 +66,20 @@ The node procedure must remain runnable from a bare systemd-based Arch Linux or
 Ubuntu installation. Distribution branches are allowed only where package or
 service defaults differ.
 
-## 2. Remaining phases
+## 2. Remaining phases and their goals
 
-| Batch | State | Outcome |
+Where the pivot ends: a player's browser reads its own session's log lines from
+the website over one same-origin route, while nothing in that path can read a
+Kubernetes pod log, hold a cluster credential, or end a game by failing.
+
+| Batch | Goal | State |
 |---|---|---|
-| F — allocator byte proxy | Next; code merged and tested, live gate outstanding | `/vif/api/logs` proxies SSE bytes with prompt flush/cancellation and a stable failure response while session APIs stay independent. |
-| G — final reconciliation | Blocked on F | Durable docs describe only the deployed design, bare Arch/Ubuntu rehearsals pass, sizing evidence is recorded, and the website handoff is ready. |
+| F — allocator byte proxy | Make `/vif/api/logs` the same-origin edge for LogWisp's SSE bytes, so the website needs no second host, port, or credential, and neither service can take the other down. | Cut over 2026-09-14; two byte-preservation proofs outstanding. |
+| G — final reconciliation | Leave a deployment a stranger can install from bare Arch or Ubuntu, described only as deployed, with limits justified by measurement instead of single-guest history. | Blocked on F. |
 
-§6 holds the non-logging gates that follow. H15 unblocks with F; H3 is measured
-inside G; H1, H11, and H12 are independent of the log pipeline and gate public
-exposure rather than this pivot.
+§6 holds the non-logging gates. H15 is what consumes F's route and unblocks with
+it; H3's sizing measurement runs inside G; H1, H11 and H12 bound what a stranger
+can do to an open game port, and gate public exposure rather than this pivot.
 
 ## 3. Batch F — cut the allocator over to the byte proxy
 
