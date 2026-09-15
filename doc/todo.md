@@ -247,3 +247,14 @@ A `HEAD` on LogWisp's SSE path registers a client that only leaves when its
 connection closes, so `max_connections` (32) is reachable without reading a byte.
 The allocator proxy closes each upstream connection, which covers the deployed
 loopback path; a public route would need an upstream bound of its own.
+
+### Render the session log level from the template
+
+- Priority: P3
+- Affected files: `deploy/k3s/30-session.yaml`, `deploy/k3s/render-session.sh`
+- Prerequisite: none
+
+The allocator renders `-lv` from the level a caller selected; the checked-in
+template hard-codes `info`. The manual render path therefore cannot reproduce an
+allocator session that chose `debug`, which is the one case a person renders by
+hand for.

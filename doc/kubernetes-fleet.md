@@ -1,30 +1,15 @@
-# The session fleet: plan and work list
+# The session fleet: design and work list
 
 Vi-Fighter dedicated servers run one session per container on K3s. A website asks
 for a game, one container appears, and it ends itself when nobody is in it.
 
-This is the plan and the outstanding work. The procedure for installing and running
-it is [Deploying the session fleet](kube_docker_deploy.md); the objects themselves
-are in [`deploy/`](../deploy/README.md); the scenarios that verify it by hand are in
-[`test/`](../test/README.md).
+This is what the design is, what it cost when it was measured, and what is left.
+The procedure for installing it is
+[Deploying the session fleet](kube_docker_deploy.md); the objects are in
+[`deploy/`](../deploy/README.md); the scenarios that verify the process by hand are
+in [`test/`](../test/README.md).
 
-> **Logging direction changed on 2026-09-12.** The unimplemented pod-log follower,
-> allocator JSON splicing, allocator-owned LogWisp, and per-session sidecar are
-> superseded by [the fleet logging pivot](kube-todo.md). Batches A-E are deployed
-> and passed: each live session writes its self-tagged JSONL through the
-> tmpfs-backed PVC, allocator RBAC cannot read pod logs, and one independent
-> loopback LogWisp service preserves the files' event bytes. Its outage gate
-> proved allocation and gameplay continue without LogWisp, and its bounded restart
-> replay delivered an exact retained sentinel across 1,841 records with 86
-> client-queue drops. LogWisp was updated live on 2026-09-14 to the pinned
-> revision that retires a watched file without an error and exposes its queue and
-> connection bounds. Batch F cut the allocator over on 2026-09-14:
-> `/vif/api/logs` now proxies LogWisp's SSE bytes, preserving a game record
-> byte-for-byte and returning a stable 503 while allocation and gameplay continue
-> without LogWisp. Publishing that route through the site's front door (H15) is
-> next.
-
-## 1. Current deployment
+## 1. What is deployed
 
 | Property | Value |
 |---|---|
@@ -33,17 +18,12 @@ are in [`deploy/`](../deploy/README.md); the scenarios that verify it by hand ar
 | First-guest window | 90 s. A session nobody reaches exits 0 and is removed. |
 | Empty grace | 90 s after the last guest leaves; also the window a dropped player has to reclaim their slot. |
 | Drain | 20 s on `SIGTERM`, inside a 30 s termination grace period. A second signal exits at once. |
-| Trigger | `tool/vif-allocator` is deployed as a hardened Arch-guest service and implements the website-facing control-plane boundary. `deploy/k3s/session.sh` is the manual fallback; no session pod runs between requests. |
-| Image | `scratch` + one static binary, ~13 MB, non-root, read-only root filesystem, no shell. |
+| Trigger | `tool/vif-allocator`, a hardened node service, is the website-facing control-plane boundary. `deploy/k3s/session.sh` drives it from a shell and can also render the template directly. No session pod runs between requests. |
+| Image | `scratch` plus one static binary, ~13 MB, non-root, read-only root filesystem, no shell. |
 | Transport | Raw framed TCP, one long-lived connection per player. Unauthenticated by decision (§4). |
 | Reached by | Its own port, from a forwarded ten-port range. The port is the whole of the routing: nothing in a plaintext game connection names a session, so a firewall's destination port is the only signal there is. |
-| Logs and metrics | Each Job writes `<session-id>.jsonl` through the Bound local PVC to the capped node tmpfs. The standalone LogWisp node service, at the revision pinned in `deploy/logwisp/REVISION` and updated live on 2026-09-14, has a read-only view and loopback-only listener. Normal fan-in preserved 606 sampled records byte-for-byte with zero drops; a stop/restart proved gameplay independence and exact retained replay with 86 bounded client-queue drops among 1,841 processed records. `/vif/api/logs` proxies that stream byte-for-byte and answers a stable 503 when LogWisp is stopped; publishing it (H15) is what remains. |
-
-The allocator-to-Kubernetes path is implemented and verified through an off-box
-join. The standalone LogWisp node edge passed installation, fan-in, isolation,
-outage independence, retained replay, and a pinned-revision update under the
-guarded empty-fleet trap. The allocator stream edge is deployed and passed the
-same gates through the proxy; nginx and website routing follow.
+| Logs and metrics | Each Job writes `<session-id>.jsonl` through a Bound local PVC onto a 256 MiB node tmpfs. One standalone LogWisp node service, pinned by `deploy/logwisp/REVISION`, has a read-only view and a loopback-only listener; the allocator reverse-proxies its SSE bytes at `/vif/api/logs` without parsing a record. |
+| Public API | Exactly `/vif/api/sessions` and `/vif/api/logs`, over TLS through the site's front door. `/healthz`, `/readyz` and every other node port stay unreachable from outside. |
 
 ```mermaid
 flowchart LR
@@ -53,9 +33,9 @@ flowchart LR
     API --> Pod["vif -serve"]
     Site -->|"host:port"| Player
     Player -->|"vif -join, TCP"| NP["NodePort"] --> Pod
-    Pod -->|"JSONL through PVC"| Logs["capped node tmpfs, operator only"]
+    Pod -->|"JSONL through PVC"| Logs["capped node tmpfs"]
     Logs -->|"read-only files"| Wisp["LogWisp, loopback"]
-    Wisp -.->|"Batch F byte proxy"| Alloc
+    Wisp -->|"SSE bytes"| Alloc
 ```
 
 ## 2. Runtime contract
@@ -67,7 +47,7 @@ flowchart LR
 | Capacity | `-players` is a ceiling on guests. At capacity the health body reports `ready=false`; the process stays healthy. |
 | Allocated lifetime | `-first-join`, `-empty` and `-drain` are enforced by `internal/lifecycle` over roster observations, and published on `/health`. |
 | Join identity | The coordinator refuses a peer whose protocol, simulation fingerprint, capture schema, journal schema, tick interval, seed, config or corpus differs from the offer it made. |
-| Session name | Optional. `-name` makes one address able to serve several sessions: the dialer sends it before the handshake, so a front door can route on it, and the session refuses a name that is not its own. A routing key, not a credential. Built and tested; the deployed manifest does not set one (H8). |
+| Session name | Optional. `-name` makes one address able to serve several sessions: the dialer sends it before the handshake, so a front door can route on it, and the session refuses a name that is not its own. A routing key, not a credential. Built and tested; the deployed manifest does not set one (§9). |
 | Crossing ordering | Ordinary crossings are judged by the capture's per-source sequence fence, not by their apply tick, so a link that misses the playout lead costs freshness rather than the player's action (§5). |
 | Shutdown | `SIGTERM` drains: readiness false, dials refused with `ErrSessionEnding`, exit when the roster empties or `-drain` elapses. |
 | Health | One `/health` path. Its code is liveness; the body carries `ready`, `phase`, `expires_in`, roster and tick. |
@@ -79,69 +59,58 @@ it does not move an in-memory session into an unrelated pod.
 
 ## 3. Work list
 
-### Done
-
-| Item | Result |
-|---|---|
-| Dedicated host shape | `ModeServer` has no cursor, terminal, renderer or audio. Its lobby starts on one guest; `-players` is a ceiling, unset meaning the whole roster. |
-| Supervised endpoint | One `/health` (liveness code, everything else in the body) and `/metrics`. |
-| Allocated lifetime | First-guest window, empty grace and drain, in `internal/lifecycle`; one `session ended` log line names the reason. |
-| Graceful termination | A signal drains rather than cutting a match; a second one exits. An abandoned startup gate costs the session its lobby, not its life: the run continues and its vacancy grace decides. |
-| Join identity (was F2) | The **host** verifies. A joiner reports what it turned out to be and the coordinator refuses it; a peer that skipped its own check is refused anyway. Covers the wire protocol, the manifest's simulation fingerprint, both schemas, the tick interval, and the whole session identity. |
-| Fleet objects | Namespace with enforced `restricted` Pod Security, ten-session quota, default-deny network policy, per-session Job/Service, allocator RBAC. |
-| Proof-of-concept Internet path (H2) | An off-box client crossed FreeBSD 15.1 `pf rdr`, the Arch bhyve guest, NodePort and kube-proxy DNAT, then joined a real game. Source-address preservation remains H11. |
-| Reboot-safe node baseline | K3s v1.34.6+k3s1 returned Ready with no swap, `inet vif` loaded from files, Docker and the system containerd inactive and disabled, no stale `vif` objects, and both imported images retained. |
-| Unclaimed-session lifecycle | With production timers, the listener opened, exited 0 at 90 s with `no guest connected`, completed its Job, then Job TTL and garbage collection removed the owned Service and returned quota to zero. |
-| Correction correctness | Snapshot schema 5 local-lifecycle reconciliation, delayed-action identity, quasar map clipping. |
-| Late-crossing ordering (was F10/H5) | A capture carries one applied-sequence fence per participant, so a correction keeps an action it had not received instead of undoing it for a cadence. See §5. |
-| Reconnect on every host shape | The mid-run gate is installed on every host and armed once its clock runs, so a dropped guest dials back into the slot its departure released whatever opened the session. A departure clears the identity's crossing fence, so the next holder of that identity is not read as already-applied. |
-| Roster ceiling | `-players` is a ceiling and only a ceiling, unset meaning the whole roster. A pod no longer serves the number somebody guessed at start-up. |
-| Empty-session cost | A roster that empties parks immediately. With `-empty`, the same world is retained until the grace expires so a reconnect reclaims the match. An unbounded host (`-empty=0`) alone starts a fresh run after `SessionVacantReset`. |
-| Parked-session probe | `/health` remains live with `clock=paused phase=vacant`; liveness is the response code, not a moving tick. |
-| Named sessions | `-name` on a host, `vif://host:port/name` in a player's link. One frame before the handshake, so a front door can put ten sessions behind one public port ([`deploy/frontdoor`](../deploy/frontdoor/haproxy.cfg)) and a stale link is refused rather than misrouted. Held in reserve for H8: the deployment reaches a session by port. |
-| Authority policy | `-authority host|migrate`, defaulting to `host` on `-serve`. A dedicated host's address *is* the session, so losing the pod is an orchestrator's job to fix rather than a guest's to inherit. See [Multiplayer](multi-player-enhancement.md) §5.0. |
-| Thin allocator (H10) | `tool/vif-allocator` exposes only the fixed session create/list API. It reserves ports from Services, refuses a full fleet before creation, owns each Service by its Job UID, waits for pod/EndpointSlice/application readiness, rolls back partial creates, and reconciles Kubernetes state at startup. Its hardened Arch-guest unit and rotating ServiceAccount token are deployed; create, list, off-box join, occupied/vacant state observation and operator cleanup passed on 2026-09-12. |
-| Commissioned file workload and volatile storage (H14 A-C) | The image writes collision-safe `<session-id>.jsonl` files with self-tags and bounded per-file rotation. The node has a locked UID/GID 65532 cleanup identity, 256 MiB fail-closed tmpfs, Bound local PV/PVC, and successful cleanup timer. Restricted admission and direct-`hostPath` rejection passed; the live allocator's single-container PVC workload passed off-box join, occupied/vacant state, complete record tagging, deletion, file cleanup, and empty steady state on 2026-09-13. |
-| Node-local log pipeline (H14 A-F) | Sessions write self-tagged JSONL through the tmpfs-backed PVC; one credential-free loopback LogWisp reads the files; `/vif/api/logs` proxies its SSE bytes without parsing a record. Live on 2026-09-14: a game record crossed the proxy byte-for-byte, a LogWisp outage left allocation, state and gameplay untouched behind a stable `503`, the restart replayed an exact retained sentinel, and normal file retirement logged no watcher failure. |
-| Public API edge (H15, partial) | The site publishes exactly `/vif/api/sessions` and `/vif/api/logs` over TLS; a browser reads a joined session's rows live over a same-origin `EventSource`, and `/healthz`, `/readyz` and every other node port stay unreachable from outside. The session page itself is not built. |
-| Pod-log RBAC removal (H14 D) | The live allocator Role omits `pods/log`. The explicit `kubectl auth can-i get pods --subresource=log` gate returned `no`, the retained permissions matched the checked-in Role, and allocation, remote join, state, node-file logging, and cleanup still passed on 2026-09-13. |
-
 ### Open
 
 | ID | Priority | Item | Done when |
 |---|---|---|---|
-| H8 | later | **Revisit how a player reaches a session.** The port range is what the proof of concept runs: no component, ten firewall entries, and source preservation now verified (H11). `-name` and [`deploy/frontdoor`](../deploy/frontdoor/haproxy.cfg) are the worked single-port alternative and replace the address the admission limiter is keyed on. Neither gives a link a name without something reading the wire. | A third option is found or the two known ones are chosen between on measurement rather than preference. TLS with SNI routing is the one Kubernetes answers natively and needs transport security this deployment has decided against. |
-| H1 | partly done | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do to a session has to be bounded. The two startup holes are closed: the gate is bounded by one world install, and a peer that leaves or goes silent costs the lobby rather than the session. | Done: a peer that never confirms is dropped on the install bound, an abandoned lobby continues into its vacancy grace instead of ending, and a confirmation cannot be sent on another participant's behalf. Remaining: fuzz coverage for malformed, oversized, replayed and half-open handshakes. |
-| H3 | next | **Measure a full roster.** Four guests through a tower and a storm, and on `wad/game/td`, for an hour. | Requests and limits in `deploy/k3s/30-session.yaml` come from the measurement rather than from single-guest history. Not a blocker: the current values are a starting point, not a claim. |
+| G | next | **Hand off a deployment a stranger can install.** The documentation reduction is done: the procedure, this plan, the artifact indexes and the runbook describe the deployed design rather than the batches that produced it. | Both rehearsals below reach a first session with no undocumented step, and every resource value in `deploy/k3s/30-session.yaml` cites a number from H3. |
+| G1 | next | **Rehearse from bare Arch Linux and from bare Ubuntu.** Record package and service differences, and fix every command that assumes the production node. | A second node reaches [§13 of the procedure](kube_docker_deploy.md#13-first-session) without a step its operator had to invent. |
+| H3 | next | **Measure a full roster.** Ten sessions and four guests, through a tower and a storm and on `wad/game/td`, for an hour. Record CPU, memory, tmpfs usage, log rate, tick slips, rotations, LogWisp drops and replay, and browser reconnect behaviour. | Requests and limits in `30-session.yaml` come from the measurement rather than from single-guest history, and the LogWisp dropped-write count in §6 is explained rather than carried. |
+| H1 | partly done | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do has to be bounded. The two startup holes are closed: the tick-zero gate is bounded by one world install, a peer that leaves or goes silent costs the lobby rather than the session, and a confirmation is keyed to the link it arrived on. | Remaining: a handshake fuzz target for malformed, oversized, replayed and half-open cases, which `internal/network` has no equivalent of. |
+| H16 | later | **Automate image delivery.** `deploy/guest/update-vif-image.sh` is the repeatable manual boundary: one build/check/import, allocator image update, old-image cleanup, and build-daemon restoration. | CI resolves and verifies a tagged release artifact, invokes or reproduces that same boundary with no credential held outside the node, and new sessions use it while existing matches finish. |
+| H8 | later | **Revisit how a player reaches a session.** The port range is what runs: no component, ten firewall entries, and the player's source address verified at the pod. `-name` plus [`deploy/frontdoor`](../deploy/frontdoor/haproxy.cfg) is the worked single-port alternative (§9) and replaces the address the admission limiter is keyed on. | A third option is found, or the two known ones are chosen between on measurement rather than preference, and the decision is recorded as an ADR — whose home in `doc/` this item also has to choose, because none exists yet. |
 | H4 | later | **Server-only build.** The binary links terminal, render and audio packages `ModeServer` never initialises. | A server target drops them without changing simulation identity. Matters for pod density, not for ten sessions. |
 | H5 | later | **Spatial grid right-sizing.** ~30.5 MiB reserved per world at the current maximum. | Deferred until density matters; needs resize/play regression coverage. |
-| H11 | done 2026-09-15 | **Verify the player's source address at the pod.** `App.noteJoinerReport` emits `peer admitted` under the `admit` sub with `remote` and `declared`; LogWisp excludes that sub from the published stream. | Passed: an off-box join named the client's own public address, so `externalTrafficPolicy: Local` plus `pf rdr` preserves it and the per-address admission limiter is per player. The record was absent from the loopback stream and the published route, both carrying traffic at the time. |
-| H12 | done 2026-09-15 | **Finish the occupied lifecycle gates.** The procedure is [Batch H12](../deploy/guest/README.md#batch-h12-occupied-lifecycle-gates). | Passed: `roster empty for 1m30s` ended an abandoned session; a rejoin inside the grace took slot 0 again at tick 1586 of a match stopped at 1580; a termination held the roster to `drain deadline 20s reached holding 1 guest(s)` with the tick still advancing; a one-player session answered `session is full at 1 participant(s)`. |
-| H14 | next | **Complete the node-local log pipeline.** Batches A-F passed, including standalone fan-in, outage independence, exact retained replay, the pinned-revision LogWisp update, and byte preservation through the deployed allocator proxy. Batch G's reconciliation remains. | Every remaining gate and the final acceptance in `kube-todo.md` passes without lowering Restricted admission or putting Kubernetes in the log data path. |
-| H15 | done 2026-09-15 | **Integrate nginx and Hugo.** The two routes were verified live on 2026-09-14 and the site's fleet page followed; `deploy/website/` holds the reference location set and the bounded same-origin viewer the page was built against. | Passed: the published route creates and lists sessions, the page keeps its HTTPS URL distinct from the raw join target, its session controls come from the allocator's advertised `limits`, and the log panel degrades on its own. |
-| H16 | later | **Automate image delivery.** `deploy/guest/update-vif-image.sh` is the repeatable manual boundary: one build/check/import, allocator image update, old-image removal, and build-daemon cleanup. | CI resolves and verifies a tagged release artifact, invokes or reproduces the same boundary without an inbound cluster credential, and new sessions use it while existing matches finish. |
+
+### What the deployment batches established
+
+Each of these is now a property of the deployed node, verified by
+[§13 of the procedure](kube_docker_deploy.md#13-first-session) rather than by
+repeating its original gate.
+
+| Was | What it left behind |
+|---|---|
+| H2, the proof-of-concept Internet path | An off-box client crosses `pf rdr`, the node, NodePort and kube-proxy DNAT into a real game. Reboot returns the node Ready with no swap, the filter loaded from files, the build daemons inactive and the imported image retained. |
+| H10, the thin allocator | The fixed create/list transaction, port reservation from Services, refusal before an eleventh, Service ownership by Job UID, readiness waiting, partial-create rollback and startup reconciliation, under a hardened unit with a rotating ServiceAccount token. |
+| A-C, the node-local log path | Sessions write self-tagged `<session-id>.jsonl` through a tmpfs-backed local PVC. The node carries a locked UID/GID 65532 cleanup identity, a 256 MiB fail-closed tmpfs, a Bound Retain PV/PVC and a per-minute cleanup timer. Restricted admission refuses a direct `hostPath`. |
+| D, least privilege | The allocator Role cannot read `pods/log`, and allocation, join, state, tagging and cleanup do not need it. |
+| E, standalone LogWisp | A credential-free loopback reader with a read-only tmpfs view. Two-session fan-in preserved 606 sampled non-TRACE records byte-for-byte with no sink drops or rejected clients; stopping it left allocation, state and gameplay untouched; restart replayed an exact retained sentinel, with 86 bounded client-queue drops among 1,841 processed records. |
+| F, the allocator byte proxy | `/vif/api/logs` carries LogWisp's SSE bytes unchanged and answers a stable `503 log_stream_unavailable` when LogWisp is down, while allocation, probes and an occupied game continue. |
+| H15, the public API edge | The site publishes exactly the two routes over TLS; a browser reads a joined session's rows live over a same-origin `EventSource`; the probe paths return the site's 404. The site's fleet page builds its session controls from the allocator's advertised `limits`. |
+| H11, source-address preservation | An off-box join names the client's own public address, so `externalTrafficPolicy: Local` plus `pf rdr` reaches the pod with it and the per-address admission limiter is per player rather than one budget for the fleet. The record is emitted under an `admit` sub that LogWisp excludes from the published stream; it was absent from both the loopback stream (212 records carried) and the published route (111 carried). |
+| H12, the occupied lifecycle | The empty grace ends a session nobody returned to on `roster empty for 1m30s`; a guest returning inside that grace is readmitted into the slot its departure released, on the same match clock; a termination holds the match for `drain deadline 20s reached holding 1 guest(s)` with the tick still advancing; a full session answers the next dial `session is full at N participant(s)`. |
 
 ### Dropped, with the reason
 
 | Was | Reason |
 |---|---|
 | F1 authentication | Deferred by decision. The website triggers a container and the player connects to it; neither hop is authenticated. Hardening (H1) is the requirement in its place, and it comes *before* any auth work, not after. |
-| F3 session credentials | The website and the container are joined by one commissioned endpoint. There is nothing for a credential to add that the endpoint's obscurity and H1's bounds do not, and building one now would be work spent away from a fleet that runs. |
+| F3 session credentials | The website and the container are joined by one commissioned endpoint. There is nothing for a credential to add that the endpoint's obscurity and H1's bounds do not. |
 | F11 `SIGHUP` reload | No reload contract is planned. `SIGHUP` terminates like any other signal, which is the documented behaviour. |
-| F12 match-complete exit | There is no gameplay terminal state and none is planned. A session ends on emptiness. If one ever exists, it attaches to `lifecycle.Controller.Expire` and nothing else changes. |
-| H9 per-session LogWisp | The selected ten-session fan-in uses one standalone node service. The unused sidecar template, renderer branch, and ConfigMap are removed. |
+| F12 match-complete exit | There is no gameplay terminal state and none is planned. A session ends on emptiness. If one ever exists it attaches to `lifecycle.Controller.Expire` and nothing else changes. |
+| H9 per-session LogWisp | The ten-session fan-in uses one standalone node service. The sidecar template, renderer branch and ConfigMap are removed; so are the pod-log follower, the allocator JSON splicer and the allocator-owned LogWisp. None of them is a fallback. |
 
 ## 4. Security posture
 
 The game port is **open and unauthenticated, by decision**. Anyone who can reach it
-can join a session and influence its Shared world. That is accepted for now; what is
-not accepted is a stranger being able to do anything *worse* than play.
+can join a session and influence its Shared world. That is accepted; what is not
+accepted is a stranger being able to do anything *worse* than play.
 
 What already bounds a stranger:
 
 - one admission per address per `NetworkAdmitBurst` (6) in `NetworkAdmitWindow`
   (1 minute), tracked for at most 1024 addresses so the defence cannot become the
-  exhaustion;
+  exhaustion, and keyed on the player's own address because the route preserves it;
 - at most `MaxHandshakes` (8) handshakes in flight, each on its own goroutine with a
   `ConnectTimeout` (5 s) and a `ReadTimeout` (30 s);
 - a 16-bit frame length, bounded receive queues, and a bounded repair size, so no
@@ -150,34 +119,31 @@ What already bounds a stranger:
   the coordinator;
 - the join identity check, which refuses a peer that is not running this session
   before it is given a roster slot;
-- the session name, where the deployment sets one: a stranger that cannot produce
-  it never reaches Assign. It is a routing key rather than a credential — it is in
+- the start gate, which waits on whoever is still on the link for one world install.
+  A participant that goes silent is dropped at that bound and one that drops is
+  excused rather than fatal, so neither holding a fresh session open nor ending
+  somebody's match is reachable from that window, and a confirmation is keyed to the
+  link it arrived on so no peer passes the gate on another's behalf;
+- the session name, where a deployment sets one: a stranger that cannot produce it
+  never reaches Assign. It is a routing key rather than a credential — it is in
   every player's link and travels in clear — so what it bounds is a session being
   walked into, not one whose link leaked;
 - the network policy: one game port reachable, everything else denied, no egress;
-- the allocator's published surface: exactly the create/list and log-stream
-  routes, bounded by the ten-session quota, the 90-second first-join expiry and
-  the edge's rate limit. Its probe endpoints and every other node port stay
-  behind the node filter, which admits only the front door;
+- the allocator's published surface: exactly the create/list and log-stream routes,
+  bounded by the ten-session quota, the 90-second first-join expiry, the advertised
+  `limits` on what a caller may select, and the edge's own rate limit. Its probe
+  endpoints and every other node port stay behind the node filter, which admits only
+  the front door;
 - `-authority host`, which is the fleet's default and what keeps that one port the
-  only one. A migrate session gives every participant a listening port and
-  publishes the addresses inside the session; a guest's peer link is refused unless
-  it names a participant the receiver's roster holds under a term not behind its
-  own, but that is the same structural check the rest of the protocol makes and the
-  same non-answer to a peer that can claim another's identity. A fleet session is
-  its address, so it has no reason to want the other shape.
+  only one. A migrate session gives every participant a listening port and publishes
+  the addresses inside the session; a fleet session is its address, so it has no
+  reason to want the other shape.
 
-What the start gate does, since H1: it waits on whoever is still on the link, for
-one world install. A participant that goes silent is dropped at that bound, and one
-that drops is excused rather than fatal, so neither holding a fresh session open nor
-ending somebody's match is reachable from that window. A confirmation is keyed to the
-link it arrived on, so no peer can pass the gate on another's behalf.
-
-The firewall requirements in
-[Deployment §3](kube_docker_deploy.md#3-freebsd-forward-the-range-to-the-guest)
-remain what stands in front of the rest: the forwarded surface is the ten-port
-NodePort range and nothing else, and the probe, log-stream and API ports never leave
-the node.
+What remains unbounded is fuzz coverage for a malformed, oversized, replayed or
+half-open handshake (H1). The firewall requirements in
+[Deployment §2](kube_docker_deploy.md#2-the-public-edge-forward-the-range) are what
+stand in front of the rest: the forwarded surface is the ten-port NodePort range and
+nothing else, and the probe, log-stream and API ports never leave the node.
 
 ## 5. Late-crossing ordering, and the trade-offs in its fix
 
@@ -220,10 +186,10 @@ older copy walk the host's cursor backward. One vector closes both directions.
 closed on, and floors at three ticks — so a fleet session, whose lobby closes on its
 first guest before a probe has usually completed, runs the whole match at that floor
 whatever a later guest's link turns out to be. A link that misses it still produces
-late frames; the fence makes them harmless rather than rare. A late crossing still applies on the host at
-whatever tick it arrives, so the two instances still order it differently and the
-correction after it is still what reconciles them; what no longer happens is the
-producer discarding its own action in between.
+late frames; the fence makes them harmless rather than rare. A late crossing still
+applies on the host at whatever tick it arrives, so the two instances still order it
+differently and the correction after it is still what reconciles them; what no
+longer happens is the producer discarding its own action in between.
 
 **How to reproduce it.** In a real game, any action that crosses a correction on a
 link over roughly 150 ms: type into a gold run, fire a shot, or hold a motion key,
@@ -236,21 +202,37 @@ fails it with `cursor at {20 10}, want {23 10}`.
 
 ## 6. Resources
 
-Starting values, not measured ones (H3):
+What the manifest asks for:
 
 | Resource | Value | Rationale |
 |---|---:|---|
-| memory request / limit | 96 / 192 MiB | Historical single-guest measurements plus headroom for a staging world after an authority change. |
+| memory request / limit | 96 / 192 MiB | Single-guest measurement plus headroom for a staging world after an authority change. |
 | `GOMEMLIMIT` | 160 MiB | An earlier collection target than the limit, so the runtime collects instead of the kernel killing. |
-| CPU request / limit | 100m / 500m | One guest was about 0.05 core; the ceiling is wide until a storm is measured. |
+| CPU request / limit | 100m / 500m | One guest was about 0.05 core in early measurement; the ceiling is wide until a storm is measured. |
 | termination grace | 30 s | Above the 20 s drain, so the process decides when the match ends. |
+
+What one session actually cost, measured on the node with one guest on `wad`
+defaults:
+
+| Reading | One session |
+|---|---|
+| CPU | 144m |
+| Memory | 59 MiB against a 96 MiB request and a 192 MiB limit |
+| tmpfs | 12 MiB of 256 MiB |
+| Log rate | 89 KiB in 30 s, about 3 KiB/s |
+| LogWisp | 56 dropped writes in 41,579 processed |
+
+Ten of these is roughly 30 KiB/s into the 256 MiB tmpfs, which the 8 MB rotation
+and the cleanup timer carry, and about 1.5 CPU against the node — above the quota's
+`requests.cpu: "1"`, which is why the CPU request is one of the values H3 has to
+settle rather than a number to scale from here. The dropped writes are the other:
+at one session they should be zero.
 
 Historical baseline worth keeping: server in lobby 12.0 MB RSS; embedded game with
 one guest 61.75 MB peak; server after a guest left 40.1 MB; headless joiner with a
 staging world 95.5 MB peak; two staggered guests 63.5 MB plateau; spatial grid about
-30.5 MiB per world; CPU about 0.2% of a core in lobby and 4.9% with one guest.
-Repeated resets plateaued rather than growing, so the RSS lag was runtime
-scavenging, not a per-match leak.
+30.5 MiB per world. Repeated resets plateaued rather than growing, so the RSS lag
+was runtime scavenging, not a per-match leak.
 
 ## 7. Verification
 
@@ -269,25 +251,22 @@ By hand, on a dev machine — see [`test/README.md`](../test/README.md):
 ./test/scenario.sh probe        # /health and /metrics
 ```
 
-Against a cluster, the checks that need one:
+Against a cluster, [§13 of the procedure](kube_docker_deploy.md#13-first-session) is
+the standing check: it proves the Job shape, Restricted admission, the tokenless
+single container, the PVC without a direct `hostPath`, an off-box join, the
+occupied/vacant transition, the self-tagged file, deletion and the empty steady
+state in one pass. Run it after every change to a live workload, allocator binary,
+Role, mount or logging service, and after
+[its reboot gate](kube_docker_deploy.md#14-the-reboot-gate).
 
-| Check | Status | Expected |
-|---|---|---|
-| Reboot with no session | Passed | Node Ready, no swap, filter present, build daemons inactive, imported image retained, namespace empty. |
-| Nobody joins for 90 s | Passed | Exit 0 at 90 s; Job Complete; owned Service removed after the 120 s TTL. |
-| Allocator create/list and off-box join | Passed | Restricted token and probes succeeded; `POST` returned a ready session; API state followed the join and quit; operator deletion cleared the test. |
-| Batch A commissioned writer | Passed | Repository, CI, allocation, remote join, occupied/vacant state, stdout logging, and cleanup passed on 2026-09-13. Batch C later selected the same writer's commissioned file mode. |
-| Batch B volatile storage | Passed | The named UID/GID 65532 identity, capped tmpfs, fail-closed K3s ordering, Bound local PV/PVC, Restricted writer and direct-`hostPath` rejection passed. The cleanup service/timer, allocation, off-box join, occupied/vacant state, unchanged stdout, file cleanup, and empty steady state passed on 2026-09-13. |
-| Batch C file-writing Jobs | Passed | The live allocator created one tokenless Restricted session container with the PVC and no direct `hostPath` or `-log-stdout`. Off-box join, occupied/vacant state, complete application-record session tagging, Job/pod/Service deletion, file cleanup, and empty steady state passed on 2026-09-13. |
-| Batch D least-privilege allocator | Passed | The live Role denied `pods/log` while preserving the allocator's required create, list, readiness, state, and cleanup operations. |
-| Batch E standalone LogWisp | Passed | Its locked identity, read-only tmpfs view, loopback listener, two-session fan-in, allocator/game independence during outage, exact retained replay, and common cleanup passed. Normal fan-in had zero drops; bounded restart replay recorded 86 drops among 1,841 processed records for later sizing. |
-| A guest joins and quits | Partial | Occupied and vacant states passed; automatic exit ninety seconds later must still name `roster empty for`. |
-| A guest quits and rejoins near 75 s | Open | The same run continues in the released slot; no one-minute reset occurs. |
-| `kubectl delete job` while a guest plays | Open | `phase=draining`, `/health` 200, exit when the roster empties or after 20 s. |
-| Roster at `-players` | Open | `ready=false` with `session at capacity`; existing guests keep playing. |
-| 60-minute full roster | Open | No OOM, liveness restart, sustained tick slips, or growing correction magnitude. |
-| `tc netem` latency, loss, reordering | Open | Recovers at the next bounded correction or keyframe. |
-| Pod delete / node failure | Open | Connected-client behaviour is recorded; no replacement is advertised as the same match. |
+What a cluster has not yet been asked:
+
+| Check | Expected |
+|---|---|
+| 60-minute full roster (H3) | No OOM, liveness restart, sustained tick slips, or growing correction magnitude. |
+| `tc netem` latency, loss, reordering | Recovers at the next bounded correction or keyframe. |
+| Pod delete / node failure | Connected-client behaviour is recorded; no replacement is advertised as the same match. |
+| A full tmpfs | Bounded log loss without ending a game. |
 
 ## 8. Decisions
 
@@ -307,15 +286,17 @@ Against a cluster, the checks that need one:
 - **A thin allocator, not a second scheduler.** It exposes only the fixed session
   transaction on `/vif/api/`; K3s still schedules, admits, limits, terminates and
   garbage-collects every workload.
+- **No public delete endpoint.** The API is anonymous behind the site, so one player
+  must not be able to end another's match.
 - **Docker builds; K3s runs.** Docker and its system containerd stay disabled except
   during an on-demand build. The image is imported into K3s's embedded containerd.
 - **One health path.** The code answers "should this process still be running";
   everything else is in the body, where the allocator reads it.
-- **The vi-fighter JSON line is the log contract.** The current workload writes it
-  to the node-local PVC. The selected public path carries those same bytes through
-  LogWisp and the allocator without parsing or reshaping them.
-- **The public stream is session output only.** K3s, kernel and host journal records
-  remain operator-only.
+- **The vi-fighter JSON line is the log contract.** The workload writes it to the
+  node-local PVC, and LogWisp and the allocator carry those same bytes without
+  parsing or reshaping them.
+- **The public stream is session output only.** K3s, kernel, host journal and the
+  `admit` sub that names a player's address remain operator-only.
 - **The host is the authority over identity.** A joiner reports; the coordinator
   decides.
 - **No authentication, and hardening first.** See §4.
@@ -326,3 +307,76 @@ Against a cluster, the checks that need one:
   scenario's shared map.
 - **Correction:** Shared capture is authoritative; Player-domain state is excluded
   and only explicit persistent local FSM lifecycle is re-derived.
+
+## 9. The alternative not taken: one fixed public port
+
+Recorded because it is built and tested and because the routing question is open
+(H8) — not because this deployment runs it. **Do not apply it piecemeal: its two
+halves only work together.**
+
+A player's link would become `203.0.113.7:7777/<name>`, and the name rather than the
+port would say which container. `vif -join` accepts that form and sends the name as
+one frame before the handshake, which is the only thing in a plaintext game
+connection that a router could route on. A front door on the node reads that frame
+and splices: [`deploy/frontdoor/haproxy.cfg`](../deploy/frontdoor/haproxy.cfg) is
+that, in HAProxy's TCP mode, with ten pre-declared backends and a name-to-backend map
+the allocator writes over the runtime socket. `pf` would then forward one port
+instead of ten, and the session manifest would need `-name ${SESSION_ID}` in its
+args — without it a session answers to every dial, and with it a session refuses
+every dial that names nothing, which is every dial the current deployment makes.
+
+| | Port range (taken) | Front door |
+|---|---|---|
+| Components | none | HAProxy, plus map upkeep in the allocator |
+| `pf` | one range | one port |
+| Client source address | preserved, and verified at the pod | replaced by the proxy's, so the per-address admission limiter becomes one budget for the whole fleet |
+| Stale link | reaches whatever session inherited the port | refused, by the map and again by the session |
+| Ceiling | the ten ports you forwarded | the ten backends you declared |
+
+Neither buys more than a name in a URL, and the second costs a component and the
+address the rate limiter is keyed on. A third answer is where the exploration should
+go: TLS with SNI routing is the one Kubernetes already has an answer for, and it
+needs the transport security this deployment has decided against.
+
+## 10. Acceptance and rollback boundary
+
+The deployment is complete when all of these hold, and the open items in §3 are what
+stands between here and there:
+
+- ten concurrent files have distinct names and matching self-tags;
+- session pods remain Restricted, tokenless, and free of direct `hostPath`;
+- allocator RBAC cannot read `pods/log`;
+- tmpfs is hard-capped, K3s fails closed without it, and reboot clears it;
+- a full tmpfs causes bounded log loss without ending a game;
+- standalone LogWisp holds no Kubernetes credential and binds only loopback;
+- stopping LogWisp does not stop allocation, state, or gameplay;
+- SSE preserves source bytes and stays bounded under slow and reconnecting clients;
+- public logs exclude host, K3s, credential, and exact client-address data;
+- every resource value in `30-session.yaml` cites a full-roster measurement; and
+- [§13 of the procedure](kube_docker_deploy.md#13-first-session) passes after reboot.
+
+These constraints hold for every change until then:
+
+- keep the `vif` namespace at Pod Security `restricted`;
+- session pods mount only the `vif-fleet-logs` PVC — never a direct `hostPath`;
+- the game writes complete JSONL records, and no component tails Kubernetes pod
+  logs, splices allocator JSON, or inserts a field after serialization;
+- LogWisp stays one independent node service with no Kubernetes credential, never an
+  allocator child or a per-session container, and the allocator may proxy its bytes
+  but must not parse, normalize, buffer, or own the stream processor;
+- stop allocation and prove the fleet empty before changing a live workload,
+  allocator binary, Role, mount, or logging service;
+- pin LogWisp to a commit reachable from upstream `main`, never a pull-request head,
+  and judge its journal only by the invocation running the pinned binary;
+- announce restarts, simultaneous clients, and deadline-sensitive joins first;
+- put placeholders in repository commands; never commit a real machine address;
+- remove rendered files, probe pods and verification JSONL after each change, and
+  preserve the mounted tmpfs and the Bound PV/PVC;
+- keep the previous allocator binary and configuration until the next live
+  [§13](kube_docker_deploy.md#13-first-session) passes.
+
+Rollback selects the preceding allocator or workload from the updaters' `.previous`
+set, restores or disables the site's nginx routes, and stops LogWisp. It never
+lowers Pod Security, mounts a direct `hostPath`, deletes a Bound PV/PVC in use, or
+unmounts the tmpfs while K3s is running. The per-component commands are in
+[`deploy/guest/README.md`](../deploy/guest/README.md).

@@ -31,7 +31,7 @@ do
 	}
 done
 getent group vif-fleet >/dev/null || {
-	echo "$0: the Batch B vif-fleet identity is missing" >&2
+	echo "$0: the vif-fleet identity is missing; install the log tmpfs first" >&2
 	exit 1
 }
 

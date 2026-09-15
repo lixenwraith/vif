@@ -45,8 +45,8 @@ check_interval_ms = 100
 raw = true
 from = "start"
 
-# The unauthenticated stream is reachable only on loopback. Batch F exposes it
-# through the allocator as a byte proxy; no browser or remote host connects here.
+# The unauthenticated stream is reachable only on loopback. The allocator exposes
+# it as a byte proxy; no browser or remote host connects here.
 [[pipelines.plugin_sinks]]
 id = "stream"
 type = "http"

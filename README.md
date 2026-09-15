@@ -143,10 +143,10 @@ and then runs the session on its own.
 `deploy/` holds the container image and the K3s objects that run one such session
 per player request: a `scratch` image of one static non-root binary, a namespace
 capped at ten concurrent sessions, default-deny network policy, a per-session Job
-and Service, and a log-streaming sidecar. `make image` builds it; the installation
-and operating procedure is [doc/kube_docker_deploy.md](doc/kube_docker_deploy.md)
-and the plan and work list behind it is
-[doc/kubernetes-fleet.md](doc/kubernetes-fleet.md).
+and Service, and one node log reader behind the allocator. `make image` builds it;
+the installation and operating procedure is
+[doc/kube_docker_deploy.md](doc/kube_docker_deploy.md) and the design and work list
+behind it is [doc/kubernetes-fleet.md](doc/kubernetes-fleet.md).
 
 `test/scenario.sh` runs named game setups for verifying behaviour by hand —
 `solo`, `host`/`join`, `serve`, `serve-fleet`, `probe`, and automated checks for the

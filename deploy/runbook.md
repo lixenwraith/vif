@@ -1,9 +1,9 @@
 # Node runbook
 
-Day-to-day operations on the K3s node, from the vi-fighter repository root. The
-batch procedures in [`guest/README.md`](guest/README.md) commission a node; this
-page is what you run afterwards. Every command here is the canonical one — if a
-procedure shows a longer variant, it is proving something extra.
+Day-to-day operations on the K3s node, from the vi-fighter repository root.
+[`../doc/kube_docker_deploy.md`](../doc/kube_docker_deploy.md) commissions a node;
+this page is what you run afterwards. Every command here is the canonical one — if
+the procedure shows a longer variant, it is proving something extra.
 
 ## Where things stand
 
@@ -95,11 +95,15 @@ allocator is down, and the stream stops while LogWisp restarts.
 
 The allocator and image updaters check for an idle fleet but do not empty one —
 drain first. The LogWisp one does not touch K3s or the allocator, so on a fleet
-node run it inside
-the guarded gate in [`guest/README.md`](guest/README.md), which stops allocation
-and restarts it through a trap.
+node stop allocation around it yourself:
 
-Roll one back by restoring its `.previous` set; the per-batch rollback blocks in
+```sh
+sudo systemctl stop vif-allocator.service
+./deploy/k3s/session.sh blockers && ./deploy/guest/update-logwisp.sh
+sudo systemctl start vif-allocator.service
+```
+
+Roll one back by restoring its `.previous` set; the per-component blocks in
 [`guest/README.md`](guest/README.md) carry the exact commands, including the
 readiness wait. `.previous` is one update back, not a fixed version.
 
@@ -156,4 +160,9 @@ sudo jq -c 'select(.sub == "admit")' '/var/log/vif-fleet/<session-id>.jsonl'
 
 `drain` and the cleanup timer both remove log files. Neither touches the mounted
 tmpfs or the Bound PV/PVC, and nothing here should: deleting either is a
-commissioning operation, not an operational one.
+commissioning operation, not an operational one, and
+[`guest/README.md`](guest/README.md) is where it lives.
+
+After any change to a live workload, allocator binary, Role, mount or logging
+service, finish with
+[§13 of the procedure](../doc/kube_docker_deploy.md#13-first-session).

@@ -31,7 +31,7 @@ make allocator
 The production service reads a short-lived ServiceAccount token from a file on
 every Kubernetes request, so the root-owned token timer can replace that file
 atomically without restarting the allocator. See
-[`doc/kube_docker_deploy.md`](../../doc/kube_docker_deploy.md#10-the-allocator-and-website-contract).
+[`doc/kube_docker_deploy.md`](../../doc/kube_docker_deploy.md#11-the-allocator).
 
 ## HTTP API
 

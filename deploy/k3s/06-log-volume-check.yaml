@@ -1,5 +1,6 @@
-# Temporary Batch B probe. Render ${IMAGE}, apply it once, then delete the pod
-# and volume-check JSONL files. The pod mounts only the PVC, never hostPath.
+# Temporary probe that binds the WaitForFirstConsumer claim on a fresh node.
+# Render ${IMAGE}, apply it once, then delete the pod and its JSONL files.
+# It mounts only the PVC, never hostPath.
 apiVersion: v1
 kind: Pod
 metadata:

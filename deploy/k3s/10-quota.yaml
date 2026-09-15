@@ -7,7 +7,7 @@
 # stale state, or was asked for eleven sessions by a website nobody rate-limited.
 #
 # The compute totals are ten times one session's envelope (doc/kubernetes-fleet.md
-# §6.4). They are a second ceiling on the same fact: ten sessions cannot exceed the
+# §6). They are a second ceiling on the same fact: ten sessions cannot exceed the
 # memory the node was sized for, whatever a mis-rendered manifest asks for.
 apiVersion: v1
 kind: ResourceQuota

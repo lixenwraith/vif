@@ -809,11 +809,12 @@ run that owns the alternate screen is corruption rather than output — so it st
 off by default and belongs to runs with no terminal.
 
 Which one a deployed session uses is decided by who has to read it. `-log-stdout`
-is `kubectl logs` and nothing else. `-l=DIR` onto a shared volume is what lets a
-[LogWisp](https://github.com/lixenwraith/logwisp) sidecar tail the directory, put
-the same lines on its own stdout, and serve them live as Server-Sent Events — which
-also makes the log a metric stream, because §6's periodic snapshot emits the whole
-status registry into it. See [deployment](kube_docker_deploy.md) §9.
+is `kubectl logs` and nothing else. `-l=DIR` onto a shared volume is what lets an
+independent [LogWisp](https://github.com/lixenwraith/logwisp) service read the
+directory and serve those exact lines as Server-Sent Events — which also makes the
+log a metric stream, because §6's periodic snapshot emits the whole status registry
+into it. The deployed fleet uses the second form; see
+[deployment](kube_docker_deploy.md) §7.
 
 At the `app.Config` boundary, zero means "use the parameter default" while a
 negative `StatTicks`/`RecTicks` means disabled. The CLI therefore maps an
