@@ -24,8 +24,8 @@ func sessionOfferFor(an event.JoinAnchor, n int) network.SessionOffer {
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 	}
 	for i := range n {
-		o.Participants = append(o.Participants,
-			network.SessionParticipant{ID: network.PeerID(i + 1), Slot: uint8(i)})
+		o.Roster = append(o.Roster,
+			network.RosterEntry{ID: network.PeerID(i + 1), Slot: uint8(i)})
 	}
 	return o
 }
@@ -217,7 +217,7 @@ func TestAJoinerAdoptsTheHostsRngSession(t *testing.T) {
 	cfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 120, Height: 40}, network.SessionOffer{
 		Anchor: an, Host: 1, Assigned: 2, Term: network.FirstTerm,
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
-		Participants: []network.SessionParticipant{
+		Roster: []network.RosterEntry{
 			{ID: 1, Slot: 0}, {ID: 2, Slot: 1},
 		},
 	})

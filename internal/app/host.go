@@ -74,7 +74,7 @@ func (a *App) beginHostingLocked(addr string) error {
 	// this call holds, which is what makes the attach below happen first.
 	a.sessionMu.Lock()
 	a.midRunPort = port
-	a.sessionRoster = []network.SessionParticipant{{ID: hostParticipantID, Slot: 0}}
+	a.sessionRoster = []network.RosterEntry{{ID: hostParticipantID, Slot: 0}}
 	roster := slices.Clone(a.sessionRoster)
 	a.sessionMu.Unlock()
 
@@ -87,7 +87,7 @@ func (a *App) beginHostingLocked(addr string) error {
 	// assigns, which is what lets a later handoff move it.
 	a.openAuthorityLocked(network.SessionOffer{
 		Anchor: a.joinAnchorLocked(), Host: hostParticipantID, Assigned: hostParticipantID,
-		Term: network.FirstTerm, Participants: roster,
+		Term: network.FirstTerm, Roster: roster,
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 	}, hostParticipantID)
 
@@ -178,7 +178,7 @@ func (a *App) sessionSummaryLocked() string {
 	if reg.Bools.Get("network.map_latched").Load() {
 		latch = "map latched"
 	}
-	line := fmt.Sprintf("Session %s, participant %d (%s), %d peers, tick %d, %s",
+	line := fmt.Sprintf("Session %s, peer %d (%s), %d peer link(s), tick %d, %s",
 		where, participant, cursor, peers, a.Position().Tick, latch)
 	if a.authority != nil {
 		if s := a.authority.Summary(); s != "" {
@@ -187,7 +187,7 @@ func (a *App) sessionSummaryLocked() string {
 	}
 	// Reachability, which is what decides whether losing the authority moves the
 	// session or forks it. The chain is the address book a survivor dials down, so
-	// its size is how many participants can be reached at all.
+	// its size is how many peers can be reached at all.
 	if n := reg.Ints.Get("network.chain").Load(); n > 0 {
 		line += fmt.Sprintf(", %d confirmed reachable", n)
 	}
@@ -252,7 +252,7 @@ func (a *App) releaseMidRunJoiner(id network.PeerID) {
 		return
 	}
 	if err := a.sendMidRunGate(port, id); err != nil {
-		vlog.Warn("app", "msg", "mid-run join failed", "participant", id, "error", err.Error())
+		vlog.Warn("app", "msg", "mid-run join failed", "peer", id, "error", err.Error())
 		// The stream is already a peer by the time this runs, so refusing the join
 		// means dropping it: a participant holding a handshake it could not finish
 		// would otherwise stay in the session receiving crossings for a world it
@@ -312,10 +312,10 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 		return err
 	}
 
-	assignment, _ := offer.Participant(id)
+	assignment, _ := offer.Entry(id)
 	a.crossParticipantArrival(id, assignment.Slot)
 	vlog.Info("app", "msg", "mid-run participant admitted",
-		"participant", id, "slot", assignment.Slot, "snapshot_tick", tick, "bytes", len(body))
+		"peer", id, "slot", assignment.Slot, "snapshot_tick", tick, "bytes", len(body))
 	return nil
 }
 

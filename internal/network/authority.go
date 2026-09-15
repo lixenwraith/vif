@@ -93,9 +93,9 @@ type HandoffRecord struct {
 	// The membership, moved whole. Roster and slot assignments are the closed
 	// roster (D-11) and must be byte-identical across the handoff; the anchor and
 	// the barrier delay are what a joiner admitted by the successor adopts.
-	Roster            []SessionParticipant `json:"roster"`
-	Anchor            event.JoinAnchor     `json:"anchor"`
-	BarrierDelayTicks uint64               `json:"barrier_delay_ticks"`
+	Roster            []RosterEntry    `json:"roster"`
+	Anchor            event.JoinAnchor `json:"anchor"`
+	BarrierDelayTicks uint64           `json:"barrier_delay_ticks"`
 
 	// Chain is the candidate list the successor is taking over with, moved whole
 	// for the same reason the roster is.
@@ -123,7 +123,7 @@ func IsHandoffRefusal(err error) bool {
 // Validate refuses a handoff record the succession rule could not have produced.
 // chain is the receiver's own, for the same reason the roster is: the check a
 // receiver makes for itself is the half of the split-brain rule it can make.
-func (h HandoffRecord) Validate(roster []SessionParticipant, chain SuccessionChain) error {
+func (h HandoffRecord) Validate(roster []RosterEntry, chain SuccessionChain) error {
 	if h.Term < FirstTerm {
 		return errors.New("handoff carries no authority term")
 	}
@@ -158,12 +158,12 @@ func (h HandoffRecord) Validate(roster []SessionParticipant, chain SuccessionCha
 // SameRoster reports whether two rosters carry the same identities in the same
 // slots. It is order-independent: what has to survive a handoff is the assignment,
 // not the order the coordinator happened to store it in.
-func SameRoster(a, b []SessionParticipant) bool {
+func SameRoster(a, b []RosterEntry) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	x, y := slices.Clone(a), slices.Clone(b)
-	byID := func(p, q SessionParticipant) int { return int(p.ID) - int(q.ID) }
+	byID := func(p, q RosterEntry) int { return int(p.ID) - int(q.ID) }
 	slices.SortFunc(x, byID)
 	slices.SortFunc(y, byID)
 	return slices.Equal(x, y)
@@ -177,10 +177,10 @@ func SameRoster(a, b []SessionParticipant) bool {
 // prefix and its extension name the same successor and no agreement step is needed.
 // A local dial result is never an input: two survivors filtering by their own reach
 // would compute two successors.
-func DesignatedSuccessor(roster []SessionParticipant, lost PeerID, chain SuccessionChain) (PeerID, bool) {
+func DesignatedSuccessor(roster []RosterEntry, lost PeerID, chain SuccessionChain) (PeerID, bool) {
 	alive := func(id PeerID) bool {
 		return id != 0 && id != lost &&
-			slices.ContainsFunc(roster, func(p SessionParticipant) bool { return p.ID == id })
+			slices.ContainsFunc(roster, func(p RosterEntry) bool { return p.ID == id })
 	}
 	for _, e := range chain {
 		if alive(e.ID) {

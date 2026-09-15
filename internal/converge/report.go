@@ -150,7 +150,7 @@ type AuthorityReport struct {
 	Fork       bool
 	Retained   int
 	RetainedAt uint64
-	Roster     []network.SessionParticipant
+	Roster     []network.RosterEntry
 	Anchor     event.JoinAnchor
 	Delay      uint64
 }

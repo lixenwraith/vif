@@ -13,8 +13,11 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
-// SessionParticipant is one coordinator-assigned participant and roster slot.
-type SessionParticipant struct {
+// RosterEntry is one coordinator-assigned participant and roster slot.
+// RosterEntry is one identity the coordinator has admitted, and the cursor slot it
+// drives. NoPlayerSlot means it drives none, which is what a dedicated coordinator
+// holds: in the roster, and not one of the session's participants.
+type RosterEntry struct {
 	ID   PeerID `json:"id"`
 	Slot uint8  `json:"slot"`
 }
@@ -32,11 +35,13 @@ type SessionOffer struct {
 	// into.
 	Term AuthorityTerm `json:"term,omitempty"`
 
-	Participants      []SessionParticipant `json:"participants"`
-	BarrierDelayTicks uint64               `json:"barrier_delay_ticks"`
+	// Roster is everyone the coordinator admitted, the cursorless one included.
+	// ParticipantCount is what a count of participants means; len(Roster) is not.
+	Roster            []RosterEntry `json:"participants"`
+	BarrierDelayTicks uint64        `json:"barrier_delay_ticks"`
 
 	// Chain is the succession candidate list with the address each was confirmed
-	// at. Beside the roster rather than inside SessionParticipant, which SameRoster
+	// at. Beside the roster rather than inside RosterEntry, which SameRoster
 	// compares by value: an address change must not look like a different roster.
 	Chain SuccessionChain `json:"chain,omitempty"`
 
@@ -128,10 +133,10 @@ func (o SessionOffer) Validate() error {
 	if o.Term < FirstTerm {
 		return errors.New("join offer carries no authority term")
 	}
-	ids := make(map[PeerID]bool, len(o.Participants))
-	slots := make(map[uint8]bool, len(o.Participants))
+	ids := make(map[PeerID]bool, len(o.Roster))
+	slots := make(map[uint8]bool, len(o.Roster))
 	cursorless := PeerID(0)
-	for _, p := range o.Participants {
+	for _, p := range o.Roster {
 		if p.ID == 0 || ids[p.ID] {
 			return errors.New("join offer carries duplicate participant assignment")
 		}
@@ -161,13 +166,26 @@ func (o SessionOffer) Validate() error {
 	return nil
 }
 
-// Participant returns the coordinator assignment for id.
-func (o SessionOffer) Participant(id PeerID) (SessionParticipant, bool) {
-	i := slices.IndexFunc(o.Participants, func(p SessionParticipant) bool { return p.ID == id })
+// Entry returns the coordinator assignment for id.
+func (o SessionOffer) Entry(id PeerID) (RosterEntry, bool) {
+	i := slices.IndexFunc(o.Roster, func(p RosterEntry) bool { return p.ID == id })
 	if i < 0 {
-		return SessionParticipant{}, false
+		return RosterEntry{}, false
 	}
-	return o.Participants[i], true
+	return o.Roster[i], true
+}
+
+// ParticipantCount is how many cursors this session holds. A coordinator with no
+// slot is in the roster and not in this number, so a dedicated host serving one
+// guest is a session of one participant.
+func (o SessionOffer) ParticipantCount() int {
+	n := 0
+	for _, e := range o.Roster {
+		if e.Slot != parameter.NoPlayerSlot {
+			n++
+		}
+	}
+	return n
 }
 
 // Coordinator is the host side of the startup handshake. Assign allocates the next

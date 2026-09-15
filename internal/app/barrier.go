@@ -11,7 +11,7 @@ import (
 // reordering allowance, times the hop count, inside [floor, ceiling]. An unready
 // link contributes nothing rather than zero, so a lobby that closes before a probe
 // completes keeps the default.
-func chooseBarrierDelay(link engine.LinkMeasuringPort, roster []network.SessionParticipant, local network.PeerID) uint64 {
+func chooseBarrierDelay(link engine.LinkMeasuringPort, roster []network.RosterEntry, local network.PeerID) uint64 {
 	if link == nil || len(roster) == 0 {
 		return parameter.NetworkBarrierDelayTicks
 	}
@@ -39,7 +39,7 @@ func chooseBarrierDelay(link engine.LinkMeasuringPort, roster []network.SessionP
 
 // sessionHops is the diameter of the topology the CLI builds: one guest is one hop
 // to the coordinator, two or more reach each other through it.
-func sessionHops(roster []network.SessionParticipant) uint64 {
+func sessionHops(roster []network.RosterEntry) uint64 {
 	if len(roster) > 2 {
 		return 2
 	}
@@ -55,6 +55,6 @@ func (a *App) adoptBarrierDelayLocked(link engine.LinkMeasuringPort) {
 	}
 	a.barrierDelay = chosen
 	vlog.Info("app", "msg", "playout lead chosen",
-		"ticks", chosen, "participants", len(a.sessionRoster),
+		"ticks", chosen, "roster", len(a.sessionRoster),
 		"hops", sessionHops(a.sessionRoster))
 }

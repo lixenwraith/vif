@@ -24,10 +24,10 @@ func (m measuredLinks) SetLinkReport(network.LinkReport)             {}
 func (m measuredLinks) LinkMetric(peer uint32) linkpace.Metrics      { return m[peer] }
 func (m measuredLinks) ObserveTransfer(uint32, int64, time.Duration) {}
 
-func roster(ids ...network.PeerID) []network.SessionParticipant {
-	out := make([]network.SessionParticipant, len(ids))
+func roster(ids ...network.PeerID) []network.RosterEntry {
+	out := make([]network.RosterEntry, len(ids))
 	for i, id := range ids {
-		out[i] = network.SessionParticipant{ID: id, Slot: uint8(i)}
+		out[i] = network.RosterEntry{ID: id, Slot: uint8(i)}
 	}
 	return out
 }
@@ -119,7 +119,7 @@ func TestTheHostAdoptsTheLeadItChose(t *testing.T) {
 
 	offer := network.SessionOffer{
 		Anchor: a.JoinAnchor(), Host: 1, Assigned: 2, Term: network.FirstTerm,
-		Participants:      roster(1, 2),
+		Roster:            roster(1, 2),
 		BarrierDelayTicks: want,
 	}
 	if err := a.HostSession(offer); err != nil {

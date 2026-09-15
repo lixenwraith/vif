@@ -55,6 +55,7 @@ var subScope = map[string]Scope{
 	"race":     ScopeApp,
 	"crash":    ScopeApp,
 	"app":      ScopeApp,
+	"admit":    ScopeApp,
 	"service":  ScopeApp,
 	"fsm":      ScopeFSM,
 	"event":    ScopeEvent,

@@ -1111,10 +1111,10 @@ func (s *NetworkSystem) ActivateSession() {
 			peers = p.PeerCount()
 		}
 		// The slot is named beside the identity because they answer different
-		// questions: a dedicated host holds identity 1 and NoPlayerSlot, so its
-		// first guest is participant 2 driving the first cursor.
+		// questions: a dedicated host holds peer identity 1 and no slot, so its
+		// first guest is peer 2 and the session's only participant.
 		vlog.Info("app", "msg", "network session active",
-			"participant", s.participantID(), "slot", s.world.Resources.Player.LocalSlot(),
+			"local", s.participantID(), "slot", s.world.Resources.Player.LocalSlot(),
 			"coordinator", s.isCoordinator(),
 			"barrier_delay_ticks", s.barrierDelayTicks(), "peers", peers)
 	}
@@ -1299,7 +1299,7 @@ func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
 	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
 		Message: message, Duration: 4 * parameter.StatusMessageDefaultTimeout, DurationOverride: true,
 	})
-	vlog.Warn("app", "msg", "peer link lost", "participant", peerID,
+	vlog.Warn("app", "msg", "peer link lost", "peer", peerID,
 		"authority_lost", authorityLost, "remaining_peers", remaining)
 }
 
@@ -1514,7 +1514,7 @@ func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
 	if err != nil {
 		*asm = network.SnapshotAssembly{}
 		s.statDrop.Add(1)
-		vlog.Warn("app", "msg", "correction chunk refused", "participant", from, "error", err.Error())
+		vlog.Warn("app", "msg", "correction chunk refused", "peer", from, "error", err.Error())
 		return
 	}
 	if !admitted {
@@ -1937,7 +1937,7 @@ func (s *NetworkSystem) applyDue(nextTick uint64) int {
 		if !s.admissibleFromSource(et, a.source) {
 			s.statForged.Add(1)
 			vlog.Warn("app", "msg", "artifact refused",
-				"participant", a.source, "event", event.GetEventName(et), "apply_tick", a.applyTick)
+				"peer", a.source, "event", event.GetEventName(et), "apply_tick", a.applyTick)
 			continue
 		}
 		if a.applyTick < nextTick {

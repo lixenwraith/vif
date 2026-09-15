@@ -30,7 +30,7 @@ type Authority struct {
 	term   network.AuthorityTerm
 	holder network.PeerID
 	local  network.PeerID
-	roster []network.SessionParticipant
+	roster []network.RosterEntry
 	anchor event.JoinAnchor
 	delay  uint64
 
@@ -111,7 +111,7 @@ func (u *Authority) Open(o network.SessionOffer, local network.PeerID) {
 	u.term = max(o.Term, network.FirstTerm)
 	u.holder = o.Host
 	u.local = local
-	u.roster = slices.Clone(o.Participants)
+	u.roster = slices.Clone(o.Roster)
 	u.anchor = o.Anchor
 	u.delay = o.BarrierDelayTicks
 	u.chain = slices.Clone(o.Chain)
@@ -183,7 +183,7 @@ func (u *Authority) admit(term network.AuthorityTerm, from uint32) bool {
 func (u *Authority) refuse(from uint32, term network.AuthorityTerm, why string) {
 	u.statRefused.Add(1)
 	vlog.Warn("app", "msg", "authoritative artifact refused",
-		"participant", from, "term", uint64(term), "held", uint64(u.Term()), "reason", why)
+		"peer", from, "term", uint64(term), "held", uint64(u.Term()), "reason", why)
 }
 
 // === succession ===
@@ -220,7 +220,7 @@ func (u *Authority) beginSuccession(lost network.PeerID) {
 
 	u.statMigrating.Store(true)
 	vlog.Warn("app", "msg", "authority lost; succession opened",
-		"participant", uint64(lost), "term", uint64(term), "local", uint64(local))
+		"peer", uint64(lost), "term", uint64(term), "local", uint64(local))
 	u.sendReport()
 	u.drive()
 }
@@ -250,7 +250,7 @@ func (u *Authority) sendReport() {
 // at the moment it dialled, so two participants would hold two lists; arrivals and
 // departures are barrier-bound crossings, so the cursor roster is the same list
 // everywhere. The offer stays as the fallback before the cursors exist.
-func (u *Authority) currentRoster() []network.SessionParticipant {
+func (u *Authority) currentRoster() []network.RosterEntry {
 	out := u.inst.WorldRoster()
 	if len(out) == 0 {
 		u.mu.Lock()
@@ -515,7 +515,7 @@ func (u *Authority) successionOrder() []network.PeerID {
 	u.mu.Unlock()
 	alive := func(id network.PeerID) bool {
 		return id != 0 && id != holder && id != local &&
-			slices.ContainsFunc(roster, func(p network.SessionParticipant) bool { return p.ID == id })
+			slices.ContainsFunc(roster, func(p network.RosterEntry) bool { return p.ID == id })
 	}
 	var out []network.PeerID
 	for _, e := range chain {
@@ -678,7 +678,7 @@ func (u *Authority) onHandoff(from uint32, body []byte) {
 	if err := u.adopt(rec, from); err != nil {
 		u.statRefused.Add(1)
 		vlog.Warn("app", "msg", "handoff refused",
-			"participant", from, "term", uint64(rec.Term), "authority", uint64(rec.Authority),
+			"peer", from, "term", uint64(rec.Term), "authority", uint64(rec.Authority),
 			"error", err.Error())
 		u.inst.SetStatusMessage("Refused a conflicting authority handoff: "+err.Error(),
 			4*parameter.StatusMessageDefaultTimeout, true)

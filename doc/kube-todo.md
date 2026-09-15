@@ -95,26 +95,18 @@ session allocatable, and a real client joins it afterwards.
 
 ### Batch H11 — source-address preservation
 
-`network.JoinerReport.Remote` carries the accepted socket's address, but only
-`converge.Reach.NoteDeclared` reads it — to complete an unspecified host in a
-declared listen address — so no record names it. Until one does, nothing proves
-the Service's `externalTrafficPolicy: Local` reaches the pod with the player's
-address rather than the node's, and the per-address admission limiter may be one
-budget for the whole fleet.
+Built, not yet gated live. The coordinator emits `peer admitted` under its own
+`admit` sub, naming the accepted socket's address and what the peer declared;
+LogWisp excludes that sub from the published stream beside its `TRACE` pattern.
+One filter is all that separates the two, which is why the gate proves both
+halves at once.
 
-1. Emit a record at the coordinator naming the source address, the assigned
-   participant and the session. Not by extending `mid-run participant admitted`
-   in `internal/app/host.go`: that one is public by design, and this one must not
-   be.
-2. Keep it out of the public stream by the mechanism already there: LogWisp's
-   exclude filter, extended beside its `TRACE` pattern to the new record's `sub`.
-3. Live-gate both halves at once, since one filter is all that separates them.
-
-Gate: a join from off the node writes a record naming that address into
-`/var/log/vif-fleet/<id>.jsonl`, and the same record is absent from
+Gate: a join from off the node writes a `"sub":"admit"` record naming that
+address into `/var/log/vif-fleet/<id>.jsonl`, and the same record is absent from
 `http://127.0.0.1:8081/stream`, from `/vif/api/logs`, and from the published
-route. An address that turns out to be the node's is the finding, not a failure:
-record it and rekey the limiter.
+route. An address that turns out to be the node's or the gateway's is the
+finding, not a failure: record it and rekey the admission limiter, which until
+then may be one budget for the whole fleet.
 
 ### Batch H12 — occupied lifecycle matrix
 

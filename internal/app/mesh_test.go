@@ -29,8 +29,8 @@ func meshSession(t *testing.T, seed uint64, n int, links [][2]int, chain ...netw
 		Chain:             meshChain(chain),
 	}
 	for i := range n {
-		offer.Participants = append(offer.Participants,
-			network.SessionParticipant{ID: network.PeerID(i + 1), Slot: uint8(i)})
+		offer.Roster = append(offer.Roster,
+			network.RosterEntry{ID: network.PeerID(i + 1), Slot: uint8(i)})
 	}
 
 	apps := make([]*App, n)
@@ -283,7 +283,7 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 		if want := network.PeerID(i + 2); offered.Assigned != want {
 			t.Fatalf("guest %d assigned participant %d, want %d", i+1, offered.Assigned, want)
 		}
-		if got, want := len(offered.Participants), i+2; got != want {
+		if got, want := len(offered.Roster), i+2; got != want {
 			t.Fatalf("guest %d offered %d participants, want the lobby so far (%d)", i+1, got, want)
 		}
 

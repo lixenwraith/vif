@@ -61,7 +61,7 @@ type App struct {
 	sessionOffer network.SessionOffer
 	// sessionRoster is the lobby the coordinator has admitted so far. It grows one
 	// entry per accepted connection and closes into the offer the start gate sends.
-	sessionRoster []network.SessionParticipant
+	sessionRoster []network.RosterEntry
 
 	// barrierDelay is the session's playout lead in ticks, chosen once when the
 	// coordinator closes its roster and carried by every offer it builds after

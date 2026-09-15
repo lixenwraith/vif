@@ -21,13 +21,13 @@ func cursorlessOffer(an event.JoinAnchor, guests int) network.SessionOffer {
 		Anchor: an, Host: hostParticipantID, Assigned: 2,
 		Term:              network.FirstTerm,
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
-		Participants: []network.SessionParticipant{
+		Roster: []network.RosterEntry{
 			{ID: hostParticipantID, Slot: parameter.NoPlayerSlot},
 		},
 	}
 	for i := range guests {
-		o.Participants = append(o.Participants,
-			network.SessionParticipant{ID: network.PeerID(i + 2), Slot: uint8(i)})
+		o.Roster = append(o.Roster,
+			network.RosterEntry{ID: network.PeerID(i + 2), Slot: uint8(i)})
 	}
 	return o
 }
@@ -161,14 +161,14 @@ func TestACursorlessRosterIsOnlyTheCoordinators(t *testing.T) {
 	}
 
 	twoCursorless := cursorlessOffer(an, 2)
-	twoCursorless.Participants[1].Slot = parameter.NoPlayerSlot
+	twoCursorless.Roster[1].Slot = parameter.NoPlayerSlot
 	if err := twoCursorless.Validate(); err == nil {
 		t.Fatal("two cursorless participants were accepted")
 	}
 
 	wrongOne := cursorlessOffer(an, 2)
-	wrongOne.Participants[0].Slot = 2
-	wrongOne.Participants[1].Slot = parameter.NoPlayerSlot
+	wrongOne.Roster[0].Slot = 2
+	wrongOne.Roster[1].Slot = parameter.NoPlayerSlot
 	if err := wrongOne.Validate(); err == nil {
 		t.Fatal("a cursorless participant that is not the host was accepted")
 	}
@@ -351,11 +351,11 @@ func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
 	}
 }
 
-// TestPlayersIsACeilingAndOnlySometimesAParty pins both meanings of one flag: always
-// a ceiling, with unset meaning the whole roster. What an explicit value adds on an
-// interactive host is the lobby — a party that says it is four starts together — and
-// the zero value drops exactly that, leaving a host that starts on its first guest.
-// A dedicated host is always that shape, because nobody is watching its lobby.
+// TestPlayersIsACeilingAndOnlySometimesAParty pins all three meanings of one flag.
+// It is always the cursor ceiling; sessionCapacity is its guest half, which on a
+// dedicated host is the whole of it because that host drives none. What an explicit
+// value adds on an interactive host is the lobby — a party that says it is four
+// starts together — and the zero value drops exactly that.
 func TestPlayersIsACeilingAndOnlySometimesAParty(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
@@ -363,15 +363,22 @@ func TestPlayersIsACeilingAndOnlySometimesAParty(t *testing.T) {
 		serves       bool
 		participants int
 		capacity     int
+		players      int
 		quorum       int
 	}{
-		{name: "host/unset", capacity: parameter.MaxPlayers - 1, quorum: 1},
-		{name: "host/two", participants: 2, capacity: 1, quorum: 1},
-		{name: "host/four", participants: 4, capacity: 3, quorum: 3},
+		{name: "host/unset", capacity: parameter.MaxPlayers - 1,
+			players: parameter.MaxPlayers, quorum: 1},
+		{name: "host/two", participants: 2, capacity: 1, players: 2, quorum: 1},
+		{name: "host/four", participants: 4, capacity: 3, players: 4, quorum: 3},
 		{name: "host/over", participants: parameter.MaxPlayers + 4,
-			capacity: parameter.MaxPlayers - 1, quorum: parameter.MaxPlayers - 1},
-		{name: "serve/unset", serves: true, capacity: parameter.MaxPlayers, quorum: 1},
-		{name: "serve/three", serves: true, participants: 3, capacity: 3, quorum: 1},
+			capacity: parameter.MaxPlayers - 1, players: parameter.MaxPlayers,
+			quorum: parameter.MaxPlayers - 1},
+		{name: "serve/unset", serves: true, capacity: parameter.MaxPlayers,
+			players: parameter.MaxPlayers, quorum: 1},
+		{name: "serve/three", serves: true, participants: 3, capacity: 3,
+			players: 3, quorum: 1},
+		{name: "serve/one", serves: true, participants: 1, capacity: 1,
+			players: 1, quorum: 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -382,7 +389,10 @@ func TestPlayersIsACeilingAndOnlySometimesAParty(t *testing.T) {
 				a.cfg.Mode = ModeServer
 			}
 			if got := a.sessionCapacity(); got != tt.capacity {
-				t.Fatalf("capacity = %d, want %d", got, tt.capacity)
+				t.Fatalf("guest capacity = %d, want %d", got, tt.capacity)
+			}
+			if got := a.playerCapacity(); got != tt.players {
+				t.Fatalf("cursor capacity = %d, want %d", got, tt.players)
 			}
 			if got := a.lobbyQuorum(); got != tt.quorum {
 				t.Fatalf("quorum = %d, want %d", got, tt.quorum)

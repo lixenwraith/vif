@@ -1070,7 +1070,7 @@ func (c *Corrections) AdmitLink(port *network.SocketPort, id network.PeerID, byt
 		return fmt.Errorf("participant %d: %w", id, err)
 	}
 	vlog.Debug("app", "msg", "join link measured",
-		"participant", id, "bytes", bytes, "ms", elapsed.Milliseconds(),
+		"peer", id, "bytes", bytes, "ms", elapsed.Milliseconds(),
 		"bytes_per_second", int64(rate))
 	return nil
 }

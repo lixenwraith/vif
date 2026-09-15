@@ -689,9 +689,9 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 	// survivor floods, what the successor publishes before it authors, and the
 	// first correction each survivor pays under the new term.
 
-	roster := make([]network.SessionParticipant, 0, parameter.MaxPlayers)
+	roster := make([]network.RosterEntry, 0, parameter.MaxPlayers)
 	for i := range parameter.MaxPlayers {
-		roster = append(roster, network.SessionParticipant{ID: network.PeerID(i + 1), Slot: uint8(i)})
+		roster = append(roster, network.RosterEntry{ID: network.PeerID(i + 1), Slot: uint8(i)})
 	}
 	reportBody, err := network.EncodeAuthorityReport(network.AuthorityReport{
 		Term: network.FirstTerm + 1, From: 2, Lost: 1,

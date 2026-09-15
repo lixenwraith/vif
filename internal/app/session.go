@@ -139,6 +139,16 @@ func (a *App) sessionCapacity() int {
 	return n - 1
 }
 
+// playerCapacity is the cursor ceiling `-players` names. sessionCapacity is its
+// guest half; an interactive host drives the one that is left, a dedicated one
+// drives none.
+func (a *App) playerCapacity() int {
+	if a.cfg.Mode.Serves() {
+		return a.sessionCapacity()
+	}
+	return a.sessionCapacity() + 1
+}
+
 // guestCount is how many guests the roster currently holds. The coordinator of a
 // dedicated host holds a roster entry and no cursor, so it is subtracted: a session
 // consisting only of its coordinator is an empty one, which is the reading both the
@@ -171,6 +181,12 @@ func (a *App) lobbyQuorum() int {
 // playing on it — which D-14 forbids for the same reason a terminal may not crop a
 // shared map. First is a number the session can commit to before it starts.
 func (a *App) noteJoinerReport(id network.PeerID, report network.JoinerReport) {
+	// The accepted socket's address, on the one instance that has it. It is what
+	// proves a deployment preserved the player's address rather than its gateway's,
+	// and the per-address admission budget is keyed on the same value. Its own sub
+	// is what keeps it out of any stream published from these files.
+	vlog.Info("admit", "msg", "peer admitted", "peer", uint64(id),
+		"remote", report.Remote, "declared", report.Listen)
 	// Before the geometry check: a participant that reported no terminal still
 	// reported a port.
 	a.reach.NoteDeclared(id, report)
@@ -346,10 +362,11 @@ func (a *App) assignParticipant() (network.SessionOffer, error) {
 
 	limit := a.sessionCapacity() + 1
 	if len(a.sessionRoster) == 0 {
-		a.sessionRoster = []network.SessionParticipant{{ID: hostParticipantID, Slot: a.hostSlot()}}
+		a.sessionRoster = []network.RosterEntry{{ID: hostParticipantID, Slot: a.hostSlot()}}
 	}
 	if len(a.sessionRoster) >= limit {
-		return network.SessionOffer{}, fmt.Errorf("session is full at %d participants", limit)
+		return network.SessionOffer{}, fmt.Errorf("session is full at %d participant(s)",
+			a.playerCapacity())
 	}
 	assigned := a.nextParticipantLocked()
 	a.sessionRoster = append(a.sessionRoster, assigned)
@@ -360,21 +377,21 @@ func (a *App) assignParticipant() (network.SessionOffer, error) {
 
 // nextParticipantLocked takes the lowest free identity and the lowest free slot, so
 // a lobby that loses a joiner reuses its place rather than exhausting the roster.
-func (a *App) nextParticipantLocked() network.SessionParticipant {
-	taken := func(pick func(network.SessionParticipant) int, want int) bool {
-		return slices.ContainsFunc(a.sessionRoster, func(p network.SessionParticipant) bool {
+func (a *App) nextParticipantLocked() network.RosterEntry {
+	taken := func(pick func(network.RosterEntry) int, want int) bool {
+		return slices.ContainsFunc(a.sessionRoster, func(p network.RosterEntry) bool {
 			return pick(p) == want
 		})
 	}
-	var out network.SessionParticipant
+	var out network.RosterEntry
 	for id := 1; id <= parameter.MaxPlayers+1; id++ {
-		if !taken(func(p network.SessionParticipant) int { return int(p.ID) }, id) {
+		if !taken(func(p network.RosterEntry) int { return int(p.ID) }, id) {
 			out.ID = network.PeerID(id)
 			break
 		}
 	}
 	for slot := range parameter.MaxPlayers {
-		if !taken(func(p network.SessionParticipant) int { return int(p.Slot) }, slot) {
+		if !taken(func(p network.RosterEntry) int { return int(p.Slot) }, slot) {
 			out.Slot = uint8(slot)
 			break
 		}
@@ -399,7 +416,7 @@ func (a *App) releaseParticipant(id network.PeerID) {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
 	a.sessionRoster = slices.DeleteFunc(a.sessionRoster,
-		func(p network.SessionParticipant) bool { return p.ID == id })
+		func(p network.RosterEntry) bool { return p.ID == id })
 }
 
 // crossPredecessorDeparture removes the authority that was lost from the roster. A
@@ -410,7 +427,7 @@ func (a *App) crossPredecessorDeparture(rec network.HandoffRecord) {
 	if rec.Predecessor == 0 {
 		return
 	}
-	i := slices.IndexFunc(rec.Roster, func(p network.SessionParticipant) bool {
+	i := slices.IndexFunc(rec.Roster, func(p network.RosterEntry) bool {
 		return p.ID == rec.Predecessor
 	})
 	if i < 0 {
@@ -424,7 +441,7 @@ func (a *App) crossPredecessorDeparture(rec network.HandoffRecord) {
 // move again. Having no link is what makes the removal local rather than a crossing
 // — a departure is produced once at one agreed tick because two instances must
 // destroy a shared entity together, and here there is no second instance.
-func (a *App) dropAbandonedCursors(roster []network.SessionParticipant, local network.PeerID) {
+func (a *App) dropAbandonedCursors(roster []network.RosterEntry, local network.PeerID) {
 	if p := a.sessionTransport(); p != nil && p.IsRunning() && p.PeerCount() > 0 {
 		return
 	}
@@ -468,7 +485,7 @@ func (a *App) offerLocked(anchor event.JoinAnchor, assigned network.PeerID) netw
 		Host:              a.authorityID(),
 		Assigned:          assigned,
 		Term:              term,
-		Participants:      slices.Clone(a.sessionRoster),
+		Roster:            slices.Clone(a.sessionRoster),
 		BarrierDelayTicks: max(a.barrierDelay, parameter.NetworkBarrierDelayTicks),
 		// A joiner adopts the chain whole: candidate list and address book in one.
 		Chain:          a.sessionChain(),
@@ -495,7 +512,7 @@ func (a *App) hostOffer() (network.SessionOffer, error) {
 		// No joiner ever arrived; describe the two-participant lobby this host opened.
 		// Through the allocator rather than beside it: a dedicated host holds no slot,
 		// so its guest takes slot zero and a second rule here would disagree.
-		a.sessionRoster = []network.SessionParticipant{{ID: hostParticipantID, Slot: a.hostSlot()}}
+		a.sessionRoster = []network.RosterEntry{{ID: hostParticipantID, Slot: a.hostSlot()}}
 		a.sessionRoster = append(a.sessionRoster, a.nextParticipantLocked())
 	}
 	assigned := a.authorityID()
@@ -564,11 +581,11 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	// its first reading. The roster the lobby closed on is what satisfies it, and
 	// everything between this point and the loop — the capture, the sends, the
 	// ready gate — happens while the deadline would otherwise still be running.
-	a.life.Observe(len(offer.Participants)-1, time.Now())
+	a.life.Observe(len(offer.Roster)-1, time.Now())
 	// Whoever the roster closed on, not whoever was counted a moment ago: an
 	// accepted dial can complete between the quorum being met and the roster being
 	// read, and that participant is in the session.
-	admitted := len(offer.Participants) - 1
+	admitted := len(offer.Roster) - 1
 	if admitted < quorum || admitted > capacity {
 		return fmt.Errorf("host closed a lobby of %d guests, outside %d..%d",
 			admitted, quorum, capacity)
@@ -595,7 +612,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	// Each joiner receives the closed roster addressed to itself, then the world it
 	// names. Sending the same participant list and the same capture to everyone is
 	// what makes shared creation order identical.
-	for _, participant := range offer.Participants {
+	for _, participant := range offer.Roster {
 		if participant.ID == offer.Host {
 			continue
 		}
@@ -625,7 +642,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	abandoned := make(map[network.PeerID]bool, admitted)
 	confirmedGuests := func() int {
 		n := 0
-		for _, participant := range offer.Participants {
+		for _, participant := range offer.Roster {
 			if participant.ID != offer.Host && port.Confirmed(uint32(participant.ID)) {
 				n++
 			}
@@ -639,7 +656,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	if err := a.waitForStartup(port, signals,
 		time.Now().Add(parameter.NetworkJoinReadyTimeout),
 		func(now time.Time) error {
-			for _, participant := range offer.Participants {
+			for _, participant := range offer.Roster {
 				id := participant.ID
 				if id == offer.Host || port.Confirmed(uint32(id)) {
 					continue
@@ -647,12 +664,12 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 				abandoned[id] = true
 				port.Disconnect(uint32(id))
 				vlog.Warn("app", "msg", "participant did not confirm the start gate",
-					"participant", id, "within", parameter.NetworkJoinReadyTimeout.String())
+					"peer", id, "within", parameter.NetworkJoinReadyTimeout.String())
 			}
 			return nil
 		},
 		func() bool {
-			for _, participant := range offer.Participants {
+			for _, participant := range offer.Roster {
 				id := participant.ID
 				if id == offer.Host || abandoned[id] {
 					continue
@@ -671,7 +688,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	// that cannot carry a whole world per floor window is refused here for the same
 	// reason a mid-run join is; one that is no longer on the link has no link to
 	// judge and leaves through the ordinary departure the loop is about to drain.
-	for _, participant := range offer.Participants {
+	for _, participant := range offer.Roster {
 		if participant.ID == offer.Host || !port.Connected(uint32(participant.ID)) {
 			continue
 		}
@@ -680,8 +697,8 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 		}
 	}
 
-	a.showStartupStatus(fmt.Sprintf("Network session ready: %d of %d participant(s) confirmed",
-		confirmedGuests(), admitted))
+	a.showStartupStatus(fmt.Sprintf("Network session ready: %d participant(s), %d of %d guest(s) confirmed",
+		offer.ParticipantCount(), confirmedGuests(), admitted))
 	a.corrections.StartPump()
 	return nil
 }
@@ -718,7 +735,8 @@ func (a *App) startJoinSession(signals <-chan os.Signal) error {
 	if err := a.pendingJoin.Ready(); err != nil {
 		return fmt.Errorf("join ready gate: %w", err)
 	}
-	a.showStartupStatus(fmt.Sprintf("Network session ready: %d participants", len(final.Participants)))
+	a.showStartupStatus(fmt.Sprintf("Network session ready: %d participant(s)",
+		final.ParticipantCount()))
 	return nil
 }
 

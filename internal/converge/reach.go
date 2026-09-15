@@ -95,7 +95,7 @@ func (r *Reach) AdoptListener(ln net.Listener, declared string) {
 	r.mu.Unlock()
 	r.statListening.Store(true)
 	r.inst.SetStatusMessage(
-		fmt.Sprintf("Listening on %s; the session will share it with the other participants", ln.Addr()),
+		fmt.Sprintf("Listening on %s; the session will share it with the other peers", ln.Addr()),
 		4*parameter.StatusMessageDefaultTimeout, false)
 	vlog.Info("app", "msg", "peer listener bound",
 		"bound", ln.Addr().String(), "declared", declared)
@@ -250,11 +250,11 @@ func (r *Reach) dial(id network.PeerID, addr string) {
 		}
 		if err := dialer.DialPeer(addr); err != nil {
 			vlog.Debug("app", "msg", "peer dial failed",
-				"participant", uint64(id), "address", addr, "error", err.Error())
+				"peer", uint64(id), "address", addr, "error", err.Error())
 			return
 		}
 		vlog.Info("app", "msg", "peer link opened",
-			"participant", uint64(id), "address", addr)
+			"peer", uint64(id), "address", addr)
 		r.authority.sendReport()
 	}()
 }
@@ -286,7 +286,7 @@ func (r *Reach) admitPeerLink(from network.PeerID) error {
 		return fmt.Errorf("peer link: participant %d is not another participant", from)
 	}
 	if !slices.ContainsFunc(r.authority.currentRoster(),
-		func(p network.SessionParticipant) bool { return p.ID == from }) {
+		func(p network.RosterEntry) bool { return p.ID == from }) {
 		return fmt.Errorf("peer link: participant %d is not in this session", from)
 	}
 	return nil

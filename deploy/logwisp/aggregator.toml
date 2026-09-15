@@ -27,12 +27,13 @@ burst = 800.0
 policy = "drop"
 max_entry_size_bytes = 65536
 
-# TRACE records are intentionally absent from the public operational feed. The
-# filter examines the unparsed message; every emitted line otherwise stays whole.
+# What the public operational feed does not carry: TRACE records, and the `admit`
+# sub, whose records name the accepted socket's address. Both stay in the node-local
+# files. The filter examines the unparsed message; every emitted line stays whole.
 [[pipelines.flow.filters]]
 type = "exclude"
 logic = "or"
-patterns = ["\"level\":\"TRACE\""]
+patterns = ["\"level\":\"TRACE\"", "\"sub\":\"admit\""]
 
 [[pipelines.plugin_sources]]
 id = "fleet"

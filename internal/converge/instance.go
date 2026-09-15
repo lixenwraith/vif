@@ -28,7 +28,7 @@ type Instance interface {
 	// WorldRoster is the roster as the cursors hold it: the same list on every
 	// instance, because arrivals and departures are barrier-bound crossings. Empty
 	// before the cursors exist, which is what makes the offer the fallback.
-	WorldRoster() []network.SessionParticipant
+	WorldRoster() []network.RosterEntry
 
 	// Transport is the attached endpoint, nil outside a session; DrainOffTick
 	// translates what it holds without advancing a tick.
@@ -50,7 +50,7 @@ type Instance interface {
 	// run reads it from; DropAbandonedCursors removes the participants an instance
 	// left with no link will never hear from again.
 	AuthorityChanged(rec network.HandoffRecord, mine bool)
-	DropAbandonedCursors(roster []network.SessionParticipant, local network.PeerID)
+	DropAbandonedCursors(roster []network.RosterEntry, local network.PeerID)
 
 	// SetStatusMessage is the operator surface a refusal or a recovery is said on.
 	SetStatusMessage(msg string, duration time.Duration, override bool)

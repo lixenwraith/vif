@@ -119,6 +119,16 @@ sudo journalctl \
   --no-pager
 ```
 
+## Who dialled a session
+
+The accepted socket's address is recorded on the node and dropped from the
+published stream, so this answers "where did that player come from" and the SSE
+never can:
+
+```sh
+sudo jq -c 'select(.sub == "admit")' '/var/log/vif-fleet/<session-id>.jsonl'
+```
+
 ## Preserve
 
 `drain` and the cleanup timer both remove log files. Neither touches the mounted

@@ -59,7 +59,7 @@ func TestASecondHandoffForOneTermIsRefused(t *testing.T) {
 	}
 	foreign := base
 	foreign.Term = network.FirstTerm + 2
-	foreign.Roster = append(slices.Clone(base.Roster), network.SessionParticipant{ID: 4, Slot: 3})
+	foreign.Roster = append(slices.Clone(base.Roster), network.RosterEntry{ID: 4, Slot: 3})
 	if err := guest.u.adopt(foreign, 0); err == nil {
 		t.Fatal("a record carrying a roster this session never closed on was adopted")
 	}
@@ -109,7 +109,7 @@ func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 	guest := newRun(t, 2, nil, roster(2))
 	guest.u.Open(network.SessionOffer{
 		Host: 1, Assigned: 2, Term: network.FirstTerm,
-		Participants: roster(2), Chain: chainOf(1, 2), FixedAuthority: true,
+		Roster: roster(2), Chain: chainOf(1, 2), FixedAuthority: true,
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 	}, 2)
 
@@ -142,7 +142,7 @@ func TestTheSuccessionOrderIsTheOrderTheRuleElects(t *testing.T) {
 	r := newRun(t, 4, nil, roster(4))
 	r.u.Open(network.SessionOffer{
 		Host: 1, Assigned: 4, Term: network.FirstTerm,
-		Participants: roster(4), Chain: chainOf(3, 4),
+		Roster: roster(4), Chain: chainOf(3, 4),
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 	}, 4)
 

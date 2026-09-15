@@ -131,7 +131,7 @@ func TestSuccessionElectsOneParticipantOnEverySurvivor(t *testing.T) {
 // exchanging anything.
 func TestTheSuccessorIsTheRostersLowestSurvivor(t *testing.T) {
 	t.Parallel()
-	roster := []network.SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}}
+	roster := []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}}
 
 	// The host goes: the first guest the coordinator admitted takes over, because
 	// identities are handed out lowest-free-first in arrival order.
@@ -144,19 +144,19 @@ func TestTheSuccessorIsTheRostersLowestSurvivor(t *testing.T) {
 	}
 	// A cursorless coordinator is not in the world's roster at all, so the
 	// participant it lost is simply not among the candidates.
-	guests := []network.SessionParticipant{{ID: 2, Slot: 0}, {ID: 3, Slot: 1}}
+	guests := []network.RosterEntry{{ID: 2, Slot: 0}, {ID: 3, Slot: 1}}
 	if got, ok := network.DesignatedSuccessor(guests, 1, nil); !ok || got != 2 {
 		t.Fatalf("successor on a dedicated host's roster = %d (ok=%t), want 2", got, ok)
 	}
 	// The two-participant session, which a quorum could never serve: one survivor
 	// of a roster of two is not a majority of two, and it is the whole session.
 	if got, ok := network.DesignatedSuccessor(
-		[]network.SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}}, 1, nil); !ok || got != 2 {
+		[]network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}}, 1, nil); !ok || got != 2 {
 		t.Fatalf("the sole survivor of a pair = %d (ok=%t), want it to take the term", got, ok)
 	}
 	// Nobody left is nothing to continue.
 	if got, ok := network.DesignatedSuccessor(
-		[]network.SessionParticipant{{ID: 1, Slot: 0}}, 1, nil); ok {
+		[]network.RosterEntry{{ID: 1, Slot: 0}}, 1, nil); ok {
 		t.Fatalf("a roster with no survivor designated %d", got)
 	}
 }
@@ -167,7 +167,7 @@ func TestTheSuccessorIsTheRostersLowestSurvivor(t *testing.T) {
 // decided from its own view alone cannot make itself the authority.
 func TestOnlyTheDesignatedSuccessorMayHoldATerm(t *testing.T) {
 	t.Parallel()
-	roster := []network.SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}}
+	roster := []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}}
 	base := network.HandoffRecord{
 		Term: network.FirstTerm + 1, Authority: 2, Predecessor: 1,
 		Roster: roster, BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
@@ -340,7 +340,7 @@ func TestMembershipIsByteIdenticalAcrossAHandoff(t *testing.T) {
 	primeRetention(t, apps)
 
 	type membership struct {
-		roster  []network.SessionParticipant
+		roster  []network.RosterEntry
 		anchor  string
 		delay   uint64
 		cursors []uint64
@@ -422,7 +422,7 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	host.openAuthority(network.SessionOffer{
 		Anchor: host.JoinAnchor(), Host: 2, Assigned: hostParticipantID,
 		Term: network.FirstTerm, BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
-		Participants: []network.SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
+		Roster: []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
 	}, hostParticipantID)
 	host.reportPeerLost(2)
 	host.ApplyPendingCorrections()

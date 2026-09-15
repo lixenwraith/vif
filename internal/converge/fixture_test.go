@@ -25,14 +25,14 @@ type stub struct {
 	mu     sync.Mutex
 	stamp  event.Stamp
 	local  uint32
-	roster []network.SessionParticipant
+	roster []network.RosterEntry
 	port   engine.NetworkPort
 	world  snapshot.SharedCapture
 
 	installed []snapshot.SharedCapture
 	replayed  []snapshot.CaptureHeader
 	handoffs  []adopted
-	abandoned [][]network.SessionParticipant
+	abandoned [][]network.RosterEntry
 	said      []string
 }
 
@@ -61,10 +61,10 @@ func (s *stub) RosterSize() int {
 	return len(s.roster)
 }
 
-func (s *stub) WorldRoster() []network.SessionParticipant {
+func (s *stub) WorldRoster() []network.RosterEntry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]network.SessionParticipant(nil), s.roster...)
+	return append([]network.RosterEntry(nil), s.roster...)
 }
 
 func (s *stub) Transport() engine.NetworkPort { return s.port }
@@ -100,7 +100,7 @@ func (s *stub) AuthorityChanged(rec network.HandoffRecord, mine bool) {
 	s.handoffs = append(s.handoffs, adopted{rec: rec, mine: mine})
 }
 
-func (s *stub) DropAbandonedCursors(roster []network.SessionParticipant, _ network.PeerID) {
+func (s *stub) DropAbandonedCursors(roster []network.RosterEntry, _ network.PeerID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.abandoned = append(s.abandoned, roster)
@@ -154,7 +154,7 @@ type run struct {
 
 // newRun builds one participant: a world at tick 1 holding a capture nobody has
 // diverged from yet, and the three halves of the protocol over it.
-func newRun(t *testing.T, local uint32, port engine.NetworkPort, roster []network.SessionParticipant) *run {
+func newRun(t *testing.T, local uint32, port engine.NetworkPort, roster []network.RosterEntry) *run {
 	t.Helper()
 	reg := status.NewRegistry()
 	w := &stub{
@@ -173,7 +173,7 @@ func newRun(t *testing.T, local uint32, port engine.NetworkPort, roster []networ
 func (r *run) open(host network.PeerID, chain network.SuccessionChain, fixed bool) {
 	r.u.Open(network.SessionOffer{
 		Host: host, Assigned: network.PeerID(r.world.local), Term: network.FirstTerm,
-		Participants: r.world.WorldRoster(), Chain: chain, FixedAuthority: fixed,
+		Roster: r.world.WorldRoster(), Chain: chain, FixedAuthority: fixed,
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 	}, network.PeerID(r.world.local))
 }
@@ -181,10 +181,10 @@ func (r *run) open(host network.PeerID, chain network.SuccessionChain, fixed boo
 func (r *run) stat(key string) int64 { return r.reg.Ints.Get(key).Load() }
 
 // roster is the closed membership every participant in these criteria holds.
-func roster(n int) []network.SessionParticipant {
-	out := make([]network.SessionParticipant, 0, n)
+func roster(n int) []network.RosterEntry {
+	out := make([]network.RosterEntry, 0, n)
 	for i := range n {
-		out = append(out, network.SessionParticipant{ID: network.PeerID(i + 1), Slot: uint8(i)})
+		out = append(out, network.RosterEntry{ID: network.PeerID(i + 1), Slot: uint8(i)})
 	}
 	return out
 }

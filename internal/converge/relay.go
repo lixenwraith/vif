@@ -165,7 +165,7 @@ func (c *Corrections) serveRelayed(port engine.NetworkPort, pending pendingReque
 	c.recordSelectiveSizeLocked(len(body))
 	c.publishMu.Unlock()
 	vlog.Debug("app", "msg", "relayed repair served",
-		"participant", pending.from, "tick", req.Tick, "pages", pages, "bytes", len(body))
+		"peer", pending.from, "tick", req.Tick, "pages", pages, "bytes", len(body))
 	return true
 }
 
@@ -187,7 +187,7 @@ func (c *Corrections) sendUnserved(port engine.NetworkPort, to uint32, req snaps
 	}
 	port.Send(to, uint8(network.MsgStateUnserved), body)
 	vlog.Debug("app", "msg", "request cannot be served from retention",
-		"participant", to, "tick", req.Tick, "reason", why)
+		"peer", to, "tick", req.Tick, "reason", why)
 }
 
 // applyUnserved is the receiver's half: stop waiting for a repair that is not
@@ -208,5 +208,5 @@ func (c *Corrections) applyUnserved(body []byte) {
 	c.selectiveMu.Unlock()
 	m.KeyframeFallback.Add(1)
 	vlog.Debug("app", "msg", "repair unavailable from the relaying neighbour",
-		"participant", u.From, "tick", u.Tick, "reason", u.Reason)
+		"peer", u.From, "tick", u.Tick, "reason", u.Reason)
 }

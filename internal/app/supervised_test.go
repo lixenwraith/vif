@@ -33,12 +33,12 @@ func supervisedServer(t *testing.T, players int, p lifecycle.Policy) *App {
 func seatGuests(a *App, n int) {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
-	a.sessionRoster = []network.SessionParticipant{
+	a.sessionRoster = []network.RosterEntry{
 		{ID: hostParticipantID, Slot: parameter.NoPlayerSlot},
 	}
 	for i := range n {
 		a.sessionRoster = append(a.sessionRoster,
-			network.SessionParticipant{ID: network.PeerID(i + 2), Slot: uint8(i)})
+			network.RosterEntry{ID: network.PeerID(i + 2), Slot: uint8(i)})
 	}
 }
 

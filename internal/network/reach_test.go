@@ -10,7 +10,7 @@ import (
 // TestSuccessionReadsTheChain covers the rule and the property that makes it safe
 // without agreement: a chain and any prefix of it name the same first survivor.
 func TestSuccessionReadsTheChain(t *testing.T) {
-	roster := []SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}}
+	roster := []RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}}
 	chain := SuccessionChain{{ID: 3, Addr: "a"}, {ID: 2, Addr: "b"}}
 
 	// An empty chain is "nobody was ever confirmed", not "nobody is eligible".
@@ -35,16 +35,16 @@ func TestSuccessionReadsTheChain(t *testing.T) {
 	if got, ok := DesignatedSuccessor(roster, 1, gone); !ok || got != 2 {
 		t.Fatalf("stale chain elected %d (ok=%t), want the fallback 2", got, ok)
 	}
-	if _, ok := DesignatedSuccessor([]SessionParticipant{{ID: 1}}, 1, nil); ok {
+	if _, ok := DesignatedSuccessor([]RosterEntry{{ID: 1}}, 1, nil); ok {
 		t.Fatal("a roster with no survivor designated one")
 	}
 }
 
 // TestAnAddressIsNotRosterIdentity is why the chain is beside the roster and not
-// in it: SameRoster compares SessionParticipant by value, so a rebound port would
+// in it: SameRoster compares RosterEntry by value, so a rebound port would
 // fail every handoff for the rest of the session.
 func TestAnAddressIsNotRosterIdentity(t *testing.T) {
-	roster := []SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}}
+	roster := []RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}}
 	rec := HandoffRecord{
 		Term: FirstTerm + 1, Authority: 2, Predecessor: 1,
 		Roster: roster, BarrierDelayTicks: 3,
@@ -57,7 +57,7 @@ func TestAnAddressIsNotRosterIdentity(t *testing.T) {
 	if err := rec.Validate(roster, rec.Chain); err != nil {
 		t.Fatalf("a record whose peer rebound its port was refused: %v", err)
 	}
-	rec.Roster = []SessionParticipant{{ID: 1, Slot: 1}, {ID: 2, Slot: 0}}
+	rec.Roster = []RosterEntry{{ID: 1, Slot: 1}, {ID: 2, Slot: 0}}
 	if err := rec.Validate(roster, rec.Chain); err == nil {
 		t.Fatal("a record carrying different slot assignments was accepted")
 	}

@@ -57,7 +57,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Crossing ordering | Snapshot schema 5 carries one applied-sequence fence per participant. A receiver removes ordinary frames the installed world already holds — including ones whose nominal receive tick is still ahead — and keeps the ones it does not, including ones whose receive tick is long past. |
 | Local FSM lifecycle | A live install replays only config-marked persistent `ClassLocal` exit/entry events for crossed state paths; staging and all ordinary actions remain side-effect free. |
 | Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. Every host arms the same mid-run gate once its own lobby is done, so a reconnect takes one path whether the session started with `-host`, `-serve`, a script, or `:host`. |
-| Roster | A participant holds an identity, a term and a vote; a roster slot binds it to a cursor. The coordinator of a dedicated host holds no slot, so a session can consist entirely of its guests. |
+| Roster | Every admitted peer holds an identity, a term and a vote; a roster slot binds it to a cursor and makes it a participant. The coordinator of a dedicated host holds no slot, so it is a peer and not a participant, and a session of one guest has one participant in a roster of two. |
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
 | Playout lead | Chosen once, when the coordinator closes its roster, from the worst measured round trip: one way plus a reordering allowance, multiplied by the topology's hop count, floored at `NetworkBarrierDelayTicks` and capped at `NetworkBarrierMaxDelayTicks`. A session that closes before a probe completes keeps the floor. |
 | Mesh and relay | Epochs, owner state, corrections, and authority records flood with per-source duplicate suppression. A relay with retained authority content keeps selective repair available to participants behind it. |
@@ -375,7 +375,7 @@ binds it, and authorship never leaves the machine that started the world.
 
 #### Why the chain is beside the roster and not in it
 
-**An address is not roster identity.** `SessionParticipant` is compared by value:
+**An address is not roster identity.** `RosterEntry` is compared by value:
 `SameRoster` sorts two rosters and calls `slices.Equal`, and
 `HandoffRecord.Validate` refuses a record whose roster is not byte-identical to the
 one the session closed on. An `Addr` field on that struct would make a guest that

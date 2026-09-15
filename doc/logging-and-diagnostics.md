@@ -75,18 +75,20 @@ conventionally the record's *follow key* — `region` on FSM records, `ev` on
 per-event dispatch records — so a viewer's follow-value navigation walks one
 region or one event type.
 
-### Naming a participant
+### Naming a peer, counting participants
 
-One session identity space, one field name. `participant` is whoever the record
-is *about*; where a record describes both ends of a link, the far one keeps
-`participant` and the local one is `local`. The emitting instance is otherwise
-not repeated per record — it is stated once by `network session active`
-(`participant`, `slot`) and in every `session summary` — because within one log
-it is a constant, and across a fleet `session_id` already names the process.
+A **peer** is one end of a session link. `peer` is the identity a record is
+*about*; where a record describes both ends, the far one keeps `peer` and the
+local one is `local`. The emitting instance is otherwise not repeated per record
+— it is stated once by `network session active` (`local`, `slot`) and in every
+`session summary` — because within one log it is a constant, and across a fleet
+`session_id` already names the process.
 
-`peers` is a count of live transport links and never an identity. A `slot` of
-255 (`parameter.NoPlayerSlot`) is a participant that drives no cursor, which on
-a dedicated host is the coordinator.
+A **participant** is a cursor on the map, so the two are not the same count. A
+dedicated host is peer 1 with `slot` 255 (`parameter.NoPlayerSlot`) and drives
+none, which is why its first guest is peer 2 and the session's only participant.
+`peers` counts live transport links; `roster` counts admitted peers, the
+cursorless coordinator included; anything named participants counts cursors.
 
 ### Correlation stamps
 
@@ -131,7 +133,7 @@ the level for everything else.
 
 | Scope | Letter | `sub` tags mapped to it |
 |---|---|---|
-| `app` | `a` | `app`, `service`, `race`, `crash` |
+| `app` | `a` | `app`, `admit`, `service`, `race`, `crash` |
 | `fsm` | `f` | `fsm` |
 | `event` | `e` | `event` |
 | `dispatch` | `d` | `dispatch` |
@@ -195,9 +197,23 @@ records is a list that goes stale.
 | `recorder flush` | INFO | `reason`, `t0`, `ticks`, `records`, `us` | recorder, when the session log absorbed the flush |
 | `recorder flush failed` | ERROR | `reason`, `error` | recorder |
 | `snapshot saved` | INFO | `path` | `:d save` |
-| `network session active` | INFO | `participant`, `slot`, `coordinator`, `barrier_delay_ticks`, `peers` | this instance's one statement of who it is |
+| `network session active` | INFO | `local`, `slot`, `coordinator`, `barrier_delay_ticks`, `peers` | this instance's one statement of who it is |
 | `session summary` | INFO | `summary` | the `-serve` loop, every 30 s; the same line `:session` prints |
-| `peer link opened` / `peer link lost` | INFO / WARN | `participant`, plus `address` on the dial and `authority_lost`, `remaining_peers` on the loss | `reach.dial`, `NetworkSystem.reportDisconnect` |
+| `peer link opened` / `peer link lost` | INFO / WARN | `peer`, plus `address` on the dial and `authority_lost`, `remaining_peers` on the loss | `reach.dial`, `NetworkSystem.reportDisconnect` |
+
+### `sub="admit"`
+
+| `msg` | Level | Fields | Source |
+|---|---|---|---|
+| `peer admitted` | INFO | `peer`, `remote`, `declared` | `App.noteJoinerReport`, on the coordinator |
+
+`remote` is the accepted socket's address and `declared` what the peer said it
+listens on. They are here and nowhere else: it is the one value that proves a
+deployment reached the pod with the player's address rather than its gateway's,
+and the per-address admission budget is keyed on it. The sub exists so the fleet's
+published stream can drop the whole category —
+[`deploy/logwisp/aggregator.toml`](../deploy/logwisp/aggregator.toml) excludes it
+beside `TRACE` — while the node-local file keeps it for an operator.
 
 ### `sub="service"`
 

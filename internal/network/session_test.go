@@ -15,7 +15,7 @@ func testOffer() SessionOffer {
 	return SessionOffer{
 		Anchor: event.JoinAnchor{Anchor: event.JournalAnchor{Schema: event.JournalSchema, Seed: 7}},
 		Host:   1, Assigned: 2, Term: FirstTerm, BarrierDelayTicks: 3,
-		Participants: []SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
+		Roster: []RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
 	}
 }
 
@@ -106,7 +106,7 @@ func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 	}
 	if got, err := pending.WaitStart(); err != nil {
 		t.Fatalf("start gate: %v", err)
-	} else if len(got.Participants) != len(offer.Participants) || got.Assigned != offer.Assigned {
+	} else if len(got.Roster) != len(offer.Roster) || got.Assigned != offer.Assigned {
 		t.Fatalf("start roster = %#v, want the offered roster", got)
 	}
 	if err := pending.Ready(); err != nil {
@@ -279,5 +279,24 @@ func TestAdmissionDoesNotGrowWithoutBound(t *testing.T) {
 	l.mu.Unlock()
 	if tracked > l.max {
 		t.Fatalf("the limiter tracks %d hosts, ceiling is %d", tracked, l.max)
+	}
+}
+
+// TestAParticipantIsACursorNotARosterEntry pins what a count of participants counts.
+// A dedicated coordinator holds a roster entry and no slot, so a session it serves to
+// one guest has one participant however many entries the roster carries.
+func TestAParticipantIsACursorNotARosterEntry(t *testing.T) {
+	t.Parallel()
+
+	served := SessionOffer{Roster: []RosterEntry{
+		{ID: 1, Slot: parameter.NoPlayerSlot},
+		{ID: 2, Slot: 0},
+	}}
+	if got := served.ParticipantCount(); got != 1 {
+		t.Fatalf("a dedicated host serving one guest counted %d participants, want 1", got)
+	}
+	hosted := SessionOffer{Roster: []RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}}}
+	if got := hosted.ParticipantCount(); got != 2 {
+		t.Fatalf("an interactive host and one guest counted %d participants, want 2", got)
 	}
 }

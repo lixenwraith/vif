@@ -30,8 +30,8 @@ func (i instance) RosterSize() (n int) {
 // WorldRoster reads the roster off the cursors rather than off the lobby the offer
 // described: arrivals and departures are barrier-bound crossings, so this is the
 // same list on every instance.
-func (i instance) WorldRoster() []network.SessionParticipant {
-	var out []network.SessionParticipant
+func (i instance) WorldRoster() []network.RosterEntry {
+	var out []network.RosterEntry
 	i.a.world.RunSafe(func() {
 		w := i.a.world
 		for slot := range parameter.MaxPlayers {
@@ -43,12 +43,12 @@ func (i instance) WorldRoster() []network.SessionParticipant {
 			if !ok || c.PeerID == 0 {
 				continue
 			}
-			out = append(out, network.SessionParticipant{
+			out = append(out, network.RosterEntry{
 				ID: network.PeerID(c.PeerID), Slot: uint8(slot),
 			})
 		}
 	})
-	slices.SortFunc(out, func(a, b network.SessionParticipant) int { return int(a.ID) - int(b.ID) })
+	slices.SortFunc(out, func(a, b network.RosterEntry) int { return int(a.ID) - int(b.ID) })
 	return out
 }
 
@@ -92,7 +92,7 @@ func (i instance) AuthorityChanged(rec network.HandoffRecord, mine bool) {
 	i.a.applyAuthorityChange(rec, mine)
 }
 
-func (i instance) DropAbandonedCursors(roster []network.SessionParticipant, local network.PeerID) {
+func (i instance) DropAbandonedCursors(roster []network.RosterEntry, local network.PeerID) {
 	i.a.dropAbandonedCursors(roster, local)
 }
 
@@ -218,7 +218,7 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 	a.sessionOffer.Term = rec.Term
 	a.sessionOffer.Anchor = rec.Anchor
 	a.sessionOffer.BarrierDelayTicks = rec.BarrierDelayTicks
-	a.sessionOffer.Participants = slices.Clone(rec.Roster)
+	a.sessionOffer.Roster = slices.Clone(rec.Roster)
 	a.sessionMu.Unlock()
 
 	a.publishAuthorityResource()
