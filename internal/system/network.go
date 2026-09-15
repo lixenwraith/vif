@@ -600,14 +600,17 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (sequence uint64, taken bool) 
 		return 0, false
 	}
 	s.mu.Lock()
-	s.crossSeq++
 	// Named before it is encoded, so this instance's own copy and every peer's
 	// carry one identity: a payload whose shared outcome needs a value no receiver
 	// can re-derive takes it from the artifact rather than from a stream position
-	// the two consume at different ticks.
+	// the two consume at different ticks. The sequence is therefore assigned first
+	// and given back if the encode fails — nothing outside this lock has seen it,
+	// and a number that is never dispatched would stall the applied prefix at it.
+	s.crossSeq++
 	event.StampCrossing(ev.Payload, s.localSource, s.crossSeq)
 	frame, encErr := event.NewWireFrame(ev)
 	if encErr != "" {
+		s.crossSeq--
 		s.encodeErr++
 		s.mu.Unlock()
 		event.ReleaseDeferredPayload(ev.Payload)

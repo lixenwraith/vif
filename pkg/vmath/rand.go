@@ -22,8 +22,9 @@ func (r *FastRand) Reseed(seed uint64) {
 	r.SetState(Mix64(seed))
 }
 
-// Mix64 is the SplitMix64 finalizer, exported because a caller deriving a seed
-// from structured values needs the same avalanche before it compares one.
+// Mix64 is the SplitMix64 finalizer, exported because a caller deriving a seed from
+// structured values — an identity and a counter — needs the same avalanche before
+// it uses one, and gets correlated early draws without it.
 func Mix64(x uint64) uint64 {
 	x ^= x >> 30
 	x *= 0xbf58476d1ce4e5b9

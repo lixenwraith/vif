@@ -121,6 +121,10 @@ func (c *Corrections) FollowAuthority(rec network.HandoffRecord) {
 	clear(c.peers)
 	c.publishMu.Unlock()
 
+	// Whatever is waiting on the clock was authored under the term this instance
+	// has just left, and the successor's first correction supersedes it anyway.
+	c.dropHeld()
+
 	vlog.Info("app", "msg", "following a new authority",
 		"term", uint64(rec.Term), "authority", uint64(rec.Authority))
 }
