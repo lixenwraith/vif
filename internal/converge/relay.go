@@ -10,21 +10,23 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
-// role is what this instance is doing in the protocol right now.
-func (c *Corrections) role() network.Role {
-	links := 0
-	if link, ok := c.inst.Transport().(engine.LinkMeasuringPort); ok {
-		links = len(link.Peers())
+// links is the transport and the participants this instance is directly linked to,
+// read together because Transport takes the world lock and every decision below
+// needs both.
+func (c *Corrections) links() (engine.NetworkPort, []uint32) {
+	port := c.inst.Transport()
+	if link, ok := port.(engine.LinkMeasuringPort); ok {
+		return port, link.Peers()
 	}
-	return network.SessionRole(c.authority.isAuthority(), links)
+	return port, nil
 }
 
 // canRelay reports whether this instance can answer for a participant behind it: not
 // the authority, more than one link, and retention to serve from. The retention test
 // is what keeps the claim honest — saying otherwise upstream would leave the
 // participants behind it holding an index nobody can act on.
-func (c *Corrections) canRelay() bool {
-	if c.role() != network.RoleRelay {
+func (c *Corrections) canRelay(peers []uint32) bool {
+	if network.SessionRole(c.authority.isAuthority(), len(peers)) != network.RoleRelay {
 		return false
 	}
 	c.publishMu.Lock()
@@ -37,18 +39,14 @@ func (c *Corrections) canRelay() bool {
 // It runs after this instance answered the manifest, which is what puts the tick in
 // retention before a request naming it can arrive.
 func (c *Corrections) forwardManifest(body []byte, from uint32, tick uint64) {
-	if !c.canRelay() {
+	port, peers := c.links()
+	if !c.canRelay(peers) {
 		return
 	}
-	link, ok := c.inst.Transport().(engine.LinkMeasuringPort)
-	if !ok {
-		return
-	}
-	behind := behindLinks(link.Peers(), from)
+	behind := behindLinks(peers, from)
 	if len(behind) == 0 {
 		return
 	}
-	port := c.inst.Transport()
 	sent := 0
 	for _, id := range behind {
 		if port.Send(id, uint8(network.MsgStateManifest), body) {
@@ -80,14 +78,11 @@ func behindLinks(peers []uint32, from uint32) []uint32 {
 // the authority withholds the index while a participant is unanswerable, so a relay
 // reporting only past forwards could never forward anything to report.
 func (c *Corrections) relayedParticipants() []uint32 {
-	if !c.canRelay() {
+	_, peers := c.links()
+	if !c.canRelay(peers) {
 		return nil
 	}
-	link, ok := c.inst.Transport().(engine.LinkMeasuringPort)
-	if !ok {
-		return nil
-	}
-	return behindLinks(link.Peers(), c.selectiveSource())
+	return behindLinks(peers, c.selectiveSource())
 }
 
 // canAnswerEveryParticipantLocked reports whether every participant can be

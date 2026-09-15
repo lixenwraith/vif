@@ -174,11 +174,3 @@ func (u *Authority) State() AuthorityReport {
 	out.RetainedAt, out.Retained = u.corrections.retentionEvidence()
 	return out
 }
-
-// canAnswer reports whether every participant can be repaired selectively right
-// now, for a caller outside the publication schedule.
-func (c *Corrections) canAnswer(ids []uint32) bool {
-	c.publishMu.Lock()
-	defer c.publishMu.Unlock()
-	return c.canAnswerEveryParticipantLocked(ids)
-}

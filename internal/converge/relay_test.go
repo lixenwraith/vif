@@ -20,7 +20,7 @@ func TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies(t *testing.T) {
 	runs := session(t, 3, [][2]int{{1, 2}, {2, 3}})
 	host, relay, leaf := runs[0], runs[1], runs[2]
 
-	if relay.c.canRelay() {
+	if _, peers := relay.c.links(); relay.c.canRelay(peers) {
 		t.Fatal("a participant that has held no authoritative capture claims it can relay")
 	}
 	if got := relay.c.relayedParticipants(); len(got) != 0 {
@@ -46,7 +46,7 @@ func TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies(t *testing.T) {
 		t.Fatalf("index: %v", err)
 	}
 	deliver(runs, 3)
-	if !relay.c.canRelay() {
+	if _, peers := relay.c.links(); !relay.c.canRelay(peers) {
 		t.Fatal("a relay that has installed an authoritative capture still cannot answer")
 	}
 	if !host.c.canAnswer([]uint32{2}) {
@@ -140,4 +140,39 @@ func TestARelayedAnswerProvesTheAuthoritysRoot(t *testing.T) {
 	if far.world.installs() == 0 {
 		t.Fatal("the honest relayed repair never reached the receiver")
 	}
+}
+
+// role is what this instance is doing in the protocol right now, which nothing in
+// the protocol asks and these criteria do.
+func (c *Corrections) role() network.Role {
+	_, peers := c.links()
+	return network.SessionRole(c.authority.isAuthority(), len(peers))
+}
+
+// canAnswer reports whether every participant can be repaired selectively right
+// now, for a caller outside the publication schedule.
+func (c *Corrections) canAnswer(ids []uint32) bool {
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+	return c.canAnswerEveryParticipantLocked(ids)
+}
+
+// expect records the baseline a repair will be validated against, as answering an
+// index does. It stands in for the leg a criterion drove by hand.
+func (c *Corrections) expect(want snapshot.CorrectionManifest, from uint32) error {
+	mine, err := c.inst.CaptureShared()
+	if err != nil {
+		return err
+	}
+	mine.Header.Term = want.Header.Term
+	index, err := snapshot.BuildManifest(mine, want.Authority)
+	if err != nil {
+		return err
+	}
+	c.selectiveMu.Lock()
+	c.selective.awaiting = append(c.selective.awaiting, &awaitingRepair{
+		tick: want.Header.Tick, capture: mine, index: index, manifest: want, from: from,
+	})
+	c.selectiveMu.Unlock()
+	return nil
 }

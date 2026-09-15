@@ -149,13 +149,10 @@ func (c *Corrections) publishManifest(port engine.NetworkPort, index *snapshot.M
 // retainLocked adds one capture and its index to the bounded ring.
 // Caller MUST hold publishMu.
 func (c *Corrections) retainLocked(cap snapshot.SharedCapture, index *snapshot.Manifest, authored bool) {
-	c.selective.retained = append(c.selective.retained, retainedCapture{
+	c.selective.retained = keepNewest(append(c.selective.retained, retainedCapture{
 		tick: cap.Header.Tick, term: cap.Header.Term, root: index.Root(),
 		index: index, authored: authored,
-	})
-	if n := len(c.selective.retained); n > parameter.SnapshotManifestRetention {
-		c.selective.retained = append(c.selective.retained[:0], c.selective.retained[n-parameter.SnapshotManifestRetention:]...)
-	}
+	}), parameter.SnapshotManifestRetention)
 	c.tel.RelayRetained.Store(int64(len(c.selective.retained)))
 }
 
@@ -559,37 +556,12 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 	}
 
 	c.selectiveMu.Lock()
-	c.selective.awaiting = append(c.selective.awaiting, &awaitingRepair{
+	c.selective.awaiting = keepNewest(append(c.selective.awaiting, &awaitingRepair{
 		tick: want.Header.Tick, capture: mine, index: index,
 		manifest: want, from: from,
-	})
-	if n := len(c.selective.awaiting); n > parameter.SnapshotCorrectionQueue {
-		c.selective.awaiting = append(c.selective.awaiting[:0],
-			c.selective.awaiting[n-parameter.SnapshotCorrectionQueue:]...)
-	}
+	}), parameter.SnapshotCorrectionQueue)
 	c.selectiveMu.Unlock()
 	return want.Header.Tick
-}
-
-// expect records the baseline a repair will be validated against, as answering an
-// index does. Nothing in the protocol calls it: a criterion driving one leg of the
-// exchange by hand uses it to stand in for the leg it skipped.
-func (c *Corrections) expect(want snapshot.CorrectionManifest, from uint32) error {
-	mine, err := c.inst.CaptureShared()
-	if err != nil {
-		return err
-	}
-	mine.Header.Term = want.Header.Term
-	index, err := snapshot.BuildManifest(mine, want.Authority)
-	if err != nil {
-		return err
-	}
-	c.selectiveMu.Lock()
-	c.selective.awaiting = append(c.selective.awaiting, &awaitingRepair{
-		tick: want.Header.Tick, capture: mine, index: index, manifest: want, from: from,
-	})
-	c.selectiveMu.Unlock()
-	return nil
 }
 
 // takeAwaiting claims the outstanding baseline a repair answers, dropping it and
@@ -684,13 +656,9 @@ func (c *Corrections) requestKeyframe(from uint32, want snapshot.CorrectionManif
 	c.selectiveMu.Unlock()
 	c.tel.KeyframeFallback.Add(1)
 	c.sendRequest(from, snapshot.CorrectionRequest{
-		Version:  snapshot.ManifestVersion,
-		Schema:   snapshot.Schema,
-		Tick:     want.Header.Tick,
-		Run:      want.Header.Run,
-		Session:  want.Header.Session,
-		Term:     want.Header.Term,
-		Keyframe: true,
+		Version: snapshot.ManifestVersion, Schema: snapshot.Schema,
+		Tick: want.Header.Tick, Run: want.Header.Run,
+		Session: want.Header.Session, Term: want.Header.Term, Keyframe: true,
 	})
 }
 
@@ -705,14 +673,12 @@ func (c *Corrections) sendRequest(from uint32, req snapshot.CorrectionRequest) {
 		vlog.Warn("app", "msg", "correction request encode", "error", err.Error())
 		return
 	}
-	if len(body) > network.MaxPayloadSize {
+	if len(body) > network.MaxPayloadSize && !req.Keyframe {
 		// A page vector this wide means the disagreement is not page-shaped. Ask
-		// for the whole world instead of describing the difference.
-		c.sendRequest(from, snapshot.CorrectionRequest{
-			Version: snapshot.ManifestVersion, Schema: snapshot.Schema,
-			Tick: req.Tick, Run: req.Run, Session: req.Session, Term: req.Term,
-			Keyframe: true,
-		})
+		// for the whole world instead of describing the difference; without the
+		// vector the same request is a header, so this recurses once.
+		req.Sections, req.Keyframe = nil, true
+		c.sendRequest(from, req)
 		return
 	}
 	if !port.Send(from, uint8(network.MsgStateRequest), body) {
@@ -742,15 +708,11 @@ func (c *Corrections) ReceiveSelective(kind uint8, from uint32, body []byte) {
 	switch network.MessageType(kind) {
 	case network.MsgStateManifest:
 		c.selective.source = from
-		c.selective.manifests = append(c.selective.manifests, body)
-		if n := len(c.selective.manifests); n > parameter.SnapshotCorrectionQueue {
-			c.selective.manifests = append(c.selective.manifests[:0], c.selective.manifests[n-parameter.SnapshotCorrectionQueue:]...)
-		}
+		c.selective.manifests = keepNewest(
+			append(c.selective.manifests, body), parameter.SnapshotCorrectionQueue)
 	case network.MsgStateShard:
-		c.selective.shardSets = append(c.selective.shardSets, body)
-		if n := len(c.selective.shardSets); n > parameter.SnapshotCorrectionQueue {
-			c.selective.shardSets = append(c.selective.shardSets[:0], c.selective.shardSets[n-parameter.SnapshotCorrectionQueue:]...)
-		}
+		c.selective.shardSets = keepNewest(
+			append(c.selective.shardSets, body), parameter.SnapshotCorrectionQueue)
 	case network.MsgStateUnserved:
 		if len(c.selective.unserved) < parameter.SnapshotCorrectionQueue {
 			c.selective.unserved = append(c.selective.unserved, body)

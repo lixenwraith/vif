@@ -135,6 +135,13 @@ func (u *Authority) Holder() network.PeerID {
 	return u.holder
 }
 
+// Local is this instance's own identity in the session.
+func (u *Authority) Local() network.PeerID {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.local
+}
+
 // isAuthority reports whether this instance is the one authoring.
 func (u *Authority) isAuthority() bool {
 	u.mu.Lock()
@@ -335,11 +342,9 @@ func (u *Authority) trySucceed() {
 		return
 	}
 	term, lost, local := u.contested, u.lost, u.local
-	u.mu.Unlock()
-
-	u.mu.Lock()
 	chain := slices.Clone(u.chain)
 	u.mu.Unlock()
+
 	if want, ok := network.DesignatedSuccessor(roster, lost, chain); !ok || want != local {
 		return // not this instance's term to take; the record or the window decides
 	}

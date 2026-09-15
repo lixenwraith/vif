@@ -359,14 +359,10 @@ func (c *Corrections) publishRound(force bool) error {
 
 	c.scoreRelevanceLocked(ids, near)
 
-	wants := make(map[uint32]struct{}, len(bodyPeers))
-	for _, id := range bodyPeers {
-		wants[id] = struct{}{}
-	}
 	sent := 0
 	for _, id := range due {
 		p := c.peers[id]
-		if _, whole := wants[id]; whole && len(chunks) > 0 {
+		if slices.Contains(bodyPeers, id) && len(chunks) > 0 {
 			if !c.sendTo(port, id, chunks) {
 				p.refused++
 				continue
@@ -498,12 +494,8 @@ func (c *Corrections) peerIDs(link engine.LinkMeasuringPort) []uint32 {
 	if len(ids) == 0 {
 		return nil
 	}
-	live := make(map[uint32]struct{}, len(ids))
-	for _, id := range ids {
-		live[id] = struct{}{}
-	}
 	for id := range c.peers {
-		if _, ok := live[id]; !ok {
+		if !slices.Contains(ids, id) {
 			delete(c.peers, id)
 		}
 	}
@@ -635,22 +627,24 @@ func (c *Corrections) sizesLocked() linkpace.Sizes {
 	return linkpace.Sizes{}
 }
 
-// recordSizeLocked folds the correction just encoded into the cost model. An
-// exponential average rather than the last value: the two shapes alternate, and a
-// controller repriced from whichever went out last would swing sixfold every
-// keyframe on this world. Caller MUST hold publishMu.
-func (c *Corrections) recordSizeLocked(keyframe bool, bytes int) {
+// blendSize folds one measurement into the cost model. An exponential average
+// rather than the last value: the two shapes alternate, and a controller repriced
+// from whichever went out last would swing sixfold every keyframe on this world.
+func blendSize(cur int64, bytes int) int64 {
 	const smoothing = 0.25
-	blend := func(cur int64) int64 {
-		if cur == 0 {
-			return int64(bytes)
-		}
-		return cur + int64(smoothing*float64(int64(bytes)-cur))
+	if cur == 0 {
+		return int64(bytes)
 	}
+	return cur + int64(smoothing*float64(int64(bytes)-cur))
+}
+
+// recordSizeLocked folds the correction just encoded into the cost model.
+// Caller MUST hold publishMu.
+func (c *Corrections) recordSizeLocked(keyframe bool, bytes int) {
 	if keyframe {
-		c.sizes.Keyframe = blend(c.sizes.Keyframe)
+		c.sizes.Keyframe = blendSize(c.sizes.Keyframe, bytes)
 	} else {
-		c.sizes.Delta = blend(c.sizes.Delta)
+		c.sizes.Delta = blendSize(c.sizes.Delta, bytes)
 	}
 	// A delta is only priceable once one has been produced. Until then the
 	// keyframe stands in for both, which overprices a schedule and therefore
@@ -760,16 +754,26 @@ func (c *Corrections) Receive(body []byte) {
 		return // this instance's own publication, back round a mesh flood with cycles
 	}
 	c.inboxMu.Lock()
-	if len(c.inbox) >= parameter.SnapshotCorrectionQueue {
-		c.inbox = append(c.inbox[:0], c.inbox[1:]...)
-		c.dropped++
-	}
 	c.inbox = append(c.inbox, body)
+	if n := len(c.inbox); n > parameter.SnapshotCorrectionQueue {
+		c.inbox = keepNewest(c.inbox, parameter.SnapshotCorrectionQueue)
+		c.dropped += int64(n - len(c.inbox))
+	}
 	c.inboxMu.Unlock()
 	select {
 	case c.wake <- struct{}{}:
 	default:
 	}
+}
+
+// keepNewest bounds one of the protocol's queues in place, dropping the oldest. A
+// correction supersedes every earlier one and so does a manifest, so an instance
+// that cannot keep up should lose the stale end rather than the fresh.
+func keepNewest[T any](q []T, n int) []T {
+	if len(q) <= n {
+		return q
+	}
+	return append(q[:0], q[len(q)-n:]...)
 }
 
 // StartCorrector runs the guest's apply loop. A tick runs entirely inside one
