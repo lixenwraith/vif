@@ -11,15 +11,26 @@ type FastRand struct {
 // NewFastRand seeds the generator, mixing the seed through the SplitMix64 finalizer first:
 // xorshift64 avalanches poorly on structured seeds, shows up as correlated early draws
 func NewFastRand(seed uint64) *FastRand {
-	seed ^= seed >> 30
-	seed *= 0xbf58476d1ce4e5b9
-	seed ^= seed >> 27
-	seed *= 0x94d049bb133111eb
-	seed ^= seed >> 31
-	if seed == 0 {
-		seed = 1
-	}
-	return &FastRand{state: seed}
+	r := &FastRand{}
+	r.Reseed(seed)
+	return r
+}
+
+// Reseed restarts an existing generator from a seed, for a caller that derives one
+// per use and cannot pay an allocation for each.
+func (r *FastRand) Reseed(seed uint64) {
+	r.SetState(Mix64(seed))
+}
+
+// Mix64 is the SplitMix64 finalizer, exported because a caller deriving a seed
+// from structured values needs the same avalanche before it compares one.
+func Mix64(x uint64) uint64 {
+	x ^= x >> 30
+	x *= 0xbf58476d1ce4e5b9
+	x ^= x >> 27
+	x *= 0x94d049bb133111eb
+	x ^= x >> 31
+	return x
 }
 
 func (r *FastRand) Next() uint64 {

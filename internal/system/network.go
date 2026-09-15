@@ -599,15 +599,20 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (sequence uint64, taken bool) 
 	if !s.barrierActive.Load() {
 		return 0, false
 	}
-	frame, encErr := event.NewWireFrame(ev)
 	s.mu.Lock()
+	s.crossSeq++
+	// Named before it is encoded, so this instance's own copy and every peer's
+	// carry one identity: a payload whose shared outcome needs a value no receiver
+	// can re-derive takes it from the artifact rather than from a stream position
+	// the two consume at different ticks.
+	event.StampCrossing(ev.Payload, s.localSource, s.crossSeq)
+	frame, encErr := event.NewWireFrame(ev)
 	if encErr != "" {
 		s.encodeErr++
 		s.mu.Unlock()
 		event.ReleaseDeferredPayload(ev.Payload)
 		return 0, true
 	}
-	s.crossSeq++
 	frame.Seq = s.crossSeq
 	applyTick := s.productionEpoch + s.delayTicks
 	s.crossings = append(s.crossings, event.ScheduledWireFrame{Frame: frame, ApplyTick: applyTick})

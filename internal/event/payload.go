@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/pkg/audio"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // --- Engine ---
@@ -864,10 +865,41 @@ type LightningDespawnRequestPayload struct {
 
 // --- Combat ---
 
+// CrossingID names the artifact a payload travelled in: the participant that
+// produced it and that source's wire sequence. Zero is not a crossing, which every
+// re-derived event is.
+//
+// It is here rather than on GameEvent because it has to survive the wire: a
+// crossing applies at once on its producer and a playout lead later everywhere
+// else, so any value the receiver draws from a shared stream at apply time lands
+// at a different position than the producer's. Naming the artifact is what lets
+// both derive the same one. See Seed and D-3.
+type CrossingID struct {
+	CrossingSource uint32 `toml:"crossing_source"`
+	CrossingSeq    uint64 `toml:"crossing_seq"`
+}
+
+// StampCrossing is written once, by the producer, before the frame is encoded.
+func (c *CrossingID) StampCrossing(source uint32, seq uint64) {
+	c.CrossingSource, c.CrossingSeq = source, seq
+}
+
+// Seed is this artifact's own random source, salted so one artifact's several
+// draws do not repeat. False for an event that never crossed: every instance
+// produces those at the same tick in the same order, so the stream is the right
+// source there.
+func (c CrossingID) Seed(salt uint64) (uint64, bool) {
+	if c.CrossingSeq == 0 {
+		return 0, false
+	}
+	return vmath.Mix64(uint64(c.CrossingSource)<<32 ^ c.CrossingSeq*0x9E3779B97F4A7C15 ^ salt), true
+}
+
 // CombatAttackDirectRequestPayload contains direct attack information.
 // HasOrigin/HasVelocity carry the emitter's geometry explicitly, so a player-domain
 // emitter (orb, cleaner, bullet) describes itself without naming its entity.
 type CombatAttackDirectRequestPayload struct {
+	CrossingID
 	OwnerEntity  core.Entity                `toml:"owner_entity"`
 	OriginEntity core.Entity                `toml:"origin_entity"`
 	TargetEntity core.Entity                `toml:"target_entity"`
@@ -890,6 +922,7 @@ func (p *CombatAttackDirectRequestPayload) IsDerived() bool { return p.ChainDept
 // An empty HitEntities is the implicit single-hit form: the hit set is exactly
 // {TargetEntity}. Single-cell targets use it to emit no per-event slice.
 type CombatAttackAreaRequestPayload struct {
+	CrossingID
 	HitEntities  []core.Entity              `toml:"hit_entities"`
 	AttackType   component.CombatAttackType `toml:"attack_type"`
 	OwnerEntity  core.Entity                `toml:"owner_entity"`

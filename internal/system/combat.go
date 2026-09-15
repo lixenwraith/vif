@@ -21,6 +21,10 @@ type CombatSystem struct {
 	rngShared *vmath.FastRand
 	rngPlayer *vmath.FastRand
 
+	// rngArtifact is reseeded per crossing rather than carried, so a knockback the
+	// artifact determines costs no allocation and no stream position.
+	rngArtifact vmath.FastRand
+
 	// Telemetry
 	statActive        *atomic.Bool
 	statCount         *atomic.Int64
@@ -296,11 +300,24 @@ func (s *CombatSystem) attackerBit(cursor core.Entity) uint32 {
 	return component.AttackerBit(slot, ok)
 }
 
-// knockbackStream selects the impulse stream by the recipient's domain, so a
-// knockback on a local drain never advances the shared sequence.
-func (s *CombatSystem) knockbackStream(e core.Entity) *vmath.FastRand {
+// knockbackStream selects the impulse source. A knockback on a local drain draws
+// from the player stream, so it never advances the shared sequence. A knockback on
+// a shared target draws from the artifact that asked for it when there is one: a
+// crossing applies at once on its producer and a playout lead later everywhere
+// else, so the shared stream hands the same two values to different artifacts on
+// each instance — a swarm deflected one way here and another way there, until the
+// next correction picks one. Only a re-derived event uses the stream, and every
+// instance produces those at the same tick in the same order.
+//
+// salt separates the several draws one artifact makes: a member hit and the header
+// it displaces are one artifact and two impulses.
+func (s *CombatSystem) knockbackStream(id event.CrossingID, e core.Entity, salt uint64) *vmath.FastRand {
 	if e.Domain() == core.DomainPlayer {
 		return s.rngPlayer
+	}
+	if seed, ok := id.Seed(salt); ok {
+		s.rngArtifact.Reseed(seed)
+		return &s.rngArtifact
 	}
 	return s.rngShared
 }
@@ -415,6 +432,9 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		// The class is per-event: a hit on a shared target is shared simulation, one
 		// on a player target is this instance's alone (D-10).
 		s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+			// The chain is the same artifact seen one step on (D-5), so it carries
+			// the same identity; ChainDepth is what keeps its draws its own.
+			CrossingID:   payload.CrossingID,
 			AttackType:   chainAttack.AttackType,
 			OwnerEntity:  payload.OwnerEntity,
 			OriginEntity: payload.OwnerEntity,
@@ -440,7 +460,9 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		// Kinetic applies to header (composite moves as unit), check header immunity
 		if !damageTargetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
 			if payload.HasVelocity &&
-				s.applyCollision(payload.OriginVelX, payload.OriginVelY, payload.TargetEntity, payload.HitEntity, attack.Collision) {
+				s.applyCollision(payload.CrossingID, uint64(payload.ChainDepth),
+					payload.OriginVelX, payload.OriginVelY,
+					payload.TargetEntity, payload.HitEntity, attack.Collision) {
 				s.statEffectKinetic.Add(1)
 				resolved = true
 			}
@@ -632,6 +654,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 			payload.OriginX, payload.OriginY, payload.HasOrigin)
 		for _, hitEntity := range hits {
 			s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+				CrossingID:   payload.CrossingID,
 				AttackType:   chainAttack.AttackType,
 				OwnerEntity:  payload.OwnerEntity,
 				OriginEntity: payload.OwnerEntity,
@@ -704,11 +727,12 @@ func (s *CombatSystem) applyEnergyDrain(ownerEntity, targetEntity core.Entity, o
 	return true
 }
 
-func (s *CombatSystem) applyCollision(originVelX, originVelY float64, targetEntity, hitEntity core.Entity, collisionProfile *physics.CollisionProfile) bool {
+func (s *CombatSystem) applyCollision(id event.CrossingID, salt uint64, originVelX, originVelY float64, targetEntity, hitEntity core.Entity, collisionProfile *physics.CollisionProfile) bool {
 	// Priority: hitEntity kinetic (ablative member with own kinetic, e.g. snake body)
 	if hitEntity != targetEntity {
 		if hitKinetic, ok := s.world.Components.Kinetic.GetPtr(hitEntity); ok {
-			physics.ApplyCollision(&hitKinetic.Kinetic, originVelX, originVelY, collisionProfile, s.knockbackStream(hitEntity))
+			physics.ApplyCollision(&hitKinetic.Kinetic, originVelX, originVelY, collisionProfile,
+				s.knockbackStream(id, hitEntity, salt^uint64(hitEntity)))
 			s.statKnock.Add(1)
 			return true
 		}
@@ -719,7 +743,7 @@ func (s *CombatSystem) applyCollision(originVelX, originVelY float64, targetEnti
 	if !ok {
 		return false
 	}
-	rng := s.knockbackStream(targetEntity)
+	rng := s.knockbackStream(id, targetEntity, salt^uint64(targetEntity))
 
 	if targetEntity == hitEntity {
 		// Direct hit on simple entity or header itself
@@ -762,7 +786,7 @@ func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequest
 	if !ok {
 		return false
 	}
-	rng := s.knockbackStream(targetEntity)
+	rng := s.knockbackStream(payload.CrossingID, targetEntity, uint64(payload.ChainDepth)^uint64(targetEntity))
 
 	// Determine origin position for radial direction
 	var originX, originY int

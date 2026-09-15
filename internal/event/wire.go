@@ -32,6 +32,26 @@ type Derived interface {
 	IsDerived() bool
 }
 
+// Crossed is implemented by a payload whose shared outcome needs a value no
+// receiver can re-derive from the fields the producer wrote down. See
+// StampCrossing and CrossingID.
+type Crossed interface {
+	StampCrossing(source uint32, seq uint64)
+}
+
+// StampCrossing names the artifact on its payload, before the frame is encoded, so
+// the producer's own copy and every peer's carry the same identity. A crossing
+// applies at once on its producer and a playout lead later everywhere else, so a
+// value drawn from a shared stream at apply time is assigned to a different
+// artifact on each instance — a knockback in another direction, not a rounding
+// difference. D-3 asks the artifact to determine the shared outcome; this is the
+// part of it a producer cannot write down.
+func StampCrossing(payload any, source uint32, seq uint64) {
+	if c, ok := payload.(Crossed); ok {
+		c.StampCrossing(source, seq)
+	}
+}
+
 // OnWire reports whether a dispatched event must reach the other participants.
 // An event a peer produced is never echoed: it already reached everyone.
 // By value: Push must stay allocation-free, and a pointer here escapes it.
