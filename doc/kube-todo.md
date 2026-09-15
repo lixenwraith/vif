@@ -7,7 +7,7 @@ design and operating detail lives in:
 - [the fleet architecture and verification matrix](kubernetes-fleet.md); and
 - [the Linux node artifacts and batch procedures](../deploy/guest/README.md).
 
-Status on 2026-09-14: Batches A-F are deployed and passed their live gates, and
+Status on 2026-09-15: Batches A-F are deployed and passed their live gates, and
 the site publishes the two API routes. What those gates established is recorded
 in the fleet plan and the deployment procedure linked above; this file holds only
 what is left.
@@ -16,7 +16,8 @@ Two things a reader needs before continuing. `deploy/logwisp/REVISION` is
 `6046f5c56b583ce3800f69c639874048b3dd8b69`. The node runs the allocator that the
 Batch F rollback restored, which is one update behind the repository, so
 `./deploy/guest/update-vif-allocator.sh` is due before anything else is measured
-on it.
+on it; that update carries the fix for a `HEAD` on `/vif/api/logs` stalling the
+next stream.
 
 ## 1. Invariants and batch discipline
 
@@ -44,25 +45,136 @@ These constraints apply to every remaining batch:
   batch-specific gate.
 - Keep the previous allocator binary/configuration available until the next live
   gate passes.
+- `id` is a session's public identifier. `page_url` and `join_target` are opaque
+  strings the allocator produces; nothing else may build either from a port,
+  because H8 will key both on the identifier instead.
 
 The node procedure must remain runnable from a bare systemd-based Arch Linux or
 Ubuntu installation. Distribution branches are allowed only where package or
 service defaults differ.
 
-## 2. Remaining phases and their goals
+## 2. Remaining batches, in order
 
 Where the pivot ends: a player's browser reads its own session's log lines from
 the website over one same-origin route, while nothing in that path can read a
 Kubernetes pod log, hold a cluster credential, or end a game by failing.
 
-| Batch | Goal | State |
-|---|---|---|
-| H15 — public edge | A browser reads its own session's lines over one same-origin `EventSource`, and the probe endpoints stay on the node. | Routes published and verified live 2026-09-14; the site's own session page remains. |
-| G — final reconciliation | Leave a deployment a stranger can install from bare Arch or Ubuntu, described only as deployed, with limits justified by measurement instead of single-guest history. | Next. |
+H15 published and verified the two API routes on 2026-09-14. Its remainder is the
+site's own session page, a separate prompt against the Hugo repository, which owes
+the same properties `deploy/website/vif-log-viewer.html` already demonstrates:
+same-origin `EventSource`, selection on `fields.session_id`, bounded retained
+rows, render rate and reconnect backoff, duplicate tolerance, and degradation
+independent of allocation. Everything else follows here in the order it should be
+done. Each batch finishes with the common check in §3 as well as its own gate.
 
-§5 holds the remaining non-logging gates. H3's sizing measurement runs inside G;
-H1, H11 and H12 bound what a stranger can do to an open game port, and gate
-public exposure rather than this pivot.
+### Batch H1 — handshake abuse bounds
+
+Bound what a stranger can do in the window before a session starts, now that the
+game port is publicly reachable. Two defects sit in that window. The tick-zero
+start gate in `internal/app/session.go` is given no deadline, so a peer that
+completes the lobby handshake and then goes silent holds a fresh session until
+the Job's four-hour `activeDeadlineSeconds`. And `waitForStartup` answers a peer
+that drops during that gate with `errLobbyAbandoned`, which `internal/app/serve.go`
+turns into a clean end of the whole session — so dialling and dropping ends a
+match other guests were about to start.
+
+1. Give the tick-zero gate a deadline of its own, sized above a world install
+   rather than taken from the first-guest window.
+2. Make an abandoned lobby return to waiting under the first-join clock already
+   running, instead of ending the session. A stranger can then neither shorten
+   that window nor end a match; only the window ends a session nobody joined.
+3. One test per rule, one `test/scenario.sh` case for the dial-and-drop, and the
+   handshake fuzz target the acceptance in `kubernetes-fleet.md` already asks for
+   — malformed, oversized, replayed and half-open — which `internal/network` has
+   no equivalent of today.
+
+Gate: a peer that completes the handshake and sends nothing is dropped at the
+bound and the session returns to `waiting` with its first-join deadline intact; a
+peer that dials and drops leaves the session allocatable and a real client joins
+it afterwards.
+
+### Batch H11 — source-address preservation
+
+`network.JoinerReport.Remote` carries the accepted socket's address, but only
+`converge.Reach.NoteDeclared` reads it — to complete an unspecified host in a
+declared listen address — so no record names it. Until one does, nothing proves
+the Service's `externalTrafficPolicy: Local` reaches the pod with the player's
+address rather than the node's, and the per-address admission limiter may be one
+budget for the whole fleet.
+
+1. Emit a record at the coordinator naming the source address, the assigned
+   participant and the session. Not by extending `mid-run participant admitted`
+   in `internal/app/host.go`: that one is public by design, and this one must not
+   be.
+2. Keep it out of the public stream by the mechanism already there: LogWisp's
+   exclude filter, extended beside its `TRACE` pattern to the new record's `sub`.
+3. Live-gate both halves at once, since one filter is all that separates them.
+
+Gate: a join from off the node writes a record naming that address into
+`/var/log/vif-fleet/<id>.jsonl`, and the same record is absent from
+`http://127.0.0.1:8081/stream`, from `/vif/api/logs`, and from the published
+route. An address that turns out to be the node's is the finding, not a failure:
+record it and rekey the limiter.
+
+### Batch H12 — occupied lifecycle matrix
+
+`test/scenario.sh` proves the lifetime policy in one process. These four prove it
+on the fleet, where a Job, a Service and a kubelet grace period are also involved:
+
+1. Empty-grace expiry — join, quit, and watch the phase go vacant, the Job
+   complete at the grace, and the session leave `GET /vif/api/sessions`.
+2. Rejoin near the deadline — quit, rejoin about 75 seconds into the 90-second
+   grace, and return to `occupied` in the same slot.
+3. SIGTERM drain while joined — delete the Job with a guest connected; the
+   process stops admitting, keeps simulating, and exits inside `-drain 20s`,
+   under the pod's 30-second grace.
+4. Capacity — render one session with `PLAYERS=1`; the second dial is refused at
+   the handshake and `/health` reports `ready=false` while the first plays.
+
+Gate: all four observed on the node, with the refusal text and the exit reason
+quoted from the session's own JSONL.
+
+### Batch G — reconcile and hand off
+
+Leave a deployment a stranger can install from bare Arch or Ubuntu, described
+only as deployed, with limits justified by measurement instead of single-guest
+history.
+
+1. Reduce `doc/kube_docker_deploy.md`, `doc/kubernetes-fleet.md`,
+   `deploy/README.md`, and `deploy/guest/README.md` to the deployed design.
+   Replace batch-by-batch narration with measured outcomes, and delete the
+   superseded console/sidecar/stdout-public-path prose that remains. Replace the
+   real host names left in `tool/vif-allocator/README.md` with placeholders.
+2. Rehearse the complete deployment from bare Arch Linux and bare Ubuntu. Record
+   package/service differences and fix every command that assumes this node.
+3. Run the ten-session/four-player measurement (H3). Record CPU, memory, tmpfs
+   usage, log rate, tick slips, rotations, LogWisp drops/replay, and browser
+   reconnect behavior; revise the provisional 256 MiB and 8 MB caps only from it.
+4. Reboot with no session and repeat node readiness, mount, timer, Restricted
+   labels, allocator probes, Bound PVC, empty directory, and §3.
+
+Gate: both rehearsals reach a first session without an undocumented step, and
+every resource limit in `deploy/k3s/30-session.yaml` cites a number from step 3.
+
+### Batch H16 — automated image delivery
+
+Reproduce the manual import boundary in CI without giving anything inbound
+cluster credentials: CI builds and publishes the session image, the node pulls or
+imports it, and `update-vif-image.sh` stays the only thing that points the
+allocator at a new tag.
+
+Gate: a tagged commit produces an image the node installs through the existing
+updater, with no credential held outside the node.
+
+### Batch H8 — path-routed sessions
+
+Design only until the batches above are done. Today a session is reached by its
+own NodePort and the allocator builds `page_url` from that port; the intended end
+is one public endpoint where the opaque session identifier in the path selects the
+container. Evaluate the allocator proxying game traffic, an ingress, and the
+built-and-tested single-port `-name` alternative in `deploy/frontdoor/` against
+measurement rather than preference, and record the decision as an ADR — whose
+home in `doc/` this batch also has to choose, because none exists yet.
 
 ## 3. Common end-of-batch session check
 
@@ -185,38 +297,7 @@ sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
 Expected: all four units active, cleanup last result successful as `vif-fleet`,
 Restricted labels intact, and PV/PVC Bound.
 
-## 4. Batch G — reconcile and hand off
-
-After Batch F passes live:
-
-1. Reduce `doc/kube_docker_deploy.md`, `doc/kubernetes-fleet.md`,
-   `deploy/README.md`, and `deploy/guest/README.md` to the deployed design.
-   Replace batch-by-batch narration with measured outcomes, and delete the
-   superseded console/sidecar/stdout-public-path prose that remains.
-2. Rehearse the complete deployment from bare Arch Linux and bare Ubuntu. Record
-   package/service differences and fix every command that assumes this node.
-3. Run the ten-session/four-player measurement (H3). Record CPU, memory, tmpfs
-   usage, log rate, tick slips, rotations, LogWisp drops/replay, and browser
-   reconnect behavior; revise the provisional 256 MiB and 8 MB caps only from it.
-4. Reboot with no session and repeat node readiness, mount, timer, Restricted
-   labels, allocator probes, Bound PVC, empty directory, and §3.
-5. Produce the separate website implementation prompt (H15): same-origin
-   `EventSource`, `fields.session_id`, bounded retained rows/render rate/reconnect
-   backoff, duplicate tolerance, and degradation independent of allocation. Gate
-   `deploy/website/vif-log-viewer.html`, the bounded browser reference, there.
-
-## 5. Remaining non-logging fleet gates
-
-| Item | Required before | Completion evidence |
-|---|---|---|
-| Startup-handshake abuse bounds (H1) | broad public exposure | Silent/half-open first peers time out and an abandoned lobby returns to waiting. |
-| Source-address preservation (H11) | per-address admission claims | An operator-only admitted-participant record names the off-box source; it never enters public SSE. |
-| Occupied lifecycle matrix (H12) | website launch | Empty expiry, near-deadline rejoin, SIGTERM drain, and capacity gates pass. |
-| Ten-session/full-roster sizing (H3) | final resource limits | One-hour measurements justify CPU, memory, tmpfs, rotation, and stream bounds. |
-| Automated image delivery (H16) | production release automation | CI reproduces the manual import/update boundary without inbound cluster credentials. |
-| Website/nginx integration (H15) | website launch | Create/list and log routes pass (done 2026-09-14); the session page and raw game join remain. |
-
-## 6. Final acceptance and rollback boundary
+## 4. Final acceptance and rollback boundary
 
 The logging pivot is complete only when:
 
