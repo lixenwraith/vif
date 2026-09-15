@@ -78,8 +78,8 @@ Two strings, and keeping them apart is the whole of the design:
 
 | String | What it is | Who reads it |
 |---|---|---|
-| `https://lixen.com/projects/vi-fighter/session/31703/` | The shareable link. A Hugo page over TLS, served by the host's nginx from the project's document root. | A browser. |
-| `lixen.com:31703` | The join target. Raw framed TCP straight to a forwarded port. | `vif -join`. |
+| `https://<site-host>/projects/vi-fighter/session/31703/` | The shareable link. A Hugo page over TLS, served by the host's nginx from the project's document root. | A browser. |
+| `<site-host>:31703` | The join target. Raw framed TCP straight to a forwarded port. | `vif -join`. |
 
 The page will be what a player clicks and forwards to a friend; its contract is to
 show the join command, the roster the allocator read from `/health`, and how long
@@ -114,7 +114,7 @@ than claiming the acceptance run proved it.
 
 The consequence, and it is deliberate: **the deployed session sets no `-name`.** A
 pod started with one refuses every dial that does not name it, and a player dialing
-`lixen.com:31703` names nothing. The name mechanism exists, is tested, and belongs to
+`<site-host>:31703` names nothing. The name mechanism exists, is tested, and belongs to
 the single-port alternative in §11, which is not the path taken here.
 
 ## 3. FreeBSD: forward the range to the guest
@@ -1006,7 +1006,7 @@ Hugo must emit the existing project page plus one `session.html` template served
 the nginx location in §2. The project page calls the GET and POST endpoints and
 shows the bounded aggregate log panel. The session template reads port `31703` from
 its own `/session/31703/` URL, queries the list endpoint for that row, and keeps the
-two user-facing strings distinct: the HTTPS page URL and the raw `lixen.com:31703`
+two user-facing strings distinct: the HTTPS page URL and the raw `<site-host>:31703`
 join target. Neither template speaks to Kubernetes or to a pod directly.
 
 ### 10.5 Publishing the two API routes (H15)

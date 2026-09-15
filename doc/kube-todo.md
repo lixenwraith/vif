@@ -7,17 +7,13 @@ design and operating detail lives in:
 - [the fleet architecture and verification matrix](kubernetes-fleet.md); and
 - [the Linux node artifacts and batch procedures](../deploy/guest/README.md).
 
-Status on 2026-09-15: Batches A-F are deployed and passed their live gates, and
-the site publishes the two API routes. What those gates established is recorded
-in the fleet plan and the deployment procedure linked above; this file holds only
-what is left.
+Status on 2026-09-15: Batches A-F, H1 and H11 are deployed and passed their live
+gates, and the site publishes the two API routes and its own fleet page. What
+those gates established is recorded in the fleet plan and the deployment
+procedure linked above; this file holds only what is left.
 
-Two things a reader needs before continuing. `deploy/logwisp/REVISION` is
-`6046f5c56b583ce3800f69c639874048b3dd8b69`. The node runs the allocator that the
-Batch F rollback restored, which is one update behind the repository, so
-`./deploy/guest/update-vif-allocator.sh` is due before anything else is measured
-on it; that update carries the fix for a `HEAD` on `/vif/api/logs` stalling the
-next stream.
+One thing a reader needs before continuing: `deploy/logwisp/REVISION` is
+`6046f5c56b583ce3800f69c639874048b3dd8b69`.
 
 ## 1. Invariants and batch discipline
 
@@ -59,15 +55,12 @@ Where the pivot ends: a player's browser reads its own session's log lines from
 the website over one same-origin route, while nothing in that path can read a
 Kubernetes pod log, hold a cluster credential, or end a game by failing.
 
-H15 published and verified the two API routes on 2026-09-14. Its remainder is the
-site's own session page, a separate prompt against the Hugo repository, which owes
-the same properties `deploy/website/vif-log-viewer.html` already demonstrates:
-same-origin `EventSource`, selection on `fields.session_id`, bounded retained
-rows, render rate and reconnect backoff, duplicate tolerance, and degradation
-independent of allocation. Its session controls should read `limits` from
-`GET /vif/api/sessions` rather than hard-coding a roster or level the allocator
-would refuse. Everything else follows here in the order it should be done. Each
-batch finishes with the common check in §3 as well as its own gate.
+H15 is done: the two API routes were verified live on 2026-09-14 and the site's
+fleet page — a separate repository — followed on 2026-09-15, with the same
+properties `deploy/website/vif-log-viewer.html` demonstrates and session controls
+built from the `limits` the allocator advertises. What remains follows here in
+the order it should be done. Each batch finishes with the common check in §3 as
+well as its own gate.
 
 ### Batch H1 — handshake abuse bounds
 
@@ -95,33 +88,33 @@ session allocatable, and a real client joins it afterwards.
 
 ### Batch H11 — source-address preservation
 
-Built, not yet gated live. The coordinator emits `peer admitted` under its own
+Done, gated live on 2026-09-15. The coordinator emits `peer admitted` under its own
 `admit` sub, naming the accepted socket's address and what the peer declared;
 LogWisp excludes that sub from the published stream beside its `TRACE` pattern.
 One filter is all that separates the two, which is why the gate proves both
 halves at once.
 
-Gate: a join from off the node writes a `"sub":"admit"` record naming that
-address into `/var/log/vif-fleet/<id>.jsonl`, and the same record is absent from
-`http://127.0.0.1:8081/stream`, from `/vif/api/logs`, and from the published
-route. An address that turns out to be the node's or the gateway's is the
-finding, not a failure: record it and rekey the admission limiter, which until
-then may be one budget for the whole fleet.
+What the gate found: an off-box join named the client's own public address, so
+`externalTrafficPolicy: Local` plus the `pf rdr` hop does reach the pod with the
+player's address and the per-address admission limiter is per player rather than
+one budget for the fleet. The same record was absent from the loopback stream
+(212 records carried, none) and from the published route (111 carried, none).
 
 ### Batch H12 — occupied lifecycle matrix
 
-`test/scenario.sh` proves the lifetime policy in one process. These four prove it
-on the fleet, where a Job, a Service and a kubelet grace period are also involved:
+Written and rehearsed off the fleet, not yet run on it. `test/scenario.sh` proves
+the lifetime policy inside one process; these four prove it where a Job, a
+Service, a kubelet grace period and an off-box client are also involved:
+the empty grace ending a session nobody returned to, a guest returning inside
+that grace into the slot its departure released, a termination draining the match
+rather than cutting it, and a full session refusing the next dial at the
+handshake.
 
-1. Empty-grace expiry — join, quit, and watch the phase go vacant, the Job
-   complete at the grace, and the session leave `GET /vif/api/sessions`.
-2. Rejoin near the deadline — quit, rejoin about 75 seconds into the 90-second
-   grace, and return to `occupied` in the same slot.
-3. SIGTERM drain while joined — delete the Job with a guest connected; the
-   process stops admitting, keeps simulating, and exits inside `-drain 20s`,
-   under the pod's 30-second grace.
-4. Capacity — render one session with `PLAYERS=1`; the second dial is refused at
-   the handshake and `/health` reports `ready=false` while the first plays.
+The procedure is
+[Batch H12 in the node README](../deploy/guest/README.md#batch-h12-occupied-lifecycle-gates),
+which also carries the per-session cost measurement Batch G's sizing needs. Read
+it before starting: each gate allocates its own session and needs a development
+terminal ready before the `POST` returns.
 
 Gate: all four observed on the node, with the refusal text and the exit reason
 quoted from the session's own JSONL.
