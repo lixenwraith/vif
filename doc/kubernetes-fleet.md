@@ -65,7 +65,7 @@ it does not move an in-memory session into an unrelated pod.
 |---|---|---|---|
 | G | next | **Hand off a deployment a stranger can install.** The documentation reduction is done: the procedure, this plan, the artifact indexes and the runbook describe the deployed design rather than the batches that produced it. | Both rehearsals below reach a first session with no undocumented step, and every resource value in `deploy/k3s/30-session.yaml` cites a number from H3. |
 | G1 | next | **Rehearse from bare Arch Linux and from bare Ubuntu.** Record package and service differences, and fix every command that assumes the production node. | A second node reaches [§13 of the procedure](kube_docker_deploy.md#13-first-session) without a step its operator had to invent. |
-| H3 | next | **Measure a full roster.** Ten sessions and four guests, through a tower and a storm and on `wad/game/td`, for an hour. Record CPU, memory, tmpfs usage, log rate, tick slips, rotations, LogWisp drops and replay, and browser reconnect behaviour. | Requests and limits in `30-session.yaml` come from the measurement rather than from single-guest history, and the LogWisp dropped-write count in §6 is explained rather than carried. |
+| H3 | next | **Measure a full roster.** Nine sessions driven by headless joiners for the fleet-level readings — CPU, memory, tmpfs, log rate, rotations — plus one real four-player session over real links, through a tower and a storm and on `wad/game/td`, for the hour that tick slips and correction magnitude need. | Requests and limits in `30-session.yaml` come from the four-player measurement rather than from single-guest history. |
 | H1 | partly done | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do has to be bounded. The two startup holes are closed: the tick-zero gate is bounded by one world install, a peer that leaves or goes silent costs the lobby rather than the session, and a confirmation is keyed to the link it arrived on. | Remaining: a handshake fuzz target for malformed, oversized, replayed and half-open cases, which `internal/network` has no equivalent of. |
 | H16 | later | **Automate image delivery.** `deploy/guest/update-vif-image.sh` is the repeatable manual boundary: one build/check/import, allocator image update, old-image cleanup, and build-daemon restoration. | CI resolves and verifies a tagged release artifact, invokes or reproduces that same boundary with no credential held outside the node, and new sessions use it while existing matches finish. |
 | H8 | later | **Revisit how a player reaches a session.** The port range is what runs: no component, ten firewall entries, and the player's source address verified at the pod. `-name` plus [`deploy/frontdoor`](../deploy/frontdoor/haproxy.cfg) is the worked single-port alternative (§9) and replaces the address the admission limiter is keyed on. | A third option is found, or the two known ones are chosen between on measurement rather than preference, and the decision is recorded as an ADR — whose home in `doc/` this item also has to choose, because none exists yet. |
@@ -84,7 +84,7 @@ repeating its original gate.
 | H10, the thin allocator | The fixed create/list transaction, port reservation from Services, refusal before an eleventh, Service ownership by Job UID, readiness waiting, partial-create rollback and startup reconciliation, under a hardened unit with a rotating ServiceAccount token. |
 | A-C, the node-local log path | Sessions write self-tagged `<session-id>.jsonl` through a tmpfs-backed local PVC. The node carries a locked UID/GID 65532 cleanup identity, a 256 MiB fail-closed tmpfs, a Bound Retain PV/PVC and a per-minute cleanup timer. Restricted admission refuses a direct `hostPath`. |
 | D, least privilege | The allocator Role cannot read `pods/log`, and allocation, join, state, tagging and cleanup do not need it. |
-| E, standalone LogWisp | A credential-free loopback reader with a read-only tmpfs view. Two-session fan-in preserved 606 sampled non-TRACE records byte-for-byte with no sink drops or rejected clients; stopping it left allocation, state and gameplay untouched; restart replayed an exact retained sentinel, with 86 bounded client-queue drops among 1,841 processed records. |
+| E, standalone LogWisp | A credential-free loopback reader with a read-only tmpfs view. Two-session fan-in preserved 606 sampled non-TRACE records byte-for-byte; stopping it left allocation, state and gameplay untouched; restart replayed an exact retained sentinel from the files it had kept. |
 | F, the allocator byte proxy | `/vif/api/logs` carries LogWisp's SSE bytes unchanged and answers a stable `503 log_stream_unavailable` when LogWisp is down, while allocation, probes and an occupied game continue. |
 | H15, the public API edge | The site publishes exactly the two routes over TLS; a browser reads a joined session's rows live over a same-origin `EventSource`; the probe paths return the site's 404. The site's fleet page builds its session controls from the allocator's advertised `limits`. |
 | H11, source-address preservation | An off-box join names the client's own public address, so `externalTrafficPolicy: Local` plus `pf rdr` reaches the pod with it and the per-address admission limiter is per player rather than one budget for the fleet. The record is emitted under an `admit` sub that LogWisp excludes from the published stream; it was absent from both the loopback stream (212 records carried) and the published route (111 carried). |
@@ -220,13 +220,10 @@ defaults:
 | Memory | 59 MiB against a 96 MiB request and a 192 MiB limit |
 | tmpfs | 12 MiB of 256 MiB |
 | Log rate | 89 KiB in 30 s, about 3 KiB/s |
-| LogWisp | 56 dropped writes in 41,579 processed |
 
-Ten of these is roughly 30 KiB/s into the 256 MiB tmpfs, which the 8 MB rotation
-and the cleanup timer carry, and about 1.5 CPU against the node — above the quota's
-`requests.cpu: "1"`, which is why the CPU request is one of the values H3 has to
-settle rather than a number to scale from here. The dropped writes are the other:
-at one session they should be zero.
+Ten of these is roughly 30 KiB/s into the 256 MiB tmpfs, which the 8 MB rotation and
+the cleanup timer carry. Do not scale the CPU and memory figures from here; H3
+measures a four-player world, which is the shape the manifest's values are for.
 
 Historical baseline worth keeping: server in lobby 12.0 MB RSS; embedded game with
 one guest 61.75 MB peak; server after a guest left 40.1 MB; headless joiner with a

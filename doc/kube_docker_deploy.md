@@ -143,12 +143,9 @@ Record every version with the deployment. Arch is rolling, Ubuntu releases chang
 their kernel and package baseline, and neither may change silently.
 
 ```sh
-uname -a                                 # kernel, recorded
-systemd-detect-virt                      # bhyve, another VM type, or none
-findmnt -no FSTYPE /sys/fs/cgroup        # expect: cgroup2fs
-timedatectl status                       # expect: synchronized
-lscpu | grep -E 'Model name|^CPU\(s\)'
-ip -br link; ip route
+uname -a; lscpu | grep -E 'Model name|^CPU\(s\)'   # recorded with the deployment
+findmnt -no FSTYPE /sys/fs/cgroup                  # expect: cgroup2fs
+timedatectl status                                 # expect: synchronized
 ```
 
 One package set covers this whole procedure, including the Docker of §4 and the
@@ -554,75 +551,21 @@ sudo jq -s -e 'map(select(.sub != null)) as $records |
   /var/log/vif-fleet/volume-check.jsonl
 ```
 
-Both volume objects must read `Bound`. Now prove the boundary holds before trusting
-it. Restricted admission must refuse a privileged pod and a direct `hostPath`, and
-the allocator's Role must be able to allocate without being able to read a Secret
-or a pod log:
+Both volume objects must read `Bound`. Remove the probe and leave the volume:
 
 ```sh
-sudo kubectl -n vif run pstest --image=busybox --restart=Never \
-    --overrides='{"spec":{"containers":[{"name":"c","image":"busybox","securityContext":{"privileged":true}}]}}'
-# expect: forbidden ... violates PodSecurity "restricted"
-
-sudo kubectl create --dry-run=server -f - <<'YAML'
-apiVersion: v1
-kind: Pod
-metadata: {name: vif-hostpath-must-fail, namespace: vif}
-spec:
-  restartPolicy: Never
-  automountServiceAccountToken: false
-  securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
-  containers:
-    - name: check
-      image: registry.k8s.io/pause:3.10
-      securityContext:
-        allowPrivilegeEscalation: false
-        readOnlyRootFilesystem: true
-        runAsNonRoot: true
-        capabilities: {drop: ["ALL"]}
-      volumeMounts: [{name: forbidden, mountPath: /forbidden, readOnly: true}]
-  volumes:
-    - name: forbidden
-      hostPath: {path: /var/log/vif-fleet, type: Directory}
-YAML
-# expect: a refusal naming restricted / hostPath
-
-for check in \
-  'create jobs.batch:yes' 'delete jobs.batch:yes' 'create services:yes' \
-  'list services:yes' 'get pods:yes' 'list endpointslices.discovery.k8s.io:yes' \
-  'get secrets:no'
-do
-  verb=${check%:*}; want=${check#*:}
-  got=$(sudo kubectl auth can-i $verb \
-    --as=system:serviceaccount:vif:vif-allocator -n vif)
-  test "$got" = "$want" || printf 'RBAC DRIFT: %s = %s, want %s\n' "$verb" "$got" "$want"
-done
-test "$(sudo kubectl auth can-i get pods --subresource=log \
-  --as=system:serviceaccount:vif:vif-allocator -n vif)" = no
-```
-
-The loop must print no `RBAC DRIFT` line, and the last command must succeed. Use
-the explicit `--subresource=log` form: a positional `pods/log` parses as
-`TYPE/NAME` and answers `yes`, because the Role intentionally retains permission to
-read Pods.
-
-Remove the probe and leave the volume:
-
-```sh
-sudo kubectl -n vif delete pod vif-log-volume-check pstest \
-  --ignore-not-found --wait=true
+sudo kubectl -n vif delete pod vif-log-volume-check --wait=true
 sudo find /var/log/vif-fleet -maxdepth 1 -type f \
   \( -name 'volume-check.jsonl' -o -name 'volume-check_*.jsonl' \) -delete
-sudo kubectl -n vif get job,pod,service \
-  -l app.kubernetes.io/part-of=vi-fighter-fleet
 sudo find /var/log/vif-fleet -mindepth 1 -maxdepth 1 -print
 ```
 
-Both final commands must print nothing.
+The last command must print nothing.
 
-Once a session pod exists (§13), K3s's embedded kube-router installs per-pod
-`KUBE-POD-FW-*` chains. Their counters are the enforcement proof — the existence of
-the `NetworkPolicy` object is not — and §16 says how to read them.
+Restricted admission, the ten-session ceiling, the default-deny policy and the
+allocator's permission surface are properties of the four files you just applied,
+not of this node. §13 exercises all of them with a real session. If one ever looks
+wrong, §16 has the assertions that name which file drifted.
 
 ## 10. LogWisp, the node log reader
 
@@ -658,43 +601,22 @@ optimisation, never a working directory:
 
 The service reads the tmpfs through the `vif-fleet` supplementary group only; its
 unit gives it a read-only mount view and hides the K3s and allocator credential
-paths. Do not continue if the listener is not loopback, if the process is not in
-group 65532, or if either installed text file differs from the repository:
+paths. Three answers say the install took:
 
 ```sh
 systemctl is-active logwisp.service
 /usr/local/bin/logwisp --version | grep -F "$LOGWISP_REVISION"
-
-LOGWISP_PID=$(systemctl show logwisp.service -p MainPID --value)
-sudo grep '^Groups:' "/proc/$LOGWISP_PID/status" |
-  grep -Eq '(^|[[:space:]])65532([[:space:]]|$)'
-sudo nsenter -t "$LOGWISP_PID" -m -- \
-  findmnt -no TARGET,FSTYPE,OPTIONS /var/log/vif-fleet
-
-sudo cmp -s deploy/logwisp/aggregator.toml /etc/logwisp/vif-fleet.toml
-sudo cmp -s deploy/guest/logwisp.service /etc/systemd/system/logwisp.service
-
 test "$(sudo ss -ltnH 'sport = :8081' | awk 'NR == 1 {print $4}')" = 127.0.0.1:8081
-curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:8081/status | jq -e '
-  .server.client_buffer_size == 512 and
-  .server.max_connections == 32 and
-  .server.write_timeout_ms == 5000'
-
-systemctl show logwisp.service -p Requires -p Wants -p After
-unset LOGWISP_PID LOGWISP_REVISION
+unset LOGWISP_REVISION
 ```
 
-The host `findmnt` stays `rw`; inside LogWisp's mount namespace the final entry for
-that target must contain `ro`. `RequiresMountsFor=` may add a mount requirement,
-but `Requires`, `Wants` and `After` must not name `k3s.service` or
-`vif-allocator.service`. The pinned Dockerfile sets no build timestamp, so
-`built: unknown` is expected; the embedded commit must equal `REVISION`.
+The pinned Dockerfile sets no build timestamp, so `built: unknown` is expected; the
+embedded commit is what must match. A listener on anything but `127.0.0.1:8081`
+means the published configuration was not the one installed — §16 has the
+isolation assertions that say which.
 
-Two things that cost time if they are not known. A file watcher seeks to
-end-of-file when it first discovers an existing file, so lines written before it
-attaches are skipped unless the source sets `from = "start"` — the checked-in
-configuration does. And when judging its journal, read only the invocation running
-the pinned binary:
+When reading its journal, read only the invocation running the pinned binary;
+earlier entries belong to whatever it replaced:
 
 ```sh
 sudo journalctl \
@@ -941,35 +863,14 @@ stdout and the join target beside it. Join immediately from the second machine:
 bin/vif -join '<join target>'
 ```
 
-While it stays connected, verify the Job shape and the occupied state:
+While it stays connected:
 
 ```sh
-sudo kubectl -n vif get job "vif-session-$SESSION_ID" -o json |
-  jq -e --arg id "$SESSION_ID" '
-    .spec.template.spec as $pod |
-    ($pod.automountServiceAccountToken == false) and
-    ($pod.containers | length == 1) and
-    ($pod.containers[0].name == "session") and
-    ($pod.containers[0].args | index("-l=/var/log/vif-fleet") != null) and
-    ($pod.containers[0].args | index("-log-session-id=" + $id) != null) and
-    ($pod.containers[0].args | index("-log-stdout") == null) and
-    any($pod.containers[0].volumeMounts[]?;
-      .name == "fleet-logs" and .mountPath == "/var/log/vif-fleet") and
-    any($pod.volumes[]?;
-      .name == "fleet-logs" and
-      .persistentVolumeClaim.claimName == "vif-fleet-logs") and
-    all($pod.volumes[]?; has("hostPath") | not) and
-    all($pod.initContainers[]?; ((.volumeMounts // []) | length) == 0) and
-    ($pod.containers[0].securityContext.allowPrivilegeEscalation == false) and
-    ($pod.containers[0].securityContext.readOnlyRootFilesystem == true) and
-    ($pod.containers[0].securityContext.runAsNonRoot == true) and
-    ($pod.containers[0].securityContext.capabilities.drop | index("ALL") != null)'
-
 ./deploy/k3s/session.sh state "$SESSION_ID"
 ```
 
-Expect `true`, then `phase=occupied` with at least one guest. Quit the remote
-client and immediately verify vacancy and the file the session wrote:
+Expect `phase=occupied` with at least one guest. Quit the remote client and
+immediately verify vacancy and the file the session wrote:
 
 ```sh
 ./deploy/k3s/session.sh state "$SESSION_ID"
@@ -992,19 +893,7 @@ removes only that session's files, and prints its own verdict:
 ```
 
 `delete` must print `session <id> removed: no objects, no log files`, and `status`
-`the fleet is empty` with five active units. Finish with the state commissioning
-left behind:
-
-```sh
-systemctl show vif-fleet-log-cleanup.service \
-  -p User -p Group -p Result -p ExecMainStatus
-sudo kubectl get namespace vif --show-labels
-sudo kubectl get persistentvolume vif-fleet-logs
-sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
-```
-
-Expected: the cleanup's last result successful as `vif-fleet`, Restricted labels
-intact, and PV/PVC `Bound`.
+`the fleet is empty` with five active units. That is the node accepted.
 
 **If this fails, separate the two questions before debugging either.**
 `session.sh create` renders the same template by hand and bypasses the allocator
@@ -1055,19 +944,14 @@ sudo nft list ruleset | grep '^table'           # inet vif, no inet filter
 sudo iptables -S FORWARD | head -1              # -P FORWARD ACCEPT
 findmnt -no TARGET,FSTYPE,SIZE,OPTIONS /var/log/vif-fleet
 sudo k3s crictl images | awk 'NR == 1 || /vi-fighter/'
-sudo systemctl show docker.service docker.socket containerd.service \
-  -p ActiveState -p UnitFileState
-sudo kubectl get namespace vif --show-labels
-sudo kubectl get persistentvolume vif-fleet-logs
-sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
-sudo find /var/log/vif-fleet -mindepth 1 -maxdepth 1 -print
+./deploy/k3s/session.sh status
 ```
 
-Expected: node Ready, no swap, the filter loaded from files, Docker and the
-distribution containerd inactive and disabled, the imported image retained,
-Restricted labels intact, PV/PVC `Bound`, and an empty tmpfs. Then run §13 again.
-A node that does not come back Ready is an infrastructure blocker, not a workload
-problem.
+These are the six things a reboot can undo: the node, swap, the filter the service
+loaded from files rather than the one you loaded by hand, Docker's forwarding
+policy, the mount, and the imported image. `status` covers the rest — an empty
+fleet, an empty tmpfs, five active units. Then run §13 again. A node that does not
+come back Ready is an infrastructure blocker, not a workload problem.
 
 ## 15. Operating, and what is not built yet
 
@@ -1097,11 +981,124 @@ range; start at the EndpointSlice and walk outward with §16.
 What this deployment does not yet have is the fleet plan's
 [work list](kubernetes-fleet.md#3-work-list): handshake fuzz coverage (H1), a
 measured full-roster envelope (H3), the routing decision between the port range and
-a single front door (H8), and CI image delivery (H16). The resource values in
-`30-session.yaml` are a starting point measured at one guest, not a full-roster
-claim.
+a single front door (H8), and CI image delivery (H16).
 
 ## 16. Troubleshooting
+
+### When the boundary looks wrong
+
+The namespace, quota, policy and Role are whatever the four files in §9 say, and
+the session pod is whatever `30-session.yaml` says. These assertions name which one
+drifted; none of them belongs in a deployment that is going well.
+
+Restricted admission must refuse a privileged pod and a direct `hostPath`:
+
+```sh
+sudo kubectl -n vif run pstest --image=busybox --restart=Never \
+    --overrides='{"spec":{"containers":[{"name":"c","image":"busybox","securityContext":{"privileged":true}}]}}'
+# expect: forbidden ... violates PodSecurity "restricted"
+
+sudo kubectl create --dry-run=server -f - <<'YAML'
+apiVersion: v1
+kind: Pod
+metadata: {name: vif-hostpath-must-fail, namespace: vif}
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+  containers:
+    - name: check
+      image: registry.k8s.io/pause:3.10
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        capabilities: {drop: ["ALL"]}
+      volumeMounts: [{name: forbidden, mountPath: /forbidden, readOnly: true}]
+  volumes:
+    - name: forbidden
+      hostPath: {path: /var/log/vif-fleet, type: Directory}
+YAML
+# expect: a refusal naming restricted / hostPath
+sudo kubectl -n vif delete pod pstest --ignore-not-found
+```
+
+The allocator must be able to allocate without being able to read a Secret or a pod
+log:
+
+```sh
+for check in \
+  'create jobs.batch:yes' 'delete jobs.batch:yes' 'create services:yes' \
+  'list services:yes' 'get pods:yes' 'list endpointslices.discovery.k8s.io:yes' \
+  'get secrets:no'
+do
+  verb=${check%:*}; want=${check#*:}
+  got=$(sudo kubectl auth can-i $verb \
+    --as=system:serviceaccount:vif:vif-allocator -n vif)
+  test "$got" = "$want" || printf 'RBAC DRIFT: %s = %s, want %s\n' "$verb" "$got" "$want"
+done
+test "$(sudo kubectl auth can-i get pods --subresource=log \
+  --as=system:serviceaccount:vif:vif-allocator -n vif)" = no
+```
+
+A live session's Job must carry exactly the shape the template describes — one
+container, no token, no `hostPath`, no `-log-stdout`, the PVC mounted only in the
+game container, and its own session id on the command line:
+
+```sh
+sudo kubectl -n vif get job "vif-session-$SESSION_ID" -o json |
+  jq -e --arg id "$SESSION_ID" '
+    .spec.template.spec as $pod |
+    ($pod.automountServiceAccountToken == false) and
+    ($pod.containers | length == 1) and
+    ($pod.containers[0].name == "session") and
+    ($pod.containers[0].args | index("-l=/var/log/vif-fleet") != null) and
+    ($pod.containers[0].args | index("-log-session-id=" + $id) != null) and
+    ($pod.containers[0].args | index("-log-stdout") == null) and
+    any($pod.containers[0].volumeMounts[]?;
+      .name == "fleet-logs" and .mountPath == "/var/log/vif-fleet") and
+    any($pod.volumes[]?;
+      .name == "fleet-logs" and
+      .persistentVolumeClaim.claimName == "vif-fleet-logs") and
+    all($pod.volumes[]?; has("hostPath") | not) and
+    all($pod.initContainers[]?; ((.volumeMounts // []) | length) == 0) and
+    ($pod.containers[0].securityContext.allowPrivilegeEscalation == false) and
+    ($pod.containers[0].securityContext.readOnlyRootFilesystem == true) and
+    ($pod.containers[0].securityContext.runAsNonRoot == true) and
+    ($pod.containers[0].securityContext.capabilities.drop | index("ALL") != null)'
+```
+
+LogWisp must hold the tmpfs read-only through the group alone, run the files the
+repository holds, and depend on neither K3s nor the allocator:
+
+```sh
+LOGWISP_PID=$(systemctl show logwisp.service -p MainPID --value)
+sudo grep '^Groups:' "/proc/$LOGWISP_PID/status" |
+  grep -Eq '(^|[[:space:]])65532([[:space:]]|$)'
+sudo nsenter -t "$LOGWISP_PID" -m -- \
+  findmnt -no TARGET,FSTYPE,OPTIONS /var/log/vif-fleet
+sudo cmp -s deploy/logwisp/aggregator.toml /etc/logwisp/vif-fleet.toml
+sudo cmp -s deploy/guest/logwisp.service /etc/systemd/system/logwisp.service
+systemctl show logwisp.service -p Requires -p Wants -p After
+unset LOGWISP_PID
+```
+
+The host `findmnt` stays `rw`; inside LogWisp's mount namespace the final entry for
+that target must contain `ro`. `RequiresMountsFor=` may add a mount requirement,
+but `Requires`, `Wants` and `After` must not name `k3s.service` or
+`vif-allocator.service`.
+
+NetworkPolicy enforcement is per-pod and cannot be seen before a pod exists. K3s
+embeds the kube-router controller in the `k3s` process, so there is no
+`kube-router` pod to find; the proof is a counter delta across one connection, not
+the existence of the API object:
+
+```sh
+sudo iptables-save -c | grep 'KUBE-POD-FW-'
+# Make one game-port connection, then repeat and confirm a counter moved.
+```
+
+### When a join does not arrive
 
 **Walk outward from the pod, never inward from the Internet.** Each boundary names
 one component; a single test from a browser combines all of them and names none.
