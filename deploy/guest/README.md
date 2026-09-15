@@ -1078,13 +1078,6 @@ test "$BATCH_F_TICK_DOWN" -gt "$BATCH_F_TICK_BEFORE" &&
     "$BATCH_F_TICK_BEFORE" "$BATCH_F_TICK_DOWN"
 
 ./deploy/k3s/session.sh delete "$BATCH_F_PROBE_ID"
-sudo kubectl -n vif wait --for=delete \
-  "job/vif-session-$BATCH_F_PROBE_ID" --timeout=60s
-sudo kubectl -n vif wait --for=delete pod \
-  -l "vif.lixenwraith.dev/session=$BATCH_F_PROBE_ID" --timeout=60s
-sudo find /var/log/vif-fleet -maxdepth 1 -type f \
-  \( -name "$BATCH_F_PROBE_ID.jsonl" \
-     -o -name "${BATCH_F_PROBE_ID}_*.jsonl" \) -delete
 ```
 
 #### F5.6 - retained replay
@@ -1152,24 +1145,13 @@ sudo jq -s -e --arg id "$SESSION_ID" '
 ' "/var/log/vif-fleet/$SESSION_ID.jsonl"
 
 ./deploy/k3s/session.sh delete "$SESSION_ID"
-sudo kubectl -n vif wait --for=delete \
-  "job/vif-session-$SESSION_ID" --timeout=60s
-sudo kubectl -n vif wait --for=delete pod \
-  -l "vif.lixenwraith.dev/session=$SESSION_ID" --timeout=60s
-sudo kubectl -n vif get job,pod,service \
-  -l "vif.lixenwraith.dev/session=$SESSION_ID"
-
-sudo find /var/log/vif-fleet -maxdepth 1 -type f \
-  \( -name "$SESSION_ID.jsonl" -o -name "${SESSION_ID}_*.jsonl" \) \
-  -delete
-sudo find /var/log/vif-fleet -mindepth 1 -maxdepth 1 -print
 unset SESSION_JSON SESSION_ID JOIN_TARGET
 ```
 
 **Expect:** `true` and `session vacant`, then `true` for the self-tag check, then
-`No resources found` and an empty `find`. A missing `session vacant` means the
-remote client is still connected. Delete before the empty grace or Job TTL
-removes the evidence.
+`session <id> removed: no objects, no log files`. A missing `session vacant`
+means the remote client is still connected. Delete before the empty grace or Job
+TTL removes the evidence.
 
 ### F6 - watcher retirement
 
@@ -1286,245 +1268,170 @@ the matching public rollback.
 
 ## Batch H12: occupied lifecycle gates
 
-`test/scenario.sh` proves the lifetime policy inside one process. These four
-prove it where a Job, a Service, a kubelet grace period and an off-box client
-are also involved. Each allocates its own session and cleans up after itself, so
-they can be run on different days.
+Passed 2026-09-15. `test/scenario.sh` proves the lifetime policy inside one
+process; these four prove it where a Job, a Service, a kubelet grace period and an
+off-box client are also involved. Each gate allocates its own session and removes
+it, so they can be run separately and in any order.
 
-Every gate needs a terminal on the remote development machine, ready before the
-`POST` returns: the first-guest window is ninety seconds and starts there.
-
-**Preflight.** On the node, with no session running:
+Every gate needs a terminal on the remote development machine ready before
+`allocate` returns: the first-guest window is ninety seconds and starts there.
+`allocate` prints the identity on stdout and the join target beside it:
 
 ```sh
-command -v jq
 ./deploy/k3s/session.sh blockers &&
-systemctl is-active 'var-log-vif\x2dfleet.mount' k3s.service \
-  vif-allocator.service logwisp.service vif-fleet-log-cleanup.timer
+SESSION_ID=$(./deploy/k3s/session.sh allocate 1)
 ```
 
-`blockers` must print `the fleet is empty`, and all five units must be active.
-
-A session's state is read through the allocator rather than the pod, because that
-is the reading the website and an operator share:
-
-```sh
-vif_state() {
-  curl -fsS http://127.0.0.1:9080/vif/api/sessions |
-    jq -r --arg id "$1" '.sessions[] | select(.id == $id) |
-      "phase=\(.state.phase) guests=\(.state.guests) clock=\(.state.clock) " +
-      "ready=\(.state.ready) tick=\(.state.tick) expires=\(.state.expires_in // "none")"'
-}
-```
-
-An empty line from `vif_state` means the session has left the fleet, which is
-itself one of the outcomes below.
+`blockers` must print `the fleet is empty` first. Join from the development
+machine with the `join=` address `allocate` printed, and read the session with
+`./deploy/k3s/session.sh state "$SESSION_ID"`, which prints one line and exits
+non-zero once the session has left the fleet. Finish every gate with
+`./deploy/k3s/session.sh delete "$SESSION_ID"`, which waits for the cascade,
+removes that session's log files and prints its own verdict — after reading the
+JSONL, not before.
 
 ### H12.1 - the empty grace ends a session nobody returned to
 
-**Purpose.** Prove that a session whose roster empties ends on its own ninety
-seconds, says why, and leaves the public list.
+Allocate, join, then:
 
 ```sh
-unset SESSION_ID JOIN_TARGET
-SESSION_JSON=$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{"players":1}' \
-  http://127.0.0.1:9080/vif/api/sessions) &&
-SESSION_ID=$(printf '%s' "$SESSION_JSON" | jq -er '.id') &&
-JOIN_TARGET=$(printf '%s' "$SESSION_JSON" | jq -er '.join_target') &&
-printf 'session=%s join=%s\n' "$SESSION_ID" "$JOIN_TARGET"
+./deploy/k3s/session.sh state "$SESSION_ID"
 ```
 
-Join immediately from the development machine with `bin/vif -join '<join_target>'`,
-then on the node:
-
-```sh
-vif_state "$SESSION_ID"
-```
-
-Expect `phase=occupied guests=1 clock=running`. Quit the client, then:
-
-```sh
-vif_state "$SESSION_ID"
-```
-
-Expect `phase=vacant guests=0 clock=paused` with `expires` counting down from
-about 1m30s. Wait it out — roughly two minutes — and read the session's own
-account of why it stopped:
+Expect `phase=occupied guests=1/1 clock=running`. Quit the client and read it
+again: `phase=vacant guests=0/1 clock=paused` with `expires` counting down from
+about 1m30s. Wait it out — roughly two minutes — then:
 
 ```sh
 sudo jq -r 'select(.fields.msg == "session parked" or .fields.msg == "session ended") |
   "\(.fields.msg): \(.fields.reason // .fields.expires_in)"' \
   "/var/log/vif-fleet/$SESSION_ID.jsonl"
-vif_state "$SESSION_ID" | grep -q . \
-  && echo 'left the fleet: FAIL' || echo 'left the fleet: PASS'
+./deploy/k3s/session.sh state "$SESSION_ID" &&
+  echo 'left the fleet: FAIL' || echo 'left the fleet: PASS'
 ```
 
-Expect `session parked: 1m30s` then `session ended: roster empty for 1m30s`, and
-`left the fleet: PASS`. Clean up with the block at the end of this batch.
+Observed: `session parked: 1m30s`, `session ended: roster empty for 1m30s`,
+`left the fleet: PASS`.
 
 ### H12.2 - a guest that returns inside the grace resumes the same match
 
-**Purpose.** Prove the grace is a reconnect window and not merely a delay: the
-world is preserved, the slot is the one the departure released, and the phase
-returns to occupied.
-
-Allocate and join as in H12.1, then read the tick the match reached and quit the
-client:
+Allocate and join, note the `tick` from `state`, and quit the client. **The
+window is ninety seconds.** Poll `state` until `expires` is near `15s`, rejoin
+from the development machine, then:
 
 ```sh
-vif_state "$SESSION_ID"
-```
-
-Note the `tick`. **Time-critical from here**: the window is ninety seconds. Poll
-until about fifteen seconds are left, then dial back in:
-
-```sh
-vif_state "$SESSION_ID"
-```
-
-With `expires` near `15s`, rejoin from the development machine, then:
-
-```sh
-vif_state "$SESSION_ID"
+./deploy/k3s/session.sh state "$SESSION_ID"
 sudo jq -r 'select(.fields.msg == "mid-run participant admitted") |
   "readmitted peer \(.fields.peer) into slot \(.fields.slot) at tick \(.fields.snapshot_tick)"' \
   "/var/log/vif-fleet/$SESSION_ID.jsonl"
 ```
 
-Expect `phase=occupied guests=1 clock=running` with a `tick` at or above the one
-noted before the departure — a clock that restarted from zero would be a new
-match — and `readmitted peer 2 into slot 0`. Slot 0 is the slot the departure
-released. Clean up with the block at the end of this batch.
+Expect `phase=occupied clock=running` with a `tick` at or above the one noted
+before the departure — a clock that restarted from zero would be a new match —
+and `readmitted peer 2 into slot 0`, the slot the departure released.
+
+Observed: two rejoins into slot 0, at ticks 1586 and 2809 of a session whose
+first guest left at tick 1580.
 
 ### H12.3 - a termination drains the match rather than cutting it
 
-**Purpose.** Prove that deleting a session Job stops admission, keeps simulating
-for the guests it still holds, and ends inside `-drain 20s` — under the pod's
-thirty-second grace, so the process and not the kubelet decides.
-
-Allocate and join as in H12.1. Keep the client connected for the whole gate: a
-drain that finds an empty roster ends early and proves the easier half. Capture
-the pod address first, because the Service goes with the Job and the probe does
-not:
+Allocate and join, and **keep the client connected for the whole gate**: a drain
+that finds an empty roster ends early and proves the easier half. Capture the pod
+address first, because the Service goes with the Job and the probe does not:
 
 ```sh
-POD_IP=$(sudo kubectl -n vif get pod \
-  -l "vif.lixenwraith.dev/session=$SESSION_ID" \
-  -o jsonpath='{.items[0].status.podIP}')
-printf 'pod=%s\n' "$POD_IP"
-curl -fsS --max-time 3 "http://$POD_IP:7778/health"
-```
-
-Announce the deletion, then time it:
-
-```sh
-DRAIN_START=$(date +%s)
-./deploy/k3s/session.sh delete "$SESSION_ID"
-sleep 2
-curl -fsS --max-time 3 "http://$POD_IP:7778/health"
-```
-
-Expect `live=true ready=false reason=draining: signal terminated`, `phase=draining`,
-and a `tick` that is still moving. Read it twice a second apart to see that:
-
-```sh
-FIRST=$(curl -fsS --max-time 3 "http://$POD_IP:7778/health" | sed -n 's/^tick=//p')
-sleep 1
-SECOND=$(curl -fsS --max-time 3 "http://$POD_IP:7778/health" | sed -n 's/^tick=//p')
-[ "$SECOND" -gt "$FIRST" ] \
-  && echo "still simulating: PASS ($FIRST -> $SECOND)" \
-  || echo "still simulating: FAIL ($FIRST -> $SECOND)"
-
-sudo kubectl -n vif wait --for=delete pod \
-  -l "vif.lixenwraith.dev/session=$SESSION_ID" --timeout=60s
-DRAIN_SECONDS=$(( $(date +%s) - DRAIN_START ))
-printf 'drain took %ss\n' "$DRAIN_SECONDS"
-[ "$DRAIN_SECONDS" -lt 30 ] \
-  && echo 'the process ended it, not the kubelet: PASS' \
-  || echo 'the process ended it, not the kubelet: FAIL'
-
-sudo jq -r 'select(.fields.msg == "session ended") | .fields.reason' \
-  "/var/log/vif-fleet/$SESSION_ID.jsonl"
-```
-
-Expect `drain deadline 20s reached holding 1 guest(s)` with the client still
-connected, or `drained` if it left first. Clean up with the block at the end of
-this batch.
-
-### H12.4 - a full session refuses the next dial at the handshake
-
-**Purpose.** Prove that `players` is enforced by the session rather than by the
-page, and that the refusal names the ceiling.
-
-Allocate a one-player session and join it as in H12.1, then **wait for
-`clock=running`** before testing the refusal: between the roster closing and the
-clock starting a dial is answered `session is starting; retry`, which is a
-different refusal and not this gate.
-
-```sh
-vif_state "$SESSION_ID"
-```
-
-With `phase=occupied guests=1 clock=running ready=false`, dial a second time from
-the development machine:
-
-```sh
-bin/vif -join '<join_target>'
-```
-
-Expect exactly:
-
-```
-join <join_target>: session is full at 1 participant(s)
-```
-
-On the node, the same answer from the pod and from the allocator:
-
-```sh
-POD_IP=$(sudo kubectl -n vif get pod \
-  -l "vif.lixenwraith.dev/session=$SESSION_ID" \
+POD_IP=$(sudo kubectl -n vif get pod -l "vif.lixenwraith.dev/session=$SESSION_ID" \
   -o jsonpath='{.items[0].status.podIP}')
 curl -fsS --max-time 3 "http://$POD_IP:7778/health" | head -1
 ```
 
-Expect `live=true ready=false reason=session at capacity`. Clean up below.
-
-### Batch G evidence, collected here
-
-While one session is occupied — H12.3 before the deletion is the natural place —
-record what a single session costs, so Batch G's sizing revises the provisional
-256 MiB and 8 MB caps from measurement rather than from history:
+Expect `live=true ready=false reason=session at capacity`. Announce the deletion,
+then **paste the whole block below at once** — the drain is twenty seconds long
+and a prompt between the reads spends it:
 
 ```sh
-sudo kubectl -n vif top pod -l app.kubernetes.io/part-of=vi-fighter-fleet ||
-  sudo k3s crictl stats
+DRAIN_START=$(date +%s)
+./deploy/k3s/session.sh delete "$SESSION_ID" & DELETE_PID=$!
+sleep 2
+curl -fsS --max-time 3 "http://$POD_IP:7778/health" | head -1
+FIRST=$(curl -fsS --max-time 3 "http://$POD_IP:7778/health" | sed -n 's/^tick=//p')
+sleep 1
+SECOND=$(curl -fsS --max-time 3 "http://$POD_IP:7778/health" | sed -n 's/^tick=//p')
+[ "${SECOND:-0}" -gt "${FIRST:-0}" ] \
+  && echo "still simulating: PASS ($FIRST -> $SECOND)" \
+  || echo "still simulating: FAIL ($FIRST -> $SECOND)"
+while curl -fsS --max-time 2 -o /dev/null "http://$POD_IP:7778/health" 2>/dev/null
+do sleep 1; done
+DRAIN_SECONDS=$(( $(date +%s) - DRAIN_START ))
+[ "$DRAIN_SECONDS" -lt 30 ] \
+  && echo "the process ended it, not the kubelet: PASS (${DRAIN_SECONDS}s)" \
+  || echo "the process ended it, not the kubelet: FAIL (${DRAIN_SECONDS}s)"
+wait "$DELETE_PID"
+sudo jq -r 'select(.fields.msg == "session ended") | .fields.reason' \
+  "/var/log/vif-fleet/$SESSION_ID.jsonl"
+```
+
+The second line must read `live=true ready=false reason=draining: signal terminated`
+with `phase=draining` and an `expires_in` near 18s. The wait loop times the
+process rather than the pod object: `-drain 20s` bounds the process, and the pod
+record lingers past it.
+
+Observed: `reason=draining: signal terminated`, the tick advancing 228 → 849
+across the drain, and `drain deadline 20s reached holding 1 guest(s)` — the
+deadline rather than `drained`, which is the stronger reading: the match was not
+cut short by the roster emptying.
+
+### H12.4 - a full session refuses the next dial at the handshake
+
+Allocate a one-player session and join it, then **wait for `clock=running`**
+before testing the refusal: between the roster closing and the clock starting a
+dial is answered `session is starting; retry`, which is a different refusal and
+not this gate.
+
+```sh
+./deploy/k3s/session.sh state "$SESSION_ID"
+```
+
+With `phase=occupied guests=1/1 clock=running ready=false`, dial a second time
+from the development machine and expect exactly:
+
+```
+join <join target>: session is full at 1 participant(s)
+```
+
+The pod says the same thing:
+
+```sh
+POD_IP=$(sudo kubectl -n vif get pod -l "vif.lixenwraith.dev/session=$SESSION_ID" \
+  -o jsonpath='{.items[0].status.podIP}')
+curl -fsS --max-time 3 "http://$POD_IP:7778/health" | head -1
+```
+
+Observed: `live=true ready=false reason=session at capacity`.
+
+### What one session costs
+
+Measured here, with one guest on `wad` defaults, for Batch G's sizing:
+
+| Reading | One session |
+|---|---|
+| CPU | 144m |
+| Memory | 59 MiB against a 96 MiB request and a 192 MiB limit |
+| tmpfs | 12 MiB of 256 MiB |
+| Log rate | 89 KiB in 30 s, about 3 KiB/s |
+| LogWisp | 56 dropped writes in 41,579 processed |
+
+Ten of these is roughly 30 KiB/s into a 256 MiB tmpfs, which the rotation and the
+cleanup timer carry, and 1.5 CPU against the node. The dropped writes are the one
+number that wants explaining before the caps are revised: at one session they
+should be zero. Repeat this reading during the ten-session hour (H3) rather than
+scaling these figures.
+
+```sh
+sudo kubectl -n vif top pod -l app.kubernetes.io/part-of=vi-fighter-fleet
 df -h /var/log/vif-fleet | tail -1
 BEFORE=$(sudo stat -c %s "/var/log/vif-fleet/$SESSION_ID.jsonl"); sleep 30
 AFTER=$(sudo stat -c %s "/var/log/vif-fleet/$SESSION_ID.jsonl")
 printf 'log rate: %s bytes in 30s\n' "$(( AFTER - BEFORE ))"
 curl -fsS http://127.0.0.1:8081/status | jq '.statistics'
 ```
-
-Record the numbers in the Batch G notes. A log rate here multiplied by ten is
-what the tmpfs cap and LogWisp's 400/s limit have to carry.
-
-### H12 cleanup
-
-After each gate, remove only that session:
-
-```sh
-./deploy/k3s/session.sh delete "$SESSION_ID"
-sudo kubectl -n vif wait --for=delete \
-  "job/vif-session-$SESSION_ID" --timeout=60s
-sudo kubectl -n vif wait --for=delete pod \
-  -l "vif.lixenwraith.dev/session=$SESSION_ID" --timeout=60s
-sudo find /var/log/vif-fleet -maxdepth 1 -type f \
-  \( -name "$SESSION_ID.jsonl" -o -name "${SESSION_ID}_*.jsonl" \) -delete
-./deploy/k3s/session.sh blockers
-sudo find /var/log/vif-fleet -mindepth 1 -maxdepth 1 -print
-unset SESSION_JSON SESSION_ID JOIN_TARGET POD_IP DRAIN_START DRAIN_SECONDS
-unset FIRST SECOND BEFORE AFTER
-```
-
-`blockers` must print `the fleet is empty` and the `find` must print nothing. A
-Job deleted in H12.3 is already gone, so `delete` there is a no-op.

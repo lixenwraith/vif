@@ -7,8 +7,9 @@ design and operating detail lives in:
 - [the fleet architecture and verification matrix](kubernetes-fleet.md); and
 - [the Linux node artifacts and batch procedures](../deploy/guest/README.md).
 
-Status on 2026-09-15: Batches A-F, H1 and H11 are deployed and passed their live
-gates, and the site publishes the two API routes and its own fleet page. What
+Status on 2026-09-15: Batches A-F and every gate in the H series except H3 and
+H16 are deployed and passed, and the site publishes the two API routes and its
+own fleet page. H1 owes only its handshake fuzz coverage. What
 those gates established is recorded in the fleet plan and the deployment
 procedure linked above; this file holds only what is left.
 
@@ -102,22 +103,15 @@ one budget for the fleet. The same record was absent from the loopback stream
 
 ### Batch H12 — occupied lifecycle matrix
 
-Written and rehearsed off the fleet, not yet run on it. `test/scenario.sh` proves
-the lifetime policy inside one process; these four prove it where a Job, a
-Service, a kubelet grace period and an off-box client are also involved:
-the empty grace ending a session nobody returned to, a guest returning inside
-that grace into the slot its departure released, a termination draining the match
-rather than cutting it, and a full session refusing the next dial at the
-handshake.
+Passed 2026-09-15. The empty grace ended a session nobody returned to on
+`roster empty for 1m30s`; a guest returning inside that grace was readmitted into
+slot 0 at ticks 1586 and 2809 of a match whose clock had stopped at 1580; a
+termination held the match for `drain deadline 20s reached holding 1 guest(s)`
+with the tick advancing 228 → 849 through it; and a one-player session answered
+the second dial `session is full at 1 participant(s)`.
 
-The procedure is
-[Batch H12 in the node README](../deploy/guest/README.md#batch-h12-occupied-lifecycle-gates),
-which also carries the per-session cost measurement Batch G's sizing needs. Read
-it before starting: each gate allocates its own session and needs a development
-terminal ready before the `POST` returns.
-
-Gate: all four observed on the node, with the refusal text and the exit reason
-quoted from the session's own JSONL.
+The procedure and the per-session cost reading are
+[Batch H12 in the node README](../deploy/guest/README.md#batch-h12-occupied-lifecycle-gates).
 
 ### Batch G — reconcile and hand off
 
@@ -171,27 +165,16 @@ first-join clock starts when `POST` returns.
 On the node:
 
 ```sh
-unset SESSION_JSON SESSION_ID JOIN_TARGET
-
-command -v jq
-curl -fsS http://127.0.0.1:9080/healthz
-curl -fsS http://127.0.0.1:9080/readyz
-
-SESSION_JSON=$(curl -fsS -X POST \
-  -H 'Content-Type: application/json' -d '{}' \
-  http://127.0.0.1:9080/vif/api/sessions) &&
-SESSION_ID=$(printf '%s' "$SESSION_JSON" |
-  jq -er '.id | strings | select(length > 0)') &&
-JOIN_TARGET=$(printf '%s' "$SESSION_JSON" |
-  jq -er '.join_target | strings | select(length > 0)') &&
-printf 'session=%s join=%s\n' "$SESSION_ID" "$JOIN_TARGET"
+curl -fsS http://127.0.0.1:9080/readyz &&
+./deploy/k3s/session.sh blockers &&
+SESSION_ID=$(./deploy/k3s/session.sh allocate)
 ```
 
-Stop if either value is empty. Immediately join from the prepared development
-machine:
+`allocate` prints the join target beside the identity it returns. Immediately
+join from the prepared development machine:
 
 ```sh
-bin/vif -join '<join_target>'
+bin/vif -join '<join target>'
 ```
 
 While it remains connected, verify the Job shape and occupied state:
@@ -223,21 +206,14 @@ sudo kubectl -n vif get job "vif-session-$SESSION_ID" -o json |
     ($pod.containers[0].securityContext.capabilities.drop |
       index("ALL") != null)'
 
-curl -fsS http://127.0.0.1:9080/vif/api/sessions |
-  jq -e --arg id "$SESSION_ID" '
-    any(.sessions[]; .id == $id and
-      .state.phase == "occupied" and .state.guests >= 1)' &&
-  printf 'session occupied\n'
+./deploy/k3s/session.sh state "$SESSION_ID"
 ```
 
-Quit the remote client and immediately verify vacancy and the commissioned file:
+Expect `phase=occupied` with at least one guest. Quit the remote client and
+immediately verify vacancy and the commissioned file:
 
 ```sh
-curl -fsS http://127.0.0.1:9080/vif/api/sessions |
-  jq -e --arg id "$SESSION_ID" '
-    any(.sessions[]; .id == $id and
-      .state.phase == "vacant" and .state.guests == 0)' &&
-  printf 'session vacant\n'
+./deploy/k3s/session.sh state "$SESSION_ID"
 
 sudo test -s "/var/log/vif-fleet/$SESSION_ID.jsonl"
 sudo jq -s -e --arg id "$SESSION_ID" '
@@ -247,31 +223,20 @@ sudo jq -s -e --arg id "$SESSION_ID" '
 ' "/var/log/vif-fleet/$SESSION_ID.jsonl"
 ```
 
-Delete the session before its empty grace/TTL removes the evidence, wait for the
-background-cascaded pod, and remove only that session's files:
+Delete the session before its empty grace or the Job TTL removes the evidence.
+`delete` waits for the background-cascaded pod, removes only that session's files
+and prints its own verdict:
 
 ```sh
 ./deploy/k3s/session.sh delete "$SESSION_ID"
-sudo kubectl -n vif wait --for=delete \
-  "job/vif-session-$SESSION_ID" --timeout=60s
-sudo kubectl -n vif wait --for=delete pod \
-  -l "vif.lixenwraith.dev/session=$SESSION_ID" --timeout=60s
-sudo kubectl -n vif get job,pod,service \
-  -l "vif.lixenwraith.dev/session=$SESSION_ID"
-
-sudo find /var/log/vif-fleet -maxdepth 1 -type f \
-  \( -name "$SESSION_ID.jsonl" -o -name "${SESSION_ID}_*.jsonl" \) \
-  -delete
-sudo find /var/log/vif-fleet \
-  -mindepth 1 -maxdepth 1 -print
+./deploy/k3s/session.sh status
 ```
 
-The two fleet queries and final `find` must be empty. Finish with:
+`delete` must print `session <id> removed: no objects, no log files`, and
+`status` `the fleet is empty` with five active units. Finish with the state
+commissioning left behind:
 
 ```sh
-systemctl is-active \
-  'var-log-vif\x2dfleet.mount' k3s.service \
-  vif-allocator.service vif-fleet-log-cleanup.timer
 systemctl show vif-fleet-log-cleanup.service \
   -p User -p Group -p Result -p ExecMainStatus
 sudo kubectl get namespace vif --show-labels
@@ -279,8 +244,8 @@ sudo kubectl get persistentvolume vif-fleet-logs
 sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
 ```
 
-Expected: all four units active, cleanup last result successful as `vif-fleet`,
-Restricted labels intact, and PV/PVC Bound.
+Expected: the cleanup's last result successful as `vif-fleet`, Restricted labels
+intact, and PV/PVC Bound.
 
 ## 4. Final acceptance and rollback boundary
 

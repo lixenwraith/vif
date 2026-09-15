@@ -10,6 +10,7 @@ procedure shows a longer variant, it is proving something extra.
 ```sh
 ./deploy/k3s/session.sh status
 ./deploy/k3s/session.sh blockers
+./deploy/k3s/session.sh state '<session-id>'
 ```
 
 `status` gives every fleet object a verdict — a match in play, a Job that
@@ -17,7 +18,10 @@ finished and is waiting out its `ttlSecondsAfterFinished`, a pod still
 terminating — then the fleet log files and the five units. `blockers` is that
 report as an assertion: `the fleet is empty` and exit 0, or the same annotated
 lines and exit 1. It is the check every update helper runs first, so run it by
-hand to learn why one refused without starting another.
+hand to learn why one refused without starting another. `state` prints one line
+of what the fleet reports about one session — phase, roster, clock, tick, the
+window it has left and its join target — and exits non-zero once that session has
+left the fleet.
 
 ## Empty the fleet
 
@@ -41,11 +45,27 @@ first if a gate still needs it:
 sudo cp -a /var/log/vif-fleet/. "$(mktemp -d /tmp/vif-logs.XXXXXX)/"
 ```
 
-A single session goes without touching the rest:
+A single session goes without touching the rest. `delete` waits for the
+background-cascaded pod, removes only that session's log files, and prints its own
+verdict — so read the session's JSONL before running it, not after:
 
 ```sh
 ./deploy/k3s/session.sh delete '<session-id>'
 ```
+
+## Ask for a session
+
+The path a player takes, from the node. It prints the identity on stdout and the
+join target and page beside it, so a shell can capture one and a person can read
+the other:
+
+```sh
+SESSION_ID=$(./deploy/k3s/session.sh allocate)       # deployment defaults
+SESSION_ID=$(./deploy/k3s/session.sh allocate 1 debug)
+```
+
+Both arguments are optional and bounded by `-players-max` and `-log-level-min`;
+`GET /vif/api/sessions` advertises what this deployment accepts as `limits`.
 
 ## Why a helper refused
 

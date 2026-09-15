@@ -4,7 +4,9 @@ set -eu
 
 namespace=vif
 fleet_label=app.kubernetes.io/part-of=vi-fighter-fleet
+session_label=vif.lixenwraith.dev/session
 fleet_logs=${VIF_FLEET_LOGS:-/var/log/vif-fleet}
+allocator=${VIF_ALLOCATOR_URL:-http://127.0.0.1:9080}
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 kube() {
@@ -16,8 +18,10 @@ kube() {
 }
 
 usage() {
-	echo "usage: $0 create SESSION_ID [GAME_NODEPORT] [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
-	echo "       $0 delete SESSION_ID" >&2
+	echo "usage: $0 allocate [PLAYERS] [LOG_LEVEL]   ask the allocator; prints the id" >&2
+	echo "       $0 state SESSION_ID                 one line of what the fleet reports" >&2
+	echo "       $0 delete SESSION_ID                remove one session and its log files" >&2
+	echo "       $0 create SESSION_ID [GAME_NODEPORT] [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
 	echo "       $0 list" >&2
 	echo "       $0 status" >&2
 	echo "       $0 blockers" >&2
@@ -188,12 +192,67 @@ case "$command" in
 		fi
 		echo 'fleet drained: no objects, no log files'
 		;;
-	delete)
+	allocate)
+		# Through the allocator rather than through `create`, because that is the
+		# path a player takes and the only one that answers with a join target.
+		[ "$#" -le 3 ] || usage
+		request=$(jq -nc --arg players "${2:-}" --arg level "${3:-}" '
+			(if $players == "" then {} else {players: ($players | tonumber)} end) +
+			(if $level == "" then {} else {log_level: $level} end)')
+		answer=$(curl -fsS -X POST -H 'Content-Type: application/json' \
+			-d "$request" "$allocator/vif/api/sessions") || {
+			echo "$0: the allocator refused $request" >&2
+			exit 1
+		}
+		# The identity on stdout so a caller can capture it, everything a person
+		# needs to type on stderr beside it.
+		printf '%s' "$answer" |
+			jq -er '"session=\(.id) join=\(.join_target) page=\(.page_url)"' >&2
+		printf '%s' "$answer" | jq -er '.id | strings | select(length > 0)'
+		;;
+	state)
 		[ "$#" -eq 2 ] || usage
-		name=$(session_name "$2")
+		reported=$(curl -fsS "$allocator/vif/api/sessions" |
+			jq -r --arg id "$2" '.sessions[] | select(.id == $id) |
+				"phase=\(.state.phase) guests=\(.state.guests)/\(.state.capacity)" +
+				" clock=\(.state.clock // "none") ready=\(.state.ready)" +
+				" tick=\(.state.tick) expires=\(.state.expires_in // "none")" +
+				" join=\(.join_target)"')
+		if [ -z "$reported" ]; then
+			printf '%s: not in the fleet\n' "$2"
+			exit 1
+		fi
+		printf '%s: %s\n' "$2" "$reported"
+		;;
+	delete)
+		# Deleting is not finished until the cascade is: a pod that outlives its
+		# Job still holds the NodePort, and a retained log file still counts
+		# against the tmpfs. Read the session's JSONL before running this.
+		[ "$#" -eq 2 ] || usage
+		id=$2
+		name=$(session_name "$id")
 		kube -n "$namespace" delete job "$name" \
 			--cascade=background --wait=false --ignore-not-found
 		kube -n "$namespace" delete service "$name" --ignore-not-found
+		remaining=$(kube -n "$namespace" get jobs,pods,services \
+			-l "$session_label=$id" -o name)
+		attempt=0
+		while [ -n "$remaining" ] && [ "$attempt" -lt 60 ]; do
+			sleep 1
+			attempt=$((attempt + 1))
+			remaining=$(kube -n "$namespace" get jobs,pods,services \
+				-l "$session_label=$id" -o name)
+		done
+		if [ -n "$remaining" ]; then
+			echo "$0: session $id did not go within 60s:" >&2
+			printf '%s\n' "$remaining" >&2
+			exit 1
+		fi
+		if [ -d "$fleet_logs" ]; then
+			sudo find "$fleet_logs" -maxdepth 1 -type f \
+				\( -name "$id.jsonl" -o -name "${id}_*.jsonl" \) -delete
+		fi
+		printf 'session %s removed: no objects, no log files\n' "$id"
 		;;
 	create)
 		[ "$#" -ge 2 ] && [ "$#" -le 6 ] || usage
