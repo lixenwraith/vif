@@ -543,6 +543,15 @@ The boundaries are enforced mechanically:
 - succession criteria cover the designated successor, retention eligibility, term gates,
   roster continuity, and explicit fork fallback.
 
+The criteria live where what they assert lives. `internal/app` drives real
+instances over a mesh or a socket, so it owns anything whose subject is a world:
+convergence, parity, the compared surface, the roster a crossing creates.
+`internal/converge` owns the protocol itself — page proofs, supersession, the
+relay role, the term gate, the succession rule — against a stub world that answers
+with the capture it was handed. That split is why the protocol exports no knob for
+fabricating its own state: a criterion that needs one is in the package that holds
+it.
+
 Run the generated and repository gates after focused changes:
 
 ```sh

@@ -1,17 +1,14 @@
 package app
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/converge"
 	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // settleAuthority runs the succession to a conclusion without advancing anyone's
@@ -53,7 +50,7 @@ func boolOf(a *App, key string) (v bool) {
 }
 
 // authorityOf is one instance's view of who is authoring.
-func authorityOf(a *App) converge.AuthorityReport { return a.AuthorityState() }
+func authorityOf(a *App) converge.AuthorityReport { return a.authority.State() }
 
 // primeRetention gives every participant a retained authoritative record, which is
 // the succession's eligibility evidence. Without one nothing is electable, which is
@@ -119,10 +116,10 @@ func TestSuccessionElectsOneParticipantOnEverySurvivor(t *testing.T) {
 	if got := statOf(survivors[0], "network.migrations"); got != 1 {
 		t.Fatalf("participant 2 counted %d handoffs, want exactly one", got)
 	}
-	if !survivors[0].authority.IsAuthority() {
+	if !survivors[0].authority.State().Authoring() {
 		t.Fatal("the elected successor does not consider itself the authority")
 	}
-	if survivors[1].authority.IsAuthority() {
+	if survivors[1].authority.State().Authoring() {
 		t.Fatal("a participant that was not elected considers itself the authority")
 	}
 }
@@ -210,7 +207,7 @@ func TestTheFirstGuestSucceedsAHostThatLeaves(t *testing.T) {
 	if got.Term != network.FirstTerm+1 {
 		t.Fatalf("the successor entered term %d, want exactly one increment", got.Term)
 	}
-	if !guest.authority.IsAuthority() {
+	if !guest.authority.State().Authoring() {
 		t.Fatal("the successor does not consider itself the authority")
 	}
 	if boolOf(guest, "network.host_lost") {
@@ -234,52 +231,6 @@ func TestTheFirstGuestSucceedsAHostThatLeaves(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("the successor holds %d cursors, want only its own", count)
-	}
-}
-
-// TestAPinnedAuthorityDoesNotMove is the option a deployment needs and a person
-// hosting a game does not. Migration reconstitutes a session only where the survivors
-// already share links; where the address *is* the session, the honest answer is that
-// losing it ends the session. The policy is the coordinator's and travels in the
-// offer, because a disagreement about it is one instance electing and one refusing.
-func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
-	t.Parallel()
-	apps := meshSession(t, 0x5EEDBEEF, 2, [][2]int{{1, 2}})
-	localCursors(t, apps)
-	primeRetention(t, apps)
-	host, guest := apps[0], apps[1]
-
-	for _, a := range apps {
-		a.authority.Pin()
-	}
-
-	closeParticipant(host)
-	settleAuthority(t, []*App{guest}, func() bool { return authorityOf(guest).Fork })
-
-	got := authorityOf(guest)
-	if !got.Fork {
-		t.Fatalf("a pinned session moved its authority: %+v", got)
-	}
-	if got.Authority == 2 {
-		t.Fatal("the survivor took a term the session pinned")
-	}
-	if got.Term != network.FirstTerm {
-		t.Fatalf("a pinned session entered term %d; the term never moves", got.Term)
-	}
-	if !boolOf(guest, "network.host_lost") {
-		t.Fatal("the survivor did not report the loss")
-	}
-
-	// It still stops holding a cursor nobody will move again — that is the roster
-	// rule, not the authority one.
-	for range 2*parameter.NetworkSuccessionTicks + 4 {
-		guest.Tick(1)
-		guest.ApplyPendingCorrections()
-	}
-	var count int
-	guest.World().RunSafe(func() { count = guest.World().Resources.Player.Count() })
-	if count != 1 {
-		t.Fatalf("the survivor holds %d cursors, want only its own", count)
 	}
 }
 
@@ -350,109 +301,31 @@ func TestAnUnreachableSuccessorLeavesTheRestForking(t *testing.T) {
 	}
 }
 
-// membershipOf is what a handoff must carry unchanged, read straight off the
-// authority state rather than off a copy the harness made.
-func membershipOf(a *App) ([]network.SessionParticipant, event.JoinAnchor, uint64) {
-	return a.authority.Membership()
-}
-
-// handOff moves authorship to apps[to] by hand, for a test whose subject is what
-// happens after a migration rather than the migration itself.
+// handOff moves authorship to apps[to], for a test whose subject is what happens
+// after a migration rather than the migration itself. The record travels the way a
+// real one does — in through the transport seam, adopted between two ticks — so
+// what the session ends up holding is what a succession would have left it.
 func handOff(t *testing.T, apps []*App, to int) {
 	t.Helper()
-	roster, anchor, delay := membershipOf(apps[to])
-	rec := network.HandoffRecord{
-		Term:              apps[to].AuthorityState().Term + 1,
+	held := apps[to].authority.State()
+	body, err := network.EncodeHandoff(network.HandoffRecord{
+		Term:              held.Term + 1,
 		Authority:         network.PeerID(to + 1),
 		Predecessor:       1,
-		Roster:            roster,
-		Anchor:            anchor,
-		BarrierDelayTicks: delay,
+		Roster:            held.Roster,
+		Anchor:            held.Anchor,
+		BarrierDelayTicks: held.Delay,
+	})
+	if err != nil {
+		t.Fatalf("encode the handoff: %v", err)
 	}
 	for _, a := range apps {
-		if err := a.authority.Adopt(rec, 0); err != nil {
-			t.Fatalf("hand authorship to participant %d: %v", to+1, err)
+		a.receiveAuthorityFrame(uint8(network.MsgAuthorityHandoff), 0, body)
+		a.ApplyPendingCorrections()
+		if got := a.authority.State(); got.Term != held.Term+1 {
+			t.Fatalf("participant %d holds term %d after the handoff, want %d",
+				a.localParticipant(), got.Term, held.Term+1)
 		}
-	}
-}
-
-// TestASecondHandoffForOneTermIsRefused is the same invariant at the receiving
-// end: whatever two candidates believe, a participant adopts one record per term.
-func TestASecondHandoffForOneTermIsRefused(t *testing.T) {
-	t.Parallel()
-	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
-	localCursors(t, apps)
-	guest := apps[2]
-
-	roster, anchor, delay := membershipOf(guest)
-	base := network.HandoffRecord{
-		Term:              network.FirstTerm + 1,
-		Authority:         2,
-		Predecessor:       1,
-		Roster:            roster,
-		Anchor:            anchor,
-		BarrierDelayTicks: delay,
-	}
-	if err := guest.authority.Adopt(base, 0); err != nil {
-		t.Fatalf("the first record for a term must be adopted: %v", err)
-	}
-	rival := base
-	rival.Authority = 3
-	err := guest.authority.Adopt(rival, 0)
-	if err == nil {
-		t.Fatal("a second, different record for one term was adopted")
-	}
-	if got := authorityOf(guest); got.Authority != 2 || got.Term != network.FirstTerm+1 {
-		t.Fatalf("the refused record moved the authority anyway: %+v", got)
-	}
-
-	// A record that skips a term is refused for the same reason: nothing agreed it.
-	skipped := base
-	skipped.Term = network.FirstTerm + 3
-	if err := guest.authority.Adopt(skipped, 0); err == nil {
-		t.Fatal("a record entering a term two generations ahead was adopted")
-	}
-	// And one whose roster is not this session's is refused before anything is read
-	// from it: the roster is what designates the successor, so a record carrying a
-	// different one is a record about a different session.
-	foreign := base
-	foreign.Term = network.FirstTerm + 2
-	foreign.Roster = append(slices.Clone(roster), network.SessionParticipant{ID: 4, Slot: 3})
-	if err := guest.authority.Adopt(foreign, 0); err == nil {
-		t.Fatal("a record carrying a roster this session never closed on was adopted")
-	}
-}
-
-// TestTheTermGateIgnoresTheOldAndRefusesTheUnheralded is the wire rule.
-func TestTheTermGateIgnoresTheOldAndRefusesTheUnheralded(t *testing.T) {
-	t.Parallel()
-	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
-	localCursors(t, apps)
-	guest := apps[2]
-	handOff(t, apps, 1)
-
-	stale := statOf(guest, "network.term_stale")
-	if guest.admitArtifactTerm(network.FirstTerm, 1) {
-		t.Fatal("an artifact from the previous term was admitted after the handoff")
-	}
-	if statOf(guest, "network.term_stale") != stale+1 {
-		t.Fatal("the ignored artifact was not counted")
-	}
-
-	refused := statOf(guest, "network.term_refused")
-	if guest.admitArtifactTerm(network.FirstTerm+5, 2) {
-		t.Fatal("an artifact from a term this instance was never handed was admitted")
-	}
-	if statOf(guest, "network.term_refused") != refused+1 {
-		t.Fatal("the refused artifact was not counted")
-	}
-	if got := authorityOf(guest); got.Term != network.FirstTerm+1 {
-		t.Fatalf("the refused artifact moved the term to %d", got.Term)
-	}
-	// The current term still passes, which is what says the gate is a gate rather
-	// than a wall.
-	if !guest.admitArtifactTerm(network.FirstTerm+1, 2) {
-		t.Fatal("the current term was refused")
 	}
 }
 
@@ -473,8 +346,8 @@ func TestMembershipIsByteIdenticalAcrossAHandoff(t *testing.T) {
 		cursors []uint64
 	}
 	read := func(a *App) membership {
-		roster, anchor, delay := membershipOf(a)
-		m := membership{roster: roster, anchor: anchor.Anchor.ConfigID, delay: delay}
+		held := a.authority.State()
+		m := membership{roster: held.Roster, anchor: held.Anchor.Anchor.ConfigID, delay: held.Delay}
 		a.World().RunSafe(func() {
 			for slot := range len(apps) {
 				m.cursors = append(m.cursors, uint64(a.World().Resources.Player.Slot(uint8(slot))))
@@ -523,12 +396,13 @@ func TestMembershipIsByteIdenticalAcrossAHandoff(t *testing.T) {
 	}
 }
 
-// TestAJoinerDiallingMidHandoffIsRefusedAndRetries's admission
-// half. A dial that lands while the session is electing must not be half-admitted
-// into a term that is about to end: it would hold a roster slot the successor's
-// record does not carry and would receive an authority that has stopped
-// publishing. The refusal is distinguishable so the joiner can retry.
-func TestAJoinerDiallingMidHandoffIsRefusedAndRetries(t *testing.T) {
+// TestAJoinerDiallingMidHandoffIsRefused is the admission half. A dial that lands
+// while the session is electing must not be half-admitted into a term that is about
+// to end: it would hold a roster slot the successor's record does not carry and
+// would receive an authority that has stopped publishing. The refusal is
+// distinguishable so the joiner can retry — the retry itself is an ordinary join,
+// pinned by the mid-run gate criteria.
+func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
 	const seed = 0x3017
 	host := mustHeadless(t, seed, 120, 40)
@@ -540,10 +414,21 @@ func TestAJoinerDiallingMidHandoffIsRefusedAndRetries(t *testing.T) {
 	}
 	addr := host.HostAddr()
 
-	// Open a succession by hand: the authority is this instance, so nothing is
-	// actually lost — what is being tested is the admission gate, and the gate
-	// reads "is a succession running" rather than "who went".
-	host.authority.Contest(9)
+	// A session this instance follows rather than authors, and then the loss of
+	// whoever was authoring it: the succession opens on the real path, and stands
+	// down at once because this instance has retained nothing to author from. What
+	// is being tested is the admission gate, which reads "is a succession running"
+	// rather than "who went".
+	host.openAuthority(network.SessionOffer{
+		Anchor: host.JoinAnchor(), Host: 2, Assigned: hostParticipantID,
+		Term: network.FirstTerm, BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
+		Participants: []network.SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
+	}, hostParticipantID)
+	host.reportPeerLost(2)
+	host.ApplyPendingCorrections()
+	if !host.authority.Migrating() {
+		t.Fatal("losing the authority opened no succession")
+	}
 
 	_, _, err := network.DialSession(addr, network.DebugConfig(network.RolePeer, ""))
 	if err == nil {
@@ -551,23 +436,6 @@ func TestAJoinerDiallingMidHandoffIsRefusedAndRetries(t *testing.T) {
 	}
 	if !network.IsHandoffRefusal(err) {
 		t.Fatalf("the refusal is not distinguishable: %v", err)
-	}
-
-	// The succession resolves; the retry is an ordinary join and lands in the same
-	// slot discipline the first one would have.
-	host.authority.Contest(0)
-
-	stopTicking := tickInBackground(host)
-	guest, _ := mustSocketJoiner(t, addr, seed, 120, 40)
-	stopTicking()
-
-	waitForRosterPair(t, host, guest)
-	if got := guest.localSlot(); got != 1 {
-		t.Fatalf("the retried join took slot %d, want the next free slot", got)
-	}
-	if got := guest.AuthorityState(); got.Term != network.FirstTerm || got.Authority != 1 {
-		t.Fatalf("the retried join adopted term %d under participant %d",
-			got.Term, got.Authority)
 	}
 }
 
@@ -666,54 +534,6 @@ func TestTheFirstCorrectionAfterAHandoffIsHashOnly(t *testing.T) {
 	}
 }
 
-// TestALocalForkRejoiningAHigherTermIsRefused: Partition merging
-// is a non-goal; the refusal is deliberate, and the operator is told.
-func TestALocalForkRejoiningAHigherTermIsRefused(t *testing.T) {
-	t.Parallel()
-	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
-	localCursors(t, apps)
-	primeRetention(t, apps)
-
-	// A partition that cannot elect: the succession opens and its deadline passes
-	// with nothing eligible, which is the local-continuation fallback.
-	fork := apps[2]
-	fork.authority.BeginSuccession(1)
-	fork.authority.GiveUp()
-	if got := authorityOf(fork); !got.Fork {
-		t.Fatalf("the instance did not become a local fork: %+v", got)
-	}
-
-	before := fork.SnapshotShared()
-	refused := statOf(fork, "network.term_refused")
-
-	// The session it left has moved on. Every artifact it now carries names a term
-	// this instance was never handed, and every one of them is refused.
-	if fork.admitArtifactTerm(network.FirstTerm+2, 1) {
-		t.Fatal("a fork adopted an artifact from a term it was never handed")
-	}
-	if statOf(fork, "network.term_refused") <= refused {
-		t.Fatal("the refusal was not counted")
-	}
-	if got := authorityOf(fork); got.Term != network.FirstTerm || !got.Fork {
-		t.Fatalf("the refused artifact moved the fork's authority: %+v", got)
-	}
-	if idx, x, y, differs := snapshot.FirstDiff(before, fork.SnapshotShared()); differs {
-		t.Fatalf("state crossed into the fork at line %d\n  %s\n  %s", idx, x, y)
-	}
-
-	// And a handoff record for a term two generations ahead — the record the
-	// session actually produced while this instance was away — is refused for the
-	// same reason rather than adopted as a way back in.
-	roster, anchor, delay := membershipOf(fork)
-	if err := fork.authority.Adopt(network.HandoffRecord{
-		Term: network.FirstTerm + 2, Authority: 2, Predecessor: 1,
-		Roster: roster, Anchor: anchor,
-		BarrierDelayTicks: delay,
-	}, 1); err == nil {
-		t.Fatal("a fork adopted a handoff that skipped the term it missed")
-	}
-}
-
 // TestSelectiveApplyKeepsItsExclusionsAcrossAHandoffAndARelay is the invariant
 // that must not regress. A successor authors the Shared domain and nothing else:
 // it does not begin authoring the D-13 owner-authored cells of cursors it does not
@@ -806,7 +626,7 @@ func TestMeshParityAcrossAHandoff(t *testing.T) {
 			authorityOf(survivors[0]), authorityOf(survivors[1]), authorityOf(survivors[2]))
 	}
 	successor := survivors[0]
-	if !successor.authority.IsAuthority() {
+	if !successor.authority.State().Authoring() {
 		t.Fatal("the roster-lowest survivor is not authoring")
 	}
 

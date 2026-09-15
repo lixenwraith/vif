@@ -1,17 +1,14 @@
 package app
 
 import (
-	"errors"
 	"slices"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/converge"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
-	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
 )
 
 // instance is the App as the authority protocol sees it: the world a correction is
@@ -148,66 +145,12 @@ func (a *App) ApplyPendingCorrections() {
 	a.corrections.Apply()
 }
 
-// PublishCorrection takes one authoritative capture and broadcasts it, for a driven
-// run that paces its own cadence. An interactive host has the pump instead, and
-// calling this retires it: a run with two things deciding when a correction leaves
-// hands its guests a world newer than the one its driver was describing.
-func (a *App) PublishCorrection() error {
-	if a.corrections == nil {
-		return errors.New("this run is not in a session")
-	}
-	return a.corrections.Publish()
-}
-
 // adoptCorrectionBaseline records the capture a join installed, so the deltas that
 // follow it have the keyframe they name. It is the same object from both ends: the
 // host sent a keyframe and this is the instance that installed it.
 func (a *App) adoptCorrectionBaseline(cap snapshot.SharedCapture) {
 	if a.corrections != nil {
 		a.corrections.SetBaseline(cap)
-	}
-}
-
-// CadenceReport is the session's operating point, for `:session` and the criteria.
-func (a *App) CadenceReport() converge.CadenceReport {
-	if a.corrections == nil {
-		return converge.CadenceReport{}
-	}
-	return a.corrections.Cadence()
-}
-
-// SelectiveReport describes the selective exchange.
-func (a *App) SelectiveReport() converge.SelectiveReport {
-	if a.corrections == nil {
-		return converge.SelectiveReport{PeerState: map[uint32]converge.PeerSelective{}}
-	}
-	return a.corrections.Selective()
-}
-
-// AuthorityState describes this instance's place in the session's authority.
-func (a *App) AuthorityState() converge.AuthorityReport {
-	if a.authority == nil {
-		return converge.AuthorityReport{}
-	}
-	return a.authority.State()
-}
-
-// cadenceSizes is what a correction currently costs on this world.
-func (a *App) cadenceSizes() linkpace.Sizes {
-	if a.corrections == nil {
-		return linkpace.Sizes{}
-	}
-	return a.corrections.Sizes()
-}
-
-// correctionMagnitude reports the last correction's size, for a caller that wants
-// the number without reading the registry.
-func (a *App) correctionMagnitude() engine.WorldDifference {
-	m := a.telemetry
-	return engine.WorldDifference{
-		Entries:   int(m.CorrectionEntries.Load()),
-		Entities:  int(m.CorrectionEntities.Load()),
-		CellShift: int(m.CorrectionCells.Load()),
 	}
 }
 
@@ -231,11 +174,6 @@ func (a *App) authorityTerm() network.AuthorityTerm {
 	return a.authority.Term()
 }
 
-// authoring reports whether this instance is the one publishing the world.
-func (a *App) authoring() bool {
-	return a.authority != nil && a.authority.IsAuthority()
-}
-
 // authorityID is the participant currently authoring, which every admission
 // artifact names. It falls back to the session's first identity so a run that has
 // not opened a session yet still offers a valid one.
@@ -247,14 +185,6 @@ func (a *App) authorityID() network.PeerID {
 		return id
 	}
 	return hostParticipantID
-}
-
-// admitArtifactTerm is the wire gate as the correction path calls it.
-func (a *App) admitArtifactTerm(term network.AuthorityTerm, from uint32) bool {
-	if a.authority == nil {
-		return true
-	}
-	return a.authority.Admit(term, from)
 }
 
 // openAuthority records the term and membership this run enters a session under.

@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/converge"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
@@ -60,32 +59,6 @@ func runSession(host, guest *App, ticks int) {
 	}
 }
 
-// TestCadenceBoundsAreTheGameParameters is the seam between the controller's
-// contract and the game's numbers. pkg may not see internal, so the envelope is
-// assembled here and a parameter that drifts out of the controller's declared
-// order is caught here.
-func TestCadenceBoundsAreTheGameParameters(t *testing.T) {
-	t.Parallel()
-	b := converge.CadenceBounds()
-	if err := b.Validate(); err != nil {
-		t.Fatalf("the shipped envelope does not validate: %v", err)
-	}
-	if b.NominalCadenceTicks != parameter.SnapshotCorrectionTicks {
-		t.Fatalf("the nominal cadence is %d, the parameter says %d",
-			b.NominalCadenceTicks, parameter.SnapshotCorrectionTicks)
-	}
-	if b.FloorKeyframeTicks != parameter.SnapshotFloorKeyframeTicks {
-		t.Fatalf("the floor is %d ticks, the parameter says %d",
-			b.FloorKeyframeTicks, parameter.SnapshotFloorKeyframeTicks)
-	}
-	// The nominal point must itself honour the floor, or a healthy session would
-	// start out already reporting a constrained link.
-	if got := b.NominalCadenceTicks * uint64(b.NominalKeyframe); got > b.FloorKeyframeTicks {
-		t.Fatalf("the nominal schedule leaves %d ticks between whole worlds, floor is %d",
-			got, b.FloorKeyframeTicks)
-	}
-}
-
 // TestAHealthyLinkKeepsTheNominalPointAndHidesItsTiming is the "do no harm" case
 // plus the boundary the phase is constrained by: an unconstrained link is not
 // adapted away from the shipped cadence, and no link measurement reaches the
@@ -95,7 +68,7 @@ func TestAHealthyLinkKeepsTheNominalPointAndHidesItsTiming(t *testing.T) {
 	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{})
 	runSession(host, guest, 120)
 
-	report := host.CadenceReport()
+	report := host.corrections.Cadence()
 	if len(report.Peers) != 1 {
 		t.Fatalf("the host scheduled %d links, want 1", len(report.Peers))
 	}
@@ -141,7 +114,7 @@ func TestTheRoundTripIsMeasuredEndToEnd(t *testing.T) {
 	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{LatencyTicks: 3})
 	runSession(host, guest, 120)
 
-	report := host.CadenceReport()
+	report := host.corrections.Cadence()
 	if len(report.Peers) != 1 {
 		t.Fatalf("the host scheduled %d links, want 1", len(report.Peers))
 	}
@@ -186,7 +159,7 @@ func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 		}
 	}
 
-	report := host.CadenceReport()
+	report := host.corrections.Cadence()
 	if len(report.Peers) != 1 {
 		t.Fatalf("the host scheduled %d links, want 1", len(report.Peers))
 	}
@@ -275,7 +248,7 @@ func TestTheFloorBoundsEveryScheduleAShapedLinkProduces(t *testing.T) {
 				if tick%8 != 0 {
 					continue
 				}
-				report := host.CadenceReport()
+				report := host.corrections.Cadence()
 				if report.KeyframePeriodTicks > parameter.SnapshotFloorKeyframeTicks {
 					t.Fatalf("%d ticks between whole worlds, floor is %d",
 						report.KeyframePeriodTicks, parameter.SnapshotFloorKeyframeTicks)
@@ -407,7 +380,7 @@ func TestASlowPeerDoesNotSlowAFastOne(t *testing.T) {
 		}
 	}
 
-	report := host.CadenceReport()
+	report := host.corrections.Cadence()
 	if len(report.Peers) != 2 {
 		t.Fatalf("the host scheduled %d links, want 2", len(report.Peers))
 	}

@@ -58,13 +58,13 @@ func (c *Corrections) driveAuthority() {
 	c.authorityMu.Unlock()
 
 	for _, id := range lost {
-		u.PeerLost(id)
+		u.peerLost(id)
 	}
 	for _, f := range frames {
 		c.tel.HandoffBytes.Add(int64(len(f.body)))
 		u.Receive(f.kind, f.from, f.body)
 	}
-	u.Drive()
+	u.drive()
 }
 
 // BecomeAuthority turns a receiver into the publisher for a new term, seeded from

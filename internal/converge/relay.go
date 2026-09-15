@@ -10,21 +10,21 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
-// Role is what this instance is doing in the protocol right now.
-func (c *Corrections) Role() network.Role {
+// role is what this instance is doing in the protocol right now.
+func (c *Corrections) role() network.Role {
 	links := 0
 	if link, ok := c.inst.Transport().(engine.LinkMeasuringPort); ok {
 		links = len(link.Peers())
 	}
-	return network.SessionRole(c.authority.IsAuthority(), links)
+	return network.SessionRole(c.authority.isAuthority(), links)
 }
 
-// CanRelay reports whether this instance can answer for a participant behind it: not
+// canRelay reports whether this instance can answer for a participant behind it: not
 // the authority, more than one link, and retention to serve from. The retention test
 // is what keeps the claim honest — saying otherwise upstream would leave the
 // participants behind it holding an index nobody can act on.
-func (c *Corrections) CanRelay() bool {
-	if c.Role() != network.RoleRelay {
+func (c *Corrections) canRelay() bool {
+	if c.role() != network.RoleRelay {
 		return false
 	}
 	c.publishMu.Lock()
@@ -37,7 +37,7 @@ func (c *Corrections) CanRelay() bool {
 // It runs after this instance answered the manifest, which is what puts the tick in
 // retention before a request naming it can arrive.
 func (c *Corrections) forwardManifest(body []byte, from uint32, tick uint64) {
-	if !c.CanRelay() {
+	if !c.canRelay() {
 		return
 	}
 	link, ok := c.inst.Transport().(engine.LinkMeasuringPort)
@@ -75,19 +75,19 @@ func behindLinks(peers []uint32, from uint32) []uint32 {
 	return out
 }
 
-// RelayedParticipants is who this instance can answer for, carried upstream in its
+// relayedParticipants is who this instance can answer for, carried upstream in its
 // own answer. A statement of capability rather than a record of what was forwarded:
 // the authority withholds the index while a participant is unanswerable, so a relay
 // reporting only past forwards could never forward anything to report.
-func (c *Corrections) RelayedParticipants() []uint32 {
-	if !c.CanRelay() {
+func (c *Corrections) relayedParticipants() []uint32 {
+	if !c.canRelay() {
 		return nil
 	}
 	link, ok := c.inst.Transport().(engine.LinkMeasuringPort)
 	if !ok {
 		return nil
 	}
-	return behindLinks(link.Peers(), c.SelectiveSource())
+	return behindLinks(link.Peers(), c.selectiveSource())
 }
 
 // canAnswerEveryParticipantLocked reports whether every participant can be

@@ -168,12 +168,12 @@ func (c *Corrections) retain(cap snapshot.SharedCapture, index *snapshot.Manifes
 	c.publishMu.Unlock()
 }
 
-// RetentionEvidence is what this instance can prove it holds: the newest
+// retentionEvidence is what this instance can prove it holds: the newest
 // authoritative tick it has an index over, and how many such records. It reads the
 // ring rather than taking a capture because a fresh capture proves only what the
 // candidate believes — a record is in the ring only because its root was the
 // authority's, so the ring is evidence about the session.
-func (c *Corrections) RetentionEvidence() (uint64, int) {
+func (c *Corrections) retentionEvidence() (uint64, int) {
 	c.publishMu.Lock()
 	defer c.publishMu.Unlock()
 	newest := uint64(0)
@@ -241,7 +241,7 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	}
 	m.RequestBytes.Add(int64(len(pending.body)))
 
-	if !c.authority.Admit(req.Term, pending.from) {
+	if !c.authority.admit(req.Term, pending.from) {
 		m.ShardsRefused.Add(1)
 		return
 	}
@@ -312,7 +312,7 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		// whole bodies, then tried again — the condition is the world's rather than
 		// the peer's and it ends when the storm does.
 		m.KeyframeFallback.Add(1)
-		c.Widen(pending.from)
+		c.widen(pending.from)
 		c.sendKeyframeTo(port, pending.from, req.Tick)
 		return
 	}
@@ -329,9 +329,9 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		"participant", pending.from, "tick", req.Tick, "pages", pages, "bytes", len(body))
 }
 
-// Widen drops one peer out of the selective exchange for the next few
+// widen drops one peer out of the selective exchange for the next few
 // publications, so it is served the ordinary correction body instead.
-func (c *Corrections) Widen(id uint32) {
+func (c *Corrections) widen(id uint32) {
 	c.publishMu.Lock()
 	if p := c.peers[id]; p != nil {
 		p.wide = parameter.SnapshotManifestSilenceCorrections
@@ -426,7 +426,7 @@ func (c *Corrections) applySelective() {
 	c.selectiveMu.Unlock()
 
 	for _, body := range shardSets {
-		c.ApplyRepair(body)
+		c.applyRepair(body)
 	}
 	for _, body := range unserved {
 		c.applyUnserved(body)
@@ -492,8 +492,8 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		vlog.Debug("app", "msg", "manifest refused", "error", err.Error())
 		return 0
 	}
-	from := c.SelectiveSource()
-	if !c.authority.Admit(want.Header.Term, from) {
+	from := c.selectiveSource()
+	if !c.authority.admit(want.Header.Term, from) {
 		m.BaselineRefusals.Add(1)
 		return 0
 	}
@@ -536,7 +536,7 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		req.Sections = nil
 	}
 	// What this instance can answer for, stated where the authority will read it.
-	req.Relayed = c.RelayedParticipants()
+	req.Relayed = c.relayedParticipants()
 	c.sendRequest(from, req)
 
 	if req.Converged() {
@@ -548,7 +548,7 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		mine.Header = want.Header
 		if integrity, err := snapshot.Integrity(mine); err == nil {
 			mine.Header.Integrity = integrity
-			if err := c.Install(mine); err != nil {
+			if err := c.install(mine); err != nil {
 				vlog.Debug("app", "msg", "hash-only correction not applied", "error", err.Error())
 			}
 		}
@@ -571,10 +571,10 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 	return want.Header.Tick
 }
 
-// Expect records the baseline a repair will be validated against, as answering an
+// expect records the baseline a repair will be validated against, as answering an
 // index does. Nothing in the protocol calls it: a criterion driving one leg of the
 // exchange by hand uses it to stand in for the leg it skipped.
-func (c *Corrections) Expect(want snapshot.CorrectionManifest, from uint32) error {
+func (c *Corrections) expect(want snapshot.CorrectionManifest, from uint32) error {
 	mine, err := c.inst.CaptureShared()
 	if err != nil {
 		return err
@@ -608,11 +608,11 @@ func (c *Corrections) takeAwaiting(tick uint64) *awaitingRepair {
 	return nil
 }
 
-// ApplyRepair validates and installs one shard set. Nothing is written until the
+// applyRepair validates and installs one shard set. Nothing is written until the
 // whole set has passed validation and the repaired capture has reproduced the set's
 // root; a failure at either point leaves the awaited state untouched and asks for a
 // keyframe, the one answer that cannot fail the same way.
-func (c *Corrections) ApplyRepair(body []byte) {
+func (c *Corrections) applyRepair(body []byte) {
 	m := c.tel
 	m.ShardBytesRecv.Add(int64(len(body)))
 
@@ -624,7 +624,7 @@ func (c *Corrections) ApplyRepair(body []byte) {
 	}
 	m.ShardsRecv.Add(int64(len(set.Shards)))
 
-	if !c.authority.Admit(set.Header.Term, set.Served) {
+	if !c.authority.admit(set.Header.Term, set.Served) {
 		m.ShardsRefused.Add(1)
 		return
 	}
@@ -657,7 +657,7 @@ func (c *Corrections) ApplyRepair(body []byte) {
 		return
 	}
 
-	if err := c.Install(repaired); err != nil {
+	if err := c.install(repaired); err != nil {
 		vlog.Warn("app", "msg", "repair not installed",
 			"tick", repaired.Header.Tick, "error", err.Error())
 		c.requestKeyframe(awaiting.from, awaiting.manifest)
@@ -721,9 +721,9 @@ func (c *Corrections) sendRequest(from uint32, req snapshot.CorrectionRequest) {
 	c.tel.RequestBytes.Add(int64(len(body)))
 }
 
-// SelectiveSource is the participant a receiver answers: the peer its manifests
+// selectiveSource is the participant a receiver answers: the peer its manifests
 // arrive from, which is the authority or the neighbour relaying for it.
-func (c *Corrections) SelectiveSource() uint32 {
+func (c *Corrections) selectiveSource() uint32 {
 	c.selectiveMu.Lock()
 	defer c.selectiveMu.Unlock()
 	return c.selective.source
@@ -735,7 +735,7 @@ func (c *Corrections) ReceiveSelective(kind uint8, from uint32, body []byte) {
 	// A request is this instance's own half to serve; the other three are a
 	// receiver's, and while this instance authors they are its own index and the
 	// repairs answering it, come back round a mesh flood with cycles.
-	if network.MessageType(kind) != network.MsgStateRequest && c.authority.IsAuthority() {
+	if network.MessageType(kind) != network.MsgStateRequest && c.authority.isAuthority() {
 		return
 	}
 	c.selectiveMu.Lock()

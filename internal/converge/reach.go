@@ -121,7 +121,7 @@ func (r *Reach) NoteDeclared(id network.PeerID, report network.JoinerReport) {
 	if !ok {
 		return
 	}
-	r.authority.AppendChain(id, addr)
+	r.authority.appendChain(id, addr)
 }
 
 // resolveDeclared completes a declared address from the connection it arrived on.
@@ -164,8 +164,8 @@ func (r *Reach) Close() {
 	}
 }
 
-// Drive runs between two ticks, from the same loop the succession does.
-func (r *Reach) Drive(contested bool) {
+// drive runs between two ticks, from the same loop the succession does.
+func (r *Reach) drive(contested bool) {
 	if r == nil {
 		return
 	}
@@ -182,7 +182,7 @@ func (r *Reach) Drive(contested bool) {
 // to author already has one when it does.
 func (r *Reach) dialSuccessor() {
 	u := r.authority
-	successor, ok := u.Successor()
+	successor, ok := u.successor()
 	if !ok || successor == 0 || successor == u.local {
 		return
 	}
@@ -213,7 +213,7 @@ func (r *Reach) retrySuccession() {
 	r.mu.Unlock()
 
 	chain := r.authority.Chain()
-	for _, id := range r.authority.SuccessionOrder() {
+	for _, id := range r.authority.successionOrder() {
 		if dialer.Connected(uint32(id)) {
 			return // reachable already; the record arrives on that link
 		}
@@ -255,7 +255,7 @@ func (r *Reach) dial(id network.PeerID, addr string) {
 		}
 		vlog.Info("app", "msg", "peer link opened",
 			"participant", uint64(id), "address", addr)
-		r.authority.SendReport()
+		r.authority.sendReport()
 	}()
 }
 
@@ -267,20 +267,20 @@ type PeerLinkGate struct{ reach atomic.Pointer[Reach] }
 // Bind hands the gate the reachability half once the run has one.
 func (g *PeerLinkGate) Bind(r *Reach) { g.reach.Store(r) }
 
-// Admit is the acceptor hook: it answers nothing until the run is bound.
+// admit is the acceptor hook: it answers nothing until the run is bound.
 func (g *PeerLinkGate) Admit(from network.PeerID) error {
 	r := g.reach.Load()
 	if r == nil {
 		return errors.New("peer link: this participant has no session yet")
 	}
-	return r.AdmitPeerLink(from)
+	return r.admitPeerLink(from)
 }
 
-// AdmitPeerLink admits a participant of this session that is not this instance.
+// admitPeerLink admits a participant of this session that is not this instance.
 // The world's roster, not the coordinator's lobby: only the coordinator fills that
 // one. Not the term either — a survivor still electing is exactly who needs to open
 // a link.
-func (r *Reach) AdmitPeerLink(from network.PeerID) error {
+func (r *Reach) admitPeerLink(from network.PeerID) error {
 	local := network.PeerID(r.inst.LocalParticipant())
 	if from == 0 || from == local {
 		return fmt.Errorf("peer link: participant %d is not another participant", from)

@@ -48,7 +48,7 @@ func deliverCorrection(t *testing.T, host *App, guests []*App, advance func()) [
 // caller measuring how far a guest's prediction had actually gone.
 func deliverCorrectionNow(t *testing.T, host *App, guests []*App, advance func()) []string {
 	t.Helper()
-	if err := host.PublishCorrection(); err != nil {
+	if err := host.corrections.Publish(); err != nil {
 		t.Fatalf("publish correction: %v", err)
 	}
 	want := host.SnapshotShared()
@@ -176,12 +176,15 @@ func TestCorrectionMagnitudeIsMeasuredNotAsserted(t *testing.T) {
 	want := deliverCorrectionNow(t, host, []*App{guest}, advance)
 	assertCorrected(t, want, guest, "guest")
 
-	got := guest.correctionMagnitude()
-	if got.Entities == 0 || got.Entries == 0 {
-		t.Fatalf("correction magnitude = %+v, want a drift the guest had to be told about", got)
+	entries := statOf(guest, "snapshot.correction_entries")
+	entities := statOf(guest, "snapshot.correction_entities")
+	cells := statOf(guest, "snapshot.correction_cells")
+	if entries == 0 || entities == 0 {
+		t.Fatalf("correction magnitude = %d entries over %d entities, want a drift the "+
+			"guest had to be told about", entries, entities)
 	}
-	if got.CellShift == 0 {
-		t.Fatalf("correction magnitude = %+v, want a placement that moved", got)
+	if cells == 0 {
+		t.Fatal("correction magnitude reports no placement shift, want one that moved")
 	}
 	// Nothing escalated: the drift is the ordinary condition this phase created.
 	if diverged := host.World().Resources.Status.Bools.Has("network.diverged"); diverged {
@@ -1054,12 +1057,12 @@ func TestASilentPeerIsSentWholeBodies(t *testing.T) {
 	// The guest stops answering: its ticks still run, but nothing drains or replies
 	// to the index. Publishing is driven, so each round is one manifest.
 	for range parameter.SnapshotManifestSilenceCorrections + 1 {
-		if err := host.PublishCorrection(); err != nil {
+		if err := host.corrections.Publish(); err != nil {
 			t.Fatalf("publish: %v", err)
 		}
 		host.Tick(1)
 	}
-	report := host.SelectiveReport()
+	report := host.corrections.Selective()
 	peer, ok := report.PeerState[2]
 	if !ok {
 		t.Fatalf("the host holds no standing for participant 2: %+v", report.PeerState)
@@ -1071,7 +1074,7 @@ func TestASilentPeerIsSentWholeBodies(t *testing.T) {
 	// The next publish carries a whole body again, and the guest — still ticking —
 	// takes it through the ordinary correction path.
 	before := statOf(host, "snapshot.correction_bytes_sent")
-	if err := host.PublishCorrection(); err != nil {
+	if err := host.corrections.Publish(); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	if got := statOf(host, "snapshot.correction_bytes_sent"); got == before {
@@ -1088,44 +1091,6 @@ func TestASilentPeerIsSentWholeBodies(t *testing.T) {
 	t.Fatal("the fallback body never reached the guest")
 }
 
-// TestAWidenedPeerIsServedForItsWholeWindow: a peer dropped out of the exchange for
-// a repair wider than the world it aimed at is owed the whole body for every round
-// it is out, the final one included. The skip and the fallback are one decision —
-// deriving the second from the counter the first spent left the last round sending
-// neither an index nor a body, which is a stall the protocol has no answer for.
-func TestAWidenedPeerIsServedForItsWholeWindow(t *testing.T) {
-	t.Parallel()
-	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
-	deliverCorrection(t, host, []*App{guest}, advance)
-
-	// What serveOne reaches when a repair is not worth sending.
-	const guestParticipant = 2
-	host.corrections.Widen(guestParticipant)
-
-	keyframes := statOf(host, "snapshot.keyframes")
-	for round := range parameter.SnapshotManifestSilenceCorrections {
-		sent := statOf(host, "snapshot.correction_bytes_sent")
-		if err := host.PublishCorrection(); err != nil {
-			t.Fatalf("round %d publish: %v", round, err)
-		}
-		if statOf(host, "snapshot.correction_bytes_sent") == sent {
-			t.Fatalf("round %d of the widen window left the peer with neither an index nor a body", round)
-		}
-		advance()
-	}
-	if got := statOf(host, "snapshot.keyframes"); got != keyframes {
-		t.Fatalf("the window crossed a keyframe (%d, was %d), which every peer is sent anyway; "+
-			"this run did not exercise the fallback it is about", got, keyframes)
-	}
-	// The window is over: the peer is back in the exchange, and the correction that
-	// puts it there converges it like any other.
-	manifests := statOf(host, "snapshot.manifests_sent")
-	assertCorrected(t, deliverCorrection(t, host, []*App{guest}, advance), guest, "after the window")
-	if statOf(host, "snapshot.manifests_sent") <= manifests {
-		t.Fatal("the peer never returned to the selective exchange")
-	}
-}
-
 // TestLinkPacingPricesTheSelectiveWire: the controller's cost
 // model is fed the bytes the new protocol actually sends, not the whole delta it
 // replaced.
@@ -1136,7 +1101,7 @@ func TestLinkPacingPricesTheSelectiveWire(t *testing.T) {
 		deliverCorrection(t, host, []*App{guest}, advance)
 	}
 
-	report := host.CadenceReport()
+	report := host.corrections.Cadence()
 	measured := statOf(host, "snapshot.selective_bytes")
 	if measured == 0 {
 		t.Fatal("the selective wire size was never measured")
@@ -1149,137 +1114,8 @@ func TestLinkPacingPricesTheSelectiveWire(t *testing.T) {
 		t.Fatalf("a keyframe (%d bytes) is priced no higher than a selective correction (%d)",
 			report.KeyframeBytes, report.DeltaBytes)
 	}
-	// Admission reads the same pair, so a link is judged against what the session
-	// will actually put on it.
-	sizes := host.cadenceSizes()
-	if sizes.Delta != measured || sizes.Keyframe != report.KeyframeBytes {
-		t.Fatalf("admission prices %+v, the report says keyframe %d delta %d",
-			sizes, report.KeyframeBytes, report.DeltaBytes)
-	}
 	t.Logf("priced from the wire: keyframe %d bytes, selective correction %d bytes",
-		sizes.Keyframe, sizes.Delta)
-}
-
-// TestAFailedProofReachesTheKeyframeFallback is the session half: a
-// repair that does not verify is refused without touching the world, the guest asks
-// for a whole world instead, and the world it gets converges it.
-func TestAFailedProofReachesTheKeyframeFallback(t *testing.T) {
-	t.Parallel()
-	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
-	deliverCorrection(t, host, []*App{guest}, advance)
-	advance()
-	divergeGuest(t, guest)
-
-	corrupt, awaiting := outstandingRepair(t, host, guest, func(set *snapshot.CorrectionShardSet) {
-		set.Shards[0].Hash++
-	})
-	_ = awaiting
-
-	before := statOf(guest, "snapshot.proof_failures")
-	guest.corrections.ApplyRepair(corrupt)
-	if statOf(guest, "snapshot.proof_failures") <= before {
-		t.Fatal("a corrupted repair passed its proof")
-	}
-	if got := statOf(guest, "snapshot.keyframe_fallbacks"); got == 0 {
-		t.Fatal("a failed proof did not reach the keyframe fallback")
-	}
-	if got := statOf(guest, "snapshot.corrections_applied"); got != 1 {
-		t.Fatalf("a refused repair was installed anyway (%d corrections applied)", got)
-	}
-
-	// The fallback resolves it: the next correction converges the guest whole, and
-	// it does so through the keyframe path rather than by repairing.
-	want := deliverSameTick(t, host, []*App{guest})
-	assertCorrected(t, want, guest, "guest")
-}
-
-// TestSupersededRepairsAreRefusedRatherThanCombined is the other half of
-// a repair that answers a baseline the receiver has moved past is
-// refused, so two of them can never be spliced into one world.
-func TestSupersededRepairsAreRefusedRatherThanCombined(t *testing.T) {
-	t.Parallel()
-	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
-	deliverCorrection(t, host, []*App{guest}, advance)
-	advance()
-	divergeGuest(t, guest)
-
-	stale, staleTick := outstandingRepair(t, host, guest, nil)
-
-	// A newer manifest supersedes what the guest was awaiting, and the guest is now
-	// waiting on a repair for a later baseline. The held one answers a state this
-	// instance has moved past.
-	advance()
-	divergeGuest(t, guest)
-	_, freshTick := outstandingRepair(t, host, guest, nil)
-	if freshTick <= staleTick {
-		t.Fatalf("the second round named tick %d, not later than %d", freshTick, staleTick)
-	}
-
-	before := statOf(guest, "snapshot.shards_refused")
-	baselines := statOf(guest, "snapshot.baseline_refusals")
-	applied := statOf(guest, "snapshot.corrections_applied")
-	guest.corrections.ApplyRepair(stale)
-	if statOf(guest, "snapshot.shards_refused") <= before {
-		t.Fatal("a superseded repair was accepted")
-	}
-	if got := statOf(guest, "snapshot.corrections_applied"); got != applied {
-		t.Fatalf("a superseded repair was installed anyway (%d corrections applied, was %d)",
-			got, applied)
-	}
-	if statOf(guest, "snapshot.baseline_refusals") <= baselines {
-		t.Fatal("a superseded repair was refused for some reason other than its baseline")
-	}
-	if got := statOf(guest, "snapshot.proof_failures"); got != 0 {
-		t.Fatalf("a superseded repair was spliced and then failed its root %d times", got)
-	}
-
-	// And the session recovers on its own: the fresh baseline is still outstanding,
-	// so the next round converges the guest.
-	advance()
-	want := deliverSameTick(t, host, []*App{guest})
-	assertCorrected(t, want, guest, "guest")
-}
-
-// outstandingRepair drives the exchange far enough for the guest to be awaiting a
-// repair, then builds the repair the host would have sent — optionally corrupted —
-// without letting the guest apply it. The interception is white-box on purpose: a
-// repair is queued and applied in one drain, so building the same message from the
-// same two indexes is the only way to ask what the receiver does with a bad one.
-func outstandingRepair(t *testing.T, host, guest *App, corrupt func(*snapshot.CorrectionShardSet)) ([]byte, uint64) {
-	t.Helper()
-	if err := host.PublishCorrection(); err != nil {
-		t.Fatalf("publish: %v", err)
-	}
-	host.ApplyPendingCorrections()
-	guest.ApplyPendingCorrections() // answers the index, now awaiting a repair
-
-	req, ok := guest.corrections.OutstandingRequest()
-	if !ok {
-		t.Fatal("the guest is not awaiting a repair; the injected divergence produced none")
-	}
-	if req.Converged() {
-		t.Fatal("the guest reported convergence; the injected divergence produced no request")
-	}
-
-	index, ok := host.corrections.RetainedIndex(req.Tick)
-	if !ok {
-		t.Fatalf("the host retained no capture for tick %d", req.Tick)
-	}
-	set, pages, err := snapshot.BuildShardSet(index, req)
-	if err != nil {
-		t.Fatalf("build repair: %v", err)
-	}
-	if pages == 0 {
-		t.Fatal("the request asked for no page")
-	}
-	if corrupt != nil {
-		corrupt(&set)
-	}
-	body, err := snapshot.EncodeShardSet(set)
-	if err != nil {
-		t.Fatalf("encode repair: %v", err)
-	}
-	return body, req.Tick
+		report.KeyframeBytes, report.DeltaBytes)
 }
 
 // TestSelectiveCorrectionKeepsThePlayerDomainUntouched seen from

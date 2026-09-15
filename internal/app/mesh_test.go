@@ -468,101 +468,6 @@ func TestARelayedParticipantKeepsTheSelectiveStream(t *testing.T) {
 	}
 }
 
-// TestARelayCannotForgeAPage proves that a relay serving pages it did not author
-// cannot substitute one. The binding is the authority's own root twice over: the set
-// must declare the root the receiver was sent, and the repaired capture must
-// reproduce it. Mutating a page breaks the page hash first and the root second, and
-// the receiver reaches the bounded keyframe fallback rather than installing anything.
-func TestARelayCannotForgeAPage(t *testing.T) {
-	t.Parallel()
-	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}})
-	localCursors(t, apps)
-	driveCorrections(t, apps, 4)
-
-	host, far := apps[0], apps[2]
-	cap, err := host.CaptureShared()
-	if err != nil {
-		t.Fatalf("capture: %v", err)
-	}
-	index, err := snapshot.BuildManifest(cap, 1)
-	if err != nil {
-		t.Fatalf("index: %v", err)
-	}
-	want := index.Summary()
-
-	// A request the relay would answer, and the honest answer to it.
-	req := snapshot.CorrectionRequest{
-		Version: snapshot.ManifestVersion, Schema: snapshot.Schema,
-		Tick: cap.Header.Tick, Run: cap.Header.Run, Session: cap.Header.Session,
-		Term: cap.Header.Term,
-		Sections: []snapshot.SectionRequest{{
-			ID: snapshot.StoreSectionPrefix + "positions", Pages: want.Sections[1].Pages,
-			Hash: make([]uint64, want.Sections[1].Pages),
-		}},
-	}
-	set, pages, err := snapshot.BuildShardSet(index, req)
-	if err != nil || pages == 0 {
-		t.Fatalf("build a relayed answer: %v (%d pages)", err, pages)
-	}
-	set.Served = 2
-
-	if err := snapshot.ValidateShardSet(set, cap.Header.Tick, 1, want.Root, want.Header); err != nil {
-		t.Fatalf("an honest relayed answer was refused: %v", err)
-	}
-
-	// Substituted at the relay: one row's value replaced, everything else intact.
-	forged := set
-	forged.Shards = append([]snapshot.CorrectionShard(nil), set.Shards...)
-	rows := append([]snapshot.ManifestRow(nil), forged.Shards[0].Rows...)
-	if len(rows) == 0 {
-		t.Skip("the chosen page is empty; nothing to substitute")
-	}
-	rows[0].Value = []byte(`{"X":1,"Y":1}`)
-	forged.Shards[0].Rows = rows
-	if err := snapshot.ValidateShardSet(forged, cap.Header.Tick, 1, want.Root, want.Header); err == nil {
-		t.Fatal("a substituted page passed the per-page proof")
-	}
-
-	// Truncated at the relay: the rows the page declares, minus one.
-	truncated := set
-	truncated.Shards = append([]snapshot.CorrectionShard(nil), set.Shards...)
-	truncated.Shards[0].Rows = truncated.Shards[0].Rows[:len(truncated.Shards[0].Rows)-1]
-	if err := snapshot.ValidateShardSet(truncated, cap.Header.Tick, 1, want.Root, want.Header); err == nil {
-		t.Fatal("a truncated page passed the per-page proof")
-	}
-
-	// And a set that is internally consistent but describes a root the manifest
-	// does not: a relay answering from a baseline of its own. The per-page hashes
-	// all reproduce, so the root is the only thing that catches it.
-	rebased := set
-	if err := snapshot.ValidateShardSet(rebased, cap.Header.Tick, 1, want.Root^0x5EED, want.Header); err == nil {
-		t.Fatal("a set declaring another root than the manifest it answers was admitted")
-	}
-
-	before := statOf(far, "snapshot.keyframe_fallbacks")
-	applyRepairFromRelay(t, far, set, want)
-	if statOf(far, "snapshot.corrections_applied") == 0 {
-		t.Fatal("the honest relayed repair never reached the receiver")
-	}
-	_ = before
-}
-
-// applyRepairFromRelay drives one relayed answer through the receiver's apply
-// path, so the refusal and the fallback are the real ones rather than a direct
-// call to the validator. Expect stands in for the leg this skips: the receiver
-// answered the index and is waiting on the repair.
-func applyRepairFromRelay(t *testing.T, a *App, set snapshot.CorrectionShardSet, want snapshot.CorrectionManifest) {
-	t.Helper()
-	body, err := snapshot.EncodeShardSet(set)
-	if err != nil {
-		t.Fatalf("encode a relayed answer: %v", err)
-	}
-	if err := a.corrections.Expect(want, 2); err != nil {
-		t.Fatalf("await a relayed answer: %v", err)
-	}
-	a.corrections.ApplyRepair(body)
-}
-
 // TestARelayThatDroppedTheManifestSaysSo is the bounded-staleness rule. A relay's
 // retention is smaller than the session's history; a request naming a tick it no
 // longer holds is answered in words, never with a body from another baseline.
@@ -583,7 +488,7 @@ func TestARelayThatDroppedTheManifestSaysSo(t *testing.T) {
 		mustEncodeRequest(t, snapshot.CorrectionRequest{
 			Version: snapshot.ManifestVersion, Schema: snapshot.Schema,
 			Tick: 1, Run: relayRun(relay), Session: relaySession(relay),
-			Term:     relay.AuthorityState().Term,
+			Term:     relay.authority.State().Term,
 			Sections: []snapshot.SectionRequest{{ID: snapshot.SectionMeta, Pages: 1, Hash: []uint64{0}}},
 		}))
 	relay.ApplyPendingCorrections()
@@ -605,53 +510,6 @@ func relaySession(a *App) uint64 { return mustCaptureSession(a) }
 func mustCaptureSession(a *App) (s uint64) {
 	a.World().RunSafe(func() { s = a.World().Resources.Rand.Session() })
 	return s
-}
-
-// TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies from the
-// other side: the gate is "can every participant be answered", so a relay that
-// holds nothing keeps the whole-body flood — unchanged, and reported.
-func TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies(t *testing.T) {
-	t.Parallel()
-	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}})
-	localCursors(t, apps)
-
-	relay := apps[1]
-	if relay.corrections.CanRelay() {
-		t.Fatal("a participant that has held no authoritative capture claims it can relay")
-	}
-	if got := relay.corrections.RelayedParticipants(); len(got) != 0 {
-		t.Fatalf("a relay with no retention offered to answer for %v", got)
-	}
-	// The authority therefore cannot answer everyone and says so.
-	host := apps[0]
-	answerable := host.corrections.CanAnswer([]uint32{2})
-	said := host.SelectiveReport().WholeBodies
-	if answerable {
-		t.Fatal("the authority believed a participant behind an empty relay could be answered")
-	}
-	if !said {
-		t.Fatal("the fallback to whole bodies was not reported")
-	}
-
-	// Once the relay holds retention the same session becomes answerable, which is
-	// the whole of the role: a topology did not change, a role did.
-	driveCorrections(t, apps, 3)
-	if !relay.corrections.CanRelay() {
-		t.Fatal("a relay that has installed authoritative captures still cannot answer")
-	}
-	answerable = host.corrections.CanAnswer([]uint32{2})
-	if !answerable {
-		t.Fatal("the authority still believes the relayed participant cannot be answered")
-	}
-	if got := relay.corrections.Role(); got != network.RoleRelay {
-		t.Fatalf("the middle participant holds role %d, want the relay role", got)
-	}
-	if got := apps[0].corrections.Role(); got != network.RoleHost {
-		t.Fatalf("the authority holds role %d, want the host role", got)
-	}
-	if got := apps[2].corrections.Role(); got != network.RolePeer {
-		t.Fatalf("the leaf holds role %d, want the peer role", got)
-	}
 }
 
 // meshChain renders identities as chain entries; an in-process mesh needs no

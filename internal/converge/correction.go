@@ -171,7 +171,7 @@ func newCorrections(inst Instance, tel snapshot.Telemetry) *Corrections {
 	return &Corrections{
 		inst:   inst,
 		tel:    tel,
-		bounds: CadenceBounds(),
+		bounds: cadenceBounds(),
 		peers:  make(map[uint32]*peerPublisher),
 		base:   parameter.SnapshotCorrectionTicks,
 		keyPeriod: parameter.SnapshotCorrectionTicks *
@@ -187,11 +187,11 @@ func newCorrections(inst Instance, tel snapshot.Telemetry) *Corrections {
 // the tick a join asked to be described a world at.
 const keyframePoll = time.Millisecond
 
-// CadenceBounds is the envelope the correction controller may move inside. It is
+// cadenceBounds is the envelope the correction controller may move inside. It is
 // assembled here because the envelope is a linkpace value and pkg may not see
 // internal: this is the one place the game's numbers and the controller's contract
 // meet, and the one place a test can check they still agree.
-func CadenceBounds() linkpace.Bounds {
+func cadenceBounds() linkpace.Bounds {
 	return linkpace.Bounds{
 		TickInterval:        parameter.GameUpdateInterval,
 		MinCadenceTicks:     parameter.SnapshotCadenceMinTicks,
@@ -259,8 +259,9 @@ func (c *Corrections) Publish() error {
 	return c.publishRound(true)
 }
 
-// PublishDue sends to the peers the adaptive schedule has made due, and is what
-// the pump calls.
+// PublishDue sends to the peers the adaptive schedule has made due. It is what the
+// pump calls, and the counterpart of Publish for a driven run: Publish means now,
+// this means when the schedule says.
 func (c *Corrections) PublishDue() error { return c.publishRound(false) }
 
 // publishRound is one decision and at most one world read. Each peer's controller
@@ -750,7 +751,7 @@ func (c *Corrections) takeKeyframe() ([]byte, uint64, error) {
 // oldest: a correction supersedes every earlier one, so a guest that cannot keep up
 // should lose the stale ones rather than the fresh.
 func (c *Corrections) Receive(body []byte) {
-	if c.authority.IsAuthority() {
+	if c.authority.isAuthority() {
 		return // this instance's own publication, back round a mesh flood with cycles
 	}
 	c.inboxMu.Lock()
@@ -857,7 +858,7 @@ func (c *Corrections) Apply() {
 	if !found {
 		return
 	}
-	if err := c.Install(newest); err != nil {
+	if err := c.install(newest); err != nil {
 		vlog.Warn("app", "msg", "correction not applied",
 			"tick", newest.Header.Tick, "error", err.Error())
 	}
@@ -886,7 +887,7 @@ func (c *Corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
 	if kind == snapshot.CorrectionDelta {
 		header = delta.Header
 	}
-	if !c.authority.Admit(header.Term, 0) {
+	if !c.authority.admit(header.Term, 0) {
 		return snapshot.SharedCapture{}, errors.New("correction carries a term this instance does not hold")
 	}
 	if kind == snapshot.CorrectionKeyframe {
@@ -904,11 +905,11 @@ func (c *Corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
 	return cap, nil
 }
 
-// Install stages a correction into the persistent staging world and commits it,
+// install stages a correction into the persistent staging world and commits it,
 // publishing how far this instance had drifted. The only refusal is a correction
 // the authority superseded, measured against the last one installed and never
 // against this instance's own tick, which is itself a prediction.
-func (c *Corrections) Install(cap snapshot.SharedCapture) error {
+func (c *Corrections) install(cap snapshot.SharedCapture) error {
 	c.installedMu.Lock()
 	stale := c.lastInstalled > 0 && cap.Header.Tick <= c.lastInstalled
 	c.installedMu.Unlock()
@@ -986,7 +987,7 @@ func (c *Corrections) observeFloor() {
 	// The authoring instance is not a receiver: it produces the world every floor
 	// window is measured against, so a successor that installed until it took the
 	// term would report its own publication as an absence.
-	breached := !c.authority.IsAuthority() &&
+	breached := !c.authority.isAuthority() &&
 		age > parameter.SnapshotFloorKeyframeTicks+parameter.SnapshotFloorGraceTicks
 	m.FloorBreached.Store(breached)
 	if breached {
@@ -1040,11 +1041,11 @@ func (c *Corrections) Close() {
 	})
 }
 
-// Sizes is what a correction currently costs on this world, for a caller deciding
+// currentSizes is what a correction currently costs on this world, for a caller deciding
 // whether a link can carry the convergence floor. Until one has been published the
 // answer is the keyframe a join was cut for, which is the same object measured the
 // same way.
-func (c *Corrections) Sizes() linkpace.Sizes {
+func (c *Corrections) currentSizes() linkpace.Sizes {
 	c.publishMu.Lock()
 	defer c.publishMu.Unlock()
 	return c.sizes
@@ -1060,12 +1061,12 @@ func (c *Corrections) AdmitLink(port *network.SocketPort, id network.PeerID, byt
 		return nil
 	}
 	port.ObserveTransfer(uint32(id), int64(bytes), elapsed)
-	sizes := c.Sizes()
+	sizes := c.currentSizes()
 	if sizes.Keyframe == 0 {
 		sizes.Keyframe = int64(bytes)
 	}
 	rate := linkpace.TransferRate(int64(bytes), elapsed)
-	if err := linkpace.Admit(CadenceBounds(), rate, sizes); err != nil {
+	if err := linkpace.Admit(cadenceBounds(), rate, sizes); err != nil {
 		return fmt.Errorf("participant %d: %w", id, err)
 	}
 	vlog.Debug("app", "msg", "join link measured",
@@ -1078,11 +1079,11 @@ func (c *Corrections) AdmitLink(port *network.SocketPort, id network.PeerID, byt
 // measured, which is what a tick-zero lobby has: its port has been up for the
 // whole wait, so several round trips have completed before the gate closes.
 func (c *Corrections) AdmitMeasuredLink(port *network.SocketPort, id network.PeerID) error {
-	sizes := c.Sizes()
+	sizes := c.currentSizes()
 	if sizes.Keyframe == 0 {
 		return nil
 	}
-	if err := linkpace.AdmitMetrics(CadenceBounds(), port.LinkMetric(uint32(id)), sizes); err != nil {
+	if err := linkpace.AdmitMetrics(cadenceBounds(), port.LinkMetric(uint32(id)), sizes); err != nil {
 		return fmt.Errorf("participant %d: %w", id, err)
 	}
 	return nil

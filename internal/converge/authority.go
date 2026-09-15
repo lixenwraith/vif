@@ -135,8 +135,8 @@ func (u *Authority) Holder() network.PeerID {
 	return u.holder
 }
 
-// IsAuthority reports whether this instance is the one authoring.
-func (u *Authority) IsAuthority() bool {
+// isAuthority reports whether this instance is the one authoring.
+func (u *Authority) isAuthority() bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return u.term > 0 && u.local != 0 && u.local == u.holder
@@ -150,19 +150,11 @@ func (u *Authority) Migrating() bool {
 	return u.contested != 0
 }
 
-// Fork reports whether this instance is a local continuation rather than part of
-// a session.
-func (u *Authority) Fork() bool {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	return u.fork
-}
-
-// Admit is the wire gate: whether an artifact produced under term may be acted on.
+// admit is the wire gate: whether an artifact produced under term may be acted on.
 // Older is ignored, equal acted on, newer refused rather than adopted — only a
 // handoff record may raise this instance's term, so an artifact under a term nobody
 // handed it is a fork or a skipped succession. Both are reported, neither followed.
-func (u *Authority) Admit(term network.AuthorityTerm, from uint32) bool {
+func (u *Authority) admit(term network.AuthorityTerm, from uint32) bool {
 	u.mu.Lock()
 	held, fork := u.term, u.fork
 	u.mu.Unlock()
@@ -196,22 +188,22 @@ func (u *Authority) refuse(from uint32, term network.AuthorityTerm, why string) 
 
 // === succession ===
 
-// PeerLost is the transport's report that a direct neighbour has gone. It starts
+// peerLost is the transport's report that a direct neighbour has gone. It starts
 // a succession only for the participant that was authoring; every other departure
 // changes this instance's reach, which the next report it sends will carry.
-func (u *Authority) PeerLost(id uint32) {
+func (u *Authority) peerLost(id uint32) {
 	u.mu.Lock()
 	start := u.term > 0 && network.PeerID(id) == u.holder && u.local != u.holder && u.contested == 0
 	u.mu.Unlock()
 	if !start {
 		return
 	}
-	u.BeginSuccession(network.PeerID(id))
+	u.beginSuccession(network.PeerID(id))
 }
 
-// BeginSuccession opens the election for the next term and floods this survivor's
+// beginSuccession opens the election for the next term and floods this survivor's
 // input to it.
-func (u *Authority) BeginSuccession(lost network.PeerID) {
+func (u *Authority) beginSuccession(lost network.PeerID) {
 	tick := u.inst.Position().Tick
 	u.mu.Lock()
 	if u.contested != 0 || u.term == 0 {
@@ -229,15 +221,15 @@ func (u *Authority) BeginSuccession(lost network.PeerID) {
 	u.statMigrating.Store(true)
 	vlog.Warn("app", "msg", "authority lost; succession opened",
 		"participant", uint64(lost), "term", uint64(term), "local", uint64(local))
-	u.SendReport()
-	u.Drive()
+	u.sendReport()
+	u.drive()
 }
 
-// SendReport floods the news that the authority is gone. It decides nothing — the
+// sendReport floods the news that the authority is gone. It decides nothing — the
 // successor is a function of the roster — but only a direct neighbour sees the link
 // drop, and the crossing that would carry the news is produced by the participant
 // that is gone, so the notice travels instead.
-func (u *Authority) SendReport() {
+func (u *Authority) sendReport() {
 	u.mu.Lock()
 	term, local, lost := u.contested, u.local, u.lost
 	u.mu.Unlock()
@@ -280,11 +272,11 @@ func (u *Authority) recordReport(rep network.AuthorityReport) bool {
 	return true
 }
 
-// Drive advances the succession. It is called from the correction loop, which runs
+// drive advances the succession. It is called from the correction loop, which runs
 // between two ticks on every instance whichever half of the protocol it is, and
 // from each succession frame that arrives — so the election proceeds on evidence
 // rather than on a schedule.
-func (u *Authority) Drive() {
+func (u *Authority) drive() {
 	u.mu.Lock()
 	contested, since := u.contested, u.since
 	badge, reconcile := u.badgeUntil, u.reconcileAt
@@ -307,7 +299,7 @@ func (u *Authority) Drive() {
 	}
 	// The reachability work runs on the same loop and for the same reason: it is
 	// between two ticks, on every instance, whichever half of the protocol it is.
-	u.reach.Drive(contested != 0)
+	u.reach.drive(contested != 0)
 	if contested == 0 {
 		return
 	}
@@ -326,7 +318,7 @@ func (u *Authority) Drive() {
 	stillOpen := u.contested == contested
 	u.mu.Unlock()
 	if stillOpen && (fixed || tick > since+parameter.NetworkSuccessionTicks) {
-		u.GiveUp()
+		u.giveUp()
 	}
 }
 
@@ -351,7 +343,7 @@ func (u *Authority) trySucceed() {
 	if want, ok := network.DesignatedSuccessor(roster, lost, chain); !ok || want != local {
 		return // not this instance's term to take; the record or the window decides
 	}
-	evidenceTick, retained := u.corrections.RetentionEvidence()
+	evidenceTick, retained := u.corrections.retentionEvidence()
 	if retained == 0 {
 		return
 	}
@@ -376,7 +368,7 @@ func (u *Authority) trySucceed() {
 	}
 	u.mu.Unlock()
 
-	if err := u.Adopt(rec, 0); err != nil {
+	if err := u.adopt(rec, 0); err != nil {
 		vlog.Error("app", "msg", "succession could not adopt its own record", "error", err.Error())
 		return
 	}
@@ -393,12 +385,12 @@ func (u *Authority) trySucceed() {
 	}
 }
 
-// GiveUp ends a succession no record ever answered: either this instance is not the
+// giveUp ends a succession no record ever answered: either this instance is not the
 // successor the roster names and cannot reach the one that is, or it is and had
 // nothing retained to author from. What is left is the local-continuation fallback,
 // said plainly: this instance continues its own game from the last authoritative
 // state.
-func (u *Authority) GiveUp() {
+func (u *Authority) giveUp() {
 	// Read before the state is cleared: what this fork keeps is the roster it can
 	// still reach, and both halves of that answer are gone once lost is.
 	roster := u.currentRoster()
@@ -427,11 +419,11 @@ func (u *Authority) GiveUp() {
 		4*parameter.StatusMessageDefaultTimeout, true)
 }
 
-// Adopt installs a handoff record: the term, the authority, and the membership
+// adopt installs a handoff record: the term, the authority, and the membership
 // that moves with them.
 //
 // from is the link the record arrived on, or zero when this instance produced it.
-func (u *Authority) Adopt(rec network.HandoffRecord, from uint32) error {
+func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 	roster := u.currentRoster()
 	u.mu.Lock()
 	if err := rec.Validate(roster, u.chain); err != nil {
@@ -501,10 +493,10 @@ func (u *Authority) Chain() network.SuccessionChain {
 	return slices.Clone(u.chain)
 }
 
-// Successor is the participant this instance would follow if the authority went
+// successor is the participant this instance would follow if the authority went
 // now. It is the same pure function succession runs, exposed so a survivor can
 // dial the right address before it needs one.
-func (u *Authority) Successor() (network.PeerID, bool) {
+func (u *Authority) successor() (network.PeerID, bool) {
 	roster := u.currentRoster()
 	u.mu.Lock()
 	holder, chain := u.holder, slices.Clone(u.chain)
@@ -512,11 +504,11 @@ func (u *Authority) Successor() (network.PeerID, bool) {
 	return network.DesignatedSuccessor(roster, holder, chain)
 }
 
-// SuccessionOrder is the succession list: every survivor of the authority's loss,
+// successionOrder is the succession list: every survivor of the authority's loss,
 // in the order the rule would elect them. It is what a survivor with no link
 // retries down, so a reconnect walks the same order the election does rather than
 // an order of its own.
-func (u *Authority) SuccessionOrder() []network.PeerID {
+func (u *Authority) successionOrder() []network.PeerID {
 	roster := u.currentRoster()
 	u.mu.Lock()
 	holder, local, chain := u.holder, u.local, slices.Clone(u.chain)
@@ -541,9 +533,9 @@ func (u *Authority) SuccessionOrder() []network.PeerID {
 	return append(out, rest...)
 }
 
-// AppendChain adds one participant that declared a port and publishes the whole
+// appendChain adds one participant that declared a port and publishes the whole
 // chain, which only the coordinator does. Reports whether anything changed.
-func (u *Authority) AppendChain(id network.PeerID, addr string) bool {
+func (u *Authority) appendChain(id network.PeerID, addr string) bool {
 	u.mu.Lock()
 	next := u.chain.Append(id, addr)
 	if slices.Equal(u.chain, next) {
@@ -650,13 +642,13 @@ func (u *Authority) onReport(from uint32, body []byte) {
 		if rep.Lost != holder || local == holder {
 			return
 		}
-		u.BeginSuccession(rep.Lost)
+		u.beginSuccession(rep.Lost)
 	}
 	if !u.recordReport(rep) {
 		return
 	}
 	u.flood(network.MsgAuthorityReport, from, body)
-	u.Drive()
+	u.drive()
 }
 
 // answerElection re-sends this instance's record to one survivor, when this
@@ -683,7 +675,7 @@ func (u *Authority) onHandoff(from uint32, body []byte) {
 	if err != nil {
 		return
 	}
-	if err := u.Adopt(rec, from); err != nil {
+	if err := u.adopt(rec, from); err != nil {
 		u.statRefused.Add(1)
 		vlog.Warn("app", "msg", "handoff refused",
 			"participant", from, "term", uint64(rec.Term), "authority", uint64(rec.Authority),
@@ -743,33 +735,4 @@ func (u *Authority) Summary() string {
 		line += "; LOCAL FORK — this instance is no longer part of the session"
 	}
 	return line
-}
-
-// Pin stops the term moving for the rest of the session, as an offer declaring a
-// fixed authority does: every survivor of the authority's loss forks rather than
-// electing. A session cannot unpin, because a disagreement about the policy is one
-// instance electing and one refusing.
-func (u *Authority) Pin() {
-	u.mu.Lock()
-	u.fixed = true
-	u.mu.Unlock()
-}
-
-// Contest opens a succession for a participant that has not actually gone, and ends
-// one when lost is zero. Nothing in the protocol calls it: a criterion whose subject
-// is what the rest of the session does *while* an election runs needs one that
-// neither elects nor times out.
-func (u *Authority) Contest(lost network.PeerID) {
-	tick := u.inst.Position().Tick
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	if lost == 0 {
-		u.contested, u.reports, u.published = 0, nil, false
-		return
-	}
-	u.contested = u.term + 1
-	u.lost = lost
-	u.since = tick
-	u.reports = make(map[network.PeerID]bool, len(u.roster))
-	u.published = false
 }

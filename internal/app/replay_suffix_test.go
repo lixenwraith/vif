@@ -36,7 +36,7 @@ func TestLocalCrossingsAfterTheBaselineSurviveExactlyOnce(t *testing.T) {
 	// the guest has not already installed, or the correction is superseded rather
 	// than applied.
 	advance()
-	if err := host.PublishCorrection(); err != nil {
+	if err := host.corrections.Publish(); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 
@@ -211,9 +211,7 @@ func TestACorrectionSupersedesAuthorityFramesItAlreadyContains(t *testing.T) {
 				t.Fatalf("capture fences = authority %d, participant 1 sequence %d; want participant 1 and a completed crossing",
 					cap.Header.Authority, cap.Header.Crossings.Seq(1))
 			}
-			if err := guest.corrections.Install(cap); err != nil {
-				t.Fatalf("install tick %d: %v", cap.Header.Tick, err)
-			}
+			installCorrection(t, guest, cap)
 			if got := cursorCell(t, guest, 0); got != latest {
 				t.Fatalf("correction installed host cursor at %v, want %v", got, latest)
 			}
@@ -299,9 +297,7 @@ func TestARewindDoesNotReuseAProductionEpoch(t *testing.T) {
 	if got := guest.Position().Tick; got != baseline+1 {
 		t.Fatalf("guest reached tick %d, want %d before rewind", got, baseline+1)
 	}
-	if err := guest.corrections.Install(cap); err != nil {
-		t.Fatalf("install tick %d: %v", baseline, err)
-	}
+	installCorrection(t, guest, cap)
 	if got := guest.Position().Tick; got != baseline {
 		t.Fatalf("correction left guest at tick %d, want %d", got, baseline)
 	}
@@ -359,7 +355,7 @@ func TestAGoldSequenceSurvivesACorrectionWithoutATick(t *testing.T) {
 	// The authority is read before the run is typed, at a tick the guest has not
 	// already installed.
 	advance()
-	if err := host.PublishCorrection(); err != nil {
+	if err := host.corrections.Publish(); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 
@@ -419,7 +415,7 @@ func TestAnIncompleteSuffixFallsBackToTheAuthority(t *testing.T) {
 	deliverCorrection(t, host, []*App{guest}, advance)
 
 	advance()
-	if err := host.PublishCorrection(); err != nil {
+	if err := host.corrections.Publish(); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 
@@ -660,9 +656,7 @@ func TestALateGuestActionIsNotUndoneByTheCorrectionThatMissedIt(t *testing.T) {
 			suffix[0].ApplyTick, cap.Header.Tick)
 	}
 
-	if err := guest.corrections.Install(cap); err != nil {
-		t.Fatalf("install: %v", err)
-	}
+	installCorrection(t, guest, cap)
 	if got := cursorCell(t, guest, 1); got != moved {
 		t.Fatalf("the correction undid the guest's own action: cursor at %v, want %v", got, moved)
 	}

@@ -133,6 +133,19 @@ func mustEncodeCorrection(t *testing.T, cap snapshot.SharedCapture) []byte {
 	return body
 }
 
+// installCorrection hands one capture to an instance the way the wire does — as a
+// correction body its apply loop resolves — so a criterion drives the real path
+// rather than the install under it.
+func installCorrection(t *testing.T, a *App, cap snapshot.SharedCapture) {
+	t.Helper()
+	before := statOf(a, "snapshot.corrections_applied")
+	a.corrections.Receive(mustEncodeCorrection(t, cap))
+	a.ApplyPendingCorrections()
+	if statOf(a, "snapshot.corrections_applied") == before {
+		t.Fatalf("the correction at tick %d was not applied", cap.Header.Tick)
+	}
+}
+
 func mustEncodeRequest(t *testing.T, req snapshot.CorrectionRequest) []byte {
 	t.Helper()
 	body, err := snapshot.EncodeCorrectionRequest(req)

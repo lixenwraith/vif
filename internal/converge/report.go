@@ -7,7 +7,6 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
-	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // PeerCadence is one link's operating point and the measurements it came from.
@@ -44,8 +43,11 @@ type CadenceReport struct {
 	Peers               []PeerCadence
 }
 
-// Cadence describes what the correction cadence is doing. A run that is not
-// publishing returns the zero value, which reads as "nominal, no links".
+// Cadence describes what the correction cadence is doing, per link. The status bar
+// reads the published cells instead — under the world lock, where taking this one
+// would invert the lock order — so this is the structured form, which is the only
+// one that can name which link is the worst. A run that is not publishing returns
+// the zero value, which reads as "nominal, no links".
 func (c *Corrections) Cadence() CadenceReport {
 	c.publishMu.Lock()
 	defer c.publishMu.Unlock()
@@ -134,7 +136,11 @@ func (c *Corrections) Selective() SelectiveReport {
 	return out
 }
 
-// AuthorityReport is what `:session` and the criteria read about who is authoring.
+// AuthorityReport is the structured answer to who is authoring, beside the one line
+// Summary gives the status bar.
+// Roster, Anchor and Delay are the membership a handoff carries unchanged: a record
+// is refused unless all three are the ones the session closed on, so what they say
+// before and after one is what says a handoff moved authorship and nothing else.
 type AuthorityReport struct {
 	Term       network.AuthorityTerm
 	Authority  network.PeerID
@@ -144,6 +150,15 @@ type AuthorityReport struct {
 	Fork       bool
 	Retained   int
 	RetainedAt uint64
+	Roster     []network.SessionParticipant
+	Anchor     event.JoinAnchor
+	Delay      uint64
+}
+
+// Authoring reports whether this instance is the one publishing the world, which
+// is Authority and Local being the same participant under a term that exists.
+func (r AuthorityReport) Authoring() bool {
+	return r.Term > 0 && r.Local != 0 && r.Local == r.Authority
 }
 
 // State describes this instance's place in the session's authority.
@@ -153,53 +168,16 @@ func (u *Authority) State() AuthorityReport {
 		Term: u.term, Authority: u.holder, Local: u.local,
 		Migrations: u.statMigrations.Load(),
 		Migrating:  u.contested != 0, Fork: u.fork,
+		Roster: slices.Clone(u.roster), Anchor: u.anchor, Delay: u.delay,
 	}
 	u.mu.Unlock()
-	out.RetainedAt, out.Retained = u.corrections.RetentionEvidence()
+	out.RetainedAt, out.Retained = u.corrections.retentionEvidence()
 	return out
 }
 
-// Membership is what a handoff carries unchanged: the closed roster, the session
-// anchor and the playout lead. A record is refused unless all three are the ones
-// the session closed on, so a successor reads them from here rather than deriving
-// any of them again.
-func (u *Authority) Membership() ([]network.SessionParticipant, event.JoinAnchor, uint64) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	return slices.Clone(u.roster), u.anchor, u.delay
-}
-
-// RetainedIndex is the index this instance can answer a request naming tick from:
-// the authority's own, or one it proved when it installed that capture whole.
-func (c *Corrections) RetainedIndex(tick uint64) (*snapshot.Manifest, bool) {
-	c.publishMu.Lock()
-	defer c.publishMu.Unlock()
-	held, ok := c.retainedAtLocked(tick)
-	if !ok {
-		return nil, false
-	}
-	return held.index, true
-}
-
-// OutstandingRequest is the page vector this receiver is waiting on an answer to,
-// recomputed from the baseline it compared. Absent when nothing is outstanding,
-// which on a converged link is the ordinary state.
-func (c *Corrections) OutstandingRequest() (snapshot.CorrectionRequest, bool) {
-	c.selectiveMu.Lock()
-	defer c.selectiveMu.Unlock()
-	n := len(c.selective.awaiting)
-	if n == 0 {
-		return snapshot.CorrectionRequest{}, false
-	}
-	a := c.selective.awaiting[n-1]
-	req, _, _ := snapshot.CompareRequest(a.index, a.manifest)
-	req.Term = a.manifest.Header.Term
-	return req, true
-}
-
-// CanAnswer reports whether every participant can be repaired selectively right
+// canAnswer reports whether every participant can be repaired selectively right
 // now, for a caller outside the publication schedule.
-func (c *Corrections) CanAnswer(ids []uint32) bool {
+func (c *Corrections) canAnswer(ids []uint32) bool {
 	c.publishMu.Lock()
 	defer c.publishMu.Unlock()
 	return c.canAnswerEveryParticipantLocked(ids)
