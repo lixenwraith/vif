@@ -85,14 +85,8 @@ if [ "$allocator_was_active" = true ]; then
 	sudo systemctl stop vif-allocator.service
 fi
 
-session_jobs=$(sudo kubectl -n vif get jobs \
-	-l app.kubernetes.io/part-of=vi-fighter-fleet -o name)
-session_pods=$(sudo kubectl -n vif get pods \
-	-l app.kubernetes.io/part-of=vi-fighter-fleet \
-	-o name)
-if [ -n "$session_jobs$session_pods" ]; then
-	echo "$0: session Jobs or pods remain; wait for TTL cleanup or delete them, then rerun" >&2
-	printf '%s\n' "$session_jobs" "$session_pods" | sed '/^$/d' >&2
+if ! "$repo_root/deploy/k3s/session.sh" blockers; then
+	echo "$0: the old image cannot be removed while a fleet object still names it" >&2
 	exit 1
 fi
 

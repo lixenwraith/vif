@@ -20,12 +20,50 @@ usage() {
 	echo "       $0 delete SESSION_ID" >&2
 	echo "       $0 list" >&2
 	echo "       $0 status" >&2
-	echo "       $0 drain" >&2
+	echo "       $0 blockers" >&2
+	echo "       $0 drain [--force]" >&2
 	exit 2
 }
 
 fleet_objects() {
 	kube -n "$namespace" get jobs,pods,services -l "$fleet_label" -o name
+}
+
+# One verdict per fleet object, because "these names exist" does not tell an
+# operator whether anyone is playing. A finished Job keeps its object for
+# ttlSecondsAfterFinished after the match ended, which is why the public session
+# list can be empty while an update still refuses.
+fleet_report() {
+	kube -n "$namespace" get jobs,pods,services -l "$fleet_label" -o json |
+		jq -r --argjson now "$(date -u +%s)" '
+			def since($t): (($now - ($t | fromdateiso8601)) | floor);
+			.items[] |
+			.metadata.name as $name |
+			if .kind == "Job" then
+				(.spec.ttlSecondsAfterFinished // 0) as $ttl |
+				(.status.completionTime //
+					([.status.conditions[]? |
+						select((.type == "Complete" or .type == "Failed") and
+							((.status | ascii_downcase) == "true")) |
+						.lastTransitionTime] | first)) as $ended |
+				if .metadata.deletionTimestamp then
+					"job/\($name): deleting for \(since(.metadata.deletionTimestamp))s, waiting on its pod"
+				elif $ended then
+					"job/\($name): finished \(since($ended))s ago, nobody is playing; " +
+					(($ttl - since($ended)) as $left |
+						if $left > 0 then "its TTL removes it in \($left)s"
+						else "its TTL expired and the controller is behind" end)
+				else
+					"job/\($name): active with \(.status.active // 0) pod(s), a match may be in play"
+				end
+			elif .kind == "Pod" then
+				"pod/\($name): \(.status.phase // "Unknown")" +
+				(if .metadata.deletionTimestamp
+					then ", terminating for \(since(.metadata.deletionTimestamp))s"
+					else ", held by its Job" end)
+			else
+				"service/\($name): NodePort \(.spec.ports[0].nodePort // 0)"
+			end'
 }
 
 session_name() {
@@ -68,7 +106,8 @@ case "$command" in
 	status)
 		[ "$#" -eq 1 ] || usage
 		echo '# fleet objects'
-		fleet_objects
+		report=$(fleet_report)
+		printf '%s\n' "${report:-the fleet is empty}"
 		echo '# fleet log files'
 		if [ -d "$fleet_logs" ]; then
 			sudo find "$fleet_logs" -mindepth 1 -maxdepth 1 -print
@@ -78,11 +117,30 @@ case "$command" in
 			vif-allocator.service logwisp.service \
 			vif-fleet-log-cleanup.timer || true
 		;;
+	blockers)
+		# The assertion the update helpers make before they touch anything.
+		[ "$#" -eq 1 ] || usage
+		report=$(fleet_report)
+		if [ -z "$report" ]; then
+			echo 'the fleet is empty'
+			exit 0
+		fi
+		printf '%s\n' "$report" >&2
+		echo "$0: the fleet is not empty" >&2
+		echo "$0: \`$0 drain\` deletes these objects and the retained session log files" >&2
+		echo "$0: \`$0 drain --force\` also abandons a pod that will not terminate" >&2
+		exit 1
+		;;
 	drain)
 		# The update helpers refuse a non-empty fleet, and the LogWisp gate also
 		# requires an empty tmpfs. This is destructive: snapshot any log evidence
 		# before running it.
-		[ "$#" -eq 1 ] || usage
+		force=false
+		case $# in
+			1) ;;
+			2) [ "$2" = --force ] || usage; force=true ;;
+			*) usage ;;
+		esac
 		for object in $(kube -n "$namespace" get jobs,services -l "$fleet_label" -o name); do
 			kube -n "$namespace" delete "$object" \
 				--cascade=background --wait=false --ignore-not-found
@@ -94,9 +152,29 @@ case "$command" in
 			attempt=$((attempt + 1))
 			remaining=$(fleet_objects)
 		done
+		if [ -n "$remaining" ] && [ "$force" = true ]; then
+			# The owning Jobs are already deleted, so nothing replaces what this
+			# abandons; the container may outlive the object until the kubelet
+			# reaps it, and its NodePort frees only then.
+			echo 'the graceful cascade did not finish; abandoning the surviving pods'
+			for object in $(kube -n "$namespace" get pods -l "$fleet_label" -o name); do
+				kube -n "$namespace" delete "$object" \
+					--force --grace-period=0 --ignore-not-found
+			done
+			remaining=$(fleet_objects)
+			attempt=0
+			while [ -n "$remaining" ] && [ "$attempt" -lt 30 ]; do
+				sleep 1
+				attempt=$((attempt + 1))
+				remaining=$(fleet_objects)
+			done
+		fi
 		if [ -n "$remaining" ]; then
-			echo "$0: fleet did not drain within 60s:" >&2
-			printf '%s\n' "$remaining" >&2
+			echo "$0: the fleet did not drain:" >&2
+			fleet_report >&2
+			if [ "$force" = false ]; then
+				echo "$0: rerun as \`$0 drain --force\` to abandon the surviving pods" >&2
+			fi
 			exit 1
 		fi
 		if [ -d "$fleet_logs" ]; then

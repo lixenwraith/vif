@@ -79,22 +79,16 @@ else
 		>>"$stage_root/allocator.env.next"
 fi
 
-fleet_objects=$(sudo kubectl -n vif get job,pod,service \
-	-l app.kubernetes.io/part-of=vi-fighter-fleet -o name)
-if [ -n "$fleet_objects" ]; then
+if ! "$repo_root/deploy/k3s/session.sh" blockers; then
 	echo "$0: the fleet must be empty before the allocator update" >&2
-	printf '%s\n' "$fleet_objects" >&2
 	exit 1
 fi
 
 echo "pausing new allocations for the allocator cutover"
 sudo systemctl stop vif-allocator.service
 allocator_stopped=true
-fleet_objects=$(sudo kubectl -n vif get job,pod,service \
-	-l app.kubernetes.io/part-of=vi-fighter-fleet -o name)
-if [ -n "$fleet_objects" ]; then
+if ! "$repo_root/deploy/k3s/session.sh" blockers; then
 	echo "$0: a fleet object remained after allocation stopped" >&2
-	printf '%s\n' "$fleet_objects" >&2
 	exit 1
 fi
 

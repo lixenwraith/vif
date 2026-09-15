@@ -66,6 +66,10 @@ One session row has this shape:
 }
 ```
 
+`id` is the session's stable public identifier. `page_url` and `join_target` are
+opaque strings this allocator produces: no caller may rebuild either from `port`,
+because path-routed sessions will key both on the identifier instead.
+
 The allocator deliberately exposes no public delete endpoint: this API is
 anonymous behind the site, and one player must not be able to terminate another
 player's match. Sessions expire themselves; operators retain `kubectl` and

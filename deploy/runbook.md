@@ -9,24 +9,33 @@ procedure shows a longer variant, it is proving something extra.
 
 ```sh
 ./deploy/k3s/session.sh status
+./deploy/k3s/session.sh blockers
 ```
 
-Fleet objects, fleet log files, and the five units. Everything below assumes you
-looked here first.
+`status` gives every fleet object a verdict — a match in play, a Job that
+finished and is waiting out its `ttlSecondsAfterFinished`, a pod still
+terminating — then the fleet log files and the five units. `blockers` is that
+report as an assertion: `the fleet is empty` and exit 0, or the same annotated
+lines and exit 1. It is the check every update helper runs first, so run it by
+hand to learn why one refused without starting another.
 
 ## Empty the fleet
 
-The update helpers refuse to run while a session exists, and the LogWisp gate
-also requires an empty tmpfs.
+The update helpers refuse to run while any fleet object exists, and the LogWisp
+gate also requires an empty tmpfs.
 
 ```sh
 ./deploy/k3s/session.sh drain
+./deploy/k3s/session.sh drain --force    # only after the plain form timed out
 ```
 
 It deletes every fleet Job and Service, waits up to 60 seconds for the
 background-cascaded pods, removes the session log files, and fails loudly if
-anything survives. **It destroys retained log evidence** — snapshot first if a
-gate still needs it:
+anything survives. `--force` then abandons the surviving pods with a zero grace
+period: nothing replaces them, because their Jobs are already gone, but a
+container can outlive its object until the kubelet reaps it and its NodePort
+frees only then. **Either form destroys retained log evidence** — snapshot
+first if a gate still needs it:
 
 ```sh
 sudo cp -a /var/log/vif-fleet/. "$(mktemp -d /tmp/vif-logs.XXXXXX)/"
@@ -42,8 +51,9 @@ A single session goes without touching the rest:
 
 | Message | Cause | Fix |
 |---|---|---|
-| `the fleet must be empty before the allocator update` | A session Job, pod or Service still exists. | `./deploy/k3s/session.sh drain` |
-| `a fleet object remained after allocation stopped` | A session outlived the stop, usually a pod still terminating. | Re-run `drain`; it waits for the cascade. |
+| `the fleet is not empty` | Printed by `blockers` above one annotated line per surviving object, then by the helper that called it. A finished Job is the usual cause: it outlives the match by its 120-second `ttlSecondsAfterFinished`, so the public session list is already empty while the update still refuses. | Wait out the TTL the report names, or `./deploy/k3s/session.sh drain`. |
+| `a fleet object remained after allocation stopped` | A session was created between the first check and the stop. | Re-run `drain`; it waits for the cascade. |
+| `the fleet did not drain` | A pod outlived the background cascade by more than 60 seconds. | `./deploy/k3s/session.sh drain --force` |
 | `the vi-fighter worktree differs from HEAD` | Uncommitted changes. The updater builds from HEAD, so it refuses to install something the tree does not describe. | Commit, stash, or check out the revision you mean to deploy. |
 | `missing installed file: /etc/vif-allocator/allocator.env` | Not actually missing: that directory is `root:vif-allocator` 0750. An older helper tested it unprivileged. | Update the checkout; the helper reads it through `sudo`. |
 | `pinned revision is not an ancestor of LogWisp main` | `deploy/logwisp/REVISION` names a commit that upstream `main` does not contain, usually a pull-request head a squash merge discarded. | Repin to the merged commit on `main`. |
