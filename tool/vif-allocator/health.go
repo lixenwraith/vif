@@ -89,15 +89,20 @@ func parseHealth(data []byte) (sessionHealth, error) {
 		if line == "" {
 			continue
 		}
-		fields := []string{line}
-		if split := strings.Index(line, " ready="); strings.HasPrefix(line, "live=") && split > 0 {
-			fields = []string{line[:split], line[split+1:]}
-		}
-		for _, field := range fields {
+		// The probe writes `live=<b> ready=<b>[ reason=<free text>]` on the first
+		// line and one key=value per line after it, so a line holds any number of
+		// fields and reason runs to the end of its line.
+		for rest := line; rest != ""; {
+			field, remainder, _ := strings.Cut(rest, " ")
 			key, value, ok := strings.Cut(field, "=")
 			if !ok || key == "" {
 				return sessionHealth{}, fmt.Errorf("invalid health line %q", line)
 			}
+			if key == "reason" {
+				result.Reason = strings.TrimPrefix(rest, "reason=")
+				break
+			}
+			rest = strings.TrimLeft(remainder, " ")
 			switch key {
 			case "live":
 				parsed, err := strconv.ParseBool(value)
@@ -137,8 +142,6 @@ func parseHealth(data []byte) (sessionHealth, error) {
 					return sessionHealth{}, fmt.Errorf("parse tick: %w", err)
 				}
 				result.Tick = parsed
-			case "reason":
-				result.Reason = value
 			}
 		}
 	}

@@ -210,6 +210,19 @@ refusing one still fails `startHostSessionOn` and ends the run — so with two g
 in the lobby, one unusable link takes the other's match with it. Refuse the
 participant and continue with the rest, the way the mid-run gate already does.
 
+### Say why a session reads as unavailable
+
+- Priority: P2
+- Affected files: `tool/vif-allocator/allocator.go`
+- Prerequisite: none
+
+`listSessions` swallows a health-probe error and reports the session as
+`phase=starting`, `reason=health unavailable`. That hid a parse bug for the whole
+life of the endpoint: every session carrying a health `reason` read as starting.
+The parse is fixed and pinned; the swallow is not, and the next cause will be as
+invisible. It needs a logger the allocator does not have, at a rate the fleet page
+polls.
+
 ## Runtime structure
 
 ### Separate drain population reconciliation concerns
