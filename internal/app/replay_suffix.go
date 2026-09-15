@@ -20,7 +20,7 @@ type replaySource interface {
 // correction it just installed does not contain: shared state is the authority's
 // as of tick T, and these are the artifacts the session agreed apply after T.
 // Retention is bounded, and a suffix missing a record is unavailable rather than
-// shorter — a shorter suffix is a different history. See doc/multi-player-enhancement.md.
+// shorter — a shorter suffix is a different history. See doc/multi-player.md.
 func (a *App) replayLocalSuffix(header snapshot.CaptureHeader) (replayed int, ok bool) {
 	src, local := a.replaySource()
 	if src == nil {

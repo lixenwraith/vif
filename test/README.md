@@ -52,7 +52,7 @@ they show is a design choice rather than a promise.
 and the handoff never reaches a guest that had no link to it, so in a star each
 survivor ends up in a game of its own either way — the policy only decides which of
 them believes it is hosting one. See
-[Multiplayer](../doc/multi-player-enhancement.md) §5.0.
+[Multiplayer](../doc/multi-player.md) §5.0.
 
 ## Automated
 

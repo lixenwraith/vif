@@ -3,7 +3,7 @@
 This document describes the multiplayer domain model as implemented. Rules D-1
 through D-24 define simulation ownership, transport, correction, admission, and
 authority continuity. The operational overview and remaining roadmap are in
-[Multiplayer architecture and remaining work](multi-player-enhancement.md).
+[Multiplayer architecture and remaining work](multi-player.md).
 
 Terminology is deliberately orthogonal:
 
@@ -84,6 +84,17 @@ in its own order; its next correction is canonical.
 Effects on Player targets do not cross. Shared follow-up events derived from a
 crossing do not cross again (D-5).
 
+"Fully determines" includes the values a receiver cannot re-derive. An ordinary
+crossing applies at once on its producer and a playout lead later everywhere else,
+so anything drawn from a shared RNG stream at apply time is assigned to a different
+artifact on each instance — a combat knockback in another direction, not a rounding
+difference. A crossing therefore carries its own identity, `event.CrossingID`: the
+producing participant and that source's wire sequence, stamped by the crossing path
+before the frame is encoded, so the producer's own copy and every peer's hold one.
+A value of this kind is seeded from that identity and the stream is left alone. A
+re-derived event has no identity and uses the stream, which is correct there:
+every instance produces it at the same tick in the same order.
+
 Arrival, departure, and full reset are `barrierBound`. They create or destroy
 shared identity, so their producer also waits for the agreed apply tick.
 
@@ -141,6 +152,10 @@ restoring a position continues it.
 The environment is a deliberate dual-domain exception with one Shared stream.
 An active wind draws force and direction exactly once per tick before iterating
 entities, so different local drain populations cannot move the Shared RNG.
+
+A Shared stream orders draws by tick, so only work every instance performs at the
+same tick may take one. A crossing is not that work: it is seeded from its own
+artifact instead (D-3), and leaves the stream where it was.
 
 ### D-9 — Entity identity is domain-local and deterministic
 
@@ -365,6 +380,13 @@ The guest retains its own encoded ordinary crossings and replays the suffix past
 installed capture's fence for its own source. A hole makes the suffix unavailable and
 selects authority-only recovery.
 
+An install adopts the capture's tick, so a receiver's clock follows the age of
+whichever exchange delivered — one one-way delay for a whole body, three for a
+selective repair. A correction describing a tick this instance has not reached
+therefore waits for it, bounded by the link's measured round trip and never more
+than one at a time, so the offset settles on the slowest path instead of stepping
+between them.
+
 ### D-24 — Cadence adapts; the convergence floor does not
 
 Each direct peer receives a cadence and keyframe interval selected from measured
@@ -517,7 +539,7 @@ state.
 Correction/order diagnostics include:
 
 - `snapshot.correction_entries`, `snapshot.correction_entities`,
-  `snapshot.correction_cells`;
+  `snapshot.correction_cells`, `snapshot.corrections_held`;
 - `snapshot.replay_records`, `snapshot.replay_skipped`,
   `snapshot.replay_suffix_unavailable`;
 - `network.artifacts_pre_install` and

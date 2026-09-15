@@ -53,7 +53,7 @@ confirm it, published to the other participants, and used only after a handoff.
 `-listen <addr>` pins it, the default is the host's own port falling back to an
 OS-assigned one, and `-no-advertise` — or a bind that fails, or an `-authority
 host` session — leaves the participant a leaf that plays normally and is never
-elected. See [Multiplayer](multi-player-enhancement.md) §5.3.
+elected. See [Multiplayer](multi-player.md) §5.3.
 
 Everything else about the session is now one implementation. `-players` is a
 ceiling on every one of them and unset means the whole roster; the mid-run gate is
@@ -247,7 +247,7 @@ allocator handed out and what every guest holds, so if the process goes, the ans
 is an orchestrator putting another one at that address and the guests dialling back
 — not a guest declaring itself the host. That is a policy rather than a limit now:
 a migrate session's guests are dialable and its successor is one the session
-confirmed it could reach ([Multiplayer](multi-player-enhancement.md) §5.3), and
+confirmed it could reach ([Multiplayer](multi-player.md) §5.3), and
 `-serve` still pins authorship because the address it was allocated at is the
 session's identity.
 

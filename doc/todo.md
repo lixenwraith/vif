@@ -111,6 +111,19 @@ so a mixed-domain cell is dropped from the correction as well. `meta` carries
 `kills.*` and `energy.damage_multiplier` around it; a second predicate removes the
 workaround.
 
+### Decide what a producer's own crossing costs the authority's copy
+
+- Priority: P2
+- Affected files: `internal/system/network.go`, `internal/event/wire.go`
+- Prerequisite: a decision on input latency, which is a gameplay judgement
+
+An ordinary crossing applies at once on its producer and `BarrierDelayTicks` later
+on the authority, so the first correction after one pulls the target back by that
+much travel — measurably, about 3 cells on a knocked-back swarm at the floored
+lead. Either the crossing becomes barrier-bound, which is 150 ms of latency on
+every hit, or the receiver rolls its prediction forward instead of adopting the
+capture's tick. See [Multiplayer](multi-player.md) §8 item 11.
+
 ### Rename the participant identity type
 
 - Priority: P3

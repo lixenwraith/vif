@@ -17,7 +17,7 @@ import (
 )
 
 // Reach is this instance's listening port, the addresses it has learned, and the
-// links it opens from them. See doc/multi-player-enhancement.md §5.3.
+// links it opens from them. See doc/multi-player.md §5.3.
 type Reach struct {
 	inst      Instance
 	authority *Authority

@@ -378,18 +378,16 @@ no two instances can claim it. With `host`, which is the default for `-serve`, t
 term never moves and every survivor continues alone. In a migrate session every
 participant binds a port of its own and the chain carries the addresses, so
 migration moves the session and not only its authorship; see
-[Multiplayer](multi-player-enhancement.md) §5.3.
+[Multiplayer](multi-player.md) §5.3.
 
 Remaining limitations include unauthenticated plaintext links, an exact
-applied-sequence fence only for authority-authored crossings, a fixed three-tick
-playout lead, no merge for explicit minority forks, no way to tell a participant
-where a session moved to, and a CLI that dials only one address even though relay
-supports a graph. The domain boundary,
-event classification, wire protocol, their enforcing tests, and an analysis of
-what the model does not yet cover are in rules D-1..D-24 and §7 of
-[the domain model](domain-design.md). The observed incident, current failure
-signals, and checkpoint-plus-suffix recovery recommendation are in
-[Desynchronisation and recovery](desync.md).
+applied-sequence fence only for authority-authored crossings, no merge for explicit
+minority forks, and a producer's own crossing still landing a playout lead before
+the authority's copy of it does. The domain boundary, event classification, wire
+protocol, their enforcing tests, and an analysis of what the model does not yet
+cover are in rules D-1..D-24 and §7 of [the domain model](domain-design.md). The
+incident this protocol was chosen from, and the options it was chosen against, are
+in [Multiplayer](multi-player.md) §10.
 
 For build, diagnostics, platform, and repository-health details, see
 [Development and operations](development.md) and

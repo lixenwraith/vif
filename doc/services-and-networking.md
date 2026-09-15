@@ -4,9 +4,9 @@ Services own process/host resources whose lifecycle differs from ECS systems:
 external file access, terminal raw mode, audio output, the immutable content
 corpus, and an optional network transport. Networking is assembled for a
 trusted-peer session of up to `parameter.MaxPlayers` participants; a normal run
-still contributes no active network capability. The current failure model and
-recovery alternatives are analysed in
-[Desynchronisation and recovery](desync.md).
+still contributes no active network capability. The session contract, the
+correction path and what remains of both are in
+[Multiplayer](multi-player.md).
 
 ## 1. Service lifecycle contract
 
@@ -604,7 +604,7 @@ candidates the chain holds and whether this one is listening.
 
 Reachability has a surface of its own: `network.listening` says this instance bound
 a port for the session to dial back, `network.chain` how many candidates it holds,
-and `network.barrier_delay_ticks` what the playout lead was chosen to be. See [Multiplayer](multi-player-enhancement.md) §5.3.
+and `network.barrier_delay_ticks` what the playout lead was chosen to be. See [Multiplayer](multi-player.md) §5.3.
 
 The relay's own surface is `snapshot.relay`: how many authoritative records this
 instance is holding for a neighbour to ask about, how many repairs it answered from

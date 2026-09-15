@@ -1,9 +1,10 @@
 # Vi-Fighter Engineering Documentation
 
 This directory describes the architecture and design of the current Vi-Fighter
-codebase. It was last audited on 2026-09-07, through the multi-participant
-networking surface, the shared-world capture that a mid-run join installs, the
-CLI flag surface, and every entry in the multiplayer plan's remaining-gaps list.
+codebase. It was last audited on 2026-09-15, through the correction and authority
+protocol in `internal/converge`, the crossing barrier it orders against, the
+shared-world capture that a mid-run join installs, the CLI flag surface, and every
+entry in the multiplayer remaining-gaps list.
 The implementation, generated manifest, and shipped configuration were treated as
 authoritative where older prose disagreed with the code.
 
@@ -22,8 +23,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [ECS and events](ecs-and-events.md) | Medium/detail | How are entities stored, systems ordered, spatial queries performed, and events settled? |
 | [Logging and diagnostics](logging-and-diagnostics.md) | Medium/detail | How do scopes, telemetry, the replay journal, snapshots, and the flight recorder work? |
 | [Multi-instance domain model](domain-design.md) | Medium/detail | How are entities, events, RNG streams and systems split between shared and player domains, who holds authority over what, and what is still missing? |
-| [Multiplayer enhancement plan](multi-player-enhancement.md) | Medium/detail | Why does the current session feel slow and diverge, what replaces it, and in what order does the work land? **Start here for multiplayer.** |
-| [Desynchronisation and recovery](desync.md) | Medium/detail | Diagnosis of the 2026-08-30 divergence and a survey of the recovery option space. Its recommendation is superseded by the plan above. |
+| [Multiplayer](multi-player.md) | Medium/detail | What a session guarantees, how a correction is ordered and contained, how authorship moves, what is still missing, and why this protocol rather than another. **Start here for multiplayer.** |
 | [Troubleshooting](troubleshooting.md) | Medium/detail | Diagnosis of the 2026-09-10 two-instance defects: what an installed FSM state does not run, what a pruned crossing loses, and why a contested immunity window reads as no damage. |
 | [Gameplay systems](gameplay.md) | Domain detail | What are the player mechanics, world mechanics, species, encounters, and system responsibilities? |
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |

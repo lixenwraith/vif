@@ -8,7 +8,7 @@ Section 7 is a second round after the first five landed.
 Three of the first four are the same defect wearing different clothes, so that
 shape is stated once and each issue refers to it. The invariants are in
 [Multi-instance domain model](domain-design.md); the operating contract is in
-[Multiplayer architecture](multi-player-enhancement.md).
+[Multiplayer architecture](multi-player.md).
 
 ## 1. The shape behind issues 1, 2 and 4
 

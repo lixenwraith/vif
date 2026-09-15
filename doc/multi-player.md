@@ -1,10 +1,11 @@
-# Multiplayer architecture and remaining work
+# Multiplayer
 
-This document is the operational summary of multiplayer as it exists now. The
-domain invariants and their implementation details live in
-[Multi-instance domain model](domain-design.md); this document explains the
-runtime contract, the correction/order boundaries, the current operating point,
-and the work that remains.
+This document is the whole of multiplayer except the domain rules, which live in
+[Multi-instance domain model](domain-design.md). §1–§9 are the runtime as it
+exists: the contract, the correction and ordering boundaries, authority
+continuity, the operating point, the diagnostics, and what remains. §10 is where
+the protocol came from — the incident that prompted it and the options it was
+chosen against — and is history rather than a description of the runtime.
 
 ## 1. Vocabulary and boundaries
 
@@ -53,6 +54,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Player state | Each instance simulates only its Player domain. Owner-authored cursor values have one writer and travel as values; a receiver keeps the values it authors across an install. |
 | Global environment | Shared wind events are re-derived rather than sent. Every instance consumes two draws from the same Shared environment stream, applies the gust to its own drains and predicted Shared species, and restores active wind state through corrections. |
 | Corrections | A correction starts with a versioned hash index. Equal roots send no state. Mismatches descend to independently proved pages. Compressed whole keyframes remain the bounded fallback. |
+| Correction playout | An install adopts the authority tick, so a receiver's clock follows the age of whichever exchange delivered. A correction describing a tick this instance has not reached waits for it, inside one measured round trip, one at a time. |
 | Local replay | A guest retains a bounded canonical suffix of its own accepted crossings and replays the portion later than the installed authority baseline. |
 | Crossing ordering | Snapshot schema 5 carries one applied-sequence fence per participant. A receiver removes ordinary frames the installed world already holds — including ones whose nominal receive tick is still ahead — and keeps the ones it does not, including ones whose receive tick is long past. |
 | Local FSM lifecycle | A live install replays only config-marked persistent `ClassLocal` exit/entry events for crossed state paths; staging and all ordinary actions remain side-effect free. |
@@ -220,6 +222,28 @@ differ on a relay whose equal canonical state has another dense-store order.
 
 Nothing acknowledges or retransmits an ordinary correction. A newer keyframe
 supersedes older state, so loss costs freshness rather than permanent correctness.
+
+### 4.1 The playout buffer
+
+Installing adopts the capture's tick, which makes a receiver's world clock a sample
+of how old the correction that delivered it was — and the paths do not agree on
+that. A whole body is one one-way delay old. A selective repair is three, because
+the index goes out, the answer comes back and the pages go out again. Alternating
+between them stepped the clock by up to four one-way delays between consecutive
+corrections, and every shared actor moved that many ticks with it: on a shaped link
+the worst step was 1 tick at zero delay, 4 at one, 8 at two and 16 at four. The
+fastest thing in the world is a knocked-back swarm, which is why that is what a
+guest saw jittering, and why an instance that becomes its own authority stops.
+
+A correction describing a tick this instance has not reached is therefore held
+until it has. The receiver's offset settles on the slowest path rather than chasing
+the fastest, and what a correction then carries is prediction error rather than a
+clock difference — which is also what makes `snapshot.correction_entities` mean
+what §7 says it means. Two bounds keep the buffer from becoming a stall: nothing is
+held that is further ahead than the link's measured round trip, and a second
+arrival while one waits takes the step instead of queueing behind it.
+`snapshot.corrections_held` counts the deferrals; a session whose paths deliver
+worlds of one age holds none.
 
 ## 5. Membership, topology, and authority continuity
 
@@ -435,6 +459,8 @@ The useful runtime signals are:
 
 - `snapshot.correction_entries`, `snapshot.correction_entities`, and
   `snapshot.correction_cells`: how far prediction moved when authority arrived;
+- `snapshot.corrections_held`: how often the playout buffer deferred one because
+  this instance had not reached the tick it describes (§4.1);
 - `snapshot.replay_records`, `snapshot.replay_skipped`, and
   `snapshot.replay_suffix_unavailable`: whether local predicted work survived;
 - `network.artifacts_pre_install`: frames discarded because an installed capture
@@ -603,13 +629,32 @@ entry says what is actually absent rather than what is imperfect, and how to see
       against, so a float difference there accumulates. Replay determinism is
       guaranteed within one implementation build.
 
+11. **A producer's own crossing still lands a playout lead before the authority's
+    copy does.** That is §3.1 working as designed — the lead is removed from the
+    player who generated the input — and what remains of it is what the first
+    correction after the crossing then undoes: a knocked-back swarm travels for
+    `BarrierDelayTicks` and is pulled back that far once. It is bounded, it is one
+    step rather than a jitter, and it is the same on a LAN as over the Internet
+    because the lead is floored rather than measured there.
+
+    *To see it:* twelve shared swarms, a guest hitting one every three ticks, and
+    the displacement each body takes beyond integrating its own velocity. At zero
+    one-way delay that is about 76 cells over 400 ticks with a worst single step of
+    3.1 cells, against 255 and 7.3 at four ticks of delay. The zero-delay figure is
+    this item; the difference between them was §4.1 and D-3's knockback roll.
+
+    Closing it needs either a barrier-bound combat crossing, which is input latency
+    on every hit, or rollback — the option §10.3 scored lowest on tractability for
+    this codebase. **To be decided.**
+
 ## 9. Verification
 
 The automated suite covers domain boundaries, deterministic continuation,
 two-participant and mesh convergence, selective repair and fallback, replay
 retention, correction ordering, join/reconnect, link shaping, relay retention,
-authority succession, the playout lead's choice over a shaped link, and the peer
-link and succession chain rules that make a successor reachable. It also forces a capture to enter and retire a quasar while
+authority succession, the playout lead's choice over a shaped link, the correction
+playout buffer, the knockback an artifact rather than a stream position determines,
+and the peer link and succession chain rules that make a successor reachable. It also forces a capture to enter and retire a quasar while
 the receiver skips the release transition, and round-trips a delayed transition
 action by compiled identity. Run the generation and repository gates after
 focused network tests:
@@ -692,3 +737,92 @@ many candidates the chain holds and whether this one is listening. Kill the host
 the survivors elect the chain's first survivor and continue in one session, rather
 than each continuing alone. Repeat with `-no-advertise` on the first guest and the
 second is elected instead.
+
+## 10. Where this came from
+
+This section is the record of the decision, condensed from the 2026-08-30
+desynchronisation diagnosis it replaces. It is history and the option space, not a
+description of the runtime; §1–§9 are that.
+
+### 10.1 The incident
+
+One instance's log, `vif-log-260830-192013.jsonl`, over 2,186 ticks:
+
+| First reported tick | First category | Outcome in the trace |
+|---:|---|---|
+| 792 | kinetics | escalated at 810; agreement restored at 822 |
+| 1,146 | kinetics | escalated at 1,164; agreement restored at 1,200 |
+| 1,704 | positions | escalated at 1,722; persistent through exit |
+
+`late=0`, no transport loss, no dropped queue records: nothing in the transport
+explained it. The permanent mismatch began at 1,704 and `StormSetup` at 1,773, so
+the storm amplified a difference rather than causing one.
+
+The cause was found in the local view. Binding the local participant emitted
+`EventCursorMoved`, which dirtied the throttled navigation cache on that instance
+only, shifted its recomputation phase, and produced kinetic differences a few
+hundred ticks later — the progression from kinetics to positions, and the apparent
+recovery when affected movers died. That is D-17, and
+`TestLocalViewChangesLeaveTheFlowFieldPhaseAlone` pins it.
+
+The run also dimensioned the problem: at tick 2,000 (100 s) about 256 entity
+creations and 247 destructions per second, 10.4 local and 20.6 received crossings
+per second, and a shared positioned high-water of 500. Those numbers are why the
+correction path is a capture with a selective exchange over it rather than a
+per-frame input stream: the artifact stream is small and the world is not.
+
+### 10.2 Why determinism alone was not enough
+
+Deterministic re-simulation reduces bandwidth and makes defects observable, but it
+is not a continuity protocol. A deterministic program still diverges when an
+artifact is lost, arrives after its apply tick, or is applied twice; when local
+input, a timer, iteration order, floating-point behavior or a cache phase leaks
+into shared state; when a participant is gone beyond retained history; or when
+partitioned groups continue separately. Journaling reproduces a run; it does not
+recover one. Recovery needs an authority, a checkpoint identity, a complete state
+format, a retained ordered suffix, and rules for the local state deliberately left
+out of it.
+
+### 10.3 The options, and why this one
+
+Scored 1–5 for this codebase, weighted: domain fit 25%, recovery correctness 25%,
+delivery tractability 15%, bandwidth 15%, latency 10%, continuity 10%.
+
+| Option | Fit | Recovery | Tract. | Bandwidth | Latency | Continuity | Weighted |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| End the session and restart | 5 | 1 | 5 | 5 | 3 | 1 | 3.40 |
+| Replay the whole log from tick zero | 5 | 3 | 4 | 4 | 1 | 2 | 3.50 |
+| Strict delayed lockstep | 4 | 3 | 3 | 5 | 1 | 2 | 3.25 |
+| **Host keyframe + canonical suffix** | **5** | **5** | **3** | **4** | **3** | **4** | **4.25** |
+| Periodic full-state stream | 3 | 5 | 3 | 2 | 4 | 4 | 3.55 |
+| Authoritative delta stream | 3 | 5 | 1 | 5 | 4 | 4 | 3.70 |
+| Input prediction and rollback | 2 | 4 | 1 | 4 | 5 | 3 | 3.05 |
+| Dedicated authoritative server | 2 | 5 | 1 | 3 | 4 | 4 | 3.15 |
+| CRDT / eventual merge | 1 | 1 | 1 | 4 | 5 | 2 | 1.95 |
+
+Lockstep turns network variance into a global stall and still needs reconnect
+state. Full state streaming makes host uplink scale with clients. Rollback wants
+cheap frequent saves, bounded side effects and many-tick re-simulation, which a
+high-churn ECS with an FSM over it does not offer; vi-fighter sends resolved
+crossings rather than a compact per-frame input stream, so it buys less here than
+it costs. CRDT merging cannot order collision, death and contested progression.
+
+What was built is the winning row plus the two things the table does not score:
+guests keep simulating between corrections, and the correction itself is selective,
+so a converged link costs hashes.
+
+### 10.4 Primary references for the patterns
+
+- Ensemble's [Age of Empires lockstep account](https://www.gamedeveloper.com/programming/1500-archers-on-a-28-8-network-programming-in-age-of-empires-and-beyond):
+  small commands over a deterministic simulation, determinism as a strict contract.
+- Valve's [Source multiplayer networking](https://developer.valvesoftware.com/wiki/Source_Multiplayer_Networking):
+  authoritative snapshots, deltas from acknowledged baselines, full fallback,
+  interpolation, prediction, lag compensation.
+- The [GGPO developer guide](https://github.com/pond3r/ggpo/blob/master/doc/DeveloperGuide.md):
+  rollback's prerequisites — deterministic simulation, fully serializable state,
+  load/save, and frame advance without rendering.
+- Unity Netcode's [client prediction](https://docs.unity3d.com/Packages/com.unity.netcode%401.4/manual/intro-to-prediction.html):
+  applying an authoritative snapshot and rolling predicted entities back.
+- Unity's [host migration](https://docs.unity.com/en-us/mps-sdk/session-host-migration)
+  and [host election](https://docs.unity.com/en-us/mps-sdk/session-op-host): capturing
+  and applying synchronised data is a separate problem from choosing a new host.

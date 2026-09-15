@@ -160,7 +160,7 @@ type Config struct {
 	// losing it ends the session rather than moving it. It is a session property:
 	// the coordinator's value travels in the offer. Default on for a dedicated host,
 	// which an orchestrator replaces at the same address, off for an interactive
-	// one. See doc/multi-player-enhancement.md §5.
+	// one. See doc/multi-player.md §5.
 	FixedAuthority bool
 
 	// Participants is a ceiling on the roster, itself included; zero means the whole
