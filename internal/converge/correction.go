@@ -88,6 +88,11 @@ type Corrections struct {
 	guestBreached  bool
 	saidGuestFloor bool
 
+	// held is the playout buffer: a resolved correction whose authority tick this
+	// instance has not reached yet, kept until it has. At most one waits.
+	held     snapshot.SharedCapture
+	haveHeld bool
+
 	// selective is the manifest exchange's state on whichever side this run is.
 	// selectiveMu covers the receiver's half, written by the tick that drained a
 	// frame; publishMu covers the host's, which belongs to the publication schedule.
@@ -776,16 +781,20 @@ func (c *Corrections) StartCorrector() {
 
 func (c *Corrections) correct() {
 	defer close(c.correctDone)
-	// A wake accompanies every arrival; the ticker is the backstop for a wake lost
-	// to a full channel, and costs one queue check per cadence when idle.
-	ticker := time.NewTicker(parameter.SnapshotCadenceMinTicks * parameter.GameUpdateInterval) // [wall]
-	defer ticker.Stop()
 	for {
+		// A wake accompanies every arrival; the timer is the backstop for a wake
+		// lost to a full channel, and costs one queue check per cadence when idle.
+		// A held correction is released by the clock and nothing wakes on that, so
+		// while one is waiting the backstop runs at the tick instead.
+		wait := parameter.SnapshotCadenceMinTicks * parameter.GameUpdateInterval // [wall]
+		if c.holding() {
+			wait = parameter.GameUpdateInterval
+		}
 		select {
 		case <-c.stop:
 			return
 		case <-c.wake:
-		case <-ticker.C:
+		case <-time.After(wait):
 		}
 		c.Apply()
 	}
@@ -810,6 +819,11 @@ func (c *Corrections) Apply() {
 	// exchange do: it belongs between two ticks, and this is the one loop every
 	// instance runs whichever half of the protocol it is.
 	c.driveAuthority()
+
+	// The playout buffer is released before anything new is resolved, so a
+	// correction whose tick this instance has now reached is installed before a
+	// fresher one can supersede it.
+	c.releaseHeld()
 
 	c.observeFloor()
 
@@ -906,9 +920,10 @@ func (c *Corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
 }
 
 // install stages a correction into the persistent staging world and commits it,
-// publishing how far this instance had drifted. The only refusal is a correction
-// the authority superseded, measured against the last one installed and never
-// against this instance's own tick, which is itself a prediction.
+// publishing how far this instance had drifted. Two refusals: a correction the
+// authority superseded, measured against the last one installed and never against
+// this instance's own tick, which is itself a prediction; and one this instance has
+// not yet reached, which is held rather than dropped.
 func (c *Corrections) install(cap snapshot.SharedCapture) error {
 	c.installedMu.Lock()
 	stale := c.lastInstalled > 0 && cap.Header.Tick <= c.lastInstalled
@@ -917,6 +932,14 @@ func (c *Corrections) install(cap snapshot.SharedCapture) error {
 		c.tel.Superseded.Add(1)
 		return nil
 	}
+	if c.hold(cap) {
+		return nil
+	}
+	return c.commit(cap)
+}
+
+// commit installs one correction whose playout time has come.
+func (c *Corrections) commit(cap snapshot.SharedCapture) error {
 	diff, err := c.inst.InstallCapture(cap)
 	if err != nil {
 		return err
@@ -944,6 +967,109 @@ func (c *Corrections) install(cap snapshot.SharedCapture) error {
 	m.CorrectionCells.Store(int64(diff.CellShift))
 	m.CorrectionTick.Store(int64(cap.Header.Tick))
 	return nil
+}
+
+// hold is the correction playout buffer, and it exists because a guest's world
+// clock is whatever the last install said: the install adopts the authority tick,
+// so the clock samples the *age* of whichever exchange happened to deliver. A
+// whole body is one one-way delay old; a selective repair is three, because the
+// index goes out, the answer comes back and the pages go out again. Mixing the two
+// moved the clock by up to four one-way delays between consecutive corrections,
+// and every shared actor moved that many ticks with it — which is why a
+// knocked-back swarm, the fastest thing in the world, was the one seen jittering.
+//
+// A correction describing a tick this instance has not reached is therefore held
+// until it has. The offset settles on the slowest path instead of chasing the
+// fastest, and what a correction then carries is prediction error rather than a
+// clock difference. Reports whether the capture was deferred.
+func (c *Corrections) hold(cap snapshot.SharedCapture) bool {
+	at := c.inst.Position()
+	if cap.Header.Run != at.Run || reached(cap, at.Tick) {
+		return false
+	}
+	// Past the window the clock is further behind than the spread the buffer is for,
+	// and waiting would starve rather than smooth: every correction after it arrives
+	// equally far ahead and supersedes the one held. The step is taken instead,
+	// which is what puts the offset back inside the window.
+	if cap.Header.Tick > at.Tick+c.holdWindow() {
+		return false
+	}
+	c.installedMu.Lock()
+	// One correction waits, never two. A second arriving while the first is still
+	// ahead of the clock says this instance is not catching up, and the step it has
+	// been avoiding is the cheapest thing left: one correction late once, rather
+	// than a buffer that fills for the rest of the session.
+	if c.haveHeld {
+		c.held, c.haveHeld = snapshot.SharedCapture{}, false
+		c.installedMu.Unlock()
+		return false
+	}
+	c.held, c.haveHeld = cap, true
+	c.installedMu.Unlock()
+	c.tel.Held.Add(1)
+	return true
+}
+
+// reached reports whether this instance's clock has arrived at the tick a
+// correction describes. One predicate for both halves of the buffer, so deferring
+// and releasing cannot disagree about what the buffer is for.
+func reached(cap snapshot.SharedCapture, tick uint64) bool {
+	return tick >= cap.Header.Tick
+}
+
+// holdWindow is how far ahead of this instance's clock a correction may be and
+// still be worth waiting for. The spread the buffer absorbs is one round trip — the
+// two extra legs a selective repair costs over a whole body — so the link's own
+// round trip is the window, floored at the cadence and capped where the barrier
+// caps its own lead. A link with nothing measured keeps the cadence, which is the
+// answer it had before anything was measured.
+func (c *Corrections) holdWindow() uint64 {
+	link, ok := c.inst.Transport().(engine.LinkMeasuringPort)
+	if !ok {
+		return parameter.SnapshotCorrectionTicks
+	}
+	worst := time.Duration(0)
+	for _, id := range link.Peers() {
+		if m := link.LinkMetric(id); m.Samples > 0 && m.RTT > worst {
+			worst = m.RTT
+		}
+	}
+	ticks := uint64(worst/parameter.GameUpdateInterval) + 1
+	return min(max(ticks, parameter.SnapshotCorrectionTicks), parameter.NetworkBarrierMaxDelayTicks)
+}
+
+// releaseHeld installs the held correction once this instance has reached the tick
+// it describes.
+func (c *Corrections) releaseHeld() {
+	c.installedMu.Lock()
+	cap, have := c.held, c.haveHeld
+	c.installedMu.Unlock()
+	if !have || !reached(cap, c.inst.Position().Tick) {
+		return
+	}
+	c.installedMu.Lock()
+	c.held, c.haveHeld = snapshot.SharedCapture{}, false
+	c.installedMu.Unlock()
+	if err := c.commit(cap); err != nil {
+		vlog.Warn("app", "msg", "held correction not applied",
+			"tick", cap.Header.Tick, "error", err.Error())
+	}
+}
+
+// dropHeld discards the playout buffer, for an instance that has stopped being a
+// receiver.
+func (c *Corrections) dropHeld() {
+	c.installedMu.Lock()
+	c.held, c.haveHeld = snapshot.SharedCapture{}, false
+	c.installedMu.Unlock()
+}
+
+// holding reports whether a correction is waiting on the clock, which is what makes
+// the apply loop poll at the tick rather than at the cadence.
+func (c *Corrections) holding() bool {
+	c.installedMu.Lock()
+	defer c.installedMu.Unlock()
+	return c.haveHeld
 }
 
 // SetBaseline records the keyframe later deltas are computed against, and the

@@ -189,7 +189,13 @@ func TestACorrectionSupersedesAuthorityFramesItAlreadyContains(t *testing.T) {
 			}
 
 			// Close the first motion's epoch. In one case the guest drains the
-			// batch before the correction; in the other it remains on the link.
+			// batch before the correction; in the other it ticks first, so the
+			// batch is still on the link when the capture arrives. Both leave the
+			// two clocks level: a capture ahead of the receiver's own tick is held
+			// by the correction playout buffer, which is a different criterion.
+			if !tc.scheduleBeforeCap {
+				guest.Tick(1)
+			}
 			host.Tick(1)
 			if tc.scheduleBeforeCap {
 				guest.Tick(1)

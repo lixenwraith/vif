@@ -91,6 +91,10 @@ func (c *Corrections) BecomeAuthority(rec network.HandoffRecord) {
 	c.selective.source = 0
 	c.selectiveMu.Unlock()
 
+	// A publisher installs nothing, so a correction still waiting on this
+	// instance's clock describes a world it is about to supersede.
+	c.dropHeld()
+
 	vlog.Warn("app", "msg", "authoring under a new term",
 		"term", uint64(rec.Term), "seeded_from_tick", seedTick, "have_baseline", seeded)
 
