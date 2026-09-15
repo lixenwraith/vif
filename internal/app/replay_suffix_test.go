@@ -211,7 +211,7 @@ func TestACorrectionSupersedesAuthorityFramesItAlreadyContains(t *testing.T) {
 				t.Fatalf("capture fences = authority %d, participant 1 sequence %d; want participant 1 and a completed crossing",
 					cap.Header.Authority, cap.Header.Crossings.Seq(1))
 			}
-			if err := guest.corrections.install(cap); err != nil {
+			if err := guest.corrections.Install(cap); err != nil {
 				t.Fatalf("install tick %d: %v", cap.Header.Tick, err)
 			}
 			if got := cursorCell(t, guest, 0); got != latest {
@@ -299,7 +299,7 @@ func TestARewindDoesNotReuseAProductionEpoch(t *testing.T) {
 	if got := guest.Position().Tick; got != baseline+1 {
 		t.Fatalf("guest reached tick %d, want %d before rewind", got, baseline+1)
 	}
-	if err := guest.corrections.install(cap); err != nil {
+	if err := guest.corrections.Install(cap); err != nil {
 		t.Fatalf("install tick %d: %v", baseline, err)
 	}
 	if got := guest.Position().Tick; got != baseline {
@@ -660,7 +660,7 @@ func TestALateGuestActionIsNotUndoneByTheCorrectionThatMissedIt(t *testing.T) {
 			suffix[0].ApplyTick, cap.Header.Tick)
 	}
 
-	if err := guest.corrections.install(cap); err != nil {
+	if err := guest.corrections.Install(cap); err != nil {
 		t.Fatalf("install: %v", err)
 	}
 	if got := cursorCell(t, guest, 1); got != moved {

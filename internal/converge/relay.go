@@ -1,4 +1,4 @@
-package app
+package converge
 
 import (
 	"slices"
@@ -10,21 +10,21 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
-// sessionRole is what this instance is doing in the protocol right now.
-func (c *corrections) sessionRole() network.Role {
+// Role is what this instance is doing in the protocol right now.
+func (c *Corrections) Role() network.Role {
 	links := 0
-	if link, ok := c.a.sessionTransport().(engine.LinkMeasuringPort); ok {
+	if link, ok := c.inst.Transport().(engine.LinkMeasuringPort); ok {
 		links = len(link.Peers())
 	}
-	return network.SessionRole(c.a.authority != nil && c.a.authority.IsAuthority(), links)
+	return network.SessionRole(c.authority.IsAuthority(), links)
 }
 
-// canRelay reports whether this instance can answer for a participant behind it: not
+// CanRelay reports whether this instance can answer for a participant behind it: not
 // the authority, more than one link, and retention to serve from. The retention test
 // is what keeps the claim honest — saying otherwise upstream would leave the
 // participants behind it holding an index nobody can act on.
-func (c *corrections) canRelay() bool {
-	if c.sessionRole() != network.RoleRelay {
+func (c *Corrections) CanRelay() bool {
+	if c.Role() != network.RoleRelay {
 		return false
 	}
 	c.publishMu.Lock()
@@ -36,11 +36,11 @@ func (c *corrections) canRelay() bool {
 // records who they were, so this instance's own answer can say who it answers for.
 // It runs after this instance answered the manifest, which is what puts the tick in
 // retention before a request naming it can arrive.
-func (c *corrections) forwardManifest(body []byte, from uint32, tick uint64) {
-	if !c.canRelay() {
+func (c *Corrections) forwardManifest(body []byte, from uint32, tick uint64) {
+	if !c.CanRelay() {
 		return
 	}
-	link, ok := c.a.sessionTransport().(engine.LinkMeasuringPort)
+	link, ok := c.inst.Transport().(engine.LinkMeasuringPort)
 	if !ok {
 		return
 	}
@@ -48,7 +48,7 @@ func (c *corrections) forwardManifest(body []byte, from uint32, tick uint64) {
 	if len(behind) == 0 {
 		return
 	}
-	port := c.a.sessionTransport()
+	port := c.inst.Transport()
 	sent := 0
 	for _, id := range behind {
 		if port.Send(id, uint8(network.MsgStateManifest), body) {
@@ -58,7 +58,7 @@ func (c *corrections) forwardManifest(body []byte, from uint32, tick uint64) {
 	if sent == 0 {
 		return
 	}
-	c.a.telemetry.RelayBytesSent.Add(int64(len(body) * sent))
+	c.tel.RelayBytesSent.Add(int64(len(body) * sent))
 	vlog.Debug("app", "msg", "manifest relayed", "tick", tick, "from", from, "to", sent)
 }
 
@@ -75,28 +75,28 @@ func behindLinks(peers []uint32, from uint32) []uint32 {
 	return out
 }
 
-// relayedParticipants is who this instance can answer for, carried upstream in its
+// RelayedParticipants is who this instance can answer for, carried upstream in its
 // own answer. A statement of capability rather than a record of what was forwarded:
 // the authority withholds the index while a participant is unanswerable, so a relay
 // reporting only past forwards could never forward anything to report.
-func (c *corrections) relayedParticipants() []uint32 {
-	if !c.canRelay() {
+func (c *Corrections) RelayedParticipants() []uint32 {
+	if !c.CanRelay() {
 		return nil
 	}
-	link, ok := c.a.sessionTransport().(engine.LinkMeasuringPort)
+	link, ok := c.inst.Transport().(engine.LinkMeasuringPort)
 	if !ok {
 		return nil
 	}
-	return behindLinks(link.Peers(), c.selectiveSource())
+	return behindLinks(link.Peers(), c.SelectiveSource())
 }
 
-// canAnswerEveryParticipant reports whether every participant can be answered. A
-// relayed one can when its forwarding neighbour holds retention, which that
-// neighbour states in its own answer since it is the only instance that knows.
+// canAnswerEveryParticipantLocked reports whether every participant can be
+// answered. A relayed one can when its forwarding neighbour holds retention, which
+// that neighbour states in its own answer since it is the only instance that knows.
 // Otherwise the session keeps the whole-body flood, and says why.
-func (c *corrections) canAnswerEveryParticipant(ids []uint32) bool {
-	roster := 0
-	c.a.world.RunSafe(func() { roster = c.a.world.Resources.Player.Count() })
+// Caller MUST hold publishMu.
+func (c *Corrections) canAnswerEveryParticipantLocked(ids []uint32) bool {
+	roster := c.inst.RosterSize()
 	if roster == 0 {
 		return true // no roster yet: nobody is behind a relay
 	}
@@ -132,7 +132,7 @@ func (c *corrections) canAnswerEveryParticipant(ids []uint32) bool {
 // world it authored. The answer carries the authority's header, root and section
 // summaries, which is what the receiver validates against; Served names this
 // instance, so the bytes are priced against the edge that carried them.
-func (c *corrections) serveRelayed(port engine.NetworkPort, pending pendingRequest, req snapshot.CorrectionRequest) bool {
+func (c *Corrections) serveRelayed(port engine.NetworkPort, pending pendingRequest, req snapshot.CorrectionRequest) bool {
 	c.publishMu.Lock()
 	held, ok := c.retainedAtLocked(req.Tick)
 	c.publishMu.Unlock()
@@ -144,17 +144,17 @@ func (c *corrections) serveRelayed(port engine.NetworkPort, pending pendingReque
 		c.sendUnserved(port, pending.from, req, "the retained index cannot answer this page vector")
 		return true
 	}
-	set.Served = c.a.localParticipant()
+	set.Served = c.inst.LocalParticipant()
 	body, err := snapshot.EncodeShardSet(set)
 	if err != nil || len(body) > parameter.SnapshotShardBytesMax || len(body) > network.MaxPayloadSize {
 		c.sendUnserved(port, pending.from, req, "the repair is wider than a relayed answer may carry")
 		return true
 	}
 	if port == nil || !port.Send(pending.from, uint8(network.MsgStateShard), body) {
-		c.a.telemetry.ShardsRefused.Add(1)
+		c.tel.ShardsRefused.Add(1)
 		return true
 	}
-	m := c.a.telemetry
+	m := c.tel
 	m.ShardsSent.Add(int64(pages))
 	m.ShardBytesSent.Add(int64(len(body)))
 	m.RelayServed.Add(1)
@@ -173,14 +173,14 @@ func (c *corrections) serveRelayed(port engine.NetworkPort, pending pendingReque
 // message rather than a silence, which would cost it a whole cadence; not a body,
 // because one from a different baseline is what the supersession rules make
 // unreachable. The receiver degrades to the next whole authoritative world.
-func (c *corrections) sendUnserved(port engine.NetworkPort, to uint32, req snapshot.CorrectionRequest, why string) {
-	c.a.telemetry.RelayUnserved.Add(1)
+func (c *Corrections) sendUnserved(port engine.NetworkPort, to uint32, req snapshot.CorrectionRequest, why string) {
+	c.tel.RelayUnserved.Add(1)
 	if port == nil {
 		return
 	}
 	body, err := snapshot.EncodeUnserved(snapshot.CorrectionUnserved{
 		Version: snapshot.ManifestVersion, Tick: req.Tick, Term: req.Term,
-		From: c.a.localParticipant(), Reason: why,
+		From: c.inst.LocalParticipant(), Reason: why,
 	})
 	if err != nil {
 		return
@@ -192,12 +192,12 @@ func (c *corrections) sendUnserved(port engine.NetworkPort, to uint32, req snaps
 
 // applyUnserved is the receiver's half: stop waiting for a repair that is not
 // coming and take the next whole world instead.
-func (c *corrections) applyUnserved(body []byte) {
+func (c *Corrections) applyUnserved(body []byte) {
 	u, err := snapshot.DecodeUnserved(body)
 	if err != nil {
 		return
 	}
-	m := c.a.telemetry
+	m := c.tel
 	m.RelayBytesRecv.Add(int64(len(body)))
 	m.RelayUnserved.Add(1)
 	if awaiting := c.takeAwaiting(u.Tick); awaiting == nil {

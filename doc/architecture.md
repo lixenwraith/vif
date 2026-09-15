@@ -36,6 +36,7 @@ protocol details to `github.com/lixenwraith/terminal`, TOML parsing to
 ```mermaid
 flowchart TD
     Entry["cmd/vif: flags and diagnostics"] --> App["internal/app: composition root"]
+    App --> Converge["internal/converge: authority protocol"]
     App --> Journal["internal/journal: deterministic run streams"]
     App --> Runtime["World, scheduler, FSM, input router"]
     App --> IO["Service hub: files, terminal, content, audio, network"]
@@ -51,6 +52,7 @@ The main architectural planes are:
 | Simulation data | `internal/engine`, `internal/component`, `internal/core` | Entity identities, typed sparse-set component stores, singleton resources, spatial indexing, and shared time/state. |
 | Simulation behavior | `internal/system`, `internal/fsm`, `internal/event` | Per-tick mechanics, event reactions, encounter control, reset, and system enablement. |
 | Interaction | `internal/input`, `internal/mode` | Parse terminal events into semantic intents and apply them under the world lock. |
+| Authority and convergence | `internal/converge` | Hold the session's authority term and run its succession, publish the correction cadence, answer the selective manifest exchange, install what arrives, and keep the links a handoff needs. It reads and writes the live world only through the seam the composition root supplies. |
 | Deterministic run streams | `internal/journal` | Attach recording sinks, capture/load journals, order replay records, generate seeded fuzz input, and execute authored tick scripts through App-independent target contracts. |
 | Presentation | `internal/render`, `internal/render/renderer`, `internal/parameter/visual` | Snapshot frame context, layer cells, apply masks/effects, and flush to the terminal. |
 | I/O boundaries | `internal/service`, `internal/content`, `internal/network`, external modules | Categorized file access, terminal polling, corpus loading, audio device/process management, and framed network sessions. |

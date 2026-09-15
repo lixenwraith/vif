@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/converge"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
@@ -54,7 +55,7 @@ func runSession(host, guest *App, ticks int) {
 	for range ticks {
 		host.Tick(1)
 		guest.Tick(1)
-		_ = host.corrections.publishDue()
+		_ = host.corrections.PublishDue()
 		guest.ApplyPendingCorrections()
 	}
 }
@@ -65,7 +66,7 @@ func runSession(host, guest *App, ticks int) {
 // order is caught here.
 func TestCadenceBoundsAreTheGameParameters(t *testing.T) {
 	t.Parallel()
-	b := CadenceBounds()
+	b := converge.CadenceBounds()
 	if err := b.Validate(); err != nil {
 		t.Fatalf("the shipped envelope does not validate: %v", err)
 	}
@@ -172,7 +173,7 @@ func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 		for range 80 {
 			host.Tick(1)
 			guest.Tick(1)
-			_ = host.corrections.publishDue()
+			_ = host.corrections.PublishDue()
 			guest.ApplyPendingCorrections()
 			if n := statOf(guest, "snapshot.correction_entities"); n > peak {
 				peak = n
@@ -269,7 +270,7 @@ func TestTheFloorBoundsEveryScheduleAShapedLinkProduces(t *testing.T) {
 			for tick := range 120 {
 				host.Tick(1)
 				guest.Tick(1)
-				_ = host.corrections.publishDue()
+				_ = host.corrections.PublishDue()
 				guest.ApplyPendingCorrections()
 				if tick%8 != 0 {
 					continue
@@ -326,7 +327,7 @@ func TestAGuestRecoversAtTheFloorAfterTheLinkComesBack(t *testing.T) {
 	for range int(parameter.SnapshotFloorKeyframeTicks) * 3 {
 		host.Tick(1)
 		guest.Tick(1)
-		_ = host.corrections.publishDue()
+		_ = host.corrections.PublishDue()
 		guest.ApplyPendingCorrections()
 		if statOf(guest, "snapshot.corrections_applied") > before {
 			recovered = true
@@ -366,10 +367,10 @@ func TestAJoinIsRefusedWhenTheLinkCannotCarryTheFloor(t *testing.T) {
 	const keyframe = 176 * 1024
 	floorWindow := time.Duration(parameter.SnapshotFloorKeyframeTicks) * parameter.GameUpdateInterval
 
-	if err := a.admitLink(port, 2, keyframe, floorWindow/4); err != nil {
+	if err := a.corrections.AdmitLink(port, 2, keyframe, floorWindow/4); err != nil {
 		t.Fatalf("a link four times faster than the floor was refused: %v", err)
 	}
-	err := a.admitLink(port, 3, keyframe, floorWindow*10)
+	err := a.corrections.AdmitLink(port, 3, keyframe, floorWindow*10)
 	if err == nil {
 		t.Fatal("a link ten times slower than the floor was admitted")
 	}
@@ -382,7 +383,7 @@ func TestAJoinIsRefusedWhenTheLinkCannotCarryTheFloor(t *testing.T) {
 	}
 	// No measurement is not a refusal: a session nobody can join before a probe has
 	// completed a round trip is worse than one that reports the condition.
-	if err := a.admitLink(port, 4, 0, 0); err != nil {
+	if err := a.corrections.AdmitLink(port, 4, 0, 0); err != nil {
 		t.Fatalf("admission was refused on no evidence: %v", err)
 	}
 }
@@ -400,7 +401,7 @@ func TestASlowPeerDoesNotSlowAFastOne(t *testing.T) {
 		for _, a := range apps {
 			a.Tick(1)
 		}
-		_ = host.corrections.publishDue()
+		_ = host.corrections.PublishDue()
 		for _, a := range apps[1:] {
 			a.ApplyPendingCorrections()
 		}

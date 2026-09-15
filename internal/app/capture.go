@@ -332,6 +332,15 @@ func (a *App) sharedStateSaversLocked() map[string]engine.SharedStateSaver {
 	return out
 }
 
+// verifyCaptureIdentity answers "is this header describing my session" without
+// requiring the body a full verification hashes.
+func (a *App) verifyCaptureIdentity(h snapshot.CaptureHeader) error {
+	if h.Schema != snapshot.Schema {
+		return fmt.Errorf("capture schema %d, this build reads %d", h.Schema, snapshot.Schema)
+	}
+	return firstAnchorMismatch("manifest", a.anchorIdentity(snapshot.Anchor(h)))
+}
+
 // VerifyCapture reports whether this instance can install a capture: whether it is
 // intact, and whether it describes the same build, configuration and corpus. The
 // identity set is anchorIdentity's, so a join and a replay of the same pair cannot

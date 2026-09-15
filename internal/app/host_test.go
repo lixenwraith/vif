@@ -482,7 +482,7 @@ func alignTicks(t *testing.T, a, b *App) {
 // two instances without one of them being re-based mid-comparison.
 func settleCorrections(t *testing.T, host, guest *App) {
 	t.Helper()
-	host.corrections.close()
+	host.corrections.Close()
 	for range 8 {
 		guest.Tick(1)
 		host.Tick(1)

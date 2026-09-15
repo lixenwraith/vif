@@ -133,7 +133,7 @@ func (a *App) HostSession(o network.SessionOffer) error {
 		}
 	})
 	a.openAuthority(o, o.Host)
-	a.authority.publishChain()
+	a.authority.PublishChain()
 	return a.configureSessionRoster(o, o.Host)
 }
 
@@ -280,6 +280,13 @@ func (a *App) localSlot() uint8 {
 	var slot uint8
 	a.world.RunSafe(func() { slot = a.world.Resources.Player.LocalSlot() })
 	return slot
+}
+
+// localParticipant is this instance's session identity, zero outside a session.
+func (a *App) localParticipant() uint32 {
+	var id uint32
+	a.world.RunSafe(func() { id = a.world.LocalParticipant() })
+	return id
 }
 
 // adoptMapLatch applies the host's bounds through the D-14 authority — the level

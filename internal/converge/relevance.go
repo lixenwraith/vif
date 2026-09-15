@@ -1,4 +1,4 @@
-package app
+package converge
 
 import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -15,7 +15,7 @@ import (
 // echo, so it is a transport value: read to decide a send time and never written
 // where a tick can see it. A keyframe moves the whole world, so what is scored there
 // is the shared population near each participant. Caller MUST hold publishMu.
-func (c *corrections) relevanceLocked(
+func (c *Corrections) relevanceLocked(
 	cap snapshot.SharedCapture, keyframe bool, link engine.LinkMeasuringPort, ids []uint32,
 ) map[uint32]int {
 	out := make(map[uint32]int, len(ids))
@@ -82,7 +82,7 @@ func movedEntities(base, next snapshot.SharedCapture, keyframe bool) map[core.En
 // absolute: in a storm every participant has hundreds of moved entities beside it,
 // so a fixed threshold fires for everyone and says nothing. Caller MUST hold
 // publishMu.
-func (c *corrections) scoreRelevanceLocked(ids []uint32, near map[uint32]int) {
+func (c *Corrections) scoreRelevanceLocked(ids []uint32, near map[uint32]int) {
 	total := 0
 	counted := 0
 	for _, id := range ids {
@@ -114,8 +114,8 @@ func (c *corrections) scoreRelevanceLocked(ids []uint32, near map[uint32]int) {
 // publishPlanTelemetryLocked publishes the operating point: the cadence in force,
 // the interval between whole worlds, what the link was measured to carry, and the
 // two conditions a player should be told about. Caller MUST hold publishMu.
-func (c *corrections) publishPlanTelemetryLocked(ids []uint32) {
-	m := c.a.telemetry
+func (c *Corrections) publishPlanTelemetryLocked(ids []uint32) {
+	m := c.tel
 	m.CadenceTicks.Store(int64(c.base))
 	m.KeyframePeriod.Store(int64(c.keyPeriod))
 	if c.base > 0 {
@@ -156,7 +156,7 @@ func (c *corrections) publishPlanTelemetryLocked(ids []uint32) {
 // link cannot carry the convergence floor. The controller clamps at the floor, so
 // the condition it clamped against is unrecoverable by any cadence and naming it is
 // the only honest answer. Caller MUST hold publishMu.
-func (c *corrections) reportFloorLocked() {
+func (c *Corrections) reportFloorLocked() {
 	if c.breached == c.saidFloor {
 		return
 	}
@@ -164,15 +164,15 @@ func (c *corrections) reportFloorLocked() {
 	if !c.breached {
 		vlog.Info("app", "msg", "link is carrying the convergence floor again",
 			"floor_ticks", c.bounds.FloorKeyframeTicks)
-		c.a.ctx.SetStatusMessage("Link recovered; corrections are converging again",
+		c.inst.SetStatusMessage("Link recovered; corrections are converging again",
 			parameter.StatusMessageDefaultTimeout, false)
 		return
 	}
 	vlog.Warn("app", "msg", "link cannot sustain the convergence floor",
 		"floor_ticks", c.bounds.FloorKeyframeTicks,
-		"floor_bps", int64(c.a.telemetry.FloorBps.Load()),
-		"budget_bps", int64(c.a.telemetry.BudgetBps.Load()))
-	c.a.ctx.SetStatusMessage(
+		"floor_bps", int64(c.tel.FloorBps.Load()),
+		"budget_bps", int64(c.tel.BudgetBps.Load()))
+	c.inst.SetStatusMessage(
 		"Link cannot carry a whole world within the convergence floor; corrections may not converge",
 		4*parameter.StatusMessageDefaultTimeout, true)
 }

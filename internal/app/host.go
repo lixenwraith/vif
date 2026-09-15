@@ -110,7 +110,7 @@ func (a *App) beginHostingLocked(addr string) error {
 	// The authority's cadence starts with the session. Nothing is published while
 	// no peer is connected — publish returns on an empty roster — so a host waiting
 	// alone pays a ticker and no world reads.
-	a.corrections.startPump()
+	a.corrections.StartPump()
 
 	bound := addr
 	if b := port.Addr(); b != nil {
@@ -181,7 +181,7 @@ func (a *App) sessionSummaryLocked() string {
 	line := fmt.Sprintf("Session %s, participant %d (%s), %d peers, tick %d, %s",
 		where, participant, cursor, peers, a.Position().Tick, latch)
 	if a.authority != nil {
-		if s := a.authority.summary(); s != "" {
+		if s := a.authority.Summary(); s != "" {
 			line += "; " + s
 		}
 	}
@@ -280,7 +280,7 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 
 	minTick := a.Position().Tick + parameter.NetworkBarrierDelayTicks
 	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound
-	body, tick, err := a.corrections.keyframeAt(minTick, deadline)
+	body, tick, err := a.corrections.KeyframeAt(minTick, deadline)
 	if err != nil {
 		return err
 	}
@@ -312,7 +312,7 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 	// what completes the measurement. A participant refused here is dropped by the
 	// caller and its identity returned to the pool, which is the same unwind a
 	// join that could not finish its gate takes.
-	if err := a.admitLink(port, id, len(body), time.Since(transferStart)); err != nil {
+	if err := a.corrections.AdmitLink(port, id, len(body), time.Since(transferStart)); err != nil {
 		return err
 	}
 

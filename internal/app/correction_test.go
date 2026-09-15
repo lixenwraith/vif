@@ -632,11 +632,11 @@ func TestJoinReusesTheCadencesKeyframe(t *testing.T) {
 	a.Tick(20)
 
 	deadline := time.Now().Add(socketWait)
-	first, firstTick, err := a.corrections.keyframeAt(0, deadline)
+	first, firstTick, err := a.corrections.KeyframeAt(0, deadline)
 	if err != nil {
 		t.Fatalf("first keyframe: %v", err)
 	}
-	second, secondTick, err := a.corrections.keyframeAt(firstTick, deadline)
+	second, secondTick, err := a.corrections.KeyframeAt(firstTick, deadline)
 	if err != nil {
 		t.Fatalf("second keyframe: %v", err)
 	}
@@ -647,12 +647,12 @@ func TestJoinReusesTheCadencesKeyframe(t *testing.T) {
 
 	// A join needs a world *later* than its admission, and asking for one this run
 	// has not reached is a refusal rather than a stale capture.
-	if _, _, err := a.corrections.keyframeAt(firstTick+4, time.Now().Add(50*time.Millisecond)); err == nil {
+	if _, _, err := a.corrections.KeyframeAt(firstTick+4, time.Now().Add(50*time.Millisecond)); err == nil {
 		t.Fatal("a keyframe was produced for a tick the session has not reached")
 	}
 
 	a.Tick(8)
-	third, thirdTick, err := a.corrections.keyframeAt(firstTick+4, deadline)
+	third, thirdTick, err := a.corrections.KeyframeAt(firstTick+4, deadline)
 	if err != nil {
 		t.Fatalf("third keyframe: %v", err)
 	}
@@ -675,7 +675,7 @@ func TestJoinReusesTheCadencesKeyframe(t *testing.T) {
 	if got := a.Position().Run; got == 0 {
 		t.Fatal("the reset did not start a new run")
 	}
-	fresh, freshTick, err := a.corrections.keyframeAt(0, deadline)
+	fresh, freshTick, err := a.corrections.KeyframeAt(0, deadline)
 	if err != nil {
 		t.Fatalf("keyframe after a restart: %v", err)
 	}
@@ -706,7 +706,7 @@ func TestMidRunJoinWaitsOutThePlayoutLead(t *testing.T) {
 	admission := host.Position().Tick
 	done := make(chan uint64, 1)
 	go func() {
-		_, tick, err := host.corrections.keyframeAt(
+		_, tick, err := host.corrections.KeyframeAt(
 			admission+parameter.NetworkBarrierDelayTicks, time.Now().Add(socketWait))
 		if err != nil {
 			done <- 0
@@ -1100,7 +1100,7 @@ func TestAWidenedPeerIsServedForItsWholeWindow(t *testing.T) {
 
 	// What serveOne reaches when a repair is not worth sending.
 	const guestParticipant = 2
-	host.corrections.widenLocked(guestParticipant)
+	host.corrections.Widen(guestParticipant)
 
 	keyframes := statOf(host, "snapshot.keyframes")
 	for round := range parameter.SnapshotManifestSilenceCorrections {
@@ -1176,7 +1176,7 @@ func TestAFailedProofReachesTheKeyframeFallback(t *testing.T) {
 	_ = awaiting
 
 	before := statOf(guest, "snapshot.proof_failures")
-	guest.corrections.applyRepair(corrupt)
+	guest.corrections.ApplyRepair(corrupt)
 	if statOf(guest, "snapshot.proof_failures") <= before {
 		t.Fatal("a corrupted repair passed its proof")
 	}
@@ -1218,7 +1218,7 @@ func TestSupersededRepairsAreRefusedRatherThanCombined(t *testing.T) {
 	before := statOf(guest, "snapshot.shards_refused")
 	baselines := statOf(guest, "snapshot.baseline_refusals")
 	applied := statOf(guest, "snapshot.corrections_applied")
-	guest.corrections.applyRepair(stale)
+	guest.corrections.ApplyRepair(stale)
 	if statOf(guest, "snapshot.shards_refused") <= before {
 		t.Fatal("a superseded repair was accepted")
 	}
@@ -1253,25 +1253,19 @@ func outstandingRepair(t *testing.T, host, guest *App, corrupt func(*snapshot.Co
 	host.ApplyPendingCorrections()
 	guest.ApplyPendingCorrections() // answers the index, now awaiting a repair
 
-	guest.corrections.selectiveMu.Lock()
-	outstanding := guest.corrections.selective.awaiting
-	guest.corrections.selectiveMu.Unlock()
-	if len(outstanding) == 0 {
+	req, ok := guest.corrections.OutstandingRequest()
+	if !ok {
 		t.Fatal("the guest is not awaiting a repair; the injected divergence produced none")
 	}
-	awaiting := outstanding[len(outstanding)-1]
-	req, _, _ := snapshot.CompareRequest(awaiting.index, awaiting.manifest)
 	if req.Converged() {
 		t.Fatal("the guest reported convergence; the injected divergence produced no request")
 	}
 
-	host.corrections.publishMu.Lock()
-	held, ok := host.corrections.retainedAtLocked(awaiting.tick)
-	host.corrections.publishMu.Unlock()
+	index, ok := host.corrections.RetainedIndex(req.Tick)
 	if !ok {
-		t.Fatalf("the host retained no capture for tick %d", awaiting.tick)
+		t.Fatalf("the host retained no capture for tick %d", req.Tick)
 	}
-	set, pages, err := snapshot.BuildShardSet(held.index, req)
+	set, pages, err := snapshot.BuildShardSet(index, req)
 	if err != nil {
 		t.Fatalf("build repair: %v", err)
 	}
@@ -1285,7 +1279,7 @@ func outstandingRepair(t *testing.T, host, guest *App, corrupt func(*snapshot.Co
 	if err != nil {
 		t.Fatalf("encode repair: %v", err)
 	}
-	return body, awaiting.tick
+	return body, req.Tick
 }
 
 // TestSelectiveCorrectionKeepsThePlayerDomainUntouched seen from

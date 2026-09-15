@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/converge"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
@@ -52,7 +53,7 @@ func boolOf(a *App, key string) (v bool) {
 }
 
 // authorityOf is one instance's view of who is authoring.
-func authorityOf(a *App) AuthorityReport { return a.AuthorityState() }
+func authorityOf(a *App) converge.AuthorityReport { return a.AuthorityState() }
 
 // primeRetention gives every participant a retained authoritative record, which is
 // the succession's eligibility evidence. Without one nothing is electable, which is
@@ -249,9 +250,7 @@ func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 	host, guest := apps[0], apps[1]
 
 	for _, a := range apps {
-		a.authority.mu.Lock()
-		a.authority.fixed = true
-		a.authority.mu.Unlock()
+		a.authority.Pin()
 	}
 
 	closeParticipant(host)
@@ -354,10 +353,7 @@ func TestAnUnreachableSuccessorLeavesTheRestForking(t *testing.T) {
 // membershipOf is what a handoff must carry unchanged, read straight off the
 // authority state rather than off a copy the harness made.
 func membershipOf(a *App) ([]network.SessionParticipant, event.JoinAnchor, uint64) {
-	a.authority.mu.Lock()
-	defer a.authority.mu.Unlock()
-	return append([]network.SessionParticipant(nil), a.authority.roster...),
-		a.authority.anchor, a.authority.delay
+	return a.authority.Membership()
 }
 
 // handOff moves authorship to apps[to] by hand, for a test whose subject is what
@@ -374,7 +370,7 @@ func handOff(t *testing.T, apps []*App, to int) {
 		BarrierDelayTicks: delay,
 	}
 	for _, a := range apps {
-		if err := a.authority.adopt(rec, 0); err != nil {
+		if err := a.authority.Adopt(rec, 0); err != nil {
 			t.Fatalf("hand authorship to participant %d: %v", to+1, err)
 		}
 	}
@@ -397,12 +393,12 @@ func TestASecondHandoffForOneTermIsRefused(t *testing.T) {
 		Anchor:            anchor,
 		BarrierDelayTicks: delay,
 	}
-	if err := guest.authority.adopt(base, 0); err != nil {
+	if err := guest.authority.Adopt(base, 0); err != nil {
 		t.Fatalf("the first record for a term must be adopted: %v", err)
 	}
 	rival := base
 	rival.Authority = 3
-	err := guest.authority.adopt(rival, 0)
+	err := guest.authority.Adopt(rival, 0)
 	if err == nil {
 		t.Fatal("a second, different record for one term was adopted")
 	}
@@ -413,7 +409,7 @@ func TestASecondHandoffForOneTermIsRefused(t *testing.T) {
 	// A record that skips a term is refused for the same reason: nothing agreed it.
 	skipped := base
 	skipped.Term = network.FirstTerm + 3
-	if err := guest.authority.adopt(skipped, 0); err == nil {
+	if err := guest.authority.Adopt(skipped, 0); err == nil {
 		t.Fatal("a record entering a term two generations ahead was adopted")
 	}
 	// And one whose roster is not this session's is refused before anything is read
@@ -422,7 +418,7 @@ func TestASecondHandoffForOneTermIsRefused(t *testing.T) {
 	foreign := base
 	foreign.Term = network.FirstTerm + 2
 	foreign.Roster = append(slices.Clone(roster), network.SessionParticipant{ID: 4, Slot: 3})
-	if err := guest.authority.adopt(foreign, 0); err == nil {
+	if err := guest.authority.Adopt(foreign, 0); err == nil {
 		t.Fatal("a record carrying a roster this session never closed on was adopted")
 	}
 }
@@ -547,11 +543,7 @@ func TestAJoinerDiallingMidHandoffIsRefusedAndRetries(t *testing.T) {
 	// Open a succession by hand: the authority is this instance, so nothing is
 	// actually lost — what is being tested is the admission gate, and the gate
 	// reads "is a succession running" rather than "who went".
-	host.authority.mu.Lock()
-	host.authority.contested = host.authority.term + 1
-	host.authority.lost = 9
-	host.authority.reports = map[network.PeerID]bool{}
-	host.authority.mu.Unlock()
+	host.authority.Contest(9)
 
 	_, _, err := network.DialSession(addr, network.DebugConfig(network.RolePeer, ""))
 	if err == nil {
@@ -563,9 +555,7 @@ func TestAJoinerDiallingMidHandoffIsRefusedAndRetries(t *testing.T) {
 
 	// The succession resolves; the retry is an ordinary join and lands in the same
 	// slot discipline the first one would have.
-	host.authority.mu.Lock()
-	host.authority.contested = 0
-	host.authority.mu.Unlock()
+	host.authority.Contest(0)
 
 	stopTicking := tickInBackground(host)
 	guest, _ := mustSocketJoiner(t, addr, seed, 120, 40)
@@ -687,8 +677,8 @@ func TestALocalForkRejoiningAHigherTermIsRefused(t *testing.T) {
 	// A partition that cannot elect: the succession opens and its deadline passes
 	// with nothing eligible, which is the local-continuation fallback.
 	fork := apps[2]
-	fork.authority.beginSuccession(1)
-	fork.authority.giveUp()
+	fork.authority.BeginSuccession(1)
+	fork.authority.GiveUp()
 	if got := authorityOf(fork); !got.Fork {
 		t.Fatalf("the instance did not become a local fork: %+v", got)
 	}
@@ -715,7 +705,7 @@ func TestALocalForkRejoiningAHigherTermIsRefused(t *testing.T) {
 	// session actually produced while this instance was away — is refused for the
 	// same reason rather than adopted as a way back in.
 	roster, anchor, delay := membershipOf(fork)
-	if err := fork.authority.adopt(network.HandoffRecord{
+	if err := fork.authority.Adopt(network.HandoffRecord{
 		Term: network.FirstTerm + 2, Authority: 2, Predecessor: 1,
 		Roster: roster, Anchor: anchor,
 		BarrierDelayTicks: delay,

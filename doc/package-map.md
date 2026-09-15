@@ -11,7 +11,9 @@ flowchart TD
     Vif["cmd/vif"] --> App["internal/app"]
     Vif --> Resource["internal/resource"]
     App --> Resource
-    App --> Snapshot["internal/snapshot"]
+    App --> Converge["internal/converge"]
+    Converge --> Snapshot["internal/snapshot"]
+    App --> Snapshot
     App --> Services["internal/service"]
     App --> Runtime["engine, input, mode, FSM"]
     App --> Assembly["manifest, systems, renderers"]
@@ -62,7 +64,8 @@ render abstraction, while the orchestrator owns the terminal capability.
 |---|---|
 | `cmd/vif` | Grouped config/log/session flags including startup host/join selection, logging/journal/runtime-capture setup, replay/script/watch/check/schema selection, process exit policy. |
 | `internal/content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. Internal because it depends on game `core.CodeBlock`. |
-| `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, drive frame/input/playback/script loops, capture and install the shared world, run the correction cadence and authority succession, choose the session's playout lead, own this participant's listening port and the reachability map peers dial from, and verify anchor/config identity. It owns the correction and authority protocol rather than delegating it: both read and write the live world under its lock, so a package boundary between them would be an interface over `*App` rather than a smaller unit. |
+| `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, drive frame/input/playback/script loops, capture and install the shared world, choose the session's playout lead, and verify anchor/config identity. It owns the world and the lock over it; the authority protocol that reads and writes that world lives in `internal/converge` and reaches it only through the `converge.Instance` seam this package implements. |
+| `internal/converge` | The authority protocol: which generation of the session this instance is part of and who is authoring it, the succession that moves authorship when the author goes, the adaptive per-link correction cadence a host publishes, the selective manifest/page exchange that makes a converged link cost hashes, the install a guest commits between two ticks, and the listening port and succession chain a survivor dials down. It holds no world and takes no world lock: `converge.Instance` is the whole of what it asks the run for, and every method on it acquires that lock itself. |
 | `internal/asset` | Every embedded shipped file — fallback FSM bundle, tutorial corpus, default keymap, built-in sound bank — plus the splash bitmap font. The only package with an `embed` directive for shipped data. |
 | `internal/component` | Pure ECS component data and related enums/masks. Position is declared here but stored specially by `engine`. |
 | `internal/core` | Small shared value types, entity ID and replication domain, modes, code blocks, the deterministic dependency resolver both `service` and `engine` order with, crash and stderr-capture support. |
@@ -157,18 +160,19 @@ The practical dependency rules are:
 
 1. `cmd` may depend on `internal/app`, `internal/resource` and `internal/manifest`; lower packages must not depend on `cmd`.
 2. `app` may compose all runtime layers; domain packages should not import it.
-3. `snapshot` and `resource` sit below `app`: the first owns the capture wire model and the comparison surface, the second the config-root precedence rule. Neither imports `app`, and neither acquires a lock — the surface readers walk a world the caller has already locked, and the wire model reads none at all.
-4. `journal` owns deterministic input-stream mechanics and may depend on event and input values, while App-specific construction, presentation, and session startup stay above it.
-5. `engine` owns data/lifecycle infrastructure but should not import concrete
+3. `converge` sits between `app` and `snapshot`/`network`: it decides what a session publishes and installs, and asks the run for the world through `converge.Instance` rather than importing `app`.
+4. `snapshot` and `resource` sit below both: the first owns the capture wire model and the comparison surface, the second the config-root precedence rule. Neither imports `app`, and neither acquires a lock — the surface readers walk a world the caller has already locked, and the wire model reads none at all.
+5. `journal` owns deterministic input-stream mechanics and may depend on event and input values, while App-specific construction, presentation, and session startup stay above it.
+6. `engine` owns data/lifecycle infrastructure but should not import concrete
    gameplay systems or renderers.
-6. `input` produces pure intents and must remain free of engine dependencies.
-7. `mode`, systems, and renderers may depend on engine data, but communicate
+7. `input` produces pure intents and must remain free of engine dependencies.
+8. `mode`, systems, and renderers may depend on engine data, but communicate
    laterally through resources/events rather than concrete peer references.
-8. Generic FSM core/std stays independent of the game through `std.Host`; the
+9. Generic FSM core/std stays independent of the game through `std.Host`; the
    manifest bridge is the adapter.
-9. Blocking I/O stays behind services, render flush, audio backends, tools, or
+10. Blocking I/O stays behind services, render flush, audio backends, tools, or
    diagnostics—not inside a simulation update.
-10. Reusable algorithms accept callbacks/data structures instead of reaching
+11. Reusable algorithms accept callbacks/data structures instead of reaching
    into global world state where practical.
 
 ## 8. External module boundary

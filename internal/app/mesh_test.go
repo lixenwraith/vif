@@ -540,7 +540,7 @@ func TestARelayCannotForgeAPage(t *testing.T) {
 	}
 
 	before := statOf(far, "snapshot.keyframe_fallbacks")
-	far.corrections.applyRepairFromRelay(t, set, want)
+	applyRepairFromRelay(t, far, set, want)
 	if statOf(far, "snapshot.corrections_applied") == 0 {
 		t.Fatal("the honest relayed repair never reached the receiver")
 	}
@@ -549,34 +549,18 @@ func TestARelayCannotForgeAPage(t *testing.T) {
 
 // applyRepairFromRelay drives one relayed answer through the receiver's apply
 // path, so the refusal and the fallback are the real ones rather than a direct
-// call to the validator.
-func (c *corrections) applyRepairFromRelay(t *testing.T, set snapshot.CorrectionShardSet, want snapshot.CorrectionManifest) {
+// call to the validator. Expect stands in for the leg this skips: the receiver
+// answered the index and is waiting on the repair.
+func applyRepairFromRelay(t *testing.T, a *App, set snapshot.CorrectionShardSet, want snapshot.CorrectionManifest) {
 	t.Helper()
 	body, err := snapshot.EncodeShardSet(set)
 	if err != nil {
 		t.Fatalf("encode a relayed answer: %v", err)
 	}
-	c.selectiveMu.Lock()
-	c.selective.awaiting = append(c.selective.awaiting, &awaitingRepair{
-		tick: want.Header.Tick, capture: mustRoundTrip(t, c.a), index: mustIndex(t, c.a, want),
-		manifest: want, from: 2,
-	})
-	c.selectiveMu.Unlock()
-	c.applyRepair(body)
-}
-
-func mustIndex(t *testing.T, a *App, want snapshot.CorrectionManifest) *snapshot.Manifest {
-	t.Helper()
-	cap, err := a.CaptureShared()
-	if err != nil {
-		t.Fatalf("capture: %v", err)
+	if err := a.corrections.Expect(want, 2); err != nil {
+		t.Fatalf("await a relayed answer: %v", err)
 	}
-	cap.Header.Term = want.Header.Term
-	index, err := snapshot.BuildManifest(cap, want.Authority)
-	if err != nil {
-		t.Fatalf("index: %v", err)
-	}
-	return index
+	a.corrections.ApplyRepair(body)
 }
 
 // TestARelayThatDroppedTheManifestSaysSo is the bounded-staleness rule. A relay's
@@ -595,7 +579,7 @@ func TestARelayThatDroppedTheManifestSaysSo(t *testing.T) {
 
 	// A request naming a tick far outside the ring.
 	before := statOf(relay, "snapshot.relay_unserved")
-	relay.corrections.receiveSelective(uint8(network.MsgStateRequest), uint32(3),
+	relay.corrections.ReceiveSelective(uint8(network.MsgStateRequest), uint32(3),
 		mustEncodeRequest(t, snapshot.CorrectionRequest{
 			Version: snapshot.ManifestVersion, Schema: snapshot.Schema,
 			Tick: 1, Run: relayRun(relay), Session: relaySession(relay),
@@ -632,18 +616,16 @@ func TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies(t *testing.T) {
 	localCursors(t, apps)
 
 	relay := apps[1]
-	if relay.corrections.canRelay() {
+	if relay.corrections.CanRelay() {
 		t.Fatal("a participant that has held no authoritative capture claims it can relay")
 	}
-	if got := relay.corrections.relayedParticipants(); len(got) != 0 {
+	if got := relay.corrections.RelayedParticipants(); len(got) != 0 {
 		t.Fatalf("a relay with no retention offered to answer for %v", got)
 	}
 	// The authority therefore cannot answer everyone and says so.
 	host := apps[0]
-	host.corrections.publishMu.Lock()
-	answerable := host.corrections.canAnswerEveryParticipant([]uint32{2})
-	said := host.corrections.saidUnrelayed
-	host.corrections.publishMu.Unlock()
+	answerable := host.corrections.CanAnswer([]uint32{2})
+	said := host.SelectiveReport().WholeBodies
 	if answerable {
 		t.Fatal("the authority believed a participant behind an empty relay could be answered")
 	}
@@ -654,22 +636,20 @@ func TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies(t *testing.T) {
 	// Once the relay holds retention the same session becomes answerable, which is
 	// the whole of the role: a topology did not change, a role did.
 	driveCorrections(t, apps, 3)
-	if !relay.corrections.canRelay() {
+	if !relay.corrections.CanRelay() {
 		t.Fatal("a relay that has installed authoritative captures still cannot answer")
 	}
-	host.corrections.publishMu.Lock()
-	answerable = host.corrections.canAnswerEveryParticipant([]uint32{2})
-	host.corrections.publishMu.Unlock()
+	answerable = host.corrections.CanAnswer([]uint32{2})
 	if !answerable {
 		t.Fatal("the authority still believes the relayed participant cannot be answered")
 	}
-	if got := relay.corrections.sessionRole(); got != network.RoleRelay {
+	if got := relay.corrections.Role(); got != network.RoleRelay {
 		t.Fatalf("the middle participant holds role %d, want the relay role", got)
 	}
-	if got := apps[0].corrections.sessionRole(); got != network.RoleHost {
+	if got := apps[0].corrections.Role(); got != network.RoleHost {
 		t.Fatalf("the authority holds role %d, want the host role", got)
 	}
-	if got := apps[2].corrections.sessionRole(); got != network.RolePeer {
+	if got := apps[2].corrections.Role(); got != network.RolePeer {
 		t.Fatalf("the leaf holds role %d, want the peer role", got)
 	}
 }

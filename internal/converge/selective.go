@@ -1,4 +1,4 @@
-package app
+package converge
 
 import (
 	"fmt"
@@ -98,7 +98,7 @@ type selectiveState struct {
 // whole body, because the index alone would leave them holding nothing they can act
 // on. Naming them here keeps the skip recorded where it is made.
 // Caller MUST hold publishMu, and MUST NOT hold the world lock.
-func (c *corrections) publishManifest(port engine.NetworkPort, index *snapshot.Manifest, due []uint32) ([]uint32, error) {
+func (c *Corrections) publishManifest(port engine.NetworkPort, index *snapshot.Manifest, due []uint32) ([]uint32, error) {
 	started := time.Now() // [wall] telemetry only; outside the world lock
 	body, err := snapshot.EncodeManifest(index.Summary())
 	if err != nil {
@@ -112,7 +112,7 @@ func (c *corrections) publishManifest(port engine.NetworkPort, index *snapshot.M
 	}
 	tick := index.Summary().Header.Tick
 
-	m := c.a.telemetry
+	m := c.tel
 	m.HashUS.Store(time.Since(started).Microseconds())
 
 	var missed []uint32
@@ -148,7 +148,7 @@ func (c *corrections) publishManifest(port engine.NetworkPort, index *snapshot.M
 
 // retainLocked adds one capture and its index to the bounded ring.
 // Caller MUST hold publishMu.
-func (c *corrections) retainLocked(cap snapshot.SharedCapture, index *snapshot.Manifest, authored bool) {
+func (c *Corrections) retainLocked(cap snapshot.SharedCapture, index *snapshot.Manifest, authored bool) {
 	c.selective.retained = append(c.selective.retained, retainedCapture{
 		tick: cap.Header.Tick, term: cap.Header.Term, root: index.Root(),
 		index: index, authored: authored,
@@ -156,24 +156,24 @@ func (c *corrections) retainLocked(cap snapshot.SharedCapture, index *snapshot.M
 	if n := len(c.selective.retained); n > parameter.SnapshotManifestRetention {
 		c.selective.retained = append(c.selective.retained[:0], c.selective.retained[n-parameter.SnapshotManifestRetention:]...)
 	}
-	c.a.telemetry.RelayRetained.Store(int64(len(c.selective.retained)))
+	c.tel.RelayRetained.Store(int64(len(c.selective.retained)))
 }
 
 // retain is retainLocked for a caller that holds no lock, which is every receiver
 // path: a receiver retains what it has just proved it holds, and it does so
 // outside the publication schedule because it is not publishing.
-func (c *corrections) retain(cap snapshot.SharedCapture, index *snapshot.Manifest, authored bool) {
+func (c *Corrections) retain(cap snapshot.SharedCapture, index *snapshot.Manifest, authored bool) {
 	c.publishMu.Lock()
 	c.retainLocked(cap, index, authored)
 	c.publishMu.Unlock()
 }
 
-// retentionEvidence is what this instance can prove it holds: the newest
+// RetentionEvidence is what this instance can prove it holds: the newest
 // authoritative tick it has an index over, and how many such records. It reads the
 // ring rather than taking a capture because a fresh capture proves only what the
 // candidate believes — a record is in the ring only because its root was the
 // authority's, so the ring is evidence about the session.
-func (c *corrections) retentionEvidence() (uint64, int) {
+func (c *Corrections) RetentionEvidence() (uint64, int) {
 	c.publishMu.Lock()
 	defer c.publishMu.Unlock()
 	newest := uint64(0)
@@ -188,7 +188,7 @@ func (c *corrections) retentionEvidence() (uint64, int) {
 // is as new as the last artifact the old authority published; a relay answers for a
 // participant behind it. Both work because the capture is the authority's byte for
 // byte, so an index over it carries the authority's root.
-func (c *corrections) retainInstalled(cap snapshot.SharedCapture) {
+func (c *Corrections) retainInstalled(cap snapshot.SharedCapture) {
 	if cap.Header.Term == 0 {
 		return // not an authoritative artifact: nothing to answer for
 	}
@@ -200,7 +200,7 @@ func (c *corrections) retainInstalled(cap snapshot.SharedCapture) {
 }
 
 // retainedAtLocked finds the capture a request names. Caller MUST hold publishMu.
-func (c *corrections) retainedAtLocked(tick uint64) (retainedCapture, bool) {
+func (c *Corrections) retainedAtLocked(tick uint64) (retainedCapture, bool) {
 	for i := len(c.selective.retained) - 1; i >= 0; i-- {
 		if c.selective.retained[i].tick == tick {
 			return c.selective.retained[i], true
@@ -214,7 +214,7 @@ func (c *corrections) retainedAtLocked(tick uint64) (retainedCapture, bool) {
 // serveRequests answers every queued request, between two ticks, on whatever drives
 // this instance. Nothing here holds the world lock: the captures being compared were
 // read on the cadence and hashed then.
-func (c *corrections) serveRequests() {
+func (c *Corrections) serveRequests() {
 	c.selectiveMu.Lock()
 	pending := c.selective.requests
 	c.selective.requests = nil
@@ -222,7 +222,7 @@ func (c *corrections) serveRequests() {
 	if len(pending) == 0 {
 		return
 	}
-	port := c.a.sessionTransport()
+	port := c.inst.Transport()
 	for _, req := range pending {
 		c.serveOne(port, req)
 	}
@@ -230,8 +230,8 @@ func (c *corrections) serveRequests() {
 
 // serveOne answers one request, falling back to a keyframe whenever a repair
 // cannot be built or would not be worth building.
-func (c *corrections) serveOne(port engine.NetworkPort, pending pendingRequest) {
-	m := c.a.telemetry
+func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) {
+	m := c.tel
 	req, err := snapshot.DecodeCorrectionRequest(pending.body)
 	if err != nil {
 		m.ShardsRefused.Add(1)
@@ -241,7 +241,7 @@ func (c *corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	}
 	m.RequestBytes.Add(int64(len(pending.body)))
 
-	if !c.a.admitArtifactTerm(req.Term, pending.from) {
+	if !c.authority.Admit(req.Term, pending.from) {
 		m.ShardsRefused.Add(1)
 		return
 	}
@@ -312,7 +312,7 @@ func (c *corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		// whole bodies, then tried again — the condition is the world's rather than
 		// the peer's and it ends when the storm does.
 		m.KeyframeFallback.Add(1)
-		c.widenLocked(pending.from)
+		c.Widen(pending.from)
 		c.sendKeyframeTo(port, pending.from, req.Tick)
 		return
 	}
@@ -329,9 +329,9 @@ func (c *corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		"participant", pending.from, "tick", req.Tick, "pages", pages, "bytes", len(body))
 }
 
-// widenLocked drops one peer out of the selective exchange for the next few
+// Widen drops one peer out of the selective exchange for the next few
 // publications, so it is served the ordinary correction body instead.
-func (c *corrections) widenLocked(id uint32) {
+func (c *Corrections) Widen(id uint32) {
 	c.publishMu.Lock()
 	if p := c.peers[id]; p != nil {
 		p.wide = parameter.SnapshotManifestSilenceCorrections
@@ -343,7 +343,7 @@ func (c *corrections) widenLocked(id uint32) {
 // the whole world it stands in for. Two bounds: SnapshotShardBytesMax is the
 // protocol's, past which a repair no longer fits one frame, and the measured
 // keyframe size is the session's, past which it has stopped being an optimisation.
-func (c *corrections) repairIsWorthSending(bytes int) bool {
+func (c *Corrections) repairIsWorthSending(bytes int) bool {
 	if bytes > parameter.SnapshotShardBytesMax || bytes > network.MaxPayloadSize {
 		return false
 	}
@@ -368,7 +368,7 @@ func countRequestedPages(req snapshot.CorrectionRequest) int {
 // and the keyframe must be at least that fresh, so a stale baseline is refreshed by
 // reading the world — the one capture this protocol pays outside the cadence, and
 // only after it has given up on repairing selectively.
-func (c *corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick uint64) {
+func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick uint64) {
 	if port == nil {
 		return
 	}
@@ -404,8 +404,8 @@ func (c *corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 	}
 	// Counted where every other correction body is: a fallback is not free, and a
 	// wire total that omitted it would flatter the protocol that provoked it.
-	c.a.telemetry.SentBytes.Add(int64(len(body)))
-	c.a.telemetry.KeyframeFallback.Add(1)
+	c.tel.SentBytes.Add(int64(len(body)))
+	c.tel.KeyframeFallback.Add(1)
 	vlog.Debug("app", "msg", "keyframe fallback sent",
 		"participant", id, "tick", cap.Header.Tick, "bytes", len(body))
 }
@@ -416,7 +416,7 @@ func (c *corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 // deliberate: an arrived repair is applied before a newer manifest is answered,
 // because the repair is state and the manifest only a question. A newer manifest
 // then supersedes the awaited repair, so nothing older lands after something newer.
-func (c *corrections) applySelective() {
+func (c *Corrections) applySelective() {
 	c.selectiveMu.Lock()
 	manifests := c.selective.manifests
 	shardSets := c.selective.shardSets
@@ -426,7 +426,7 @@ func (c *corrections) applySelective() {
 	c.selectiveMu.Unlock()
 
 	for _, body := range shardSets {
-		c.applyRepair(body)
+		c.ApplyRepair(body)
 	}
 	for _, body := range unserved {
 		c.applyUnserved(body)
@@ -450,7 +450,7 @@ func (c *corrections) applySelective() {
 // whatever it was holding: an older one describes a state the authority has moved
 // past, and passing it on would send the participants behind this one to repair
 // themselves onto a world nobody holds.
-func (c *corrections) holdForward(body []byte, from uint32, tick uint64) {
+func (c *Corrections) holdForward(body []byte, from uint32, tick uint64) {
 	c.selectiveMu.Lock()
 	c.selective.forward, c.selective.forwardTick, c.selective.forwardFrom = body, tick, from
 	c.selectiveMu.Unlock()
@@ -458,7 +458,7 @@ func (c *corrections) holdForward(body []byte, from uint32, tick uint64) {
 
 // flushForward passes the held manifest on once this instance can answer for the
 // tick it names.
-func (c *corrections) flushForward() {
+func (c *Corrections) flushForward() {
 	c.selectiveMu.Lock()
 	body, tick, from := c.selective.forward, c.selective.forwardTick, c.selective.forwardFrom
 	c.selectiveMu.Unlock()
@@ -472,7 +472,7 @@ func (c *corrections) flushForward() {
 }
 
 // holdsRetention reports whether this instance can answer a request naming tick.
-func (c *corrections) holdsRetention(tick uint64) bool {
+func (c *Corrections) holdsRetention(tick uint64) bool {
 	c.publishMu.Lock()
 	defer c.publishMu.Unlock()
 	_, ok := c.retainedAtLocked(tick)
@@ -481,8 +481,8 @@ func (c *corrections) holdsRetention(tick uint64) bool {
 
 // answerManifest indexes this instance's own world against one manifest and
 // answers it.
-func (c *corrections) answerManifest(body []byte, arrived int64) uint64 {
-	m := c.a.telemetry
+func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
+	m := c.tel
 	m.ManifestRecv.Add(arrived)
 	m.ManifestBytesRecv.Add(int64(len(body)))
 
@@ -492,8 +492,8 @@ func (c *corrections) answerManifest(body []byte, arrived int64) uint64 {
 		vlog.Debug("app", "msg", "manifest refused", "error", err.Error())
 		return 0
 	}
-	from := c.selectiveSource()
-	if !c.a.admitArtifactTerm(want.Header.Term, from) {
+	from := c.SelectiveSource()
+	if !c.authority.Admit(want.Header.Term, from) {
 		m.BaselineRefusals.Add(1)
 		return 0
 	}
@@ -502,13 +502,13 @@ func (c *corrections) answerManifest(body []byte, arrived int64) uint64 {
 		c.requestKeyframe(from, want)
 		return 0
 	}
-	if err := c.a.verifyCaptureIdentity(want.Header); err != nil {
+	if err := c.inst.VerifyCaptureIdentity(want.Header); err != nil {
 		m.BaselineRefusals.Add(1)
 		vlog.Debug("app", "msg", "manifest describes another session", "error", err.Error())
 		return 0
 	}
 
-	mine, err := c.a.CaptureShared()
+	mine, err := c.inst.CaptureShared()
 	if err != nil {
 		vlog.Warn("app", "msg", "manifest comparison capture", "error", err.Error())
 		return 0
@@ -536,7 +536,7 @@ func (c *corrections) answerManifest(body []byte, arrived int64) uint64 {
 		req.Sections = nil
 	}
 	// What this instance can answer for, stated where the authority will read it.
-	req.Relayed = c.relayedParticipants()
+	req.Relayed = c.RelayedParticipants()
 	c.sendRequest(from, req)
 
 	if req.Converged() {
@@ -548,7 +548,7 @@ func (c *corrections) answerManifest(body []byte, arrived int64) uint64 {
 		mine.Header = want.Header
 		if integrity, err := snapshot.Integrity(mine); err == nil {
 			mine.Header.Integrity = integrity
-			if err := c.install(mine); err != nil {
+			if err := c.Install(mine); err != nil {
 				vlog.Debug("app", "msg", "hash-only correction not applied", "error", err.Error())
 			}
 		}
@@ -571,10 +571,31 @@ func (c *corrections) answerManifest(body []byte, arrived int64) uint64 {
 	return want.Header.Tick
 }
 
+// Expect records the baseline a repair will be validated against, as answering an
+// index does. Nothing in the protocol calls it: a criterion driving one leg of the
+// exchange by hand uses it to stand in for the leg it skipped.
+func (c *Corrections) Expect(want snapshot.CorrectionManifest, from uint32) error {
+	mine, err := c.inst.CaptureShared()
+	if err != nil {
+		return err
+	}
+	mine.Header.Term = want.Header.Term
+	index, err := snapshot.BuildManifest(mine, want.Authority)
+	if err != nil {
+		return err
+	}
+	c.selectiveMu.Lock()
+	c.selective.awaiting = append(c.selective.awaiting, &awaitingRepair{
+		tick: want.Header.Tick, capture: mine, index: index, manifest: want, from: from,
+	})
+	c.selectiveMu.Unlock()
+	return nil
+}
+
 // takeAwaiting claims the outstanding baseline a repair answers, dropping it and
 // every older one. A repair matching nothing outstanding is one this instance has
 // already moved past.
-func (c *corrections) takeAwaiting(tick uint64) *awaitingRepair {
+func (c *Corrections) takeAwaiting(tick uint64) *awaitingRepair {
 	c.selectiveMu.Lock()
 	defer c.selectiveMu.Unlock()
 	for i, a := range c.selective.awaiting {
@@ -587,12 +608,12 @@ func (c *corrections) takeAwaiting(tick uint64) *awaitingRepair {
 	return nil
 }
 
-// applyRepair validates and installs one shard set. Nothing is written until the
+// ApplyRepair validates and installs one shard set. Nothing is written until the
 // whole set has passed validation and the repaired capture has reproduced the set's
 // root; a failure at either point leaves the awaited state untouched and asks for a
 // keyframe, the one answer that cannot fail the same way.
-func (c *corrections) applyRepair(body []byte) {
-	m := c.a.telemetry
+func (c *Corrections) ApplyRepair(body []byte) {
+	m := c.tel
 	m.ShardBytesRecv.Add(int64(len(body)))
 
 	set, err := snapshot.DecodeShardSet(body)
@@ -603,7 +624,7 @@ func (c *corrections) applyRepair(body []byte) {
 	}
 	m.ShardsRecv.Add(int64(len(set.Shards)))
 
-	if !c.a.admitArtifactTerm(set.Header.Term, set.Served) {
+	if !c.authority.Admit(set.Header.Term, set.Served) {
 		m.ShardsRefused.Add(1)
 		return
 	}
@@ -636,7 +657,7 @@ func (c *corrections) applyRepair(body []byte) {
 		return
 	}
 
-	if err := c.install(repaired); err != nil {
+	if err := c.Install(repaired); err != nil {
 		vlog.Warn("app", "msg", "repair not installed",
 			"tick", repaired.Header.Tick, "error", err.Error())
 		c.requestKeyframe(awaiting.from, awaiting.manifest)
@@ -656,12 +677,12 @@ func (c *corrections) applyRepair(body []byte) {
 
 // requestKeyframe asks the authority for a whole world and remembers that it is
 // waiting for one, so the next manifest does not start a repair instead.
-func (c *corrections) requestKeyframe(from uint32, want snapshot.CorrectionManifest) {
+func (c *Corrections) requestKeyframe(from uint32, want snapshot.CorrectionManifest) {
 	c.selectiveMu.Lock()
 	c.selective.wantKeyframe = true
 	c.selective.awaiting = nil
 	c.selectiveMu.Unlock()
-	c.a.telemetry.KeyframeFallback.Add(1)
+	c.tel.KeyframeFallback.Add(1)
 	c.sendRequest(from, snapshot.CorrectionRequest{
 		Version:  snapshot.ManifestVersion,
 		Schema:   snapshot.Schema,
@@ -674,8 +695,8 @@ func (c *corrections) requestKeyframe(from uint32, want snapshot.CorrectionManif
 }
 
 // sendRequest returns one answer to the peer the manifest came from.
-func (c *corrections) sendRequest(from uint32, req snapshot.CorrectionRequest) {
-	port := c.a.sessionTransport()
+func (c *Corrections) sendRequest(from uint32, req snapshot.CorrectionRequest) {
+	port := c.inst.Transport()
 	if port == nil || from == 0 {
 		return
 	}
@@ -697,24 +718,24 @@ func (c *corrections) sendRequest(from uint32, req snapshot.CorrectionRequest) {
 	if !port.Send(from, uint8(network.MsgStateRequest), body) {
 		return
 	}
-	c.a.telemetry.RequestBytes.Add(int64(len(body)))
+	c.tel.RequestBytes.Add(int64(len(body)))
 }
 
-// selectiveSource is the participant a receiver answers: the peer its manifests
+// SelectiveSource is the participant a receiver answers: the peer its manifests
 // arrive from, which is the authority or the neighbour relaying for it.
-func (c *corrections) selectiveSource() uint32 {
+func (c *Corrections) SelectiveSource() uint32 {
 	c.selectiveMu.Lock()
 	defer c.selectiveMu.Unlock()
 	return c.selective.source
 }
 
-// receiveSelective queues one selective frame. Caller holds the world lock, so it
+// ReceiveSelective queues one selective frame. Caller holds the world lock, so it
 // takes the bytes and nothing else.
-func (c *corrections) receiveSelective(kind uint8, from uint32, body []byte) {
+func (c *Corrections) ReceiveSelective(kind uint8, from uint32, body []byte) {
 	// A request is this instance's own half to serve; the other three are a
 	// receiver's, and while this instance authors they are its own index and the
 	// repairs answering it, come back round a mesh flood with cycles.
-	if network.MessageType(kind) != network.MsgStateRequest && c.a.authoring() {
+	if network.MessageType(kind) != network.MsgStateRequest && c.authority.IsAuthority() {
 		return
 	}
 	c.selectiveMu.Lock()
@@ -748,7 +769,7 @@ func (c *corrections) receiveSelective(kind uint8, from uint32, body []byte) {
 
 // clearKeyframeWait is called when a whole capture is installed, which is the
 // answer a keyframe request was waiting for.
-func (c *corrections) clearKeyframeWait() {
+func (c *Corrections) clearKeyframeWait() {
 	c.selectiveMu.Lock()
 	c.selective.wantKeyframe = false
 	c.selective.awaiting = nil
@@ -759,7 +780,7 @@ func (c *corrections) clearKeyframeWait() {
 // puts on the wire: a non-keyframe correction is a manifest plus whatever repair it
 // provoked, blended into the controller's Delta figure rather than added beside it.
 // Its cost model is "keyframe, and the other thing". Caller MUST hold publishMu.
-func (c *corrections) recordSelectiveSizeLocked(bytes int) {
+func (c *Corrections) recordSelectiveSizeLocked(bytes int) {
 	const smoothing = 0.25
 	if bytes <= 0 {
 		return
@@ -772,73 +793,5 @@ func (c *corrections) recordSelectiveSizeLocked(bytes int) {
 	if c.sizes.Keyframe > 0 {
 		c.haveSizes = true
 	}
-	c.a.telemetry.SelectiveBytes.Store(c.sizes.Delta)
-}
-
-// localParticipant is this instance's session identity, zero outside a session.
-func (a *App) localParticipant() uint32 {
-	var id uint32
-	a.world.RunSafe(func() { id = a.world.LocalParticipant() })
-	return id
-}
-
-// verifyCaptureIdentity answers "is this header describing my session" without
-// requiring the body a full verification hashes.
-func (a *App) verifyCaptureIdentity(h snapshot.CaptureHeader) error {
-	if h.Schema != snapshot.Schema {
-		return fmt.Errorf("capture schema %d, this build reads %d", h.Schema, snapshot.Schema)
-	}
-	return firstAnchorMismatch("manifest", a.anchorIdentity(snapshot.Anchor(h)))
-}
-
-// selectiveSummary is what the selective protocol is currently doing, for the
-// diagnostics surface and for the tests that assert the protocol rather than its
-// effect.
-type selectiveSummary struct {
-	Retained  []uint64
-	Awaiting  uint64
-	Requests  int
-	Keyframe  bool
-	PeerState map[uint32]PeerSelective
-}
-
-// PeerSelective is one peer's standing in the selective protocol, from the host's
-// side: the last manifest it was sent, the last it answered, whether that answer
-// said it had converged, and how many manifests have gone unanswered.
-type PeerSelective struct {
-	ManifestTick uint64
-	AnsweredTick uint64
-	Converged    bool
-	Silence      int
-}
-
-// SelectiveReport describes the selective exchange, for `:session` and for tests.
-func (a *App) SelectiveReport() selectiveSummary {
-	out := selectiveSummary{PeerState: map[uint32]PeerSelective{}}
-	c := a.corrections
-	if c == nil {
-		return out
-	}
-	c.publishMu.Lock()
-	for _, r := range c.selective.retained {
-		out.Retained = append(out.Retained, r.tick)
-	}
-	for id, p := range c.peers {
-		out.PeerState[id] = PeerSelective{
-			ManifestTick: p.manifestTick,
-			AnsweredTick: p.answeredTick,
-			Converged:    p.converged,
-			Silence:      p.silence,
-		}
-	}
-	c.publishMu.Unlock()
-	c.selectiveMu.Lock()
-	if n := len(c.selective.awaiting); n > 0 {
-		out.Awaiting = c.selective.awaiting[n-1].tick
-	}
-	out.Keyframe = c.selective.wantKeyframe
-	out.Requests = len(c.selective.requests)
-	c.selectiveMu.Unlock()
-	slices.Sort(out.Retained)
-	return out
+	c.tel.SelectiveBytes.Store(c.sizes.Delta)
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/asset"
+	"github.com/lixenwraith/vi-fighter/internal/converge"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
@@ -129,20 +130,13 @@ type App struct {
 	// publish its cost into a registry that is frozen by then.
 	telemetry snapshot.Telemetry
 
-	// corrections is the authority half of a session: the host's publication
-	// cadence or a guest's apply loop, whichever this run turns out to be. It
-	// exists from construction and starts nothing until a transport is attached.
-	corrections *corrections
-
-	// authority is which generation of the session this run is part of and who is
-	// authoring it. It is separate from corrections because the two answer
-	// different questions and change on different events: corrections is what this
-	// instance sends and applies, authority is whether it is allowed to.
-	authority *authority
-
-	// reach owns this instance's listening port, the addresses it has learned, and
-	// the links it opens from them. See reach.go.
-	reach *reach
+	// The three halves of the authority protocol, built together because they hold
+	// references to each other: corrections is what this instance publishes and
+	// installs, authority whether it is allowed to, and reach the links a
+	// succession needs. See internal/converge.
+	corrections *converge.Corrections
+	authority   *converge.Authority
+	reach       *converge.Reach
 
 	// staging is the second world a capture resolves into before it is written into
 	// this one, built on first use and re-used for the life of the run: building one
@@ -168,9 +162,6 @@ func New(cfg Config) (*App, error) {
 		admissions: network.NewAdmissionLimiter(),
 		life:       lifecycle.New(cfg.Lifetime),
 	}
-	// Before init, because initWorld binds the correction queue to whatever
-	// transport a service contributed and a peer can reach it from that moment.
-	a.corrections = newCorrections(a)
 	if a.cfg.HostAddress != "" && a.cfg.networkConfig == nil {
 		a.cfg.networkConfig = a.hostNetworkConfig()
 	}
@@ -340,10 +331,13 @@ func (a *App) initWorld() {
 	// Corpus telemetry needs the registry NewGameContext creates
 	service.MustGet[*service.ContentService](a.hub, "content").
 		PublishStatus(a.world.Resources.Status)
-	ensureAuthorityCells(a.world.Resources.Status)
 	a.telemetry = snapshot.NewTelemetry(a.world.Resources.Status)
-	a.authority = newAuthority(a)
-	a.reach = newReach(a)
+	// The protocol is built here rather than before init because it reads the
+	// telemetry cells and the status registry this world owns. Nothing can reach
+	// it earlier: the transport hooks bound above answer nothing until the service
+	// is started, which is after construction returns.
+	a.corrections, a.authority, a.reach =
+		converge.New(instance{a}, a.telemetry, a.world.Resources.Status)
 
 	// Initial rate; ParseScale rejects "" so a bare run stays at real time
 	if s, ok := engine.ParseScale(a.cfg.TimeScaleSpec); ok {
@@ -513,9 +507,9 @@ func (a *App) Close() {
 		_ = a.pendingJoin.Close()
 	}
 	if a.corrections != nil {
-		a.corrections.close()
+		a.corrections.Close()
 	}
-	a.reach.close()
+	a.reach.Close()
 	a.closeProbe()
 	a.closeMidRunPort()
 	a.discardStagingWorld()

@@ -9,10 +9,12 @@ import (
 	"slices"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/converge"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
@@ -24,6 +26,13 @@ import (
 const hostParticipantID network.PeerID = 1
 
 var errSessionCanceled = errors.New("network session canceled")
+
+// ErrSessionHandoff refuses a join that arrived while the session was electing a
+// new authority. It is distinguishable on purpose: a joiner may retry against the
+// authority that emerges, and half-admitting it into a term that is about to end
+// is the one outcome that would leave a participant in a session nobody owns.
+var ErrSessionHandoff = errors.New(
+	"session authority is changing (" + network.HandoffRefusalTag + "); retry")
 
 // ErrSessionStarting refuses a dial that lands in the window between the startup
 // lobby closing and the mid-run gate opening. It is distinguishable for the same
@@ -171,7 +180,7 @@ func (a *App) lobbyQuorum() int {
 func (a *App) noteJoinerReport(id network.PeerID, report network.JoinerReport) {
 	// Before the geometry check: a participant that reported no terminal still
 	// reported a port.
-	a.reach.noteDeclared(id, report)
+	a.reach.NoteDeclared(id, report)
 	if !report.Sized() {
 		return
 	}
@@ -254,12 +263,12 @@ func newJoiningApp(cfg Config) (*App, error) {
 	// Bound before the reply that declares it, and only for a session whose
 	// authorship can move: where it cannot, a guest's port is for nothing. What is
 	// declared is what was actually bound, which is why this cannot wait until the
-	// transport exists — the reply goes out first. See reach.go.
+	// transport exists — the reply goes out first. See internal/converge/reach.go.
 	var listener net.Listener
 	var declared string
-	gate := &peerLinkGate{}
+	gate := &converge.PeerLinkGate{}
 	if !offer.FixedAuthority && !cfg.NoAdvertise {
-		listener, declared = bindAdvertised(cfg.ListenAddress, cfg.JoinAddress, cfg.networkConfig)
+		listener, declared = converge.BindAdvertised(cfg.ListenAddress, cfg.JoinAddress, cfg.networkConfig)
 	}
 	closeListener := func() {
 		if listener != nil {
@@ -274,7 +283,7 @@ func newJoiningApp(cfg Config) (*App, error) {
 		cfg.networkConfig.AcceptPeer = network.PeerAcceptor(network.PeerGate{
 			Local:    offer.Assigned,
 			Identity: identityFromAnchor(offer.Anchor),
-			Admit:    gate.admit,
+			Admit:    gate.Admit,
 		}, cfg.networkConfig.ConnectTimeout)
 	}
 
@@ -288,8 +297,8 @@ func newJoiningApp(cfg Config) (*App, error) {
 		closeListener()
 		return reject(err)
 	}
-	gate.bind(a)
-	a.reach.adoptListener(listener, declared)
+	gate.Bind(a.reach)
+	a.reach.AdoptListener(listener, declared)
 	a.pendingJoin = pending
 	a.sessionOffer = offer
 	// Identity now, world and roster at the start gate: a mismatched joiner must be
@@ -390,14 +399,67 @@ func (a *App) releaseParticipant(id network.PeerID) {
 	if id == 0 || id == hostParticipantID {
 		return
 	}
-	a.reach.forget(id)
+	a.reach.Forget(id)
 	if a.authority != nil {
-		a.authority.forgetReachable(id)
+		a.authority.ForgetReachable(id)
 	}
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
 	a.sessionRoster = slices.DeleteFunc(a.sessionRoster,
 		func(p network.SessionParticipant) bool { return p.ID == id })
+}
+
+// crossPredecessorDeparture removes the authority that was lost from the roster. A
+// departure is a shared entity's destruction, so exactly one instance may produce it
+// (D-11) and that instance is the authority — which is the one that went. The
+// successor is the first instance that may, so it does, under the new term.
+func (a *App) crossPredecessorDeparture(rec network.HandoffRecord) {
+	if rec.Predecessor == 0 {
+		return
+	}
+	i := slices.IndexFunc(rec.Roster, func(p network.SessionParticipant) bool {
+		return p.ID == rec.Predecessor
+	})
+	if i < 0 {
+		return
+	}
+	a.crossDeparture(rec.Predecessor, rec.Roster[i].Slot)
+}
+
+// dropAbandonedCursors removes the participants an instance left alone will never
+// hear from again: every cursor it does not simulate belongs to someone nothing will
+// move again. Having no link is what makes the removal local rather than a crossing
+// — a departure is produced once at one agreed tick because two instances must
+// destroy a shared entity together, and here there is no second instance.
+func (a *App) dropAbandonedCursors(roster []network.SessionParticipant, local network.PeerID) {
+	if p := a.sessionTransport(); p != nil && p.IsRunning() && p.PeerCount() > 0 {
+		return
+	}
+	for _, p := range roster {
+		if p.ID == local || p.Slot == parameter.NoPlayerSlot {
+			continue
+		}
+		a.pushDeparture(p.ID, p.Slot, core.DomainShared)
+	}
+}
+
+// crossDeparture produces one participant's departure as the D-11 crossing it is.
+func (a *App) crossDeparture(id network.PeerID, slot uint8) {
+	a.pushDeparture(id, slot, core.DomainPlayer)
+}
+
+// pushDeparture emits one participant's removal and returns its identity to the
+// pool. The domain is the whole difference between the two producers above: player
+// puts the artifact on the wire for every instance to apply at one agreed tick,
+// shared keeps it here. Both are recorded, so a replay of either reaches the same
+// world the same way.
+func (a *App) pushDeparture(id network.PeerID, slot uint8, domain core.Domain) {
+	a.world.RunSafe(func() {
+		a.world.PushEventFull(event.EventParticipantDeparted,
+			&event.ParticipantDepartedPayload{Participant: uint32(id), Slot: slot},
+			event.OriginSession, domain)
+	})
+	a.releaseParticipant(id)
 }
 
 // offerLocked builds the offer addressed to one participant. Caller holds sessionMu,
@@ -523,7 +585,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	// the roster names, and it has to describe a tick no participant has moved past.
 	// The tick-zero gate's capture is a keyframe like any other, and taking it
 	// through the same path is what makes it the baseline the first delta names.
-	body, tick, err := a.corrections.keyframeAt(0, time.Now().Add(parameter.NetworkJoinReadyTimeout))
+	body, tick, err := a.corrections.KeyframeAt(0, time.Now().Add(parameter.NetworkJoinReadyTimeout))
 	if err != nil {
 		return err
 	}
@@ -575,13 +637,13 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 		if participant.ID == offer.Host {
 			continue
 		}
-		if err := a.admitMeasuredLink(port, participant.ID); err != nil {
+		if err := a.corrections.AdmitMeasuredLink(port, participant.ID); err != nil {
 			return fmt.Errorf("session start: %w", err)
 		}
 	}
 
 	a.showStartupStatus(fmt.Sprintf("Network session ready: %d participants", len(offer.Participants)))
-	a.corrections.startPump()
+	a.corrections.StartPump()
 	return nil
 }
 

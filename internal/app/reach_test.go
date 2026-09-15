@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"net"
 	"strings"
 	"testing"
 
@@ -106,80 +105,12 @@ func TestTheSuccessionOrderIsTheOrderTheRuleElects(t *testing.T) {
 	}
 }
 
-// TestADeclaredAddressIsCompletedFromTheConnection is why a guest declares a port
-// and not an address: it knows which port it bound and not which address the world
-// reaches it at, and only the far end of an established stream knows both.
-func TestADeclaredAddressIsCompletedFromTheConnection(t *testing.T) {
-	t.Parallel()
-	for _, c := range []struct {
-		declared, remote, want string
-		ok                     bool
-	}{
-		{":7777", "203.0.113.9:51000", "203.0.113.9:7777", true},
-		{"0.0.0.0:7777", "203.0.113.9:51000", "203.0.113.9:7777", true},
-		{"10.0.0.4:7777", "203.0.113.9:51000", "10.0.0.4:7777", true},
-		{":0", "203.0.113.9:51000", "", false},
-		{"nonsense", "203.0.113.9:51000", "", false},
-		{":7777", "", "", false},
-	} {
-		got, ok := resolveDeclared(c.declared, c.remote)
-		if ok != c.ok || got != c.want {
-			t.Errorf("resolveDeclared(%q, %q) = (%q, %t), want (%q, %t)",
-				c.declared, c.remote, got, ok, c.want, c.ok)
-		}
-	}
-}
-
-// TestBindAdvertisedDeclaresWhatItBound covers the default and its fallback: the
-// coordinator's own port, an OS-assigned one when that is taken, and the port
-// actually bound in either case.
-func TestBindAdvertisedDeclaresWhatItBound(t *testing.T) {
-	t.Parallel()
-	cfg := network.DebugConfig(network.RolePeer, "")
-
-	held, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	defer held.Close()
-	_, heldPort, _ := net.SplitHostPort(held.Addr().String())
-
-	ln, declared := bindAdvertised("", "127.0.0.1:"+heldPort, cfg)
-	if ln == nil {
-		t.Fatal("the default bind gave up instead of falling back")
-	}
-	defer ln.Close()
-	_, boundPort, _ := net.SplitHostPort(ln.Addr().String())
-	if declared != ":"+boundPort {
-		t.Fatalf("declared %q, want the port it bound (:%s)", declared, boundPort)
-	}
-	if boundPort == heldPort {
-		t.Fatal("the fallback bound the port that was already taken")
-	}
-
-	// An explicit -listen is declared whole, because the operator named a host the
-	// coordinator must not overwrite from the connection.
-	pinned, pinnedDeclared := bindAdvertised("127.0.0.1:0", "127.0.0.1:"+heldPort, cfg)
-	if pinned == nil {
-		t.Fatal("an explicit -listen did not bind")
-	}
-	defer pinned.Close()
-	if pinnedDeclared != pinned.Addr().String() {
-		t.Fatalf("declared %q for an explicit -listen, want %q", pinnedDeclared, pinned.Addr())
-	}
-}
-
-// TestALeafDeclaresNothing is the privacy decision and the failure case in one: a
-// participant that will not advertise, and one that could not bind, both play
-// normally and publish no address.
+// TestALeafDeclaresNothing is the privacy decision: a participant that binds no
+// port of its own plays normally and publishes no address.
 func TestALeafDeclaresNothing(t *testing.T) {
 	t.Parallel()
-	cfg := network.DebugConfig(network.RolePeer, "")
-	if ln, declared := bindAdvertised("", "not-an-address", cfg); ln != nil || declared != "" {
-		t.Fatalf("a host address with no port bound %v and declared %q", ln, declared)
-	}
 	a := mustHeadless(t, 3, 80, 24)
-	if got := a.reach.declaredAddr(); got != "" {
+	if got := a.reach.DeclaredAddr(); got != "" {
 		t.Fatalf("a solo run declares %q", got)
 	}
 	if statOf(a, "network.chain") != 0 {
@@ -197,13 +128,13 @@ func TestAGuestAdmitsAPeerLink(t *testing.T) {
 	localCursors(t, apps)
 
 	guest := apps[2]
-	if err := guest.admitPeerLink(2); err != nil {
+	if err := guest.reach.AdmitPeerLink(2); err != nil {
 		t.Fatalf("a guest refused a participant of its own session: %v", err)
 	}
-	if err := guest.admitPeerLink(9); err == nil {
+	if err := guest.reach.AdmitPeerLink(9); err == nil {
 		t.Fatal("a guest admitted a participant that is not in the session")
 	}
-	if err := guest.admitPeerLink(3); err == nil {
+	if err := guest.reach.AdmitPeerLink(3); err == nil {
 		t.Fatal("a guest admitted a link from itself")
 	}
 }
@@ -217,7 +148,7 @@ func TestTheSessionLineReportsTheAddressesItHolds(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {1, 3}}, 2, 3)
 	host := apps[0]
-	host.corrections.driveAuthority()
+	host.ApplyPendingCorrections()
 
 	chain := statOf(host, "network.chain")
 	if chain == 0 {

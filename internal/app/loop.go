@@ -81,7 +81,7 @@ func (a *App) Loop() error {
 			// needs a goroutine of its own. World.RunSafe is what makes "between
 			// two ticks" true by construction — a tick runs entirely inside one
 			// acquisition of the update mutex.
-			a.corrections.startCorrector()
+			a.corrections.StartCorrector()
 		}
 		// Paused directly during construction, without emitting an operator event:
 		// the start gate is the authority that releases tick-zero game time.

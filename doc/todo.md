@@ -169,7 +169,7 @@ without either being confirmed. `storm.spawn_failures` and a `StormSetupRetry` i
 ### Prove or rule out a stale gold surviving a correction
 
 - Priority: P1
-- Affected files: `internal/app/correction_selective.go`, `internal/snapshot/manifest.go`
+- Affected files: `internal/converge/selective.go`, `internal/snapshot/manifest.go`
 - Prerequisite: a two-instance repro that leaves the guest holding two sequences
 
 A guest was seen holding a gold the host had destroyed, and once two at a time.
