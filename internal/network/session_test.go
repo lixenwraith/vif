@@ -112,7 +112,7 @@ func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 	if err := pending.Ready(); err != nil {
 		t.Fatalf("ready: %v", err)
 	}
-	waitFor(t, func() bool { return host.ReadyCount() == 1 }, host.Changes(), "guest ready")
+	waitFor(t, func() bool { return host.Confirmed(2) }, host.Changes(), "guest ready")
 
 	guest := NewSocketPort(pending.TransportConfig())
 	if err := guest.Start(); err != nil {

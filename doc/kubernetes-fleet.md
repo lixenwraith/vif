@@ -86,7 +86,7 @@ it does not move an in-memory session into an unrelated pod.
 | Dedicated host shape | `ModeServer` has no cursor, terminal, renderer or audio. Its lobby starts on one guest; `-players` is a ceiling, unset meaning the whole roster. |
 | Supervised endpoint | One `/health` (liveness code, everything else in the body) and `/metrics`. |
 | Allocated lifetime | First-guest window, empty grace and drain, in `internal/lifecycle`; one `session ended` log line names the reason. |
-| Graceful termination | A signal drains rather than cutting a match; a second one exits. An abandoned startup gate ends cleanly rather than failing the Job. |
+| Graceful termination | A signal drains rather than cutting a match; a second one exits. An abandoned startup gate costs the session its lobby, not its life: the run continues and its vacancy grace decides. |
 | Join identity (was F2) | The **host** verifies. A joiner reports what it turned out to be and the coordinator refuses it; a peer that skipped its own check is refused anyway. Covers the wire protocol, the manifest's simulation fingerprint, both schemas, the tick interval, and the whole session identity. |
 | Fleet objects | Namespace with enforced `restricted` Pod Security, ten-session quota, default-deny network policy, per-session Job/Service, allocator RBAC. |
 | Proof-of-concept Internet path (H2) | An off-box client crossed FreeBSD 15.1 `pf rdr`, the Arch bhyve guest, NodePort and kube-proxy DNAT, then joined a real game. Source-address preservation remains H11. |
@@ -111,11 +111,11 @@ it does not move an in-memory session into an unrelated pod.
 | ID | Priority | Item | Done when |
 |---|---|---|---|
 | H8 | later | **Revisit how a player reaches a session.** The port range is what the proof of concept runs: no component, ten firewall entries, and source preservation intended but not yet verified (H11). `-name` and [`deploy/frontdoor`](../deploy/frontdoor/haproxy.cfg) are the worked single-port alternative and replace the address the admission limiter is keyed on. Neither gives a link a name without something reading the wire. | A third option is found or the two known ones are chosen between on measurement rather than preference. TLS with SNI routing is the one Kubernetes answers natively and needs transport security this deployment has decided against. |
-| H1 | **next** | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do to a session has to be bounded. Two known holes: the startup ready gate has no timeout, and an abandoned startup gate ends the session — so a peer that reaches a fresh session first can hang it or end it. | A peer that connects and never confirms is dropped on a deadline; an abandoned lobby returns to waiting instead of ending the session; fuzz coverage for malformed, oversized, replayed and half-open handshakes passes. |
+| H1 | partly done | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do to a session has to be bounded. The two startup holes are closed: the gate is bounded by one world install, and a peer that leaves or goes silent costs the lobby rather than the session. | Done: a peer that never confirms is dropped on the install bound, an abandoned lobby continues into its vacancy grace instead of ending, and a confirmation cannot be sent on another participant's behalf. Remaining: fuzz coverage for malformed, oversized, replayed and half-open handshakes. |
 | H3 | next | **Measure a full roster.** Four guests through a tower and a storm, and on `wad/game/td`, for an hour. | Requests and limits in `deploy/k3s/30-session.yaml` come from the measurement rather than from single-guest history. Not a blocker: the current values are a starting point, not a claim. |
 | H4 | later | **Server-only build.** The binary links terminal, render and audio packages `ModeServer` never initialises. | A server target drops them without changing simulation identity. Matters for pod density, not for ten sessions. |
 | H5 | later | **Spatial grid right-sizing.** ~30.5 MiB reserved per world at the current maximum. | Deferred until density matters; needs resize/play regression coverage. |
-| H11 | **next** | **Verify the player's source address at the pod.** `externalTrafficPolicy: Local` plus `pf rdr` should preserve it, and the address is already carried — `network.JoinerReport.Remote` holds `conn.RemoteAddr()` and reaches `App.noteJoinerReport` — but only `reach.noteDeclared` consumes it, so no record names it and the run could not inspect one. | The admitted-participant record in `internal/app/host.go` carries the accepted socket's remote address, and a remote join names the off-box client. If it names the node or gateway, the routing is corrected before relying on admission limits; otherwise the limiter is one budget for the whole fleet. |
+| H11 | **next** | **Verify the player's source address at the pod.** `externalTrafficPolicy: Local` plus `pf rdr` should preserve it, and the address is already carried — `network.JoinerReport.Remote` holds `conn.RemoteAddr()` and reaches `App.noteJoinerReport` — but only `converge.Reach.NoteDeclared` consumes it, so no record names it and the run could not inspect one. | A coordinator-side record names the accepted socket's remote address, LogWisp keeps it out of the public stream, and a remote join names the off-box client. If it names the node or gateway, the routing is corrected before relying on admission limits; otherwise the limiter is one budget for the whole fleet. |
 | H12 | **next** | **Finish the occupied lifecycle gates.** First-join expiry and owned-Service cleanup passed. An allocator-created off-box join reached `occupied` then `vacant`; automatic empty-grace expiry, rejoin near 75 s, drain on Job deletion, and `PLAYERS=1` capacity remain. | Each open case in [Deployment §9](kube_docker_deploy.md#9-create-one-session-by-hand) produces its specified transition and preserves the same run throughout the reconnect grace. |
 | H14 | next | **Complete the node-local log pipeline.** Batches A-F passed, including standalone fan-in, outage independence, exact retained replay, the pinned-revision LogWisp update, and byte preservation through the deployed allocator proxy. Batch G's reconciliation remains. | Every remaining gate and the final acceptance in `kube-todo.md` passes without lowering Restricted admission or putting Kubernetes in the log data path. |
 | H15 | **next** | **Integrate nginx and Hugo.** The log endpoint is live, and `deploy/website/` holds the reference location set and the bounded same-origin viewer. | `https://lixen.com/vif/api/sessions` creates/lists sessions, the session page keeps its HTTPS URL distinct from the raw join target, and the bounded log panel degrades cleanly when the API is absent. |
@@ -167,21 +167,17 @@ What already bounds a stranger:
   same non-answer to a peer that can claim another's identity. A fleet session is
   its address, so it has no reason to want the other shape.
 
-What does not, and is H1:
+What the start gate does, since H1: it waits on whoever is still on the link, for
+one world install. A participant that goes silent is dropped at that bound, and one
+that drops is excused rather than fatal, so neither holding a fresh session open nor
+ending somebody's match is reachable from that window. A confirmation is keyed to the
+link it arrived on, so no peer can pass the gate on another's behalf.
 
-- the startup ready gate waits without a deadline, so a peer that completes the
-  handshake and then goes silent holds a fresh session open until the Job's
-  `activeDeadlineSeconds`;
-- an abandoned startup gate ends the session, so a peer that reaches a fresh session
-  before its intended player can end it by connecting and dropping.
-
-Both are confined to the window between a session's first guest connecting and the
-session starting. Neither is reachable once a session is running.
-
-Until H1 lands, the firewall requirements in
+The firewall requirements in
 [Deployment §3](kube_docker_deploy.md#3-freebsd-forward-the-range-to-the-guest)
-are what stands in front of this: the forwarded surface is the ten-port NodePort
-range and nothing else, and the probe, log-stream and API ports never leave the node.
+remain what stands in front of the rest: the forwarded surface is the ten-port
+NodePort range and nothing else, and the probe, log-stream and API ports never leave
+the node.
 
 ## 5. Late-crossing ordering, and the trade-offs in its fix
 

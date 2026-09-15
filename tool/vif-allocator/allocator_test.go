@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -173,6 +175,7 @@ func testAllocatorConfig() allocatorConfig {
 			Image:     "docker.io/library/vi-fighter:test",
 			Players:   4,
 			MapSize:   "120x40",
+			LogLevel:  "info",
 			FirstJoin: "90s",
 			Empty:     "90s",
 			Drain:     "20s",
@@ -181,6 +184,8 @@ func testAllocatorConfig() allocatorConfig {
 		PageBase:       "https://play.example.com/projects/vi-fighter/session/",
 		PortFirst:      31700,
 		PortLast:       31709,
+		PlayersMax:     8,
+		LogLevels:      []string{"debug", "info", "warn", "error"},
 		ReadyTimeout:   100 * time.Millisecond,
 		PollInterval:   time.Millisecond,
 		CleanupTimeout: 100 * time.Millisecond,
@@ -196,7 +201,7 @@ func TestCreateSessionReservesPortAndOwnsService(t *testing.T) {
 	}}, testAllocatorConfig())
 	controller.newID = func() (string, error) { return "abc123", nil }
 
-	created, err := controller.createSession(context.Background())
+	created, err := controller.createSession(context.Background(), sessionRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +229,7 @@ func TestCreateSessionRefusesFullFleetBeforeCreatingJob(t *testing.T) {
 	}
 	controller := newAllocator(kube, fakeHealth{}, testAllocatorConfig())
 
-	_, err := controller.createSession(context.Background())
+	_, err := controller.createSession(context.Background(), sessionRequest{})
 	if !errors.Is(err, errFleetFull) {
 		t.Fatalf("got %v, want fleet full", err)
 	}
@@ -238,7 +243,7 @@ func TestCreateSessionRollsBackJobWhenServiceFails(t *testing.T) {
 	controller := newAllocator(kube, fakeHealth{}, testAllocatorConfig())
 	controller.newID = func() (string, error) { return "rollback", nil }
 
-	if _, err := controller.createSession(context.Background()); err == nil {
+	if _, err := controller.createSession(context.Background(), sessionRequest{}); err == nil {
 		t.Fatal("expected Service failure")
 	}
 	if len(kube.deletedJobs) != 1 || kube.deletedJobs[0] != "vif-session-rollback" {
@@ -253,7 +258,7 @@ func TestCreateSessionCancellationRollsBackWithoutBecomingReadinessFailure(t *te
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := controller.createSession(ctx)
+	_, err := controller.createSession(ctx, sessionRequest{})
 	if !errors.Is(err, context.Canceled) || errors.Is(err, errSessionNotReady) {
 		t.Fatalf("error = %v, want context cancellation only", err)
 	}
@@ -333,5 +338,49 @@ func TestReadyAddressesStayScopedToTheirService(t *testing.T) {
 	}
 	if !addresses["vif-session-two"]["10.42.0.21"] || addresses["vif-session-two"]["10.42.0.20"] {
 		t.Fatalf("unexpected second Service addresses: %v", addresses["vif-session-two"])
+	}
+}
+
+// TestARequestedRosterAndLevelReachTheJob is the point of accepting them: a choice
+// the pod did not run would make the page's controls decoration.
+func TestARequestedRosterAndLevelReachTheJob(t *testing.T) {
+	kube := &fakeKube{}
+	controller := newAllocator(kube, fakeHealth{state: sessionHealth{
+		Live: true, Ready: true, Capacity: 2, Phase: "waiting",
+	}}, testAllocatorConfig())
+	controller.newID = func() (string, error) { return "chosen", nil }
+
+	if _, err := controller.createSession(context.Background(),
+		sessionRequest{Players: 2, LogLevel: "debug"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(kube.jobObjects) != 1 {
+		t.Fatalf("created %d Jobs, want 1", len(kube.jobObjects))
+	}
+	encoded, err := json.Marshal(kube.jobObjects[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"-players","2"`, `"-lv","debug"`} {
+		if !strings.Contains(string(encoded), want) {
+			t.Fatalf("the Job does not carry %s: %s", want, encoded)
+		}
+	}
+}
+
+// TestASessionRequestOutsideTheOpenedBoundsIsRefused keeps an anonymous caller
+// inside what the operator configured. Refused rather than clamped: a session handed
+// a roster it did not ask for is harder to notice than a request that failed.
+func TestASessionRequestOutsideTheOpenedBoundsIsRefused(t *testing.T) {
+	controller := newAllocator(&fakeKube{}, fakeHealth{}, testAllocatorConfig())
+	for _, request := range []sessionRequest{
+		{Players: 9},
+		{Players: -1},
+		{LogLevel: "trace"},
+		{LogLevel: "shout"},
+	} {
+		if _, err := controller.createSession(context.Background(), request); !errors.Is(err, errRequestRefused) {
+			t.Fatalf("createSession(%+v) returned %v, want a refusal", request, err)
+		}
 	}
 }

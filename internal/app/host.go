@@ -274,10 +274,6 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 		return err
 	}
 
-	// Read before the gate is sent: ReadyCount is cumulative over the session, so
-	// what this join waits for is an increase rather than a value.
-	ready := port.ReadyCount()
-
 	minTick := a.Position().Tick + parameter.NetworkBarrierDelayTicks
 	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound
 	body, tick, err := a.corrections.KeyframeAt(minTick, deadline)
@@ -305,7 +301,7 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 			return fmt.Errorf("could not send capture chunk %d/%d", i+1, len(chunks))
 		}
 	}
-	if err := a.awaitJoinerReady(port, id, ready); err != nil {
+	if err := a.awaitJoinerReady(port, id); err != nil {
 		return err
 	}
 	// Refused *after* the install rather than before it, because the install is
@@ -338,10 +334,10 @@ func (a *App) midRunOffer(id network.PeerID) (network.SessionOffer, error) {
 // The wait is bounded and the bound is the point: a participant that cannot install
 // and answer within it is one whose crossings would arrive after the ticks they
 // name, and admitting it would trade a failed join for a divergence.
-func (a *App) awaitJoinerReady(port *network.SocketPort, id network.PeerID, was int) error {
+func (a *App) awaitJoinerReady(port *network.SocketPort, id network.PeerID) error {
 	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound, not a game one
 	for time.Now().Before(deadline) {
-		if port.ReadyCount() > was {
+		if port.Confirmed(uint32(id)) {
 			return nil
 		}
 		if !port.Connected(uint32(id)) {

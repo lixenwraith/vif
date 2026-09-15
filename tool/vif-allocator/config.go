@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,12 @@ var (
 	dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 	mapSizePattern  = regexp.MustCompile(`^[1-9][0-9]*x[1-9][0-9]*$`)
 )
+
+// sessionLogLevels are the game's -lv names, most verbose first. A request may
+// select from -log-level-min onward, which defaults past trace: the fleet's log rate
+// and its tmpfs are shared, and an anonymous caller must not be able to raise one
+// session's output at the cost of every other session's records.
+var sessionLogLevels = []string{"trace", "debug", "info", "warn", "error"}
 
 type runtimeConfig struct {
 	Listen         string
@@ -32,6 +39,7 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	var firstJoin string
 	var empty string
 	var drain string
+	var logLevelMin string
 
 	set := flag.NewFlagSet("vif-allocator", flag.ContinueOnError)
 	set.SetOutput(output)
@@ -43,7 +51,12 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	set.DurationVar(&cfg.RequestTimeout, "kube-timeout", 10*time.Second, "timeout for one Kubernetes API request")
 	set.StringVar(&cfg.Allocator.Workload.Namespace, "namespace", "vif", "Kubernetes namespace")
 	set.StringVar(&cfg.Allocator.Workload.Image, "image", "", "session image reference (required)")
-	set.IntVar(&cfg.Allocator.Workload.Players, "players", 4, "session guest ceiling")
+	set.IntVar(&cfg.Allocator.Workload.Players, "players", 4, "default session guest ceiling")
+	set.IntVar(&cfg.Allocator.PlayersMax, "players-max", 0,
+		"highest guest ceiling a request may select; 0 keeps -players as the only one")
+	set.StringVar(&cfg.Allocator.Workload.LogLevel, "log-level", "info", "default session log level")
+	set.StringVar(&logLevelMin, "log-level-min", "debug",
+		"most verbose session log level a request may select")
 	set.StringVar(&cfg.Allocator.Workload.MapSize, "map-size", "120x40", "session map size")
 	set.StringVar(&firstJoin, "first-join", "90s", "first guest deadline")
 	set.StringVar(&empty, "empty", "90s", "empty roster grace")
@@ -65,6 +78,15 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	cfg.Allocator.Workload.FirstJoin = firstJoin
 	cfg.Allocator.Workload.Empty = empty
 	cfg.Allocator.Workload.Drain = drain
+	if cfg.Allocator.PlayersMax == 0 {
+		cfg.Allocator.PlayersMax = cfg.Allocator.Workload.Players
+	}
+	floor := slices.Index(sessionLogLevels, logLevelMin)
+	if floor < 0 {
+		return runtimeConfig{}, fmt.Errorf("-log-level-min must be one of %s",
+			strings.Join(sessionLogLevels, ", "))
+	}
+	cfg.Allocator.LogLevels = sessionLogLevels[floor:]
 	if err := validateConfig(cfg); err != nil {
 		return runtimeConfig{}, err
 	}
@@ -86,6 +108,14 @@ func validateConfig(cfg runtimeConfig) error {
 	}
 	if cfg.Allocator.Workload.Players < 1 || cfg.Allocator.Workload.Players > 16 {
 		return fmt.Errorf("-players must be between 1 and 16")
+	}
+	if cfg.Allocator.PlayersMax < cfg.Allocator.Workload.Players || cfg.Allocator.PlayersMax > 16 {
+		return fmt.Errorf("-players-max must be between -players (%d) and 16",
+			cfg.Allocator.Workload.Players)
+	}
+	if !slices.Contains(cfg.Allocator.LogLevels, cfg.Allocator.Workload.LogLevel) {
+		return fmt.Errorf("-log-level %q is more verbose than -log-level-min allows",
+			cfg.Allocator.Workload.LogLevel)
 	}
 	if !mapSizePattern.MatchString(cfg.Allocator.Workload.MapSize) {
 		return fmt.Errorf("invalid -map-size %q", cfg.Allocator.Workload.MapSize)

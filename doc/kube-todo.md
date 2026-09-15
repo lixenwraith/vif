@@ -64,34 +64,34 @@ site's own session page, a separate prompt against the Hugo repository, which ow
 the same properties `deploy/website/vif-log-viewer.html` already demonstrates:
 same-origin `EventSource`, selection on `fields.session_id`, bounded retained
 rows, render rate and reconnect backoff, duplicate tolerance, and degradation
-independent of allocation. Everything else follows here in the order it should be
-done. Each batch finishes with the common check in §3 as well as its own gate.
+independent of allocation. Its session controls should read `limits` from
+`GET /vif/api/sessions` rather than hard-coding a roster or level the allocator
+would refuse. Everything else follows here in the order it should be done. Each
+batch finishes with the common check in §3 as well as its own gate.
 
 ### Batch H1 — handshake abuse bounds
 
-Bound what a stranger can do in the window before a session starts, now that the
-game port is publicly reachable. Two defects sit in that window. The tick-zero
-start gate in `internal/app/session.go` is given no deadline, so a peer that
-completes the lobby handshake and then goes silent holds a fresh session until
-the Job's four-hour `activeDeadlineSeconds`. And `waitForStartup` answers a peer
-that drops during that gate with `errLobbyAbandoned`, which `internal/app/serve.go`
-turns into a clean end of the whole session — so dialling and dropping ends a
-match other guests were about to start.
+Landed except its fuzz coverage. The tick-zero gate is bounded by one world
+install (`parameter.NetworkJoinReadyTimeout`, the same bound a mid-run join
+gets) and waits on whoever is still linked rather than on the roster the lobby
+closed on, so a silent peer is dropped at that bound and a departing one is
+excused. A confirmation is keyed to the link it arrived on, so no peer passes the
+gate for another and a released identity installs its own world before the next
+gate admits it.
 
-1. Give the tick-zero gate a deadline of its own, sized above a world install
-   rather than taken from the first-guest window.
-2. Make an abandoned lobby return to waiting under the first-join clock already
-   running, instead of ending the session. A stranger can then neither shorten
-   that window nor end a match; only the window ends a session nobody joined.
-3. One test per rule, one `test/scenario.sh` case for the dial-and-drop, and the
-   handshake fuzz target the acceptance in `kubernetes-fleet.md` already asks for
-   — malformed, oversized, replayed and half-open — which `internal/network` has
-   no equivalent of today.
+An abandoned lobby continues into the run rather than returning to `waiting`:
+`lifecycle` moves forward only, and a roster that emptied is `vacant` by its own
+definition. The session therefore starts, parks, and its empty grace — the same
+ninety seconds — decides, while a new dial arrives through the tested mid-run
+gate. What H1 required is that a stranger cannot end a match or hold a fresh
+session; both hold.
 
-Gate: a peer that completes the handshake and sends nothing is dropped at the
-bound and the session returns to `waiting` with its first-join deadline intact; a
-peer that dials and drops leaves the session allocatable and a real client joins
-it afterwards.
+Remaining: the handshake fuzz target `kubernetes-fleet.md` asks for — malformed,
+oversized, replayed and half-open — which `internal/network` has no equivalent
+of.
+
+Gate: an off-box peer that completes the handshake and sends nothing leaves the
+session allocatable, and a real client joins it afterwards.
 
 ### Batch H11 — source-address preservation
 

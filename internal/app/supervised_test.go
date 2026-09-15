@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"os"
 	"testing"
 	"time"
 
@@ -201,12 +200,11 @@ func TestASignalReadsTheRosterItArrivesWith(t *testing.T) {
 	}
 }
 
-// TestOnlyTheLobbyWaitCarriesTheFirstGuestDeadline is the boundary between the two
-// gates a session start runs. The lobby is inside the first-guest window and must end
-// when it closes; the ready gate that follows is not — its guest has arrived, and
-// re-arming there would end a session because installing the world took the last
-// second. The deadline is the caller's argument rather than a policy read inside.
-func TestOnlyTheLobbyWaitCarriesTheFirstGuestDeadline(t *testing.T) {
+// TestEachStartupGateCarriesItsOwnDeadline is the boundary between the two gates a
+// session start runs. The lobby's deadline is the allocated first-guest window and
+// ends the session; the start gate's is one world install and ends only the wait, by
+// giving up on whoever has not confirmed. Neither is read from the policy inside.
+func TestEachStartupGateCarriesItsOwnDeadline(t *testing.T) {
 	t.Parallel()
 	a := supervisedServer(t, 4, lifecycle.Policy{FirstJoin: 80 * time.Millisecond})
 	a.life.Start(time.Now())
@@ -214,36 +212,91 @@ func TestOnlyTheLobbyWaitCarriesTheFirstGuestDeadline(t *testing.T) {
 	port := network.NewSocketPort(network.DebugConfig(network.RoleHost, "127.0.0.1:0"))
 	defer port.Close()
 
-	// The lobby's gate: a deadline that passes ends it, cleanly.
 	never := func() bool { return false }
-	err := a.waitForStartup(port, nil, 1, false, a.life.State(time.Now()).Deadline, never)
+	expired := func(now time.Time) error { a.life.State(now); return errSessionExpired }
+	err := a.waitForStartup(port, nil, a.life.State(time.Now()).Deadline, expired, never)
 	if !errors.Is(err, errSessionExpired) {
 		t.Fatalf("the lobby wait returned %v, want errSessionExpired", err)
 	}
 
-	// The ready gate: no deadline, so the same expired policy does not end it. It
-	// is left waiting on its own readiness condition and ended by a signal, which
-	// is the only thing that should be able to end it here.
-	signals := make(chan os.Signal, 1)
-	done := make(chan error, 1)
-	go func() { done <- a.waitForStartup(port, signals, 1, false, time.Time{}, never) }()
-
-	// Well past the first-guest window, which the ready gate must not inherit.
-	time.Sleep(200 * time.Millisecond)
-	select {
-	case err := <-done:
-		t.Fatalf("the ready gate ended on its own with %v; it inherited a deadline", err)
-	default:
+	// The start gate: its bound settles the condition instead of ending the run,
+	// which is what stops a peer that connects and goes silent from holding a fresh
+	// session for the Job's whole deadline.
+	const bound = 60 * time.Millisecond
+	settled := false
+	start := time.Now()
+	err = a.waitForStartup(port, nil, start.Add(bound),
+		func(time.Time) error { settled = true; return nil },
+		func() bool { return settled })
+	if err != nil {
+		t.Fatalf("the start gate returned %v, want it to settle on its own bound", err)
 	}
+	if elapsed := time.Since(start); elapsed < bound {
+		t.Fatalf("the start gate settled after %s, before its %s bound", elapsed, bound)
+	}
+}
 
-	signals <- os.Interrupt
+// TestAGuestThatLeavesBeforeConfirmingDoesNotEndTheSession is the abuse bound on an
+// open port: the gate waits on whoever is still linked, so a peer that dials and
+// drops costs the session its lobby rather than its life.
+func TestAGuestThatLeavesBeforeConfirmingDoesNotEndTheSession(t *testing.T) {
+	// Not parallel: this binds a real socket.
+	a := supervisedServer(t, 4, lifecycle.Policy{FirstJoin: 30 * time.Second, Empty: time.Minute})
+	a.life.Start(time.Now())
+
+	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
+	hostCfg.ParticipantID = hostParticipantID
+	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
+		Assign: a.assignParticipant, Release: a.releaseParticipant,
+		Report: a.noteJoinerReport,
+	}, socketWait)
+	port := network.NewSocketPort(hostCfg)
+	t.Cleanup(func() { _ = port.Close() })
+	if err := port.Start(); err != nil {
+		t.Fatalf("host transport: %v", err)
+	}
+	a.AttachTransport(port)
+
+	started := make(chan error, 1)
+	go func() { started <- a.startHostSessionOn(port, nil) }()
+
+	// A real guest up to the point of the abuse: the coordinator verifies what a
+	// joiner turned out to be, so only one that built its world gets into a roster.
+	pending, offered := dialSession(t, port.Addr().String())
+	joinCfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 120, Height: 40}, offered)
+	if err != nil {
+		t.Fatalf("join config: %v", err)
+	}
+	guest, err := NewHeadless(joinCfg)
+	if err != nil {
+		t.Fatalf("join app: %v", err)
+	}
+	t.Cleanup(guest.Close)
+	guest.pendingJoin, guest.sessionOffer = pending, offered
+	if err := guest.JoinAt(offered.Anchor); err != nil {
+		_ = pending.Complete(err, network.JoinerReport{})
+		t.Fatalf("join identity: %v", err)
+	}
+	if err := pending.Complete(nil, guest.joinerReport()); err != nil {
+		t.Fatalf("join reply: %v", err)
+	}
+	// The gate is open once the start arrives; leaving without confirming is the
+	// whole of the abuse.
+	if _, err := pending.WaitStart(); err != nil {
+		t.Fatalf("the host never released the lobby: %v", err)
+	}
+	_ = pending.Close()
+
 	select {
-	case err := <-done:
-		if !errors.Is(err, errSessionCanceled) {
-			t.Fatalf("the ready gate ended with %v, want errSessionCanceled", err)
+	case err := <-started:
+		if err != nil {
+			t.Fatalf("the abandoned start gate ended the session with %v", err)
 		}
-	case <-time.After(30 * time.Second):
-		t.Fatal("the ready gate ignored its signal")
+	case <-time.After(socketWait):
+		t.Fatalf("the start gate is still waiting for participant %d", offered.Assigned)
+	}
+	if st := a.life.State(time.Now()); st.Expired {
+		t.Fatalf("the session expired on an abandoned lobby: %s", st.Reason)
 	}
 }
 

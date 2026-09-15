@@ -153,3 +153,28 @@ func TestStopDoesNotWaitOutAHandshakeDeadline(t *testing.T) {
 		t.Fatal("Stop waited on a handshake blocked in its read")
 	}
 }
+
+// TestAStartGateConfirmationBelongsToOneLink pins what a confirmation names. Keyed
+// by participant, a peer repeating MsgReady cannot satisfy a gate waiting on
+// another; dropped with the link, an identity that returns to the pool has to
+// install its own world before the next gate admits it.
+func TestAStartGateConfirmationBelongsToOneLink(t *testing.T) {
+	t.Parallel()
+
+	port := NewSocketPort(DebugConfig(RoleHost, "127.0.0.1:0"))
+	defer func() { _ = port.Close() }()
+
+	port.Inject(2, uint8(MsgReady), nil)
+	if !port.Confirmed(2) {
+		t.Fatal("the peer that confirmed is not recorded")
+	}
+	if port.Confirmed(3) {
+		t.Fatal("a peer that sent nothing counts as confirmed")
+	}
+	// A released identity dials back with its own world to install, so the
+	// confirmation goes with the link rather than with the participant number.
+	port.onDisconnect(2)
+	if port.Confirmed(2) {
+		t.Fatal("a departed peer's confirmation outlived its link")
+	}
+}

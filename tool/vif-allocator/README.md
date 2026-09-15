@@ -37,8 +37,8 @@ atomically without restarting the allocator. See
 
 | Request | Result |
 |---|---|
-| `POST /vif/api/sessions` with an empty body or `{}` | `201` and one created session. Callers cannot select an image or workload field. |
-| `GET /vif/api/sessions` | `200` and `{ "sessions": [...] }` for live, non-completed Jobs. |
+| `POST /vif/api/sessions` with an empty body, `{}`, or `{"players":N,"log_level":"info"}` | `201` and one created session. Those two fields are the whole of what a caller may choose; an omitted one takes the deployment default, an unknown one is a `400`. |
+| `GET /vif/api/sessions` | `200` and `{ "sessions": [...], "limits": {...} }` for live, non-completed Jobs. |
 | `GET /healthz` | Process liveness. |
 | `GET /readyz` | Verifies that the current token can reach the Kubernetes API. |
 | `GET /vif/api/logs` | Proxies the loopback LogWisp SSE response byte-for-byte. `HEAD` is also accepted. An unavailable upstream returns `503 log_stream_unavailable`. |
@@ -65,6 +65,14 @@ One session row has this shape:
   }
 }
 ```
+
+`limits` names what this deployment will accept — `players_max` and the allowed
+`log_levels`, most verbose first — so a caller offers only choices that would be
+granted rather than discovering them by refusal. `-players-max` defaults to
+`-players`, and `-log-level-min` defaults to `debug`: publishing the API must not
+hand an anonymous caller a sixteen-player world or the fleet's shared log rate, so
+both open only as far as an operator sets them. A value outside them is refused with
+`400 invalid_request` naming the bound, never clamped.
 
 `id` is the session's stable public identifier. `page_url` and `join_target` are
 opaque strings this allocator produces: no caller may rebuild either from `port`,

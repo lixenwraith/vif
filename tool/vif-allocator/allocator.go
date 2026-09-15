@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 var (
 	errFleetFull       = errors.New("all session ports are allocated")
 	errSessionNotReady = errors.New("session did not become ready")
+	errRequestRefused  = errors.New("session request refused")
 )
 
 type allocatorConfig struct {
@@ -26,9 +28,26 @@ type allocatorConfig struct {
 	PageBase       string
 	PortFirst      int
 	PortLast       int
+	PlayersMax     int
+	LogLevels      []string
 	ReadyTimeout   time.Duration
 	PollInterval   time.Duration
 	CleanupTimeout time.Duration
+}
+
+// sessionRequest is what a caller may choose about the session it is asking for.
+// Both fields are optional and nothing else in the workload is selectable: the
+// image, the map, the lifetime bounds and the mounts are the deployment's.
+type sessionRequest struct {
+	Players  int    `json:"players,omitempty"`
+	LogLevel string `json:"log_level,omitempty"`
+}
+
+// fleetLimits is what the deployment will accept, so a caller can offer only the
+// choices this allocator would allow rather than discovering them by refusal.
+type fleetLimits struct {
+	PlayersMax int      `json:"players_max"`
+	LogLevels  []string `json:"log_levels"`
 }
 
 type session struct {
@@ -67,8 +86,39 @@ func newAllocator(kube kubeAPI, health healthProbe, cfg allocatorConfig) *alloca
 	return &allocator{kube: kube, health: health, cfg: cfg, newID: randomSessionID}
 }
 
-func (a *allocator) createSession(ctx context.Context) (session, error) {
-	created, err := a.createTransaction(ctx)
+func (a *allocator) limits() fleetLimits {
+	return fleetLimits{PlayersMax: a.cfg.PlayersMax, LogLevels: a.cfg.LogLevels}
+}
+
+// resolve folds a caller's choices into this deployment's workload. An omitted
+// choice keeps the default; one outside what the operator opened is refused rather
+// than clamped, because a session quietly given a different roster than the one it
+// asked for is worse than a request the caller can correct.
+func (a *allocator) resolve(req sessionRequest) (workloadConfig, error) {
+	workload := a.cfg.Workload
+	if req.Players != 0 {
+		if req.Players < 1 || req.Players > a.cfg.PlayersMax {
+			return workloadConfig{}, fmt.Errorf("%w: players must be between 1 and %d",
+				errRequestRefused, a.cfg.PlayersMax)
+		}
+		workload.Players = req.Players
+	}
+	if req.LogLevel != "" {
+		if !slices.Contains(a.cfg.LogLevels, req.LogLevel) {
+			return workloadConfig{}, fmt.Errorf("%w: log_level must be one of %s",
+				errRequestRefused, strings.Join(a.cfg.LogLevels, ", "))
+		}
+		workload.LogLevel = req.LogLevel
+	}
+	return workload, nil
+}
+
+func (a *allocator) createSession(ctx context.Context, req sessionRequest) (session, error) {
+	workload, err := a.resolve(req)
+	if err != nil {
+		return session{}, err
+	}
+	created, err := a.createTransaction(ctx, workload)
 	if err != nil {
 		return session{}, err
 	}
@@ -93,7 +143,7 @@ func (a *allocator) createSession(ctx context.Context) (session, error) {
 	return a.sessionRecord(created.id, created.port, created.createdAt, true, state), nil
 }
 
-func (a *allocator) createTransaction(ctx context.Context) (createdObjects, error) {
+func (a *allocator) createTransaction(ctx context.Context, workload workloadConfig) (createdObjects, error) {
 	a.createMu.Lock()
 	defer a.createMu.Unlock()
 
@@ -113,7 +163,7 @@ func (a *allocator) createTransaction(ctx context.Context) (createdObjects, erro
 		if err != nil {
 			return createdObjects{}, fmt.Errorf("generate session ID: %w", err)
 		}
-		createdJob, err = a.kube.createJob(ctx, buildJob(id, a.cfg.Workload))
+		createdJob, err = a.kube.createJob(ctx, buildJob(id, workload))
 		if isAPIStatus(err, http.StatusConflict) {
 			continue
 		}

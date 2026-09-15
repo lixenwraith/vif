@@ -22,7 +22,12 @@ type SocketPort struct {
 	refused  atomic.Uint64
 	received atomic.Uint64
 	ever     atomic.Bool
-	ready    atomic.Int64
+
+	// confirmed names the peers that passed a start gate, rather than counting the
+	// confirmations: one peer sending MsgReady twice would satisfy a gate waiting on
+	// two, and a released identity that dials back has to be able to confirm again.
+	readyMu   sync.Mutex
+	confirmed map[PeerID]bool
 
 	// The link measurement is entirely the port's. Probes leave on a timer of
 	// their own rather than on a tick, because a stalled or paused instance still
@@ -60,6 +65,7 @@ func NewSocketPort(cfg *Config) *SocketPort {
 	}
 	p.config.OnError = p.reportError
 	p.meters = make(map[PeerID]*linkMeter)
+	p.confirmed = make(map[PeerID]bool)
 	p.probeStop = make(chan struct{})
 	p.probeDone = make(chan struct{})
 	p.transport = NewTransport(&p.config)
@@ -329,8 +335,12 @@ func (p *SocketPort) Inject(peer uint32, msgType uint8, payload []byte) {
 // Changes wakes startup coordination after connect, disconnect or ready.
 func (p *SocketPort) Changes() <-chan struct{} { return p.changes }
 
-// ReadyCount reports peers that passed the tick-zero start gate.
-func (p *SocketPort) ReadyCount() int { return int(p.ready.Load()) }
+// Confirmed reports whether this peer's current link passed its start gate.
+func (p *SocketPort) Confirmed(peerID uint32) bool {
+	p.readyMu.Lock()
+	defer p.readyMu.Unlock()
+	return p.confirmed[PeerID(peerID)]
+}
 
 // Errors exposes asynchronous accept and handshake failures.
 func (p *SocketPort) Errors() <-chan error { return p.errors }
@@ -351,6 +361,11 @@ func (p *SocketPort) onConnect(id PeerID) {
 }
 
 func (p *SocketPort) onDisconnect(id PeerID) {
+	// A confirmation belongs to a link, not to an identity: this one returns to the
+	// pool, and the participant that takes it next has its own world to install.
+	p.readyMu.Lock()
+	delete(p.confirmed, id)
+	p.readyMu.Unlock()
 	p.push(Inbound{Kind: InboundDisconnect, Peer: id})
 	p.signal()
 }
@@ -363,7 +378,9 @@ func (p *SocketPort) onMessage(id PeerID, msg *Message) {
 	case MsgHeartbeat:
 		return
 	case MsgReady:
-		p.ready.Add(1)
+		p.readyMu.Lock()
+		p.confirmed[id] = true
+		p.readyMu.Unlock()
 		p.signal()
 		return
 	// The round trip never reaches the game. Answering here rather than from a

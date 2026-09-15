@@ -12,14 +12,16 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 )
 
 const maxCreateBody = 1024
 
 type sessionAllocator interface {
-	createSession(context.Context) (session, error)
+	createSession(context.Context, sessionRequest) (session, error)
 	listSessions(context.Context) ([]session, error)
+	limits() fleetLimits
 	ready(context.Context) error
 }
 
@@ -31,7 +33,8 @@ type apiServer struct {
 }
 
 type sessionsResponse struct {
-	Sessions []session `json:"sessions"`
+	Sessions []session   `json:"sessions"`
+	Limits   fleetLimits `json:"limits"`
 }
 
 type errorResponse struct {
@@ -104,23 +107,26 @@ func (s *apiServer) handleSessions(w http.ResponseWriter, r *http.Request) {
 		if sessions == nil {
 			sessions = []session{}
 		}
-		writeJSON(w, http.StatusOK, sessionsResponse{Sessions: sessions})
+		writeJSON(w, http.StatusOK, sessionsResponse{Sessions: sessions, Limits: s.allocator.limits()})
 	case http.MethodPost:
-		if err := validateCreateBody(r); err != nil {
+		request, err := parseCreateRequest(r)
+		if err != nil {
 			var bodyErr *requestBodyError
 			if errors.As(err, &bodyErr) {
 				writeAPIError(w, bodyErr.status, bodyErr.code, bodyErr.message)
 				return
 			}
-			writeAPIError(w, http.StatusBadRequest, "invalid_request", "Request body must be an empty JSON object")
+			writeAPIError(w, http.StatusBadRequest, "invalid_request",
+				"Request body must be a JSON object naming only players and log_level")
 			return
 		}
-		created, err := s.allocator.createSession(r.Context())
+		created, err := s.allocator.createSession(r.Context(), request)
 		if err != nil {
 			s.writeCreateError(w, err)
 			return
 		}
-		s.log.Info("session created", "session", created.ID, "port", created.Port)
+		s.log.Info("session created", "session", created.ID, "port", created.Port,
+			"players", request.Players, "log_level", request.LogLevel)
 		writeJSON(w, http.StatusCreated, created)
 	default:
 		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
@@ -151,6 +157,10 @@ func (s *apiServer) handleLogs(w http.ResponseWriter, r *http.Request) {
 
 func (s *apiServer) writeCreateError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, errRequestRefused):
+		// The bound is what the caller needs, and it is the same bound the session
+		// list advertises, so stating it tells an anonymous caller nothing new.
+		writeAPIError(w, http.StatusBadRequest, "invalid_request", capitalize(unwrapRefusal(err)))
 	case errors.Is(err, errFleetFull):
 		w.Header().Set("Retry-After", "10")
 		writeAPIError(w, http.StatusServiceUnavailable, "fleet_full", "All session ports are allocated")
@@ -174,27 +184,49 @@ type requestBodyError struct {
 
 func (e *requestBodyError) Error() string { return e.message }
 
-func validateCreateBody(r *http.Request) error {
+// parseCreateRequest reads the optional session choices. An empty body and `{}` are
+// both the deployment default, which is what every caller sent before there was
+// anything to choose; an unknown field is refused rather than ignored, so a caller
+// misspelling one is told instead of silently served a default.
+func parseCreateRequest(r *http.Request) (sessionRequest, error) {
 	data, err := io.ReadAll(io.LimitReader(r.Body, maxCreateBody+1))
 	if err != nil {
-		return err
+		return sessionRequest{}, err
 	}
 	if len(data) > maxCreateBody {
-		return &requestBodyError{status: http.StatusRequestEntityTooLarge, code: "request_too_large", message: "Request body is too large"}
+		return sessionRequest{}, &requestBodyError{status: http.StatusRequestEntityTooLarge, code: "request_too_large", message: "Request body is too large"}
 	}
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 {
-		return nil
+		return sessionRequest{}, nil
 	}
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" {
-		return &requestBodyError{status: http.StatusUnsupportedMediaType, code: "content_type", message: "Content-Type must be application/json"}
+		return sessionRequest{}, &requestBodyError{status: http.StatusUnsupportedMediaType, code: "content_type", message: "Content-Type must be application/json"}
 	}
-	var object map[string]json.RawMessage
-	if err := json.Unmarshal(data, &object); err != nil || object == nil || len(object) != 0 {
-		return fmt.Errorf("body is not an empty JSON object")
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var request sessionRequest
+	if err := decoder.Decode(&request); err != nil {
+		return sessionRequest{}, fmt.Errorf("body is not a session request: %w", err)
 	}
-	return nil
+	if decoder.More() {
+		return sessionRequest{}, fmt.Errorf("body carries more than one JSON value")
+	}
+	return request, nil
+}
+
+// unwrapRefusal drops the sentinel prefix so the reason reaches the caller without
+// the wrapper it was matched on.
+func unwrapRefusal(err error) string {
+	return strings.TrimPrefix(err.Error(), errRequestRefused.Error()+": ")
+}
+
+func capitalize(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 func methodNotAllowed(w http.ResponseWriter, allow string) {

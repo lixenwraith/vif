@@ -199,6 +199,17 @@ corrections and should keep refusing it.
 Both are owner-authored, so a receiver never writes them and no capture carries
 them. The state is unreachable today, which is why it is a latent hole.
 
+### Let a refused link cost one participant, not the session
+
+- Priority: P2
+- Affected files: `internal/app/session.go`
+- Prerequisite: none
+
+The start gate now excuses a participant that leaves, but `AdmitMeasuredLink`
+refusing one still fails `startHostSessionOn` and ends the run — so with two guests
+in the lobby, one unusable link takes the other's match with it. Refuse the
+participant and continue with the rest, the way the mid-run gate already does.
+
 ## Runtime structure
 
 ### Separate drain population reconciliation concerns

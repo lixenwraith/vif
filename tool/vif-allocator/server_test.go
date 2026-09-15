@@ -13,14 +13,19 @@ import (
 type fakeSessionAllocator struct {
 	created   session
 	sessions  []session
+	requested sessionRequest
+	bounds    fleetLimits
 	createErr error
 	listErr   error
 	readyErr  error
 }
 
-func (f *fakeSessionAllocator) createSession(context.Context) (session, error) {
+func (f *fakeSessionAllocator) createSession(_ context.Context, req sessionRequest) (session, error) {
+	f.requested = req
 	return f.created, f.createErr
 }
+
+func (f *fakeSessionAllocator) limits() fleetLimits { return f.bounds }
 
 func (f *fakeSessionAllocator) listSessions(context.Context) ([]session, error) {
 	return f.sessions, f.listErr
@@ -91,10 +96,33 @@ func TestGetSessionsAlwaysReturnsArray(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/vif/api/sessions", nil)
 	response := httptest.NewRecorder()
 
-	testServer(&fakeSessionAllocator{}).ServeHTTP(response, request)
+	testServer(&fakeSessionAllocator{
+		bounds: fleetLimits{PlayersMax: 4, LogLevels: []string{"info"}},
+	}).ServeHTTP(response, request)
 
-	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != `{"sessions":[]}` {
+	want := `{"sessions":[],"limits":{"players_max":4,"log_levels":["info"]}}`
+	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != want {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
+// TestPostSessionCarriesTheChoicesItNames pins the one thing a caller may select. A
+// field the allocator dropped would be a session silently unlike the one the page
+// offered, which is worse than a refusal.
+func TestPostSessionCarriesTheChoicesItNames(t *testing.T) {
+	backend := &fakeSessionAllocator{created: session{ID: "abc", Port: 31700}}
+	request := httptest.NewRequest(http.MethodPost, "/vif/api/sessions",
+		strings.NewReader(`{"players":2,"log_level":"debug"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	testServer(backend).ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if backend.requested != (sessionRequest{Players: 2, LogLevel: "debug"}) {
+		t.Fatalf("the allocator was asked for %+v", backend.requested)
 	}
 }
 

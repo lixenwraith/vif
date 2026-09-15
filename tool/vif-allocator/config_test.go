@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"slices"
 	"testing"
 	"time"
 )
@@ -63,6 +64,40 @@ func TestParseConfigRejectsUnsafeLogStreamURL(t *testing.T) {
 		args := append(append([]string{}, base...), "-log-stream-url", target)
 		if _, err := parseConfig(args, io.Discard); err == nil {
 			t.Fatalf("parseConfig accepted unsafe log stream URL %q", target)
+		}
+	}
+}
+
+// TestRequestBoundsFailClosed pins what an unconfigured deployment will accept: the
+// default roster and nothing more verbose than debug, so publishing the API does not
+// hand an anonymous caller the fleet's log rate or a sixteen-player world.
+func TestRequestBoundsFailClosed(t *testing.T) {
+	base := []string{
+		"-image", "docker.io/library/vi-fighter:test",
+		"-join-host", "play.example.com",
+		"-page-base", "https://play.example.com/session/",
+		"-log-stream-url", "http://127.0.0.1:8081/stream",
+	}
+	cfg, err := parseConfig(base, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Allocator.PlayersMax != cfg.Allocator.Workload.Players {
+		t.Fatalf("players-max = %d, want the -players default %d",
+			cfg.Allocator.PlayersMax, cfg.Allocator.Workload.Players)
+	}
+	if slices.Contains(cfg.Allocator.LogLevels, "trace") {
+		t.Fatalf("trace is selectable by default: %v", cfg.Allocator.LogLevels)
+	}
+	for _, extra := range [][]string{
+		{"-players", "8", "-players-max", "4"},
+		{"-players-max", "17"},
+		{"-log-level-min", "shout"},
+		{"-log-level", "trace"},
+	} {
+		args := append(append([]string{}, base...), extra...)
+		if _, err := parseConfig(args, io.Discard); err == nil {
+			t.Fatalf("parseConfig accepted %v", extra)
 		}
 	}
 }

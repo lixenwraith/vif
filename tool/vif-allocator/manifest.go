@@ -6,6 +6,7 @@ type workloadConfig struct {
 	Namespace string
 	Image     string
 	Players   int
+	LogLevel  string
 	MapSize   string
 	FirstJoin string
 	Empty     string
@@ -81,7 +82,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 								"-authority", "host",
 								"-l=/var/log/vif-fleet",
 								"-log-session-id=" + id,
-								"-lv", "info",
+								"-lv", cfg.LogLevel,
 								"-ls", "all+dispatch",
 								"-d",
 								"-size", cfg.MapSize,

@@ -78,6 +78,13 @@ else
 	printf '%s\n' 'VIF_ALLOCATOR_LOG_STREAM_URL=http://127.0.0.1:8081/stream' \
 		>>"$stage_root/allocator.env.next"
 fi
+# Settings the installed unit now passes. Added only when absent, because an
+# operator's raised ceiling has to survive an update, and a flag whose variable is
+# unset expands to nothing and fails the parse.
+for setting in 'VIF_ALLOCATOR_PLAYERS_MAX=4' 'VIF_ALLOCATOR_LOG_LEVEL_MIN=debug'; do
+	grep -q "^${setting%%=*}=" "$stage_root/allocator.env.next" ||
+		printf '%s\n' "$setting" >>"$stage_root/allocator.env.next"
+done
 
 if ! "$repo_root/deploy/k3s/session.sh" blockers; then
 	echo "$0: the fleet must be empty before the allocator update" >&2
@@ -116,6 +123,8 @@ sudo cmp -s "$source_unit" "$installed_unit"
 sudo cmp -s "$repo_root/bin/vif-allocator" "$binary"
 sudo grep -Fx 'VIF_ALLOCATOR_LOG_STREAM_URL=http://127.0.0.1:8081/stream' \
 	"$installed_env" >/dev/null
+sudo grep -q '^VIF_ALLOCATOR_PLAYERS_MAX=' "$installed_env"
+sudo grep -q '^VIF_ALLOCATOR_LOG_LEVEL_MIN=' "$installed_env"
 
 rollback_required=false
 allocator_stopped=false

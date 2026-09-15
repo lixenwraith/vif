@@ -50,13 +50,6 @@ var ErrSessionEnding = errors.New("session is ending")
 // told to do with a slot nobody claimed — so the caller reports it and exits zero.
 var errSessionExpired = errors.New("session lifetime expired")
 
-// errLobbyAbandoned ends a startup gate whose guest left before confirming it
-// installed the world. On an interactive host that is a failure to report to the
-// person who started it. On a dedicated one it is not: nobody is watching, the
-// session has no participants and never had any, and the honest end is the same
-// clean exit an unclaimed window takes.
-var errLobbyAbandoned = errors.New("participant disconnected during startup")
-
 // newSessionApp resolves the startup handshake before a joining App draws a
 // seed. Interactive play and authored headless scripts share this construction.
 func newSessionApp(cfg Config) (*App, error) {
@@ -548,8 +541,12 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	// The lobby is the one wait the first-guest window covers, so it is the one
 	// wait that carries its deadline. Zero on an unbounded policy, and zero again
 	// on the ready gate below — see the comment there.
-	if err := a.waitForStartup(port, signals, quorum, false,
+	if err := a.waitForStartup(port, signals,
 		a.life.State(time.Now()).Deadline,
+		func(now time.Time) error {
+			a.life.State(now) // settles the deadline so the reason is recorded once
+			return errSessionExpired
+		},
 		func() bool { return port.PeerCount() >= quorum }); err != nil {
 		return err
 	}
@@ -618,23 +615,64 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 			}
 		}
 	}
-	// No deadline. The first-guest window was satisfied by the roster this gate is
-	// waiting on, and re-arming it here would end a session that has its guest
-	// because installing the world took the last second of it. A participant that
-	// connects and then never confirms holds this gate open; that is a startup-gate
-	// bound this does not have, recorded as a blocker in doc/kubernetes-fleet.md.
-	if err := a.waitForStartup(port, signals, admitted, true, time.Time{}, func() bool {
-		return port.PeerCount() >= admitted && port.ReadyCount() >= admitted
-	}); err != nil {
+	// Not the first-guest window, which this roster already satisfied and which
+	// re-arming here would spend on installing the world. Its own bound is the
+	// install it is waiting for, the same one a mid-run join is given.
+	//
+	// abandoned holds the participants given up on at that bound, so the condition
+	// below settles at once rather than waiting for their closed links to be
+	// noticed.
+	abandoned := make(map[network.PeerID]bool, admitted)
+	confirmedGuests := func() int {
+		n := 0
+		for _, participant := range offer.Participants {
+			if participant.ID != offer.Host && port.Confirmed(uint32(participant.ID)) {
+				n++
+			}
+		}
+		return n
+	}
+	// Whoever is still on the link, not the roster the lobby closed on. A peer that
+	// drops in this window cannot redial — lobbyClosing refuses it — so waiting for
+	// it is waiting for nobody, and ending the session on its behalf hands a
+	// stranger the power to end one.
+	if err := a.waitForStartup(port, signals,
+		time.Now().Add(parameter.NetworkJoinReadyTimeout),
+		func(now time.Time) error {
+			for _, participant := range offer.Participants {
+				id := participant.ID
+				if id == offer.Host || port.Confirmed(uint32(id)) {
+					continue
+				}
+				abandoned[id] = true
+				port.Disconnect(uint32(id))
+				vlog.Warn("app", "msg", "participant did not confirm the start gate",
+					"participant", id, "within", parameter.NetworkJoinReadyTimeout.String())
+			}
+			return nil
+		},
+		func() bool {
+			for _, participant := range offer.Participants {
+				id := participant.ID
+				if id == offer.Host || abandoned[id] {
+					continue
+				}
+				if port.Connected(uint32(id)) && !port.Confirmed(uint32(id)) {
+					return false
+				}
+			}
+			return true
+		}); err != nil {
 		return err
 	}
 
 	// The lobby's links have been up for the whole wait, so the convergence floor is
 	// decided per link rather than from the gate's aggregate transfer. A participant
 	// that cannot carry a whole world per floor window is refused here for the same
-	// reason a mid-run join is.
+	// reason a mid-run join is; one that is no longer on the link has no link to
+	// judge and leaves through the ordinary departure the loop is about to drain.
 	for _, participant := range offer.Participants {
-		if participant.ID == offer.Host {
+		if participant.ID == offer.Host || !port.Connected(uint32(participant.ID)) {
 			continue
 		}
 		if err := a.corrections.AdmitMeasuredLink(port, participant.ID); err != nil {
@@ -642,7 +680,8 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 		}
 	}
 
-	a.showStartupStatus(fmt.Sprintf("Network session ready: %d participants", len(offer.Participants)))
+	a.showStartupStatus(fmt.Sprintf("Network session ready: %d of %d participant(s) confirmed",
+		confirmedGuests(), admitted))
 	a.corrections.StartPump()
 	return nil
 }
@@ -746,11 +785,12 @@ func (a *App) lobbyEventCancels(ev terminal.Event) bool {
 
 // waitForStartup treats rejected handshakes as recoverable while no peer was admitted.
 //
-// deadline, when non-zero, ends the wait with errSessionExpired. It is supplied by
-// the caller rather than read from the lifetime policy here, because only one of
-// the two gates this serves is inside the window that deadline belongs to.
+// deadline, when non-zero, hands the wait to expire, which either ends it with an
+// error or settles ready and lets it finish. Both are the caller's, because the two
+// gates this serves bound different things: the lobby's deadline is the allocated
+// first-guest window, the start gate's is one world install.
 func (a *App) waitForStartup(port *network.SocketPort, signals <-chan os.Signal,
-	expectedPeers int, failOnDisconnect bool, deadline time.Time, ready func() bool) error {
+	deadline time.Time, expire func(time.Time) error, ready func() bool) error {
 	// A pod nobody dialled is precisely the case the first-guest window exists for,
 	// and it is also the case this gate would otherwise wait in forever. A run with
 	// no bounded policy is given no deadline and waits as it always has.
@@ -765,8 +805,10 @@ func (a *App) waitForStartup(port *network.SocketPort, signals <-chan os.Signal,
 		case <-signals:
 			return errSessionCanceled
 		case now := <-expiry:
-			a.life.State(now) // settles the deadline so the reason is recorded once
-			return errSessionExpired
+			expiry = nil
+			if err := expire(now); err != nil {
+				return err
+			}
 		case ev := <-a.lobbyEvents():
 			if a.lobbyEventCancels(ev) {
 				return errSessionCanceled
@@ -775,9 +817,6 @@ func (a *App) waitForStartup(port *network.SocketPort, signals <-chan os.Signal,
 			logSessionError(err)
 			a.showStartupStatus("Join rejected: " + err.Error() + "; still waiting")
 		case <-port.Changes():
-			if failOnDisconnect && port.PeerCount() < expectedPeers {
-				return errLobbyAbandoned
-			}
 		}
 	}
 	return nil
