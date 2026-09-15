@@ -329,11 +329,6 @@ sudo install -o root -g root -m 0755 \
 sudo install -o root -g root -m 0755 \
   bin/vif-allocator /usr/local/bin/vif-allocator
 sudo systemctl start vif-allocator.service
-for attempt in $(seq 1 25); do
-  curl --connect-timeout 1 --max-time 2 -fsS \
-    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
-  sleep 1
-done
 curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:9080/healthz
 curl --connect-timeout 2 --max-time 5 -fsS \
@@ -362,11 +357,6 @@ sudo install -o root -g root -m 0755 \
   /usr/local/libexec/vif-allocator.batch-b \
   /usr/local/bin/vif-allocator
 sudo systemctl start vif-allocator.service
-for attempt in $(seq 1 25); do
-  curl --connect-timeout 1 --max-time 2 -fsS \
-    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
-  sleep 1
-done
 systemctl is-active vif-allocator.service
 curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:9080/healthz
@@ -429,15 +419,10 @@ Use the explicit `--subresource=log` form. Positional `pods/log` can be parsed a
 `TYPE/NAME` and return `yes` because this Role intentionally retains permission to
 read Pods; that does not test the log subresource.
 
-Restart the allocator and wait for both probes:
+Restart the allocator and read both probes:
 
 ```sh
 sudo systemctl start vif-allocator.service
-for attempt in $(seq 1 25); do
-  curl --connect-timeout 1 --max-time 2 -fsS \
-    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
-  sleep 1
-done
 curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:9080/healthz
 curl --connect-timeout 2 --max-time 5 -fsS \
@@ -462,11 +447,6 @@ sudo systemctl stop vif-allocator.service
 sudo kubectl -n vif patch role vif-allocator --type=json \
   -p='[{"op":"add","path":"/rules/-","value":{"apiGroups":[""],"resources":["pods/log"],"verbs":["get"]}}]'
 sudo systemctl start vif-allocator.service
-for attempt in $(seq 1 25); do
-  curl --connect-timeout 1 --max-time 2 -fsS \
-    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
-  sleep 1
-done
 systemctl is-active vif-allocator.service
 curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:9080/healthz
@@ -695,11 +675,6 @@ if (
   ./deploy/guest/update-logwisp.sh
 )
 then
-  for attempt in $(seq 1 25); do
-    curl --connect-timeout 1 --max-time 2 -fsS \
-      http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
-    sleep 1
-  done
   curl --connect-timeout 2 --max-time 5 -fsS \
     http://127.0.0.1:9080/healthz
   curl --connect-timeout 2 --max-time 5 -fsS \
@@ -1282,11 +1257,6 @@ sudo install -o root -g root -m 0644 \
 sudo systemctl daemon-reload
 sudo systemctl start vif-allocator.service
 
-for attempt in $(seq 1 25); do
-  curl --connect-timeout 1 --max-time 2 -fsS \
-    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
-  sleep 1
-done
 systemctl is-active vif-allocator.service
 curl --connect-timeout 2 --max-time 5 -fsS \
   http://127.0.0.1:9080/healthz

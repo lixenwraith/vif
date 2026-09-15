@@ -103,6 +103,9 @@ curl --no-buffer -fsS https://<site-host>/vif/api/logs
 
 ## Health
 
+`vif-allocator.service` is `Type=notify`, so `systemctl start` returns once the
+allocator answers; a probe straight after one is not a race.
+
 ```sh
 curl -fsS http://127.0.0.1:9080/healthz
 curl -fsS http://127.0.0.1:9080/readyz

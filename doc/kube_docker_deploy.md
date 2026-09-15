@@ -889,21 +889,16 @@ sudo systemctl enable --now vif-allocator-token.timer vif-allocator.service
 
 The allocator is a host process. Starting it does not create a Kubernetes Job,
 pod or Service; those appear only after `POST /vif/api/sessions`.
-`vif-allocator.service` is `Type=simple`, so systemd reports it active before its
-startup reconciliation finishes. Reconciliation has a 20-second deadline; wait
-for the listener before testing readiness or changing the bridge firewall:
+`vif-allocator.service` is `Type=notify`: the process answers `READY=1` once its
+listener is bound, after its 20-second startup reconciliation, so `systemctl
+start` returns when the allocator answers and nothing has to wait for it.
 
 ```sh
-for attempt in $(seq 1 25); do
-  curl --connect-timeout 1 --max-time 2 -fsS \
-    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
-  sleep 1
-done
 curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/healthz
 curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/readyz
 ```
 
-Both final probes must print `ok`. On a fresh node, finish installation with the
+Both probes must print `ok`. On a fresh node, finish installation with the
 common session check in `kube-todo.md`; that is the first allocator-created proof
 that the current Role, PVC workload, remote join, self-tagged file, and cleanup all
 work together. If the listener never appears, inspect `systemctl show` with
@@ -1278,12 +1273,6 @@ sudo systemctl show vif-allocator.service vif-allocator-token.timer \
   -p Id -p ActiveState -p UnitFileState -p Result
 sudo systemctl status vif-allocator-token.service --no-pager
 sudo grep '^VIF_ALLOCATOR_IMAGE=' /etc/vif-allocator/allocator.env
-
-for attempt in $(seq 1 25); do
-  curl --connect-timeout 1 --max-time 2 -fsS \
-    http://127.0.0.1:9080/healthz >/dev/null 2>&1 && break
-  sleep 1
-done
 
 curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/healthz
 curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/readyz

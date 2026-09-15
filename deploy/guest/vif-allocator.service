@@ -7,7 +7,11 @@ ConditionPathExists=/etc/vif-allocator/allocator.env
 ConditionPathExists=/etc/vif-allocator/server-ca.crt
 
 [Service]
-Type=simple
+# The allocator answers READY=1 once its listener is bound, so `systemctl start`
+# returns when it answers. Every caller that restarts it and then probes it — the
+# updaters, an operator at a prompt — was otherwise racing the bind.
+Type=notify
+TimeoutStartSec=30s
 User=vif-allocator
 Group=vif-allocator
 EnvironmentFile=/etc/vif-allocator/allocator.env

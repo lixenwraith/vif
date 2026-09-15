@@ -111,11 +111,6 @@ sudo install -o root -g root -m 0644 "$source_unit" "$installed_unit"
 sudo systemctl daemon-reload
 sudo systemctl start vif-allocator.service
 
-for attempt in $(seq 1 25); do
-	curl --connect-timeout 1 --max-time 2 -fsS http://127.0.0.1:9080/healthz \
-		>/dev/null 2>&1 && break
-	sleep 1
-done
 systemctl is-active --quiet vif-allocator.service
 curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/healthz
 curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/readyz

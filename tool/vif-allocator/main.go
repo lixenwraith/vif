@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -74,11 +75,19 @@ func run(args []string, logger *slog.Logger) error {
 		},
 	}
 
+	// Bound here rather than inside Serve, so a port already taken is an error this
+	// returns and so readiness can be announced once the socket exists.
+	listener, err := net.Listen("tcp", cfg.Listen)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", cfg.Listen, err)
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("allocator listening", "address", cfg.Listen, "image", cfg.Allocator.Workload.Image)
-		errCh <- server.ListenAndServe()
+		errCh <- server.Serve(listener)
 	}()
+	notifyReady(logger)
 
 	select {
 	case err := <-errCh:
@@ -96,5 +105,29 @@ func run(args []string, logger *slog.Logger) error {
 			return err
 		}
 		return nil
+	}
+}
+
+// notifyReady answers systemd's Type=notify, so `systemctl start` returns when the
+// allocator answers rather than when it forked — every caller that restarts it then
+// probes it was racing the bind. Outside systemd NOTIFY_SOCKET is unset and this
+// does nothing.
+func notifyReady(logger *slog.Logger) {
+	name := os.Getenv("NOTIFY_SOCKET")
+	if name == "" {
+		return
+	}
+	if strings.HasPrefix(name, "@") {
+		name = "\x00" + name[1:] // abstract namespace
+	}
+	conn, err := net.DialUnix("unixgram", nil, &net.UnixAddr{Name: name, Net: "unixgram"})
+	if err == nil {
+		defer conn.Close()
+		_, err = conn.Write([]byte("READY=1"))
+	}
+	if err != nil {
+		// Not fatal here: the unit's start timeout is what reports it, and failing
+		// a bound listener over an unsent datagram would be the worse answer.
+		logger.Warn("systemd readiness notification failed", "error", err)
 	}
 }
