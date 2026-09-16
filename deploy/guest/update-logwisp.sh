@@ -80,11 +80,27 @@ for attempt in $(seq 1 50); do
 done
 systemctl is-active --quiet logwisp.service
 "$binary" --version | grep -F "$revision"
+# Read from the configuration just installed rather than restated here: a second
+# copy of these bounds drifts the first time one of them is tuned, and the check
+# then rejects the build that carries the new value.
+bounds=$(awk '
+	BEGIN { printf "{" }
+	$2 == "=" && $1 ~ /^(client_buffer_size|max_connections|write_timeout_ms)$/ {
+		printf "%s\"%s\":%s", separator, $1, $3
+		separator = ","
+		found++
+	}
+	END { printf "}"; if (found != 3) exit 1 }
+' "$config_file") || {
+	echo "$0: cannot read the sink bounds from $config_file" >&2
+	exit 1
+}
 curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:8081/status |
-	jq -e '
-		.server.client_buffer_size == 512 and
-		.server.max_connections == 32 and
-		.server.write_timeout_ms == 5000' >/dev/null
+	jq -e --argjson bounds "$bounds" \
+		'.server as $served | all($bounds | to_entries[]; $served[.key] == .value)' >/dev/null || {
+	echo "$0: the served stream bounds are not $bounds" >&2
+	exit 1
+}
 sudo cmp -s "$config_file" "$installed_config"
 sudo cmp -s "$unit_file" "$installed_unit"
 rollback_required=false
