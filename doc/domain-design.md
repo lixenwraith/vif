@@ -67,7 +67,8 @@ not update a cursor this instance does not simulate.
 When a player mechanic affects Shared state, it emits the smallest artifact that
 fully determines the shared outcome. Ordinary crossings apply immediately on the
 producer and on the receive schedule everywhere else. The host applies requests
-in its own order; its next correction is canonical.
+in its own order; its next correction is canonical. An artifact that instead
+decides what the world *is* is barrier-bound and waits on its producer too (D-9).
 
 | Effect | Crossing artifact |
 |---|---|
@@ -153,9 +154,14 @@ the ambient tag. Generic systems resolve the request or target domain at runtime
 A dual system chooses the stream from the target domain; a Player-only system uses
 its Player stream. Simulation never seeds from wall time.
 
-Every issued stream is inventoried by `RandResource`, and a capture stores its
-generator position, not merely its seed. Restoring a seed restarts a sequence;
-restoring a position continues it.
+Every issued stream is inventoried by `RandResource`. A capture stores the Shared
+streams' generator positions, not merely their seeds: restoring a seed restarts a
+sequence, restoring a position continues it. Player streams stay out of it. They
+are drawn by mechanics only their own participant simulates (D-2), so a capture
+carrying one installs the sender's position over every receiver's — an authority
+that spawns no nuggets of its own pins each guest's nugget glyph and cell to
+wherever its own stream last sat. `SaveStreams`/`LoadStreams` take the domain and
+refuse a state naming another.
 
 The environment is a deliberate dual-domain exception with one Shared stream.
 An active wind draws force and direction exactly once per tick before iterating
@@ -170,6 +176,11 @@ artifact instead (D-3), and leaves the stream where it was.
 `CreateEntity(domain)` uses one counter per domain. Shared entity creation order
 must be identical wherever the same Shared world is represented. Creation and
 destruction telemetry is tracked per domain; aggregate values are sums.
+
+A crossing that allocates Shared identity, or advances the progression a region
+gates its spawns on, is therefore barrier-bound (D-3): a producer applying it a
+playout lead early would number the world differently from everyone else, and a
+correction would be repairing identity rather than state.
 
 ### D-10 — Event class and event domain answer different questions
 

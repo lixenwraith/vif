@@ -744,27 +744,15 @@ func (s *NetworkSystem) AppliedCrossingFences() network.CrossingFences {
 	return out.Normalize()
 }
 
-// barrierBound names the artifacts that must still apply at one agreed tick on
-// every instance, the producer included.
-//
-// Requirement 5 takes the playout lead off the local path, and the reason it can is
-// that an artifact's effect is provisional on a guest: the producer applies it now,
-// the host applies it in its own order, and the next correction repairs the gap.
-// That argument holds for every D-3 crossing, which describes an *effect* on a
-// world both instances already have.
-//
-// It does not hold for the three artifacts that decide what the world *is*. An
-// arrival creates a shared cursor and a departure destroys one, and a shared
-// entity's identity and creation order are what a capture references by; a reset
-// replaces the run. Applied a lead early on the producer, each of those would
-// allocate an entity — or a run — the rest of the session numbers differently, and
-// a correction would then be repairing identity rather than state. So the
-// coordinator, which is their only producer, waits with everyone else. Nobody's
-// input is waiting on them: they are the session's own bookkeeping rather than a
-// participant's action.
+// barrierBound names the artifacts that apply at one agreed tick on every instance,
+// the producer included: the ones deciding what the world *is* — roster, run,
+// shared identity, and the progression a region gates its spawns on — not what
+// happens in a world both instances already hold, whose gap a correction repairs.
+// Nobody's input waits on them. See multi-player.md §3.1.
 func barrierBound(et event.EventType) bool {
 	switch et {
-	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameResetRequest:
+	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameResetRequest,
+		event.EventSwarmSpawnRequest, event.EventQuasarSpawnRequest, event.EventDrainDefeated:
 		return true
 	default:
 		return false

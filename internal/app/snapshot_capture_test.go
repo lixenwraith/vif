@@ -254,10 +254,12 @@ func TestCaptureCarriesEveryDeclaredSystem(t *testing.T) {
 		t.Fatal("no system declares snapshot state; the check passed vacuously")
 	}
 
-	// Every stream the run issued is in the inventory, which is the hidden-state
-	// survey's "~24 per-system RNG streams" answered by construction.
-	if len(cap.Streams) < 20 {
-		t.Errorf("capture carries %d RNG streams; the run issues far more", len(cap.Streams))
+	// A floor rather than a count: streams are issued lazily, but a Shared draw
+	// that moved to a system's Player stream would silently stop being restorable
+	// and drop below it. Which domain a capture may carry is D-8's rule, pinned in
+	// TestCorrectionLeavesPlayerStreamsAlone.
+	if len(cap.Streams) < 10 {
+		t.Errorf("capture carries %d shared RNG streams; the run issues more", len(cap.Streams))
 	}
 }
 

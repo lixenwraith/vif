@@ -13,17 +13,19 @@ import (
 // prove the three things retention itself promises, without a session: what it
 // refuses to hold, what it offers, and what it does when a bound is reached.
 
-// TestRosterAndResetArtifactsAreNeverRetained is deliverable 2's exclusion. The
-// three artifacts that decide what the world *is* — an arrival, a departure and a
-// reset — apply at one agreed tick on every instance including their producer, so
-// Cross takes ownership of them and never puts them in the replay suffix. A replay
-// that carried one would create a roster entry, or a run, the rest of the session
-// numbers differently.
-func TestRosterAndResetArtifactsAreNeverRetained(t *testing.T) {
+// TestWorldDefiningArtifactsAreNeverRetained is deliverable 2's exclusion. An
+// artifact deciding what the world *is* applies at one agreed tick on every
+// instance including its producer, so Cross owns it and never puts it in the replay
+// suffix: a replay carrying one would create a roster entry, a run, or an entity
+// the rest of the session numbers differently.
+func TestWorldDefiningArtifactsAreNeverRetained(t *testing.T) {
 	for _, et := range []event.EventType{
 		event.EventParticipantJoined,
 		event.EventParticipantDeparted,
 		event.EventGameResetRequest,
+		event.EventSwarmSpawnRequest,
+		event.EventQuasarSpawnRequest,
+		event.EventDrainDefeated,
 	} {
 		if !barrierBound(et) {
 			t.Errorf("%s is not barrier-bound, so a replay could carry it",

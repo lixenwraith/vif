@@ -821,3 +821,35 @@ func TestPassiveDrainSurvivesATransportedStamp(t *testing.T) {
 		t.Fatalf("drains one interval later = %d, want 1", n)
 	}
 }
+
+// TestLootDropsOnlyForLocallySimulatedCursors is the D-2 read of a personal reward
+// on a shared kill. Every instance sees the species die and each rolls the drop
+// table for its own cursors only: rolling for a cursor it does not simulate would
+// double that player's reward, because the instance that does simulate it rolls the
+// same slot.
+func TestLootDropsOnlyForLocallySimulatedCursors(t *testing.T) {
+	w, local, _ := testCursorWorld(t)
+	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
+
+	loot := NewLootSystem(w).(*LootSystem)
+	loot.Init()
+	for range 200 {
+		loot.onSpeciesKilled(&event.SpeciesKilledPayload{
+			Species: component.SpeciesDrain, X: 10, Y: 10, KillerEntity: remote,
+		})
+	}
+
+	owners := map[core.Entity]int{}
+	for _, e := range w.Components.Loot.GetAllEntities() {
+		if c, ok := w.Components.Loot.GetComponent(e); ok {
+			owners[c.Owner]++
+		}
+	}
+	if owners[remote] != 0 {
+		t.Errorf("%d drops landed on a cursor this instance does not simulate",
+			owners[remote])
+	}
+	if owners[local] == 0 {
+		t.Fatal("200 kills dropped nothing for the local cursor; the check is vacuous")
+	}
+}

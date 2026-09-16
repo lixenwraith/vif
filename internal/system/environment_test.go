@@ -262,7 +262,7 @@ func TestWindSnapshotAndRNGContinueTogether(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	streams := originWorld.Resources.Rand.SaveStreams()
+	streams := originWorld.Resources.Rand.SaveStreams(core.DomainShared)
 
 	receiverWorld, receiver := newEnvironmentWorld(0xC0FFEE)
 	receiverSwarm := addWindKinetic(receiverWorld, core.DomainShared)
@@ -270,7 +270,7 @@ func TestWindSnapshotAndRNGContinueTogether(t *testing.T) {
 	if err := receiver.LoadShared(record); err != nil {
 		t.Fatal(err)
 	}
-	if unknown := receiverWorld.Resources.Rand.LoadStreams(streams); len(unknown) != 0 {
+	if unknown := receiverWorld.Resources.Rand.LoadStreams(core.DomainShared, streams); len(unknown) != 0 {
 		t.Fatalf("unknown RNG streams: %v", unknown)
 	}
 

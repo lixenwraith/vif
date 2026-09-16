@@ -1245,3 +1245,58 @@ func diffSharedWorld(a, b *App, maxDiff int) []string {
 	}
 	return out
 }
+
+// TestSharedIdentityCrossingWaitsOnItsProducer is the rule the storm flicker broke.
+// An ordinary crossing applies at once on its producer because its effect is
+// provisional and the next correction repairs it. One that *creates* shared
+// entities is not: applied a lead early it allocates identity nobody else has, the
+// next correction deletes what it made, and the one after that puts it back.
+func TestSharedIdentityCrossingWaitsOnItsProducer(t *testing.T) {
+	t.Parallel()
+	const seed = 0x5EEDBEEF
+	a := mustHeadless(t, seed, 120, 40)
+	b := mustHeadless(t, seed, 120, 40)
+	t.Cleanup(func() { a.Close(); b.Close() })
+
+	offer, err := a.hostOffer()
+	if err != nil {
+		t.Fatalf("host offer: %v", err)
+	}
+	if err := b.JoinSession(offer); err != nil {
+		t.Fatalf("join roster: %v", err)
+	}
+	if err := a.HostSession(offer); err != nil {
+		t.Fatalf("host roster: %v", err)
+	}
+	pa, pb := network.NewLoopbackPair(offer.Host, offer.Assigned)
+	a.AttachTransport(pa)
+	b.AttachTransport(pb)
+	a.activateNetworkSession()
+	b.activateNetworkSession()
+
+	next := func(x *App) uint64 {
+		var n uint64
+		x.World().RunSafe(func() { n = x.World().CaptureSharedWorld().NextEntity })
+		return n
+	}
+	before := next(a)
+
+	a.Context().PushCrossing(event.EventSwarmSpawnRequest,
+		&event.SwarmSpawnRequestPayload{X: 40, Y: 20})
+	a.Settle()
+	if got := next(a); got != before {
+		t.Fatalf("producer allocated shared identity at %d before the agreed tick (was %d)",
+			got, before)
+	}
+
+	for range parameter.NetworkBarrierDelayTicks + 1 {
+		a.Tick(1)
+		b.Tick(1)
+	}
+	if next(a) == before {
+		t.Fatal("the held spawn never reached its apply tick")
+	}
+	if got, want := next(b), next(a); got != want {
+		t.Fatalf("peer's shared identity counter is %d, producer's %d", got, want)
+	}
+}

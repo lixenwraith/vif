@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
@@ -92,7 +93,7 @@ func (a *App) CaptureShared() (snapshot.SharedCapture, error) {
 	)
 	a.world.RunSafe(func() {
 		cap.World = a.world.CaptureSharedWorld()
-		cap.Streams = a.world.Resources.Rand.SaveStreams()
+		cap.Streams = a.world.Resources.Rand.SaveStreams(core.DomainShared)
 		cap.FSM = a.scheduler.ExportFSM()
 		cap.Status = a.captureStatusLocked()
 		cap.Systems, err = a.captureSystemStatesLocked()
@@ -280,7 +281,7 @@ func (a *App) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal 
 			a.world.Resources.Time.RealTime,
 			cap.Header.TickInterval)
 
-		if unknown := a.world.Resources.Rand.LoadStreams(cap.Streams); len(unknown) > 0 {
+		if unknown := a.world.Resources.Rand.LoadStreams(core.DomainShared, cap.Streams); len(unknown) > 0 {
 			err = fmt.Errorf("capture names RNG streams this build does not issue: %v", unknown)
 			return
 		}

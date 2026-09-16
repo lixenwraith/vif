@@ -491,10 +491,10 @@ the socket. `NetworkService` contributes that port through `NetworkResource`.
 `WireSink.Receive` drains notifications and applies scheduled local/peer artifacts;
 at tick close, `Flush` sends the closed production epoch. For an ordinary D-3
 crossing, `Cross` retains the peer copy but lets the producer publish its original
-immediately; remote copies apply after the fixed receive lead. Arrival, departure
-and full reset remain barrier-bound on their producer because they create or destroy
-shared identity. The default lead is three 50 ms ticks and never waits for a
-per-tick round trip.
+immediately; remote copies apply after the fixed receive lead. A crossing that
+creates or destroys shared identity, or advances the progression a region gates
+its spawns on, stays barrier-bound on its producer — `barrierBound` names the set.
+The default lead is three 50 ms ticks and never waits for a per-tick round trip.
 An arriving epoch is admitted only inside a forward window. The schedule keeps what
 is not yet due, so an apply tick beyond anything this run reaches is not a schedule
 but a reservation nothing retires — and `epochWindow.admit` takes any tick above a

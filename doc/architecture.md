@@ -345,9 +345,10 @@ a synchronous per-tick round trip, and because every artifact names the absolute
 tick it applies at, a node relays what it receives so a participant reaches
 instances its producer never linked to. Its playout lead is a receive-side
 interpolation buffer: a participant applies its *own* crossing in the tick it
-produced it for, which is what makes local input feel local. Roster changes are the
-exception and land on one agreed tick everywhere, because they create and destroy
-shared entities that a capture references by id.
+produced it for, which is what makes local input feel local. The exception is the
+artifact that decides what the world *is* rather than what happens in it — a roster
+change, a reset, a species allocation — which lands on one agreed tick everywhere,
+because a capture references shared entities by id.
 
 A participant may also arrive at any tick. `:host <addr>` opens a run that is
 already playing; the joiner receives the shared world as a chunked capture (D-19),

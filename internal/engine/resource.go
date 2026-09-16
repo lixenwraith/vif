@@ -487,39 +487,37 @@ func (r *RandResource) Stream(d core.Domain, label string) *vmath.FastRand {
 	return g
 }
 
-// SaveStreams reports every issued generator's position, sorted by domain then
-// label so two instances that issued the same streams produce byte-identical
-// output. This is the D-19 answer to §4.1's "~24 per-system RNG streams": they are
-// enumerable because they are issued through one factory, not because anything
-// keeps a list by hand.
-func (r *RandResource) SaveStreams() []StreamState {
+// SaveStreams reports one domain's issued generator positions, sorted by label so
+// two instances that issued the same streams serialize identically (D-19). By
+// domain because a capture is the *shared* world (D-8): a Player stream is drawn by
+// mechanics only its own participant simulates, so carrying one installed the
+// sender's position over every receiver's.
+func (r *RandResource) SaveStreams(d core.Domain) []StreamState {
 	r.streamMu.Lock()
 	defer r.streamMu.Unlock()
 	out := make([]StreamState, 0, len(r.streams))
 	for k, g := range r.streams {
+		if k.domain != d {
+			continue
+		}
 		out = append(out, StreamState{Domain: k.domain, Label: k.label, State: g.State()})
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Domain != out[j].Domain {
-			return out[i].Domain < out[j].Domain
-		}
-		return out[i].Label < out[j].Label
-	})
+	sort.Slice(out, func(i, j int) bool { return out[i].Label < out[j].Label })
 	return out
 }
 
-// LoadStreams resumes each named generator in place, so a system holding the
-// pointer it drew in Init continues from the captured position without knowing a
-// transfer happened. A name the receiving build does not issue is reported rather
-// than dropped: it means the two sides disagree about which streams exist, and a
-// stream that silently restarts is a divergence nothing else would catch.
-func (r *RandResource) LoadStreams(states []StreamState) []string {
+// LoadStreams resumes each named generator in place, so the pointer a system drew
+// in Init continues from the captured position without knowing a transfer happened.
+// A name this build does not issue, or one naming another domain, is reported
+// rather than dropped: the two sides disagree about which streams exist, and a
+// stream silently restarting from its seed is a divergence nothing else catches.
+func (r *RandResource) LoadStreams(d core.Domain, states []StreamState) []string {
 	r.streamMu.Lock()
 	defer r.streamMu.Unlock()
 	var unknown []string
 	for _, st := range states {
 		g, ok := r.streams[streamKey{domain: st.Domain, label: st.Label}]
-		if !ok {
+		if !ok || st.Domain != d {
 			unknown = append(unknown, core.DomainNames[st.Domain]+":"+st.Label)
 			continue
 		}

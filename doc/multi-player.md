@@ -96,10 +96,25 @@ published immediately; remote copies wait until `ApplyTick` and are ordered by
 `(ApplyTick, Source, Seq)`. This removes the playout lead from the player who
 generated the input while keeping a receive buffer for reordered remote traffic.
 
-Participant arrival, participant departure, and full reset are `barrierBound`.
-They create or destroy shared identity, so their producer also waits for the
-agreed apply tick. A correction must not repair divergent entity allocation or run
+An artifact that decides what the world *is*, rather than what happens to a world
+both instances already have, is `barrierBound`: its producer waits for the agreed
+apply tick too. A correction must not be repairing entity allocation or run
 numbering.
+
+| Barrier-bound crossing | What it decides |
+|---|---|
+| `EventParticipantJoined` / `EventParticipantDeparted` | creates or destroys a shared cursor |
+| `EventGameResetRequest` | replaces the run |
+| `EventSwarmSpawnRequest` / `EventQuasarSpawnRequest` | allocates a shared species from a drain fusion |
+| `EventDrainDefeated` | advances the shared progression a region gates its spawns on |
+
+The last row is the least obvious and was the storm seen flickering into
+existence: a producer that counted its ninth drain a lead early entered the
+escalation a lead early and built that region's world before anyone else had it,
+so the next correction deleted what it made and the one after put it back. Nobody's
+input waits on any of these. What the player did is the drain dying, which is
+Player-domain and immediate; the shared consequence waits the same lead everywhere
+instead of on all but one instance.
 
 Wind start/cancel are the opposite case: they are `ClassShared` outputs suitable
 for a Shared FSM transition. They appear identically in every journal but never
@@ -142,9 +157,9 @@ An install classifies queued and later-arriving frames as follows:
 | Barrier-bound frame, any source | `frame.ApplyTick <= Header.Tick` |
 
 The sequence rule is evaluated before the tick rule for ordinary frames, and the
-tick rule is the whole rule for barrier-bound ones: an arrival, a departure and a
-reset apply at one agreed tick on every instance including their producer, so the
-tick is exact for them and nothing else is needed.
+tick rule is the whole rule for barrier-bound ones: they apply at one agreed tick
+on every instance including their producer, so the tick is exact for them and
+nothing else is needed.
 
 This closes both rollback patterns with one boundary. The host-cursor pattern —
 a correction installs a new host position and queued older absolute positions then
@@ -661,8 +676,9 @@ retention, correction ordering, join/reconnect, link shaping, relay retention,
 authority succession, the playout lead's choice over a shaped link, the correction
 playout buffer, the knockback an artifact rather than a stream position determines,
 the per-attacker window and additive join that make two participants' knockbacks
-compose the same way in either order, and the peer link and succession chain rules
-that make a successor reachable. It also forces a capture to enter and retire a quasar while
+compose the same way in either order, the domain a capture's RNG streams may carry,
+the agreed tick a shared-identity crossing waits for on its own producer, and the
+peer link and succession chain rules that make a successor reachable. It also forces a capture to enter and retire a quasar while
 the receiver skips the release transition, and round-trips a delayed transition
 action by compiled identity. Run the generation and repository gates after
 focused network tests:

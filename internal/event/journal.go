@@ -29,6 +29,10 @@ import (
 // while the world is this instance's alone, and that condition has to reproduce:
 // a replay or a catch-up holds no transport, so deriving it from one made the
 // reproduction crop where the run it reproduces did not.
+//
+// 12: Combat payloads carry the crossing identity that seeds their knockback, so
+// the impulse follows the artifact rather than a shared stream position two
+// instances consume at different ticks.
 const JournalSchema = 12
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game

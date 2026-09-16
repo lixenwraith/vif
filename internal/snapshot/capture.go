@@ -26,10 +26,14 @@ import (
 // 5 replaced the authority's single crossing fence with one per participant, so a
 // receiver classifies every source's ordinary crossings by sequence rather than
 // only the authority's.
-const Schema = 5
+//
+// 6 dropped the Player-domain RNG streams. A capture is the shared world (D-2), and
+// carrying a participant's own streams installed the sender's positions over every
+// receiver's.
+const Schema = 6
 
 // SharedCapture is the shared world at one tick (D-19): the shared component
-// stores, the allocator's next ID, every RNG stream position, and the private
+// stores, the allocator's next ID, the Shared RNG stream positions, and the private
 // state each system declares. Everything an install recomputes (flow fields,
 // spatial index, passability grid) and everything player-domain is absent.
 type SharedCapture struct {

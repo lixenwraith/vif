@@ -1,6 +1,7 @@
 package app
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -1166,5 +1167,43 @@ func TestSelectiveCorrectionKeepsThePlayerDomainUntouched(t *testing.T) {
 					uint64(e), pos, got)
 			}
 		}
+	}
+}
+
+// TestCorrectionLeavesPlayerStreamsAlone is D-8 read onto the RNG inventory: a
+// capture is the shared world, so it carries the streams driving shared mechanics
+// and none a participant draws for itself. Carrying both froze every receiver's
+// Player streams at the sender's position — a host spawning no nuggets of its own
+// pinned each guest's nugget glyph and cell to wherever its stream last sat.
+func TestCorrectionLeavesPlayerStreamsAlone(t *testing.T) {
+	t.Parallel()
+	const seed = 0x5EEDBEEF
+	source := mustHeadless(t, seed, 120, 40)
+	defer source.Close()
+	tickUntilCursor(t, source)
+	source.Tick(40)
+	cap, err := source.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+	for _, st := range cap.Streams {
+		if st.Domain != core.DomainShared {
+			t.Fatalf("a %s stream rode a shared capture: %s", core.DomainNames[st.Domain], st.Label)
+		}
+	}
+
+	receiver := mustHeadless(t, seed, 120, 40)
+	defer receiver.Close()
+	tickUntilCursor(t, receiver)
+	receiver.Tick(140)
+	own := receiver.World().Resources.Rand.SaveStreams(core.DomainPlayer)
+	if len(own) == 0 {
+		t.Fatal("the receiver issued no player streams, so the install proved nothing")
+	}
+	if err := receiver.InstallShared(cap); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if got := receiver.World().Resources.Rand.SaveStreams(core.DomainPlayer); !reflect.DeepEqual(got, own) {
+		t.Fatalf("a correction moved the receiver's own streams:\n  before %v\n  after  %v", own, got)
 	}
 }
