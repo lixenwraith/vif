@@ -102,12 +102,12 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventExplosionRequest:
 		if p, ok := ev.Payload.(*event.ExplosionRequestPayload); ok {
 			one := [1]event.ExplosionCenterEntry{{X: p.X, Y: p.Y}}
-			s.resolve(p.Entity, one[:], p.Radius, p.Attack)
+			s.resolve(p.CrossingID, p.Entity, one[:], p.Radius, p.Attack)
 		}
 
 	case event.EventExplosionBatchRequest:
 		if p, ok := ev.Payload.(*event.ExplosionBatchRequestPayload); ok {
-			s.resolve(p.Entity, p.Centers, p.Radius, p.Attack)
+			s.resolve(p.CrossingID, p.Entity, p.Centers, p.Radius, p.Attack)
 			event.ReleaseExplosionBatchRequest(p)
 		}
 	}
@@ -117,7 +117,7 @@ func (s *ExplosionSystem) Update() {}
 
 // resolve applies request defaults and damage credit, then sweeps every center.
 // In particular, it reads no TransientResource state.
-func (s *ExplosionSystem) resolve(owner core.Entity, centers []event.ExplosionCenterEntry,
+func (s *ExplosionSystem) resolve(id event.CrossingID, owner core.Entity, centers []event.ExplosionCenterEntry,
 	radius float64, attack component.CombatAttackType) {
 
 	if len(centers) == 0 || attack == component.CombatAttackNone {
@@ -134,7 +134,7 @@ func (s *ExplosionSystem) resolve(owner core.Entity, centers []event.ExplosionCe
 	}
 
 	for i := range centers {
-		s.resolveArea(cursor, centers[i].X, centers[i].Y, radius, attack)
+		s.resolveArea(id, cursor, centers[i].X, centers[i].Y, radius, attack)
 	}
 	s.statTriggered.Add(int64(len(centers)))
 }
@@ -143,7 +143,7 @@ func (s *ExplosionSystem) resolve(owner core.Entity, centers []event.ExplosionCe
 // Player entities are never selected here; their producer resolves its own domain
 // before the request crosses. The header test stands in for an entity-domain test and
 // can become one once a player-domain composite exists.
-func (s *ExplosionSystem) resolveArea(cursor core.Entity, centerX, centerY int, radius float64, attack component.CombatAttackType) {
+func (s *ExplosionSystem) resolveArea(id event.CrossingID, cursor core.Entity, centerX, centerY int, radius float64, attack component.CombatAttackType) {
 	config := s.world.Resources.Config
 
 	radiusCells := int(radius)
@@ -205,6 +205,7 @@ func (s *ExplosionSystem) resolveArea(cursor core.Entity, centerX, centerY int, 
 
 	for i := range s.compositeBuf {
 		s.world.PushLocal(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+			CrossingID:   id,
 			AttackType:   attack,
 			OwnerEntity:  cursor,
 			OriginEntity: cursor,

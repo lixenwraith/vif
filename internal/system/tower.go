@@ -280,21 +280,19 @@ func (s *TowerSystem) findTowerPosition(radiusX, radiusY int) (int, int, bool) {
 	rangeX := maxCX - minCX + 1
 	rangeY := maxCY - minCY + 1
 
-	lastCX, lastCY := config.MapWidth/2, config.MapHeight/2
+	var cells [parameter.TowerSpawnMaxAttempts]vmath.Point
+	drawSpawnCells(s.rng, cells[:], minCX, rangeX, minCY, rangeY)
 
-	for range parameter.TowerSpawnMaxAttempts {
-		cx := minCX + s.rng.Intn(rangeX)
-		cy := minCY + s.rng.Intn(rangeY)
-		lastCX, lastCY = cx, cy
-
-		if s.validateTowerPosition(cx, cy, radiusX, radiusY) {
-			return cx, cy, true
+	for i := range cells {
+		if s.validateTowerPosition(cells[i].X, cells[i].Y, radiusX, radiusY) {
+			return cells[i].X, cells[i].Y, true
 		}
 	}
 
 	// Spiral fallback from last attempt
+	last := cells[len(cells)-1]
 	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
-		lastCX, lastCY,
+		last.X, last.Y,
 		width, height,
 		radiusX, radiusY,
 		component.WallBlockSpawn,

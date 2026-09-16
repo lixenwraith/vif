@@ -1207,3 +1207,56 @@ func TestCorrectionLeavesPlayerStreamsAlone(t *testing.T) {
 		t.Fatalf("a correction moved the receiver's own streams:\n  before %v\n  after  %v", own, got)
 	}
 }
+
+// TestACorrectionDoesNotStallTheOwnerStateSync is the D-13 cadence boundary. The
+// authority mirrors a guest's cursor from a sync up to NetworkSyncTicks old, so a
+// correction can carry a stale mirror to everyone else. That is bounded only because
+// an install leaves the sync sequence alone: an install adopts the capture's tick, and
+// a sequence that followed it would restart below what a receiver had already applied.
+func TestACorrectionDoesNotStallTheOwnerStateSync(t *testing.T) {
+	t.Parallel()
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+
+	var cursor core.Entity
+	guest.World().RunSafe(func() { cursor = guest.World().Resources.Player.Slot(1) })
+
+	syncOnce := func() {
+		for range parameter.NetworkSyncTicks + 2 {
+			advance()
+		}
+	}
+	arm := func() int {
+		guest.Context().PushLocal(event.EventWeaponAddRequest,
+			&event.WeaponAddRequestPayload{Entity: cursor, Weapon: component.WeaponRod})
+		guest.Settle()
+		return rodCharges(guest, cursor)
+	}
+
+	first := arm()
+	syncOnce()
+	if got := rodCharges(host, cursor); got != first {
+		t.Fatalf("host mirror = %d charges after a sync period, the guest authored %d", got, first)
+	}
+
+	// Run the guest several sync periods past the host, so the correction it installs
+	// describes a tick it has left and the install rewinds its clock across one.
+	for range 4 * parameter.NetworkSyncTicks {
+		guest.Tick(1)
+	}
+	ahead := guest.Position().Tick
+	deliverCorrectionNow(t, host, []*App{guest}, advance)
+	if guest.Position().Tick >= ahead {
+		t.Fatalf("guest tick %d did not rewind from %d; the assertion below proves nothing",
+			guest.Position().Tick, ahead)
+	}
+
+	second := arm()
+	if second == first {
+		t.Fatal("the second grant did not change the guest's loadout")
+	}
+	syncOnce()
+	if got := rodCharges(host, cursor); got != second {
+		t.Fatalf("host mirror stalled at %d charges after an install rewound the guest, it authored %d",
+			got, second)
+	}
+}

@@ -92,9 +92,13 @@ artifact on each instance — a combat knockback in another direction, not a rou
 difference. A crossing therefore carries its own identity, `event.CrossingID`: the
 producing participant and that source's wire sequence, stamped by the crossing path
 before the frame is encoded, so the producer's own copy and every peer's hold one.
-A value of this kind is seeded from that identity and the stream is left alone. A
-re-derived event has no identity and uses the stream, which is correct there:
-every instance produces it at the same tick in the same order.
+A value of this kind is seeded from that identity and the stream is left alone.
+
+Identity descends with the derivation. A re-derived event uses the stream only when
+every instance produces it at the same tick, and an event derived from a crossing is
+not that: its root applied a lead earlier on the producer, so it inherits the root's
+identity. A combat chain and an explosion's per-composite hits are both that shape.
+An event with no crossing above it has no identity and uses the stream, correctly.
 
 The same asymmetry decides the *effect*, not only the value. Two crossings on one
 target apply in opposite orders on their two producers, each applying its own
@@ -168,17 +172,21 @@ An active wind draws force and direction exactly once per tick before iterating
 entities, so different local drain populations cannot move the Shared RNG.
 
 A Shared stream orders draws by tick, so only work every instance performs at the
-same tick may take one. Two kinds of work are not that, and both take a seed
-instead of a position, leaving the stream where it was:
+same tick, in the same number, may take one. The count matters as much as the tick:
+a stream that advanced a different number of steps on two instances hands every
+later draw to the wrong work, permanently, because nothing between corrections
+rewinds a sequence. Three shapes fail that test, and each has its own remedy:
 
-- A **crossing** is seeded from its own artifact (D-3), because it applies a playout
-  lead apart on producer and receiver.
-- A **conditional** draw is seeded from the tick and the entities it concerns,
-  because whether it happens at all depends on live positions and on a population a
-  crossing thins a lead apart. Soft collision is the case: one swarm member the
+- A **crossing**, and anything derived from one, is seeded from the artifact (D-3)
+  rather than from a position the two reach a lead apart.
+- A **conditional** draw whose count depends on the entities it concerns is seeded
+  from the tick and that pair. Soft collision is the case: one swarm member the
   producer had already killed cost the two instances a different number of draws,
-  and from that tick every shared impulse on either side read a different point in
-  one sequence — a swarm that jittered under a cleaner and never settled.
+  and from that tick every shared impulse read a different point in one sequence.
+- A draw a **filter** stands in front of is moved ahead of the filter instead, so
+  the count is the budget rather than the outcome. Spawn placement retries and the
+  storm's burst are that shape: they test live cursor cells, a wall set a correction
+  repairs, and an aim, and every one of those differs across the lead.
 
 ### D-9 — Entity identity is domain-local and deterministic
 
@@ -239,12 +247,19 @@ split by domain so a Shared record never names a Player entity.
 
 ### D-13 — Owner-authored Shared values have one writer
 
-A Shared cursor carries values written by exactly one instance and transported
-rather than re-derived:
+A Shared cursor carries values written by exactly one instance rather than
+re-derived:
 
 - energy, heat, boost, shield, weapon, and cursor combat values;
 - `CursorComponent.Control` and `PeerID`;
 - `CursorViewComponent`, `PingComponent`, and `PulseComponent` presentation.
+
+Every one of them is excluded from what a receiver repairs for a cursor it does not
+own, and every one but `PingComponent` is also transported on the owner-state sync.
+Ping is the exception because nothing reads a remote cursor's copy — the renderer
+reads the local cursor's — so a mirror frozen at its creation value costs nothing.
+The two lists are otherwise the same and have to stay so: a value on one and not the
+other is either hashed and unrepairable, or repairable and silently overwritten.
 
 Position is different: it is Shared and changes through
 `EventCursorMoveRequest`. Protection is a deterministic creation constant.
@@ -253,6 +268,12 @@ A capture carries owner-authored values so a joiner can materialise remote
 cursors. During an in-session correction, the receiver preserves the values for
 cursors it authors and rebuilds control/roster binding from participant identity.
 No shared-profile system computes a remote owner's values.
+
+The sync runs every `NetworkSyncTicks`, so the authority's mirror of a guest's
+cursor is that stale at worst and a correction can carry the stale copy to a third
+participant. What bounds it is that an install adopts the capture's tick but leaves
+the sync sequence and its cadence counter alone, so the owner's next sync still
+lands over whatever the correction wrote.
 
 ### D-14 — Map bounds are Shared authority
 

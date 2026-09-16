@@ -142,3 +142,53 @@ func TestSoftCollisionImpulseFollowsTheTickAndThePair(t *testing.T) {
 			first.Kinetic, got.Kinetic)
 	}
 }
+
+// TestASharedSpawnDrawsItsPlacementBudgetBeforeFiltering is D-8 for a placement
+// retry loop. Whether a candidate is rejected depends on live cursor positions and
+// on a wall set a correction repairs, and two instances hold both a playout lead
+// apart, so a stream advanced once per attempt would land at a different position on
+// each — permanently, because nothing between corrections rewinds a shared sequence.
+func TestASharedSpawnDrawsItsPlacementBudgetBeforeFiltering(t *testing.T) {
+	// Each spawner runs twice from one seed: once as it falls, then with the cell it
+	// chose blocked by whatever its own filter reads, which forces that rejection.
+	for _, sp := range []struct {
+		name  string
+		run   func(*engine.World) (int, int, uint64)
+		block func(*engine.World, core.Entity, int, int)
+	}{
+		{"pylon", func(w *engine.World) (int, int, uint64) {
+			s := NewPylonSystem(w).(*PylonSystem)
+			x, y, _ := s.findRandomPylonPosition(4, 2)
+			return x, y, s.rng.State()
+		}, func(w *engine.World, cursor core.Entity, x, y int) {
+			w.Positions.SetPosition(cursor, component.PositionComponent{X: x, Y: y})
+		}},
+		{"gold", func(w *engine.World) (int, int, uint64) {
+			s := NewGoldSystem(w).(*GoldSystem)
+			x, y := s.findValidPosition(10)
+			return x, y, s.rng.State()
+		}, func(w *engine.World, cursor core.Entity, x, y int) {
+			w.Positions.SetPosition(cursor, component.PositionComponent{X: x, Y: y})
+		}},
+		{"tower", func(w *engine.World) (int, int, uint64) {
+			s := NewTowerSystem(w).(*TowerSystem)
+			x, y, _ := s.findTowerPosition(4, 2)
+			return x, y, s.rng.State()
+		}, func(w *engine.World, _ core.Entity, x, y int) { spawnWall(w, x, y) }},
+	} {
+		t.Run(sp.name, func(t *testing.T) {
+			w, _, _ := testCursorWorld(t)
+			x, y, want := sp.run(w)
+
+			w, cursor, _ := testCursorWorld(t)
+			sp.block(w, cursor, x, y)
+			got, gotY, state := sp.run(w)
+			if got == x && gotY == y {
+				t.Fatalf("blocking %d,%d did not reject it; the assertion below proves nothing", x, y)
+			}
+			if state != want {
+				t.Fatalf("stream = %#x with the first candidate rejected, %#x without", state, want)
+			}
+		})
+	}
+}

@@ -527,19 +527,11 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 		return -1, -1
 	}
 
-	// Every candidate is drawn before any is examined. The filters below read
-	// cursor positions, and two instances hold a cursor at different points of the
-	// receive lead (§3.1), so a draw count that depended on them would leave the
-	// shared gold stream at a different position on each — and every later
-	// sequence, not just this one, would then differ until a correction.
-	var cx, cy [parameter.GoldSpawnMaxAttempts]int
-	for i := range parameter.GoldSpawnMaxAttempts {
-		cx[i] = s.rng.Intn(config.MapWidth)
-		cy[i] = s.rng.Intn(config.MapHeight)
-	}
+	var cells [parameter.GoldSpawnMaxAttempts]vmath.Point
+	drawSpawnCells(s.rng, cells[:], 0, config.MapWidth, 0, config.MapHeight)
 
-	for i := range parameter.GoldSpawnMaxAttempts {
-		x, y := cx[i], cy[i]
+	for i := range cells {
+		x, y := cells[i].X, cells[i].Y
 
 		// Check if far enough from every cursor.
 		nearCursor := false

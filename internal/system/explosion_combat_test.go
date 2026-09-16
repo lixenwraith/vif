@@ -53,3 +53,43 @@ func TestExplosionCombatDoesNotDependOnVisualMergeState(t *testing.T) {
 		t.Fatalf("area attack = %#v, want header %d member %d", events[0].Payload, header, member)
 	}
 }
+
+// TestExplosionHitsCarryTheArtifactIdentity is D-3 one step down the derivation.
+// The geometry crosses and its per-target hits are re-derived (D-5), but not at one
+// tick: the producer resolves them at once and every receiver a playout lead later.
+// Without the artifact's identity on them, their knockback would come from the
+// shared stream the two instances stand at different positions in (D-8).
+func TestExplosionHitsCarryTheArtifactIdentity(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	explosion := NewExplosionSystem(w).(*ExplosionSystem)
+	id := event.CrossingID{CrossingSource: 2, CrossingSeq: 9}
+
+	header := w.CreateEntity(core.DomainShared)
+	member := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(header, component.PositionComponent{X: 7, Y: 5})
+	w.Positions.SetPosition(member, component.PositionComponent{X: 7, Y: 5})
+	w.Components.Header.SetComponent(header, component.HeaderComponent{
+		Type: component.CompositeTypeUnit, MemberEntries: []component.MemberEntry{{Entity: member}},
+	})
+	w.Components.Member.SetComponent(member, component.MemberComponent{HeaderEntity: header})
+	w.Components.Combat.SetComponent(header, component.CombatComponent{
+		OwnerEntity: header, CombatEntityType: component.CombatEntityStorm, HitPoints: 10,
+	})
+
+	explosion.HandleEvent(event.GameEvent{
+		Type: event.EventExplosionRequest,
+		Payload: &event.ExplosionRequestPayload{
+			CrossingID: id, Entity: cursor, X: 7, Y: 5, Radius: 4,
+			Attack: component.CombatAttackExplosion,
+		},
+	})
+
+	events := w.Resources.Event.Queue.Consume()
+	if len(events) != 1 {
+		t.Fatalf("derived events = %#v, want one shared area attack", events)
+	}
+	p, ok := events[0].Payload.(*event.CombatAttackAreaRequestPayload)
+	if !ok || p.CrossingID != id {
+		t.Fatalf("derived hit identity = %#v, want the explosion's %#v", events[0].Payload, id)
+	}
+}

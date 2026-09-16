@@ -302,12 +302,11 @@ func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, b
 	rangeX := maxCX - minCX + 1
 	rangeY := maxCY - minCY + 1
 
-	lastCX, lastCY := config.MapWidth/2, config.MapHeight/2
+	var cells [parameter.PylonSpawnMaxAttempts]vmath.Point
+	drawSpawnCells(s.rng, cells[:], minCX, rangeX, minCY, rangeY)
 
-	for range parameter.PylonSpawnMaxAttempts {
-		cx := minCX + s.rng.Intn(rangeX)
-		cy := minCY + s.rng.Intn(rangeY)
-		lastCX, lastCY = cx, cy
+	for i := range cells {
+		cx, cy := cells[i].X, cells[i].Y
 
 		// Cursor exclusion
 		excluded := false
@@ -333,8 +332,9 @@ func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, b
 	}
 
 	// Tier 2: Spiral from last random attempt center
+	last := cells[len(cells)-1]
 	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
-		lastCX, lastCY,
+		last.X, last.Y,
 		width, height,
 		radiusX, radiusY, // anchor offset = radius (center to top-left)
 		component.WallBlockSpawn,

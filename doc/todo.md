@@ -124,6 +124,21 @@ cadence of credit rather than a permanent one, but the boost it awards in the
 meantime is player-domain and is not. The knockback window's answer was a budget
 per attacker; credit's is a choice about who owns the kill.
 
+### Agree which knockback opens a shared window
+
+- Priority: P2
+- Affected files: `internal/component/combat.go`, `internal/system/combat.go`
+- Prerequisite: a decision on whether a crossing-carried hit may ever override
+
+`SpendKineticImmunity` reports `opened` from a timer the producer starts a playout
+lead before everyone else, and `opened` is what picks the override profile over the
+additive one. Measured on a two-participant mesh at the floored lead: the window
+opens on the producer at +1 and on the receiver at +4, so for 6 of its 7 ticks the
+two instances would answer `opened` differently for a second attacker's hit — one
+replacing the body's velocity where the other adds to it. The per-attacker budget
+and the additive join closed the composition; which hit owns the override is the
+same choice as kill credit above.
+
 ### Decide what a producer's own crossing costs the authority's copy
 
 - Priority: P2

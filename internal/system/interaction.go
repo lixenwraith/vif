@@ -23,6 +23,16 @@ type CursorOverlaps struct {
 	Count   int
 }
 
+// drawSpawnCells fills dst with placement candidates before any of them is
+// examined. The filters that follow read live positions, and two instances hold a
+// cursor a playout lead apart, so a draw count that depended on one would leave the
+// shared stream at a different position on each — and every later spawn with it (D-8).
+func drawSpawnCells(rng *vmath.FastRand, dst []vmath.Point, minX, rangeX, minY, rangeY int) {
+	for i := range dst {
+		dst[i] = vmath.Point{X: minX + rng.Intn(rangeX), Y: minY + rng.Intn(rangeY)}
+	}
+}
+
 // ClosestCursor returns the nearest rostered cursor in deterministic slot order.
 func ClosestCursor(w *engine.World, fromX, fromY int) (core.Entity, int, int, bool) {
 	var best core.Entity

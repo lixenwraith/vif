@@ -811,7 +811,6 @@ func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequest
 	if !ok {
 		return false
 	}
-	rng := s.knockbackStream(payload.CrossingID, targetEntity, uint64(payload.ChainDepth)^uint64(targetEntity))
 
 	// Determine origin position for radial direction
 	var originX, originY int
@@ -829,6 +828,12 @@ func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequest
 		originX = originPos.X
 		originY = originPos.Y
 	}
+
+	// One artifact resolves one request per centre per composite, so the centre
+	// joins the salt: two centres of one batch reaching the same body would
+	// otherwise seed both impulses identically.
+	rng := s.knockbackStream(payload.CrossingID, targetEntity,
+		uint64(payload.ChainDepth)^uint64(targetEntity)^uint64(originX)<<20^uint64(originY))
 
 	// Radial direction: origin → target (pushes outward)
 	radialX := float64(targetPos.X - originX)

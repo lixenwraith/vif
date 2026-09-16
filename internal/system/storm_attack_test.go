@@ -86,3 +86,47 @@ func TestStormRedBurstRefreshesSharedAim(t *testing.T) {
 			circleComp.AttackTargetX, circleComp.AttackTargetY, second)
 	}
 }
+
+// TestStormDrawsBeforeItReadsLivePositions is D-8 for the two conditional draws a
+// storm makes. Both sit behind a test on Shared state two instances hold a playout
+// lead apart — the red burst behind its aim, the spawn behind a wall search that
+// abandons the whole storm — so a draw behind either would leave the storm stream at
+// a different position on each, and with it every later blue angle and spawn height.
+func TestStormDrawsBeforeItReadsLivePositions(t *testing.T) {
+	redBurst := func(targetX int) uint64 {
+		w, _, _ := testCursorWorld(t)
+		storm := NewStormSystem(w).(*StormSystem)
+		circle := w.CreateEntity(core.DomainShared)
+		w.Positions.SetPosition(circle, component.PositionComponent{X: 10, Y: 5})
+		w.Components.StormCircle.SetComponent(circle, component.StormCircleComponent{
+			Index:           int(component.StormCircleRed),
+			AttackState:     component.StormCircleAttackActive,
+			AttackRemaining: parameter.StormRedBurstDuration,
+			AttackTargetX:   targetX, AttackTargetY: 5,
+		})
+		c, _ := w.Components.StormCircle.GetPtr(circle)
+		storm.processRedAttack(c, 10, 5)
+		return storm.rng.State()
+	}
+	// An aim on the circle's own cell is the burst that fires nothing.
+	if far, none := redBurst(30), redBurst(10); far != none {
+		t.Fatalf("red burst stream = %#x with a live aim, %#x with none", far, none)
+	}
+
+	spawn := func(blocked bool) uint64 {
+		w, _, _ := testCursorWorld(t)
+		storm := NewStormSystem(w).(*StormSystem)
+		if blocked {
+			for y := range 24 {
+				for x := range 40 {
+					spawnWall(w, x, y)
+				}
+			}
+		}
+		storm.spawnStorm()
+		return storm.rng.State()
+	}
+	if open, walled := spawn(false), spawn(true); open != walled {
+		t.Fatalf("spawn stream = %#x with room, %#x with none", open, walled)
+	}
+}

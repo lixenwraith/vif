@@ -521,7 +521,13 @@ const (
 
 // ExplosionRequestPayload is the D-3 combat artifact for one explosion center.
 // Attack has no safe zero value; producers must set it explicitly.
+//
+// It carries CrossingID because the per-target hits it resolves into are re-derived
+// (D-5) but not at one tick: this artifact applies at once on its producer and a
+// playout lead later everywhere else, so their knockback must come from the
+// artifact rather than from a shared stream position the two reach apart (D-3).
 type ExplosionRequestPayload struct {
+	CrossingID
 	Entity core.Entity                `toml:"entity"` // Owner cursor, credited for damage
 	X      int                        `toml:"x"`
 	Y      int                        `toml:"y"`
@@ -534,6 +540,7 @@ type ExplosionRequestPayload struct {
 // Producers must truncate Centers at parameter.ExplosionRequestCenterCap so a
 // map-wide detonation cannot flood the event queue.
 type ExplosionBatchRequestPayload struct {
+	CrossingID
 	Centers []ExplosionCenterEntry
 	Entity  core.Entity
 	Radius  float64

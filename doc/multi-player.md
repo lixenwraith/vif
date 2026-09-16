@@ -668,7 +668,12 @@ entry says what is actually absent rather than what is imperfect, and how to see
     sub-cell positions each tick. The gap opens over the lead, holds, and closes at
     the next correction. Two participants hitting one body used to be fifteen cells
     apart and pointing opposite ways; that was the kinetic immunity latch and the
-    override join, and both are closed.
+    override join, and the composition is closed. What the same lead still moves is
+    the window's *phase* — it opens on the producer and a lead later everywhere else
+    — so which hit `SpendKineticImmunity` reports as opening it, and therefore which
+    one overrides rather than adds, is still answered differently across the lead.
+    That is one attacker's velocity rather than fifteen cells, and it is in
+    `doc/todo.md` as a choice about who owns the override.
 
     Three ways to close the rest, none of them free:
 
@@ -687,9 +692,12 @@ two-participant and mesh convergence, selective repair and fallback, replay
 retention, correction ordering, join/reconnect, link shaping, relay retention,
 authority succession, the playout lead's choice over a shaped link, the correction
 playout buffer, the knockback an artifact rather than a stream position determines,
-the per-attacker window and additive join that make two participants' knockbacks
-compose the same way in either order, the domain a capture's RNG streams may carry,
-the agreed tick a shared-identity crossing waits for on its own producer, and the
+the identity an explosion's re-derived hits inherit from it, the per-attacker window
+and additive join that make two participants' knockbacks compose the same way in
+either order, the domain a capture's RNG streams may carry, the placement budget and
+the storm burst a shared stream draws before it reads a live position, the owner-state
+sync an install must not stall, the agreed tick a shared-identity crossing waits for
+on its own producer, and the
 peer link and succession chain rules that make a successor reachable. It also forces a capture to enter and retire a quasar while
 the receiver skips the release transition, and round-trips a delayed transition
 action by compiled identity. Run the generation and repository gates after

@@ -313,6 +313,14 @@ func (s *StormSystem) spawnStorm() {
 
 	var circleInfos [component.StormCircleCount]circleSpawnInfo
 
+	// Every circle's Z jitter is drawn before any placement is validated: the loop
+	// below abandons the whole spawn on the first circle that finds no room, and the
+	// wall set it searches is Shared state a correction repairs (D-8).
+	var zJitter [component.StormCircleCount]float64
+	for i := range zJitter {
+		zJitter[i] = float64(s.rng.Intn(6)-3) * 0.8
+	}
+
 	// 1. Calculate target positions and validate all circles
 	for i := range component.StormCircleCount {
 		angle := angleOffsets[i]
@@ -343,7 +351,7 @@ func (s *StormSystem) spawnStorm() {
 			vel3D: vmath.Vec3F{
 				X: -initialSpeed * vmath.SinF(angle),
 				Y: initialSpeed * vmath.CosF(angle) * 0.5,
-				Z: float64(s.rng.Intn(6)-3) * 0.8,
+				Z: zJitter[i],
 			},
 		}
 	}
@@ -1285,6 +1293,12 @@ func (s *StormSystem) processRedAttack(
 
 	s.statRedActiveFrame.Add(1)
 
+	// Drawn before the aim is examined: whether the burst fires depends on live
+	// Shared positions two instances hold a playout lead apart, and a draw behind
+	// that test would leave the storm stream — which also decides the blue attack's
+	// angle and a circle's spawn height — at a different position on each (D-8).
+	spreadFrac := s.rng.Float64() - 0.5 // [-0.5, 0.5)
+
 	// Direction from circle center to the selected cursor's current position.
 	dx := float64(circleComp.AttackTargetX - circleX)
 	dy := float64(circleComp.AttackTargetY - circleY)
@@ -1304,8 +1318,6 @@ func (s *StormSystem) processRedAttack(
 	originX := circleCenterX + spawnOffX
 	originY := circleCenterY + spawnOffY
 
-	// Random spread within cone half-angle
-	spreadFrac := s.rng.Float64() - 0.5 // [-0.5, 0.5)
 	spreadRad := spreadFrac * 2.0 * parameter.StormRedBulletSpreadHalfAngle
 	bulletDirX, bulletDirY := vmath.RotateVectorF(dx, dy, spreadRad)
 
