@@ -262,16 +262,19 @@ materialization, stagger timing, and failed-placement backoff.
 
 ## Fleet logging
 
-### Bound a LogWisp stream client that never reads
+### Repin LogWisp past the fleet stream fixes
 
-- Priority: P3
-- Affected files: `deploy/logwisp/aggregator.toml`
-- Prerequisite: the log route reaching anything wider than node loopback
+- Priority: P1
+- Affected files: `deploy/logwisp/REVISION`
+- Prerequisite: the quiet-stream keepalive and the rotated-file resume reaching
+  LogWisp `main`, which the installer requires the pin to descend from
 
-A `HEAD` on LogWisp's SSE path registers a client that only leaves when its
-connection closes, so `max_connections` (32) is reachable without reading a byte.
-The allocator proxy closes each upstream connection, which covers the deployed
-loopback path; a public route would need an upstream bound of its own.
+`REVISION` names v0.18.1, which predates both. Until it moves, a vacant node still
+idle-expires a connected viewer and evicts it on the next session's first record,
+and a session crossing the 8 MiB file cap still replays its rotated log whole,
+spending the rate limit on duplicates while live records drop.
+[Deploying the session fleet](kube_docker_deploy.md) §10 states what the pin must
+carry.
 
 ### Render the session log level from the template
 
