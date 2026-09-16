@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // knockTarget builds one kinetic combat entity in the given domain
@@ -83,40 +84,61 @@ func TestCombatKnockbackFollowsTheArtifactNotTheStream(t *testing.T) {
 	}
 }
 
-// TestSoftCollisionImpulseDrawsFromTheTargetsStream is the same assertion on the
-// other D-8 dual system; tryApplyCollision takes the rule directly, so no profile
-// lookup runs between the call and the draw.
-func TestSoftCollisionImpulseDrawsFromTheTargetsStream(t *testing.T) {
+// TestSoftCollisionImpulseFollowsTheTickAndThePair is D-8 where a stream stops. A
+// collision is conditional on live positions and on a population a crossing thins a
+// playout lead apart, so it is not work every instance does at the same tick and
+// may not take a shared stream position: one member the producer has already killed
+// would cost the two a different number of draws and desync every later impulse.
+func TestSoftCollisionImpulseFollowsTheTickAndThePair(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	s := NewSoftCollisionSystem(w).(*SoftCollisionSystem)
+	s.Init()
 
 	rule := s.matrix[component.SpeciesSwarm][component.SpeciesSwarm]
 	if rule == nil {
 		t.Fatal("swarm-to-swarm collision rule is absent")
 	}
+	source := knockTarget(w, core.DomainShared, 15, 10)
 	player := knockTarget(w, core.DomainPlayer, 10, 10)
 	shared := knockTarget(w, core.DomainShared, 14, 10)
 
-	beforeShared, beforePlayer := s.rngShared.State(), s.rngPlayer.State()
+	beforePlayer := s.rngPlayer.State()
 	hits := s.statCollisions.Load()
-	s.tryApplyCollision(11, 10, player, rule)
+	s.tryApplyCollision(source, 11, 10, player, rule)
 	if s.statCollisions.Load() == hits {
 		t.Fatal("player impulse did not land; the source is outside the collision ellipse")
-	}
-	if got := s.rngShared.State(); got != beforeShared {
-		t.Fatalf("player impulse advanced the shared stream: %x -> %x", beforeShared, got)
 	}
 	if s.rngPlayer.State() == beforePlayer {
 		t.Fatal("player impulse drew nothing; this profile is not randomized")
 	}
 
 	beforePlayer = s.rngPlayer.State()
-	s.tryApplyCollision(15, 10, shared, rule)
-	if s.rngShared.State() == beforeShared {
-		t.Fatal("shared impulse drew nothing; the assertion above proves nothing")
-	}
+	s.tryApplyCollision(source, 15, 10, shared, rule)
+	first, _ := w.Components.Kinetic.GetComponent(shared)
 	if s.rngPlayer.State() != beforePlayer {
 		t.Fatal("shared impulse advanced the player stream")
+	}
+	if first.Kinetic == (physics.Kinetic{}) {
+		t.Fatal("shared impulse did nothing; the comparison below proves nothing")
+	}
+
+	// The other instance still holds a member this one's producer already killed, so
+	// it reaches the same pair having resolved a different number of collisions.
+	w2 := engine.NewWorld()
+	engine.NewGameContextWithClock(w2, 40, 24, engine.NewManualClock())
+	s2 := NewSoftCollisionSystem(w2).(*SoftCollisionSystem)
+	s2.Init()
+	source2 := knockTarget(w2, core.DomainShared, 15, 10)
+	shared2 := knockTarget(w2, core.DomainShared, 14, 10)
+	doomed := knockTarget(w2, core.DomainShared, 16, 10)
+	if source2 != source || shared2 != shared {
+		t.Fatalf("shared identity differs between instances: %d/%d", source2, shared2)
+	}
+	s2.tryApplyCollision(source2, 15, 10, doomed, rule)
+	s2.tryApplyCollision(source2, 15, 10, shared2, rule)
+	if got, _ := w2.Components.Kinetic.GetComponent(shared2); got != first {
+		t.Fatalf("one extra collision moved the pair's impulse: %v here, %v there",
+			first.Kinetic, got.Kinetic)
 	}
 }

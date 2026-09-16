@@ -139,7 +139,9 @@ is positive.
 
 Soft collision is a separate pre-motion pass. It applies randomized instantaneous
 scatter between configured species pairs and continuous flocking separation for
-configured targets. Pylons can be sources without being movable targets. Dust is
+configured targets. A shared target's scatter is seeded from the tick and the
+colliding pair rather than drawn from the Shared stream, because whether a
+collision happens at all depends on live positions (D-8). Pylons can be sources without being movable targets. Dust is
 another producer: it aggregates many particle hits per drain and applies one
 diminishing-return velocity delta.
 

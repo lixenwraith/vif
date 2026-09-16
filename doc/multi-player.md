@@ -107,14 +107,26 @@ numbering.
 | `EventGameResetRequest` | replaces the run |
 | `EventSwarmSpawnRequest` / `EventQuasarSpawnRequest` | allocates a shared species from a drain fusion |
 | `EventDrainDefeated` | advances the shared progression a region gates its spawns on |
+| `EventCursorDefeatState` | folds into `session.all_defeated`, which `MonitorGlobalReset` rebuilds the level on |
 
-The last row is the least obvious and was the storm seen flickering into
-existence: a producer that counted its ninth drain a lead early entered the
-escalation a lead early and built that region's world before anyone else had it,
-so the next correction deleted what it made and the one after put it back. Nobody's
-input waits on any of these. What the player did is the drain dying, which is
-Player-domain and immediate; the shared consequence waits the same lead everywhere
-instead of on all but one instance.
+The last two are the least obvious and each was a visible defect. A producer that
+counted its ninth drain a lead early entered the escalation a lead early and built
+that region's world before anyone else had it — the storm seen flickering into
+existence. A participant whose own cursor went down flipped its latch a lead before
+the rest and ran `MonitorGlobalReset` on its own: it cancelled every region, cleared
+the level and strobed, and the next correction — published while the authority was
+still in `MonitorActive` — put the pre-reset world back. The player saw the strobe
+and no reset, and went on taking hits that should each have ended the run.
+
+Nobody's input waits on any of these. What the player did is the drain dying or the
+cursor going down, both Player-domain and immediate; the shared consequence waits
+the same lead everywhere instead of on all but one instance.
+
+A latch the barrier feeds needs a second rule: whatever the agreed artifact sets
+must be cleared by the world it rebuilds, not by a later artifact. `MetaSystem`
+clears the defeat latch on the `EventLevelSetup` that carries `clear_entities`,
+because the un-defeat crossing arrives a lead after `MonitorArm` has already
+re-armed the roster — long enough for the guard to fire a second reset.
 
 Wind start/cancel are the opposite case: they are `ClassShared` outputs suitable
 for a Shared FSM transition. They appear identically in every journal but never

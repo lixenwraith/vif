@@ -213,6 +213,17 @@ corrections and should keep refusing it.
 Both are owner-authored, so a receiver never writes them and no capture carries
 them. The state is unreachable today, which is why it is a latent hole.
 
+### Drop the three shared streams nothing draws from
+
+- Priority: P3
+- Affected files: `internal/system/quasar.go`, `swarm.go`, `snake.go`
+- Prerequisite: retune `TestASlowPeerDoesNotSlowAFastOne`'s shaped budget
+
+Each issues a Shared stream in `Init` and never draws from it, so every capture
+carries and every correction restores three dead positions. Removing them shrinks
+the capture enough that the cadence test's 500 B/tick shape stops saturating, so it
+needs a lower budget in the same change. Costs a capture schema bump.
+
 ### Let a refused link cost one participant, not the session
 
 - Priority: P2

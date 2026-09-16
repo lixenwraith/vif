@@ -745,14 +745,15 @@ func (s *NetworkSystem) AppliedCrossingFences() network.CrossingFences {
 }
 
 // barrierBound names the artifacts that apply at one agreed tick on every instance,
-// the producer included: the ones deciding what the world *is* — roster, run,
-// shared identity, and the progression a region gates its spawns on — not what
-// happens in a world both instances already hold, whose gap a correction repairs.
-// Nobody's input waits on them. See multi-player.md §3.1.
+// the producer included: the ones deciding what the world *is* — roster, run, shared
+// identity, the progression a region gates spawns on, and the defeat that rebuilds
+// the level — not what happens in a world both already hold, whose gap a correction
+// repairs. Nobody's input waits on them. See multi-player.md §3.1.
 func barrierBound(et event.EventType) bool {
 	switch et {
 	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameResetRequest,
-		event.EventSwarmSpawnRequest, event.EventQuasarSpawnRequest, event.EventDrainDefeated:
+		event.EventSwarmSpawnRequest, event.EventQuasarSpawnRequest, event.EventDrainDefeated,
+		event.EventCursorDefeatState:
 		return true
 	default:
 		return false

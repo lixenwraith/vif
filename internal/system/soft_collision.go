@@ -49,9 +49,11 @@ type FlockingMatrix [component.SpeciesCount][component.SpeciesCount]*FlockingRul
 type SoftCollisionSystem struct {
 	world *engine.World
 
-	// Impulse streams, selected by the target's domain
-	rngShared *vmath.FastRand
-	rngPlayer *vmath.FastRand
+	// sharedRoot seeds a shared impulse from the pair that produced it; rngPlayer
+	// is an ordinary stream because a player impulse is this instance's alone.
+	sharedRoot  uint64
+	rngArtifact vmath.FastRand
+	rngPlayer   *vmath.FastRand
 
 	// Internal position caches (rebuilt each tick)
 	drains  []collisionEntry
@@ -194,7 +196,7 @@ func (s *SoftCollisionSystem) initFlockingMatrix() {
 }
 
 func (s *SoftCollisionSystem) Init() {
-	s.rngShared = s.world.Rand(core.DomainShared, s.Name())
+	s.sharedRoot = vmath.DeriveSeed(s.world.Resources.Rand.DomainRoot(core.DomainShared), s.Name())
 	s.rngPlayer = s.world.Rand(core.DomainPlayer, s.Name())
 	s.clearCaches()
 	s.statCollisions.Store(0)
@@ -365,22 +367,30 @@ func (s *SoftCollisionSystem) processCollisionPair(
 				continue
 			}
 
-			s.tryApplyCollision(src.x, src.y, tgt.entity, rule)
+			s.tryApplyCollision(src.entity, src.x, src.y, tgt.entity, rule)
 		}
 	}
 }
 
-// impulseStream selects the stream by the recipient's domain, so a player impulse
-// never advances the shared sequence.
-func (s *SoftCollisionSystem) impulseStream(e core.Entity) *vmath.FastRand {
-	if e.Domain() == core.DomainPlayer {
+// impulseStream selects the impulse source by the recipient's domain: an ordinary
+// stream for a player target, and for a shared one a seed from the tick and the
+// pair. A stream orders draws by tick and a collision is conditional on live
+// positions, so one member the producer had already killed cost the two instances a
+// different number of draws and desynced every later impulse (D-8). The pair is
+// mixed rather than packed: a domain tag lives in an entity's high bits.
+func (s *SoftCollisionSystem) impulseStream(source, target core.Entity) *vmath.FastRand {
+	if target.Domain() == core.DomainPlayer {
 		return s.rngPlayer
 	}
-	return s.rngShared
+	tick := s.world.Resources.Game.State.GetGameTicks()
+	s.rngArtifact.Reseed(vmath.Mix64(s.sharedRoot ^ tick*0x9E3779B97F4A7C15 ^
+		uint64(source)*0xD6E8FEB86659FD93 ^ uint64(target)))
+	return &s.rngArtifact
 }
 
 // tryApplyCollision checks and applies collision from source position to target entity
 func (s *SoftCollisionSystem) tryApplyCollision(
+	sourceEntity core.Entity,
 	sourceX, sourceY int,
 	targetEntity core.Entity,
 	rule *SoftCollisionRule,
@@ -419,7 +429,8 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 		return
 	}
 
-	impulseX, impulseY := physics.ImpulseFromProfile(radialX, radialY, rule.Profile, s.impulseStream(targetEntity))
+	impulseX, impulseY := physics.ImpulseFromProfile(radialX, radialY, rule.Profile,
+		s.impulseStream(sourceEntity, targetEntity))
 
 	physics.ApplyImpulse(&kineticComp.Kinetic, impulseX, impulseY)
 	s.statCollisions.Add(1)

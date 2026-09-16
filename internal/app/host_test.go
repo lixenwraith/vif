@@ -548,19 +548,58 @@ func TestSessionRosterStartsAndRestartsEveryParticipant(t *testing.T) {
 
 	assertArmed("start")
 
-	// The shared monitor guard is normally published by MetaSystem after every
-	// owner reports defeat. Set the already-folded value identically here so this
-	// test exercises the real MonitorGlobalReset transition without constructing
-	// two complete defeat sequences.
-	for _, a := range apps {
-		a.World().Resources.Status.Bools.Get("session.all_defeated").Store(true)
+	// Each owner drains its own cursor, staggered, because that is the only way the
+	// guard is really reached: defeat is owner-authored and crosses as a derived
+	// artifact, so the two latches would flip a playout lead apart if the crossing
+	// were an ordinary one. The reset replaces the world, so it has to be one reset
+	// at one agreed tick rather than each instance rebuilding on its own.
+	for i, a := range apps {
+		for range i * 2 {
+			tickAll(apps)
+		}
+		a.Context().PushEventOrigin(event.EventEnergySetRequest,
+			&event.EnergySetPayload{Entity: local[i], Value: 0}, event.OriginDebug)
+		a.Context().PushEventOrigin(event.EventHeatSetRequest,
+			&event.HeatSetRequestPayload{Entity: local[i], Value: 0}, event.OriginDebug)
+		a.Settle()
 	}
-	for range 6 {
+
+	resets := make([]uint64, len(apps))
+	for tick := range 12 {
 		tickAll(apps)
+		for i, a := range apps {
+			if monitorRegion(a) == "MonitorGlobalReset" {
+				if resets[i] != 0 {
+					t.Fatalf("participant %d reset twice, at tick %d and %d",
+						i+1, resets[i], tick+1)
+				}
+				resets[i] = uint64(tick + 1)
+			}
+		}
+	}
+	for i, at := range resets {
+		if at == 0 {
+			t.Fatalf("participant %d never reset; every owner had reported defeat", i+1)
+		}
+		if at != resets[0] {
+			t.Fatalf("participant %d rebuilt the world at tick %d and participant 1 at %d",
+				i+1, at, resets[0])
+		}
 	}
 
 	assertArmed("global reset")
 	assertMeshParity(t, apps, 6)
+}
+
+// monitorRegion is the monitor region's active state, which is where the session's
+// lifecycle and its reset live.
+func monitorRegion(a *App) string {
+	for _, r := range a.scheduler.ExportFSM().Regions {
+		if r.Name == "monitor" {
+			return r.ActiveState
+		}
+	}
+	return ""
 }
 
 // TestLiveSessionRefusesAnInstanceLocalPause pins the operator policy: entering a

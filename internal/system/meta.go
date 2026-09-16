@@ -459,6 +459,15 @@ func (s *MetaSystem) handleLevelSetup(payload *event.LevelSetupPayload) {
 	}
 
 	s.world.SetupLevel(width, height, payload.ClearEntities, cropOnResize)
+
+	// A rebuild replaces the world every latched defeat described, and MonitorArm
+	// restores each owner's resources right after it. Leaving the latch set would
+	// re-enter the reset before the un-defeat crossing lands a playout lead later,
+	// resetting a second time. A resize carries ClearEntities false and keeps it.
+	if payload.ClearEntities {
+		s.defeated = [parameter.MaxPlayers]bool{}
+		s.publishAllDefeated()
+	}
 }
 
 // handleScreenResize applies terminal dimensions and reflows the geometry. Sole

@@ -168,8 +168,17 @@ An active wind draws force and direction exactly once per tick before iterating
 entities, so different local drain populations cannot move the Shared RNG.
 
 A Shared stream orders draws by tick, so only work every instance performs at the
-same tick may take one. A crossing is not that work: it is seeded from its own
-artifact instead (D-3), and leaves the stream where it was.
+same tick may take one. Two kinds of work are not that, and both take a seed
+instead of a position, leaving the stream where it was:
+
+- A **crossing** is seeded from its own artifact (D-3), because it applies a playout
+  lead apart on producer and receiver.
+- A **conditional** draw is seeded from the tick and the entities it concerns,
+  because whether it happens at all depends on live positions and on a population a
+  crossing thins a lead apart. Soft collision is the case: one swarm member the
+  producer had already killed cost the two instances a different number of draws,
+  and from that tick every shared impulse on either side read a different point in
+  one sequence — a swarm that jittered under a cleaner and never settled.
 
 ### D-9 — Entity identity is domain-local and deterministic
 
