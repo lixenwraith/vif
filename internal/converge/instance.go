@@ -35,16 +35,15 @@ type Instance interface {
 	Transport() engine.NetworkPort
 	DrainOffTick()
 
-	// CaptureShared reads the shared world, InstallCapture writes one and reports
-	// how far the live world had drifted, and VerifyCaptureIdentity answers whether
-	// a header describes this session without the body a full verification hashes.
+	// InstallCapture projects a capture to this instance's own tick — the clock
+	// never moves backwards — writes the projection, and reports how far the live
+	// world had drifted from it. AdoptAuthority takes a header whose world this
+	// instance provably holds already. VerifyCaptureIdentity answers whether a
+	// header describes this session without the body a full verification hashes.
 	CaptureShared() (snapshot.SharedCapture, error)
 	InstallCapture(snapshot.SharedCapture) (engine.WorldDifference, error)
+	AdoptAuthority(snapshot.CaptureHeader)
 	VerifyCaptureIdentity(snapshot.CaptureHeader) error
-
-	// ReplayLocalSuffix re-applies this instance's own accepted crossings the
-	// installed capture does not contain.
-	ReplayLocalSuffix(snapshot.CaptureHeader)
 
 	// PlayoutLead is the lead the barrier defers by now, the lead one roster and
 	// this instance's links ask for, and the participants past the ceiling. The

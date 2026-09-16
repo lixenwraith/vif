@@ -65,10 +65,12 @@ not update a cursor this instance does not simulate.
 ### D-3 — Cross the smallest shared outcome
 
 When a player mechanic affects Shared state, it emits the smallest artifact that
-fully determines the shared outcome. Ordinary crossings apply immediately on the
-producer and on the receive schedule everywhere else. The host applies requests
-in its own order; its next correction is canonical. An artifact that instead
-decides what the world *is* is barrier-bound and waits on its producer too (D-9).
+fully determines the shared outcome. A crossing applies at one agreed tick, a
+playout lead after its production, on its producer as everywhere else; the D-18
+prediction answers the keystroke in the meantime. The host applies requests in its
+own order; its next correction is canonical. An artifact that instead decides what
+the world *is* is barrier-bound: it also closes the capture fence at production and
+never enters the replay suffix (D-9).
 
 | Effect | Crossing artifact |
 |---|---|
@@ -85,28 +87,29 @@ decides what the world *is* is barrier-bound and waits on its producer too (D-9)
 Effects on Player targets do not cross. Shared follow-up events derived from a
 crossing do not cross again (D-5).
 
-"Fully determines" includes the values a receiver cannot re-derive. An ordinary
-crossing applies at once on its producer and a playout lead later everywhere else,
-so anything drawn from a shared RNG stream at apply time is assigned to a different
-artifact on each instance — a combat knockback in another direction, not a rounding
-difference. A crossing therefore carries its own identity, `event.CrossingID`: the
-producing participant and that source's wire sequence, stamped by the crossing path
-before the frame is encoded, so the producer's own copy and every peer's hold one.
-A value of this kind is seeded from that identity and the stream is left alone.
+"Fully determines" includes the values a receiver cannot re-derive. A crossing
+that misses the lead is applied late by the authority, and a projection re-applies
+one at its own tick over a world the capture describes, so anything drawn from a
+shared RNG stream at apply time would be assigned to a different artifact on each
+instance — a combat knockback in another direction, not a rounding difference. A
+crossing therefore carries its own identity, `event.CrossingID`: the producing
+participant and that source's wire sequence, stamped by the crossing path before
+the frame is encoded, so the producer's own copy and every peer's hold one. A value
+of this kind is seeded from that identity and the stream is left alone.
 
 Identity descends with the derivation. A re-derived event uses the stream only when
 every instance produces it at the same tick, and an event derived from a crossing is
-not that: its root applied a lead earlier on the producer, so it inherits the root's
-identity. A combat chain and an explosion's per-composite hits are both that shape.
-An event with no crossing above it has no identity and uses the stream, correctly.
+not that, for the same two reasons: it inherits the root's identity. A combat chain
+and an explosion's per-composite hits are both that shape. An event with no
+crossing above it has no identity and uses the stream, correctly.
 
-The same asymmetry decides the *effect*, not only the value. Two crossings on one
-target apply in opposite orders on their two producers, each applying its own
-first, so an effect that latches or overwrites keeps a different one on each. A
-shared outcome several crossings may reach must therefore compose the same way
-whichever order it saw them in: a budget per producer rather than one window per
-target, and an accumulation rather than a replacement for the ones that join it.
-Combat's damage and kinetic windows are both of that shape.
+The same lateness decides the *effect*, not only the value. Two crossings on one
+target can apply in opposite orders on two instances when one of them was late, so
+an effect that latches or overwrites keeps a different one on each. A shared
+outcome several crossings may reach must therefore compose the same way whichever
+order it saw them in: a budget per producer rather than one window per target, and
+an accumulation rather than a replacement for the ones that join it. Combat's
+damage and kinetic windows are both of that shape.
 
 Arrival, departure, and full reset are `barrierBound`. They create or destroy
 shared identity, so their producer also waits for the agreed apply tick.
@@ -271,9 +274,9 @@ No shared-profile system computes a remote owner's values.
 
 The sync runs every `NetworkSyncTicks`, so the authority's mirror of a guest's
 cursor is that stale at worst and a correction can carry the stale copy to a third
-participant. What bounds it is that an install adopts the capture's tick but leaves
-the sync sequence and its cadence counter alone, so the owner's next sync still
-lands over whatever the correction wrote.
+participant. What bounds it is that an install leaves the sync sequence and its
+cadence counter alone, so the owner's next sync still lands over whatever the
+correction wrote.
 
 ### D-14 — Map bounds are Shared authority
 
@@ -435,16 +438,14 @@ Correction magnitude is measured during commit. It is telemetry, not a verdict.
 Runtime shared digests identify drift surfaces between corrections but do not
 escalate to a terminal desynchronisation state.
 
-The guest retains its own encoded ordinary crossings and replays the suffix past the
-installed capture's fence for its own source. A hole makes the suffix unavailable and
-selects authority-only recovery.
-
-An install adopts the capture's tick, so a receiver's clock follows the age of
-whichever exchange delivered — one one-way delay for a whole body, three for a
-selective repair. A correction describing a tick this instance has not reached
-therefore waits for it, bounded by the link's measured round trip and never more
-than one at a time, so the offset settles on the slowest path instead of stepping
-between them.
+An install never moves the clock backwards. A capture behind it is projected: the
+staging world takes the capture, this instance's owner-authored values, its own
+encoded ordinary crossings past the capture's fence for its source and the applied
+barrier-bound artifacts due after the capture's tick, simulates to the live tick,
+and the projection is what the live world is reconciled to. A hole in the retained
+suffix makes it unavailable and selects authority-only recovery. A capture ahead of
+the clock waits for its tick inside the lead, newest wins, and one further ahead is
+adopted at its own tick as the jump it is (multi-player.md §3.3, §4.1).
 
 ### D-24 — Cadence adapts; the convergence floor does not
 
@@ -486,14 +487,14 @@ the Shared navigation field answers nearest-target questions and cannot answer
 
 ### 4.1 Receive lead
 
-Ordinary local crossings are published immediately and encoded into the source's
-next epoch for peers. Remote copies wait for an absolute `ApplyTick`. At tick open,
-due frames sort by `(ApplyTick, Source, Seq)` and settle before `BeginTick`.
+A local crossing is scheduled on this instance's own barrier and encoded into the
+source's next epoch for peers; every copy waits for the same absolute `ApplyTick`.
+At tick open, due frames sort by `(ApplyTick, Source, Seq)` and settle before
+`BeginTick`. A typed gold member is the one copy published at once.
 
-A correction may rewind world tick, but never the source's production epoch.
-Peers use `ProducedTick` as a replay key; reusing one after rewind would make a new
-batch look like a duplicate. Crossings produced during catch-up remain in the next
-unsent epoch until world tick reaches it.
+A correction never rewinds the world tick or the source's production epoch. Peers
+use `ProducedTick` as a replay key, and an install moves the epoch forward only
+past empty ones: an epoch holding a pending crossing keeps its key.
 
 Snapshot containment is not a tick comparison. Every ordinary frame uses its
 source's entry in `Header.Crossings`; barrier-bound frames use the capture tick,

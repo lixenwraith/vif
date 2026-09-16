@@ -50,16 +50,17 @@ func (w *World) recordPrediction(et event.EventType, payload any) {
 	w.confirm(overflow)
 }
 
-// ConfirmPredictedDeaths settles the ledger against a world this instance just
-// installed: an entity the authority does not have is proved dead, and one it still
-// holds a convergence floor later is the misprediction it was.
-// Caller MUST hold updateMutex: it reads the installed stores.
-func (w *World) ConfirmPredictedDeaths(authorityTick uint64) {
+// ConfirmPredictedDeaths settles the ledger against an authoritative world at
+// authorityTick, read through alive: an entity the authority does not have is
+// proved dead, and one it still holds a convergence floor later is the
+// misprediction it was. The world asked is the authority's as installed, never a
+// projection of it — a projection re-derives this instance's own predictions.
+func (w *World) ConfirmPredictedDeaths(authorityTick uint64, alive func(core.Entity) bool) {
 	w.settle(func(d predictedDeath) (release, drop bool) {
 		if d.tick > authorityTick {
 			return false, false // the capture predates the death; it claims nothing
 		}
-		if !w.Components.Combat.HasEntity(d.payload.Entity) {
+		if !alive(d.payload.Entity) {
 			return true, false
 		}
 		return false, authorityTick-d.tick > parameter.SnapshotFloorKeyframeTicks

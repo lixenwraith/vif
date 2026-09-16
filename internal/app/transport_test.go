@@ -197,17 +197,15 @@ func TestTransportCarriesCrossingsWithoutEcho(t *testing.T) {
 			t.Fatalf("cursor on participant = (%d, %d), target applied = %t, want %t", pos.X, pos.Y, got, want)
 		}
 	}
-	// The producer applies its own artifact at once; the peer keeps
-	// the playout lead, which is the interpolation buffer for remote action.
-	assertPosition(a, true)
+	// Producer and peer apply it at the one agreed tick: neither holds it before
+	// the lead, both hold it after.
+	assertPosition(a, false)
 	assertPosition(b, false)
-	for range parameter.NetworkBarrierDelayTicks {
+	for range parameter.NetworkBarrierDelayTicks + 1 {
 		a.Tick(1)
 		b.Tick(1)
-		assertPosition(a, true)
 	}
-	a.Tick(1)
-	b.Tick(1)
+	assertPosition(a, true)
 
 	var sentA, recvB, sentB int64
 	a.World().RunSafe(func() {
@@ -330,9 +328,8 @@ func TestTwoLiveParticipantsConvergeOnCorrections(t *testing.T) {
 
 // TestActivatedSessionDefersCrossingBeforeFirstTick closes the lobby/input gap: an
 // artifact produced after the session is activated and before the first tick still
-// reaches its peer at the agreed apply tick, rather than falling into the window
-// between the two. The producer applies its own copy at once; the gap this test
-// exists for is the peer's.
+// applies at the agreed tick on both, rather than falling into the window between
+// the two.
 func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF
@@ -364,11 +361,10 @@ func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
 	a.Settle()
 	want := start
 	want.X++
-	if got := cursorPosition(a, target); got != want {
-		t.Fatalf("host held its own pre-tick crossing behind the lead: %#v", got)
-	}
-	if got := cursorPosition(b, target); got != start {
-		t.Fatalf("joiner applied a pre-tick crossing before its apply tick: %#v", got)
+	for _, x := range []*App{a, b} {
+		if got := cursorPosition(x, target); got != start {
+			t.Fatalf("a pre-tick crossing applied before its apply tick: %#v", got)
+		}
 	}
 
 	for range parameter.NetworkBarrierDelayTicks + 1 {
@@ -839,19 +835,16 @@ func TestOneKeypressMovesTheLocalCursorWithoutATick(t *testing.T) {
 			liveAfter, liveBefore)
 	}
 
-	// Prediction gives the cell this participant reads; the local path drops the playout
-	// lead off the shared store as well, so the producer's own crossing is applied
-	// in the tick that produced it and the prediction and the store agree at once.
-	// The peers keep the lead, which is where a remote participant's motion is
-	// interpolated from.
+	// Prediction is what answered: the shared store moves at the agreed tick on the
+	// producer as on its peers, so the two never disagree about the crossing and a
+	// correction read inside the lead has nothing to undo.
 	local := localCursorEntity(live)
 	want := liveBefore
 	want.X++
-	if got := cursorPosition(live, local); got != want {
-		t.Fatalf("the producer's own crossing landed at %#v, want %#v with no lead", got, want)
-	}
-	if got := cursorPosition(apps[1], local); got != liveBefore {
-		t.Fatalf("a peer applied the crossing at %#v before its apply tick", got)
+	for i, a := range apps {
+		if got := cursorPosition(a, local); got != liveBefore {
+			t.Fatalf("participant %d applied the crossing at %#v before its apply tick", i+1, got)
+		}
 	}
 	for range parameter.NetworkBarrierDelayTicks + 1 {
 		tickAll(apps)
@@ -1094,21 +1087,19 @@ func TestPredictedLocalCursorReconcilesAndSnaps(t *testing.T) {
 		t.Fatalf("store after an unpredicted placement = %#v, want %#v", got, snap)
 	}
 
-	// Discarded, not merged, and nothing comes back to un-discard it: the local path
-	// carries no playout lead, so the crossings the prediction described had already
-	// applied here before the authoritative placement replaced them. The peers'
-	// copies land at the agreed tick and are corrected like any other disagreement.
+	// Discarded, not merged: the outstanding crossings still land at the agreed
+	// tick, on the producer as on its peers, and nothing revives the prediction —
+	// the local cell reads the store they moved.
 	for range parameter.NetworkBarrierDelayTicks + 1 {
 		tickAll(apps)
 	}
-	if got, _ := localCell(live); got != snap {
-		t.Fatalf("local cell after the lead drained = %#v, want the authoritative %#v", got, snap)
+	for i, a := range apps {
+		if got := cursorPosition(a, local); got != predicted {
+			t.Fatalf("participant %d applied the outstanding crossings as %#v, want %#v", i+1, got, predicted)
+		}
 	}
-	if got := cursorPosition(live, local); got != snap {
-		t.Fatalf("store after the lead drained = %#v, want %#v", got, snap)
-	}
-	if got := cursorPosition(apps[1], local); got != predicted {
-		t.Fatalf("the peer applied the outstanding crossings as %#v, want %#v", got, predicted)
+	if got, _ := localCell(live); got != predicted {
+		t.Fatalf("local cell after the lead drained = %#v, want the store's %#v", got, predicted)
 	}
 }
 

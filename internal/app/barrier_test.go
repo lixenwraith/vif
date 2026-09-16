@@ -72,10 +72,11 @@ func TestPlayoutLeadFollowsWhatWasMeasured(t *testing.T) {
 		t.Fatalf("loopback lead = %d, want the %d-tick minimum", got, parameter.NetworkBarrierMinDelayTicks)
 	}
 
-	// 200 ms round trip, 20 ms of variation: 100 + 40 = 140 ms, three ticks at the
-	// 50 ms interval — which the default happens to equal, so push it further out.
+	// 400 ms round trip, 20 ms of variation: 400 + 40 = 440 ms, nine ticks at the
+	// 50 ms interval. The whole round trip, because the authority reads a guest's
+	// crossing a correction's age after the guest produced it.
 	slow := measuredLinks{2: {RTT: 400 * time.Millisecond, Jitter: 20 * time.Millisecond, Ready: true}}
-	if got, want := lead(slow, two), uint64(5); got != want {
+	if got, want := lead(slow, two), uint64(9); got != want {
 		t.Fatalf("lead over a 400ms link = %d, want %d", got, want)
 	}
 
@@ -87,7 +88,7 @@ func TestPlayoutLeadFollowsWhatWasMeasured(t *testing.T) {
 		2: {RTT: 400 * time.Millisecond, Jitter: 20 * time.Millisecond, Ready: true},
 		3: {RTT: 20 * time.Millisecond, Ready: true},
 	}
-	if got, want := lead(mixed, three), uint64(10); got != want {
+	if got, want := lead(mixed, three), uint64(18); got != want {
 		t.Fatalf("relayed lead = %d, want %d", got, want)
 	}
 

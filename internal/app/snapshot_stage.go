@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
@@ -78,11 +79,11 @@ func (s *StagedInstall) Capture() snapshot.SharedCapture { return s.capture }
 // it against the live one before the swap. It is invalid after Commit or Discard.
 func (s *StagedInstall) StagingWorld() *App { return s.staging }
 
-// Commit writes the staged capture into the live world and releases the staging
-// world. A tick runs entirely inside one acquisition of the update mutex, so a
-// commit that takes it is between two ticks by construction. A failure here is not a
-// rejected capture but an inconsistency — the same bytes loaded into the same build
-// a moment ago — so it is reported rather than hidden.
+// Commit projects the staged capture to the live tick and writes the projection:
+// the staging world takes the authority's world, this instance's owner-authored
+// values and what it applied after the capture, and simulates to the present, so
+// a transition already made is neither torn down nor rebuilt and the clock never
+// moves backwards (multi-player.md §3.3). A failure here is an inconsistency.
 func (s *StagedInstall) Commit() error {
 	switch {
 	case s.committed:
@@ -92,28 +93,94 @@ func (s *StagedInstall) Commit() error {
 	}
 	var err error
 	started := time.Now() // [wall] telemetry only
-	s.difference, err = s.live.reconcileShared(s.capture)
+	live, staging, header := s.live, s.staging, s.capture.Header
+
+	// The ledger is settled against the authority's world as installed, before the
+	// projection re-derives this instance's own predictions over it.
+	live.confirmPredictions(header.Tick, staging)
+
+	// A capture ahead of the clock is adopted at its own tick: the buffer holds one
+	// inside the lead, so reaching here ahead is a join or a jump, and either takes
+	// the world as it is. One behind is projected to the present.
+	at, tick := live.Position().Tick, header.Tick
+	behind := uint64(0)
+	if at > tick {
+		behind, tick = at-tick, at
+	}
+	live.prepareProjection(staging)
+	live.feedProjection(staging, header)
+	staging.Tick(int(behind))
+	// What the live world settled after its last completed tick — a copy the queue
+	// published at once, a record the authority received late — is due now.
+	staging.receiveDue(tick + 1)
+
+	var projected snapshot.SharedCapture
+	projected, err = staging.CaptureShared()
+	if err == nil {
+		// The authority's identity and fences, at the live tick: what the barrier
+		// prunes by is what the host applied, and the projection has moved the
+		// world to where this instance stands.
+		projected.Header = header
+		projected.Header.Tick = tick
+		s.difference, err = live.reconcileShared(projected)
+	}
+	staging.world.RunSafe(func() { staging.world.DestroyDomainEntities(core.DomainPlayer) })
 	s.commitDur = time.Since(started)
 	s.committed = true
 	s.release()
 	if err != nil {
 		vlog.Error("app", "msg", "staged capture failed its live install",
-			"tick", s.capture.Header.Tick, "error", err.Error())
+			"tick", header.Tick, "error", err.Error())
 		return fmt.Errorf("commit a staged capture: %w", err)
 	}
-	s.live.world.RunSafe(func() {
-		m := s.live.telemetry
+	live.world.RunSafe(func() {
+		m := live.telemetry
 		m.StageUS.Store(s.stageDur.Microseconds())
 		m.CommitUS.Store(s.commitDur.Microseconds())
-		m.InstallTick.Store(int64(s.capture.Header.Tick))
+		m.InstallTick.Store(int64(header.Tick))
+		m.Projected.Store(int64(behind))
 	})
 	vlog.Info("app", "msg", "capture installed",
-		"tick", s.capture.Header.Tick,
+		"tick", header.Tick, "projected_ticks", behind,
 		"stage_ms", s.stageDur.Milliseconds(), "commit_ms", s.commitDur.Milliseconds(),
 		"correction_entries", s.difference.Entries,
 		"correction_entities", s.difference.Entities,
 		"correction_cells", s.difference.CellShift)
 	return nil
+}
+
+// prepareProjection makes the staging world this instance's predictor: it drives
+// no cursor, so no player-domain system simulates for one; it holds this instance's
+// owner-authored values, which the shared species it predicts react to; and its
+// barrier defers by the session's lead under the session's authority, so anything it
+// re-derives applies at the tick the live world applies it.
+func (a *App) prepareProjection(staging *App) {
+	var (
+		ctl       engine.LocalControl
+		lead      uint64
+		authority uint32
+	)
+	a.world.RunSafe(func() {
+		ctl = a.world.CaptureCursorControl()
+		if r := a.world.Resources.Network; r != nil {
+			lead, authority = r.BarrierDelayTicks, r.Authority.Load()
+		}
+	})
+	staging.world.RunSafe(func() {
+		w := staging.world
+		w.DisownCursors()
+		w.AdoptOwnedCursorState(ctl)
+		r := &engine.NetworkResource{BarrierDelayTicks: lead}
+		r.Authority.Store(authority)
+		w.Resources.Network = r
+	})
+}
+
+// receiveDue applies what the barrier holds due at tick without running one, and
+// settles what that dispatched.
+func (a *App) receiveDue(tick uint64) {
+	a.world.RunSafe(func() { a.world.Resources.Event.Queue.ReceiveWire(tick) })
+	a.scheduler.Settle()
 }
 
 // Difference is how far the live world had drifted from the capture at the moment

@@ -20,226 +20,81 @@ const guestParticipant network.PeerID = 2
 
 // The seam between two claims that pull opposite ways: a correction makes a guest
 // hold the authority's world, and its own accepted actions must not disappear when
-// one arrives. Production ticks bound retention; the capture's fence for this source
-// decides membership, because a crossing applies immediately on its producer and a
-// lead later elsewhere — so a copy past its apply tick can still be missing from it.
+// one arrives. An install finds a crossing either pending on the barrier, which it
+// leaves alone, or applied after the capture's tick, which the projection
+// re-derives; the capture's fence for this source decides which.
 
-// TestLocalCrossingsAfterTheBaselineSurviveExactlyOnce: A guest
-// produces a crossing, then installs an authority taken before it, and the effect
-// is present exactly once afterwards.
-func TestLocalCrossingsAfterTheBaselineSurviveExactlyOnce(t *testing.T) {
+// TestALocalCrossingPendingAtTheBaselineAppliesExactlyOnce: a guest produces a
+// crossing, installs an authority taken before it, and the effect lands at the
+// agreed tick on both — once, with the prediction that answered the press intact
+// across the install.
+func TestALocalCrossingPendingAtTheBaselineAppliesExactlyOnce(t *testing.T) {
 	t.Parallel()
 	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
 	deliverCorrection(t, host, []*App{guest}, advance)
 
-	// The authority is read here, before the guest acts. It has to describe a tick
-	// the guest has not already installed, or the correction is superseded rather
-	// than applied.
+	// The authority is read here, before the guest acts, at a tick the guest has
+	// not already installed.
 	advance()
 	if err := host.corrections.Publish(); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
+	at := guest.Position().Tick
 
-	// Now the guest acts, after that baseline, and applies it immediately. No tick
-	// separates the two: an artifact produced between two ticks belongs to the next
-	// epoch, which is already past the baseline, and advancing here would let the
-	// guest consume the correction before it had acted at all.
 	before := cursorCell(t, guest, 1)
 	inject(t, guest, intentMotion(input.MotionRight, 4))
-	moved := cursorCell(t, guest, 1)
-	if moved == before {
-		t.Fatal("the local motion did not move the cursor at all")
+	predicted, _ := localCell(guest)
+	if predicted.X != before.X+4 || predicted.Y != before.Y {
+		t.Fatalf("four presses predicted %v, want four cells right of %v", predicted, before)
 	}
-	fence := hostFence(t, host, guestParticipant)
-	suffix, dropped := replaySuffixOf(t, guest, fence)
-	if len(suffix) == 0 {
-		t.Fatal("the guest retained no crossing the authority does not hold")
+	if got := cursorCell(t, guest, 1); got != before {
+		t.Fatalf("the producer applied its own crossing at %v inside the lead", got)
 	}
-	if suffix[0].Frame.Seq <= fence {
-		t.Fatalf("the retained crossing is sequence %d, at or before the authority's fence %d",
-			suffix[0].Frame.Seq, fence)
-	}
-	if dropped != 0 {
-		t.Fatalf("retention dropped %d records in a four-tick window", dropped)
+	// Pending is not missing: the fence offers nothing to project.
+	if suffix, _ := replaySuffixOf(t, guest, hostFence(t, host, guestParticipant)); len(suffix) != 0 {
+		t.Fatalf("%d crossings still pending on the barrier were offered for projection", len(suffix))
 	}
 
-	// The correction arrives and rebases the guest onto the earlier tick. Without
-	// the replay the cursor would snap back and the player's own keystrokes would
-	// arrive a playout lead later; with it the placement survives.
-	replayed := statOf(guest, "snapshot.replay_records")
+	applied := statOf(guest, "snapshot.corrections_applied")
 	for range parameter.NetworkRelayHopLimit {
 		host.ApplyPendingCorrections()
 		guest.ApplyPendingCorrections()
-		if statOf(guest, "snapshot.replay_records") > replayed {
+		if statOf(guest, "snapshot.corrections_applied") > applied {
 			break
 		}
 		advance()
 	}
-	if statOf(guest, "snapshot.replay_records") <= replayed {
-		t.Fatal("the correction did not replay the guest's own crossing")
+	if statOf(guest, "snapshot.corrections_applied") <= applied {
+		t.Fatal("the correction never reached the guest")
 	}
-	if got := cursorCell(t, guest, 1); got != moved {
-		t.Fatalf("after the correction the cursor stands at %v, want the placement it was moved to, %v",
-			got, moved)
+	if got := guest.Position().Tick; got != at {
+		t.Fatalf("the correction moved the guest's clock from %d to %d", at, got)
+	}
+	if got, _ := localCell(guest); got != predicted {
+		t.Fatalf("the correction dropped the prediction: local cell %v, want %v", got, predicted)
 	}
 
-	// Exactly once: the effect is not doubled, and the crossing is not replayed a
-	// second time by the correction that finally carries it.
-	replayedOnce := statOf(guest, "snapshot.replay_records")
+	// Exactly once, at the agreed tick, on both.
 	want := deliverCorrection(t, host, []*App{guest}, advance)
 	assertCorrected(t, want, guest, "guest")
-	if got := statOf(guest, "snapshot.replay_records"); got != replayedOnce {
-		t.Fatalf("the same crossing was replayed again (%d then %d records)", replayedOnce, got)
+	for _, x := range []*App{host, guest} {
+		if got := cursorCell(t, x, 1); got != predicted {
+			t.Fatalf("after the lead the cursor stands at %v, want %v", got, predicted)
+		}
 	}
-	if got := cursorCell(t, host, 1); got != moved {
-		t.Fatalf("the pending wire copy never reached the authority: host stands at %v, want %v", got, moved)
-	}
-	if got := cursorCell(t, guest, 1); got != moved {
-		t.Fatalf("the authority's next correction lost the pending crossing: guest stands at %v, want %v", got, moved)
+	if got := statOf(guest, "snapshot.replay_records"); got != 0 {
+		t.Fatalf("a pending crossing was projected %d times", got)
 	}
 	if got := statOf(guest, "snapshot.replay_skipped"); got != 0 {
 		t.Fatalf("replay was skipped %d times on a healthy suffix", got)
 	}
 }
 
-// TestLocalCrossingInFlightAtTheBaselineSurvivesExactlyOnce is the boundary the
-// production-tick test above does not cover. The guest has already closed the
-// crossing's production epoch, but its authoritative apply tick is still ahead of
-// the capture. A correction at that production tick therefore cannot contain the
-// crossing and must replay it, even though it was not produced after the baseline.
-func TestLocalCrossingInFlightAtTheBaselineSurvivesExactlyOnce(t *testing.T) {
-	t.Parallel()
-	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
-	deliverCorrection(t, host, []*App{guest}, advance)
-
-	before := cursorCell(t, guest, 1)
-	inject(t, guest, intentMotion(input.MotionRight, 1))
-	moved := cursorCell(t, guest, 1)
-	if moved.X != before.X+1 || moved.Y != before.Y {
-		t.Fatalf("the local motion moved the cursor from %v to %v", before, moved)
-	}
-
-	// Close and send the production epoch. The host still cannot apply the frame
-	// until its agreed apply tick, one playout lead later.
-	advance()
-	baseline := host.Position().Tick
-	if got := guest.Position().Tick; got != baseline {
-		t.Fatalf("guest tick %d, want the host baseline %d", got, baseline)
-	}
-	fence := hostFence(t, host, guestParticipant)
-	suffix, dropped := replaySuffixOf(t, guest, fence)
-	if len(suffix) != 1 {
-		t.Fatalf("fence %d offered %d crossings, want the one still in flight", fence, len(suffix))
-	}
-	if suffix[0].Frame.Seq <= fence {
-		t.Fatalf("the in-flight crossing is sequence %d, at or before the fence %d",
-			suffix[0].Frame.Seq, fence)
-	}
-	if dropped != 0 {
-		t.Fatalf("retention dropped %d records in a one-crossing window", dropped)
-	}
-
-	replayed := statOf(guest, "snapshot.replay_records")
-	deliverCorrectionNow(t, host, []*App{guest}, advance)
-	if got := statOf(guest, "snapshot.replay_records"); got != replayed+1 {
-		t.Fatalf("the correction replayed %d records, want one", got-replayed)
-	}
-	if got := cursorCell(t, guest, 1); got != moved {
-		t.Fatalf("correction at production tick rolled the cursor from %v back to %v", moved, got)
-	}
-
-	// Once the host reaches the frame's apply tick, its next capture contains the
-	// move and the guest neither loses nor replays it again.
-	want := deliverCorrection(t, host, []*App{guest}, advance)
-	assertCorrected(t, want, guest, "guest")
-	if got := statOf(guest, "snapshot.replay_records"); got != replayed+1 {
-		t.Fatalf("the same crossing was replayed again (%d total records)", got-replayed)
-	}
-	if got := cursorCell(t, guest, 1); got != moved {
-		t.Fatalf("the authority applied the crossing at %v, want %v", got, moved)
-	}
-}
-
-// TestACorrectionSupersedesAuthorityFramesItAlreadyContains pins the other side
-// of the replay boundary. The authority applies its own ordinary crossings
-// immediately, so a capture can contain a frame whose receive-side ApplyTick is
-// still in the future. Keeping that peer copy after installing the capture makes
-// a remote cursor walk backwards through already-authoritative positions.
-func TestACorrectionSupersedesAuthorityFramesItAlreadyContains(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name              string
-		scheduleBeforeCap bool
-	}{
-		{name: "already scheduled", scheduleBeforeCap: true},
-		{name: "arrives after install"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			apps := meshSession(t, 0x5EEDBEEF, 2, [][2]int{{1, 2}})
-			localCursors(t, apps)
-			host, guest := apps[0], apps[1]
-			advance := func() { tickAll(apps) }
-			deliverCorrection(t, host, []*App{guest}, advance)
-
-			before := cursorCell(t, host, 0)
-			inject(t, host, intentMotion(input.MotionRight, 1))
-			first := cursorCell(t, host, 0)
-			if first.X != before.X+1 || first.Y != before.Y {
-				t.Fatalf("the first host motion moved from %v to %v", before, first)
-			}
-
-			// Close the first motion's epoch. In one case the guest drains the
-			// batch before the correction; in the other it ticks first, so the
-			// batch is still on the link when the capture arrives. Both leave the
-			// two clocks level: a capture ahead of the receiver's own tick is held
-			// by the correction playout buffer, which is a different criterion.
-			if !tc.scheduleBeforeCap {
-				guest.Tick(1)
-			}
-			host.Tick(1)
-			if tc.scheduleBeforeCap {
-				guest.Tick(1)
-			}
-
-			// This second motion is already in the host's world but its peer copy
-			// remains in the open epoch. The capture therefore stands one cell
-			// beyond the stale frame the guest has, or is about to receive.
-			inject(t, host, intentMotion(input.MotionRight, 1))
-			latest := cursorCell(t, host, 0)
-			if latest.X != first.X+1 || latest.Y != first.Y {
-				t.Fatalf("the second host motion moved from %v to %v", first, latest)
-			}
-			cap, err := host.CaptureShared()
-			if err != nil {
-				t.Fatalf("capture: %v", err)
-			}
-			if cap.Header.Authority != 1 || cap.Header.Crossings.Seq(1) == 0 {
-				t.Fatalf("capture fences = authority %d, participant 1 sequence %d; want participant 1 and a completed crossing",
-					cap.Header.Authority, cap.Header.Crossings.Seq(1))
-			}
-			installCorrection(t, guest, cap)
-			if got := cursorCell(t, guest, 0); got != latest {
-				t.Fatalf("correction installed host cursor at %v, want %v", got, latest)
-			}
-
-			// Do not tick the host: the second peer copy must stay unsent. Once
-			// the first copy reaches its nominal ApplyTick, it must not overwrite
-			// the newer position the correction already installed.
-			for range parameter.NetworkBarrierDelayTicks + 1 {
-				guest.Tick(1)
-			}
-			if got := cursorCell(t, guest, 0); got != latest {
-				t.Fatalf("stale authority frame rolled the corrected cursor from %v back to %v", latest, got)
-			}
-		})
-	}
-}
-
-// TestAuthorityCrossingFenceWaitsForDispatch keeps the capture watermark tied to
-// state rather than to transport admission. A crossing may be encoded and queued
-// before the scheduler can acquire the world lock; a capture in that interval
-// must not claim the event it has not applied.
-func TestAuthorityCrossingFenceWaitsForDispatch(t *testing.T) {
+// TestAuthorityCrossingFenceWaitsForTheApplyTick keeps the capture watermark tied
+// to state rather than to production. A crossing is named and scheduled a playout
+// lead before it applies; a capture in that interval must not claim the effect the
+// world does not yet hold.
+func TestAuthorityCrossingFenceWaitsForTheApplyTick(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 2, [][2]int{{1, 2}})
 	localCursors(t, apps)
@@ -254,90 +109,97 @@ func TestAuthorityCrossingFenceWaitsForDispatch(t *testing.T) {
 	host.World().RunSafe(func() { cursor = host.World().Resources.Player.Slot(0) })
 	host.Context().PushCrossing(event.EventCursorMoveRequest,
 		&event.CursorMoveRequestPayload{Entity: cursor, X: cell.X + 1, Y: cell.Y})
+	host.Settle()
 
-	queued, err := host.CaptureShared()
+	scheduled, err := host.CaptureShared()
 	if err != nil {
-		t.Fatalf("capture with queued crossing: %v", err)
+		t.Fatalf("capture with scheduled crossing: %v", err)
 	}
-	if got := queued.Header.Crossings.Seq(1); got != before.Header.Crossings.Seq(1) {
-		t.Fatalf("queued crossing advanced the authority's fence from %d to %d before dispatch",
+	if got := scheduled.Header.Crossings.Seq(1); got != before.Header.Crossings.Seq(1) {
+		t.Fatalf("a scheduled crossing advanced the authority's fence from %d to %d before its apply tick",
 			before.Header.Crossings.Seq(1), got)
 	}
 	if got := cursorCell(t, host, 0); got != cell {
-		t.Fatalf("queued crossing moved cursor from %v to %v before dispatch", cell, got)
+		t.Fatalf("a scheduled crossing moved the cursor from %v to %v before its apply tick", cell, got)
 	}
 
-	host.Settle()
+	for range parameter.NetworkBarrierDelayTicks + 1 {
+		tickAll(apps)
+	}
 	applied, err := host.CaptureShared()
 	if err != nil {
-		t.Fatalf("capture after dispatch: %v", err)
+		t.Fatalf("capture after the apply tick: %v", err)
 	}
-	if got := applied.Header.Crossings.Seq(1); got <= queued.Header.Crossings.Seq(1) {
-		t.Fatalf("dispatched crossing left the authority's fence at %d, want after %d",
-			got, queued.Header.Crossings.Seq(1))
+	if got := applied.Header.Crossings.Seq(1); got <= scheduled.Header.Crossings.Seq(1) {
+		t.Fatalf("the applied crossing left the authority's fence at %d, want after %d",
+			got, scheduled.Header.Crossings.Seq(1))
 	}
 	if got := cursorCell(t, host, 0); got.X != cell.X+1 || got.Y != cell.Y {
-		t.Fatalf("dispatched crossing moved cursor from %v to %v", cell, got)
+		t.Fatalf("the applied crossing moved the cursor from %v to %v", cell, got)
 	}
 }
 
-// TestARewindDoesNotReuseAProductionEpoch covers the other clock carried by a
-// correction. The world tick may move backwards, but a source's wire epochs are a
-// monotonic stream: reusing one makes every peer's replay filter discard the new
-// batch before it can inspect the frames inside it.
-func TestARewindDoesNotReuseAProductionEpoch(t *testing.T) {
+// TestACorrectionBehindTheClockIsProjectedNotRewound is the projection criterion:
+// a capture older than the guest's clock is simulated forward over the guest's own
+// crossings and written at the present, so the clock never moves backwards, what
+// the guest already re-derived is neither torn down nor rebuilt, and the source's
+// production epochs stay the monotonic stream the host's replay filter accepts.
+func TestACorrectionBehindTheClockIsProjectedNotRewound(t *testing.T) {
 	t.Parallel()
 	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
 	deliverCorrection(t, host, []*App{guest}, advance)
 
-	// Capture one authority tick, then let the guest close the following epoch and
-	// make sure the host has admitted its marker before rewinding the guest.
 	advance()
-	cap, err := host.CaptureShared()
-	if err != nil {
-		t.Fatalf("capture: %v", err)
-	}
+	cap := mustCaptureShared(t, host)
 	baseline := cap.Header.Tick
-	advance()
-	host.Tick(1)
-	if got := guest.Position().Tick; got != baseline+1 {
-		t.Fatalf("guest reached tick %d, want %d before rewind", got, baseline+1)
-	}
-	installCorrection(t, guest, cap)
-	if got := guest.Position().Tick; got != baseline {
-		t.Fatalf("correction left guest at tick %d, want %d", got, baseline)
-	}
 
-	before := cursorCell(t, host, 1)
+	before := cursorCell(t, guest, 1)
 	inject(t, guest, intentMotion(input.MotionRight, 1))
-	moved := cursorCell(t, guest, 1)
-	if moved.X != before.X+1 || moved.Y != before.Y {
-		t.Fatalf("guest moved from host cell %v to %v", before, moved)
+	moved := before
+	moved.X++
+	for range parameter.NetworkBarrierDelayTicks + 1 {
+		advance()
+	}
+	if got := cursorCell(t, guest, 1); got != moved {
+		t.Fatalf("the guest stands at %v after the lead, want its own crossing applied at %v", got, moved)
+	}
+	ahead := guest.Position().Tick
+	held := guest.SnapshotShared()
+
+	installCorrection(t, guest, cap)
+	if got := guest.Position().Tick; got != ahead {
+		t.Fatalf("the correction moved the guest's clock from %d to %d", ahead, got)
+	}
+	if got, want := statOf(guest, "snapshot.projected_ticks"), int64(ahead-baseline); got != want {
+		t.Fatalf("the correction was projected over %d ticks, want %d", got, want)
+	}
+	if got := cursorCell(t, guest, 1); got != moved {
+		t.Fatalf("the projection lost the guest's own crossing: cursor at %v, want %v", got, moved)
+	}
+	// The projection re-derived the same world the guest already held.
+	assertCorrected(t, held, guest, "the projected guest")
+	if got := statOf(guest, "snapshot.correction_cells"); got != 0 {
+		t.Fatalf("the projection shifted a placement by %d cells", got)
 	}
 
-	suffix, dropped := replaySuffixOf(t, guest, hostFence(t, host, guestParticipant))
-	if len(suffix) != 1 || dropped != 0 {
-		t.Fatalf("post-rewind suffix has %d records and %d drops, want one healthy record",
-			len(suffix), dropped)
-	}
-	applyTick := suffix[0].ApplyTick
-
-	// The first re-simulated tick must not send another batch under baseline+1.
-	// The next tick reaches the source's unsent epoch and closes one batch carrying
-	// the move. Once the host reaches its ApplyTick it must have accepted and
-	// applied the absolute cursor move exactly once.
-	guest.Tick(2)
-	for host.Position().Tick < applyTick {
-		host.Tick(1)
+	// The next crossing leaves under an epoch the host has not seen and applies
+	// there once.
+	inject(t, guest, intentMotion(input.MotionRight, 1))
+	moved.X++
+	for range parameter.NetworkBarrierDelayTicks + 1 {
+		advance()
 	}
 	if got := cursorCell(t, host, 1); got != moved {
-		t.Fatalf("host discarded the post-rewind input: cursor is %v, want %v", got, moved)
+		t.Fatalf("the host discarded the post-install input: cursor at %v, want %v", got, moved)
 	}
+	want := deliverCorrection(t, host, []*App{guest}, advance)
+	assertCorrected(t, want, guest, "guest")
 }
 
-// TestAGoldSequenceSurvivesACorrectionWithoutATick's second half:
-// a whole gold run typed inside one tick is retained as a suffix and survives a
-// correction taken before it, and every member is still gone afterwards.
+// TestAGoldSequenceSurvivesACorrectionWithoutATick: a typed member is the one
+// crossing its producer applies at once, so a whole run typed inside one tick is
+// retained as a suffix, projected over a correction taken before it, and every
+// member is still gone afterwards.
 func TestAGoldSequenceSurvivesACorrectionWithoutATick(t *testing.T) {
 	t.Parallel()
 	host, apps := liveInstance(t, 0x601D)
@@ -385,7 +247,7 @@ func TestAGoldSequenceSurvivesACorrectionWithoutATick(t *testing.T) {
 	}
 
 	// The correction describes a world in which the run is still standing. The
-	// replay is what keeps it gone.
+	// projection is what keeps it gone.
 	replayed := statOf(guest, "snapshot.replay_records")
 	for range parameter.NetworkRelayHopLimit {
 		host.ApplyPendingCorrections()
@@ -406,8 +268,8 @@ func TestAGoldSequenceSurvivesACorrectionWithoutATick(t *testing.T) {
 		}
 	})
 
-	// And the session converges: the host applies the same crossings on its own
-	// schedule, and the next correction finds nothing left to disagree about.
+	// And the session converges: the host applies the same crossings at the agreed
+	// tick, and the next correction finds nothing left to disagree about.
 	want := deliverCorrection(t, host, []*App{guest}, advance)
 	assertCorrected(t, want, guest, "guest")
 }
@@ -417,59 +279,51 @@ func TestAGoldSequenceSurvivesACorrectionWithoutATick(t *testing.T) {
 // installs the authority alone and says so.
 func TestAnIncompleteSuffixFallsBackToTheAuthority(t *testing.T) {
 	t.Parallel()
-	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
-	deliverCorrection(t, host, []*App{guest}, advance)
+	host, guest := pair(t, 0x5EEDBEEF, 0)
+	mirrorCursors(t, host, guest)
+	advance := func() { host.Tick(1); guest.Tick(1) }
+	lagHostReceive(t, host, 2*parameter.NetworkBarrierDelayTicks)
 
-	advance()
-	if err := host.corrections.Publish(); err != nil {
-		t.Fatalf("publish: %v", err)
-	}
-
-	// Past the record bound inside one window. Nothing an ordinary session does
-	// reaches this — the bounds are far wider than a cadence — but a participant
-	// that produced faster than retention allows must not be replayed from a
-	// suffix with a hole in it.
+	// Past the record bound inside one window, and applied here before the host
+	// has seen any of it. Nothing an ordinary session does reaches the bound — it
+	// is far wider than a cadence — but a participant that produced faster than
+	// retention allows must not be projected from a suffix with a hole in it.
 	src := replaySourceOf(t, guest)
 	for range parameter.SnapshotReplayRecords + 32 {
 		inject(t, guest, intentMotion(input.MotionRight, 1))
 		inject(t, guest, intentMotion(input.MotionLeft, 1))
 	}
+	for range parameter.NetworkBarrierDelayTicks + 1 {
+		advance()
+	}
 	if _, dropped := src.ReplaySuffixSize(); dropped == 0 {
 		t.Fatal("retention dropped nothing, so there is no hole to refuse")
 	}
-	if _, _, ok := src.LocalReplaySuffix(hostFence(t, host, guestParticipant)); ok {
+	cap := mustCaptureShared(t, host)
+	want := host.SnapshotShared()
+	if _, _, ok := src.LocalReplaySuffix(cap.Header.Crossings.Seq(guestParticipant)); ok {
 		t.Fatal("a suffix with a hole was offered as if it were complete")
 	}
 
-	skipped := statOf(guest, "snapshot.replay_skipped")
-	applied := statOf(guest, "snapshot.corrections_applied")
-	for range parameter.NetworkRelayHopLimit {
-		host.ApplyPendingCorrections()
-		guest.ApplyPendingCorrections()
-		if statOf(guest, "snapshot.corrections_applied") > applied {
-			break
-		}
-		advance()
-	}
-	if statOf(guest, "snapshot.corrections_applied") <= applied {
-		t.Fatal("the correction never reached the guest")
-	}
-	if got := statOf(guest, "snapshot.replay_skipped"); got <= skipped {
-		t.Fatal("an unavailable suffix was not reported as skipped")
+	installCorrection(t, guest, cap)
+	if got := statOf(guest, "snapshot.replay_skipped"); got != 1 {
+		t.Fatalf("an unavailable suffix was reported skipped %d times, want once", got)
 	}
 	if !statBoolOf(guest, "snapshot.replay_suffix_unavailable") {
 		t.Fatal("an unavailable suffix left the indicator clear")
 	}
 	if got := statOf(guest, "snapshot.replay_records"); got != 0 {
-		t.Fatalf("an unavailable suffix replayed %d records anyway", got)
+		t.Fatalf("an unavailable suffix projected %d records anyway", got)
 	}
 	if got := statOf(guest, "snapshot.replay_overflow"); got == 0 {
 		t.Fatal("retention overflow was not published")
 	}
+	// The authority alone, rather than half-applied.
+	assertCorrected(t, want, guest, "guest")
 
-	// The authority is intact rather than half-applied, and the session converges
-	// on the next correction as it always did.
-	want := deliverCorrection(t, host, []*App{guest}, advance)
+	// And the session converges once the link carries the lead again.
+	lagHostReceive(t, host, 0)
+	want = deliverCorrection(t, host, []*App{guest}, advance)
 	assertCorrected(t, want, guest, "guest")
 }
 
@@ -615,7 +469,7 @@ func goldRun(t *testing.T, a *App) []goldMember {
 }
 
 // TestALateGuestActionIsNotUndoneByTheCorrectionThatMissedIt is the regression the
-// fence exists for. A guest produces a crossing for T+3 and applies it at once; the
+// fence exists for. A guest produces a crossing for T+3 and applies it there; the
 // host has not received it at T+9. Judging membership by tick, the guest sees an apply
 // tick in the past, concludes the correction holds the action and drops it — undoing
 // its own keystroke. The fence asks what the authority actually had of that stream.
@@ -631,15 +485,18 @@ func TestALateGuestActionIsNotUndoneByTheCorrectionThatMissedIt(t *testing.T) {
 
 	before := cursorCell(t, guest, 1)
 	inject(t, guest, intentMotion(input.MotionRight, 3))
-	moved := cursorCell(t, guest, 1)
+	moved, _ := localCell(guest)
 	if moved.X != before.X+3 || moved.Y != before.Y {
-		t.Fatalf("the guest's own motion moved its cursor from %v to %v", before, moved)
+		t.Fatalf("the guest's own motion predicted %v, want three cells right of %v", moved, before)
 	}
 
 	// Past the apply tick the crossing named, while the shaped link still holds it.
 	for range 2 * parameter.NetworkBarrierDelayTicks {
 		host.Tick(1)
 		guest.Tick(1)
+	}
+	if got := cursorCell(t, guest, 1); got != moved {
+		t.Fatalf("the guest stands at %v past the apply tick, want %v", got, moved)
 	}
 	if got := cursorCell(t, host, 1); got != before {
 		t.Fatalf("the host already applied the crossing at %v; the link is not lagging", got)

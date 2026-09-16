@@ -49,20 +49,20 @@ identity, and giving it a second name would cost the identity space its sentinel
 
 | Area | Current behaviour |
 |---|---|
-| Local input | The producer applies ordinary crossings immediately. Remote copies retain the receive-side playout lead. |
+| Local input | Every crossing applies at one agreed tick, a playout lead after its production, on its producer as on its peers. The D-18 prediction answers the keystroke at once; the shared store moves when the crossing does. The one exception is a typed gold member, which the producer removes at once because the next keystroke validates against the live run. |
 | Shared authority | The host's Shared world is canonical. A guest's predicted result is provisional until the next correction. |
 | Player state | Each instance simulates only its Player domain. Owner-authored cursor values have one writer and travel as values; a receiver keeps the values it authors across an install. |
 | Predicted derivations | A shared death a predicting instance derives is stamped `PhasePredicted` and held in a ledger. Presentation follows it; the player-domain rewards behind it are paid once, when an authoritative world proves the entity gone. |
 | Global environment | Shared wind events are re-derived rather than sent. Every instance consumes two draws from the same Shared environment stream, applies the gust to its own drains and predicted Shared species, and restores active wind state through corrections. |
 | Corrections | A correction starts with a versioned hash index. Equal roots send no state. Mismatches descend to independently proved pages. Compressed whole keyframes remain the bounded fallback. |
-| Correction playout | An install adopts the authority tick, so a receiver's clock follows the age of whichever exchange delivered. A correction describing a tick this instance has not reached waits for it, inside one measured round trip, one at a time. |
-| Local replay | A guest retains a bounded canonical suffix of its own accepted crossings and replays the portion later than the installed authority baseline. |
+| Correction playout | The clock never moves backwards. A correction behind this instance's tick is projected: simulated forward in the staging world, over what this instance applied since, and written at the present. One ahead of the clock inside the lead waits for its tick; the newest waiting one wins, and one further ahead is taken as the jump it is. |
+| Local replay | A guest retains a bounded canonical suffix of its own crossings; a projection re-applies those past the installed capture's fence for its source, at their own ticks. |
 | Crossing ordering | Snapshot schema 5 carries one applied-sequence fence per participant. A receiver removes ordinary frames the installed world already holds — including ones whose nominal receive tick is still ahead — and keeps the ones it does not, including ones whose receive tick is long past. |
 | Local FSM lifecycle | A live install replays only config-marked persistent `ClassLocal` exit/entry events for crossed state paths; staging and all ordinary actions remain side-effect free. |
 | Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. Every host arms the same mid-run gate once its own lobby is done, so a reconnect takes one path whether the session started with `-host`, `-serve`, a script, or `:host`. |
 | Roster | Every admitted peer holds an identity, a term and a vote; a roster slot binds it to a cursor and makes it a participant. The coordinator of a dedicated host holds no slot, so it is a peer and not a participant, and a session of one guest has one participant in a roster of two. |
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
-| Playout lead | Re-derived by the authority from the worst measured round trip — one way plus a reordering allowance, times the topology's hop count — and published as a barrier-bound crossing. No lead at all with nobody on the far end, `NetworkBarrierDelayTicks` with nothing measured, `NetworkBarrierMinDelayTicks` to `NetworkBarrierMaxDelayTicks` once a link has been probed. It widens at once and narrows on a window. |
+| Playout lead | Re-derived by the authority from the worst measured round trip — the whole round trip plus a reordering allowance, times the topology's hop count — and published as a barrier-bound crossing. No lead at all with nobody on the far end, `NetworkBarrierDelayTicks` with nothing measured, `NetworkBarrierMinDelayTicks` to `NetworkBarrierMaxDelayTicks` once a link has been probed. It widens at once and narrows on a window. |
 | Playout ceiling | A link whose *smallest* observed round trip asks for more than `NetworkBarrierMaxDelayTicks` is dropped rather than absorbed. The smoothed round trip is not the test: a backlogged link is the cadence controller's problem, not the barrier's. |
 | Mesh and relay | Epochs, owner state, corrections, and authority records flood with per-source duplicate suppression. A relay with retained authority content keeps selective repair available to participants behind it. |
 | Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is never elected (§5.3). |
@@ -73,7 +73,10 @@ identity, and giving it a second name would cost the identity space its sentinel
 The central choice is that guests keep simulating. Determinism fills time between
 corrections, makes a converged exchange hash-only, and preserves responsive local
 terminal input. Correction magnitude measures prediction distance; it is not a
-request to turn the guest into a renderer.
+request to turn the guest into a renderer. What a correction may never do is show
+the player a state the world has already left: it neither rewinds the clock nor
+undoes an artifact every instance applies at the same tick, so a transition —
+a kill, a knockback, a region's species changing — happens once on every screen.
 
 Directional Storm fire uses a Shared aim and Player-domain results. On every active
 tick, the red circle selects the nearest Shared cursor in deterministic roster
@@ -93,15 +96,20 @@ Every wire frame carries four ordering values:
 - `ApplyTick`: the absolute receive-side simulation tick;
 - `Seq`: the source-local order within the crossing stream.
 
-An ordinary crossing has two application times by design. Its local copy is
-published immediately; remote copies wait until `ApplyTick` and are ordered by
-`(ApplyTick, Source, Seq)`. This removes the playout lead from the player who
-generated the input while keeping a receive buffer for reordered remote traffic.
+A crossing has one application time. Every copy, the producer's included, waits
+until `ApplyTick` and is ordered by `(ApplyTick, Source, Seq)`, so the lead is a
+receive buffer for reordered traffic and never a difference between two worlds. It
+used to have two: the producer published its own copy at once, and every correction
+read inside the lead described a world without it — the kill was undone and
+re-derived, the knockback rewound, the region's species torn down and rebuilt.
+Input feel is the D-18 prediction's job, not the store's (§3.4 of
+[domain-design.md](domain-design.md)); the one copy still published at once is a
+typed gold member, because the next keystroke validates against the live run.
 
 An artifact that decides what the world *is*, rather than what happens to a world
-both instances already have, is `barrierBound`: its producer waits for the agreed
-apply tick too. A correction must not be repairing entity allocation or run
-numbering.
+both instances already have, is `barrierBound`: it also closes the capture fence at
+production rather than at application, because it never enters the replay suffix.
+A correction must not be repairing entity allocation or run numbering.
 
 | Barrier-bound crossing | What it decides |
 |---|---|
@@ -141,19 +149,11 @@ resolution installs the wind at the agreed tick.
 
 ### 3.2 The capture boundary
 
-`ApplyTick` does not say whether a capture contains a given ordinary frame, for
-either side of the session, and the reason is the same in both directions: an
-ordinary crossing applies immediately on its producer and a playout lead later
-everywhere else, so the tick a copy was *scheduled* to run at is not the tick the
-world took it in.
-
-That splits two ways:
-
-- The authority applies its own frame first, so a capture at tick T can already
-  contain one whose remote `ApplyTick` is T+1, T+2 or T+3.
-- A guest whose link misses the lead produces a frame for T+3 that has not reached
-  the authority when it reads its world at T+9, so the capture is missing one whose
-  `ApplyTick` is already six ticks old.
+`ApplyTick` does not say whether a capture contains a given ordinary frame: a guest
+whose link misses the lead produces a frame for T+3 that has not reached the
+authority when it reads its world at T+9, so the capture is missing one whose
+`ApplyTick` is already six ticks old — and the authority applies it late when it
+arrives, in the order it arrives.
 
 Snapshot schema 5 therefore records `CaptureHeader.Crossings`: one fence per
 participant, `{source, seq}`, naming the source-local sequence through which this
@@ -176,14 +176,14 @@ tick rule is the whole rule for barrier-bound ones: they apply at one agreed tic
 on every instance including their producer, so the tick is exact for them and
 nothing else is needed.
 
-This closes both rollback patterns with one boundary. The host-cursor pattern —
-a correction installs a new host position and queued older absolute positions then
-walk the guest backward — is closed because an already-applied frame is discarded
-even when its receive deadline is still in the future. The guest-action pattern —
-a correction undoes the player's own keystroke, and the next one puts it back a
-cadence later — is closed because a frame the capture never saw is kept even when
-its receive deadline is long past. The same fences are retained after installation,
-so a stale batch arriving later is classified the same way.
+This closes the guest-action pattern — a correction undoes the player's own
+keystroke, and the next one puts it back a cadence later — because a frame the
+capture never saw is kept even when its receive deadline is long past. The
+host-cursor pattern — a correction installs a new host position and queued older
+absolute positions then walk the guest backward — is closed by construction: the
+authority no longer applies its own frame before the tick every copy applies at.
+The same fences are retained after installation, so a stale batch arriving later
+is classified the same way.
 
 Two deliberate asymmetries in how the fences are computed:
 
@@ -200,17 +200,35 @@ Two deliberate asymmetries in how the fences are computed:
   suffix at every correction for the rest of the session. The bounded, self-healing
   failure is the one worth having.
 
-### 3.3 Guest replay
+### 3.3 Projection
 
-A correction may describe a host tick behind the guest's predicted present. The
-guest retains its own ordinary crossings in their encoded wire representation and
-replays those past the capture's fence for its own source. Production ticks bound
-retention age; they do not choose replay membership, and neither does the apply
-tick. Arrival, departure, and reset are never replayed.
+A correction may describe a host tick behind the guest's present, and a world is
+never written at a tick the receiver has run. The capture is resolved into the
+staging world, which is then made this instance's predictor — it drives no cursor,
+holds this instance's owner-authored cursor values, and defers by the session's
+lead under the session's authority — and simulated forward to the live tick. What
+is written into the live world is that projection, at the tick the live world is
+on. Everything the projection re-derives as the live world already has it diffs to
+nothing, so a transition the guest has already made is neither torn down nor
+rebuilt, and the clock never moves backwards. `snapshot.projected_ticks` is the
+distance; a capture level with the clock projects zero ticks and still takes the
+open epoch, which is where a typed member and a late-arriving record live.
 
-The suffix is bounded by ticks, records, and encoded bytes. If retention has a
-hole, the guest installs the authority alone and reports the skipped replay rather
-than guessing at a partial history.
+The projection is fed what the capture does not contain and this instance applied
+after it: its own ordinary crossings past the capture's fence for its source, in
+their encoded wire form, and the applied barrier-bound artifacts due after the
+capture's tick, each at its own apply tick. Production ticks bound retention age;
+they do not choose membership, and neither does the apply tick. A crossing still
+pending on the live barrier is not fed — the barrier applies it at its tick, and
+an install leaves the barrier and the D-18 queue alone. The suffix is bounded by
+ticks, records, and encoded bytes; if retention has a hole, the guest installs the
+authority alone and reports the skipped replay rather than guessing at a partial
+history. Ordinary crossings from *other* participants applied inside the window
+are not retained, so a projection loses them until the next correction; that gap
+is in `doc/todo.md`.
+
+A capture ahead of the clock is a join or a jump and is adopted at its own tick;
+inside the lead it waits (§4.1).
 
 Consecutive simulation events are not coalesced on the wire. Two cursor placements
 may consume different glyphs or cause different collision and progression effects;
@@ -219,12 +237,12 @@ state repair, and presentation work are the safe optimisation layers.
 
 ### 3.4 Predicted derivations
 
-A guest's Shared state is not monotonic. A correction replaces it with a world
-older than the guest's present, so a species can be dead, then alive, then dead;
-the guest's own crossing is replayed past the capture's fence and kills it a second
-time. That is §3.3 working, and for Shared state it is right: the FSM, the kill
-tallies, the adaptation and the genetic registry are all in the capture, so they are
-rolled back and re-derived together.
+A guest's Shared state is not monotonic across a correction that disagrees with
+it: a correction can restore a species the guest killed with a crossing the
+authority had not yet applied, and the projection kills it a second time. For
+Shared state that is right: the FSM, the kill tallies, the adaptation and the
+genetic registry are all in the capture, so they are repaired and re-derived
+together, and a projection re-derives them at the tick the guest had them.
 
 Player-domain state is not. Loot, the boost grant and every presentation burst are
 in no capture, nothing rolls them back, and nothing stopped the second derivation
@@ -268,9 +286,13 @@ Three answers rather than a constant. A roster with nobody on the far end takes 
 lead at all: nothing is sent, so nothing is waiting for it, which is what makes a
 hosted solo run cost no input latency. A roster with nothing measured keeps
 `NetworkBarrierDelayTicks`, because an unready link is no evidence rather than a
-fast one. A measured link asks for one way plus a reordering allowance, times the
-hop count, between `NetworkBarrierMinDelayTicks` and `NetworkBarrierMaxDelayTicks` —
-so an in-process or loopback session defers by one tick where it used to pay three.
+fast one. A measured link asks for its whole round trip plus a reordering
+allowance, times the hop count, between `NetworkBarrierMinDelayTicks` and
+`NetworkBarrierMaxDelayTicks` — so an in-process or loopback session defers by one
+tick where it used to pay three. The round trip and not half of it, because the
+authority reads a guest's crossing a correction's age after the guest produced it:
+a lead of one way keeps the peer's copy on time and the authority's a correction
+late, and every capture read in between is missing it.
 
 The two directions are not symmetric. Widening is immediate, because an artifact
 that misses the lead costs a correction and one that clears it costs nothing;
@@ -327,25 +349,24 @@ supersedes older state, so loss costs freshness rather than permanent correctnes
 
 ### 4.1 The playout buffer
 
-Installing adopts the capture's tick, which makes a receiver's world clock a sample
-of how old the correction that delivered it was — and the paths do not agree on
-that. A whole body is one one-way delay old. A selective repair is three, because
-the index goes out, the answer comes back and the pages go out again. Alternating
-between them stepped the clock by up to four one-way delays between consecutive
-corrections, and every shared actor moved that many ticks with it: on a shaped link
-the worst step was 1 tick at zero delay, 4 at one, 8 at two and 16 at four. The
-fastest thing in the world is a knocked-back swarm, which is why that is what a
-guest saw jittering, and why an instance that becomes its own authority stops.
+The paths deliver worlds of different ages: a whole body is one one-way delay old,
+a selective repair three. When an install adopted the capture's tick, alternating
+between them stepped the clock by up to four one-way delays and every shared actor
+moved that many ticks with it — the knocked-back swarm a guest saw jittering. A
+capture behind the clock is now projected (§3.3) and moves nothing; the buffer is
+for the other direction.
 
-A correction describing a tick this instance has not reached is therefore held
-until it has. The receiver's offset settles on the slowest path rather than chasing
-the fastest, and what a correction then carries is prediction error rather than a
-clock difference — which is also what makes `snapshot.correction_entities` mean
-what §7 says it means. One rule keeps the buffer from becoming a stall: a second
-arrival while one waits takes the step instead of queueing behind it, so at most
-one correction is ever delayed and never by more than a cadence.
-`snapshot.corrections_held` counts the deferrals; a session whose paths deliver
-worlds of one age holds none.
+A correction describing a tick this instance has not reached, within the lead, is
+held until it has, and it is compared there too: a manifest over a tick this
+instance has not run would name every page different and buy a repair of nothing,
+so it waits with the same rule. The newest arrival while one waits replaces it —
+an older one describes a world the authority has left — so at most one is ever
+delayed and never by more than the lead. One further ahead than the lead is not
+a correction this instance can wait for; it is adopted at its own tick as the jump
+it is, counted in `snapshot.corrections_jumped`. A hash-only acknowledgement
+behind the clock is not adopted at all: the world already equals it, and adopting
+its tick would be the rewind. `snapshot.corrections_held` counts the deferrals; a
+session whose paths deliver worlds of one age holds none.
 
 ## 5. Membership, topology, and authority continuity
 
@@ -561,8 +582,11 @@ The useful runtime signals are:
 
 - `snapshot.correction_entries`, `snapshot.correction_entities`, and
   `snapshot.correction_cells`: how far prediction moved when authority arrived;
-- `snapshot.corrections_held`: how often the playout buffer deferred one because
-  this instance had not reached the tick it describes (§4.1);
+- `snapshot.corrections_held` and `snapshot.corrections_jumped`: how often the
+  playout buffer deferred one because this instance had not reached the tick it
+  describes, and how often one was too far ahead to wait for (§4.1);
+- `snapshot.projected_ticks`: how far behind the clock the last correction was,
+  which is the distance the projection simulated (§3.3);
 - `snapshot.replay_records`, `snapshot.replay_skipped`, and
   `snapshot.replay_suffix_unavailable`: whether local predicted work survived;
 - `snapshot.predictions_pending`, `snapshot.predictions_confirmed` and
@@ -650,7 +674,7 @@ entry says what is actually absent rather than what is imperfect, and how to see
 2. **The playout lead is now measured, and re-measured.** `BarrierDelayTicks` travelled from
    `SessionOffer` through `HandoffRecord` to `NetworkSystem.delayTicks` and every
    writer put the same constant in it. It is derived at lobby close from the worst
-   measured round trip — one way plus a reordering allowance, times the hop count,
+   measured round trip — the round trip plus a reordering allowance, times the hop count,
    floored at the constant and capped at `NetworkBarrierMaxDelayTicks` — and
    published as `network.barrier_delay_ticks`. It was chosen once because no
    artifact between offers and handoffs could tell anyone it had changed; §3.5's
@@ -739,34 +763,17 @@ entry says what is actually absent rather than what is imperfect, and how to see
       against, so a float difference there accumulates. Replay determinism is
       guaranteed within one implementation build.
 
-11. **A producer's own crossing still lands a playout lead before the authority's
-    copy does.** That is §3.1 working as designed — the lead is removed from the
-    player who generated the input — and what remains of it is a position offset
-    the first correction after the crossing then removes: the producer integrates
-    the impulse for `BarrierDelayTicks` that the authority has not, and the
-    difference does not decay with the impulse. A shared body is about one cell
-    apart between the two instances for a single hit at the floored lead.
-
-    *To see it:* one participant hitting a shared swarm, reading both worlds'
-    sub-cell positions each tick. The gap opens over the lead, holds, and closes at
-    the next correction. Two participants hitting one body used to be fifteen cells
-    apart and pointing opposite ways; that was the kinetic immunity latch and the
-    override join, and the composition is closed. What the same lead still moves is
-    the window's *phase* — it opens on the producer and a lead later everywhere else
-    — so which hit `SpendKineticImmunity` reports as opening it, and therefore which
-    one overrides rather than adds, is still answered differently across the lead.
-    That is one attacker's velocity rather than fifteen cells, and it is in
-    `doc/todo.md` as a choice about who owns the override.
-
-    Three ways to close the rest, none of them free:
-
-    | Option | Cost |
-    |---|---|
-    | Make a combat crossing `barrierBound` | The lead becomes input latency on every hit — 150 ms at the floor, and up to a second at `NetworkBarrierMaxDelayTicks`. |
-    | Lag-compensate the receiver | On applying a crossing the receiver also advances the target by the lead's worth of the impulse it just added, so it lands where the producer already has it. Deterministic — the lead is session identity — but it moves the discontinuity onto the participants who did not act, and the extrapolation is only exact while the target's motion is drag alone. |
-    | Roll the receiver's prediction forward | Exact, and the option §10.3 scored lowest on tractability for this codebase. |
-
-    **To be decided.**
+11. **Closed: a producer's own crossing no longer lands a lead before the
+    authority's copy.** Every copy applies at the agreed tick (§3.1), so the offset
+    the first correction after a hit used to remove — the producer integrating an
+    impulse the authority had not — is gone, and with it the phase difference in
+    the kinetic immunity window. What a hit still costs is the lead itself, paid
+    as the distance between the D-18 prediction and the store rather than as input
+    latency. What remains is a two-attacker residual: a crossing that misses the
+    lead is applied late by the authority in arrival order, so which of two hits
+    on one body `SpendKineticImmunity` reports as opening the window can still
+    differ for the length of that lateness; it is in `doc/todo.md` as a choice
+    about who owns the override.
 
 ## 9. Verification
 

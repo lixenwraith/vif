@@ -10,27 +10,40 @@ import (
 // replaySource is the seam the barrier offers the correction path. An interface
 // rather than a concrete type for the same reason AdoptSnapshot is: the system set
 // is assembled from the manifest, and a run without a network system has nothing
-// to replay rather than being broken.
+// to project rather than being broken.
 type replaySource interface {
 	LocalReplaySuffix(fence uint64) ([]event.ScheduledWireFrame, []event.Origin, bool)
 	ReplaySuffixSize() (int, int64)
+	RetainedAfter(tick uint64) ([]event.ScheduledWireFrame, []uint32, []event.Origin)
 }
 
-// replayLocalSuffix re-applies this instance's own accepted crossings that the
-// correction it just installed does not contain: shared state is the authority's
-// as of tick T, and these are the artifacts the session agreed apply after T.
+// replaySink is the projection world's half of the same seam.
+type replaySink interface {
+	ScheduleReplay([]event.ScheduledWireFrame, []uint32, []event.Origin)
+}
+
+// feedProjection puts on the projection world's schedule everything this instance
+// applied after the capture that the capture does not contain: its own crossings
+// past the authority's fence for its source, and the agreed artifacts due after the
+// capture's tick. Each applies at its own tick as the projection simulates forward,
+// which is what makes the projection the world this instance would have reached.
 // Retention is bounded, and a suffix missing a record is unavailable rather than
-// shorter — a shorter suffix is a different history. See doc/multi-player.md.
-func (a *App) replayLocalSuffix(header snapshot.CaptureHeader) (replayed int, ok bool) {
+// shorter — a shorter suffix is a different history. See doc/multi-player.md §3.3.
+func (a *App) feedProjection(staging *App, header snapshot.CaptureHeader) {
 	src, local := a.replaySource()
 	if src == nil {
-		return 0, true // no session barrier: nothing was ever retained
+		return // no session barrier: nothing was ever retained
 	}
-	// This instance's own boundary in the world that was just installed. A capture
-	// that names no fence for this source claims nothing about its stream, so the
-	// whole retained suffix is replayed — the conservative direction, because a
-	// duplicate is repaired by the next correction and a discarded action is not.
+	sink, _ := staging.replaySource()
+	dst, ok := sink.(replaySink)
+	if !ok {
+		return
+	}
 	tick := header.Tick
+	// A capture that names no fence for this source claims nothing about its
+	// stream, so the whole retained suffix is fed — the conservative direction,
+	// because a duplicate is repaired by the next correction and a discarded
+	// action is not.
 	fence := header.Crossings.Seq(network.PeerID(local))
 	frames, origins, available := src.LocalReplaySuffix(fence)
 	retained, dropped := src.ReplaySuffixSize()
@@ -43,45 +56,20 @@ func (a *App) replayLocalSuffix(header snapshot.CaptureHeader) (replayed int, ok
 		m.ReplaySkipped.Add(1)
 		vlog.Warn("app", "msg", "local replay skipped",
 			"tick", tick, "retained", retained, "dropped", dropped)
-		return 0, false
+		frames, origins = nil, nil
 	}
-	if len(frames) == 0 {
-		return 0, true
+	sources := make([]uint32, len(frames))
+	for i := range sources {
+		sources[i] = local
 	}
-
-	pushed := 0
-	a.world.RunSafe(func() {
-		queue := a.world.Resources.Event.Queue
-		for i, f := range frames {
-			et, payload, domain, err := f.Frame.Decode()
-			if err != nil {
-				// A frame this build cannot decode is one it should never have
-				// encoded. Counting it and going on would replay a hole; the whole
-				// suffix is refused instead, on the same "never guess" rule.
-				vlog.Warn("app", "msg", "local replay frame refused", "error", err.Error())
-				pushed = -1
-				return
-			}
-			origin := event.OriginNetwork
-			if i < len(origins) {
-				origin = origins[i]
-			}
-			queue.PushReady(event.GameEvent{
-				Type: et, Payload: payload, Origin: origin, Domain: domain,
-			})
-			pushed++
-		}
-	})
-	if pushed < 0 {
-		m.ReplaySkipped.Add(1)
-		m.ReplayUnusable.Store(true)
-		return 0, false
+	agreed, agreedSources, agreedOrigins := src.RetainedAfter(tick)
+	dst.ScheduleReplay(append(frames, agreed...), append(sources, agreedSources...),
+		append(origins, agreedOrigins...))
+	m.ReplayReplayed.Add(int64(len(frames)))
+	if len(frames)+len(agreed) > 0 {
+		vlog.Debug("app", "msg", "local crossings projected",
+			"tick", tick, "records", len(frames), "agreed", len(agreed), "retained", retained)
 	}
-	a.scheduler.Settle()
-	m.ReplayReplayed.Add(int64(pushed))
-	vlog.Debug("app", "msg", "local crossings replayed",
-		"tick", tick, "records", pushed, "retained", retained)
-	return pushed, true
 }
 
 // replaySource finds the barrier that retains the suffix, and this instance's own

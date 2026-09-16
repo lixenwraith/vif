@@ -118,9 +118,9 @@ workaround.
 - Prerequisite: a rule for which of two participants owns a shared kill
 
 `CombatComponent.LastDamagedBy` is the last writer's cursor, and two participants
-damaging one target write it in opposite orders because each applies its own
-crossing first. The authority's correction repairs it, so the divergence is one
-cadence of credit rather than a permanent one. The boost is no longer awarded
+damaging one target write it in opposite orders when one hit missed the lead and
+the authority applied it late. The authority's correction repairs it, so the
+divergence is one cadence of credit rather than a permanent one. The boost is no longer awarded
 inside that cadence — the prediction ledger holds it until a world proves the death
 (multi-player.md §3.4) — but the credit it then pays is the one the local
 prediction recorded, and the entity is gone from the authority's world by the time
@@ -145,27 +145,60 @@ against a different entity. A generation would make the key exact.
 - Affected files: `internal/component/combat.go`, `internal/system/combat.go`
 - Prerequisite: a decision on whether a crossing-carried hit may ever override
 
-`SpendKineticImmunity` reports `opened` from a timer the producer starts a playout
-lead before everyone else, and `opened` is what picks the override profile over the
-additive one. Measured on a two-participant mesh at the floored lead: the window
-opens on the producer at +1 and on the receiver at +4, so for 6 of its 7 ticks the
-two instances would answer `opened` differently for a second attacker's hit — one
-replacing the body's velocity where the other adds to it. The per-attacker budget
-and the additive join closed the composition; which hit owns the override is the
-same choice as kill credit above.
+`SpendKineticImmunity` reports `opened` from a timer, and `opened` is what picks
+the override profile over the additive one. Every copy of a hit now applies at the
+agreed tick, so the window opens together; what still differs is a hit that missed
+the lead, which the authority applies late in arrival order, so for the length of
+that lateness a second attacker's hit answers `opened` differently on two
+instances. The per-attacker budget and the additive join closed the composition;
+which hit owns the override is the same choice as kill credit above.
 
-### Decide what a producer's own crossing costs the authority's copy
+### Retain peer crossings for the projection
 
 - Priority: P2
-- Affected files: `internal/system/network.go`, `internal/event/wire.go`
-- Prerequisite: a decision on input latency, which is a gameplay judgement
+- Affected files: `internal/system/network.go`, `internal/app/replay_suffix.go`
+- Prerequisite: none
 
-An ordinary crossing applies at once on its producer and `BarrierDelayTicks` later
-on the authority, so the first correction after one pulls the target back by that
-much travel — measurably, about 3 cells on a knocked-back swarm at the floored
-lead. Either the crossing becomes barrier-bound, which is 150 ms of latency on
-every hit, or the receiver rolls its prediction forward instead of adopting the
-capture's tick. See [Multiplayer](multi-player.md) §8 item 11.
+A projection re-applies this instance's own suffix and the agreed artifacts, but
+an ordinary crossing from another participant applied inside the projected window
+is not retained, so the projection lacks it until the next correction carries it.
+Retaining applied peer artifacts under the same age bound closes it.
+
+### Predict a typed gold member instead of publishing it
+
+- Priority: P2
+- Affected files: `internal/system/network.go`, `internal/system/typing.go`
+- Prerequisite: a local tombstone the leftmost-member check can read
+
+`EventCompositeMemberDestroyed` is the one crossing its producer still applies at
+once, because `isLeftmostMember` validates the next keystroke against the live run;
+a correction inside the lead shows the member once more for a tick. A player-domain
+tombstone the check consults would let the member cross like everything else.
+
+### Keep the correction magnitude to the shared surface
+
+- Priority: P3
+- Affected files: `internal/engine/snapshot_world_gen.go`, `tools/`
+- Prerequisite: none
+
+`SharedWorldDifference` counts the owner-authored set of a cursor this instance
+authors, which the reconcile then restores, so a projected install reports one
+phantom entity per owned cursor.
+
+### Find what makes a networkless soak load-sensitive
+
+- Priority: P2
+- Affected files: `internal/app/soak_test.go`, `internal/event/pool.go`,
+  `internal/event/batch_pool.go`, `internal/engine/component_domain.go`
+- Prerequisite: a reproduction; 36 runs under parallel load here stayed clean
+
+`TestSoakAppsAreIndependent` failed twice in nine loaded suite runs with two
+worlds of one seed differing in their position digest, so the simulation itself
+took a different path. The headless clock is virtual and the audit gate is the only
+process-wide switch a world reads; what parallel Apps share is the payload pools
+(`CharacterTypedPayloadPool`, the batch pools) and `auditScope`, so a payload read
+after its release to a shared pool is the candidate. Moving the pools onto the
+World, or `-count` under load until it reproduces, is the smallest step.
 
 ### Rename the participant identity type
 

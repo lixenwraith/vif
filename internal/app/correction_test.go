@@ -110,11 +110,11 @@ func assertCorrected(t *testing.T, want []string, guest *App, label string) {
 	}
 }
 
-// TestGuestConvergesOnEveryCorrection is the headline criterion and the replacement
-// for a lockstep one. A guest applies its own input immediately and extrapolates, so
-// it is expected to differ; the claim is that every correction closes the difference
-// exactly. The magnitude is asserted non-zero, because a guest that never predicted
-// anything would pass a convergence criterion while proving nothing.
+// TestGuestConvergesOnEveryCorrection is the headline criterion. Crossings apply at
+// one agreed tick everywhere, so the two disagree only over what one of them derived
+// and the other did not; the claim is that every correction closes that difference
+// exactly. The magnitude is asserted non-zero, because a guest that never differed
+// would pass a convergence criterion while proving nothing.
 func TestGuestConvergesOnEveryCorrection(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF
@@ -124,10 +124,14 @@ func TestGuestConvergesOnEveryCorrection(t *testing.T) {
 	advance := func() { host.Tick(1); guest.Tick(1) }
 	drifted := false
 	for round := range 6 {
-		// Each participant drives its own cursor, which is what makes their shared
-		// worlds disagree between corrections at all.
+		// Each participant drives its own cursor, and the host takes a placement the
+		// guest never derives — a stamped shared one, as a wall push-out is.
 		inject(t, host, intentMotion(input.MotionRight, 1))
 		inject(t, guest, intentMotion(input.MotionLeft, 1))
+		from := cursorPosition(host, localA)
+		host.Context().PushEventOrigin(event.EventCursorMoveRequest,
+			&event.CursorMoveRequestPayload{Entity: localA, X: from.X, Y: from.Y + 1}, event.OriginDebug)
+		host.Settle()
 		for range 3 {
 			advance()
 		}
@@ -164,14 +168,13 @@ func TestCorrectionMagnitudeIsMeasuredNotAsserted(t *testing.T) {
 	mirrorCursors(t, host, guest)
 	advance := func() { host.Tick(1); guest.Tick(1) }
 
-	// A placement only the host knows about: it applies locally at once and the
-	// guest learns of it a playout lead later, so a correction read in between
-	// describes a world the guest does not have.
+	// A placement only the host derives — stamped shared, as a wall push-out is —
+	// so a correction read after it describes a world the guest does not have.
 	var hostCursor core.Entity
 	host.World().RunSafe(func() { hostCursor = host.World().Resources.Player.Slot(0) })
 	from := cursorPosition(host, hostCursor)
-	host.Context().PushCrossing(event.EventCursorMoveRequest,
-		&event.CursorMoveRequestPayload{Entity: hostCursor, X: from.X + 7, Y: from.Y + 3})
+	host.Context().PushEventOrigin(event.EventCursorMoveRequest,
+		&event.CursorMoveRequestPayload{Entity: hostCursor, X: from.X + 7, Y: from.Y + 3}, event.OriginDebug)
 	host.Settle()
 
 	want := deliverCorrectionNow(t, host, []*App{guest}, advance)
@@ -411,11 +414,10 @@ func TestReconcileMatchesAFullInstall(t *testing.T) {
 	}
 }
 
-// TestCrossingApplyTimes covers both halves of the ordering rule over one pair. An
-// ordinary crossing applies on its producer in the tick that produced it and a
-// playout lead later everywhere else. Arrival and departure are the exception: they
-// create and destroy shared cursors, whose identity every capture references by, so
-// they apply at one agreed tick on the producer too.
+// TestCrossingApplyTimes is the ordering rule over one pair: a crossing applies at
+// one agreed tick, a playout lead after its production, on its producer as on its
+// peer. A producer that applied its own a lead early was the one every correction
+// inside that lead had to undo.
 func TestCrossingApplyTimes(t *testing.T) {
 	t.Parallel()
 	a, b := pair(t, 0x5EEDBEEF, 0)
@@ -431,21 +433,25 @@ func TestCrossingApplyTimes(t *testing.T) {
 		&event.CursorMoveRequestPayload{Entity: target, X: want.X, Y: want.Y})
 	a.Settle()
 
-	if got := cursorPosition(a, target); got != want {
-		t.Fatalf("the producer's own crossing landed at %#v, want %#v with no lead", got, want)
-	}
-	if got := cursorPosition(b, target); got != start {
-		t.Fatalf("the peer applied a crossing before its apply tick: %#v", got)
-	}
-	for range parameter.NetworkBarrierDelayTicks + 1 {
+	for range parameter.NetworkBarrierDelayTicks {
+		if got := cursorPosition(a, target); got != start {
+			t.Fatalf("the producer applied its own crossing at %#v inside the lead", got)
+		}
+		if got := cursorPosition(b, target); got != start {
+			t.Fatalf("the peer applied a crossing before its apply tick: %#v", got)
+		}
 		a.Tick(1)
 		b.Tick(1)
 	}
-	if got := cursorPosition(b, target); got != want {
-		t.Fatalf("the peer applied the crossing as %#v, want %#v", got, want)
+	a.Tick(1)
+	b.Tick(1)
+	for _, x := range []*App{a, b} {
+		if got := cursorPosition(x, target); got != want {
+			t.Fatalf("the crossing applied as %#v at the agreed tick, want %#v", got, want)
+		}
 	}
-	if local := statOf(a, "network.crossings_local"); local == 0 {
-		t.Fatal("no crossing was counted as applied without the lead")
+	if deferred := statOf(a, "network.barrier_deferred"); deferred == 0 {
+		t.Fatal("the producer's own crossing was not counted as deferred")
 	}
 	if sent := statOf(a, "network.crossings_sent"); sent == 0 {
 		t.Fatal("the crossing applied locally but never reached the wire")
@@ -1211,8 +1217,7 @@ func TestCorrectionLeavesPlayerStreamsAlone(t *testing.T) {
 // TestACorrectionDoesNotStallTheOwnerStateSync is the D-13 cadence boundary. The
 // authority mirrors a guest's cursor from a sync up to NetworkSyncTicks old, so a
 // correction can carry a stale mirror to everyone else. That is bounded only because
-// an install leaves the sync sequence alone: an install adopts the capture's tick, and
-// a sequence that followed it would restart below what a receiver had already applied.
+// an install leaves the sync sequence alone, whatever distance it projects across.
 func TestACorrectionDoesNotStallTheOwnerStateSync(t *testing.T) {
 	t.Parallel()
 	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
@@ -1239,15 +1244,14 @@ func TestACorrectionDoesNotStallTheOwnerStateSync(t *testing.T) {
 	}
 
 	// Run the guest several sync periods past the host, so the correction it installs
-	// describes a tick it has left and the install rewinds its clock across one.
+	// describes a tick well behind it and is projected across the gap.
 	for range 4 * parameter.NetworkSyncTicks {
 		guest.Tick(1)
 	}
 	ahead := guest.Position().Tick
 	deliverCorrectionNow(t, host, []*App{guest}, advance)
-	if guest.Position().Tick >= ahead {
-		t.Fatalf("guest tick %d did not rewind from %d; the assertion below proves nothing",
-			guest.Position().Tick, ahead)
+	if got := guest.Position().Tick; got < ahead {
+		t.Fatalf("guest tick %d rewound from %d; a correction behind the clock is projected", got, ahead)
 	}
 
 	second := arm()

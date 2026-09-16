@@ -68,11 +68,9 @@ type NetworkSystem struct {
 
 	// snapshotFloor is the tick of the last world this instance installed, and
 	// snapshotFences what that world contained from each participant. For a
-	// barrier-bound frame ApplyTick still decides membership — every instance
-	// applies one at the same tick, so the tick is exact. For an ordinary crossing
-	// it is not: the producer applied it immediately and everyone else waits, so a
-	// world can contain one whose receive-side ApplyTick is still in the future and
-	// miss one whose ApplyTick is already past. The sequence answers both.
+	// barrier-bound frame ApplyTick decides membership — the tick is exact. For an
+	// ordinary crossing the authority may have applied late, so a world can miss one
+	// whose ApplyTick is already past; the sequence answers.
 	// Zero on an instance that never installed a capture.
 	snapshotFloor     uint64
 	snapshotAuthority uint32
@@ -154,15 +152,10 @@ type NetworkSystem struct {
 	// chunk once per path instead, which is a cycle the mesh closes.
 	snapshot network.SnapshotAssembly
 
-	// suffix is the bounded ring of this instance's own accepted crossings, kept so
-	// a correction that rebases the world onto an earlier tick can put them back.
-	//
-	// Only the crossings that applied *immediately* are here — the ones Cross does
-	// not take ownership of. The three barrier-bound artifacts (an arrival, a
-	// departure, a reset) are deliberately absent: they decide what the world *is*
-	// rather than what happens in it, every instance applies them at one agreed
-	// tick including their producer, and replaying one would create a roster entry
-	// or a run the session numbers differently.
+	// suffix is the bounded ring of this instance's own ordinary crossings, kept so
+	// a projection over a capture that predates them can re-apply them at their
+	// ticks. Barrier-bound artifacts are absent: they decide what the world *is*,
+	// and are retained separately in agreed once applied.
 	//
 	// lostSeq is the newest source-local sequence retention has dropped. A replay is
 	// offered only when it lies at or before the correction's fence, because a
@@ -627,9 +620,11 @@ func (s *NetworkSystem) forgetCrossingFence(participant uint32) {
 	s.mu.Unlock()
 }
 
-// Cross encodes and schedules a crossing when a peer is live. The sequence it
-// returns follows the ordinary local copy through dispatch; returning taken=true
-// transfers queue ownership, and pooled originals are released after encoding.
+// Cross encodes and schedules a crossing when a peer is live. Returning taken=true
+// transfers queue ownership: the local copy is applied by the barrier at the
+// artifact's agreed tick, in the order every other instance applies it, and the
+// pooled original is released after encoding. The one copy published now is a
+// producer-immediate type's, and its sequence follows it through dispatch.
 func (s *NetworkSystem) Cross(ev event.GameEvent) (sequence uint64, taken bool) {
 	if !s.barrierActive.Load() {
 		return 0, false
@@ -656,7 +651,8 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (sequence uint64, taken bool) 
 	s.lastApplyTick = applyTick
 	s.crossings = append(s.crossings, event.ScheduledWireFrame{Frame: frame, ApplyTick: applyTick})
 	agreed := barrierBound(ev.Type)
-	if agreed {
+	immediate := producerImmediate(ev.Type)
+	if !immediate {
 		// Counted, never capped. The cap is on what a peer can make this instance
 		// hold; this artifact is this instance's own and has already been broadcast,
 		// so refusing it here would be a divergence rather than a defence.
@@ -664,37 +660,32 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (sequence uint64, taken bool) 
 			frame: frame, applyTick: applyTick, source: s.localSource, origin: ev.Origin,
 		})
 		s.scheduledBytes += frameBytes(frame)
+	}
+	if agreed {
 		// A barrier-bound sequence does not participate in the authority's
 		// local-first capture fence. Close its position now so it cannot leave a
 		// permanent hole in the ordinary sequence prefix; its effect remains
 		// classified by ApplyTick on every instance.
 		s.closeAppliedCrossingLocked(frame.Seq)
 	} else {
-		// Retained for replay: this is the artifact the queue is about to publish
-		// here and now, and the one a correction rebasing this instance onto an
-		// earlier tick would undo.
-		s.retainLocked(frame, s.productionEpoch, applyTick, ev.Origin)
+		// Retained for the projection a correction runs, at the tick this instance
+		// applies it: the agreed tick, or the open epoch for a copy the queue
+		// publishes now.
+		localApply := applyTick
+		if immediate {
+			localApply = s.productionEpoch
+		}
+		s.retainLocked(frame, s.productionEpoch, localApply, ev.Origin)
 	}
 	s.mu.Unlock()
-	if agreed {
+	if !immediate {
 		event.ReleaseDeferredPayload(ev.Payload)
 		s.statDeferred.Add(1)
 		return frame.Seq, true
 	}
+	// Ownership is not taken: the queue publishes this copy now, and what was
+	// scheduled above is the copy the peers get.
 	s.statLocalNow.Add(1)
-
-	// Ownership is *not* taken: the queue publishes this artifact now, in the tick
-	// that produced it, and what was scheduled above is only the copy the peers get.
-	//
-	// D-3 makes this a request to the authority: the producer applies it
-	// immediately, the host applies it in its own order, and the next correction
-	// repairs any difference. On the host that difference is nothing because the
-	// host is the authority.
-	//
-	// The receive side keeps the lead, and keeps it for a different reason: it is
-	// an interpolation buffer that lets a remote participant's artifacts arrive out
-	// of order and still be applied in one. Nothing about that is a barrier on this
-	// instance's own input.
 	return frame.Seq, false
 }
 
@@ -796,6 +787,15 @@ func barrierBound(et event.EventType) bool {
 	}
 }
 
+// producerImmediate names the crossings a producer applies in the tick that made
+// them rather than at the agreed tick. Gold typing is the whole list: the next
+// keystroke is validated against the members still standing, so a typed member
+// has to be gone before the lead elapses. Everything else waits, which is what
+// makes the shared world identical on every instance at every tick.
+func producerImmediate(et event.EventType) bool {
+	return et == event.EventCompositeMemberDestroyed
+}
+
 // retainLocked adds one of this instance's own crossings to the replay suffix,
 // dropping the oldest whenever any of the three bounds is exceeded.
 //
@@ -848,38 +848,68 @@ func (s *NetworkSystem) retainLocked(frame event.WireFrame, produced, applyTick 
 	}
 }
 
-// retainAgreed records one applied barrier-bound artifact, so an install that
-// rebases this instance behind its apply tick can put it back.
-//
-// The set is bounded by the roster rather than by a byte budget: the three
-// artifacts are an arrival, a departure and a reset, and a session produces one
-// per participant plus a reset. AdoptSnapshot prunes it by the same membership
-// test that prunes the scheduled queue, so it holds only what a correction could
-// still undo; the cap is what stops a session that installs nothing from growing
-// it without end.
+// retainAgreed keeps one applied barrier-bound artifact so a capture that predates
+// it can be projected past it. Bounded by age rather than by the roster: a
+// projection re-applies everything due between the capture's tick and this
+// instance's, and a spawn burst inside that window is more than a roster's worth.
 func (s *NetworkSystem) retainAgreed(a barrierArtifact) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.agreed = append(s.agreed, a)
+	kept := s.agreed[:0]
+	for _, r := range s.agreed {
+		if r.applyTick+parameter.SnapshotReplayTicks >= a.applyTick {
+			kept = append(kept, r)
+		}
+	}
+	s.agreed = kept
 	if n := len(s.agreed); n > maxAgreedRetained {
 		s.agreed = append(s.agreed[:0], s.agreed[n-maxAgreedRetained:]...)
 	}
 }
 
-// maxAgreedRetained bounds the applied barrier-bound artifacts kept for an
-// install to restore: every participant's arrival and departure, plus a reset.
-const maxAgreedRetained = 2*parameter.MaxPlayers + 1
+// maxAgreedRetained bounds the applied barrier-bound artifacts kept inside the
+// retention window, against a peer producing them faster than the age bound prunes.
+const maxAgreedRetained = 64
+
+// RetainedAfter returns the applied agreed artifacts due after tick, in session
+// order, for a projection that has to re-apply them at their own ticks.
+func (s *NetworkSystem) RetainedAfter(tick uint64) (frames []event.ScheduledWireFrame, sources []uint32, origins []event.Origin) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, a := range s.agreed {
+		if a.applyTick <= tick {
+			continue
+		}
+		frames = append(frames, event.ScheduledWireFrame{Frame: a.frame, ApplyTick: a.applyTick})
+		sources = append(sources, a.source)
+		origins = append(origins, a.origin)
+	}
+	return frames, sources, origins
+}
+
+// ScheduleReplay puts artifacts another instance retained on this barrier's
+// schedule, for a projection world to apply at their ticks. One due at or before
+// the next tick applies then: a record the capture missed because it reached the
+// authority late is re-applied late, exactly as the authority did.
+func (s *NetworkSystem) ScheduleReplay(frames []event.ScheduledWireFrame, sources []uint32, origins []event.Origin) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, f := range frames {
+		a := barrierArtifact{frame: f.Frame, applyTick: f.ApplyTick, source: sources[i], origin: origins[i]}
+		s.scheduled = append(s.scheduled, a)
+		s.scheduledBytes += frameBytes(f.Frame)
+	}
+}
 
 // LocalReplaySuffix returns this instance's own crossings that the installed world
 // does not contain, in session application order.
 //
-// The boundary is the capture's fence for this source, not its tick. A capture
-// describes a world, and what that world holds of this participant's stream is a
-// sequence — the producer applied each crossing immediately, so a copy whose apply
-// tick is already past can still be missing from a capture read before it arrived.
-// Judging by tick discarded exactly those, which is how a guest's own action came to
-// vanish for one cadence whenever its link missed the playout lead. Production ticks
-// still bound the retained window; they do not decide membership.
+// The boundary is the capture's fence for this source, not its tick. A copy whose
+// apply tick is already past can still be missing from a capture read before it
+// reached the authority; judging by tick discarded exactly those, which is how a
+// guest's own action came to vanish for one cadence whenever its link missed the
+// lead. Production ticks bound the retained window; they do not decide membership.
 //
 // ok is false when retention has dropped a record the suffix would need. The
 // caller then installs the authority alone and reports that replay was skipped;
@@ -891,9 +921,20 @@ func (s *NetworkSystem) LocalReplaySuffix(fence uint64) ([]event.ScheduledWireFr
 	if s.lostSeq > fence {
 		return nil, nil, false
 	}
+	// A record whose scheduled copy has not applied yet is not missing from the
+	// world, it is pending in it; the schedule applies it at its tick.
+	pending := make(map[uint64]struct{}, len(s.scheduled))
+	for _, a := range s.scheduled {
+		if a.source == s.localSource {
+			pending[a.frame.Seq] = struct{}{}
+		}
+	}
 	selected := make([]localCrossing, 0, len(s.suffix))
 	for _, rec := range s.suffix {
 		if rec.frame.Frame.Seq != 0 && rec.frame.Frame.Seq <= fence {
+			continue
+		}
+		if _, ok := pending[rec.frame.Frame.Seq]; ok {
 			continue
 		}
 		selected = append(selected, rec)
@@ -1648,11 +1689,11 @@ func (s *NetworkSystem) publishTransportLoss(p engine.NetworkPort) {
 
 // flushCrossings advances the epoch under the producer lock, then sends its marker.
 //
-// A correction may rewind completedTick behind productionEpoch. Epochs up to that
-// high-water mark were already sent before the install, so sending them again would
-// make the receiver's duplicate filter discard any new frames they carry. Keep the
-// frames pending until the re-simulated world reaches the next unsent epoch; they
-// were stamped for that epoch by Cross and then leave together under its one marker.
+// completedTick can stand behind productionEpoch after an install moved the epoch
+// forward. Epochs up to that high-water mark were already sent, so sending them
+// again would make the receiver's duplicate filter discard any new frames they
+// carry. The frames stay pending until the world reaches the next unsent epoch;
+// they were stamped for it by Cross and leave together under its one marker.
 func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint64, active bool) {
 	s.mu.Lock()
 	dropped := s.encodeErr
@@ -1773,10 +1814,10 @@ func (s *NetworkSystem) recordStateDigest(local stateDigest) {
 // compareStateDigest folds one peer's sample against this instance's own at the
 // same tick, and records the difference as a *gauge* rather than as a verdict.
 //
-// This is where D-11's live contract lands in the runtime. A guest applies its own
-// input immediately and extrapolates between corrections, so it is expected to
-// differ from the host. The counter and part name cheaply describe where two
-// instances stand apart; authority corrections, not a terminal verdict, close it.
+// This is where D-11's live contract lands in the runtime. A guest predicts between
+// corrections, so it may differ from the host. The counter and part name cheaply
+// describe where two instances stand apart; authority corrections, not a terminal
+// verdict, close it.
 //
 // What replaced it is two numbers with better claims: the correction magnitude,
 // which says how far apart the two actually were at the moment the authority
@@ -1985,9 +2026,14 @@ func (s *NetworkSystem) applyDue(nextTick uint64) int {
 			// participant's link is not keeping the playout lead.
 			s.statLate.Add(1)
 		}
-		s.world.Resources.Event.Queue.PushReady(event.GameEvent{
-			Type: et, Payload: payload, Origin: a.origin, Domain: domain,
-		})
+		ev := event.GameEvent{Type: et, Payload: payload, Origin: a.origin, Domain: domain}
+		if a.source == localSource && !barrierBound(et) {
+			// The local fence closes at dispatch: a capture read between the
+			// schedule and the handlers must not claim an effect the world does
+			// not yet hold.
+			ev.CrossingSeq = a.frame.Seq
+		}
+		s.world.Resources.Event.Queue.PushReady(ev)
 		if barrierBound(et) {
 			s.retainAgreed(a)
 		} else if a.source != localSource {

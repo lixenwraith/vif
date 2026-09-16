@@ -300,9 +300,9 @@ the effect's current name; death API unification removed the two obsolete
 | `nugget.cursor_rejects` (int) | Requests rejected because nugget could not resolve a roster cursor. |
 | `nugget.disabled_rejects` (int) | Action requests dropped while the nugget system was disabled. |
 | `nugget.spawn_failures` (int) | nugget spawn requests that could not produce an entity. |
-| `network.barrier_applied_local` (int) | Deferred local artifacts admitted at their playout boundary. Only the three that still take one: an arrival, a departure and a reset. Everything else a participant produces is in `network.crossings_local`. |
+| `network.barrier_applied_local` (int) | Local artifacts admitted at their playout boundary, which is every crossing this participant produces but a typed gold member. |
 | `network.barrier_applied_peer` (int) | Peer artifacts admitted at their playout boundary. |
-| `network.barrier_deferred` (int) | Local crossing artifacts the barrier took ownership of, which since Phase 4 is only the three that create or destroy a shared entity. |
+| `network.barrier_deferred` (int) | Local crossing artifacts the barrier took ownership of at production, to apply at the agreed tick. |
 | `network.barrier_late` (int) | Artifacts admitted after their scheduled apply tick. Under an authority this is an ordering decision rather than a divergence — the host applies what reaches it in the order it reaches it — but it is still what says a participant's link is not keeping the playout lead. |
 | `network.barrier_peer_applied` (bool) | Whether the most recent boundary admitted a peer artifact. |
 | `network.barrier_peer_artifacts` (int) | Peer artifacts admitted at the most recent boundary. |
@@ -310,7 +310,7 @@ the effect's current name; death API unification removed the two obsolete
 | `network.barrier_ran_without_peer` (int) | Tick boundaries reached before every required peer epoch marker. |
 | `network.crossings_received` (int) | Peer crossing artifacts decoded and admitted. |
 | `network.crossings_sent` (int) | Local crossing artifacts sent in closed epochs. |
-| `network.crossings_local` (int) | Local crossing artifacts applied in the tick that produced them rather than at the playout lead (D-3 as Phase 4 changed it). |
+| `network.crossings_local` (int) | Local crossing artifacts published in the tick that produced them: typed gold members, whose next keystroke validates against the live run. |
 | `network.corrections_received` (int) | Authoritative corrections reassembled from the wire. |
 | `network.artifacts_refused` (int) | Peer artifacts the authority refused — an arrival or a departure produced by a participant that is not the coordinator. |
 | `network.digest_mismatches` (int) | Runtime parity samples that disagreed. A gauge under weakened D-11, not a fault: a guest differs from the host between corrections by design. |
@@ -365,6 +365,8 @@ the effect's current name; death API unification removed the two obsolete
 | `snapshot.correction_cells` (int) | The largest distance a shared placement moved — the correction a player would actually see. |
 | `snapshot.correction_tick` (int) | The tick the last applied correction described. |
 | `snapshot.corrections_held` (int) | Corrections the playout buffer deferred because this instance had not reached the tick they describe. Nonzero says the exchange paths are delivering worlds of different ages, which is the ordinary case on a link with a round trip; a steady rise with no corrections applied beside it is the buffer stalling rather than smoothing. |
+| `snapshot.corrections_jumped` (int) | Corrections further ahead of the clock than the lead, adopted at their own tick rather than waited for: a join, or a clock this instance had fallen behind. |
+| `snapshot.projected_ticks` (int) | How far behind the clock the last correction was, which is the distance the staging world simulated it forward before the install; zero when it was level. |
 | `snapshot.cadence_ticks` (int) | The correction cadence in force, in ticks. The publication timeline's base — the fastest peer's plan — rather than any one peer's, which `:session` and `CadenceReport` name individually. |
 | `snapshot.cadence_keyframe_interval` (int) | Corrections between whole captures at that cadence. |
 | `snapshot.cadence_keyframe_period_ticks` (int) | Their product: the ticks the session leaves between whole authoritative worlds. This is the value the convergence floor bounds, and the first one to read — a value above `SnapshotFloorKeyframeTicks` is a defect in the controller rather than a slow link. |
@@ -403,7 +405,7 @@ the effect's current name; death API unification removed the two obsolete
 | `snapshot.relay_bytes_sent` (int) | What those relayed answers cost, priced against the relaying participant's own link and never the authority's. |
 | `snapshot.relay_bytes_received` (int) | The same figure from the receiving end. |
 | `snapshot.replay_suffix_records` (int) | Crossings this instance is currently retaining for replay. |
-| `snapshot.replay_records` (int) | Crossings replayed after corrections, cumulative. Each one is an action this participant took that a correction would otherwise have undone. |
+| `snapshot.replay_records` (int) | Crossings re-applied in a projection, cumulative. Each one is an action this participant took that the capture did not contain. |
 | `snapshot.replay_overflow` (int) | Retained crossings dropped by the tick, count or byte bound. |
 | `snapshot.replay_skipped` (int) | Corrections that installed the authority alone because the suffix was incomplete. A partial replay is a guess, so there is no partial answer. |
 | `snapshot.replay_suffix_unavailable` (bool) | Whether the suffix was unavailable at the last correction. |

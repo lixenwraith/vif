@@ -138,6 +138,10 @@ func (w *World) RebindCursorRoster(prior LocalControl) {
 	})
 
 	localID := w.LocalParticipant()
+	// The placements this instance has requested are still pending on the barrier
+	// after the write; dropping them would snap the local cell back for a lead.
+	// They are kept exactly when the same entity is still the cursor it drives.
+	driven, queue := roster.Entity, roster.prediction
 	roster.Clear()
 	for slot := range parameter.MaxPlayers {
 		e := slots[slot]
@@ -160,9 +164,37 @@ func (w *World) RebindCursorRoster(prior LocalControl) {
 	// Bind only re-points Entity for the slot that was local at the time, and the
 	// roster was cleared, so the binding is restored explicitly afterwards.
 	roster.SetLocal(prior.local)
+	if roster.Entity != 0 && roster.Entity == driven {
+		roster.prediction = queue
+	}
 
 	for _, held := range prior.owned {
 		if w.SimulatesLocally(held.entity) {
+			w.restoreOwnedCursorState(held)
+		}
+	}
+}
+
+// DisownCursors leaves this world driving no cursor: every cursor is remote and
+// input follows none. A projection world predicts the shared domain for another
+// instance and must simulate nothing that instance's own player systems own.
+// Caller MUST hold updateMutex.
+func (w *World) DisownCursors() {
+	w.Components.Cursor.Each(func(_ core.Entity, c *component.CursorComponent) bool {
+		c.Control = component.ControlRemote
+		return true
+	})
+	w.Resources.Player.SetLocal(parameter.NoPlayerSlot)
+}
+
+// AdoptOwnedCursorState writes another instance's owner-authored cursor values
+// over this world's, whoever this world thinks drives them. A projection reads the
+// shield and energy the shared species react to as the instance it predicts for
+// holds them, not as the authority's stale copy has them.
+// Caller MUST hold updateMutex.
+func (w *World) AdoptOwnedCursorState(prior LocalControl) {
+	for _, held := range prior.owned {
+		if w.Components.Cursor.HasEntity(held.entity) {
 			w.restoreOwnedCursorState(held)
 		}
 	}

@@ -157,6 +157,21 @@ func (w *World) DestroyEntity(e core.Entity) {
 	w.destroyedCount[e.Domain()].Add(1)
 }
 
+// DestroyDomainEntities removes every entity of one domain. A projection world
+// accumulates player-domain effects of the shared deaths it re-derives, and nothing
+// else in it ever retires them.
+// Caller MUST hold updateMutex.
+func (w *World) DestroyDomainEntities(d core.Domain) {
+	var doomed []core.Entity
+	for e := range w.componentMask {
+		if e.Domain() == d {
+			doomed = append(doomed, e)
+		}
+	}
+	slices.Sort(doomed)
+	w.DestroyEntitiesBatch(doomed)
+}
+
 // DestroyEntitiesBatch removes entities without protection checks
 // Caller guarantees no entity has ProtectAll - use for known-safe bulk operations
 func (w *World) DestroyEntitiesBatch(entities []core.Entity) {

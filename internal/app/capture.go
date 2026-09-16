@@ -191,7 +191,19 @@ func (a *App) InstallShared(cap snapshot.SharedCapture) error {
 	if err := a.VerifyCapture(cap); err != nil {
 		return err
 	}
-	return a.installShared(cap, true)
+	if err := a.installShared(cap, true); err != nil {
+		return err
+	}
+	a.confirmPredictions(cap.Header.Tick, a)
+	return nil
+}
+
+// confirmPredictions settles the prediction ledger against the authority's world
+// as installed in authority, which is this world after a direct install and the
+// staging world before a projection re-derives this instance's own predictions.
+func (a *App) confirmPredictions(tick uint64, authority *App) {
+	alive := authority.world.Components.Combat.HasEntity
+	a.world.RunSafe(func() { a.world.ConfirmPredictedDeaths(tick, alive) })
 }
 
 // installShared writes a capture whose identity has already been established, by
@@ -296,19 +308,9 @@ func (a *App) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal 
 			return
 		}
 
-		// The barrier is rebased with the world. Tick classifies peer and
-		// barrier-bound artifacts; the completed authority sequence classifies the
-		// authority's local-first stream.
+		// The barrier is rebased with the world. Tick classifies barrier-bound
+		// artifacts; each source's fence classifies its ordinary stream.
 		a.adoptSnapshotBarrierLocked(cap.Header)
-
-		// The world is the authority's, so a shared death this instance predicted is
-		// proved by the entity's absence from it. Behind the same gate the FSM's
-		// lifecycle replay is, and for the same reason: a staging pass proves the
-		// position resolves and must reach no player-domain system. After every
-		// fallible step, so a refused install never pays a reward out.
-		if reconcileLocal {
-			a.world.ConfirmPredictedDeaths(cap.Header.Tick)
-		}
 
 		// Last, so a carrier that publishes on load does not overwrite the
 		// captured surface with a value derived from this instance's own history.

@@ -79,6 +79,10 @@ type selectiveState struct {
 	forwardTick uint64
 	forwardFrom uint32
 
+	// heldManifest is one that arrived ahead of this instance's clock, kept until
+	// the clock reaches the tick it describes; a newer arrival replaces it.
+	heldManifest []byte
+
 	// wantKeyframe records that this receiver has asked for a whole world and is
 	// waiting for one, so a manifest arriving in the meantime is answered with the
 	// same request rather than starting a repair that cannot help.
@@ -416,6 +420,10 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 func (c *Corrections) applySelective() {
 	c.selectiveMu.Lock()
 	manifests := c.selective.manifests
+	if len(manifests) == 0 && c.selective.heldManifest != nil {
+		manifests = [][]byte{c.selective.heldManifest}
+	}
+	c.selective.heldManifest = nil
 	shardSets := c.selective.shardSets
 	unserved := c.selective.unserved
 	from := c.selective.source
@@ -435,12 +443,36 @@ func (c *Corrections) applySelective() {
 	// authority has already moved past, and answering it would spend a round trip
 	// repairing this instance onto a world nobody holds any more.
 	newest := manifests[len(manifests)-1]
+	// Compared at the tick it describes, for the reason a correction is applied
+	// there: this instance's world moves, and an index over a tick it has not
+	// reached would name every page different and buy a repair of nothing. Past
+	// the hold window it is answered now; the repair then jumps the clock.
+	if ahead, ok := c.manifestAhead(newest); ok && ahead <= c.holdWindow() {
+		c.selectiveMu.Lock()
+		c.selective.heldManifest = newest
+		c.selectiveMu.Unlock()
+		return
+	}
 	tick := c.answerManifest(newest, int64(len(manifests)))
 	if tick == 0 {
 		return // refused; there is nothing worth passing on
 	}
 	c.holdForward(newest, from, tick)
 	c.flushForward()
+}
+
+// manifestAhead reports how far ahead of this instance's clock a manifest's tick
+// is, and whether it is ahead at all.
+func (c *Corrections) manifestAhead(body []byte) (uint64, bool) {
+	want, err := snapshot.DecodeManifest(body)
+	if err != nil {
+		return 0, false
+	}
+	at := c.inst.Position()
+	if want.Header.Run != at.Run || want.Header.Tick <= at.Tick {
+		return 0, false
+	}
+	return want.Header.Tick - at.Tick, true
 }
 
 // holdForward records the newest manifest this instance has answered, replacing
@@ -537,17 +569,15 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 	c.sendRequest(from, req)
 
 	if req.Converged() {
-		// The whole point of the protocol: the roots agree, so no state travels.
-		// The header still does — the authority's tick, run and map bounds are what
-		// an install adopts, and a guest that kept its own would keep predicting
-		// from a clock the session has moved past.
+		// The whole point of the protocol: the roots agree, so no state travels
+		// and nothing is written. The header still counts — its fences are what the
+		// barrier prunes by, and its tick is proof this instance's own predictions
+		// can be settled against. A header behind the clock proves the same about
+		// a world this instance has already moved past, so it is not adopted.
 		m.HashOnly.Add(1)
 		mine.Header = want.Header
-		if integrity, err := snapshot.Integrity(mine); err == nil {
-			mine.Header.Integrity = integrity
-			if err := c.install(mine); err != nil {
-				vlog.Debug("app", "msg", "hash-only correction not applied", "error", err.Error())
-			}
+		if at := c.inst.Position(); at.Run == want.Header.Run && at.Tick <= want.Header.Tick {
+			c.adoptAuthority(mine)
 		}
 		c.selectiveMu.Lock()
 		c.selective.awaiting = nil
@@ -562,6 +592,28 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 	}), parameter.SnapshotCorrectionQueue)
 	c.selectiveMu.Unlock()
 	return want.Header.Tick
+}
+
+// adoptAuthority takes a capture this instance's own world already equals: fences,
+// ledger and retention move, and no store is written.
+func (c *Corrections) adoptAuthority(cap snapshot.SharedCapture) {
+	c.installedMu.Lock()
+	stale := c.lastInstalled > 0 && cap.Header.Tick <= c.lastInstalled
+	if !stale {
+		c.lastInstalled = cap.Header.Tick
+	}
+	c.installedMu.Unlock()
+	if stale {
+		c.tel.Superseded.Add(1)
+		return
+	}
+	c.inst.AdoptAuthority(cap.Header)
+	if integrity, err := snapshot.Integrity(cap); err == nil {
+		cap.Header.Integrity = integrity
+		c.retainInstalled(cap)
+	}
+	c.tel.Applied.Add(1)
+	c.tel.CorrectionTick.Store(int64(cap.Header.Tick))
 }
 
 // takeAwaiting claims the outstanding baseline a repair answers, dropping it and

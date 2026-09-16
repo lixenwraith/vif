@@ -41,9 +41,11 @@ func diverge(guest *run, spread int) {
 func outstandingRepair(t *testing.T, host, guest *run, corrupt func(*snapshot.CorrectionShardSet)) ([]byte, uint64) {
 	t.Helper()
 	// A publication the guest has to descend into: not a keyframe, so it leads with
-	// the index. One round delivers it and lets the guest answer; the request that
-	// comes back is intercepted here rather than served.
+	// the index. The guest is level with the host, because an index is answered at
+	// the tick it describes; one round delivers it and lets the guest answer, and the
+	// request that comes back is intercepted here rather than served.
 	host.world.advance(1)
+	guest.world.advance(1)
 	if err := host.c.Publish(); err != nil {
 		t.Fatalf("publish: %v", err)
 	}

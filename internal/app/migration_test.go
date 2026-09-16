@@ -640,6 +640,7 @@ func TestMeshParityAcrossAHandoff(t *testing.T) {
 func TestGuestContinuesLocallyAfterHostLoss(t *testing.T) {
 	t.Parallel()
 	host, guest, _ := shapedPair(t, 0x10571057, network.LinkShape{})
+	mirrorCursors(t, host, guest)
 	runSession(host, guest, 80)
 
 	beforeTick := guest.Position().Tick

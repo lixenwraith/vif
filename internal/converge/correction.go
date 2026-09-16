@@ -952,11 +952,6 @@ func (c *Corrections) commit(cap snapshot.SharedCapture) error {
 	c.lastInstalled = cap.Header.Tick
 	c.installedMu.Unlock()
 
-	// The authority is in place; this participant's own actions the installed world
-	// does not contain go back on top of it. The boundary is the capture's fence for
-	// this source, not its tick — see internal/app/replay_suffix.go for why.
-	c.inst.ReplayLocalSuffix(cap.Header)
-
 	// What was just installed is provably the authority's world at that tick — a
 	// whole correction re-checks its own integrity hash and a repair reproduces the
 	// authority's root — so an index over it carries the authority's root and can
@@ -973,38 +968,32 @@ func (c *Corrections) commit(cap snapshot.SharedCapture) error {
 	return nil
 }
 
-// hold is the correction playout buffer, and it exists because a guest's world
-// clock is whatever the last install said: the install adopts the authority tick,
-// so the clock samples the *age* of whichever exchange happened to deliver. A
-// whole body is one one-way delay old; a selective repair is three, because the
-// index goes out, the answer comes back and the pages go out again. Mixing the two
-// moved the clock by up to four one-way delays between consecutive corrections,
-// and every shared actor moved that many ticks with it — which is why a
-// knocked-back swarm, the fastest thing in the world, was the one seen jittering.
-//
-// A correction describing a tick this instance has not reached is therefore held
-// until it has. The offset settles on the slowest path instead of chasing the
-// fastest, and what a correction then carries is prediction error rather than a
-// clock difference. Reports whether the capture was deferred.
+// hold is the correction playout buffer: one ahead of the clock inside the lead
+// waits for its tick, a newer arrival replacing an older one still waiting. One
+// further ahead is a session this instance has fallen behind, adopted at once as
+// the one step the clock takes forward; one behind the clock is projected by the
+// commit instead. Reports whether the capture was deferred.
 func (c *Corrections) hold(cap snapshot.SharedCapture) bool {
 	at := c.inst.Position()
 	if cap.Header.Run != at.Run || reached(cap, at.Tick) {
 		return false
 	}
-	c.installedMu.Lock()
-	// One correction waits, never two. A second arriving while the first is still
-	// ahead of the clock says this instance is not catching up, and the step it has
-	// been avoiding is the cheapest thing left: one correction late once, rather
-	// than a buffer that fills for the rest of the session.
-	if c.haveHeld {
-		c.held, c.haveHeld = snapshot.SharedCapture{}, false
-		c.installedMu.Unlock()
+	if cap.Header.Tick-at.Tick > c.holdWindow() {
+		c.tel.Jumped.Add(1)
 		return false
 	}
+	c.installedMu.Lock()
 	c.held, c.haveHeld = cap, true
 	c.installedMu.Unlock()
 	c.tel.Held.Add(1)
 	return true
+}
+
+// holdWindow is how far ahead of the clock a correction is worth waiting for: the
+// playout lead, which is also how late this instance's own crossings may already be
+// landing. Never less than a tick, so a lead of none still absorbs a jittered path.
+func (c *Corrections) holdWindow() uint64 {
+	return max(c.authority.State().Delay, 1)
 }
 
 // reached reports whether this instance's clock has arrived at the tick a

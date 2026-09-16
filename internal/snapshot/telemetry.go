@@ -33,8 +33,10 @@ type Telemetry struct {
 
 	// KeyframeAge is the receiving end of the floor: ticks since a whole
 	// authoritative world last arrived. Held is how many corrections the playout
-	// buffer deferred: a session whose paths deliver worlds of one age holds none.
-	KeyframeAge, Held *atomic.Int64
+	// buffer deferred, Jumped how many moved the clock forward past it, and
+	// Projected how far behind the clock the last one arrived — the ticks the
+	// staging world simulated so the live one never revisited them.
+	KeyframeAge, Held, Jumped, Projected *atomic.Int64
 
 	// The index exchange: what it cost, and how often it proved convergence
 	// outright. HashOnly is the case the design is for.
@@ -99,6 +101,8 @@ func NewTelemetry(reg *status.Registry) Telemetry {
 		FloorBreached: b("snapshot.cadence_floor_breached"),
 		KeyframeAge:   i("snapshot.cadence_keyframe_age_ticks"),
 		Held:          i("snapshot.corrections_held"),
+		Jumped:        i("snapshot.corrections_jumped"),
+		Projected:     i("snapshot.projected_ticks"),
 
 		ManifestSent: i("snapshot.manifests_sent"), ManifestRecv: i("snapshot.manifests_received"),
 		ManifestBytesSent: i("snapshot.manifest_bytes_sent"),

@@ -69,8 +69,9 @@ func (i instance) DrainOffTick() {
 
 func (i instance) CaptureShared() (snapshot.SharedCapture, error) { return i.a.CaptureShared() }
 
-// InstallCapture resolves a capture against the staging world and commits it
-// between two ticks, reporting how far this instance had drifted.
+// InstallCapture resolves a capture against the staging world, projects it to this
+// instance's tick and commits it between two ticks, reporting how far this instance
+// had drifted from the projection.
 func (i instance) InstallCapture(cap snapshot.SharedCapture) (engine.WorldDifference, error) {
 	staged, err := i.a.StageShared(cap)
 	if err != nil {
@@ -86,7 +87,14 @@ func (i instance) VerifyCaptureIdentity(h snapshot.CaptureHeader) error {
 	return i.a.verifyCaptureIdentity(h)
 }
 
-func (i instance) ReplayLocalSuffix(h snapshot.CaptureHeader) { i.a.replayLocalSuffix(h) }
+// AdoptAuthority takes a header whose world this instance already holds: the
+// barrier's fences move to it and the ledger is settled against this world, which
+// the authority has just proved is its own.
+func (i instance) AdoptAuthority(h snapshot.CaptureHeader) {
+	i.a.world.RunSafe(func() { i.a.adoptSnapshotBarrierLocked(h) })
+	i.a.confirmPredictions(h.Tick, i.a)
+	i.a.world.RunSafe(func() { i.a.telemetry.InstallTick.Store(int64(h.Tick)) })
+}
 
 func (i instance) PlayoutLead(r []network.RosterEntry) (uint64, uint64, []network.PeerID) {
 	return i.a.playoutLead(r)

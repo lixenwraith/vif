@@ -14,8 +14,10 @@ import (
 // chooseBarrierDelay picks the lead one roster and its measurements ask for, and
 // names the participants whose links ask for more than the ceiling can absorb.
 // Nothing on the far end takes no lead, nothing measured keeps the default, and a
-// measured link asks for what it measured. The ceiling reads the *smallest* round
-// trip, not the smoothed one: see multi-player.md §3.5 for why.
+// measured link asks for a whole round trip plus a reordering allowance: one way
+// for the artifact to arrive, and one way more because the authority reading it
+// stands a correction's age ahead of the guest that produced it. The ceiling reads
+// the *smallest* round trip, not the smoothed one: see multi-player.md §3.5.
 func chooseBarrierDelay(link engine.LinkMeasuringPort, roster []network.RosterEntry, local network.PeerID) (uint64, []network.PeerID) {
 	if len(roster) == 0 {
 		return parameter.NetworkBarrierDelayTicks, nil
@@ -42,10 +44,10 @@ func chooseBarrierDelay(link engine.LinkMeasuringPort, roster []network.RosterEn
 		if !m.Ready || m.RTT <= 0 {
 			continue
 		}
-		if m.MinRTT > 0 && ticks(m.MinRTT/2) > parameter.NetworkBarrierMaxDelayTicks {
+		if m.MinRTT > 0 && ticks(m.MinRTT) > parameter.NetworkBarrierMaxDelayTicks {
 			overrun = append(overrun, p.ID)
 		}
-		worst = max(worst, ticks(m.RTT/2+parameter.NetworkBarrierJitterMargin*m.Jitter))
+		worst = max(worst, ticks(m.RTT+parameter.NetworkBarrierJitterMargin*m.Jitter))
 		measured = true
 	}
 	switch {

@@ -41,7 +41,9 @@ func TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies(t *testing.T) {
 		t.Fatalf("keyframe: %v", err)
 	}
 	deliver(runs, 2)
-	host.world.advance(1)
+	for _, r := range runs {
+		r.world.advance(1) // an index is answered at the tick it describes
+	}
 	if err := host.c.Publish(); err != nil {
 		t.Fatalf("index: %v", err)
 	}

@@ -31,7 +31,7 @@ type stub struct {
 	world  snapshot.SharedCapture
 
 	installed []snapshot.SharedCapture
-	replayed  []snapshot.CaptureHeader
+	adopted   []snapshot.CaptureHeader
 	handoffs  []adopted
 	abandoned [][]network.RosterEntry
 	said      []string
@@ -91,16 +91,20 @@ func (s *stub) InstallCapture(cap snapshot.SharedCapture) (engine.WorldDifferenc
 	defer s.mu.Unlock()
 	s.installed = append(s.installed, cap)
 	s.world = cap
-	s.stamp.Tick = cap.Header.Tick
+	// Forward only, as App projects a capture behind the clock to the present.
+	if cap.Header.Tick > s.stamp.Tick {
+		s.stamp.Tick = cap.Header.Tick
+	}
 	return engine.WorldDifference{Entries: 1, Entities: 1}, nil
 }
 
 func (s *stub) VerifyCaptureIdentity(snapshot.CaptureHeader) error { return nil }
 
-func (s *stub) ReplayLocalSuffix(h snapshot.CaptureHeader) {
+// AdoptAuthority records a header this instance's world already equals.
+func (s *stub) AdoptAuthority(h snapshot.CaptureHeader) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.replayed = append(s.replayed, h)
+	s.adopted = append(s.adopted, h)
 }
 
 // PlayoutLead answers what the criterion staged; SetPlayoutLead and
