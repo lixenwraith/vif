@@ -628,6 +628,26 @@ Later revisions go through [`update-logwisp.sh`](../deploy/guest/update-logwisp.
 which replaces only the binary, configuration and unit and retains one automatic
 rollback set; the runbook holds the empty-fleet gate it runs inside.
 
+What the stream is allowed to lose is the `rate_limit` in
+[`aggregator.toml`](../deploy/logwisp/aggregator.toml), and nothing else. The sink
+queues a whole burst per reader while that reader writes one frame at a time, so
+`client_buffer_size` under the limiter's `burst` silently loses the tail of every
+release — `dropped_writes` on `/status`, charged to a reader that would have
+drained it. Keep the queue at or above the burst. A reader that truly cannot keep
+up is disconnected at `write_timeout_ms` instead, which the viewer counts as a
+reconnect and `dropped_writes` never sees.
+
+A stream with nothing to carry is the ordinary state of a node between sessions,
+not a dead reader. LogWisp keeps it alive with an SSE comment; a revision without
+that lets the session manager expire a connected viewer and evicts it on the first
+record of the next session, losing it and everything until the browser reconnects.
+
+The 8 MiB file cap that bounds one session on the tmpfs renames its log in place,
+and the archive matches `*.jsonl` too. A revision that reads that archive from the
+start replays every record in it, and the duplicates spend the rate limit, so live
+records are dropped until the replay ends. The pin must be at or after both
+changes for a vacant node to hold a viewer and a long session to stay whole.
+
 ## 11. The allocator
 
 [`tool/vif-allocator`](../tool/vif-allocator/README.md) is the narrow HTTP boundary
@@ -732,7 +752,8 @@ The page-facing API is deliberately small:
 | `GET /readyz` | `200` | The current token can list Services through the K3s API; otherwise `503`. |
 | `POST /vif/api/sessions` | `201` | Accepts an empty body, `{}`, or `{"players":N,"log_level":"L"}` within the advertised `limits`. Refuses before creation when all ten ports are held; otherwise creates the fixed Job, reads its UID, creates its owner-referenced Service, and returns only after pod, EndpointSlice and `live=true ready=true` agree. |
 | `GET /vif/api/sessions` | `200` | `{ "sessions": [...], "limits": {...} }` for live, non-completed Jobs. `guests`, `capacity`, `phase` and `expires_in` come from each pod's text `/health`. |
-| `GET` or `HEAD /vif/api/logs` | `200` stream | Proxies the loopback LogWisp SSE response without parsing records. An unavailable LogWisp is a stable `503 log_stream_unavailable`; a build without the upstream configured is `501 log_stream_not_configured`. |
+| `GET /vif/api/logs` | `200` stream | Proxies the loopback LogWisp SSE response without parsing records. An unavailable LogWisp is a stable `503 log_stream_unavailable`; a build without the upstream configured is `501 log_stream_not_configured`. |
+| `HEAD /vif/api/logs` | `200` | The stream's headers and no body, answered by the allocator. LogWisp refuses a `HEAD` on `/stream` — the client it would register never reads — so a probe never opens one. It reports the route, not the upstream; `501` still stands for a build without it. |
 
 Creation answers `503 fleet_full` (with `Retry-After: 10`), `504
 session_not_ready`, `502 kubernetes_error`, `400` for a malformed body or an
@@ -1156,6 +1177,9 @@ Each row below was a dead end in the proof-of-concept run when it was not known:
 | The Docker build cannot resolve DNS. | The node ruleset does not accept `docker0`. Build with `--network host` (§8). |
 | `kubectl auth can-i get pods/log` answers `yes`. | Positional `pods/log` parses as `TYPE/NAME`. Use `--subresource=log` (§9). |
 | LogWisp shows no lines written before it started. | A watcher seeks to end-of-file on discovery. The source needs `from = "start"` (§10). |
+| `dropped_writes` rises on `/status` with one reader and an idle node. | Records lost from a burst larger than `client_buffer_size`, not backpressure. Keep that queue at or above the `rate_limit` burst (§10). |
+| The viewer's `duplicates` counter jumps, and live records thin out for a minute. | A session crossed the 8 MiB file cap. Pinned LogWisp older than the rotation fix replays the whole archive it renames, and the replay spends the rate limit (§10). |
+| The viewer reconnects while the fleet is quiet, or its `reconnects` climbs on an idle node. | Pinned LogWisp older than the idle keepalive: a stream carrying nothing was idle-expired and evicted on the next record (§10). |
 | `Watcher failed … watcher stopped` in LogWisp's journal. | Read only the invocation running the pinned binary (§10); earlier entries belong to whatever it replaced. |
 | A build stops with `pinned revision is not an ancestor of LogWisp main`. | `deploy/logwisp/REVISION` names a pull-request head a squash merge discarded. Repin to the merged commit. |
 | `curl` to `:9080` is refused right after `systemctl start`. | Only on an allocator that predates `Type=notify`; otherwise the bind has already happened and the refusal is real. |

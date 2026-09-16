@@ -47,6 +47,12 @@ from = "start"
 
 # The unauthenticated stream is reachable only on loopback. The allocator exposes
 # it as a byte proxy; no browser or remote host connects here.
+#
+# client_buffer_size clears the burst above. The sink queues a whole release per
+# client while its reader writes one frame at a time, so a shorter queue loses the
+# tail of every burst the rate limit allows, to a reader that would have drained
+# it. One mechanism decides what this stream loses, and it is the rate limit; a
+# reader that truly cannot keep up is disconnected at write_timeout_ms instead.
 [[pipelines.plugin_sinks]]
 id = "stream"
 type = "http"
@@ -57,5 +63,5 @@ stream_path = "/stream"
 status_path = "/status"
 buffer_size = 4096
 max_connections = 32
-client_buffer_size = 512
+client_buffer_size = 1024
 write_timeout_ms = 5000

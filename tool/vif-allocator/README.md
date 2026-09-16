@@ -41,7 +41,8 @@ atomically without restarting the allocator. See
 | `GET /vif/api/sessions` | `200` and `{ "sessions": [...], "limits": {...} }` for live, non-completed Jobs. |
 | `GET /healthz` | Process liveness. |
 | `GET /readyz` | Verifies that the current token can reach the Kubernetes API. |
-| `GET /vif/api/logs` | Proxies the loopback LogWisp SSE response byte-for-byte. `HEAD` is also accepted. An unavailable upstream returns `503 log_stream_unavailable`. |
+| `GET /vif/api/logs` | Proxies the loopback LogWisp SSE response byte-for-byte. An unavailable upstream returns `503 log_stream_unavailable`. |
+| `HEAD /vif/api/logs` | `200` and the stream's headers, answered here: upstream refuses a HEAD on the stream path, and a probe should not open a stream. Only the `GET` reports upstream availability. |
 
 One session row has this shape:
 

@@ -143,15 +143,25 @@ func (s *apiServer) handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The server keeps a finite WriteTimeout for create/list/health responses.
-	// Clear it only for this long-lived SSE response; request cancellation and
-	// allocator shutdown still cancel the upstream request.
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
-
 	// Successful responses must retain LogWisp's cache and stream headers rather
 	// than the allocator's finite-API defaults.
 	w.Header().Del("Cache-Control")
 	w.Header().Del("X-Content-Type-Options")
+
+	// A HEAD names the route, and this route is only a body. Upstream refuses one
+	// because the client it would register never reads, so the probe is answered
+	// here without opening a stream. A GET is what reports availability.
+	if r.Method == http.MethodHead {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// The server keeps a finite WriteTimeout for create/list/health responses.
+	// Clear it only for this long-lived SSE response; request cancellation and
+	// allocator shutdown still cancel the upstream request.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 	s.logProxy.ServeHTTP(w, r)
 }
 

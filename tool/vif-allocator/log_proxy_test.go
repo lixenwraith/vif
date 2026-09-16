@@ -65,23 +65,8 @@ func TestLogProxyPreservesResponse(t *testing.T) {
 	}
 }
 
-func TestLogProxySupportsHeadAndRejectsOtherMethods(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodHead || r.URL.Path != "/stream" {
-			t.Errorf("upstream request = %s %s", r.Method, r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer upstream.Close()
-	server := proxyTestServer(t, upstream.URL+"/stream")
-
-	head := httptest.NewRecorder()
-	server.ServeHTTP(head, httptest.NewRequest(http.MethodHead, "/vif/api/logs", nil))
-	if head.Code != http.StatusNoContent || head.Body.Len() != 0 {
-		t.Fatalf("HEAD status = %d, body = %q", head.Code, head.Body.String())
-	}
-
+func TestLogProxyRejectsOtherMethods(t *testing.T) {
+	server := proxyTestServer(t, "http://127.0.0.1:1/stream")
 	post := httptest.NewRecorder()
 	server.ServeHTTP(post, httptest.NewRequest(http.MethodPost, "/vif/api/logs", nil))
 	if post.Code != http.StatusMethodNotAllowed || post.Header().Get("Allow") != "GET, HEAD" {
@@ -189,11 +174,14 @@ func TestLogProxyRepeatedReconnectsReleaseUpstream(t *testing.T) {
 	}
 }
 
-func TestLogProxyStreamsAfterHead(t *testing.T) {
-	// A stalled reply must not outlive the test: on regression the HEAD's
-	// handler keeps its connection and would block the server's Close.
+// A HEAD is a route probe. Upstream refuses one on the stream path, because the
+// client it would register never reads its discarded body, so the allocator
+// answers it without opening a stream at all.
+func TestLogProxyAnswersHeadWithoutOpeningAStream(t *testing.T) {
+	var upstreamRequests atomic.Int64
 	release := make(chan struct{})
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamRequests.Add(1)
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = io.WriteString(w, "event: connected\ndata: {}\n\n")
 		w.(http.Flusher).Flush()
@@ -214,6 +202,12 @@ func TestLogProxyStreamsAfterHead(t *testing.T) {
 	_ = head.Body.Close()
 	if head.StatusCode != http.StatusOK {
 		t.Fatalf("HEAD status = %d", head.StatusCode)
+	}
+	if got := head.Header.Get("Content-Type"); got != "text/event-stream" {
+		t.Errorf("HEAD Content-Type = %q", got)
+	}
+	if got := upstreamRequests.Load(); got != 0 {
+		t.Fatalf("upstream requests from HEAD = %d, want 0", got)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
