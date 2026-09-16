@@ -991,13 +991,6 @@ func (c *Corrections) hold(cap snapshot.SharedCapture) bool {
 	if cap.Header.Run != at.Run || reached(cap, at.Tick) {
 		return false
 	}
-	// Past the window the clock is further behind than the spread the buffer is for,
-	// and waiting would starve rather than smooth: every correction after it arrives
-	// equally far ahead and supersedes the one held. The step is taken instead,
-	// which is what puts the offset back inside the window.
-	if cap.Header.Tick > at.Tick+c.holdWindow() {
-		return false
-	}
 	c.installedMu.Lock()
 	// One correction waits, never two. A second arriving while the first is still
 	// ahead of the clock says this instance is not catching up, and the step it has
@@ -1019,27 +1012,6 @@ func (c *Corrections) hold(cap snapshot.SharedCapture) bool {
 // and releasing cannot disagree about what the buffer is for.
 func reached(cap snapshot.SharedCapture, tick uint64) bool {
 	return tick >= cap.Header.Tick
-}
-
-// holdWindow is how far ahead of this instance's clock a correction may be and
-// still be worth waiting for. The spread the buffer absorbs is one round trip — the
-// two extra legs a selective repair costs over a whole body — so the link's own
-// round trip is the window, floored at the cadence and capped where the barrier
-// caps its own lead. A link with nothing measured keeps the cadence, which is the
-// answer it had before anything was measured.
-func (c *Corrections) holdWindow() uint64 {
-	link, ok := c.inst.Transport().(engine.LinkMeasuringPort)
-	if !ok {
-		return parameter.SnapshotCorrectionTicks
-	}
-	worst := time.Duration(0)
-	for _, id := range link.Peers() {
-		if m := link.LinkMetric(id); m.Samples > 0 && m.RTT > worst {
-			worst = m.RTT
-		}
-	}
-	ticks := uint64(worst/parameter.GameUpdateInterval) + 1
-	return min(max(ticks, parameter.SnapshotCorrectionTicks), parameter.NetworkBarrierMaxDelayTicks)
 }
 
 // releaseHeld installs the held correction once this instance has reached the tick

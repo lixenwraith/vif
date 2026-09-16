@@ -122,10 +122,17 @@ Combat collision profiles combine impactor/target mass ratio, impulse magnitude
 range, angular variance, additive-versus-override mode, and member-hit offset.
 Direct hits prefer a kinetic body on an ablative hit member, then fall back to the
 resolved header. Area hits use a radial direction and a hit-member centroid for
-composites. The target domain selects the random stream.
+composites. The target domain selects the random stream, and a crossing brings its
+own: an artifact's impulse is a function of the artifact, because a crossing
+applies at once on its producer and a playout lead later everywhere else (D-3).
 
-`RemainingKineticImmunity` prevents repeated combat/soft-collision impulses and
-usually suppresses homing so an accepted knockback can displace the actor.
+`RemainingKineticImmunity` is the target's displacement window: it suppresses
+soft-collision impulses and usually suppresses homing, so an accepted knockback can
+displace the actor. Its *combat* budget is per attacker, like damage's, and the hit
+that opens a window applies the profile's own mode while every hit joining one adds.
+Both halves are what make two participants hitting one body reach the same vector:
+a shared latch let each instance keep the hit it applied first — its own — and an
+override let each keep the one it applied last.
 `IsEnraged` suppresses kinetic attacks during protected species phases. Stun is
 stronger: combat zeros velocity and species systems skip movement while its timer
 is positive.

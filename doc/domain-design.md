@@ -95,6 +95,14 @@ A value of this kind is seeded from that identity and the stream is left alone. 
 re-derived event has no identity and uses the stream, which is correct there:
 every instance produces it at the same tick in the same order.
 
+The same asymmetry decides the *effect*, not only the value. Two crossings on one
+target apply in opposite orders on their two producers, each applying its own
+first, so an effect that latches or overwrites keeps a different one on each. A
+shared outcome several crossings may reach must therefore compose the same way
+whichever order it saw them in: a budget per producer rather than one window per
+target, and an accumulation rather than a replacement for the ones that join it.
+Combat's damage and kinetic windows are both of that shape.
+
 Arrival, departure, and full reset are `barrierBound`. They create or destroy
 shared identity, so their producer also waits for the agreed apply tick.
 

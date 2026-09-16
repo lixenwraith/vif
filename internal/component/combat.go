@@ -89,8 +89,15 @@ type CombatComponent struct {
 	// RemainingHitFlash is the remaining duration of hit visual feedback
 	RemainingHitFlash time.Duration
 
-	// RemainingKineticImmunity is remaining immunity time for collision knockback
+	// RemainingKineticImmunity is remaining immunity time for collision knockback.
+	// It is also how every steering system asks "is this target currently
+	// displaced", so it stays the whole target's window whoever opened it.
 	RemainingKineticImmunity time.Duration
+
+	// KineticImmunitySpent names the attackers that have already landed a
+	// knockback in the open window, one bit per roster slot, exactly as
+	// DamageImmunitySpent does for damage.
+	KineticImmunitySpent uint32
 
 	// StunnedRemaining is remaining stun duration (movement suppressed)
 	StunnedRemaining time.Duration
@@ -122,6 +129,39 @@ func (c *CombatComponent) SpendDamageImmunity(attacker uint32, d time.Duration) 
 func (c *CombatComponent) SealDamageImmunity(d time.Duration) {
 	c.RemainingDamageImmunity = d
 	c.DamageImmunitySpent = ^uint32(0)
+}
+
+// KineticImmuneTo reports whether this attacker already spent its knockback in the
+// open window. Per attacker for the reason damage is, and for a second one: a
+// crossing applies at once on its producer and a playout lead later everywhere
+// else, so a shared latch is taken by whichever participant's hit that instance
+// applied first — its own — and the other's is discarded rather than delayed. Two
+// participants hitting one swarm then sent it opposite ways on their two screens
+// until the next correction.
+func (c *CombatComponent) KineticImmuneTo(attacker uint32) bool {
+	return c.RemainingKineticImmunity != 0 && c.KineticImmunitySpent&attacker != 0
+}
+
+// SpendKineticImmunity records a landed knockback, opening the window when it is
+// closed, and reports whether this hit is the one that opened it. That answer is
+// what decides override against additive: the opening hit replaces the target's
+// velocity and every hit joining the window adds to it, so a window's impulses
+// compose to the same vector whatever order an instance saw them in.
+func (c *CombatComponent) SpendKineticImmunity(attacker uint32, d time.Duration) (opened bool) {
+	if c.RemainingKineticImmunity == 0 {
+		c.RemainingKineticImmunity = d
+		c.KineticImmunitySpent = 0
+		opened = true
+	}
+	c.KineticImmunitySpent |= attacker
+	return opened
+}
+
+// SealKineticImmunity opens a displacement window no attacker may spend, for the
+// species-authored knockback that has no attacker to name.
+func (c *CombatComponent) SealKineticImmunity(d time.Duration) {
+	c.RemainingKineticImmunity = d
+	c.KineticImmunitySpent = ^uint32(0)
 }
 
 // AttackerBit names an attacking cursor's slot inside a target's immunity window.

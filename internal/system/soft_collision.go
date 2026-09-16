@@ -425,7 +425,7 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 	s.statCollisions.Add(1)
 
 	// Set immunity
-	combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
+	combatComp.SealKineticImmunity(parameter.SoftCollisionImmunityDuration)
 
 }
 

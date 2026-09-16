@@ -733,6 +733,61 @@ func TestDamageImmunityBudgetIsPerAttacker(t *testing.T) {
 	}
 }
 
+// TestKineticKnockbackComposesInEitherOrder is the same budget on the other
+// effect, and it has a second reason to exist. A crossing applies at once on its
+// producer and a playout lead later everywhere else, so two participants hitting
+// one target apply their own hit first: a shared latch let each instance keep its
+// own knockback and discard the other's, and an override let each keep whichever
+// it applied last. Both made two instances hold opposite velocities for the whole
+// window. The window is per attacker and the hits that join one add, so the pair
+// composes to one vector whichever order an instance saw them in.
+func TestKineticKnockbackComposesInEitherOrder(t *testing.T) {
+	// Each attacker keeps its own artifact and its own impact direction whatever
+	// order it lands in, which is what the two instances disagree about.
+	type hit struct {
+		slot   int
+		vx, vy float64
+	}
+	left := hit{slot: 0, vx: 40, vy: 8}
+	right := hit{slot: 1, vx: -40, vy: 8}
+
+	knock := func(hits ...hit) component.KineticComponent {
+		w, first, second := testCursorWorld(t)
+		combat := NewCombatSystem(w).(*CombatSystem)
+		target := w.CreateEntity(core.DomainShared)
+		w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
+		w.Components.Kinetic.SetComponent(target, component.KineticComponent{})
+		w.Components.Combat.SetComponent(target, component.CombatComponent{
+			OwnerEntity:      target,
+			CombatEntityType: component.CombatEntitySwarm,
+			HitPoints:        1 << 20, // outlives both hits: a death suppresses knockback
+		})
+		owners := [2]core.Entity{first, second}
+		for _, h := range hits {
+			combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
+				CrossingID:  event.CrossingID{CrossingSource: uint32(h.slot + 1), CrossingSeq: uint64(h.slot + 1)},
+				OwnerEntity: owners[h.slot], OriginEntity: owners[h.slot],
+				TargetEntity: target, HitEntity: target,
+				OriginVelX: h.vx, OriginVelY: h.vy,
+				HasVelocity: true, AttackType: component.CombatAttackProjectile,
+			})
+		}
+		got, _ := w.Components.Kinetic.GetComponent(target)
+		return got
+	}
+
+	both := knock(left, right)
+	if both.VelX == 0 && both.VelY == 0 {
+		t.Fatal("neither knockback landed; this criterion proves nothing")
+	}
+	if reversed := knock(right, left); reversed != both {
+		t.Fatalf("left-then-right gave %v and right-then-left gave %v", both.Kinetic, reversed.Kinetic)
+	}
+	if solo := knock(left); solo == both {
+		t.Fatal("the second attacker's knockback was swallowed by the first attacker's window")
+	}
+}
+
 // TestPassiveDrainSurvivesATransportedStamp covers the other way a per-cursor
 // shield can stop draining: LastDrainTime is an absolute simulation instant and
 // the component is captured, so a cursor materialised from an authority further

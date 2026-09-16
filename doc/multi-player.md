@@ -239,9 +239,9 @@ A correction describing a tick this instance has not reached is therefore held
 until it has. The receiver's offset settles on the slowest path rather than chasing
 the fastest, and what a correction then carries is prediction error rather than a
 clock difference — which is also what makes `snapshot.correction_entities` mean
-what §7 says it means. Two bounds keep the buffer from becoming a stall: nothing is
-held that is further ahead than the link's measured round trip, and a second
-arrival while one waits takes the step instead of queueing behind it.
+what §7 says it means. One rule keeps the buffer from becoming a stall: a second
+arrival while one waits takes the step instead of queueing behind it, so at most
+one correction is ever delayed and never by more than a cadence.
 `snapshot.corrections_held` counts the deferrals; a session whose paths deliver
 worlds of one age holds none.
 
@@ -631,21 +631,27 @@ entry says what is actually absent rather than what is imperfect, and how to see
 
 11. **A producer's own crossing still lands a playout lead before the authority's
     copy does.** That is §3.1 working as designed — the lead is removed from the
-    player who generated the input — and what remains of it is what the first
-    correction after the crossing then undoes: a knocked-back swarm travels for
-    `BarrierDelayTicks` and is pulled back that far once. It is bounded, it is one
-    step rather than a jitter, and it is the same on a LAN as over the Internet
-    because the lead is floored rather than measured there.
+    player who generated the input — and what remains of it is a position offset
+    the first correction after the crossing then removes: the producer integrates
+    the impulse for `BarrierDelayTicks` that the authority has not, and the
+    difference does not decay with the impulse. A shared body is about one cell
+    apart between the two instances for a single hit at the floored lead.
 
-    *To see it:* twelve shared swarms, a guest hitting one every three ticks, and
-    the displacement each body takes beyond integrating its own velocity. At zero
-    one-way delay that is about 76 cells over 400 ticks with a worst single step of
-    3.1 cells, against 255 and 7.3 at four ticks of delay. The zero-delay figure is
-    this item; the difference between them was §4.1 and D-3's knockback roll.
+    *To see it:* one participant hitting a shared swarm, reading both worlds'
+    sub-cell positions each tick. The gap opens over the lead, holds, and closes at
+    the next correction. Two participants hitting one body used to be fifteen cells
+    apart and pointing opposite ways; that was the kinetic immunity latch and the
+    override join, and both are closed.
 
-    Closing it needs either a barrier-bound combat crossing, which is input latency
-    on every hit, or rollback — the option §10.3 scored lowest on tractability for
-    this codebase. **To be decided.**
+    Three ways to close the rest, none of them free:
+
+    | Option | Cost |
+    |---|---|
+    | Make a combat crossing `barrierBound` | The lead becomes input latency on every hit — 150 ms at the floor, and up to a second at `NetworkBarrierMaxDelayTicks`. |
+    | Lag-compensate the receiver | On applying a crossing the receiver also advances the target by the lead's worth of the impulse it just added, so it lands where the producer already has it. Deterministic — the lead is session identity — but it moves the discontinuity onto the participants who did not act, and the extrapolation is only exact while the target's motion is drag alone. |
+    | Roll the receiver's prediction forward | Exact, and the option §10.3 scored lowest on tractability for this codebase. |
+
+    **To be decided.**
 
 ## 9. Verification
 
@@ -654,7 +660,9 @@ two-participant and mesh convergence, selective repair and fallback, replay
 retention, correction ordering, join/reconnect, link shaping, relay retention,
 authority succession, the playout lead's choice over a shaped link, the correction
 playout buffer, the knockback an artifact rather than a stream position determines,
-and the peer link and succession chain rules that make a successor reachable. It also forces a capture to enter and retire a quasar while
+the per-attacker window and additive join that make two participants' knockbacks
+compose the same way in either order, and the peer link and succession chain rules
+that make a successor reachable. It also forces a capture to enter and retire a quasar while
 the receiver skips the release transition, and round-trips a delayed transition
 action by compiled identity. Run the generation and repository gates after
 focused network tests:

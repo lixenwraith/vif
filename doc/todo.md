@@ -111,6 +111,19 @@ so a mixed-domain cell is dropped from the correction as well. `meta` carries
 `kills.*` and `energy.damage_multiplier` around it; a second predicate removes the
 workaround.
 
+### Make kill credit independent of crossing order
+
+- Priority: P2
+- Affected files: `internal/system/combat.go`, `internal/component/combat.go`
+- Prerequisite: a rule for which of two participants owns a shared kill
+
+`CombatComponent.LastDamagedBy` is the last writer's cursor, and two participants
+damaging one target write it in opposite orders because each applies its own
+crossing first. The authority's correction repairs it, so the divergence is one
+cadence of credit rather than a permanent one, but the boost it awards in the
+meantime is player-domain and is not. The knockback window's answer was a budget
+per attacker; credit's is a choice about who owns the kill.
+
 ### Decide what a producer's own crossing costs the authority's copy
 
 - Priority: P2
@@ -146,18 +159,6 @@ says `participant` everywhere; the type is what remains.
 An authority frame the capture's fence already claims is discarded on the
 receiver. That is correct for shared component state and wrong for every other
 effect the frame would have had. Enumerate them.
-
-### Decide whether kinetic immunity is per attacker
-
-- Priority: P2
-- Affected files: `internal/system/combat.go`, `internal/component/combat.go`
-- Prerequisite: a two-participant repro of a swarm that stops steering
-
-Damage immunity is now budgeted per attacker; kinetic immunity is still one
-window per target, and it suppresses homing as well as knockback. Two impulses on
-one body is a physics decision, not a networking one. Stun is deliberately not
-per attacker: a running one is refused rather than refreshed, which is what a
-lockdown window should be.
 
 ### Give a splash anchor a generation
 

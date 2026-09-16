@@ -31,7 +31,7 @@ func TestCombatKnockbackDrawsFromTheTargetsStream(t *testing.T) {
 	shared := knockTarget(w, core.DomainShared, 22, 6)
 
 	beforeShared, beforePlayer := s.rngShared.State(), s.rngPlayer.State()
-	if !s.applyCollision(event.CrossingID{}, 0, 1, 0, player, player, &profile.SoftSwarmToSwarm) {
+	if !s.applyCollision(event.CrossingID{}, 0, true, 1, 0, player, player, &profile.SoftSwarmToSwarm) {
 		t.Fatal("player knockback did not apply")
 	}
 	if got := s.rngShared.State(); got != beforeShared {
@@ -42,7 +42,7 @@ func TestCombatKnockbackDrawsFromTheTargetsStream(t *testing.T) {
 	}
 
 	beforePlayer = s.rngPlayer.State()
-	if !s.applyCollision(event.CrossingID{}, 0, 1, 0, shared, shared, &profile.SoftSwarmToSwarm) {
+	if !s.applyCollision(event.CrossingID{}, 0, true, 1, 0, shared, shared, &profile.SoftSwarmToSwarm) {
 		t.Fatal("shared knockback did not apply")
 	}
 	if s.rngShared.State() == beforeShared {
@@ -64,7 +64,7 @@ func TestCombatKnockbackFollowsTheArtifactNotTheStream(t *testing.T) {
 	id := event.CrossingID{CrossingSource: 2, CrossingSeq: 7}
 
 	before := s.rngShared.State()
-	if !s.applyCollision(id, 0, 1, 0, target, target, &profile.SoftSwarmToSwarm) {
+	if !s.applyCollision(id, 0, true, 1, 0, target, target, &profile.SoftSwarmToSwarm) {
 		t.Fatal("the crossing's knockback did not apply")
 	}
 	first, _ := w.Components.Kinetic.GetComponent(target)
@@ -75,7 +75,7 @@ func TestCombatKnockbackFollowsTheArtifactNotTheStream(t *testing.T) {
 	// The other instance reaches this artifact having applied another one first.
 	s.rngShared.Next()
 	w.Components.Kinetic.SetComponent(target, component.KineticComponent{})
-	if !s.applyCollision(id, 0, 1, 0, target, target, &profile.SoftSwarmToSwarm) {
+	if !s.applyCollision(id, 0, true, 1, 0, target, target, &profile.SoftSwarmToSwarm) {
 		t.Fatal("the second application did not apply")
 	}
 	if again, _ := w.Components.Kinetic.GetComponent(target); again != first {

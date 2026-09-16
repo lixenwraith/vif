@@ -22,8 +22,10 @@ type CombatSystem struct {
 	rngPlayer *vmath.FastRand
 
 	// rngArtifact is reseeded per crossing rather than carried, so a knockback the
-	// artifact determines costs no allocation and no stream position.
+	// artifact determines costs no allocation and no stream position; joined is
+	// the same for the profile a hit joining a window borrows.
 	rngArtifact vmath.FastRand
+	joined      physics.CollisionProfile
 
 	// Telemetry
 	statActive        *atomic.Bool
@@ -300,6 +302,21 @@ func (s *CombatSystem) attackerBit(cursor core.Entity) uint32 {
 	return component.AttackerBit(slot, ok)
 }
 
+// joining is the profile a hit uses: its own when it opens the target's knockback
+// window, and additive when it joins one another attacker opened. An override that
+// joins would leave each instance holding whichever impulse it applied last, and
+// each applies its own first; adding is what makes the window's impulses compose to
+// the same vector on both. The scratch is the system's for the same reason the
+// artifact generator is: one hit uses it and is done with it.
+func (s *CombatSystem) joining(p *physics.CollisionProfile, opened bool) *physics.CollisionProfile {
+	if opened || p.Mode == physics.ImpulseAdditive {
+		return p
+	}
+	s.joined = *p
+	s.joined.Mode = physics.ImpulseAdditive
+	return &s.joined
+}
+
 // knockbackStream selects the impulse source. A knockback on a local drain draws
 // from the player stream, so it never advances the shared sequence. A knockback on
 // a shared target draws from the artifact that asked for it when there is one: a
@@ -458,20 +475,26 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	}
 	if attack.EffectMask&component.CombatEffectKinetic != 0 && attack.Collision != nil {
 		// Kinetic applies to header (composite moves as unit), check header immunity
-		if !damageTargetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
+		if !damageTargetDead && !targetCombatComp.KineticImmuneTo(attacker) && !targetCombatComp.IsEnraged {
+			opened := targetCombatComp.SpendKineticImmunity(attacker, attack.KineticImmunity)
 			if payload.HasVelocity &&
-				s.applyCollision(payload.CrossingID, uint64(payload.ChainDepth),
+				s.applyCollision(payload.CrossingID, uint64(payload.ChainDepth), opened,
 					payload.OriginVelX, payload.OriginVelY,
 					payload.TargetEntity, payload.HitEntity, attack.Collision) {
 				s.statEffectKinetic.Add(1)
 				resolved = true
 			}
-			targetCombatComp.RemainingKineticImmunity = attack.KineticImmunity
 
 			// Propagate to the hit member for displacement detection (snake body spring physics)
 			if payload.HitEntity != payload.TargetEntity {
 				if hitCombat, ok := s.world.Components.Combat.GetPtr(payload.HitEntity); ok {
-					hitCombat.RemainingKineticImmunity = attack.KineticImmunity
+					// A member's window is a displacement flag rather than a budget:
+					// the header's gate already decided this hit lands, so a later
+					// attacker refreshes the flag instead of joining a window that
+					// would expire under the spring still reading it.
+					hitCombat.SpendKineticImmunity(attacker, attack.KineticImmunity)
+					hitCombat.RemainingKineticImmunity = max(
+						hitCombat.RemainingKineticImmunity, attack.KineticImmunity)
 				}
 			}
 		} else if !damageTargetDead {
@@ -625,12 +648,12 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 
 	// Apply kinetic effect
 	if attack.EffectMask&component.CombatEffectKinetic != 0 && attack.Collision != nil {
-		if !targetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
-			if s.applyAreaKnockback(payload, targetEntity, hits, attack.Collision) {
+		if !targetDead && !targetCombatComp.KineticImmuneTo(attacker) && !targetCombatComp.IsEnraged {
+			opened := targetCombatComp.SpendKineticImmunity(attacker, attack.KineticImmunity)
+			if s.applyAreaKnockback(payload, targetEntity, hits, opened, attack.Collision) {
 				s.statEffectKinetic.Add(1)
 				resolved = true
 			}
-			targetCombatComp.RemainingKineticImmunity = attack.KineticImmunity
 		} else if !targetDead {
 			s.statKineticImmune.Add(1)
 		}
@@ -727,7 +750,8 @@ func (s *CombatSystem) applyEnergyDrain(ownerEntity, targetEntity core.Entity, o
 	return true
 }
 
-func (s *CombatSystem) applyCollision(id event.CrossingID, salt uint64, originVelX, originVelY float64, targetEntity, hitEntity core.Entity, collisionProfile *physics.CollisionProfile) bool {
+func (s *CombatSystem) applyCollision(id event.CrossingID, salt uint64, opened bool, originVelX, originVelY float64, targetEntity, hitEntity core.Entity, collisionProfile *physics.CollisionProfile) bool {
+	collisionProfile = s.joining(collisionProfile, opened)
 	// Priority: hitEntity kinetic (ablative member with own kinetic, e.g. snake body)
 	if hitEntity != targetEntity {
 		if hitKinetic, ok := s.world.Components.Kinetic.GetPtr(hitEntity); ok {
@@ -777,7 +801,8 @@ func (s *CombatSystem) applyCollision(id event.CrossingID, salt uint64, originVe
 
 // applyAreaKnockback calculates radial knockback for area attacks.
 // hits is the normalized hit set; targetEntity is the resolved header.
-func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequestPayload, targetEntity core.Entity, hits []core.Entity, collisionProfile *physics.CollisionProfile) bool {
+func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequestPayload, targetEntity core.Entity, hits []core.Entity, opened bool, collisionProfile *physics.CollisionProfile) bool {
+	collisionProfile = s.joining(collisionProfile, opened)
 	targetPos, ok := s.world.Positions.GetPosition(targetEntity)
 	if !ok {
 		return false
