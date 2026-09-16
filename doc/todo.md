@@ -120,9 +120,24 @@ workaround.
 `CombatComponent.LastDamagedBy` is the last writer's cursor, and two participants
 damaging one target write it in opposite orders because each applies its own
 crossing first. The authority's correction repairs it, so the divergence is one
-cadence of credit rather than a permanent one, but the boost it awards in the
-meantime is player-domain and is not. The knockback window's answer was a budget
-per attacker; credit's is a choice about who owns the kill.
+cadence of credit rather than a permanent one. The boost is no longer awarded
+inside that cadence — the prediction ledger holds it until a world proves the death
+(multi-player.md §3.4) — but the credit it then pays is the one the local
+prediction recorded, and the entity is gone from the authority's world by the time
+that world arrives, so nothing can read the credit back off it. The knockback
+window's answer was a budget per attacker; credit's is a choice about who owns the
+kill, made where the kill is produced.
+
+### Key the prediction ledger on more than an entity id
+
+- Priority: P2
+- Affected files: `internal/engine/prediction.go`, `internal/engine/world.go`
+- Prerequisite: a generation on shared entity ids, which the allocator rollback
+  already wants for its own reasons
+
+An install restores the allocator counter, so a shared id can be issued twice
+inside the ledger's window and a held derivation would then be proved or refused
+against a different entity. A generation would make the key exact.
 
 ### Agree which knockback opens a shared window
 

@@ -17,6 +17,12 @@ type GameEvent struct {
 
 	Origin Origin      // Producer, for journaling and replay; never affects dispatch
 	Domain core.Domain // Producer domain, for journaling and replication; never affects dispatch
+
+	// Phase marks a record the producer may have to derive again because the
+	// shared state behind it is this instance's prediction. Stamped by
+	// World.pushEvent, read by the player-domain consumers a second derivation
+	// would pay twice; never affects dispatch or replication.
+	Phase EventPhase
 }
 
 // EventType represents the type of game event
@@ -111,6 +117,8 @@ const (
 	EventParticipantJoined
 	// EventParticipantDeparted (ParticipantDepartedPayload) [bus] removes a participant from the session roster
 	EventParticipantDeparted
+	// EventPlayoutLead (PlayoutLeadPayload) [bus] carries the lead the session's crossings are deferred by
+	EventPlayoutLead
 	// EventCursorStateSync (CursorStatePayload) [local] carries one cursor's owner-authored state to the instances that do not simulate it
 	EventCursorStateSync
 
@@ -350,6 +358,8 @@ const (
 	EventSpeciesCreated
 	// EventSpeciesKilled (SpeciesKilledPayload) [stamped] announces a terminated species instance
 	EventSpeciesKilled
+	// EventSpeciesKillConfirmed (SpeciesKilledPayload) [local] re-raises a predicted death an authoritative world proved
+	EventSpeciesKillConfirmed
 	// EventDrainDefeated (DrainDefeatedPayload) [bus] advances progression and names the causal cursor domain
 	EventDrainDefeated
 

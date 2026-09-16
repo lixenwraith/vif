@@ -52,6 +52,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Local input | The producer applies ordinary crossings immediately. Remote copies retain the receive-side playout lead. |
 | Shared authority | The host's Shared world is canonical. A guest's predicted result is provisional until the next correction. |
 | Player state | Each instance simulates only its Player domain. Owner-authored cursor values have one writer and travel as values; a receiver keeps the values it authors across an install. |
+| Predicted derivations | A shared death a predicting instance derives is stamped `PhasePredicted` and held in a ledger. Presentation follows it; the player-domain rewards behind it are paid once, when an authoritative world proves the entity gone. |
 | Global environment | Shared wind events are re-derived rather than sent. Every instance consumes two draws from the same Shared environment stream, applies the gust to its own drains and predicted Shared species, and restores active wind state through corrections. |
 | Corrections | A correction starts with a versioned hash index. Equal roots send no state. Mismatches descend to independently proved pages. Compressed whole keyframes remain the bounded fallback. |
 | Correction playout | An install adopts the authority tick, so a receiver's clock follows the age of whichever exchange delivered. A correction describing a tick this instance has not reached waits for it, inside one measured round trip, one at a time. |
@@ -61,7 +62,8 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. Every host arms the same mid-run gate once its own lobby is done, so a reconnect takes one path whether the session started with `-host`, `-serve`, a script, or `:host`. |
 | Roster | Every admitted peer holds an identity, a term and a vote; a roster slot binds it to a cursor and makes it a participant. The coordinator of a dedicated host holds no slot, so it is a peer and not a participant, and a session of one guest has one participant in a roster of two. |
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
-| Playout lead | Chosen once, when the coordinator closes its roster, from the worst measured round trip: one way plus a reordering allowance, multiplied by the topology's hop count, floored at `NetworkBarrierDelayTicks` and capped at `NetworkBarrierMaxDelayTicks`. A session that closes before a probe completes keeps the floor. |
+| Playout lead | Re-derived by the authority from the worst measured round trip — one way plus a reordering allowance, times the topology's hop count — and published as a barrier-bound crossing. No lead at all with nobody on the far end, `NetworkBarrierDelayTicks` with nothing measured, `NetworkBarrierMinDelayTicks` to `NetworkBarrierMaxDelayTicks` once a link has been probed. It widens at once and narrows on a window. |
+| Playout ceiling | A link whose *smallest* observed round trip asks for more than `NetworkBarrierMaxDelayTicks` is dropped rather than absorbed. The smoothed round trip is not the test: a backlogged link is the cadence controller's problem, not the barrier's. |
 | Mesh and relay | Epochs, owner state, corrections, and authority records flood with per-source duplicate suppression. A relay with retained authority content keeps selective repair available to participants behind it. |
 | Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is never elected (§5.3). |
 | Host loss | `-authority migrate` (default off `-serve`): **the first survivor in the succession chain** takes the next term, with no vote, because every survivor computes it from state it already holds identically. `-authority host` (default on `-serve`): nobody takes it and every survivor continues alone. |
@@ -108,6 +110,7 @@ numbering.
 | `EventSwarmSpawnRequest` / `EventQuasarSpawnRequest` | allocates a shared species from a drain fusion |
 | `EventDrainDefeated` | advances the shared progression a region gates its spawns on |
 | `EventCursorDefeatState` | folds into `session.all_defeated`, which `MonitorGlobalReset` rebuilds the level on |
+| `EventPlayoutLead` | changes the lead every instance defers its own crossings by |
 
 The last two are the least obvious and each was a visible defect. A producer that
 counted its ninth drain a lead early entered the escalation a lead early and built
@@ -213,6 +216,78 @@ Consecutive simulation events are not coalesced on the wire. Two cursor placemen
 may consume different glyphs or cause different collision and progression effects;
 discarding the intermediate event would change gameplay. Batching, selective
 state repair, and presentation work are the safe optimisation layers.
+
+### 3.4 Predicted derivations
+
+A guest's Shared state is not monotonic. A correction replaces it with a world
+older than the guest's present, so a species can be dead, then alive, then dead;
+the guest's own crossing is replayed past the capture's fence and kills it a second
+time. That is §3.3 working, and for Shared state it is right: the FSM, the kill
+tallies, the adaptation and the genetic registry are all in the capture, so they are
+rolled back and re-derived together.
+
+Player-domain state is not. Loot, the boost grant and every presentation burst are
+in no capture, nothing rolls them back, and nothing stopped the second derivation
+paying them again. Measured on a two-participant mesh at a two-tick link delay: one
+swarm, killed once by the player, announced killed twice and rewarded twice.
+
+The bridge is therefore phased. A Shared-domain `EventSpeciesKilled` raised while
+`World.PredictsShared` — a live session in which somebody else authors — is stamped
+`event.PhasePredicted` and its payload entered in a ledger keyed by the dying
+entity. Recording is idempotent, so a re-derivation after a rollback adds nothing.
+An install settles the ledger against the world it just wrote: an entity the
+authority does not have is proved dead and raised once as `EventSpeciesKillConfirmed`,
+and one the authority still holds a convergence floor later is dropped as the
+misprediction it was. `LootSystem` and `BoostSystem` consume the confirmed form and
+ignore the predicted one; everything else consumes `EventSpeciesKilled` exactly as
+before, because the capture already reconciles what it holds.
+
+Three cases close the edges. An instance that stops predicting — it took the term,
+or the last peer went — releases everything it holds, because the world it predicted
+is the only one there is. A reset drops the ledger, for the reason it drops the
+replay suffix. Past `parameter.PredictionLedgerMax` the oldest entry is released
+unproved rather than discarded: losing a player's progression to a bound is worse
+than paying it a cadence early.
+
+This is the edge-triggered half of what the FSM's `reconcile = true` lifecycle
+replay does for the level-triggered half (D-19). Neither covers the other: a hold
+that follows a Shared region is re-derived from the imported state, and a one-shot
+reward is held until the state that caused it is proved.
+
+### 3.5 The lead the session defers by
+
+The playout lead is session identity — every instance defers its own crossings by
+the same number of ticks, and a reproduction of the run defers by the same again —
+so it is authored by one instance and travels rather than being measured
+independently. The authority re-derives it between ticks from the links it measures
+and publishes each value as the barrier-bound crossing in §3.1's table; the offer
+and the handoff record carry the same number to a participant with no history to
+apply.
+
+Three answers rather than a constant. A roster with nobody on the far end takes no
+lead at all: nothing is sent, so nothing is waiting for it, which is what makes a
+hosted solo run cost no input latency. A roster with nothing measured keeps
+`NetworkBarrierDelayTicks`, because an unready link is no evidence rather than a
+fast one. A measured link asks for one way plus a reordering allowance, times the
+hop count, between `NetworkBarrierMinDelayTicks` and `NetworkBarrierMaxDelayTicks` —
+so an in-process or loopback session defers by one tick where it used to pay three.
+
+The two directions are not symmetric. Widening is immediate, because an artifact
+that misses the lead costs a correction and one that clears it costs nothing;
+narrowing waits `NetworkBarrierRenegotiateTicks` of the lower measurement holding.
+That same window re-announces an unchanged lead, so a change a peer never received
+costs a window rather than the rest of the session. A narrowing lead would also
+number the next artifact below one already scheduled, and a receiver orders by
+`(ApplyTick, Source, Seq)`; the barrier therefore holds each source's newest apply
+tick and lets the production epoch catch up to it, which decays the lead by a tick
+per tick instead of reordering two of one source's crossings.
+
+The ceiling is a refusal, not a clamp. It is judged on the link's *smallest*
+observed round trip, because a backlogged link reports an inflated one that the
+cadence controller is already narrowing the correction stream to relieve — dropping
+that participant would be answering a bandwidth problem by ending somebody's game.
+What the floor says is what the link costs with nothing queued on it, and past the
+ceiling that is not a session anyone can play.
 
 ## 4. Correction pipeline
 
@@ -490,13 +565,20 @@ The useful runtime signals are:
   this instance had not reached the tick it describes (§4.1);
 - `snapshot.replay_records`, `snapshot.replay_skipped`, and
   `snapshot.replay_suffix_unavailable`: whether local predicted work survived;
+- `snapshot.predictions_pending`, `snapshot.predictions_confirmed` and
+  `snapshot.predictions_dropped`: the §3.4 ledger's depth, the rewards an
+  authoritative world proved, and the derivations it refused. A guest that is
+  converging confirms nearly everything it predicts; a rising drop count is a guest
+  whose crossings are not reaching the authority;
 - `network.artifacts_pre_install`: frames discarded because an installed capture
   already represented them;
 - `network.artifacts_authority_superseded`: the subset discarded by the authority
   sequence fence rather than by tick;
 - `network.lag_ticks`, `network.stale`, and `network.barrier_late`: whether the
-  receive lead is being missed, and `network.barrier_delay_ticks` what that lead
-  was chosen to be;
+  receive lead is being missed, and `network.barrier_delay_ticks` what the lead
+  currently is. It moves during a session now (§3.5): `playout lead renegotiated`
+  on the authority and `playout lead adopted` on every instance name each change,
+  and the two ticks must agree across the session;
 - `network.listening`, `network.chain`, and `network.rejoin_attempts`: whether this
   instance bound a port of its own, how many succession candidates it holds, and how
   far a survivor with no link has walked the succession list;
@@ -565,16 +647,17 @@ entry says what is actually absent rather than what is imperfect, and how to see
 
 ### Closed since the last review
 
-2. **The playout lead is now chosen.** `BarrierDelayTicks` travelled from
+2. **The playout lead is now measured, and re-measured.** `BarrierDelayTicks` travelled from
    `SessionOffer` through `HandoffRecord` to `NetworkSystem.delayTicks` and every
    writer put the same constant in it. It is derived at lobby close from the worst
    measured round trip — one way plus a reordering allowance, times the hop count,
    floored at the constant and capped at `NetworkBarrierMaxDelayTicks` — and
-   published as `network.barrier_delay_ticks`. Chosen once, because the value has
-   to be the same on every participant and in every reproduction of the run, and no
-   artifact between offers and handoffs could tell anyone it had changed; a session
-   that closes before a probe completes keeps the constant, which is the answer it
-   had before.
+   published as `network.barrier_delay_ticks`. It was chosen once because no
+   artifact between offers and handoffs could tell anyone it had changed; §3.5's
+   barrier-bound crossing is that artifact, so the authority now re-derives it
+   between ticks and the floor is a measurement rather than a constant. A session
+   that closes before a probe completes still keeps the constant, which is the
+   answer it had before.
 
 3, 4, 5. **Reachability, and what it makes decidable.** A guest binds and declares,
    the coordinator publishes the whole chain, and every participant dials the current
@@ -694,7 +777,10 @@ authority succession, the playout lead's choice over a shaped link, the correcti
 playout buffer, the knockback an artifact rather than a stream position determines,
 the identity an explosion's re-derived hits inherit from it, the per-attacker window
 and additive join that make two participants' knockbacks compose the same way in
-either order, the domain a capture's RNG streams may carry, the placement budget and
+either order, the one reward a shared death pays however many times a rollback makes
+a guest derive it, the lead a measured link narrows the session to and the tick every
+barrier adopts it on, the link the ceiling drops rather than absorbs,
+the domain a capture's RNG streams may carry, the placement budget and
 the storm burst a shared stream draws before it reads a live position, the owner-state
 sync an install must not stall, the agreed tick a shared-identity crossing waits for
 on its own producer, and the

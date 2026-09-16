@@ -301,6 +301,15 @@ func (a *App) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal 
 		// authority's local-first stream.
 		a.adoptSnapshotBarrierLocked(cap.Header)
 
+		// The world is the authority's, so a shared death this instance predicted is
+		// proved by the entity's absence from it. Behind the same gate the FSM's
+		// lifecycle replay is, and for the same reason: a staging pass proves the
+		// position resolves and must reach no player-domain system. After every
+		// fallible step, so a refused install never pays a reward out.
+		if reconcileLocal {
+			a.world.ConfirmPredictedDeaths(cap.Header.Tick)
+		}
+
 		// Last, so a carrier that publishes on load does not overwrite the
 		// captured surface with a value derived from this instance's own history.
 		a.installStatusLocked(cap.Status)

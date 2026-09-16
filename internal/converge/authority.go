@@ -34,6 +34,11 @@ type Authority struct {
 	anchor event.JoinAnchor
 	delay  uint64
 
+	// leadPublished is the tick the playout lead was last announced on, and
+	// leadLowSince the tick a lower measurement first held. See lead.go.
+	leadPublished uint64
+	leadLowSince  uint64
+
 	// chain is the succession candidate list: every participant that declared a
 	// port, in join order, adopted whole from an offer, a handoff or MsgPeerList.
 	// See internal/network/reach.go.
@@ -307,6 +312,10 @@ func (u *Authority) drive() {
 	// The reachability work runs on the same loop and for the same reason: it is
 	// between two ticks, on every instance, whichever half of the protocol it is.
 	u.reach.drive(contested != 0)
+
+	// So does the playout lead, which is the authority's half alone: it reads the
+	// links it measures and publishes what the whole session then defers by.
+	u.driveLead()
 	if contested == 0 {
 		return
 	}

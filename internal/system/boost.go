@@ -61,6 +61,7 @@ func (s *BoostSystem) EventTypes() []event.EventType {
 		event.EventBoostExtend,
 		event.EventBoostReward,
 		event.EventSpeciesKilled,
+		event.EventSpeciesKillConfirmed,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
@@ -134,7 +135,13 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 
-	case event.EventSpeciesKilled:
+	case event.EventSpeciesKilled, event.EventSpeciesKillConfirmed:
+		// The grant is owner-authored and survives an install, so a predicted death
+		// would extend the boost once per re-derivation. It waits for the ledger's
+		// confirmed form, as the drop does.
+		if ev.Phase == event.PhasePredicted {
+			return
+		}
 		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
 			// Player-owned tower lifecycle deaths use the shared species event so
 			// FSMs can observe them, but are not failed reward requests.

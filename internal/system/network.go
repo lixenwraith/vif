@@ -47,8 +47,15 @@ type NetworkSystem struct {
 	appliedAhead    map[uint64]struct{}
 	localSource     uint32
 	delayTicks      uint64
-	encodeErr       int64
-	barrierActive   atomic.Bool
+
+	// lastApplyTick is the newest apply tick this source has assigned. A shrinking
+	// lead would otherwise number the next artifact below one already scheduled,
+	// and a receiver orders by (ApplyTick, Source, Seq) — so two of this source's
+	// crossings would arrive in the other order. Holding the number until the
+	// production epoch catches it decays the lead a tick per tick instead.
+	lastApplyTick uint64
+	encodeErr     int64
+	barrierActive atomic.Bool
 
 	// appliedPeerSeq is the highest ordinary sequence this instance has applied from
 	// each remote source, and the receive-side half of the fence a capture carries.
@@ -424,6 +431,11 @@ func (s *NetworkSystem) Init() {
 	s.pendingDigest = [participantSlots]stateDigest{}
 	s.snapshot = network.SnapshotAssembly{}
 
+	// Held derivations go for the reason the replay suffix below does: a reward the
+	// authority never proved belongs to the run that predicted it, and that run has
+	// been replaced. Outside the barrier lock, which the ledger does not share.
+	s.world.ResetPredictedDeaths()
+
 	s.mu.Lock()
 	s.crossings = s.crossings[:0]
 	s.scheduled = s.scheduled[:0]
@@ -444,6 +456,7 @@ func (s *NetworkSystem) Init() {
 	s.snapshotFences = nil
 	s.appliedPeerSeq = [participantSlots]uint64{}
 	s.productionEpoch = s.world.Resources.Game.State.GetGameTicks() + 1
+	s.lastApplyTick = 0
 	s.crossSeq = 0
 	s.appliedCrossSeq = 0
 	s.appliedAhead = make(map[uint64]struct{})
@@ -482,6 +495,7 @@ func (s *NetworkSystem) EventTypes() []event.EventType {
 		event.EventGameResetRequest,
 		event.EventParticipantJoined,
 		event.EventParticipantDeparted,
+		event.EventPlayoutLead,
 	}
 }
 
@@ -500,6 +514,10 @@ func (s *NetworkSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventParticipantDeparted:
 		if p, ok := ev.Payload.(*event.ParticipantDepartedPayload); ok {
 			s.removeParticipant(p)
+		}
+	case event.EventPlayoutLead:
+		if p, ok := ev.Payload.(*event.PlayoutLeadPayload); ok {
+			s.adoptDelay(p.Ticks)
 		}
 	}
 }
@@ -542,6 +560,23 @@ func (s *NetworkSystem) participantID() uint32 {
 // drain paths differ on whether a tick is in progress and the answer must not.
 func (s *NetworkSystem) localTick() uint64 {
 	return s.world.Resources.Event.Queue.Stamp().Tick
+}
+
+// adoptDelay installs the lead the authority published, at the agreed tick its
+// crossing applies on. The resource is the single copy: refreshLink re-reads it
+// every tick, so writing anything else would be overwritten by the next one.
+// Caller holds the world lock: this runs from dispatch.
+func (s *NetworkSystem) adoptDelay(ticks uint64) {
+	r := s.world.Resources.Network
+	if r == nil || r.BarrierDelayTicks == ticks {
+		return
+	}
+	r.BarrierDelayTicks = ticks
+	s.mu.Lock()
+	s.delayTicks = ticks
+	s.mu.Unlock()
+	s.statDelayTicks.Store(int64(ticks))
+	vlog.Info("net", "msg", "playout lead adopted", "ticks", ticks, "tick", s.localTick())
 }
 
 // barrierDelayTicks returns the session's negotiated playout lead.
@@ -617,7 +652,8 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (sequence uint64, taken bool) 
 		return 0, true
 	}
 	frame.Seq = s.crossSeq
-	applyTick := s.productionEpoch + s.delayTicks
+	applyTick := max(s.productionEpoch+s.delayTicks, s.lastApplyTick)
+	s.lastApplyTick = applyTick
 	s.crossings = append(s.crossings, event.ScheduledWireFrame{Frame: frame, ApplyTick: applyTick})
 	agreed := barrierBound(ev.Type)
 	if agreed {
@@ -753,7 +789,7 @@ func barrierBound(et event.EventType) bool {
 	switch et {
 	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameResetRequest,
 		event.EventSwarmSpawnRequest, event.EventQuasarSpawnRequest, event.EventDrainDefeated,
-		event.EventCursorDefeatState:
+		event.EventCursorDefeatState, event.EventPlayoutLead:
 		return true
 	default:
 		return false
@@ -1121,6 +1157,10 @@ func (s *NetworkSystem) Update() {
 	p := s.port()
 	s.refreshLink(p)
 	s.publishConnectionTelemetry(p)
+	// An instance nothing will correct any more owns what it predicted, so the
+	// rewards it is holding are due. Cheap and silent while the ledger is empty,
+	// which is every tick of a host and of a run with no session.
+	s.world.SettlePredictedDeaths()
 	if s.enabled && p != nil && p.IsRunning() {
 		s.ticks++
 	}

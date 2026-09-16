@@ -372,6 +372,16 @@ the install itself. Only immediate, unguarded `ClassLocal` lifecycle events mark
 acquire with imported variables, and a changed scope variable is treated as a
 boundary crossing. Staging imports remain side-effect free.
 
+That covers the *level-triggered* half: a hold that follows a Shared region is
+re-derived from the imported state. The *edge-triggered* half is a ledger, because
+a one-shot reward cannot be re-derived from state that no longer says it happened.
+A Shared-domain `EventSpeciesKilled` raised while the instance predicts is stamped
+`event.PhasePredicted` and held by dying entity; an install proves it by the
+entity's absence from the world it wrote and raises `EventSpeciesKillConfirmed`
+once, which is what `LootSystem` and `BoostSystem` consume. Recording is idempotent,
+so the re-derivation a rollback forces costs nothing. See
+[Multiplayer](multi-player.md) §3.4.
+
 ### D-20 — Shared FSM regions use replicated triggers
 
 Every FSM region is Shared state. A transition trigger must therefore be present

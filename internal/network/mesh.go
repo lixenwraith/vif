@@ -486,6 +486,30 @@ func (p *MeshPort) answerLocally(in Inbound) bool {
 	return false
 }
 
+// Disconnect severs one link, reporting whether it was there. Both ends observe
+// the loss naming the participant they lost, exactly as they would if the far end
+// had closed: a link the session refuses and a link that failed are the same event
+// to everything above the transport.
+func (p *MeshPort) Disconnect(peerID uint32) bool {
+	id := PeerID(peerID)
+	p.mu.Lock()
+	peer, ok := p.links[id]
+	if ok {
+		delete(p.links, id)
+	}
+	p.mu.Unlock()
+	if !ok {
+		return false
+	}
+	peer.mu.Lock()
+	delete(peer.links, p.local)
+	peer.mu.Unlock()
+
+	p.deliver(Inbound{Kind: InboundDisconnect, Peer: id})
+	peer.deliver(Inbound{Kind: InboundDisconnect, Peer: p.local})
+	return true
+}
+
 // Close drops this node from the graph. Both ends of every severed link observe a
 // disconnect naming the participant they lost, so each runs the same departure path
 // against the same identity. Closing one node leaves the rest of the graph running:

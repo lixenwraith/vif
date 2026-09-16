@@ -481,12 +481,14 @@ func (a *App) offerLocked(anchor event.JoinAnchor, assigned network.PeerID) netw
 		term = network.FirstTerm
 	}
 	return network.SessionOffer{
-		Anchor:            anchor,
-		Host:              a.authorityID(),
-		Assigned:          assigned,
-		Term:              term,
-		Roster:            slices.Clone(a.sessionRoster),
-		BarrierDelayTicks: max(a.barrierDelay, parameter.NetworkBarrierDelayTicks),
+		Anchor:   anchor,
+		Host:     a.authorityID(),
+		Assigned: assigned,
+		Term:     term,
+		Roster:   slices.Clone(a.sessionRoster),
+		// Floored at a tick rather than at the default: an offer is only written
+		// when somebody is on the far end, and zero is the protocol's "unset".
+		BarrierDelayTicks: max(a.barrierDelay, parameter.NetworkBarrierMinDelayTicks),
 		// A joiner adopts the chain whole: candidate list and address book in one.
 		Chain:          a.sessionChain(),
 		FixedAuthority: a.cfg.FixedAuthority,

@@ -6,10 +6,24 @@ import "time"
 // a periodic value sync whose interval trades freshness against traffic.
 const (
 	// NetworkBarrierDelayTicks gives an artifact 150ms to reach every participant.
-	// It is the floor and the default: a session with nothing measured, and a
-	// session on a link faster than this, both use it. The negotiated value travels
-	// in the offer and the handoff record.
+	// It is the answer with no evidence: a session that closed before a probe
+	// completed, and a transport that cannot measure its links. A measured link
+	// asks for what it measured, down to NetworkBarrierMinDelayTicks.
 	NetworkBarrierDelayTicks = 3
+
+	// NetworkBarrierMinDelayTicks is the smallest lead a measured link is given.
+	// One tick rather than none: a remote copy applies at the tick its producer
+	// stamped, which is already past on every receiver, so zero makes every
+	// artifact late by construction. A session with nothing on the wire takes no
+	// lead at all — nobody is waiting for an artifact nobody is sent.
+	NetworkBarrierMinDelayTicks = 1
+
+	// NetworkBarrierRenegotiateTicks is the shortest interval between two published
+	// leads, the window a lower measurement holds through before the lead follows
+	// it down, and the re-announcement period that makes a change a peer never
+	// received cost one window rather than the session. Raising is immediate for
+	// the reason the cadence controller degrades immediately.
+	NetworkBarrierRenegotiateTicks = SnapshotFloorKeyframeTicks
 
 	// NetworkBarrierMaxDelayTicks is one second, and bounds what a measurement may
 	// ask for. Past this the lead has stopped being an interpolation buffer and
@@ -94,11 +108,13 @@ const (
 	// NetworkJoinLagTicks is how far behind the session a freshly installed
 	// participant may land and still be admitted, in ticks.
 	//
-	// It is the playout lead, and that is not a coincidence: a participant N ticks
-	// behind produces a crossing for tick Q+lead when the rest of the session is
-	// already at Q+N, so the artifact is late by N-lead. At or under the lead it
-	// still lands on time. The join measures its own lag against this and refuses
-	// rather than joining a session it will immediately diverge from.
+	// It is the default playout lead, and that is not a coincidence: a participant
+	// N ticks behind produces a crossing for tick Q+lead when the rest of the
+	// session is already at Q+N, so the artifact is late by N-lead. The join
+	// measures its own lag against this and refuses rather than joining a session
+	// it will immediately diverge from. A fixed bound rather than the session's
+	// live lead, because an admission rule that moved with a measurement would
+	// admit and refuse the same participant a second apart.
 	NetworkJoinLagTicks = NetworkBarrierDelayTicks
 
 	// NetworkJoinCatchUpTicks bounds the ticks a joining participant may simulate
@@ -249,10 +265,10 @@ const (
 	// the session's newest observed tick this instance may stand before a player
 	// should be told the link rather than the game is the problem.
 	//
-	// It is the playout lead, for the same reason NetworkJoinLagTicks is: past it
-	// this participant's own crossings reach the host after the tick they name, so
-	// the host reorders them and the correction magnitude grows. Under it, nothing
-	// is late and there is nothing to say.
+	// It is the default playout lead, for the same reason NetworkJoinLagTicks is:
+	// past it this participant's own crossings reach the host after the tick they
+	// name, so the host reorders them and the correction magnitude grows. Fixed
+	// rather than live, so an indicator does not flicker with the lead it reads.
 	SnapshotStaleTicks = NetworkBarrierDelayTicks
 
 	// SnapshotCorrectionQueue bounds the corrections one instance may hold
@@ -319,6 +335,17 @@ const (
 	SnapshotReplayTicks   = SnapshotFloorKeyframeTicks
 	SnapshotReplayRecords = 512
 	SnapshotReplayBytes   = 256 << 10
+
+	// PredictionLedgerMax bounds the shared derivations a guest holds waiting for
+	// an authoritative world to prove them.
+	//
+	// It is a cousin of the replay suffix and bounded for the same reason, but it
+	// overflows the other way: a dropped crossing is a different history and is
+	// refused, while a derivation past the bound is released unproved. Losing a
+	// player's progression to a bound is worse than paying it a cadence early, and
+	// a guest that fills this inside one convergence floor has a correction problem
+	// the ledger cannot fix. Twice the storm high-water's shared population.
+	PredictionLedgerMax = 1024
 
 	// NetworkSuccessionTicks bounds a succession. A survivor that has neither
 	// adopted a handoff nor been elected within it falls back to local

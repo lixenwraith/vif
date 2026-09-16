@@ -70,6 +70,16 @@ type World struct {
 	// degradedSystems remembers the disabled systems that already reported an
 	// optional dependent, so a region re-applying its config reports once
 	degradedSystems sync.Map
+
+	// predicted holds the shared derivations this instance has made against a world
+	// an authority may still correct; see prediction.go. Its own lock rather than
+	// the update mutex, because a derivation is recorded from the lock-free push
+	// path and released from an install that already holds the update mutex.
+	predictionMu            sync.Mutex
+	predicted               []predictedDeath
+	statPredictionPending   *atomic.Int64
+	statPredictionConfirmed *atomic.Int64
+	statPredictionDropped   *atomic.Int64
 }
 
 // NewWorld creates a new ECS world with dynamic component store support
@@ -415,6 +425,18 @@ func (w *World) IsSessionCoordinator() bool {
 	return w.Resources.Network != nil && w.Resources.Network.ParticipantID == 1
 }
 
+// PredictsShared reports whether this world runs the shared domain ahead of an
+// authority that may correct it. The authority's own world is never a prediction,
+// and neither is a run with nobody to correct it: both hold the only shared world
+// there is, so what they derive from it is settled the moment they derive it.
+func (w *World) PredictsShared() bool {
+	net := w.Resources.Network
+	if net == nil || net.Port == nil || !net.Port.IsRunning() || net.Port.PeerCount() == 0 {
+		return false
+	}
+	return net.Authority.Load() != net.ParticipantID
+}
+
 // PushLocal emits an event that must never replicate: an owner-authored grant, or an
 // effect belonging to this instance alone. Replication classifies on the domain tag,
 // so tagging here is what makes the classification mechanical rather than by inspection.
@@ -441,12 +463,21 @@ func (w *World) pushEvent(eventType event.EventType, payload any, origin event.O
 		vlog.Trace("push", vlog.LevelTrace, 4, "msg", "push", "ev", event.GetEventName(eventType))
 	}
 
-	w.Resources.Event.Queue.Push(event.GameEvent{
+	ev := event.GameEvent{
 		Type:    eventType,
 		Payload: payload,
 		Origin:  origin,
 		Domain:  domain,
-	})
+	}
+	// A shared derivation raised on a predicting instance is provisional: a
+	// correction can restore what it announced dead and make this instance
+	// announce it again. The ledger holds the reward; the stamp is what tells the
+	// consumers that would pay it to wait.
+	if domain == core.DomainShared && event.Derivation(eventType) && w.PredictsShared() {
+		ev.Phase = event.PhasePredicted
+		w.recordPrediction(eventType, payload)
+	}
+	w.Resources.Event.Queue.Push(ev)
 }
 
 // PushRecord republishes one journaled record without offering it to the wire.

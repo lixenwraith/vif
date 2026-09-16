@@ -88,6 +88,13 @@ func (i instance) VerifyCaptureIdentity(h snapshot.CaptureHeader) error {
 
 func (i instance) ReplayLocalSuffix(h snapshot.CaptureHeader) { i.a.replayLocalSuffix(h) }
 
+func (i instance) PlayoutLead(r []network.RosterEntry) (uint64, uint64, []network.PeerID) {
+	return i.a.playoutLead(r)
+}
+
+func (i instance) SetPlayoutLead(ticks uint64)    { i.a.crossPlayoutLead(ticks) }
+func (i instance) DropParticipant(id uint32) bool { return i.a.dropParticipant(id) }
+
 func (i instance) AuthorityChanged(rec network.HandoffRecord, mine bool) {
 	i.a.applyAuthorityChange(rec, mine)
 }

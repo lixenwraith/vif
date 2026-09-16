@@ -138,6 +138,7 @@ func (s *LootSystem) Priority() int {
 func (s *LootSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventSpeciesKilled,
+		event.EventSpeciesKillConfirmed,
 		event.EventLootSpawnRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
@@ -164,7 +165,13 @@ func (s *LootSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventSpeciesKilled:
+	case event.EventSpeciesKilled, event.EventSpeciesKillConfirmed:
+		// A drop is player-domain and no correction can take it back, so a death
+		// this instance is only predicting waits: the ledger raises the confirmed
+		// form once an authoritative world proves the species gone.
+		if ev.Phase == event.PhasePredicted {
+			return
+		}
 		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
 			s.onSpeciesKilled(payload)
 		}

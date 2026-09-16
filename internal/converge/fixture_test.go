@@ -3,6 +3,7 @@
 package converge
 
 import (
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -34,6 +35,14 @@ type stub struct {
 	handoffs  []adopted
 	abandoned [][]network.RosterEntry
 	said      []string
+
+	// The playout lead: what the barrier defers by, what the links ask for, and
+	// what the authority did about it.
+	leadCurrent uint64
+	leadTarget  uint64
+	leadOverrun []network.PeerID
+	leads       []uint64
+	dropped     []uint32
 }
 
 // adopted is one call the succession made on the run: the record it moved to, and
@@ -92,6 +101,28 @@ func (s *stub) ReplayLocalSuffix(h snapshot.CaptureHeader) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.replayed = append(s.replayed, h)
+}
+
+// PlayoutLead answers what the criterion staged; SetPlayoutLead and
+// DropParticipant record what the authority decided from it.
+func (s *stub) PlayoutLead([]network.RosterEntry) (uint64, uint64, []network.PeerID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.leadCurrent, s.leadTarget, s.leadOverrun
+}
+
+func (s *stub) SetPlayoutLead(ticks uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.leads = append(s.leads, ticks)
+}
+
+func (s *stub) DropParticipant(id uint32) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	first := !slices.Contains(s.dropped, id)
+	s.dropped = append(s.dropped, id)
+	return first
 }
 
 func (s *stub) AuthorityChanged(rec network.HandoffRecord, mine bool) {

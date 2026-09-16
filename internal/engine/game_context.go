@@ -166,6 +166,7 @@ func newGameContext(world *World, width, height int, clock Clock, corr *vlog.Cor
 	world.Resources.Status.SetSnapshotInterval(parameter.StatSnapshotTicks)
 	world.updateMutex.BindStatus(world.Resources.Status)
 	world.Positions.BindTelemetry(world.Resources.Status)
+	world.BindPredictionTelemetry(world.Resources.Status)
 	world.Resources.NavigationDebug = &ctx.NavigationDebug
 
 	// 2. Context metrics; registered before Freeze, written by their owners

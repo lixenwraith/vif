@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 171
+const EventTypeCount = 173
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -31,6 +31,7 @@ func InitRegistry() {
 	RegisterType("EventNetworkDisconnect", EventNetworkDisconnect, &NetworkDisconnectPayload{})
 	RegisterType("EventParticipantJoined", EventParticipantJoined, &ParticipantJoinedPayload{})
 	RegisterType("EventParticipantDeparted", EventParticipantDeparted, &ParticipantDepartedPayload{})
+	RegisterType("EventPlayoutLead", EventPlayoutLead, &PlayoutLeadPayload{})
 	RegisterType("EventCursorStateSync", EventCursorStateSync, &CursorStatePayload{})
 	RegisterType("EventGameResetRequest", EventGameResetRequest, &GameResetPayload{})
 	RegisterType("EventMetaDebugRequest", EventMetaDebugRequest, nil)
@@ -116,6 +117,7 @@ func InitRegistry() {
 	RegisterType("EventCursorLocalChanged", EventCursorLocalChanged, &CursorSetLocalPayload{})
 	RegisterType("EventSpeciesCreated", EventSpeciesCreated, &SpeciesCreatedPayload{})
 	RegisterType("EventSpeciesKilled", EventSpeciesKilled, &SpeciesKilledPayload{})
+	RegisterType("EventSpeciesKillConfirmed", EventSpeciesKillConfirmed, &SpeciesKilledPayload{})
 	RegisterType("EventDrainDefeated", EventDrainDefeated, &DrainDefeatedPayload{})
 	RegisterType("EventFuseQuasarRequest", EventFuseQuasarRequest, &FuseQuasarRequestPayload{})
 	RegisterType("EventFuseSwarmRequest", EventFuseSwarmRequest, &FuseSwarmRequestPayload{})
@@ -208,6 +210,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventNetworkDisconnect:               ClassLocal,
 	EventParticipantJoined:               ClassBus,
 	EventParticipantDeparted:             ClassBus,
+	EventPlayoutLead:                     ClassBus,
 	EventCursorStateSync:                 ClassLocal,
 	EventGameResetRequest:                ClassBus,
 	EventMetaDebugRequest:                ClassLocal,
@@ -293,6 +296,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventCursorLocalChanged:              ClassLocal,
 	EventSpeciesCreated:                  ClassStamped,
 	EventSpeciesKilled:                   ClassStamped,
+	EventSpeciesKillConfirmed:            ClassLocal,
 	EventDrainDefeated:                   ClassBus,
 	EventFuseQuasarRequest:               ClassLocal,
 	EventFuseSwarmRequest:                ClassLocal,

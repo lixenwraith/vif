@@ -880,6 +880,13 @@ type PeerDialingPort interface {
 	DialPeer(addr string) error
 }
 
+// PeerDroppingPort is a transport the session may close one link on, rather than
+// waiting for the peer to close it. Asserted for like the dialing and measuring
+// ports: a transport that cannot drop a peer is still a working one.
+type PeerDroppingPort interface {
+	Disconnect(peerID uint32) bool
+}
+
 // NetworkSessionPort exposes barrier metadata negotiated before simulation starts.
 type NetworkSessionPort interface {
 	ParticipantID() uint32

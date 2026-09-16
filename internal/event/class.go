@@ -58,3 +58,25 @@ func Replicated(et EventType, domain core.Domain) bool {
 		return false
 	}
 }
+
+// EventPhase says whether a record derived from shared state is still this
+// instance's own prediction. A guest predicts the shared world forward between
+// corrections, so a death it derives can be undone by a correction and derived
+// again; the player-domain rewards that follow one are in no capture and no
+// correction can take them back.
+type EventPhase uint8
+
+const (
+	// PhaseSettled is the default and the whole of a run nobody corrects: the
+	// record states a fact this instance owns.
+	PhaseSettled EventPhase = iota
+	// PhasePredicted marks a derivation this instance may yet have to make again.
+	// Presentation follows it; a reward waits for the authority to prove it.
+	PhasePredicted
+)
+
+// Derivation names the edge-triggered types a predicting instance can raise more
+// than once for one underlying fact, because the shared state they read is
+// non-monotonic there. A shared-domain push of one is stamped PhasePredicted and
+// confirmed against the next authoritative world.
+func Derivation(et EventType) bool { return et == EventSpeciesKilled }

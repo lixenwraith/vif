@@ -141,6 +141,14 @@ type ParticipantDepartedPayload struct {
 	Slot        uint8  `toml:"slot"`
 }
 
+// PlayoutLeadPayload carries the ticks every participant defers its crossings by.
+// Authored by the authority alone and applied at one agreed tick, because a
+// measurement is not something a receiver can re-derive and two participants
+// deferring by different leads produce artifacts for ticks the other is not on.
+type PlayoutLeadPayload struct {
+	Ticks uint64 `toml:"ticks"`
+}
+
 // NetworkDisconnectPayload signals peer disconnection
 type NetworkDisconnectPayload struct {
 	PeerID uint32 `toml:"peer_id"`

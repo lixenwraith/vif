@@ -46,6 +46,15 @@ type Instance interface {
 	// installed capture does not contain.
 	ReplayLocalSuffix(snapshot.CaptureHeader)
 
+	// PlayoutLead is the lead the barrier defers by now, the lead one roster and
+	// this instance's links ask for, and the participants past the ceiling. The
+	// first is read rather than remembered: a successor inherits a lead it never
+	// derived, and re-announcing its own copy would move the session back to it.
+	// SetPlayoutLead publishes one; DropParticipant closes a link and says so.
+	PlayoutLead(roster []network.RosterEntry) (current, target uint64, overrun []network.PeerID)
+	SetPlayoutLead(ticks uint64)
+	DropParticipant(id uint32) bool
+
 	// AuthorityChanged moves the membership a handoff carries into the places the
 	// run reads it from; DropAbandonedCursors removes the participants an instance
 	// left with no link will never hear from again.
