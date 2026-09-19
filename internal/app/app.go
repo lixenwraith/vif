@@ -12,7 +12,6 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/asset"
 	"github.com/lixenwraith/vi-fighter/internal/converge"
-	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
@@ -23,7 +22,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/probe"
-	"github.com/lixenwraith/vi-fighter/internal/render"
 	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/service"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
@@ -34,20 +32,17 @@ import (
 // fallbackColorMode is published when no terminal exists to detect against
 const fallbackColorMode = terminal.ColorMode256
 
-// App owns the wired runtime: services, world, renderer, input, and scheduler
-// Headless runs leave termSvc, term and orchestrator nil
+// App owns the wired runtime: services, world, input, scheduler, and the selected
+// presentation adapter.
 type App struct {
 	cfg Config
 
-	hub        *service.Hub
-	termSvc    *service.TerminalService
+	hub *service.Hub
+	presentationState
 	networkSvc *service.NetworkService
-	term       terminal.Terminal
 
-	world *engine.World
-	ctx   *engine.GameContext
-
-	orchestrator *render.RenderOrchestrator
+	world        *engine.World
+	ctx          *engine.GameContext
 	inputMachine *input.Machine
 	router       *mode.Router
 	recorder     *journal.Recorder
@@ -211,7 +206,7 @@ func (a *App) init() error {
 	if err := a.initScheduler(); err != nil {
 		return err
 	}
-	a.ctx.SessionCtl = sessionControl{a}
+	a.bindSessionController()
 
 	vlog.Info("app", "msg", "init complete",
 		"width", a.ctx.Width,
@@ -226,24 +221,14 @@ func (a *App) initServices() error {
 	// Event registry backs FSM trigger resolution and :emit; precedes FSM load
 	event.EnsureRegistry()
 
-	if a.cfg.Mode.Presents() {
-		colorMode := terminal.DetectColorMode()
-		if a.cfg.ColorModeSet {
-			colorMode = a.cfg.ColorMode
-		}
-		a.termSvc = service.NewTerminalService(colorMode)
-		_ = a.hub.Register(a.termSvc)
+	if err := a.initPresentationService(); err != nil {
+		return err
 	}
-	if a.cfg.Mode == ModePlay || a.cfg.HostAddress != "" || a.cfg.JoinAddress != "" {
-		a.networkSvc = service.NewNetworkService(a.cfg.networkConfig)
-		_ = a.hub.Register(a.networkSvc)
+	if err := a.initNetworkService(); err != nil {
+		return err
 	}
-	if a.cfg.Mode.Audio() {
-		audioSrc, err := resource.Audio(a.cfg.Resources)
-		if err != nil {
-			return err
-		}
-		_ = a.hub.Register(service.NewAudioService(a.cfg.AudioMuted, a.cfg.AudioBackend, audioSrc))
+	if err := a.initAudioService(); err != nil {
+		return err
 	}
 	_ = a.hub.Register(service.NewFileService(resource.Files(a.cfg.Resources)))
 
@@ -289,16 +274,7 @@ func (a *App) initWorld() {
 
 	// The terminal supplies color whenever one exists, but dimensions only when the
 	// mode says so; a replay's come from the journal, via config
-	width, height := a.cfg.Width, a.cfg.Height
-	colorMode := fallbackColorMode
-	if a.cfg.Mode.Presents() {
-		a.term = a.termSvc.Terminal()
-		core.SetCrashTerminal(a.term)
-		colorMode = a.term.ColorMode()
-	}
-	if a.cfg.Mode.OwnsGeometry() {
-		width, height = a.term.Size()
-	}
+	width, height, colorMode := a.presentationGeometry(a.cfg.Width, a.cfg.Height)
 
 	// GameContext initializes the remaining world resources.
 	// A driven run uses the manual clock: game time is a pure function of ticks.
@@ -378,17 +354,6 @@ func (a *App) applyMapLatch() {
 	a.world.SetupLevel(a.cfg.MapWidth, a.cfg.MapHeight, false, a.cfg.CropOnResize)
 }
 
-// initPresentation builds the render pipeline. The buffer is terminal-sized while
-// renderers draw in simulation coordinates, so a replay on a smaller terminal clips;
-// the windowed composite replaces that.
-func (a *App) initPresentation() {
-	w, h := a.term.Size()
-	a.orchestrator = render.NewRenderOrchestrator(a.term, w, h)
-	for _, reg := range manifest.BuildRenderers(a.ctx) {
-		a.orchestrator.Register(reg.Renderer, reg.Priority)
-	}
-}
-
 // initInput builds the intent pipeline. Kept headless because intents are the
 // injection path; only the terminal mouse sink is skipped.
 func (a *App) initInput() error {
@@ -401,6 +366,32 @@ func (a *App) initInput() error {
 		a.router.SetMouseModeApplier(a.applyMouseMode)
 	}
 	return nil
+}
+
+// handleIntent tags the producer and keeps the whole router path under the world
+// lock; mode must never acquire that lock itself.
+func (a *App) handleIntent(intent *input.Intent) bool {
+	origin := event.OriginInput
+	if intent.MacroPlayback {
+		origin = event.OriginMacro
+	}
+	cont := true
+	a.world.RunSafe(func() {
+		a.world.WithOrigin(origin, func() {
+			cont = a.router.Handle(intent)
+		})
+	})
+	return cont
+}
+
+// processInputTick takes the lock here because no input event wraps timer-driven
+// reads of cursor state.
+func (a *App) processInputTick() bool {
+	emitted := false
+	a.world.RunSafe(func() {
+		emitted = a.router.ProcessInputTick()
+	})
+	return emitted
 }
 
 // initScheduler wires the clock scheduler, loads the FSM, and registers the

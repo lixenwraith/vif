@@ -62,15 +62,20 @@ make release
 ./bin/vif
 ```
 
-Useful targets include `make dev`, `make test`, `make verify`, `make tools`,
-`make wasm`, and `make serve`. `make install-config` copies the `wad/` payload
-and the default keymap under the user config root without replacing existing
-files; `make install` stages the same payload for a distribution package. Audio starts muted; press `Ctrl-S` to cycle audio channels or
-launch with `-mute=false`. Run `./bin/vif -h` for all flags — it prints to
-stdout, so it pipes into `grep` without redirecting stderr.
+Useful targets include `make dev`, `make test`, `make verify`, `make headless`,
+`make tools`, `make wasm`, and `make serve`. `make install-config` copies the
+`wad/` payload and the default keymap under the user config root without replacing
+existing files; `make install` stages the same payload for a distribution package.
+Audio starts muted; press `Ctrl-S` to cycle audio channels or launch with
+`-mute=false`. Run `./bin/vif -h` for all flags — it prints to stdout, so it pipes
+into `grep` without redirecting stderr.
 
 Primary native targets are Linux and FreeBSD. The repository also contains a
-constrained xterm.js/WASM build and an experimental Windows cross-build.
+constrained xterm.js/WASM build and an experimental Windows cross-build. The
+WASM client is currently solo: browser JavaScript cannot open the framed TCP
+socket used by native sessions. See the
+[build and platform analysis](doc/multi-platform.md) for WebSocket options,
+browser arguments, external assets, and the future renderer boundary.
 
 ## Configuration and tools
 
@@ -141,10 +146,10 @@ nobody sits at, `./bin/vif -serve :7777 -size 120x40` waits for its first guest
 and then runs the session on its own.
 
 `deploy/` holds the container image and the K3s objects that run one such session
-per player request: a `scratch` image of one static non-root binary, a namespace
-capped at ten concurrent sessions, default-deny network policy, a per-session Job
-and Service, and one node log reader behind the allocator. `make image` builds it;
-the installation and operating procedure is
+per player request: a `scratch` image of the static `vif_headless` non-root binary,
+a namespace capped at ten concurrent sessions, default-deny network policy, a
+per-session Job and Service, and one node log reader behind the allocator. The
+image is built by `make image`; the installation and operating procedure is
 [doc/kube_docker_deploy.md](doc/kube_docker_deploy.md) and the design and work list
 behind it is [doc/kubernetes-fleet.md](doc/kubernetes-fleet.md).
 

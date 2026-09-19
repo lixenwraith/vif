@@ -16,6 +16,7 @@ type SystemDef struct {
 	Domain      string   // Domain profile: "shared", "player" or "dual"
 	Requires    []string // Systems this one cannot function without
 	Optional    []string // Systems whose absence only degrades this one
+	Capability  string   // Optional local-only implementation capability, currently "audio"
 	// Snapshot is the D-19 obligation: "" (none) when the system holds no
 	// future-affecting state outside the component stores, "state" when it does
 	// and implements engine.SharedStateSaver to carry it. The declaration is
@@ -105,8 +106,9 @@ var Components = []ComponentDef{
 	{"Timer", "TimerComponent", ""},
 }
 
-// Systems is the authoritative system list: order, construction, domain profile, and dependencies
-// Generator produces: RegisterSystems(), ActiveSystems(), systemProfiles
+// Systems is the authoritative system list: order, construction, domain profile, and dependencies.
+// Capability may vary only local systems; it is deliberately outside the simulation fingerprint.
+// Generator produces BuildSystems, ActiveSystems, and systemProfiles.
 var Systems = []SystemDef{
 	// --- Transport ---
 	{Name: "network", Constructor: "NewNetworkSystem", Domain: "dual",
@@ -205,8 +207,8 @@ var Systems = []SystemDef{
 		Optional: []string{"death", "adaptation"}}, // per-species GA populations behind pkg/genetic's registry // shared genotype state; observes lifecycle and route outcomes
 
 	// --- Audio ---
-	{Name: "audio", Constructor: "NewAudioSystem", Domain: "player"},                              // per-instance sound sink with no simulation writes
-	{Name: "music", Constructor: "NewMusicSystem", Domain: "player", Optional: []string{"audio"}}, // player stream; tracks intensity silently without audio
+	{Name: "audio", Constructor: "NewAudioSystem", Domain: "player", Capability: "audio"},                              // per-instance sound sink with no simulation writes
+	{Name: "music", Constructor: "NewMusicSystem", Domain: "player", Optional: []string{"audio"}, Capability: "audio"}, // player stream; tracks intensity silently without audio
 }
 
 // ContextSystems deliberately stay separate from generated World-only

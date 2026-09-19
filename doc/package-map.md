@@ -76,7 +76,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/input` | Terminal-event parser, semantic intents, keymap override decoding/merging; the default document comes from `internal/asset`. It does not import the ECS. |
 | `internal/journal` | Runtime-agnostic deterministic-run machinery: recording lifecycle, in-memory capture, rotated JSONL loading, replay ordering/payload decoding, seeded fuzz input, and versioned authored tick scripts. Drivers depend on narrow target interfaces and never import `internal/app`. |
 | `internal/lifecycle` | The allocated session's lifetime policy: a pure state machine over an injected clock turning roster observations into a phase (waiting, occupied, vacant, draining, expired), a deadline, and whether a dial may still be admitted. It opens nothing, reads no roster, and terminates nothing — the run supplies the observations and acts on the phase. |
-| `internal/manifest` | Authoritative component/system/renderer lists, the simulation fingerprint two participants must share,, generated builders, game binding for the generic FSM, and the JSON schema dump the map editor consumes. |
+| `internal/manifest` | Authoritative component/system/renderer lists, the simulation fingerprint two participants must share, capability-split generated builders, game binding for the generic FSM, and the JSON schema dump the map editor consumes. |
 | `internal/mode` | Mode ownership, intent execution, motions/operators/search, mouse handling, macros, command mode, undo/history. |
 | `internal/network` | Length-prefixed TCP transport, optional TLS configuration, anchor/start/ready session protocol, the peer-link handshake two participants open a stream with, the succession chain a handoff reads, peers, sequence/ack fields, bounded inbound notifications, and the per-address dial budget the coordinator admits against. |
 | `internal/parameter` | Gameplay constants, timing, priorities, effect/audio tuning, and navigation/genetics settings. |
@@ -109,6 +109,7 @@ flowchart TD
 |---|---|---|
 | `pkg/ascimage` | Convert images to terminal cells and read/write dual-mode `.vifimg` assets. | External terminal/color types only. The interactive viewer lives in `cmd/ascimage` because it needs the in-repo render buffer. |
 | `pkg/audio` | Synthesis, sound registry/cache, PCM mixer, patterns, harmony, voices, sequencer, backend detection, WAV sink. | Game policy *and the sound bank* are injected; the package ships no specs and imports nothing under `internal/`. |
+| `pkg/audio/model` | Audio identifiers and arrangement values shared by events/configuration. | No mixer, backend, filesystem, or synthesis dependency; remains in audio-free profiles. |
 | `pkg/genetic` | Generic generational and caller-driven streaming genetic engines, deterministic PCG streams, exact continuation checkpoints, and operators. | Core package uses the standard library only. |
 | `pkg/genetic/fitness` | Convert lifetime metric bundles to scalar fitness. | Depends on tracking types. |
 | `pkg/genetic/tracking` | Pooled lifetime metric collectors for simple and composite subjects. | No game-specific component dependency. |
@@ -135,13 +136,15 @@ boundaries.
 registries:
 
 - component field/type pairs;
-- system registry keys and constructors;
+- system registry keys, constructors, and optional local build capability;
 - renderer registry keys, constructors, and layer priorities.
 
 `go generate ./internal/manifest/...` invokes `internal/gen-manifest` and
-updates builders, typed component stores/removal masks, the event reflection
-registry, and input enum strings. Stable tie-breaking comes from manifest order
-when two systems or renderers share a priority.
+updates the core and audio system builders, terminal renderer builder, typed
+component stores/removal masks, event reflection registry, and input enum strings.
+Stable tie-breaking comes from manifest order when two systems or renderers share
+a priority. Audio is the current local-only implementation capability; audio-free
+builds select null event sinks without changing the simulation fingerprint.
 
 Important exceptions:
 

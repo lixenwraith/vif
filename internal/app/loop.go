@@ -1,3 +1,5 @@
+//go:build !vif_headless
+
 package app
 
 import (
@@ -9,7 +11,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/render"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
@@ -143,24 +144,6 @@ func (a *App) Loop() error {
 	}
 }
 
-// handleIntent runs one intent under the world lock, tagged with its producer.
-// The entire router path (motions, operators, mouse cursor writes, undo
-// capture, mode transitions) is serialized against tick/event/render by
-// construction — mode/ must never acquire the world lock itself.
-func (a *App) handleIntent(intent *input.Intent) bool {
-	origin := event.OriginInput
-	if intent.MacroPlayback {
-		origin = event.OriginMacro
-	}
-	cont := true
-	a.world.RunSafe(func() {
-		a.world.WithOrigin(origin, func() {
-			cont = a.router.Handle(intent)
-		})
-	})
-	return cont
-}
-
 // handleResize records the terminal change and lets the handler apply it. The
 // dispatch is synchronous so the orchestrator resizes against dimensions the
 // handler has already written; the render pipeline is main-loop state, so it stays
@@ -259,16 +242,4 @@ func (a *App) inputTick() bool {
 		}
 	}
 	return true
-}
-
-// processInputTick serializes timer-driven router reads with cursor lifecycle.
-// Unlike Handle intents, ProcessInputTick enters through no input event, so the
-// App boundary must acquire the world lock explicitly before it snapshots the
-// local cursor for auto-fire and held-button repeat.
-func (a *App) processInputTick() bool {
-	emitted := false
-	a.world.RunSafe(func() {
-		emitted = a.router.ProcessInputTick()
-	})
-	return emitted
 }

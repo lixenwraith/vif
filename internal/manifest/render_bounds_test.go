@@ -1,3 +1,5 @@
+//go:build !vif_headless
+
 package manifest
 
 import (

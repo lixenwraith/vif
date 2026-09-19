@@ -38,12 +38,13 @@ The Makefile targets are:
 | `generate` | Run the manifest/event/input code generator. |
 | `dev` | Generate and build `cmd/vif` with the race detector/debug symbols. |
 | `release` | Generate and build a stripped `-trimpath` native binary. |
+| `headless` | Build `bin/vif-headless` without terminal presentation, renderers, or audio. |
 | `nolog` | Release-style build with the `novlog` tag. |
-| `wasm` | Generate and build `web/vif.wasm` for `js/wasm`. |
-| `windows` | Experimental `windows/amd64`, `CGO_ENABLED=0` cross-build. |
+| `wasm` | Build audio-free `web/vif.wasm` for the xterm.js host. |
+| `windows` | Experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0` cross-build. |
 | `run` | Build the dev binary and execute it. |
 | `test` | Generate and run `go test -race ./...`. |
-| `verify` | Generate, test, default/`novlog`/WASM build, then `go vet ./...`. |
+| `verify` | Generate, test, vet, and compile full/`novlog`/audio-free/headless/WASM/Windows variants. |
 | `arch-check` | Report `pkg/*` packages that import `internal/*`; diagnostic and separate from `verify`. |
 | `tools` | Build `cmd/ascimage`, `cmd/soundlab`, and every `tool/*` command. |
 | `allocator` | Build the website-to-K3s session allocator as `bin/vif-allocator`. |
@@ -62,8 +63,14 @@ The Makefile targets are:
 defaults to `docker` and accepts `podman`. The image is a `scratch` layer holding
 one static non-root binary; `image-check` is the only way to prove it starts,
 because there is no shell in it to ask.
-Release/nolog/wasm use stripped linker flags; `dev` intentionally retains
-diagnostics and enables race instrumentation.
+Release-style profile targets use stripped linker flags; `dev` intentionally
+retains diagnostics and enables race instrumentation.
+
+Runtime modes and compile-time profiles are different boundaries. `-serve` in a
+full binary skips presentation initialization; `make headless` also removes its
+terminal adapter and generated renderer registry from the build. The tag contract,
+measured artifacts, browser constraints, and future-renderer path are in
+[Build profiles and platform boundaries](multi-platform.md).
 
 ## 3. Generated code
 
@@ -77,7 +84,10 @@ input enum declarations. `go generate ./internal/manifest/...` runs
 | `internal/engine/component_domain_gen.go` | `ComponentDef.Domain` | `componentDomains`, the replication-domain audit table |
 | `internal/engine/snapshot_world_gen.go` | manifest components | the shared-world capture, its delta, and the install/reconcile passes over every store |
 | `internal/engine/snapshot_pages_gen.go` | manifest components | the canonical page rows a correction manifest is hashed over, and the writer one repaired page is applied through |
-| `internal/manifest/build_gen.go` | systems/renderers | constructors, active-name lists, and `systemProfiles` |
+| `internal/manifest/build_gen.go` | manifest systems | core constructors, active-name list, profiles, and snapshot declarations |
+| `internal/manifest/build_audio_gen.go` | systems with the `audio` capability | audio-capable constructors and names |
+| `internal/manifest/build_noaudio_gen.go` | audio capability boundary | audio-free event-sink constructors |
+| `internal/manifest/render_gen.go` | manifest renderers | terminal renderer constructors and priorities |
 | `internal/event/registry_gen.go` | `internal/event/type.go` and payload comments/types | event name/type/payload registry and the replication class table |
 | `internal/input/strings_gen.go` | selected input enum const blocks | enum string/reverse lookup tables |
 
@@ -437,8 +447,12 @@ The intended local gate is:
 make verify
 ```
 
-It covers race-enabled tests, package compilation, `novlog`, `js/wasm`, and
-vet. It does not cross-build Windows or exercise a real terminal/audio backend.
+It covers race-enabled tests, package compilation, `novlog`, `vif_noaudio`,
+`vif_headless`, `js/wasm`, `windows/amd64`, and vet. The audio-free internal suite
+and the headless manifest/system suites also run under their tags. Verification
+does not execute a real Windows artifact or exercise a real terminal/audio
+backend. Dependency assertions fail if the headless command regains
+renderer/audio packages or the browser command regains the audio implementation.
 
 The Go test suite covers `cmd/vif`, `cmd/soundlab`, the
 headless/replay application harness, clocks/scheduler/time control, event
@@ -508,15 +522,10 @@ downloads modules, runs `go vet ./...`, builds `./...`, and runs
 `go test -race -v ./...` with race output redirected to `race.*`; those files
 are uploaded for seven days on failure.
 
-CI does not run generation followed by a clean-tree check, the `novlog` build,
-the WASM build, Windows cross-compilation, or terminal/audio smoke tests.
-`make verify` covers generation, race tests, default/`novlog`/WASM builds, and
-vet locally; Windows and host-I/O behavior remain separate validation work.
-
-The Makefile's `windows` help text says sound/logging are disabled, but the
-recipe does not pass `novlog` or another disabling tag. Treat the recipe—not the
-help sentence—as current behavior, and validate/update that target before
-advertising a Windows capability.
+CI does not run generation followed by a clean-tree check, the profile build
+matrix, Windows cross-compilation, or terminal/audio smoke tests. `make verify`
+covers generation, race tests, the compile matrix, and vet locally; Windows and
+host-I/O behavior remain separate runtime validation work.
 
 ## 7. Platform matrix
 
@@ -524,8 +533,8 @@ advertising a Windows capability.
 |---|---|---|
 | Linux | Primary native target | Unix signals/crash reset; process audio backends; optional stderr fd capture. |
 | FreeBSD | Native target | Unix handling plus optional `/dev/dsp` OSS backend. |
-| `js/wasm` | Supported constrained build | xterm.js host, embedded FSM/content/keymap/audio fallback, `vlog` stub, no host discovery or native process audio backend. |
-| Windows amd64 | Experimental/untested cross-build | `CGO_ENABLED=0`; non-Unix crash/redirect path; requires a compatible terminal; recipe needs live validation. |
+| `js/wasm` | Supported constrained build | xterm.js host, embedded FSM/content/keymap, audio omitted, `vlog` stub, no host discovery or raw socket transport. |
+| Windows amd64 | Experimental/untested cross-build | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; non-Unix crash path; terminal and TCP need live validation. |
 | Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification. |
 
 ### WASM host
@@ -534,11 +543,17 @@ advertising a Windows capability.
 addon, and a Go WASM instance. JavaScript batches Go writes into microtasks,
 forwards text/binary input, reports resizes, prevents the context menu, and
 maintains focus. `make serve` builds `web/vif.wasm` and serves this directory.
+Before launch, `web/terminal.js` maps `window.VIF_ARGS` and repeated `arg` query
+parameters into `Go.argv`.
 
 The browser build does not perform native config-root discovery for `game.toml`,
 keymap, content, audio overrides, or logs. Embedded assets make it playable;
-logging compiles to a stub. Feature claims for WASM
-should be verified against the terminal module's browser implementation.
+audio and logging compile out. Browser JavaScript cannot open the framed TCP
+socket used by native `-join`, so session flags fail validation until a WebSocket
+transport is provided. Arguments can select embedded behavior but cannot turn a
+URL into a filesystem path. See
+[Build profiles and platform boundaries](multi-platform.md) for the
+WebSocket/gateway and HTTP resource-provider strategy.
 
 ## 8. Structured logging
 

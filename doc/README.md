@@ -1,10 +1,11 @@
 # Vi-Fighter Engineering Documentation
 
 This directory describes the architecture and design of the current Vi-Fighter
-codebase. It was last audited on 2026-09-15, through the correction and authority
-protocol in `internal/converge`, the crossing barrier it orders against, the
-shared-world capture that a mid-run join installs, the CLI flag surface, and every
-entry in the multiplayer remaining-gaps list.
+codebase. It was last audited on 2026-09-19, through the build-capability split,
+browser boundary, correction and authority protocol in `internal/converge`, the
+crossing barrier it orders against, the shared-world capture that a mid-run join
+installs, the CLI flag surface, and every entry in the multiplayer remaining-gaps
+list.
 The implementation, generated manifest, and shipped configuration were treated as
 authoritative where older prose disagreed with the code.
 
@@ -36,6 +37,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Services and networking](services-and-networking.md) | Domain detail | How are I/O resources managed, and how do startup sessions, framing, polling, and disconnect work? |
 | [External filesystem layout](filesystem-layout.md) | Operational detail | Where do the `wad/` and embedded payloads live, and how are config, content, logs, and journals discovered and installed? |
 | [Packaging](packaging.md) | Operational detail | What must hold for a distribution package, and what is still missing per repository? |
+| [Build profiles and platforms](multi-platform.md) | Operational/design detail | What does each build include, why browser TCP cannot work directly, how can browser joining and external assets be added, and where do future renderers attach? |
 | [Development and operations](development.md) | Operational detail | How is the project built, generated, tested, diagnosed, and deployed on native and WASM targets? |
 | [Deploying the session fleet](kube_docker_deploy.md) | Operational detail | How are the edge firewall, the node, Docker, K3s, the log tmpfs, the image, the fleet objects, LogWisp, the allocator and the site's front door installed, in order? **Start here to deploy a node.** |
 | [Session fleet plan](kubernetes-fleet.md) | Operational detail | What is the design, what did it cost when measured, what is still open, and what was decided against? Holds the work list. |
@@ -62,7 +64,8 @@ changing a subsystem, update the source that actually owns its shape.
 
 | Concern | Authoritative source | Generated or runtime consumer |
 |---|---|---|
-| Components, systems, renderers | `internal/manifest/definition.go` | `internal/manifest/build_gen.go`, `internal/engine/component_store_gen.go` |
+| Components, systems, renderers | `internal/manifest/definition.go` | `internal/manifest/build_gen.go`, `build_audio_gen.go`, `build_noaudio_gen.go`, `render_gen.go`, `internal/engine/component_store_gen.go` |
+| Build capabilities | build constraints in `internal/app/presentation_*`, `audio*`, and `network_*` | Makefile profiles and generated capability-specific builders |
 | System domain profiles and dependencies | `SystemDef.Domain`/`Requires` in `internal/manifest/definition.go` | `manifest.ProfileFor`/`SystemProfiles`, `World.SystemInitOrder`, `app.checkSystems` |
 | Event names, payload association, replication class | `internal/event/type.go` comments and constants | `internal/event/registry_gen.go` |
 | Runtime shape and deterministic harness | `internal/app/config.go`, `headless.go`, `script.go` | `App`, `ClockScheduler`, services |

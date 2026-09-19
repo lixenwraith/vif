@@ -13,7 +13,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/converge"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -780,29 +779,6 @@ func (a *App) awaitStartGate(signals <-chan os.Signal) (network.SessionOffer, er
 	}
 }
 
-// lobbyEvents is the terminal source a gate polls, nil when this run has no
-// terminal — a receive on which blocks forever, which is what a headless gate wants.
-func (a *App) lobbyEvents() <-chan terminal.Event {
-	if a.termSvc == nil {
-		return nil
-	}
-	return a.termSvc.Events()
-}
-
-// lobbyEventCancels applies one terminal event to a gate and reports whether it
-// ends the wait. A resize is applied rather than deferred: the gate can outlast it.
-func (a *App) lobbyEventCancels(ev terminal.Event) bool {
-	switch ev.Type {
-	case terminal.EventClosed, terminal.EventError:
-		return true
-	case terminal.EventResize:
-		a.handleResize(ev.Width, ev.Height)
-	case terminal.EventKey:
-		return ev.Key == terminal.KeyCtrlC || ev.Key == terminal.KeyCtrlQ
-	}
-	return false
-}
-
 // waitForStartup treats rejected handshakes as recoverable while no peer was admitted.
 //
 // deadline, when non-zero, hands the wait to expire, which either ends it with an
@@ -842,17 +818,6 @@ func (a *App) waitForStartup(port *network.SocketPort, signals <-chan os.Signal,
 	return nil
 }
 
-// pollTerminalEarly starts the terminal poll ahead of the rest of the hub, so a
-// gate that blocks on a peer still has keys and signals to end on. A service is
-// started once: the StartAll that follows finds this one already running, and a run
-// with no terminal has nothing to start.
-func (a *App) pollTerminalEarly() error {
-	if a.termSvc == nil {
-		return nil
-	}
-	return a.termSvc.Start()
-}
-
 // socketPort returns the concrete startup endpoint contributed by NetworkService.
 func (a *App) socketPort() (*network.SocketPort, error) {
 	if a.networkSvc == nil || a.networkSvc.Port() == nil {
@@ -873,14 +838,6 @@ func (a *App) activateNetworkSessionLocked() {
 		if activator, ok := sys.(interface{ ActivateSession() }); ok {
 			activator.ActivateSession()
 		}
-	}
-}
-
-// showStartupStatus renders a frozen tick-zero lobby message.
-func (a *App) showStartupStatus(message string) {
-	a.ctx.SetStatusMessage(message, 0, false)
-	if a.orchestrator != nil {
-		a.frame()
 	}
 }
 

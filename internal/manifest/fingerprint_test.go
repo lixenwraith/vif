@@ -62,6 +62,12 @@ func TestFingerprintTracksTheSimulationSet(t *testing.T) {
 		t.Fatal("a constructor rename changed the fingerprint; it names no simulation difference")
 	}
 
+	Systems = append([]SystemDef{}, systems...)
+	Systems[len(Systems)-1].Capability = ""
+	if computeFingerprint() != base {
+		t.Fatal("a local build capability changed the simulation fingerprint")
+	}
+
 	Systems = systems
 	renderers := Renderers
 	t.Cleanup(func() { Renderers = renderers })

@@ -82,10 +82,14 @@ Assembly is mode-dependent:
 | `ModeServer` | file, content, and `RoleHost` network; no terminal and no audio |
 
 The predicates in `internal/app/config.go` are authoritative for terminal and
-audio capabilities. Network is role-selected separately: play always constructs
-the no-op-capable adapter, while an authored headless script constructs it only
-for `-host`/`-join`. Replay input controls playback rather than the mode router,
-and its terminal resize affects presentation rather than recorded geometry.
+audio capabilities, then build capabilities constrain them further. A
+`vif_headless` build has no terminal or audio adapter; `vif_noaudio` and browser
+builds have no audio adapter. Native networking is role-selected separately:
+play constructs the no-op-capable socket adapter, while an authored headless
+script constructs it only for `-host`/`-join`. Browser session flags are rejected
+because their required WebSocket adapter does not yet exist. Replay input controls
+playback rather than the mode router, and its terminal resize affects presentation
+rather than recorded geometry.
 
 Content and audio details are covered in
 [Content, assets, and tools](content-assets-and-tools.md) and

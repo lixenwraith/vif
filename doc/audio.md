@@ -28,9 +28,15 @@ flowchart TD
 `pkg/audio` carries no ECS or APM concept. The app injects effect volumes and
 shapes, and `MusicSystem` interprets the game's five-second APM signal.
 
-Runtime mode selects whether this layer exists. `ModePlay`, `ModeReplay` and
-`ModeScript` register the audio service; `ModeHeadless` does not. Replay rebuilds simulation
-from recorded events, including sound requests, and starts playback unmuted
+Runtime mode and build capability select whether this layer exists. In a full
+build, `ModePlay`, `ModeReplay` and `ModeScript` register the audio service;
+`ModeHeadless` and `ModeServer` do not. `vif_noaudio`, `vif_headless`, and
+`js/wasm` omit the service, engine resource, full audio systems, and `pkg/audio`
+implementation. Lightweight null systems still consume local audio events and
+publish audio as unavailable, preserving telemetry and system controls. Event
+payloads retain compatible identifiers through the small `pkg/audio/model`
+package. Replay rebuilds simulation from recorded events,
+including sound requests, and starts playback unmuted
 because the journal anchor has no original mute-state field. Terminal playback
 controls pacing only; it does not route viewer keys through `AudioSystem` or
 the gameplay keymap.
@@ -287,10 +293,11 @@ events and keep the sequencer unaware of gameplay concepts.
 | Engine/backend lifecycle | `pkg/audio/engine.go`, `detector.go`, `wav.go` |
 | Mixer/SFX admission | `pkg/audio/mixer.go`, `cache.go`, `sound_render.go` |
 | Sound schema | `pkg/audio/sound_spec.go`, `sound_valid.go` |
+| Shared protocol identifiers | `pkg/audio/model` |
 | Shipped sound bank | `internal/asset/audio/*.toml`, `internal/parameter.BuiltinSounds` |
 | Sequencer/patterns | `pkg/audio/sequencer.go`, `pattern*.go`, `track.go`, `voice.go` |
 | Game service | `internal/service/adapter_audio.go` |
 | Game event adapters | `internal/system/audio.go`, `music.go` |
-| Mode selection and replay default | `internal/app/config.go`, `app.go`, `play.go` |
-| Game policy | `internal/parameter/audio.go`, `music.go`, `sfx.go` |
+| Mode/build selection and replay default | `internal/app/config.go`, `audio*.go`, `play.go` |
+| Game policy | `internal/parameter/audio.go`, `music.go`, `sfx.go`, `sfx_audio.go` |
 | Authoring tool | `cmd/soundlab`, `cmd/soundlab/README.md` |

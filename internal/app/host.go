@@ -39,6 +39,9 @@ func (a *App) BeginHosting(addr string) error {
 // world lock costs a tick, bounded by one listen(2) — the same deliberate operator
 // cost `:log on` pays. Caller MUST hold updateMutex.
 func (a *App) beginHostingLocked(addr string) error {
+	if !buildHasSocketNetwork {
+		return errors.New("host: browser build has no socket transport; a WebSocket adapter is required")
+	}
 	if addr == "" {
 		return errors.New("host: no address")
 	}

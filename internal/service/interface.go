@@ -23,3 +23,10 @@ type Service interface {
 type ResourceContributor interface {
 	Contribute(r *engine.Resource)
 }
+
+// AudioSource names optional external overrides; empty paths retain the shipped
+// sound bank and patterns.
+type AudioSource struct {
+	MusicPath string
+	SoundPath string
+}

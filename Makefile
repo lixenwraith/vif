@@ -22,7 +22,7 @@ SYSCONFDIR ?= /etc
 
 .DEFAULT_GOAL := help
 
-.PHONY: help generate dev release nolog wasm windows run test verify arch-check clean check-go tools allocator serve install install-config install-config-force image image-check
+.PHONY: help generate dev release headless nolog wasm windows run test verify arch-check clean check-go tools allocator serve install install-config install-config-force image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -30,9 +30,10 @@ help:
 	@echo "Targets:"
 	@echo "  dev      Build with race detector and debug symbols"
 	@echo "  release  Build optimized binary (stripped, trimmed)"
+	@echo "  headless Build dedicated-host binary without presentation or audio"
 	@echo "  nolog    Release build without logger"
-	@echo "  wasm     Build WebAssembly binary for xterm.js (sound and logging disabled)"
-	@echo "  windows  Cross-compile for Windows (amd64, requires Windows Terminal, sound/log disabled)"
+	@echo "  wasm     Build WebAssembly binary for xterm.js (audio and logging omitted)"
+	@echo "  windows  Cross-compile for Windows/amd64 (audio and logging omitted)"
 	@echo "  tools    Build all auxiliary tools and cmds (includes vif-log, the log/journal viewer)"
 	@echo "  allocator Build the website-to-K3s session allocator"
 	@echo "  serve    Build wasm and http-server, then serve web/ directory (use PORT=8080 to change)"
@@ -96,17 +97,22 @@ serve: wasm | $(BIN_DIR)
 release: generate | $(BIN_DIR)
 	go build $(GOFLAGS) -tags "$(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
+# headless is a build profile, not merely -serve at runtime: renderer and audio
+# constructors are absent from the dependency graph.
+headless: generate | $(BIN_DIR)
+	go build $(GOFLAGS) -tags "vif_headless $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-headless $(SRC)
+
 # nolog strips logging; internal/vlog is not linked
 nolog: generate | $(BIN_DIR)
 	go build $(GOFLAGS) -tags "novlog $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
-# wasm selects vlog/stub.go automatically
+# wasm selects vlog/stub.go and the audio-free system manifest automatically.
 wasm: generate | $(WEB_DIR)
-	GOOS=js GOARCH=wasm go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
+	GOOS=js GOARCH=wasm go build $(GOFLAGS) -tags "vif_noaudio $(TAGS)" -ldflags="$(LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
 
 # windows is experimental and untested
 windows: generate | $(BIN_DIR)
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(GOFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
 
 tools: | $(BIN_DIR)
 	go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/ ./cmd/ascimage ./cmd/soundlab ./tool/...
@@ -121,7 +127,18 @@ test: generate
 verify: generate test
 	go build ./...
 	go build -tags novlog ./...
-	GOOS=js GOARCH=wasm go build ./...
+	go build -tags vif_noaudio $(SRC)
+	go build -tags vif_headless $(SRC)
+	go test -tags vif_noaudio ./internal/... $(SRC)
+	go test -tags vif_headless ./internal/manifest ./internal/system $(SRC)
+	GOOS=js GOARCH=wasm go build $(SRC)
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags "novlog vif_noaudio" $(SRC)
+	@if go list -deps -tags vif_headless $(SRC) | grep -Eq '/internal/render($$|/)|/pkg/audio$$'; then \
+		echo "FAIL: vif_headless imports presentation or audio implementation"; exit 1; \
+	fi
+	@if GOOS=js GOARCH=wasm go list -deps $(SRC) | grep -Eq '/pkg/audio$$'; then \
+		echo "FAIL: wasm imports the audio implementation"; exit 1; \
+	fi
 	go vet ./...
 
 run: dev

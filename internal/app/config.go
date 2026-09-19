@@ -25,8 +25,8 @@ const (
 type Mode uint8
 
 const (
-	// ModePlay is the interactive game: terminal, audio, network, renderer, and
-	// the scheduler and event goroutines
+	// ModePlay is the interactive game: presentation, available host services,
+	// and the scheduler and event goroutines.
 	ModePlay Mode = iota
 	// ModeHeadless has no presentation or audio and runs on a manual clock the
 	// caller ticks. An authored script may still attach the network service.
@@ -76,10 +76,10 @@ func (m Mode) OwnsGeometry() bool { return m == ModePlay }
 // drives playback controls instead, so the mode router never sees it.
 func (m Mode) OwnsInput() bool { return m == ModePlay }
 
-// Audio reports whether an audio service is registered. A driven mode advances the
-// simulation only through its driver, so AudioSystem must push no event a system
-// reads.
-func (m Mode) Audio() bool { return m == ModePlay || m == ModeReplay || m == ModeScript }
+// Audio reports whether this mode and build register an audio service.
+func (m Mode) Audio() bool {
+	return buildHasAudio && (m == ModePlay || m == ModeReplay || m == ModeScript)
+}
 
 // Config is the resolved startup configuration
 // Built from CLI flags by cmd/vif, or programmatically by embedders
@@ -256,6 +256,15 @@ func (c *Config) Normalize() {
 func (c Config) Validate() error {
 	if err := c.Resources.Validate(); err != nil {
 		return err
+	}
+	if err := validateBuildConfig(c); err != nil {
+		return err
+	}
+	if err := validateAudioBuildConfig(c); err != nil {
+		return err
+	}
+	if !buildHasSocketNetwork && (c.HostAddress != "" || c.JoinAddress != "") {
+		return errors.New("browser build has no socket transport; host and join require a WebSocket transport adapter")
 	}
 	if c.HostAddress != "" && c.JoinAddress != "" {
 		return errors.New("-host and -join are mutually exclusive")

@@ -7,7 +7,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
+	"github.com/lixenwraith/vi-fighter/pkg/audio/model"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -35,7 +35,7 @@ type ScreenResizePayload struct {
 
 // SoundRequestPayload contains the sound type to play
 type SoundRequestPayload struct {
-	ID audio.SoundID `toml:"sound_id"`
+	ID model.SoundID `toml:"sound_id"`
 }
 
 type SoundMuteToggleMode uint8
@@ -63,14 +63,14 @@ type AudioMuteChangedPayload struct {
 // MusicStartPayload initializes music state
 type MusicStartPayload struct {
 	BPM           int             `toml:"bpm"`
-	Intensity     audio.Intensity `toml:"intensity"`
-	BeatPattern   audio.PatternID `toml:"beat_pattern"`
-	MelodyPattern audio.PatternID `toml:"melody_pattern"`
+	Intensity     model.Intensity `toml:"intensity"`
+	BeatPattern   model.PatternID `toml:"beat_pattern"`
+	MelodyPattern model.PatternID `toml:"melody_pattern"`
 }
 
 // BeatPatternRequestPayload requests beat pattern transition
 type BeatPatternRequestPayload struct {
-	Pattern        audio.PatternID `toml:"pattern"`
+	Pattern        model.PatternID `toml:"pattern"`
 	TransitionTime time.Duration   `toml:"transition_time"` // 0 = default
 	Quantize       bool            `toml:"quantize"`        // Wait for bar boundary
 }
@@ -80,12 +80,12 @@ type MelodyNoteRequestPayload struct {
 	Note       int                  `toml:"note"`       // MIDI note number
 	Velocity   float64              `toml:"velocity"`   // 0.0-1.0
 	Duration   time.Duration        `toml:"duration"`   // 0 = use instrument default
-	Instrument audio.InstrumentType `toml:"instrument"` // 0 = default (piano)
+	Instrument model.InstrumentType `toml:"instrument"` // 0 = default (piano)
 }
 
 // MelodyPatternRequestPayload requests melody pattern transition
 type MelodyPatternRequestPayload struct {
-	Pattern        audio.PatternID `toml:"pattern"`
+	Pattern        model.PatternID `toml:"pattern"`
 	RootNote       int             `toml:"root_note"` // MIDI note for pattern root
 	TransitionTime time.Duration   `toml:"transition_time"`
 	Quantize       bool            `toml:"quantize"`
@@ -93,7 +93,7 @@ type MelodyPatternRequestPayload struct {
 
 // MusicIntensityPayload adjusts overall music intensity
 type MusicIntensityPayload struct {
-	Intensity      audio.Intensity `toml:"intensity"`
+	Intensity      model.Intensity `toml:"intensity"`
 	TransitionTime time.Duration   `toml:"transition_time"`
 }
 

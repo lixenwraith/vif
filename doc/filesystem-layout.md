@@ -134,8 +134,13 @@ cross the generic `FileService` capability contributed to the world; systems do
 not open host paths directly.
 
 `internal/asset` owns every embedded group and is the only package with an
-`embed` directive for shipped data. `pkg/audio` carries no specs of its own:
-`internal/parameter.BuiltinSounds` parses the embedded bank and hands it to the
-engine as `AudioConfig.BaseSounds`, which is what keeps `pkg/` free of
-`internal/` imports. A `js/wasm` build performs no host-directory discovery, so
-it remains playable without external files.
+`embed` directive for shipped data. In an audio-capable build, `pkg/audio`
+carries no specs of its own: `internal/parameter.BuiltinSounds` parses the
+embedded bank and hands it to the engine as `AudioConfig.BaseSounds`, which is
+what keeps `pkg/` free of `internal/` imports. Audio-free and browser builds omit
+that loader and the audio engine.
+
+A `js/wasm` build performs no host-directory discovery, so it remains playable
+from the embedded FSM, content, and keymap. Page launch arguments do not make
+external URLs into files; downloadable `wad/` content needs an HTTP-backed
+resource provider. See [Build profiles and platform boundaries](multi-platform.md).

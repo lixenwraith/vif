@@ -14,9 +14,9 @@ import (
 // carry state a capture has to move. Change any of those and the two runs are
 // different games that will agree for a while and then not.
 //
-// So this hashes exactly that set, and deliberately not the renderers: presentation
-// decides nothing about the simulation, and a fingerprint that included it would
-// refuse a session for a reason that could not have caused a divergence.
+// So this hashes exactly that set, and deliberately not renderers or a system's
+// local-only implementation capability: presentation and audio availability decide
+// nothing about the simulation, and including either would refuse a compatible session.
 //
 // It is an identity, not a version. It says two builds differ; it cannot say which
 // is newer, and nothing should try to order two of them.

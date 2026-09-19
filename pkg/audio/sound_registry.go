@@ -3,14 +3,16 @@ package audio
 import (
 	"fmt"
 	"sync"
+
+	"github.com/lixenwraith/vi-fighter/pkg/audio/model"
 )
 
 // SoundID identifies a registered sound. IDs are process-local: assigned by
 // registration order, stable across a run, never persisted or transmitted.
 // SoundNone is the zero value and always renders silence.
-type SoundID int32
+type SoundID = model.SoundID
 
-const SoundNone SoundID = 0
+const SoundNone = model.SoundNone
 
 var (
 	soundMu     sync.RWMutex

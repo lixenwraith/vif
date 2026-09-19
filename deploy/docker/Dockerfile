@@ -13,7 +13,8 @@
 #   docker build -f deploy/docker/Dockerfile -t vi-fighter:dev .
 #   make image                      # the same, with the revision label filled in
 #
-# The result is one layer of about 13 MB. See doc/kube_docker_deploy.md.
+# The result is one layer containing the dedicated build. See
+# doc/kube_docker_deploy.md and doc/multi-platform.md.
 
 # Keep this pin equal to the go directive in ../../go.mod. The dependency layer
 # downloads before an older builder reports the mismatch, so drift fails late.
@@ -43,7 +44,7 @@ ARG TARGETARCH=amd64
 # be scratch. -trimpath removes the builder's paths from the binary; -s -w drop the
 # symbol table and DWARF, and leave the Go build info the run is identified by.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags="-s -w" -o /out/vif ./cmd/vif
+    go build -trimpath -tags=vif_headless -ldflags="-s -w" -o /out/vif ./cmd/vif
 
 # Prove the artifact in the builder rather than discovering it in a pod: a binary
 # that cannot resolve its own embedded configuration is not one to publish. Skipped

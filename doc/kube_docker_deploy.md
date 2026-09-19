@@ -443,7 +443,9 @@ match ceiling plus margin.
 ## 8. The session image
 
 The container build does not use `bin/vif`, and `make release` is not part of this
-deployment. Do not run both `make image` and the explicit `docker build` below —
+deployment. Its Dockerfile compiles the `vif_headless` profile, excluding terminal
+renderers and audio while retaining the native session transport. Do not run both
+`make image` and the explicit `docker build` below —
 `make image` is a wrapper around it. The explicit form is written out because it
 carries the `--network host`, the revision label and the commit-derived tag.
 

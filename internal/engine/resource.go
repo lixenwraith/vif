@@ -16,7 +16,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/status"
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
 	"github.com/lixenwraith/vi-fighter/pkg/genetic/registry"
 	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
 	"github.com/lixenwraith/vi-fighter/pkg/navigation"
@@ -60,8 +59,8 @@ type Resource struct {
 	// Bridged resources from services
 	Files   *FileResource
 	Content *ContentResource
-	Audio   *AudioResource
 	Network *NetworkResource
+	audioResources
 }
 
 // === World Resources ===
@@ -832,13 +831,6 @@ type ContentProvider interface {
 // ContentResource wraps a ContentProvider for the Resource
 type ContentResource struct {
 	Provider ContentProvider
-}
-
-// AudioResource exposes the audio engine directly. The engine's internal
-// command channel is the decoupling layer; no interface mirror is kept here.
-// Nil Resources.Audio = audio unavailable.
-type AudioResource struct {
-	Engine *audio.AudioEngine
 }
 
 // NetworkPort is the service-side endpoint driven by NetworkSystem.

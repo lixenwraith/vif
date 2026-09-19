@@ -1,6 +1,6 @@
 # Runtime, Scheduling, and Concurrency
 
-This document describes all three application runtime shapes and the
+This document describes the application runtime shapes and the
 synchronization contract that makes the ECS safe. For the data structures
 operated on by the runtime, see [ECS and events](ecs-and-events.md).
 
@@ -10,10 +10,10 @@ operated on by the runtime, see [ECS and events](ecs-and-events.md).
 
 | Mode | Presents | Driven | Geometry/input owner | Audio | Execution |
 |---|---:|---:|---|---:|---|
-| `ModePlay` | Yes | No | terminal / terminal | Yes | `PausableClock`; scheduler and event goroutines |
+| `ModePlay` | Yes | No | terminal / terminal | If built | `PausableClock`; scheduler and event goroutines |
 | `ModeHeadless` | No | Yes | caller / caller | No | `ManualClock`; harness or authored `ScriptDriver` invokes ticks and injections; an authored host/join script may attach network I/O |
-| `ModeReplay` | Yes | Yes | journal / playback controls | Yes | `ManualClock`; `journal.ReplayDriver` invokes ticks and injections |
-| `ModeScript` | Yes | Yes | script / playback controls | Yes | `ManualClock`; `journal.ScriptDriver` invokes ticks and injections; the presented form of a `ModeHeadless` script, network I/O included |
+| `ModeReplay` | Yes | Yes | journal / playback controls | If built | `ManualClock`; `journal.ReplayDriver` invokes ticks and injections |
+| `ModeScript` | Yes | Yes | script / playback controls | If built | `ManualClock`; `journal.ScriptDriver` invokes ticks and injections; the presented form of a `ModeHeadless` script, network I/O included |
 | `ModeServer` | No | No | config / none | No | `PausableClock`; scheduler and event goroutines, as `ModePlay`, with no terminal and no local cursor |
 
 The five predicates in `internal/app/config.go` are the policy boundary:
@@ -24,6 +24,14 @@ supplied and rejects I/O settings the selected mode cannot honor. It also reject
 a simulation speed setting, because only `Tick` advances its clock — with one
 exception: an authored script reads `-speed` as its wall pace, which is a
 property of the run rather than of the clock. See §1.1.
+
+Those predicates describe a full native build. Compile-time capabilities refine
+them: `vif_headless` makes presenting modes unavailable and omits renderers;
+`vif_noaudio` and `wasm` make `Audio` false and replace full audio systems with
+event-only sinks. Runtime mode
+and build profile remain separate so the same `ModeServer` behavior can run from
+a full development binary or the smaller deployment artifact. See
+[Build profiles and platform boundaries](multi-platform.md).
 
 `-serve <address>` constructs `ModeServer`. `cmd/vif` normally constructs `ModePlay`; `-replay <file>` constructs a replay
 from the journal anchor, and `-script <file>` constructs a caller-driven
@@ -310,10 +318,11 @@ The detailed construction order is significant:
    scope.
 2. Initialize the generated event registry. FSM trigger resolution and
    `:emit` reflection depend on it.
-3. Register services selected by the mode: files and content always; terminal
-   for presenting modes; audio for play/replay; network for play in `RoleNone`,
-   or for play/headless script sessions in `RoleHost` or `RolePeer` according to
-   startup configuration.
+3. Register services selected by mode and available build capability: files and
+   content always; terminal for presenting modes; audio for play/replay/script
+   when compiled; network for native play in `RoleNone`, or for native
+   play/headless script sessions in `RoleHost` or `RolePeer` according to startup
+   configuration.
 4. Create an empty world and initialize services in deterministic topological
    order.
 5. Let initialized services contribute typed resources to the world.
@@ -764,6 +773,7 @@ not indefinitely leave the terminal in raw mode.
 | Concern | Primary source |
 |---|---|
 | Runtime modes and composition | `internal/app/config.go`, `app.go`, `headless.go` |
+| Build capability adapters | `internal/app/presentation_*`, `audio*`, `network_*` |
 | Interactive, playback, and script loops | `internal/app/loop.go`, `play.go`, `script.go` |
 | Recording, replay, fuzz, and authored script drivers | `internal/journal` |
 | Replay identity and comparison boundary | `internal/app/replay.go`, `surface.go`, `internal/snapshot/surface.go` |

@@ -91,6 +91,17 @@
     }
 
     // === WASM Loading ===
+    function launchArguments() {
+        const pageArgs = Array.isArray(window.VIF_ARGS) ? window.VIF_ARGS : [];
+        const queryArgs = new URLSearchParams(window.location.search).getAll('arg');
+        const args = pageArgs.concat(queryArgs);
+
+        if (args.length > 64 || args.some(arg => typeof arg !== 'string' || arg.length > 1024)) {
+            throw new Error('invalid vif launch arguments');
+        }
+        return ['vif'].concat(args);
+    }
+
     async function loadWasm() {
         if (!WebAssembly) {
             showError('WebAssembly not supported');
@@ -100,6 +111,7 @@
         const go = new Go();
 
         try {
+            go.argv = launchArguments();
             const result = await WebAssembly.instantiateStreaming(
                 fetch(WASM_PATH),
                 go.importObject

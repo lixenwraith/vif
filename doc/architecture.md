@@ -62,7 +62,7 @@ See [Package map](package-map.md) for the medium-level dependency view.
 
 ## 3. Architectural control flow
 
-`app.Mode` selects one of three application shapes before composition:
+`app.Mode` selects one of five application shapes before composition:
 
 | Shape | I/O and presentation | Clock/owner |
 |---|---|---|
@@ -75,7 +75,19 @@ See [Package map](package-map.md) for the medium-level dependency view.
 The `Presents`, `Driven`, `OwnsGeometry`, `OwnsInput`, and `Audio` predicates
 are the composition policy. A driven App spawns no scheduler/event goroutines,
 so for one build its run is a pure function of seed, config, and injected event
-groups. Interactive play instead has four cooperating execution paths:
+groups.
+
+Build capabilities refine that policy before runtime. `vif_headless` replaces the
+presentation adapter and generated renderer registry with empty implementations;
+`vif_noaudio` and `wasm` remove the audio service and resource while the generated
+builder selects lightweight event sinks. Runtime modes remain the
+simulation/lifecycle choice, while build profiles decide which host adapters can
+be selected at all. The simulation
+fingerprint excludes renderers and the local-only audio capability, so a dedicated
+host and a full terminal guest retain one session identity. See
+[Build profiles and platform boundaries](multi-platform.md).
+
+Interactive play has four cooperating execution paths:
 
 1. The main goroutine selects terminal events, an input ticker, and a render
    ticker. It routes input and performs terminal output.
@@ -262,9 +274,13 @@ streams 44.1 kHz, 16-bit stereo PCM to an installed process such as `pacat`,
 and `wav:path` sinks support automation and offline capture. Missing backends
 degrade to silence rather than aborting gameplay.
 
-Audio service assembly is mode-dependent: play and replay register it;
-headless does not. Journal anchors do not carry the original mute state, so
-terminal playback intentionally starts audio unmuted.
+Audio service assembly is both mode- and build-dependent: an audio-capable build
+registers it for play, replay, and presented scripts; headless, audio-free, and
+browser builds do not contain the service or full audio systems. Small null systems
+consume local audio events and publish the unavailable state so telemetry and
+system identity remain stable. Event IDs live in the lightweight `pkg/audio/model`
+package, so omitting the engine does not change protocol types. Journal anchors do
+not carry the original mute state, so terminal playback starts audio unmuted.
 
 See [Audio](audio.md).
 
@@ -324,12 +340,20 @@ enabled.
 
 The primary build targets Linux and FreeBSD terminals. On those builds the same
 composition root supports interactive play, deterministic harnesses and authored
-headless scripts, and terminal journal playback. A headless script has no terminal
-or audio, but may deliberately attach the TCP service with `-host`/`-join`. A WASM build runs inside
-the bundled xterm.js page, uses embedded FSM/content/keymap/audio assets without
-host-directory discovery, and compiles out logging; sound is disabled in the
-current web build. The Makefile also contains
-an explicitly experimental Windows cross-build.
+headless scripts, and terminal journal playback. `make headless` additionally
+removes terminal presentation and audio code from the dedicated artifact while
+retaining TCP sessions. A headless script has no terminal or audio, but may attach
+the TCP service with `-host`/`-join`.
+
+A WASM build runs inside the bundled xterm.js page, uses embedded
+FSM/content/keymap assets without host-directory discovery, and omits audio and
+logging. It cannot use the native framed-TCP transport: browser play needs a
+WebSocket/WebTransport adapter or gateway, and socket session flags are rejected
+until one exists. The page can supply ordinary arguments through `Go.argv`, but
+external `wad/` content needs an HTTP-backed resource provider rather than a file
+argument. The Makefile also contains an explicitly experimental Windows
+cross-build. The exact profile and browser extension strategy are in
+[Build profiles and platform boundaries](multi-platform.md).
 
 A trusted-peer TCP game of up to `parameter.MaxPlayers` participants is exposed
 through `-host`, `-join`, `-serve` and `-players`. The join handshake resolves the
@@ -381,10 +405,12 @@ participant binds a port of its own and the chain carries the addresses, so
 migration moves the session and not only its authorship; see
 [Multiplayer](multi-player.md) §5.3.
 
-Remaining limitations include unauthenticated plaintext links, an exact
-applied-sequence fence only for authority-authored crossings, no merge for explicit
-minority forks, and a producer's own crossing still landing a playout lead before
-the authority's copy of it does. The domain boundary, event classification, wire
+Remaining limitations include unauthenticated plaintext native links, no browser
+transport, no merge for explicit minority forks, and a producer's own crossing
+still landing a playout lead before the authority's copy of it does. Remote
+crossing fences record the highest applied sequence rather than a contiguous
+prefix, a bounded trade-off documented in the fleet plan. The domain boundary,
+event classification, wire
 protocol, their enforcing tests, and an analysis of what the model does not yet
 cover are in rules D-1..D-24 and §7 of [the domain model](domain-design.md). The
 incident this protocol was chosen from, and the options it was chosen against, are

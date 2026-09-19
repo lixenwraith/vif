@@ -4,8 +4,6 @@ package manifest
 
 import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/vi-fighter/internal/render/renderer"
 	"github.com/lixenwraith/vi-fighter/internal/system"
 )
 
@@ -13,7 +11,7 @@ import (
 // World.AddSystem sorts by Priority(); the sort is stable, so manifest order
 // breaks ties between systems sharing a priority constant
 func BuildSystems(w *engine.World) []engine.System {
-	return []engine.System{
+	systems := []engine.System{
 		system.NewNetworkSystem(w),
 		system.NewCursorSystem(w),
 		system.NewPingSystem(w),
@@ -63,65 +61,13 @@ func BuildSystems(w *engine.World) []engine.System {
 		system.NewTimerSystem(w),
 		system.NewAdaptationSystem(w),
 		system.NewGeneticSystem(w),
-		system.NewAudioSystem(w),
-		system.NewMusicSystem(w),
 	}
+	return append(systems, buildAudioSystems(w)...)
 }
 
-// BuildRenderers constructs every active renderer paired with its priority
-// RenderOrchestrator.Register sorts by priority with a stable index tiebreak,
-// so manifest order breaks ties between renderers at the same layer
-func BuildRenderers(ctx *engine.GameContext) []render.Registration {
-	return []render.Registration{
-		{Renderer: renderer.NewPingRenderer(ctx), Priority: render.PriorityPing},
-		{Renderer: renderer.NewChargeLineRenderer(ctx), Priority: render.PriorityChargeLine},
-		{Renderer: renderer.NewWallRenderer(ctx), Priority: render.PriorityWall},
-		{Renderer: renderer.NewGlyphRenderer(ctx), Priority: render.PriorityGlyph},
-		{Renderer: renderer.NewSigilRenderer(ctx), Priority: render.PrioritySigil},
-		{Renderer: renderer.NewGoldRenderer(ctx), Priority: render.PriorityGold},
-		{Renderer: renderer.NewHealthBarRenderer(ctx), Priority: render.PriorityHealthBar},
-		{Renderer: renderer.NewPylonRenderer(ctx), Priority: render.PriorityPylon},
-		{Renderer: renderer.NewTowerRenderer(ctx), Priority: render.PriorityTower},
-		{Renderer: renderer.NewEyeRenderer(ctx), Priority: render.PriorityEye},
-		{Renderer: renderer.NewSnakeRenderer(ctx), Priority: render.PrioritySnake},
-		{Renderer: renderer.NewDrainRenderer(ctx), Priority: render.PriorityDrain},
-		{Renderer: renderer.NewQuasarRenderer(ctx), Priority: render.PriorityQuasar},
-		{Renderer: renderer.NewSwarmRenderer(ctx), Priority: render.PrioritySwarm},
-		{Renderer: renderer.NewStormRenderer(ctx), Priority: render.PriorityStorm},
-		{Renderer: renderer.NewCleanerRenderer(ctx), Priority: render.PriorityCleaner},
-		{Renderer: renderer.NewMaterializeRenderer(ctx), Priority: render.PriorityMaterialize},
-		{Renderer: renderer.NewTeleportLineRenderer(ctx), Priority: render.PriorityTeleportLine},
-		{Renderer: renderer.NewShieldRenderer(ctx), Priority: render.PriorityShield},
-		{Renderer: renderer.NewEmberRenderer(ctx), Priority: render.PriorityEmber},
-		{Renderer: renderer.NewOrbRenderer(ctx), Priority: render.PriorityOrb},
-		{Renderer: renderer.NewLightningRenderer(ctx), Priority: render.PriorityLightning},
-		{Renderer: renderer.NewMissileRenderer(ctx), Priority: render.PriorityMissile},
-		{Renderer: renderer.NewPulseRenderer(ctx), Priority: render.PriorityPulse},
-		{Renderer: renderer.NewBulletRenderer(ctx), Priority: render.PriorityBullet},
-		{Renderer: renderer.NewFlashRenderer(ctx), Priority: render.PriorityFlash},
-		{Renderer: renderer.NewFadeoutRenderer(ctx), Priority: render.PriorityFadeout},
-		{Renderer: renderer.NewExplosionRenderer(ctx), Priority: render.PriorityExplosion},
-		{Renderer: renderer.NewSpiritRenderer(ctx), Priority: render.PrioritySpirit},
-		{Renderer: renderer.NewSplashRenderer(ctx), Priority: render.PrioritySplash},
-		{Renderer: renderer.NewMarkerRenderer(ctx), Priority: render.PriorityMarker},
-		{Renderer: renderer.NewGrayoutRenderer(ctx), Priority: render.PriorityGrayout},
-		{Renderer: renderer.NewStrobeRenderer(ctx), Priority: render.PriorityStrobe},
-		{Renderer: renderer.NewDimRenderer(ctx), Priority: render.PriorityDim},
-		{Renderer: renderer.NewHeatRenderer(ctx), Priority: render.PriorityHeat},
-		{Renderer: renderer.NewIndicatorRenderer(ctx), Priority: render.PriorityIndicator},
-		{Renderer: renderer.NewStatusBarRenderer(ctx), Priority: render.PriorityStatusBar},
-		{Renderer: renderer.NewPeerCursorRenderer(ctx), Priority: render.PriorityPeerCursor},
-		{Renderer: renderer.NewCursorRenderer(ctx), Priority: render.PriorityCursor},
-		{Renderer: renderer.NewFlowFieldDebugRenderer(ctx), Priority: render.PriorityFlowField},
-		{Renderer: renderer.NewPinnedStatsRenderer(ctx), Priority: render.PriorityPinnedState},
-		{Renderer: renderer.NewOverlayRenderer(ctx), Priority: render.PriorityOverlay},
-	}
-}
-
-// ActiveSystems returns the names of the systems BuildSystems constructs
-// Consumed by config validation of region enabled_systems/disabled_systems
+// ActiveSystems returns the names of the systems this build constructs.
 func ActiveSystems() []string {
-	return []string{
+	systems := []string{
 		"network",
 		"cursor",
 		"ping",
@@ -171,9 +117,8 @@ func ActiveSystems() []string {
 		"timer",
 		"adaptation",
 		"genetic",
-		"audio",
-		"music",
 	}
+	return append(systems, activeAudioSystems...)
 }
 
 // systemProfiles is every system's declared profile: the domain it resolves and the

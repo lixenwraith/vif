@@ -1,3 +1,5 @@
+//go:build !vif_headless && !vif_noaudio && !wasm
+
 package service
 
 import (
@@ -10,13 +12,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
-
-// AudioSource names optional external overrides. Empty paths retain the
-// shipped sound bank and the built-in patterns.
-type AudioSource struct {
-	MusicPath string
-	SoundPath string
-}
 
 type AudioService struct {
 	audioEngine *audio.AudioEngine
