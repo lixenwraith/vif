@@ -132,3 +132,30 @@ func TestOffMapEntityIsNotATarget(t *testing.T) {
 		t.Fatalf("targets = %v, want the same entity once it is back in bounds", got)
 	}
 }
+
+// TestTrackedLightningRetiresWithItsOwner: a correction removes a shared entity by
+// writing the world, not by replaying the despawn that ends the player-domain
+// effects keyed to it, and a tracked bolt carries no duration to retire itself.
+func TestTrackedLightningRetiresWithItsOwner(t *testing.T) {
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
+	lightning := NewLightningSystem(w).(*LightningSystem)
+
+	owner := w.CreateEntity(core.DomainShared)
+	w.Components.Quasar.SetComponent(owner, component.QuasarComponent{})
+	lightning.HandleEvent(event.GameEvent{
+		Type:    event.EventLightningSpawnRequest,
+		Payload: &event.LightningSpawnRequestPayload{Owner: owner, OriginEntity: owner, Tracked: true},
+	})
+
+	lightning.Update()
+	if n := w.Components.Lightning.CountEntities(); n != 1 {
+		t.Fatalf("bolts under a live owner = %d, want 1", n)
+	}
+
+	w.DestroyEntity(owner)
+	lightning.Update()
+	if n := w.Components.Lightning.CountEntities(); n != 0 {
+		t.Fatalf("orphaned bolts = %d, want none", n)
+	}
+}

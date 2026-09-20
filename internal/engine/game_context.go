@@ -337,7 +337,7 @@ func (ctx *GameContext) HandleResizeLocked() {
 		// would recompute their fields on different ticks and steer shared species
 		// along fields of different ages. The view still has to follow, and that is
 		// this instance's own business — the camera re-anchors directly.
-		ctx.followLocalCursorCamera(config)
+		ctx.World.FollowLocalCursor()
 		return
 	}
 
@@ -355,20 +355,6 @@ func (ctx *GameContext) HandleResizeLocked() {
 		ctx.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: e, X: x, Y: y})
 		return true
 	})
-}
-
-// followLocalCursorCamera re-anchors the view on this instance's own cursor after a
-// reflow that moved nothing in the world. Pure local view state: the camera is not
-// compared across instances, and the cursor it follows is this instance's binding.
-func (ctx *GameContext) followLocalCursorCamera(config *ConfigResource) {
-	if !parameter.CameraEnabled {
-		return
-	}
-	pos, ok := ctx.World.LocalCursor()
-	if !ok {
-		return
-	}
-	config.FollowCamera(pos.X, pos.Y)
 }
 
 // === Overlay ===

@@ -286,3 +286,54 @@ The scenario now asserts what the signal is actually promising: the probe report
 tick advances while draining**, and the session ends itself naming a reason. The
 guest is no longer part of the claim. That a scripted participant cannot survive
 a tick jump is real and is in `doc/todo.md`.
+
+## 8. Third round (2026-09-20, internet host, two remote guests)
+
+Two of the three are one shape: a player-domain reader resolved the local cursor
+from the shared store while the renderer drew it from the D-18 prediction, so
+everything keyed to the drawn cell trailed the keystroke by a whole playout lead.
+The third is the correction boundary seen from the other side — a player-domain
+effect keyed to a shared entity the install removed.
+
+### 8.1 The camera trails the cursor
+
+`CameraSystem` anchored on `EventCursorMoved`, the announcement `CursorSystem`
+makes when the crossing applies. On a guest that is a playout lead after the
+keystroke: the cursor moved at once and the viewport followed ~150 ms later. The
+camera is local view state (D-14) and D-18 already names it a reader of the
+prediction, so nothing was being kept in agreement by the wait.
+
+**Fix.** One anchor, `World.FollowLocalCursor`, reading the cell the renderer
+draws. `predictCursorMove` calls it as the prediction advances, and an
+announcement re-anchors through the same accessor rather than from its payload —
+an older queued absolute cell would otherwise walk the viewport backwards. The
+resize reflow and the `CameraEnabled` gate collapse into that path.
+
+### 8.2 Nugget absorption waits for the announcement
+
+`collectionCursor` tested the ember and shield ellipses against
+`Positions.GetPosition` while `ShieldRenderer` and `EmberRenderer` draw them at
+`CursorCell`, so the nugget sat visibly inside the shield for a lead before it was
+absorbed. Nothing in the collection crosses — the nugget is a player entity and
+the heat it pays is a `ClassLocal` write to an owner-authored component (D-13) —
+so the delay bought no agreement. It was the store read, not a deliberate pairing
+of absorption with the heat it grants.
+
+**Fix.** Both cursor reads in `NuggetSystem` resolve through `CursorCell`.
+
+### 8.3 A quasar zap that outlived its quasar
+
+The tracked bolt is player-domain (D-6), keyed to the quasar header by `Owner`,
+and ends when `QuasarSystem` pushes `EventLightningDespawnRequest`. A correction
+removes a shared entity by writing the world, not by replaying its lifecycle, so a
+guest whose predicted quasar the authority did not have kept a bolt with
+`Duration == 0` and an hour `Remaining`: it drew from the dead header's last cell
+for the rest of the session.
+
+**Fix.** `LightningSystem` retires a bolt whose owner the world no longer holds,
+the way `SplashSystem` already retires a timer whose anchor is gone.
+
+**Not closed.** The same install can clear `IsZapping` under a live quasar, which
+leaves a bolt until that quasar's next zap-stop or death. `QuasarSystem` is
+shared-profile and may not read the player store to find the bolt, so the fix is a
+lease the owner renews rather than a lookup. See `doc/todo.md`.

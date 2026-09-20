@@ -137,6 +137,11 @@ beams, dust, particles (decay and blossom), orbs, bullets, missiles, and loot ar
 Player-domain.
 They may depend on local view state and must not decide a Shared outcome.
 
+An effect keyed to a Shared entity retires with it. An install writes the world
+rather than replaying the lifecycle that ends such effects, so the owner's absence
+is the signal its own system acts on; an effect with no lifetime of its own and no
+owner left would otherwise draw for the rest of the session.
+
 Player-domain does not mean that only one participant sees an effect. A shared FSM
 may raise a local effect on every instance. Effects intended for one participant
 carry a cursor scope; entity zero means session-wide, while a non-zero cursor is

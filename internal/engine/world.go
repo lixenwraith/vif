@@ -144,6 +144,15 @@ func (w *World) GetComponentMask(e core.Entity) (uint64, bool) {
 	return bit, ok
 }
 
+// HasEntity reports whether the world still holds e. A correction install destroys
+// the shared entities its capture omits, so this is how an effect keyed to one
+// learns that it outlived its subject.
+// Caller MUST hold updateMutex
+func (w *World) HasEntity(e core.Entity) bool {
+	_, ok := w.componentMask[e]
+	return ok
+}
+
 // RemoveComponentMask clears a component bit for the specified entity
 // Caller MUST hold updateMutex
 func (w *World) RemoveComponentMask(e core.Entity, bit uint64) {
@@ -742,6 +751,18 @@ func (w *World) predictCursorMove(e core.Entity, x, y int) {
 		X: max(0, min(x, config.MapWidth-1)),
 		Y: max(0, min(y, config.MapHeight-1)),
 	})
+	w.FollowLocalCursor()
+}
+
+// FollowLocalCursor re-anchors the view on the cell this instance's cursor occupies,
+// which is the D-18 prediction while one is outstanding. The camera is local view
+// state (D-14), so it follows the cell the renderer draws rather than the announced
+// one a playout lead behind it.
+// Caller MUST hold updateMutex
+func (w *World) FollowLocalCursor() {
+	if pos, ok := w.LocalCursor(); ok {
+		w.Resources.Config.FollowCamera(pos.X, pos.Y)
+	}
 }
 
 // ReconcileLocalCursor settles an announced placement against the D-18 prediction

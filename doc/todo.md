@@ -309,6 +309,18 @@ An authority frame the capture's fence already claims is discarded on the
 receiver. That is correct for shared component state and wrong for every other
 effect the frame would have had. Enumerate them.
 
+### Retire a zap bolt when a correction ends the zap
+
+- Priority: P2
+- Affected files: `internal/system/quasar.go`, `internal/system/lightning.go`
+- Prerequisite: none
+
+A bolt whose owner an install removed is now retired by `LightningSystem`, but an
+install that clears `IsZapping` under a live quasar leaves one: the despawn is on
+the range transition and the corrected state arrives without one. `QuasarSystem` is
+shared-profile and cannot read the player store to find the bolt, so the answer is a
+lease the owner renews while zapping rather than a lookup.
+
 ### Give a splash anchor a generation
 
 - Priority: P2

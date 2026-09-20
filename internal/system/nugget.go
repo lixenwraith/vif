@@ -286,7 +286,7 @@ func (s *NuggetSystem) spawnNugget() {
 func (s *NuggetSystem) findValidPosition() (int, int) {
 	config := s.world.Resources.Config
 	cursor := s.world.ResolveOwnedCursor(s.world.Resources.Player.Entity)
-	cursorPos, ok := s.world.Positions.GetPosition(cursor)
+	cursorPos, ok := s.world.CursorCell(cursor)
 	if !ok {
 		return -1, -1
 	}
@@ -329,10 +329,14 @@ func (s *NuggetSystem) collectNugget(cursor core.Entity) {
 	s.statCollected.Add(1)
 }
 
-// collectionCursor returns the local cursor when its personal collection area contains the nugget.
+// collectionCursor returns the local cursor when its personal collection area contains
+// the nugget. The area is keyed to the D-18 prediction, which is where the renderer
+// draws the shield and the ember: absorption is wholly player-domain — the heat it
+// pays is owner-authored and crosses nothing — so waiting for the announced cell
+// would delay it by a playout lead for no shared outcome.
 func (s *NuggetSystem) collectionCursor(nuggetX, nuggetY int) core.Entity {
 	cursor := s.world.ResolveOwnedCursor(s.world.Resources.Player.Entity)
-	cursorPos, ok := s.world.Positions.GetPosition(cursor)
+	cursorPos, ok := s.world.CursorCell(cursor)
 	if !ok {
 		return 0
 	}

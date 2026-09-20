@@ -550,6 +550,9 @@ func (r *RandResource) sessionRoot() uint64 {
 // throttle it dirties is shared state, so a local view change that emitted one put
 // two instances on different recompute phases.
 func (c *ConfigResource) FollowCamera(cursorX, cursorY int) {
+	if !parameter.CameraEnabled {
+		return
+	}
 	// Nothing to scroll: the renderer centres a map smaller than its viewport
 	if c.MapWidth <= c.ViewportWidth && c.MapHeight <= c.ViewportHeight {
 		c.CameraX, c.CameraY = 0, 0

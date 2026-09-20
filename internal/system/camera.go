@@ -41,35 +41,18 @@ func (s *CameraSystem) EventTypes() []event.EventType {
 	return []event.EventType{event.EventCursorMoved, event.EventCursorLocalChanged}
 }
 
-// HandleEvent processes cursor movement for camera updates
+// HandleEvent re-anchors the view after an announced placement or a rebind. The
+// anchor is the cell the local cursor occupies, never the announced one: while a
+// prediction is outstanding that cell is a playout lead behind what the renderer
+// draws, and an older queued placement would walk the camera back through cells
+// the player has already left (D-18).
 func (s *CameraSystem) HandleEvent(ev event.GameEvent) {
-	if !parameter.CameraEnabled {
-		return
-	}
-
-	switch ev.Type {
-	case event.EventCursorMoved:
-		payload, ok := ev.Payload.(*event.CursorMovedPayload)
-		// The camera follows one cursor; a remote or bot move is not a viewport change
-		if !ok || !s.world.Resources.Player.IsLocal(payload.Entity) {
+	// The camera follows one cursor; a remote or bot move is not a viewport change
+	if ev.Type == event.EventCursorMoved {
+		p, ok := ev.Payload.(*event.CursorMovedPayload)
+		if !ok || !s.world.Resources.Player.IsLocal(p.Entity) {
 			return
 		}
-		s.updateCamera(payload.X, payload.Y)
-
-	case event.EventCursorLocalChanged:
-		// A rebind moves the view, not the world. The camera re-anchors from the new
-		// binding rather than from a cursor move nobody made: EventCursorMoved is a
-		// shared event and dirties a throttled shared derivation (D-17).
-		if pos, ok := s.world.LocalCursor(); ok {
-			s.updateCamera(pos.X, pos.Y)
-		}
 	}
-}
-
-// updateCamera adjusts camera position based on cursor location.
-// The soft-follow itself is ConfigResource.FollowCamera, shared with the resize
-// reflow: a resize re-anchors the view through the same code rather than by
-// announcing a cursor move it did not make.
-func (s *CameraSystem) updateCamera(cursorX, cursorY int) {
-	s.world.Resources.Config.FollowCamera(cursorX, cursorY)
+	s.world.FollowLocalCursor()
 }

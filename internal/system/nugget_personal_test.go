@@ -73,3 +73,20 @@ func TestPersonalNuggetJumpCrossesOnlyCursorMove(t *testing.T) {
 		}
 	}
 }
+
+// TestPersonalNuggetCollectsAtThePredictedCell: the collection area is the one the
+// renderer draws the shield and the ember at. Nothing in absorption crosses — the
+// heat it pays is owner-authored — so resolving it from the announced placement
+// delayed a wholly local reward by a playout lead.
+func TestPersonalNuggetCollectsAtThePredictedCell(t *testing.T) {
+	w, local, _ := testCursorWorld(t)
+	nuggets := NewNuggetSystem(w).(*NuggetSystem)
+
+	w.PushCursorMove(local, 20, 9)
+	if pos, _ := w.Positions.GetPosition(local); pos.X == 20 && pos.Y == 9 {
+		t.Fatal("store cell already moved; the check is vacuous")
+	}
+	if got := nuggets.collectionCursor(20, 9); got != local {
+		t.Fatalf("collection cursor = %d, want %d at the predicted cell", got, local)
+	}
+}

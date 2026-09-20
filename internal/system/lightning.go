@@ -63,6 +63,15 @@ func (s *LightningSystem) Update() {
 			continue
 		}
 
+		// A bolt whose owner left is orphaned: an install writes the shared world
+		// rather than replaying the lifecycle that ends the player-domain effects
+		// keyed to a shared entity (D-6), and a tracked bolt has no duration to
+		// retire it, so it would render for the rest of the session.
+		if lc.Owner != 0 && !s.world.HasEntity(lc.Owner) {
+			toDestroy = append(toDestroy, e)
+			continue
+		}
+
 		// Advance animation frame for tracked mode (dancing effect)
 		if lc.Duration == 0 {
 			lc.AnimFrame++

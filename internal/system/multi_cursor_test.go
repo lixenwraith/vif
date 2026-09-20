@@ -853,3 +853,44 @@ func TestLootDropsOnlyForLocallySimulatedCursors(t *testing.T) {
 		t.Fatal("200 kills dropped nothing for the local cursor; the check is vacuous")
 	}
 }
+
+// TestCameraAnchorsOnThePredictedCell is the view half of D-18: the camera follows
+// the cell this participant's input selected, so an announcement arriving a playout
+// lead later cannot walk it back to where the shared store still was.
+func TestCameraAnchorsOnThePredictedCell(t *testing.T) {
+	w, local, _ := testCursorWorld(t)
+	cursors := NewCursorSystem(w).(*CursorSystem)
+	camera := NewCameraSystem(w).(*CameraSystem)
+
+	config := w.Resources.Config
+	config.MapWidth, config.MapHeight = 200, 100
+	w.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
+
+	w.PushCursorMove(local, 150, 60)
+	if config.CameraX == 0 || config.CameraY == 0 {
+		t.Fatalf("camera = (%d, %d), want a scroll toward the predicted cell", config.CameraX, config.CameraY)
+	}
+	if pos, _ := w.Positions.GetPosition(local); pos.X != 5 || pos.Y != 5 {
+		t.Fatalf("store cell = (%d, %d), want the crossing still pending", pos.X, pos.Y)
+	}
+
+	w.PushCursorMove(local, 0, 0)
+	if config.CameraX != 0 || config.CameraY != 0 {
+		t.Fatalf("camera = (%d, %d), want the origin the newest prediction selected", config.CameraX, config.CameraY)
+	}
+
+	// Both placements announce in order; the first is the older absolute cell
+	for range 4 {
+		events := w.Resources.Event.Queue.Consume()
+		if len(events) == 0 {
+			break
+		}
+		for _, ev := range events {
+			cursors.HandleEvent(ev)
+			camera.HandleEvent(ev)
+		}
+	}
+	if config.CameraX != 0 || config.CameraY != 0 {
+		t.Fatalf("camera = (%d, %d) after the announcements, want the origin", config.CameraX, config.CameraY)
+	}
+}
