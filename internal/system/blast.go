@@ -61,18 +61,7 @@ func (a *blastArea) find(x, y int) (cx, cy int, ok bool) {
 	return cx, cy, best >= 0
 }
 
-// contains reports whether a cell falls inside any center
-func (a *blastArea) contains(x, y int) bool {
-	_, _, ok := a.find(x, y)
-	return ok
-}
-
-// strikePlayerTargets applies a blast to player-domain combat entities. A local
-// producer calls it before pushing its explosion request, so the shared consumer
-// never observes a player entity.
-// The drain store is today's whole player-domain combat set. A second player-domain
-// combatant replaces this with a domain filter over Components.Combat; nothing else
-// on the path has to change.
+// Player targets resolve before geometry crosses; the shared resolver never reads them.
 func strikePlayerTargets(w *engine.World, owner core.Entity, area *blastArea, attack component.CombatAttackType) {
 	cursor := w.ResolveCursor(owner)
 	if cursor == 0 {

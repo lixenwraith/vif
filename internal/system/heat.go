@@ -106,6 +106,7 @@ func (s *HeatSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventHeatAddRequest,
 		event.EventHeatSetRequest,
+		event.EventHeatSpendRequest,
 		event.EventCursorArmRequest,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
@@ -161,6 +162,17 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 			}
 			s.setHeat(cursor, payload.Value)
 		}
+	case event.EventHeatSpendRequest:
+		if p, ok := ev.Payload.(*event.HeatSpendRequestPayload); ok && p.Amount > 0 {
+			cursor := s.world.ResolveOwnedCursor(p.Entity)
+			if cursor == 0 {
+				s.rejects.cursor.Add(1)
+				return
+			}
+			if heat, ok := s.world.Components.Heat.GetPtr(cursor); ok {
+				s.setHeat(cursor, heat.Current+heat.Overheat-p.Amount)
+			}
+		}
 	case event.EventCursorArmRequest:
 		if p, ok := ev.Payload.(*event.CursorArmRequestPayload); ok {
 			if cursor := s.world.Resources.Player.Entity; cursor != 0 {
@@ -202,13 +214,7 @@ func (s *HeatSystem) addHeat(cursor core.Entity, delta int) {
 		heatComp.EmberDecayTime = s.world.Resources.Time.GameTime
 		s.world.PushLocal(event.EventHeatBurst, &event.HeatBurstPayload{Entity: cursor})
 
-		// The sweep is this participant's own effect and is emitted here, in this
-		// system's domain (D-6). It used to be the on_enter of a shared FSM state
-		// the burst transitioned into, which meant the shared monitor region moved
-		// on an owner-authored event that never replicates: only the bursting
-		// participant's copy transitioned, and fsm.monitor then disagreed for the
-		// rest of the session. A shared region may not be steered by a value only
-		// one participant holds (D-20).
+		// The personal sweep cannot steer the shared FSM (D-6, D-20).
 		s.world.PushLocal(event.EventCleanerSweepingRequest, &event.CleanerSweepingRequestPayload{
 			Entity: cursor,
 		})

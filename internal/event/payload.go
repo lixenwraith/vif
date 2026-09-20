@@ -413,6 +413,11 @@ type HeatSetRequestPayload struct {
 	Value  int         `toml:"value"`
 }
 
+type HeatSpendRequestPayload struct {
+	Entity core.Entity `toml:"entity"`
+	Amount int         `toml:"amount"`
+}
+
 // HeatBurstPayload names the cursor that overheated
 type HeatBurstPayload struct {
 	Entity core.Entity `toml:"entity"`
@@ -522,7 +527,7 @@ type FlashRequestPayload struct {
 type ExplosionType uint8
 
 const (
-	ExplosionTypeDust    ExplosionType = iota // Converts glyphs to dust, cyan palette
+	ExplosionTypeDust    ExplosionType = iota // Cyan palette
 	ExplosionTypeMissile                      // Visual only, warm palette
 	ExplosionTypeEye                          // Self-destruct explosion with character noise
 )

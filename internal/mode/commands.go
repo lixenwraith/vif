@@ -317,14 +317,33 @@ func handleFreeCommand(ctx *engine.GameContext, args []string) CommandResult {
 	return applyToggle(ctx, &ctx.MouseFreeMode, args, "free", "Mouse free mode")
 }
 
-// handleAutoCommand toggles or sets auto-fire (main + special)
 func handleAutoCommand(ctx *engine.GameContext, args []string) CommandResult {
-	return applyToggle(ctx, &ctx.AutoFire, args, "auto", "Auto-fire")
+	next := (ctx.AutoFire.Load() + 1) % 3
+	valid := len(args) <= 1
+	if len(args) > 0 {
+		switch args[0] {
+		case "on", "both":
+			next = engine.AutoFireBoth
+		case "off":
+			next = engine.AutoFireOff
+		case "cleaner":
+			next = engine.AutoFireCleaner
+		default:
+			valid = false
+		}
+	}
+	if !valid {
+		setCommandError(ctx, "Usage: :auto [on|off|cleaner]")
+		return CommandResult{Continue: true}
+	}
+	ctx.AutoFire.Store(next)
+	word := [...]string{"off", "cleaner", "on"}[next]
+	ctx.SetStatusMessage("Auto: "+word, parameter.StatusMessageDefaultTimeout, false)
+	ctx.SetLastCommand(":auto " + word)
+	return CommandResult{Continue: true}
 }
 
-// applyToggle resolves a bare toggle or an explicit on|off argument against a
-// context flag. The explicit form exists so macros and scripts are idempotent
-// now that both flags default to on.
+// Explicit on/off keeps scripted input preferences idempotent.
 func applyToggle(ctx *engine.GameContext, flag *atomic.Bool, args []string, cmd, label string) CommandResult {
 	desired, explicit, ok := parseToggleArg(args)
 	if !ok {

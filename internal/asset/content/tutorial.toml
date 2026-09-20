@@ -81,7 +81,7 @@ id = "combat"
 lines = [
   "tab jumps to the nearest nugget",
   "enter fires the main weapon",
-  "auto fire is on by default",
+  "a cycles auto fire both off cleaner",
 ]
 
 [[blocks]]

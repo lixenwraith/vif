@@ -20,7 +20,6 @@ var topics = []topicDef{
 		Key: "modes", Title: "MODES",
 		Entries: []entryDef{
 			{Actions: []string{"mode_insert"}, Desc: "INSERT mode: typed characters become glyphs at the cursor"},
-			{Actions: []string{"append"}, Desc: "Move one cell right, then INSERT mode"},
 			{Actions: []string{"mode_visual"}, Desc: "Toggle VISUAL mode: motions step by the shield radius instead of one cell"},
 			{Actions: []string{"mode_search"}, Desc: "SEARCH mode: type a pattern and press Enter to jump to it"},
 			{Actions: []string{"mode_command"}, Desc: "COMMAND mode: pauses solo play; a live network session continues"},
@@ -77,10 +76,10 @@ var topics = []topicDef{
 		Key: "combat", Title: "COMBAT",
 		Entries: []entryDef{
 			{Actions: []string{"fire_main"}, Desc: "Fire the main weapon"},
-			{Actions: []string{"fire_special"}, All: true, Desc: "Fire the special weapon"},
+			{Actions: []string{"fire_special"}, All: true, Desc: "Convert matching dark glyphs and detonate dust; spends 1 heat"},
 			{Actions: []string{"nugget_jump"}, Desc: "Jump to the nearest nugget"},
 			{Actions: []string{"gold_jump"}, Desc: "Jump to the nearest gold glyph"},
-			{Keys: ":auto on", Desc: "Fire both weapons continuously without holding a key; on by default"},
+			{Actions: []string{"toggle_auto_fire"}, Desc: "Cycle auto-fire: both weapons, off, cleaner only"},
 		},
 	},
 	{
@@ -159,7 +158,7 @@ var topics = []topicDef{
 			{Keys: ":q", Desc: "Quit"},
 			{Keys: ":content", Desc: "Corpus source, file counts and served blocks in the status bar"},
 			{Keys: ":free [on|off]", Desc: "Track the cursor with mouse motion; on by default"},
-			{Keys: ":auto [on|off]", Desc: "Auto-fire both weapons; on by default"},
+			{Keys: ":auto [on|off|cleaner]", Desc: "Cycle or set auto-fire; both weapons by default"},
 			{Keys: ":mouse enable|disable|free", Desc: "Pointer master switch"},
 			{Keys: ":host <addr>", Desc: "Open this running game to participants, e.g. :host :7777; they join at the current tick"},
 			{Keys: ":session", Desc: "Report the session role, address, participant identity, peers and tick"},

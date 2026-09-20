@@ -42,8 +42,8 @@ const (
 	IntentMacroRecordToggle // q key - placeholder, Router interprets based on context
 
 	// Mode switching
-	IntentModeSwitch // i, /, :
-	IntentAppend     // a
+	IntentModeSwitch     // i, /, :
+	IntentToggleAutoFire // a
 
 	// Text entry modes (Insert/Search/Command)
 	IntentTextChar            // Printable character

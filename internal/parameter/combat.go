@@ -31,7 +31,7 @@ const (
 	CombatDamageRod = 1
 
 	// CombatDamageExplosion is damage caused by each explosion center hit
-	CombatDamageExplosion = 1
+	CombatDamageExplosion = 2
 
 	// CombatDamageMissile is damage per missile impact
 	CombatDamageMissile = 2

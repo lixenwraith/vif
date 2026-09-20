@@ -95,6 +95,7 @@ screen positions over the glyph grid.
 |---|---|
 | `Ctrl-Q`, `Ctrl-C` | Quit. |
 | `Ctrl-S` | Cycle audio mute state. |
+| `a` in Normal | Cycle auto-fire: both weapons → off → cleaner only. |
 | `Esc` | Cancel pending input or return toward Normal mode. |
 | Arrow keys | Move in the applicable mode. |
 | `Tab` | Jump to the active nugget. |
@@ -132,7 +133,7 @@ screen positions over the glyph grid.
 | `dd` | Delete the current line. |
 | `x`, `D` | Delete current glyph / through line end. |
 | `u` | Cursor-motion undo. |
-| `i`, `a` | Enter Insert at the cursor / after it. |
+| `i` | Enter Insert at the cursor. |
 | `v` | Enter Visual mode. |
 | `/` | Enter Search mode. |
 | `:` | Enter Command mode. |
@@ -205,10 +206,13 @@ only ever land on the cell drawn under it.
 short toggle for free mouse motion. Input is ignored while suspended, in
 Command mode, or where pause/overlay policy blocks it.
 
-Auto-fire independently requests main and special firing at its interval and
-is enabled by default for a new process. `:auto [on|off]` changes it. Held-button
-and auto-fire deadlines share de-duplication so both do not fire the same path
-twice in one cooldown slot.
+Automatic fire starts in both-weapons mode. `a` in Normal mode or bare `:auto`
+cycles both weapons → off → cleaner only → both weapons. `:auto on`, `:auto off`,
+and `:auto cleaner` select a state directly. Cleaner-only repeats the main-fire
+path, including ready equipped weapons, without requesting special attacks.
+Manual and held-button attacks remain available in every state. Held-button and
+auto-fire deadlines share de-duplication within each cooldown slot. `a` remains
+ordinary text in Insert, Search, and Command modes.
 
 ## 8. APM signal
 
@@ -234,7 +238,8 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:new!` | Reset and purge the initiating operator's free-mouse, auto-fire, speed, debug HUD, and pins. |
 | `:help`, `:h`, `:?`; `:about` | Open overlays. |
 | `:content` | Show corpus telemetry. |
-| `:free [on\|off]`, `:auto [on\|off]` | Toggle free mouse and auto-fire. |
+| `:free [on\|off]` | Toggle or set free mouse. |
+| `:auto [on\|off\|cleaner]` | Cycle or set automatic fire. |
 | `:mouse enable\|disable\|free` | Control terminal mouse input. |
 | `:host <addr>` | Open this running game to participants (`:host :7777`). Refused if the run is already in a session. |
 | `:session` | Report the session role, address, participant identity, its cursor slot, peer count and tick. |

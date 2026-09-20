@@ -6,8 +6,9 @@ import (
 
 // Drain System
 const (
-	// DrainMaxCount is the maximum number of drain entities (at 100% heat)
-	DrainMaxCount = 10
+	// DrainMaxCount caps each participant's population.
+	DrainMaxCount      = 10
+	DrainHeatPerEntity = 100
 
 	// DrainShieldEnergyDrainAmount is energy cost per tick per drain inside shield
 	DrainShieldEnergyDrainAmount = 100

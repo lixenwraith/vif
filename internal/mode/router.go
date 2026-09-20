@@ -236,8 +236,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	// Mode switching
 	case input.IntentModeSwitch:
 		return r.handleModeSwitch(intent)
-	case input.IntentAppend:
-		return r.handleAppend()
+	case input.IntentToggleAutoFire:
+		return handleAutoCommand(r.ctx, nil).Continue
 
 	// Text entry
 	case input.IntentTextChar:
@@ -595,21 +595,6 @@ func (r *Router) handleModeSwitch(intent *input.Intent) bool {
 	}
 
 	r.transitionMode(newMode)
-	return true
-}
-
-func (r *Router) handleAppend() bool {
-	r.captureForUndo()
-
-	// 1. Move cursor right
-	if pos, ok := r.ctx.World.LocalCursor(); ok {
-		result := MotionRight(r.ctx, pos.X, pos.Y, 1)
-		OpMove(r.ctx, result)
-	}
-
-	// 2. Switch to Insert mode via centralized transition
-	r.transitionMode(core.ModeInsert)
-
 	return true
 }
 
@@ -1037,12 +1022,12 @@ func (r *Router) ProcessInputTick() bool {
 	player := r.ctx.World.Resources.Player.Entity
 
 	emitted := false
-	if o, due := r.fireDue(now, &r.lastFireMain, auto, mouse && r.mouseLeftHeld); due {
+	if o, due := r.fireDue(now, &r.lastFireMain, auto != engine.AutoFireOff, mouse && r.mouseLeftHeld); due {
 		r.ctx.PushEventFull(event.EventWeaponFireRequest,
 			&event.WeaponFireRequestPayload{Entity: player}, o, core.DomainPlayer)
 		emitted = true
 	}
-	if o, due := r.fireDue(now, &r.lastFireSpec, auto, mouse && r.mouseRightHeld); due {
+	if o, due := r.fireDue(now, &r.lastFireSpec, auto == engine.AutoFireBoth, mouse && r.mouseRightHeld); due {
 		r.ctx.PushEventFull(event.EventFireSpecialRequest,
 			&event.FireSpecialRequestPayload{Entity: player}, o, core.DomainPlayer)
 		emitted = true

@@ -13,6 +13,8 @@ const (
 	// HeatTypingErrorPenalty is the heat penalty when wrong character typed in insert mode
 	HeatTypingErrorPenalty = 10
 
+	SpecialAttackHeatCost = 1
+
 	// HeatBurstFlashDuration is the time burst flash indicator is shown on heat bar
 	HeatBurstFlashDuration = 150 * time.Millisecond
 
@@ -105,9 +107,6 @@ const (
 
 // Initial input state, applied once at GameContext construction, changed state persist through game reset
 const (
-	// DefaultAutoFire enables main/special auto-fire at startup
-	DefaultAutoFire = true
-
 	// DefaultMouseFreeMode enables cursor tracking of bare mouse motion at startup
 	DefaultMouseFreeMode = true
 )

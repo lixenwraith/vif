@@ -402,7 +402,7 @@ func TestSnapshotSimulationExcludesSession(t *testing.T) {
 	}
 
 	ctx := a.Context()
-	ctx.AutoFire.Store(!ctx.AutoFire.Load())
+	ctx.AutoFire.Store(engine.AutoFireOff)
 	ctx.MouseDisabled.Store(!ctx.MouseDisabled.Load())
 	ctx.TimeCtl.SetPaused(true)
 

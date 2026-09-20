@@ -152,12 +152,12 @@ storm cycle increases the penalty multiplier; reset returns it to one.
 Heat is clamped from `0` to `100`. Positive additions beyond the cap accumulate
 overheat. Reaching the overheat threshold emits a heat burst, flashes the meter,
 and activates the ember phase. Ember decays heat periodically and protects
-ordinary energy penalties while active. A negative heat delta also clears the
+ordinary energy penalties while active. A heat penalty also clears the
 overheat accumulation.
 
-The background monitor region reacts to `EventHeatBurst` by requesting a
-sweeping cleaner. This reaction is campaign policy, not hard-coded into the heat
-component itself.
+HeatSystem requests the bursting participant's sweeping cleaner locally.
+Special-attack heat spending consumes overheat before current heat without
+resetting the remaining overheat or triggering the penalty sound.
 
 ### Boost
 
@@ -244,9 +244,20 @@ because those values are expected to change during tuning.
 ## 7. Weapons and attacks
 
 Main fire has its own cooldown. It emits a directional cleaner colored by
-energy polarity and asks every owned, ready weapon to fire. Auto-fire is enabled
-by default in a new process and is maintained by input state rather than the
-weapon system.
+energy polarity and asks every owned, ready weapon to fire. Automatic fire
+starts with main and special enabled; `a` cycles both → off → cleaner only.
+Cleaner-only repeats the main-fire path without special attacks.
+
+Special fire converts all loose, living Player-domain **dark** green glyphs plus
+dark blue glyphs for nonnegative energy or dark red glyphs for negative energy.
+Conversion commits synchronously, then all existing and newly created dust is
+consumed into one explosion center per occupied cell, within the center budget.
+Other glyphs, including shared composite members, are not converted by the blast.
+A nonempty blast spends 1 heat, drawing from overheat first and clamping at zero:
+156 becomes 155, 1 becomes 0, and 0 stays 0. Without dust or eligible glyphs it
+emits no blast and spends nothing. Each center deals 2 base damage and uses an
+explosion mass of 1.0. Player targets resolve locally; only center/radius/attack
+geometry crosses for shared combat.
 
 | Weapon | Model |
 |---|---|
@@ -275,7 +286,7 @@ a blocked cleaner drains to its stop point.
 
 | Actor | Current design role |
 |---|---|
-| Drain | Baseline hostile species population tied to heat. Materializes, approaches the cursor, periodically drains energy inside the shield, and removes heat on an unshielded cursor collision. |
+| Drain | Local population is `min(10, ceil(current heat / 100))`, excluding overheat: with the current 100-point cap, one drain from the first heat point. Materializes, chases, drains shield energy, and removes heat on unshielded contact. |
 | Quasar | Large composite, 5 cells wide by 3 high. Tracks the cursor and emits lightning when the cursor leaves its effective range. It is created by fusing drains in the default progression. |
 | Swarm | Fast composite, 4 cells wide by 2 high, created from enraged drains. It tracks/charges, may teleport around blocked line of sight, absorbs drains, and has bounded charges/lifetime. |
 | Storm | Multi-part boss with independently moving circles and 3D orbital dynamics. The green circle pulses an area, the red circle tracks the nearest cursor with directional bullet bursts, and the blue circle creates swarm pressure. |

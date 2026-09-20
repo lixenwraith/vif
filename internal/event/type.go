@@ -237,6 +237,8 @@ const (
 	EventHeatAddRequest
 	// EventHeatSetRequest (HeatSetRequestPayload) [local] signals absolute heat value
 	EventHeatSetRequest
+	// EventHeatSpendRequest (HeatSpendRequestPayload) [local] spends overheat before current heat
+	EventHeatSpendRequest
 	// EventHeatBurst (HeatBurstPayload) [local] signals heat burst notification
 	EventHeatBurst
 

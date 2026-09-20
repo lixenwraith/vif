@@ -22,7 +22,7 @@ const (
 	MassSnakeBody Mass = 2.0
 	MassSnakeHead Mass = 8.0
 	MassQuasar    Mass = 10.0
-	MassExplosion Mass = 10.0
+	MassExplosion Mass = 1.0
 	// StormSystem folds 2D impulses back into its 3D velocity (see absorbExternalImpulse)
 	MassStorm Mass = 100.0
 

@@ -397,18 +397,6 @@ The parse is fixed and pinned; the swallow is not, and the next cause will be as
 invisible. It needs a logger the allocator does not have, at a rate the fleet page
 polls.
 
-## Runtime structure
-
-### Separate drain population reconciliation concerns
-
-- Priority: P2
-- Affected files: `internal/system/drain.go`
-- Prerequisite: focused deterministic coverage for spawn, pause/resume,
-  materialization completion, and exponential backoff
-
-Refactor the update block that currently combines target count, pending
-materialization, stagger timing, and failed-placement backoff.
-
 ## Fleet logging
 
 ### Repin LogWisp past the fleet stream fixes

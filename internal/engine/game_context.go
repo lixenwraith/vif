@@ -14,6 +14,12 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/navigation"
 )
 
+const (
+	AutoFireOff uint32 = iota
+	AutoFireCleaner
+	AutoFireBoth
+)
+
 // NavigationDebugState is one runtime's operator view of navigation internals.
 type NavigationDebugState struct {
 	Flow                 *navigation.FlowFieldCache
@@ -78,7 +84,7 @@ type GameContext struct {
 	MouseFreeMode atomic.Bool // Free cursor movement (motion tracking)
 	MouseDisabled atomic.Bool // All mouse input ignored
 
-	AutoFire atomic.Bool // Auto-fire (continuous weapon/special fire)
+	AutoFire atomic.Uint32 // AutoFireOff, AutoFireCleaner, or AutoFireBoth
 
 	// === Main-Loop Exclusive ===
 
@@ -236,7 +242,7 @@ func newGameContext(world *World, width, height int, clock Clock, corr *vlog.Cor
 
 	// 13. Initial input state - Not restored by EventGameResetRequest: user-owned for the session
 	ctx.MouseFreeMode.Store(parameter.DefaultMouseFreeMode)
-	ctx.AutoFire.Store(parameter.DefaultAutoFire)
+	ctx.AutoFire.Store(AutoFireBoth)
 
 	return ctx
 }
@@ -484,7 +490,7 @@ func (ctx *GameContext) ClearOverlayPins() {
 // Called only on the purge path, never by a plain reset.
 func (ctx *GameContext) ResetSessionState() {
 	ctx.MouseFreeMode.Store(false)
-	ctx.AutoFire.Store(false)
+	ctx.AutoFire.Store(AutoFireOff)
 	ctx.OverlayHUD.Store(false)
 	ctx.ClearOverlayPins()
 	ctx.SetOverlayContent(nil)

@@ -1,6 +1,8 @@
 package system
 
 import (
+	"cmp"
+	"slices"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -33,9 +35,7 @@ type drainCacheEntry struct {
 	dying bool
 }
 
-// DrainSystem manages the drain entity lifecycle
-// If not paused, drain count = floor(heat / 10), max 10
-// Drains spawn materialize based on Heat only
+// DrainSystem owns the local participant's heat-driven population.
 type DrainSystem struct {
 	world *engine.World
 
@@ -49,6 +49,7 @@ type DrainSystem struct {
 
 	// Spawn failure backoff (game ticks)
 	spawnCooldownUntil uint64
+	spawnBackoff       uint64
 
 	// Per-tick cache to avoid repeated queries
 	drainCache []drainCacheEntry
@@ -70,18 +71,7 @@ type DrainSystem struct {
 	statPaused              *atomic.Bool
 	buffers                 bufferTelemetry
 
-	// The outstanding reasons drains are not spawning.
-	//
-	// Scoped rather than a flag because two shapes overlap. A session-wide region
-	// — a storm, a tower defence, a reset — pauses every participant's drains and
-	// releases them all again. A quasar pauses one cursor's, because it is fused
-	// from that cursor's drains and belongs to that participant alone. A single
-	// boolean could not tell them apart: one participant's quasar stopped every
-	// participant's drains, and its exit resumed drains a storm was still holding.
-	//
-	// pausedFor is a slice rather than a set because it is read on every tick and
-	// is bounded by the roster; membership is the only question ever asked of it,
-	// so nothing here depends on an order.
+	// Session holds and cursor-specific quasar holds can overlap.
 	pausedAll bool
 	pausedFor []core.Entity
 
@@ -128,6 +118,7 @@ func (s *DrainSystem) Init() {
 	s.drainCache = s.drainCache[:0]
 	s.nextSpawnOrder = 0
 	s.spawnCooldownUntil = 0
+	s.spawnBackoff = 0
 	s.pausedAll = false
 	s.pausedFor = s.pausedFor[:0]
 	s.statCount.Store(0)
@@ -216,7 +207,10 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.MaterializeCompletedPayload); ok {
 			if payload.Type == component.SpawnTypeDrain {
 				s.removeCompletedSpawn(payload.X, payload.Y)
-				s.materializeDrainAt(payload.X, payload.Y)
+				// Heat may fall while the materialization is in flight.
+				if s.world.Components.Drain.CountEntities() < s.calcTargetDrainCount() {
+					s.materializeDrainAt(payload.X, payload.Y)
+				}
 			}
 		}
 	}
@@ -248,45 +242,7 @@ func (s *DrainSystem) Update() {
 		return
 	}
 
-	currentTick := s.world.Resources.Game.State.GetGameTicks()
-
-	// Process pending materialize spawn queue first
-	s.processPendingSpawns()
-
-	// Multi-drain lifecycle based on heat
-	currentCount := s.liveDrainCount()
-	pendingCount := len(s.pendingSpawns)
-
-	targetCount := s.calcTargetDrainCount()
-	effectiveCount := currentCount + pendingCount
-
-	if effectiveCount < targetCount {
-		// Check materialize spawn cooldown
-		if currentTick >= s.spawnCooldownUntil {
-			needed := targetCount - effectiveCount
-			queued := s.queueDrainSpawns(needed)
-
-			// Apply backoff if we couldn't queue all needed spawns
-			if queued < needed {
-				s.statSpawnFailure.Add(int64(needed - queued))
-				// Exponential backoff: 8 ticks base, doubles on consecutive failures
-				backoff := uint64(8)
-				if s.spawnCooldownUntil > 0 {
-					// Already had a recent failure, increase backoff
-					prevBackoff := s.spawnCooldownUntil - (currentTick - 1)
-					if prevBackoff > 0 && prevBackoff < 60 {
-						backoff = prevBackoff * 2
-					}
-				}
-				s.spawnCooldownUntil = currentTick + backoff
-			}
-		}
-	} else if currentCount > targetCount {
-		// Too many drains (heat dropped)
-		s.despawnExcessDrains(currentCount - targetCount)
-		// Clear cooldown on despawn materialize (positions freed up)
-		s.spawnCooldownUntil = 0
-	}
+	s.reconcilePopulation()
 
 	// Clock-based updates for active drains
 	if len(s.drainCache) > 0 {
@@ -296,6 +252,44 @@ func (s *DrainSystem) Update() {
 
 	s.statCount.Store(int64(s.liveDrainCount()))
 	s.statPending.Store(int64(len(s.pendingSpawns)))
+}
+
+func (s *DrainSystem) reconcilePopulation() {
+	current := s.liveDrainCount()
+	target := s.calcTargetDrainCount()
+
+	// Keep in-flight reservations until completion; cancel unstarted excess first.
+	pendingLimit := max(0, target-current)
+	for i := len(s.pendingSpawns) - 1; i >= 0 && len(s.pendingSpawns) > pendingLimit; i-- {
+		if !s.pendingSpawns[i].materializeStarted {
+			s.pendingSpawns = slices.Delete(s.pendingSpawns, i, i+1)
+		}
+	}
+	if current > target {
+		s.despawnExcessDrains(current - target)
+		current = target
+	}
+	s.processPendingSpawns()
+
+	needed := target - current - len(s.pendingSpawns)
+	if needed <= 0 {
+		s.spawnBackoff = 0
+		s.spawnCooldownUntil = 0
+		return
+	}
+	tick := s.world.Resources.Game.State.GetGameTicks()
+	if tick < s.spawnCooldownUntil {
+		return
+	}
+	queued := s.queueDrainSpawns(needed)
+	if queued == needed {
+		s.spawnBackoff = 0
+		s.spawnCooldownUntil = 0
+		return
+	}
+	s.statSpawnFailure.Add(int64(needed - queued))
+	s.spawnBackoff = min(max(8, s.spawnBackoff*2), 60)
+	s.spawnCooldownUntil = tick + s.spawnBackoff
 }
 
 // cacheDrainData populates drainCache with all drain entities and components
@@ -535,13 +529,6 @@ func (s *DrainSystem) releasePause(owner core.Entity) {
 	}
 }
 
-// spawningPaused reports whether a hold applies to the cursor this instance's
-// drains belong to.
-//
-// The drain population is a function of one cursor — its heat decides the count
-// and its cell decides where they spawn — so "my drains" is exactly
-// Resources.Player.Entity, and an owner-scoped hold naming any other cursor is a
-// hold on a participant this instance does not simulate.
 func (s *DrainSystem) spawningPaused() bool {
 	if s.pausedAll {
 		return true
@@ -558,59 +545,12 @@ func (s *DrainSystem) spawningPaused() bool {
 	return false
 }
 
-// calcTargetDrainCount returns the desired number of drains based on current heat
-// Formula: floor(heat / 10), capped at DrainMaxCount
 func (s *DrainSystem) calcTargetDrainCount() int {
-	cursorEntity := s.world.Resources.Player.Entity
-	currentHeat := 0
-	if heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
-		currentHeat = heatComp.Current
+	heat, ok := s.world.Components.Heat.GetPtr(s.world.Resources.Player.Entity)
+	if !ok || heat.Current <= 0 {
+		return 0
 	}
-
-	count := currentHeat / 10 // int div floor
-	if count > parameter.DrainMaxCount {
-		count = parameter.DrainMaxCount
-	}
-	return count
-}
-
-// getActiveDrainsBySpawnOrder returns drains sorted by SpawnOrder descending (newest first)
-func (s *DrainSystem) getActiveDrainsBySpawnOrder() []core.Entity {
-	entities := s.world.Components.Drain.Entities()
-	if len(entities) <= 1 {
-		return entities
-	}
-
-	// Sort by SpawnOrder descending (LIFO - highest order first)
-	type drainWithOrder struct {
-		entity core.Entity
-		order  int
-	}
-
-	ordered := make([]drainWithOrder, 0, len(entities))
-	for _, e := range entities {
-		if s.isDying(e) {
-			continue
-		}
-		if drain, ok := s.world.Components.Drain.GetComponent(e); ok {
-			ordered = append(ordered, drainWithOrder{entity: e, order: drain.SpawnOrder})
-		}
-	}
-
-	// Simple insertion sort (small N, max 10)
-	for i := 1; i < len(ordered); i++ {
-		j := i
-		for j > 0 && ordered[j].order > ordered[j-1].order {
-			ordered[j], ordered[j-1] = ordered[j-1], ordered[j]
-			j--
-		}
-	}
-
-	result := make([]core.Entity, len(ordered))
-	for i, d := range ordered {
-		result[i] = d.entity
-	}
-	return result
+	return min(1+(heat.Current-1)/parameter.DrainHeatPerEntity, parameter.DrainMaxCount)
 }
 
 // randomSpawnOffset returns a valid position with boundary-stretched offset
@@ -770,18 +710,23 @@ func (s *DrainSystem) queueDrainSpawns(count int) int {
 	return queued
 }
 
-// despawnExcessDrains removes N drains using LIFO ordering (newest first)
 func (s *DrainSystem) despawnExcessDrains(count int) {
-	if count <= 0 {
-		return
-	}
-
-	ordered := s.getActiveDrainsBySpawnOrder()
-	toRemove := min(count, len(ordered))
-
-	for i := range toRemove {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, ordered[i])
+	// Reuse the tick cache for LIFO removal instead of allocating sorted copies.
+	slices.SortFunc(s.drainCache, func(a, b drainCacheEntry) int {
+		return cmp.Compare(b.drainComp.SpawnOrder, a.drainComp.SpawnOrder)
+	})
+	for i := range s.drainCache {
+		drain := &s.drainCache[i]
+		if drain.dying {
+			continue
+		}
+		if count <= 0 {
+			break
+		}
+		drain.dying = true
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, drain.entity)
 		s.statDespawned.Add(1)
+		count--
 	}
 }
 

@@ -373,21 +373,25 @@ func dropRecord(rng *vmath.FastRand, recs []event.JournalRecord) ([]event.Journa
 	return append(recs[:i:i], recs[i+1:]...), what, true
 }
 
-// mutatePayload rewrites one recorded cursor move command.
-func mutatePayload(rng *vmath.FastRand, recs []event.JournalRecord) ([]event.JournalRecord, string, bool) {
-	const forced = "entity = 1\nx = 1\ny = 1\n"
-	var sites []int
-	for i := range recs {
-		if recs[i].Type == event.EventCursorMoveRequest && recs[i].Payload != forced {
-			sites = append(sites, i)
+// Mutate the final move so a later absolute placement cannot erase the change.
+func mutatePayload(_ *vmath.FastRand, recs []event.JournalRecord) ([]event.JournalRecord, string, bool) {
+	for i := len(recs) - 1; i >= 0; i-- {
+		if recs[i].Type != event.EventCursorMoveRequest {
+			continue
 		}
+		decoded, err := journal.DecodePayload(recs[i].Type, recs[i].Payload)
+		p, ok := decoded.(*event.CursorMoveRequestPayload)
+		if err != nil || !ok {
+			continue
+		}
+		x := 1
+		if p.X == x {
+			x = 2
+		}
+		recs[i].Payload = fmt.Sprintf("entity = %d\nx = %d\ny = 1\n", p.Entity, x)
+		return recs, fmt.Sprintf("rewrote final cursor move jseq %d", recs[i].JSeq), true
 	}
-	i := pick(rng, sites)
-	if i < 0 {
-		return recs, "", false
-	}
-	recs[i].Payload = forced
-	return recs, fmt.Sprintf("rewrote jseq %d cursor position", recs[i].JSeq), true
+	return recs, "", false
 }
 
 // TestReplaySoakNegative asserts a perturbed record stream is caught. Individual

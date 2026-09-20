@@ -33,13 +33,6 @@ func posKey(x, y int) uint64 {
 	return uint64(x)<<32 | uint64(uint32(y))
 }
 
-// glyphTransform caches a glyph's render state before its entity is destroyed
-type glyphTransform struct {
-	x, y  int
-	char  rune
-	level component.GlyphLevel
-}
-
 // DustSystem manages orbital dust particles created from glyph transformation
 // Dust orbits cursor with chase behavior on large cursor movements
 type DustSystem struct {
@@ -59,8 +52,8 @@ type DustSystem struct {
 	collisionCtx collisionContext
 	deathBuf     []core.Entity
 
-	// Glyph→dust scratch; storm collisions can request this many times a second
-	transformBuf []glyphTransform
+	// Conversion reuses the same spawn data as ordinary dust requests.
+	transformBuf []event.DustSpawnEntry
 	destroyBuf   []core.Entity
 	flashBuf     []core.Entity
 
@@ -124,7 +117,7 @@ func (s *DustSystem) Init() {
 	s.centerCells = make(map[uint64]struct{}, 256)
 	s.centerBuf = make([]event.ExplosionCenterEntry, 0, parameter.ExplosionCenterCap)
 	s.deathBuf = make([]core.Entity, 0, 32)
-	s.transformBuf = make([]glyphTransform, 0, 256)
+	s.transformBuf = make([]event.DustSpawnEntry, 0, 256)
 	s.destroyBuf = make([]core.Entity, 0, 256)
 	s.flashBuf = make([]core.Entity, 0, 64)
 	s.statCreated.Store(0)
@@ -237,7 +230,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventFireSpecialRequest:
 		if p, ok := ev.Payload.(*event.FireSpecialRequestPayload); ok {
-			if cursor := s.world.ResolveCursor(p.Entity); cursor != 0 {
+			if cursor := s.world.ResolveOwnedCursor(p.Entity); cursor != 0 {
 				s.detonateDust(cursor)
 			} else {
 				s.rejects.cursor.Add(1)
@@ -564,7 +557,7 @@ func (s *DustSystem) setDustComponents(entity core.Entity, x, y int, char rune, 
 	}
 
 	// Sigil for rendering
-	remaining, c := s.dustProperties(level)
+	remaining, c := dustProfileFor(level)
 
 	sigilComp := component.SigilComponent{
 		Rune:  char,
@@ -588,16 +581,22 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
 }
 
-// detonateDust converts every dust particle into an explosion center, resolves the
-// player-domain half of the blast, then hands the geometry to ExplosionSystem.
+// Conversion commits before center collection; no queued spawn can miss this blast.
 func (s *DustSystem) detonateDust(cursor core.Entity) {
-	dusts := s.world.Components.Dust.Entities()
-	if len(dusts) == 0 {
-		return
-	}
-
 	cursorPos, ok := s.world.Positions.GetPosition(cursor)
 	if !ok {
+		return
+	}
+	polarity := component.GlyphBlue
+	if energy, ok := s.world.Components.Energy.GetPtr(cursor); ok && energy.Current < 0 {
+		polarity = component.GlyphRed
+	}
+	s.convertGlyphs(cursorPos.X, cursorPos.Y, func(glyph *component.GlyphComponent) bool {
+		return glyph.Level == component.GlyphDark &&
+			(glyph.Type == component.GlyphGreen || glyph.Type == polarity)
+	})
+	dusts := s.world.Components.Dust.Entities()
+	if len(dusts) == 0 {
 		return
 	}
 
@@ -634,7 +633,9 @@ func (s *DustSystem) detonateDust(cursor core.Entity) {
 	}
 	s.blast.reset(s.centerBuf, parameter.ExplosionFieldRadius)
 
-	s.convertGlyphs(cursorPos.X, cursorPos.Y, &s.blast)
+	s.world.PushLocal(event.EventHeatSpendRequest, &event.HeatSpendRequestPayload{
+		Entity: cursor, Amount: parameter.SpecialAttackHeatCost,
+	})
 	strikePlayerTargets(s.world, cursor, &s.blast, component.CombatAttackExplosion)
 	s.world.PushLocal(event.EventExplosionVisualBatchRequest, &event.ExplosionVisualBatchRequestPayload{
 		Centers: append([]event.ExplosionCenterEntry(nil), s.centerBuf...),
@@ -651,9 +652,8 @@ func (s *DustSystem) detonateDust(cursor core.Entity) {
 	s.world.PushCrossing(event.EventExplosionBatchRequest, p)
 }
 
-// convertGlyphs turns loose glyphs into dust and flashes the dark ones.
-// A nil area converts the whole field; composite members are never converted.
-func (s *DustSystem) convertGlyphs(cursorX, cursorY int, area *blastArea) {
+// A filter admits dark glyphs as dust; nil keeps :dust's dark-glyph flashes.
+func (s *DustSystem) convertGlyphs(cursorX, cursorY int, match func(*component.GlyphComponent) bool) {
 	glyphEntities := s.world.Components.Glyph.Entities()
 	if len(glyphEntities) == 0 {
 		return
@@ -668,7 +668,7 @@ func (s *DustSystem) convertGlyphs(cursorX, cursorY int, area *blastArea) {
 		if glyphEntity.Domain() != core.DomainPlayer {
 			continue
 		}
-		if s.world.Components.Member.HasEntity(glyphEntity) {
+		if s.world.Components.Member.HasEntity(glyphEntity) || s.world.Components.Death.HasEntity(glyphEntity) {
 			continue
 		}
 		glyphComp, ok := s.world.Components.Glyph.GetPtr(glyphEntity)
@@ -676,14 +676,11 @@ func (s *DustSystem) convertGlyphs(cursorX, cursorY int, area *blastArea) {
 			continue
 		}
 
-		// Dark glyphs carry no dust, so they die through the death API for the flash
-		if glyphComp.Level == component.GlyphDark {
-			if area != nil {
-				pos, ok := s.world.Positions.GetPosition(glyphEntity)
-				if !ok || !area.contains(pos.X, pos.Y) {
-					continue
-				}
+		if match != nil {
+			if !match(glyphComp) {
+				continue
 			}
+		} else if glyphComp.Level == component.GlyphDark {
 			s.flashBuf = append(s.flashBuf, glyphEntity)
 			continue
 		}
@@ -692,12 +689,9 @@ func (s *DustSystem) convertGlyphs(cursorX, cursorY int, area *blastArea) {
 		if !ok {
 			continue
 		}
-		if area != nil && !area.contains(glyphPos.X, glyphPos.Y) {
-			continue
-		}
 		s.destroyBuf = append(s.destroyBuf, glyphEntity)
-		s.transformBuf = append(s.transformBuf, glyphTransform{
-			x: glyphPos.X, y: glyphPos.Y, char: glyphComp.Rune, level: glyphComp.Level,
+		s.transformBuf = append(s.transformBuf, event.DustSpawnEntry{
+			X: glyphPos.X, Y: glyphPos.Y, Char: glyphComp.Rune, Level: glyphComp.Level,
 		})
 	}
 	s.buffers.Observe(bufDustTransform, len(s.transformBuf))
@@ -716,15 +710,15 @@ func (s *DustSystem) convertGlyphs(cursorX, cursorY int, area *blastArea) {
 	posBatch := s.world.Positions.BeginBatch()
 	for _, gt := range s.transformBuf {
 		entity := s.world.CreateEntity(core.DomainPlayer)
-		s.setDustComponents(entity, gt.x, gt.y, gt.char, gt.level, cursorX, cursorY)
-		posBatch.Add(entity, component.PositionComponent{X: gt.x, Y: gt.y})
+		s.setDustComponents(entity, gt.X, gt.Y, gt.Char, gt.Level, cursorX, cursorY)
+		posBatch.Add(entity, component.PositionComponent{X: gt.X, Y: gt.Y})
 	}
 	posBatch.CommitForce()
 
 	s.statCreated.Add(int64(len(s.transformBuf)))
 }
 
-func (s *DustSystem) dustProperties(level component.GlyphLevel) (time.Duration, color.RGB) {
+func dustProfileFor(level component.GlyphLevel) (time.Duration, color.RGB) {
 	switch level {
 	case component.GlyphDark:
 		return parameter.DustTimerDark, visual.RgbDustDark

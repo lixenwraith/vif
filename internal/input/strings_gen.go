@@ -56,8 +56,8 @@ func (i IntentType) String() string {
 		return "IntentMacroRecordToggle"
 	case IntentModeSwitch:
 		return "IntentModeSwitch"
-	case IntentAppend:
-		return "IntentAppend"
+	case IntentToggleAutoFire:
+		return "IntentToggleAutoFire"
 	case IntentTextChar:
 		return "IntentTextChar"
 	case IntentTextBackspace:

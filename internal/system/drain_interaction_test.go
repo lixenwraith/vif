@@ -252,3 +252,94 @@ func beginDrainTick(t *testing.T, drains *DrainSystem) {
 		t.Fatal("drain cache is empty; movement and interaction passes would no-op")
 	}
 }
+
+func TestDrainPopulationUsesCeilingWithoutOverheat(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	drains := NewDrainSystem(w).(*DrainSystem)
+	for _, tc := range []struct{ heat, want int }{
+		{-1, 0}, {0, 0}, {1, 1}, {99, 1}, {100, 1}, {101, 2}, {1000, 10}, {1001, 10},
+	} {
+		w.Components.Heat.SetComponent(cursor, component.HeatComponent{Current: tc.heat, Overheat: 99})
+		if got := drains.calcTargetDrainCount(); got != tc.want {
+			t.Fatalf("heat %d plus overheat: drains=%d, want %d", tc.heat, got, tc.want)
+		}
+	}
+}
+
+func TestDrainReconciliationRespectsHeatChangesAndPause(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	drains := NewDrainSystem(w).(*DrainSystem)
+	heat, _ := w.Components.Heat.GetPtr(cursor)
+	heat.Current = 1
+	drains.Update()
+	if len(drains.pendingSpawns) != 1 || drains.pendingSpawns[0].materializeStarted {
+		t.Fatal("first heat point did not queue a drain")
+	}
+	drains.Update()
+	spawn := drains.pendingSpawns[0]
+	if !spawn.materializeStarted {
+		t.Fatal("due drain did not begin materializing")
+	}
+	drains.queueDrainSpawn(20, 15, 1)
+	heat.Current = 0
+	drains.Update()
+	if len(drains.pendingSpawns) != 1 || !drains.pendingSpawns[0].materializeStarted {
+		t.Fatal("heat drop must cancel unstarted spawns and retain in-flight reservations")
+	}
+	complete := event.GameEvent{Type: event.EventMaterializeComplete,
+		Payload: &event.MaterializeCompletedPayload{X: spawn.targetX, Y: spawn.targetY, Type: component.SpawnTypeDrain}}
+	drains.HandleEvent(complete)
+	if len(drains.pendingSpawns) != 0 || w.Components.Drain.CountEntities() != 0 {
+		t.Fatal("materialization exceeded the lowered heat target")
+	}
+
+	heat.Current = 1
+	drains.HandleEvent(event.GameEvent{Type: event.EventDrainPause})
+	drains.Update()
+	if len(drains.pendingSpawns) != 0 {
+		t.Fatal("paused drains scheduled a spawn")
+	}
+	drains.HandleEvent(event.GameEvent{Type: event.EventDrainResume})
+	drains.Update()
+	drains.Update()
+	spawn = drains.pendingSpawns[0]
+	complete.Payload = &event.MaterializeCompletedPayload{X: spawn.targetX, Y: spawn.targetY, Type: component.SpawnTypeDrain}
+	drains.HandleEvent(complete)
+	drains.HandleEvent(complete)
+	if w.Components.Drain.CountEntities() != 1 {
+		t.Fatal("completion did not respect population capacity")
+	}
+	first := w.Components.Drain.Entities()[0]
+	drains.materializeDrainAt(20, 15)
+	drains.Update()
+	if drains.liveDrainCount() != 1 || drains.isDying(first) {
+		t.Fatal("excess drains were not removed newest first")
+	}
+}
+
+func TestDrainPlacementBackoffDoublesAndResets(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	drains := NewDrainSystem(w).(*DrainSystem)
+	w.Components.Heat.SetComponent(cursor, component.HeatComponent{Current: 1})
+	// Without a cursor position every placement fails deterministically.
+	w.Positions.RemoveEntity(cursor)
+	for _, want := range []uint64{8, 16, 32, 60, 60} {
+		tick := drains.spawnCooldownUntil
+		w.Resources.Game.State.SetGameTicks(tick)
+		drains.reconcilePopulation()
+		if drains.spawnBackoff != want || drains.spawnCooldownUntil != tick+want {
+			t.Fatalf("backoff=%d until=%d, want %d/%d", drains.spawnBackoff, drains.spawnCooldownUntil, want, tick+want)
+		}
+		failures := drains.statSpawnFailure.Load()
+		drains.reconcilePopulation()
+		if drains.statSpawnFailure.Load() != failures {
+			t.Fatal("placement retried before cooldown")
+		}
+	}
+	w.Positions.SetPosition(cursor, component.PositionComponent{X: 5, Y: 5})
+	w.Resources.Game.State.SetGameTicks(drains.spawnCooldownUntil)
+	drains.reconcilePopulation()
+	if len(drains.pendingSpawns) != 1 || drains.spawnBackoff != 0 || drains.spawnCooldownUntil != 0 {
+		t.Fatal("successful placement did not reset backoff")
+	}
+}
