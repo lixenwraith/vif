@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vi-fighter/internal/component"
 )
 
 // captureSink records journal output in memory, for tests that need no file
@@ -56,6 +57,24 @@ func TestPayloadFieldsEncodable(t *testing.T) {
 		}
 		checkEncodable(t, name, reflect.TypeOf(proto).Elem(), seen)
 	})
+}
+
+func TestRecycledExplosionRetainsStorageButNoArtifactState(t *testing.T) {
+	p := AcquireExplosionBatchRequest()
+	p.StampCrossing(2, 17)
+	p.Centers = append(p.Centers, ExplosionCenterEntry{X: 7, Y: 5})
+	p.Entity, p.Radius, p.Attack = 11, 4, component.CombatAttackExplosion
+	backing := p.Centers[:cap(p.Centers)]
+	ReleaseDeferredPayload(p)
+
+	// This serial test inspects the reset before any other consumer can acquire it.
+	want := ExplosionBatchRequestPayload{Centers: backing[:0]}
+	if !reflect.DeepEqual(*p, want) {
+		t.Fatalf("recycled explosion retains artifact state: %+v", *p)
+	}
+	if cap(p.Centers) != len(backing) || &p.Centers[:cap(p.Centers)][0] != &backing[0] {
+		t.Fatal("recycling discarded the centers' backing storage")
+	}
 }
 
 // checkEncodable walks a payload type and flags any nested struct the encoder

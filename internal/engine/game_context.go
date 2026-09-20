@@ -16,7 +16,7 @@ import (
 
 const (
 	AutoFireOff uint32 = iota
-	AutoFireCleaner
+	AutoFireMain
 	AutoFireBoth
 )
 
@@ -84,7 +84,7 @@ type GameContext struct {
 	MouseFreeMode atomic.Bool // Free cursor movement (motion tracking)
 	MouseDisabled atomic.Bool // All mouse input ignored
 
-	AutoFire atomic.Uint32 // AutoFireOff, AutoFireCleaner, or AutoFireBoth
+	AutoFire atomic.Uint32 // AutoFireOff, AutoFireMain, or AutoFireBoth
 
 	// === Main-Loop Exclusive ===
 

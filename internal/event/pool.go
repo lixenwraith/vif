@@ -55,12 +55,7 @@ var explosionBatchRequestPool = sync.Pool{
 
 // AcquireExplosionBatchRequest returns a pooled payload with a zero-length retained-capacity slice
 func AcquireExplosionBatchRequest() *ExplosionBatchRequestPayload {
-	p := explosionBatchRequestPool.Get().(*ExplosionBatchRequestPayload)
-	p.Centers = p.Centers[:0]
-	p.Entity = 0
-	p.Radius = 0
-	p.Attack = component.CombatAttackNone
-	return p
+	return explosionBatchRequestPool.Get().(*ExplosionBatchRequestPayload)
 }
 
 // ReleaseExplosionBatchRequest returns payload to pool
@@ -68,7 +63,8 @@ func ReleaseExplosionBatchRequest(p *ExplosionBatchRequestPayload) {
 	if p == nil {
 		return
 	}
-	p.Centers = p.Centers[:0]
+	// A recycled crossing ID would seed the next user's knockback from another run.
+	*p = ExplosionBatchRequestPayload{Centers: p.Centers[:0]}
 	explosionBatchRequestPool.Put(p)
 }
 

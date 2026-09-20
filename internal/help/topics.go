@@ -79,7 +79,7 @@ var topics = []topicDef{
 			{Actions: []string{"fire_special"}, All: true, Desc: "Convert matching dark glyphs and detonate dust; spends 1 heat"},
 			{Actions: []string{"nugget_jump"}, Desc: "Jump to the nearest nugget"},
 			{Actions: []string{"gold_jump"}, Desc: "Jump to the nearest gold glyph"},
-			{Actions: []string{"toggle_auto_fire"}, Desc: "Cycle auto-fire: both weapons, off, cleaner only"},
+			{Actions: []string{"toggle_auto_fire"}, Desc: "Cycle auto-fire: both weapons, off, main only"},
 		},
 	},
 	{
@@ -158,7 +158,7 @@ var topics = []topicDef{
 			{Keys: ":q", Desc: "Quit"},
 			{Keys: ":content", Desc: "Corpus source, file counts and served blocks in the status bar"},
 			{Keys: ":free [on|off]", Desc: "Track the cursor with mouse motion; on by default"},
-			{Keys: ":auto [on|off|cleaner]", Desc: "Cycle or set auto-fire; both weapons by default"},
+			{Keys: ":auto [on|off|main]", Desc: "Cycle or set auto-fire; both weapons by default"},
 			{Keys: ":mouse enable|disable|free", Desc: "Pointer master switch"},
 			{Keys: ":host <addr>", Desc: "Open this running game to participants, e.g. :host :7777; they join at the current tick"},
 			{Keys: ":session", Desc: "Report the session role, address, participant identity, peers and tick"},

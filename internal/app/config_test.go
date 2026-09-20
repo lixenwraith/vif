@@ -1,8 +1,15 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/input"
+	"github.com/lixenwraith/vi-fighter/internal/paths"
 )
 
 func TestNetworkSessionConfigValidation(t *testing.T) {
@@ -61,5 +68,43 @@ func TestHeadlessSessionRequiresTheScriptGate(t *testing.T) {
 	_, err := NewHeadless(Config{HostAddress: ":7777"})
 	if err == nil || !strings.Contains(err.Error(), "RunScript") {
 		t.Fatalf("NewHeadless() error = %v, want RunScript gate", err)
+	}
+}
+
+func TestInstalledKeymapMigratesRetiredAppendBinding(t *testing.T) {
+	t.Parallel()
+	cfg := scriptConfig(fixtureSeed)
+	cfg.Resources.Dir = t.TempDir()
+	path := filepath.Join(cfg.Resources.Dir, paths.InputDirName, paths.KeymapConfigFile)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("[normal]\na = \"append\"\nh = \"motion_right\"\nv = \"none\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatalf("installed keymap: %v", err)
+	}
+	defer a.Close()
+	tickUntilCursor(t, a)
+	before, _ := a.World().LocalCursor()
+	a.Inject(a.inputMachine.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'a'}))
+	after, _ := a.World().LocalCursor()
+	if a.Context().AutoFire.Load() != engine.AutoFireOff || a.Context().IsInsertMode() || after != before {
+		t.Fatal("retired append binding did not cycle auto-fire without moving or entering Insert")
+	}
+	kt := a.Context().KeyTable
+	if kt.NormalRunes['h'].Motion != input.MotionRight || kt.NormalRunes['l'].Motion != input.MotionRight {
+		t.Fatal("custom binding or default fallback was lost")
+	}
+	if _, bound := kt.NormalRunes['v']; bound {
+		t.Fatal("explicit unbinding was lost")
+	}
+	if err := os.WriteFile(path, []byte("[normal]\na = \"unknown_action\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.loadKeymap(); err == nil || !strings.Contains(err.Error(), "unknown_action") {
+		t.Fatalf("unknown action was not rejected: %v", err)
 	}
 }

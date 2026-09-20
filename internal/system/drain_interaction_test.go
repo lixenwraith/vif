@@ -253,16 +253,36 @@ func beginDrainTick(t *testing.T, drains *DrainSystem) {
 	}
 }
 
-func TestDrainPopulationUsesCeilingWithoutOverheat(t *testing.T) {
+func TestDrainPopulationScalesToTenWithoutOverheat(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	drains := NewDrainSystem(w).(*DrainSystem)
 	for _, tc := range []struct{ heat, want int }{
-		{-1, 0}, {0, 0}, {1, 1}, {99, 1}, {100, 1}, {101, 2}, {1000, 10}, {1001, 10},
+		{-1, 0}, {0, 0}, {1, 1}, {9, 1}, {10, 1}, {11, 2}, {50, 5}, {90, 9}, {91, 10}, {100, 10}, {101, 10},
 	} {
 		w.Components.Heat.SetComponent(cursor, component.HeatComponent{Current: tc.heat, Overheat: 99})
 		if got := drains.calcTargetDrainCount(); got != tc.want {
 			t.Fatalf("heat %d plus overheat: drains=%d, want %d", tc.heat, got, tc.want)
 		}
+	}
+	w.Components.Heat.SetComponent(cursor, component.HeatComponent{Current: 100, Overheat: 99})
+	drains.reconcilePopulation()
+	if len(drains.pendingSpawns) != 10 {
+		t.Fatalf("heat 100 queued %d drains, want 10", len(drains.pendingSpawns))
+	}
+	w.Resources.Game.State.SetGameTicks(uint64(parameter.DrainSpawnStaggerTicks * 10))
+	drains.reconcilePopulation()
+	spawns := append([]pendingDrainSpawn(nil), drains.pendingSpawns...)
+	for _, spawn := range spawns {
+		if !spawn.materializeStarted {
+			t.Fatal("due drain did not start materializing")
+		}
+		drains.HandleEvent(event.GameEvent{Type: event.EventMaterializeComplete,
+			Payload: &event.MaterializeCompletedPayload{X: spawn.targetX, Y: spawn.targetY, Type: component.SpawnTypeDrain}})
+	}
+	drains.cacheDrainData()
+	drains.reconcilePopulation()
+	if got := drains.liveDrainCount(); got != 10 || len(drains.pendingSpawns) != 0 {
+		t.Fatalf("heat 100: live=%d pending=%d, want 10/0", got, len(drains.pendingSpawns))
 	}
 }
 

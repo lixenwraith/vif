@@ -326,18 +326,18 @@ func handleAutoCommand(ctx *engine.GameContext, args []string) CommandResult {
 			next = engine.AutoFireBoth
 		case "off":
 			next = engine.AutoFireOff
-		case "cleaner":
-			next = engine.AutoFireCleaner
+		case "main", "cleaner":
+			next = engine.AutoFireMain
 		default:
 			valid = false
 		}
 	}
 	if !valid {
-		setCommandError(ctx, "Usage: :auto [on|off|cleaner]")
+		setCommandError(ctx, "Usage: :auto [on|off|main]")
 		return CommandResult{Continue: true}
 	}
 	ctx.AutoFire.Store(next)
-	word := [...]string{"off", "cleaner", "on"}[next]
+	word := [...]string{"off", "main", "on"}[next]
 	ctx.SetStatusMessage("Auto: "+word, parameter.StatusMessageDefaultTimeout, false)
 	ctx.SetLastCommand(":auto " + word)
 	return CommandResult{Continue: true}

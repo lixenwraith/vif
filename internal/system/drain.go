@@ -384,7 +384,7 @@ func (s *DrainSystem) detectSwarmFusions() {
 		drainB := enragedDrains[1]
 		enragedDrains = enragedDrains[2:]
 
-		s.world.PushEvent(event.EventFuseSwarmRequest, &event.FuseSwarmRequestPayload{
+		s.world.PushLocal(event.EventFuseSwarmRequest, &event.FuseSwarmRequestPayload{
 			DrainA: drainA,
 			DrainB: drainB,
 			Effect: event.FuseEffectSpirit,
@@ -550,7 +550,9 @@ func (s *DrainSystem) calcTargetDrainCount() int {
 	if !ok || heat.Current <= 0 {
 		return 0
 	}
-	return min(1+(heat.Current-1)/parameter.DrainHeatPerEntity, parameter.DrainMaxCount)
+	// Scale the capped meter to the population cap, then round partial drains up.
+	scaled := min(heat.Current, parameter.HeatMax) * parameter.DrainMaxCount
+	return (scaled + parameter.HeatMax - 1) / parameter.HeatMax
 }
 
 // randomSpawnOffset returns a valid position with boundary-stretched offset

@@ -95,7 +95,7 @@ screen positions over the glyph grid.
 |---|---|
 | `Ctrl-Q`, `Ctrl-C` | Quit. |
 | `Ctrl-S` | Cycle audio mute state. |
-| `a` in Normal | Cycle auto-fire: both weapons → off → cleaner only. |
+| `a` in Normal | Cycle auto-fire: both weapons → off → main only. |
 | `Esc` | Cancel pending input or return toward Normal mode. |
 | Arrow keys | Move in the applicable mode. |
 | `Tab` | Jump to the active nugget. |
@@ -207,8 +207,8 @@ short toggle for free mouse motion. Input is ignored while suspended, in
 Command mode, or where pause/overlay policy blocks it.
 
 Automatic fire starts in both-weapons mode. `a` in Normal mode or bare `:auto`
-cycles both weapons → off → cleaner only → both weapons. `:auto on`, `:auto off`,
-and `:auto cleaner` select a state directly. Cleaner-only repeats the main-fire
+cycles both weapons → off → main only → both weapons. `:auto on`, `:auto off`,
+and `:auto main` select a state directly. Main-only repeats the main-fire
 path, including ready equipped weapons, without requesting special attacks.
 Manual and held-button attacks remain available in every state. Held-button and
 auto-fire deadlines share de-duplication within each cooldown slot. `a` remains
@@ -239,7 +239,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:help`, `:h`, `:?`; `:about` | Open overlays. |
 | `:content` | Show corpus telemetry. |
 | `:free [on\|off]` | Toggle or set free mouse. |
-| `:auto [on\|off\|cleaner]` | Cycle or set automatic fire. |
+| `:auto [on\|off\|main]` | Cycle or set automatic fire. |
 | `:mouse enable\|disable\|free` | Control terminal mouse input. |
 | `:host <addr>` | Open this running game to participants (`:host :7777`). Refused if the run is already in a session. |
 | `:session` | Report the session role, address, participant identity, its cursor slot, peer count and tick. |
@@ -312,8 +312,10 @@ Resolution order is:
 3. the same under the user root, then under each system root;
 4. the embedded `internal/asset/input/keymap.toml` document.
 
-The exact embedded document is installed to the user input directory by
-`make install-config`, so the editable and WASM-safe defaults cannot drift. See
+`make install-config` installs the embedded document without overwriting existing
+user files. Existing `append` bindings are normalized to `toggle_auto_fire` when
+loaded, so installed keymaps select the new action without restoring Insert-mode
+append behavior. Other custom bindings are preserved. See
 [External filesystem layout](filesystem-layout.md) for the shared root policy.
 
 An override is sparse: unspecified bindings retain defaults. The accepted TOML

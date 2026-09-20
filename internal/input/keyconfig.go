@@ -158,6 +158,10 @@ func resolveRune(s string) (rune, error) {
 // resolveAction converts an action name string to a KeyEntry
 func resolveAction(name string) (KeyEntry, error) {
 	name = strings.ToLower(strings.TrimSpace(name))
+	// Installed keymaps retain retired names; normalize them before strict validation.
+	if name == "append" {
+		name = "toggle_auto_fire"
+	}
 	entry, ok := ActionEntry(name)
 	if !ok {
 		return KeyEntry{}, fmt.Errorf("unknown action: %q", name)

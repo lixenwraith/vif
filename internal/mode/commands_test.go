@@ -55,7 +55,7 @@ func TestAutoFireCycleRoutesOnlySelectedWeapons(t *testing.T) {
 	}{
 		{engine.AutoFireBoth, true, true},
 		{engine.AutoFireOff, false, false},
-		{engine.AutoFireCleaner, true, false},
+		{engine.AutoFireMain, true, false},
 		{engine.AutoFireBoth, true, true},
 	} {
 		if ctx.AutoFire.Load() != tc.state {
@@ -88,13 +88,17 @@ func TestAutoFireCycleRoutesOnlySelectedWeapons(t *testing.T) {
 		command string
 		state   uint32
 	}{
-		{"auto cleaner", engine.AutoFireCleaner}, {"auto on", engine.AutoFireBoth},
-		{"auto off", engine.AutoFireOff}, {"auto", engine.AutoFireCleaner},
-		{"auto invalid", engine.AutoFireCleaner}, {"auto on extra", engine.AutoFireCleaner},
+		{"auto main", engine.AutoFireMain}, {"auto on", engine.AutoFireBoth},
+		{"auto off", engine.AutoFireOff}, {"auto", engine.AutoFireMain},
+		{"auto cleaner", engine.AutoFireMain},
+		{"auto invalid", engine.AutoFireMain}, {"auto on extra", engine.AutoFireMain},
 	} {
 		mode.ExecuteCommand(ctx, tc.command)
 		if ctx.AutoFire.Load() != tc.state {
 			t.Fatalf("%q selected %d, want %d", tc.command, ctx.AutoFire.Load(), tc.state)
+		}
+		if tc.state == engine.AutoFireMain && ctx.GetLastCommand() != ":auto main" {
+			t.Fatalf("main-fire command label = %q", ctx.GetLastCommand())
 		}
 	}
 	machine.SetMode(input.ModeInsert)

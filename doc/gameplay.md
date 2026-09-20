@@ -245,8 +245,8 @@ because those values are expected to change during tuning.
 
 Main fire has its own cooldown. It emits a directional cleaner colored by
 energy polarity and asks every owned, ready weapon to fire. Automatic fire
-starts with main and special enabled; `a` cycles both → off → cleaner only.
-Cleaner-only repeats the main-fire path without special attacks.
+starts with main and special enabled; `a` cycles both → off → main only.
+Main-only repeats the main-fire path without special attacks.
 
 Special fire converts all loose, living Player-domain **dark** green glyphs plus
 dark blue glyphs for nonnegative energy or dark red glyphs for negative energy.
@@ -286,7 +286,7 @@ a blocked cleaner drains to its stop point.
 
 | Actor | Current design role |
 |---|---|
-| Drain | Local population is `min(10, ceil(current heat / 100))`, excluding overheat: with the current 100-point cap, one drain from the first heat point. Materializes, chases, drains shield energy, and removes heat on unshielded contact. |
+| Drain | Local population is `ceil(current heat × 10 / 100)`, capped at 10 and excluding overheat: heat 0 gives 0; 1–10 gives 1; 11–20 gives 2; 91–100 gives 10. Materializes, chases, drains shield energy, and removes heat on unshielded contact. |
 | Quasar | Large composite, 5 cells wide by 3 high. Tracks the cursor and emits lightning when the cursor leaves its effective range. It is created by fusing drains in the default progression. |
 | Swarm | Fast composite, 4 cells wide by 2 high, created from enraged drains. It tracks/charges, may teleport around blocked line of sight, absorbs drains, and has bounded charges/lifetime. |
 | Storm | Multi-part boss with independently moving circles and 3D orbital dynamics. The green circle pulses an area, the red circle tracks the nearest cursor with directional bullet bursts, and the blue circle creates swarm pressure. |
