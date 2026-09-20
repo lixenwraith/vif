@@ -31,7 +31,7 @@ make allocator
 The production service reads a short-lived ServiceAccount token from a file on
 every Kubernetes request, so the root-owned token timer can replace that file
 atomically without restarting the allocator. See
-[`doc/kube_docker_deploy.md`](../../doc/kube_docker_deploy.md#11-the-allocator).
+[`doc/kube-docker-deploy.md`](../../doc/kube-docker-deploy.md#11-the-allocator).
 
 ## HTTP API
 
@@ -78,6 +78,13 @@ both open only as far as an operator sets them. A value outside them is refused 
 `id` is the session's stable public identifier. `page_url` and `join_target` are
 opaque strings this allocator produces: no caller may rebuild either from `port`,
 because path-routed sessions will key both on the identifier instead.
+
+The chosen browser path is `wss://lixen.com/vif/ws/<session>`, but it is not an API
+implemented by the allocator yet. Once `vif` has a native WebSocket listener, the
+allocator will reconcile a session ID to its ready pod and reverse-proxy that
+Upgrade to the private listener. It will validate the same-origin request and
+session state and will not translate WebSocket to TCP or accept an arbitrary
+upstream from the caller. The ordered work is tracked in `doc/todo.md`.
 
 The allocator deliberately exposes no public delete endpoint: this API is
 anonymous behind the site, and one player must not be able to terminate another

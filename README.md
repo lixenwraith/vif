@@ -74,8 +74,9 @@ Primary native targets are Linux and FreeBSD. The repository also contains a
 constrained xterm.js/WASM build and an experimental Windows cross-build. The
 WASM client is currently solo: browser JavaScript cannot open the framed TCP
 socket used by native sessions. See the
-[build and platform analysis](doc/multi-platform.md) for WebSocket options,
-browser arguments, external assets, and the future renderer boundary.
+[build and platform analysis](doc/multi-platform.md) for the chosen native
+WebSocket path, browser arguments, external assets, and the future renderer
+boundary.
 
 ## Configuration and tools
 
@@ -150,8 +151,11 @@ per player request: a `scratch` image of the static `vif_headless` non-root bina
 a namespace capped at ten concurrent sessions, default-deny network policy, a
 per-session Job and Service, and one node log reader behind the allocator. The
 image is built by `make image`; the installation and operating procedure is
-[doc/kube_docker_deploy.md](doc/kube_docker_deploy.md) and the design and work list
+[doc/kube-docker-deploy.md](doc/kube-docker-deploy.md) and the design and work list
 behind it is [doc/kubernetes-fleet.md](doc/kubernetes-fleet.md).
+The nightly workflow publishes downloadable Linux, FreeBSD, browser, and headless
+server archives plus the headless container image; see
+[doc/packaging.md](doc/packaging.md).
 
 `test/scenario.sh` runs named game setups for verifying behaviour by hand —
 `solo`, `host`/`join`, `serve`, `serve-fleet`, `probe`, and automated checks for the

@@ -97,7 +97,7 @@ spec:
             - ":7778"
             # No -name: a session is reached by its own port, so a player's link
             # names nothing and a pod that demanded a name would refuse every dial.
-            # It belongs to the front-door alternative; see doc/kubernetes-fleet.md §9.
+            # Browser routing uses its own WebSocket path; see doc/kubernetes-fleet.md §9.
             #
             # Stated rather than inherited from the -serve default: losing this pod
             # ends the match. The Job never replaces its in-memory world, and guests

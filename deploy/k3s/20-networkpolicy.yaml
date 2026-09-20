@@ -25,7 +25,7 @@ spec:
 # What it does is confine the reachable surface to one port on one workload, so
 # that everything else in the namespace stays unreachable even from a source that
 # is allowed to play. Restricting *who* may reach 7777 is the firewall's job on the
-# FreeBSD host and the node; see doc/kube_docker_deploy.md §2.
+# FreeBSD host and the node; see doc/kube-docker-deploy.md §2.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

@@ -1,0 +1,135 @@
+name: Nightly Release
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  GO_VERSION: '1.27.1'
+
+jobs:
+  artifacts:
+    name: Build downloadable artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Refresh generated registries
+        run: go generate ./internal/event ./internal/manifest
+
+      - name: Build archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist stage/linux-amd64 stage/linux-amd64-headless \
+            stage/freebsd-amd64 stage/web
+
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -trimpath -ldflags='-s -w' -o stage/linux-amd64/vif ./cmd/vif
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -trimpath -tags=vif_headless -ldflags='-s -w' \
+            -o stage/linux-amd64-headless/vif ./cmd/vif
+          CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 \
+            go build -trimpath -ldflags='-s -w' -o stage/freebsd-amd64/vif ./cmd/vif
+          GOOS=js GOARCH=wasm \
+            go build -trimpath -tags=vif_noaudio -ldflags='-s -w' \
+            -o stage/web/vif.wasm ./cmd/vif
+
+          for target in linux-amd64 linux-amd64-headless freebsd-amd64; do
+            cp README.md LICENSE "stage/$target/"
+            tar -C "stage/$target" -czf "dist/vi-fighter-nightly-$target.tar.gz" .
+          done
+          cp -R web/. stage/web/
+          tar -C stage/web -czf dist/vi-fighter-nightly-web.tar.gz .
+          (cd dist && sha256sum vi-fighter-nightly-* > SHA256SUMS)
+
+      - name: Upload release payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-release
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  image:
+    name: Publish headless container
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push headless image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            VERSION=nightly
+            REVISION=${{ github.sha }}
+          tags: |
+            ghcr.io/${{ github.repository }}:nightly
+            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+
+  release:
+    name: Update nightly prerelease
+    needs: [artifacts, image]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download release payload
+        uses: actions/download-artifact@v4
+        with:
+          name: nightly-release
+          path: dist
+
+      - name: Move nightly tag and publish assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag --force nightly "$GITHUB_SHA"
+          git push origin refs/tags/nightly --force
+
+          notes="Automated build of ${GITHUB_SHA}. The Linux server archive and GHCR image use the vif_headless profile."
+          if gh release view nightly >/dev/null 2>&1; then
+            gh release upload nightly dist/* --clobber
+            gh release edit nightly --title 'Nightly build' --notes "$notes" --prerelease
+          else
+            gh release create nightly dist/* --target "$GITHUB_SHA" \
+              --title 'Nightly build' --notes "$notes" --prerelease
+          fi

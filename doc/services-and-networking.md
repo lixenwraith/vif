@@ -87,9 +87,11 @@ audio capabilities, then build capabilities constrain them further. A
 builds have no audio adapter. Native networking is role-selected separately:
 play constructs the no-op-capable socket adapter, while an authored headless
 script constructs it only for `-host`/`-join`. Browser session flags are rejected
-because their required WebSocket adapter does not yet exist. Replay input controls
-playback rather than the mode router, and its terminal resize affects presentation
-rather than recorded geometry.
+because their required native WebSocket adapter does not yet exist. The planned
+same-origin route is `wss://lixen.com/vif/ws/<session>` through the allocator to a
+private pod listener; native clients retain raw TCP. Replay input controls playback
+rather than the mode router, and its terminal resize affects presentation rather
+than recorded geometry.
 
 Content and audio details are covered in
 [Content, assets, and tools](content-assets-and-tools.md) and

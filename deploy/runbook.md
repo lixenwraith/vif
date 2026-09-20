@@ -1,7 +1,7 @@
 # Node runbook
 
 Day-to-day operations on the K3s node, from the vi-fighter repository root.
-[`../doc/kube_docker_deploy.md`](../doc/kube_docker_deploy.md) commissions a node;
+[`../doc/kube-docker-deploy.md`](../doc/kube-docker-deploy.md) commissions a node;
 this page is what you run afterwards. Every command here is the canonical one — if
 the procedure shows a longer variant, it is proving something extra.
 
@@ -95,6 +95,9 @@ allocator is down, and the stream stops while LogWisp restarts.
 ./deploy/guest/update-vif-image.sh v1.2.3       # session image, explicit tag
 ```
 
+The image updater accepts only the Dockerfile's OCI `headless` build profile, so
+every subsequently allocated pod omits terminal presentation and audio code.
+
 The allocator and image updaters check for an idle fleet but do not empty one —
 drain first. The LogWisp one does not touch K3s or the allocator, so on a fleet
 node stop allocation around it yourself:
@@ -167,4 +170,4 @@ commissioning operation, not an operational one, and
 
 After any change to a live workload, allocator binary, Role, mount or logging
 service, finish with
-[§13 of the procedure](../doc/kube_docker_deploy.md#13-first-session).
+[§13 of the procedure](../doc/kube-docker-deploy.md#13-first-session).

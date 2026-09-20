@@ -8,18 +8,104 @@ code-originated item names its source here.
 Priorities: P0 blocks a release, P1 is wanted next, P2 is convenient follow-up,
 and P3 is an idea.
 
+## Browser sessions and mobile
+
+### Add the native WebSocket transport
+
+- Priority: P0
+- Affected files: `internal/network`, `internal/app`, `internal/engine`, browser
+  launch code
+- Prerequisite: generalize lobby and session composition away from the concrete
+  `network.SocketPort`
+
+Implement binary WebSocket as a second `engine.NetworkPort` adapter while keeping
+the existing framed TCP adapter for native clients. The pod must speak WebSocket
+itself; do not put a WebSocket-to-TCP translation layer between the allocator and
+the game. Preserve frame and queue bounds, timeouts, close propagation,
+backpressure, and the current handshake before enabling `-join` in WASM.
+
+### Expand vif-allocator into the browser session adapter
+
+- Priority: P0
+- Affected files: `tool/vif-allocator`, `deploy/k3s`,
+  `deploy/website/vif.nginx.example`
+- Prerequisite: the pod-native WebSocket listener above
+
+Build the public path in this order:
+
+1. Reconcile each live session identifier to its one ready pod IP and private
+   WebSocket port; Kubernetes objects remain the authority after restart.
+2. Accept only an Upgrade request at the final route
+   `/vif/ws/<session>`; this endpoint's scope has no version segment.
+3. Validate method, session syntax, same-origin `Origin`, liveness, readiness,
+   connection ceiling, and handshake deadline before upgrading; callers never
+   select an upstream address.
+4. Reverse-proxy the upgraded connection to that pod's native WebSocket listener
+   with bounded buffers and coupled cancellation when either side or the session
+   ends; do not translate it to TCP.
+5. Add the private container port and the narrow ingress policy needed for the
+   node allocator, without publishing another NodePort; retain raw TCP for native
+   clients.
+6. Return `wss://lixen.com/vif/ws/<session>` for browser launch and pass it through
+   the existing page-to-WASM argument bridge, then verify the production TLS/CSP
+   path under slow links, tab suspension, reconnects, and session expiry.
+
+At that point allocation, routing, and admission are separate interfaces inside
+one process. Reassess the `vif-allocator` name and split boundary before adding
+more control-plane duties.
+
+### Add browser admission authentication
+
+- Priority: P1
+- Affected files: allocator/session adapter, website, future authentication
+  dependency
+- Prerequisite: the unauthenticated native WebSocket path is bounded and measured
+
+Issue a short-lived, session-scoped admission credential after authentication and
+consume it during the WebSocket handshake without putting it in page history or
+logs. Decide whether the expanded allocator remains the credential boundary or is
+renamed/split before adding the planned `github.com/lixenwraith/auth`
+Argon2-SCRAM dependency.
+
+### Add verified downloadable content bundles
+
+- Priority: P1
+- Affected files: resource providers, browser/native admission, release assets
+- Prerequisite: decide the bundle format, compressed/expanded size limits,
+  publisher trust, allowed origins, and cache policy
+
+Use the nightly release page as the first consistent download surface, then add one
+content-addressed manifest and provider for native and browser clients. Download
+and verify the host-selected bundle before constructing a replacement `App`; do
+not put content bytes on the simulation channel or in CLI arguments.
+
+### Extract the renderer-neutral Android host model
+
+- Priority: P1
+- Affected files: terminal-shaped input/cell/color values, `internal/app`, host
+  entry points
+- Prerequisite: define the minimum visual and semantic-input contract for the app
+
+Target a minimally polished Android build within one month of development time.
+Move terminal-specific visual and input values behind positive renderer/host
+adapters, add a library entry point, and keep lifecycle, simulation, networking,
+and resource providers common.
+
 ## Packaging
 
 Distribution-specific detail lives in [Packaging](packaging.md).
 
-### Publish the first release
+### Promote a nightly build to the first stable release
 
 - Priority: P0
-- Affected files: release artifacts and `doc/packaging.md`
-- Prerequisite: choose a release commit after the complete verification gate
+- Affected files: `.github/workflows/nightly.yml`, release artifacts and
+  `doc/packaging.md`
+- Prerequisite: choose a nightly commit after the complete verification gate
   passes
 
-Tag `v0.1.0` and publish a byte-stable source tarball with its checksum.
+Promote the selected commit to `v0.1.0` and publish a byte-stable source tarball
+with its checksum. Keep the moving nightly prerelease and headless GHCR image as
+development artifacts rather than treating them as the stable source archive.
 
 ### Install a manual page
 
@@ -336,7 +422,7 @@ materialization, stagger timing, and failed-placement backoff.
 idle-expires a connected viewer and evicts it on the next session's first record,
 and a session crossing the 8 MiB file cap still replays its rotated log whole,
 spending the rate limit on duplicates while live records drop.
-[Deploying the session fleet](kube_docker_deploy.md) §10 states what the pin must
+[Deploying the session fleet](kube-docker-deploy.md) §10 states what the pin must
 carry.
 
 ### Render the session log level from the template

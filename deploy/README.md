@@ -2,7 +2,7 @@
 
 The container image, the K3s objects an allocated session is made of, and the
 node-side files that carry them. The procedure that installs them, in order, is
-[doc/kube_docker_deploy.md](../doc/kube_docker_deploy.md) — **start there** — and
+[doc/kube-docker-deploy.md](../doc/kube-docker-deploy.md) — **start there** — and
 the design and open work behind it are
 [doc/kubernetes-fleet.md](../doc/kubernetes-fleet.md).
 
@@ -22,9 +22,8 @@ the design and open work behind it are
 | `guest/` | The node's identities, mounts, units and update helpers, and how to back one out. See [`guest/README.md`](guest/README.md). |
 | `logwisp/REVISION` | Exact upstream LogWisp source revision used for the standalone node binary. It must be reachable from upstream `main`; a pull-request head does not survive a squash merge. |
 | `logwisp/aggregator.toml` | Standalone raw file-source pipeline over `/var/log/vif-fleet/*.jsonl`, with bounded flow/clients and a loopback-only HTTP sink. |
-| `website/vif.nginx.example` | Public edge for the two allocator API routes: finite timeouts for create/list, and an unbuffered, uncached, long-read location for the SSE stream. Placeholders only; the probe endpoints are not published. |
+| `website/vif.nginx.example` | Public edge for the allocator API and SSE routes, plus the prepared native-WebSocket Upgrade route. Placeholders only; the probe endpoints are not published. |
 | `website/vif-log-viewer.html` / `.js` | Bounded same-origin browser reference for `/vif/api/logs`. Caps rendered rows, its pending render queue, and its duplicate fingerprint set; it reaches nothing but its own origin. The script is a separate file because a site that forbids inline script would otherwise silently not run it. |
-| `frontdoor/haproxy.cfg` | Not deployed. The worked alternative: every session behind one public port, routed on the name a dialer sends before the handshake. Kept for the routing question in the fleet plan §9; the deployed shape reaches a session on its own port. |
 
 Nothing here installs itself. Once installed, the allocator creates a session only
 when a player asks for one; between requests, the namespace holds no pods.

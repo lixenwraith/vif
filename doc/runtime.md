@@ -202,7 +202,7 @@ Why the process holds this rather than the orchestrator: the roster is the only
 thing that knows whether anybody is in the session, and it is inside the process. A
 `Job` with an `activeDeadlineSeconds` can end a session on a wall clock; nothing
 outside can end one on emptiness. See
-[Deploying the session fleet](kube_docker_deploy.md).
+[Deploying the session fleet](kube-docker-deploy.md).
 
 ```bash
 ./bin/vif -serve :7777 -probe :7778 -log-stdout -lv info \

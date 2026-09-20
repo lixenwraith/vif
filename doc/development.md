@@ -341,7 +341,7 @@ false, dials refused, existing gameplay untouched — for up to the third. One
 `session ended` log line names which of those happened. The flags are refused
 outside `-serve`; the policy is `internal/lifecycle` and the phases are documented
 in [Runtime](runtime.md) §1.2. This is what `deploy/` runs; see
-[Deploying the session fleet](kube_docker_deploy.md).
+[Deploying the session fleet](kube-docker-deploy.md).
 
 `-players` is a ceiling on every host shape and unset means the whole roster: the
 session starts on its first guest and takes the rest through the mid-run gate, so
@@ -451,7 +451,8 @@ It covers race-enabled tests, package compilation, `novlog`, `vif_noaudio`,
 `vif_headless`, `js/wasm`, `windows/amd64`, and vet. The audio-free internal suite
 and the headless manifest/system suites also run under their tags. Verification
 does not execute a real Windows artifact or exercise a real terminal/audio
-backend. Dependency assertions fail if the headless command regains
+backend. Windows is a best-effort cross-build rather than a supported release
+target. Dependency assertions fail if the headless command regains
 renderer/audio packages or the browser command regains the audio implementation.
 
 The Go test suite covers `cmd/vif`, `cmd/soundlab`, the
@@ -514,7 +515,7 @@ For audio documents, use `soundlab validate`; for visual behavior, exercise the
 blend tester and both color modes. Runtime terminal interactions still need a
 manual smoke test because unit tests do not reproduce every emulator.
 
-## 6. Current CI workflow
+## 6. Current CI workflows
 
 `.github/workflows/test.yml` runs on pushes to selected development branches
 and pull requests to `main`, `master`, or `develop`. Its single Go 1.27.1 job
@@ -524,8 +525,14 @@ are uploaded for seven days on failure.
 
 CI does not run generation followed by a clean-tree check, the profile build
 matrix, Windows cross-compilation, or terminal/audio smoke tests. `make verify`
-covers generation, race tests, the compile matrix, and vet locally; Windows and
-host-I/O behavior remain separate runtime validation work.
+covers generation, race tests, the compile matrix, and vet locally; host-I/O
+behavior remains separate runtime validation work.
+
+`.github/workflows/nightly.yml` runs daily and on manual dispatch. It builds
+downloadable Linux amd64, Linux amd64 headless, FreeBSD amd64, and browser
+archives with checksums, updates the moving `nightly` prerelease, and pushes the
+headless Dockerfile to GHCR as moving and commit-addressed tags. It does not turn
+the experimental Windows cross-build into a release target.
 
 ## 7. Platform matrix
 
@@ -534,7 +541,7 @@ host-I/O behavior remain separate runtime validation work.
 | Linux | Primary native target | Unix signals/crash reset; process audio backends; optional stderr fd capture. |
 | FreeBSD | Native target | Unix handling plus optional `/dev/dsp` OSS backend. |
 | `js/wasm` | Supported constrained build | xterm.js host, embedded FSM/content/keymap, audio omitted, `vlog` stub, no host discovery or raw socket transport. |
-| Windows amd64 | Experimental/untested cross-build | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; non-Unix crash path; terminal and TCP need live validation. |
+| Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; omitted from nightly releases and removable if field reports show it is broken. |
 | Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification. |
 
 ### WASM host
@@ -552,8 +559,8 @@ audio and logging compile out. Browser JavaScript cannot open the framed TCP
 socket used by native `-join`, so session flags fail validation until a WebSocket
 transport is provided. Arguments can select embedded behavior but cannot turn a
 URL into a filesystem path. See
-[Build profiles and platform boundaries](multi-platform.md) for the
-WebSocket/gateway and HTTP resource-provider strategy.
+[Build profiles and platform boundaries](multi-platform.md) for the native
+WebSocket and HTTP resource-provider strategy.
 
 ## 8. Structured logging
 

@@ -100,6 +100,14 @@ docker build --network host \
 	--build-arg REVISION="$revision" \
 	-t "$local_image" .
 
+image_profile=$(docker image inspect \
+	--format '{{ index .Config.Labels "dev.lixenwraith.vi-fighter.build-profile" }}' \
+	"$local_image")
+if [ "$image_profile" != headless ]; then
+	echo "$0: refusing image with build profile '$image_profile' (expected headless)" >&2
+	exit 1
+fi
+
 # This is the same configuration check run by the pod's init container, without
 # giving the scratch image a writable root, capabilities or network access.
 docker run --rm --read-only --user 65532:65532 \

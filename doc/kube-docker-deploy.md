@@ -3,7 +3,7 @@
 A website asks for a game, one container appears on a K3s node, a player anywhere
 on the Internet dials it, and it ends itself when nobody is in it. This document is
 the whole of what you type to build that, in the order you type it. **It is the
-entry point for a new deployment.**
+authoritative entry point for a new deployment.**
 
 Three other files carry what this one deliberately does not repeat:
 [the fleet plan](kubernetes-fleet.md) holds the design, the measured cost and the
@@ -27,9 +27,9 @@ what that step should say.
 | D1 | **Every address here is an example** from the RFC 5737 documentation ranges and is meant to be substituted: `203.0.113.7` for the host's public address, `192.0.2.20` for the node, `192.0.2.1` for the host end of the bridge, `198.51.100.0/24` for jails already on the host. Nothing in this repository holds a real address. | §2 |
 | D2 | **`pf` owns the path and `ipfw` is not in it.** The rules below are FreeBSD's classic `rdr`/`nat` syntax. If the host's `pf.conf` is written in the newer `match … rdr-to` form, translate them rather than mixing the two — a ruleset with both is refused. | §2 |
 | D3 | **Existing jails already use `rdr` rules.** The fleet's port range must not collide with theirs and must be evaluated in the same pass, so §2 puts it in a named anchor. | §2 |
-| D4 | **A session is reached on its own port.** Ten NodePorts, one per container, forwarded as one range. It is the whole of the routing, and it is why the deployed session manifest sets no `-name`. The single-port alternative is worked but not taken; see the fleet plan §9. | §2 |
-| D5 | **The website path and the game connection are independent.** Pages and the allocator API are HTTPS through the site's nginx; the game is raw TCP straight to a forwarded port and never passes through nginx. Page TLS has no bearing on a join. | §2 |
-| D6 | **There is no authentication and no transport encryption, by decision.** Anyone who can reach a forwarded port can join the session behind it, and the link is public. What bounds a stranger is the forwarded surface being ten ports and nothing else (fleet plan §4). | §2 |
+| D4 | **A native client reaches a session on its own port.** Ten NodePorts, one per container, are forwarded as one range. It is why the deployed session manifest sets no `-name`; the planned browser route is separate (fleet plan §9). | §2 |
+| D5 | **Native and browser game paths differ.** Native framed TCP goes straight through `pf` and never enters Nginx. The planned browser path is same-origin WSS through Nginx and the allocator to a native WebSocket pod listener. | §2 |
+| D6 | **The current session transports are unauthenticated.** Anyone who can reach a forwarded port can join the session behind it. Browser admission authentication is planned after the bounded WSS path; until then the forwarded surface and application limits are the controls (fleet plan §4). | §2 |
 | D7 | **Docker is a build tool here, not a runtime.** K3s runs its own containerd. Docker exists on the node to build the image and is stopped afterwards, because its `iptables` rules and K3s's share one table. | §4 |
 | D8 | **Cluster commands run through `sudo kubectl`.** K3s is installed with kubeconfig mode `0640`; do not copy the node's root kubeconfig into a login user's home to avoid typing `sudo`. | §5 |
 | D9 | **The vi-fighter JSON line is the log contract.** Records originate in `internal/vlog` and every public hop preserves those bytes. No component parses, splices, or reserializes them, and nothing reads a Kubernetes pod log. | §7 |
@@ -42,21 +42,23 @@ what that step should say.
 ```mermaid
 flowchart TD
     Browser["Player's browser"] -->|"site pages + /vif/api"| Site["Front door: nginx, TLS"]
-    Site -->|"bridge only"| Alloc["Allocator on the node"]
+    Site -->|"API + planned WSS Upgrade"| Alloc["Allocator on the node"]
     Alloc -->|"Job + Service"| API["K3s API"]
     API --> Pod["vif -serve pod"]
     Alloc -->|"health"| Pod
     Term["Player's vif -join"] -->|"raw TCP, no nginx"| PF["pf rdr"] --> NP["NodePort"] --> Pod
+    Alloc -.->|"planned private WS"| Pod
     Pod -->|"JSONL through PVC"| Log["Capped tmpfs"]
     Log -->|"read-only files"| Wisp["LogWisp, loopback only"]
     Wisp -->|"SSE bytes"| Alloc
 ```
 
-Three facts this procedure turns on. The game transport is **raw framed TCP, not
-HTTP**, so nothing here is an Ingress and the game connection never enters nginx.
-A session is **a thing that ends**, so it is a Job and not a Deployment. There is
-**one node and one cluster**, so every Service, port and rule below has exactly one
-place to be.
+Three facts this procedure turns on. The currently deployed native game transport
+is **raw framed TCP, not HTTP**, so it is not an Ingress and never enters Nginx.
+The planned browser transport is explicitly different: native WebSocket in the pod,
+routed through the allocator. A session is **a thing that ends**, so it is a Job
+and not a Deployment. There is **one node and one cluster**, so every Service,
+port and rule below has exactly one place to be.
 
 A player is given two strings, and keeping them apart is the whole of the design:
 
@@ -64,6 +66,7 @@ A player is given two strings, and keeping them apart is the whole of the design
 |---|---|---|
 | `https://<site-host>/projects/vi-fighter/session/<id>/` | The shareable link: a page over TLS, served by the site's nginx. | A browser. |
 | `<site-host>:31703` | The join target: raw framed TCP straight to a forwarded port. | `vif -join`. |
+| `wss://lixen.com/vif/ws/<session>` | The final browser join target, planned but not implemented. | Browser WASM through the allocator. |
 
 The allocator produces both and they are opaque: `id` is a session's public
 identifier, and nothing else may rebuild `page_url` or `join_target` from a port,
@@ -131,11 +134,14 @@ Four requirements this has to keep meeting:
 | Leave `tcp.established` alone | A session holds one long-lived connection per player. The default is hours and the protocol heartbeats every ten seconds, so an idle mapping is not the failure mode — a *short* `set timeout tcp.established` is. |
 | Do not collide with the jails | `pfctl -s nat` shows every anchor's rules; check the range is unclaimed before loading it. |
 
-**The site's nginx has no part in this.** It terminates TLS for the pages and the
-two API routes (§12); the game ports are `rdr`ed past it in the kernel. Carrying
-them in nginx instead — one `stream { server { listen 31703; proxy_pass … } }` per
-port — works and costs the second row above: a `stream` proxy replaces the client's
-source address with the host's unless it is run transparently. Prefer the `rdr`.
+**The site's Nginx has no part in the native TCP path.** It terminates TLS for the
+pages and allocator routes (§12); the raw game ports are `rdr`ed past it in the
+kernel. Carrying those ports in Nginx instead — one
+`stream { server { listen 31703; proxy_pass … } }` per port — replaces the
+client's source address with the host's unless it is run transparently. Prefer the
+`rdr`. The planned WSS path does enter Nginx on 443, but only for TLS termination
+and HTTP Upgrade forwarding; the allocator and pod own session routing and the
+WebSocket protocol.
 
 ## 3. Node prerequisites
 
@@ -476,11 +482,15 @@ docker build --network host \
   --build-arg VERSION="$VIF_TAG" \
   --build-arg REVISION="$VIF_REVISION" \
   -t "vi-fighter:$VIF_TAG" .
+test "$(docker image inspect --format \
+  '{{ index .Config.Labels "dev.lixenwraith.vi-fighter.build-profile" }}' \
+  "vi-fighter:$VIF_TAG")" = headless
 make image-check IMAGE_TAG="$VIF_TAG"
 ```
 
 `image-check` runs vi-fighter's own `-check` as UID 65532, read-only, with no
-network and no capabilities.
+network and no capabilities. The OCI profile assertion prevents an interactive
+image from entering the fleet even if its binary also accepts `-serve`.
 
 With no registry (D10), import into the node's containerd and verify the name
 before stopping Docker. `IfNotPresent` in every session container is load bearing:
@@ -502,12 +512,13 @@ than asking an operator to repeat it piecemeal:
 ./deploy/guest/update-vif-image.sh v1.2.3      # or an explicit release tag
 ```
 
-It pauses an active allocator, starts Docker, restores `FORWARD ACCEPT`, builds and
-checks one image, imports it into K3s, updates `VIF_ALLOCATOR_IMAGE`, removes older
-vi-fighter image references, disables Docker and the distribution containerd, then
-restores the allocator. It refuses an occupied fleet deliberately: changing the
-configured image does not require killing a match, while deleting an image out from
-under one has no operational value.
+It pauses an active allocator, starts Docker, restores `FORWARD ACCEPT`, builds one
+image, verifies its `headless` OCI profile and runtime configuration, imports it
+into K3s, updates `VIF_ALLOCATOR_IMAGE`, removes older vi-fighter image references,
+disables Docker and the distribution containerd, then restores the allocator. It
+refuses an occupied fleet deliberately: changing the configured image does not
+require killing a match, while deleting an image out from under one has no
+operational value.
 
 For anything past the lab, publish the image and reference it **by digest**, not by
 tag. A tag can be moved; a session's logs then name a revision that is no longer
@@ -658,8 +669,10 @@ limits, terminates and garbage-collects every session; the allocator performs on
 the fixed transaction Kubernetes has no anonymous endpoint for — reserve a free
 NodePort, create one non-retryable Job, read its UID, create the owner-referenced
 Service, wait for a ready EndpointSlice and `live=true ready=true` from `/health`,
-and return the page URL, join target and state. Raw game traffic bypasses it
-entirely.
+and return the page URL, join target and state. Current raw native game traffic
+bypasses it. The planned browser transport expands this process into the
+session-aware WebSocket reverse proxy described in the fleet plan §9 and
+`doc/todo.md`; it remains unimplemented here.
 
 It runs on the node, and that is not an interchangeable placement (D11). K3s
 installs a node-local-source allowance before the pod policy path, so a process on
@@ -789,9 +802,10 @@ obligations are what keep that true:
 
 The allocator listens on `:9080` behind the node filter, which admits only the
 site's host. Publishing it means letting the TLS front door reach that port and
-mapping exactly two paths; `/healthz` and `/readyz` stay on the node.
+mapping the two live API paths; `/healthz` and `/readyz` stay on the node.
 [`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example) is the
-reference location set, with placeholders for the node address.
+reference location set, with placeholders for the node address and a prepared WSS
+block that remains disabled until the game and allocator work lands.
 
 ```nginx
 location = /vif/api/logs {
@@ -820,7 +834,35 @@ proxy setting.
 The browser calls `/vif/api/...` on the same origin as the page, which removes CORS
 from the design; do not replace it with `Access-Control-Allow-Origin: *`. The
 site's `Content-Security-Policy` needs `connect-src 'self'` for a same-origin
-`EventSource`, and nothing else is added.
+`EventSource`. The supplied policy already has that directive, and it also permits
+the same-origin `wss://lixen.com/vif/ws/<session>` connection.
+
+When the native WebSocket listener and allocator router are implemented, add the
+map in the `http` context and the location in this TLS `server` context:
+
+```nginx
+map $http_upgrade $vif_connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+location ~ "^/vif/ws/[0-9a-f]{16}$" {
+    proxy_pass http://192.0.2.20:9080;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $vif_connection_upgrade;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
+```
+
+Nginx terminates TLS and preserves the hop-by-hop Upgrade. It neither chooses a
+pod nor translates WebSocket messages to TCP: `vif-allocator` resolves the session
+and the `vif_headless` pod implements the protocol. The existing FreeBSD `pf`
+rules continue to carry native TCP independently.
 
 One page location serves every session, because the only thing that differs between
 them is the identifier in the path:
@@ -1003,8 +1045,8 @@ range; start at the EndpointSlice and walk outward with §16.
 
 What this deployment does not yet have is the fleet plan's
 [work list](kubernetes-fleet.md#3-work-list): handshake fuzz coverage (H1), a
-measured full-roster envelope (H3), the routing decision between the port range and
-a single front door (H8), and CI image delivery (H16).
+measured full-roster envelope (H3), the native browser WebSocket path, and
+digest-based promotion of the nightly headless image onto the node (H16).
 
 ## 16. Troubleshooting
 

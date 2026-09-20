@@ -5,7 +5,7 @@ for a game, one container appears, and it ends itself when nobody is in it.
 
 This is what the design is, what it cost when it was measured, and what is left.
 The procedure for installing it is
-[Deploying the session fleet](kube_docker_deploy.md); the objects are in
+[Deploying the session fleet](kube-docker-deploy.md); the objects are in
 [`deploy/`](../deploy/README.md); the scenarios that verify the process by hand are
 in [`test/`](../test/README.md).
 
@@ -20,19 +20,20 @@ in [`test/`](../test/README.md).
 | Drain | 20 s on `SIGTERM`, inside a 30 s termination grace period. A second signal exits at once. |
 | Trigger | `tool/vif-allocator`, a hardened node service, is the website-facing control-plane boundary. `deploy/k3s/session.sh` drives it from a shell and can also render the template directly. No session pod runs between requests. |
 | Image | `scratch` plus the static `vif_headless` binary (about 12 MiB in the reference build), non-root, read-only root filesystem, no shell. |
-| Transport | Raw framed TCP, one long-lived connection per player. Unauthenticated by decision (§4). |
-| Reached by | Its own port, from a forwarded ten-port range. The port is the whole of the routing: nothing in a plaintext game connection names a session, so a firewall's destination port is the only signal there is. |
+| Transport | Raw framed TCP today; the chosen browser path adds a native binary WebSocket listener without removing TCP (§9). Unauthenticated initially (§4). |
+| Reached by | Native clients use the forwarded ten-port range. Browser clients will use `wss://lixen.com/vif/ws/<session>` through the site and allocator to the selected pod (§9). |
 | Logs and metrics | Each Job writes `<session-id>.jsonl` through a Bound local PVC onto a 256 MiB node tmpfs. One standalone LogWisp node service, pinned by `deploy/logwisp/REVISION`, has a read-only view and a loopback-only listener; the allocator reverse-proxies its SSE bytes at `/vif/api/logs` without parsing a record. |
 | Public API | Exactly `/vif/api/sessions` and `/vif/api/logs`, over TLS through the site's front door. `/healthz`, `/readyz` and every other node port stay unreachable from outside. |
 
 ```mermaid
 flowchart LR
     Player["Player"] --> Site["Website"]
-    Site --> Alloc["Allocator"]
+    Site -->|"API + planned WSS"| Alloc["Allocator"]
     Alloc -->|"create Job + Service"| API["K3s API"]
     API --> Pod["vif -serve"]
     Site -->|"host:port"| Player
     Player -->|"vif -join, TCP"| NP["NodePort"] --> Pod
+    Alloc -.->|"planned private WS"| Pod
     Pod -->|"JSONL through PVC"| Logs["capped node tmpfs"]
     Logs -->|"read-only files"| Wisp["LogWisp, loopback"]
     Wisp -->|"SSE bytes"| Alloc
@@ -64,18 +65,17 @@ it does not move an in-memory session into an unrelated pod.
 | ID | Priority | Item | Done when |
 |---|---|---|---|
 | G | next | **Hand off a deployment a stranger can install.** The documentation reduction is done: the procedure, this plan, the artifact indexes and the runbook describe the deployed design rather than the batches that produced it. | Both rehearsals below reach a first session with no undocumented step, and every resource value in `deploy/k3s/30-session.yaml` cites a number from H3. |
-| G1 | next | **Rehearse from bare Arch Linux and from bare Ubuntu.** Record package and service differences, and fix every command that assumes the production node. | A second node reaches [§13 of the procedure](kube_docker_deploy.md#13-first-session) without a step its operator had to invent. |
+| G1 | next | **Rehearse from bare Arch Linux and from bare Ubuntu.** Record package and service differences, and fix every command that assumes the production node. | A second node reaches [§13 of the procedure](kube-docker-deploy.md#13-first-session) without a step its operator had to invent. |
 | H3 | next | **Measure a full roster.** Nine sessions driven by headless joiners for the fleet-level readings — CPU, memory, tmpfs, log rate, rotations — plus one real four-player session over real links, through a tower and a storm and on `wad/game/td`, for the hour that tick slips and correction magnitude need. | Requests and limits in `30-session.yaml` come from the four-player measurement rather than from single-guest history. |
 | H1 | partly done | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do has to be bounded. The two startup holes are closed: the tick-zero gate is bounded by one world install, a peer that leaves or goes silent costs the lobby rather than the session, and a confirmation is keyed to the link it arrived on. | Remaining: a handshake fuzz target for malformed, oversized, replayed and half-open cases, which `internal/network` has no equivalent of. |
-| H16 | later | **Automate image delivery.** `deploy/guest/update-vif-image.sh` is the repeatable manual boundary: one build/check/import, allocator image update, old-image cleanup, and build-daemon restoration. | CI resolves and verifies a tagged release artifact, invokes or reproduces that same boundary with no credential held outside the node, and new sessions use it while existing matches finish. |
-| H8 | later | **Revisit how a player reaches a session.** The port range is what runs: no component, ten firewall entries, and the player's source address verified at the pod. `-name` plus [`deploy/frontdoor`](../deploy/frontdoor/haproxy.cfg) is the worked single-port alternative (§9) and replaces the address the admission limiter is keyed on. | A third option is found, or the two known ones are chosen between on measurement rather than preference, and the decision is recorded as an ADR — whose home in `doc/` this item also has to choose, because none exists yet. |
-| H4 | partly done | **Server-only build.** `vif_headless` removes renderer and audio packages and is now used by the image. Terminal-shaped key, color, cell, and image values remain in common simulation/configuration packages. | Extract renderer-neutral values so the external terminal module also leaves the server dependency graph; keep the simulation fingerprint shared with clients. |
+| H16 | partly done | **Automate image delivery.** Nightly CI publishes the final headless Dockerfile to GHCR under moving and commit-addressed tags; `deploy/guest/update-vif-image.sh` still provides the checked local build/import boundary. | Choose the node's registry/promotion policy, authenticate pulls without a long-lived off-node deployment credential, and move new sessions to a verified digest while existing matches finish. |
+| H4 | partly done | **Server-only and renderer-neutral builds.** `vif_headless` removes renderer and audio packages and is used by the image. Terminal-shaped key, color, cell, and image values remain in common simulation/configuration packages. | Extract renderer-neutral values for a minimally polished Android host within one month of development time; keep the simulation fingerprint shared with clients. |
 | H5 | later | **Spatial grid right-sizing.** ~30.5 MiB reserved per world at the current maximum. | Deferred until density matters; needs resize/play regression coverage. |
 
 ### What the deployment batches established
 
 Each of these is now a property of the deployed node, verified by
-[§13 of the procedure](kube_docker_deploy.md#13-first-session) rather than by
+[§13 of the procedure](kube-docker-deploy.md#13-first-session) rather than by
 repeating its original gate.
 
 | Was | What it left behind |
@@ -94,17 +94,16 @@ repeating its original gate.
 
 | Was | Reason |
 |---|---|
-| F1 authentication | Deferred by decision. The website triggers a container and the player connects to it; neither hop is authenticated. Hardening (H1) is the requirement in its place, and it comes *before* any auth work, not after. |
-| F3 session credentials | The website and the container are joined by one commissioned endpoint. There is nothing for a credential to add that the endpoint's obscurity and H1's bounds do not. |
 | F11 `SIGHUP` reload | No reload contract is planned. `SIGHUP` terminates like any other signal, which is the documented behaviour. |
 | F12 match-complete exit | There is no gameplay terminal state and none is planned. A session ends on emptiness. If one ever exists it attaches to `lifecycle.Controller.Expire` and nothing else changes. |
 | H9 per-session LogWisp | The ten-session fan-in uses one standalone node service. The sidecar template, renderer branch and ConfigMap are removed; so are the pod-log follower, the allocator JSON splicer and the allocator-owned LogWisp. None of them is a fallback. |
 
 ## 4. Security posture
 
-The game port is **open and unauthenticated, by decision**. Anyone who can reach it
-can join a session and influence its Shared world. That is accepted; what is not
-accepted is a stranger being able to do anything *worse* than play.
+The game port is **open and initially unauthenticated**. Anyone who can reach it
+can join a session and influence its Shared world. Browser admission authentication
+is planned after the bounded WebSocket path; until then, what is not accepted is a
+stranger being able to do anything *worse* than play.
 
 What already bounds a stranger:
 
@@ -141,7 +140,7 @@ What already bounds a stranger:
 
 What remains unbounded is fuzz coverage for a malformed, oversized, replayed or
 half-open handshake (H1). The firewall requirements in
-[Deployment §2](kube_docker_deploy.md#2-the-public-edge-forward-the-range) are what
+[Deployment §2](kube-docker-deploy.md#2-the-public-edge-forward-the-range) are what
 stand in front of the rest: the forwarded surface is the ten-port NodePort range and
 nothing else, and the probe, log-stream and API ports never leave the node.
 
@@ -248,13 +247,13 @@ By hand, on a dev machine — see [`test/README.md`](../test/README.md):
 ./test/scenario.sh probe        # /health and /metrics
 ```
 
-Against a cluster, [§13 of the procedure](kube_docker_deploy.md#13-first-session) is
+Against a cluster, [§13 of the procedure](kube-docker-deploy.md#13-first-session) is
 the standing check: it proves the Job shape, Restricted admission, the tokenless
 single container, the PVC without a direct `hostPath`, an off-box join, the
 occupied/vacant transition, the self-tagged file, deletion and the empty steady
 state in one pass. Run it after every change to a live workload, allocator binary,
 Role, mount or logging service, and after
-[its reboot gate](kube_docker_deploy.md#14-the-reboot-gate).
+[its reboot gate](kube-docker-deploy.md#14-the-reboot-gate).
 
 What a cluster has not yet been asked:
 
@@ -305,35 +304,27 @@ What a cluster has not yet been asked:
 - **Correction:** Shared capture is authoritative; Player-domain state is excluded
   and only explicit persistent local FSM lifecycle is re-derived.
 
-## 9. The alternative not taken: one fixed public port
+## 9. Planned browser session path
 
-Recorded because it is built and tested and because the routing question is open
-(H8) — not because this deployment runs it. **Do not apply it piecemeal: its two
-halves only work together.**
+The final public browser route is `wss://lixen.com/vif/ws/<session>`. This does not
+replace the raw NodePort/PF path used by native clients. Browser traffic follows
+the existing HTTPS route into the host's Nginx, which terminates TLS and forwards
+the HTTP Upgrade to `vif-allocator`; Nginx does not translate game frames. The
+allocator validates the session and origin, resolves its ready pod, and proxies to
+a native WebSocket listener in that pod.
 
-A player's link would become `203.0.113.7:7777/<name>`, and the name rather than the
-port would say which container. `vif -join` accepts that form and sends the name as
-one frame before the handshake, which is the only thing in a plaintext game
-connection that a router could route on. A front door on the node reads that frame
-and splices: [`deploy/frontdoor/haproxy.cfg`](../deploy/frontdoor/haproxy.cfg) is
-that, in HAProxy's TCP mode, with ten pre-declared backends and a name-to-backend map
-the allocator writes over the runtime socket. `pf` would then forward one port
-instead of ten, and the session manifest would need `-name ${SESSION_ID}` in its
-args — without it a session answers to every dial, and with it a session refuses
-every dial that names nothing, which is every dial the current deployment makes.
+The game must implement WebSocket as another `engine.NetworkPort`, with the same
+bounded handshake, frames, queues, closure, and backpressure as TCP. The allocator
+must never accept a caller-supplied upstream address: the session identifier is
+looked up from reconciled Kubernetes state. Add a private named container port and
+a narrow ingress allowance for the node allocator, not another public NodePort.
 
-| | Port range (taken) | Front door |
-|---|---|---|
-| Components | none | HAProxy, plus map upkeep in the allocator |
-| `pf` | one range | one port |
-| Client source address | preserved, and verified at the pod | replaced by the proxy's, so the per-address admission limiter becomes one budget for the whole fleet |
-| Stale link | reaches whatever session inherited the port | refused, by the map and again by the session |
-| Ceiling | the ten ports you forwarded | the ten backends you declared |
-
-Neither buys more than a name in a URL, and the second costs a component and the
-address the rate limiter is keyed on. A third answer is where the exploration should
-go: TLS with SNI routing is the one Kubernetes already has an answer for, and it
-needs the transport security this deployment has decided against.
+The site's current `connect-src 'self'` permits the same-origin WSS route. Its
+Nginx configuration still has to preserve `Upgrade` and `Connection`, disable
+buffering, and use session-length timeouts; the prepared block lives in
+[`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example). The
+ordered implementation plan, including later admission authentication, is in
+[`doc/todo.md`](todo.md).
 
 ## 10. Acceptance and rollback boundary
 
@@ -350,7 +341,7 @@ stands between here and there:
 - SSE preserves source bytes and stays bounded under slow and reconnecting clients;
 - public logs exclude host, K3s, credential, and exact client-address data;
 - every resource value in `30-session.yaml` cites a full-roster measurement; and
-- [§13 of the procedure](kube_docker_deploy.md#13-first-session) passes after reboot.
+- [§13 of the procedure](kube-docker-deploy.md#13-first-session) passes after reboot.
 
 These constraints hold for every change until then:
 
@@ -370,7 +361,7 @@ These constraints hold for every change until then:
 - remove rendered files, probe pods and verification JSONL after each change, and
   preserve the mounted tmpfs and the Bound PV/PVC;
 - keep the previous allocator binary and configuration until the next live
-  [§13](kube_docker_deploy.md#13-first-session) passes.
+  [§13](kube-docker-deploy.md#13-first-session) passes.
 
 Rollback selects the preceding allocator or workload from the updaters' `.previous`
 set, restores or disables the site's nginx routes, and stops LogWisp. It never

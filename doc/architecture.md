@@ -348,8 +348,9 @@ the TCP service with `-host`/`-join`.
 A WASM build runs inside the bundled xterm.js page, uses embedded
 FSM/content/keymap assets without host-directory discovery, and omits audio and
 logging. It cannot use the native framed-TCP transport: browser play needs a
-WebSocket/WebTransport adapter or gateway, and socket session flags are rejected
-until one exists. The page can supply ordinary arguments through `Go.argv`, but
+native WebSocket adapter in the game plus allocator routing at
+`wss://lixen.com/vif/ws/<session>`, and socket session flags are rejected until
+that adapter exists. The page can supply ordinary arguments through `Go.argv`, but
 external `wad/` content needs an HTTP-backed resource provider rather than a file
 argument. The Makefile also contains an explicitly experimental Windows
 cross-build. The exact profile and browser extension strategy are in

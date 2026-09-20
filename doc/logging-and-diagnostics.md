@@ -814,7 +814,7 @@ independent [LogWisp](https://github.com/lixenwraith/logwisp) service read the
 directory and serve those exact lines as Server-Sent Events — which also makes the
 log a metric stream, because §6's periodic snapshot emits the whole status registry
 into it. The deployed fleet uses the second form; see
-[deployment](kube_docker_deploy.md) §7.
+[deployment](kube-docker-deploy.md) §7.
 
 At the `app.Config` boundary, zero means "use the parameter default" while a
 negative `StatTicks`/`RecTicks` means disabled. The CLI therefore maps an

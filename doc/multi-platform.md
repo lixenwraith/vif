@@ -131,7 +131,7 @@ binary in `scratch`; its exact layer size should be measured for each release.
 |---|---|---|
 | Linux | Developed and tested | Full audio backend discovery, Unix terminal/crash handling, TCP sessions, dedicated image |
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp`; the deployed node may itself be a VM on FreeBSD without changing the guest build |
-| Windows amd64 | Cross-compiles, not runtime-tested | `CGO_ENABLED=0`; audio and logging omitted by the Makefile; terminal and socket behavior still need a real Windows smoke test |
+| Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`; audio and logging omitted; not a release artifact or development focus, and may be removed if field reports show it is broken |
 | `js/wasm` | Tested solo browser target | xterm.js presentation; no audio, filesystem discovery, process execution, logging sink, or raw sockets |
 | Other native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 
@@ -165,29 +165,34 @@ listener/dialer files, then make startup orchestration consume a transport facto
 That refactor is also the prerequisite for a direct WebSocket transport; simply
 hiding the package would duplicate the protocol or block browser sessions later.
 
-### Viable transports
+### Transport decision
 
-| Option | Shape | Advantages | Costs and limits |
-|---|---|---|---|
-| WebSocket `NetworkPort` | Browser and host both speak binary WebSocket | One protocol end to end; reliable ordered delivery matches the current stream assumptions | Requires an HTTP Upgrade listener and a browser-specific client adapter |
-| WebSocket-to-TCP gateway | Browser uses WSS; gateway forwards bytes to the existing TCP pod | Smallest initial change to game servers and fleet pods | Another stateful service owns backpressure, connection lifetime, routing, and security checks |
-| WebTransport | Browser and host use HTTP/3 streams/datagrams | Multiple streams and explicit transport features | More server and ingress complexity; no present protocol need justifies it |
-| WebRTC data channel | Browser peers through an ICE/TURN path | Useful for peer-to-peer topologies | Signaling, NAT traversal, TURN, and topology complexity do not fit the current authoritative host |
+- **Chosen — native WebSocket endpoint in `vif`:** browser and pod speak binary WebSocket directly, while native clients keep the existing framed TCP endpoint.
+  - Benefit: one game transport end to end preserves ordered delivery without a permanent protocol-translation hop.
+  - Price: composition must accept a second `engine.NetworkPort` implementation and the pod must expose a private WebSocket listener.
+  - Library constraint: Go's standard [`net/http`](https://pkg.go.dev/net/http) package has no WebSocket handler, and [`golang.org/x/net/websocket`](https://pkg.go.dev/golang.org/x/net/websocket) is external and points to more actively maintained alternatives, so implementation should evaluate and pin a focused package such as `github.com/coder/websocket`.
+- **Rejected as the initial design — WebSocket-to-TCP gateway:** it would get a browser onto the current server with fewer early `vif` changes.
+  - Price: the gateway would permanently own byte translation, backpressure, closure, limits, and two connection lifetimes for every player.
+- **Deferred — WebTransport:** useful transport features do not currently justify HTTP/3 server and ingress complexity.
+- **Rejected for this topology — WebRTC data channel:** ICE, signaling, and TURN solve a peer-to-peer problem the authoritative host does not have.
 
-The recommended incremental path is a same-origin binary WebSocket endpoint, for
-example `wss://lixen.com/vif/ws/<session>`, backed initially by a gateway that
-translates its ordered byte stream to the pod's existing TCP connection. A native
-WebSocket implementation of `engine.NetworkPort` can later remove the translation
-without changing systems, convergence, or the wire messages.
+The public route is `wss://lixen.com/vif/ws/<session>`. The session identifier is
+a routing key, not an authentication secret. The current site Content Security
+Policy already permits this same-origin connection through `connect-src 'self'`.
+Host Nginx terminates TLS and must forward the HTTP Upgrade headers, but it does
+not interpret game frames or translate them to TCP. `vif-allocator` validates the
+route and browser origin, resolves the live session to its ready pod, and proxies
+the upgraded connection to the pod's native WebSocket listener. The pod owns the
+game protocol and all frame limits.
 
 ```mermaid
 flowchart LR
-    Browser["Browser WASM"] -->|"WSS, binary"| Edge["lixen.com WebSocket edge"]
-    Edge -->|"ordered byte stream"| Gateway["session gateway"]
-    Gateway -->|"framed TCP"| Pod["vif-headless pod"]
+    Browser["Browser WASM"] -->|"WSS"| Nginx["Host Nginx"]
+    Nginx -->|"Upgrade"| Allocator["Session router"]
+    Allocator -->|"private WS"| Pod["vif-headless pod"]
 ```
 
-The adapter or gateway must preserve the properties the current transport relies
+The WebSocket adapter must preserve the properties the current transport relies
 on: reliable ordered bytes, bounded frames and inbound queues, connection-close
 notification, admission timeouts, and backpressure. WebSocket message boundaries
 need not become protocol boundaries; the existing frame decoder can consume a
@@ -200,18 +205,19 @@ adapter. Systems, convergence, capture, and the wire message definitions need no
 change.
 
 For a page delivered over HTTPS, the endpoint must use `wss://`; browsers block
-active mixed content such as `ws://`. The site's Content Security Policy must allow
-the endpoint in `connect-src`. A gateway should validate the WebSocket `Origin`,
-retain the existing frame/handshake bounds, and decide whether the current
-unauthenticated public-session policy is also acceptable at the browser edge.
-Cross-origin deployments additionally need an explicit origin policy; ordinary
-CORS headers are not a substitute for WebSocket origin validation.
+active mixed content such as `ws://`. The allocator must validate the WebSocket
+`Origin`, retain the existing frame/handshake bounds, and initially apply the
+current unauthenticated public-session policy. Ordinary CORS headers are not a
+substitute for WebSocket origin validation. Browser admission credentials are a
+later control-plane feature and should be short-lived and session-scoped when
+introduced.
 
-The allocator currently commissions a raw host/port. Browser play needs it to
-return or derive a WebSocket route that identifies the selected session. That
-routing value can remain distinct from authentication, as the current session
-name is; whether to introduce a short-lived admission credential is a deployment
-decision rather than a transport requirement.
+The raw TCP NodePort/PF path remains available for native clients. Browser traffic
+instead follows the site's existing HTTPS path to Nginx, then the allocator; it
+does not enter through the FreeBSD host's raw game-port forwarding. The allocator
+will outgrow pure allocation once it owns routing and admission. Keep those duties
+behind explicit interfaces so the process can be renamed or split without moving
+Kubernetes lifecycle code into the game.
 
 ## 6. Browser launch arguments
 
@@ -243,10 +249,11 @@ browser history, logs, and sometimes referrers, so secrets and substantial paylo
 do not belong there. A path supplied through `-g`, `-f`, or another file flag also
 does not make that file exist in the browser filesystem.
 
-Once a WebSocket adapter exists, a page can pass a `-join=<websocket-route>` style
-argument or provide the route through a browser-specific configuration bridge.
-The current `-join` parser expects the native address form and the WASM build
-rejects it; choosing the browser address syntax belongs with the transport choice.
+Once the WebSocket adapter exists, the page can pass
+`-join=wss://lixen.com/vif/ws/<session>` through the existing argument bridge. The
+current `-join` parser expects the native address form and the WASM build rejects
+it, so the transport work must add URL parsing without weakening native address
+validation.
 
 ## 7. External maps and assets
 
@@ -300,8 +307,9 @@ not a simulation fork:
 Android should use the same pattern through a library entry point rather than the
 terminal CLI. Its renderer, lifecycle, input, audio, networking, and packaged asset
 providers are host adapters. The remaining terminal-shaped cell/color and key types
-described in §2 are the main architectural work before that port; extracting those
-into renderer-neutral values will benefit both a desktop GUI and Android.
+described in §2 are the main architectural work before that port; the development
+target is a minimally polished Android app within one month, so renderer-neutral
+visual and input extraction belongs on that launch path rather than after it.
 
 Build tags should remain orthogonal capabilities. Avoid an accumulating
 `linux`/`windows`/`android` switch in gameplay code: use a platform tag only where
@@ -323,18 +331,16 @@ go vet ./...
 node --check web/terminal.js
 ```
 
-Compilation is not runtime certification. Before advertising Windows support,
-exercise input, resize, shutdown, TCP host/join, and the selected terminal on a
-real Windows system. Before browser networking is advertised, test through the
-production TLS proxy and CSP with slow links, partial frames, reconnects, large
-captures, tab suspension, and allocator/session expiry. Linux and FreeBSD release
-checks should continue to include a real terminal; audio-capable artifacts also
-need at least one real or `null`/WAV backend smoke test.
+Compilation is not runtime certification. Before browser networking is advertised,
+test through the production TLS proxy and CSP with slow links, partial frames,
+reconnects, large captures, tab suspension, and allocator/session expiry. Linux
+and FreeBSD release checks should continue to include a real terminal;
+audio-capable artifacts also need at least one real or `null`/WAV backend smoke
+test. Windows remains an unpromised cross-build and has no runtime certification
+work on the release path.
 
-The decisions still open are deliberately separate:
+The remaining policy decisions are deliberately separate from transport:
 
-- native WebSocket endpoint versus an initial WebSocket-to-TCP gateway;
-- browser route syntax and whether browser admission gains a credential;
-- downloadable bundle format, limits, trust, and cache policy;
-- timing of the renderer-neutral visual/input model extraction;
-- whether Windows becomes a supported target after its runtime smoke matrix.
+- browser authentication and whether the expanded allocator is renamed or split;
+- downloadable bundle format, compressed and expanded limits, trust, and cache policy;
+- exact renderer-neutral model boundaries needed for the one-month Android target.

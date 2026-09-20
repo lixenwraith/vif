@@ -14,7 +14,7 @@
 #   make image                      # the same, with the revision label filled in
 #
 # The result is one layer containing the dedicated build. See
-# doc/kube_docker_deploy.md and doc/multi-platform.md.
+# doc/kube-docker-deploy.md and doc/multi-platform.md.
 
 # Keep this pin equal to the go directive in ../../go.mod. The dependency layer
 # downloads before an older builder reports the mismatch, so drift fails late.
@@ -68,7 +68,8 @@ LABEL org.opencontainers.image.title="vi-fighter" \
       org.opencontainers.image.source="${SOURCE}" \
       org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.licenses="BSD-3-Clause"
+      org.opencontainers.image.licenses="BSD-3-Clause" \
+      dev.lixenwraith.vi-fighter.build-profile="headless"
 
 COPY --from=build /out/vif /vif
 

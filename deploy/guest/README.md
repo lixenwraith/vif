@@ -5,7 +5,7 @@ and the helpers that replace one component at a time. The production path is an
 Arch Linux guest; the same files apply to a bare Ubuntu node.
 
 **These are not a procedure.** The order they install in is
-[`doc/kube_docker_deploy.md`](../../doc/kube_docker_deploy.md), which is the entry
+[`doc/kube-docker-deploy.md`](../../doc/kube-docker-deploy.md), which is the entry
 point for a new deployment. [`../runbook.md`](../runbook.md) is what you run once
 the node is up. This file says where each artifact lands, what it needs, and how to
 back one out.
@@ -43,7 +43,7 @@ disabled with `FORWARD ACCEPT` restored.
 | `install-logwisp.sh [checkout]` | first install of the pinned binary, identity, configuration and unit | an existing installation; a pin that is not an ancestor of upstream `main` |
 | `update-logwisp.sh [checkout]` | LogWisp's binary, configuration and unit only | a stopped `logwisp.service`; the same unreachable pin |
 | `update-vif-allocator.sh` | the allocator binary, env and unit | a dirty worktree; a non-empty fleet |
-| `update-vif-image.sh [tag]` | the session image, and `VIF_ALLOCATOR_IMAGE` with it | a dirty worktree; an occupied fleet |
+| `update-vif-image.sh [tag]` | the headless session image, and `VIF_ALLOCATOR_IMAGE` with it; rejects an image without the `headless` profile label | a dirty worktree; an occupied fleet |
 
 An optional checkout argument is a download optimisation, never a working
 directory: the builder creates a temporary detached worktree at the pinned revision

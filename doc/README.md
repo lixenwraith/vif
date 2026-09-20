@@ -36,10 +36,10 @@ reader can start with the application shape and then descend into a subsystem.
 | [Content, assets, and tools](content-assets-and-tools.md) | Domain detail | How are corpora and embedded assets resolved, parsed, validated, and authored? |
 | [Services and networking](services-and-networking.md) | Domain detail | How are I/O resources managed, and how do startup sessions, framing, polling, and disconnect work? |
 | [External filesystem layout](filesystem-layout.md) | Operational detail | Where do the `wad/` and embedded payloads live, and how are config, content, logs, and journals discovered and installed? |
-| [Packaging](packaging.md) | Operational detail | What must hold for a distribution package, and what is still missing per repository? |
-| [Build profiles and platforms](multi-platform.md) | Operational/design detail | What does each build include, why browser TCP cannot work directly, how can browser joining and external assets be added, and where do future renderers attach? |
+| [Packaging](packaging.md) | Operational detail | What do nightly releases publish, what must hold for a distribution package, and what is still missing per repository? |
+| [Build profiles and platforms](multi-platform.md) | Operational/design detail | What does each build include, why browser TCP cannot work directly, how will native browser WebSocket joining and external assets be added, and where do future renderers attach? |
 | [Development and operations](development.md) | Operational detail | How is the project built, generated, tested, diagnosed, and deployed on native and WASM targets? |
-| [Deploying the session fleet](kube_docker_deploy.md) | Operational detail | How are the edge firewall, the node, Docker, K3s, the log tmpfs, the image, the fleet objects, LogWisp, the allocator and the site's front door installed, in order? **Start here to deploy a node.** |
+| [Deploying the session fleet](kube-docker-deploy.md) | Operational detail | How are the edge firewall, the node, Docker, K3s, the log tmpfs, the image, the fleet objects, LogWisp, the allocator and the site's front door installed, in order? **Start here to deploy a node.** |
 | [Session fleet plan](kubernetes-fleet.md) | Operational detail | What is the design, what did it cost when measured, what is still open, and what was decided against? Holds the work list. |
 | [Node runbook](../deploy/runbook.md) | Operational detail | What do you run on a node that is already up — status, draining, the updaters, and what each refusal means? |
 | [Manual test scenarios](../test/README.md) | Operational detail | Which command runs which game setup, and which ones assert? |
