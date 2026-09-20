@@ -410,7 +410,7 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	s.ctx.SetMode(core.ModeNormal)
 	s.ctx.SetCommandText("")
 	s.ctx.SetSearchText("")
-	s.ctx.SetStatusMessage("", 0, false)
+	s.ctx.ClearStatusMessage()
 	s.ctx.SetOverlayContent(nil)
 
 	// 7. Cancel pending step requests; the rate itself is operator-owned and survives

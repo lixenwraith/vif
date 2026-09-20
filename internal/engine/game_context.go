@@ -110,8 +110,10 @@ type GameContext struct {
 	lastCommand   atomic.Pointer[string]
 	// Command-mode cursor position (rune offset within command text)
 	commandCursorPos atomic.Int32
-	// Status message expiry (Unix nano timestamp, 0 = no expiry)
+	// Status message lifetime, both wall-clock Unix nano: the instant the bar
+	// stops drawing it, and the instant a lesser message may replace it.
 	statusMessageExpiry atomic.Int64
+	statusMessageHold   atomic.Int64
 
 	// Overlay state (atomic for lock-free access)
 	overlayActive  atomic.Bool
@@ -698,22 +700,27 @@ func (ctx *GameContext) SetSearchText(text string) {
 	ctx.searchText.Store(&text)
 }
 
-// SetStatusMessage sets status message with optional duration and override.
-// Expiry is game time: a message dilates with the rate and holds while paused.
+// SetStatusMessage posts a status message for at most StatusMessageMaxDuration,
+// which a shorter duration shortens. The lifetime is wall time, so a message is
+// read at the rate it was written at and does not outlive a pause. A caller that
+// named a duration also holds the bar for it against a non-override write; one
+// that named none is replaced by the next message, whoever sends it.
 func (ctx *GameContext) SetStatusMessage(msg string, duration time.Duration, override bool) {
-	now := ctx.TimeCtl.Now().UnixNano()
-	currentExpiry := ctx.statusMessageExpiry.Load()
-
-	// Reject write if current message has unexpired duration and no override
-	if !override && currentExpiry > 0 && currentExpiry > now && msg != "" {
+	now := ctx.TimeCtl.RealTime().UnixNano()
+	if hold := ctx.statusMessageHold.Load(); !override && hold > now && msg != "" {
 		return
 	}
 
+	shown := min(duration, parameter.StatusMessageMaxDuration)
+	if shown <= 0 {
+		shown = parameter.StatusMessageMaxDuration
+	}
 	ctx.statusMessage.Store(&msg)
+	ctx.statusMessageExpiry.Store(now + shown.Nanoseconds())
 	if duration > 0 {
-		ctx.statusMessageExpiry.Store(now + duration.Nanoseconds())
+		ctx.statusMessageHold.Store(now + shown.Nanoseconds())
 	} else {
-		ctx.statusMessageExpiry.Store(0)
+		ctx.statusMessageHold.Store(0)
 	}
 }
 
@@ -725,16 +732,18 @@ func (ctx *GameContext) GetStatusMessage() string {
 	return ""
 }
 
-// GetStatusMessageExpiry returns the expiry timestamp (Unix nano), 0 if none
+// GetStatusMessageExpiry returns the wall-clock instant the bar stops drawing
+// the current message (Unix nano), 0 if there is none
 func (ctx *GameContext) GetStatusMessageExpiry() int64 {
 	return ctx.statusMessageExpiry.Load()
 }
 
-// ClearStatusMessage forcibly clears the status message and expiry
+// ClearStatusMessage forcibly clears the status message and its lifetime
 func (ctx *GameContext) ClearStatusMessage() {
 	empty := ""
 	ctx.statusMessage.Store(&empty)
 	ctx.statusMessageExpiry.Store(0)
+	ctx.statusMessageHold.Store(0)
 }
 
 func (ctx *GameContext) GetLastCommand() string {

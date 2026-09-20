@@ -448,7 +448,9 @@ owners of the convention:
 | anything else | plain count |
 
 Display consumers — the debug overlay, the status bar, log viewers — resolve
-through `FormatInt`. The log stores the raw integer.
+through `FormatInt`. The log stores the raw integer. Where a value has to fit a
+column rather than a line, `FormatCount` gives it a thousandfold suffix and
+`FormatLatency` picks the time unit; both are display only.
 
 The debug overlay scrolls through the full height of a clipped selected card
 before `j`/`k` moves to its neighbour. Its pinned-card HUD is anchored at the

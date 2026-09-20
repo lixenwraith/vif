@@ -39,3 +39,38 @@ func FormatInt(key string, v int64) string {
 	}
 	return strconv.FormatInt(v, 10)
 }
+
+// FormatCount renders a count for a display that has no room for its digits:
+// under ten thousand it is itself, above it one thousandfold suffix per step.
+func FormatCount(v int64) string {
+	if v > -10000 && v < 10000 {
+		return strconv.FormatInt(v, 10)
+	}
+	f, suffix := float64(v), "K"
+	for _, s := range []string{"K", "M", "B", "T", "Q"} {
+		f, suffix = f/1000, s
+		if f > -1000 && f < 1000 {
+			break
+		}
+	}
+	prec := 0
+	if f > -100 && f < 100 {
+		prec = 1
+	}
+	return strconv.FormatFloat(f, 'f', prec, 64) + suffix
+}
+
+// FormatLatency renders a round trip in five columns at most: a sub-millisecond
+// link in tenths, a working one in whole milliseconds, a failing one in seconds.
+func FormatLatency(us int64) string {
+	switch {
+	case us <= 0:
+		return "--"
+	case us < 1000:
+		return strconv.FormatFloat(float64(us)/1000, 'f', 1, 64) + "ms"
+	case us < 1_000_000:
+		return strconv.FormatInt((us+500)/1000, 10) + "ms"
+	default:
+		return strconv.FormatFloat(float64(us)/1e6, 'f', 1, 64) + "s"
+	}
+}

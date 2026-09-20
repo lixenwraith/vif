@@ -30,6 +30,10 @@ const (
 	// StatusMessageDefaultTimeout is how long status message on status bar lasts
 	StatusMessageDefaultTimeout = 2 * time.Second
 
+	// StatusMessageMaxDuration caps every status message, so one posted without a
+	// duration leaves the bar instead of standing there for the rest of the run.
+	StatusMessageMaxDuration = 5 * time.Second
+
 	// StatusCursorBlinkDuration is the blink duration of the cursor when visible in status bar in search and command modes
 	StatusCursorBlinkDuration = 250 * time.Millisecond
 
@@ -40,6 +44,14 @@ const (
 
 	// StatusCursorChar is status bar cursor character that blinks
 	StatusCursorChar = '█'
+
+	// StatusNetLatencyWarn/StatusNetLatencyBad colour the session badge by round
+	// trip, the reading a player already has from every other networked game.
+	StatusNetLatencyWarn = 120 * time.Millisecond
+	StatusNetLatencyBad  = 250 * time.Millisecond
+
+	// StatusNetLossWarnPct is the probe loss a badge names rather than absorbs.
+	StatusNetLossWarnPct = 2
 )
 
 // Overlay Window

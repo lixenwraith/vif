@@ -54,7 +54,9 @@ It is the contract, not a suggestion.
 
 ## Gates
 
-`go generate ./internal/event ./internal/manifest`, `go build ./...`,
-`go test ./...`, `go vet ./...`,
-`gofmt -l` on changed files, `test/scenario.sh all`.
-- Do not run `-race` test, it takes a long time and user verifies it.
+`go build ./...`, `gofmt -l` on changed files, and `go test` on the packages the
+change touches. Run `go generate ./internal/event ./internal/manifest` only when
+an event or manifest definition changed.
+- Do not run the full `go test ./...`, `go vet ./...` or `test/scenario.sh all`
+  sweeps; they cost more time than they catch. The user runs them.
+- Do not run `-race` tests, they take a long time and the user verifies them.

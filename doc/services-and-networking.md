@@ -186,8 +186,8 @@ different seed. The coordinator assigns canonical participant IDs and roster
 slots; both instances create the roster in slot order and mark only their own
 cursor human-controlled.
 
-The status bar shows `Net: wait`, `Net: 1` or `Net: down` — one badge, chosen by
-severity. The D-14 latch used to be printed beside each of them, and it is not a
+The status bar shows `Net: wait`, `Net: 1 <round trip>` or `Net: down` — one
+badge, chosen by severity. The D-14 latch used to be printed beside each of them, and it is not a
 thing to watch: it is on for every session run from before its first joiner to
 after its last one leaves, and off for every solo run, which is the only one whose
 terminal may still crop. It is a fact about the run, so `:session` names it and the
@@ -617,20 +617,23 @@ instance is holding for a neighbour to ask about, how many repairs it answered f
 them, how many requests it had to refuse, and the bytes it forwarded and served.
 Those bytes are priced into *this* participant's link plan, never the authority's.
 
-Three measurements reach the status bar, as one badge rather than three items.
-`network.lag_ticks` is how far behind the newest tick any peer has been seen
-closing this instance stands, taken every tick rather than once at admission, with
-`network.stale` set past the playout lead — the point at which this participant's
-own crossings reach the host after the ticks they name.
-`snapshot.correction_entities` is how much of the world the last correction moved.
-And the `snapshot.cadence` group with `network.link` beside it is the operating
-point: the cadence in force, the ticks between whole worlds, the round trip and its
-variation, the measured rate, and which of two conditions holds —
-`cadence_constrained`, which is the design working, or `cadence_floor_breached`,
-which is not. The bar draws the last two as `slow` and `slow!` for that reason and
-prints no numbers at all: five of them beside a badge is a diagnostic panel rather
-than a glance, and `:session` and the status snapshot are where they can be read
-against each other.
+Four measurements reach the status bar, as one badge rather than four items.
+`network.link_rtt_us` is the round trip to the worst peer, which the badge always
+draws and colours by `StatusNetLatencyWarn`/`Bad`: it is the number a player
+already reads in every other networked game, and the one they can act on without
+knowing what a cadence is. `network.lag_ticks` is how far behind the newest tick
+any peer has been seen closing this instance stands, taken every tick rather than
+once at admission, with `network.stale` set past the playout lead — the point at
+which this participant's own crossings reach the host after the ticks they name;
+the badge names it `desync`, since a lag measured in ticks is not the delay the
+round trip already states. `network.link_loss_pct` is the share of probes that went
+unanswered, named past `StatusNetLossWarnPct`. And the `snapshot.cadence` group is
+the operating point, of which the bar draws only which of two conditions holds —
+`cadence_constrained`, which is the design working, drawn as `slow`, or
+`cadence_floor_breached`, which is not, drawn as `slow!`. The rest — jitter, the
+cadence itself, the keyframe interval, the byte rates — is a diagnostic panel
+rather than a glance, and `:session` and the status snapshot are where they can be
+read against each other.
 
 Loss that happens outside the barrier is published rather than swallowed, because
 either direction would otherwise desynchronise silently:
@@ -777,9 +780,9 @@ for the deadlock a direct call cannot see. `TestSnapshotChunksRoundTrip` and
 ./bin/vif -join 127.0.0.1:7777
 ```
 
-Both sides should reach `Net: 1`, display two cursors and agree on shared actors,
-scoring and progression while both participants move/type/fire; a healthy run shows
-a small `~n` and never `lag`. Give the two terminals different sizes and resize one
+Both sides should reach `Net: 1` with a green round trip, display two cursors and
+agree on shared actors, scoring and progression while both participants
+move/type/fire; a healthy run never qualifies the badge with `desync` or `loss`. Give the two terminals different sizes and resize one
 mid-run: the map must not move and neither side may fall behind. The host's `:new`
 resets both rosters and a guest's is refused. Quit the guest; the host must show a
 participant-disconnected message and continue at `Net: down`. Quit the host; the

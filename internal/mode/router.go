@@ -168,9 +168,10 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return true
 	}
 
-	// Clear status message on any action
+	// Clear status message on any action, hold included: an empty bar that still
+	// refuses the next message is the message holding a space it does not occupy.
 	if r.ctx.GetStatusMessage() != "" {
-		r.ctx.SetStatusMessage("", 0, false)
+		r.ctx.ClearStatusMessage()
 	}
 
 	// === Macro Context Interception ===

@@ -520,14 +520,15 @@ Mismatches increment drift telemetry and name position, kinetics, combat, contex
 status, or combined surface. Guests are expected to differ provisionally, so a
 digest is diagnostic rather than a failure state.
 
-The player-visible distinction is one badge, chosen by severity so a worse fact
-hides a lesser one rather than sitting beside it:
+The player-visible distinction is one badge — `Net: n <round trip>`, coloured
+green, amber or red by the worst of the round trip and the state below — with at
+most one qualifier, chosen by severity so a worse fact hides a lesser one:
 
-- `Net: n ~m`: the last correction changed m shared entities;
-- `Net: n lag t`: this instance is t ticks behind, far enough that the receive lead
+- `desync t`: this instance is t ticks behind, far enough that the receive lead
   is being missed;
-- `Net: n slow`: the cadence backed off and prediction is carrying more;
-- `Net: n slow!`: no feasible cadence satisfies the keyframe floor;
+- `loss p%`: probes went unanswered often enough for the link to be the cause;
+- `slow`: the cadence backed off and prediction is carrying more;
+- `slow!`: no feasible cadence satisfies the keyframe floor;
 - `Migrating [k]`: a handoff is in flight, k passes down the succession list so far;
 - `Host lost`: this instance is an explicit local fork.
 

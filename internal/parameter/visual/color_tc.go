@@ -98,6 +98,11 @@ var (
 	RgbBoostBg       = color.Pink
 	RgbStatusText    = color.Black
 
+	// Session link health: settled, degrading, unable to keep its guarantee
+	RgbNetGoodBg = color.MintGreen
+	RgbNetWarnBg = color.Amber
+	RgbNetBadBg  = color.Red
+
 	// Runtime Metrics Backgrounds
 	RgbFpsBg = color.Cyan
 	RgbGtBg  = color.PaleGold

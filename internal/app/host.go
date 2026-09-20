@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -218,16 +219,18 @@ func (a *App) sessionSummaryLocked() string {
 	}
 	// Keyframe period in ticks only: the cadence count it is derived from is the
 	// same number divided by the cadence, and the floor it is checked against is
-	// stated in ticks.
+	// stated in ticks. The link line is what the badge collapses: the round trip
+	// it draws, and beside it the variation, the loss and the rates it does not.
 	return line + fmt.Sprintf(
-		"; cadence %d ticks, keyframe %d ticks, link %d ms ±%d, %d B/s, uplink %d B/s, floor %d B/s, %s",
+		"; cadence %d ticks, keyframe %d ticks, link %s ±%dms, %d%% loss, %sB/s, uplink %sB/s, floor %sB/s, %s",
 		cadence,
 		reg.Ints.Get("snapshot.cadence_keyframe_period_ticks").Load(),
-		reg.Ints.Get("network.link_rtt_ms").Load(),
+		status.FormatLatency(reg.Ints.Get("network.link_rtt_us").Load()),
 		reg.Ints.Get("network.link_jitter_ms").Load(),
-		reg.Ints.Get("network.link_bps").Load(),
-		reg.Ints.Get("snapshot.cadence_uplink_bps").Load(),
-		reg.Ints.Get("snapshot.cadence_floor_bps").Load(),
+		reg.Ints.Get("network.link_loss_pct").Load(),
+		status.FormatCount(reg.Ints.Get("network.link_bps").Load()),
+		status.FormatCount(reg.Ints.Get("snapshot.cadence_uplink_bps").Load()),
+		status.FormatCount(reg.Ints.Get("snapshot.cadence_floor_bps").Load()),
 		state)
 }
 

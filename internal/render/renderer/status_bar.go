@@ -43,12 +43,14 @@ type StatusBarRenderer struct {
 	statStep  *atomic.Int64
 	statBreak *status.AtomicString
 
-	// The session, in the one badge networkItem renders. The measurements behind
-	// the badge — round trip, jitter, cadence, keyframe interval, byte rate, the
+	// The session, in the one badge networkItem renders. The rest of the
+	// measurements behind it — jitter, cadence, keyframe interval, byte rate, the
 	// map latch — are read in the status snapshot and in :session, not here.
 	statNet         *status.AtomicString
 	statStale       *atomic.Bool
 	statLag         *atomic.Int64
+	statRTT         *atomic.Int64
+	statLoss        *atomic.Int64
 	statPeers       *atomic.Int64
 	statHostLost    *atomic.Bool
 	statMigrating   *atomic.Bool
@@ -97,6 +99,8 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statNet:       statusReg.Strings.Get("network.state"),
 		statStale:     statusReg.Bools.Get("network.stale"),
 		statLag:       statusReg.Ints.Get("network.lag_ticks"),
+		statRTT:       statusReg.Ints.Get("network.link_rtt_us"),
+		statLoss:      statusReg.Ints.Get("network.link_loss_pct"),
 		statPeers:     statusReg.Ints.Get("network.peers"),
 		statHostLost:  statusReg.Bools.Get("network.host_lost"),
 		statMigrating: statusReg.Bools.Get("network.migrating"),
@@ -185,7 +189,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	if hasEnergy {
 		energyVal = energyComp.Current
 	}
-	energyText := fmt.Sprintf(" Energy: %d ", energyVal)
+	energyText := fmt.Sprintf(" Energy: %s ", status.FormatCount(energyVal))
 
 	var energyFg, energyBg color.RGB
 	if energyVal < 0 {
@@ -222,7 +226,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	dmgMult := r.statDamageMultiplier.Load()
 	if dmgMult > 1 {
 		rightItems = append(rightItems, statusItem{
-			text: fmt.Sprintf(" x%d ", dmgMult),
+			text: fmt.Sprintf(" x%s ", status.FormatCount(dmgMult)),
 			fg:   visual.RgbBlack,
 			bg:   visual.RgbCursorError, // Red background
 		})
@@ -376,7 +380,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		textFg = visual.RgbCommandInputText
 		isInputMode = true
 	} else {
-		textContent = r.getActiveStatusMessage(r.gameCtx.TimeCtl.Now())
+		textContent = r.getActiveStatusMessage(realNow)
 		textFg = visual.RgbStatusMessageText
 		isInputMode = false
 	}
@@ -407,8 +411,10 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		}
 	}
 
-	// Drop items from end (lowest priority) until text fits
-	for fitCount > 0 && textNeeded > 0 {
+	// Input the player is typing takes the space it needs from the right-side
+	// items, lowest priority first. A message takes only what they leave, so one
+	// arriving never reflows the bar; the command it follows pushes it right.
+	for isInputMode && fitCount > 0 && textNeeded > 0 {
 		textAvailable := availableTotal - rightFitWidth
 		if textAvailable >= textNeeded {
 			break
@@ -473,14 +479,15 @@ func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 	return r.netHeld, true
 }
 
-// networkBadge is the session in one badge, chosen by severity so a worse fact
-// hides a lesser one. The measurements behind it are in :session and the status
-// snapshot; a row of numbers beside a badge is a diagnostic panel, not a glance.
+// networkBadge is the session in one badge: the round trip, which is the reading
+// a player already has from every other networked game, coloured by how well this
+// instance is keeping up, and at most one qualifier. A worse fact hides a lesser
+// one; the numbers behind them are in :session and the status snapshot.
 func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 	// Losing the authority is a permanent change for this run and outranks
 	// everything, including the link state that described the host that went.
 	if r.statHostLost.Load() {
-		return statusItem{text: " Host lost ", fg: visual.RgbBlack, bg: visual.RgbCursorError}, true
+		return statusItem{text: " Host lost ", fg: visual.RgbBlack, bg: visual.RgbNetBadBg}, true
 	}
 	// Transient by construction: the badge is cleared a fixed number of ticks after
 	// the handoff is adopted, so the two states a player reads are either side of it.
@@ -490,7 +497,7 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 		if n := r.statRejoin.Load(); n > 0 {
 			text = fmt.Sprintf(" Migrating %d ", n)
 		}
-		return statusItem{text: text, fg: visual.RgbBlack, bg: visual.RgbOrange}, true
+		return statusItem{text: text, fg: visual.RgbBlack, bg: visual.RgbNetWarnBg}, true
 	}
 	state := r.statNet.Load()
 	if state == "" || state == "off" {
@@ -498,37 +505,53 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 	}
 	switch state {
 	case "down":
-		return statusItem{text: " Net: down ", fg: visual.RgbBlack, bg: visual.RgbCursorError}, true
+		return statusItem{text: " Net: down ", fg: visual.RgbBlack, bg: visual.RgbNetBadBg}, true
 	case "connected":
 	default:
 		return statusItem{text: " Net: wait ", fg: visual.RgbBlack, bg: visual.RgbGtBg}, true
 	}
 
-	// slow! no cadence delivers a whole world inside the guaranteed window;
-	// lag n  this instance is n ticks behind, so its crossings land late;
-	// slow   the cadence backed off and prediction carries more.
-	peers := r.statPeers.Load()
+	// slow!     no cadence delivers a whole world inside the guaranteed window;
+	// desync n  this instance is n ticks behind, so its crossings land late;
+	// loss n%   probes went unanswered often enough for the link to be the cause;
+	// slow      the cadence backed off and prediction carries more.
+	rtt := r.statRTT.Load()
+	text := fmt.Sprintf(" Net: %d %s", r.statPeers.Load(), status.FormatLatency(rtt))
+	severity := latencySeverity(rtt)
+	loss := r.statLoss.Load()
 	switch {
 	case r.statFloor.Load() && r.statCadence.Load() != 0:
-		return statusItem{
-			text: fmt.Sprintf(" Net: %d slow! ", peers),
-			fg:   visual.RgbBlack, bg: visual.RgbCursorError,
-		}, true
+		text, severity = text+" slow! ", severityFailing
 	case r.statStale.Load():
-		return statusItem{
-			text: fmt.Sprintf(" Net: %d lag %d ", peers, r.statLag.Load()),
-			fg:   visual.RgbBlack, bg: visual.RgbOrange,
-		}, true
+		text, severity = fmt.Sprintf("%s desync %d ", text, r.statLag.Load()), max(severity, severityDegrading)
+	case loss >= parameter.StatusNetLossWarnPct:
+		text, severity = fmt.Sprintf("%s loss %d%% ", text, loss), max(severity, severityDegrading)
 	case r.statConstrained.Load() && r.statCadence.Load() != 0:
-		return statusItem{
-			text: fmt.Sprintf(" Net: %d slow ", peers),
-			fg:   visual.RgbBlack, bg: visual.RgbOrange,
-		}, true
+		text, severity = text+" slow ", max(severity, severityDegrading)
+	default:
+		text += " "
 	}
-	return statusItem{
-		text: fmt.Sprintf(" Net: %d ", peers),
-		fg:   visual.RgbBlack, bg: visual.RgbBoostBg,
-	}, true
+	return statusItem{text: text, fg: visual.RgbBlack, bg: netSeverityBg[severity]}, true
+}
+
+// Link health as a player reads it, worst wins; latencySeverity is the round trip
+// alone, which colours a badge that has nothing else to say.
+const (
+	severitySettled = iota
+	severityDegrading
+	severityFailing
+)
+
+var netSeverityBg = [...]color.RGB{visual.RgbNetGoodBg, visual.RgbNetWarnBg, visual.RgbNetBadBg}
+
+func latencySeverity(us int64) int {
+	switch rtt := time.Duration(us) * time.Microsecond; {
+	case rtt >= parameter.StatusNetLatencyBad:
+		return severityFailing
+	case rtt >= parameter.StatusNetLatencyWarn:
+		return severityDegrading
+	}
+	return severitySettled
 }
 
 // timeItem builds the time control indicator, present only when the simulation is
@@ -560,20 +583,18 @@ func (r *StatusBarRenderer) timeItem() (statusItem, bool) {
 	return statusItem{}, false
 }
 
-// getActiveStatusMessage returns the status message if its game-time expiry has not passed
-func (r *StatusBarRenderer) getActiveStatusMessage(gameNow time.Time) string {
+// getActiveStatusMessage returns the status message while its wall-clock
+// lifetime lasts, and clears it once past: every message has one, capped at
+// StatusMessageMaxDuration, so none of them stays on the bar for the run.
+func (r *StatusBarRenderer) getActiveStatusMessage(now time.Time) string {
 	msg := r.gameCtx.GetStatusMessage()
 	if msg == "" {
 		return ""
 	}
-
-	expiry := r.gameCtx.GetStatusMessageExpiry()
-	if expiry > 0 && gameNow.UnixNano() > expiry {
-		// Expired - clear it
+	if expiry := r.gameCtx.GetStatusMessageExpiry(); expiry > 0 && now.UnixNano() > expiry {
 		r.gameCtx.ClearStatusMessage()
 		return ""
 	}
-
 	return msg
 }
 

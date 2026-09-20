@@ -639,11 +639,12 @@ crosses, because its type is `ClassBus` and a crossing is what it becomes.
 
 The status bar renders the whole of this as **one badge**, chosen by severity, so a
 worse fact hides a lesser one rather than sitting beside it: `Host lost`,
-`Migrating [n]`, `Net: down`, `Net: wait`, `Net: <peers> slow!`,
-`Net: <peers> lag <ticks>`, `Net: <peers> slow`, `Net: <peers> ~<entities>`, or
-plain `Net: <peers>`. The measurements behind the badge — round trip, jitter,
-cadence, keyframe interval, byte rate, the D-14 latch — are read in the status
-snapshot and in `:session`, where they can be compared against each other.
+`Migrating [n]`, `Net: down`, `Net: wait`, or `Net: <peers> <round trip>` with at
+most one qualifier — `slow!`, `desync <ticks>`, `loss <pct>%` or `slow` — and a
+background that is green, amber or red by the worst of the round trip and that
+qualifier. The rest of the measurements — jitter, cadence, keyframe interval,
+byte rate, the D-14 latch — are read in the status snapshot and in `:session`,
+where they can be compared against each other.
 
 ## 8. Remaining gaps
 
