@@ -1,6 +1,7 @@
 package system
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -94,7 +95,9 @@ func TestExplosionHitsCarryTheArtifactIdentity(t *testing.T) {
 	}
 }
 
-func TestSpecialAttackConvertsBeforeDetonationAndSpendsOnlyForABlast(t *testing.T) {
+// Every glyph below sits inside the resulting blast, so the pass over the field
+// and the pass over the blast are told apart by what each one admits.
+func TestSpecialAttackConvertsDarkGlyphsThenChainsThroughTheBlast(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		energy int64
@@ -103,7 +106,6 @@ func TestSpecialAttackConvertsBeforeDetonationAndSpendsOnlyForABlast(t *testing.
 		{"positive overheat", 50, 156},
 		{"negative", -50, 100},
 		{"zero energy", 0, 1},
-		{"zero heat", 50, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w, cursor, _ := testCursorWorld(t)
@@ -116,8 +118,9 @@ func TestSpecialAttackConvertsBeforeDetonationAndSpendsOnlyForABlast(t *testing.
 				polarity = component.GlyphRed
 			}
 
-			var retained []core.Entity
+			var excluded, chained, flashed []core.Entity
 			wantCenters := make(map[event.ExplosionCenterEntry]bool)
+			wantChainCells := make(map[event.ExplosionCenterEntry]bool)
 			for i, g := range []struct {
 				typ    component.GlyphType
 				level  component.GlyphLevel
@@ -144,11 +147,17 @@ func TestSpecialAttackConvertsBeforeDetonationAndSpendsOnlyForABlast(t *testing.
 				if g.dying {
 					w.Components.Death.SetComponent(e, component.DeathComponent{})
 				}
-				if !g.shared && !g.member && !g.dying && g.level == component.GlyphDark &&
-					(g.typ == component.GlyphGreen || g.typ == polarity) {
-					wantCenters[event.ExplosionCenterEntry{X: 8 + i, Y: 5}] = true
-				} else {
-					retained = append(retained, e)
+				cell := event.ExplosionCenterEntry{X: 8 + i, Y: 5}
+				switch {
+				case g.shared || g.member || g.dying:
+					excluded = append(excluded, e)
+				case g.level != component.GlyphDark:
+					chained = append(chained, e)
+					wantChainCells[cell] = true
+				case g.typ == component.GlyphGreen || g.typ == polarity:
+					wantCenters[cell] = true
+				default:
+					flashed = append(flashed, e)
 				}
 			}
 			// Co-located old dust is consumed once, alongside newly converted dust.
@@ -166,10 +175,9 @@ func TestSpecialAttackConvertsBeforeDetonationAndSpendsOnlyForABlast(t *testing.
 				t.Fatal("remote cursor detonated local dust")
 			}
 
-			fire := event.GameEvent{Type: event.EventFireSpecialRequest,
-				Payload: &event.FireSpecialRequestPayload{Entity: cursor}}
-			dust.HandleEvent(fire)
-			spends, blasts := 0, 0
+			dust.HandleEvent(event.GameEvent{Type: event.EventFireSpecialRequest,
+				Payload: &event.FireSpecialRequestPayload{Entity: cursor}})
+			spends, blasts, deaths := 0, 0, 0
 			for _, ev := range w.Resources.Event.Queue.Consume() {
 				switch ev.Type {
 				case event.EventHeatSpendRequest:
@@ -188,30 +196,76 @@ func TestSpecialAttackConvertsBeforeDetonationAndSpendsOnlyForABlast(t *testing.
 						delete(wantCenters, center)
 					}
 					event.ReleaseExplosionBatchRequest(p)
-				case event.EventDustSpawnBatchRequest, event.EventDustSpawnOneRequest, event.EventDeathBatch:
-					t.Fatal("special attack deferred a conversion or destroyed an ineligible glyph")
+				case event.EventDeathBatch:
+					deaths++
+					p := ev.Payload.(*event.DeathRequestPayload)
+					if p.EffectEvent != event.EventFlashSpawnOneRequest || !slices.Equal(p.Entities, flashed) {
+						t.Fatalf("flashes = %+v, want the caught dark glyphs %v", p, flashed)
+					}
+					event.ReleaseDeathRequest(p)
+				case event.EventDustSpawnBatchRequest, event.EventDustSpawnOneRequest:
+					t.Fatal("special attack deferred a conversion")
 				}
 			}
-			if spends != 1 || blasts != 1 || w.Components.Dust.CountEntities() != 0 {
-				t.Fatalf("spends=%d blasts=%d dust=%d", spends, blasts, w.Components.Dust.CountEntities())
+			if spends != 1 || blasts != 1 || deaths != 1 {
+				t.Fatalf("spends=%d blasts=%d deaths=%d", spends, blasts, deaths)
+			}
+
+			// Glyphs the blast caught are the dust the next special attack detonates
+			for _, e := range w.Components.Dust.Entities() {
+				pos, _ := w.Positions.GetPosition(e)
+				cell := event.ExplosionCenterEntry{X: pos.X, Y: pos.Y}
+				if !wantChainCells[cell] {
+					t.Fatalf("chained dust at %+v, want a converted glyph cell", cell)
+				}
+				delete(wantChainCells, cell)
+			}
+			if len(wantChainCells) != 0 {
+				t.Fatalf("blast left %d caught glyph cells without dust", len(wantChainCells))
+			}
+			for _, e := range chained {
+				if w.Components.Glyph.HasEntity(e) {
+					t.Fatalf("caught glyph %d was not converted", e)
+				}
+			}
+			for _, e := range slices.Concat(excluded, flashed) {
+				if !w.Components.Glyph.HasEntity(e) {
+					t.Fatalf("glyph %d was destroyed instead of skipped or flashed", e)
+				}
 			}
 			h, _ := w.Components.Heat.GetComponent(cursor)
-			if total := h.Current + h.Overheat; total != max(0, tc.heat-1) {
-				t.Fatalf("heat = %+v, want total %d", h, max(0, tc.heat-1))
-			}
-			if w.Components.Glyph.CountEntities() != len(retained) {
-				t.Fatal("converted glyphs survived")
-			}
-			for _, e := range retained {
-				if !w.Components.Glyph.HasEntity(e) {
-					t.Fatalf("ineligible glyph %d was destroyed by nearby blast", e)
-				}
-			}
-			w.Resources.Event.Queue.Consume()
-			dust.HandleEvent(fire)
-			if evs := w.Resources.Event.Queue.Consume(); len(evs) != 0 {
-				t.Fatalf("empty special attack emitted %d events", len(evs))
+			if total := h.Current + h.Overheat; total != tc.heat-1 {
+				t.Fatalf("heat = %+v, want total %d", h, tc.heat-1)
 			}
 		})
+	}
+}
+
+// A special attack that cannot be paid for, or has nothing to detonate, is inert.
+func TestSpecialAttackWithoutHeatOrDustChangesNothing(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	heat := NewHeatSystem(w).(*HeatSystem)
+	dust := NewDustSystem(w).(*DustSystem)
+	w.Components.Energy.SetComponent(cursor, component.EnergyComponent{Current: 50})
+
+	glyph := w.CreateEntity(core.DomainPlayer)
+	w.Components.Glyph.SetComponent(glyph, component.GlyphComponent{Rune: 'x', Type: component.GlyphBlue})
+	w.Positions.SetPosition(glyph, component.PositionComponent{X: 8, Y: 5})
+	fire := event.GameEvent{Type: event.EventFireSpecialRequest,
+		Payload: &event.FireSpecialRequestPayload{Entity: cursor}}
+
+	dust.HandleEvent(fire)
+	if evs := w.Resources.Event.Queue.Consume(); len(evs) != 0 || !w.Components.Glyph.HasEntity(glyph) {
+		t.Fatalf("heat 0 emitted %d events, eligible glyph alive = %v", len(evs), w.Components.Glyph.HasEntity(glyph))
+	}
+
+	heat.setHeat(cursor, 10)
+	w.DestroyEntity(glyph)
+	dust.HandleEvent(fire)
+	if evs := w.Resources.Event.Queue.Consume(); len(evs) != 0 {
+		t.Fatalf("dustless special attack emitted %d events", len(evs))
+	}
+	if h, _ := w.Components.Heat.GetComponent(cursor); h.Current != 10 {
+		t.Fatalf("heat = %+v, want 10 unspent", h)
 	}
 }

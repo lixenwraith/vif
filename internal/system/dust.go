@@ -239,7 +239,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventDustAllRequest:
 		if cursorPos, ok := s.world.LocalCursor(); ok {
-			s.convertGlyphs(cursorPos.X, cursorPos.Y, nil)
+			s.convertGlyphs(cursorPos.X, cursorPos.Y, nil, nil)
 		}
 	}
 }
@@ -583,6 +583,11 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 
 // Conversion commits before center collection; no queued spawn can miss this blast.
 func (s *DustSystem) detonateDust(cursor core.Entity) {
+	// An unaffordable blast converts nothing, so the gate precedes the conversion.
+	heat, ok := s.world.Components.Heat.GetPtr(cursor)
+	if !ok || heat.Current+heat.Overheat < parameter.SpecialAttackHeatCost {
+		return
+	}
 	cursorPos, ok := s.world.Positions.GetPosition(cursor)
 	if !ok {
 		return
@@ -591,7 +596,7 @@ func (s *DustSystem) detonateDust(cursor core.Entity) {
 	if energy, ok := s.world.Components.Energy.GetPtr(cursor); ok && energy.Current < 0 {
 		polarity = component.GlyphRed
 	}
-	s.convertGlyphs(cursorPos.X, cursorPos.Y, func(glyph *component.GlyphComponent) bool {
+	s.convertGlyphs(cursorPos.X, cursorPos.Y, nil, func(glyph *component.GlyphComponent) bool {
 		return glyph.Level == component.GlyphDark &&
 			(glyph.Type == component.GlyphGreen || glyph.Type == polarity)
 	})
@@ -633,6 +638,9 @@ func (s *DustSystem) detonateDust(cursor core.Entity) {
 	}
 	s.blast.reset(s.centerBuf, parameter.ExplosionFieldRadius)
 
+	// Glyphs caught in the blast seed the next detonation's dust
+	s.convertGlyphs(cursorPos.X, cursorPos.Y, &s.blast, nil)
+
 	s.world.PushLocal(event.EventHeatSpendRequest, &event.HeatSpendRequestPayload{
 		Entity: cursor, Amount: parameter.SpecialAttackHeatCost,
 	})
@@ -652,8 +660,9 @@ func (s *DustSystem) detonateDust(cursor core.Entity) {
 	s.world.PushCrossing(event.EventExplosionBatchRequest, p)
 }
 
-// A filter admits dark glyphs as dust; nil keeps :dust's dark-glyph flashes.
-func (s *DustSystem) convertGlyphs(cursorX, cursorY int, match func(*component.GlyphComponent) bool) {
+// A nil area converts the whole field; a nil filter converts every level and
+// flashes the dark glyphs instead, since they carry no dust.
+func (s *DustSystem) convertGlyphs(cursorX, cursorY int, area *blastArea, match func(*component.GlyphComponent) bool) {
 	glyphEntities := s.world.Components.Glyph.Entities()
 	if len(glyphEntities) == 0 {
 		return
@@ -676,12 +685,7 @@ func (s *DustSystem) convertGlyphs(cursorX, cursorY int, match func(*component.G
 			continue
 		}
 
-		if match != nil {
-			if !match(glyphComp) {
-				continue
-			}
-		} else if glyphComp.Level == component.GlyphDark {
-			s.flashBuf = append(s.flashBuf, glyphEntity)
+		if match != nil && !match(glyphComp) {
 			continue
 		}
 
@@ -689,6 +693,16 @@ func (s *DustSystem) convertGlyphs(cursorX, cursorY int, match func(*component.G
 		if !ok {
 			continue
 		}
+		if area != nil {
+			if _, _, inside := area.find(glyphPos.X, glyphPos.Y); !inside {
+				continue
+			}
+		}
+		if match == nil && glyphComp.Level == component.GlyphDark {
+			s.flashBuf = append(s.flashBuf, glyphEntity)
+			continue
+		}
+
 		s.destroyBuf = append(s.destroyBuf, glyphEntity)
 		s.transformBuf = append(s.transformBuf, event.DustSpawnEntry{
 			X: glyphPos.X, Y: glyphPos.Y, Char: glyphComp.Rune, Level: glyphComp.Level,

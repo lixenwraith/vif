@@ -76,7 +76,7 @@ var topics = []topicDef{
 		Key: "combat", Title: "COMBAT",
 		Entries: []entryDef{
 			{Actions: []string{"fire_main"}, Desc: "Fire the main weapon"},
-			{Actions: []string{"fire_special"}, All: true, Desc: "Convert matching dark glyphs and detonate dust; spends 1 heat"},
+			{Actions: []string{"fire_special"}, All: true, Desc: "Convert matching dark glyphs and detonate dust; needs and spends 1 heat"},
 			{Actions: []string{"nugget_jump"}, Desc: "Jump to the nearest nugget"},
 			{Actions: []string{"gold_jump"}, Desc: "Jump to the nearest gold glyph"},
 			{Actions: []string{"toggle_auto_fire"}, Desc: "Cycle auto-fire: both weapons, off, main only"},

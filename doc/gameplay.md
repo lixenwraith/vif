@@ -248,16 +248,17 @@ energy polarity and asks every owned, ready weapon to fire. Automatic fire
 starts with main and special enabled; `a` cycles both → off → main only.
 Main-only repeats the main-fire path without special attacks.
 
-Special fire converts all loose, living Player-domain **dark** green glyphs plus
-dark blue glyphs for nonnegative energy or dark red glyphs for negative energy.
-Conversion commits synchronously, then all existing and newly created dust is
-consumed into one explosion center per occupied cell, within the center budget.
-Other glyphs, including shared composite members, are not converted by the blast.
-A nonempty blast spends 1 heat, drawing from overheat first and clamping at zero:
-156 becomes 155, 1 becomes 0, and 0 stays 0. Without dust or eligible glyphs it
-emits no blast and spends nothing. Each center deals 2 base damage and uses an
-explosion mass of 1.0. Player targets resolve locally; only center/radius/attack
-geometry crosses for shared combat.
+Special fire needs 1 heat; below that it converts nothing and emits no blast.
+It converts all loose, living Player-domain **dark** green glyphs plus dark blue
+glyphs for nonnegative energy or dark red glyphs for negative energy. Conversion
+commits synchronously, then all existing and newly created dust is consumed into
+one explosion center per occupied cell, within the center budget. Glyphs the
+resulting blast covers are themselves converted and become the next attack's
+dust; dark ones flash away instead, and shared or composite-member glyphs are
+never taken. The blast spends its heat from overheat first, so 156 becomes 155
+and 1 becomes 0. Without dust or eligible glyphs it spends nothing. Each center
+deals 2 base damage and uses an explosion mass of 1.0. Player targets resolve
+locally; only center/radius/attack geometry crosses for shared combat.
 
 | Weapon | Model |
 |---|---|
