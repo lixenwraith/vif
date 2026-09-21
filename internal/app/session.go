@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/converge"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
@@ -85,11 +86,12 @@ func (a *App) hostNetworkConfig() *network.Config {
 	netCfg.MaxPeers = a.sessionCapacity()
 	netCfg.OnError = logSessionError
 	netCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
-		Assign:  a.assignParticipant,
-		Release: a.releaseParticipant,
-		Admit:   a.admissions.Admit,
-		Report:  a.noteJoinerReport,
-		Name:    a.cfg.SessionName,
+		Assign:   a.assignParticipant,
+		Release:  a.releaseParticipant,
+		Admit:    a.admissions.Admit,
+		Report:   a.noteJoinerReport,
+		Name:     a.cfg.SessionName,
+		Scenario: a.scenarioBody,
 	}, netCfg.ConnectTimeout)
 	// Every host outlives its guests, so every host admits a dial after its lobby
 	// closed: a dropped participant comes back into the slot its departure released,
@@ -97,6 +99,38 @@ func (a *App) hostNetworkConfig() *network.Config {
 	// the run arms it, because until then the gate is the startup lobby's own.
 	netCfg.OnAdmit = a.admitLateJoiner
 	return netCfg
+}
+
+// scenarioBody serves this session's scenario to a joiner whose roots do not hold
+// it, refusing any digest but the one being played — the transfer exists to make a
+// participant match this run, not to be a file service.
+//
+// Read without the world lock: a.scenario is written once during construction,
+// before any listener exists, and a scenario change builds a new App rather than
+// writing this one.
+func (a *App) scenarioBody(digest string) ([]byte, error) {
+	if digest != a.scenario.Digest() {
+		return nil, fmt.Errorf("this session plays %s (%s), not %s",
+			a.scenario.Name, a.scenario.Short(), shortDigest(digest))
+	}
+	body, err := a.scenario.MarshalCompressed()
+	if err != nil {
+		return nil, err
+	}
+	vlog.Info("app", "msg", "scenario served",
+		"scenario", a.scenario.Name, "digest", a.scenario.Short(), "bytes", len(body))
+	return body, nil
+}
+
+// shortDigest trims a digest for a message; one from a peer may be anything at all.
+func shortDigest(d string) string {
+	switch {
+	case d == "":
+		return "nothing"
+	case len(d) > 12:
+		return d[:12]
+	}
+	return d
 }
 
 // admitLateJoiner gates a dial that arrives after the startup lobby closed.
@@ -300,6 +334,10 @@ func newJoiningApp(cfg Config) (*App, error) {
 		closeListener()
 		return reject(err)
 	}
+	if err := resolveJoinScenario(&cfg, pending, offer); err != nil {
+		closeListener()
+		return reject(err)
+	}
 	a, err := New(cfg)
 	if err != nil {
 		closeListener()
@@ -326,6 +364,37 @@ func newJoiningApp(cfg Config) (*App, error) {
 		return nil, fmt.Errorf("join reply: %w", err)
 	}
 	return a, nil
+}
+
+// resolveJoinScenario makes this run hold the exact scenario the coordinator is
+// playing, before it builds a world the coordinator would refuse. A root that
+// already has those bytes is used as it stands, whatever it calls them; otherwise
+// the coordinator is asked for them and they are held in memory for the life of the
+// run and never written to disk.
+func resolveJoinScenario(cfg *Config, pending *network.PendingJoin, o network.SessionOffer) error {
+	want := o.Anchor.Anchor.ScenarioDigest
+	if want == "" {
+		return nil // nothing to match against; the identity check is the verdict
+	}
+	if local, err := resource.LoadScenario(cfg.Resources); err == nil && local.Digest() == want {
+		return nil
+	}
+	body, err := pending.RequestScenario(want)
+	if err != nil {
+		return fmt.Errorf("scenario transfer: %w", err)
+	}
+	sc, err := resource.UnmarshalScenarioCompressed(o.Anchor.Anchor.ScenarioID, body)
+	if err != nil {
+		return err
+	}
+	if sc.Digest() != want {
+		return fmt.Errorf("scenario transfer: arrived as %s, the offer named %s",
+			sc.Short(), shortDigest(want))
+	}
+	cfg.Resources.Provided = &sc
+	vlog.Info("app", "msg", "scenario received",
+		"scenario", sc.Name, "digest", sc.Short(), "files", sc.Files(), "bytes", len(body))
+	return nil
 }
 
 // assignParticipant allocates the next identity and returns the offer carrying it.

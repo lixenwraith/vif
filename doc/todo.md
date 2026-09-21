@@ -74,10 +74,11 @@ Argon2-SCRAM dependency.
 - Prerequisite: decide the bundle format, compressed/expanded size limits,
   publisher trust, allowed origins, and cache policy
 
-Use the nightly release page as the first consistent download surface, then add one
-content-addressed manifest and provider for native and browser clients. Download
-and verify the host-selected bundle before constructing a replacement `App`; do
-not put content bytes on the simulation channel or in CLI arguments.
+The scenario half is done: `resource.Scenario` is content-addressed, a coordinator
+serves its own digest during the join handshake, and the receiver verifies before
+constructing its `App`. What remains is the corpus, which travels as a fingerprint
+and not as bytes, and a download surface for a client that has neither — the
+nightly release page is the first candidate.
 
 ### Extract the renderer-neutral Android host model
 
@@ -238,6 +239,21 @@ the lead, which the authority applies late in arrival order, so for the length o
 that lateness a second attacker's hit answers `opened` differently on two
 instances. The per-attacker budget and the additive join closed the composition;
 which hit owns the override is the same choice as kill credit above.
+
+### Let a td-sized world fit a capture
+
+- Priority: P1
+- Affected files: `internal/network/snapshot.go`, `internal/snapshot/capture.go`,
+  `internal/system/wall.go`
+- Prerequisite: a decision on whether walls belong in a capture at all
+
+`-serve -s td` refuses every join with `snapshot encode: 10112276 plain bytes is
+outside 1..4194304`. `MaxSnapshotBytes` is 4 MiB and documented for a world whose
+captures are single-digit kilobytes; `wad/scenario/td` is 500x250 with a generated
+maze and towers. Raising the ceiling moves a number that bounds what one peer can
+make another hold, so the question is first whether the wall grid has to travel as
+entities — it is a function of the scenario and a seed on both sides. Until this
+lands, `td` is a solo scenario and the fleet cannot serve it.
 
 ### Retain peer crossings for the projection
 

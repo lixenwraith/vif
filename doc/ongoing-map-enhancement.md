@@ -161,51 +161,66 @@ resets in place, `:q` still exits 0.
 **Accepted cost.** The terminal is torn down and re-created with the App, so a
 restart flashes the shell for one frame.
 
-### Phase 3 — The scenario over the wire
+### Phase 3 — The scenario over the wire (done)
 
-1. `network`: `MsgScenarioRequest = 0x16`, `MsgScenarioBody = 0x17`. Extend the
-   numbering rather than reusing a retired code. `ProtocolVersion` stays at 1: the
-   one deployed node is updated with the code and every client is in step with it,
-   so the bump would only cost a redeploy. Record that decision beside the constant
-   — the next wire change with a mixed fleet must bump it.
-2. `Coordinator` gains `Scenario func(digest string) ([]byte, error)`.
-   `HostAcceptor` accepts at most one `MsgScenarioRequest` between the offer and the
-   reply, answers it with chunks, and refuses a second. `network` never learns the
-   format.
-3. `PendingJoin.RequestScenario(digest string) ([]byte, error)`, bounded by the
-   handshake deadline with a per-chunk extension.
-4. The body is `compress/flate` over `Scenario.Marshal()`; the receiver bounds the
-   inflated size at `resource.ScenarioMaxBytes` with an `io.LimitedReader` before
-   `UnmarshalScenario`, so a small frame cannot expand into a large allocation.
-   `main` is 44 KiB and `td` 60 KiB of TOML, which compress to a few kilobytes.
-5. `resource.Options` gains `Scenario *Scenario` — an in-memory scenario that wins
-   over discovery. `newStagingApp` carries it, or the first correction after a
-   transferred-scenario join resolves against the wrong world.
-6. `newJoiningApp`, after the offer and before `New`: if the local roots hold a
-   scenario whose digest matches, use it; otherwise request, verify the digest,
-   `UnmarshalScenario`, and put it in `Options.Scenario`. A digest that does not
-   match what arrived is a refused join, not a retry.
+`MsgScenarioRequest` (0x16) and `MsgScenarioBody` (0x17) sit inside the join
+handshake, between the offer and the reply. A joiner whose roots hold no scenario
+with the offer's digest asks for it there, so it is running the session's scenario
+before it reports an identity the coordinator would refuse it on. One request fits
+by construction: what follows the answer has to be the reply, so a second is a
+protocol error on both sides without a counter to keep.
 
-**Bounds and posture.** A scenario is data, not code: every system, guard, action
-and event name resolves against a registry that refuses an unknown one, and map
-dimensions pass `ClampMapSize`. It is size-capped, `.toml`-only, held in memory and
-never written to disk. The game port is unauthenticated by decision
-(`doc/kubernetes-fleet.md` §4), so this adds one more bounded thing a stranger can
-make a peer allocate, at 1 MiB inflated, once per handshake, inside the existing
-admission budget.
+`Coordinator.Scenario` serves only the digest being played — the transfer makes a
+participant match this run, it is not a file service. The body is the canonical
+form deflated, chunked with the capture's own framing, which is why `readSnapshot`
+generalised into `readChunked`: a capture and a scenario are the two messages whose
+size is a function of their content. A `MsgJoinReply` arriving mid-transfer is the
+coordinator refusing, and its reason is what the dialer is given.
 
-**Gates.** `go test ./internal/network ./internal/resource ./internal/app`.
-**Manual.** Host `-s td`; guest with `-config-dir` pointing at an empty directory
-joins, receives and plays. Guest with its own edited `td` is refused on the digest
-and says so. Guest with the identical `td` installed joins without a transfer —
-check the log for the absence. Kill the host mid-transfer: the guest fails the join
-rather than starting on a prefix.
-**New tests.** A body that arrives with the wrong digest is refused. A second
-`MsgScenarioRequest` in one handshake is refused. A compressed body that inflates
-past the ceiling is refused without allocating it.
+`resource.Options.Provided` is a scenario already in hand. It wins over every other
+selector, is never written to disk, and `newStagingApp` now hands the staging world
+this instance's loaded scenario rather than re-resolving one — which also covers a
+correction on a run whose scenario exists nowhere on this host.
+
+**Compression is over the whole container, not per file.** The files are
+near-identical TOML and a shared window is most of the saving: `td` goes from about
+60 KiB to 5.3 KiB, `main` from 44 KiB to 5.3 KiB. That is safe because the
+container is length-prefixed rather than delimited — a reader takes exactly the
+bytes each file declares and never scans for a terminator, so a file that is
+truncated, malformed or deliberately unterminated cannot run into the next one.
+Compression changes the bytes on the wire and nothing about the framing. The
+inflate is bounded with an `io.LimitedReader` at the same ceiling a scenario read
+from disk is held to, so a few kilobytes cannot be made to allocate a megabyte, and
+the digest is taken over what deflate was given, so a receiver verifies exactly
+what the sender hashed.
+
+`ProtocolVersion` stays at 1, as decided: one node updated with the code, every
+client in step with it. The reason is recorded at the constant, and the next wire
+change reaching a fleet that is not in step has to bump it.
+
+**Verified.** `script/test.sh transfer` starts a host on an installed `main` and a
+guest whose configuration root is empty: the host serves, the guest receives,
+stages and installs the session world on a scenario it could not have resolved.
+`TestATransferCarriesBytesByLengthNotByScanning` round-trips a region file holding
+the container's own magic, a NUL and an unbalanced quote, and refuses a deflate
+bomb that inflates past the ceiling.
+
+**Found on the way, not fixed here.** A `wad/scenario/td` world does not fit the
+capture ceiling: `-serve -s td` answers a join with `snapshot encode: 10112276
+plain bytes is outside 1..4194304`, so a `td` session cannot be joined mid-run at
+all. It is pre-existing and independent of the transfer — a guest that already has
+`td` installed fails identically — and `MaxSnapshotBytes` is documented for a world
+whose captures are "single-digit kilobytes". `td`'s 500x250 map with its maze and
+towers is three orders of magnitude past that. Phase 5 cannot serve `td` from the
+fleet until this is decided. See `doc/todo.md`.
 
 ### Phase 4 — Live scenario change in a session
 
+0. **The refusal to lift.** Phase 2 answers `Scenario: a run that has opened a
+   session cannot change scenario` to `:n <name>` and `:n! <name>` on a host that
+   has a guest — `bin/vif -host :7777 -s wad/scenario/main/` then `:n
+   wad/scenario/td`. That message is this phase's entry point: when it is gone,
+   the same two commands rebuild the host and carry every guest with them.
 1. The coordinator's `:n <scenario>` validates as in Phase 2, then broadcasts a
    session-restart notice carrying the new name, digest and the address to redial,
    and latches its own restart. A guest's `:n <scenario>` stays refused, as `:n` is.

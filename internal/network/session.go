@@ -214,6 +214,12 @@ type Coordinator struct {
 	// refused. Empty expects no such frame, which is an address with one session
 	// on it — a two-terminal lobby, a harness, a host somebody started by hand.
 	Name string
+
+	// Scenario answers a joiner that asked for the session's scenario by digest,
+	// returning the deflated canonical form. The format is the caller's; this
+	// package carries bytes. Nil serves nothing, which refuses the request rather
+	// than pretending the transfer is not part of the protocol.
+	Scenario func(digest string) ([]byte, error)
 }
 
 // MaxSessionName is the longest name a session may answer to. A name is a short
@@ -276,6 +282,18 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 		if err != nil {
 			return 0, err
 		}
+		// A joiner whose roots do not hold this session's scenario asks for it here,
+		// before it builds a world and therefore before it reports an identity this
+		// coordinator would refuse it on. One request fits: what follows the answer
+		// has to be the reply.
+		if msg.Type == MsgScenarioRequest {
+			if err = serveScenario(conn, c, string(msg.Payload), timeout); err != nil {
+				return 0, err
+			}
+			if msg, err = Decode(conn); err != nil {
+				return 0, err
+			}
+		}
 		if msg.Type != MsgJoinReply {
 			return 0, fmt.Errorf("join handshake: got message %#x, want reply", msg.Type)
 		}
@@ -309,6 +327,45 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 		}
 		return o.Assigned, nil
 	}
+}
+
+// refusalFrom reads the reason out of a rejection frame, so a refused dialer says
+// what it was told rather than that it was told something.
+func refusalFrom(msg *Message) error {
+	var reply sessionReply
+	if err := json.Unmarshal(msg.Payload, &reply); err != nil || reply.Error == "" {
+		return errors.New("join refused with no reason given")
+	}
+	return errors.New(reply.Error)
+}
+
+// serveScenario answers one scenario request with the chunked body. The deadline is
+// renewed per chunk: the handshake's single window is sized for frames a session
+// exchanges, and this is the one that is a function of what is being played.
+func serveScenario(conn net.Conn, c Coordinator, digest string, timeout time.Duration) error {
+	if c.Scenario == nil {
+		err := errors.New("this coordinator does not serve its scenario")
+		refuseJoin(conn, err, timeout)
+		return err
+	}
+	body, err := c.Scenario(digest)
+	if err != nil {
+		refuseJoin(conn, err, timeout)
+		return err
+	}
+	chunks, err := EncodeSnapshotChunks(0, body)
+	if err != nil {
+		return err
+	}
+	for i, chunk := range chunks {
+		if timeout > 0 {
+			_ = conn.SetDeadline(time.Now().Add(timeout))
+		}
+		if err := NewMessage(MsgScenarioBody, chunk).Encode(conn); err != nil {
+			return fmt.Errorf("scenario chunk %d/%d: %w", i+1, len(chunks), err)
+		}
+	}
+	return nil
 }
 
 // readSessionName consumes the dialer's routing frame. The name is not echoed
@@ -368,6 +425,35 @@ type PendingJoin struct {
 	// probe that arrives mid-gate, so a host measuring this link sees a running
 	// counter rather than a silence it would have to score as loss.
 	gateBytes uint64
+
+	// asked records that this stream has already spent its one scenario request.
+	asked bool
+}
+
+// RequestScenario asks the coordinator for the scenario the offer named and returns
+// the deflated body. One request per handshake: the coordinator reads what follows
+// the answer as the reply, so a second would be a protocol error on both sides.
+func (p *PendingJoin) RequestScenario(digest string) ([]byte, error) {
+	switch {
+	case p.replied:
+		return nil, errors.New("join handshake already completed")
+	case p.asked:
+		return nil, errors.New("join handshake already asked for a scenario")
+	}
+	p.asked = true
+	if p.base.WriteTimeout > 0 {
+		_ = p.conn.SetWriteDeadline(time.Now().Add(p.base.WriteTimeout))
+	}
+	err := NewMessage(MsgScenarioRequest, []byte(digest)).Encode(p.conn)
+	_ = p.conn.SetWriteDeadline(time.Time{})
+	if err != nil {
+		return nil, err
+	}
+	_, body, err := readChunked(p, MsgScenarioBody, p.base.ReadTimeout)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
 }
 
 // Deferred returns the session traffic read off the stream during the gate, oldest
@@ -498,11 +584,7 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 		// the one reason worth acting on rather than reporting is a succession:
 		// IsHandoffRefusal is what a caller retries on.
 		_ = conn.Close()
-		var reply sessionReply
-		if err := json.Unmarshal(msg.Payload, &reply); err != nil || reply.Error == "" {
-			return nil, SessionOffer{}, errors.New("join refused with no reason given")
-		}
-		return nil, SessionOffer{}, errors.New(reply.Error)
+		return nil, SessionOffer{}, refusalFrom(msg)
 	}
 	if msg.Type != MsgJoinOffer {
 		_ = conn.Close()

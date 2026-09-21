@@ -2,6 +2,7 @@ package resource
 
 import (
 	"bytes"
+	"compress/flate"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -62,6 +63,9 @@ type scenarioFile struct {
 
 // LoadScenario resolves this run's scenario and reads it whole.
 func LoadScenario(o Options) (Scenario, error) {
+	if o.Provided != nil {
+		return *o.Provided, nil
+	}
 	entry, err := ScenarioPath(o)
 	if err != nil {
 		return Scenario{}, err
@@ -139,6 +143,49 @@ func (s Scenario) Marshal() []byte {
 		out = append(out, f.data...)
 	}
 	return out
+}
+
+// MarshalCompressed is the canonical form deflated, which is what a transfer
+// carries. The whole container is one stream rather than one per file, because the
+// files are near-identical TOML and a shared window is most of the saving.
+//
+// That is safe to do because the container is length-prefixed, not delimited: a
+// reader takes exactly the bytes each file declares and never scans for a
+// terminator, so a file that is truncated, malformed or deliberately unterminated
+// cannot run into the next one. Compression changes the bytes on the wire and
+// nothing about the framing, and the digest stays over what Marshal produced, so
+// what a receiver verifies is what a sender hashed.
+func (s Scenario) MarshalCompressed() ([]byte, error) {
+	var out bytes.Buffer
+	w, err := flate.NewWriter(&out, flate.BestCompression)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := w.Write(s.Marshal()); err != nil {
+		return nil, err
+	}
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+// UnmarshalScenarioCompressed inflates a transferred body and reads it. The inflate
+// is bounded at the same ceiling the uncompressed form is held to, so a few
+// kilobytes on the wire cannot be made to allocate a megabyte here, and a stream
+// that claims to be larger is refused before anything parses it.
+func UnmarshalScenarioCompressed(name string, body []byte) (Scenario, error) {
+	r := flate.NewReader(bytes.NewReader(body))
+	defer r.Close()
+	plain, err := io.ReadAll(io.LimitReader(r, ScenarioMaxBytes+1))
+	if err != nil {
+		return Scenario{}, fmt.Errorf("scenario %s: %w", name, err)
+	}
+	if len(plain) > ScenarioMaxBytes {
+		return Scenario{}, fmt.Errorf("scenario %s: inflates past the %d-byte ceiling",
+			name, ScenarioMaxBytes)
+	}
+	return UnmarshalScenario(name, plain)
 }
 
 // UnmarshalScenario reads a canonical form back, under the same bounds a read from

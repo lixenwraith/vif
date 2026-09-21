@@ -51,6 +51,13 @@ The scenario is identified by its name and by the SHA-256 of its canonical form,
 which is what a replay and a join are refused on; `-check` prints both. Reading it
 first is also what lets a scenario that never touched this disk be loaded.
 
+A scenario need not be on this host at all. A participant joining a session whose
+scenario no local root holds receives it from the coordinator during the handshake
+and holds it in memory; `resource.Options.Provided` is that scenario, and it wins
+over every other selector because the run holding one has already agreed to
+simulate exactly those bytes. See
+[Services and networking](services-and-networking.md) §on the join identity.
+
 A run plays one scenario. The regions a scenario declares register one metric set
 each, and `Scheduler.Prepare` freezes the registry before the first tick, so
 loading a second scenario into a running machine would need keys the frozen set

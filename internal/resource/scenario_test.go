@@ -1,6 +1,8 @@
 package resource
 
 import (
+	"bytes"
+	"compress/flate"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -84,4 +86,50 @@ func read(t *testing.T, dir string) Scenario {
 		t.Fatalf("load %s: %v", dir, err)
 	}
 	return s
+}
+
+// TestATransferCarriesBytesByLengthNotByScanning is why the whole container is
+// deflated as one stream rather than one per file: the framing is length-prefixed,
+// so a file holding the container's own magic, a NUL or an unbalanced quote is
+// taken by its declared length and cannot run into its neighbour. It also bounds
+// the inflation, so a few compressed bytes cannot be made to allocate a megabyte.
+func TestATransferCarriesBytesByLengthNotByScanning(t *testing.T) {
+	adversarial := scenarioRegion +
+		"\n# VIFSCEN\x00\x00\x01 unbalanced \" and a lone ' in a comment\n" +
+		"[states.MainOther]\nparent = \"Root\"\n"
+	src := read(t, writeScenario(t, filepath.Join(t.TempDir(), "scenario", "main"), adversarial))
+
+	body, err := src.MarshalCompressed()
+	if err != nil {
+		t.Fatalf("compress: %v", err)
+	}
+	back, err := UnmarshalScenarioCompressed(src.Name, body)
+	if err != nil {
+		t.Fatalf("inflate: %v", err)
+	}
+	if back.Digest() != src.Digest() {
+		t.Fatalf("round trip changed the digest")
+	}
+	region, err := fs.ReadFile(back.FS(), "main.toml")
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if string(region) != adversarial {
+		t.Errorf("region came back as %q", region)
+	}
+	entry, err := fs.ReadFile(back.FS(), "scenario.toml")
+	if err != nil {
+		t.Fatalf("read entry: %v", err)
+	}
+	if strings.Contains(string(entry), "MainOther") {
+		t.Error("one file's bytes reached the next")
+	}
+
+	var bomb bytes.Buffer
+	w, _ := flate.NewWriter(&bomb, flate.BestCompression)
+	_, _ = w.Write(make([]byte, ScenarioMaxBytes*4))
+	_ = w.Close()
+	if _, err := UnmarshalScenarioCompressed("bomb", bomb.Bytes()); err == nil {
+		t.Fatalf("a %d-byte body inflating to %d was accepted", bomb.Len(), ScenarioMaxBytes*4)
+	}
 }

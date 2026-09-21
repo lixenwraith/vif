@@ -256,16 +256,23 @@ func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 	// rejected as unused. That is how an explicit guest colour mode used to abort
 	// join and every later correction; audio overrides had the same latent path.
 	//
-	// Dir remains part of the simulation resource set because installed scenario names,
-	// corpus discovery and files referenced by the FSM resolve through it. Keymap,
-	// music and sounds belong to the live instance's input and audio services.
+	// Dir remains part of the simulation resource set because corpus discovery and
+	// files referenced by the FSM resolve through it. Keymap, music and sounds
+	// belong to the live instance's input and audio services.
+	//
+	// The scenario is handed over rather than re-resolved: this instance has one
+	// loaded, it is what the capture was produced against, and a root that has
+	// changed underneath a running session must not make the staging world answer a
+	// different question. It also covers a scenario that came from the coordinator
+	// and exists nowhere on this host.
+	staged := a.scenario
 	cfg := Config{
 		Mode: ModeHeadless,
 		Resources: resource.Options{
 			Dir:      a.cfg.Resources.Dir,
-			Scenario: a.cfg.Resources.Scenario,
 			Content:  a.cfg.Resources.Content,
 			Embedded: a.cfg.Resources.Embedded,
+			Provided: &staged,
 		},
 		Seed:      a.cfg.Seed,
 		Session:   a.cfg.Session,

@@ -43,6 +43,18 @@ const (
 	MsgLinkProbe MessageType = 0x14 // Live: a link measurement, awaiting its echo
 	MsgLinkEcho  MessageType = 0x15 // Live: one probe answered, with the peer's report
 
+	// MsgScenarioRequest and MsgScenarioBody carry the session's scenario to a
+	// joiner whose own roots do not hold it. The request names the digest the offer
+	// announced; the answer is the deflated canonical form, chunked like a capture
+	// because it is the other message whose size is a function of its content.
+	//
+	// They sit inside the join handshake, between the offer and the reply, so a
+	// participant is running the session's scenario before it reports an identity
+	// the coordinator would refuse it on. At most one request fits there by
+	// construction: what follows the answer has to be the reply.
+	MsgScenarioRequest MessageType = 0x16 // Live: a joiner asking for the session's scenario
+	MsgScenarioBody    MessageType = 0x17 // Live: one chunk of the deflated scenario
+
 	// MsgStateSnapshot carries one chunk of an authoritative shared-world capture
 	// (D-19). It is the only message whose total size is a function of the world
 	// rather than of the format, so it is the only one that is split; see

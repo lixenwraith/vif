@@ -266,6 +266,23 @@ than `scenario_id` is what a mismatched scenario is refused on: two roots may
 install the same scenario under different names or paths, and the same name may
 cover an edit. The name is what the refusal message and the log records say.
 
+A joiner whose own roots hold no scenario with that digest asks the coordinator
+for one, between the offer and the reply: `MsgScenarioRequest` names the digest,
+`MsgScenarioBody` carries the deflated canonical form in capture-sized chunks. It
+sits there so the participant is running the session's scenario before it reports
+an identity that would otherwise be refused, and one request fits by construction
+— what follows the answer has to be the reply. The coordinator serves only the
+digest it is playing, refusing anything else rather than acting as a file service.
+
+The received scenario is held in memory for the life of the run and never written
+to disk, including into the staging world a correction resolves against. The whole
+container is one deflate stream rather than one per file, because the files are
+near-identical TOML and a shared window is most of the saving; the container is
+length-prefixed rather than delimited, so a file that is truncated, malformed or
+deliberately unterminated cannot run into the next one, and the inflate is bounded
+at the same ceiling a scenario read from disk is held to. The digest is taken over
+what deflate was given, so a receiver verifies exactly what the sender hashed.
+
 `simulation` is `manifest.Fingerprint()`: a hash over the component list and the
 system list — names, domains, snapshot obligations, dependencies and order — which
 is what actually decides whether two participants converge. Renderers are excluded

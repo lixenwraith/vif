@@ -211,6 +211,14 @@ func writeSnapshot(conn net.Conn, timeout time.Duration, tick uint64, body []byt
 // carries nothing. Anything else is a protocol error, because the next message on
 // this stream decides what the joiner does with the world it just received.
 func readSnapshot(p *PendingJoin, timeout time.Duration) (uint64, []byte, error) {
+	return readChunked(p, MsgStateSnapshot, timeout)
+}
+
+// readChunked reassembles one chunked transfer off the handshake stream, holding
+// the session traffic that arrives beside it. want names the kind: a capture and a
+// scenario are the two messages whose size is a function of their content, and
+// they share the framing because they are the same problem.
+func readChunked(p *PendingJoin, want MessageType, timeout time.Duration) (uint64, []byte, error) {
 	var asm SnapshotAssembly
 	for {
 		if timeout > 0 {
@@ -224,9 +232,16 @@ func readSnapshot(p *PendingJoin, timeout time.Duration) (uint64, []byte, error)
 		if p.hold(msg) {
 			continue
 		}
-		if msg.Type != MsgStateSnapshot {
+		if msg.Type == MsgJoinReply {
+			// The coordinator refused mid-transfer. Its reason is worth more than
+			// the surprise at the message kind, and it is the only thing the
+			// dialer can act on.
 			_ = p.conn.SetReadDeadline(time.Time{})
-			return 0, nil, fmt.Errorf("join snapshot: got message %#x, want a capture chunk", msg.Type)
+			return 0, nil, refusalFrom(msg)
+		}
+		if msg.Type != want {
+			_ = p.conn.SetReadDeadline(time.Time{})
+			return 0, nil, fmt.Errorf("join transfer: got message %#x, want %#x", msg.Type, want)
 		}
 		done, err := asm.Add(msg.Payload)
 		if err != nil {

@@ -100,6 +100,7 @@ Observed (runs a scenario and prints what happened; asserts nothing)
 Automated (assert, and used by `all`)
   check             validate every shipped resource tree
   scenario          :n <name> rebuilds the run on another scenario and back
+  transfer          a guest with no root receives the session's scenario
   lifetime          unclaimed expiry, then vacancy expiry
   drain             SIGTERM drains instead of cutting a match
   identity          a peer running a different build is refused (runs the tests)
@@ -337,6 +338,30 @@ identity)
 	pass "a peer running a different build or session is refused by the host"
 	;;
 
+transfer)
+	# A guest with no configuration root of its own joins a host playing an
+	# installed scenario. What proves the transfer is that the guest could not have
+	# resolved that scenario locally: its root is empty.
+	need_bin
+	[ -d wad/scenario/main ] || fail "wad/scenario/main is not in this checkout"
+	ROOT=$(mktemp -d); HL=$(mktemp -d); GL=$(mktemp -d)
+	"$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -config-dir wad -s main \
+		-size 120x40 -players 1 -first-join 30s -empty 15s \
+		-l="$HL" -lv info -ls app >/dev/null 2>&1 &
+	SERVE_PID=$!
+	wait_for 15 'probe_get /health' || fail "the host never answered its probe"
+	timeout 20 "$BIN" -script script/sparring-guest.toml -join "$HOST:$PORT" \
+		-config-dir "$ROOT" -l="$GL" -lv info -ls app >/dev/null 2>&1 || true
+	grep -qh '"msg":"scenario served"' "$HL"/*.jsonl 2>/dev/null \
+		|| fail "the host never served its scenario: $HL"
+	grep -qh '"msg":"scenario received"' "$GL"/*.jsonl 2>/dev/null \
+		|| fail "the guest never received a scenario: $GL"
+	grep -qh '"msg":"join installed the session world"' "$GL"/*.jsonl 2>/dev/null \
+		|| fail "the guest received a scenario but never joined: $GL"
+	rm -rf "$ROOT" "$HL" "$GL"
+	pass "a guest with no root received the session's scenario and joined on it"
+	;;
+
 scenario)
 	# `:n <name>` rebuilds the run, so the only honest witness is a real terminal
 	# going through it. script(1) supplies the pty; its two flavours take their
@@ -374,7 +399,7 @@ image)
 	;;
 
 all)
-	for s in check scenario lifetime drain identity; do
+	for s in check scenario transfer lifetime drain identity; do
 		note "$s"
 		"$0" "$s"
 	done
