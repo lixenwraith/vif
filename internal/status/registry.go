@@ -109,7 +109,7 @@ func (r *Registry) TotalCount() int {
 }
 
 // Freeze closes the metric set and caches the group index. Called once from
-// ClockScheduler.Start, after World.Seal and before the first tick: every
+// Scheduler.Start, after World.Seal and before the first tick: every
 // system and renderer has registered by then and nothing registers later.
 func (r *Registry) Freeze() {
 	r.idxMu.Lock()

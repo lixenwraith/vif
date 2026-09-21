@@ -275,7 +275,7 @@ func (w *World) SystemsRequiring(name string, strength DependencyStrength) []str
 }
 
 // Systems returns a copy of all registered systems
-// Used by ClockScheduler for event handler auto-registration
+// Used by Scheduler for event handler auto-registration
 func (w *World) Systems() []System {
 	result := make([]System, len(w.systems))
 	for i := range w.systems {
@@ -300,8 +300,8 @@ func (w *World) UpdateLocked() {
 	}
 }
 
-// Seal freezes the system set; called by ClockScheduler.Start before the
-// scheduler and event goroutines begin ranging it
+// Seal freezes the system set; called by Scheduler.Start before its tick and
+// event goroutines begin ranging it
 func (w *World) Seal() {
 	w.sealed.Store(true)
 }

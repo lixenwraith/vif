@@ -64,7 +64,7 @@ type GameContext struct {
 
 	// === Channels ===
 
-	ResetChan chan<- struct{} // FSM reset signal; wired to ClockScheduler
+	ResetChan chan<- struct{} // FSM reset signal; wired to Scheduler
 
 	// SessionCtl is the App-level session lifecycle the operator surface reaches
 	// through. It is nil in a harness that builds no transport, so every caller

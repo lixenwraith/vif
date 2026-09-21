@@ -17,10 +17,10 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
-// ClockScheduler manages game logic on a fixed tick
+// Scheduler manages game logic on a fixed tick
 // Provides infrastructure for phase transitions and state ownership
 // Handles pause-aware scheduling without busy-wait
-type ClockScheduler struct {
+type Scheduler struct {
 	world *World
 
 	ctl *TimeControl // sole time surface; pause is read from the clock it schedules
@@ -123,20 +123,20 @@ const (
 
 var settleSourceNames = [settleSourceCount]string{"pre", "post", "loop", "reset", "input", "settle", "wire"}
 
-// NewClockScheduler creates a new clock scheduler with specified tick interval
+// NewScheduler creates a scheduler on the given tick interval
 // Receives frameReady sync (receive) channel and returns game updateDone (send) and resetRequest (send) channels
-func NewClockScheduler(
+func NewScheduler(
 	world *World,
 	ctl *TimeControl,
 	tickInterval time.Duration,
 	frameReady <-chan struct{},
-) (*ClockScheduler, <-chan struct{}, chan<- struct{}) {
+) (*Scheduler, <-chan struct{}, chan<- struct{}) {
 	updateDone := make(chan struct{}, 1)
 	resetChan := make(chan struct{}, 1)
 
 	statusReg := world.Resources.Status
 
-	cs := &ClockScheduler{
+	s := &Scheduler{
 		world:        world,
 		ctl:          ctl,
 		tickInterval: tickInterval,
@@ -183,73 +183,73 @@ func NewClockScheduler(
 		statFSMTotal:   statusReg.Ints.Get("fsm.state_count"),
 	}
 	for i, name := range settleSourceNames {
-		cs.statSettlePass[i] = statusReg.Ints.Get("event.settle_" + name)
+		s.statSettlePass[i] = statusReg.Ints.Get("event.settle_" + name)
 	}
-	cs.resetTelemetry()
+	s.resetTelemetry()
 
 	// The FSM is scheduler-owned, so region control arrives as an event rather
 	// than as an API pair reaching through App
-	cs.eventRouter.Register(cs)
+	s.eventRouter.Register(s)
 
-	return cs, updateDone, resetChan
+	return s, updateDone, resetChan
 }
 
 // EventTypes returns the event types the scheduler handles directly
-func (cs *ClockScheduler) EventTypes() []event.EventType {
+func (s *Scheduler) EventTypes() []event.EventType {
 	return []event.EventType{event.EventFSMRegionRequest}
 }
 
 // HandleEvent applies a region operation to the scheduler-owned FSM.
 // Runs inside dispatchOnePass with the world lock held; anything the operation
 // emits settles on a later pass.
-func (cs *ClockScheduler) HandleEvent(ev event.GameEvent) {
+func (s *Scheduler) HandleEvent(ev event.GameEvent) {
 	p, ok := ev.Payload.(*event.FSMRegionPayload)
 	if !ok {
-		cs.report("region: missing payload")
+		s.report("region: missing payload")
 		return
 	}
-	if err := cs.applyRegionOp(p); err != nil {
+	if err := s.applyRegionOp(p); err != nil {
 		vlog.Error("fsm", "msg", "region request failed",
 			"op", p.Op, "region", p.Region, "state", p.State, "error", err.Error())
-		cs.report("region: " + err.Error())
+		s.report("region: " + err.Error())
 		return
 	}
 	vlog.Info("fsm", "msg", "region request", "op", p.Op, "region", p.Region, "state", p.State)
 }
 
 // applyRegionOp dispatches one primitive region operation
-func (cs *ClockScheduler) applyRegionOp(p *event.FSMRegionPayload) error {
+func (s *Scheduler) applyRegionOp(p *event.FSMRegionPayload) error {
 	if p.Op == event.RegionList {
-		return cs.reportRegions()
+		return s.reportRegions()
 	}
 	if p.Region == "" {
 		return fmt.Errorf("%s requires a region name", p.Op)
 	}
-	if cs.fsm.GetRegionConfig(p.Region) == nil {
+	if s.fsm.GetRegionConfig(p.Region) == nil {
 		return fmt.Errorf("undeclared region %q", p.Region)
 	}
 
 	switch p.Op {
 	case event.RegionSpawn:
-		id, ok := cs.fsm.GetStateID(p.State)
+		id, ok := s.fsm.GetStateID(p.State)
 		if !ok {
 			return fmt.Errorf("unknown state %q", p.State)
 		}
-		if err := cs.fsm.SpawnRegion(cs.world, p.Region, id); err != nil {
+		if err := s.fsm.SpawnRegion(s.world, p.Region, id); err != nil {
 			return err
 		}
 	case event.RegionPause:
-		if !cs.fsm.HasRegion(p.Region) {
+		if !s.fsm.HasRegion(p.Region) {
 			return fmt.Errorf("region %q is not active", p.Region)
 		}
-		cs.fsm.PauseRegion(p.Region)
+		s.fsm.PauseRegion(p.Region)
 	case event.RegionResume:
-		if !cs.fsm.HasRegion(p.Region) {
+		if !s.fsm.HasRegion(p.Region) {
 			return fmt.Errorf("region %q is not active", p.Region)
 		}
-		cs.fsm.ResumeRegion(p.Region)
+		s.fsm.ResumeRegion(p.Region)
 	case event.RegionTerminate:
-		if err := cs.fsm.TerminateRegion(cs.world, p.Region); err != nil {
+		if err := s.fsm.TerminateRegion(s.world, p.Region); err != nil {
 			return err
 		}
 	default:
@@ -257,15 +257,15 @@ func (cs *ClockScheduler) applyRegionOp(p *event.FSMRegionPayload) error {
 	}
 
 	// Every op changes the active set, so every op reconciles
-	if !cs.fsm.ExecuteAction(cs.world, "ApplyRegionSystemConfigs", nil) {
+	if !s.fsm.ExecuteAction(s.world, "ApplyRegionSystemConfigs", nil) {
 		return fmt.Errorf("fsm: action ApplyRegionSystemConfigs is not registered")
 	}
 	return nil
 }
 
 // report surfaces a scheduler-side message in the status bar
-func (cs *ClockScheduler) report(msg string) {
-	cs.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
+func (s *Scheduler) report(msg string) {
+	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
 		Message:          msg,
 		DurationOverride: true,
 	})
@@ -274,17 +274,17 @@ func (cs *ClockScheduler) report(msg string) {
 // reportRegions publishes declared regions for :region list.
 // An inactive region shows its declared initial state, which is what spawn expects;
 // an active one shows its current state, suffixed '~' while paused.
-func (cs *ClockScheduler) reportRegions() error {
+func (s *Scheduler) reportRegions() error {
 	var b strings.Builder
-	for i, r := range cs.fsm.DeclaredRegions() {
+	for i, r := range s.fsm.DeclaredRegions() {
 		if i > 0 {
 			b.WriteByte(' ')
 		}
 		b.WriteString(r)
 
-		t := cs.fsm.RegionTelemetry(r)
+		t := s.fsm.RegionTelemetry(r)
 		if !t.Active {
-			if cfg := cs.fsm.GetRegionConfig(r); cfg != nil && cfg.Initial != "" {
+			if cfg := s.fsm.GetRegionConfig(r); cfg != nil && cfg.Initial != "" {
 				b.WriteString("[" + cfg.Initial + "]")
 			}
 			continue
@@ -294,19 +294,19 @@ func (cs *ClockScheduler) reportRegions() error {
 			b.WriteByte('~')
 		}
 	}
-	cs.report("regions: " + b.String())
+	s.report("regions: " + b.String())
 	return nil
 }
 
 // RegisterEventHandler adds an event handler to router, must be called before Start()
-func (cs *ClockScheduler) RegisterEventHandler(handler event.Handler) {
-	cs.eventRouter.Register(handler)
+func (s *Scheduler) RegisterEventHandler(handler event.Handler) {
+	s.eventRouter.Register(handler)
 }
 
 // SetDispatchTap installs an observer called for every event before the FSM and
 // system handlers see it, so a pooled payload is still the producer's. Harness-only:
 // set before Start, or any time on a driven App, never on a running scheduler.
-func (cs *ClockScheduler) SetDispatchTap(fn func(event.GameEvent)) { cs.tap = fn }
+func (s *Scheduler) SetDispatchTap(fn func(event.GameEvent)) { s.tap = fn }
 
 // ExportFSM reads the FSM runtime's position for a D-19 capture: which state each
 // region stands in, how long it has stood there, the variables guards read, and
@@ -314,7 +314,7 @@ func (cs *ClockScheduler) SetDispatchTap(fn func(event.GameEvent)) { cs.tap = fn
 // travels with the build.
 //
 // Caller MUST hold updateMutex: the machine is tick-owned.
-func (cs *ClockScheduler) ExportFSM() fsm.MachineState { return cs.fsm.Export() }
+func (s *Scheduler) ExportFSM() fsm.MachineState { return s.fsm.Export() }
 
 // ImportFSM places the FSM runtime where a capture found it. A staging import
 // resolves the graph without side effects. A live import additionally replays the
@@ -322,16 +322,16 @@ func (cs *ClockScheduler) ExportFSM() fsm.MachineState { return cs.fsm.Export() 
 // the imported position crossed; ordinary entry actions are never re-run.
 //
 // Caller MUST hold updateMutex.
-func (cs *ClockScheduler) ImportFSM(state fsm.MachineState, reconcileLocal bool) error {
+func (s *Scheduler) ImportFSM(state fsm.MachineState, reconcileLocal bool) error {
 	var err error
 	if reconcileLocal {
 		var actions int
-		actions, err = cs.fsm.ImportReconciled(cs.world, state)
+		actions, err = s.fsm.ImportReconciled(s.world, state)
 		if err == nil && actions > 0 {
 			vlog.Debug("fsm", "msg", "import reconciled local lifecycle", "actions", actions)
 		}
 	} else {
-		err = cs.fsm.Import(cs.world, state)
+		err = s.fsm.Import(s.world, state)
 	}
 	if err != nil {
 		return err
@@ -340,59 +340,59 @@ func (cs *ClockScheduler) ImportFSM(state fsm.MachineState, reconcileLocal bool)
 	// does. The toggles a region declares are a per-instance effect of a Shared
 	// position (D-20) and are re-derived from it; a participant that arrives at the
 	// position by installing a world runs no region's entry actions.
-	if err := cs.applySystemConfig(); err != nil {
+	if err := s.applySystemConfig(); err != nil {
 		return err
 	}
 	// Region telemetry is derived from the position that just changed, and it is
 	// part of the compared shared surface. Republish it here rather than waiting
 	// for the next tick, so an installed world reports where it stands.
-	cs.publishRegionStats()
-	stateName, stateID, timeInState := cs.fsm.GetActiveRegionTelemetry()
-	cs.statFSMName.StoreIfChanged(stateName)
-	cs.statFSMElapsed.Store(int64(timeInState))
-	cs.statFSMMaxDur.Store(int64(cs.fsm.StateDurations[stateID]))
-	cs.statFSMIndex.Store(int64(cs.fsm.StateIndices[stateID]))
-	cs.statFSMTotal.Store(int64(cs.fsm.StateCount))
+	s.publishRegionStats()
+	stateName, stateID, timeInState := s.fsm.GetActiveRegionTelemetry()
+	s.statFSMName.StoreIfChanged(stateName)
+	s.statFSMElapsed.Store(int64(timeInState))
+	s.statFSMMaxDur.Store(int64(s.fsm.StateDurations[stateID]))
+	s.statFSMIndex.Store(int64(s.fsm.StateIndices[stateID]))
+	s.statFSMTotal.Store(int64(s.fsm.StateCount))
 	return nil
 }
 
 // LoadFSMFromFS initializes HFSM from a filesystem (embed.FS or os.DirFS)
-func (cs *ClockScheduler) LoadFSMFromFS(fsys fs.FS, entry string, registerComponents func(*fsm.Machine[*World])) error {
-	registerComponents(cs.fsm)
-	if err := fsm.LoadConfigFromFS(cs.fsm, fsys, entry); err != nil {
+func (s *Scheduler) LoadFSMFromFS(fsys fs.FS, entry string, registerComponents func(*fsm.Machine[*World])) error {
+	registerComponents(s.fsm)
+	if err := fsm.LoadConfigFromFS(s.fsm, fsys, entry); err != nil {
 		return fmt.Errorf("failed to load FSM: %w", err)
 	}
-	return cs.initLoadedFSM()
+	return s.initLoadedFSM()
 }
 
 // LoadFSMFromPath initializes HFSM from an external entry config
 // Region file includes resolve relative to the file's directory
-func (cs *ClockScheduler) LoadFSMFromPath(configPath string, registerComponents func(*fsm.Machine[*World])) error {
-	registerComponents(cs.fsm)
+func (s *Scheduler) LoadFSMFromPath(configPath string, registerComponents func(*fsm.Machine[*World])) error {
+	registerComponents(s.fsm)
 
-	if err := fsm.LoadConfigFromPath(cs.fsm, configPath); err != nil {
+	if err := fsm.LoadConfigFromPath(s.fsm, configPath); err != nil {
 		return fmt.Errorf("failed to load FSM: %w", err)
 	}
-	return cs.initLoadedFSM()
+	return s.initLoadedFSM()
 }
 
 // initLoadedFSM is common post-load initialization
-func (cs *ClockScheduler) initLoadedFSM() error {
+func (s *Scheduler) initLoadedFSM() error {
 	// Before Init: the initial region entries must reach the observer
-	cs.bindFSMTelemetry()
+	s.bindFSMTelemetry()
 
-	if err := cs.fsm.Init(cs.world); err != nil {
+	if err := s.fsm.Init(s.world); err != nil {
 		return fmt.Errorf("failed to init FSM: %w", err)
 	}
-	return cs.applySystemConfig()
+	return s.applySystemConfig()
 }
 
 // applySystemConfig reconciles global then per-region toggles, so a region
 // declaration wins over the root list. A missing action is a wiring
 // regression, not a runtime condition.
-func (cs *ClockScheduler) applySystemConfig() error {
+func (s *Scheduler) applySystemConfig() error {
 	for _, name := range [...]string{"ApplyGlobalSystemConfig", "ApplyRegionSystemConfigs"} {
-		if !cs.fsm.ExecuteAction(cs.world, name, nil) {
+		if !s.fsm.ExecuteAction(s.world, name, nil) {
 			return fmt.Errorf("fsm: action %s is not registered", name)
 		}
 	}
@@ -401,13 +401,13 @@ func (cs *ClockScheduler) applySystemConfig() error {
 
 // bindFSMTelemetry installs the transition taps and pre-registers one metric
 // set per declared region, so no status key appears after the first tick.
-func (cs *ClockScheduler) bindFSMTelemetry() {
-	reg := cs.world.Resources.Status
-	names := cs.fsm.DeclaredRegions()
-	cs.regionStats = make([]regionStat, 0, len(names))
+func (s *Scheduler) bindFSMTelemetry() {
+	reg := s.world.Resources.Status
+	names := s.fsm.DeclaredRegions()
+	s.regionStats = make([]regionStat, 0, len(names))
 	for _, n := range names {
 		k := "fsm." + n + "."
-		cs.regionStats = append(cs.regionStats, regionStat{
+		s.regionStats = append(s.regionStats, regionStat{
 			name:    n,
 			state:   reg.Strings.Get(k + "state"),
 			index:   reg.Ints.Get(k + "index"),
@@ -419,50 +419,50 @@ func (cs *ClockScheduler) bindFSMTelemetry() {
 
 	// region is the first string field on every record, so vif-log's follow
 	// key (f/F) walks one region's path
-	cs.fsm.OnTransition = func(region string, from, to fsm.StateID, trigger event.EventType, internal bool) {
+	s.fsm.OnTransition = func(region string, from, to fsm.StateID, trigger event.EventType, internal bool) {
 		if internal {
 			if !vlog.On("fsm", vlog.LevelDebug) {
 				return
 			}
 			vlog.Debug("fsm", "msg", "internal",
 				"region", region,
-				"state", cs.fsm.StateName(from),
+				"state", s.fsm.StateName(from),
 				"via", event.GetEventName(trigger))
 			return
 		}
-		cs.world.Resources.Status.TriggerFSM(region)
+		s.world.Resources.Status.TriggerFSM(region)
 		if vlog.On("fsm", vlog.LevelInfo) {
 			vlog.Info("fsm", "msg", "transition",
 				"region", region,
-				"from", cs.fsm.StateName(from),
-				"to", cs.fsm.StateName(to),
+				"from", s.fsm.StateName(from),
+				"to", s.fsm.StateName(to),
 				"via", event.GetEventName(trigger),
-				"index", cs.fsm.StateIndices[to],
-				"max_ms", cs.fsm.StateDurations[to].Milliseconds())
+				"index", s.fsm.StateIndices[to],
+				"max_ms", s.fsm.StateDurations[to].Milliseconds())
 		}
 		// After the transition record, so the breakpoint reads as its consequence
-		if bs := cs.ctl.Trip(StepFSM, region, event.EventNone); bs != nil {
-			cs.breakHit(bs, region+" "+cs.fsm.StateName(from)+" -> "+cs.fsm.StateName(to))
+		if bs := s.ctl.Trip(StepFSM, region, event.EventNone); bs != nil {
+			s.breakHit(bs, region+" "+s.fsm.StateName(from)+" -> "+s.fsm.StateName(to))
 		}
 	}
 
-	cs.fsm.OnRegion = func(op, region string, state fsm.StateID) {
+	s.fsm.OnRegion = func(op, region string, state fsm.StateID) {
 		if !vlog.On("fsm", vlog.LevelInfo) {
 			return
 		}
 		vlog.Info("fsm", "msg", "region",
 			"region", region,
 			"op", op,
-			"state", cs.fsm.StateName(state))
+			"state", s.fsm.StateName(state))
 	}
 }
 
 // publishRegionStats mirrors every declared region into the status registry.
 // Caller MUST hold updateMutex: reads live FSM state.
-func (cs *ClockScheduler) publishRegionStats() {
-	for i := range cs.regionStats {
-		rs := &cs.regionStats[i]
-		t := cs.fsm.RegionTelemetry(rs.name)
+func (s *Scheduler) publishRegionStats() {
+	for i := range s.regionStats {
+		rs := &s.regionStats[i]
+		t := s.fsm.RegionTelemetry(rs.name)
 		if !t.Active {
 			rs.state.StoreIfChanged("-")
 			rs.index.Store(-1)
@@ -480,29 +480,29 @@ func (cs *ClockScheduler) publishRegionStats() {
 }
 
 // Start begins the scheduler loop
-func (cs *ClockScheduler) Start() {
-	if cs.running.CompareAndSwap(false, true) {
-		cs.Prepare()
-		cs.wg.Add(2) // 2 Goroutines
+func (s *Scheduler) Start() {
+	if s.running.CompareAndSwap(false, true) {
+		s.Prepare()
+		s.wg.Add(2) // 2 Goroutines
 		// Use core.Go for safe execution with centralized crash handling
-		core.Go(cs.schedulerLoop)
-		core.Go(cs.eventLoop)
+		core.Go(s.schedulerLoop)
+		core.Go(s.eventLoop)
 	}
 }
 
 // Running reports whether the scheduler goroutines are live. A liveness probe
 // reads it to tell a stalled tick loop from one that has not started: only the
 // first is a fault.
-func (cs *ClockScheduler) Running() bool { return cs.running.Load() }
+func (s *Scheduler) Running() bool { return s.running.Load() }
 
 // Prepare closes the system and metric sets from a harness that drives ticks
 // or settles events before the first RunTicks call. Idempotent.
-func (cs *ClockScheduler) Prepare() {
-	if cs.world.Resources.Status.Frozen() {
+func (s *Scheduler) Prepare() {
+	if s.world.Resources.Status.Frozen() {
 		return
 	}
-	cs.world.Seal() // no system registration once the goroutines are live
-	cs.world.Resources.Status.Freeze()
+	s.world.Seal() // no system registration once the goroutines are live
+	s.world.Resources.Status.Freeze()
 }
 
 // RunTicks advances the simulation by n ticks as fast as the caller's goroutine
@@ -511,20 +511,20 @@ func (cs *ClockScheduler) Prepare() {
 // a concurrent scheduler or event goroutine reintroduces the nondeterminism
 // this exists to avoid. A reset requested during a tick is serviced before the
 // next one, matching the scheduler loop.
-func (cs *ClockScheduler) RunTicks(n int) {
-	cs.Prepare()
+func (s *Scheduler) RunTicks(n int) {
+	s.Prepare()
 	for range n {
-		cs.drainReset()
-		cs.stepTick()
+		s.drainReset()
+		s.stepTick()
 	}
-	cs.drainReset()
+	s.drainReset()
 }
 
 // drainReset services a pending reset request without blocking
-func (cs *ClockScheduler) drainReset() {
+func (s *Scheduler) drainReset() {
 	select {
-	case <-cs.resetChan:
-		cs.executeReset()
+	case <-s.resetChan:
+		s.executeReset()
 	default:
 	}
 }
@@ -532,24 +532,24 @@ func (cs *ClockScheduler) drainReset() {
 // Settle dispatches queued events without advancing time. Use after injecting
 // input so its effects land before the next tick. Must not be called from a
 // path already holding the world lock.
-func (cs *ClockScheduler) Settle() {
-	cs.world.RunSafe(func() { cs.settleLocked("settle") })
+func (s *Scheduler) Settle() {
+	s.world.RunSafe(func() { s.settleLocked("settle") })
 }
 
 // settleLocked dispatches pending events and closes the settle group when it
 // consumed any. Caller MUST hold the world lock.
-func (cs *ClockScheduler) settleLocked(src string) {
-	if cs.dispatchAndProcessEvents(src) > 0 {
-		cs.world.Resources.Event.Queue.NextBoundary()
+func (s *Scheduler) settleLocked(src string) {
+	if s.dispatchAndProcessEvents(src) > 0 {
+		s.world.Resources.Event.Queue.NextBoundary()
 	}
 }
 
 // Stop halts the scheduler loop
-func (cs *ClockScheduler) Stop() {
-	cs.stopOnce.Do(func() {
-		if cs.running.CompareAndSwap(true, false) {
-			close(cs.stopChan)
-			cs.wg.Wait()
+func (s *Scheduler) Stop() {
+	s.stopOnce.Do(func() {
+		if s.running.CompareAndSwap(true, false) {
+			close(s.stopChan)
+			s.wg.Wait()
 		}
 	})
 }
@@ -557,10 +557,10 @@ func (cs *ClockScheduler) Stop() {
 // schedulerLoop runs the main scheduling loop with pause awareness.
 // Deadlines live in game time; sleeps live in wall time, so every wait
 // converts through the clock's current rate.
-func (cs *ClockScheduler) schedulerLoop() {
-	defer cs.wg.Done()
+func (s *Scheduler) schedulerLoop() {
+	defer s.wg.Done()
 
-	cs.nextTickDeadline = cs.ctl.Now().Add(cs.tickInterval)
+	s.nextTickDeadline = s.ctl.Now().Add(s.tickInterval)
 
 	timer := stoppedTimer()
 	defer timer.Stop()
@@ -571,12 +571,12 @@ func (cs *ClockScheduler) schedulerLoop() {
 
 	for {
 		select {
-		case <-cs.stopChan:
+		case <-s.stopChan:
 			return
 
-		case <-cs.resetChan:
+		case <-s.resetChan:
 			// Execute reset regardless of current pause state to prevent channel clogging
-			cs.executeReset()
+			s.executeReset()
 			continue
 
 		default:
@@ -584,9 +584,9 @@ func (cs *ClockScheduler) schedulerLoop() {
 
 		var sleepDuration time.Duration // wall clock
 
-		if cs.ctl.IsPaused() {
-			if cs.ctl.TakeStep() {
-				cs.stepTick()
+		if s.ctl.IsPaused() {
+			if s.ctl.TakeStep() {
+				s.stepTick()
 				continue // drain the allowance without sleeping
 			}
 			wasPaused = true
@@ -596,50 +596,50 @@ func (cs *ClockScheduler) schedulerLoop() {
 			if wasPaused {
 				// Game time stood still or was stepped; re-anchor so the first
 				// live tick is not owed a burst
-				cs.nextTickDeadline = cs.ctl.Now().Add(cs.tickInterval)
+				s.nextTickDeadline = s.ctl.Now().Add(s.tickInterval)
 				wasPaused = false
 			}
-			gameNow := cs.ctl.Now()
-			deadline := cs.nextTickDeadline
+			gameNow := s.ctl.Now()
+			deadline := s.nextTickDeadline
 
 			if !gameNow.Before(deadline) {
-				if !cs.awaitFrame(frameTimer) {
+				if !s.awaitFrame(frameTimer) {
 					return
 				}
 
-				cs.processTick()
+				s.processTick()
 
-				cs.nextTickDeadline = cs.nextTickDeadline.Add(cs.tickInterval)
+				s.nextTickDeadline = s.nextTickDeadline.Add(s.tickInterval)
 
 				// Re-read after the tick: the debt is what the tick consumed,
 				// not what was owed when it started
-				gameNow = cs.ctl.Now()
-				if gameNow.Sub(cs.nextTickDeadline) > cs.tickInterval*2 {
+				gameNow = s.ctl.Now()
+				if gameNow.Sub(s.nextTickDeadline) > s.tickInterval*2 {
 					// Systems cannot sustain this rate; drop the debt and count it
-					cs.nextTickDeadline = gameNow.Add(cs.tickInterval)
-					cs.tickSlipPending = true
+					s.nextTickDeadline = gameNow.Add(s.tickInterval)
+					s.tickSlipPending = true
 				}
-				deadline = cs.nextTickDeadline
+				deadline = s.nextTickDeadline
 
 				select {
-				case cs.updateDone <- struct{}{}:
+				case s.updateDone <- struct{}{}:
 				default:
 				}
 
 			}
-			sleepDuration = max(cs.ctl.ToReal(deadline.Sub(gameNow)), 0)
+			sleepDuration = max(s.ctl.ToReal(deadline.Sub(gameNow)), 0)
 		}
 
 		if sleepDuration > 0 {
 			timer.Reset(sleepDuration)
 			select {
 			case <-timer.C:
-			case <-cs.ctl.Wake():
+			case <-s.ctl.Wake():
 				drainTimer(timer) // rate changed; recompute against the new one
-			case <-cs.resetChan:
+			case <-s.resetChan:
 				drainTimer(timer)
-				cs.executeReset()
-			case <-cs.stopChan:
+				s.executeReset()
+			case <-s.stopChan:
 				return
 			}
 		}
@@ -649,33 +649,33 @@ func (cs *ClockScheduler) schedulerLoop() {
 // stepTick advances frozen game time by one interval and runs the tick past the
 // pause gate. Render backpressure is skipped: the render loop grants no frame
 // while paused, and a step is an inspection request, not a paced one.
-func (cs *ClockScheduler) stepTick() {
-	cs.ctl.Step(cs.tickInterval)
-	cs.stepping = true
-	cs.processTick()
-	cs.stepping = false
+func (s *Scheduler) stepTick() {
+	s.ctl.Step(s.tickInterval)
+	s.stepping = true
+	s.processTick()
+	s.stepping = false
 
 	select {
-	case cs.updateDone <- struct{}{}:
+	case s.updateDone <- struct{}{}:
 	default:
 	}
 }
 
 // Reset rebuilds world state on the caller's goroutine, for harnesses that drive
 // ticks directly rather than through the reset channel
-func (cs *ClockScheduler) Reset() { cs.executeReset() }
+func (s *Scheduler) Reset() { s.executeReset() }
 
 // breakHit applies a tripped request: flush the recorder window, report the
 // cause, and pause when asked
-func (cs *ClockScheduler) breakHit(bs *BreakState, cause string) {
-	cs.world.Resources.Status.Trigger(status.TrigBreak)
+func (s *Scheduler) breakHit(bs *BreakState, cause string) {
+	s.world.Resources.Status.Trigger(status.TrigBreak)
 	vlog.Info("app", "msg", "breakpoint",
 		"on", bs.Label, "cause", cause, "scale", bs.Restore.String(), "pause", bs.Pause)
 
 	if bs.Pause {
-		cs.world.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: true})
+		s.world.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: true})
 	}
-	cs.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
+	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
 		Message: "Break: " + cause, DurationOverride: true,
 	})
 }
@@ -685,22 +685,22 @@ func (cs *ClockScheduler) breakHit(bs *BreakState, cause string) {
 // the simulation. Above real time the operator has asked the world to outrun the
 // display, so the handshake is skipped and the tick deadline is the only pacing.
 // Returns false on shutdown.
-func (cs *ClockScheduler) awaitFrame(t *time.Timer) bool {
-	if cs.ctl.Scale().Faster() {
+func (s *Scheduler) awaitFrame(t *time.Timer) bool {
+	if s.ctl.Scale().Faster() {
 		return true
 	}
-	timeout := cs.ctl.ToReal(cs.tickInterval * 2)
+	timeout := s.ctl.ToReal(s.tickInterval * 2)
 	if timeout <= 0 {
-		timeout = cs.tickInterval * 2
+		timeout = s.tickInterval * 2
 	}
 	t.Reset(timeout)
 	defer drainTimer(t)
 
 	select {
-	case <-cs.frameReady:
+	case <-s.frameReady:
 	case <-t.C:
-	case <-cs.ctl.Wake(): // rate or pause changed; recompute rather than wait it out
-	case <-cs.stopChan:
+	case <-s.ctl.Wake(): // rate or pause changed; recompute rather than wait it out
+	case <-s.stopChan:
 		return false
 	}
 	return true
@@ -738,10 +738,10 @@ func drainTimer(t *time.Timer) {
 // and its post-UpdateLocked events need settling before the next frame.
 // Without the escalation the only guaranteed consumer is processTick, i.e.
 // one tick of latency on exactly the ticks that need it least.
-func (cs *ClockScheduler) eventLoop() {
-	defer cs.wg.Done()
+func (s *Scheduler) eventLoop() {
+	defer s.wg.Done()
 
-	ticker := time.NewTicker(cs.eventLoopInterval)
+	ticker := time.NewTicker(s.eventLoopInterval)
 	defer ticker.Stop()
 
 	backoffCount := 0
@@ -750,33 +750,33 @@ func (cs *ClockScheduler) eventLoop() {
 
 	for {
 		select {
-		case <-cs.stopChan:
+		case <-s.stopChan:
 			return
 
 		case <-ticker.C:
 			// Skip if queue empty (prevents busy-wait contention)
-			if cs.world.Resources.Event.Queue.Len() == 0 {
+			if s.world.Resources.Event.Queue.Len() == 0 {
 				backoffCount = 0
 				continue
 			}
 
 			// Attempt non-blocking lock
-			if cs.world.TryLock() {
-				if pendingBackoffs != 0 && pendingRun == cs.world.Resources.Event.Queue.Stamp().Run {
-					cs.evBackoffs += pendingBackoffs
+			if s.world.TryLock() {
+				if pendingBackoffs != 0 && pendingRun == s.world.Resources.Event.Queue.Stamp().Run {
+					s.evBackoffs += pendingBackoffs
 				}
 				pendingBackoffs = 0
-				if cs.dispatchOnePass("loop") > 0 {
-					cs.world.Resources.Event.Queue.NextBoundary()
+				if s.dispatchOnePass("loop") > 0 {
+					s.world.Resources.Event.Queue.NextBoundary()
 				}
-				cs.world.Unlock()
+				s.world.Unlock()
 				backoffCount = 0
 				continue
 			}
 
 			// Backoff tracking
 			backoffCount++
-			run := cs.world.Resources.Event.Queue.Stamp().Run
+			run := s.world.Resources.Event.Queue.Stamp().Run
 			if pendingBackoffs == 0 || pendingRun == run {
 				pendingBackoffs++
 			} else {
@@ -785,20 +785,20 @@ func (cs *ClockScheduler) eventLoop() {
 			pendingRun = run
 
 			// Force progress after threshold
-			if backoffCount >= cs.eventLoopBackoffMax {
+			if backoffCount >= s.eventLoopBackoffMax {
 				// Check shutdown before blocking lock to prevent Stop() hang
-				if !cs.running.Load() {
+				if !s.running.Load() {
 					return
 				}
-				cs.world.Lock()
-				if pendingRun == cs.world.Resources.Event.Queue.Stamp().Run {
-					cs.evBackoffs += pendingBackoffs
+				s.world.Lock()
+				if pendingRun == s.world.Resources.Event.Queue.Stamp().Run {
+					s.evBackoffs += pendingBackoffs
 				}
 				pendingBackoffs = 0
-				if cs.dispatchOnePass("loop") > 0 {
-					cs.world.Resources.Event.Queue.NextBoundary()
+				if s.dispatchOnePass("loop") > 0 {
+					s.world.Resources.Event.Queue.NextBoundary()
 				}
-				cs.world.Unlock()
+				s.world.Unlock()
 				backoffCount = 0
 			}
 		}
@@ -808,8 +808,8 @@ func (cs *ClockScheduler) eventLoop() {
 // dispatchOnePass consumes and dispatches pending events exactly once.
 // src labels the caller so a pass record identifies what produced the batch.
 // Returns number of events processed.
-func (cs *ClockScheduler) dispatchOnePass(src string) int {
-	eventsList := cs.world.Resources.Event.Queue.Consume()
+func (s *Scheduler) dispatchOnePass(src string) int {
+	eventsList := s.world.Resources.Event.Queue.Consume()
 	if len(eventsList) == 0 {
 		return 0
 	}
@@ -822,16 +822,16 @@ func (cs *ClockScheduler) dispatchOnePass(src string) int {
 
 	// Breakpoint probe: one pointer load per pass, one compare per event
 	var brkEv event.EventType
-	if bs := cs.ctl.Armed(); bs != nil && bs.Mode == StepEvent {
+	if bs := s.ctl.Armed(); bs != nil && bs.Mode == StepEvent {
 		brkEv = bs.Event
 	}
 
 	// APM admission; input while paused is not gameplay
-	apmOpen := !cs.ctl.IsPaused()
+	apmOpen := !s.ctl.IsPaused()
 	var apmWeight uint64
 
 	// Harness observer, hoisted with the other gates
-	tap := cs.tap
+	tap := s.tap
 
 	var nFSM, nSys, nDead int
 	for _, ev := range eventsList {
@@ -840,10 +840,10 @@ func (cs *ClockScheduler) dispatchOnePass(src string) int {
 			tap(ev)
 		}
 
-		handlers, _ := cs.eventRouter.GetHandlers(ev.Type)
+		handlers, _ := s.eventRouter.GetHandlers(ev.Type)
 
 		// FSM first, and its result is what makes sys=0 meaningful
-		took := cs.fsm.HandleEvent(cs.world, ev)
+		took := s.fsm.HandleEvent(s.world, ev)
 
 		if took {
 			nFSM++
@@ -856,9 +856,9 @@ func (cs *ClockScheduler) dispatchOnePass(src string) int {
 			nDead++
 		}
 		if ev.Type <= event.EventNone || int(ev.Type) >= event.EventTypeCount {
-			cs.statEvInvalid.Add(1)
+			s.statEvInvalid.Add(1)
 		} else {
-			cs.world.Resources.Event.Queue.RecordDispatch(ev.Type, dead)
+			s.world.Resources.Event.Queue.RecordDispatch(ev.Type, dead)
 		}
 
 		// Emitted after HandleEvent so the fsm verdict is known; any transition
@@ -873,22 +873,22 @@ func (cs *ClockScheduler) dispatchOnePass(src string) int {
 		for _, h := range handlers {
 			h.HandleEvent(ev)
 		}
-		cs.world.Resources.Event.Queue.RecordCrossingApplied(ev.CrossingSeq)
+		s.world.Resources.Event.Queue.RecordCrossingApplied(ev.CrossingSeq)
 
 		if apmOpen && ev.Origin == event.OriginInput && apmAdmits(ev.Type) {
 			apmWeight += parameter.APMWeightFull
 		}
 
 		if brkEv != 0 && ev.Type == brkEv {
-			if bs := cs.ctl.Trip(StepEvent, "", ev.Type); bs != nil {
-				cs.breakHit(bs, event.GetEventName(ev.Type))
+			if bs := s.ctl.Trip(StepEvent, "", ev.Type); bs != nil {
+				s.breakHit(bs, event.GetEventName(ev.Type))
 			}
 			brkEv = 0
 		}
 	}
 
 	if apmWeight > 0 {
-		cs.world.Resources.Game.State.RecordActionWeight(apmWeight)
+		s.world.Resources.Game.State.RecordActionWeight(apmWeight)
 	}
 
 	if summary {
@@ -900,9 +900,9 @@ func (cs *ClockScheduler) dispatchOnePass(src string) int {
 			"dead", nDead)
 	}
 
-	cs.statEvDispatches.Add(int64(len(eventsList)))
-	cs.statEvDead.Add(int64(nDead))
-	cs.recordSettlePass(src)
+	s.statEvDispatches.Add(int64(len(eventsList)))
+	s.statEvDead.Add(int64(nDead))
+	s.recordSettlePass(src)
 	return len(eventsList)
 }
 
@@ -914,24 +914,24 @@ func apmAdmits(t event.EventType) bool {
 
 // dispatchAndProcessEvents settles pending events with an iteration cap and
 // returns how many were dispatched
-func (cs *ClockScheduler) dispatchAndProcessEvents(src string) int {
+func (s *Scheduler) dispatchAndProcessEvents(src string) int {
 	total := 0
 	last := 0
 	for range parameter.EventLoopIterations {
-		last = cs.dispatchOnePass(src)
+		last = s.dispatchOnePass(src)
 		total += last
 		if last == 0 {
 			break
 		}
 	}
-	if last != 0 && cs.world.Resources.Event.Queue.Len() != 0 {
-		cs.statSettleExhausted.Add(1)
+	if last != 0 && s.world.Resources.Event.Queue.Len() != 0 {
+		s.statSettleExhausted.Add(1)
 	}
 	return total
 }
 
 // recordSettlePass increments the fixed source bucket for one non-empty pass.
-func (cs *ClockScheduler) recordSettlePass(src string) {
+func (s *Scheduler) recordSettlePass(src string) {
 	var index int
 	switch src {
 	case "pre":
@@ -951,49 +951,49 @@ func (cs *ClockScheduler) recordSettlePass(src string) {
 	default:
 		return
 	}
-	cs.statSettlePass[index].Add(1)
+	s.statSettlePass[index].Add(1)
 }
 
 // resetTelemetry clears scheduler and queue-facing session diagnostics.
 // Construction and executeReset are the only callers.
-func (cs *ClockScheduler) resetTelemetry() {
-	cs.evBackoffs = 0
-	cs.tickSlips = 0
-	cs.tickSlipPending = false
-	cs.lastEvDropped = 0
+func (s *Scheduler) resetTelemetry() {
+	s.evBackoffs = 0
+	s.tickSlips = 0
+	s.tickSlipPending = false
+	s.lastEvDropped = 0
 
 	for _, stat := range []*atomic.Int64{
-		cs.statTicks,
-		cs.statAPM,
-		cs.statMusicAPM,
-		cs.statEvBackoffs,
-		cs.statEvDispatches,
-		cs.statEvDead,
-		cs.statEntityCount,
-		cs.statEntityCreated,
-		cs.statEntityDestroyed,
-		cs.statQueueLen,
-		cs.statQueueMax,
-		cs.statGameElapsedMs,
-		cs.statEvDropped,
-		cs.statTickSlips,
-		cs.statEvInvalid,
-		cs.statSettleExhausted,
+		s.statTicks,
+		s.statAPM,
+		s.statMusicAPM,
+		s.statEvBackoffs,
+		s.statEvDispatches,
+		s.statEvDead,
+		s.statEntityCount,
+		s.statEntityCreated,
+		s.statEntityDestroyed,
+		s.statQueueLen,
+		s.statQueueMax,
+		s.statGameElapsedMs,
+		s.statEvDropped,
+		s.statTickSlips,
+		s.statEvInvalid,
+		s.statSettleExhausted,
 	} {
 		stat.Store(0)
 	}
-	for _, stat := range cs.statSettlePass {
+	for _, stat := range s.statSettlePass {
 		stat.Store(0)
 	}
-	cs.statEvDispatchTypes.StoreIfChanged("-")
-	cs.statEvDeadTypes.StoreIfChanged("-")
-	cs.statFSMName.StoreIfChanged("-")
-	cs.statFSMElapsed.Store(0)
-	cs.statFSMMaxDur.Store(0)
-	cs.statFSMIndex.Store(0)
-	cs.statFSMTotal.Store(0)
-	for i := range cs.regionStats {
-		rs := &cs.regionStats[i]
+	s.statEvDispatchTypes.StoreIfChanged("-")
+	s.statEvDeadTypes.StoreIfChanged("-")
+	s.statFSMName.StoreIfChanged("-")
+	s.statFSMElapsed.Store(0)
+	s.statFSMMaxDur.Store(0)
+	s.statFSMIndex.Store(0)
+	s.statFSMTotal.Store(0)
+	for i := range s.regionStats {
+		rs := &s.regionStats[i]
 		rs.state.StoreIfChanged("-")
 		rs.index.Store(0)
 		rs.elapsed.Store(0)
@@ -1003,12 +1003,12 @@ func (cs *ClockScheduler) resetTelemetry() {
 }
 
 // publishEventTelemetry formats the sparse per-type arrays on snapshot cadence.
-func (cs *ClockScheduler) publishEventTelemetry() {
-	cs.world.Resources.Event.Queue.SnapshotTelemetry(&cs.eventDispatch, &cs.eventDead)
-	cs.eventTypeBuf = appendEventTypeCounts(cs.eventTypeBuf[:0], &cs.eventDispatch)
-	cs.eventDeadBuf = appendEventTypeCounts(cs.eventDeadBuf[:0], &cs.eventDead)
-	cs.statEvDispatchTypes.Store(string(cs.eventTypeBuf))
-	cs.statEvDeadTypes.Store(string(cs.eventDeadBuf))
+func (s *Scheduler) publishEventTelemetry() {
+	s.world.Resources.Event.Queue.SnapshotTelemetry(&s.eventDispatch, &s.eventDead)
+	s.eventTypeBuf = appendEventTypeCounts(s.eventTypeBuf[:0], &s.eventDispatch)
+	s.eventDeadBuf = appendEventTypeCounts(s.eventDeadBuf[:0], &s.eventDead)
+	s.statEvDispatchTypes.Store(string(s.eventTypeBuf))
+	s.statEvDeadTypes.Store(string(s.eventDeadBuf))
 }
 
 func appendEventTypeCounts(dst []byte, counts *[event.EventTypeCount]int64) []byte {
@@ -1036,90 +1036,90 @@ func appendEventTypeCounts(dst []byte, counts *[event.EventTypeCount]int64) []by
 }
 
 // executeReset performs FSM reset while scheduler mutex is held
-func (cs *ClockScheduler) executeReset() {
+func (s *Scheduler) executeReset() {
 	vlog.Info("fsm", "msg", "session reset")
 
 	// 1. Synchronize with world lock
 	// Acquire lock, wait till MetaSystem finishes synchronous cleanup and releases the lock
 	// NOTE: Do not use RunSafe if called from a blocking systems
-	cs.world.Lock()
-	defer cs.world.Unlock()
+	s.world.Lock()
+	defer s.world.Unlock()
 
 	// 2. Drain and discard stale events from the previous game session
-	_ = cs.world.Resources.Event.Queue.Consume()
-	cs.world.Resources.Event.Queue.ResetTelemetry()
-	cs.resetTelemetry()
+	_ = s.world.Resources.Event.Queue.Consume()
+	s.world.Resources.Event.Queue.ResetTelemetry()
+	s.resetTelemetry()
 
 	// 3. Reset Scheduler internal timing. The deadline is a pacing value and stays
 	// on the wall clock; the game-time origin is SimEpoch, because the tick counter
 	// the elapsed figure is derived from restarts with the run.
-	cs.nextTickDeadline = cs.ctl.Now().Add(cs.tickInterval)
-	cs.gameStartTime = SimEpoch
+	s.nextTickDeadline = s.ctl.Now().Add(s.tickInterval)
+	s.gameStartTime = SimEpoch
 	// Reset settles FSM entry actions before another tick can stamp TimeResource.
 	// Rebase it first so those actions create deadlines in the new run's timeline.
-	cs.world.Resources.Time.Update(
+	s.world.Resources.Time.Update(
 		SimEpoch,
-		cs.ctl.RealTime(),
-		cs.tickInterval,
+		s.ctl.RealTime(),
+		s.tickInterval,
 	)
 
 	// 4. Reset FSM state - This will trigger OnEnter actions
-	if err := cs.fsm.Reset(cs.world); err != nil {
+	if err := s.fsm.Reset(s.world); err != nil {
 		panic(fmt.Errorf("FSM reset failed: %v", err))
 	}
 
 	// 5. Re-apply global system configuration (mirrors LoadFSM behavior)
-	if err := cs.applySystemConfig(); err != nil {
+	if err := s.applySystemConfig(); err != nil {
 		vlog.Error("fsm", "msg", "system config", "error", err.Error())
 	}
 
 	// 6. Unpause via the single owner so clock, context, and audio move
 	//    together; settled below while the world lock is still held.
-	cs.world.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: false})
+	s.world.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: false})
 
 	// 7. Settle FSM-reset and unpause events before releasing the lock. No boundary
 	//    bump: this is a phase of the reset, reached identically by a run and its replay.
-	cs.dispatchAndProcessEvents("reset")
+	s.dispatchAndProcessEvents("reset")
 
 	// 8. Systems re-Init on the reset dispatch that preceded this call, so the
 	//    next game's streams differ while staying a function of the root seed
-	session := cs.world.Resources.Rand.NextSession()
+	session := s.world.Resources.Rand.NextSession()
 	vlog.Info("app", "msg", "rng session", "session", session)
-	cs.world.Resources.Event.Queue.AnchorJournal(cs.anchorLive(session))
+	s.world.Resources.Event.Queue.AnchorJournal(s.anchorLive(session))
 }
 
 // anchorLive reads the per-emission anchor fields: this instance's terminal, the
 // D-14 map latch, the followed slot and the time scale.
 // Caller MUST hold updateMutex — reads Config and the roster.
-func (cs *ClockScheduler) anchorLive(session uint64) event.AnchorLive {
-	cfg := cs.world.Resources.Config
+func (s *Scheduler) anchorLive(session uint64) event.AnchorLive {
+	cfg := s.world.Resources.Config
 	w, h := ScreenSize(cfg)
 	return event.AnchorLive{
-		Speed:         cs.ctl.Scale().String(),
+		Speed:         s.ctl.Scale().String(),
 		Session:       session,
 		Width:         w,
 		Height:        h,
 		MapWidth:      cfg.MapWidth,
 		MapHeight:     cfg.MapHeight,
 		CropOnResize:  cfg.CropOnResize,
-		SessionShared: cs.world.SessionShared(),
-		Slot:          cs.world.Resources.Player.LocalSlot(),
+		SessionShared: s.world.SessionShared(),
+		Slot:          s.world.Resources.Player.LocalSlot(),
 	}
 }
 
 // DispatchEventsImmediately processes all pending events synchronously
-func (cs *ClockScheduler) DispatchEventsImmediately() {
-	cs.world.RunSafe(func() { cs.settleLocked("input") })
+func (s *Scheduler) DispatchEventsImmediately() {
+	s.world.RunSafe(func() { s.settleLocked("input") })
 }
 
 // processTick executes one clock cycle
-func (cs *ClockScheduler) processTick() {
-	if cs.ctl.IsPaused() && !cs.stepping {
+func (s *Scheduler) processTick() {
+	if s.ctl.IsPaused() && !s.stepping {
 		return
 	}
 
 	// Lock sampling is a per-tick decision, not a per-acquire probe
-	cs.world.SetLockSampling(vlog.On("lock", vlog.LevelDebug) || cs.world.Resources.Status.RecorderActive())
+	s.world.SetLockSampling(vlog.On("lock", vlog.LevelDebug) || s.world.Resources.Status.RecorderActive())
 	SetDomainAudit(vlog.On("domain", vlog.LevelDebug))
 
 	var (
@@ -1134,108 +1134,108 @@ func (cs *ClockScheduler) processTick() {
 		droppedDelta     uint64
 	)
 
-	cs.world.RunSafe(func() {
-		if cs.tickSlipPending {
-			cs.tickSlips++
-			cs.tickSlipPending = false
+	s.world.RunSafe(func() {
+		if s.tickSlipPending {
+			s.tickSlips++
+			s.tickSlipPending = false
 		}
 		// The barrier applies against the completed tick's stamp. Its settle group
 		// therefore replays between ticks, before the next BeginTick resets Boundary.
-		tick := cs.world.Resources.Game.State.GetGameTicks() + 1
+		tick := s.world.Resources.Game.State.GetGameTicks() + 1
 
 		// The simulation instant is derived from the tick, never from the pacing
 		// clock: it is shared state, and every participant must read the same value
 		// at the same tick (SimEpoch). The pacing clock still decides *when* this
 		// tick runs, and RealTime below still reports the wall.
-		tickTime = SimTime(tick, cs.tickInterval)
-		if cs.world.Resources.Event.Queue.ReceiveWire(tick) > 0 {
-			cs.settleLocked("wire")
+		tickTime = SimTime(tick, s.tickInterval)
+		if s.world.Resources.Event.Queue.ReceiveWire(tick) > 0 {
+			s.settleLocked("wire")
 		}
 
 		// Stamp under the lock: a producer must not observe the new tick before
 		// the tick body it belongs to has started.
-		cs.world.Resources.Status.Correlation().SetTick(tick)
-		cs.world.Resources.Event.Queue.BeginTick(tick)
+		s.world.Resources.Status.Correlation().SetTick(tick)
+		s.world.Resources.Event.Queue.BeginTick(tick)
 
 		// 1. Sync Time
-		cs.world.Resources.Time.Update(
+		s.world.Resources.Time.Update(
 			tickTime,
-			cs.ctl.RealTime(),
-			cs.tickInterval,
+			s.ctl.RealTime(),
+			s.tickInterval,
 		)
 
 		// 2. Update game elapsed time status
-		cs.statGameElapsedMs.Store(tickTime.Sub(cs.gameStartTime).Milliseconds())
+		s.statGameElapsedMs.Store(tickTime.Sub(s.gameStartTime).Milliseconds())
 
 		// 3. Initial Settling: Resolve everything accumulated during game tick.
 
 		// Ensures FSM and Systems start with a consistent, settled world
-		cs.dispatchAndProcessEvents("pre")
+		s.dispatchAndProcessEvents("pre")
 
 		// 4. FSM Update: Advance state machine (may emit new events via Actions)
-		cs.fsm.Update(cs.world, cs.tickInterval)
+		s.fsm.Update(s.world, s.tickInterval)
 
 		// 5. FSM telemetry (after update, before post-settling)
 		// Transitions are reported by the OnTransition tap, not sampled here:
 		// sampling collapses intra-tick chains and cannot see background regions
-		stateName, stateID, timeInState := cs.fsm.GetActiveRegionTelemetry()
-		cs.statFSMName.StoreIfChanged(stateName)
-		cs.statFSMElapsed.Store(int64(timeInState))
-		cs.statFSMMaxDur.Store(int64(cs.fsm.StateDurations[stateID]))
-		cs.statFSMIndex.Store(int64(cs.fsm.StateIndices[stateID]))
-		cs.statFSMTotal.Store(int64(cs.fsm.StateCount))
-		cs.publishRegionStats()
+		stateName, stateID, timeInState := s.fsm.GetActiveRegionTelemetry()
+		s.statFSMName.StoreIfChanged(stateName)
+		s.statFSMElapsed.Store(int64(timeInState))
+		s.statFSMMaxDur.Store(int64(s.fsm.StateDurations[stateID]))
+		s.statFSMIndex.Store(int64(s.fsm.StateIndices[stateID]))
+		s.statFSMTotal.Store(int64(s.fsm.StateCount))
+		s.publishRegionStats()
 
 		// 6. Post-FSM Settling: Resolve events emitted by FSM state transitions
-		cs.dispatchAndProcessEvents("post")
+		s.dispatchAndProcessEvents("post")
 
 		// 7. System Execution: Systems run on the final, settled state for this tick
-		cs.world.UpdateLocked()
+		s.world.UpdateLocked()
 
 		// 8. Commit the tick and every registry write while the world is stable.
-		gs := cs.world.Resources.Game.State
+		gs := s.world.Resources.Game.State
 		ticks = gs.IncrementGameTicks()
 		gs.UpdateAPM(tickTime)
 
-		cs.statTicks.Store(int64(ticks))
-		cs.statAPM.Store(int64(gs.GetAPM()))
-		cs.statMusicAPM.Store(int64(gs.GetMusicAPM()))
-		cs.statEntityCount.Store(int64(cs.world.Positions.CountEntities()))
-		cs.statEntityCreated.Store(cs.world.CreatedCount())
-		cs.statEntityDestroyed.Store(cs.world.DestroyedCount())
-		cs.statEvBackoffs.Store(cs.evBackoffs)
-		cs.statTickSlips.Store(cs.tickSlips)
+		s.statTicks.Store(int64(ticks))
+		s.statAPM.Store(int64(gs.GetAPM()))
+		s.statMusicAPM.Store(int64(gs.GetMusicAPM()))
+		s.statEntityCount.Store(int64(s.world.Positions.CountEntities()))
+		s.statEntityCreated.Store(s.world.CreatedCount())
+		s.statEntityDestroyed.Store(s.world.DestroyedCount())
+		s.statEvBackoffs.Store(s.evBackoffs)
+		s.statTickSlips.Store(s.tickSlips)
 
-		qlen := int64(cs.world.Resources.Event.Queue.Len())
-		cs.statQueueLen.Store(qlen)
-		if qlen > cs.statQueueMax.Load() {
-			cs.statQueueMax.Store(qlen)
+		qlen := int64(s.world.Resources.Event.Queue.Len())
+		s.statQueueLen.Store(qlen)
+		if qlen > s.statQueueMax.Load() {
+			s.statQueueMax.Store(qlen)
 		}
 
-		dropped = cs.world.Resources.Event.Queue.Dropped()
-		cs.statEvDropped.Store(int64(dropped))
-		if dropped > cs.lastEvDropped {
-			droppedDelta = dropped - cs.lastEvDropped
-			cs.lastEvDropped = dropped
+		dropped = s.world.Resources.Event.Queue.Dropped()
+		s.statEvDropped.Store(int64(dropped))
+		if dropped > s.lastEvDropped {
+			droppedDelta = dropped - s.lastEvDropped
+			s.lastEvDropped = dropped
 		}
 
 		if parameter.StatSnapshotTicks != 0 && ticks%parameter.StatSnapshotTicks == 0 {
-			cs.world.Positions.PublishTelemetry()
-			cs.publishEventTelemetry()
+			s.world.Positions.PublishTelemetry()
+			s.publishEventTelemetry()
 		}
 		// Outbound transport closes the tick: everything this tick produced has
 		// settled, so a peer receives one tick's artifacts as one tick's worth
-		cs.world.Resources.Event.Queue.FlushWire(ticks)
+		s.world.Resources.Event.Queue.FlushWire(ticks)
 
-		cfg := cs.world.Resources.Config
+		cfg := s.world.Resources.Config
 		screenW, screenH = ScreenSize(cfg)
 		mapW, mapH, cropOnResize = cfg.MapWidth, cfg.MapHeight, cfg.CropOnResize
-		sessionShared = cs.world.SessionShared()
-		slot = cs.world.Resources.Player.LocalSlot()
+		sessionShared = s.world.SessionShared()
+		slot = s.world.Resources.Player.LocalSlot()
 	})
 
-	if bs := cs.ctl.Expire(ticks); bs != nil {
-		cs.breakHit(bs, "expired")
+	if bs := s.ctl.Expire(ticks); bs != nil {
+		s.breakHit(bs, "expired")
 	}
 
 	// Queue overflow is silent state loss; report every increase.
@@ -1243,18 +1243,18 @@ func (cs *ClockScheduler) processTick() {
 		vlog.Warn("event", "msg", "queue overflow",
 			"dropped", dropped,
 			"delta", droppedDelta)
-		cs.world.Resources.Status.Trigger(status.TrigDrop)
+		s.world.Resources.Status.Trigger(status.TrigDrop)
 	}
 
 	// Status snapshot: world lock released and every stat above committed,
 	// so the reading belongs to exactly this tick. Lock-free by construction.
-	cs.world.Resources.Status.Tick(ticks)
+	s.world.Resources.Status.Tick(ticks)
 
 	// Anchor cadence: a rotated journal file must be interpretable on its own
 	if event.AnchorDue(ticks) {
-		cs.world.Resources.Event.Queue.AnchorJournal(event.AnchorLive{
-			Speed:         cs.ctl.Scale().String(),
-			Session:       cs.world.Resources.Rand.Session(),
+		s.world.Resources.Event.Queue.AnchorJournal(event.AnchorLive{
+			Speed:         s.ctl.Scale().String(),
+			Session:       s.world.Resources.Rand.Session(),
 			Width:         screenW,
 			Height:        screenH,
 			MapWidth:      mapW,

@@ -97,7 +97,7 @@ cursorless coordinator included; anything named participants counts cursors.
 | Stamp | Owner | Advances |
 |---|---|---|
 | `run` | `MetaSystem.handleGameReset` via `vlog.SetRun` | once per game reset, with the replay tick rebased to zero |
-| `tick` | `ClockScheduler.processTick` via `vlog.SetTick` | once per simulation tick, before the tick body |
+| `tick` | `Scheduler.processTick` via `vlog.SetTick` | once per simulation tick, before the tick body |
 
 `tick` is stamped with the tick *about to execute*, so records emitted inside
 `processTick` carry the tick they describe rather than the previous one.
@@ -460,7 +460,7 @@ contracts only after a stable narrow interval, preventing value-width jitter.
 
 ### Freeze
 
-`Registry.Freeze` is called once from `ClockScheduler.Prepare`, reached by
+`Registry.Freeze` is called once from `Scheduler.Prepare`, reached by
 `Start` in play mode and by the first tick/settle in a driven App. It follows
 `World.Seal` and precedes the first tick; every system and renderer has
 registered by then. Freezing:
@@ -982,7 +982,7 @@ both the snapshot and the recorder.
 | Journal record/anchor schema and queue sink | `internal/event/journal.go`, `journal_sink.go`, `origin.go` |
 | Recording lifecycle, capture, loading, replay/fuzz/script drivers | `internal/journal` |
 | Replay/config verification and presentation | `internal/app/replay.go`, `play.go`, `surface.go` |
-| Tick stamping, FSM taps, dispatch tap, triggers | `internal/engine/clock_scheduler.go` |
+| Tick stamping, FSM taps, dispatch tap, triggers | `internal/engine/scheduler.go` |
 | Lock hold sampling | `internal/engine/sync_std.go` |
 | Frame stamping | `internal/engine/game_context.go` |
 | On-demand context snapshot | `internal/engine/snapshot.go` |

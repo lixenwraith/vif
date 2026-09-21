@@ -43,7 +43,7 @@ func TestTelemetryRegistryStaysFrozenAcrossTicksAndReset(t *testing.T) {
 
 	reg := a.World().Resources.Status
 	if !reg.Frozen() {
-		t.Fatal("ClockScheduler.Prepare did not freeze the status registry")
+		t.Fatal("Scheduler.Prepare did not freeze the status registry")
 	}
 	want := telemetryKeySet(reg)
 

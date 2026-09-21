@@ -67,7 +67,7 @@ type Resource struct {
 
 // --- Time Resource ---
 
-// TimeResource is time data snapshot for systems and is updated by ClockScheduler at the start of a tick
+// TimeResource is time data snapshot for systems and is updated by Scheduler at the start of a tick
 // Simulation code must not read wall time. CI guard:
 // rg 'time\.Now\(\)|time\.Since' internal/system internal/mode must return zero hits.
 type TimeResource struct {

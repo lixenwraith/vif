@@ -35,7 +35,7 @@ therefore observe whole state transitions rather than partially applied ones.
 Atomic counters and explicitly self-synchronized resources are the exceptions
 and are safe for post-tick telemetry.
 
-Systems may be added only during construction. `ClockScheduler.Start` seals the
+Systems may be added only during construction. `Scheduler.Start` seals the
 world; registering another system after that point panics. Systems run
 sequentially in ascending priority, with registration order breaking equal
 priorities.

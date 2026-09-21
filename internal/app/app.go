@@ -47,7 +47,7 @@ type App struct {
 	router       *mode.Router
 	recorder     *journal.Recorder
 
-	scheduler      *engine.ClockScheduler
+	scheduler      *engine.Scheduler
 	frameReady     chan struct{}
 	gameUpdateDone <-chan struct{}
 
@@ -394,12 +394,12 @@ func (a *App) processInputTick() bool {
 	return emitted
 }
 
-// initScheduler wires the clock scheduler, loads the FSM, and registers the
+// initScheduler wires the scheduler, loads the FSM, and registers the
 // systems that handle events
 func (a *App) initScheduler() error {
 	a.frameReady = make(chan struct{}, 1)
 	var resetChan chan<- struct{}
-	a.scheduler, a.gameUpdateDone, resetChan = engine.NewClockScheduler(
+	a.scheduler, a.gameUpdateDone, resetChan = engine.NewScheduler(
 		a.world,
 		a.ctx.TimeCtl,
 		parameter.GameUpdateInterval,

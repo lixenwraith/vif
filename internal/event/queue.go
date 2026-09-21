@@ -185,7 +185,7 @@ func (eq *EventQueue) Dropped() uint64 {
 }
 
 // RecordDispatch accounts one routed event and whether no consumer accepted it.
-// ClockScheduler calls this under the world lock after the routing verdict is known.
+// Scheduler calls this under the world lock after the routing verdict is known.
 func (eq *EventQueue) RecordDispatch(t EventType, dead bool) {
 	if !validType(t) {
 		return

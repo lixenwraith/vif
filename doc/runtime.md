@@ -336,7 +336,7 @@ The detailed construction order is significant:
 10. Create the input parser and mode router for semantic injection in every
     mode; merge the live keymap and bind terminal mouse control only when the
     terminal owns simulation input.
-11. Create frame synchronization channels and the clock scheduler.
+11. Create frame synchronization channels and the scheduler.
 12. Resolve and load the external or embedded FSM, initialize its regions,
     enqueue their entry actions (including the shipped cursor spawn request),
     and apply global/region system toggles.
@@ -368,7 +368,7 @@ This limits the simulation to one outstanding update and prevents rendering a
 world that is being advanced concurrently.
 
 Headless and replay modes replace `PausableClock` with `ManualClock`. They do
-not call `ClockScheduler.Start`, so there is no scheduler loop, event loop, or
+not call `Scheduler.Start`, so there is no scheduler loop, event loop, or
 frame gate racing the world lock. `App.Tick(n)` advances the manual instant by
 exactly the fixed interval and executes `n` tick bodies on the caller's
 goroutine; `App.Settle` drains an injected event group without advancing time.
@@ -492,7 +492,7 @@ flowchart TD
     Stats --> Flush["Close and send this tick's production epoch"]
 ```
 
-`ClockScheduler.processTick` holds the world lock for steps 1–9:
+`Scheduler.processTick` holds the world lock for steps 1–9:
 
 1. apply the wire artifacts whose fixed playout deadline has arrived and, if any
    did, settle them in their own `"wire"` group — before the tick stamp advances,
@@ -527,7 +527,7 @@ sample, so a status snapshot or recorder window is stamped with tick *n* but
 reads "at or after tick *n*" for anything not written inside the locked body.
 See [Logging and diagnostics](logging-and-diagnostics.md) §6.
 
-`ClockScheduler.Prepare`, reached from `Start` or the first driven operation,
+`Scheduler.Prepare`, reached from `Start` or the first driven operation,
 calls `Registry.Freeze` immediately after `World.Seal`. Both close a
 registration surface before any tick reads it:
 `Seal` freezes the system list, `Freeze` freezes the metric set and lays out
@@ -777,7 +777,7 @@ not indefinitely leave the terminal in raw mode.
 | Interactive, playback, and script loops | `internal/app/loop.go`, `play.go`, `script.go` |
 | Recording, replay, fuzz, and authored script drivers | `internal/journal` |
 | Replay identity and comparison boundary | `internal/app/replay.go`, `surface.go`, `internal/snapshot/surface.go` |
-| Tick and event scheduling | `internal/engine/clock_scheduler.go` |
+| Tick and event scheduling | `internal/engine/scheduler.go` |
 | World locking and system execution | `internal/engine/world.go`, `sync_*.go` |
 | Play/manual clocks and time control | `internal/engine/pausable_clock.go`, `manual_clock.go`, `time_control.go` |
 | Game context, reset flags, and snapshots | `internal/engine/game_context.go`, `game_state.go`, `snapshot.go` |

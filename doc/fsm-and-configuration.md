@@ -474,7 +474,7 @@ event counter plus an outer tick transition.
 | Concern | Primary source |
 |---|---|
 | Runtime semantics | `internal/fsm/machine.go`, `types.go` |
-| Region commands and scheduler adapter | `internal/mode/commands.go`, `internal/engine/clock_scheduler.go` |
+| Region commands and scheduler adapter | `internal/mode/commands.go`, `internal/engine/scheduler.go` |
 | TOML schema/compiler | `internal/fsm/config.go`, `loader.go`, `builder.go` |
 | External files | `internal/fsm/file_loader.go` |
 | Standard actions/guards | `internal/fsm/std/*.go` |

@@ -74,7 +74,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 |---|---|---|---|---|---|
 | Game context | `engine.fps`, `context.{frame,screen_w,screen_h,mode}` | `NewGameContextWithClock` | Presentation/context owners | Context lifecycle | Status bar reads `engine.fps`; snapshot allow-list reads context keys |
 | Time control | `engine.{speed_pct,speed,step,breakpoint,paused}` | `NewTimeControl` | Time-control mutation under its owner lock | Time-control reset/persistent operator state | Status bar and app snapshot read these keys |
-| Clock scheduler / world | `engine.{ticks,apm,music_apm,tick_slips}`, `entity.{count,created_total,destroyed_total}`, `time.game_elapsed_ms`, `event.{backoffs,dispatches,dead,dropped,queue_len,queue_max,invalid,settle_*}`, `fsm.*` | `NewClockScheduler`; schema-derived region keys bind before `Prepare` | Dispatch/tick tail while the world mutex is held | `resetTelemetry` during reset | Status bar reads tick/APM/FSM; region/debug metrics are generic |
+| Scheduler / world | `engine.{ticks,apm,music_apm,tick_slips}`, `entity.{count,created_total,destroyed_total}`, `time.game_elapsed_ms`, `event.{backoffs,dispatches,dead,dropped,queue_len,queue_max,invalid,settle_*}`, `fsm.*` | `NewScheduler`; schema-derived region keys bind before `Prepare` | Dispatch/tick tail while the world mutex is held | `resetTelemetry` during reset | Status bar reads tick/APM/FSM; region/debug metrics are generic |
 | Event queue | Per-type `[EventTypeCount]atomic.Int64` dispatch/dead arrays; surfaced as `event.{dispatch_by_type,dead_by_type}` | Fixed arrays in `NewEventQueue`; strings in scheduler constructor | Scheduler records after routing; strings publish every `StatSnapshotTicks` | `ResetTelemetry` after stale-event drain | Generic only |
 | Position/spatial grid | `spatial.{cell_saturations,cell_overflows,occupied_cells,indexed_entities,unindexed,max_cell_occupancy,cell_occupancy_hwm,positions_hwm,position_batch_hwm}` | `BindTelemetry` immediately after registry construction | Position mutations under the world mutex; expensive gauges on snapshot cadence | `World.Clear` | Generic only |
 
@@ -93,7 +93,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 
 ## Deliberately unchanged or excluded
 
-- Schema-derived `fsm.<region>.*` keys still bind during FSM loading because region names do not exist when the scheduler constructor runs. Binding completes before `ClockScheduler.Prepare` freezes the registry, and the freeze regression test proves that no key is added afterward.
+- Schema-derived `fsm.<region>.*` keys still bind during FSM loading because region names do not exist when the scheduler constructor runs. Binding completes before `Scheduler.Prepare` freezes the registry, and the freeze regression test proves that no key is added afterward.
 - The position store binds its metrics immediately after `NewGameContextWithClock` creates the registry; `World` necessarily constructs the store before that registry exists. It is frozen before the first tick and never registers during reset.
 - Legacy slot-zero mirrors such as `energy.current`, `heat.current`, and `player.x` remain intact for existing status-bar/config consumers.
 - Registry-owned `content.*`, `rec.*`, and `stat.*` metrics and persistent operator/context settings are excluded from session-zero assertions. Reset tests seed and verify every session-owned int, bool, and string; live gauges are allowed to rebuild to their deterministic reset values.

@@ -80,7 +80,7 @@ func (r *Router) HandlerCount(t EventType) int {
 }
 
 // GetHandlers returns the slice of handlers for a specific event type
-// Exposed to allow ClockScheduler to manually iterate handlers after FSM processing
+// Exposed to allow Scheduler to manually iterate handlers after FSM processing
 func (r *Router) GetHandlers(t EventType) ([]Handler, bool) {
 	if !validType(t) {
 		return nil, false
