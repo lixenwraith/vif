@@ -256,6 +256,26 @@ it, so the assertion is not vacuous.
 A scripted (`-script`) participant is `ModeScript` and has no restart loop either,
 so it leaves the session rather than following it.
 
+**Fixed after the first session test.** Three things the first live run found:
+
+- `wad/scenario/blank` spawned no cursor, so a host switching to it had no player
+  domain at all — it watched its guests play. Solo too; the scaffold had never had
+  one. It now boots a player region, and
+  `TestEveryShippedScenarioSpawnsAPlayer` pins the rule for every shipped scenario
+  and the embedded one.
+- `World.IsSessionCoordinator` compared against identity 1 rather than the term, so
+  a successor was refused every rule reserved for the authority — its own reset and
+  its own scenario change — while being the only instance able to apply either.
+  It now reads `Network.Authority`, defaulting to the first identity as
+  `NetworkSystem.authorityParticipant` already did, and the two notions of
+  "coordinator" are one.
+- A restart took its role from the command line, so a successor whose coordinator
+  was gone redialled a dead address for the whole rejoin window. `restartRequest`
+  now says what the next run is: `Rejoin` with the address to dial, which the
+  notice carries because a succession moves the door, or solo when there is nobody
+  left to follow. A participant that inherited a session, has peers and has no
+  address of its own to reopen is refused rather than scattering them.
+
 ### Phase 5 — The fleet serves an external wad
 
 **5a — The node directory.** `/var/db/vif/wad/`, root-owned, `0755`/`0644`,

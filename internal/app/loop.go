@@ -33,6 +33,14 @@ type restartRequest struct {
 	// guests are already redialling, and the mid-run gate is the door they arrive
 	// at — the same one a reconnect has always used.
 	Host string
+
+	// Rejoin says the next run follows this session rather than leads it, and Join
+	// where to dial when that is not the address the command line named — a
+	// succession moves the door, so a participant told to rebuild is told where.
+	// Without Rejoin the next run is solo, which is what an authority whose
+	// coordinator is gone and whose roster is empty has actually become.
+	Rejoin bool
+	Join   string
 }
 
 // Run wires, runs, and tears down the game, once per scenario the player asks for.
@@ -57,10 +65,18 @@ func Run(cfg Config) error {
 		// Hosting resumes after the clock rather than before it: this run is not
 		// waiting for a lobby, it is reopening a door its guests are already at.
 		cfg.HostAddress, cfg.resumeHost = "", next.Host
-		cfg.LockMap = cfg.LockMap || next.Host != ""
-		rejoin = cfg.JoinAddress != ""
-		vlog.Info("app", "msg", "run restarting",
-			"scenario", cfg.Resources.Scenario, "host", next.Host, "rejoin", rejoin)
+		if next.Rejoin {
+			if next.Join != "" {
+				cfg.JoinAddress = next.Join
+			}
+		} else {
+			// Not following anyone: a run that led its session, and one that
+			// inherited it and has nobody left, both start over on their own.
+			cfg.JoinAddress = ""
+		}
+		rejoin = next.Rejoin
+		vlog.Info("app", "msg", "run restarting", "scenario", cfg.Resources.Scenario,
+			"host", next.Host, "join", cfg.JoinAddress, "rejoin", rejoin)
 	}
 }
 

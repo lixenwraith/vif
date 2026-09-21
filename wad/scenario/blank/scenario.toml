@@ -1,8 +1,14 @@
-# Root configuration with region definitions
+# The authoring scaffold: an empty map with a player on it and nothing to fight.
 
 [regions.main]
 initial = "MainStart"
 disabled_systems = ["glyph","nugget","gold","audio","music"]
+
+# A scaffold with no cursor is a scaffold nobody can stand in, and a session that
+# switched to one would leave every participant without a player domain.
+[regions.player]
+initial = "PlayerBoot"
+background = true
 
 [states.MainStart]
 parent = "Root"
@@ -21,3 +27,24 @@ parent = "Root"
 transitions = [
     { trigger = "Tick", target = "MainStart", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
 ]
+
+# --- Player ---
+
+[states.PlayerBoot]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true, heat = 10, energy = 100 } },
+]
+transitions = [
+    { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },
+    { trigger = "EventCursorSpawnFailed", target = "PlayerBootRetry" },
+]
+
+[states.PlayerBootRetry]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "PlayerBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+]
+
+[states.PlayerActive]
+parent = "Root"

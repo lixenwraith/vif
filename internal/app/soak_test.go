@@ -77,6 +77,42 @@ func towerScenario(t *testing.T, seed uint64) Config {
 	return cfg
 }
 
+// TestEveryShippedScenarioSpawnsAPlayer pins the one thing a scenario has to do
+// before anything else it declares matters. wad/scenario/blank did not, so a run
+// that switched to it had no player domain at all — and in a session, a host that
+// switched to it saw its guests and none of itself.
+func TestEveryShippedScenarioSpawnsAPlayer(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"main", "blank", "td", ""} {
+		label := name
+		if label == "" {
+			label = resource.EmbeddedLabel
+		}
+		t.Run(label, func(t *testing.T) {
+			t.Parallel()
+			opts := resource.Options{Embedded: name == ""}
+			if name != "" {
+				opts = resource.Options{Dir: soakRoot, Scenario: name}
+				if _, err := os.Stat(filepath.Join(soakRoot, "scenario", name)); err != nil {
+					t.Skipf("external scenario %s not present", name)
+				}
+			}
+			a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed,
+				Width: 160, Height: 50, Resources: opts})
+			if err != nil {
+				t.Fatalf("headless: %v", err)
+			}
+			defer a.Close()
+			a.Tick(60)
+			var placed bool
+			a.World().RunSafe(func() { _, placed = a.World().LocalCursor() })
+			if !placed {
+				t.Fatal("no cursor on the map after 60 ticks")
+			}
+		})
+	}
+}
+
 // TestExternalConfigsOwnTheirTowers covers the external producer side of cursor
 // addressing on both shipped scenarios: the machine must spawn and capture a cursor
 // before its tower requests inject player_entity into their payloads.

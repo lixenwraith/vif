@@ -429,6 +429,32 @@ func TestOnlyTheHostChangesALiveSessionsScenario(t *testing.T) {
 	}
 }
 
+// TestASuccessorLeadsTheSessionItInherited pins what a term means for every rule
+// reserved for the authority. IsSessionCoordinator used to compare against
+// identity 1 alone, so a participant that had inherited the session was refused
+// its own reset and its own scenario change while being the only instance able to
+// apply either.
+func TestASuccessorLeadsTheSessionItInherited(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA1A3, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+	successor := apps[1]
+
+	var led bool
+	successor.World().RunSafe(func() { led = successor.World().IsSessionCoordinator() })
+	if led {
+		t.Fatal("a guest reports itself the session's authority before any handoff")
+	}
+
+	successor.World().RunSafe(func() {
+		successor.world.Resources.Network.Authority.Store(successor.world.LocalParticipant())
+		led = successor.World().IsSessionCoordinator()
+	})
+	if !led {
+		t.Fatal("the participant the term names is still refused the authority's rules")
+	}
+}
+
 // TestBeginHostingRefusesASecondSession pins the one rule the command carries: a
 // run is in one session or none.
 func TestBeginHostingRefusesASecondSession(t *testing.T) {

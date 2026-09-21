@@ -63,12 +63,22 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 	}
 	req := &restartRequest{Scenario: name}
 	if port != nil {
-		// Said before this run's transport goes, because afterwards there is nobody
-		// to say it to. The notice carries nothing: each participant rebuilds on the
-		// command line it was started with and redials the address it came in on,
-		// and the offer it is given there names what is being played.
-		port.Broadcast(uint8(network.MsgSessionRestart), nil)
+		// Where this run's participants come back to. The address it already
+		// listens on when it opened the session; the one it advertised when it
+		// inherited the session from somebody else. A successor with neither has no
+		// door to offer, and saying so is better than sending its peers to an
+		// address that stopped answering.
 		req.Host = a.cfg.HostAddress
+		if req.Host == "" {
+			req.Host = a.reach.DeclaredAddr()
+		}
+		if req.Host == "" && port.PeerCount() > 0 {
+			return false, errors.New("this participant has no address its session can return to")
+		}
+		// Said before this run's transport goes, because afterwards there is nobody
+		// to say it to. All it carries is where to come back: the offer a
+		// participant is given when it redials names what is being played.
+		port.Broadcast(uint8(network.MsgSessionRestart), []byte(req.Host))
 	}
 	a.restart.Store(req)
 	vlog.Info("app", "msg", "scenario change requested",
@@ -77,18 +87,18 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 }
 
 // receiveSessionRestart takes the authority's notice that the session is rebuilding
-// on another scenario. There is nothing in it to apply: this participant restarts
-// on its own command line and dials the address it came in on, and Phase 3's
-// transfer covers a scenario no root here holds.
+// on another scenario. All it carries is where to come back to, which is not always
+// where this participant came from: a succession moves the door. Phase 3's transfer
+// covers a scenario no root here holds.
 //
 // Called under the world lock from the tick that drained the frame, so the latch is
 // atomic and the run it belongs to is the one Loop is about to leave.
-func (a *App) receiveSessionRestart(from uint32) {
+func (a *App) receiveSessionRestart(from uint32, addr string) {
 	if a.cfg.Mode != ModePlay || a.cfg.JoinAddress == "" {
 		return // a coordinator hears its own broadcast back on a mesh; a driven run has no loop
 	}
-	if a.restart.CompareAndSwap(nil, &restartRequest{}) {
-		vlog.Info("app", "msg", "session restarting", "authority", from)
+	if a.restart.CompareAndSwap(nil, &restartRequest{Rejoin: true, Join: addr}) {
+		vlog.Info("app", "msg", "session restarting", "authority", from, "dial", addr)
 	}
 }
 

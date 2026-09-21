@@ -439,6 +439,17 @@ follow)
 		|| fail "the guest ended on $ends, the host on $want"
 	[ "$(grep -c '"msg":"join installed the session world"' "$GL"/*.jsonl 2>/dev/null)" -ge 2 ] \
 		|| fail "the guest did not install the session world a second time: $GL"
+	# The host's own player after the change, not before it. One process writes one
+	# log across both runs, and the guest's arrival spawns a cursor too, so the
+	# count only means something from the restart onward. A scenario that spawns no
+	# cursor leaves the host watching its guests play, which is what blank used to do.
+	# Slot 0 is the host's own; the guest's arrival spawns one too, so the count
+	# alone says nothing.
+	own=$(cat "$HL"/*.jsonl 2>/dev/null | awk '
+		/"msg":"run restarting"/ { seen = 1; n = 0; next }
+		seen && /"msg":"cursor spawn"/ && /"slot":0/ { n++ }
+		END { print n + 0 }')
+	[ "$own" -ge 1 ] || fail "the rebuilt host spawned no cursor of its own: $HL"
 	rm -rf "$HL" "$GL" "$ROOT" "$HK" "$GK"
 	pass "the host changed scenario and its guest rebuilt and rejoined on it"
 	;;

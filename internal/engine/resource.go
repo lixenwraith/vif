@@ -989,10 +989,11 @@ type NetworkResource struct {
 	OnAuthority func(kind uint8, from uint32, body []byte)
 
 	// OnSessionRestart reports the authority's notice that the session is
-	// rebuilding on another scenario, so this participant rebuilds with it. Called
-	// under the world lock from the tick that drained the frame, and only for a
-	// frame the authority sent.
-	OnSessionRestart func(participant uint32)
+	// rebuilding on another scenario, so this participant rebuilds with it. addr is
+	// where to come back to, which is not always where this participant came from.
+	// Called under the world lock from the tick that drained the frame, and only
+	// for a frame the authority sent.
+	OnSessionRestart func(participant uint32, addr string)
 
 	// OnPeerLost reports a direct neighbour's departure to the session layer,
 	// beside the identity release OnDeparture does. It is a different question:

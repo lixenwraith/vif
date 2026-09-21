@@ -444,9 +444,26 @@ func (w *World) LocalParticipant() uint32 {
 	return r.ParticipantID
 }
 
-// IsSessionCoordinator reports whether this instance owns the host identity.
+// CoordinatorParticipant is the identity the handshake always assigns to the host.
+// It is the one participant every topology the session can build has a path to,
+// which is what makes it the single producer of a departure crossing, and the
+// authority every session starts under.
+const CoordinatorParticipant uint32 = 1
+
+// IsSessionCoordinator reports whether this instance is the one authoring the
+// session: the participant the current term names, which is the participant that
+// opened it until a succession moves the term. It used to compare against identity
+// 1 alone, so a successor was refused every rule reserved for the authority — its
+// own resets among them — while still being the only instance able to apply one.
 func (w *World) IsSessionCoordinator() bool {
-	return w.Resources.Network != nil && w.Resources.Network.ParticipantID == 1
+	r := w.Resources.Network
+	if r == nil {
+		return false
+	}
+	if held := r.Authority.Load(); held != 0 {
+		return r.ParticipantID == held
+	}
+	return r.ParticipantID == CoordinatorParticipant
 }
 
 // PredictsShared reports whether this world runs the shared domain ahead of an

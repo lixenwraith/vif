@@ -318,11 +318,6 @@ func (w *epochWindow) newest() uint64 { return w.high }
 // dropped by whichever array was short.
 const participantSlots = parameter.MaxPlayers + 2
 
-// coordinatorParticipant is the identity the handshake always assigns to the host.
-// It is the one participant every topology the session can build has a path to, which
-// is what makes it the single producer of a departure crossing.
-const coordinatorParticipant uint32 = 1
-
 // barrierArtifact is one encoded local or peer crossing waiting for its apply tick.
 type barrierArtifact struct {
 	frame     event.WireFrame
@@ -1484,7 +1479,7 @@ func (s *NetworkSystem) authorityParticipant() uint32 {
 			return id
 		}
 	}
-	return coordinatorParticipant
+	return engine.CoordinatorParticipant
 }
 
 // participantSlot finds the roster slot a peer-owned cursor occupies.
@@ -1561,7 +1556,7 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) int {
 		network.MsgStateUnserved:
 		s.receiveSelective(msg.Type, from, msg.Payload)
 	case network.MsgSessionRestart:
-		s.receiveSessionRestart(from)
+		s.receiveSessionRestart(from, msg.Payload)
 	case network.MsgAuthorityReport, network.MsgAuthorityHandoff, network.MsgPeerList:
 		// The address map travels with the succession it exists for: same term
 		// gate, same flood, same session layer deduplicating by term and
@@ -1667,7 +1662,7 @@ func (s *NetworkSystem) receiveAuthority(kind network.MessageType, from uint32, 
 // Only the authority's own is taken: a participant that could make its peers tear
 // down and redial on demand is a participant that could empty a session, and the
 // term already names which one of them speaks for it.
-func (s *NetworkSystem) receiveSessionRestart(from uint32) {
+func (s *NetworkSystem) receiveSessionRestart(from uint32, addr []byte) {
 	r := s.world.Resources.Network
 	if r == nil || r.OnSessionRestart == nil {
 		return
@@ -1676,7 +1671,11 @@ func (s *NetworkSystem) receiveSessionRestart(from uint32) {
 		s.statDrop.Add(1)
 		return
 	}
-	r.OnSessionRestart(from)
+	if len(addr) > network.MaxSessionName {
+		s.statDrop.Add(1) // an address, not a document
+		return
+	}
+	r.OnSessionRestart(from, string(addr))
 }
 
 // publishTransportLoss exposes frames the link lost outside the barrier: inbound
