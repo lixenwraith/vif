@@ -20,29 +20,6 @@ import (
 // defaultMouseMode is the reporting mode used outside free-look
 const defaultMouseMode = terminal.MouseModeClick | terminal.MouseModeDrag
 
-// restartRequest is what one run asks the next one to be. Loop returns it and Run
-// applies it to the command line it was given, so the operator's own flags still
-// decide everything a restart does not name — a pinned -seed most of all.
-type restartRequest struct {
-	// Scenario replaces -s. Empty keeps the command line's, which is what a guest
-	// rebuilding into a session that is about to re-offer it one wants.
-	Scenario string
-
-	// Host is the address to open hosting on once the next run's clock is running.
-	// A coordinator changing scenario does not go back into a startup lobby: its
-	// guests are already redialling, and the mid-run gate is the door they arrive
-	// at — the same one a reconnect has always used.
-	Host string
-
-	// Rejoin says the next run follows this session rather than leads it, and Join
-	// where to dial when that is not the address the command line named — a
-	// succession moves the door, so a participant told to rebuild is told where.
-	// Without Rejoin the next run is solo, which is what an authority whose
-	// coordinator is gone and whose roster is empty has actually become.
-	Rejoin bool
-	Join   string
-}
-
 // Run wires, runs, and tears down the game, once per scenario the player asks for.
 // A scenario change ends one run and starts another on the same command line with
 // a different -s: the regions a scenario declares are what register the FSM metric

@@ -133,6 +133,7 @@ Automated (assert, and used by `all`)
   transfer          a guest with no root receives the session's scenario
   follow            a host changes scenario and its guest rebuilds with it
   fleet             the session template and the allocator render one workload
+  deploy            the node install, the manifests and a mounted scenario
   lifetime          unclaimed expiry, then vacancy expiry
   drain             SIGTERM drains instead of cutting a match
   identity          a peer running a different build is refused (runs the tests)
@@ -475,6 +476,56 @@ fleet)
 	pass "the session template and the allocator agree on the fleet's workload"
 	;;
 
+deploy)
+	# What the node needs to be true before a pod can start, none of which the
+	# normal build exercises: the image's own build tag, a manifest that survives an
+	# unset variable, the installer's report, and a scenario resolving through the
+	# mount layout rather than out of the binary.
+	command -v go >/dev/null 2>&1 || fail "go not found"
+	headless=$(mktemp -d)
+	CGO_ENABLED=0 go build -tags=vif_headless -o "$headless/vif" ./cmd/vif \
+		|| fail "the image's build tag does not compile"
+
+	# An unquoted placeholder that renders empty ends the line on a colon, which is
+	# a YAML scanner error forty lines from the variable that caused it.
+	grep -Rn 'image: \${' deploy/k3s/ \
+		&& fail "an image placeholder is unquoted; an unset tag becomes a parse error"
+
+	# scenario.toml is three levels under the root, and a listing that looks one
+	# level short reports a correct install as an empty one.
+	if sudo -n true 2>/dev/null; then
+		node=$(mktemp -d)
+		VIF_WAD_ROOT=$node/wad VIF_CONTAINER= VIF_ALLOCATOR_ENV=/nonexistent \
+			./deploy/guest/update-vif-wad.sh >"$headless/install" 2>&1 \
+			|| fail "the wad installer failed: $headless/install"
+		for name in blank main td; do
+			grep -q "$node/wad/scenario/$name\$" "$headless/install" \
+				|| fail "the installer did not report $name: $headless/install"
+		done
+		sudo rm -rf "$node"
+	else
+		echo "  skip: the wad installer needs passwordless sudo"
+	fi
+
+	# The pod mounts scenario/ and image/ and nothing else, so prove a scenario
+	# resolves from exactly that and names itself in the log the commissioning
+	# check reads.
+	mount=$(mktemp -d)
+	cp -a wad/scenario wad/image "$mount/"
+	"$headless/vif" -check -config-dir "$mount" -s main | grep -q '^scenario ok' \
+		|| fail "the init container's check does not resolve through the mount layout"
+	"$headless/vif" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -authority host \
+		-l="$mount/log" -log-session-id=volume-check -lv=info \
+		-config-dir="$mount" -s=main -first-join=3s -empty=3s -drain=3s >/dev/null 2>&1 \
+		|| fail "the probe pod's arguments do not run"
+	grep -q '"msg":"scenario"' "$mount/log/volume-check.jsonl" \
+		|| fail "no scenario record; the commissioning check has nothing to read"
+	grep -q '"name":"main"' "$mount/log/volume-check.jsonl" \
+		|| fail "the session did not load main off the mount"
+	rm -rf "$mount" "$headless"
+	pass "the image builds, the manifests render, and a mounted scenario loads"
+	;;
+
 image)
 	command -v docker >/dev/null 2>&1 || command -v podman >/dev/null 2>&1 \
 		|| fail "no container engine found"
@@ -484,7 +535,7 @@ image)
 	;;
 
 all)
-	for s in check scenario transfer follow fleet lifetime drain identity; do
+	for s in check scenario transfer follow fleet deploy lifetime drain identity; do
 		note "$s"
 		"$0" "$s"
 	done

@@ -72,7 +72,7 @@ spec:
         # that would have accepted players and then failed; this turns it into a
         # pod that never became ready.
         - name: config-check
-          image: ${IMAGE}
+          image: "${IMAGE}"
           imagePullPolicy: IfNotPresent
           # The configuration this session will actually serve, not the embedded
           # one it used to prove instead. A scenario missing from the node volume,
@@ -107,7 +107,7 @@ spec:
             limits: {cpu: 500m, memory: 192Mi}
       containers:
         - name: session
-          image: ${IMAGE}
+          image: "${IMAGE}"
           imagePullPolicy: IfNotPresent
           args:
             - "-serve"

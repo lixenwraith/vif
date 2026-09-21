@@ -65,6 +65,7 @@ them believes it is hosting one. See
 | `transfer` | a guest whose configuration root is empty joins a host playing an installed scenario: the host serves it, the guest receives it and installs the session world on it |
 | `follow` | a host with a guest types `:n blank`: the guest is told, rebuilds, redials, receives the new scenario off the wire and installs the session world again. Two terminals, so it needs a pty like `scenario` |
 | `fleet` | the hand-rendered session template and the allocator's own render carry the same arguments, mounts and claims |
+| `deploy` | what a node needs before a pod can start, none of which a normal build reaches: the image's `vif_headless` tag compiles, no manifest leaves an image placeholder unquoted, the wad installer reports what it installed, and a scenario resolves through the pod's `scenario/`+`image/` mount and names itself in the log the commissioning check reads |
 | `lifetime` | an unclaimed session exits 0 on its first-guest window; an emptied one exits 0 on its vacancy grace, each naming why |
 | `drain` | `SIGTERM` keeps the match running, reports `live=true ready=false phase=draining`, keeps the clock moving, then ends itself |
 | `identity` | a peer running a different build or session is refused (runs the Go tests that can construct one) |

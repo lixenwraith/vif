@@ -31,6 +31,28 @@ import (
 // fallbackColorMode is published when no terminal exists to detect against
 const fallbackColorMode = terminal.ColorMode256
 
+// restartRequest is what one run asks the next one to be. Loop returns it and Run
+// applies it to the command line it was given, so the operator's own flags still
+// decide everything a restart does not name — a pinned -seed most of all.
+type restartRequest struct {
+	// Scenario replaces -s. Empty keeps the command line's, which is what a guest
+	// rebuilding into a session that is about to re-offer it one wants.
+	Scenario string
+
+	// Host is the address to open hosting on once the next run's clock is running.
+	// A coordinator changing scenario does not go back into a startup lobby: its
+	// guests are already redialling, and the mid-run gate is the door they arrive
+	// at — the same one a reconnect has always used.
+	Host string
+
+	// Rejoin says the next run follows this session rather than leads it, and Join
+	// where to dial when the command line's address is not where the session is
+	// now — succession moves the door. Without Rejoin the next run is solo, which
+	// is what an authority with an empty roster has actually become.
+	Rejoin bool
+	Join   string
+}
+
 // App owns the wired runtime: services, world, input, scheduler, and the selected
 // presentation adapter.
 type App struct {

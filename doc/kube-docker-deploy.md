@@ -533,6 +533,7 @@ applied before the claim, because the claim counts against it:
 ```sh
 NODE_NAME=$(sudo kubectl get nodes -o jsonpath='{.items[0].metadata.name}')
 VIF_TAG=$(git rev-parse --short=8 HEAD)
+: "${NODE_NAME:?no node came back from kubectl}" "${VIF_TAG:?not in the checkout}"
 
 sudo kubectl apply -f deploy/k3s/00-namespace.yaml
 sudo kubectl apply -f deploy/k3s/10-quota.yaml
@@ -549,9 +550,14 @@ Never apply `05-log-volume.yaml` with `${NODE_NAME}` intact. `30-session.yaml` i
 ### 9.1 The scenario volume
 
 Sessions read their scenarios from a read-only node directory rather than from the
-image, so an operator replaces what the fleet serves without a rebuild. Create the
-directory and fill it from this checkout before applying the objects — a claim
-bound to a path that does not exist is a pod that never starts:
+image, so an operator replaces what the fleet serves without a rebuild.
+
+This section builds the volume on a **new** node, as part of §9's run. A node that
+is already serving matches is §14.1 instead: it has a fleet to empty, an allocator
+to stop and a quota already at the old number, and none of that is here.
+
+Create the directory and fill it from this checkout before applying the objects — a
+claim bound to a path that does not exist is a pod that never starts:
 
 ```sh
 ./deploy/guest/update-vif-wad.sh
@@ -582,7 +588,7 @@ later. Run it once with Docker up, during §8, to get the validated form.
 Assert the layout before the claim goes anywhere near it:
 
 ```sh
-sudo find /var/db/vif/wad -maxdepth 2 -mindepth 2 -name scenario.toml | sort
+sudo find /var/db/vif/wad/scenario -maxdepth 2 -mindepth 2 -name scenario.toml | sort
 sudo find /var/db/vif/wad ! -user root -o ! -group root | head
 sudo stat -c '%a %n' /var/db/vif/wad /var/db/vif/wad/scenario/main/scenario.toml
 ```
@@ -590,18 +596,32 @@ sudo stat -c '%a %n' /var/db/vif/wad /var/db/vif/wad/scenario/main/scenario.toml
 Expected: one `scenario.toml` per installed scenario, no output from the ownership
 check, and `755 /var/db/vif/wad` with `644` on the file.
 
-Then apply the volume objects, rendering the same node name:
+Then apply the volume objects. The quota comes first and is re-applied here even
+though §9 just did it: this claim is the second one the namespace has ever held, so
+a ceiling still at `1` refuses it, and that refusal reads as a broken manifest
+rather than as a stale number. `NODE_NAME` is re-derived because an empty one
+renders a volume that is affine to no node and therefore binds to nothing:
 
 ```sh
-sed "s|\${NODE_NAME}|$NODE_NAME|g" deploy/k3s/07-wad-volume.yaml \
-  | sudo kubectl apply -f -
+: "${NODE_NAME:=$(sudo kubectl get nodes -o jsonpath='{.items[0].metadata.name}')}"
+: "${NODE_NAME:?no node came back from kubectl}"
+
+sed "s|\${NODE_NAME}|$NODE_NAME|g" deploy/k3s/07-wad-volume.yaml >/tmp/wad-volume.yaml
+grep 'values:' /tmp/wad-volume.yaml
+
+sudo kubectl apply -f deploy/k3s/10-quota.yaml
+sudo kubectl apply -f /tmp/wad-volume.yaml
 sudo kubectl get storageclass vif-node-wad
 sudo kubectl get persistentvolume vif-fleet-wad
 ```
 
-Expected: the class exists with `kubernetes.io/no-provisioner`, and the volume is
-`8Mi  ROX  Retain  Available` — `Available` rather than `Bound`, because
-`WaitForFirstConsumer` waits for a pod.
+Expected: `values: ["<node>"]` naming this node, then the class with
+`kubernetes.io/no-provisioner` and the volume as `8Mi  ROX  Retain  Available` —
+`Available` rather than `Bound`, because `WaitForFirstConsumer` waits for a pod.
+
+The `grep` is read before the `apply`, not after. `values: [""]` is a volume affine
+to no node: it applies cleanly, binds to nothing and says nothing about why. Fix
+`NODE_NAME` and render again rather than applying it and waiting on it.
 
 ### 9.2 Binding both claims
 
@@ -611,6 +631,9 @@ a scenario through the wad claim and writes a record through the log claim, whic
 is what a session does:
 
 ```sh
+: "${VIF_TAG:=$(git rev-parse --short=8 HEAD)}"
+: "${VIF_TAG:?not in the checkout; pass the tag §8 imported}"
+
 sed -e "s|\${IMAGE}|docker.io/library/vi-fighter:$VIF_TAG|g" \
     -e "s|\${SCENARIO}|main|g" \
   deploy/k3s/06-log-volume-check.yaml | sudo kubectl apply -f -
@@ -626,8 +649,11 @@ sudo jq -s -e 'map(select(.sub != null)) as $records |
   /var/log/vif-fleet/volume-check.jsonl
 ```
 
-All four volume objects must read `Bound`. The probe also proves the scenario
-loaded off the volume rather than out of the image — the record names it:
+`VIF_TAG` is asserted rather than assumed: an unset one renders
+`image: "docker.io/library/vi-fighter:"`, which the API server accepts and no
+kubelet can pull. All four volume objects must read `Bound`. The probe also proves
+the scenario loaded off the volume rather than out of the image — the record names
+it:
 
 ```sh
 sudo jq -r 'select(.fields.msg == "scenario") | .fields |
@@ -1165,21 +1191,34 @@ Expected: one `ok` per scenario, then `-P FORWARD ACCEPT` from the last line —
 check, because starting Docker moves it.
 
 **4. Raise the quota before the claim, then apply the volume.** The claim counts
-against the quota, so the order is not interchangeable:
+against the quota, so the order is not interchangeable: a ceiling still at `1`
+refuses the claim, and the refusal names the quota rather than the order. Read the
+render before applying it, because a volume affine to no node applies cleanly and
+then binds to nothing:
 
 ```sh
+: "${NODE_NAME:?re-run step 1; an empty one renders a volume affine to no node}"
+
+sed "s|\${NODE_NAME}|$NODE_NAME|g" deploy/k3s/07-wad-volume.yaml >/tmp/wad-volume.yaml
+grep 'values:' /tmp/wad-volume.yaml
+
 sudo kubectl apply -f deploy/k3s/10-quota.yaml
-sed "s|\${NODE_NAME}|$NODE_NAME|g" deploy/k3s/07-wad-volume.yaml | sudo kubectl apply -f -
+sudo kubectl apply -f /tmp/wad-volume.yaml
 sudo kubectl -n vif get resourcequota vif-fleet-ceiling \
   -o jsonpath='{.spec.hard.persistentvolumeclaims}{"\n"}'
 sudo kubectl -n vif get pvc vif-fleet-wad -o jsonpath='{.status.phase}{"\n"}'
 ```
 
-Expected: `2`, then `Pending` — the claim waits for its first consumer.
+Expected: `values: ["<node>"]`, then `2`, then `Pending` — the claim waits for its
+first consumer. An earlier attempt that applied the volume against an unset
+`NODE_NAME` left one that will never bind; `kubectl delete pv vif-fleet-wad` and
+apply this render over it, since `Retain` keeps the node directory either way.
 
 **5. Bind it with the probe**, which is §9.2 run again on a commissioned node:
 
 ```sh
+: "${VIF_IMAGE:?re-run step 1; an empty one renders an image no kubelet can pull}"
+
 sed -e "s|\${IMAGE}|$VIF_IMAGE|g" -e "s|\${SCENARIO}|main|g" \
   deploy/k3s/06-log-volume-check.yaml | sudo kubectl apply -f -
 sudo kubectl -n vif wait --for=jsonpath='{.status.phase}'=Succeeded \

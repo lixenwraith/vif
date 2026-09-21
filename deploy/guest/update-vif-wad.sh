@@ -80,11 +80,11 @@ fi
 
 note "staging $source_wad into $staging"
 sudo rm -rf "$staging"
-sudo install -d -o root -g root -m 0755 "$staging"
+sudo cp -a "$source_wad" "$staging"
 # Directories 0755 and files 0644, owned by root: every session reads this and
 # none of them writes it.
-(cd "$source_wad" && find . -type d -exec sudo install -d -o root -g root -m 0755 "$staging/{}" \;)
-(cd "$source_wad" && find . -type f -exec sudo install -o root -g root -m 0644 "{}" "$staging/{}" \;)
+sudo chown -R root:root "$staging"
+sudo chmod -R u=rwX,go=rX "$staging"
 
 # The swap. A running pod's bind mount resolves the inode it was given, so it
 # keeps the tree it started on; the next pod mounts what is at the path now.
@@ -97,6 +97,6 @@ fi
 sudo mv "$staging" "$wad_root"
 
 note "installed:"
-sudo find "$wad_root" -mindepth 2 -maxdepth 2 -name scenario.toml -printf '  %h\n' | sort
+sudo find "$wad_root/scenario" -mindepth 2 -maxdepth 2 -name scenario.toml -printf '  %h\n' | sort
 [ -d "$previous" ] && echo "  (previous tree retained at $previous)"
 echo "done. Sessions already running keep the scenarios they started on."
