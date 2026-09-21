@@ -403,12 +403,15 @@ one chunk of a shared-world capture. It is the only message whose size is a
 function of the world rather than of the format, so it is the only one that may be
 split. The schema JSON first enters a 10-byte bounded compression envelope:
 `[magic:4][version:1][codec:1][plain bytes:4]`, followed by deflate data. The
-declared plain size and the reassembled wire size are both capped at
-`MaxSnapshotBytes`. The current storm high water compresses from about 176 KiB to
-15.4 KiB, but chunking remains required for larger or less compressible worlds.
+reassembled wire size is capped at `MaxSnapshotBytes` and the declared plain size
+at `MaxSnapshotPlainBytes`, which is eight times it. The two differ because the
+ratio is large and world-dependent: the storm high water compresses from about
+176 KiB to 15.4 KiB, and the largest map the grid holds — 500x250 walled, which
+`wad/scenario/td` approaches — from 24.3 MiB to 1.1 MiB. One cap for both would
+refuse at the encoder a world whose bytes fit on the wire four times over.
 
-That cap is a sanity bound rather than the defence. A declared length is a claim by
-whoever sent the chunk, and `NetworkSystem` holds one `SnapshotAssembly` per
+The wire cap is a sanity bound rather than the defence. A declared length is a claim
+by whoever sent the chunk, and `NetworkSystem` holds one `SnapshotAssembly` per
 source: reserving for the declared total let one twenty-byte header make a receiver
 hold the whole ceiling, once per participant. The reservation is now bounded by
 `snapshotReserve` and the buffer grows with the bytes that actually arrive, so what

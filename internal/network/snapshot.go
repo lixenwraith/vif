@@ -24,22 +24,32 @@ const SnapshotChunkHeader = 20
 // accounted for by MaxPayloadSize.
 const SnapshotChunkBody = MaxPayloadSize - SnapshotChunkHeader
 
-// MaxSnapshotBytes bounds a transfer either end will handle at all. A measured
-// capture of this world is single-digit kilobytes and the documented storm high
-// water is about 15 KiB, so this is three orders of magnitude of headroom for a
-// world that grows — and it is a sanity bound rather than the defence, because a
-// declared length is a claim by whoever sent the chunk.
+// MaxSnapshotBytes bounds a transfer either end will handle at all: the bytes on
+// the wire, after the codec has compressed them. The largest world the engine
+// holds — MaxMapCells walled, which is more than any scenario builds — measures
+// 1.1 MiB here, so this keeps four times that as headroom for a world that grows.
 //
 // The defence is snapshotReserve below: a receiver allocates for the bytes that
 // have arrived rather than for the bytes a sender says are coming, so the memory
 // one peer can make a receiver hold is bounded by what that peer actually sends.
 const MaxSnapshotBytes = 4 << 20
 
+// MaxSnapshotPlainBytes bounds the body a capture expands to, which is a separate
+// quantity from the one above: captures of a walled map compress better than 20:1,
+// so a transfer well inside the wire ceiling still expands past it. That worst case
+// measures 24.3 MiB, and this is the next power of two.
+//
+// It is the decompression bound, so it is stated as a ratio rather than a size: a
+// peer may still send only MaxSnapshotBytes, and this is how far a receiver will
+// let those bytes expand. Eight to one is what the codec achieves on a real world;
+// flate's own worst case is 1032 to one.
+const MaxSnapshotPlainBytes = 8 * MaxSnapshotBytes
+
 // snapshotReserve is the most a receiver reserves up front for a transfer it has
-// only seen the first chunk of. A real capture fits inside it and is allocated
-// once; anything larger grows by append, which costs a few copies on a path that
-// runs once per keyframe and removes the last place a peer could name a number
-// and have it allocated.
+// only seen the first chunk of. An ordinary world's capture fits inside it and is
+// allocated once; a walled map's is several times it and grows by append, which
+// costs a few copies on a path that runs once per keyframe and removes the last
+// place a peer could name a number and have it allocated.
 const snapshotReserve = 64 << 10
 
 // EncodeSnapshotChunks splits an encoded capture into wire frames.

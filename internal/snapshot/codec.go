@@ -20,8 +20,9 @@ import (
 //
 // The JSON remains the schema and integrity surface. Compression is only a wire
 // concern, outside the world lock, so it reduces joins and corrections without
-// changing capture, diff or reconcile semantics. The declared plain size lets a
-// receiver bound decompression as tightly as it already bounds reassembly.
+// changing capture, diff or reconcile semantics. The declared plain size is what a
+// receiver bounds decompression by, against the expansion ceiling rather than the
+// wire one: the two differ by the ratio the codec achieves on a walled map.
 const (
 	snapshotWireHeader  = 10
 	snapshotWireVersion = 1
@@ -48,9 +49,9 @@ func EncodeJSON(v any) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(plain) == 0 || len(plain) > network.MaxSnapshotBytes {
+	if len(plain) == 0 || len(plain) > network.MaxSnapshotPlainBytes {
 		return nil, fmt.Errorf("snapshot encode: %d plain bytes is outside 1..%d",
-			len(plain), network.MaxSnapshotBytes)
+			len(plain), network.MaxSnapshotPlainBytes)
 	}
 
 	var out bytes.Buffer
@@ -82,7 +83,7 @@ func EncodeJSON(v any) ([]byte, error) {
 
 // DecodeJSON validates and expands one wire envelope. The plain-size
 // declaration is checked before allocation and enforced while reading, so a small
-// compressed body cannot expand past the snapshot ceiling.
+// compressed body cannot expand past the expansion ceiling.
 func DecodeJSON(body []byte, dst any) error {
 	if len(body) < snapshotWireHeader {
 		return fmt.Errorf("snapshot envelope: %d bytes, want at least %d", len(body), snapshotWireHeader)
@@ -97,7 +98,7 @@ func DecodeJSON(body []byte, dst any) error {
 		return fmt.Errorf("snapshot envelope: unsupported codec %d", body[5])
 	}
 	plainBytes := binary.BigEndian.Uint32(body[6:10])
-	if plainBytes == 0 || plainBytes > network.MaxSnapshotBytes {
+	if plainBytes == 0 || plainBytes > network.MaxSnapshotPlainBytes {
 		return fmt.Errorf("snapshot envelope: names %d plain bytes", plainBytes)
 	}
 

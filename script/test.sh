@@ -132,6 +132,7 @@ Automated (assert, and used by `all`)
   bundle            the release wad archive extracts to a working config root
   scenario          :n <name> rebuilds the run on another scenario and back
   transfer          a guest with no root receives the session's scenario
+  maxmap            a guest joins a host serving the largest map the grid holds
   follow            a host changes scenario and its guest rebuilds with it
   corpus            a guest reading its own content joins a host reading other
   fleet             the session template and the allocator render one workload
@@ -414,6 +415,34 @@ transfer)
 		|| fail "the guest received a scenario but never joined: $GL"
 	rm -rf "$ROOT" "$HL" "$GL"
 	pass "a guest with no root received the session's scenario and joined on it"
+	;;
+
+maxmap)
+	# td is 500x250, the most cells the grid holds, and fills them with a maze, so
+	# its capture is ten megabytes of JSON that compresses to half of one. Only the
+	# bytes that travel are bounded by the wire ceiling; a join refused here means
+	# the plain body is being measured against it again.
+	need_bin
+	[ -d wad/scenario/td ] || fail "wad/scenario/td is not in this checkout"
+	ROOT=$(mktemp -d); HL=$(mktemp -d); GL=$(mktemp -d)
+	"$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -config-dir wad -s td \
+		-size 120x40 -players 1 -first-join 30s -empty 15s \
+		-l="$HL" -lv info -ls app >/dev/null 2>&1 &
+	SERVE_PID=$!
+	wait_for 20 'probe_get /health' || fail "the host never answered its probe"
+	# The install moves the world tick past the script's next action, so the guest
+	# ends on that rather than on a clean exit. Its log is what is asserted.
+	timeout 40 "$BIN" -script script/sparring-guest.toml -join "$HOST:$PORT" \
+		-config-dir "$ROOT" -l="$GL" -lv info -ls app >/dev/null 2>&1 || true
+	grep -qh '"msg":"join installed the session world"' "$GL"/*.jsonl 2>/dev/null \
+		|| fail "the guest never installed the session world: $GL"
+	# A keyframe correction carries the same whole world the join did, so a second
+	# install is what proves the session carries it and not just the handshake.
+	installs=$(grep -ho '"msg":"capture installed"' "$GL"/*.jsonl 2>/dev/null | wc -l)
+	[ "${installs:-0}" -gt 1 ] \
+		|| fail "the world arrived once and was never corrected: $GL"
+	rm -rf "$ROOT" "$HL" "$GL"
+	pass "a guest joined and was corrected on the largest map the spatial grid holds"
 	;;
 
 scenario)
