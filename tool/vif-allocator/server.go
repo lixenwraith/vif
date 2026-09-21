@@ -21,6 +21,7 @@ const maxCreateBody = 1024
 type sessionAllocator interface {
 	createSession(context.Context, sessionRequest) (session, error)
 	listSessions(context.Context) ([]session, error)
+	routeSession(context.Context, string) (string, error)
 	limits() fleetLimits
 	ready(context.Context) error
 }
@@ -29,6 +30,7 @@ type apiServer struct {
 	allocator sessionAllocator
 	log       *slog.Logger
 	logProxy  *httputil.ReverseProxy
+	ws        *wsRouter
 	mux       *http.ServeMux
 }
 
@@ -46,15 +48,19 @@ type apiErrorResponse struct {
 	Message string `json:"message"`
 }
 
-func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL *url.URL) *apiServer {
+func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL *url.URL, web allocatorConfig) *apiServer {
 	server := &apiServer{allocator: allocator, log: logger, mux: http.NewServeMux()}
 	if logStreamURL != nil {
 		server.logProxy = newLogStreamProxy(logStreamURL, logger)
+	}
+	if web.WebOrigin != "" {
+		server.ws = newWSRouter(web.WebOrigin, web.WebMaxPerSession, logger)
 	}
 	server.mux.HandleFunc("/healthz", server.handleHealth)
 	server.mux.HandleFunc("/readyz", server.handleReady)
 	server.mux.HandleFunc("/vif/api/sessions", server.handleSessions)
 	server.mux.HandleFunc("/vif/api/logs", server.handleLogs)
+	server.mux.HandleFunc(wsRoutePrefix, server.handleSessionSocket)
 	return server
 }
 

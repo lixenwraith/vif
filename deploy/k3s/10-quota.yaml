@@ -7,8 +7,11 @@
 # stale state, or was asked for eleven sessions by a website nobody rate-limited.
 #
 # The compute totals are ten times one session's envelope (doc/kubernetes-fleet.md
-# §6). They are a second ceiling on the same fact: ten sessions cannot exceed the
-# memory the node was sized for, whatever a mis-rendered manifest asks for.
+# §6), which since the browser path is the game container plus the WebSocket bridge
+# sidecar: a restartable init container counts into the pod total alongside the
+# ordinary ones, where the config-check container counts only against its own peak.
+# They are a second ceiling on the same fact: ten sessions cannot exceed the memory
+# the node was sized for, whatever a mis-rendered manifest asks for.
 apiVersion: v1
 kind: ResourceQuota
 metadata:
@@ -21,10 +24,10 @@ spec:
     # One Service per session, plus headroom for a fixed one an operator adds.
     count/services: "12"
     count/services.nodeports: "12"
-    requests.cpu: "1"
-    requests.memory: 960Mi
-    limits.cpu: "5"
-    limits.memory: 1920Mi
+    requests.cpu: 1250m
+    requests.memory: 1120Mi
+    limits.cpu: "6"
+    limits.memory: 2240Mi
     # Two shared local claims: the volatile log tmpfs every session writes through,
     # and the read-only scenario volume they all mount. Neither is per-session
     # persistence; the node's own tmpfs and directory are the hard capacity.

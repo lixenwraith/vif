@@ -271,8 +271,11 @@ func (c Config) Validate() error {
 	if err := validateAudioBuildConfig(c); err != nil {
 		return err
 	}
-	if !buildHasSocketNetwork && (c.HostAddress != "" || c.JoinAddress != "") {
-		return errors.New("browser build has no socket transport; host and join require a WebSocket transport adapter")
+	// A browser joins over the session's WebSocket route and nothing else: it has
+	// no socket to dial a host:port with, and no listener to host or serve from.
+	if !buildHasSocketNetwork &&
+		(c.HostAddress != "" || (c.JoinAddress != "" && !network.IsWebSocketTarget(c.JoinAddress))) {
+		return errors.New("browser build joins a session over its wss:// route; it has no socket transport to host or to dial a host:port")
 	}
 	if c.HostAddress != "" && c.JoinAddress != "" {
 		return errors.New("-host and -join are mutually exclusive")

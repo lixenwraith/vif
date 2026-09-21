@@ -222,6 +222,7 @@ func TestAJoinTargetCarriesTheSessionName(t *testing.T) {
 		{"host.example:7777", "host.example:7777", ""},
 		{"vif://host.example:7777/7f3c1a", "host.example:7777", "7f3c1a"},
 		{"host.example:7777/7f3c1a", "host.example:7777", "7f3c1a"},
+		{"wss://site.example/vif/ws/7f3c1a", "wss://site.example/vif/ws/7f3c1a", ""},
 	} {
 		addr, name := parseJoinTarget(tc.target, "")
 		if addr != tc.addr || name != tc.name {

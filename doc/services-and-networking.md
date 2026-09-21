@@ -86,12 +86,13 @@ audio capabilities, then build capabilities constrain them further. A
 `vif_headless` build has no terminal or audio adapter; `vif_noaudio` and browser
 builds have no audio adapter. Native networking is role-selected separately:
 play constructs the no-op-capable socket adapter, while an authored headless
-script constructs it only for `-host`/`-join`. Browser session flags are rejected
-because their required native WebSocket adapter does not yet exist. The planned
-same-origin route is `wss://lixen.com/vif/ws/<session>` through the allocator to a
-private pod listener; native clients retain raw TCP. Replay input controls playback
-rather than the mode router, and its terminal resize affects presentation rather
-than recorded geometry.
+script constructs it only for `-host`/`-join`. A browser registers the same adapter
+for a `-join` naming the same-origin route `wss://<site>/vif/ws/<session>`, and is
+refused `-host`, `-serve` and a `host:port` target, none of which it could bind or
+dial. The route reaches a bridge sidecar in the session's pod, which is the only
+thing on the path that speaks WebSocket; native clients retain raw TCP. Replay
+input controls playback rather than the mode router, and its terminal resize
+affects presentation rather than recorded geometry.
 
 Content and audio details are covered in
 [Content, assets, and tools](content-assets-and-tools.md) and
@@ -216,7 +217,12 @@ flowchart TD
 
 Host uses `tls.Listen` when a TLS config is supplied programmatically, otherwise
 `net.Listen`; peer uses the corresponding dialer. The CLI deliberately supplies
-no TLS configuration in this trusted-peer proof. Every admitted stream is keyed
+no TLS configuration in this trusted-peer proof. `dial` is also where a browser
+diverges and stops diverging: a `ws://` or `wss://` target is opened as the page's
+own WebSocket wrapped in a `net.Conn`, and every layer above it — handshake,
+admission, fences, snapshot assembly — is the code a native client runs. A
+WebSocket message is not a frame boundary; `Decode` reassembles the stream exactly
+as it does from a socket. Every admitted stream is keyed
 by the coordinator's participant ID rather than accept order. The peer manager
 enforces the configured cap and duplicate-ID rejection.
 

@@ -9,7 +9,12 @@
 #   ./render-session.sh 7f3c1a 31707 > /tmp/7f3c1a.yaml
 #   FIRST_JOIN=20m EMPTY_GRACE=20m ./render-session.sh 7f3c1a 31707
 #   SCENARIO=td LOG_LEVEL=debug ./render-session.sh 7f3c1a 31707
+#   WS_BRIDGE_IMAGE=vif-ws-bridge:pinned ./render-session.sh 7f3c1a 31707
 #   JOB_UID=<uid> ./render-session.sh 7f3c1a 31707
+#
+# WS_BRIDGE_IMAGE is what a browser reaches the session through. Unset, the bridge
+# sidecar is dropped and the rendered session is the native-clients-only one, which
+# is the shape to render when the question is whether the game itself is broken.
 #
 # The one session container writes directly to the shared tmpfs-backed local PVC.
 # No allocator log follower or per-session LogWisp sidecar exists. One standalone
@@ -36,6 +41,7 @@ FIRST_JOIN=${FIRST_JOIN:-90s}
 EMPTY_GRACE=${EMPTY_GRACE:-90s}
 SCENARIO=${SCENARIO:-main}
 LOG_LEVEL=${LOG_LEVEL:-info}
+WS_BRIDGE_IMAGE=${WS_BRIDGE_IMAGE:-}
 JOB_UID=${JOB_UID:-}
 
 case "$SESSION_ID" in
@@ -73,8 +79,14 @@ rendered=$(sed \
 	-e "s|\${EMPTY_GRACE}|$EMPTY_GRACE|g" \
 	-e "s|\${SCENARIO}|$SCENARIO|g" \
 	-e "s|\${LOG_LEVEL}|$LOG_LEVEL|g" \
+	-e "s|\${WS_BRIDGE_IMAGE}|$WS_BRIDGE_IMAGE|g" \
 	-e "s|\${JOB_UID}|$JOB_UID|g" \
 	"$template")
+
+if [ -z "$WS_BRIDGE_IMAGE" ]; then
+	rendered=$(printf '%s\n' "$rendered" |
+		sed '/^        - name: ws-bridge$/,/^      containers:$/{/^      containers:$/!d;}')
+fi
 
 if [ -z "$JOB_UID" ]; then
 	rendered=$(printf '%s\n' "$rendered" | sed '/ownerReferences:/,/blockOwnerDeletion: true/d')

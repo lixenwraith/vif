@@ -21,20 +21,21 @@ in [`script/`](../script/README.md).
 | Trigger | `tool/vif-allocator`, a hardened node service, is the website-facing control-plane boundary. A caller selects roster size, log level and scenario from what it advertises in `limits`; everything else in the workload is the deployment's. `deploy/k3s/session.sh` drives it from a shell and can also render the template directly. No session pod runs between requests. |
 | Image | `scratch` plus the static `vif_headless` binary (about 12 MiB in the reference build), non-root, read-only root filesystem, no shell. It carries no scenarios: those come off a node volume, so what the fleet serves changes without a rebuild. |
 | Scenario | Chosen per session from the allocator's advertised list, served from a read-only node directory (`/var/db/vif/wad`) mounted `scenario/` and `image/` only. The corpus and keymap stay embedded, so a native guest running `-d` can still join. |
-| Transport | Raw framed TCP today; the chosen browser path adds a native binary WebSocket listener without removing TCP (§9). Unauthenticated initially (§4). |
-| Reached by | Native clients use the forwarded ten-port range. Browser clients will use `wss://lixen.com/vif/ws/<session>` through the site and allocator to the selected pod (§9). |
+| Transport | Raw framed TCP, for every participant. A browser reaches it through a WebSocket bridge sidecar in the same pod, so the game speaks one protocol and this repository carries no WebSocket implementation (§9). Unauthenticated initially (§4). |
+| Reached by | Native clients use the forwarded ten-port range. Browser clients use `wss://<site>/vif/ws/<session>` through the site and allocator to the selected pod's bridge (§9). |
 | Logs and metrics | Each Job writes `<session-id>.jsonl` through a Bound local PVC onto a 256 MiB node tmpfs. One standalone LogWisp node service, pinned by `deploy/logwisp/REVISION`, has a read-only view and a loopback-only listener; the allocator reverse-proxies its SSE bytes at `/vif/api/logs` without parsing a record. |
-| Public API | Exactly `/vif/api/sessions` and `/vif/api/logs`, over TLS through the site's front door. `/healthz`, `/readyz` and every other node port stay unreachable from outside. |
+| Public API | Exactly `/vif/api/sessions`, `/vif/api/logs` and `/vif/ws/<session>`, over TLS through the site's front door. `/healthz`, `/readyz` and every other node port stay unreachable from outside. |
 
 ```mermaid
 flowchart LR
     Player["Player"] --> Site["Website"]
-    Site -->|"API + planned WSS"| Alloc["Allocator"]
+    Site -->|"API + WSS"| Alloc["Allocator"]
     Alloc -->|"create Job + Service"| API["K3s API"]
     API --> Pod["vif -serve"]
     Site -->|"host:port"| Player
     Player -->|"vif -join, TCP"| NP["NodePort"] --> Pod
-    Alloc -.->|"planned private WS"| Pod
+    Alloc -->|"private WS"| Bridge["ws-bridge sidecar"]
+    Bridge -->|"127.0.0.1:7777"| Pod
     Pod -->|"JSONL through PVC"| Logs["capped node tmpfs"]
     Logs -->|"read-only files"| Wisp["LogWisp, loopback"]
     Wisp -->|"SSE bytes"| Alloc
@@ -67,7 +68,8 @@ it does not move an in-memory session into an unrelated pod.
 |---|---|---|---|
 | G | next | **Hand off a deployment a stranger can install.** The documentation reduction is done: the procedure, this plan, the artifact indexes and the runbook describe the deployed design rather than the batches that produced it. | Both rehearsals below reach a first session with no undocumented step, and every resource value in `deploy/k3s/30-session.yaml` cites a number from H3. |
 | G1 | next | **Rehearse from bare Arch Linux and from bare Ubuntu.** Record package and service differences, and fix every command that assumes the production node. | A second node reaches [§13 of the procedure](kube-docker-deploy.md#13-first-session) without a step its operator had to invent. |
-| H3 | next | **Measure a full roster.** Nine sessions driven by headless joiners for the fleet-level readings — CPU, memory, tmpfs, log rate, rotations — plus one real four-player session over real links, through a tower and a storm and on `wad/scenario/td`, for the hour that tick slips and correction magnitude need. | Requests and limits in `30-session.yaml` come from the four-player measurement rather than from single-guest history. |
+| W1 | next | **Commission the browser path.** The code and the objects exist and nothing has run them: build and pin the bridge image, import it, set `-web-origin` and `-ws-bridge-image`, publish the edge route with its rate limits. | A browser joins a live session through the site, plays, drops and rejoins, and the session ends on its own grace with no operator step invented on the way. |
+| H3 | next | **Measure a full roster.** Nine sessions driven by headless joiners for the fleet-level readings — CPU, memory, tmpfs, log rate, rotations — plus one real four-player session over real links, through a tower and a storm and on `wad/scenario/td`, for the hour that tick slips and correction magnitude need. Include the bridge sidecar, whose envelope is an estimate. | Requests and limits in `30-session.yaml`, and the quota totals, come from the four-player measurement rather than from single-guest history and estimates. |
 | H1 | partly done | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do has to be bounded. The two startup holes are closed: the tick-zero gate is bounded by one world install, a peer that leaves or goes silent costs the lobby rather than the session, and a confirmation is keyed to the link it arrived on. | Remaining: a handshake fuzz target for malformed, oversized, replayed and half-open cases, which `internal/network` has no equivalent of. |
 | H16 | partly done | **Automate image delivery.** Nightly CI publishes the final headless Dockerfile to GHCR under moving and commit-addressed tags; `deploy/guest/update-vif-image.sh` still provides the checked local build/import boundary. | Choose the node's registry/promotion policy, authenticate pulls without a long-lived off-node deployment credential, and move new sessions to a verified digest while existing matches finish. |
 | H4 | partly done | **Server-only and renderer-neutral builds.** `vif_headless` removes renderer and audio packages and is used by the image. Terminal-shaped key, color, cell, and image values remain in common simulation/configuration packages. | Extract renderer-neutral values for a minimally polished Android host within one month of development time; keep the simulation fingerprint shared with clients. |
@@ -102,15 +104,18 @@ repeating its original gate.
 ## 4. Security posture
 
 The game port is **open and initially unauthenticated**. Anyone who can reach it
-can join a session and influence its Shared world. Browser admission authentication
-is planned after the bounded WebSocket path; until then, what is not accepted is a
-stranger being able to do anything *worse* than play.
+can join a session and influence its Shared world, and so can anyone who can open
+the browser route. Browser admission authentication is planned; until then, what is
+not accepted is a stranger being able to do anything *worse* than play.
 
 What already bounds a stranger:
 
 - one admission per address per `NetworkAdmitBurst` (6) in `NetworkAdmitWindow`
   (1 minute), tracked for at most 1024 addresses so the defence cannot become the
-  exhaustion, and keyed on the player's own address because the route preserves it;
+  exhaustion, and keyed on the player's own address because the NodePort route
+  preserves it. The browser route does not: every browser participant arrives from
+  the pod's own loopback, so they share one budget and the two bounds below are
+  what separate them;
 - at most `MaxHandshakes` (8) handshakes in flight, each on its own goroutine with a
   `ConnectTimeout` (5 s) and a `ReadTimeout` (30 s);
 - a 16-bit frame length, bounded receive queues, and a bounded repair size, so no
@@ -129,11 +134,16 @@ What already bounds a stranger:
   every player's link and travels in clear — so what it bounds is a session being
   walked into, not one whose link leaked;
 - the network policy: one game port reachable, everything else denied, no egress;
-- the allocator's published surface: exactly the create/list and log-stream routes,
-  bounded by the ten-session quota, the 90-second first-join expiry, the advertised
-  `limits` on what a caller may select, and the edge's own rate limit. Its probe
-  endpoints and every other node port stay behind the node filter, which admits only
-  the front door;
+- the allocator's published surface: exactly the create/list, log-stream and
+  session-socket routes, bounded by the ten-session quota, the 90-second first-join
+  expiry, the advertised `limits` on what a caller may select, and the edge's own
+  rate limit. Its probe endpoints and every other node port stay behind the node
+  filter, which admits only the front door;
+- on the browser route specifically: one `Origin`, a 16-hex identifier looked up in
+  Kubernetes state rather than supplied, a refusal for a session that is not live
+  and ready, `-web-max` concurrent connections per session, and the edge's
+  per-address `limit_conn`/`limit_req`. Everything refusable is refused before the
+  upgrade, because after it there is no status code left to send;
 - `-authority host`, which is the fleet's default and what keeps that one port the
   only one. A migrate session gives every participant a listening port and publishes
   the addresses inside the session; a fleet session is its address, so it has no
@@ -207,6 +217,8 @@ What the manifest asks for:
 | Resource | Value | Rationale |
 |---|---:|---|
 | memory request / limit | 96 / 192 MiB | Single-guest measurement plus headroom for a staging world after an authority change. |
+| bridge memory request / limit | 16 / 32 MiB | Estimate for a sidecar that holds one buffer per connection and no state. Unmeasured; H3 settles it. |
+| bridge CPU request / limit | 25m / 100m | The same estimate, for a process whose work is one copy loop per player. |
 | `GOMEMLIMIT` | 160 MiB | An earlier collection target than the limit, so the runtime collects instead of the kernel killing. |
 | CPU request / limit | 100m / 500m | One guest was about 0.05 core in early measurement; the ceiling is wide until a storm is measured. |
 | termination grace | 30 s | Above the 20 s drain, so the process decides when the match ends. |
@@ -223,7 +235,11 @@ defaults:
 
 Ten of these is roughly 30 KiB/s into the 256 MiB tmpfs, which the 8 MB rotation and
 the cleanup timer carry. Do not scale the CPU and memory figures from here; H3
-measures a four-player world, which is the shape the manifest's values are for.
+measures a four-player world, which is the shape the manifest's values are for, and
+it is also what the bridge sidecar's own envelope is waiting on. The quota totals in
+`10-quota.yaml` are ten times the pod, which is now the game container plus that
+sidecar: a restartable init container counts into the pod total, where the
+config-check container counts only against its own peak.
 
 Historical baseline worth keeping: server in lobby 12.0 MB RSS; embedded game with
 one guest 61.75 MB peak; server after a guest left 40.1 MB; headless joiner with a
@@ -297,6 +313,8 @@ What a cluster has not yet been asked:
 - **The host is the authority over identity.** A joiner reports; the coordinator
   decides.
 - **No authentication, and hardening first.** See §4.
+- **Kubernetes speaks WebSocket; the game does not.** A bridge sidecar per session,
+  not a library in `vif` and not a translator shared by the fleet. See §9.
 - **Drain waits for the roster with a deadline.** No participant migration: there is
   nowhere to migrate a match that lives in one process's memory.
 - **Dedicated lobby:** quorum is one, `-players` is capacity.
@@ -305,27 +323,53 @@ What a cluster has not yet been asked:
 - **Correction:** Shared capture is authoritative; Player-domain state is excluded
   and only explicit persistent local FSM lifecycle is re-derived.
 
-## 9. Planned browser session path
+## 9. The browser session path
 
-The final public browser route is `wss://lixen.com/vif/ws/<session>`. This does not
-replace the raw NodePort/PF path used by native clients. Browser traffic follows
-the existing HTTPS route into the host's Nginx, which terminates TLS and forwards
-the HTTP Upgrade to `vif-allocator`; Nginx does not translate game frames. The
-allocator validates the session and origin, resolves its ready pod, and proxies to
-a native WebSocket listener in that pod.
+The public route is `wss://<site>/vif/ws/<session>`. It does not replace the raw
+NodePort/PF path, which is what native clients use and what the game is still
+written against.
 
-The game must implement WebSocket as another `engine.NetworkPort`, with the same
-bounded handshake, frames, queues, closure, and backpressure as TCP. The allocator
-must never accept a caller-supplied upstream address: the session identifier is
-looked up from reconciled Kubernetes state. Add a private named container port and
-a narrow ingress allowance for the node allocator, not another public NodePort.
+**Where each layer stops.** Nginx terminates TLS and forwards the `Upgrade`; it
+never looks at a frame. `vif-allocator` validates the request — method, identifier
+syntax, `Origin`, the session's liveness and readiness read from reconciled
+Kubernetes state, and its own per-session ceiling — and then proxies the upgraded
+connection with `net/http/httputil.ReverseProxy`. It never accepts an upstream a
+caller named: the identifier is a routing key looked up, not an address supplied.
+A `ws-bridge` sidecar in that pod is the one process on the path that speaks
+WebSocket, and it turns one upgraded connection into one loopback TCP connection to
+the session's existing listener.
 
-The site's current `connect-src 'self'` permits the same-origin WSS route. Its
-Nginx configuration still has to preserve `Upgrade` and `Connection`, disable
-buffering, and use session-length timeouts; the prepared block lives in
+**Why the translation is in the pod.** The game must not gain a WebSocket
+implementation: the standard library has none, `golang.org/x/net/websocket` is
+deprecated, and the maintained third-party packages would be a network-facing
+dependency on the path every player takes. Kubernetes already has the missing
+piece. The bridge is a *restartable init container*, which is a sidecar: it starts
+after the config check and before the game, it restarts on its own, and — unlike
+an ordinary container in a `backoffLimit: 0` Job — its exit is not the pod's and
+therefore not the end of somebody's match. It needs K3s 1.29 or later.
+[Multi-platform §5](multi-platform.md#5-browser-networking) holds the alternatives
+and why each was refused, including the earlier plan's own rule against a
+WebSocket-to-TCP layer: the rule was about a translation hop *between* the
+allocator and the game, and this one is inside the pod, on loopback, ending with
+the session.
+
+**What it costs.** The game sees every browser participant arriving from
+`127.0.0.1`, so `NetworkAdmitBurst` is one budget for all of them rather than one
+each (§4). The allocator's `-web-max` per session and the edge's `limit_conn`/
+`limit_req` are what stand in for it; [`doc/todo.md`](todo.md) carries the decision
+about whether that is the answer. The sidecar also adds 25m/16Mi requested and
+100m/32Mi limited to every pod, which is in §6 and in the quota, and is an estimate
+until H3 measures it.
+
+**What does not change.** No second NodePort is published: 7779 is a private
+container port reachable from the node and named by no Service. The site's
+`connect-src 'self'` already permits the same-origin socket, and the nginx block —
+`Upgrade` and `Connection` preserved, buffering off, session-length timeouts, the
+two rate-limit zones — is in
 [`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example). The
-ordered implementation plan, including later admission authentication, is in
-[`doc/todo.md`](todo.md).
+browser dials the route with the page's own `WebSocket` wrapped as a `net.Conn`,
+so the protocol, the frame bounds, the queue bounds and the handshake are the ones
+a native client uses.
 
 ## 10. Acceptance and rollback boundary
 
@@ -333,6 +377,8 @@ The deployment is complete when all of these hold, and the open items in §3 are
 stands between here and there:
 
 - ten concurrent files have distinct names and matching self-tags;
+- the browser route refuses another origin, an unknown session, a session that is
+  not ready and the connection past `-web-max`, each before the upgrade;
 - session pods remain Restricted, tokenless, and free of direct `hostPath`;
 - allocator RBAC cannot read `pods/log`;
 - tmpfs is hard-capped, K3s fails closed without it, and reboot clears it;
@@ -347,6 +393,8 @@ stands between here and there:
 These constraints hold for every change until then:
 
 - keep the `vif` namespace at Pod Security `restricted`;
+- keep the bridge a sidecar with no volumes, no credential and no published
+  NodePort, and pin its image by digest like the session image;
 - session pods mount only the `vif-fleet-logs` PVC — never a direct `hostPath`;
 - the game writes complete JSONL records, and no component tails Kubernetes pod
   logs, splices allocator JSON, or inserts a field after serialization;

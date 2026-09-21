@@ -57,7 +57,7 @@ func run(args []string, logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("parse log stream URL: %w", err)
 	}
-	handler := newAPIServer(controller, logger, logStreamURL)
+	handler := newAPIServer(controller, logger, logStreamURL, cfg.Allocator)
 	server := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           handler,

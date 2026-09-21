@@ -21,20 +21,30 @@ import (
 )
 
 var (
-	errFleetFull       = errors.New("all session ports are allocated")
-	errSessionNotReady = errors.New("session did not become ready")
-	errRequestRefused  = errors.New("session request refused")
+	errFleetFull         = errors.New("all session ports are allocated")
+	errSessionNotReady   = errors.New("session did not become ready")
+	errRequestRefused    = errors.New("session request refused")
+	errSessionUnknown    = errors.New("no such session")
+	errSessionRefusing   = errors.New("session is not accepting players")
+	errSessionUnroutable = errors.New("session has no reachable pod")
 )
 
 type allocatorConfig struct {
-	Workload       workloadConfig
-	JoinHost       string
-	PageBase       string
-	PortFirst      int
-	PortLast       int
-	PlayersMax     int
-	LogLevels      []string
-	WadDir         string
+	Workload   workloadConfig
+	JoinHost   string
+	PageBase   string
+	PortFirst  int
+	PortLast   int
+	PlayersMax int
+	LogLevels  []string
+	WadDir     string
+
+	// WebOrigin is the one origin the browser route answers, and publishing it is
+	// what turns that route on. The sidecar that serves it is Workload.BridgeImage;
+	// see doc/kubernetes-fleet.md §9.
+	WebOrigin        string
+	WebMaxPerSession int
+
 	ReadyTimeout   time.Duration
 	PollInterval   time.Duration
 	CleanupTimeout time.Duration
@@ -59,13 +69,17 @@ type fleetLimits struct {
 }
 
 type session struct {
-	ID         string        `json:"id"`
-	Port       int           `json:"port"`
-	PageURL    string        `json:"page_url"`
-	JoinTarget string        `json:"join_target"`
-	CreatedAt  string        `json:"created_at,omitempty"`
-	Routable   bool          `json:"routable"`
-	State      sessionHealth `json:"state"`
+	ID         string `json:"id"`
+	Port       int    `json:"port"`
+	PageURL    string `json:"page_url"`
+	JoinTarget string `json:"join_target"`
+	// WebSocketURL is the same session reached from a browser. Absent where the
+	// deployment publishes no browser route, which is what a page keyed on it reads
+	// as "this fleet is for native clients".
+	WebSocketURL string        `json:"ws_url,omitempty"`
+	CreatedAt    string        `json:"created_at,omitempty"`
+	Routable     bool          `json:"routable"`
+	State        sessionHealth `json:"state"`
 }
 
 type reconcileResult struct {
@@ -406,6 +420,45 @@ func (a *allocator) listSessions(ctx context.Context) ([]session, error) {
 	return result, nil
 }
 
+// routeSession resolves one session identifier to the address of its one ready
+// pod. The identifier is a routing key looked up in Kubernetes state; no caller
+// ever names an upstream, which is the whole of why this is a lookup rather than
+// a parameter.
+func (a *allocator) routeSession(ctx context.Context, id string) (string, error) {
+	pods, err := a.kube.listPods(ctx, labelSession+"="+id)
+	if err != nil {
+		return "", fmt.Errorf("list Pods: %w", err)
+	}
+	slices, err := a.kube.listEndpointSlices(ctx, "kubernetes.io/service-name="+sessionPrefix+id)
+	if err != nil {
+		return "", fmt.Errorf("list EndpointSlices: %w", err)
+	}
+	addresses := readyAddresses(slices)
+	for _, item := range pods {
+		if !isManaged(item.Metadata.Labels) || !podReady(item) || !addresses[item.Status.PodIP] {
+			continue
+		}
+		state, err := a.health.probe(ctx, item.Status.PodIP)
+		if err != nil {
+			return "", fmt.Errorf("read pod health: %w", err)
+		}
+		if !state.Live {
+			return "", errSessionUnroutable
+		}
+		// The same answer the create path waits for. A session at capacity or
+		// draining refuses the dial itself; refusing here costs it nothing and
+		// tells the caller which of the two it is.
+		if !state.Ready {
+			return "", fmt.Errorf("%w: %s", errSessionRefusing, state.Phase)
+		}
+		return item.Status.PodIP, nil
+	}
+	if len(pods) == 0 {
+		return "", errSessionUnknown
+	}
+	return "", errSessionUnroutable
+}
+
 func (a *allocator) reconcile(ctx context.Context) (reconcileResult, error) {
 	jobs, err := a.kube.listJobs(ctx)
 	if err != nil {
@@ -535,14 +588,30 @@ func (a *allocator) cleanup(created createdObjects) error {
 func (a *allocator) sessionRecord(id string, port int, createdAt string, routable bool, state sessionHealth) session {
 	pageBase := strings.TrimRight(a.cfg.PageBase, "/")
 	return session{
-		ID:         id,
-		Port:       port,
-		PageURL:    pageBase + "/" + strconv.Itoa(port) + "/",
-		JoinTarget: net.JoinHostPort(a.cfg.JoinHost, strconv.Itoa(port)),
-		CreatedAt:  createdAt,
-		Routable:   routable,
-		State:      state,
+		ID:           id,
+		Port:         port,
+		PageURL:      pageBase + "/" + strconv.Itoa(port) + "/",
+		JoinTarget:   net.JoinHostPort(a.cfg.JoinHost, strconv.Itoa(port)),
+		WebSocketURL: a.webSocketURL(id),
+		CreatedAt:    createdAt,
+		Routable:     routable,
+		State:        state,
 	}
+}
+
+// webSocketURL is derived from the origin the route accepts rather than configured
+// beside it: a page handed a URL whose origin this allocator would refuse is a
+// player told to dial a door that will not open.
+func (a *allocator) webSocketURL(id string) string {
+	if a.cfg.WebOrigin == "" {
+		return ""
+	}
+	authority := strings.TrimPrefix(strings.TrimPrefix(a.cfg.WebOrigin, "https://"), "http://")
+	scheme := "wss://"
+	if strings.HasPrefix(a.cfg.WebOrigin, "http://") {
+		scheme = "ws://"
+	}
+	return scheme + authority + wsRoutePrefix + id
 }
 
 func randomSessionID() (string, error) {

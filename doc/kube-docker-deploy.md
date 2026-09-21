@@ -65,17 +65,17 @@ routed through the allocator. A session is **a thing that ends**, so it is a Job
 and not a Deployment. There is **one node and one cluster**, so every Service,
 port and rule below has exactly one place to be.
 
-A player is given two strings, and keeping them apart is the whole of the design:
+A player is given three strings, and keeping them apart is the whole of the design:
 
 | String | What it is | Who reads it |
 |---|---|---|
 | `https://<site-host>/projects/vi-fighter/session/<id>/` | The shareable link: a page over TLS, served by the site's nginx. | A browser. |
 | `<site-host>:31703` | The join target: raw framed TCP straight to a forwarded port. | `vif -join`. |
-| `wss://lixen.com/vif/ws/<session>` | The final browser join target, planned but not implemented. | Browser WASM through the allocator. |
+| `wss://<site-host>/vif/ws/<session>` | The browser join target, through the site and the allocator to the pod's bridge. | The WASM build, launched with it. |
 
-The allocator produces both and they are opaque: `id` is a session's public
-identifier, and nothing else may rebuild `page_url` or `join_target` from a port,
-because path-routed sessions would key both on the identifier instead.
+The allocator produces all three and they are opaque: `id` is a session's public
+identifier, and nothing else may rebuild `page_url`, `join_target` or `ws_url` from
+a port, because path-routed sessions would key them on the identifier instead.
 
 **Why the port is the whole of the routing.** The coordinator speaks first: a
 dialer that has connected receives `MsgJoinOffer` before it says anything. Nothing
@@ -529,6 +529,45 @@ For anything past the lab, publish the image and reference it **by digest**, not
 tag. A tag can be moved; a session's logs then name a revision that is no longer
 what ran.
 
+### 8.1 The browser bridge image
+
+Skip this and everything about `-web-origin` if the fleet serves native clients
+only; the session then renders exactly as it did before there was a browser path.
+
+The bridge is the one process in the deployment that speaks WebSocket, and it is
+off-the-shelf so that the game and the allocator do not have to be. `websocat` is
+the reference. Its release asset is verified by checksum at build time, because a
+pod cannot refuse its own image:
+
+```sh
+# Read the version and the asset checksum from the upstream release page, then:
+docker build --network host \
+  -f deploy/docker/Dockerfile.ws-bridge \
+  --build-arg WEBSOCAT_VERSION="$WS_VERSION" \
+  --build-arg WEBSOCAT_SHA256="$WS_SHA256" \
+  -t "vif-ws-bridge:$WS_VERSION" .
+docker save "vif-ws-bridge:$WS_VERSION" | sudo k3s ctr images import -
+sudo k3s ctr images ls | grep vif-ws-bridge
+```
+
+The build fails without both arguments rather than shipping whatever the mirror
+served. Reference the result by digest past the lab, for the reason the session
+image is referenced by digest.
+
+A substitute image is allowed and must accept the argument vector in
+`deploy/k3s/30-session.yaml`: serve WebSocket on `0.0.0.0:7779`, open one
+connection to `127.0.0.1:7777` per client, binary frames. It must also run as UID
+65532 on a read-only root filesystem with no capabilities, because the namespace is
+Pod Security `restricted` and will refuse anything else.
+
+The sidecar needs K3s **1.29 or later**: a restartable init container is what makes
+a bridge fault survivable, and on an older API server the `restartPolicy` field on
+an init container is rejected. Check before building anything:
+
+```sh
+kubectl version -o json | jq -r .serverVersion.gitVersion
+```
+
 ## 9. The fleet objects and the shared volumes
 
 This block establishes the namespace, the ceiling, the network boundary, the
@@ -757,10 +796,11 @@ limits, terminates and garbage-collects every session; the allocator performs on
 the fixed transaction Kubernetes has no anonymous endpoint for — reserve a free
 NodePort, create one non-retryable Job, read its UID, create the owner-referenced
 Service, wait for a ready EndpointSlice and `live=true ready=true` from `/health`,
-and return the page URL, join target and state. Current raw native game traffic
-bypasses it. The planned browser transport expands this process into the
-session-aware WebSocket reverse proxy described in the fleet plan §9 and
-`doc/todo.md`; it remains unimplemented here.
+and return the page URL, join target and state. Raw native game traffic
+bypasses it. Browser traffic does not: the same process is also the session-aware
+WebSocket reverse proxy of fleet plan §9, which validates an upgrade and routes it
+to the resolved pod's bridge sidecar. That half is off unless `-web-origin` and
+`-ws-bridge-image` are both set.
 
 It runs on the node, and that is not an interchangeable placement (D11). K3s
 installs a node-local-source allowance before the pod policy path, so a process on
@@ -794,9 +834,10 @@ sudo install -o root -g root -m 0644 \
   deploy/guest/vif-allocator-token.service \
   deploy/guest/vif-allocator-token.timer /etc/systemd/system/
 
-# Set the imported image tag, the public join host, the session page base, and
-# the scenarios a caller may ask for. There are no secrets in this file; keep its
-# write permission with root.
+# Set the imported image tag, the public join host, the session page base, the
+# scenarios a caller may ask for, and — for a browser path — the site origin and
+# the imported bridge image. There are no secrets in this file; keep its write
+# permission with root.
 sudoedit /etc/vif-allocator/allocator.env
 
 sudo systemctl daemon-reload
@@ -813,9 +854,10 @@ A variable this file does not define expands to an empty argument, not to nothin
 so the unit passes every flag its `ExecStart` names whether or not you set it. The
 allocator drops a flag whose value is empty and takes its own default, so an
 environment file written before a flag existed still starts: `VIF_ALLOCATOR_WAD`
-unset is `/var/db/vif/wad` and `VIF_ALLOCATOR_SCENARIO` unset is `main`. The four
-that have no default — image, join host, page base, log stream URL — still refuse
-by name. `update-vif-allocator.sh` prints the unit's own last lines before it rolls
+unset is `/var/db/vif/wad` and `VIF_ALLOCATOR_SCENARIO` unset is `main`, and both
+browser variables unset is a fleet with no browser route. The four that have no
+default — image, join host, page base, log stream URL — still refuse by name, and
+so does either browser variable set without the other. `update-vif-allocator.sh` prints the unit's own last lines before it rolls
 back, which is where that name appears.
 
 ```sh
@@ -887,6 +929,7 @@ The page-facing API is deliberately small:
 | `GET /vif/api/sessions` | `200` | `{ "sessions": [...], "limits": {...} }` for live, non-completed Jobs. `guests`, `capacity`, `phase` and `expires_in` come from each pod's text `/health`. |
 | `GET /vif/api/logs` | `200` stream | Proxies the loopback LogWisp SSE response without parsing records. An unavailable LogWisp is a stable `503 log_stream_unavailable`; a build without the upstream configured is `501 log_stream_not_configured`. |
 | `HEAD /vif/api/logs` | `200` | The stream's headers and no body, answered by the allocator. LogWisp refuses a `HEAD` on `/stream` — the client it would register never reads — so a probe never opens one. It reports the route, not the upstream; `501` still stands for a build without it. |
+| `GET /vif/ws/<session>` | `101` | A WebSocket upgrade, proxied to the resolved pod's bridge. Refuses before upgrading: `404 unknown_session` for a bad identifier or a session that is not there, `400 not_an_upgrade`, `403 origin_refused`, `409 session_not_accepting` for one that is full or ending, `503 session_busy` past `-web-max`, `503 session_unreachable`, `501 web_route_not_configured` where the deployment publishes no route. |
 
 Creation answers `503 fleet_full` (with `Retry-After: 10`), `504
 session_not_ready`, `502 kubernetes_error`, `400` for a malformed body or an
@@ -922,8 +965,7 @@ The allocator listens on `:9080` behind the node filter, which admits only the
 site's host. Publishing it means letting the TLS front door reach that port and
 mapping the two live API paths; `/healthz` and `/readyz` stay on the node.
 [`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example) is the
-reference location set, with placeholders for the node address and a prepared WSS
-block that remains disabled until the game and allocator work lands.
+reference location set, with placeholders for the node address.
 
 ```nginx
 location = /vif/api/logs {
@@ -952,17 +994,21 @@ proxy setting.
 The browser calls `/vif/api/...` on the same origin as the page, which removes CORS
 from the design; do not replace it with `Access-Control-Allow-Origin: *`. The
 site's `Content-Security-Policy` needs `connect-src 'self'` for a same-origin
-`EventSource`. The supplied policy already has that directive, and it also permits
-the same-origin `wss://lixen.com/vif/ws/<session>` connection.
+`EventSource`, and the same directive is what permits the same-origin
+`wss://<site>/vif/ws/<session>`. CSP 3 says `'self'` covers `wss://` on the page's
+own host; naming it as well costs nothing and does not depend on a browser having
+implemented that clause.
 
-When the native WebSocket listener and allocator router are implemented, add the
-map in the `http` context and the location in this TLS `server` context:
+The browser route needs the upgrade map in the `http` context, the two rate-limit
+zones beside it, and this location in the TLS `server` context:
 
 ```nginx
 map $http_upgrade $vif_connection_upgrade {
     default upgrade;
     ''      close;
 }
+limit_conn_zone $binary_remote_addr zone=vif_ws_conn:10m;
+limit_req_zone  $binary_remote_addr zone=vif_ws_req:10m rate=12r/m;
 
 location ~ "^/vif/ws/[0-9a-f]{16}$" {
     proxy_pass http://192.0.2.20:9080;
@@ -974,13 +1020,19 @@ location ~ "^/vif/ws/[0-9a-f]{16}$" {
     proxy_connect_timeout 5s;
     proxy_read_timeout 3600s;
     proxy_send_timeout 3600s;
+    limit_conn vif_ws_conn 4;
+    limit_req zone=vif_ws_req burst=4 nodelay;
 }
 ```
 
-Nginx terminates TLS and preserves the hop-by-hop Upgrade. It neither chooses a
-pod nor translates WebSocket messages to TCP: `vif-allocator` resolves the session
-and the `vif_headless` pod implements the protocol. The existing FreeBSD `pf`
-rules continue to carry native TCP independently.
+Nginx terminates TLS and preserves the hop-by-hop Upgrade. It neither chooses a pod
+nor translates WebSocket messages: `vif-allocator` resolves the session and the
+bridge sidecar in that pod owns the WebSocket. Do not set `Origin` here — the
+allocator compares the browser's own against its `-web-origin`, and a proxy that
+rewrites it removes the check. The rate limits are not optional decoration: they
+are the per-player bound the game cannot apply to browsers, which all reach the pod
+from one loopback address. The existing FreeBSD `pf` rules continue to carry native
+TCP independently, and no new `rdr` is added — the browser path uses the HTTPS one.
 
 One page location serves every session, because the only thing that differs between
 them is the identifier in the path:
@@ -993,9 +1045,14 @@ location ~ "^/projects/vi-fighter/session/(?<vifsession>[a-z0-9]+)/$" {
 ```
 
 The page reads its own identifier from its URL, asks the list endpoint for that
-row, and keeps the two user-facing strings distinct: the HTTPS page URL and the raw
-`<site-host>:31703` join target. It builds its session controls from the `limits`
-the allocator advertises, and it speaks to neither Kubernetes nor a pod.
+row, and keeps the user-facing strings distinct: the HTTPS page URL, the raw
+`<site-host>:31703` join target a native client is given, and the `ws_url` a
+browser build is launched with. It builds its session controls from the `limits`
+the allocator advertises, and it speaks to neither Kubernetes nor a pod. A page
+that launches the WASM build passes `ws_url` through the existing argument bridge
+as `-join=<ws_url>` (see [Multi-platform §6](multi-platform.md#6-browser-launch-arguments));
+it must not construct that URL itself, because the allocator is what decides
+whether a browser route exists at all.
 
 Verify from a client, not from the node:
 
@@ -1052,8 +1109,30 @@ While it stays connected:
 ./deploy/k3s/session.sh state "$SESSION_ID"
 ```
 
-Expect `phase=occupied` with at least one guest. Quit the remote client and
-immediately verify vacancy and the file the session wrote:
+Expect `phase=occupied` with at least one guest.
+
+Where the browser route is published, check it in the same window. The refusals are
+the point: everything a stranger could try is answered before an upgrade, and the
+one that succeeds prints `101`.
+
+```sh
+ws=$(./deploy/k3s/session.sh state "$SESSION_ID" | sed -n 's/.*ws_url=//p')
+code() { curl -o /dev/null -sw '%{http_code}' "$@"; }
+# An ordinary GET, another origin, then the real thing.
+code "$ws"
+code -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+     -H 'Origin: https://elsewhere.example' "$ws"
+code -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+     -H 'Origin: https://<site-host>' \
+     -H 'Sec-WebSocket-Version: 13' \
+     -H 'Sec-WebSocket-Key: AAAAAAAAAAAAAAAAAAAAAA==' "$ws"
+```
+
+Expect `400`, `403`, `101`. Then open the session page in a browser and play: the
+tab is a participant like any other, and `state` counts it as a guest.
+
+Quit the remote client and immediately verify vacancy and the file the session
+wrote:
 
 ```sh
 ./deploy/k3s/session.sh state "$SESSION_ID"

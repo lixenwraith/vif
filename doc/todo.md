@@ -10,56 +10,45 @@ and P3 is an idea.
 
 ## Browser sessions and mobile
 
-### Add the native WebSocket transport
+### Commission the browser session path on the node
 
 - Priority: P0
-- Affected files: `internal/network`, `internal/app`, `internal/engine`, browser
-  launch code
-- Prerequisite: generalize lobby and session composition away from the concrete
-  `network.SocketPort`
+- Affected files: `deploy/docker/Dockerfile.ws-bridge`, `deploy/guest`,
+  `deploy/website/vif.nginx.example`, `doc/kube-docker-deploy.md`
+- Prerequisite: a K3s at 1.29 or later, which is what makes a restartable init
+  container a sidecar rather than a step the pod waits for
 
-Implement binary WebSocket as a second `engine.NetworkPort` adapter while keeping
-the existing framed TCP adapter for native clients. The pod must speak WebSocket
-itself; do not put a WebSocket-to-TCP translation layer between the allocator and
-the game. Preserve frame and queue bounds, timeouts, close propagation,
-backpressure, and the current handshake before enabling `-join` in WASM.
+The code is in place: the browser dials `wss://<site>/vif/ws/<session>` over a
+`net.Conn` built from the page's own WebSocket, the allocator validates and
+reverse-proxies the upgrade to the session's pod, and a bridge sidecar there turns
+it into the loopback TCP connection the game already serves. What is left is a
+deployment nobody has run.
 
-### Expand vif-allocator into the browser session adapter
+Build and pin the bridge image, import it into K3s, set `-web-origin` and
+`-ws-bridge-image`, publish the edge route with its rate limits, then verify the
+production TLS/CSP path under slow links, tab suspension, reconnects and session
+expiry. Measure what the sidecar actually costs and reconcile it with the values in
+`deploy/k3s/30-session.yaml` and the quota totals, which are estimates.
 
-- Priority: P0
-- Affected files: `tool/vif-allocator`, `deploy/k3s`,
-  `deploy/website/vif.nginx.example`
-- Prerequisite: the pod-native WebSocket listener above
+### Restore a per-player bound for browser participants
 
-Build the public path in this order:
+- Priority: P1
+- Affected files: `tool/vif-allocator`, `deploy/website/vif.nginx.example`
+- Prerequisite: the browser path is carrying real players
 
-1. Reconcile each live session identifier to its one ready pod IP and private
-   WebSocket port; Kubernetes objects remain the authority after restart.
-2. Accept only an Upgrade request at the final route
-   `/vif/ws/<session>`; this endpoint's scope has no version segment.
-3. Validate method, session syntax, same-origin `Origin`, liveness, readiness,
-   connection ceiling, and handshake deadline before upgrading; callers never
-   select an upstream address.
-4. Reverse-proxy the upgraded connection to that pod's native WebSocket listener
-   with bounded buffers and coupled cancellation when either side or the session
-   ends; do not translate it to TCP.
-5. Add the private container port and the narrow ingress policy needed for the
-   node allocator, without publishing another NodePort; retain raw TCP for native
-   clients.
-6. Return `wss://lixen.com/vif/ws/<session>` for browser launch and pass it through
-   the existing page-to-WASM argument bridge, then verify the production TLS/CSP
-   path under slow links, tab suspension, reconnects, and session expiry.
-
-At that point allocation, routing, and admission are separate interfaces inside
-one process. Reassess the `vif-allocator` name and split boundary before adding
-more control-plane duties.
+Every browser participant reaches the session pod from `127.0.0.1`, so
+`network.AdmissionLimiter` gives the whole browser population one budget instead of
+one each. The edge's `limit_conn`/`limit_req` and the allocator's per-session
+ceiling stand in for it today. Decide whether that is the answer or whether the
+allocator should carry a per-address bound of its own, which means deciding whether
+it may trust a forwarded address at all.
 
 ### Add browser admission authentication
 
 - Priority: P1
 - Affected files: allocator/session adapter, website, future authentication
   dependency
-- Prerequisite: the unauthenticated native WebSocket path is bounded and measured
+- Prerequisite: the unauthenticated browser path is bounded and measured
 
 Issue a short-lived, session-scoped admission credential after authentication and
 consume it during the WebSocket handshake without putting it in page history or

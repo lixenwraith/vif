@@ -43,6 +43,7 @@ atomically without restarting the allocator. See
 | `GET /readyz` | Verifies that the current token can reach the Kubernetes API. |
 | `GET /vif/api/logs` | Proxies the loopback LogWisp SSE response byte-for-byte. An unavailable upstream returns `503 log_stream_unavailable`. |
 | `HEAD /vif/api/logs` | `200` and the stream's headers, answered here: upstream refuses a HEAD on the stream path, and a probe should not open a stream. Only the `GET` reports upstream availability. |
+| `GET /vif/ws/<session>` | `101` and one browser participant, proxied to the resolved pod's bridge sidecar. Published only where `-web-origin` and `-ws-bridge-image` are both set. |
 
 One session row has this shape:
 
@@ -52,6 +53,7 @@ One session row has this shape:
   "port": 31700,
   "page_url": "https://play.example.com/projects/vi-fighter/session/31700/",
   "join_target": "play.example.com:31700",
+  "ws_url": "wss://play.example.com/vif/ws/3c3a8eec0cbb6f17",
   "created_at": "2026-09-11T12:00:00Z",
   "routable": true,
   "state": {
@@ -75,16 +77,21 @@ hand an anonymous caller a sixteen-player world or the fleet's shared log rate, 
 both open only as far as an operator sets them. A value outside them is refused with
 `400 invalid_request` naming the bound, never clamped.
 
-`id` is the session's stable public identifier. `page_url` and `join_target` are
-opaque strings this allocator produces: no caller may rebuild either from `port`,
-because path-routed sessions will key both on the identifier instead.
+`id` is the session's stable public identifier. `page_url`, `join_target` and
+`ws_url` are opaque strings this allocator produces: no caller may rebuild any of
+them from `port`, because path-routed sessions key them on the identifier instead.
+`ws_url` is absent where the deployment publishes no browser route, which is what a
+page keyed on it reads as "this fleet is for native clients".
 
-The chosen browser path is `wss://lixen.com/vif/ws/<session>`, but it is not an API
-implemented by the allocator yet. Once `vif` has a native WebSocket listener, the
-allocator will reconcile a session ID to its ready pod and reverse-proxy that
-Upgrade to the private listener. It will validate the same-origin request and
-session state and will not translate WebSocket to TCP or accept an arbitrary
-upstream from the caller. The ordered work is tracked in `doc/todo.md`.
+The browser route validates before it upgrades — method, identifier syntax,
+`Origin` against `-web-origin`, the session's liveness and readiness in reconciled
+Kubernetes state, and `-web-max` concurrent connections for that session — and then
+reverse-proxies the upgrade to the pod's bridge sidecar with
+`net/http/httputil.ReverseProxy`. It never translates a frame and never accepts an
+upstream a caller named: the identifier is a routing key looked up in Kubernetes,
+not an address supplied. Why the WebSocket lives in a sidecar rather than here or
+in the game is in
+[`doc/multi-platform.md`](../../doc/multi-platform.md#5-browser-networking).
 
 The allocator deliberately exposes no public delete endpoint: this API is
 anonymous behind the site, and one player must not be able to terminate another

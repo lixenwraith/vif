@@ -24,7 +24,7 @@ back one out.
 | `logwisp.sysusers` | `/etc/sysusers.d/` | root 0644 | creates the locked `logwisp` identity; tmpfs read access comes from the `vif-fleet` supplementary group alone |
 | `logwisp.service` | `/etc/systemd/system/` | root 0644 | read-only view of the fleet tmpfs, inaccessible K3s and allocator credential paths, no dependency on games or the allocator |
 | `../logwisp/aggregator.toml` | `/etc/logwisp/vif-fleet.toml` | root 0644 | `raw = true`, `from = "start"`, bounded flow and clients, loopback-only sink |
-| `vif-allocator.env.example` | `/etc/vif-allocator/allocator.env` | `root:vif-allocator` 0640 | the imported image tag, the public join host, the session page base, and the scenarios a request may select |
+| `vif-allocator.env.example` | `/etc/vif-allocator/allocator.env` | `root:vif-allocator` 0640 | the imported image tag, the public join host, the session page base, the scenarios a request may select, and the site origin and bridge image that publish the browser route |
 | `vif-allocator.service` | `/etc/systemd/system/` | root 0644 | `/usr/local/bin/vif-allocator`, the CA copy and the token file; `Type=notify` |
 | `vif-allocator-token.service` / `.timer` | `/etc/systemd/system/` | root 0644 | root-only atomic rotation of the short-lived ServiceAccount token, every six hours |
 | `vif-allocator-refresh-token.sh` | `/usr/local/libexec/vif-allocator-refresh-token` | root 0755 | the rotation the oneshot runs |

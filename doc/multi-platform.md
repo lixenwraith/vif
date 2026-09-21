@@ -23,7 +23,7 @@ content, a non-text renderer, and Android.
 | Full native | `make release` | Terminal renderer | Included | Yes | Included | Linux/FreeBSD client or manually run host |
 | Audio-free native | `vif_noaudio` | Terminal renderer | Omitted | Yes | Included unless `novlog` | Platforms or packages that do not ship audio |
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
-| Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Browser terminal | Omitted | No | Stub | Solo browser client today |
+| Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Browser terminal | Omitted | No | Stub | Solo play, or a session joined over its `wss://` route |
 | Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` artifact |
 
 `novlog` is orthogonal to the other profiles. `vif_headless` implies no audio;
@@ -132,7 +132,7 @@ binary in `scratch`; its exact layer size should be measured for each release.
 | Linux | Developed and tested | Full audio backend discovery, Unix terminal/crash handling, TCP sessions, dedicated image |
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp`; the deployed node may itself be a VM on FreeBSD without changing the guest build |
 | Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`; audio and logging omitted; not a release artifact or development focus, and may be removed if field reports show it is broken |
-| `js/wasm` | Tested solo browser target | xterm.js presentation; no audio, filesystem discovery, process execution, logging sink, or raw sockets |
+| `js/wasm` | Solo play tested; session join built, not yet commissioned | xterm.js presentation; no audio, filesystem discovery, process execution, logging sink, or raw sockets. A session is joined over the page's own WebSocket (§5), never a socket |
 | Other native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 
 The simulation uses `float64` and live sessions include concurrent scheduling.
@@ -142,82 +142,81 @@ authoritative correction remains the live convergence mechanism.
 
 ## 5. Browser networking
 
-### Current answer
+### What a browser joins with
 
-The browser build cannot join the existing game host directly. The existing
-transport is a framed, long-lived TCP byte stream. Browser JavaScript exposes no
-arbitrary TCP socket, and Go's `js/wasm` `net` implementation is a fake networking
-surface rather than a path around the browser sandbox. `net/http` can use browser
-fetch, but fetch cannot be converted into the bidirectional TCP stream the game
-protocol expects.
+The game protocol is a framed byte stream, and a browser has exactly one
+bidirectional byte stream: a WebSocket. It has no arbitrary socket, and `js/wasm`'s
+`net` package is a fake networking surface rather than a way around that. So the
+browser build dials the session's WebSocket route and wraps the page's own
+`WebSocket` object as a `net.Conn` — reads block on arriving binary messages,
+writes send one encoded frame each, and deadlines and closure behave as the
+transport already expects. `network.dial` is the only seam; everything above it,
+including `SocketPort`, the handshake, the fences and the snapshot assembly, is the
+code a native client runs.
 
-Accordingly, the WASM build rejects `-host`, `-serve`, and `-join` configuration
-before application initialization and reports that a WebSocket adapter is needed.
-This is preferable to accepting the flags and failing later inside a fake socket.
-Security headers on `lixen.com` do not grant raw network access.
+That is why message boundaries need not be frame boundaries. `Decode` reads with
+`io.ReadFull` from a stream, so a receiver reassembles whatever chunking the path
+produced, exactly as it does from TCP. The inbound queue is bounded at
+`wsQueueMessages`: a browser offers a receiver no backpressure, so the link is
+closed rather than left growing the tab's heap.
 
-This guard removes socket activity, not yet the whole native-network dependency.
-Protocol/session values and parts of application session orchestration still refer
-to `network.Config` and `SocketPort`, so `internal/network` remains in the WASM
-compile graph. A complete byte-level split should move `PeerID`, messages, offers,
-snapshots, and other browser-neutral wire values away from the TLS/`net.Conn`
-listener/dialer files, then make startup orchestration consume a transport factory.
-That refactor is also the prerequisite for a direct WebSocket transport; simply
-hiding the package would duplicate the protocol or block browser sessions later.
+The browser is refused `-host` and `-serve` before initialization, because it can
+bind nothing. A `-join` naming a `host:port` is refused for the same reason.
 
-### Transport decision
+### Where WebSocket is spoken
 
-- **Chosen — native WebSocket endpoint in `vif`:** browser and pod speak binary WebSocket directly, while native clients keep the existing framed TCP endpoint.
-  - Benefit: one game transport end to end preserves ordered delivery without a permanent protocol-translation hop.
-  - Price: composition must accept a second `engine.NetworkPort` implementation and the pod must expose a private WebSocket listener.
-  - Library constraint: Go's standard [`net/http`](https://pkg.go.dev/net/http) package has no WebSocket handler, and [`golang.org/x/net/websocket`](https://pkg.go.dev/golang.org/x/net/websocket) is external and points to more actively maintained alternatives, so implementation should evaluate and pin a focused package such as `github.com/coder/websocket`.
-- **Rejected as the initial design — WebSocket-to-TCP gateway:** it would get a browser onto the current server with fewer early `vif` changes.
-  - Price: the gateway would permanently own byte translation, backpressure, closure, limits, and two connection lifetimes for every player.
-- **Deferred — WebTransport:** useful transport features do not currently justify HTTP/3 server and ingress complexity.
-- **Rejected for this topology — WebRTC data channel:** ICE, signaling, and TURN solve a peer-to-peer problem the authoritative host does not have.
+Not here. The pod keeps its framed TCP listener, and the WebSocket half of the path
+is a bridge sidecar in the session pod that turns one upgraded connection into one
+loopback TCP connection to the game. Ordered delivery, frame bounds, queue bounds,
+closure and backpressure are unchanged, because the transport they belong to is
+unchanged.
 
-The public route is `wss://lixen.com/vif/ws/<session>`. The session identifier is
-a routing key, not an authentication secret. The current site Content Security
-Policy already permits this same-origin connection through `connect-src 'self'`.
-Host Nginx terminates TLS and must forward the HTTP Upgrade headers, but it does
-not interpret game frames or translate them to TCP. `vif-allocator` validates the
-route and browser origin, resolves the live session to its ready pod, and proxies
-the upgraded connection to the pod's native WebSocket listener. The pod owns the
-game protocol and all frame limits.
+| Option | Why not |
+|---|---|
+| **Chosen — a bridge sidecar in the session pod.** | Kubernetes already has the pieces: a restartable init container is a sidecar whose fault is not the pod's, and it dies with the session. The loopback hop never leaves the pod's network namespace, and the repository gains no WebSocket implementation. |
+| A WebSocket listener in `vif`, on a third-party package. | `net/http` has no WebSocket handler; `golang.org/x/net/websocket` is deprecated and says so. What is left is a third-party, network-facing dependency on the path every player takes, for something an off-the-shelf process already does. |
+| The same, hand-written. | RFC 6455 framing in this repository is the dependency objection restated as maintenance, plus new parsing surface reachable by anyone who can open the public route. |
+| Terminating WebSocket in `vif-allocator`. | Same library problem, and it would put per-player byte translation inside the one process the whole fleet depends on. |
+| The API server's `pods/portforward`, which is genuinely Kubernetes-native. | It needs a WebSocket *client* in the allocator — the same missing library — and `pods/portforward` is a shell-equivalent grant. |
+| An ingress controller. | None translates WebSocket to a raw TCP backend. Traefik and Nginx forward an upgrade to a backend that already speaks it. |
+| WebTransport. | Its advantages do not yet justify an HTTP/3 server and ingress. |
+| A WebRTC data channel. | ICE, signalling and TURN solve a peer-to-peer problem an authoritative host does not have. |
+
+The price is stated rather than hidden: the translation the earlier plan refused
+between the allocator and the game now happens inside the pod, and the game sees
+every browser participant arriving from `127.0.0.1`. `network.AdmissionLimiter` is
+per-address, so the browser population shares one budget; the allocator's
+per-session ceiling and the edge's rate limits are what replace it, and
+[`doc/todo.md`](todo.md) carries the decision about whether that is enough.
+
+### The public route
 
 ```mermaid
 flowchart LR
-    Browser["Browser WASM"] -->|"WSS"| Nginx["Host Nginx"]
-    Nginx -->|"Upgrade"| Allocator["Session router"]
-    Allocator -->|"private WS"| Pod["vif-headless pod"]
+    Browser["Browser WASM"] -->|"wss://"| Nginx["Host Nginx"]
+    Nginx -->|"Upgrade"| Allocator["vif-allocator"]
+    Allocator -->|"private WS"| Bridge["ws-bridge sidecar"]
+    Bridge -->|"127.0.0.1:7777"| Pod["vif -serve"]
 ```
 
-The WebSocket adapter must preserve the properties the current transport relies
-on: reliable ordered bytes, bounded frames and inbound queues, connection-close
-notification, admission timeouts, and backpressure. WebSocket message boundaries
-need not become protocol boundaries; the existing frame decoder can consume a
-concatenated byte stream.
+`wss://<site>/vif/ws/<session>`. The session identifier is a routing key, not a
+secret. Nginx terminates TLS and forwards `Upgrade` without interpreting a frame.
+The allocator checks the method, the identifier's syntax, the `Origin`, the
+session's liveness and readiness in reconciled Kubernetes state, and its own
+per-session ceiling; only then does it proxy, and it never accepts an upstream a
+caller named. `net/http/httputil.ReverseProxy` carries the upgrade, so that hop
+needs no library either.
 
-The ECS already sees the narrow `engine.NetworkPort` interface, but lobby,
-admission, and mid-run join code still takes a concrete `network.SocketPort`.
-Generalizing that composition-time surface is required for a native WebSocket
-adapter. Systems, convergence, capture, and the wire message definitions need not
-change.
+For a page served over HTTPS the endpoint must be `wss://`: browsers block
+`ws://` as active mixed content. The site's `connect-src 'self'` permits the
+same-origin socket. Ordinary CORS headers are not a substitute for the `Origin`
+check. Browser admission credentials are a later control-plane feature and should
+be short-lived and session-scoped when introduced.
 
-For a page delivered over HTTPS, the endpoint must use `wss://`; browsers block
-active mixed content such as `ws://`. The allocator must validate the WebSocket
-`Origin`, retain the existing frame/handshake bounds, and initially apply the
-current unauthenticated public-session policy. Ordinary CORS headers are not a
-substitute for WebSocket origin validation. Browser admission credentials are a
-later control-plane feature and should be short-lived and session-scoped when
-introduced.
-
-The raw TCP NodePort/PF path remains available for native clients. Browser traffic
-instead follows the site's existing HTTPS path to Nginx, then the allocator; it
-does not enter through the FreeBSD host's raw game-port forwarding. The allocator
-will outgrow pure allocation once it owns routing and admission. Keep those duties
-behind explicit interfaces so the process can be renamed or split without moving
-Kubernetes lifecycle code into the game.
+The raw TCP NodePort path is unchanged and is what native clients use. The
+allocator has outgrown pure allocation now that it owns routing and admission; keep
+those duties behind explicit interfaces so the process can be renamed or split
+without moving Kubernetes lifecycle code into the game.
 
 ## 6. Browser launch arguments
 
@@ -249,11 +248,10 @@ browser history, logs, and sometimes referrers, so secrets and substantial paylo
 do not belong there. A path supplied through `-s`, `-f`, or another file flag also
 does not make that file exist in the browser filesystem.
 
-Once the WebSocket adapter exists, the page can pass
-`-join=wss://lixen.com/vif/ws/<session>` through the existing argument bridge. The
-current `-join` parser expects the native address form and the WASM build rejects
-it, so the transport work must add URL parsing without weakening native address
-validation.
+The page passes `-join=wss://<site>/vif/ws/<session>` through this bridge. A
+target with a `ws://` or `wss://` scheme is dialled whole; the `host:port` and
+`[vif://]host:port/name` forms are parsed as they were, so a link a native player
+was handed still means what it meant.
 
 ## 7. External maps and assets
 

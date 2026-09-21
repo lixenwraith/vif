@@ -86,7 +86,10 @@ Both arguments are optional and bounded by `-players-max` and `-log-level-min`;
 
 Each builds first, keeps one rollback set at `.previous`, and restores it if
 verification fails. Announce the pause: no session can be created while the
-allocator is down, and the stream stops while LogWisp restarts.
+allocator is down, and the stream stops while LogWisp restarts. Where the browser
+route is published, stopping the allocator also drops every browser player —
+their connection runs through it, unlike a native `-join` — so the empty-fleet
+gate below is what keeps that from ending somebody's match.
 
 ```sh
 ./deploy/guest/update-vif-allocator.sh          # allocator binary, env, unit
@@ -94,6 +97,12 @@ allocator is down, and the stream stops while LogWisp restarts.
 ./deploy/guest/update-vif-image.sh              # session image, tag from HEAD
 ./deploy/guest/update-vif-image.sh v1.2.3       # session image, explicit tag
 ```
+
+The browser bridge image has no updater: it is a pinned third-party binary that
+changes on its own schedule. Build and import it as in
+[the procedure §8.1](../doc/kube-docker-deploy.md#81-the-browser-bridge-image),
+then point `VIF_ALLOCATOR_WS_BRIDGE_IMAGE` at the new reference. Sessions already
+running keep the image they started with.
 
 The image updater accepts only the Dockerfile's OCI `headless` build profile, so
 every subsequently allocated pod omits terminal presentation and audio code.

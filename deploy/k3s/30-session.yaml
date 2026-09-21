@@ -6,6 +6,7 @@
 #
 #   ${SESSION_ID}      a short, unique, DNS-safe session name (e.g. 7f3c1a)
 #   ${IMAGE}           the image, pinned by digest in anything but a lab
+#   ${WS_BRIDGE_IMAGE} the WebSocket bridge sidecar image, also pinned
 #   ${GAME_NODEPORT}   the node port this session is reachable on (31700-31709)
 #   ${JOB_UID}         the created Job UID used to own the Service
 #   ${PLAYERS}         the guest ceiling for this session (1-16)
@@ -103,6 +104,32 @@ spec:
           resources:
             requests: {cpu: 50m, memory: 64Mi}
             limits: {cpu: 500m, memory: 192Mi}
+        - name: ws-bridge
+          # The browser's half of the fleet, and the only thing in it that speaks
+          # WebSocket. One upgraded connection becomes one loopback connection to
+          # the game, so the session keeps the framed TCP protocol it already
+          # serves natives and this repository carries no WebSocket implementation.
+          #
+          # A restartable init container, not an ordinary one: with restartPolicy
+          # Never and backoffLimit 0, a container that exited non-zero would be a
+          # Failed pod and a dead match. A sidecar restarts by itself and never
+          # decides whether the pod finished. Needs Kubernetes 1.29 or later.
+          image: "${WS_BRIDGE_IMAGE}"
+          imagePullPolicy: IfNotPresent
+          restartPolicy: Always
+          # The reference bridge is websocat; a substitute image must accept this
+          # vector. See doc/kube-docker-deploy.md §8.1.
+          args: ["--binary", "--exit-on-eof", "ws-l:0.0.0.0:7779", "tcp:127.0.0.1:7777"]
+          ports:
+            - name: wsgame
+              containerPort: 7779
+              protocol: TCP
+          securityContext: *container_security
+          # No volumes and no probes. It holds no state, and a TCP probe on 7779
+          # would be a half-open handshake the bridge has to log and drop.
+          resources:
+            requests: {cpu: 25m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 32Mi}
       containers:
         - name: session
           image: "${IMAGE}"
@@ -114,7 +141,8 @@ spec:
             - ":7778"
             # No -name: a session is reached by its own port, so a player's link
             # names nothing and a pod that demanded a name would refuse every dial.
-            # Browser routing uses its own WebSocket path; see doc/kubernetes-fleet.md §9.
+            # A browser is routed by the allocator and arrives here on loopback
+            # through the sidecar above; see doc/kubernetes-fleet.md §9.
             #
             # Stated rather than inherited from the -serve default: losing this pod
             # ends the match. The Job never replaces its in-memory world, and guests
@@ -237,9 +265,10 @@ spec:
 # same match must reach the same process, and an ordinary load-balanced Service
 # over several session pods would scatter them across unrelated worlds.
 #
-# The probe port is deliberately absent. It stays reachable inside the cluster
-# through the pod IP, where Prometheus and the kubelet find it, and nothing outside
-# the node can route to it.
+# The probe and WebSocket ports are deliberately absent. Both stay reachable inside
+# the cluster through the pod IP — the kubelet and Prometheus find the first, the
+# node's allocator finds the second — and nothing outside the node can route to
+# either. The browser path publishes no second NodePort by design.
 apiVersion: v1
 kind: Service
 metadata:

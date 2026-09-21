@@ -15,9 +15,11 @@ type fakeSessionAllocator struct {
 	sessions  []session
 	requested sessionRequest
 	bounds    fleetLimits
+	podIP     string
 	createErr error
 	listErr   error
 	readyErr  error
+	routeErr  error
 }
 
 func (f *fakeSessionAllocator) createSession(_ context.Context, req sessionRequest) (session, error) {
@@ -33,8 +35,19 @@ func (f *fakeSessionAllocator) listSessions(context.Context) ([]session, error) 
 
 func (f *fakeSessionAllocator) ready(context.Context) error { return f.readyErr }
 
+func (f *fakeSessionAllocator) routeSession(context.Context, string) (string, error) {
+	return f.podIP, f.routeErr
+}
+
 func testServer(allocator sessionAllocator) *apiServer {
-	return newAPIServer(allocator, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	return newAPIServer(allocator, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, allocatorConfig{})
+}
+
+// testWebServer publishes the browser route, which an ordinary test server does
+// not: the two halves of the fleet are refusable independently.
+func testWebServer(allocator sessionAllocator) *apiServer {
+	return newAPIServer(allocator, slog.New(slog.NewTextHandler(io.Discard, nil)), nil,
+		allocatorConfig{WebOrigin: "https://site.example", WebMaxPerSession: 2})
 }
 
 func TestPostSession(t *testing.T) {
@@ -135,5 +148,46 @@ func TestLogEndpointIsExplicitlyDeferred(t *testing.T) {
 
 	if response.Code != http.StatusNotImplemented || !strings.Contains(response.Body.String(), "log_stream_not_configured") {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
+func TestTheBrowserRouteRefusesEverythingButAnUpgradeFromItsOrigin(t *testing.T) {
+	const live = "/vif/ws/0123456789abcdef"
+	upgrade := func(r *http.Request) *http.Request {
+		r.Header.Set("Upgrade", "websocket")
+		r.Header.Set("Connection", "keep-alive, Upgrade")
+		r.Header.Set("Origin", "https://site.example")
+		return r
+	}
+	for name, tc := range map[string]struct {
+		request *http.Request
+		want    int
+	}{
+		"a path that is not a session identifier": {
+			upgrade(httptest.NewRequest(http.MethodGet, "/vif/ws/0123456789ABCDEF/extra", nil)), http.StatusNotFound},
+		"an ordinary GET": {
+			httptest.NewRequest(http.MethodGet, live, nil), http.StatusBadRequest},
+		"another origin": {
+			func() *http.Request {
+				r := upgrade(httptest.NewRequest(http.MethodGet, live, nil))
+				r.Header.Set("Origin", "https://elsewhere.example")
+				return r
+			}(), http.StatusForbidden},
+		"a method the route does not answer": {
+			upgrade(httptest.NewRequest(http.MethodPost, live, nil)), http.StatusMethodNotAllowed},
+	} {
+		response := httptest.NewRecorder()
+		testWebServer(&fakeSessionAllocator{podIP: "10.42.0.7"}).ServeHTTP(response, tc.request)
+		if response.Code != tc.want {
+			t.Errorf("%s: status = %d, want %d", name, response.Code, tc.want)
+		}
+	}
+
+	// A deployment that publishes no route answers the same path with its absence
+	// rather than with a refusal a caller would retry.
+	response := httptest.NewRecorder()
+	testServer(&fakeSessionAllocator{}).ServeHTTP(response, upgrade(httptest.NewRequest(http.MethodGet, live, nil)))
+	if response.Code != http.StatusNotImplemented {
+		t.Errorf("unconfigured route status = %d", response.Code)
 	}
 }

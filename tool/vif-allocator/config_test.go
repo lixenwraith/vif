@@ -145,3 +145,30 @@ func TestAnUnsetUnitVariableKeepsTheDefault(t *testing.T) {
 		t.Error("an empty required flag was accepted")
 	}
 }
+
+func TestTheBrowserRouteAndItsBridgeAreOneSwitch(t *testing.T) {
+	base := []string{
+		"-image", "vi-fighter:test",
+		"-join-host", "play.example.com",
+		"-page-base", "https://play.example.com/session/",
+		"-log-stream-url", "http://127.0.0.1:8081/stream",
+	}
+	for _, half := range [][]string{
+		{"-web-origin", "https://play.example.com"},
+		{"-ws-bridge-image", "ws-bridge:test"},
+		{"-web-origin", "https://play.example.com/vif", "-ws-bridge-image", "ws-bridge:test"},
+	} {
+		if _, err := parseConfig(append(slices.Clone(base), half...), io.Discard); err == nil {
+			t.Errorf("parseConfig(%q) published a half-configured browser route", half)
+		}
+	}
+	cfg, err := parseConfig(append(slices.Clone(base),
+		"-web-origin", "https://play.example.com", "-ws-bridge-image", "ws-bridge:test"), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := (&allocator{cfg: cfg.Allocator}).webSocketURL("0123456789abcdef"); got !=
+		"wss://play.example.com/vif/ws/0123456789abcdef" {
+		t.Fatalf("webSocketURL = %q", got)
+	}
+}

@@ -359,7 +359,7 @@ func (f sessionFlags) lifetime() lifecycle.Policy {
 
 func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.host, "host", "", "Host a session on bind address, e.g. :7777")
-	fs.StringVar(&f.join, "join", "", "Join a session at host:port, or at the vif://host:port/name a link carries")
+	fs.StringVar(&f.join, "join", "", "Join a session at host:port, at the vif://host:port/name a link carries, or at the wss:// route a browser build is given")
 	fs.StringVar(&f.name, "name", "", "Name this host answers to, so one address can serve several sessions")
 	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player, e.g. :7777")
 	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
@@ -460,7 +460,13 @@ const joinScheme = "vif://"
 // named on it: host:port, or [vif://]host:port/name where one address serves
 // several. The name a target carries wins over the fallback, which is what a host
 // put there with -name.
+//
+// A browser route is dialled whole: its path is the front door's, not a session
+// name this client sends, and cutting at the first '/' would take one for the other.
 func parseJoinTarget(target, fallback string) (addr, name string) {
+	if network.IsWebSocketTarget(target) {
+		return target, fallback
+	}
 	addr, name = strings.TrimPrefix(target, joinScheme), fallback
 	if a, n, ok := strings.Cut(addr, "/"); ok {
 		addr, name = a, n

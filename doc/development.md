@@ -532,11 +532,12 @@ parameters into `Go.argv`.
 The browser build does not perform native config-root discovery for `scenario.toml`,
 keymap, content, audio overrides, or logs. Embedded assets make it playable;
 audio and logging compile out. Browser JavaScript cannot open the framed TCP
-socket used by native `-join`, so session flags fail validation until a WebSocket
-transport is provided. Arguments can select embedded behavior but cannot turn a
-URL into a filesystem path. See
-[Build profiles and platform boundaries](multi-platform.md) for the native
-WebSocket and HTTP resource-provider strategy.
+socket used by native `-join`, so a browser joins over the session's `wss://`
+route instead — the page's own WebSocket wrapped as a `net.Conn` — and `-host`,
+`-serve` and a `host:port` target still fail validation. Arguments can select
+embedded behavior but cannot turn a URL into a filesystem path. See
+[Build profiles and platform boundaries](multi-platform.md) for the transport and
+HTTP resource-provider strategy.
 
 ## 8. Structured logging
 

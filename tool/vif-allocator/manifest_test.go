@@ -57,6 +57,48 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 	}
 }
 
+// A bridge that failed would end the match if it were an ordinary container, and
+// a fleet with no browser route must render the pod it rendered before there was
+// one.
+func TestTheBridgeIsARestartableSidecarAndOnlyWhenConfigured(t *testing.T) {
+	base := workloadConfig{Namespace: "vif", Image: "vi-fighter:revision", Players: 4,
+		MapSize: "120x40", Scenario: "main", FirstJoin: "90s", Empty: "90s", Drain: "20s"}
+	plain, err := json.Marshal(buildJob("abc123", base))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(plain), "ws-bridge") {
+		t.Fatal("a fleet with no browser route rendered a bridge")
+	}
+
+	// In initContainers and after the check, which is where a restartable container
+	// is a sidecar rather than a step the pod waits for.
+	base.BridgeImage = "ws-bridge:pinned"
+	podSpec := buildJob("abc123", base)["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)
+	inits := podSpec["initContainers"].([]any)
+	if len(inits) != 2 {
+		t.Fatalf("init containers = %d, want the check and the bridge", len(inits))
+	}
+	bridge := inits[1].(map[string]any)
+	if bridge["name"] != "ws-bridge" || bridge["restartPolicy"] != "Always" {
+		t.Fatalf("the bridge is not a sidecar after the check: %v", bridge)
+	}
+	encoded, err := json.Marshal(bridge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`"image":"ws-bridge:pinned"`,
+		`"tcp:127.0.0.1:7777"`,
+		`{"containerPort":7779,"name":"wsgame","protocol":"TCP"}`,
+		`"readOnlyRootFilesystem":true`,
+	} {
+		if !strings.Contains(string(encoded), want) {
+			t.Errorf("bridge JSON does not contain %s", want)
+		}
+	}
+}
+
 func TestBuildServiceOwnsJobAndPreservesSource(t *testing.T) {
 	object := buildService("abc123", "job-uid", 31703, "vif")
 	encoded, err := json.Marshal(object)

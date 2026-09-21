@@ -1,0 +1,69 @@
+# The WebSocket bridge sidecar.
+#
+# One upgraded browser connection becomes one loopback connection to the session's
+# framed TCP port, inside the session pod's own network namespace. It exists so the
+# game keeps one transport and this repository keeps no WebSocket implementation:
+# the two maintained Go packages are a third-party network-facing dependency, and
+# the standard library has none. See doc/multi-platform.md §5.
+#
+# websocat is the reference, pinned by version and by the checksum of the release
+# asset. There is no default checksum: a build that does not state one fails rather
+# than shipping whatever the mirror served.
+#
+#   docker build -f deploy/docker/Dockerfile.ws-bridge \
+#       --build-arg WEBSOCAT_VERSION=<version> \
+#       --build-arg WEBSOCAT_SHA256=<sha256 of the asset> \
+#       -t vif-ws-bridge:<version> .
+#
+# Import it into K3s the way deploy/guest/update-vif-image.sh imports the session
+# image, and give the allocator the resulting reference with -ws-bridge-image.
+
+ARG WEBSOCAT_VERSION
+ARG WEBSOCAT_SHA256
+ARG WEBSOCAT_ASSET=websocat.x86_64-unknown-linux-musl
+ARG WEBSOCAT_SOURCE=https://github.com/vi/websocat
+
+# --- fetch ---------------------------------------------------------------------
+# Nothing from this stage ships but the one verified binary. The checksum is
+# checked here rather than at run time because a pod cannot refuse its own image.
+FROM docker.io/library/alpine:3 AS fetch
+
+ARG WEBSOCAT_VERSION
+ARG WEBSOCAT_SHA256
+ARG WEBSOCAT_ASSET
+ARG WEBSOCAT_SOURCE
+
+RUN apk add --no-cache curl
+RUN test -n "${WEBSOCAT_VERSION}" && test -n "${WEBSOCAT_SHA256}" \
+    || { echo "WEBSOCAT_VERSION and WEBSOCAT_SHA256 are required"; exit 1; }
+RUN curl -fsSL -o /out \
+        "${WEBSOCAT_SOURCE}/releases/download/${WEBSOCAT_VERSION}/${WEBSOCAT_ASSET}" \
+    && echo "${WEBSOCAT_SHA256}  /out" | sha256sum -c - \
+    && chmod 0555 /out
+
+# --- runtime -------------------------------------------------------------------
+FROM scratch
+
+ARG WEBSOCAT_VERSION
+ARG WEBSOCAT_SOURCE
+
+LABEL org.opencontainers.image.title="vif-ws-bridge" \
+      org.opencontainers.image.description="WebSocket to loopback TCP bridge for a Vi-Fighter session pod" \
+      org.opencontainers.image.source="${WEBSOCAT_SOURCE}" \
+      org.opencontainers.image.version="${WEBSOCAT_VERSION}" \
+      org.opencontainers.image.licenses="MIT"
+
+COPY --from=fetch /out /ws-bridge
+
+# The session pod's numeric identity. There is no /etc/passwd here to resolve a
+# name against, and the pod spec sets the same value.
+USER 65532:65532
+
+# Private to the pod: no Service names it and no firewall forwards it.
+EXPOSE 7779
+
+ENTRYPOINT ["/ws-bridge"]
+
+# Overridden by the workload, which states the same thing explicitly; see
+# deploy/k3s/30-session.yaml.
+CMD ["--binary", "--exit-on-eof", "ws-l:0.0.0.0:7779", "tcp:127.0.0.1:7777"]

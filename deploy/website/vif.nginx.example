@@ -16,6 +16,16 @@ map $http_upgrade $vif_connection_upgrade {
     ''      close;
 }
 
+# What the session route is bounded by at the edge; see the location below.
+limit_conn_zone $binary_remote_addr zone=vif_ws_conn:10m;
+limit_req_zone  $binary_remote_addr zone=vif_ws_req:10m rate=12r/m;
+
+# The site's Content-Security-Policy must permit the same-origin socket. CSP 3
+# says 'self' covers wss:// on the page's own host, and naming it as well costs
+# nothing and does not depend on a browser having implemented that clause:
+#
+#   connect-src 'self' wss://<site-host>;
+
 # --- server context, inside the site's TLS server block ---
 
 # Create and list. Finite requests, so ordinary proxy timeouts apply.
@@ -46,9 +56,13 @@ location = /vif/api/logs {
     proxy_send_timeout 3600s;
 }
 
-# Planned browser-session route. Enable only after vif and vif-allocator provide
-# the native WebSocket endpoint. Nginx terminates TLS and forwards Upgrade; it
-# does not translate WebSocket frames to the native TCP protocol.
+# The browser session route. Nginx terminates TLS and forwards the Upgrade; it
+# does not translate WebSocket frames. The allocator validates the session, the
+# Origin and the fleet's ceilings, then proxies the upgraded connection to the
+# bridge sidecar in that session's pod, which is what speaks WebSocket.
+#
+# Origin is forwarded unchanged, because it is the whole of same-origin here and
+# the allocator compares it against its -web-origin. Do not set it.
 location ~ "^/vif/ws/[0-9a-f]{16}$" {
     proxy_pass http://vif_allocator;
     proxy_http_version 1.1;
@@ -60,6 +74,12 @@ location ~ "^/vif/ws/[0-9a-f]{16}$" {
     proxy_connect_timeout 5s;
     proxy_read_timeout 3600s;
     proxy_send_timeout 3600s;
+
+    # The per-player bound the game cannot apply here: every browser reaches the
+    # pod from the same loopback address, so its per-address admission limiter
+    # sees one player. This and the allocator's per-session ceiling replace it.
+    limit_conn vif_ws_conn 4;
+    limit_req zone=vif_ws_req burst=4 nodelay;
 }
 
 # Exact locations, because /healthz, /readyz and every other allocator path stay

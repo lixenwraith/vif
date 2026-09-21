@@ -23,6 +23,7 @@ usage() {
 	echo "       $0 state SESSION_ID                 one line of what the fleet reports" >&2
 	echo "       $0 delete SESSION_ID                remove one session and its log files" >&2
 	echo "       $0 create SESSION_ID [GAME_NODEPORT] [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
+	echo "       WS_BRIDGE_IMAGE=<image> adds the browser bridge sidecar to a create" >&2
 	echo "                                          SCENARIO= and LOG_LEVEL= override" >&2
 	echo "       $0 list" >&2
 	echo "       $0 status" >&2
@@ -211,7 +212,8 @@ case "$command" in
 		# The identity on stdout so a caller can capture it, everything a person
 		# needs to type on stderr beside it.
 		printf '%s' "$answer" |
-			jq -er '"session=\(.id) join=\(.join_target) page=\(.page_url)"' >&2
+			jq -er '"session=\(.id) join=\(.join_target) page=\(.page_url)" +
+				(if .ws_url then " ws=\(.ws_url)" else "" end)' >&2
 		printf '%s' "$answer" | jq -er '.id | strings | select(length > 0)'
 		;;
 	state)
@@ -221,7 +223,8 @@ case "$command" in
 				"phase=\(.state.phase) guests=\(.state.guests)/\(.state.capacity)" +
 				" clock=\(.state.clock // "none") ready=\(.state.ready)" +
 				" tick=\(.state.tick) expires=\(.state.expires_in // "none")" +
-				" join=\(.join_target)"')
+				" join=\(.join_target)" +
+				(if .ws_url then " ws_url=\(.ws_url)" else "" end)')
 		if [ -z "$reported" ]; then
 			printf '%s: not in the fleet\n' "$2"
 			exit 1

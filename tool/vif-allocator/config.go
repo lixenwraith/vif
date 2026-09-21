@@ -73,6 +73,12 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	set.StringVar(&empty, "empty", "90s", "empty roster grace")
 	set.StringVar(&drain, "drain", "20s", "termination drain deadline")
 	set.StringVar(&cfg.Allocator.JoinHost, "join-host", "", "public raw-TCP host returned to players (required)")
+	set.StringVar(&cfg.Allocator.WebOrigin, "web-origin", "",
+		"site origin allowed to open a browser session, e.g. https://example.com; empty publishes no WebSocket route")
+	set.StringVar(&cfg.Allocator.Workload.BridgeImage, "ws-bridge-image", "",
+		"WebSocket bridge sidecar image; required with -web-origin")
+	set.IntVar(&cfg.Allocator.WebMaxPerSession, "web-max", 8,
+		"concurrent browser connections one session may hold")
 	set.StringVar(&cfg.Allocator.PageBase, "page-base", "", "absolute session page base URL (required)")
 	set.IntVar(&cfg.Allocator.PortFirst, "port-first", 31700, "first allocatable NodePort")
 	set.IntVar(&cfg.Allocator.PortLast, "port-last", 31709, "last allocatable NodePort")
@@ -172,6 +178,9 @@ func validateConfig(cfg runtimeConfig) error {
 	if net.ParseIP(cfg.Allocator.JoinHost) == nil && strings.Contains(cfg.Allocator.JoinHost, ":") {
 		return fmt.Errorf("-join-host must not include a port")
 	}
+	if err := validateWebRoute(cfg.Allocator); err != nil {
+		return err
+	}
 	pageBase, err := url.Parse(cfg.Allocator.PageBase)
 	if err != nil || pageBase.Host == "" || (pageBase.Scheme != "https" && pageBase.Scheme != "http") {
 		return fmt.Errorf("-page-base must be an absolute http or https URL")
@@ -187,6 +196,35 @@ func validateConfig(cfg runtimeConfig) error {
 	}
 	if err := validateLogStreamURL(cfg.LogStreamURL); err != nil {
 		return err
+	}
+	return nil
+}
+
+// validateWebRoute holds the browser path to one switch. The route and the sidecar
+// are halves of the same path: published without a bridge it reaches a pod with no
+// listener, and a bridge without the route is a container nothing dials.
+func validateWebRoute(cfg allocatorConfig) error {
+	if cfg.WebOrigin == "" {
+		if cfg.Workload.BridgeImage != "" {
+			return fmt.Errorf("-ws-bridge-image needs -web-origin, which is what publishes the route it serves")
+		}
+		return nil
+	}
+	if cfg.Workload.BridgeImage == "" {
+		return fmt.Errorf("-web-origin needs -ws-bridge-image, which is what answers the route it publishes")
+	}
+	if strings.ContainsAny(cfg.Workload.BridgeImage, "<>\t\r\n ") {
+		return fmt.Errorf("invalid -ws-bridge-image %q", cfg.Workload.BridgeImage)
+	}
+	origin, err := url.Parse(cfg.WebOrigin)
+	if err != nil || origin.Host == "" || (origin.Scheme != "https" && origin.Scheme != "http") {
+		return fmt.Errorf("-web-origin must be an absolute http or https origin")
+	}
+	if origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" || origin.User != nil {
+		return fmt.Errorf("-web-origin must be a bare scheme://host[:port] origin")
+	}
+	if cfg.WebMaxPerSession < 1 || cfg.WebMaxPerSession > 16 {
+		return fmt.Errorf("-web-max must be between 1 and 16")
 	}
 	return nil
 }

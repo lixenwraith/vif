@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -369,8 +370,18 @@ func (pm *PeerManager) Close() {
 	pm.peers = make(map[PeerID]*Peer)
 }
 
+// IsWebSocketTarget reports whether a join target is the browser session route
+// rather than the host:port a native client dials. The two reach the same session
+// and the same protocol; only the bytes' path to it differs.
+func IsWebSocketTarget(target string) bool {
+	return strings.HasPrefix(target, "ws://") || strings.HasPrefix(target, "wss://")
+}
+
 // dial establishes a connection with optional TLS
 func dial(addr string, cfg *Config) (net.Conn, error) {
+	if IsWebSocketTarget(addr) {
+		return dialWebSocket(addr, cfg.ConnectTimeout)
+	}
 	dialer := &net.Dialer{
 		Timeout: cfg.ConnectTimeout,
 	}

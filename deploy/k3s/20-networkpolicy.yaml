@@ -42,6 +42,40 @@ spec:
         - protocol: TCP
           port: game
 ---
+# The browser bridge port, from the node.
+#
+# Nothing publishes 7779: no NodePort names it, the host forwards only the game
+# range, and the namespace's default-deny egress means no sibling session pod can
+# dial it either. What reaches it is the node's own allocator, which arrives with a
+# node address no pod or namespace selector can express — so this rule is written
+# without a `from`, exactly as the game rule above is, and the reachability it
+# leaves is "the node, and nothing else that exists".
+#
+# Narrow it where the node address is stable and known. It is not committed here
+# because a repository file must not carry a real machine address:
+#
+#   ingress:
+#     - from:
+#         - ipBlock: {cidr: <node-address>/32}
+#       ports:
+#         - protocol: TCP
+#           port: wsgame
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ws-bridge-ingress
+  namespace: vif
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vi-fighter
+      app.kubernetes.io/component: session
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: wsgame
+---
 # The operator ports, from the monitoring namespace only.
 #
 # /health and /metrics describe the session's roster, tick and remaining lifetime,
