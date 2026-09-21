@@ -280,10 +280,12 @@ so it leaves the session rather than following it.
 
 `/var/db/vif/wad` is the node directory, `deploy/k3s/07-wad-volume.yaml` the
 read-only node-affine `local` PV and `ReadOnlyMany` claim over it, and
-`deploy/guest/update-vif-wad.sh` the updater. It validates every scenario against
-the session image, as UID 65532 with the mounts a session gets, before it swaps —
+`deploy/guest/update-vif-wad.sh` the updater. It validates every scenario before it
+swaps, with a binary built from the same checkout and the layout a session mounts,
 so a scenario that would have failed an init container fails at the operator's
-prompt instead. The swap is a rename: a running match keeps the inode its pod
+prompt instead. No container runtime: the node keeps Docker stopped.
+
+The swap is a rename: a running match keeps the inode its pod
 mounted, the next pod gets the new tree, and unlike the image updater it does not
 require an idle fleet, which is the whole point.
 

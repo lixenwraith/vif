@@ -44,7 +44,7 @@ disabled with `FORWARD ACCEPT` restored.
 | `update-logwisp.sh [checkout]` | LogWisp's binary, configuration and unit only | a stopped `logwisp.service`; the same unreachable pin |
 | `update-vif-allocator.sh` | the allocator binary, env and unit | a dirty worktree; a non-empty fleet |
 | `update-vif-image.sh [tag]` | the headless session image, and `VIF_ALLOCATOR_IMAGE` with it; rejects an image without the `headless` profile label | a dirty worktree; an occupied fleet |
-| `update-vif-wad.sh [dir]` | the node's scenario volume at `/var/db/vif/wad`, by atomic rename; validates every scenario against the session image first | a tree that is not laid out like `wad/`; a scenario the image cannot load. **Not** an occupied fleet: a running match keeps the tree it mounted |
+| `update-vif-wad.sh [dir]` | the node's scenario volume at `/var/db/vif/wad`, by atomic rename; validates every scenario first, with a binary built from the checkout and the layout a pod mounts | a tree that is not laid out like `wad/`; a scenario that does not load. **Not** an occupied fleet: a running match keeps the tree it mounted |
 
 An optional checkout argument is a download optimisation, never a working
 directory: the builder creates a temporary detached worktree at the pinned revision

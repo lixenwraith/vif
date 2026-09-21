@@ -491,23 +491,34 @@ deploy)
 	grep -Rn 'image: \${' deploy/k3s/ \
 		&& fail "an image placeholder is unquoted; an unset tag becomes a parse error"
 
-	# /etc/vif-allocator is 0750 root:vif-allocator: an operator's own [ -r ] on
-	# anything inside reads as missing, and silently skips what it guards.
-	grep -n '\[ -[rfwdx] "\$allocator_env"' deploy/guest/*.sh \
-		&& fail "a root-only path is tested without sudo; that guard never passes"
-
-	# scenario.toml is three levels under the root, and a listing that looks one
-	# level short reports a correct install as an empty one.
+	# The installer runs on a node with no container runtime and no wad root yet,
+	# which is every node before its first install and this one after any build.
 	if sudo -n true 2>/dev/null; then
-		node=$(mktemp -d)
-		VIF_WAD_ROOT=$node/wad VIF_CONTAINER= VIF_ALLOCATOR_ENV=/nonexistent \
-			./deploy/guest/update-vif-wad.sh >"$headless/install" 2>&1 \
+		node=$(mktemp -d)/nested
+		VIF_WAD_ROOT=$node/wad ./deploy/guest/update-vif-wad.sh >"$headless/install" 2>&1 \
 			|| fail "the wad installer failed: $headless/install"
+		grep -q '^  ok    main$' "$headless/install" \
+			|| fail "scenarios were not validated: $headless/install"
+		# scenario.toml is three levels under the root; a listing one level short
+		# reports a correct install as an empty one.
 		for name in blank main td; do
 			grep -q "$node/wad/scenario/$name\$" "$headless/install" \
 				|| fail "the installer did not report $name: $headless/install"
 		done
-		sudo rm -rf "$node"
+		# A scenario that does not load is refused by name, and refused before the
+		# swap: the tree already on the node is what a running match still reads.
+		bad=$(mktemp -d)/wad
+		cp -a wad "$bad"
+		printf '\n[regions.broken]\nfile = "nope.toml"\n' >>"$bad/scenario/blank/scenario.toml"
+		if VIF_WAD_ROOT=$node/wad ./deploy/guest/update-vif-wad.sh "$bad" \
+			>"$headless/bad" 2>&1
+		then
+			fail "the installer accepted a scenario that does not load"
+		fi
+		grep -q 'scenario blank does not load' "$headless/bad" \
+			|| fail "the refusal did not name the scenario: $headless/bad"
+		[ -d "$node/wad/scenario/main" ] || fail "a refused tree still replaced the node's"
+		sudo rm -rf "$node" "$bad"
 	else
 		echo "  skip: the wad installer needs passwordless sudo"
 	fi

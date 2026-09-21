@@ -11,10 +11,9 @@
 # pod already mounted, and the next pod mounts the new one. Nothing reloads, and
 # nothing has to.
 #
-# What it refuses: a tree that is not laid out like wad/, and a tree the session
-# image cannot actually load. Every scenario in it is validated by the image's own
-# -check, as the fleet's own user, against the same mount layout a session gets —
-# so a scenario that would have failed an init container fails here instead.
+# What it refuses: a tree that is not laid out like wad/, and a tree the fleet
+# cannot load. Every scenario is validated by -check against the same mount layout
+# a session gets, so one that would have failed an init container fails here first.
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -22,7 +21,7 @@ repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 
 case ${1:-} in
 	-h|--help)
-		sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
 		exit 0
 		;;
 esac
@@ -32,11 +31,12 @@ source_wad=${1:-$repo_root/wad}
 wad_root=${VIF_WAD_ROOT:-/var/db/vif/wad}
 staging="$wad_root.new"
 previous="$wad_root.previous"
-allocator_env=${VIF_ALLOCATOR_ENV:-/etc/vif-allocator/allocator.env}
-runtime=${VIF_CONTAINER:-}
+layout=
 
 die() { echo "$0: $*" >&2; exit 1; }
 note() { echo "== $*"; }
+cleanup() { [ -z "$layout" ] || rm -rf "$layout"; }
+trap cleanup EXIT INT TERM
 
 [ -d "$source_wad/scenario" ] || die "$source_wad has no scenario/ directory"
 [ -d "$source_wad/image" ] || die "$source_wad has no image/ directory"
@@ -49,40 +49,29 @@ for name in $scenarios; do
 done
 note "scenarios found: $(echo "$scenarios" | tr '\n' ' ')"
 
-# The image validates its own load, so the check runs the binary the fleet runs
-# rather than whatever is in ./bin. It reads the mount layout a session gets:
-# scenario/ and image/ only, so a scenario depending on a corpus it will not have
-# on the node fails here rather than in a pod.
-if [ -z "$runtime" ]; then
-	for candidate in docker podman; do
-		command -v "$candidate" >/dev/null 2>&1 && { runtime=$candidate; break; }
-	done
-fi
-# /etc/vif-allocator is 0750 root:vif-allocator, so the operator account running
-# this cannot stat inside it: the read and the test it is guarded by both need root.
-image=${VIF_ALLOCATOR_IMAGE:-}
-if [ -z "$image" ] && sudo test -r "$allocator_env"; then
-	image=$(sudo sed -n 's/^VIF_ALLOCATOR_IMAGE=//p' "$allocator_env" | tail -1)
-fi
-if [ -n "$runtime" ] && [ -n "$image" ]; then
-	note "validating every scenario with $image"
+# Built here rather than run from a container: the node keeps Docker stopped
+# outside an image build, so a runtime is the one thing this cannot count on, and a
+# dead socket would read as a broken scenario. Same worktree the image is built
+# from. The layout is scenario/ and image/ only, as a pod gets, so a scenario
+# needing a corpus it will not have on the node fails here rather than in a pod.
+checker=$repo_root/bin/vif-headless
+if command -v go >/dev/null 2>&1 && make -C "$repo_root" headless >/dev/null; then
+	layout=$(mktemp -d)
+	ln -s "$source_wad/scenario" "$layout/scenario"
+	ln -s "$source_wad/image" "$layout/image"
+	note "validating every scenario with $checker"
 	for name in $scenarios; do
-		"$runtime" run --rm --read-only --pull never --user 65532:65532 --network none \
-			--cap-drop ALL --security-opt no-new-privileges \
-			-v "$source_wad/scenario:/wad/scenario:ro" \
-			-v "$source_wad/image:/wad/image:ro" \
-			"$image" -check -config-dir /wad -s "$name" >/dev/null \
-			|| die "scenario $name does not load in $image"
+		"$checker" -check -config-dir "$layout" -s "$name" >/dev/null \
+			|| die "scenario $name does not load"
 		echo "  ok    $name"
 	done
 else
-	[ -n "$runtime" ] || echo "$0: no docker or podman; scenarios not validated" >&2
-	[ -n "$image" ] || echo "$0: no image in $allocator_env or VIF_ALLOCATOR_IMAGE;" \
-		"scenarios not validated" >&2
+	echo "$0: no Go toolchain here; scenarios not validated" >&2
 	echo "$0: the init container still refuses a broken one, but later" >&2
 fi
 
 note "staging $source_wad into $staging"
+sudo install -d -o root -g root -m 0755 "$(dirname "$wad_root")"
 sudo rm -rf "$staging"
 sudo cp -a "$source_wad" "$staging"
 # Directories 0755 and files 0644, owned by root: every session reads this and
@@ -93,7 +82,6 @@ sudo chmod -R u=rwX,go=rX "$staging"
 # The swap. A running pod's bind mount resolves the inode it was given, so it
 # keeps the tree it started on; the next pod mounts what is at the path now.
 note "swapping $wad_root"
-sudo install -d -o root -g root -m 0755 "$(dirname "$wad_root")"
 sudo rm -rf "$previous"
 if [ -d "$wad_root" ]; then
 	sudo mv "$wad_root" "$previous"

@@ -569,7 +569,7 @@ session image, the swap, and the installed list.
 
 ```text
 == scenarios found: blank main td
-== validating every scenario with docker.io/library/vi-fighter:9f21ab04
+== validating every scenario with /home/you/vi-fighter/bin/vif-headless
   ok    blank
   ok    main
   ok    td
@@ -582,10 +582,11 @@ session image, the swap, and the installed list.
 done. Sessions already running keep the scenarios they started on.
 ```
 
-`no docker or podman` is the node's normal state, Docker being stopped outside a
-build; run it once with Docker up, during §8, to get the validated form above. `no
-image in /etc/vif-allocator/allocator.env` instead means the allocator is not
-installed yet, which on a fresh node it is not. Either way the init container still
+The check is `bin/vif-headless`, built from this checkout by the same `make` the
+allocator updater uses. It is not the image's own binary, but it is the same
+revision, and it reads the layout a pod gets — `scenario/` and `image/`, no
+`content/` — so a scenario reaching for something a session will not have fails
+here. Only a node without a Go toolchain skips it, and the init container still
 refuses a broken scenario, just later.
 
 Then apply the volume objects. The quota comes first and is re-applied here even
@@ -1169,8 +1170,9 @@ in `Bound`. If `VIF_IMAGE` comes back empty the allocator is not installed and t
 is a fresh node — follow §9 instead. A `vif-fleet-wad` volume already listed is a
 leftover from an abandoned attempt, not progress; step 3 replaces it.
 
-**2. Fill the node directory**, exactly as §9.1 does. Do it with Docker up so the
-scenarios are validated against the image this node actually runs.
+**2. Fill the node directory**, exactly as §9.1 does. It validates with a binary it
+builds from this checkout, so Docker stays stopped and §6's `FORWARD` policy is
+never touched.
 
 Leave the allocator running. Nothing in steps 2 to 4 disturbs a match — the
 directory swap is a rename, the volume objects are new names, and the probe is one
@@ -1178,14 +1180,10 @@ more pod under the same ceiling — and stopping it here only means an abort lea
 the node serving nothing:
 
 ```sh
-sudo systemctl start docker
 ./deploy/guest/update-vif-wad.sh
-sudo systemctl stop docker.service docker.socket containerd.service
-sudo iptables -S FORWARD | head -1
 ```
 
-Expected: one `ok` per scenario, then `-P FORWARD ACCEPT` from the last line — §6's
-check, because starting Docker moves it.
+Expected: one `ok` per scenario, then the swap and the installed list.
 
 **3. Raise the quota, then apply the volume.** Two things make this order the only
 one that works. The claim counts against the quota, so a ceiling still at `1`
