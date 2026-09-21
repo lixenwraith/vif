@@ -117,7 +117,7 @@ useful CI addition even though the current workflow does not perform one.
 flag still goes to stderr with exit 2, which is the `flag` package's contract for
 a usage error. Short and long forms of the same option share one line here and
 one line in the program's own help; they are the same flag, not aliases, so
-`-g` and `-config-game` write the same field and the last one on the command
+`-s` and `-config-scenario` write the same field and the last one on the command
 line wins.
 
 ### Session
@@ -139,9 +139,9 @@ line wins.
 
 | Flag | Purpose |
 |---|---|
-| `-d`, `-config-embedded` | Use the embedded FSM and content; mutually exclusive with `-g` and `-f`. |
-| `-config-dir <dir>` | Search one categorized config root (`game/ input/ audio/ content/ image/`) before the user and system roots. |
-| `-g`, `-config-game <name-or-path>` | Installed game name, FSM `game.toml`, or a directory containing it. |
+| `-d`, `-config-embedded` | Use the embedded scenario and content; mutually exclusive with `-s` and `-f`. |
+| `-config-dir <dir>` | Search one categorized config root (`scenario/ input/ audio/ content/ image/`) before the user and system roots. |
+| `-s`, `-config-scenario <name-or-path>` | Installed scenario name, a `scenario.toml`, or a directory containing one. |
 | `-f`, `-config-content <path>` | Content directory, or a single pinned `.txt`/`.toml` file. |
 | `-k`, `-config-keymap <path>` | Keymap override TOML. |
 | `-config-music <path>` | Music pattern override TOML; strict optional. |
@@ -540,7 +540,7 @@ the experimental Windows cross-build into a release target.
 |---|---|---|
 | Linux | Primary native target | Unix signals/crash reset; process audio backends; optional stderr fd capture. |
 | FreeBSD | Native target | Unix handling plus optional `/dev/dsp` OSS backend. |
-| `js/wasm` | Supported constrained build | xterm.js host, embedded FSM/content/keymap, audio omitted, `vlog` stub, no host discovery or raw socket transport. |
+| `js/wasm` | Supported constrained build | xterm.js host, embedded scenario/content/keymap, audio omitted, `vlog` stub, no host discovery or raw socket transport. |
 | Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; omitted from nightly releases and removable if field reports show it is broken. |
 | Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification. |
 
@@ -553,7 +553,7 @@ maintains focus. `make serve` builds `web/vif.wasm` and serves this directory.
 Before launch, `web/terminal.js` maps `window.VIF_ARGS` and repeated `arg` query
 parameters into `Go.argv`.
 
-The browser build does not perform native config-root discovery for `game.toml`,
+The browser build does not perform native config-root discovery for `scenario.toml`,
 keymap, content, audio overrides, or logs. Embedded assets make it playable;
 audio and logging compile out. Browser JavaScript cannot open the framed TCP
 socket used by native `-join`, so session flags fail validation until a WebSocket

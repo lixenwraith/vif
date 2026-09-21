@@ -43,29 +43,30 @@ type recordFields struct {
 }
 
 type anchorFields struct {
-	Speed         string `json:"speed"`
-	ConfigID      string `json:"config_id"`
-	ContentID     string `json:"content_id"`
-	ContentPin    string `json:"content_pin"`
-	Schema        uint64 `json:"schema"`
-	Seed          uint64 `json:"seed"`
-	Session       uint64 `json:"session"`
-	JSeq          uint64 `json:"jseq"`
-	Run           uint64 `json:"jrun"`
-	Tick          uint64 `json:"jtick"`
-	StartRun      uint64 `json:"start_run"`
-	StartTick     uint64 `json:"start_tick"`
-	ContentFiles  uint64 `json:"content_files"`
-	ContentBlocks uint64 `json:"content_blocks"`
-	ContentLines  uint64 `json:"content_lines"`
-	TickInterval  int64  `json:"tick_ns"`
-	Slot          uint64 `json:"slot"`
-	Width         int    `json:"width"`
-	Height        int    `json:"height"`
-	MapWidth      int    `json:"map_w"`
-	MapHeight     int    `json:"map_h"`
-	CropOnResize  bool   `json:"crop_on_resize"`
-	SessionShared bool   `json:"session_shared"`
+	Speed          string `json:"speed"`
+	ScenarioID     string `json:"scenario_id"`
+	ScenarioDigest string `json:"scenario_digest"`
+	ContentID      string `json:"content_id"`
+	ContentPin     string `json:"content_pin"`
+	Schema         uint64 `json:"schema"`
+	Seed           uint64 `json:"seed"`
+	Session        uint64 `json:"session"`
+	JSeq           uint64 `json:"jseq"`
+	Run            uint64 `json:"jrun"`
+	Tick           uint64 `json:"jtick"`
+	StartRun       uint64 `json:"start_run"`
+	StartTick      uint64 `json:"start_tick"`
+	ContentFiles   uint64 `json:"content_files"`
+	ContentBlocks  uint64 `json:"content_blocks"`
+	ContentLines   uint64 `json:"content_lines"`
+	TickInterval   int64  `json:"tick_ns"`
+	Slot           uint64 `json:"slot"`
+	Width          int    `json:"width"`
+	Height         int    `json:"height"`
+	MapWidth       int    `json:"map_w"`
+	MapHeight      int    `json:"map_h"`
+	CropOnResize   bool   `json:"crop_on_resize"`
+	SessionShared  bool   `json:"session_shared"`
 }
 
 // Replicated returns the records that must appear identically in every instance's
@@ -166,7 +167,7 @@ func decodeAnchor(raw json.RawMessage) (event.JournalAnchor, error) {
 		return event.JournalAnchor{}, err
 	}
 	return event.JournalAnchor{
-		Speed: f.Speed, ConfigID: f.ConfigID,
+		Speed: f.Speed, ScenarioID: f.ScenarioID, ScenarioDigest: f.ScenarioDigest,
 		ContentID: f.ContentID, ContentPin: f.ContentPin,
 		Schema: f.Schema, Seed: f.Seed, Session: f.Session, JSeq: f.JSeq,
 		Run: f.Run, Tick: f.Tick, StartRun: f.StartRun, StartTick: f.StartTick,

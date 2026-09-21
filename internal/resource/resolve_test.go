@@ -24,17 +24,17 @@ func TestResolutionPrecedence(t *testing.T) {
 	base := t.TempDir()
 	user, system := filepath.Join(base, "user"), filepath.Join(base, "system")
 
-	systemGame := filepath.Join(system, paths.GameDirName, paths.MainGameName, paths.GameConfigFile)
-	writeFixture(t, systemGame)
+	systemScenario := filepath.Join(system, paths.ScenarioDirName, paths.MainScenarioName, paths.ScenarioFile)
+	writeFixture(t, systemScenario)
 	r := resolver{roots: []string{user, system}}
-	if got := r.game(paths.MainGameName); got != systemGame {
-		t.Fatalf("game path = %q, want the system root's file %q", got, systemGame)
+	if got := r.scenario(paths.MainScenarioName); got != systemScenario {
+		t.Fatalf("scenario path = %q, want the system root's file %q", got, systemScenario)
 	}
 
-	userGame := filepath.Join(user, paths.GameDirName, paths.MainGameName, paths.GameConfigFile)
-	writeFixture(t, userGame)
-	if got := r.game(paths.MainGameName); got != userGame {
-		t.Fatalf("game path = %q, want the user root's file %q", got, userGame)
+	userScenario := filepath.Join(user, paths.ScenarioDirName, paths.MainScenarioName, paths.ScenarioFile)
+	writeFixture(t, userScenario)
+	if got := r.scenario(paths.MainScenarioName); got != userScenario {
+		t.Fatalf("scenario path = %q, want the user root's file %q", got, userScenario)
 	}
 
 	systemContent := filepath.Join(system, paths.ContentDirName)
@@ -57,12 +57,12 @@ func TestResolutionPrecedence(t *testing.T) {
 // end, and the strictness the explicit overrides apply.
 func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 	root := t.TempDir()
-	game := filepath.Join(root, paths.GameDirName, paths.MainGameName, paths.GameConfigFile)
+	scenario := filepath.Join(root, paths.ScenarioDirName, paths.MainScenarioName, paths.ScenarioFile)
 	keymap := filepath.Join(root, paths.InputDirName, paths.KeymapConfigFile)
 	music := filepath.Join(root, paths.AudioDirName, paths.MusicConfigFile)
 	sounds := filepath.Join(root, paths.AudioDirName, paths.SoundConfigFile)
 	content := filepath.Join(root, paths.ContentDirName)
-	for _, path := range []string{game, keymap, music, sounds} {
+	for _, path := range []string{scenario, keymap, music, sounds} {
 		writeFixture(t, path)
 	}
 	if err := os.MkdirAll(content, 0o755); err != nil {
@@ -70,8 +70,8 @@ func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 	}
 
 	o := Options{Dir: root}
-	if got, err := GameConfig(o); err != nil || got != game {
-		t.Fatalf("game = %q, %v; want %q", got, err, game)
+	if got, err := ScenarioPath(o); err != nil || got != scenario {
+		t.Fatalf("scenario = %q, %v; want %q", got, err, scenario)
 	}
 	if got, err := Keymap(o); err != nil || got != keymap {
 		t.Fatalf("keymap = %q, %v; want %q", got, err, keymap)
@@ -89,15 +89,15 @@ func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 
 func TestGameNameResolvesInsideConfigurationRoots(t *testing.T) {
 	root := t.TempDir()
-	td := filepath.Join(root, paths.GameDirName, "td", paths.GameConfigFile)
+	td := filepath.Join(root, paths.ScenarioDirName, "td", paths.ScenarioFile)
 	writeFixture(t, td)
 
-	got, err := GameConfig(Options{Dir: root, Game: "td"})
+	got, err := ScenarioPath(Options{Dir: root, Scenario: "td"})
 	if err != nil || got != td {
-		t.Fatalf("named game = %q, %v; want %q", got, err, td)
+		t.Fatalf("named scenario = %q, %v; want %q", got, err, td)
 	}
-	if _, err := GameConfig(Options{Dir: root, Game: "missing"}); err == nil {
-		t.Fatal("missing named game accepted")
+	if _, err := ScenarioPath(Options{Dir: root, Scenario: "missing"}); err == nil {
+		t.Fatal("missing named scenario accepted")
 	}
 }
 
@@ -120,7 +120,7 @@ func TestOptionsRejectUnusableOverrides(t *testing.T) {
 	}{
 		{"missing root", Options{Dir: filepath.Join(base, "missing")}},
 		{"root is a file", Options{Dir: file}},
-		{"embedded with an override", Options{Embedded: true, Game: file}},
+		{"embedded with an override", Options{Embedded: true, Scenario: file}},
 	} {
 		if err := tc.o.Validate(); err == nil {
 			t.Errorf("%s accepted", tc.name)

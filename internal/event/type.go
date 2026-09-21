@@ -38,7 +38,7 @@ type EventType int
 //	// EventFoo short description of what the event signals
 //
 // The first form registers the event with a typed payload, making its fields
-// addressable from FSM configs and from ":emit". The second registers nil.
+// addressable from a scenario and from ":emit". The second registers nil.
 // A constant with no doc comment at all is registered nil and warned about.
 //
 // Stem convention: an event named Event<Stem> pairs with a payload named

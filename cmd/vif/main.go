@@ -105,7 +105,7 @@ func main() {
 	case *flagCheck:
 		err = resource.Check(buildConfig().Resources, os.Stdout)
 	case *flagReplay != "":
-		err = app.PlayJournal(*flagReplay)
+		err = app.PlayJournal(flagConfig.options(), *flagReplay)
 	case *flagScript != "":
 		cfg := buildConfig()
 		if *flagWatch {
@@ -281,7 +281,7 @@ func buildConfig() app.Config {
 // compatibility; config-* aliases make the family discoverable in CLI help.
 type configFlags struct {
 	dir      string
-	game     string
+	scenario string
 	content  string
 	keymap   string
 	music    string
@@ -295,7 +295,7 @@ func newConfigFlags() *configFlags { return &configFlags{} }
 func (f *configFlags) options() resource.Options {
 	return resource.Options{
 		Dir:      f.dir,
-		Game:     f.game,
+		Scenario: f.scenario,
 		Content:  f.content,
 		Keymap:   f.keymap,
 		Music:    f.music,
@@ -305,7 +305,7 @@ func (f *configFlags) options() resource.Options {
 }
 
 func (f *configFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&f.dir, "config-dir", "", "Configuration root holding game/ input/ audio/ content/ image/")
+	fs.StringVar(&f.dir, "config-dir", "", "Configuration root holding scenario/ input/ audio/ content/ image/")
 	fs.StringVar(&f.music, "config-music", "", "Music pattern override TOML")
 	fs.StringVar(&f.sounds, "config-sounds", "", "Sound definition override TOML")
 
@@ -313,7 +313,7 @@ func (f *configFlags) register(fs *flag.FlagSet) {
 		short, long, hint string
 		into              *string
 	}{
-		{"g", "config-game", "installed game name, game.toml, or a game directory", &f.game},
+		{"s", "config-scenario", "Installed scenario name, scenario.toml, or a scenario directory", &f.scenario},
 		{"f", "config-content", "Content directory, or a single content file", &f.content},
 		{"k", "config-keymap", "Keymap TOML", &f.keymap},
 	} {
@@ -321,7 +321,7 @@ func (f *configFlags) register(fs *flag.FlagSet) {
 		fs.StringVar(alias.into, alias.long, "", alias.hint)
 	}
 
-	embedded := "Use the embedded FSM and content, ignoring -g and -f"
+	embedded := "Use the embedded scenario and content, ignoring -s and -f"
 	fs.BoolVar(&f.embedded, "d", false, embedded)
 	fs.BoolVar(&f.embedded, "config-embedded", false, embedded)
 }

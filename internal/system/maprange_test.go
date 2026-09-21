@@ -27,7 +27,7 @@ var lintDirs = []string{
 var allowedMapRanges = map[string]string{
 	// --- Collect-then-sort ---
 	"sortedKeys:m":                              "collects keys for sorting",
-	"Machine.LoadConfigFromMap:States":          "collects state names, sorted before ID assignment",
+	"Machine.LoadScenarioFromMap:States":        "collects state names, sorted before ID assignment",
 	"Machine.DeclaredRegions:regionConfigs":     "collects names, sorted before return",
 	"Machine.Init:regionInitials":               "collects names, sorted before region init",
 	"Machine.RegisteredGuards:guardReg":         "collects names, sorted before return",
@@ -48,7 +48,7 @@ var allowedMapRanges = map[string]string{
 
 	// --- Writes target a map or distinct keys; order cannot change the result ---
 	"Machine.CompilePaths:nodes":                   "writes each node's own Path",
-	"Machine.LoadConfigFromMap:Regions":            "writes regionConfigs/regionInitials by key",
+	"Machine.LoadScenarioFromMap:Regions":          "writes regionConfigs/regionInitials by key",
 	"loadAndResolve:regions":                       "load-time include resolution; merges into a map",
 	"mergeStates:addition":                         "load-time; merges into a map",
 	"Machine.GetStateID:nodes":                     "returns first name match; names are unique",

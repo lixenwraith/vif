@@ -19,7 +19,7 @@ func loadSystemsConfig(t *testing.T, body string) *fsm.Machine[*engine.World] {
 	t.Helper()
 	event.EnsureRegistry()
 
-	path := filepath.Join(t.TempDir(), "game.toml")
+	path := filepath.Join(t.TempDir(), "scenario.toml")
 	config := body + `
 [states.Root]
 transitions = []
@@ -30,7 +30,7 @@ transitions = []
 
 	m := fsm.NewMachine[*engine.World]()
 	manifest.RegisterFSMComponents(m)
-	if err := fsm.LoadConfigFromPath(m, path); err != nil {
+	if err := fsm.LoadScenarioFromPath(m, path); err != nil {
 		t.Fatalf("load config: %v", err)
 	}
 	return m

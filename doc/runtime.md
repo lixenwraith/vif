@@ -153,7 +153,7 @@ First rather than smallest, and the difference is the mid-run gate: guests arriv
 throughout the run, so sizing from the smallest would mean shrinking the map under
 participants already playing on it, which D-14 forbids for the same reason a
 terminal may not crop a shared map. An explicit `-size` still wins, and a scenario
-that fixes its own bounds (`crop_on_resize = false`, as `wad/game/td` does) is left
+that fixes its own bounds (`crop_on_resize = false`, as `wad/scenario/td` does) is left
 alone: those bounds are the scenario's statement rather than a stand-in for a
 terminal nobody has.
 
@@ -337,7 +337,7 @@ The detailed construction order is significant:
     mode; merge the live keymap and bind terminal mouse control only when the
     terminal owns simulation input.
 11. Create frame synchronization channels and the scheduler.
-12. Resolve and load the external or embedded FSM, initialize its regions,
+12. Resolve and load the external or embedded scenario, initialize its regions,
     enqueue their entry actions (including the shipped cursor spawn request),
     and apply global/region system toggles.
 13. Register the event-only `MetaSystem`, then every constructed system that

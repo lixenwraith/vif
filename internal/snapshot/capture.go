@@ -30,7 +30,7 @@ import (
 // 6 dropped the Player-domain RNG streams. A capture is the shared world (D-2), and
 // carrying a participant's own streams installed the sender's positions over every
 // receiver's.
-const Schema = 6
+const Schema = 7
 
 // SharedCapture is the shared world at one tick (D-19): the shared component
 // stores, the allocator's next ID, the Shared RNG stream positions, and the private
@@ -94,19 +94,20 @@ type StringCell struct {
 // capture installed under a different one diverges for reasons no digest
 // attributes.
 type CaptureHeader struct {
-	Schema        int           `json:"schema"`
-	JournalSchema uint64        `json:"journal_schema"`
-	Run           uint64        `json:"run"`
-	Tick          uint64        `json:"tick"`
-	TickInterval  time.Duration `json:"tick_interval"`
-	Seed          uint64        `json:"seed"`
-	Session       uint64        `json:"session"`
-	ConfigID      string        `json:"config_id"`
-	ContentID     string        `json:"content_id"`
-	ContentPin    string        `json:"content_pin"`
-	ContentFiles  uint64        `json:"content_files"`
-	ContentBlocks uint64        `json:"content_blocks"`
-	ContentLines  uint64        `json:"content_lines"`
+	Schema         int           `json:"schema"`
+	JournalSchema  uint64        `json:"journal_schema"`
+	Run            uint64        `json:"run"`
+	Tick           uint64        `json:"tick"`
+	TickInterval   time.Duration `json:"tick_interval"`
+	Seed           uint64        `json:"seed"`
+	Session        uint64        `json:"session"`
+	ScenarioID     string        `json:"scenario_id"`
+	ScenarioDigest string        `json:"scenario_digest"`
+	ContentID      string        `json:"content_id"`
+	ContentPin     string        `json:"content_pin"`
+	ContentFiles   uint64        `json:"content_files"`
+	ContentBlocks  uint64        `json:"content_blocks"`
+	ContentLines   uint64        `json:"content_lines"`
 
 	// MapWidth and MapHeight are the D-14 shared bounds: simulation state rather
 	// than this instance's terminal, and a joiner adopts them.
@@ -156,16 +157,17 @@ type SystemStateRecord struct {
 // header alone.
 func Anchor(h CaptureHeader) event.JournalAnchor {
 	return event.JournalAnchor{
-		Schema:        h.JournalSchema,
-		Seed:          h.Seed,
-		Session:       h.Session,
-		ConfigID:      h.ConfigID,
-		ContentID:     h.ContentID,
-		ContentPin:    h.ContentPin,
-		ContentFiles:  h.ContentFiles,
-		ContentBlocks: h.ContentBlocks,
-		ContentLines:  h.ContentLines,
-		TickInterval:  int64(h.TickInterval),
+		Schema:         h.JournalSchema,
+		Seed:           h.Seed,
+		Session:        h.Session,
+		ScenarioID:     h.ScenarioID,
+		ScenarioDigest: h.ScenarioDigest,
+		ContentID:      h.ContentID,
+		ContentPin:     h.ContentPin,
+		ContentFiles:   h.ContentFiles,
+		ContentBlocks:  h.ContentBlocks,
+		ContentLines:   h.ContentLines,
+		TickInterval:   int64(h.TickInterval),
 	}
 }
 

@@ -45,14 +45,16 @@ type soakRun struct {
 	want []string
 	end  event.Stamp
 	seed uint64
+	root string // the config root the replay resolves the anchor's scenario under
 }
 
-// soakConfigDir is the external map set the tower soak drives; the tower region is
+// soakScenarioDir is the external scenario the tower soak drives; the tower region is
 // the only path that engages gateway, eye and route-graph navigation
-const soakConfigDir = "../../wad/game/main"
-const soakContentDir = "../../wad/content"
+const soakRoot = "../../wad"
+const soakScenarioDir = soakRoot + "/scenario/main"
+const soakContentDir = soakRoot + "/content"
 
-// towerRegions mirrors wad/game/main's declared regions and their entry states
+// towerRegions mirrors wad/scenario/main's declared regions and their entry states
 var towerRegions = []journal.FuzzRegion{
 	{Name: "main", State: "MainSpawnGold"},
 	{Name: "quasar", State: "QuasarFuse"},
@@ -61,13 +63,14 @@ var towerRegions = []journal.FuzzRegion{
 	{Name: "tower", State: "TowerSetup"},
 }
 
-// towerConfig pins the external map set and a viewport the tower layout fits in
-func towerConfig(t *testing.T, seed uint64) Config {
+// towerScenario pins the external scenario and a viewport the tower layout fits in
+func towerScenario(t *testing.T, seed uint64) Config {
 	t.Helper()
-	if _, err := os.Stat(filepath.Join(soakConfigDir, paths.GameConfigFile)); err != nil {
-		t.Skipf("external map set %s not present", soakConfigDir)
+	if _, err := os.Stat(filepath.Join(soakScenarioDir, paths.ScenarioFile)); err != nil {
+		t.Skipf("external scenario %s not present", soakScenarioDir)
 	}
-	cfg := Config{Mode: ModeHeadless, Seed: seed, Resources: resource.Options{Game: soakConfigDir}, Width: 160, Height: 50}
+	cfg := Config{Mode: ModeHeadless, Seed: seed, Width: 160, Height: 50,
+		Resources: resource.Options{Dir: soakRoot, Scenario: paths.MainScenarioName}}
 	if _, err := os.Stat(soakContentDir); err == nil {
 		cfg.Resources.Content = soakContentDir
 	}
@@ -75,7 +78,7 @@ func towerConfig(t *testing.T, seed uint64) Config {
 }
 
 // TestExternalConfigsOwnTheirTowers covers the external producer side of cursor
-// addressing on both shipped map sets: the machine must spawn and capture a cursor
+// addressing on both shipped scenarios: the machine must spawn and capture a cursor
 // before its tower requests inject player_entity into their payloads.
 func TestExternalConfigsOwnTheirTowers(t *testing.T) {
 	t.Parallel()
@@ -86,18 +89,18 @@ func TestExternalConfigsOwnTheirTowers(t *testing.T) {
 		// it inside a test-length run.
 		spawn bool
 	}{
-		{"td", "../../wad/game/td", false},
-		{"main", soakConfigDir, true},
+		{"td", "../../wad/scenario/td", false},
+		{"main", soakScenarioDir, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if _, err := os.Stat(filepath.Join(tc.dir, paths.GameConfigFile)); err != nil {
-				t.Skipf("external map set %s not present", tc.dir)
+			if _, err := os.Stat(filepath.Join(tc.dir, paths.ScenarioFile)); err != nil {
+				t.Skipf("external scenario %s not present", tc.dir)
 			}
 			cfg := Config{
 				Mode: ModeHeadless, Seed: fixtureSeed, Width: 160, Height: 50,
-				Resources: resource.Options{Game: tc.dir},
+				Resources: resource.Options{Scenario: tc.dir},
 			}
 			if _, err := os.Stat(soakContentDir); err == nil {
 				cfg.Resources.Content = soakContentDir
@@ -145,7 +148,7 @@ func TestReplaySoakTower(t *testing.T) {
 			t.Parallel()
 			opt := journal.DefaultFuzz(seed, soakSteps)
 			opt.RegionSet = towerRegions
-			run := runSoakScriptCfg(t, towerConfig(t, seed), opt, func(a *App) {
+			run := runSoakScriptCfg(t, towerScenario(t, seed), opt, func(a *App) {
 				a.Tick(1) // boot and capture player_entity before TowerSetup reads it
 				a.Region(event.RegionSpawn, "tower", "TowerSetup")
 				a.Tick(3)
@@ -196,6 +199,7 @@ func runSoakScriptCfg(t *testing.T, cfg Config, opt journal.FuzzOptions, prelude
 		want: a.SnapshotSimulation(),
 		end:  a.Position(),
 		seed: opt.Seed,
+		root: cfg.Resources.Dir,
 	}
 	a.Close()
 
@@ -217,7 +221,7 @@ func runSoakScript(t *testing.T, seed uint64, steps int) soakRun {
 
 // replaySoak reproduces a source run from its capture
 func replaySoak(run soakRun, recs []event.JournalRecord) error {
-	return replayInto(run.cap.Anchors(), recs, run.want, run.end)
+	return replayInto(run.root, run.cap.Anchors(), recs, run.want, run.end)
 }
 
 // TestReplaySoak drives seeded scripts through journal, replay and comparison.

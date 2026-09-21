@@ -347,7 +347,7 @@ func TestMembershipIsByteIdenticalAcrossAHandoff(t *testing.T) {
 	}
 	read := func(a *App) membership {
 		held := a.authority.State()
-		m := membership{roster: held.Roster, anchor: held.Anchor.Anchor.ConfigID, delay: held.Delay}
+		m := membership{roster: held.Roster, anchor: held.Anchor.Anchor.ScenarioID, delay: held.Delay}
 		a.World().RunSafe(func() {
 			for slot := range len(apps) {
 				m.cursors = append(m.cursors, uint64(a.World().Resources.Player.Slot(uint8(slot))))

@@ -6,55 +6,73 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 
 	"github.com/lixenwraith/toml"
 )
 
-// LoadConfigFromPath loads FSM config from an OS file path
-// Region file includes resolve relative to the config file's directory
-func LoadConfigFromPath[T any](m *Machine[T], configPath string) error {
-	info, err := os.Stat(configPath)
+// LoadScenarioFromPath loads a scenario from an OS entry path
+// Region file includes resolve relative to the entry file's directory
+func LoadScenarioFromPath[T any](m *Machine[T], entryPath string) error {
+	info, err := os.Stat(entryPath)
 	if err != nil || info.IsDir() {
-		return fmt.Errorf("config file not found: %s", configPath)
+		return fmt.Errorf("scenario entry not found: %s", entryPath)
 	}
 	// OS path handling via filepath; include resolution via fs.FS
-	fsys := os.DirFS(filepath.Dir(configPath))
-	return LoadConfigFromFS(m, fsys, filepath.Base(configPath))
+	fsys := os.DirFS(filepath.Dir(entryPath))
+	return LoadScenarioFromFS(m, fsys, filepath.Base(entryPath))
 }
 
-// LoadConfigFromFS loads FSM config from any fs.FS (os.DirFS, embed.FS)
-func LoadConfigFromFS[T any](m *Machine[T], fsys fs.FS, entry string) error {
+// LoadScenarioFromFS loads a scenario from any fs.FS (os.DirFS, embed.FS)
+func LoadScenarioFromFS[T any](m *Machine[T], fsys fs.FS, entry string) error {
 	// 'stack' tracks the in-progress include chain, not every file seen
 	stack := make(map[string]bool)
-	merged, err := loadAndResolve(fsys, entry, stack)
+	merged, err := loadAndResolve(fsys, entry, stack, nil)
 	if err != nil {
-		return fmt.Errorf("failed to load FSM config '%s': %w", entry, err)
+		return fmt.Errorf("failed to load scenario '%s': %w", entry, err)
 	}
-	return m.LoadConfigFromMap(merged)
+	return m.LoadScenarioFromMap(merged)
 }
 
-// ResolveConfig merges an entry file and its region includes into the map
-// LoadConfigFromMap consumes, without building a machine. It is the seam a
+// ResolveScenario merges an entry file and its region includes into the map
+// LoadScenarioFromMap consumes, without building a machine. It is the seam a
 // checker reads: a rule about what the shipped configuration may declare has to
-// see the declarations, and decoding RootConfig from this map is the only way to
+// see the declarations, and decoding ScenarioDoc from this map is the only way to
 // reach a transition's trigger without running the game.
-func ResolveConfig(fsys fs.FS, entry string) (map[string]any, error) {
-	merged, err := loadAndResolve(fsys, entry, make(map[string]bool))
+func ResolveScenario(fsys fs.FS, entry string) (map[string]any, error) {
+	merged, err := loadAndResolve(fsys, entry, make(map[string]bool), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load FSM config '%s': %w", entry, err)
+		return nil, fmt.Errorf("failed to load scenario '%s': %w", entry, err)
 	}
 	return merged, nil
 }
 
+// ScenarioFiles names every file a scenario is made of — its entry and the region
+// files that entry includes — sorted and deduplicated. A portable copy is read
+// through this, so it carries exactly the files the loader would have read and
+// nothing that happens to sit beside them.
+func ScenarioFiles(fsys fs.FS, entry string) ([]string, error) {
+	var visited []string
+	if _, err := loadAndResolve(fsys, entry, make(map[string]bool), &visited); err != nil {
+		return nil, fmt.Errorf("failed to load scenario '%s': %w", entry, err)
+	}
+	slices.Sort(visited)
+	return slices.Compact(visited), nil
+}
+
 // loadAndResolve recursively loads a TOML file and resolves region file includes
 // stack holds the ancestors currently being resolved; entries are popped on return
-func loadAndResolve(fsys fs.FS, name string, stack map[string]bool) (map[string]any, error) {
+// visited, when non-nil, collects every file read, in no particular order
+func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]string) (map[string]any, error) {
 	cleanName := path.Clean(name)
 	if stack[cleanName] {
 		return nil, fmt.Errorf("circular include detected: %s", cleanName)
 	}
 	stack[cleanName] = true
 	defer delete(stack, cleanName) // pop on return; siblings may re-include
+	if visited != nil {
+		*visited = append(*visited, cleanName)
+	}
 
 	data, err := fs.ReadFile(fsys, cleanName)
 	if err != nil {
@@ -96,8 +114,7 @@ func loadAndResolve(fsys fs.FS, name string, stack map[string]bool) (map[string]
 			return nil, fmt.Errorf("%s: region '%s' file must be a string", cleanName, regionName)
 		}
 
-		// pass stack (was visited)
-		regionMap, err := loadAndResolve(fsys, path.Join(baseDir, fileStr), stack)
+		regionMap, err := loadAndResolve(fsys, path.Join(baseDir, fileStr), stack, visited)
 		if err != nil {
 			return nil, fmt.Errorf("region '%s': %w", regionName, err)
 		}

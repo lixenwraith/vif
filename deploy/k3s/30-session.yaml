@@ -114,8 +114,8 @@ spec:
             - "all+dispatch"
             # Embedded scenario and corpus: nothing is mounted, so nothing can
             # drift between the image and what the session actually ran. Replace
-            # with -g /config/game.toml and a read-only ConfigMap mount when a
-            # deployment needs to serve an authored scenario instead.
+            # with -config-dir and -s <name> over a read-only mount when a
+            # deployment needs to serve an installed scenario instead.
             - "-d"
             - "-size"
             - "${MAP_SIZE}"

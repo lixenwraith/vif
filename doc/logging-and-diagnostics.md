@@ -726,7 +726,8 @@ rotated file soon receives a self-description. It carries:
   speed ladder token;
 - current `run`/`tick` plus `start_run`/`start_tick`, which remember where the
   journal originally opened;
-- resolved config ID, content source and optional pinned file;
+- the scenario's name and the digest of its canonical form, and the content
+  source and optional pinned file;
 - the loaded corpus fingerprint (`content_files`, `content_blocks`,
   `content_lines`), because a path alone does not prove what content loaded;
 - fixed tick interval and terminal-equivalent `width`/`height` used by the
@@ -734,7 +735,9 @@ rotated file soon receives a self-description. It carries:
 
 The reader accepts multiple files, sorts records by `jseq`, removes overlap,
 and reports the first gap. `ConfigFromAnchor` verifies schema/tick interval,
-seed, config, corpus fingerprint, and geometry before replay. It refuses an
+seed, scenario name and digest, corpus fingerprint, and geometry before replay.
+The scenario is asked for by name, so a journal recorded against one that is not
+installed replays under the same `-config-dir` the run used. It refuses an
 anchor with non-zero `start_run` or `start_tick` (`StartRun`/`StartTick` in
 Go): a capture beginning mid-run needs a world snapshot that this journal
 format does not contain.

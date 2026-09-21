@@ -49,7 +49,7 @@ func itoa(v uint64) string {
 // anchorLine carries the build's own schema rather than a written-down one: the
 // criterion is that the reader round-trips an anchor, not which version it is at.
 var anchorLine = `{"sub":"anchor","fields":{"schema":` + itoa(event.JournalSchema) + `,"jseq":0,"jrun":0,"jtick":0,` +
-	`"start_run":0,"start_tick":0,"seed":42,"session":3,"config_id":"cfg","content_id":"c",` +
+	`"start_run":0,"start_tick":0,"seed":42,"session":3,"scenario_id":"cfg","content_id":"c",` +
 	`"content_pin":"","content_files":1,"content_blocks":2,"content_lines":3,` +
 	`"tick_ns":16000000,"width":120,"height":40,"map_w":100,"map_h":30,` +
 	`"crop_on_resize":true,"session_shared":true,"slot":0,"speed":"1x"}}`

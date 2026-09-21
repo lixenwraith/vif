@@ -11,7 +11,7 @@ func sampleIdentity() PeerIdentity {
 	return PeerIdentity{
 		Protocol: ProtocolVersion, Simulation: "abc123", CaptureSchema: 4,
 		JournalSchema: 11, TickIntervalNS: 50_000_000,
-		Seed: 0x5EED, Session: 1, ConfigID: "embedded", ContentID: "embedded",
+		Seed: 0x5EED, Session: 1, ScenarioID: "embedded", ContentID: "embedded",
 		ContentFiles: 1, ContentBlocks: 14, ContentLines: 46,
 	}
 }
@@ -35,7 +35,7 @@ func TestVerifyNamesTheFirstDifference(t *testing.T) {
 		"tick_ns":        func(p *PeerIdentity) { p.TickIntervalNS = 33_000_000 },
 		"seed":           func(p *PeerIdentity) { p.Seed = 1 },
 		"session":        func(p *PeerIdentity) { p.Session = 2 },
-		"config_id":      func(p *PeerIdentity) { p.ConfigID = "wad/game/td/game.toml" },
+		"scenario_id":    func(p *PeerIdentity) { p.ScenarioID = "wad/scenario/td/scenario.toml" },
 		"content_id":     func(p *PeerIdentity) { p.ContentID = "elsewhere" },
 		"content_pin":    func(p *PeerIdentity) { p.ContentPin = "tutorial.toml" },
 		"content_files":  func(p *PeerIdentity) { p.ContentFiles = 2 },
@@ -65,7 +65,7 @@ func TestVerifyBuildIgnoresWhatAPeerCannotKnowYet(t *testing.T) {
 	t.Parallel()
 	local := sampleIdentity()
 	remote := sampleIdentity()
-	remote.Seed, remote.Session, remote.ConfigID = 0, 0, ""
+	remote.Seed, remote.Session, remote.ScenarioID = 0, 0, ""
 	remote.ContentID, remote.ContentFiles, remote.ContentBlocks, remote.ContentLines = "", 0, 0, 0
 
 	if err := local.VerifyBuild(remote); err != nil {
@@ -93,7 +93,7 @@ func TestSessionFromKeepsTheBuildLocal(t *testing.T) {
 	}
 	got := build.SessionFrom(event.JournalAnchor{
 		Schema: 999, TickInterval: 1, Seed: 0x5EED, Session: 3,
-		ConfigID: "embedded", ContentID: "embedded",
+		ScenarioID: "embedded", ContentID: "embedded",
 		ContentFiles: 1, ContentBlocks: 14, ContentLines: 46,
 	})
 

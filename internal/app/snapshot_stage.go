@@ -247,7 +247,7 @@ func (s *StagedInstall) release() { s.staging = nil }
 // newStagingApp builds the second world a capture is resolved into: this instance's
 // configuration with every outward-facing part removed — no transport, no journal,
 // no telemetry cadence — keeping what decides whether a capture loads, which is the
-// seed, the FSM config and the corpus. The map latch comes from the capture, because
+// seed, the scenario and the corpus. The map latch comes from the capture, because
 // a world built on different bounds would answer a different question.
 func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 	// Project only the inputs that can change the simulated world. Starting from
@@ -256,14 +256,14 @@ func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 	// rejected as unused. That is how an explicit guest colour mode used to abort
 	// join and every later correction; audio overrides had the same latent path.
 	//
-	// Dir remains part of the simulation resource set because installed game names,
+	// Dir remains part of the simulation resource set because installed scenario names,
 	// corpus discovery and files referenced by the FSM resolve through it. Keymap,
 	// music and sounds belong to the live instance's input and audio services.
 	cfg := Config{
 		Mode: ModeHeadless,
 		Resources: resource.Options{
 			Dir:      a.cfg.Resources.Dir,
-			Game:     a.cfg.Resources.Game,
+			Scenario: a.cfg.Resources.Scenario,
 			Content:  a.cfg.Resources.Content,
 			Embedded: a.cfg.Resources.Embedded,
 		},

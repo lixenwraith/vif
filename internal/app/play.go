@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -21,8 +22,10 @@ import (
 const panStep = 4
 
 // PlayJournal replays a recorded run on the terminal. Several paths reassemble a
-// rotated set.
-func PlayJournal(paths ...string) error {
+// rotated set. The anchor names the scenario; roots says where to look for it, so
+// a journal recorded against a scenario that is not installed replays under the
+// same -config-dir the run used.
+func PlayJournal(roots resource.Options, paths ...string) error {
 	event.EnsureRegistry()
 
 	set, err := journal.Load(paths...)
@@ -41,6 +44,7 @@ func PlayJournal(paths ...string) error {
 	if err != nil {
 		return err
 	}
+	cfg.Resources.Dir = roots.Dir
 	cfg.AudioMuted = false // the anchor carries no mute state; a viewer wants sound
 	a, err := NewReplay(cfg)
 	if err != nil {

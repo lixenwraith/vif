@@ -1,7 +1,8 @@
 package fsm
 
-// RootConfig represents the top-level config structure
-type RootConfig struct {
+// ScenarioDoc is a scenario's top-level document: global toggles, the regions it
+// declares, and every state they resolve against
+type ScenarioDoc struct {
 	Systems *SystemsConfig          `toml:"systems,omitempty"` // Global system toggles
 	Regions map[string]RegionConfig `toml:"regions"`           // Multi-region
 	States  map[string]*StateConfig `toml:"states"`
@@ -15,7 +16,7 @@ type SystemsConfig struct {
 // RegionConfig defines a parallel region
 type RegionConfig struct {
 	Initial         string   `toml:"initial"`
-	File            string   `toml:"file,omitempty"`             // External file path, relative to config dir
+	File            string   `toml:"file,omitempty"`             // External file path, relative to the entry's directory
 	Background      bool     `toml:"background,omitempty"`       // Excluded from telemetry
 	EnabledSystems  []string `toml:"enabled_systems,omitempty"`  // Systems to enable when region spawns or resumes
 	DisabledSystems []string `toml:"disabled_systems,omitempty"` // Systems to disable when region spawns or resumes

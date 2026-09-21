@@ -19,17 +19,17 @@ anything. The embedded keymap has no `wad/` copy: it is installed from
 file a user edits are one source.
 
 ```text
-wad/                          internal/asset/
-├── game/       named games   ├── config/    fallback FSM bundle
-│   ├── main/   default       ├── content/   fallback corpus
-│   ├── blank/  scaffold      ├── input/     default keymap
-│   └── td/     tower defence ├── audio/     built-in sound bank
-├── content/    typing corpus └── splash_font.go
+wad/                            internal/asset/
+├── scenario/   named scenarios  ├── scenario/  fallback scenario
+│   ├── main/   default          ├── content/   fallback corpus
+│   ├── blank/  scaffold         ├── input/     default keymap
+│   └── td/     tower defence    ├── audio/     built-in sound bank
+├── content/    typing corpus    └── splash_font.go
 └── image/      .vifimg assets
 ```
 
-The external `main` game and embedded fallback are intentionally separate. The
-external game is an editable, extended scenario; the embedded bundle is the
+The external `main` scenario and the embedded fallback are intentionally
+separate. The external one is editable and extended; the embedded one is the
 self-contained fallback required by native and browser binaries. They need not
 contain the same optional regions.
 
@@ -41,7 +41,7 @@ On Linux and FreeBSD the user root is `$XDG_CONFIG_HOME/vi-fighter` (normally
 
 ```text
 vi-fighter/
-├── game/        named bundles, each rooted at game.toml
+├── scenario/    named scenarios, each rooted at scenario.toml
 │   ├── main/    discovered default
 │   ├── blank/   authoring scaffold
 │   └── td/      tower-defence scenario
@@ -51,17 +51,17 @@ vi-fighter/
 └── image/       .vifimg wall assets
 ```
 
-`game/main/` is the automatically discovered encounter bundle. The other
-directories under `game/` are selected by name (`-g td`) or explicit path.
+`scenario/main/` is the automatically discovered scenario. The other directories
+under `scenario/` are selected by name (`-s td`) or explicit path.
 `audio/` is empty until a user or `soundlab` writes an override. `image/` is the
 discovery category for `.vifimg` assets named by a `WallPatternSpawnRequest`.
 
 ## 3. Resolution policy
 
-An individual resource flag (`-g`, `-f`, `-k`, `-config-music`, or
-`-config-sounds`) is strict and always wins. `-g` first accepts an existing
-`game.toml` path or bundle directory; a single name such as `td` then resolves
-as `game/td/game.toml` through the roots below. Without an override, every
+An individual resource flag (`-s`, `-f`, `-k`, `-config-music`, or
+`-config-sounds`) is strict and always wins. `-s` first accepts an existing
+`scenario.toml` path or scenario directory; a single name such as `td` then
+resolves as `scenario/td/scenario.toml` through the roots below. Without an override, every
 resource walks the same roots in order:
 
 1. `-config-dir <root>`;
@@ -74,24 +74,31 @@ the embedded fallback.
 
 | Resource | Path in each root | Final fallback |
 |---|---|---|
-| FSM entry | `game/main/game.toml` | embedded FSM bundle |
+| Scenario | `scenario/main/scenario.toml` | embedded scenario |
 | Keymap | `input/keymap.toml` | embedded keymap |
 | Music | `audio/music.toml` | built-in patterns |
 | Sounds | `audio/sounds.toml` | built-in sound bank |
 | Content | `content/` | embedded tutorial corpus |
 | Wall image | `image/<name>.vifimg` | none; failure is reported in the game status |
 
-An explicit game directory means a bundle whose entry is directly at
-`<directory>/game.toml`. A named game is searched under `game/<name>/` in root
-priority order. An explicit content file pins delivery to that file. For a wall
+An explicit scenario directory means one whose entry is directly at
+`<directory>/scenario.toml`. A named scenario is searched under
+`scenario/<name>/` in root priority order. An explicit content file pins delivery to that file. For a wall
 image, an existing absolute or relative path is explicit; otherwise the event's
 path is a logical name below each root's `image/` directory, and it may include
 nested directories but not `..`. New configurations should use a logical name or
 an absolute path; the relative-path check remains for compatibility. Missing
 explicit paths or names are errors; absent discovered overrides are normal.
 
-`-d` bypasses FSM and content discovery only. Keymap and audio overrides remain
+`-d` bypasses scenario and content discovery only. Keymap and audio overrides remain
 local participant preferences and retain their ordinary resolution.
+
+A scenario is content, not configuration, which is why it is named for what it is
+and lives in its own category. The word *configuration* is reserved here for what
+settles how this process runs: the roots above, the keymap and audio overrides,
+and a future `vif.toml` at the root of each of them, which would supply what CLI
+flags and environment variables supply today under the same precedence. Nothing
+reads such a file yet; the name is held so the category stays one thing.
 
 ## 4. Installation
 
@@ -141,6 +148,6 @@ what keeps `pkg/` free of `internal/` imports. Audio-free and browser builds omi
 that loader and the audio engine.
 
 A `js/wasm` build performs no host-directory discovery, so it remains playable
-from the embedded FSM, content, and keymap. Page launch arguments do not make
+from the embedded scenario, content, and keymap. Page launch arguments do not make
 external URLs into files; downloadable `wad/` content needs an HTTP-backed
 resource provider. See [Build profiles and platform boundaries](multi-platform.md).

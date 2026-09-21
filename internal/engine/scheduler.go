@@ -356,28 +356,18 @@ func (s *Scheduler) ImportFSM(state fsm.MachineState, reconcileLocal bool) error
 	return nil
 }
 
-// LoadFSMFromFS initializes HFSM from a filesystem (embed.FS or os.DirFS)
-func (s *Scheduler) LoadFSMFromFS(fsys fs.FS, entry string, registerComponents func(*fsm.Machine[*World])) error {
+// LoadScenarioFromFS initializes the HFSM from a scenario on any filesystem
+// (embed.FS, os.DirFS, or a scenario held in memory)
+func (s *Scheduler) LoadScenarioFromFS(fsys fs.FS, entry string, registerComponents func(*fsm.Machine[*World])) error {
 	registerComponents(s.fsm)
-	if err := fsm.LoadConfigFromFS(s.fsm, fsys, entry); err != nil {
-		return fmt.Errorf("failed to load FSM: %w", err)
+	if err := fsm.LoadScenarioFromFS(s.fsm, fsys, entry); err != nil {
+		return fmt.Errorf("failed to load scenario: %w", err)
 	}
-	return s.initLoadedFSM()
+	return s.initLoadedScenario()
 }
 
-// LoadFSMFromPath initializes HFSM from an external entry config
-// Region file includes resolve relative to the file's directory
-func (s *Scheduler) LoadFSMFromPath(configPath string, registerComponents func(*fsm.Machine[*World])) error {
-	registerComponents(s.fsm)
-
-	if err := fsm.LoadConfigFromPath(s.fsm, configPath); err != nil {
-		return fmt.Errorf("failed to load FSM: %w", err)
-	}
-	return s.initLoadedFSM()
-}
-
-// initLoadedFSM is common post-load initialization
-func (s *Scheduler) initLoadedFSM() error {
+// initLoadedScenario is common post-load initialization
+func (s *Scheduler) initLoadedScenario() error {
 	// Before Init: the initial region entries must reach the observer
 	s.bindFSMTelemetry()
 
@@ -1068,7 +1058,7 @@ func (s *Scheduler) executeReset() {
 		panic(fmt.Errorf("FSM reset failed: %v", err))
 	}
 
-	// 5. Re-apply global system configuration (mirrors LoadFSM behavior)
+	// 5. Re-apply global system configuration (mirrors the scenario load)
 	if err := s.applySystemConfig(); err != nil {
 		vlog.Error("fsm", "msg", "system config", "error", err.Error())
 	}

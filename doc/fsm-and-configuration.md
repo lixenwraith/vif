@@ -29,13 +29,13 @@ The result is a strict policy/mechanism split:
 - events request mechanics without knowing which state caused them;
 - systems implement mechanics without knowing the campaign graph.
 
-## 2. Configuration resolution
+## 2. Scenario resolution
 
-Entry configuration is resolved in this order:
+The scenario entry is resolved in this order:
 
-1. `-g <path-or-name>`, where a path is `game.toml` or a directory containing
-   it, and a name resolves under `game/<name>/` in the configured roots;
-2. `game/main/game.toml` under a root passed with `-config-dir`;
+1. `-s <path-or-name>`, where a path is `scenario.toml` or a directory containing
+   it, and a name resolves under `scenario/<name>/` in the configured roots;
+2. `scenario/main/scenario.toml` under a root passed with `-config-dir`;
 3. the same under the user config root, normally `$XDG_CONFIG_HOME/vi-fighter`
    or `~/.config/vi-fighter`;
 4. the same under each `$XDG_CONFIG_DIRS` system root;
@@ -45,9 +45,14 @@ All external resources share this root hierarchy; see
 [External filesystem layout](filesystem-layout.md) for the categorized tree and
 migration policy.
 
-`-d` selects the embedded FSM and content. It is mutually exclusive with `-g`
-and `-f`; combining them fails configuration validation. It is a single flag;
-the older `-gd` wording was inaccurate.
+The resolved entry and its region files are read whole into a `resource.Scenario`
+before the FSM loads, and the loader reads that rather than the host filesystem.
+The scenario is identified by its name and by the SHA-256 of its canonical form,
+which is what a replay and a join are refused on; `-check` prints both. Reading it
+first is also what lets a scenario that never touched this disk be loaded.
+
+`-d` selects the embedded scenario and content. It is mutually exclusive with
+`-s` and `-f`; combining them fails validation.
 
 Region files are resolved through the same filesystem as the entry file and
 relative to its directory. They may contain only `[states]`; nested region
@@ -479,6 +484,6 @@ event counter plus an outer tick transition.
 | External files | `internal/fsm/file_loader.go` |
 | Standard actions/guards | `internal/fsm/std/*.go` |
 | Game host adapter | `internal/manifest/fsm_bridge.go` |
-| Current embedded campaign | `internal/asset/config/*.toml` |
-| External examples | `wad/game/main`, `wad/game/td`, `wad/game/blank` |
+| Current embedded campaign | `internal/asset/scenario/*.toml` |
+| External examples | `wad/scenario/main`, `wad/scenario/td`, `wad/scenario/blank` |
 | Extended syntax examples | `doc/fsm-reference.md` |

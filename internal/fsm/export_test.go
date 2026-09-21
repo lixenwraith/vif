@@ -62,7 +62,7 @@ func newReconcileMachine(t *testing.T) (*fsm.Machine[*eventTrace], *eventTrace) 
 			*dst = append(*dst, et)
 		},
 	})
-	if err := m.LoadConfig([]byte(reconcileConfig)); err != nil {
+	if err := m.LoadScenario([]byte(reconcileConfig)); err != nil {
 		t.Fatalf("load test machine: %v", err)
 	}
 	if err := m.Init(trace); err != nil {
@@ -150,7 +150,7 @@ parent = "Hold"
 				*dst = append(*dst, record{typeID: et, owner: owner})
 			},
 		})
-		if err := m.LoadConfig([]byte(cfg)); err != nil {
+		if err := m.LoadScenario([]byte(cfg)); err != nil {
 			t.Fatalf("load scoped machine: %v", err)
 		}
 		if err := m.Init(got); err != nil {
@@ -296,7 +296,7 @@ transitions = [
 						*dst = append(*dst, et)
 					},
 				})
-				if err := m.LoadConfig([]byte(tt.config)); err != nil {
+				if err := m.LoadScenario([]byte(tt.config)); err != nil {
 					t.Fatalf("load delayed-action machine: %v", err)
 				}
 				if err := m.Init(trace); err != nil {
@@ -383,7 +383,7 @@ parent = "Root"
 `
 			m := fsm.NewMachine[struct{}]()
 			std.Register(m, std.Host[struct{}]{})
-			err := m.LoadConfig([]byte(cfg))
+			err := m.LoadScenario([]byte(cfg))
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("load error = %v, want text %q", err, tt.want)
 			}

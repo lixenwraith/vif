@@ -329,7 +329,7 @@ for the exact motion paths and extension plan.
 
 ## 10. Embedded campaign progression
 
-The default `game.toml` declares five parallel-capable regions. Only `main` and
+The default scenario declares five parallel-capable regions. Only `main` and
 the background `monitor` start immediately; the other three are spawned as
 needed.
 
@@ -365,11 +365,11 @@ The actual flow is:
    tracking and the damage multiplier, clears/rebuilds the level, and preserves
    and re-arms the complete roster before restarting `main`.
 
-This is data, not a guaranteed product rule. `wad/game/main` extends the game
-with a tower scenario; `wad/game/td` is a standalone 500-by-250 tower-defense
-configuration using towers, pylons, gateways, route pressure, quasars, and a
-storm finale. `wad/game/blank` is a minimal authoring scaffold with most gameplay
-and audio systems disabled.
+This is data, not a guaranteed product rule. `wad/scenario/main` extends the
+embedded progression with a tower encounter; `wad/scenario/td` is a standalone
+500-by-250 tower defence using towers, pylons, gateways, route pressure, quasars,
+and a storm finale. `wad/scenario/blank` is a minimal authoring scaffold with most
+gameplay and audio systems disabled.
 
 ## 11. System inventory
 
@@ -408,8 +408,8 @@ Each entry declares a domain profile and its dependencies in
 | Drop routing and homing | `internal/system/loot.go`, `internal/profile/homing.go` |
 | Environment effects | `internal/system/environment.go`, `internal/parameter/environment.go`, `internal/profile/mass.go` |
 | System behavior | Matching files in `internal/system` |
-| Default progression | `internal/asset/config/*.toml` |
-| External scenarios | `wad/game/main`, `wad/game/td`, `wad/game/blank` |
+| Default progression | `internal/asset/scenario/*.toml` |
+| External scenarios | `wad/scenario/main`, `wad/scenario/td`, `wad/scenario/blank` |
 
 Changing a number in `parameter` changes a mechanic; changing a transition in
 TOML changes when that mechanic is invoked. Keep that distinction intact when

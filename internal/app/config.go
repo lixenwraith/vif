@@ -89,7 +89,7 @@ type Config struct {
 	Mode Mode
 
 	// Resources names every external file this run may load: the config root and
-	// the individual game, content, keymap and audio overrides.
+	// the individual scenario, content, keymap and audio overrides.
 	Resources resource.Options
 
 	// ColorMode overrides terminal detection when ColorModeSet is true
@@ -223,7 +223,7 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 	local.Seed = fromAnchor.Seed
 	local.Session = fromAnchor.Session
 	local.Resources.Embedded = fromAnchor.Resources.Embedded
-	local.Resources.Game = fromAnchor.Resources.Game
+	local.Resources.Scenario = fromAnchor.Resources.Scenario
 	local.Resources.Content = fromAnchor.Resources.Content
 	// The map latch travels with identity rather than being adopted afterwards: the
 	// FSM boots inside New and spawns cursor slot zero at the centre of whatever map

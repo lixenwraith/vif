@@ -69,9 +69,9 @@ func helpSections() []flagSection {
 	}, {
 		title: "Configuration",
 		lines: []flagLine{
-			{names: []string{"d", "config-embedded"}, hint: "Use the embedded FSM and content, ignoring -g and -f"},
-			{names: []string{"config-dir"}, arg: "<dir>", hint: "Configuration root holding game/ input/ audio/ content/ image/"},
-			{names: []string{"g", "config-game"}, arg: "<name|path>", hint: "Installed game name, game.toml, or a game directory"},
+			{names: []string{"d", "config-embedded"}, hint: "Use the embedded scenario and content, ignoring -s and -f"},
+			{names: []string{"config-dir"}, arg: "<dir>", hint: "Configuration root holding scenario/ input/ audio/ content/ image/"},
+			{names: []string{"s", "config-scenario"}, arg: "<name|path>", hint: "Installed scenario name, scenario.toml, or a scenario directory"},
 			{names: []string{"f", "config-content"}, arg: "<path>", hint: "Content directory, or a single content file"},
 			{names: []string{"k", "config-keymap"}, arg: "<path>", hint: "Keymap TOML"},
 			{names: []string{"config-music"}, arg: "<path>", hint: "Music pattern override TOML"},
@@ -92,7 +92,7 @@ func helpSections() []flagSection {
 			{names: []string{"script"}, arg: "<path>", hint: "Run an authored deterministic TOML tick script"},
 			{names: []string{"watch"}, hint: "Present a -script run on this terminal instead of running it headlessly"},
 			{names: []string{"replay"}, arg: "<path>", hint: "Replay a recorded journal instead of playing"},
-			{names: []string{"check"}, hint: "Validate the resolved game, keymap, audio and content config, then exit"},
+			{names: []string{"check"}, hint: "Validate the resolved scenario, keymap, audio and content, then exit"},
 			{names: []string{"schema"}, hint: "Print the FSM schema as JSON, then exit"},
 		},
 	}, {

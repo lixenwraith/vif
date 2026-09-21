@@ -72,24 +72,24 @@ func TestSharedGlyphsAreGoldMembersOnly(t *testing.T) {
 	}
 }
 
-// fsmConfigTrees names every configuration a build can boot: the two shipped
-// scripts, the empty one, and the copy embedded in the binary. A rule that holds
-// for one of them and not the others is not a rule.
-func fsmConfigTrees(t *testing.T) map[string]func() (map[string]any, error) {
+// scenarioTrees names every scenario a build can boot: the two shipped ones, the
+// empty one, and the copy embedded in the binary. A rule that holds for one of
+// them and not the others is not a rule.
+func scenarioTrees(t *testing.T) map[string]func() (map[string]any, error) {
 	t.Helper()
 	root := repoRoot(t)
 	trees := map[string]func() (map[string]any, error){
 		"asset(embedded)": func() (map[string]any, error) {
-			return fsm.ResolveConfig(asset.DefaultFSMConfig, asset.DefaultFSMEntry)
+			return fsm.ResolveScenario(asset.DefaultScenario, asset.DefaultScenarioEntry)
 		},
 	}
-	for _, dir := range []string{"game/main", "game/td", "game/blank"} {
+	for _, dir := range []string{"scenario/main", "scenario/td", "scenario/blank"} {
 		d := filepath.Join(root, "wad", dir)
-		if _, err := os.Stat(filepath.Join(d, "game.toml")); err != nil {
+		if _, err := os.Stat(filepath.Join(d, "scenario.toml")); err != nil {
 			continue
 		}
 		trees["wad/"+dir] = func() (map[string]any, error) {
-			return fsm.ResolveConfig(os.DirFS(d), "game.toml")
+			return fsm.ResolveScenario(os.DirFS(d), "scenario.toml")
 		}
 	}
 	return trees
@@ -126,9 +126,9 @@ func TestFSMTriggersAreReplicated(t *testing.T) {
 	event.EnsureRegistry()
 
 	totalChecked := 0
-	trees := fsmConfigTrees(t)
+	trees := scenarioTrees(t)
 	if len(trees) < 2 {
-		t.Fatalf("only %d config tree(s) reachable; the check would barely cover anything", len(trees))
+		t.Fatalf("only %d scenario(s) reachable; the check would barely cover anything", len(trees))
 	}
 	for name, load := range trees {
 		t.Run(name, func(t *testing.T) {
@@ -136,7 +136,7 @@ func TestFSMTriggersAreReplicated(t *testing.T) {
 			if err != nil {
 				t.Fatalf("resolve config: %v", err)
 			}
-			var root fsm.RootConfig
+			var root fsm.ScenarioDoc
 			if err := toml.Decode(merged, &root); err != nil {
 				t.Fatalf("decode config: %v", err)
 			}
@@ -171,7 +171,7 @@ func TestFSMTriggersAreReplicated(t *testing.T) {
 					}
 				}
 			}
-			// wad/game/blank declares no transitions at all, so a per-tree floor
+			// wad/scenario/blank declares no transitions at all, so a per-tree floor
 			// would fail it; the suite-wide floor below is what keeps the check
 			// from passing vacuously.
 			totalChecked += checked
@@ -184,7 +184,7 @@ func TestFSMTriggersAreReplicated(t *testing.T) {
 		})
 	}
 	if totalChecked == 0 {
-		t.Fatal("no event triggers found in any config tree; the check passed vacuously")
+		t.Fatal("no event triggers found in any scenario; the check passed vacuously")
 	}
 }
 

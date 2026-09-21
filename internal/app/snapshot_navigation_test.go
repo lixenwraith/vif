@@ -348,7 +348,7 @@ const navRouteTargetStride = parameter.NavRouteRebuildInterval / 2
 // so the region is entered outright, as the tower soak does.
 func navRouteWorld(t *testing.T) *App {
 	t.Helper()
-	a, err := NewHeadless(towerConfig(t, navRouteSeed))
+	a, err := NewHeadless(towerScenario(t, navRouteSeed))
 	if err != nil {
 		t.Fatalf("headless: %v", err)
 	}

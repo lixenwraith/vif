@@ -80,14 +80,14 @@ boundary.
 
 ## Configuration and tools
 
-- `-g <name|game.toml|directory>` selects an installed named game or an explicit
-  encounter configuration.
+- `-s <name|scenario.toml|directory>` selects an installed named scenario or an
+  explicit one by path.
 - `-f <content-file|directory>` selects typeable `.txt`/`.toml` content.
 - `-k <keymap.toml>` applies sparse key overrides.
 - `-config-dir <root>` puts one categorized config tree ahead of user/system
   discovery; `-config-music` and `-config-sounds` select audio overrides.
-- `-check` validates resolved FSM, keymap, audio, and content without opening
-  the game.
+- `-check` validates the resolved scenario, keymap, audio, and content without
+  opening the game.
 - `-schema` exports the current event/action/guard schema as JSON.
 - `-version` prints the module version and commit a package should report.
 - `-seed <n>` selects the root RNG seed and `-speed <rate>` selects an exact
@@ -157,7 +157,7 @@ The nightly workflow publishes downloadable Linux, FreeBSD, browser, and headles
 server archives plus the headless container image; see
 [doc/packaging.md](doc/packaging.md).
 
-`test/scenario.sh` runs named game setups for verifying behaviour by hand —
+`test/scenario.sh` runs named setups for verifying behaviour by hand —
 `solo`, `host`/`join`, `serve`, `serve-fleet`, `probe`, and automated checks for the
 session lifetime, the drain, and join-identity refusal. See
 [test/README.md](test/README.md).

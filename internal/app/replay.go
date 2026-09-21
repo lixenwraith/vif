@@ -8,13 +8,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/service"
 )
 
-// ConfigFromAnchor rebuilds the configuration a journal was recorded under, as a headless config; NewReplay retargets it for presentation.
-// Speed is dropped: a replay runs the manual clock, which a headless config
-// rejects a rate for. The result asks for a corpus and a config; VerifyAnchor
-// proves the ones that resolved are the recorded ones.
+// ConfigFromAnchor rebuilds the configuration a journal was recorded under, as a
+// headless config; NewReplay retargets it for presentation. Speed is dropped: a
+// replay runs the manual clock, which a headless config rejects a rate for. The
+// scenario is asked for by name, so a journal recorded against one outside the
+// config roots needs -config-dir; VerifyAnchor proves what resolved is what ran.
 func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 	if a.Schema != event.JournalSchema {
 		return Config{}, fmt.Errorf("journal schema %d, this build reads %d", a.Schema, event.JournalSchema)
@@ -43,14 +45,14 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 
 	// Embedded on both sides is the only pairing Config states exactly; a mixed
 	// anchor leaves the embedded side to discovery, which VerifyAnchor then rejects
-	if a.ConfigID == embeddedLabel && a.ContentID == embeddedLabel {
+	if a.ScenarioID == resource.EmbeddedLabel && a.ContentID == resource.EmbeddedLabel {
 		cfg.Resources.Embedded = true
 		return cfg, cfg.Validate()
 	}
-	if a.ConfigID != embeddedLabel {
-		cfg.Resources.Game = a.ConfigID
+	if a.ScenarioID != resource.EmbeddedLabel {
+		cfg.Resources.Scenario = a.ScenarioID
 	}
-	if a.ContentID != embeddedLabel {
+	if a.ContentID != resource.EmbeddedLabel {
 		cfg.Resources.Content = a.ContentID
 		if a.ContentPin != "" {
 			cfg.Resources.Content = filepath.Join(a.ContentID, a.ContentPin) // ResolveContent re-splits
@@ -76,7 +78,8 @@ func (a *App) anchorIdentity(an event.JournalAnchor) []anchorField {
 		{"schema", an.Schema, uint64(event.JournalSchema)},
 		{"seed", an.Seed, a.world.Resources.Rand.Root()},
 		{"session", an.Session, a.world.Resources.Rand.Session()},
-		{"config_id", an.ConfigID, resolveConfigID(a.cfg)},
+		{"scenario_id", an.ScenarioID, a.scenario.Name},
+		{"scenario_digest", an.ScenarioDigest, a.scenario.Digest()},
 		{"content_id", an.ContentID, reg.Strings.Get("content.source").Load()},
 		{"content_pin", an.ContentPin, svc.Pin()},
 		{"content_files", an.ContentFiles, uint64(reg.Ints.Get("content.files").Load())},

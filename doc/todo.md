@@ -334,12 +334,12 @@ composite under the same id and keep counting.
 ### Confirm the storm skip
 
 - Priority: P2
-- Affected files: `wad/game/main/storm.toml`, `internal/system/storm.go`
+- Affected files: `wad/scenario/main/storm.toml`, `internal/system/storm.go`
 - Prerequisite: a run that reaches three quasar kills with a crowded map centre
 
 The spawn retry and the carried kill counters address both candidate mechanisms
 without either being confirmed. `storm.spawn_failures` and a `StormSetupRetry` in
-`fsm.storm` tell them apart. `wad/game/td/td_storm.toml` still waits blind.
+`fsm.storm` tell them apart. `wad/scenario/td/td_storm.toml` still waits blind.
 
 ### Prove or rule out a stale gold surviving a correction
 
@@ -367,7 +367,7 @@ corrections and should keep refusing it.
 ### Keep shared FSM guards off owner-authored keys
 
 - Priority: P3
-- Affected files: `wad/game/main/monitor.toml`
+- Affected files: `wad/scenario/main/monitor.toml`
 - Prerequisite: a replicated liveness signal to replace the slot mirror
 
 `MonitorWarmup` guards on `player.0.heat.current` and `player.0.energy.current`.

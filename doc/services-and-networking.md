@@ -259,7 +259,12 @@ The identity has two halves, because they become knowable at different moments:
 | Half | Fields | Checked |
 |---|---|---|
 | Build | `protocol`, `simulation`, `capture_schema`, `journal_schema`, `tick_ns` | By the dialer against the offer, before it constructs a world; and again by the coordinator. |
-| Session | `seed`, `session`, `config_id`, `content_id`, `content_pin`, and the corpus file/block/line counts | By the coordinator only. A dialer has no world yet, so it has none of these. |
+| Session | `seed`, `session`, `scenario_id`, `scenario_digest`, `content_id`, `content_pin`, and the corpus file/block/line counts | By the coordinator only. A dialer has no world yet, so it has none of these. |
+
+`scenario_digest` is the SHA-256 of the scenario's canonical form, and it rather
+than `scenario_id` is what a mismatched scenario is refused on: two roots may
+install the same scenario under different names or paths, and the same name may
+cover an edit. The name is what the refusal message and the log records say.
 
 `simulation` is `manifest.Fingerprint()`: a hash over the component list and the
 system list — names, domains, snapshot obligations, dependencies and order — which

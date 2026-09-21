@@ -3,7 +3,7 @@
 # One process is one session, so this image contains one thing: the statically
 # linked `vif` binary. Nothing else is in the final layer — no shell, no libc, no
 # package manager, no configuration tree — because everything a session needs at
-# runtime is either compiled in (the embedded FSM scenario and corpus) or mounted
+# runtime is either compiled in (the embedded scenario and corpus) or mounted
 # read-only by the workload that runs it. What is not there cannot be executed by
 # a peer that finds a way to make the game run something, and a session pod is
 # reachable by whoever can reach the game port.

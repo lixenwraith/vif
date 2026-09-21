@@ -1,7 +1,7 @@
 // Package asset embeds every file the binary must be able to play without a
-// host filesystem: the fallback FSM bundle and typing corpus, the default
-// keymap, and the built-in sound bank. Each group is narrowed with fs.Sub so
-// its runtime root is the category directory, not internal/asset.
+// host filesystem: the fallback scenario and typing corpus, the default keymap,
+// and the built-in sound bank. Each group is narrowed with fs.Sub so its runtime
+// root is the category directory, not internal/asset.
 package asset
 
 import (
@@ -9,12 +9,12 @@ import (
 	"io/fs"
 )
 
-//go:embed config/*.toml content/*.toml input/keymap.toml audio/*.toml
+//go:embed scenario/*.toml content/*.toml input/keymap.toml audio/*.toml
 var assetFS embed.FS
 
 var (
-	// DefaultFSMConfig is the fallback FSM bundle; DefaultFSMEntry is its entry.
-	DefaultFSMConfig fs.FS
+	// DefaultScenario is the fallback scenario; DefaultScenarioEntry is its entry.
+	DefaultScenario fs.FS
 	// DefaultContent is the fallback typing corpus.
 	DefaultContent fs.FS
 	// DefaultSounds holds the built-in sound specs; DefaultSoundFiles is their
@@ -22,7 +22,7 @@ var (
 	DefaultSounds fs.FS
 )
 
-const DefaultFSMEntry = "game.toml"
+const DefaultScenarioEntry = "scenario.toml"
 
 var DefaultSoundFiles = []string{"sfx.toml", "drums.toml"}
 
@@ -31,7 +31,7 @@ var DefaultKeymap []byte
 
 // A missing group is a broken build artifact, not a recoverable user error.
 func init() {
-	DefaultFSMConfig = sub("config")
+	DefaultScenario = sub("scenario")
 	DefaultContent = sub("content")
 	DefaultSounds = sub("audio")
 	data, err := assetFS.ReadFile("input/keymap.toml")

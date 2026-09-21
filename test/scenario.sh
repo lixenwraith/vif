@@ -263,11 +263,11 @@ vacant)
 
 check)
 	need_bin
-	for tree in "-d" "-config-dir wad" "-config-dir wad -g td"; do
+	for tree in "-d" "-config-dir wad" "-config-dir wad -s td"; do
 		# shellcheck disable=SC2086
-		"$BIN" -check $tree >/dev/null || fail "config check: $tree"
+		"$BIN" -check $tree >/dev/null || fail "resource check: $tree"
 	done
-	pass "every shipped config tree resolves"
+	pass "every shipped resource tree resolves"
 	;;
 
 lifetime)

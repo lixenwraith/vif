@@ -135,7 +135,7 @@ func TestConfigFlagAliasesShareOneConfig(t *testing.T) {
 	cfg := newConfigFlags()
 	cfg.register(fs)
 	args := []string{
-		"-config-dir", "root", "-config-game", "game.toml",
+		"-config-dir", "root", "-config-scenario", "scenario.toml",
 		"-config-content", "content", "-config-keymap", "keys.toml",
 		"-config-music", "music.toml", "-config-sounds", "sounds.toml",
 		"-config-embedded=false",
@@ -143,7 +143,7 @@ func TestConfigFlagAliasesShareOneConfig(t *testing.T) {
 	if err := fs.Parse(args); err != nil {
 		t.Fatal(err)
 	}
-	if cfg.dir != "root" || cfg.game != "game.toml" || cfg.content != "content" ||
+	if cfg.dir != "root" || cfg.scenario != "scenario.toml" || cfg.content != "content" ||
 		cfg.keymap != "keys.toml" || cfg.music != "music.toml" || cfg.sounds != "sounds.toml" || cfg.embedded {
 		t.Fatalf("config flags = %+v", cfg)
 	}

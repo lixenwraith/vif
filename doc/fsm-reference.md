@@ -4,16 +4,16 @@
 
 Entry config search order:
 
-1. `-g <path-or-name>` — file, directory containing `game.toml`, or a name
-   resolved as `game/<name>/game.toml` under the configured roots;
-2. `game/main/game.toml` under `-config-dir <root>`;
+1. `-s <path-or-name>` — file, directory containing `scenario.toml`, or a name
+   resolved as `game/<name>/scenario.toml` under the configured roots;
+2. `game/main/scenario.toml` under `-config-dir <root>`;
 3. the same under `$XDG_CONFIG_HOME/vi-fighter` (normally
    `~/.config/vi-fighter`);
 4. the same under each corresponding root in `$XDG_CONFIG_DIRS`;
-5. embedded default (`internal/asset/config/`; forced with `-d`).
+5. embedded default (`internal/asset/scenario/`; forced with `-d`).
 
-`-d` is mutually exclusive with both `-g` and `-f`; by itself it selects the
-embedded FSM and content corpus. For the runtime design behind this reference, see
+`-d` is mutually exclusive with both `-s` and `-f`; by itself it selects the
+embedded scenario and content corpus. For the runtime design behind this reference, see
 [`doc/fsm-and-configuration.md`](fsm-and-configuration.md). The complete
 cross-resource order and migration policy are in
 [`doc/filesystem-layout.md`](filesystem-layout.md).
@@ -25,16 +25,16 @@ cannot escape it (`..` is rejected). Installed layout:
 ~/.config/vi-fighter/
 ├── game/
 │   ├── main/
-│   │   ├── game.toml
+│   │   ├── scenario.toml
 │   │   ├── main.toml
 │   │   ├── quasar.toml
 │   │   ├── storm.toml
 │   │   ├── monitor.toml
 │   │   └── tower.toml
 │   ├── blank/
-│   │   └── game.toml
+│   │   └── scenario.toml
 │   └── td/
-│       └── game.toml
+│       └── scenario.toml
 └── input/
     └── keymap.toml
 ```
@@ -45,7 +45,7 @@ content config and exits; all state-level FSM errors are reported in one pass.
 
 ---
 
-## Root Config (`game.toml`)
+## Root Config (`scenario.toml`)
 
 ```toml
 [systems]

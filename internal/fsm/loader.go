@@ -10,25 +10,25 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 )
 
-// LoadConfig parses a TOML byte slice and populates the Machine
+// LoadScenario parses a scenario TOML byte slice and populates the Machine
 // Validates all references (states, guards, actions, events)
 // Clears existing graph data before loading
-func (m *Machine[T]) LoadConfig(data []byte) error {
+func (m *Machine[T]) LoadScenario(data []byte) error {
 	p := toml.NewParser(data)
 	parsed, err := p.Parse()
 	if err != nil {
-		return fmt.Errorf("failed to parse FSM config: %w", err)
+		return fmt.Errorf("failed to parse scenario: %w", err)
 	}
-	return m.LoadConfigFromMap(parsed)
+	return m.LoadScenarioFromMap(parsed)
 }
 
-// LoadConfigFromMap builds the Machine from a pre-parsed config map
+// LoadScenarioFromMap builds the Machine from a pre-parsed scenario document
 // Used by file loader after merging external includes
-func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
-	// 1. Decode map into intermediate config struct
-	var config RootConfig
-	if err := toml.Decode(configMap, &config); err != nil {
-		return fmt.Errorf("failed to decode FSM config: %w", err)
+func (m *Machine[T]) LoadScenarioFromMap(doc map[string]any) error {
+	// 1. Decode the document into the intermediate config structs
+	var config ScenarioDoc
+	if err := toml.Decode(doc, &config); err != nil {
+		return fmt.Errorf("failed to decode scenario: %w", err)
 	}
 
 	// Enforce regions existence

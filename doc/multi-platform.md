@@ -246,7 +246,7 @@ https://lixen.com/vif/?arg=-d&arg=-seed%3D42
 The launcher accepts at most 64 arguments of at most 1,024 characters each.
 Arguments are configuration, not a content transport. Query values appear in
 browser history, logs, and sometimes referrers, so secrets and substantial payloads
-do not belong there. A path supplied through `-g`, `-f`, or another file flag also
+do not belong there. A path supplied through `-s`, `-f`, or another file flag also
 does not make that file exist in the browser filesystem.
 
 Once the WebSocket adapter exists, the page can pass

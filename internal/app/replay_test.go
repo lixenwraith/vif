@@ -188,7 +188,9 @@ func journalRun(t *testing.T, script func(*testing.T, *App) int) (*journal.Captu
 
 // replayInto rebuilds from the anchor, verifies it, replays and compares. Returns the
 // divergence rather than failing, so a negative control can require one.
-func replayInto(anchors []event.JournalAnchor, recs []event.JournalRecord,
+// root is where the replay looks for the scenario the anchor names, matching what
+// PlayJournal takes from -config-dir. Empty for a run on the embedded scenario.
+func replayInto(root string, anchors []event.JournalAnchor, recs []event.JournalRecord,
 	want []string, end event.Stamp) error {
 
 	if len(anchors) == 0 {
@@ -198,6 +200,7 @@ func replayInto(anchors []event.JournalAnchor, recs []event.JournalRecord,
 	if err != nil {
 		return fmt.Errorf("config from anchor: %w", err)
 	}
+	rcfg.Resources.Dir = root
 	rep, err := NewHeadless(rcfg)
 	if err != nil {
 		return fmt.Errorf("replay run: %w", err)
@@ -237,7 +240,7 @@ func replayAndCompare(t *testing.T, script func(*testing.T, *App) int) {
 	if a := cap.Anchors(); len(a) > 0 && a[0].Seed != seed {
 		t.Fatalf("anchor seed %d, run seed %d", a[0].Seed, seed)
 	}
-	if err := replayInto(cap.Anchors(), cap.Records(), want, end); err != nil {
+	if err := replayInto("", cap.Anchors(), cap.Records(), want, end); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -425,17 +428,18 @@ func TestVerifyAnchorRejectsMismatch(t *testing.T) {
 	defer a.Close()
 
 	good := event.JournalAnchor{
-		Schema:        event.JournalSchema,
-		Seed:          fixtureSeed,
-		Session:       a.World().Resources.Rand.Session(),
-		ConfigID:      resolveConfigID(a.cfg),
-		ContentID:     a.World().Resources.Status.Strings.Get("content.source").Load(),
-		ContentFiles:  uint64(a.World().Resources.Status.Ints.Get("content.files").Load()),
-		ContentBlocks: uint64(a.World().Resources.Status.Ints.Get("content.blocks").Load()),
-		ContentLines:  uint64(a.World().Resources.Status.Ints.Get("content.lines").Load()),
-		TickInterval:  int64(parameter.GameUpdateInterval),
-		Width:         a.Context().Width,
-		Height:        a.Context().Height,
+		Schema:         event.JournalSchema,
+		Seed:           fixtureSeed,
+		Session:        a.World().Resources.Rand.Session(),
+		ScenarioID:     a.scenario.Name,
+		ScenarioDigest: a.scenario.Digest(),
+		ContentID:      a.World().Resources.Status.Strings.Get("content.source").Load(),
+		ContentFiles:   uint64(a.World().Resources.Status.Ints.Get("content.files").Load()),
+		ContentBlocks:  uint64(a.World().Resources.Status.Ints.Get("content.blocks").Load()),
+		ContentLines:   uint64(a.World().Resources.Status.Ints.Get("content.lines").Load()),
+		TickInterval:   int64(parameter.GameUpdateInterval),
+		Width:          a.Context().Width,
+		Height:         a.Context().Height,
 	}
 	if err := a.VerifyAnchor(good); err != nil {
 		t.Fatalf("verify own anchor: %v", err)
@@ -526,7 +530,7 @@ func TestReplayAcrossAPMFold(t *testing.T) {
 	if !folded {
 		t.Fatal("script folded no APM: admission is not seeing input-origin events")
 	}
-	if err := replayInto(cap.Anchors(), cap.Records(), want, end); err != nil {
+	if err := replayInto("", cap.Anchors(), cap.Records(), want, end); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -760,7 +764,7 @@ func bisectOnce(t *testing.T, seed uint64, steps int) error {
 	if len(cap.Records()) == 0 {
 		return nil // nothing recorded yet, nothing to reproduce
 	}
-	return replayInto(cap.Anchors(), cap.Records(), want, end)
+	return replayInto("", cap.Anchors(), cap.Records(), want, end)
 }
 
 // TestReplayBisect reports the shortest script prefix whose replay diverges, then

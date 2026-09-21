@@ -15,16 +15,16 @@ import (
 )
 
 // Options names the resource overrides a run was started with. An empty field
-// selects config-root discovery; Embedded selects the built-in FSM config and
-// corpus and rejects Game and Content.
+// selects config-root discovery; Embedded selects the built-in scenario and
+// corpus and rejects Scenario and Content.
 type Options struct {
 	// Dir is an optional root searched before the user and system roots, in the
-	// categorized game/, input/, audio/, content/, image/ layout. Empty selects
-	// platform discovery.
+	// categorized scenario/, input/, audio/, content/, image/ layout. Empty
+	// selects platform discovery.
 	Dir string
 
-	// Game is a game name, a game.toml path, or a map directory.
-	Game string
+	// Scenario is a scenario name, a scenario.toml path, or a scenario directory.
+	Scenario string
 
 	// Content is a corpus directory or a single content file.
 	Content string
@@ -34,7 +34,7 @@ type Options struct {
 	Music  string
 	Sounds string
 
-	// Embedded forces the built-in FSM config and corpus.
+	// Embedded forces the built-in scenario and corpus.
 	Embedded bool
 }
 
@@ -49,8 +49,8 @@ func (o Options) Validate() error {
 			return fmt.Errorf("-config-dir %q is not a directory", o.Dir)
 		}
 	}
-	if o.Embedded && (o.Game != "" || o.Content != "") {
-		return errors.New("-d is mutually exclusive with -g and -f")
+	if o.Embedded && (o.Scenario != "" || o.Content != "") {
+		return errors.New("-d is mutually exclusive with -s and -f")
 	}
 	return nil
 }
@@ -64,41 +64,41 @@ func newResolver(o Options) resolver {
 	return resolver{roots: paths.ConfigRoots(o.Dir)}
 }
 
-// GameConfig returns the FSM entry config path. An empty path selects the
+// ScenarioPath returns the scenario entry path. An empty path selects the
 // embedded default.
-func GameConfig(o Options) (string, error) {
+func ScenarioPath(o Options) (string, error) {
 	if o.Embedded {
 		return "", nil
 	}
-	if o.Game != "" {
-		info, err := os.Stat(o.Game)
+	if o.Scenario != "" {
+		info, err := os.Stat(o.Scenario)
 		if err == nil {
 			if info.IsDir() {
-				p := filepath.Join(o.Game, paths.GameConfigFile)
+				p := filepath.Join(o.Scenario, paths.ScenarioFile)
 				if !fileExists(p) {
-					return "", fmt.Errorf("%s not found in %s", paths.GameConfigFile, o.Game)
+					return "", fmt.Errorf("%s not found in %s", paths.ScenarioFile, o.Scenario)
 				}
 				return p, nil
 			}
-			return o.Game, nil // explicit file: entry filename override
+			return o.Scenario, nil // explicit file: entry filename override
 		}
-		if !errors.Is(err, os.ErrNotExist) || !isGameName(o.Game) {
+		if !errors.Is(err, os.ErrNotExist) || !isScenarioName(o.Scenario) {
 			return "", err
 		}
-		if p := newResolver(o).game(o.Game); p != "" {
+		if p := newResolver(o).scenario(o.Scenario); p != "" {
 			return p, nil
 		}
-		return "", fmt.Errorf("game %q not found as a path or in any configuration root", o.Game)
+		return "", fmt.Errorf("scenario %q not found as a path or in any configuration root", o.Scenario)
 	}
 
 	r := newResolver(o)
-	return r.game(paths.MainGameName), nil
+	return r.scenario(paths.MainScenarioName), nil
 }
 
-// isGameName distinguishes the installed shorthand from an explicit path.
+// isScenarioName distinguishes the installed shorthand from an explicit path.
 // A path always wins when it exists; only a single clean path element falls
-// back to game/<name>/game.toml under the configured roots.
-func isGameName(name string) bool {
+// back to scenario/<name>/scenario.toml under the configured roots.
+func isScenarioName(name string) bool {
 	return name != "." && name != ".." && filepath.Base(name) == name
 }
 
@@ -178,8 +178,8 @@ func (r resolver) file(category, name string) string {
 	return ""
 }
 
-func (r resolver) game(name string) string {
-	return r.file(filepath.Join(paths.GameDirName, name), paths.GameConfigFile)
+func (r resolver) scenario(name string) string {
+	return r.file(filepath.Join(paths.ScenarioDirName, name), paths.ScenarioFile)
 }
 
 func (r resolver) dir(category string) string {

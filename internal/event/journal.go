@@ -33,7 +33,12 @@ import (
 // 12: Combat payloads carry the crossing identity that seeds their knockback, so
 // the impulse follows the artifact rather than a shared stream position two
 // instances consume at different ticks.
-const JournalSchema = 12
+//
+// 13: The anchor names the scenario instead of the path it resolved to, and
+// carries its digest. A path is the same simulation on one machine and nothing on
+// another, so it could neither refuse an edited scenario nor admit an identical
+// one installed elsewhere.
+const JournalSchema = 13
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.
@@ -66,8 +71,14 @@ func (r JournalRecord) Replicated() bool { return Replicated(r.Type, r.Domain) }
 // JournalAnchor is a self-describing header re-emitted periodically so a
 // rotated log file can be replayed without its predecessors.
 type JournalAnchor struct {
-	Speed      string // time scale ladder token; exact, unlike a float
-	ConfigID   string
+	Speed string // time scale ladder token; exact, unlike a float
+
+	// ScenarioID is the scenario's name and ScenarioDigest the hex SHA-256 of its
+	// canonical form. The name is what a config root resolves; the digest is what
+	// a reproduction and a join are refused on.
+	ScenarioID     string
+	ScenarioDigest string
+
 	ContentID  string
 	ContentPin string // file the corpus is restricted to, empty when unpinned
 

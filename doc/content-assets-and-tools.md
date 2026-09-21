@@ -37,8 +37,8 @@ Source resolution is:
 The complete common precedence is documented in
 [External filesystem layout](filesystem-layout.md).
 
-`-d` skips discovery and forces the embedded FSM and corpus. It is mutually
-exclusive with `-g` and `-f`.
+`-d` skips discovery and forces the embedded scenario and corpus. It is mutually
+exclusive with `-s` and `-f`.
 
 An explicit path that cannot yield usable content is fatal. A discovered
 directory that cannot be read or produces an empty corpus falls back to the
@@ -158,7 +158,7 @@ everything a build must be able to play without a filesystem:
 
 | Asset | Source | Purpose |
 |---|---|---|
-| FSM bundle | `internal/asset/config/*.toml` | Fallback campaign and region files. |
+| FSM bundle | `internal/asset/scenario/*.toml` | Fallback campaign and region files. |
 | Content bundle | `internal/asset/content/*.toml` | Always-available tutorial corpus. |
 | Keymap | `internal/asset/input/keymap.toml` | Default bindings; also what `make install-config` installs. |
 | Sound bank | `internal/asset/audio/*.toml` | Built-in specs `pkg/audio` renders. |
