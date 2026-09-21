@@ -43,6 +43,11 @@ var deniedSharedPrefix = []string{
 	"combat.",
 	// Kill tallies mix shared species with the player-domain drain.
 	"kills.",
+	// The corpus is player domain: each instance reads its own roots and nothing
+	// reconciles them (D-11), so its fingerprint is no more comparable than the
+	// draw from it, and a capture carrying one installs the sender's over the
+	// receiver's — the sender's filesystem path included.
+	"content.",
 	// Capture cost and correction magnitude: the measurement cadence is chosen
 	// from, and under weakened D-11 not something two instances agree on.
 	"snapshot.",
@@ -60,12 +65,6 @@ var deniedSharedKey = map[string]bool{
 	// Whole-store counts sum both domains; the shared position digest covers the
 	// shared half.
 	"nav.entities": true,
-	// Corpus consumption is a player-domain draw. The fingerprint beside these
-	// (files, blocks, lines, source) describes the corpus rather than a position
-	// in it and stays comparable.
-	"content.served":   true,
-	"content.rejected": true,
-	"content.file":     true,
 }
 
 // allowedSharedKey re-admits a key its group prefix denies. spatial.indexed_shared

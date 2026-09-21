@@ -30,7 +30,10 @@ import (
 // 6 dropped the Player-domain RNG streams. A capture is the shared world (D-2), and
 // carrying a participant's own streams installed the sender's positions over every
 // receiver's.
-const Schema = 7
+//
+// 8 dropped the corpus fingerprint for the same reason, once glyphs became player
+// domain: the status surface still compared and carried it.
+const Schema = 8
 
 // SharedCapture is the shared world at one tick (D-19): the shared component
 // stores, the allocator's next ID, the Shared RNG stream positions, and the private

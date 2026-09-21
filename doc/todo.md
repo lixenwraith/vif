@@ -344,8 +344,8 @@ World, or `-count` under load until it reproduces, is the smallest step.
 ### Rename the participant identity type
 
 - Priority: P3
-- Affected files: `internal/network/connection.go` and the 230-odd sites naming
-  `PeerID`, `CursorComponent.PeerID` included
+- Affected files: `internal/network/connection.go` and every site naming `PeerID`,
+  `CursorComponent.PeerID` included
 - Prerequisite: none; it is mechanical, and the component field is a capture
   schema change that both sides of a session already have to match on
 

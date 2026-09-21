@@ -20,6 +20,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/resource"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // sharedGlyphs returns the shared-domain glyph entities and the ones that are not
@@ -522,44 +523,71 @@ func TestAppsScopeOperatorState(t *testing.T) {
 // occur — which is exactly why every criterion built on it missed this.
 const corpusDir = "../../wad/content"
 
-// TestParticipantsShareTheCorpusFingerprintNotItsCursor: content glyphs are
-// player-domain, so two participants who type differently consume blocks at
-// different rates. The fingerprint — files, blocks, lines and source — is shared and
-// stays compared; the file the cursor has reached is not, and comparing it
-// desynchronised a live session with a world that agreed completely.
-func TestParticipantsShareTheCorpusFingerprintNotItsCursor(t *testing.T) {
+// TestParticipantsKeepTheirOwnCorpus: glyphs are player domain, so two
+// participants read their own roots and nothing reconciles them. Neither the
+// fingerprint nor the cursor into it is comparable, and a capture that carried
+// either installed the sender's over the receiver's.
+func TestParticipantsKeepTheirOwnCorpus(t *testing.T) {
 	t.Parallel()
 	const seed = 0xC0FFEE
 	if _, err := os.Stat(corpusDir); err != nil {
 		t.Skipf("multi-file corpus %s not present", corpusDir)
 	}
-
-	base := Config{Mode: ModeHeadless, Seed: seed, Resources: resource.Options{Embedded: true}}
-	base.Resources.Content = corpusDir
-	base.Resources.Embedded = false
-
-	host := base
-	host.Width, host.Height = 120, 40
-	a, err := NewHeadless(host)
-	if err != nil {
-		t.Fatalf("host: %v", err)
+	// One file against the whole corpus: every content cell differs, which is the
+	// pair script/test.sh corpus certifies as a legal session.
+	lone := filepath.Join(t.TempDir(), "content")
+	if err := os.MkdirAll(lone, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	defer a.Close()
+	entries, err := os.ReadDir(corpusDir)
+	if err != nil || len(entries) < 2 {
+		t.Skipf("corpus %s holds fewer than two files", corpusDir)
+	}
+	data, err := os.ReadFile(filepath.Join(corpusDir, entries[0].Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lone, entries[0].Name()), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	build := func(dir string, w, h int, an *event.JoinAnchor) *App {
+		t.Helper()
+		cfg := Config{Mode: ModeHeadless, Seed: seed, Width: w, Height: h,
+			Resources: resource.Options{Content: dir}}
+		if an != nil {
+			cfg.MapWidth, cfg.MapHeight = an.Anchor.MapWidth, an.Anchor.MapHeight
+			cfg.CropOnResize, cfg.LockMap = an.Anchor.CropOnResize, an.Anchor.SessionShared
+		}
+		x, err := NewHeadless(cfg)
+		if err != nil {
+			t.Fatalf("headless on %s: %v", dir, err)
+		}
+		t.Cleanup(x.Close)
+		return x
+	}
+
+	a := build(corpusDir, 120, 40, nil)
 	an := a.JoinAnchor()
-
-	guest := base
-	guest.Width, guest.Height = 84, 26
-	guest.MapWidth, guest.MapHeight = an.Anchor.MapWidth, an.Anchor.MapHeight
-	guest.CropOnResize, guest.LockMap = an.Anchor.CropOnResize, an.Anchor.SessionShared
-	b, err := NewHeadless(guest)
-	if err != nil {
-		t.Fatalf("guest: %v", err)
-	}
-	defer b.Close()
+	b := build(lone, 84, 26, &an)
 	if err := b.Join(an); err != nil {
 		t.Fatalf("join: %v", err)
 	}
 	a.adoptMapLatch(an.Anchor)
+
+	content := func(x *App) (files, blocks int64, source string) {
+		x.World().RunSafe(func() {
+			reg := x.World().Resources.Status
+			files = reg.Ints.Get("content.files").Load()
+			blocks = reg.Ints.Get("content.blocks").Load()
+			source = reg.Strings.Get("content.source").Load()
+		})
+		return
+	}
+	wantFiles, wantBlocks, wantSource := content(b)
+	if gotFiles, _, _ := content(a); gotFiles == wantFiles {
+		t.Fatalf("both participants loaded %d files; the criterion proves nothing", wantFiles)
+	}
 
 	pa, pb := network.NewLoopbackPair(1, 2)
 	a.AttachTransport(pa)
@@ -569,44 +597,44 @@ func TestParticipantsShareTheCorpusFingerprintNotItsCursor(t *testing.T) {
 		x.Tick(1)
 	}
 	mirrorCursors(t, a, b)
-	assertSharedParity(t, a, b, -1)
-
-	// One participant consumes more of the corpus than the other, which is what
-	// typing does. Drawing directly makes the asymmetry immediate and exact instead
-	// of waiting several hundred steps for two scripts to drift apart.
-	corpusFile := func(x *App) string {
-		var s string
-		x.World().RunSafe(func() { s = x.World().Resources.Status.Strings.Get("content.file").Load() })
-		return s
-	}
-	start := corpusFile(a)
-	if start != corpusFile(b) {
-		t.Fatalf("participants began on different corpus files: %q and %q", start, corpusFile(b))
-	}
-	var drawn int
-	for range 400 {
-		if corpusFile(a) != start {
-			break
-		}
-		a.World().RunSafe(func() {
-			if res := a.World().Resources.Content; res != nil && res.Provider != nil {
-				res.Provider.NextBlock()
-			}
-		})
-		drawn++
-	}
-	if corpusFile(a) == start {
-		t.Fatalf("the corpus cursor never left %q after %d blocks; it may hold one file", start, drawn)
-	}
-
 	for i := range 8 {
 		a.Tick(1)
 		b.Tick(1)
 		assertSharedParity(t, a, b, i)
 	}
-	if corpusFile(a) == corpusFile(b) {
-		t.Fatalf("both participants report corpus file %q; the criterion proves nothing", corpusFile(a))
+
+	cap, err := a.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture: %v", err)
 	}
+	for _, key := range append(cellKeys(cap.Status.Ints), cellKeys(cap.Status.Strings)...) {
+		if strings.HasPrefix(key, "content.") {
+			t.Fatalf("the capture carries %s; the corpus is the receiver's own", key)
+		}
+	}
+	if err := b.InstallShared(cap); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if files, blocks, source := content(b); files != wantFiles || blocks != wantBlocks || source != wantSource {
+		t.Fatalf("the install rewrote the receiver's corpus to %d files, %d blocks, %q; it reads %d, %d, %q",
+			files, blocks, source, wantFiles, wantBlocks, wantSource)
+	}
+}
+
+// cellKeys is the key half of one capture status list.
+func cellKeys[C interface {
+	snapshot.IntCell | snapshot.StringCell
+}](cells []C) []string {
+	out := make([]string, 0, len(cells))
+	for _, c := range cells {
+		switch v := any(c).(type) {
+		case snapshot.IntCell:
+			out = append(out, v.Key)
+		case snapshot.StringCell:
+			out = append(out, v.Key)
+		}
+	}
+	return out
 }
 
 // TestEmbedderSharedMutationIsRefusedInALiveSession. SetupLevel and Region carry
