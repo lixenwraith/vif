@@ -129,36 +129,37 @@ pointing at it, so replaying one recorded against a scenario that is not install
 needs the same `-config-dir` the run used. `PlayJournal` takes the operator's roots
 for exactly that. `-check` prints name, file count and digest prefix.
 
-### Phase 2 — `:n <scenario>` on a solo run
+### Phase 2 — `:n <scenario>` on a solo run (done)
 
-1. `App.Loop` returns `(*Config, error)`. A non-nil `Config` is the run to build
-   next. `Run` becomes a loop: construct, run, close, repeat. It is the only caller.
-2. `engine.SessionController` gains `ChangeScenario(name string) error`. Like the
-   rest of that interface it is the locked form: it resolves and reads the named
-   scenario with `resource.LoadScenario`, loads it into a throwaway `fsm.Machine`
-   and runs the same system-name and dependency checks `resource.checkSystems`
-   runs, then latches the request. A bad name fails here, in front of the operator,
-   with the game still running. The bounded file I/O under the world lock is the
-   cost `:log on` already pays.
-3. `App.restartConfig()` builds the next `Config`: this run's flags with
-   `Resources.Scenario` replaced, `Resources.Embedded` cleared, and a fresh seed and
-   session unless `-seed` pinned them. Map bounds are not carried — the new scenario
-   derives or declares its own.
-4. `mode`: `:n <scenario>` and `:n! <scenario>`. No argument keeps today's in-place
-   reset exactly. An argument naming the running scenario — compare the digest, not
-   the name — is an in-place reset too, so `:n td` twice does not restart twice.
-   Update `commandNames` and `internal/help/topics.go`, which
-   `TestCommandsDocumented` cross-checks.
-5. Refuse on a driven mode (`ModeReplay`, `ModeScript`, `ModeHeadless`) and, until
-   Phase 4, in any live session.
+`Run` owns a loop that builds one App per scenario: `runScenario` constructs, runs
+and tears one down, and what `Loop` returns is the scenario to build next — empty
+means the player quit. The next run is the operator's original command line with a
+different `-s`, so `-seed` still pins what it pinned and nothing else drifts.
 
-**Gates.** `go test ./internal/app ./internal/mode ./internal/help`.
-**Manual.** `:n td` from `main` reaches the TD setup chain; `:n main` returns;
-`:n blank`; `:n nosuch` prints an error and the game continues; `:n` alone still
-resets in place; `:n` with `-j` open starts a new journal run; `:q` still exits.
+`SessionController.ChangeScenario(name) (bool, error)` validates with
+`resource.ValidateScenario` and latches `App.restartScenario`, which `Loop` reads
+between two waits on its own goroutine. Validation is before the teardown because
+the operator typed the name: a scenario that does not resolve, or that names a
+system this build lacks, is an error read with the game still running. `false`
+means the name resolved to the bytes already loaded, and the command resets in
+place instead — `:n main` on `main` costs nothing.
+
+Refused on a driven mode, which has no `Run` loop, and on a run that has opened a
+session, which Phase 4 takes up. `:n! <scenario>` is accepted and means the same
+thing: what comes back is a fresh run, operator state included.
+
+`resource.ValidateScenario` is the export `-check` and the command now share, so
+neither can drift from the other.
+
+**Verified.** `script/test.sh scenario` drives a real terminal through `:n td` and
+back, asserting the run rebuilt each time and returned to the scenario it started
+on; it skips where no `script(1)` can give it a pty.
+`TestScenarioChangeNeedsARestartLoop` pins the driven-mode guard through the
+command path. By hand: `:n nosuch` reports and the game continues, `:n` alone still
+resets in place, `:q` still exits 0.
+
 **Accepted cost.** The terminal is torn down and re-created with the App, so a
-restart flashes the shell for one frame. Confirmed acceptable; a `TerminalService`
-that survives a restart is a later refinement, not part of this phase.
+restart flashes the shell for one frame.
 
 ### Phase 3 — The scenario over the wire
 

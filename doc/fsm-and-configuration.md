@@ -51,6 +51,13 @@ The scenario is identified by its name and by the SHA-256 of its canonical form,
 which is what a replay and a join are refused on; `-check` prints both. Reading it
 first is also what lets a scenario that never touched this disk be loaded.
 
+A run plays one scenario. The regions a scenario declares register one metric set
+each, and `Scheduler.Prepare` freezes the registry before the first tick, so
+loading a second scenario into a running machine would need keys the frozen set
+does not hold. `:n <scenario>` therefore ends the run and starts another on the
+same command line with a different `-s`; `resource.ValidateScenario` proves the
+new one loads before the old one is torn down.
+
 `-d` selects the embedded scenario and content. It is mutually exclusive with
 `-s` and `-f`; combining them fails validation.
 

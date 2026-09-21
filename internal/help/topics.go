@@ -155,6 +155,7 @@ var topics = []topicDef{
 			{Keys: ":about", Desc: "Version, engine and licence"},
 			{Keys: ":new  :n", Desc: "New game; in a live session the host resets everyone and a guest is refused"},
 			{Keys: ":new! :n!", Desc: "Restart and clear this operator's mouse, auto-fire, rate and pins; logging is untouched"},
+			{Keys: ":n <scenario>", Desc: "Rebuild the run on another scenario, by installed name or path; everything operator-owned restarts with it"},
 			{Keys: ":q", Desc: "Quit"},
 			{Keys: ":content", Desc: "Corpus source, file counts and served blocks in the status bar"},
 			{Keys: ":free [on|off]", Desc: "Track the cursor with mouse motion; on by default"},

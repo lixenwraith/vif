@@ -55,16 +55,31 @@ func checkKeymap(o Options, w io.Writer) error {
 	return nil
 }
 
-// checkScenario loads the resolved scenario and reports what a peer would compare:
-// the name, the digest, and where it came from.
-func checkScenario(o Options, w io.Writer) error {
+// ValidateScenario resolves and reads a scenario, loads it into a throwaway
+// machine, and checks every system it names against this build. It is what
+// `-check` proves before a run starts and what an operator changing scenario
+// mid-run proves before the run it would replace is torn down.
+func ValidateScenario(o Options) (Scenario, error) {
 	sc, err := LoadScenario(o)
 	if err != nil {
-		return err
+		return Scenario{}, err
 	}
 	m := fsm.NewMachine[*engine.World]()
 	manifest.RegisterFSMComponents(m)
 	if err := fsm.LoadScenarioFromFS(m, sc.FS(), sc.Entry()); err != nil {
+		return Scenario{}, err
+	}
+	if err := checkSystems(m); err != nil {
+		return Scenario{}, err
+	}
+	return sc, nil
+}
+
+// checkScenario reports what a peer would compare: the name, the digest, and
+// where it came from.
+func checkScenario(o Options, w io.Writer) error {
+	sc, err := ValidateScenario(o)
+	if err != nil {
 		return err
 	}
 	source, err := ScenarioPath(o)
@@ -76,12 +91,13 @@ func checkScenario(o Options, w io.Writer) error {
 	}
 	fmt.Fprintf(w, "scenario ok: %s (%s, %d files, sha256:%s)\n",
 		source, sc.Name, sc.Files(), sc.Short())
-	return checkSystems(m, w)
+	fmt.Fprintln(w, "systems ok")
+	return nil
 }
 
 // checkSystems validates every system name the config references, then every
 // required dependency the resulting system set would leave unsatisfied
-func checkSystems(m *fsm.Machine[*engine.World], w io.Writer) error {
+func checkSystems(m *fsm.Machine[*engine.World]) error {
 	profiles := manifest.SystemProfiles()
 	valid := make(map[string]bool, len(profiles))
 	for _, p := range profiles {
@@ -114,11 +130,7 @@ func checkSystems(m *fsm.Machine[*engine.World], w io.Writer) error {
 		return fmt.Errorf("unknown system names:\n  %s", strings.Join(unknown, "\n  "))
 	}
 
-	if err := checkSystemDependencies(m, profiles, globalDisabled); err != nil {
-		return err
-	}
-	fmt.Fprintln(w, "systems ok")
-	return nil
+	return checkSystemDependencies(m, profiles, globalDisabled)
 }
 
 // checkSystemDependencies reports every enabled system whose required

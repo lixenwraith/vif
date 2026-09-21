@@ -98,7 +98,8 @@ Observed (runs a scenario and prints what happened; asserts nothing)
   vacant            watch a dedicated host park when its last guest leaves
 
 Automated (assert, and used by `all`)
-  check             validate every shipped config tree
+  check             validate every shipped resource tree
+  scenario          :n <name> rebuilds the run on another scenario and back
   lifetime          unclaimed expiry, then vacancy expiry
   drain             SIGTERM drains instead of cutting a match
   identity          a peer running a different build is refused (runs the tests)
@@ -336,6 +337,34 @@ identity)
 	pass "a peer running a different build or session is refused by the host"
 	;;
 
+scenario)
+	# `:n <name>` rebuilds the run, so the only honest witness is a real terminal
+	# going through it. script(1) supplies the pty; its two flavours take their
+	# arguments in different orders, and a machine with neither says so rather than
+	# failing, because what is missing is the harness and not the game.
+	need_bin
+	[ -d wad/scenario/td ] || fail "wad/scenario/td is not in this checkout"
+	LOG=$(mktemp -d)
+	keys() { sleep 1; printf ':n td\r'; sleep 3; printf ':n main\r'; sleep 3; printf ':q\r'; sleep 1; }
+	run="$BIN -config-dir wad -l=$LOG -lv info -ls app"
+	if script -qec true /dev/null >/dev/null 2>&1; then
+		keys | script -qec "$run" /dev/null >/dev/null 2>&1 || true
+	elif script -q /dev/null true >/dev/null 2>&1; then
+		# shellcheck disable=SC2086
+		keys | script -q /dev/null $run >/dev/null 2>&1 || true
+	else
+		echo "SKIP scenario: no usable script(1) for a pty" >&2
+		exit 0
+	fi
+	got=$(grep -ho '"digest":"[0-9a-f]*"' "$LOG"/*.jsonl 2>/dev/null | sed 's/.*:"//;s/"//' | uniq)
+	count=$(printf '%s\n' "$got" | grep -c .)
+	[ "$count" -ge 3 ] || fail "expected main, td and main again; the log named $count scenario(s): $(printf '%s ' $got)"
+	first=$(printf '%s\n' "$got" | head -1)
+	[ "$(printf '%s\n' "$got" | sed -n 3p)" = "$first" ] || fail "the run did not come back to the scenario it started on"
+	rm -rf "$LOG"
+	pass "a run changed scenario and came back, rebuilding each time"
+	;;
+
 image)
 	command -v docker >/dev/null 2>&1 || command -v podman >/dev/null 2>&1 \
 		|| fail "no container engine found"
@@ -345,7 +374,7 @@ image)
 	;;
 
 all)
-	for s in check lifetime drain identity; do
+	for s in check scenario lifetime drain identity; do
 		note "$s"
 		"$0" "$s"
 	done

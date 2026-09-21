@@ -1,7 +1,6 @@
 package resource
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,7 +44,7 @@ disabled_systems = ["glyph","nugget","gold","audio","music"]
 [regions.main]
 initial = "Root"
 `)
-	if err := checkSystems(m, io.Discard); err != nil {
+	if err := checkSystems(m); err != nil {
 		t.Fatalf("checkSystems rejected an intact set: %v", err)
 	}
 }
@@ -60,7 +59,7 @@ disabled_systems = ["death"]
 [regions.main]
 initial = "Root"
 `)
-	err := checkSystems(m, io.Discard)
+	err := checkSystems(m)
 	if err == nil {
 		t.Fatal("checkSystems accepted a config disabling a required system")
 	}
@@ -79,7 +78,7 @@ func TestCheckSystemsRejectsRegionDisabledRequirement(t *testing.T) {
 initial = "Root"
 disabled_systems = ["composite"]
 `)
-	err := checkSystems(m, io.Discard)
+	err := checkSystems(m)
 	if err == nil {
 		t.Fatal("checkSystems accepted a region disabling a required system")
 	}
@@ -96,7 +95,7 @@ func TestCheckSystemsAcceptsDependentDisabledToo(t *testing.T) {
 initial = "Root"
 disabled_systems = ["cursor","camera","energy","heat","ping","shield","boost","weapon","typing","splash","motion_marker","missile","network"]
 `)
-	if err := checkSystems(m, io.Discard); err != nil {
+	if err := checkSystems(m); err != nil {
 		t.Fatalf("checkSystems rejected a self-consistent disable set: %v", err)
 	}
 }
@@ -109,7 +108,7 @@ func TestCheckSystemsRejectsUnknownName(t *testing.T) {
 initial = "Root"
 disabled_systems = ["timekeeper"]
 `)
-	err := checkSystems(m, io.Discard)
+	err := checkSystems(m)
 	if err == nil {
 		t.Fatal("checkSystems accepted an unknown system name")
 	}

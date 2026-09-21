@@ -19,14 +19,30 @@ import (
 // defaultMouseMode is the reporting mode used outside free-look
 const defaultMouseMode = terminal.MouseModeClick | terminal.MouseModeDrag
 
-// Run wires, runs, and tears down the game
+// Run wires, runs, and tears down the game, once per scenario the player asks for.
+// A scenario change ends one run and starts another on the same command line with
+// a different -s: the regions a scenario declares are what register the FSM metric
+// set, and that set is frozen for the life of a run.
 func Run(cfg Config) error {
 	if cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode is caller-driven; Run owns the frame loop", cfg.Mode)
 	}
+	for {
+		next, err := runScenario(cfg)
+		if err != nil || next == "" {
+			return err
+		}
+		vlog.Info("app", "msg", "scenario change", "scenario", next)
+		cfg.Resources.Scenario, cfg.Resources.Embedded = next, false
+	}
+}
+
+// runScenario owns one App from construction to teardown. What it returns is the
+// scenario to build next; empty means the player quit.
+func runScenario(cfg Config) (next string, err error) {
 	a, err := newSessionApp(cfg)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer func() {
 		if r := recover(); r != nil {
@@ -37,10 +53,11 @@ func Run(cfg Config) error {
 	return a.Loop()
 }
 
-// Loop starts the services and runs the frame loop until the player quits
-func (a *App) Loop() error {
+// Loop starts the services and runs the frame loop until the player quits or asks
+// for another scenario, which it names on the way out.
+func (a *App) Loop() (string, error) {
 	if a.cfg.Mode != ModePlay {
-		return fmt.Errorf("%s mode has no interactive loop", a.cfg.Mode)
+		return "", fmt.Errorf("%s mode has no interactive loop", a.cfg.Mode)
 	}
 	sigChan, stopSignals := notifySignals()
 	defer stopSignals()
@@ -51,30 +68,30 @@ func (a *App) Loop() error {
 		// must not start yet — and without an event source the gate is a wait with
 		// no key and no signal to leave on.
 		if err := a.pollTerminalEarly(); err != nil {
-			return err
+			return "", err
 		}
 		if err := a.startJoinSession(sigChan); err != nil {
 			if errors.Is(err, errSessionCanceled) {
-				return nil
+				return "", nil
 			}
-			return err
+			return "", err
 		}
 	}
 	if err := a.hub.StartAll(); err != nil {
-		return err
+		return "", err
 	}
 	if a.cfg.HostAddress != "" {
 		if err := a.startHostSession(sigChan); err != nil {
 			if errors.Is(err, errSessionCanceled) {
-				return nil
+				return "", nil
 			}
-			return err
+			return "", err
 		}
 	}
 	if a.cfg.HostAddress != "" || a.cfg.JoinAddress != "" {
 		a.activateNetworkSession()
 		if err := a.resumeJoinedSession(); err != nil {
-			return err
+			return "", err
 		}
 		if a.cfg.JoinAddress != "" {
 			// A guest applies corrections between two ticks, and nothing on this
@@ -108,17 +125,23 @@ func (a *App) Loop() error {
 	eventChan := a.termSvc.Events()
 
 	for {
+		// Before the wait, not inside it: a latched restart is serviced on the
+		// iteration after the intent that asked for one, and every other path
+		// through the loop arrives back here too.
+		if a.restartScenario != "" {
+			return a.restartScenario, nil
+		}
 		select {
 		case sig := <-sigChan:
 			vlog.Info("app", "msg", "signal received", "signal", sig.String())
-			return nil
+			return "", nil
 
 		case ev := <-eventChan:
 			// Dumb pipe: key event → machine → intent → router
 			if intent := a.inputMachine.Process(ev); intent != nil {
 				before := a.pushed()
 				if !a.handleIntent(intent) {
-					return nil // player quit
+					return "", nil // player quit
 				}
 				// Input events bypass the game tick wait; an intent that emitted
 				// nothing has nothing of its own to settle
@@ -133,12 +156,12 @@ func (a *App) Loop() error {
 
 		case <-inputTicker.C:
 			if !a.inputTick() {
-				return nil
+				return "", nil
 			}
 
 		case <-frameTicker.C:
 			if !a.frame() {
-				return nil
+				return "", nil
 			}
 		}
 	}

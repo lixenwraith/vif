@@ -40,12 +40,17 @@ type App struct {
 	presentationState
 	networkSvc *service.NetworkService
 
-	world        *engine.World
-	ctx          *engine.GameContext
-	scenario     resource.Scenario
-	inputMachine *input.Machine
-	router       *mode.Router
-	recorder     *journal.Recorder
+	world    *engine.World
+	ctx      *engine.GameContext
+	scenario resource.Scenario
+
+	// restartScenario is the scenario this run is to be replaced by, latched by the
+	// operator command surface under the world lock and read by Loop between two
+	// waits on the same goroutine. Empty means this run ends when the player quits.
+	restartScenario string
+	inputMachine    *input.Machine
+	router          *mode.Router
+	recorder        *journal.Recorder
 
 	scheduler      *engine.Scheduler
 	frameReady     chan struct{}

@@ -391,6 +391,25 @@ func injectExCommand(t *testing.T, a *App, command string) {
 	a.Inject(&input.Intent{Type: input.IntentTextConfirm, Count: 1})
 }
 
+// TestScenarioChangeNeedsARestartLoop pins the guard the command carries: a run the
+// caller drives has no Run loop to service a restart, so the change is refused
+// rather than latched as a request nothing will ever read.
+func TestScenarioChangeNeedsARestartLoop(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 0x3020, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+
+	injectExCommand(t, a, "n td")
+	a.Tick(1)
+	if got := a.Context().GetStatusMessage(); !strings.Contains(got, "restart loop") {
+		t.Fatalf("status bar says %q; want a refusal naming the restart loop", got)
+	}
+	if a.restartScenario != "" {
+		t.Fatalf("a refused change latched %q", a.restartScenario)
+	}
+}
+
 // TestBeginHostingRefusesASecondSession pins the one rule the command carries: a
 // run is in one session or none.
 func TestBeginHostingRefusesASecondSession(t *testing.T) {

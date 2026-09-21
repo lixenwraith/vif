@@ -72,9 +72,9 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 	case "q", "quit":
 		return handleQuitCommand(ctx)
 	case "new", "n":
-		return handleNewCommand(ctx, false)
+		return handleNewCommand(ctx, args, false)
 	case "new!", "n!":
-		return handleNewCommand(ctx, true)
+		return handleNewCommand(ctx, args, true)
 	case "f", "free":
 		return handleFreeCommand(ctx, args)
 	case "a", "auto":
@@ -292,8 +292,18 @@ func handleQuitCommand(ctx *engine.GameContext) CommandResult {
 	return CommandResult{Continue: false, KeepPaused: true}
 }
 
-// handleNewCommand resets the game state via event; purge also clears operator session state
-func handleNewCommand(ctx *engine.GameContext, purge bool) CommandResult {
+// handleNewCommand starts a new game. Bare, it resets this run's state through the
+// event; purge also clears operator session state. Named, it restarts the run on
+// that scenario, because a scenario's regions are what register the metric set the
+// run froze. Purge says nothing on that path: what comes back is a fresh run.
+func handleNewCommand(ctx *engine.GameContext, args []string, purge bool) CommandResult {
+	if len(args) > 1 {
+		setCommandError(ctx, "Usage: :n [scenario]")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	if len(args) == 1 {
+		return changeScenario(ctx, args[0])
+	}
 	if ctx.World.LiveSession() {
 		if !ctx.World.IsSessionCoordinator() {
 			setCommandError(ctx, "Only the host can reset a live session")
@@ -309,6 +319,31 @@ func handleNewCommand(ctx *engine.GameContext, purge bool) CommandResult {
 	}
 	ctx.SetLastCommand(cmd)
 	ctx.MacroClearFlag.Store(true) // Signal macro reset
+	return CommandResult{Continue: true, KeepPaused: true}
+}
+
+// changeScenario asks the runtime to rebuild this run on another scenario. The
+// controller validates before it latches, so a name that does not resolve is
+// reported here with the game still running.
+func changeScenario(ctx *engine.GameContext, name string) CommandResult {
+	if ctx.SessionCtl == nil {
+		setCommandError(ctx, "This runtime cannot change scenario")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	changed, err := ctx.SessionCtl.ChangeScenario(name)
+	if err != nil {
+		setCommandError(ctx, "Scenario: "+err.Error())
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	ctx.SetLastCommand(":n " + name)
+	ctx.MacroClearFlag.Store(true)
+	if !changed {
+		// Already running these bytes, so a reset is the same new game without a
+		// restart's cost
+		ctx.PushEvent(event.EventGameResetRequest, &event.GameResetPayload{})
+	}
+	// Nothing to report on the restart path: the loop returns before the next
+	// frame, and what the operator sees is the new scenario.
 	return CommandResult{Continue: true, KeepPaused: true}
 }
 

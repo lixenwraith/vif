@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
@@ -25,6 +26,43 @@ type sessionControl struct{ a *App }
 
 func (c sessionControl) BeginHosting(addr string) error { return c.a.beginHostingLocked(addr) }
 func (c sessionControl) SessionSummary() string         { return c.a.sessionSummaryLocked() }
+
+func (c sessionControl) ChangeScenario(name string) (bool, error) {
+	return c.a.changeScenarioLocked(name)
+}
+
+// changeScenarioLocked validates the named scenario and latches the restart that
+// builds it. A scenario declares its own regions, and the regions are what register
+// the FSM metric set that Scheduler.Prepare freezes for the life of a run, so
+// loading a different one into this App is not available — Run builds another.
+//
+// Validation happens here rather than after the teardown because the operator
+// typed the name: a scenario that does not resolve, or that names a system this
+// build does not have, has to be an error they read with the game still running.
+// The bounded file I/O under the world lock is the cost `:log on` already pays.
+//
+// Caller MUST hold updateMutex.
+func (a *App) changeScenarioLocked(name string) (bool, error) {
+	if a.cfg.Mode != ModePlay {
+		return false, fmt.Errorf("%s mode has no restart loop", a.cfg.Mode)
+	}
+	if a.sessionTransportLocked() != nil {
+		return false, errors.New("a run that has opened a session cannot change scenario")
+	}
+	o := a.cfg.Resources
+	o.Scenario, o.Embedded = name, false
+	sc, err := resource.ValidateScenario(o)
+	if err != nil {
+		return false, err
+	}
+	if sc.Digest() == a.scenario.Digest() {
+		return false, nil // already running these bytes; the caller resets instead
+	}
+	a.restartScenario = name
+	vlog.Info("app", "msg", "scenario change requested",
+		"scenario", sc.Name, "digest", sc.Short())
+	return true, nil
+}
 
 // BeginHosting opens a running instance to participants, for a caller that holds
 // no lock. The operator command path reaches beginHostingLocked instead.

@@ -677,6 +677,13 @@ session for the same per-instance-clock reason as pause.
 
 ## 10. Reset and operator state
 
+`:n <scenario>` is not a reset. The regions a scenario declares are what register
+the FSM metric set, and `Scheduler.Prepare` freezes that set for the life of a
+run, so another scenario needs another run: `Run` owns a loop that builds one App
+per scenario, and the command validates the name and latches which one comes next.
+Everything operator-owned restarts with it. See
+[HFSM and configuration](fsm-and-configuration.md) §2.
+
 A `:new` command emits `EventGameResetRequest` and requests scheduler reset
 without reconstructing the process. In a live session only the coordinator may
 request it; the request crosses and every participant applies it at one barrier

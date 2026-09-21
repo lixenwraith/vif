@@ -61,6 +61,7 @@ them believes it is hosting one. See
 | Scenario | Asserts |
 |---|---|
 | `check` | embedded, default `wad/scenario/main`, and named `wad/scenario/td` all resolve |
+| `scenario` | `:n td` then `:n main` each rebuild the run: three scenario records, the last matching the first. Needs a `script(1)` that can give it a pty, and skips rather than fails without one |
 | `lifetime` | an unclaimed session exits 0 on its first-guest window; an emptied one exits 0 on its vacancy grace, each naming why |
 | `drain` | `SIGTERM` keeps the match running, reports `live=true ready=false phase=draining`, keeps the clock moving, then ends itself |
 | `identity` | a peer running a different build or session is refused (runs the Go tests that can construct one) |
