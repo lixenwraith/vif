@@ -491,6 +491,11 @@ deploy)
 	grep -Rn 'image: \${' deploy/k3s/ \
 		&& fail "an image placeholder is unquoted; an unset tag becomes a parse error"
 
+	# /etc/vif-allocator is 0750 root:vif-allocator: an operator's own [ -r ] on
+	# anything inside reads as missing, and silently skips what it guards.
+	grep -n '\[ -[rfwdx] "\$allocator_env"' deploy/guest/*.sh \
+		&& fail "a root-only path is tested without sudo; that guard never passes"
+
 	# scenario.toml is three levels under the root, and a listing that looks one
 	# level short reports a correct install as an empty one.
 	if sudo -n true 2>/dev/null; then

@@ -58,14 +58,16 @@ if [ -z "$runtime" ]; then
 		command -v "$candidate" >/dev/null 2>&1 && { runtime=$candidate; break; }
 	done
 fi
+# /etc/vif-allocator is 0750 root:vif-allocator, so the operator account running
+# this cannot stat inside it: the read and the test it is guarded by both need root.
 image=${VIF_ALLOCATOR_IMAGE:-}
-if [ -z "$image" ] && [ -r "$allocator_env" ]; then
+if [ -z "$image" ] && sudo test -r "$allocator_env"; then
 	image=$(sudo sed -n 's/^VIF_ALLOCATOR_IMAGE=//p' "$allocator_env" | tail -1)
 fi
 if [ -n "$runtime" ] && [ -n "$image" ]; then
 	note "validating every scenario with $image"
 	for name in $scenarios; do
-		"$runtime" run --rm --read-only --user 65532:65532 --network none \
+		"$runtime" run --rm --read-only --pull never --user 65532:65532 --network none \
 			--cap-drop ALL --security-opt no-new-privileges \
 			-v "$source_wad/scenario:/wad/scenario:ro" \
 			-v "$source_wad/image:/wad/image:ro" \
@@ -74,7 +76,9 @@ if [ -n "$runtime" ] && [ -n "$image" ]; then
 		echo "  ok    $name"
 	done
 else
-	echo "$0: no container runtime or image available; scenarios not validated" >&2
+	[ -n "$runtime" ] || echo "$0: no docker or podman; scenarios not validated" >&2
+	[ -n "$image" ] || echo "$0: no image in $allocator_env or VIF_ALLOCATOR_IMAGE;" \
+		"scenarios not validated" >&2
 	echo "$0: the init container still refuses a broken one, but later" >&2
 fi
 

@@ -552,9 +552,10 @@ Never apply `05-log-volume.yaml` with `${NODE_NAME}` intact. `30-session.yaml` i
 Sessions read their scenarios from a read-only node directory rather than from the
 image, so an operator replaces what the fleet serves without a rebuild.
 
-This section builds the volume on a **new** node, as part of §9's run. A node that
-is already serving matches is §14.1 instead: it has a fleet to empty, an allocator
-to stop and a quota already at the old number, and none of that is here.
+This section builds the volume on a **new** node, as part of §9's run. A node
+already serving matches is §14.1 instead: it has a quota at the old number, an
+allocator cutover to sequence and possibly a leftover volume, none of which is
+here.
 
 Create the directory and fill it from this checkout before applying the objects — a
 claim bound to a path that does not exist is a pod that never starts:
@@ -581,20 +582,11 @@ session image, the swap, and the installed list.
 done. Sessions already running keep the scenarios they started on.
 ```
 
-It says `no container runtime or image available` when Docker is stopped, which is
-the node's normal state — the init container still refuses a broken scenario, just
-later. Run it once with Docker up, during §8, to get the validated form.
-
-Assert the layout before the claim goes anywhere near it:
-
-```sh
-sudo find /var/db/vif/wad/scenario -maxdepth 2 -mindepth 2 -name scenario.toml | sort
-sudo find /var/db/vif/wad ! -user root -o ! -group root | head
-sudo stat -c '%a %n' /var/db/vif/wad /var/db/vif/wad/scenario/main/scenario.toml
-```
-
-Expected: one `scenario.toml` per installed scenario, no output from the ownership
-check, and `755 /var/db/vif/wad` with `644` on the file.
+`no docker or podman` is the node's normal state, Docker being stopped outside a
+build; run it once with Docker up, during §8, to get the validated form above. `no
+image in /etc/vif-allocator/allocator.env` instead means the allocator is not
+installed yet, which on a fresh node it is not. Either way the init container still
+refuses a broken scenario, just later.
 
 Then apply the volume objects. The quota comes first and is re-applied here even
 though §9 just did it: this claim is the second one the namespace has ever held, so
@@ -609,19 +601,23 @@ renders a volume that is affine to no node and therefore binds to nothing:
 sed "s|\${NODE_NAME}|$NODE_NAME|g" deploy/k3s/07-wad-volume.yaml >/tmp/wad-volume.yaml
 grep 'values:' /tmp/wad-volume.yaml
 
+# nodeAffinity is immutable, so a volume from an earlier attempt is replaced
+# rather than updated. Retain leaves the node directory alone either way.
+sudo kubectl -n vif delete pvc vif-fleet-wad --ignore-not-found
+sudo kubectl delete pv vif-fleet-wad --ignore-not-found
+
 sudo kubectl apply -f deploy/k3s/10-quota.yaml
 sudo kubectl apply -f /tmp/wad-volume.yaml
-sudo kubectl get storageclass vif-node-wad
 sudo kubectl get persistentvolume vif-fleet-wad
 ```
 
-Expected: `values: ["<node>"]` naming this node, then the class with
-`kubernetes.io/no-provisioner` and the volume as `8Mi  ROX  Retain  Available` —
-`Available` rather than `Bound`, because `WaitForFirstConsumer` waits for a pod.
+Expected: `values: ["<node>"]` naming this node, then the volume as
+`8Mi  ROX  Retain  Available` — `Available` rather than `Bound`, because
+`WaitForFirstConsumer` waits for §9.2's pod.
 
-The `grep` is read before the `apply`, not after. `values: [""]` is a volume affine
-to no node: it applies cleanly, binds to nothing and says nothing about why. Fix
-`NODE_NAME` and render again rather than applying it and waiting on it.
+Read the `grep` before the applies. `values: [""]` is a volume affine to no node:
+it applies cleanly, binds to nothing, and says nothing about why. Fix `NODE_NAME`
+and run the block again — the deletes lead so that re-running always works.
 
 ### 9.2 Binding both claims
 
@@ -638,7 +634,8 @@ sed -e "s|\${IMAGE}|docker.io/library/vi-fighter:$VIF_TAG|g" \
     -e "s|\${SCENARIO}|main|g" \
   deploy/k3s/06-log-volume-check.yaml | sudo kubectl apply -f -
 sudo kubectl -n vif wait --for=jsonpath='{.status.phase}'=Succeeded \
-  pod/vif-log-volume-check --timeout=90s
+  pod/vif-log-volume-check --timeout=90s \
+  || sudo kubectl -n vif describe pod vif-log-volume-check | tail -25
 
 sudo kubectl get persistentvolume vif-fleet-logs vif-fleet-wad
 sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs vif-fleet-wad
@@ -1146,8 +1143,12 @@ come back Ready is an infrastructure blocker, not a workload problem.
 
 A node installed before the scenario volume existed serves the embedded scenario
 and mounts nothing. This is the upgrade, in order, with what each step should say.
-It changes a live workload, so §15's rule applies: stop allocation and prove the
-fleet empty first.
+Steps 2 to 4 run against a live fleet; §15's rule applies from step 5, which is
+where the workload changes.
+
+If a run was abandoned partway, start with `sudo systemctl start
+vif-allocator.service` — that is the only part of this an abort can leave broken —
+then begin again at step 1. Every step is safe to repeat.
 
 **1. Read what this node already is.** Every value the later steps need comes out
 of the node rather than out of this document:
@@ -1165,20 +1166,16 @@ sudo kubectl get persistentvolume -o custom-columns=NAME:.metadata.name,PHASE:.s
 Expected: a node name, the image tag the allocator is configured for, `1` and
 `256Mi` from the quota it has not yet been given, and one `vif-fleet-logs` volume
 in `Bound`. If `VIF_IMAGE` comes back empty the allocator is not installed and this
-is a fresh node — follow §9 instead.
+is a fresh node — follow §9 instead. A `vif-fleet-wad` volume already listed is a
+leftover from an abandoned attempt, not progress; step 3 replaces it.
 
-**2. Empty the fleet and stop allocating.**
+**2. Fill the node directory**, exactly as §9.1 does. Do it with Docker up so the
+scenarios are validated against the image this node actually runs.
 
-```sh
-./deploy/k3s/session.sh blockers || ./deploy/k3s/session.sh drain
-sudo systemctl stop vif-allocator.service
-```
-
-Expected: `blockers` prints nothing and exits zero. It naming a Job means a match
-is running; `drain` ends them.
-
-**3. Fill the node directory**, exactly as §9.1 does. Do it with Docker up so the
-scenarios are validated against the image this node actually runs:
+Leave the allocator running. Nothing in steps 2 to 4 disturbs a match — the
+directory swap is a rename, the volume objects are new names, and the probe is one
+more pod under the same ceiling — and stopping it here only means an abort leaves
+the node serving nothing:
 
 ```sh
 sudo systemctl start docker
@@ -1190,11 +1187,12 @@ sudo iptables -S FORWARD | head -1
 Expected: one `ok` per scenario, then `-P FORWARD ACCEPT` from the last line — §6's
 check, because starting Docker moves it.
 
-**4. Raise the quota before the claim, then apply the volume.** The claim counts
-against the quota, so the order is not interchangeable: a ceiling still at `1`
-refuses the claim, and the refusal names the quota rather than the order. Read the
-render before applying it, because a volume affine to no node applies cleanly and
-then binds to nothing:
+**3. Raise the quota, then apply the volume.** Two things make this order the only
+one that works. The claim counts against the quota, so a ceiling still at `1`
+refuses it. And a `PersistentVolume`'s `nodeAffinity` is immutable, so a leftover
+from an earlier attempt cannot be updated into the right one — `apply` rejects it
+and the claim it left behind stays `Pending` forever. Both are removed first;
+`Retain` means the node directory is untouched either way:
 
 ```sh
 : "${NODE_NAME:?re-run step 1; an empty one renders a volume affine to no node}"
@@ -1202,19 +1200,20 @@ then binds to nothing:
 sed "s|\${NODE_NAME}|$NODE_NAME|g" deploy/k3s/07-wad-volume.yaml >/tmp/wad-volume.yaml
 grep 'values:' /tmp/wad-volume.yaml
 
+sudo kubectl -n vif delete pvc vif-fleet-wad --ignore-not-found
+sudo kubectl delete pv vif-fleet-wad --ignore-not-found
 sudo kubectl apply -f deploy/k3s/10-quota.yaml
 sudo kubectl apply -f /tmp/wad-volume.yaml
-sudo kubectl -n vif get resourcequota vif-fleet-ceiling \
-  -o jsonpath='{.spec.hard.persistentvolumeclaims}{"\n"}'
-sudo kubectl -n vif get pvc vif-fleet-wad -o jsonpath='{.status.phase}{"\n"}'
+sudo kubectl -n vif get pvc vif-fleet-wad
 ```
 
-Expected: `values: ["<node>"]`, then `2`, then `Pending` — the claim waits for its
-first consumer. An earlier attempt that applied the volume against an unset
-`NODE_NAME` left one that will never bind; `kubectl delete pv vif-fleet-wad` and
-apply this render over it, since `Retain` keeps the node directory either way.
+Expected: `values: ["<node>"]` naming this node, then the claim as `Pending` —
+`WaitForFirstConsumer` waits for step 4. `values: [""]` means `NODE_NAME` did not
+render: fix it and run the block again, which is why the deletes lead.
 
-**5. Bind it with the probe**, which is §9.2 run again on a commissioned node:
+**4. Bind it with the probe**, which is §9.2 run again on a commissioned node. The
+`wait` ends in a `describe` rather than a bare timeout, because a claim that cannot
+bind shows up here as a pod that never schedules and the events say why:
 
 ```sh
 : "${VIF_IMAGE:?re-run step 1; an empty one renders an image no kubelet can pull}"
@@ -1222,7 +1221,8 @@ apply this render over it, since `Retain` keeps the node directory either way.
 sed -e "s|\${IMAGE}|$VIF_IMAGE|g" -e "s|\${SCENARIO}|main|g" \
   deploy/k3s/06-log-volume-check.yaml | sudo kubectl apply -f -
 sudo kubectl -n vif wait --for=jsonpath='{.status.phase}'=Succeeded \
-  pod/vif-log-volume-check --timeout=90s
+  pod/vif-log-volume-check --timeout=90s \
+  || sudo kubectl -n vif describe pod vif-log-volume-check | tail -25
 sudo jq -r 'select(.fields.msg == "scenario") | .fields |
   "\(.name) \(.digest) \(.files) files"' /var/log/vif-fleet/volume-check.jsonl
 sudo kubectl -n vif delete pod vif-log-volume-check --wait=true
@@ -1230,11 +1230,15 @@ sudo find /var/log/vif-fleet -maxdepth 1 -type f \
   \( -name 'volume-check.jsonl' -o -name 'volume-check_*.jsonl' \) -delete
 ```
 
-Expected: the pod reaches `Succeeded`, and the record names `main` with a digest
-and 6 files. `embedded` here means the mount is not reaching the process.
+Expected: the pod reaches `Succeeded` and the record names `main` with a digest and
+6 files. `embedded` means the mount is not reaching the process. A `describe`
+instead means step 3 did not leave a bindable volume.
 
-**6. Update the allocator**, whose Job template now mounts the volume and passes
-`-s`. The helper does the build, the rollback set and the unit:
+**5. Update the allocator**, whose Job template now mounts the volume and passes
+`-s`. This is the step §15's rule is about, and the helper performs the cutover
+itself — build, rollback set, unit stop and start. Empty the fleet first
+(`./deploy/k3s/session.sh blockers || ./deploy/k3s/session.sh drain`), because
+from here a running match is a match on the old template:
 
 ```sh
 ./deploy/guest/update-vif-allocator.sh
@@ -1247,7 +1251,7 @@ Expected: `limits` carries a `scenarios` array. Without the two new variables th
 unit fails to start, because the `ExecStart` names them — `journalctl -u
 vif-allocator -n 20` says which.
 
-**7. Prove a real session on each advertised scenario.** This is §13 run once per
+**6. Prove a real session on each advertised scenario.** This is §13 run once per
 name:
 
 ```sh
@@ -1265,21 +1269,30 @@ whose `name` is the one asked for, and a clean delete. A scenario that is
 advertised but not installed fails here with the init container's refusal, which
 `sudo kubectl -n vif logs job/vif-session-<id> -c config-check` prints.
 
-**8. Rollback**, if any step above refuses. Nothing here is destructive to a match
-that is not running:
+**7. Rollback**, if any step above refuses. Nothing here is destructive to a match
+that is not running, and the last line is what an aborted run needs most — an
+allocator left stopped serves nothing:
 
 ```sh
 sudo kubectl -n vif delete pvc vif-fleet-wad --ignore-not-found
 sudo kubectl delete pv vif-fleet-wad --ignore-not-found
 sudo kubectl delete storageclass vif-node-wad --ignore-not-found
-sudo install -o root -g vif-allocator -m 0640 \
+
+# Only if step 5 ran: before it there is no .previous set to restore.
+sudo test -f /etc/vif-allocator/allocator.env.previous && sudo install \
+  -o root -g vif-allocator -m 0640 \
   /etc/vif-allocator/allocator.env.previous /etc/vif-allocator/allocator.env
-sudo install -o root -g root -m 0755 \
+sudo test -f /usr/local/libexec/vif-allocator.previous && sudo install \
+  -o root -g root -m 0755 \
   /usr/local/libexec/vif-allocator.previous /usr/local/bin/vif-allocator
-sudo systemctl restart vif-allocator.service
+
+sudo systemctl start vif-allocator.service
+./deploy/k3s/session.sh status
 ```
 
-The node directory can stay: nothing mounts it once the claim is gone.
+The node directory can stay: nothing mounts it once the claim is gone. The last two
+lines are the ones that matter after any abort — `start` is a no-op on a running
+unit and the fix for a stopped one, and `status` says whether the node is serving.
 
 ## 15. Operating, and what is not built yet
 
