@@ -30,17 +30,20 @@ type allocatorConfig struct {
 	PortLast       int
 	PlayersMax     int
 	LogLevels      []string
+	Scenarios      []string
 	ReadyTimeout   time.Duration
 	PollInterval   time.Duration
 	CleanupTimeout time.Duration
 }
 
 // sessionRequest is what a caller may choose about the session it is asking for.
-// Both fields are optional and nothing else in the workload is selectable: the
-// image, the map, the lifetime bounds and the mounts are the deployment's.
+// Every field is optional and nothing else in the workload is selectable: the
+// image, the map size, the lifetime bounds, the mounts and the environment are
+// the deployment's.
 type sessionRequest struct {
 	Players  int    `json:"players,omitempty"`
 	LogLevel string `json:"log_level,omitempty"`
+	Scenario string `json:"scenario,omitempty"`
 }
 
 // fleetLimits is what the deployment will accept, so a caller can offer only the
@@ -48,6 +51,7 @@ type sessionRequest struct {
 type fleetLimits struct {
 	PlayersMax int      `json:"players_max"`
 	LogLevels  []string `json:"log_levels"`
+	Scenarios  []string `json:"scenarios"`
 }
 
 type session struct {
@@ -87,7 +91,8 @@ func newAllocator(kube kubeAPI, health healthProbe, cfg allocatorConfig) *alloca
 }
 
 func (a *allocator) limits() fleetLimits {
-	return fleetLimits{PlayersMax: a.cfg.PlayersMax, LogLevels: a.cfg.LogLevels}
+	return fleetLimits{PlayersMax: a.cfg.PlayersMax, LogLevels: a.cfg.LogLevels,
+		Scenarios: a.cfg.Scenarios}
 }
 
 // resolve folds a caller's choices into this deployment's workload. An omitted
@@ -109,6 +114,13 @@ func (a *allocator) resolve(req sessionRequest) (workloadConfig, error) {
 				errRequestRefused, strings.Join(a.cfg.LogLevels, ", "))
 		}
 		workload.LogLevel = req.LogLevel
+	}
+	if req.Scenario != "" {
+		if !slices.Contains(a.cfg.Scenarios, req.Scenario) {
+			return workloadConfig{}, fmt.Errorf("%w: scenario must be one of %s",
+				errRequestRefused, strings.Join(a.cfg.Scenarios, ", "))
+		}
+		workload.Scenario = req.Scenario
 	}
 	return workload, nil
 }

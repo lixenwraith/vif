@@ -24,7 +24,7 @@ back one out.
 | `logwisp.sysusers` | `/etc/sysusers.d/` | root 0644 | creates the locked `logwisp` identity; tmpfs read access comes from the `vif-fleet` supplementary group alone |
 | `logwisp.service` | `/etc/systemd/system/` | root 0644 | read-only view of the fleet tmpfs, inaccessible K3s and allocator credential paths, no dependency on games or the allocator |
 | `../logwisp/aggregator.toml` | `/etc/logwisp/vif-fleet.toml` | root 0644 | `raw = true`, `from = "start"`, bounded flow and clients, loopback-only sink |
-| `vif-allocator.env.example` | `/etc/vif-allocator/allocator.env` | `root:vif-allocator` 0640 | the imported image tag, the public join host, the session page base |
+| `vif-allocator.env.example` | `/etc/vif-allocator/allocator.env` | `root:vif-allocator` 0640 | the imported image tag, the public join host, the session page base, and the scenarios a request may select |
 | `vif-allocator.service` | `/etc/systemd/system/` | root 0644 | `/usr/local/bin/vif-allocator`, the CA copy and the token file; `Type=notify` |
 | `vif-allocator-token.service` / `.timer` | `/etc/systemd/system/` | root 0644 | root-only atomic rotation of the short-lived ServiceAccount token, every six hours |
 | `vif-allocator-refresh-token.sh` | `/usr/local/libexec/vif-allocator-refresh-token` | root 0755 | the rotation the oneshot runs |
@@ -44,6 +44,7 @@ disabled with `FORWARD ACCEPT` restored.
 | `update-logwisp.sh [checkout]` | LogWisp's binary, configuration and unit only | a stopped `logwisp.service`; the same unreachable pin |
 | `update-vif-allocator.sh` | the allocator binary, env and unit | a dirty worktree; a non-empty fleet |
 | `update-vif-image.sh [tag]` | the headless session image, and `VIF_ALLOCATOR_IMAGE` with it; rejects an image without the `headless` profile label | a dirty worktree; an occupied fleet |
+| `update-vif-wad.sh [dir]` | the node's scenario volume at `/var/db/vif/wad`, by atomic rename; validates every scenario against the session image first | a tree that is not laid out like `wad/`; a scenario the image cannot load. **Not** an occupied fleet: a running match keeps the tree it mounted |
 
 An optional checkout argument is a download optimisation, never a working
 directory: the builder creates a temporary detached worktree at the pinned revision

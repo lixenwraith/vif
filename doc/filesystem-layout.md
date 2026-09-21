@@ -93,6 +93,12 @@ explicit paths or names are errors; absent discovered overrides are normal.
 `-d` bypasses scenario and content discovery only. Keymap and audio overrides remain
 local participant preferences and retain their ordinary resolution.
 
+A fleet node carries a partial root. `/var/db/vif/wad` holds `scenario/` and
+`image/` and nothing else, mounted read-only at `/wad` in every session pod, so a
+session resolves its scenario from the node and its corpus and keymap from the
+binary. That is deliberate: a native guest running `-d` has to be able to join one,
+and its content identity is `embedded`.
+
 A scenario is content, not configuration, which is why it is named for what it is
 and lives in its own category. The word *configuration* is reserved here for what
 settles how this process runs: the roots above, the keymap and audio overrides,

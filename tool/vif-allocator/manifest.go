@@ -8,9 +8,24 @@ type workloadConfig struct {
 	Players   int
 	LogLevel  string
 	MapSize   string
+	Scenario  string
 	FirstJoin string
 	Empty     string
 	Drain     string
+}
+
+// wadMounts is what a container reads the fleet's scenarios through. subPath
+// rather than the whole root: content/, input/ and audio/ are deliberately absent,
+// so the corpus and keymap stay embedded and a native guest running -d can still
+// join. Shared by the init container and the session, because proving a
+// configuration a session cannot then read would prove nothing.
+func wadMounts() []any {
+	return []any{
+		map[string]any{"name": "fleet-wad", "mountPath": "/wad/scenario",
+			"subPath": "scenario", "readOnly": true},
+		map[string]any{"name": "fleet-wad", "mountPath": "/wad/image",
+			"subPath": "image", "readOnly": true},
+	}
 }
 
 func buildJob(id string, cfg workloadConfig) map[string]any {
@@ -63,8 +78,9 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 							"name":            "config-check",
 							"image":           cfg.Image,
 							"imagePullPolicy": "IfNotPresent",
-							"args":            []string{"-check", "-d"},
+							"args":            []string{"-check", "-config-dir", "/wad", "-s", cfg.Scenario},
 							"securityContext": containerSecurity,
+							"volumeMounts":    wadMounts(),
 							"resources": map[string]any{
 								"requests": map[string]string{"cpu": "50m", "memory": "64Mi"},
 								"limits":   map[string]string{"cpu": "500m", "memory": "192Mi"},
@@ -84,7 +100,8 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 								"-log-session-id=" + id,
 								"-lv", cfg.LogLevel,
 								"-ls", "all+dispatch",
-								"-d",
+								"-config-dir", "/wad",
+								"-s", cfg.Scenario,
 								"-size", cfg.MapSize,
 								"-players", strconv.Itoa(cfg.Players),
 								"-first-join", cfg.FirstJoin,
@@ -95,16 +112,24 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 								map[string]any{"name": "game", "containerPort": 7777, "protocol": "TCP"},
 								map[string]any{"name": "probe", "containerPort": 7778, "protocol": "TCP"},
 							},
+							// Deployment state, never request state: a caller chooses
+							// from what limits advertises and nothing else. Optional,
+							// so an absent map is not a pod that will not start.
+							"envFrom": []any{
+								map[string]any{"configMapRef": map[string]any{
+									"name": "vif-session-env", "optional": true}},
+							},
+							// After envFrom, so the fleet's own envelope wins.
 							"env": []any{
 								map[string]any{"name": "GOMEMLIMIT", "value": "160MiB"},
 							},
 							"securityContext": containerSecurity,
-							"volumeMounts": []any{
+							"volumeMounts": append([]any{
 								map[string]any{
 									"name":      "fleet-logs",
 									"mountPath": "/var/log/vif-fleet",
 								},
-							},
+							}, wadMounts()...),
 							"resources": map[string]any{
 								"requests": map[string]string{"cpu": "100m", "memory": "96Mi"},
 								"limits":   map[string]string{"cpu": "500m", "memory": "192Mi"},
@@ -127,6 +152,13 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 							"name": "fleet-logs",
 							"persistentVolumeClaim": map[string]any{
 								"claimName": "vif-fleet-logs",
+							},
+						},
+						map[string]any{
+							"name": "fleet-wad",
+							"persistentVolumeClaim": map[string]any{
+								"claimName": "vif-fleet-wad",
+								"readOnly":  true,
 							},
 						},
 					},

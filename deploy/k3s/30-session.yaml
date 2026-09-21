@@ -10,6 +10,8 @@
 #   ${JOB_UID}         the created Job UID used to own the Service
 #   ${PLAYERS}         the guest ceiling for this session (1-16)
 #   ${MAP_SIZE}        the shared map geometry, WxH (e.g. 120x40)
+#   ${SCENARIO}        the installed scenario name to serve (e.g. main)
+#   ${LOG_LEVEL}       the session log level (trace..error; the allocator picks it)
 #   ${FIRST_JOIN}      the first-guest deadline (normally 90s)
 #   ${EMPTY_GRACE}     the empty-roster grace (normally 90s)
 #
@@ -72,7 +74,24 @@ spec:
         - name: config-check
           image: ${IMAGE}
           imagePullPolicy: IfNotPresent
-          args: ["-check", "-d"]
+          # The configuration this session will actually serve, not the embedded
+          # one it used to prove instead. A scenario missing from the node volume,
+          # or one naming a system this build does not have, is now a pod that
+          # never became ready rather than a session that accepted players first.
+          args: ["-check", "-config-dir", "/wad", "-s", "${SCENARIO}"]
+          volumeMounts:
+            # subPath rather than the whole root: scenario/ and image/ are what a
+            # session reads, and content/, input/ and audio/ are deliberately left
+            # out so the corpus and keymap stay embedded. A native guest running -d
+            # has to be able to join this, and its content identity is "embedded".
+            - name: fleet-wad
+              mountPath: /wad/scenario
+              subPath: scenario
+              readOnly: true
+            - name: fleet-wad
+              mountPath: /wad/image
+              subPath: image
+              readOnly: true
           securityContext: &container_security
             allowPrivilegeEscalation: false
             privileged: false
@@ -109,14 +128,17 @@ spec:
             - "-l=/var/log/vif-fleet"
             - "-log-session-id=${SESSION_ID}"
             - "-lv"
-            - "info"
+            - "${LOG_LEVEL}"
             - "-ls"
             - "all+dispatch"
-            # Embedded scenario and corpus: nothing is mounted, so nothing can
-            # drift between the image and what the session actually ran. Replace
-            # with -config-dir and -s <name> over a read-only mount when a
-            # deployment needs to serve an installed scenario instead.
-            - "-d"
+            # The scenario comes off the node's read-only volume; the corpus stays
+            # embedded, because only scenario/ and image/ are mounted. -config-dir
+            # is explicit rather than relying on the XDG default: a scratch image
+            # has no /etc/xdg and no reason to acquire one.
+            - "-config-dir"
+            - "/wad"
+            - "-s"
+            - "${SCENARIO}"
             - "-size"
             - "${MAP_SIZE}"
             - "-players"
@@ -141,16 +163,35 @@ spec:
             - name: probe
               containerPort: 7778
               protocol: TCP
+          # Deployment state, never request state. A caller chooses from what the
+          # allocator advertises and nothing else; this is where an operator puts a
+          # GODEBUG or a locale for the whole fleet. Optional, so an absent map is
+          # not a pod that will not start.
+          envFrom:
+            - configMapRef:
+                name: vif-session-env
+                optional: true
           env:
             # An earlier collection target than the memory limit, so the runtime
             # collects instead of the kernel killing. GOMAXPROCS is deliberately
             # unset: the Go runtime derives it from the cgroup CPU limit.
+            #
+            # After envFrom, so it wins: the fleet's own envelope is not something
+            # a ConfigMap should be able to move out from under the memory limit.
             - name: GOMEMLIMIT
               value: "160MiB"
           securityContext: *container_security
           volumeMounts:
             - name: fleet-logs
               mountPath: /var/log/vif-fleet
+            - name: fleet-wad
+              mountPath: /wad/scenario
+              subPath: scenario
+              readOnly: true
+            - name: fleet-wad
+              mountPath: /wad/image
+              subPath: image
+              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -184,6 +225,12 @@ spec:
         - name: fleet-logs
           persistentVolumeClaim:
             claimName: vif-fleet-logs
+        # Read-only here as well as at each mount: the claim is ReadOnlyMany and a
+        # session has no business writing what every other session is reading.
+        - name: fleet-wad
+          persistentVolumeClaim:
+            claimName: vif-fleet-wad
+            readOnly: true
 ---
 # The session's endpoint.
 #

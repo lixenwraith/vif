@@ -524,7 +524,7 @@ For anything past the lab, publish the image and reference it **by digest**, not
 tag. A tag can be moved; a session's logs then name a revision that is no longer
 what ran.
 
-## 9. The fleet objects, and the log volume
+## 9. The fleet objects and the shared volumes
 
 This block establishes the namespace, the ceiling, the network boundary, the
 allocator's identity and the volume the sessions write through. The quota is
@@ -546,17 +546,79 @@ sed "s|\${NODE_NAME}|$NODE_NAME|g" deploy/k3s/05-log-volume.yaml \
 Never apply `05-log-volume.yaml` with `${NODE_NAME}` intact. `30-session.yaml` is a
 **template**, not an object to apply: the allocator renders it per session.
 
-`WaitForFirstConsumer` leaves the claim `Pending` until something mounts it, so
-bind it with the checked-in probe rather than waiting for a real player:
+### 9.1 The scenario volume
+
+Sessions read their scenarios from a read-only node directory rather than from the
+image, so an operator replaces what the fleet serves without a rebuild. Create the
+directory and fill it from this checkout before applying the objects — a claim
+bound to a path that does not exist is a pod that never starts:
 
 ```sh
-sed "s|\${IMAGE}|docker.io/library/vi-fighter:$VIF_TAG|g" \
+./deploy/guest/update-vif-wad.sh
+```
+
+Expected: the scenarios it found, one `ok` per scenario validated against the
+session image, the swap, and the installed list.
+
+```text
+== scenarios found: blank main td
+== validating every scenario with docker.io/library/vi-fighter:9f21ab04
+  ok    blank
+  ok    main
+  ok    td
+== staging /home/you/vi-fighter/wad into /var/db/vif/wad.new
+== swapping /var/db/vif/wad
+== installed:
+  /var/db/vif/wad/scenario/blank
+  /var/db/vif/wad/scenario/main
+  /var/db/vif/wad/scenario/td
+done. Sessions already running keep the scenarios they started on.
+```
+
+It says `no container runtime or image available` when Docker is stopped, which is
+the node's normal state — the init container still refuses a broken scenario, just
+later. Run it once with Docker up, during §8, to get the validated form.
+
+Assert the layout before the claim goes anywhere near it:
+
+```sh
+sudo find /var/db/vif/wad -maxdepth 2 -mindepth 2 -name scenario.toml | sort
+sudo find /var/db/vif/wad ! -user root -o ! -group root | head
+sudo stat -c '%a %n' /var/db/vif/wad /var/db/vif/wad/scenario/main/scenario.toml
+```
+
+Expected: one `scenario.toml` per installed scenario, no output from the ownership
+check, and `755 /var/db/vif/wad` with `644` on the file.
+
+Then apply the volume objects, rendering the same node name:
+
+```sh
+sed "s|\${NODE_NAME}|$NODE_NAME|g" deploy/k3s/07-wad-volume.yaml \
+  | sudo kubectl apply -f -
+sudo kubectl get storageclass vif-node-wad
+sudo kubectl get persistentvolume vif-fleet-wad
+```
+
+Expected: the class exists with `kubernetes.io/no-provisioner`, and the volume is
+`8Mi  ROX  Retain  Available` — `Available` rather than `Bound`, because
+`WaitForFirstConsumer` waits for a pod.
+
+### 9.2 Binding both claims
+
+`WaitForFirstConsumer` leaves each claim `Pending` until something mounts it, so
+bind them with the checked-in probe rather than waiting for a real player. It reads
+a scenario through the wad claim and writes a record through the log claim, which
+is what a session does:
+
+```sh
+sed -e "s|\${IMAGE}|docker.io/library/vi-fighter:$VIF_TAG|g" \
+    -e "s|\${SCENARIO}|main|g" \
   deploy/k3s/06-log-volume-check.yaml | sudo kubectl apply -f -
 sudo kubectl -n vif wait --for=jsonpath='{.status.phase}'=Succeeded \
   pod/vif-log-volume-check --timeout=90s
 
-sudo kubectl get persistentvolume vif-fleet-logs
-sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs
+sudo kubectl get persistentvolume vif-fleet-logs vif-fleet-wad
+sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs vif-fleet-wad
 sudo test -s /var/log/vif-fleet/volume-check.jsonl
 sudo jq -s -e 'map(select(.sub != null)) as $records |
     ($records | length > 0) and
@@ -564,7 +626,18 @@ sudo jq -s -e 'map(select(.sub != null)) as $records |
   /var/log/vif-fleet/volume-check.jsonl
 ```
 
-Both volume objects must read `Bound`. Remove the probe and leave the volume:
+All four volume objects must read `Bound`. The probe also proves the scenario
+loaded off the volume rather than out of the image — the record names it:
+
+```sh
+sudo jq -r 'select(.fields.msg == "scenario") | .fields |
+  "\(.name) \(.digest) \(.files) files"' /var/log/vif-fleet/volume-check.jsonl
+```
+
+Expected: `main <digest> 6 files`. An `embedded` here means the mount is not
+reaching the process, and §16 starts at the pod's `volumeMounts`.
+
+Remove the probe and leave the volumes:
 
 ```sh
 sudo kubectl -n vif delete pod vif-log-volume-check --wait=true
@@ -706,13 +779,38 @@ sudo install -o root -g root -m 0644 \
   deploy/guest/vif-allocator-token.service \
   deploy/guest/vif-allocator-token.timer /etc/systemd/system/
 
-# Set the imported image tag, the public join host and the session page base.
-# There are no secrets in this file; keep its write permission with root.
+# Set the imported image tag, the public join host, the session page base, and
+# the scenarios a caller may ask for. There are no secrets in this file; keep its
+# write permission with root.
 sudoedit /etc/vif-allocator/allocator.env
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now vif-allocator-token.timer vif-allocator.service
 ```
+
+`VIF_ALLOCATOR_SCENARIO` is what every session gets and `VIF_ALLOCATOR_SCENARIOS`
+the set a request may choose from instead. The allocator never reads the node
+volume: the list is your statement about what is installed there, and a name that
+is not is a session whose init container refuses it. Keep the two in step:
+
+```sh
+sudo sed -n 's/^VIF_ALLOCATOR_SCENARIOS=//p' /etc/vif-allocator/allocator.env |
+  tr ',' '\n' | sed 's/^ *//;s/ *$//' | sort > /tmp/advertised
+sudo find /var/db/vif/wad/scenario -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
+  sort > /tmp/installed
+comm -23 /tmp/advertised /tmp/installed
+```
+
+Expected: no output. A name printed here is advertised and not installed, and a
+caller asking for it gets a pod that never becomes ready.
+
+Once the unit is up, the same list is what the site sees:
+
+```sh
+curl -fsS http://127.0.0.1:9080/vif/api/sessions | jq -c .limits
+```
+
+Expected: `{"players_max":4,"log_levels":["debug","info","warn","error"],"scenarios":["main","blank"]}`.
 
 The credential is a short-lived `vif-allocator` ServiceAccount token in a file,
 re-read on every Kubernetes request, so the root timer can replace it atomically
@@ -1018,6 +1116,132 @@ policy, the mount, and the imported image. `status` covers the rest — an empty
 fleet, an empty tmpfs, five active units. Then run §13 again. A node that does not
 come back Ready is an infrastructure blocker, not a workload problem.
 
+## 14.1 Commissioning the scenario volume on a node that is already running
+
+A node installed before the scenario volume existed serves the embedded scenario
+and mounts nothing. This is the upgrade, in order, with what each step should say.
+It changes a live workload, so §15's rule applies: stop allocation and prove the
+fleet empty first.
+
+**1. Read what this node already is.** Every value the later steps need comes out
+of the node rather than out of this document:
+
+```sh
+NODE_NAME=$(sudo kubectl get nodes -o jsonpath='{.items[0].metadata.name}')
+VIF_IMAGE=$(sudo sed -n 's/^VIF_ALLOCATOR_IMAGE=//p' /etc/vif-allocator/allocator.env | tail -1)
+VIF_TAG=${VIF_IMAGE##*:}
+printf 'node=%s image=%s tag=%s\n' "$NODE_NAME" "$VIF_IMAGE" "$VIF_TAG"
+sudo kubectl -n vif get resourcequota vif-fleet-ceiling \
+  -o jsonpath='{.spec.hard.persistentvolumeclaims}{"\n"}{.spec.hard.requests\.storage}{"\n"}'
+sudo kubectl get persistentvolume -o custom-columns=NAME:.metadata.name,PHASE:.status.phase
+```
+
+Expected: a node name, the image tag the allocator is configured for, `1` and
+`256Mi` from the quota it has not yet been given, and one `vif-fleet-logs` volume
+in `Bound`. If `VIF_IMAGE` comes back empty the allocator is not installed and this
+is a fresh node — follow §9 instead.
+
+**2. Empty the fleet and stop allocating.**
+
+```sh
+./deploy/k3s/session.sh blockers || ./deploy/k3s/session.sh drain
+sudo systemctl stop vif-allocator.service
+```
+
+Expected: `blockers` prints nothing and exits zero. It naming a Job means a match
+is running; `drain` ends them.
+
+**3. Fill the node directory**, exactly as §9.1 does. Do it with Docker up so the
+scenarios are validated against the image this node actually runs:
+
+```sh
+sudo systemctl start docker
+./deploy/guest/update-vif-wad.sh
+sudo systemctl stop docker.service docker.socket containerd.service
+sudo iptables -S FORWARD | head -1
+```
+
+Expected: one `ok` per scenario, then `-P FORWARD ACCEPT` from the last line — §6's
+check, because starting Docker moves it.
+
+**4. Raise the quota before the claim, then apply the volume.** The claim counts
+against the quota, so the order is not interchangeable:
+
+```sh
+sudo kubectl apply -f deploy/k3s/10-quota.yaml
+sed "s|\${NODE_NAME}|$NODE_NAME|g" deploy/k3s/07-wad-volume.yaml | sudo kubectl apply -f -
+sudo kubectl -n vif get resourcequota vif-fleet-ceiling \
+  -o jsonpath='{.spec.hard.persistentvolumeclaims}{"\n"}'
+sudo kubectl -n vif get pvc vif-fleet-wad -o jsonpath='{.status.phase}{"\n"}'
+```
+
+Expected: `2`, then `Pending` — the claim waits for its first consumer.
+
+**5. Bind it with the probe**, which is §9.2 run again on a commissioned node:
+
+```sh
+sed -e "s|\${IMAGE}|$VIF_IMAGE|g" -e "s|\${SCENARIO}|main|g" \
+  deploy/k3s/06-log-volume-check.yaml | sudo kubectl apply -f -
+sudo kubectl -n vif wait --for=jsonpath='{.status.phase}'=Succeeded \
+  pod/vif-log-volume-check --timeout=90s
+sudo jq -r 'select(.fields.msg == "scenario") | .fields |
+  "\(.name) \(.digest) \(.files) files"' /var/log/vif-fleet/volume-check.jsonl
+sudo kubectl -n vif delete pod vif-log-volume-check --wait=true
+sudo find /var/log/vif-fleet -maxdepth 1 -type f \
+  \( -name 'volume-check.jsonl' -o -name 'volume-check_*.jsonl' \) -delete
+```
+
+Expected: the pod reaches `Succeeded`, and the record names `main` with a digest
+and 6 files. `embedded` here means the mount is not reaching the process.
+
+**6. Update the allocator**, whose Job template now mounts the volume and passes
+`-s`. The helper does the build, the rollback set and the unit:
+
+```sh
+./deploy/guest/update-vif-allocator.sh
+sudoedit /etc/vif-allocator/allocator.env   # add VIF_ALLOCATOR_SCENARIO/SCENARIOS
+sudo systemctl restart vif-allocator.service
+curl -fsS http://127.0.0.1:9080/vif/api/sessions | jq -c .limits
+```
+
+Expected: `limits` carries a `scenarios` array. Without the two new variables the
+unit fails to start, because the `ExecStart` names them — `journalctl -u
+vif-allocator -n 20` says which.
+
+**7. Prove a real session on each advertised scenario.** This is §13 run once per
+name:
+
+```sh
+for name in $(curl -fsS http://127.0.0.1:9080/vif/api/sessions | jq -r '.limits.scenarios[]'); do
+  id=$(./deploy/k3s/session.sh allocate "" "" "$name") || { echo "FAIL $name"; continue; }
+  ./deploy/k3s/session.sh state "$id"
+  sudo jq -r 'select(.fields.msg == "scenario") | .fields |
+    "  '"$name"' -> \(.name) \(.digest)"' "/var/log/vif-fleet/$id.jsonl"
+  ./deploy/k3s/session.sh delete "$id"
+done
+```
+
+Expected, per name: a session that reaches `phase=waiting ready=true`, a log record
+whose `name` is the one asked for, and a clean delete. A scenario that is
+advertised but not installed fails here with the init container's refusal, which
+`sudo kubectl -n vif logs job/vif-session-<id> -c config-check` prints.
+
+**8. Rollback**, if any step above refuses. Nothing here is destructive to a match
+that is not running:
+
+```sh
+sudo kubectl -n vif delete pvc vif-fleet-wad --ignore-not-found
+sudo kubectl delete pv vif-fleet-wad --ignore-not-found
+sudo kubectl delete storageclass vif-node-wad --ignore-not-found
+sudo install -o root -g vif-allocator -m 0640 \
+  /etc/vif-allocator/allocator.env.previous /etc/vif-allocator/allocator.env
+sudo install -o root -g root -m 0755 \
+  /usr/local/libexec/vif-allocator.previous /usr/local/bin/vif-allocator
+sudo systemctl restart vif-allocator.service
+```
+
+The node directory can stay: nothing mounts it once the claim is gone.
+
 ## 15. Operating, and what is not built yet
 
 Day-to-day operation is [`deploy/runbook.md`](../deploy/runbook.md): where things
@@ -1030,6 +1254,31 @@ the fleet empty before changing a live workload, allocator binary, Role, mount o
 logging service**, and finish that change with §13. And **keep the previous
 allocator binary and configuration** — the updaters' `.previous` set — until the
 next live §13 passes.
+
+Replacing what the fleet serves is the one change that is not either of those.
+`./deploy/guest/update-vif-wad.sh` swaps the node directory by rename, so a running
+match keeps the tree its pod mounted and the next session gets the new one; the
+fleet need not be empty and the allocator need not stop. Confirm afterwards that
+the next session picks it up:
+
+```sh
+id=$(./deploy/k3s/session.sh allocate)
+sudo jq -r 'select(.fields.msg == "scenario") | .fields.digest' "/var/log/vif-fleet/$id.jsonl"
+./deploy/k3s/session.sh delete "$id"
+```
+
+Expected: the digest `vif -check -config-dir wad -s main` prints in the checkout
+that was installed. One update back is retained at `/var/db/vif/wad.previous`;
+restoring it is `sudo mv` in both directions.
+
+Adding a scenario is two steps in this order — install it, then advertise it —
+because the reverse advertises a name a session cannot load:
+
+```sh
+./deploy/guest/update-vif-wad.sh
+sudoedit /etc/vif-allocator/allocator.env   # add the name to VIF_ALLOCATOR_SCENARIOS
+sudo systemctl restart vif-allocator.service
+```
 
 One line is intended to end every session and name why:
 

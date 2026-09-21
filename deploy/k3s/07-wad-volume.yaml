@@ -1,0 +1,67 @@
+# The scenario volume the fleet serves from.
+#
+# Render ${NODE_NAME} at deployment time; never commit a machine address here.
+#
+# Read-only and node-affine, like the log volume beside it and for the opposite
+# reason: sessions write their logs and only read this. It is a separate claim
+# rather than a second directory on the log volume because the two have opposite
+# permissions, opposite lifetimes and opposite owners — the log tmpfs is volatile
+# and written by UID 65532, this is durable and written by an operator.
+#
+# The node directory is replaced by an atomic rename (deploy/guest/update-vif-wad.sh),
+# so a running match keeps the inode it mounted and the next pod gets the new tree.
+# That is the whole of "update the wad live": nothing reloads, and nothing has to.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: vif-node-wad
+  labels:
+    app.kubernetes.io/name: vi-fighter
+    app.kubernetes.io/part-of: vi-fighter-fleet
+provisioner: kubernetes.io/no-provisioner
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: false
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: vif-fleet-wad
+  labels:
+    app.kubernetes.io/name: vi-fighter
+    app.kubernetes.io/part-of: vi-fighter-fleet
+spec:
+  # The shipped tree is about 200 KiB. 8 Mi is three orders of magnitude of
+  # headroom for authored scenarios and the images they name, and small enough
+  # that it says out loud this is not a place to put content.
+  capacity:
+    storage: 8Mi
+  volumeMode: Filesystem
+  accessModes: [ReadOnlyMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: vif-node-wad
+  local:
+    path: /var/db/vif/wad
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: ["${NODE_NAME}"]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vif-fleet-wad
+  namespace: vif
+  labels:
+    app.kubernetes.io/name: vi-fighter
+    app.kubernetes.io/part-of: vi-fighter-fleet
+spec:
+  accessModes: [ReadOnlyMany]
+  volumeMode: Filesystem
+  storageClassName: vif-node-wad
+  resources:
+    requests:
+      storage: 8Mi

@@ -176,6 +176,7 @@ func testAllocatorConfig() allocatorConfig {
 			Players:   4,
 			MapSize:   "120x40",
 			LogLevel:  "info",
+			Scenario:  "main",
 			FirstJoin: "90s",
 			Empty:     "90s",
 			Drain:     "20s",
@@ -186,6 +187,7 @@ func testAllocatorConfig() allocatorConfig {
 		PortLast:       31709,
 		PlayersMax:     8,
 		LogLevels:      []string{"debug", "info", "warn", "error"},
+		Scenarios:      []string{"main", "td"},
 		ReadyTimeout:   100 * time.Millisecond,
 		PollInterval:   time.Millisecond,
 		CleanupTimeout: 100 * time.Millisecond,
@@ -343,7 +345,7 @@ func TestReadyAddressesStayScopedToTheirService(t *testing.T) {
 
 // TestARequestedRosterAndLevelReachTheJob is the point of accepting them: a choice
 // the pod did not run would make the page's controls decoration.
-func TestARequestedRosterAndLevelReachTheJob(t *testing.T) {
+func TestARequestedRosterLevelAndScenarioReachTheJob(t *testing.T) {
 	kube := &fakeKube{}
 	controller := newAllocator(kube, fakeHealth{state: sessionHealth{
 		Live: true, Ready: true, Capacity: 2, Phase: "waiting",
@@ -351,7 +353,7 @@ func TestARequestedRosterAndLevelReachTheJob(t *testing.T) {
 	controller.newID = func() (string, error) { return "chosen", nil }
 
 	if _, err := controller.createSession(context.Background(),
-		sessionRequest{Players: 2, LogLevel: "debug"}); err != nil {
+		sessionRequest{Players: 2, LogLevel: "debug", Scenario: "td"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(kube.jobObjects) != 1 {
@@ -361,7 +363,8 @@ func TestARequestedRosterAndLevelReachTheJob(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"-players","2"`, `"-lv","debug"`} {
+	for _, want := range []string{`"-players","2"`, `"-lv","debug"`,
+		`"-config-dir","/wad","-s","td"`, `"-check","-config-dir","/wad","-s","td"`} {
 		if !strings.Contains(string(encoded), want) {
 			t.Fatalf("the Job does not carry %s: %s", want, encoded)
 		}
@@ -378,6 +381,8 @@ func TestASessionRequestOutsideTheOpenedBoundsIsRefused(t *testing.T) {
 		{Players: -1},
 		{LogLevel: "trace"},
 		{LogLevel: "shout"},
+		{Scenario: "blank"},
+		{Scenario: "../etc"},
 	} {
 		if _, err := controller.createSession(context.Background(), request); !errors.Is(err, errRequestRefused) {
 			t.Fatalf("createSession(%+v) returned %v, want a refusal", request, err)

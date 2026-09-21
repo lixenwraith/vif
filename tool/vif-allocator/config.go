@@ -16,6 +16,10 @@ import (
 var (
 	dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 	mapSizePattern  = regexp.MustCompile(`^[1-9][0-9]*x[1-9][0-9]*$`)
+	// A scenario name is one path element the game looks up under scenario/ on the
+	// read-only volume. Anything with a separator in it would be a caller choosing
+	// a path, which is not a choice this allocator offers.
+	scenarioPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 )
 
 // sessionLogLevels are the game's -lv names, most verbose first. A request may
@@ -40,6 +44,7 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	var empty string
 	var drain string
 	var logLevelMin string
+	var scenarios string
 
 	set := flag.NewFlagSet("vif-allocator", flag.ContinueOnError)
 	set.SetOutput(output)
@@ -58,6 +63,9 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	set.StringVar(&logLevelMin, "log-level-min", "debug",
 		"most verbose session log level a request may select")
 	set.StringVar(&cfg.Allocator.Workload.MapSize, "map-size", "120x40", "session map size")
+	set.StringVar(&cfg.Allocator.Workload.Scenario, "scenario", "main", "default scenario name")
+	set.StringVar(&scenarios, "scenarios", "",
+		"comma-separated scenario names a request may select; empty keeps -scenario as the only one")
 	set.StringVar(&firstJoin, "first-join", "90s", "first guest deadline")
 	set.StringVar(&empty, "empty", "90s", "empty roster grace")
 	set.StringVar(&drain, "drain", "20s", "termination drain deadline")
@@ -87,6 +95,7 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 			strings.Join(sessionLogLevels, ", "))
 	}
 	cfg.Allocator.LogLevels = sessionLogLevels[floor:]
+	cfg.Allocator.Scenarios = splitScenarios(scenarios, cfg.Allocator.Workload.Scenario)
 	if err := validateConfig(cfg); err != nil {
 		return runtimeConfig{}, err
 	}
@@ -119,6 +128,14 @@ func validateConfig(cfg runtimeConfig) error {
 	}
 	if !mapSizePattern.MatchString(cfg.Allocator.Workload.MapSize) {
 		return fmt.Errorf("invalid -map-size %q", cfg.Allocator.Workload.MapSize)
+	}
+	for _, name := range cfg.Allocator.Scenarios {
+		if !scenarioPattern.MatchString(name) {
+			return fmt.Errorf("invalid scenario name %q", name)
+		}
+	}
+	if !slices.Contains(cfg.Allocator.Scenarios, cfg.Allocator.Workload.Scenario) {
+		return fmt.Errorf("-scenario %q is not in -scenarios", cfg.Allocator.Workload.Scenario)
 	}
 	for name, value := range map[string]string{
 		"-first-join": cfg.Allocator.Workload.FirstJoin,
@@ -153,6 +170,21 @@ func validateConfig(cfg runtimeConfig) error {
 		return err
 	}
 	return nil
+}
+
+// splitScenarios turns the operator's list into the set a request may pick from,
+// with the default always in it. The allocator never reads the volume: this list is
+// the operator's statement about what is installed there, and a name that is not
+// fails the init container, which is where a configuration error belongs.
+func splitScenarios(spec, fallback string) []string {
+	out := []string{fallback}
+	for _, name := range strings.Split(spec, ",") {
+		name = strings.TrimSpace(name)
+		if name != "" && !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func validateLogStreamURL(raw string) error {

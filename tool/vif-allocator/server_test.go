@@ -97,10 +97,11 @@ func TestGetSessionsAlwaysReturnsArray(t *testing.T) {
 	response := httptest.NewRecorder()
 
 	testServer(&fakeSessionAllocator{
-		bounds: fleetLimits{PlayersMax: 4, LogLevels: []string{"info"}},
+		bounds: fleetLimits{PlayersMax: 4, LogLevels: []string{"info"},
+			Scenarios: []string{"main"}},
 	}).ServeHTTP(response, request)
 
-	want := `{"sessions":[],"limits":{"players_max":4,"log_levels":["info"]}}`
+	want := `{"sessions":[],"limits":{"players_max":4,"log_levels":["info"],"scenarios":["main"]}}`
 	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != want {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}

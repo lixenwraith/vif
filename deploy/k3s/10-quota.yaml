@@ -25,10 +25,11 @@ spec:
     requests.memory: 960Mi
     limits.cpu: "5"
     limits.memory: 1920Mi
-    # One shared, volatile local claim backs every commissioned log writer. It is
-    # not per-session persistence; the node tmpfs is the actual hard capacity.
-    persistentvolumeclaims: "1"
-    requests.storage: 256Mi
+    # Two shared local claims: the volatile log tmpfs every session writes through,
+    # and the read-only scenario volume they all mount. Neither is per-session
+    # persistence; the node's own tmpfs and directory are the hard capacity.
+    persistentvolumeclaims: "2"
+    requests.storage: 264Mi
 ---
 # The default a session inherits if its manifest omits one. A pod with no request
 # is scheduled as if it were free and counts nothing against the quota above, which

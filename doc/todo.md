@@ -447,14 +447,3 @@ and a session crossing the 8 MiB file cap still replays its rotated log whole,
 spending the rate limit on duplicates while live records drop.
 [Deploying the session fleet](kube-docker-deploy.md) §10 states what the pin must
 carry.
-
-### Render the session log level from the template
-
-- Priority: P3
-- Affected files: `deploy/k3s/30-session.yaml`, `deploy/k3s/render-session.sh`
-- Prerequisite: none
-
-The allocator renders `-lv` from the level a caller selected; the checked-in
-template hard-codes `info`. The manual render path therefore cannot reproduce an
-allocator session that chose `debug`, which is the one case a person renders by
-hand for.

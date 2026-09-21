@@ -276,69 +276,53 @@ so it leaves the session rather than following it.
   left to follow. A participant that inherited a session, has peers and has no
   address of its own to reopen is refused rather than scattering them.
 
-### Phase 5 — The fleet serves an external wad
+### Phase 5 — The fleet serves an external wad (done)
 
-**5a — The node directory.** `/var/db/vif/wad/`, root-owned, `0755`/`0644`,
-holding the categorized layout. `deploy/guest/update-vif-wad.sh` follows the shape
-of the other updaters — build or stage, verify, keep one `.previous` rollback set,
-restore on failure. It stages the repository's `wad/` into `/var/db/vif/wad.new`,
-validates it with the session image's own `-check -config-dir /wad -s <name>` for
-every scenario it contains, then swaps by rename. A running pod keeps the inode it
-mounted; the next pod gets the new tree. Unlike `update-vif-image.sh` it does
-**not** require an empty fleet — updating without ending a match is the point.
+`/var/db/vif/wad` is the node directory, `deploy/k3s/07-wad-volume.yaml` the
+read-only node-affine `local` PV and `ReadOnlyMany` claim over it, and
+`deploy/guest/update-vif-wad.sh` the updater. It validates every scenario against
+the session image, as UID 65532 with the mounts a session gets, before it swaps —
+so a scenario that would have failed an init container fails at the operator's
+prompt instead. The swap is a rename: a running match keeps the inode its pod
+mounted, the next pod gets the new tree, and unlike the image updater it does not
+require an idle fleet, which is the whole point.
 
-**5b — The volume.** `deploy/k3s/07-wad-volume.yaml`: a no-provisioner
-`StorageClass vif-node-wad`, a node-affine `local` PV `vif-fleet-wad` at
-`/var/db/vif/wad` (8 Mi, Retain, `WaitForFirstConsumer`), and one PVC.
-`10-quota.yaml` goes to `persistentvolumeclaims: "2"` and `requests.storage: 264Mi`.
-`06-log-volume-check.yaml` gains a sibling, or grows a second mount, so a fresh
-node binds both claims before a real player does.
+The session mounts `subPath: scenario` and `subPath: image` at `/wad` and runs
+`-config-dir /wad -s <name>` in place of `-d`. `content/`, `input/` and `audio/`
+are deliberately not mounted, so the corpus and keymap stay embedded and a native
+guest running `-d` can still join: the session's `ContentID` does not move.
+`-config-dir` is explicit rather than leaning on the XDG default, because a
+`scratch` image has no `/etc/xdg` and no reason to acquire one. The init container
+now runs `-check -config-dir /wad -s <name>`, which finally proves the
+configuration the session will serve rather than the embedded one it used to prove
+instead.
 
-**5c — The pod.** `30-session.yaml` and `tool/vif-allocator/manifest.go` mount the
-claim read-only with `subPath: scenario` at `/wad/scenario` and `subPath: image` at
-`/wad/image`, and replace `-d` with `-config-dir /wad -s ${SCENARIO}`. `content`,
-`input` and `audio` are deliberately **not** mounted, so the corpus and keymap stay
-embedded and the session's `ContentID` does not move — a native guest running `-d`
-must still be able to join. The init container runs `-check -config-dir /wad -s
-${SCENARIO}`, which finally proves the scenario the session will actually serve
-rather than the embedded one; the Dockerfile comment that names this gap is
-updated. `.dockerignore` gains `wad/` so the context stops carrying what the image
-never uses. `-config-dir` rather than a mount at `/etc/xdg/vi-fighter`: the
-explicit root does not depend on XDG defaults inside a `scratch` container. Verify
-on the node that a `scratch` image with `readOnlyRootFilesystem: true` gets its
-mount points created — it is the one assumption here that the cluster, not the
-code, has to honour.
+The allocator gained `-scenario` and `-scenarios`, `sessionRequest.Scenario` and
+`fleetLimits.Scenarios`, in the shape `Players` and `LogLevel` already had: refused
+rather than clamped, and advertised in `limits` so a caller offers only what this
+deployment allows. It never reads the volume — the list is the operator's statement
+about what is installed there, and a mismatch fails the init container, which is
+where a configuration error belongs. `${LOG_LEVEL}` closes the `doc/todo.md` item
+that made the manual render unable to reproduce an allocator session.
 
-**5d — The allocator.** `-scenarios` is the allowlist a caller may pick from and
-`-scenario` the default; `sessionRequest.Scenario` and `fleetLimits.Scenarios`
-follow the shape `Players`/`LogLevel` already have, and `resolve` refuses an
-unlisted name rather than clamping it. `VIF_ALLOCATOR_SCENARIOS` and
-`VIF_ALLOCATOR_SCENARIO` join `vif-allocator.env.example`. The allocator does not
-read the wad; the allowlist is the operator's statement about what is installed
-there, and a mismatch fails the init container, which is where a configuration
-error belongs.
+One optional `envFrom` a `vif-session-env` ConfigMap is the deployment's place for
+a `GODEBUG` or a locale. `optional: true`, so an absent map is not a pod that will
+not start; `GOMEMLIMIT` is declared after it, so the fleet's own envelope wins.
+`.dockerignore` gains `wad/`: the image carries no scenarios and the context should
+not either.
 
-**5e — Environment.** One optional `envFrom` a namespace `ConfigMap
-vif-session-env`, `optional: true` so an absent map is not a failed pod. Deployment
-state, never request state: a caller cannot set an environment variable, only
-choose from `limits`. `GOMEMLIMIT` stays where it is, as a property of the
-manifest's own resource envelope.
+**Commissioning.** `doc/kube-docker-deploy.md` §9.1 and §9.2 are the fresh-node
+path and §14.1 is the upgrade for a node already running, step by step, each with
+what it should print. §14.1 step 1 extracts every value the later steps need out of
+the node rather than out of the document, and step 8 is the rollback. §15 covers
+replacing the tree on a live fleet, which is the one change that needs neither an
+empty fleet nor a stopped allocator.
 
-**5f — Documentation.** `kube-docker-deploy.md` gains the wad volume beside §7's
-log tmpfs and §9's fleet objects, and a wad step in §15's operating notes;
-`kubernetes-fleet.md` §1, §2 and §6 record the new mount and its ceiling;
-`deploy/README.md`, `deploy/guest/README.md` and `deploy/runbook.md` gain the new
-file and the new helper; `filesystem-layout.md` §2 notes the fleet's partial root.
-
-**5g — P2, after the rest.** The site's fleet page builds its controls from
-`limits`, so a scenario picker is a page change once `limits.scenarios` exists.
-
-**Gates.** `go test ./tool/vif-allocator`; `./deploy/k3s/render-session.sh` diffed
-against the allocator's rendered Job; `make image-check`.
-**Manual.** A real allocate with `{"scenario":"td"}` reaches a playable TD session;
-an unlisted scenario is refused with the list; `update-vif-wad.sh` during a live
-match leaves that match alone and changes the next one; a deliberately broken
-scenario is refused by the helper and, if forced past it, by the init container.
+**Verified.** `script/test.sh fleet` renders the template by hand and asserts it
+carries the same arguments, mounts and claims the allocator builds, then runs the
+allocator suite. `render-session.sh` refuses a scenario name that is not a plain
+installed one. Not verified here: the cluster itself — §9 and §14.1 are written to
+be run on the node, and their expected output is what to check against.
 
 ## 4. `doc/todo.md` items this work closes or touches
 

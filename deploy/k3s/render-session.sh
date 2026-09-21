@@ -8,6 +8,7 @@
 #
 #   ./render-session.sh 7f3c1a 31707 > /tmp/7f3c1a.yaml
 #   FIRST_JOIN=20m EMPTY_GRACE=20m ./render-session.sh 7f3c1a 31707
+#   SCENARIO=td LOG_LEVEL=debug ./render-session.sh 7f3c1a 31707
 #   JOB_UID=<uid> ./render-session.sh 7f3c1a 31707
 #
 # The one session container writes directly to the shared tmpfs-backed local PVC.
@@ -20,6 +21,7 @@ set -eu
 
 usage() {
 	echo "usage: $0 SESSION_ID GAME_NODEPORT [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
+	echo "       SCENARIO and LOG_LEVEL override the defaults from the environment" >&2
 	exit 2
 }
 
@@ -32,6 +34,8 @@ PLAYERS=${4:-4}
 MAP_SIZE=${5:-120x40}
 FIRST_JOIN=${FIRST_JOIN:-90s}
 EMPTY_GRACE=${EMPTY_GRACE:-90s}
+SCENARIO=${SCENARIO:-main}
+LOG_LEVEL=${LOG_LEVEL:-info}
 JOB_UID=${JOB_UID:-}
 
 case "$SESSION_ID" in
@@ -39,6 +43,15 @@ case "$SESSION_ID" in
 esac
 case "$GAME_NODEPORT" in
 	'' | *[!0-9]* ) echo "$0: GAME_NODEPORT must be a number" >&2; exit 2 ;;
+esac
+# A scenario name is a single path element the resolver looks up under scenario/;
+# anything else would be an operator asking this template to reach off the volume.
+case "$SCENARIO" in
+	'' | *[!a-zA-Z0-9_-]* ) echo "$0: SCENARIO must be a plain installed name" >&2; exit 2 ;;
+esac
+case "$LOG_LEVEL" in
+	trace|debug|info|warn|error ) ;;
+	* ) echo "$0: LOG_LEVEL must be trace, debug, info, warn or error" >&2; exit 2 ;;
 esac
 if [ "$GAME_NODEPORT" -lt 31700 ] || [ "$GAME_NODEPORT" -gt 31709 ]; then
 	echo "$0: GAME_NODEPORT $GAME_NODEPORT is outside the fleet range 31700-31709" >&2
@@ -58,6 +71,8 @@ rendered=$(sed \
 	-e "s|\${MAP_SIZE}|$MAP_SIZE|g" \
 	-e "s|\${FIRST_JOIN}|$FIRST_JOIN|g" \
 	-e "s|\${EMPTY_GRACE}|$EMPTY_GRACE|g" \
+	-e "s|\${SCENARIO}|$SCENARIO|g" \
+	-e "s|\${LOG_LEVEL}|$LOG_LEVEL|g" \
 	-e "s|\${JOB_UID}|$JOB_UID|g" \
 	"$template")
 
