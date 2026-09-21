@@ -117,7 +117,7 @@ func (s *apiServer) handleSessions(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeAPIError(w, http.StatusBadRequest, "invalid_request",
-				"Request body must be a JSON object naming only players and log_level")
+				"Request body must be a JSON object naming only players, log_level and scenario")
 			return
 		}
 		created, err := s.allocator.createSession(r.Context(), request)
@@ -126,7 +126,8 @@ func (s *apiServer) handleSessions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.log.Info("session created", "session", created.ID, "port", created.Port,
-			"players", request.Players, "log_level", request.LogLevel)
+			"players", request.Players, "log_level", request.LogLevel,
+			"scenario", request.Scenario)
 		writeJSON(w, http.StatusCreated, created)
 	default:
 		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)

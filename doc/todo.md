@@ -150,15 +150,18 @@ files over `parameter.BuiltinSounds`, which the tag removes. The gates and
 `script/test.sh deploy` therefore build `./cmd/vif` alone, as the image does, so a
 break confined to soundlab is invisible. Tag the package out, or give it a stub.
 
-### Offer the fleet's scenarios on the session page
+### Let a request name the map size
 
-- Priority: P1
-- Affected files: the Hugo site's `vif-fleet.js` and the fleet page template
+- Priority: P2
+- Affected files: `tool/vif-allocator/config.go`, `tool/vif-allocator/allocator.go`,
+  the Hugo site's `vif-fleet.js`
 
-`GET /vif/api/sessions` now returns `limits.scenarios` from the node's volume, and
-`POST` accepts `{"scenario":"<name>"}`, but the page posts neither — so every
-session the website creates runs the default. Add the selector beside players and
-log level, the same shape as those two: omit the field to take the deployment's.
+`-map-size` is the deployment's for every session, and the session page cannot
+select it. A scenario that fixes its own dimensions ignores it — `td` emits
+`EventLevelSetup` at 500x250 — so the flag only decides the scenarios that do not,
+and those all run at one size. Offer it the way `scenarios` is offered, bounded by
+`parameter.MaxMapCells` rather than by a list: `limits` names the ceiling, a
+request names a size under it, and a scenario that sets its own still wins.
 
 ### Provision audio to the fleet when a host needs it
 
