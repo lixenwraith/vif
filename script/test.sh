@@ -466,7 +466,7 @@ fleet)
 		./deploy/k3s/render-session.sh fleetcheck 31700 vi-fighter:dev 4 120x40)
 	for want in \
 		'"-config-dir"' '"-s"' '"td"' '"debug"' \
-		'claimName: vif-fleet-wad' 'subPath: scenario' 'subPath: image' \
+		'claimName: vif-fleet-wad' 'mountPath: /wad' \
 		'name: vif-session-env'
 	do
 		printf '%s' "$rendered" | grep -q -- "$want" \
@@ -526,10 +526,15 @@ deploy)
 	# The pod mounts scenario/ and image/ and nothing else, so prove a scenario
 	# resolves from exactly that and names itself in the log the commissioning
 	# check reads.
-	mount=$(mktemp -d)
-	cp -a wad/scenario wad/image "$mount/"
-	"$headless/vif" -check -config-dir "$mount" -s main | grep -q '^scenario ok' \
-		|| fail "the init container's check does not resolve through the mount layout"
+	mount=$(mktemp -d)/wad
+	cp -a wad "$mount"
+	"$headless/vif" -check -config-dir "$mount" -s main >"$headless/check" \
+		|| fail "the init container's check does not resolve through the mount"
+	grep -q '^scenario ok' "$headless/check" || fail "no scenario off the mount"
+	# The pod mounts the whole volume, so the corpus a session serves is the node's.
+	# It is also every guest's: a joining run adopts the coordinator's content.
+	grep -q '^content ok: .*/content ' "$headless/check" \
+		|| fail "the corpus fell back to embedded: $headless/check"
 	"$headless/vif" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -authority host \
 		-l="$mount/log" -log-session-id=volume-check -lv=info \
 		-config-dir="$mount" -s=main -first-join=3s -empty=3s -drain=3s >/dev/null 2>&1 \

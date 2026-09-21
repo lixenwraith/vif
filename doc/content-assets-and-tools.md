@@ -48,6 +48,14 @@ silently ignored while keeping default startup resilient.
 Only eligible files immediately at the directory root are loaded. Subfolders,
 hidden names, and unrelated extensions are skipped.
 
+**Resolution above applies to the run that leads a session, not to one that joins
+it.** The corpus is the coordinator's: `PeerIdentity.SessionFrom` adopts its
+content identity, and the blocks arrive as replicated world state, so a guest with
+its own `content/` still types the coordinator's text. Two consequences. A guest
+never has to hold the corpus, and never has to match it. And what a fleet session
+serves is whatever the pod mounts — an unmounted `content/` means every player in
+it gets the embedded tutorial, whatever they have locally.
+
 ## 3. Corpus model and limits
 
 ```go

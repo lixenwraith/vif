@@ -49,9 +49,6 @@ Existing focused references remain useful:
 - [FSM authoring reference](fsm-reference.md) documents the TOML surface in
   detail.
 - [TODO](todo.md) is the running work list the packaging checklists feed.
-- [Scenario enhancement plan](ongoing-map-enhancement.md) is transient: the phased
-  plan for live scenario change, over-the-air scenarios and an externally supplied
-  fleet `wad/`. It is deleted when the last phase lands.
 - [Keymap example](../internal/input/README.md) shows sparse key overrides.
 - [Genetic package reference](../pkg/genetic/README.md) documents the reusable
   optimization library.

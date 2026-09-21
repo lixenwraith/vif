@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -168,7 +171,25 @@ func (f fakeHealth) probe(context.Context, string) (sessionHealth, error) {
 	return f.state, f.err
 }
 
-func testAllocatorConfig() allocatorConfig {
+// testWad lays down the scenario tree the allocator scans, since what it offers
+// is now what the node's volume holds rather than a list it was given.
+func testWad(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	for _, name := range []string{"main", "td"} {
+		dir := filepath.Join(root, "scenario", name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "scenario.toml"), []byte("[regions]\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+func testAllocatorConfig(t *testing.T) allocatorConfig {
+	t.Helper()
 	return allocatorConfig{
 		Workload: workloadConfig{
 			Namespace: "vif",
@@ -187,7 +208,7 @@ func testAllocatorConfig() allocatorConfig {
 		PortLast:       31709,
 		PlayersMax:     8,
 		LogLevels:      []string{"debug", "info", "warn", "error"},
-		Scenarios:      []string{"main", "td"},
+		WadDir:         testWad(t),
 		ReadyTimeout:   100 * time.Millisecond,
 		PollInterval:   time.Millisecond,
 		CleanupTimeout: 100 * time.Millisecond,
@@ -200,7 +221,7 @@ func TestCreateSessionReservesPortAndOwnsService(t *testing.T) {
 	}
 	controller := newAllocator(kube, fakeHealth{state: sessionHealth{
 		Live: true, Ready: true, Capacity: 4, Phase: "waiting",
-	}}, testAllocatorConfig())
+	}}, testAllocatorConfig(t))
 	controller.newID = func() (string, error) { return "abc123", nil }
 
 	created, err := controller.createSession(context.Background(), sessionRequest{})
@@ -229,7 +250,7 @@ func TestCreateSessionRefusesFullFleetBeforeCreatingJob(t *testing.T) {
 	for port := 31700; port <= 31709; port++ {
 		kube.services = append(kube.services, service{Spec: serviceSpec{Ports: []servicePort{{NodePort: port}}}})
 	}
-	controller := newAllocator(kube, fakeHealth{}, testAllocatorConfig())
+	controller := newAllocator(kube, fakeHealth{}, testAllocatorConfig(t))
 
 	_, err := controller.createSession(context.Background(), sessionRequest{})
 	if !errors.Is(err, errFleetFull) {
@@ -242,7 +263,7 @@ func TestCreateSessionRefusesFullFleetBeforeCreatingJob(t *testing.T) {
 
 func TestCreateSessionRollsBackJobWhenServiceFails(t *testing.T) {
 	kube := &fakeKube{createServiceErr: fmt.Errorf("admission failed")}
-	controller := newAllocator(kube, fakeHealth{}, testAllocatorConfig())
+	controller := newAllocator(kube, fakeHealth{}, testAllocatorConfig(t))
 	controller.newID = func() (string, error) { return "rollback", nil }
 
 	if _, err := controller.createSession(context.Background(), sessionRequest{}); err == nil {
@@ -255,7 +276,7 @@ func TestCreateSessionRollsBackJobWhenServiceFails(t *testing.T) {
 
 func TestCreateSessionCancellationRollsBackWithoutBecomingReadinessFailure(t *testing.T) {
 	kube := &fakeKube{}
-	controller := newAllocator(kube, fakeHealth{state: sessionHealth{Live: true}}, testAllocatorConfig())
+	controller := newAllocator(kube, fakeHealth{state: sessionHealth{Live: true}}, testAllocatorConfig(t))
 	controller.newID = func() (string, error) { return "canceled", nil }
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -294,7 +315,7 @@ func TestReconcileDeletesPartialAndOrphanObjects(t *testing.T) {
 			{Metadata: objectMeta{Name: "vif-session-orphan", Labels: sessionLabels("orphan")}},
 		},
 	}
-	controller := newAllocator(kube, fakeHealth{}, testAllocatorConfig())
+	controller := newAllocator(kube, fakeHealth{}, testAllocatorConfig(t))
 
 	result, err := controller.reconcile(context.Background())
 	if err != nil {
@@ -349,7 +370,7 @@ func TestARequestedRosterLevelAndScenarioReachTheJob(t *testing.T) {
 	kube := &fakeKube{}
 	controller := newAllocator(kube, fakeHealth{state: sessionHealth{
 		Live: true, Ready: true, Capacity: 2, Phase: "waiting",
-	}}, testAllocatorConfig())
+	}}, testAllocatorConfig(t))
 	controller.newID = func() (string, error) { return "chosen", nil }
 
 	if _, err := controller.createSession(context.Background(),
@@ -375,7 +396,7 @@ func TestARequestedRosterLevelAndScenarioReachTheJob(t *testing.T) {
 // inside what the operator configured. Refused rather than clamped: a session handed
 // a roster it did not ask for is harder to notice than a request that failed.
 func TestASessionRequestOutsideTheOpenedBoundsIsRefused(t *testing.T) {
-	controller := newAllocator(&fakeKube{}, fakeHealth{}, testAllocatorConfig())
+	controller := newAllocator(&fakeKube{}, fakeHealth{}, testAllocatorConfig(t))
 	for _, request := range []sessionRequest{
 		{Players: 9},
 		{Players: -1},
@@ -387,5 +408,35 @@ func TestASessionRequestOutsideTheOpenedBoundsIsRefused(t *testing.T) {
 		if _, err := controller.createSession(context.Background(), request); !errors.Is(err, errRequestRefused) {
 			t.Fatalf("createSession(%+v) returned %v, want a refusal", request, err)
 		}
+	}
+}
+
+// TestScenariosFollowTheVolume is why the list is not configuration: the node's
+// tree is replaced by rename under a running allocator, so what is offered has to
+// be read when asked. The default is offered whatever the volume says.
+func TestScenariosFollowTheVolume(t *testing.T) {
+	cfg := testAllocatorConfig(t)
+	controller := newAllocator(&fakeKube{}, fakeHealth{}, cfg)
+	if got := controller.limits().Scenarios; !slices.Equal(got, []string{"main", "td"}) {
+		t.Fatalf("scenarios = %v; want the volume's two", got)
+	}
+
+	if err := os.MkdirAll(filepath.Join(cfg.WadDir, "scenario", "added"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := controller.limits().Scenarios; slices.Contains(got, "added") {
+		t.Errorf("a directory with no %s was offered: %v", "scenario.toml", got)
+	}
+	if err := os.WriteFile(filepath.Join(cfg.WadDir, "scenario", "added", "scenario.toml"),
+		[]byte("[regions]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := controller.limits().Scenarios; !slices.Contains(got, "added") {
+		t.Errorf("a scenario installed under a running allocator was not offered: %v", got)
+	}
+
+	controller.cfg.WadDir = filepath.Join(cfg.WadDir, "gone")
+	if got := controller.limits().Scenarios; !slices.Equal(got, []string{"main"}) {
+		t.Errorf("an unreadable volume gave %v; want the default alone", got)
 	}
 }

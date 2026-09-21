@@ -14,17 +14,14 @@ type workloadConfig struct {
 	Drain     string
 }
 
-// wadMounts is what a container reads the fleet's scenarios through. subPath
-// rather than the whole root: content/, input/ and audio/ are deliberately absent,
-// so the corpus and keymap stay embedded and a native guest running -d can still
-// join. Shared by the init container and the session, because proving a
-// configuration a session cannot then read would prove nothing.
+// wadMounts is what a container reads the fleet's resources through: the whole
+// root, so a scenario naming an asset the node has can reach it without a manifest
+// change. The corpus is the session's to serve — a guest is sent the host's, never
+// its own — so content/ absent here means every guest types the embedded corpus.
+// Shared by the init container and the session, which must prove the same tree.
 func wadMounts() []any {
 	return []any{
-		map[string]any{"name": "fleet-wad", "mountPath": "/wad/scenario",
-			"subPath": "scenario", "readOnly": true},
-		map[string]any{"name": "fleet-wad", "mountPath": "/wad/image",
-			"subPath": "image", "readOnly": true},
+		map[string]any{"name": "fleet-wad", "mountPath": "/wad", "readOnly": true},
 	}
 }
 

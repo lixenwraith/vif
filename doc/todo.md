@@ -150,6 +150,49 @@ files over `parameter.BuiltinSounds`, which the tag removes. The gates and
 `script/test.sh deploy` therefore build `./cmd/vif` alone, as the image does, so a
 break confined to soundlab is invisible. Tag the package out, or give it a stub.
 
+### Let a guest keep its own corpus
+
+- Priority: P2
+- Affected files: `internal/network/identity.go`, `internal/app/config.go`,
+  `internal/service` content service
+
+`PeerIdentity.SessionFrom` adopts the coordinator's content identity and the blocks
+arrive as replicated state, so a guest's own `content/` is never used in a session:
+a corpus of one file still types the coordinator's five. That is what makes a guest
+able to join without holding the corpus at all. Letting each player type their own
+text instead is a different game — the shared surface stops being shared — so this
+is a design decision before it is a change.
+
+### Offer the fleet's scenarios on the session page
+
+- Priority: P1
+- Affected files: the Hugo site's `vif-fleet.js` and the fleet page template
+
+`GET /vif/api/sessions` now returns `limits.scenarios` from the node's volume, and
+`POST` accepts `{"scenario":"<name>"}`, but the page posts neither — so every
+session the website creates runs the default. Add the selector beside players and
+log level, the same shape as those two: omit the field to take the deployment's.
+
+### Cache a received scenario to the user root
+
+- Priority: P3
+- Affected files: `internal/resource`, `internal/app/session.go`
+
+A scenario received from a coordinator lives in memory and is dropped at exit, so
+rejoining the same session downloads it again. Writing it under the user root
+behind an explicit opt-in would keep it, and needs a trust decision first: the
+bytes came from a peer, and nothing about a plaintext link says they are the
+operator's.
+
+### Serve a scenario over HTTP for browser builds
+
+- Priority: P3
+- Affected files: `internal/resource`, browser resource provider
+
+A WASM build has no config roots and no peer to receive from until it has joined.
+An HTTP-backed provider reading the same content-addressed container is what
+[Multi-platform](multi-platform.md) already anticipates.
+
 ## Audio
 
 ### Surface malformed user sound configuration during play

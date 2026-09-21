@@ -8,12 +8,16 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/internal/paths"
 )
 
 var (
@@ -30,7 +34,7 @@ type allocatorConfig struct {
 	PortLast       int
 	PlayersMax     int
 	LogLevels      []string
-	Scenarios      []string
+	WadDir         string
 	ReadyTimeout   time.Duration
 	PollInterval   time.Duration
 	CleanupTimeout time.Duration
@@ -92,7 +96,32 @@ func newAllocator(kube kubeAPI, health healthProbe, cfg allocatorConfig) *alloca
 
 func (a *allocator) limits() fleetLimits {
 	return fleetLimits{PlayersMax: a.cfg.PlayersMax, LogLevels: a.cfg.LogLevels,
-		Scenarios: a.cfg.Scenarios}
+		Scenarios: a.scenarios()}
+}
+
+// scenarios is what the node's volume holds, read per request rather than kept
+// from start-up: the tree is replaced by rename while this runs, so a list taken
+// at boot would advertise what was installed before the last swap. The default is
+// always offered, so a volume that cannot be read still yields a session — and a
+// name that is there but broken is the init container's to refuse, not this.
+func (a *allocator) scenarios() []string {
+	root := filepath.Join(a.cfg.WadDir, paths.ScenarioDirName)
+	out := []string{a.cfg.Workload.Scenario}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return out
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.IsDir() || name == a.cfg.Workload.Scenario ||
+			!scenarioPattern.MatchString(name) {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(root, name, paths.ScenarioFile)); err == nil {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // resolve folds a caller's choices into this deployment's workload. An omitted
@@ -116,9 +145,10 @@ func (a *allocator) resolve(req sessionRequest) (workloadConfig, error) {
 		workload.LogLevel = req.LogLevel
 	}
 	if req.Scenario != "" {
-		if !slices.Contains(a.cfg.Scenarios, req.Scenario) {
+		installed := a.scenarios()
+		if !slices.Contains(installed, req.Scenario) {
 			return workloadConfig{}, fmt.Errorf("%w: scenario must be one of %s",
-				errRequestRefused, strings.Join(a.cfg.Scenarios, ", "))
+				errRequestRefused, strings.Join(installed, ", "))
 		}
 		workload.Scenario = req.Scenario
 	}

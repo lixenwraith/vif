@@ -12,6 +12,11 @@ helpers; [`deploy/runbook.md`](../deploy/runbook.md) is what you run once the no
 is up. [`deploy/guest/README.md`](../deploy/guest/README.md) says where each
 host-side artifact installs and how to back one out.
 
+§1 to §14 are the deployment, and each step carries only the one reading that says
+whether it worked. §16 is everything else: the assertions that name which file
+drifted, the checks that take a wrong result apart. Nothing in §16 belongs in a
+deployment that is going well, and nothing in §1 to §14 is there to diagnose.
+
 The production node is an Arch Linux bhyve guest on FreeBSD 15.1, whose host owns
 routing and packet filtering with `pf`. A bare systemd Arch or Ubuntu node runs the
 same procedure from §3 and supplies its own inbound boundary in place of §2.
@@ -623,9 +628,11 @@ and run the block again — the deletes lead so that re-running always works.
 ### 9.2 Binding both claims
 
 `WaitForFirstConsumer` leaves each claim `Pending` until something mounts it, so
-bind them with the checked-in probe rather than waiting for a real player. It reads
+bind them with the checked-in probe rather than waiting for a real player. It loads
 a scenario through the wad claim and writes a record through the log claim, which
-is what a session does:
+is what a session does. `VIF_TAG` is asserted rather than assumed: an unset one
+renders `image: "docker.io/library/vi-fighter:"`, which the API server accepts and
+no kubelet can pull.
 
 ```sh
 : "${VIF_TAG:=$(git rev-parse --short=8 HEAD)}"
@@ -638,28 +645,15 @@ sudo kubectl -n vif wait --for=jsonpath='{.status.phase}'=Succeeded \
   pod/vif-log-volume-check --timeout=90s \
   || sudo kubectl -n vif describe pod vif-log-volume-check | tail -25
 
-sudo kubectl get persistentvolume vif-fleet-logs vif-fleet-wad
-sudo kubectl -n vif get persistentvolumeclaim vif-fleet-logs vif-fleet-wad
-sudo test -s /var/log/vif-fleet/volume-check.jsonl
-sudo jq -s -e 'map(select(.sub != null)) as $records |
-    ($records | length > 0) and
-    all($records[]; .fields.session_id == "volume-check")' \
-  /var/log/vif-fleet/volume-check.jsonl
-```
-
-`VIF_TAG` is asserted rather than assumed: an unset one renders
-`image: "docker.io/library/vi-fighter:"`, which the API server accepts and no
-kubelet can pull. All four volume objects must read `Bound`. The probe also proves
-the scenario loaded off the volume rather than out of the image — the record names
-it:
-
-```sh
 sudo jq -r 'select(.fields.msg == "scenario") | .fields |
   "\(.name) \(.digest) \(.files) files"' /var/log/vif-fleet/volume-check.jsonl
+sudo kubectl -n vif get pvc vif-fleet-logs vif-fleet-wad
 ```
 
-Expected: `main <digest> 6 files`. An `embedded` here means the mount is not
-reaching the process, and §16 starts at the pod's `volumeMounts`.
+Expected: `main <digest> 6 files`, then both claims `Bound`. That one line is the
+whole check — it proves the pod started, the wad claim mounted, the scenario came
+off the volume and the log claim took the record. `embedded` instead means the
+mount is not reaching the process; §16 starts at the pod's `volumeMounts`.
 
 Remove the probe and leave the volumes:
 
@@ -667,15 +661,12 @@ Remove the probe and leave the volumes:
 sudo kubectl -n vif delete pod vif-log-volume-check --wait=true
 sudo find /var/log/vif-fleet -maxdepth 1 -type f \
   \( -name 'volume-check.jsonl' -o -name 'volume-check_*.jsonl' \) -delete
-sudo find /var/log/vif-fleet -mindepth 1 -maxdepth 1 -print
 ```
 
-The last command must print nothing.
-
 Restricted admission, the ten-session ceiling, the default-deny policy and the
-allocator's permission surface are properties of the four files you just applied,
-not of this node. §13 exercises all of them with a real session. If one ever looks
-wrong, §16 has the assertions that name which file drifted.
+allocator's permission surface are properties of the files you just applied, not of
+this node. §13 exercises all of them with a real session, and §16 has the
+assertions that name which file drifted if one ever looks wrong.
 
 ## 10. LogWisp, the node log reader
 
@@ -812,21 +803,17 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now vif-allocator-token.timer vif-allocator.service
 ```
 
-`VIF_ALLOCATOR_SCENARIO` is what every session gets and `VIF_ALLOCATOR_SCENARIOS`
-the set a request may choose from instead. The allocator never reads the node
-volume: the list is your statement about what is installed there, and a name that
-is not is a session whose init container refuses it. Keep the two in step:
+`VIF_ALLOCATOR_SCENARIO` is what a session gets when the caller names none.
+`VIF_ALLOCATOR_WAD` is the volume the rest are discovered in: the allocator reads
+`scenario/` each time it is asked, so installing a scenario is the whole of
+offering it and there is no second list to keep in step. A swap under a running
+allocator is picked up without a restart.
 
 ```sh
-sudo sed -n 's/^VIF_ALLOCATOR_SCENARIOS=//p' /etc/vif-allocator/allocator.env |
-  tr ',' '\n' | sed 's/^ *//;s/ *$//' | sort > /tmp/advertised
-sudo find /var/db/vif/wad/scenario -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
-  sort > /tmp/installed
-comm -23 /tmp/advertised /tmp/installed
+curl -fsS http://127.0.0.1:9080/vif/api/sessions | jq -c .limits.scenarios
 ```
 
-Expected: no output. A name printed here is advertised and not installed, and a
-caller asking for it gets a pod that never becomes ready.
+Expected: the names `update-vif-wad.sh` last installed.
 
 Once the unit is up, the same list is what the site sees:
 
@@ -1321,13 +1308,12 @@ Expected: the digest `vif -check -config-dir wad -s main` prints in the checkout
 that was installed. One update back is retained at `/var/db/vif/wad.previous`;
 restoring it is `sudo mv` in both directions.
 
-Adding a scenario is two steps in this order — install it, then advertise it —
-because the reverse advertises a name a session cannot load:
+Adding a scenario is installing it. The allocator reads `scenario/` when asked, so
+the name is offered from the next request; nothing else to edit, nothing to restart:
 
 ```sh
 ./deploy/guest/update-vif-wad.sh
-sudoedit /etc/vif-allocator/allocator.env   # add the name to VIF_ALLOCATOR_SCENARIOS
-sudo systemctl restart vif-allocator.service
+curl -fsS http://127.0.0.1:9080/vif/api/sessions | jq -c .limits.scenarios
 ```
 
 One line is intended to end every session and name why:

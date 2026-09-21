@@ -29,7 +29,7 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 		`"ttlSecondsAfterFinished":120`,
 		`"-l=/var/log/vif-fleet","-log-session-id=abc123"`,
 		`{"mountPath":"/var/log/vif-fleet","name":"fleet-logs"}`,
-		`{"mountPath":"/wad/scenario","name":"fleet-wad","readOnly":true,"subPath":"scenario"}`,
+		`{"mountPath":"/wad","name":"fleet-wad","readOnly":true}`,
 		`{"name":"fleet-wad","persistentVolumeClaim":{"claimName":"vif-fleet-wad","readOnly":true}}`,
 		`"-config-dir","/wad","-s","main"`,
 		`"args":["-check","-config-dir","/wad","-s","main"]`,
