@@ -23,6 +23,9 @@ var (
 	scenarioPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 )
 
+// defaultWadDir is where deploy/guest/update-vif-wad.sh installs the volume.
+const defaultWadDir = "/var/db/vif/wad"
+
 // sessionLogLevels are the game's -lv names, most verbose first. A request may
 // select from -log-level-min onward, which defaults past trace: the fleet's log rate
 // and its tmpfs are shared, and an anonymous caller must not be able to raise one
@@ -64,7 +67,7 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 		"most verbose session log level a request may select")
 	set.StringVar(&cfg.Allocator.Workload.MapSize, "map-size", "120x40", "session map size")
 	set.StringVar(&cfg.Allocator.Workload.Scenario, "scenario", "main", "default scenario name")
-	set.StringVar(&cfg.Allocator.WadDir, "wad", "/var/db/vif/wad",
+	set.StringVar(&cfg.Allocator.WadDir, "wad", defaultWadDir,
 		"node resource volume, scanned for the scenarios a request may select")
 	set.StringVar(&firstJoin, "first-join", "90s", "first guest deadline")
 	set.StringVar(&empty, "empty", "90s", "empty roster grace")
@@ -82,6 +85,12 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	}
 	if set.NArg() != 0 {
 		return runtimeConfig{}, fmt.Errorf("unexpected argument %q", set.Arg(0))
+	}
+	// An empty -wad is the default rather than a refusal: the unit passes
+	// -wad=${VIF_ALLOCATOR_WAD} and that variable is optional, so a deployment that
+	// never set it must start on the path everything else already assumes.
+	if cfg.Allocator.WadDir == "" {
+		cfg.Allocator.WadDir = defaultWadDir
 	}
 	cfg.Allocator.Workload.FirstJoin = firstJoin
 	cfg.Allocator.Workload.Empty = empty

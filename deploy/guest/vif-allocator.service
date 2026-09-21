@@ -23,7 +23,7 @@ ExecStart=/usr/local/bin/vif-allocator \
     -players-max ${VIF_ALLOCATOR_PLAYERS_MAX} \
     -log-level-min ${VIF_ALLOCATOR_LOG_LEVEL_MIN} \
     -scenario ${VIF_ALLOCATOR_SCENARIO} \
-    -wad ${VIF_ALLOCATOR_WAD} \
+    -wad=${VIF_ALLOCATOR_WAD} \
     -log-stream-url ${VIF_ALLOCATOR_LOG_STREAM_URL}
 Restart=on-failure
 RestartSec=3s

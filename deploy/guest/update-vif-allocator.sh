@@ -43,7 +43,8 @@ stage_root=$(mktemp -d "${TMPDIR:-/tmp}/vif-allocator-update.XXXXXX")
 allocator_stopped=false
 rollback_required=false
 rollback() {
-	echo "$0: update failed; restoring previous allocator"
+	echo "$0: update failed; restoring previous allocator" >&2
+	sudo journalctl -u vif-allocator.service -n 5 --no-pager -o cat >&2 || true
 	sudo systemctl stop vif-allocator.service >/dev/null 2>&1 || true
 	sudo install -o root -g root -m 0755 "$backup_binary" "$binary"
 	sudo install -o root -g vif-allocator -m 0640 "$backup_env" "$installed_env"

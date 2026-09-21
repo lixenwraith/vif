@@ -11,6 +11,8 @@ catalog.txt
 combined.txt
 web/*.wasm
 cmd/vif/vif
+/vif
+/vif-headless
 tmp/
 log/**/*.jsonl
 tmp/**/*.jsonl

@@ -101,3 +101,33 @@ func TestRequestBoundsFailClosed(t *testing.T) {
 		}
 	}
 }
+
+// TestAnUnsetWadVariableStartsOnTheDefault is what the unit does with an optional
+// variable. systemd expands -wad=${VIF_ALLOCATOR_WAD} to -wad= when the operator
+// never set it, so an empty value has to mean the default rather than a refusal —
+// otherwise adding the variable to a unit takes the deployment down until someone
+// edits the environment file the updater does not own.
+func TestAnUnsetWadVariableStartsOnTheDefault(t *testing.T) {
+	base := []string{
+		"-image", "docker.io/library/vi-fighter:test",
+		"-join-host", "play.example.com",
+		"-page-base", "https://play.example.com/projects/vi-fighter/session/",
+		"-log-stream-url", "http://127.0.0.1:8081/stream",
+	}
+	for _, args := range [][]string{base, append(slices.Clone(base), "-wad=")} {
+		cfg, err := parseConfig(args, io.Discard)
+		if err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if cfg.Allocator.WadDir != defaultWadDir {
+			t.Errorf("%v: wad = %q; want %q", args, cfg.Allocator.WadDir, defaultWadDir)
+		}
+	}
+	cfg, err := parseConfig(append(slices.Clone(base), "-wad=/srv/wad"), io.Discard)
+	if err != nil || cfg.Allocator.WadDir != "/srv/wad" {
+		t.Fatalf("an explicit volume was not honoured: %q, %v", cfg.Allocator.WadDir, err)
+	}
+	if _, err := parseConfig(append(slices.Clone(base), "-wad=relative"), io.Discard); err == nil {
+		t.Error("a relative volume was accepted")
+	}
+}

@@ -809,6 +809,13 @@ sudo systemctl enable --now vif-allocator-token.timer vif-allocator.service
 offering it and there is no second list to keep in step. A swap under a running
 allocator is picked up without a restart.
 
+`VIF_ALLOCATOR_WAD` is the only optional variable in the file. Unset means
+`/var/db/vif/wad`, where `update-vif-wad.sh` installs; the unit passes it as
+`-wad=${VIF_ALLOCATOR_WAD}` so an unset one is an empty value the allocator reads
+as that default. Every other variable the `ExecStart` names is required, and a
+missing one takes the unit down — which is why `update-vif-allocator.sh` prints the
+unit's own last lines before it rolls back.
+
 ```sh
 curl -fsS http://127.0.0.1:9080/vif/api/sessions | jq -c .limits.scenarios
 ```
@@ -1227,14 +1234,17 @@ from here a running match is a match on the old template:
 
 ```sh
 ./deploy/guest/update-vif-allocator.sh
-sudoedit /etc/vif-allocator/allocator.env   # add VIF_ALLOCATOR_SCENARIO/SCENARIOS
-sudo systemctl restart vif-allocator.service
 curl -fsS http://127.0.0.1:9080/vif/api/sessions | jq -c .limits
 ```
 
-Expected: `limits` carries a `scenarios` array. Without the two new variables the
-unit fails to start, because the `ExecStart` names them — `journalctl -u
-vif-allocator -n 20` says which.
+Expected: `limits` carries a `scenarios` array holding what step 2 installed. The
+environment file needs no edit — `VIF_ALLOCATOR_WAD` is optional and an unset one
+is `/var/db/vif/wad`, which is where the installer puts the volume. Set it only to
+serve from somewhere else, and do that before running the helper: the helper
+installs the unit and starts it in one step, so there is no window between them.
+
+If the helper rolls back, it prints the unit's own last lines before it does;
+`journalctl -u vif-allocator -n 20` has the rest.
 
 **6. Prove a real session on each advertised scenario.** This is §13 run once per
 name:
