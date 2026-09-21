@@ -57,11 +57,6 @@ type PeerIdentity struct {
 	Session        uint64 `json:"session"`
 	ScenarioID     string `json:"scenario_id"`
 	ScenarioDigest string `json:"scenario_digest"`
-	ContentID      string `json:"content_id"`
-	ContentPin     string `json:"content_pin,omitempty"`
-	ContentFiles   uint64 `json:"content_files"`
-	ContentBlocks  uint64 `json:"content_blocks"`
-	ContentLines   uint64 `json:"content_lines"`
 }
 
 // SessionFrom fills the session half from an anchor, leaving the build half to the
@@ -73,11 +68,6 @@ func (local PeerIdentity) SessionFrom(an event.JournalAnchor) PeerIdentity {
 	local.Session = an.Session
 	local.ScenarioID = an.ScenarioID
 	local.ScenarioDigest = an.ScenarioDigest
-	local.ContentID = an.ContentID
-	local.ContentPin = an.ContentPin
-	local.ContentFiles = an.ContentFiles
-	local.ContentBlocks = an.ContentBlocks
-	local.ContentLines = an.ContentLines
 	return local
 }
 
@@ -103,19 +93,16 @@ func (local PeerIdentity) buildFields(remote PeerIdentity) []identityField {
 }
 
 // sessionFields are what the two are simulating: the same seed over the same
-// configuration and the same corpus. They can only be compared once the peer has
-// built a world, which is why they are separate from the build half.
+// scenario. They can only be compared once the peer has built a world, which is
+// why they are separate from the build half. The corpus is deliberately absent —
+// it is the player's, resolved locally and never reconciled, so a peer with a
+// different one is not a peer running a different session.
 func (local PeerIdentity) sessionFields(remote PeerIdentity) []identityField {
 	return []identityField{
 		{"seed", local.Seed, remote.Seed},
 		{"session", local.Session, remote.Session},
 		{"scenario_id", local.ScenarioID, remote.ScenarioID},
 		{"scenario_digest", local.ScenarioDigest, remote.ScenarioDigest},
-		{"content_id", local.ContentID, remote.ContentID},
-		{"content_pin", local.ContentPin, remote.ContentPin},
-		{"content_files", local.ContentFiles, remote.ContentFiles},
-		{"content_blocks", local.ContentBlocks, remote.ContentBlocks},
-		{"content_lines", local.ContentLines, remote.ContentLines},
 	}
 }
 

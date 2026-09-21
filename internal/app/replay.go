@@ -67,26 +67,36 @@ type anchorField struct {
 	want, got any
 }
 
-// anchorIdentity is what any two participants in one session must agree on: record
-// layout and tick rate, the seed and session counter every RNG stream derives from,
-// and the config and corpus the simulation reads. Terminal geometry is absent — it is
-// per-instance. Shared by VerifyAnchor and the join handshake, so the two agree.
-func (a *App) anchorIdentity(an event.JournalAnchor) []anchorField {
-	reg := a.world.Resources.Status
-	svc := service.MustGet[*service.ContentService](a.hub, "content")
+// sessionAnchorFields are what two participants in one session must agree on:
+// record layout and tick rate, the seed and session counter every RNG stream
+// derives from, and the scenario the simulation reads. Terminal geometry is absent
+// because it is per-instance, and so is the corpus: glyphs are player domain, read
+// from each machine's own roots and never reconciled (D-11, doc/multi-player.md).
+func (a *App) sessionAnchorFields(an event.JournalAnchor) []anchorField {
 	return []anchorField{
 		{"schema", an.Schema, uint64(event.JournalSchema)},
 		{"seed", an.Seed, a.world.Resources.Rand.Root()},
 		{"session", an.Session, a.world.Resources.Rand.Session()},
 		{"scenario_id", an.ScenarioID, a.scenario.Name},
 		{"scenario_digest", an.ScenarioDigest, a.scenario.Digest()},
-		{"content_id", an.ContentID, reg.Strings.Get("content.source").Load()},
-		{"content_pin", an.ContentPin, svc.Pin()},
-		{"content_files", an.ContentFiles, uint64(reg.Ints.Get("content.files").Load())},
-		{"content_blocks", an.ContentBlocks, uint64(reg.Ints.Get("content.blocks").Load())},
-		{"content_lines", an.ContentLines, uint64(reg.Ints.Get("content.lines").Load())},
 		{"tick_ns", an.TickInterval, int64(parameter.GameUpdateInterval)},
 	}
+}
+
+// anchorIdentity adds what a replay must reproduce and a join must not require.
+// A recorded run typed the blocks of one corpus, so replaying its input against
+// another yields different glyphs; a peer joining live only has to agree on the
+// world, and brings its own text into it.
+func (a *App) anchorIdentity(an event.JournalAnchor) []anchorField {
+	reg := a.world.Resources.Status
+	svc := service.MustGet[*service.ContentService](a.hub, "content")
+	return append(a.sessionAnchorFields(an),
+		anchorField{"content_id", an.ContentID, reg.Strings.Get("content.source").Load()},
+		anchorField{"content_pin", an.ContentPin, svc.Pin()},
+		anchorField{"content_files", an.ContentFiles, uint64(reg.Ints.Get("content.files").Load())},
+		anchorField{"content_blocks", an.ContentBlocks, uint64(reg.Ints.Get("content.blocks").Load())},
+		anchorField{"content_lines", an.ContentLines, uint64(reg.Ints.Get("content.lines").Load())},
+	)
 }
 
 // firstAnchorMismatch reports the first field this App does not reproduce

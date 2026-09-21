@@ -150,19 +150,6 @@ files over `parameter.BuiltinSounds`, which the tag removes. The gates and
 `script/test.sh deploy` therefore build `./cmd/vif` alone, as the image does, so a
 break confined to soundlab is invisible. Tag the package out, or give it a stub.
 
-### Let a guest keep its own corpus
-
-- Priority: P2
-- Affected files: `internal/network/identity.go`, `internal/app/config.go`,
-  `internal/service` content service
-
-`PeerIdentity.SessionFrom` adopts the coordinator's content identity and the blocks
-arrive as replicated state, so a guest's own `content/` is never used in a session:
-a corpus of one file still types the coordinator's five. That is what makes a guest
-able to join without holding the corpus at all. Letting each player type their own
-text instead is a different game — the shared surface stops being shared — so this
-is a design decision before it is a change.
-
 ### Offer the fleet's scenarios on the session page
 
 - Priority: P1
@@ -172,6 +159,18 @@ is a design decision before it is a change.
 `POST` accepts `{"scenario":"<name>"}`, but the page posts neither — so every
 session the website creates runs the default. Add the selector beside players and
 log level, the same shape as those two: omit the field to take the deployment's.
+
+### Provision audio to the fleet when a host needs it
+
+- Priority: P3
+- Affected files: `deploy/guest/update-vif-wad.sh`, `tool/vif-allocator/manifest.go`,
+  `deploy/k3s/30-session.yaml`
+
+What a fleet session reads from the node volume is one list in three places —
+`categories` in the installer, `wadCategories` in the allocator, and the mounts in
+the template. `scenario` and `image` are on it. `audio` goes on it the day a
+dedicated host renders anything, and `content` never does. Nothing else changes;
+the volume already carries whatever the installer puts there.
 
 ### Cache a received scenario to the user root
 

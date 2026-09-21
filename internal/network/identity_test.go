@@ -11,8 +11,8 @@ func sampleIdentity() PeerIdentity {
 	return PeerIdentity{
 		Protocol: ProtocolVersion, Simulation: "abc123", CaptureSchema: 4,
 		JournalSchema: 11, TickIntervalNS: 50_000_000,
-		Seed: 0x5EED, Session: 1, ScenarioID: "embedded", ContentID: "embedded",
-		ContentFiles: 1, ContentBlocks: 14, ContentLines: 46,
+		Seed: 0x5EED, Session: 1, ScenarioID: "embedded",
+		ScenarioDigest: "sha256:2604b13fd259",
 	}
 }
 
@@ -28,19 +28,15 @@ func TestVerifyNamesTheFirstDifference(t *testing.T) {
 	}
 
 	cases := map[string]func(*PeerIdentity){
-		"protocol":       func(p *PeerIdentity) { p.Protocol = 99 },
-		"simulation":     func(p *PeerIdentity) { p.Simulation = "deadbeef" },
-		"capture_schema": func(p *PeerIdentity) { p.CaptureSchema = 3 },
-		"journal_schema": func(p *PeerIdentity) { p.JournalSchema = 10 },
-		"tick_ns":        func(p *PeerIdentity) { p.TickIntervalNS = 33_000_000 },
-		"seed":           func(p *PeerIdentity) { p.Seed = 1 },
-		"session":        func(p *PeerIdentity) { p.Session = 2 },
-		"scenario_id":    func(p *PeerIdentity) { p.ScenarioID = "wad/scenario/td/scenario.toml" },
-		"content_id":     func(p *PeerIdentity) { p.ContentID = "elsewhere" },
-		"content_pin":    func(p *PeerIdentity) { p.ContentPin = "tutorial.toml" },
-		"content_files":  func(p *PeerIdentity) { p.ContentFiles = 2 },
-		"content_blocks": func(p *PeerIdentity) { p.ContentBlocks = 15 },
-		"content_lines":  func(p *PeerIdentity) { p.ContentLines = 47 },
+		"protocol":        func(p *PeerIdentity) { p.Protocol = 99 },
+		"simulation":      func(p *PeerIdentity) { p.Simulation = "deadbeef" },
+		"capture_schema":  func(p *PeerIdentity) { p.CaptureSchema = 3 },
+		"journal_schema":  func(p *PeerIdentity) { p.JournalSchema = 10 },
+		"tick_ns":         func(p *PeerIdentity) { p.TickIntervalNS = 33_000_000 },
+		"seed":            func(p *PeerIdentity) { p.Seed = 1 },
+		"session":         func(p *PeerIdentity) { p.Session = 2 },
+		"scenario_id":     func(p *PeerIdentity) { p.ScenarioID = "wad/scenario/td/scenario.toml" },
+		"scenario_digest": func(p *PeerIdentity) { p.ScenarioDigest = "sha256:deadbeef0000" },
 	}
 	for field, break_ := range cases {
 		remote := sampleIdentity()
@@ -65,8 +61,7 @@ func TestVerifyBuildIgnoresWhatAPeerCannotKnowYet(t *testing.T) {
 	t.Parallel()
 	local := sampleIdentity()
 	remote := sampleIdentity()
-	remote.Seed, remote.Session, remote.ScenarioID = 0, 0, ""
-	remote.ContentID, remote.ContentFiles, remote.ContentBlocks, remote.ContentLines = "", 0, 0, 0
+	remote.Seed, remote.Session, remote.ScenarioID, remote.ScenarioDigest = 0, 0, "", ""
 
 	if err := local.VerifyBuild(remote); err != nil {
 		t.Fatalf("a peer with no world yet failed the build check: %v", err)
@@ -93,8 +88,7 @@ func TestSessionFromKeepsTheBuildLocal(t *testing.T) {
 	}
 	got := build.SessionFrom(event.JournalAnchor{
 		Schema: 999, TickInterval: 1, Seed: 0x5EED, Session: 3,
-		ScenarioID: "embedded", ContentID: "embedded",
-		ContentFiles: 1, ContentBlocks: 14, ContentLines: 46,
+		ScenarioID: "embedded", ScenarioDigest: "sha256:2604b13fd259",
 	})
 
 	if got.JournalSchema != 11 || got.TickIntervalNS != 50_000_000 {
@@ -103,7 +97,7 @@ func TestSessionFromKeepsTheBuildLocal(t *testing.T) {
 	if got.Simulation != "abc123" || got.CaptureSchema != 4 || got.Protocol != ProtocolVersion {
 		t.Fatalf("a build field was lost: %+v", got)
 	}
-	if got.Seed != 0x5EED || got.Session != 3 || got.ContentBlocks != 14 {
+	if got.Seed != 0x5EED || got.Session != 3 || got.ScenarioID != "embedded" {
 		t.Fatalf("a session field was not adopted: %+v", got)
 	}
 }

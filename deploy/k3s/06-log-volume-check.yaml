@@ -66,7 +66,12 @@ spec:
         - name: fleet-logs
           mountPath: /var/log/vif-fleet
         - name: fleet-wad
-          mountPath: /wad
+          mountPath: /wad/scenario
+          subPath: scenario
+          readOnly: true
+        - name: fleet-wad
+          mountPath: /wad/image
+          subPath: image
           readOnly: true
   volumes:
     - name: fleet-logs

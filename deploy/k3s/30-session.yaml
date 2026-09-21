@@ -80,10 +80,15 @@ spec:
           # never became ready rather than a session that accepted players first.
           args: ["-check", "-config-dir", "/wad", "-s", "${SCENARIO}"]
           volumeMounts:
-            # The whole root, so a scenario naming an asset the node has can
-            # reach it without a manifest change.
+            # The categories the fleet serves, by subPath. content/ is not one:
+            # glyphs are player domain, read on each player's own machine.
             - name: fleet-wad
-              mountPath: /wad
+              mountPath: /wad/scenario
+              subPath: scenario
+              readOnly: true
+            - name: fleet-wad
+              mountPath: /wad/image
+              subPath: image
               readOnly: true
           securityContext: &container_security
             allowPrivilegeEscalation: false
@@ -124,11 +129,11 @@ spec:
             - "${LOG_LEVEL}"
             - "-ls"
             - "all+dispatch"
-            # The scenario and the corpus both come off the node's read-only
-            # volume. The corpus is the session's to serve — a guest is sent the
-            # host's, never its own — so what is mounted here is what every player
-            # types. -config-dir is explicit rather than relying on the XDG
-            # default: a scratch image has no /etc/xdg and no reason to acquire one.
+            # The scenario comes off the node's read-only volume; the corpus is
+            # embedded and unused, because a dedicated host spawns no glyphs and
+            # each player reads their own text. -config-dir is explicit rather than
+            # relying on the XDG default: a scratch image has no /etc/xdg and no
+            # reason to acquire one.
             - "-config-dir"
             - "/wad"
             - "-s"
@@ -179,7 +184,12 @@ spec:
             - name: fleet-logs
               mountPath: /var/log/vif-fleet
             - name: fleet-wad
-              mountPath: /wad
+              mountPath: /wad/scenario
+              subPath: scenario
+              readOnly: true
+            - name: fleet-wad
+              mountPath: /wad/image
+              subPath: image
               readOnly: true
           resources:
             requests:

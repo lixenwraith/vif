@@ -11,6 +11,9 @@
 # pod already mounted, and the next pod mounts the new one. Nothing reloads, and
 # nothing has to.
 #
+# It installs the categories the fleet serves — scenario/ and image/ — and not the
+# rest of wad/: a corpus is read on each player's own machine, never the host's.
+#
 # What it refuses: a tree that is not laid out like wad/, and a tree the fleet
 # cannot load. Every scenario is validated by -check against the same mount layout
 # a session gets, so one that would have failed an init container fails here first.
@@ -21,7 +24,7 @@ repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 
 case ${1:-} in
 	-h|--help)
-		sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
 		exit 0
 		;;
 esac
@@ -33,13 +36,20 @@ staging="$wad_root.new"
 previous="$wad_root.previous"
 layout=
 
+# The categories the fleet serves. content/ is not one and will not be: glyphs are
+# player domain, read on each player's own machine. audio/ is not one yet, because
+# a dedicated host renders nothing. Adding a category is this line, wadCategories
+# in tool/vif-allocator/manifest.go, and the mounts in deploy/k3s/30-session.yaml.
+categories="scenario image"
+
 die() { echo "$0: $*" >&2; exit 1; }
 note() { echo "== $*"; }
 cleanup() { [ -z "$layout" ] || rm -rf "$layout"; }
 trap cleanup EXIT INT TERM
 
-[ -d "$source_wad/scenario" ] || die "$source_wad has no scenario/ directory"
-[ -d "$source_wad/image" ] || die "$source_wad has no image/ directory"
+for name in $categories; do
+	[ -d "$source_wad/$name" ] || die "$source_wad has no $name/ directory"
+done
 
 scenarios=$(find "$source_wad/scenario" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
 [ -n "$scenarios" ] || die "$source_wad/scenario holds no scenarios"
@@ -52,13 +62,14 @@ note "scenarios found: $(echo "$scenarios" | tr '\n' ' ')"
 # Built here rather than run from a container: the node keeps Docker stopped
 # outside an image build, so a runtime is the one thing this cannot count on, and a
 # dead socket would read as a broken scenario. Same worktree the image is built
-# from. The layout is scenario/ and image/ only, as a pod gets, so a scenario
-# needing a corpus it will not have on the node fails here rather than in a pod.
+# from. The layout is the categories a pod gets, so a scenario reaching for one
+# the node does not serve fails here rather than in a pod.
 checker=$repo_root/bin/vif-headless
 if command -v go >/dev/null 2>&1 && make -C "$repo_root" headless >/dev/null; then
 	layout=$(mktemp -d)
-	ln -s "$source_wad/scenario" "$layout/scenario"
-	ln -s "$source_wad/image" "$layout/image"
+	for name in $categories; do
+		ln -s "$source_wad/$name" "$layout/$name"
+	done
 	note "validating every scenario with $checker"
 	for name in $scenarios; do
 		"$checker" -check -config-dir "$layout" -s "$name" >/dev/null \
@@ -70,10 +81,12 @@ else
 	echo "$0: the init container still refuses a broken one, but later" >&2
 fi
 
-note "staging $source_wad into $staging"
-sudo install -d -o root -g root -m 0755 "$(dirname "$wad_root")"
+note "staging $categories from $source_wad into $staging"
 sudo rm -rf "$staging"
-sudo cp -a "$source_wad" "$staging"
+sudo install -d -o root -g root -m 0755 "$(dirname "$wad_root")" "$staging"
+for name in $categories; do
+	sudo cp -a "$source_wad/$name" "$staging/$name"
+done
 # Directories 0755 and files 0644, owned by root: every session reads this and
 # none of them writes it.
 sudo chown -R root:root "$staging"

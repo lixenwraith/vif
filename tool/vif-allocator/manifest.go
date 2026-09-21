@@ -14,15 +14,23 @@ type workloadConfig struct {
 	Drain     string
 }
 
-// wadMounts is what a container reads the fleet's resources through: the whole
-// root, so a scenario naming an asset the node has can reach it without a manifest
-// change. The corpus is the session's to serve — a guest is sent the host's, never
-// its own — so content/ absent here means every guest types the embedded corpus.
-// Shared by the init container and the session, which must prove the same tree.
+// wadCategories are the resource directories a session reads from the node's
+// volume. content/ is not among them and will not be: glyphs are player domain,
+// read on each player's own machine. audio/ is not yet — a dedicated host renders
+// nothing — and adding it back is adding it here, in update-vif-wad.sh, and in
+// 30-session.yaml, which is the whole of provisioning a category to the fleet.
+var wadCategories = []string{"scenario", "image"}
+
+// wadMounts is shared by the init container and the session, which must prove the
+// same tree. subPath rather than the whole root, so a category the node happens to
+// hold is not silently in a pod that was never meant to read it.
 func wadMounts() []any {
-	return []any{
-		map[string]any{"name": "fleet-wad", "mountPath": "/wad", "readOnly": true},
+	mounts := make([]any, 0, len(wadCategories))
+	for _, name := range wadCategories {
+		mounts = append(mounts, map[string]any{"name": "fleet-wad",
+			"mountPath": "/wad/" + name, "subPath": name, "readOnly": true})
 	}
+	return mounts
 }
 
 func buildJob(id string, cfg workloadConfig) map[string]any {

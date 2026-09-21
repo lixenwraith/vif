@@ -54,7 +54,7 @@ func (a *App) JoinAt(j event.JoinAnchor) error { return a.join(j, true) }
 
 func (a *App) join(j event.JoinAnchor, midRun bool) error {
 	an := j.Anchor
-	if err := firstAnchorMismatch("join", a.anchorIdentity(an)); err != nil {
+	if err := firstAnchorMismatch("join", a.sessionAnchorFields(an)); err != nil {
 		return err
 	}
 	if an.MapWidth <= 0 || an.MapHeight <= 0 {

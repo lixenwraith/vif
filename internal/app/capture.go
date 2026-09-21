@@ -351,13 +351,15 @@ func (a *App) verifyCaptureIdentity(h snapshot.CaptureHeader) error {
 	if h.Schema != snapshot.Schema {
 		return fmt.Errorf("capture schema %d, this build reads %d", h.Schema, snapshot.Schema)
 	}
-	return firstAnchorMismatch("manifest", a.anchorIdentity(snapshot.Anchor(h)))
+	return firstAnchorMismatch("manifest", a.sessionAnchorFields(snapshot.Anchor(h)))
 }
 
 // VerifyCapture reports whether this instance can install a capture: whether it is
-// intact, and whether it describes the same build, configuration and corpus. The
-// identity set is anchorIdentity's, so a join and a replay of the same pair cannot
-// reach opposite verdicts.
+// intact, and whether it describes the same session. The set is
+// sessionAnchorFields', the same one the join handshake uses, so the two cannot
+// reach opposite verdicts about one peer. The corpus the header records is
+// provenance, not a condition: a shared capture carries no glyphs to disagree
+// about, since those are player domain.
 func (a *App) VerifyCapture(cap snapshot.SharedCapture) error {
 	if cap.Header.Schema != snapshot.Schema {
 		return fmt.Errorf("capture schema %d, this build reads %d",
@@ -371,5 +373,5 @@ func (a *App) VerifyCapture(cap snapshot.SharedCapture) error {
 		return errors.New("capture integrity hash does not match its body")
 	}
 
-	return firstAnchorMismatch("capture", a.anchorIdentity(snapshot.Anchor(cap.Header)))
+	return firstAnchorMismatch("capture", a.sessionAnchorFields(snapshot.Anchor(cap.Header)))
 }

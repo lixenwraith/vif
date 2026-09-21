@@ -64,6 +64,7 @@ them believes it is hosting one. See
 | `scenario` | `:n td` then `:n main` each rebuild the run: three scenario records, the last matching the first. Needs a `script(1)` that can give it a pty, and skips rather than fails without one |
 | `transfer` | a guest whose configuration root is empty joins a host playing an installed scenario: the host serves it, the guest receives it and installs the session world on it |
 | `follow` | a host with a guest types `:n blank`: the guest is told, rebuilds, redials, receives the new scenario off the wire and installs the session world again. Two terminals, so it needs a pty like `scenario` |
+| `corpus` | a guest whose `content/` holds one file the host does not have joins a host reading five: glyphs are player domain, so nothing is reconciled and no `content_id` appears in either log |
 | `fleet` | the hand-rendered session template and the allocator's own render carry the same arguments, mounts and claims |
 | `deploy` | what a node needs before a pod can start, none of which a normal build reaches: the image's `vif_headless` tag compiles, no manifest leaves an image placeholder unquoted, the wad installer reports what it installed, and a scenario resolves through the pod's `scenario/`+`image/` mount and names itself in the log the commissioning check reads |
 | `lifetime` | an unclaimed session exits 0 on its first-guest window; an emptied one exits 0 on its vacancy grace, each naming why |

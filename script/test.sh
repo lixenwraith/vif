@@ -132,6 +132,7 @@ Automated (assert, and used by `all`)
   scenario          :n <name> rebuilds the run on another scenario and back
   transfer          a guest with no root receives the session's scenario
   follow            a host changes scenario and its guest rebuilds with it
+  corpus            a guest reading its own content joins a host reading other
   fleet             the session template and the allocator render one workload
   deploy            the node install, the manifests and a mounted scenario
   lifetime          unclaimed expiry, then vacancy expiry
@@ -414,6 +415,34 @@ scenario)
 	pass "a run changed scenario and came back, rebuilding each time"
 	;;
 
+corpus)
+	# Glyphs are player domain, so two machines with different content installed are
+	# still in one session. The guest's corpus is one file the host does not have;
+	# nothing is reconciled and nothing is refused.
+	need_bin
+	ROOT=$(mktemp -d); HL=$(mktemp -d); GL=$(mktemp -d)
+	mkdir -p "$ROOT/content"
+	cp -a wad/scenario wad/image "$ROOT/"
+	printf 'package solo\n\nfunc OnlyHere() int { return 42 }\n' >"$ROOT/content/solo.go.txt"
+	"$BIN" -check -config-dir "$ROOT" -s main | grep -q "content ok: $ROOT/content (1 files" \
+		|| fail "the guest root did not resolve to its own single-file corpus"
+
+	"$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -config-dir wad -s main \
+		-size 120x40 -players 1 -first-join 30s -empty 15s \
+		-l="$HL" -lv info -ls all >/dev/null 2>&1 &
+	SERVE_PID=$!
+	wait_for 15 'probe_get /health' || fail "the host never answered its probe"
+	timeout 25 "$BIN" -script script/sparring-guest.toml -join "$HOST:$PORT" \
+		-config-dir "$ROOT" -l="$GL" -lv info -ls all >/dev/null 2>&1 || true
+
+	grep -qh '"msg":"join installed the session world"' "$GL"/*.jsonl 2>/dev/null \
+		|| fail "a guest reading its own corpus did not join: $GL"
+	grep -qh 'content_id' "$GL"/*.jsonl "$HL"/*.jsonl 2>/dev/null \
+		&& fail "the corpus was reconciled; it is the player's: $GL"
+	rm -rf "$ROOT" "$HL" "$GL"
+	pass "a guest reading its own corpus joined a host reading another"
+	;;
+
 follow)
 	# The host changes scenario and every guest comes with it. Two real terminals,
 	# because both sides restart and only a run Run owns has a loop to restart in.
@@ -466,7 +495,7 @@ fleet)
 		./deploy/k3s/render-session.sh fleetcheck 31700 vi-fighter:dev 4 120x40)
 	for want in \
 		'"-config-dir"' '"-s"' '"td"' '"debug"' \
-		'claimName: vif-fleet-wad' 'mountPath: /wad' \
+		'claimName: vif-fleet-wad' 'subPath: scenario' 'subPath: image' \
 		'name: vif-session-env'
 	do
 		printf '%s' "$rendered" | grep -q -- "$want" \
@@ -518,6 +547,10 @@ deploy)
 		grep -q 'scenario blank does not load' "$headless/bad" \
 			|| fail "the refusal did not name the scenario: $headless/bad"
 		[ -d "$node/wad/scenario/main" ] || fail "a refused tree still replaced the node's"
+		# Only the categories the fleet serves are installed. A corpus on the node
+		# would be a category nothing mounts and no session would read.
+		[ -d "$node/wad/image" ] || fail "the installer skipped image/"
+		[ ! -d "$node/wad/content" ] || fail "the installer put a corpus on the node"
 		sudo rm -rf "$node" "$bad"
 	else
 		echo "  skip: the wad installer needs passwordless sudo"
@@ -527,14 +560,15 @@ deploy)
 	# resolves from exactly that and names itself in the log the commissioning
 	# check reads.
 	mount=$(mktemp -d)/wad
-	cp -a wad "$mount"
+	mkdir -p "$mount"
+	cp -a wad/scenario wad/image "$mount/"
 	"$headless/vif" -check -config-dir "$mount" -s main >"$headless/check" \
 		|| fail "the init container's check does not resolve through the mount"
 	grep -q '^scenario ok' "$headless/check" || fail "no scenario off the mount"
-	# The pod mounts the whole volume, so the corpus a session serves is the node's.
-	# It is also every guest's: a joining run adopts the coordinator's content.
-	grep -q '^content ok: .*/content ' "$headless/check" \
-		|| fail "the corpus fell back to embedded: $headless/check"
+	# A pod reads no corpus: glyphs are player domain and a dedicated host spawns
+	# none, so an installed content/ would be a category nothing asked for.
+	grep -q '^content ok: embedded' "$headless/check" \
+		|| fail "a session resolved a corpus off the volume: $headless/check"
 	"$headless/vif" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -authority host \
 		-l="$mount/log" -log-session-id=volume-check -lv=info \
 		-config-dir="$mount" -s=main -first-join=3s -empty=3s -drain=3s >/dev/null 2>&1 \
@@ -556,7 +590,7 @@ image)
 	;;
 
 all)
-	for s in check scenario transfer follow fleet deploy lifetime drain identity; do
+	for s in check scenario transfer follow corpus fleet deploy lifetime drain identity; do
 		note "$s"
 		"$0" "$s"
 	done

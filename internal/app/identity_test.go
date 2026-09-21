@@ -87,11 +87,11 @@ func TestTheOfferCarriesWhatTheJoinIsCheckedAgainst(t *testing.T) {
 	}
 }
 
-// TestADifferentCorpusIsRefusedAtTheJoin is the mismatch a person actually hits:
-// two machines with different content installed. It is the case the anchor check
-// already caught on the joiner, asserted here through the authority's check so it
-// stays caught when the joiner is the one that is wrong.
-func TestADifferentCorpusIsRefusedAtTheJoin(t *testing.T) {
+// TestADifferentCorpusStillJoins is the rule content follows: the corpus is the
+// player's, resolved from this machine's roots or -d and never reconciled, so two
+// machines with different content installed are still running the same session.
+// The scenario is the opposite and stays refused, which is what keeps them apart.
+func TestADifferentCorpusStillJoins(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, 0x0C0C, 120, 40)
 	defer a.Close()
@@ -101,17 +101,43 @@ func TestADifferentCorpusIsRefusedAtTheJoin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("assign: %v", err)
 	}
-	remote := a.sessionIdentity()
-	remote.ContentBlocks += 3
-
-	err = offer.Identity.Verify(remote)
-	if err == nil {
-		t.Fatal("a peer with a different corpus was accepted")
+	if err := offer.Identity.Verify(a.sessionIdentity()); err != nil {
+		t.Fatalf("a peer with the same session was refused: %v", err)
 	}
-	if !strings.Contains(err.Error(), "content_blocks") {
-		t.Fatalf("refusal %q does not name the corpus", err)
+
+	elsewhere := a.sessionIdentity()
+	elsewhere.ScenarioDigest = "sha256:0000000000000000"
+	err = offer.Identity.Verify(elsewhere)
+	if err == nil {
+		t.Fatal("a peer simulating a different scenario was accepted")
+	}
+	if !strings.Contains(err.Error(), "scenario_digest") {
+		t.Fatalf("refusal %q does not name the scenario", err)
 	}
 	if !network.IsIdentityRefusal(err) {
 		t.Fatalf("refusal %q is not recognisable across the wire", err)
+	}
+}
+
+// TestAJoinIgnoresTheCorpusAReplayRequires is the split between the two checks
+// that read one anchor. Glyphs are player domain, so a peer reading its own corpus
+// is still in this session. A replay is the opposite: it retypes recorded input,
+// which only reproduces the run if the blocks it typed are the same ones.
+func TestAJoinIgnoresTheCorpusAReplayRequires(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 0x0C0C, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+
+	an := a.JoinAnchor().Anchor
+	an.ContentID = "elsewhere/content"
+	an.ContentFiles += 2
+
+	if err := firstAnchorMismatch("join", a.sessionAnchorFields(an)); err != nil {
+		t.Fatalf("a peer reading its own corpus was refused: %v", err)
+	}
+	err := firstAnchorMismatch("replay", a.anchorIdentity(an))
+	if err == nil || !strings.Contains(err.Error(), "content_id") {
+		t.Fatalf("a replay accepted a corpus it did not record: %v", err)
 	}
 }
