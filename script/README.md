@@ -1,10 +1,10 @@
-# Manual test scenarios
+# End-to-end setups
 
 Command reference for verifying behaviour on a dev machine. Build first: `make dev`.
 
 ```sh
-./test/scenario.sh list        # every scenario
-./test/scenario.sh all         # every automated one; prints PASS/FAIL
+./script/test.sh list        # every scenario
+./script/test.sh all         # every automated one; prints PASS/FAIL
 ```
 
 Overrides: `BIN` (default `./bin/vif`), `HOST`, `PORT`, `PROBE_PORT`, `PLAYERS`,
@@ -27,8 +27,8 @@ Each runs in the foreground until you stop it.
 Two terminals for a real session:
 
 ```sh
-./test/scenario.sh host        # terminal 1
-./test/scenario.sh join        # terminal 2
+./script/test.sh host        # terminal 1
+./script/test.sh join        # terminal 2
 ```
 
 `host` with no argument admits the whole roster and starts on its first guest, so
@@ -56,7 +56,7 @@ them believes it is hosting one. See
 
 ## Automated
 
-`./test/scenario.sh all` runs every one of these and prints PASS/FAIL.
+`./script/test.sh all` runs every one of these and prints PASS/FAIL.
 
 | Scenario | Asserts |
 |---|---|

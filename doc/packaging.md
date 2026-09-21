@@ -72,7 +72,7 @@ Target `vi-fighter` (release) with `vi-fighter-git` optional.
    wants to control.
 3. `package()` runs `make install DESTDIR="$pkgdir" PREFIX=/usr SYSCONFDIR=/etc`.
    Confirm the licence lands in `/usr/share/licenses/vi-fighter/`.
-4. `check()` runs `go test ./...`. `test/scenario.sh` binds ports and must not
+4. `check()` runs `go test ./...`. `script/test.sh` binds ports and must not
    run in a build chroot.
 5. Namcap the result. Expect a warning about the size of `/etc/xdg/vi-fighter`;
    a config tree that large is intentional and is the answer to it.

@@ -734,9 +734,7 @@ same claims are taken once over a real socket the kernel is shaping:
 stages — latency, jitter, loss, bandwidth — and requires bounded magnitude through
 all of them and recovery when the qdisc is removed. It is opt-in behind
 `VIF_NETEM=1` and needs root, because a qdisc on `lo` shapes every loopback flow
-on the machine. `script/phase5-linkshape.sh` is the operator form of the same run,
-driving the checked-in `script/phase5-host.toml` and `script/phase5-guest.toml`
-pair and reading the answer out of both journals.
+on the machine.
 
 The authority term and the succession have their own set, and it is split the same
 way for the same reason. The election rule is a pure function of a roster and a set
@@ -758,12 +756,11 @@ The relay role's are `TestARelayedParticipantKeepsTheSelectiveStream`,
 `TestARelayCannotForgeAPage`, `TestARelayThatDroppedTheManifestSaysSo` and
 `TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies`.
 
-`script/phase7-migration.sh` is the operator form: three real processes over
-sockets, the same `tc netem` stages, the coordinator killed mid-storm, and the
-term, authority, migration and repair counters read out of all three logs. It says
-which half it can prove — a star's leaves cannot reach a majority, so what it
-demonstrates over sockets is the fallback and the no-two-authorities invariant, and
-the elected-successor half belongs to the mesh suite.
+What sockets can demonstrate and the mesh suite cannot is the fallback and the
+no-two-authorities invariant: `-join` dials one address, so real processes start as
+a star, and a star's leaves cannot reach a majority. The elected-successor half
+belongs to the mesh suite, where a topology that is not a star can be expressed.
+`script/test.sh host-loss` is the operator form of the first half.
 
 The mid-run join has its own set. `TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun`
 runs the whole thing over a socket — a solo run opens a port hundreds of ticks in,
@@ -815,11 +812,11 @@ passing the flag; the guest dials it the same way. `:session` on either side
 reports what it is part of.
 
 For a repeatable no-terminal run, combine the flags with the paired authored
-scripts in `script/phase3-host.toml` and `script/phase3-guest.toml`. Their manual
-clocks are wall-paced after the ready gate so socket delivery observes the same
-tick cadence as play mode. `script/phase4-host.toml` and `script/phase4-guest.toml`
-are the mid-run pair: the host half takes **no** flag, runs flat out to tick 400,
-opens hosting there with `:host`, and is wall-paced from that point — pacing is a
+scripts in `script/sparring-host.toml` and `script/sparring-guest.toml`, which
+`script/test.sh pair` runs together. Their manual clocks are wall-paced after the
+ready gate so socket delivery observes the same tick cadence as play mode. A
+mid-run pair is the same files with no flag on the host half: it runs flat out,
+opens hosting with `:host`, and is wall-paced from that point — pacing is a
 property of the run rather than of the flags, so a script that opens a session
 starts keeping step with its peer the moment it has one. See
 [Development](development.md) for the exact commands and script schema.

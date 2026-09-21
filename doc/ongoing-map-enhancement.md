@@ -302,7 +302,7 @@ scenario is refused by the helper and, if forced past it, by the init container.
 
 New items to add when the phases land: caching a received scenario to the user root
 behind an explicit opt-in; an HTTP-backed scenario provider for browser builds,
-which `multi-platform.md` already anticipates; and `test/scenario.sh`, whose name
+which `multi-platform.md` already anticipates; and `script/test.sh`, whose name
 now collides with the word for a playable scenario.
 
 ## 5. Settled

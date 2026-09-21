@@ -42,7 +42,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Deploying the session fleet](kube-docker-deploy.md) | Operational detail | How are the edge firewall, the node, Docker, K3s, the log tmpfs, the image, the fleet objects, LogWisp, the allocator and the site's front door installed, in order? **Start here to deploy a node.** |
 | [Session fleet plan](kubernetes-fleet.md) | Operational detail | What is the design, what did it cost when measured, what is still open, and what was decided against? Holds the work list. |
 | [Node runbook](../deploy/runbook.md) | Operational detail | What do you run on a node that is already up — status, draining, the updaters, and what each refusal means? |
-| [Manual test scenarios](../test/README.md) | Operational detail | Which command runs which game setup, and which ones assert? |
+| [End-to-end setups](../script/README.md) | Operational detail | Which command runs which game setup, and which ones assert? |
 
 Existing focused references remain useful:
 

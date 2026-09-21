@@ -378,33 +378,9 @@ and the same script geometry, so the presented and headless forms simulate
 identically. A presented run that is in a session offers pan and quit only: pause,
 step and rate are instance-local and half a session cannot be paused.
 
-The checked-in Phase 3 pair runs the tick-zero 2,000-tick diagnostic, forces one
-owner-local heat burst on each side, and forces a quasar, storm, and
-shield-overlapping swarm:
-
-```bash
-# terminal 1
-./bin/vif -host :7777 -players 2 -script script/phase3-host.toml \
-  -l=log/phase3-host -lv info -ls afs -lt 200 -j
-
-# terminal 2
-./bin/vif -join 127.0.0.1:7777 -script script/phase3-guest.toml \
-  -l=log/phase3-guest -lv info -ls afs -lt 200 -j
-```
-
-The Phase 4 pair is the mid-run form. Its host half takes **no** flag: it runs flat
-out to tick 400, opens hosting there with `:host`, and is wall-paced from that
-point, so the operator has the rest of the run to start the guest.
-
-```bash
-# terminal 1 — starts solo, opens hosting at tick 400
-./bin/vif -script script/phase4-host.toml \
-  -l=log/phase4-host -lv info -ls afs -lt 100 -j
-
-# terminal 2 — once "hosting opened mid-run" appears in the host log
-./bin/vif -join 127.0.0.1:7777 -script script/phase4-guest.toml \
-  -l=log/phase4-guest -lv info -ls afs -lt 100 -j
-```
+`script/test.sh pair` runs both halves headless in one command. A mid-run form
+takes no flag on the host half: it runs solo, opens hosting with `:host`, and the
+guest dials it once the log says so.
 
 A guest half of a mid-run pair carries no action before a tick the join cannot
 have passed: a joiner enters at whatever tick the host had reached, which depends
@@ -418,7 +394,7 @@ process exit, paired journals, status records, and the cross-process gate provid
 those verdicts. Interactive play remains the acceptance path for actual terminal
 responsiveness and rendering.
 
-`app.PlayJournal(paths ...string)` and `journal.Load` can reassemble several
+`app.PlayJournal` and `journal.Load` can reassemble several
 rotated files by `jseq`. The current CLI flag stores one string and passes one
 path, so positional paths after `-replay` are not a supported multi-file form.
 The replay path rebuilds seed, config/content, timing, and geometry from its
@@ -426,18 +402,18 @@ anchor rather than `buildConfig`; normal gameplay flags do not override those
 values. Session logging and `-dev` are still applied before playback starts;
 `-j` is an App config flag and does not journal a replay.
 
-### Manual scenarios
+### End-to-end setups
 
-`test/scenario.sh` is the command reference for running a setup by hand: `solo`,
+`script/test.sh` is the command reference for running a setup by hand: `solo`,
 `host`, `join`, `serve`, `serve-fleet`, `probe`, `pair`, and the automated `check`,
 `lifetime`, `drain`, `identity` and `image` checks that print PASS or FAIL.
 
 ```sh
-./test/scenario.sh list
-./test/scenario.sh all
+./script/test.sh list
+./script/test.sh all
 ```
 
-See [test/README.md](../test/README.md).
+See [script/README.md](../script/README.md).
 
 ## 5. Validation and tests
 

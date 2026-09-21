@@ -1,11 +1,11 @@
 #!/bin/sh
-# Named game setups, for verifying behaviour by hand on a dev machine.
+# End-to-end setups, for verifying behaviour by hand on a dev machine.
 #
-#   ./test/scenario.sh <name> [args...]
-#   ./test/scenario.sh list
+#   ./script/test.sh <name> [args...]
+#   ./script/test.sh list
 #
 # Scenarios marked (auto) assert and print PASS/FAIL; the rest launch something and
-# leave it in the foreground. See test/README.md.
+# leave it in the foreground. See script/README.md.
 set -eu
 
 BIN=${BIN:-./bin/vif}

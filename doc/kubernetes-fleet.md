@@ -7,7 +7,7 @@ This is what the design is, what it cost when it was measured, and what is left.
 The procedure for installing it is
 [Deploying the session fleet](kube-docker-deploy.md); the objects are in
 [`deploy/`](../deploy/README.md); the scenarios that verify the process by hand are
-in [`test/`](../test/README.md).
+in [`script/`](../script/README.md).
 
 ## 1. What is deployed
 
@@ -239,12 +239,12 @@ go test ./...        # includes lifecycle, identity refusal, probe and fingerpri
 make verify          # plus vet and the build-tag matrix
 ```
 
-By hand, on a dev machine — see [`test/README.md`](../test/README.md):
+By hand, on a dev machine — see [`script/README.md`](../script/README.md):
 
 ```sh
-./test/scenario.sh all          # check, lifetime, drain, identity
-./test/scenario.sh serve-fleet  # the flag set the containers run
-./test/scenario.sh probe        # /health and /metrics
+./script/test.sh all          # check, lifetime, drain, identity
+./script/test.sh serve-fleet  # the flag set the containers run
+./script/test.sh probe        # /health and /metrics
 ```
 
 Against a cluster, [§13 of the procedure](kube-docker-deploy.md#13-first-session) is

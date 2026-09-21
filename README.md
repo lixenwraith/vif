@@ -141,10 +141,9 @@ The session is plaintext and trusted-peer — a dial is rate-limited per address
 bounded in what it can allocate, but it is not authenticated, so a host reachable
 from an untrusted network needs one in front of it.
 
-For an automatic 2,000-tick headless pair, use `script/phase3-host.toml` and
-`script/phase3-guest.toml` as documented in `doc/development.md`. For a host
-nobody sits at, `./bin/vif -serve :7777 -size 120x40` waits for its first guest
-and then runs the session on its own.
+For an automatic headless pair, `./script/test.sh pair` runs both scripted sides
+in one command. For a host nobody sits at, `./bin/vif -serve :7777 -size 120x40`
+waits for its first guest and then runs the session on its own.
 
 `deploy/` holds the container image and the K3s objects that run one such session
 per player request: a `scratch` image of the static `vif_headless` non-root binary,
@@ -157,10 +156,10 @@ The nightly workflow publishes downloadable Linux, FreeBSD, browser, and headles
 server archives plus the headless container image; see
 [doc/packaging.md](doc/packaging.md).
 
-`test/scenario.sh` runs named setups for verifying behaviour by hand —
+`script/test.sh` runs named setups for verifying behaviour by hand —
 `solo`, `host`/`join`, `serve`, `serve-fleet`, `probe`, and automated checks for the
 session lifetime, the drain, and join-identity refusal. See
-[test/README.md](test/README.md).
+[script/README.md](script/README.md).
 
 ## Documentation
 
