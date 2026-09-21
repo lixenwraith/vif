@@ -32,9 +32,15 @@ These hold regardless of which repository is targeted first.
 
 `.github/workflows/nightly.yml` runs daily and on manual dispatch. It updates the
 moving `nightly` prerelease with Linux amd64 client and headless-server archives,
-a FreeBSD amd64 client archive, a complete browser bundle, and `SHA256SUMS`. It
-also publishes the same Dockerfile's `vif_headless` image to GHCR as both
-`nightly` and an immutable `sha-<commit>` tag.
+a FreeBSD amd64 client archive, a complete browser bundle, the wad archive, and
+`SHA256SUMS`. It also publishes the same Dockerfile's `vif_headless` image to GHCR
+as both `nightly` and an immutable `sha-<commit>` tag.
+
+`vi-fighter-nightly-wad.tar.gz` is `make wad-archive`, which is `install-config`
+into one file: it unpacks over a config root, so a downloaded binary reaches the
+installed scenarios and corpus rather than only the embedded scenario. It is one
+archive for every target because the wad is platform-independent, and the Makefile
+owns its contents so the release and a source install cannot drift.
 
 Downloads appear at the repository's
 [`nightly` release](https://github.com/lixenwraith/vi-fighter/releases/tag/nightly),
@@ -43,9 +49,9 @@ and the image is `ghcr.io/lixenwraith/vi-fighter:nightly` or its immutable
 
 Nightlies are download and deployment candidates, not stable source releases.
 They intentionally exclude the experimental Windows cross-build. A stable tag
-still needs a byte-stable source archive and checksum, and downloadable game
-content still needs its own format, limits, trust, and cache policy before it is
-wired into either client.
+still needs a byte-stable source archive and checksum. Content a client fetches
+for itself, rather than one a person downloads and extracts, still needs its
+trust, origin and cache policy decided.
 
 ## 3. Gaps to close before a first submission
 

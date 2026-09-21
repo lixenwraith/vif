@@ -62,6 +62,12 @@ jobs:
           done
           cp -R web/. stage/web/
           tar -C stage/web -czf dist/vi-fighter-nightly-web.tar.gz .
+
+          # One archive rather than a copy in each target's: the wad is the same
+          # bytes on every platform. The Makefile owns what is in it, so the
+          # release and make install-config cannot drift.
+          make wad-archive WAD_ARCHIVE=dist/vi-fighter-nightly-wad.tar.gz
+
           (cd dist && sha256sum vi-fighter-nightly-* > SHA256SUMS)
 
       - name: Upload release payload

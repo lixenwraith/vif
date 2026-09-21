@@ -129,6 +129,7 @@ Observed (runs a scenario and prints what happened; asserts nothing)
 
 Automated (assert, and used by `all`)
   check             validate every shipped resource tree
+  bundle            the release wad archive extracts to a working config root
   scenario          :n <name> rebuilds the run on another scenario and back
   transfer          a guest with no root receives the session's scenario
   follow            a host changes scenario and its guest rebuilds with it
@@ -304,6 +305,25 @@ check)
 		"$BIN" -check $tree >/dev/null || fail "resource check: $tree"
 	done
 	pass "every shipped resource tree resolves"
+	;;
+
+bundle)
+	# What the release publishes is the wad as the config root it extracts into, so
+	# the archive is only right if an empty root filled from it resolves. A binary
+	# on its own reaches the embedded scenario and nothing else.
+	need_bin
+	ARCHIVE=$(mktemp -d)/wad.tar.gz; ROOT=$(mktemp -d)
+	make wad-archive WAD_ARCHIVE="$ARCHIVE" >/dev/null || fail "make wad-archive"
+	tar -C "$ROOT" -xzf "$ARCHIVE" || fail "the archive did not extract"
+	for tree in "-s main" "-s td" ""; do
+		# shellcheck disable=SC2086
+		"$BIN" -check -config-dir "$ROOT" $tree >/dev/null \
+			|| fail "the extracted root did not resolve: $tree"
+	done
+	"$BIN" -check -config-dir "$ROOT" | grep -q "^content ok: $ROOT/content" \
+		|| fail "the archive carries no corpus for a player who has none"
+	rm -rf "$ROOT" "$(dirname "$ARCHIVE")"
+	pass "the release wad archive extracts to a config root that resolves"
 	;;
 
 lifetime)
@@ -590,7 +610,7 @@ image)
 	;;
 
 all)
-	for s in check scenario transfer follow corpus fleet deploy lifetime drain identity; do
+	for s in check bundle scenario transfer follow corpus fleet deploy lifetime drain identity; do
 		note "$s"
 		"$0" "$s"
 	done

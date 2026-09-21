@@ -15,6 +15,7 @@ VIF_CONFIG_BASE := $(if $(XDG_CONFIG_HOME),$(XDG_CONFIG_HOME),$(HOME)/.config)
 VIF_CONFIG_DIR ?= $(VIF_CONFIG_BASE)/vi-fighter
 VIF_CONFIG_FORCE ?= 0
 WAD_DIR := wad
+WAD_ARCHIVE ?= $(BIN_DIR)/vi-fighter-wad.tar.gz
 KEYMAP_SRC := internal/asset/input/keymap.toml
 DESTDIR ?=
 PREFIX ?= /usr
@@ -22,7 +23,7 @@ SYSCONFDIR ?= /etc
 
 .DEFAULT_GOAL := help
 
-.PHONY: help generate dev release headless nolog wasm windows run test verify arch-check clean check-go tools allocator serve install install-config install-config-force image image-check
+.PHONY: help generate dev release headless nolog wasm windows run test verify arch-check clean check-go tools allocator serve install install-config install-config-force wad-archive image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -41,6 +42,7 @@ help:
 	@echo "  install  Stage binary, wad and docs under DESTDIR/PREFIX for a distro package"
 	@echo "  install-config Install the wad and default keymap under $(VIF_CONFIG_DIR)"
 	@echo "  install-config-force Replace files previously installed there"
+	@echo "  wad-archive Pack the wad as the config root a player extracts ($(WAD_ARCHIVE))"
 	@echo "  image    Build the dedicated-session container image (scratch, static, non-root)"
 	@echo "  image-check Run the image's own config validation as its numeric user"
 	@echo "  verify   Run tests, vet, and multi-arch compilation checks"
@@ -164,6 +166,19 @@ install-config:
 
 install-config-force:
 	@$(MAKE) --no-print-directory install-config VIF_CONFIG_FORCE=1
+
+# wad-archive is that same install as one file, so what a player extracts over a
+# config root is what install-config would have written there. The release
+# publishes it because a binary alone resolves only the embedded scenario.
+wad-archive: | $(BIN_DIR)
+	@set -eu; \
+	stage=$$(mktemp -d); \
+	trap 'rm -rf "$$stage"' EXIT; \
+	$(MAKE) --no-print-directory install-config \
+		VIF_CONFIG_DIR="$$stage" VIF_CONFIG_FORCE=1 >/dev/null; \
+	install -m 0644 LICENSE "$$stage/LICENSE"; \
+	tar -C "$$stage" -czf $(WAD_ARCHIVE) .; \
+	echo "packed $(WAD_ARCHIVE)"
 
 # install stages a distro package: the binary, the wad as a system config root
 # ($(SYSCONFDIR)/xdg is the XDG_CONFIG_DIRS default the resolver already

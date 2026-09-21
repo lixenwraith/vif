@@ -67,18 +67,26 @@ logs. Decide whether the expanded allocator remains the credential boundary or i
 renamed/split before adding the planned `github.com/lixenwraith/auth`
 Argon2-SCRAM dependency.
 
-### Add verified downloadable content bundles
+### Fetch a content-addressed bundle over HTTP
 
 - Priority: P1
-- Affected files: resource providers, browser/native admission, release assets
-- Prerequisite: decide the bundle format, compressed/expanded size limits,
-  publisher trust, allowed origins, and cache policy
+- Affected files: `internal/resource`, browser resource provider
+- Prerequisite: decide publisher trust, allowed origins, and cache policy; the
+  format and the limits are `resource.Scenario`'s and are already decided
 
-The scenario half is done: `resource.Scenario` is content-addressed, a coordinator
-serves its own digest during the join handshake, and the receiver verifies before
-constructing its `App`. What remains is the corpus, which travels as a fingerprint
-and not as bytes, and a download surface for a client that has neither — the
-nightly release page is the first candidate.
+Two of the three routes to content exist. A native player downloads the release
+wad and extracts it over a config root; a guest joining a session is served the
+coordinator's scenario and verifies its digest before constructing its `App`. The
+corpus needs neither: it is player domain, resolved per instance and never
+reconciled, so a peer holding a different one is not a disagreement to settle.
+
+The third route is a client with no config root and no peer — a WASM build before
+it has joined anything, which has no roots at all. An HTTP-backed provider reading
+the same content-addressed container is what [Multi-platform](multi-platform.md)
+anticipates, and it is one provider for both the browser case and a native player
+who would rather fetch a scenario than unpack one. What it needs before it is
+written is whose signature makes bytes trustworthy, which origins may serve them,
+and how long a fetched container is kept.
 
 ### Extract the renderer-neutral Android host model
 
@@ -185,15 +193,6 @@ rejoining the same session downloads it again. Writing it under the user root
 behind an explicit opt-in would keep it, and needs a trust decision first: the
 bytes came from a peer, and nothing about a plaintext link says they are the
 operator's.
-
-### Serve a scenario over HTTP for browser builds
-
-- Priority: P3
-- Affected files: `internal/resource`, browser resource provider
-
-A WASM build has no config roots and no peer to receive from until it has joined.
-An HTTP-backed provider reading the same content-addressed container is what
-[Multi-platform](multi-platform.md) already anticipates.
 
 ## Audio
 
