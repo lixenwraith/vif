@@ -809,12 +809,14 @@ sudo systemctl enable --now vif-allocator-token.timer vif-allocator.service
 offering it and there is no second list to keep in step. A swap under a running
 allocator is picked up without a restart.
 
-`VIF_ALLOCATOR_WAD` is the only optional variable in the file. Unset means
-`/var/db/vif/wad`, where `update-vif-wad.sh` installs; the unit passes it as
-`-wad=${VIF_ALLOCATOR_WAD}` so an unset one is an empty value the allocator reads
-as that default. Every other variable the `ExecStart` names is required, and a
-missing one takes the unit down — which is why `update-vif-allocator.sh` prints the
-unit's own last lines before it rolls back.
+A variable this file does not define expands to an empty argument, not to nothing,
+so the unit passes every flag its `ExecStart` names whether or not you set it. The
+allocator drops a flag whose value is empty and takes its own default, so an
+environment file written before a flag existed still starts: `VIF_ALLOCATOR_WAD`
+unset is `/var/db/vif/wad` and `VIF_ALLOCATOR_SCENARIO` unset is `main`. The four
+that have no default — image, join host, page base, log stream URL — still refuse
+by name. `update-vif-allocator.sh` prints the unit's own last lines before it rolls
+back, which is where that name appears.
 
 ```sh
 curl -fsS http://127.0.0.1:9080/vif/api/sessions | jq -c .limits.scenarios
@@ -1238,10 +1240,10 @@ curl -fsS http://127.0.0.1:9080/vif/api/sessions | jq -c .limits
 ```
 
 Expected: `limits` carries a `scenarios` array holding what step 2 installed. The
-environment file needs no edit — `VIF_ALLOCATOR_WAD` is optional and an unset one
-is `/var/db/vif/wad`, which is where the installer puts the volume. Set it only to
-serve from somewhere else, and do that before running the helper: the helper
-installs the unit and starts it in one step, so there is no window between them.
+environment file needs no edit: `VIF_ALLOCATOR_SCENARIO` and `VIF_ALLOCATOR_WAD`
+are both optional, and unset means `main` and `/var/db/vif/wad` — the path the
+installer uses. Set either only to change it, and do that before running the
+helper, which installs the unit and starts it in one step.
 
 If the helper rolls back, it prints the unit's own last lines before it does;
 `journalctl -u vif-allocator -n 20` has the rest.

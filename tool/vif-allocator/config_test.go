@@ -102,32 +102,46 @@ func TestRequestBoundsFailClosed(t *testing.T) {
 	}
 }
 
-// TestAnUnsetWadVariableStartsOnTheDefault is what the unit does with an optional
-// variable. systemd expands -wad=${VIF_ALLOCATOR_WAD} to -wad= when the operator
-// never set it, so an empty value has to mean the default rather than a refusal —
-// otherwise adding the variable to a unit takes the deployment down until someone
-// edits the environment file the updater does not own.
-func TestAnUnsetWadVariableStartsOnTheDefault(t *testing.T) {
-	base := []string{
+// TestAnUnsetUnitVariableKeepsTheDefault is the failure mode a unit has and a
+// command line does not. systemd expands a variable the environment file never
+// defined to an empty argument, so every flag the ExecStart names is passed with
+// nothing behind it. A flag with a default must take the default; a numeric one
+// must not fail to parse; a required one must still say which it is.
+func TestAnUnsetUnitVariableKeepsTheDefault(t *testing.T) {
+	required := []string{
 		"-image", "docker.io/library/vi-fighter:test",
 		"-join-host", "play.example.com",
 		"-page-base", "https://play.example.com/projects/vi-fighter/session/",
 		"-log-stream-url", "http://127.0.0.1:8081/stream",
 	}
-	for _, args := range [][]string{base, append(slices.Clone(base), "-wad=")} {
+	unset := func(extra ...string) []string { return append(slices.Clone(required), extra...) }
+
+	for _, args := range [][]string{
+		unset(),
+		unset("-scenario", "", "-wad", ""),
+		unset("-scenario=", "-wad="),
+		unset("-listen", "", "-players-max", "", "-log-level-min", "", "-scenario", "", "-wad", ""),
+	} {
 		cfg, err := parseConfig(args, io.Discard)
 		if err != nil {
 			t.Fatalf("%v: %v", args, err)
 		}
-		if cfg.Allocator.WadDir != defaultWadDir {
-			t.Errorf("%v: wad = %q; want %q", args, cfg.Allocator.WadDir, defaultWadDir)
+		if cfg.Allocator.WadDir != defaultWadDir || cfg.Allocator.Workload.Scenario != "main" ||
+			cfg.Listen != ":9080" || cfg.Allocator.PlayersMax != cfg.Allocator.Workload.Players {
+			t.Errorf("%v: an empty variable overrode a default: %+v", args, cfg.Allocator)
 		}
 	}
-	cfg, err := parseConfig(append(slices.Clone(base), "-wad=/srv/wad"), io.Discard)
-	if err != nil || cfg.Allocator.WadDir != "/srv/wad" {
-		t.Fatalf("an explicit volume was not honoured: %q, %v", cfg.Allocator.WadDir, err)
+
+	cfg, err := parseConfig(unset("-wad", "/srv/wad", "-scenario", "td"), io.Discard)
+	if err != nil || cfg.Allocator.WadDir != "/srv/wad" || cfg.Allocator.Workload.Scenario != "td" {
+		t.Fatalf("a set variable was not honoured: %+v, %v", cfg.Allocator, err)
 	}
-	if _, err := parseConfig(append(slices.Clone(base), "-wad=relative"), io.Discard); err == nil {
+	if _, err := parseConfig(unset("-wad", "relative"), io.Discard); err == nil {
 		t.Error("a relative volume was accepted")
+	}
+	if _, err := parseConfig([]string{"-image", "", "-join-host", "h",
+		"-page-base", "https://h/p/", "-log-stream-url", "http://127.0.0.1:8081/stream"},
+		io.Discard); err == nil {
+		t.Error("an empty required flag was accepted")
 	}
 }

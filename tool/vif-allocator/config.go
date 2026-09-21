@@ -80,17 +80,11 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	set.DurationVar(&cfg.Allocator.PollInterval, "poll-interval", time.Second, "session readiness polling interval")
 	cfg.Allocator.CleanupTimeout = 10 * time.Second
 
-	if err := set.Parse(args); err != nil {
+	if err := set.Parse(dropEmptyFlags(args)); err != nil {
 		return runtimeConfig{}, err
 	}
 	if set.NArg() != 0 {
 		return runtimeConfig{}, fmt.Errorf("unexpected argument %q", set.Arg(0))
-	}
-	// An empty -wad is the default rather than a refusal: the unit passes
-	// -wad=${VIF_ALLOCATOR_WAD} and that variable is optional, so a deployment that
-	// never set it must start on the path everything else already assumes.
-	if cfg.Allocator.WadDir == "" {
-		cfg.Allocator.WadDir = defaultWadDir
 	}
 	cfg.Allocator.Workload.FirstJoin = firstJoin
 	cfg.Allocator.Workload.Empty = empty
@@ -108,6 +102,25 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 		return runtimeConfig{}, err
 	}
 	return cfg, nil
+}
+
+// dropEmptyFlags removes flags whose value is empty, so the flag's own default
+// applies instead. systemd expands a variable the environment file does not define
+// to an empty argument, and a unit naming one would otherwise override a default
+// with nothing — or fail to parse at all, since an empty numeric flag is an error
+// rather than an omission. A flag that is genuinely required still fails, by name.
+func dropEmptyFlags(args []string) []string {
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		switch {
+		case strings.HasSuffix(args[i], "=") && strings.HasPrefix(args[i], "-"):
+		case strings.HasPrefix(args[i], "-") && i+1 < len(args) && args[i+1] == "":
+			i++
+		default:
+			out = append(out, args[i])
+		}
+	}
+	return out
 }
 
 func validateConfig(cfg runtimeConfig) error {
