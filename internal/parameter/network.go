@@ -97,6 +97,16 @@ const (
 	// beside is stopped.
 	SessionVacantReset = time.Minute
 
+	// SessionRejoinWindow and SessionRejoinInterval bound a participant redialling
+	// the coordinator that told it the session is rebuilding on another scenario.
+	// The window covers the coordinator tearing one App down and constructing the
+	// next, which is a world build rather than a link event, so it is generous; the
+	// interval is what a refused dial costs before the door is open.
+	//
+	// Wall time, not game time: neither run has a clock while this is measured.
+	SessionRejoinWindow   = 30 * time.Second
+	SessionRejoinInterval = 250 * time.Millisecond
+
 	// NetworkJoinReadyTimeout bounds how long a coordinator waits for a mid-run
 	// joiner to install the world it was sent and confirm it. It is a link and
 	// install bound rather than a game one: a participant that needs longer than

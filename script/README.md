@@ -63,6 +63,7 @@ them believes it is hosting one. See
 | `check` | embedded, default `wad/scenario/main`, and named `wad/scenario/td` all resolve |
 | `scenario` | `:n td` then `:n main` each rebuild the run: three scenario records, the last matching the first. Needs a `script(1)` that can give it a pty, and skips rather than fails without one |
 | `transfer` | a guest whose configuration root is empty joins a host playing an installed scenario: the host serves it, the guest receives it and installs the session world on it |
+| `follow` | a host with a guest types `:n blank`: the guest is told, rebuilds, redials, receives the new scenario off the wire and installs the session world again. Two terminals, so it needs a pty like `scenario` |
 | `lifetime` | an unclaimed session exits 0 on its first-guest window; an emptied one exits 0 on its vacancy grace, each naming why |
 | `drain` | `SIGTERM` keeps the match running, reports `live=true ready=false phase=draining`, keeps the clock moving, then ends itself |
 | `identity` | a peer running a different build or session is refused (runs the Go tests that can construct one) |

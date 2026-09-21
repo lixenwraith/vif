@@ -236,7 +236,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:quit`, `:q` | Exit. |
 | `:new`, `:n` | Reset simulation state; in a live session only the host may request it, and both participants reset. |
 | `:new!` | Reset and purge the initiating operator's free-mouse, auto-fire, speed, debug HUD, and pins. |
-| `:n <scenario>` | Rebuild the run on another scenario, by installed name or path. A scenario declares its own regions, so a different one needs a run of its own; naming the one already loaded resets in place instead. Refused on a run that has opened a session. |
+| `:n <scenario>` | Rebuild the run on another scenario, by installed name or path. A scenario declares its own regions, so a different one needs a run of its own; naming the one already loaded resets in place instead. In a live session only the host may ask, and every guest rebuilds and rejoins with it. |
 | `:help`, `:h`, `:?`; `:about` | Open overlays. |
 | `:content` | Show corpus telemetry. |
 | `:free [on\|off]` | Toggle or set free mouse. |

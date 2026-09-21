@@ -988,6 +988,12 @@ type NetworkResource struct {
 	// the correction protocol rather than inside the transport.
 	OnAuthority func(kind uint8, from uint32, body []byte)
 
+	// OnSessionRestart reports the authority's notice that the session is
+	// rebuilding on another scenario, so this participant rebuilds with it. Called
+	// under the world lock from the tick that drained the frame, and only for a
+	// frame the authority sent.
+	OnSessionRestart func(participant uint32)
+
 	// OnPeerLost reports a direct neighbour's departure to the session layer,
 	// beside the identity release OnDeparture does. It is a different question:
 	// which identities the lobby may hand out again is local bookkeeping, and

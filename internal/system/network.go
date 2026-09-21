@@ -1560,6 +1560,8 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) int {
 	case network.MsgStateManifest, network.MsgStateRequest, network.MsgStateShard,
 		network.MsgStateUnserved:
 		s.receiveSelective(msg.Type, from, msg.Payload)
+	case network.MsgSessionRestart:
+		s.receiveSessionRestart(from)
 	case network.MsgAuthorityReport, network.MsgAuthorityHandoff, network.MsgPeerList:
 		// The address map travels with the succession it exists for: same term
 		// gate, same flood, same session layer deduplicating by term and
@@ -1659,6 +1661,22 @@ func (s *NetworkSystem) receiveAuthority(kind network.MessageType, from uint32, 
 	if r := s.world.Resources.Network; r != nil && r.OnAuthority != nil {
 		r.OnAuthority(uint8(kind), from, body)
 	}
+}
+
+// receiveSessionRestart hands the authority's rebuild notice to the session layer.
+// Only the authority's own is taken: a participant that could make its peers tear
+// down and redial on demand is a participant that could empty a session, and the
+// term already names which one of them speaks for it.
+func (s *NetworkSystem) receiveSessionRestart(from uint32) {
+	r := s.world.Resources.Network
+	if r == nil || r.OnSessionRestart == nil {
+		return
+	}
+	if from == 0 || from != r.Authority.Load() {
+		s.statDrop.Add(1)
+		return
+	}
+	r.OnSessionRestart(from)
 }
 
 // publishTransportLoss exposes frames the link lost outside the barrier: inbound

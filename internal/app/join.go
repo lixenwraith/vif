@@ -322,6 +322,7 @@ func (a *App) attachTransportLocked(port engine.NetworkPort) {
 	r.OnSelective = a.receiveSelective
 	r.OnAuthority = a.receiveAuthorityFrame
 	r.OnPeerLost = a.reportPeerLost
+	r.OnSessionRestart = a.receiveSessionRestart
 	term, holder := a.authorityStamp()
 	if holder != 0 {
 		r.Authority.Store(holder)

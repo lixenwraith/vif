@@ -214,33 +214,47 @@ whose captures are "single-digit kilobytes". `td`'s 500x250 map with its maze an
 towers is three orders of magnitude past that. Phase 5 cannot serve `td` from the
 fleet until this is decided. See `doc/todo.md`.
 
-### Phase 4 — Live scenario change in a session
+### Phase 4 — Live scenario change in a session (done)
 
-0. **The refusal to lift.** Phase 2 answers `Scenario: a run that has opened a
-   session cannot change scenario` to `:n <name>` and `:n! <name>` on a host that
-   has a guest — `bin/vif -host :7777 -s wad/scenario/main/` then `:n
-   wad/scenario/td`. That message is this phase's entry point: when it is gone,
-   the same two commands rebuild the host and carry every guest with them.
-1. The coordinator's `:n <scenario>` validates as in Phase 2, then broadcasts a
-   session-restart notice carrying the new name, digest and the address to redial,
-   and latches its own restart. A guest's `:n <scenario>` stays refused, as `:n` is.
-2. A guest receiving the notice latches a restart whose next `Config` is
-   `-join <addr>` against the same address, with a bounded redial window
-   (`NetworkJoinReadyTimeout` scale, a handful of attempts) covering the host's own
-   rebuild. Failure to redial ends the guest's run with the reason on the way out,
-   rather than leaving it in a session that no longer exists.
-3. The host's restart re-binds the same address. Guests arrive through the ordinary
-   mid-run gate: identity, scenario transfer if needed, capture install, roster
-   slot. No new admission path.
-4. A dedicated `-serve` host is out of scope: it has no operator, and its scenario
-   is the pod's. Phase 5 is how that changes.
+The Phase 2 refusal is gone. `:n <scenario>` on a coordinator broadcasts
+`MsgSessionRestart` before its transport goes and latches its own restart; each
+guest latches the same one and redials. A guest asking is refused by name — a
+participant that could rebuild the session could empty somebody else's.
 
-**Gates.** `go test ./internal/app`.
-**Manual.** Two local instances, `:n td` on the host: both reach TD, the guest's
-cursor is on the session's map, a correction lands. Guest that cannot obtain the
-scenario exits with the reason. Host `:n` with no argument still resets both in
-place through the existing crossing. Three participants: all three follow.
-**New test.** A notice for the digest already running is a no-op, not a restart.
+The notice carries nothing. Every participant already knows the address it came in
+on, and the offer it is given when it redials names what is being played, so the
+smallest thing that works is the news itself. It is taken only from the participant
+the term names, checked in `NetworkSystem.receiveSessionRestart` before the hook.
+
+`restartRequest` is what `Loop` returns and `Run` applies to the command line it
+was given, so a pinned `-seed` still pins. A coordinator's carries `Host`: the
+rebuilt run starts **solo** and reopens its address once its clock is running,
+through `Config.resumeHost`, rather than going back into a startup lobby — its
+guests are already redialling, and the mid-run gate is the door a reconnect has
+always used. A guest's request is empty: the same command line, redialled.
+`App.restart` became an `atomic.Pointer` because the authority's notice latches it
+from the tick goroutine while `Loop` reads it from its own.
+
+`openRun` retries a rejoin for `SessionRejoinWindow` at `SessionRejoinInterval`,
+which covers the coordinator tearing one App down and building the next — a world
+build, not a link event. Only a rejoin retries: a first `-join` reports a host that
+is not there at once, and an identity the coordinator refuses will not be a
+different identity a second later.
+
+`:n <same scenario>` in a session now crosses its reset like a bare `:n` does, via
+the `resetGame` both paths share.
+
+**Verified.** `script/test.sh follow` drives two real terminals: a host on `main`
+and a guest whose configuration root is empty. The host types `:n blank`; the guest
+is told, rebuilds, redials, receives `blank` off the wire and installs the session
+world a second time, and both end on the same digest. Removing the broadcast fails
+it, so the assertion is not vacuous.
+`TestOnlyTheHostChangesALiveSessionsScenario` pins the refusal over a live mesh.
+
+**Not covered.** A `-serve` host has no operator to ask, and `Run` only drives
+`ModePlay`, so a dedicated session's scenario is still the pod's — which is Phase 5.
+A scripted (`-script`) participant is `ModeScript` and has no restart loop either,
+so it leaves the session rather than following it.
 
 ### Phase 5 — The fleet serves an external wad
 

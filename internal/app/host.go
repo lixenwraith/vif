@@ -43,11 +43,14 @@ func (c sessionControl) ChangeScenario(name string) (bool, error) {
 //
 // Caller MUST hold updateMutex.
 func (a *App) changeScenarioLocked(name string) (bool, error) {
+	// The session's rule first: it holds whatever shape this runtime is, and it is
+	// the more useful of the two answers to a participant that asked.
+	port := a.sessionTransportLocked()
+	if port != nil && !a.world.IsSessionCoordinator() {
+		return false, errors.New("only the host can change a live session's scenario")
+	}
 	if a.cfg.Mode != ModePlay {
 		return false, fmt.Errorf("%s mode has no restart loop", a.cfg.Mode)
-	}
-	if a.sessionTransportLocked() != nil {
-		return false, errors.New("a run that has opened a session cannot change scenario")
 	}
 	o := a.cfg.Resources
 	o.Scenario, o.Embedded = name, false
@@ -58,10 +61,35 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 	if sc.Digest() == a.scenario.Digest() {
 		return false, nil // already running these bytes; the caller resets instead
 	}
-	a.restartScenario = name
+	req := &restartRequest{Scenario: name}
+	if port != nil {
+		// Said before this run's transport goes, because afterwards there is nobody
+		// to say it to. The notice carries nothing: each participant rebuilds on the
+		// command line it was started with and redials the address it came in on,
+		// and the offer it is given there names what is being played.
+		port.Broadcast(uint8(network.MsgSessionRestart), nil)
+		req.Host = a.cfg.HostAddress
+	}
+	a.restart.Store(req)
 	vlog.Info("app", "msg", "scenario change requested",
-		"scenario", sc.Name, "digest", sc.Short())
+		"scenario", sc.Name, "digest", sc.Short(), "host", req.Host)
 	return true, nil
+}
+
+// receiveSessionRestart takes the authority's notice that the session is rebuilding
+// on another scenario. There is nothing in it to apply: this participant restarts
+// on its own command line and dials the address it came in on, and Phase 3's
+// transfer covers a scenario no root here holds.
+//
+// Called under the world lock from the tick that drained the frame, so the latch is
+// atomic and the run it belongs to is the one Loop is about to leave.
+func (a *App) receiveSessionRestart(from uint32) {
+	if a.cfg.Mode != ModePlay || a.cfg.JoinAddress == "" {
+		return // a coordinator hears its own broadcast back on a mesh; a driven run has no loop
+	}
+	if a.restart.CompareAndSwap(nil, &restartRequest{}) {
+		vlog.Info("app", "msg", "session restarting", "authority", from)
+	}
 }
 
 // BeginHosting opens a running instance to participants, for a caller that holds

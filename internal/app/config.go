@@ -199,6 +199,11 @@ type Config struct {
 	// a run reproducing a session sets it from the anchor's SessionShared.
 	LockMap bool
 
+	// resumeHost is Run's own: the address a rebuilt coordinator reopens once its
+	// clock is running. It is not HostAddress because this run is not waiting for a
+	// startup lobby — its guests are redialling into the mid-run gate.
+	resumeHost string
+
 	// networkConfig is prepared by Run after host/join negotiation. Keeping the
 	// transport detail private leaves Config's public session surface role-neutral.
 	networkConfig *network.Config

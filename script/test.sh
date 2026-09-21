@@ -65,6 +65,36 @@ guest_bg() {
 	GUEST_PID=$!
 }
 
+# pty_ok reports whether this machine has a script(1) that can give vif a terminal.
+# The two flavours take their arguments in opposite orders; a machine with neither
+# is missing the harness rather than the game, so its scenarios skip.
+pty_ok() {
+	script -qec true /dev/null >/dev/null 2>&1 && return 0
+	script -q /dev/null true >/dev/null 2>&1 && return 0
+	return 1
+}
+
+# keyfile writes the keystroke script one terminal is driven by, and echoes its path.
+keyfile() {
+	f=$(mktemp)
+	printf '%s\n' "$@" > "$f"
+	echo "$f"
+}
+
+# pty_bg runs one command under a pty in the background, feeding it a keyfile.
+# PTY_PID is the job; a caller driving two terminals keeps its own copy.
+pty_bg() {
+	keys=$1
+	shift
+	if script -qec true /dev/null >/dev/null 2>&1; then
+		sh "$keys" | script -qec "$*" /dev/null >/dev/null 2>&1 &
+	else
+		# shellcheck disable=SC2086
+		sh "$keys" | script -q /dev/null $* >/dev/null 2>&1 &
+	fi
+	PTY_PID=$!
+}
+
 # Every line here has to succeed: under `set -e` a failing command in an EXIT trap
 # becomes the script's exit status, and a process that already ended is the normal
 # case rather than an error.
@@ -101,6 +131,7 @@ Automated (assert, and used by `all`)
   check             validate every shipped resource tree
   scenario          :n <name> rebuilds the run on another scenario and back
   transfer          a guest with no root receives the session's scenario
+  follow            a host changes scenario and its guest rebuilds with it
   lifetime          unclaimed expiry, then vacancy expiry
   drain             SIGTERM drains instead of cutting a match
   identity          a peer running a different build is refused (runs the tests)
@@ -364,30 +395,52 @@ transfer)
 
 scenario)
 	# `:n <name>` rebuilds the run, so the only honest witness is a real terminal
-	# going through it. script(1) supplies the pty; its two flavours take their
-	# arguments in different orders, and a machine with neither says so rather than
-	# failing, because what is missing is the harness and not the game.
+	# going through it.
 	need_bin
 	[ -d wad/scenario/td ] || fail "wad/scenario/td is not in this checkout"
+	pty_ok || { echo "SKIP scenario: no usable script(1) for a pty" >&2; exit 0; }
 	LOG=$(mktemp -d)
-	keys() { sleep 1; printf ':n td\r'; sleep 3; printf ':n main\r'; sleep 3; printf ':q\r'; sleep 1; }
-	run="$BIN -config-dir wad -l=$LOG -lv info -ls app"
-	if script -qec true /dev/null >/dev/null 2>&1; then
-		keys | script -qec "$run" /dev/null >/dev/null 2>&1 || true
-	elif script -q /dev/null true >/dev/null 2>&1; then
-		# shellcheck disable=SC2086
-		keys | script -q /dev/null $run >/dev/null 2>&1 || true
-	else
-		echo "SKIP scenario: no usable script(1) for a pty" >&2
-		exit 0
-	fi
+	KEYS=$(keyfile "sleep 1" "printf ':n td\\r'" "sleep 3" "printf ':n main\\r'" "sleep 3" "printf ':q\\r'" "sleep 1")
+	pty_bg "$KEYS" "$BIN -config-dir wad -l=$LOG -lv info -ls app"
+	wait "$PTY_PID" 2>/dev/null || true
 	got=$(grep -ho '"digest":"[0-9a-f]*"' "$LOG"/*.jsonl 2>/dev/null | sed 's/.*:"//;s/"//' | uniq)
 	count=$(printf '%s\n' "$got" | grep -c .)
 	[ "$count" -ge 3 ] || fail "expected main, td and main again; the log named $count scenario(s): $(printf '%s ' $got)"
 	first=$(printf '%s\n' "$got" | head -1)
 	[ "$(printf '%s\n' "$got" | sed -n 3p)" = "$first" ] || fail "the run did not come back to the scenario it started on"
-	rm -rf "$LOG"
+	rm -rf "$LOG" "$KEYS"
 	pass "a run changed scenario and came back, rebuilding each time"
+	;;
+
+follow)
+	# The host changes scenario and every guest comes with it. Two real terminals,
+	# because both sides restart and only a run Run owns has a loop to restart in.
+	# The guest's root is empty, so the scenario it ends on can only have come off
+	# the wire — which is the whole of what a session scenario change has to do.
+	need_bin
+	[ -d wad/scenario/blank ] || fail "wad/scenario/blank is not in this checkout"
+	pty_ok || { echo "SKIP follow: no usable script(1) for a pty" >&2; exit 0; }
+	HL=$(mktemp -d); GL=$(mktemp -d); ROOT=$(mktemp -d)
+	HK=$(keyfile "sleep 7" "printf ':n blank\\r'" "sleep 12" "printf ':q\\r'" "sleep 2")
+	GK=$(keyfile "sleep 24" "printf ':q\\r'" "sleep 2")
+	pty_bg "$HK" "$BIN -host $HOST:$PORT -config-dir wad -s main -l=$HL -lv info -ls app"
+	HOST_PTY=$PTY_PID
+	sleep 2
+	pty_bg "$GK" "$BIN -join $HOST:$PORT -config-dir $ROOT -l=$GL -lv info -ls app"
+	wait "$HOST_PTY" 2>/dev/null || true
+	wait "$PTY_PID" 2>/dev/null || true
+	grep -qh '"msg":"session restarting"' "$GL"/*.jsonl 2>/dev/null \
+		|| fail "the guest was never told the session was rebuilding: $GL"
+	grep -qh '"msg":"hosting opened mid-run"' "$HL"/*.jsonl 2>/dev/null \
+		|| fail "the rebuilt host never reopened its door: $HL"
+	ends=$(grep -ho '"digest":"[0-9a-f]*"' "$GL"/*.jsonl 2>/dev/null | sed 's/.*:"//;s/"//' | uniq | tail -1)
+	want=$(grep -ho '"digest":"[0-9a-f]*"' "$HL"/*.jsonl 2>/dev/null | sed 's/.*:"//;s/"//' | uniq | tail -1)
+	[ -n "$want" ] && [ "$ends" = "$want" ] \
+		|| fail "the guest ended on $ends, the host on $want"
+	[ "$(grep -c '"msg":"join installed the session world"' "$GL"/*.jsonl 2>/dev/null)" -ge 2 ] \
+		|| fail "the guest did not install the session world a second time: $GL"
+	rm -rf "$HL" "$GL" "$ROOT" "$HK" "$GK"
+	pass "the host changed scenario and its guest rebuilt and rejoined on it"
 	;;
 
 image)
@@ -399,7 +452,7 @@ image)
 	;;
 
 all)
-	for s in check scenario transfer lifetime drain identity; do
+	for s in check scenario transfer follow lifetime drain identity; do
 		note "$s"
 		"$0" "$s"
 	done

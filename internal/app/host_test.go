@@ -405,8 +405,27 @@ func TestScenarioChangeNeedsARestartLoop(t *testing.T) {
 	if got := a.Context().GetStatusMessage(); !strings.Contains(got, "restart loop") {
 		t.Fatalf("status bar says %q; want a refusal naming the restart loop", got)
 	}
-	if a.restartScenario != "" {
-		t.Fatalf("a refused change latched %q", a.restartScenario)
+	if req := a.restart.Load(); req != nil {
+		t.Fatalf("a refused change latched %+v", req)
+	}
+}
+
+// TestOnlyTheHostChangesALiveSessionsScenario pins who may do it. A scenario
+// change rebuilds every participant, so a guest that could ask for one could empty
+// somebody else's session.
+func TestOnlyTheHostChangesALiveSessionsScenario(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA1A2, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+
+	guest := apps[1]
+	var err error
+	guest.World().RunSafe(func() { _, err = guest.changeScenarioLocked("blank") })
+	if err == nil || !strings.Contains(err.Error(), "only the host") {
+		t.Fatalf("a guest's change = %v; want a refusal naming the host", err)
+	}
+	if req := guest.restart.Load(); req != nil {
+		t.Fatalf("a refused change latched %+v", req)
 	}
 }
 

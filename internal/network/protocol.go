@@ -55,6 +55,14 @@ const (
 	MsgScenarioRequest MessageType = 0x16 // Live: a joiner asking for the session's scenario
 	MsgScenarioBody    MessageType = 0x17 // Live: one chunk of the deflated scenario
 
+	// MsgSessionRestart is the authority saying this session is rebuilding on
+	// another scenario. It carries nothing: every participant already knows the
+	// address it came in on, and the offer it is given when it redials names what
+	// is being played. A scenario change restarts the run on both sides, so there
+	// is no state to hand over — only the news that the door is about to close and
+	// reopen.
+	MsgSessionRestart MessageType = 0x18 // Live: the authority is rebuilding the session
+
 	// MsgStateSnapshot carries one chunk of an authoritative shared-world capture
 	// (D-19). It is the only message whose total size is a function of the world
 	// rather than of the format, so it is the only one that is split; see

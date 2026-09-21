@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/render"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
@@ -19,30 +20,56 @@ import (
 // defaultMouseMode is the reporting mode used outside free-look
 const defaultMouseMode = terminal.MouseModeClick | terminal.MouseModeDrag
 
+// restartRequest is what one run asks the next one to be. Loop returns it and Run
+// applies it to the command line it was given, so the operator's own flags still
+// decide everything a restart does not name — a pinned -seed most of all.
+type restartRequest struct {
+	// Scenario replaces -s. Empty keeps the command line's, which is what a guest
+	// rebuilding into a session that is about to re-offer it one wants.
+	Scenario string
+
+	// Host is the address to open hosting on once the next run's clock is running.
+	// A coordinator changing scenario does not go back into a startup lobby: its
+	// guests are already redialling, and the mid-run gate is the door they arrive
+	// at — the same one a reconnect has always used.
+	Host string
+}
+
 // Run wires, runs, and tears down the game, once per scenario the player asks for.
 // A scenario change ends one run and starts another on the same command line with
 // a different -s: the regions a scenario declares are what register the FSM metric
-// set, and that set is frozen for the life of a run.
+// set, and that set is frozen for the life of a run. In a session every
+// participant does this together — the coordinator because the operator asked, the
+// rest because the coordinator said so.
 func Run(cfg Config) error {
 	if cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode is caller-driven; Run owns the frame loop", cfg.Mode)
 	}
+	rejoin := false
 	for {
-		next, err := runScenario(cfg)
-		if err != nil || next == "" {
+		next, err := runScenario(cfg, rejoin)
+		if err != nil || next == nil {
 			return err
 		}
-		vlog.Info("app", "msg", "scenario change", "scenario", next)
-		cfg.Resources.Scenario, cfg.Resources.Embedded = next, false
+		if next.Scenario != "" {
+			cfg.Resources.Scenario, cfg.Resources.Embedded = next.Scenario, false
+		}
+		// Hosting resumes after the clock rather than before it: this run is not
+		// waiting for a lobby, it is reopening a door its guests are already at.
+		cfg.HostAddress, cfg.resumeHost = "", next.Host
+		cfg.LockMap = cfg.LockMap || next.Host != ""
+		rejoin = cfg.JoinAddress != ""
+		vlog.Info("app", "msg", "run restarting",
+			"scenario", cfg.Resources.Scenario, "host", next.Host, "rejoin", rejoin)
 	}
 }
 
 // runScenario owns one App from construction to teardown. What it returns is the
-// scenario to build next; empty means the player quit.
-func runScenario(cfg Config) (next string, err error) {
-	a, err := newSessionApp(cfg)
+// run to build next; nil means the player quit.
+func runScenario(cfg Config, rejoin bool) (next *restartRequest, err error) {
+	a, err := openRun(cfg, rejoin)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer func() {
 		if r := recover(); r != nil {
@@ -53,11 +80,32 @@ func runScenario(cfg Config) (next string, err error) {
 	return a.Loop()
 }
 
-// Loop starts the services and runs the frame loop until the player quits or asks
-// for another scenario, which it names on the way out.
-func (a *App) Loop() (string, error) {
+// openRun builds the App, retrying while the coordinator this participant follows
+// rebuilds itself. Only a rejoin retries: a first -join reports a host that is not
+// there at once, which is what an operator dialling by hand wants, and an identity
+// the coordinator refuses will not be a different identity a second later.
+func openRun(cfg Config, rejoin bool) (*App, error) {
+	if !rejoin {
+		return newSessionApp(cfg)
+	}
+	deadline := time.Now().Add(parameter.SessionRejoinWindow) // [wall] a link bound
+	for {
+		a, err := newSessionApp(cfg)
+		switch {
+		case err == nil:
+			return a, nil
+		case network.IsIdentityRefusal(err) || !time.Now().Before(deadline):
+			return nil, err
+		}
+		time.Sleep(parameter.SessionRejoinInterval)
+	}
+}
+
+// Loop starts the services and runs the frame loop until the player quits or this
+// run is replaced, which it describes on the way out.
+func (a *App) Loop() (*restartRequest, error) {
 	if a.cfg.Mode != ModePlay {
-		return "", fmt.Errorf("%s mode has no interactive loop", a.cfg.Mode)
+		return nil, fmt.Errorf("%s mode has no interactive loop", a.cfg.Mode)
 	}
 	sigChan, stopSignals := notifySignals()
 	defer stopSignals()
@@ -68,30 +116,30 @@ func (a *App) Loop() (string, error) {
 		// must not start yet — and without an event source the gate is a wait with
 		// no key and no signal to leave on.
 		if err := a.pollTerminalEarly(); err != nil {
-			return "", err
+			return nil, err
 		}
 		if err := a.startJoinSession(sigChan); err != nil {
 			if errors.Is(err, errSessionCanceled) {
-				return "", nil
+				return nil, nil
 			}
-			return "", err
+			return nil, err
 		}
 	}
 	if err := a.hub.StartAll(); err != nil {
-		return "", err
+		return nil, err
 	}
 	if a.cfg.HostAddress != "" {
 		if err := a.startHostSession(sigChan); err != nil {
 			if errors.Is(err, errSessionCanceled) {
-				return "", nil
+				return nil, nil
 			}
-			return "", err
+			return nil, err
 		}
 	}
 	if a.cfg.HostAddress != "" || a.cfg.JoinAddress != "" {
 		a.activateNetworkSession()
 		if err := a.resumeJoinedSession(); err != nil {
-			return "", err
+			return nil, err
 		}
 		if a.cfg.JoinAddress != "" {
 			// A guest applies corrections between two ticks, and nothing on this
@@ -115,6 +163,14 @@ func (a *App) Loop() (string, error) {
 	// what a run that opens a session later with :host needs even when it never had
 	// a lobby of its own.
 	a.openMidRunJoins()
+	// A coordinator rebuilt by a scenario change reopens its door here, after the
+	// clock: its guests are redialling into the mid-run gate, which reads a capture
+	// a playout lead ahead of a tick that has to be running.
+	if a.cfg.resumeHost != "" {
+		if err := a.BeginHosting(a.cfg.resumeHost); err != nil {
+			return nil, fmt.Errorf("resume hosting on %s: %w", a.cfg.resumeHost, err)
+		}
+	}
 
 	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
 	defer frameTicker.Stop()
@@ -128,20 +184,20 @@ func (a *App) Loop() (string, error) {
 		// Before the wait, not inside it: a latched restart is serviced on the
 		// iteration after the intent that asked for one, and every other path
 		// through the loop arrives back here too.
-		if a.restartScenario != "" {
-			return a.restartScenario, nil
+		if req := a.restart.Load(); req != nil {
+			return req, nil
 		}
 		select {
 		case sig := <-sigChan:
 			vlog.Info("app", "msg", "signal received", "signal", sig.String())
-			return "", nil
+			return nil, nil
 
 		case ev := <-eventChan:
 			// Dumb pipe: key event → machine → intent → router
 			if intent := a.inputMachine.Process(ev); intent != nil {
 				before := a.pushed()
 				if !a.handleIntent(intent) {
-					return "", nil // player quit
+					return nil, nil // player quit
 				}
 				// Input events bypass the game tick wait; an intent that emitted
 				// nothing has nothing of its own to settle
@@ -156,12 +212,12 @@ func (a *App) Loop() (string, error) {
 
 		case <-inputTicker.C:
 			if !a.inputTick() {
-				return "", nil
+				return nil, nil
 			}
 
 		case <-frameTicker.C:
 			if !a.frame() {
-				return "", nil
+				return nil, nil
 			}
 		}
 	}

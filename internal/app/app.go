@@ -44,13 +44,13 @@ type App struct {
 	ctx      *engine.GameContext
 	scenario resource.Scenario
 
-	// restartScenario is the scenario this run is to be replaced by, latched by the
-	// operator command surface under the world lock and read by Loop between two
-	// waits on the same goroutine. Empty means this run ends when the player quits.
-	restartScenario string
-	inputMachine    *input.Machine
-	router          *mode.Router
-	recorder        *journal.Recorder
+	// restart is what this run is to be replaced by, latched either by the operator
+	// command surface or by the authority's notice on the tick goroutine, and read
+	// by Loop between two waits. Nil means this run ends when the player quits.
+	restart      atomic.Pointer[restartRequest]
+	inputMachine *input.Machine
+	router       *mode.Router
+	recorder     *journal.Recorder
 
 	scheduler      *engine.Scheduler
 	frameReady     chan struct{}
@@ -276,6 +276,7 @@ func (a *App) initWorld() {
 		r.OnSelective = a.receiveSelective
 		r.OnAuthority = a.receiveAuthorityFrame
 		r.OnPeerLost = a.reportPeerLost
+		r.OnSessionRestart = a.receiveSessionRestart
 		// A session endpoint exists, so this run is shared for its whole life whether
 		// or not a peer is attached at a given tick. Latching here rather than
 		// reading the port keeps the anchor, the D-14 verdict and the playout barrier

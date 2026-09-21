@@ -240,20 +240,27 @@ that lateness a second attacker's hit answers `opened` differently on two
 instances. The per-attacker budget and the additive join closed the composition;
 which hit owns the override is the same choice as kill credit above.
 
-### Let a td-sized world fit a capture
+### Carry a maximum-sized world across a session
 
 - Priority: P1
 - Affected files: `internal/network/snapshot.go`, `internal/snapshot/capture.go`,
-  `internal/system/wall.go`
-- Prerequisite: a decision on whether walls belong in a capture at all
+  `internal/system/wall.go`, `internal/engine/spatial_grid.go`
+- Prerequisite: a decision on whether a generated wall grid has to travel as
+  entities at all
 
 `-serve -s td` refuses every join with `snapshot encode: 10112276 plain bytes is
-outside 1..4194304`. `MaxSnapshotBytes` is 4 MiB and documented for a world whose
-captures are single-digit kilobytes; `wad/scenario/td` is 500x250 with a generated
-maze and towers. Raising the ceiling moves a number that bounds what one peer can
-make another hold, so the question is first whether the wall grid has to travel as
-entities — it is a function of the scenario and a seed on both sides. Until this
-lands, `td` is a solo scenario and the fleet cannot serve it.
+outside 1..4194304`. `wad/scenario/td` is sized to the largest map the spatial grid
+holds, 500x250, and fills it with a generated maze, so its start state alone is
+more than 50,000 entities. `MaxSnapshotBytes` is 4 MiB and documented for a world
+whose captures are single-digit kilobytes.
+
+Raising the ceiling moves a number that bounds what one peer can make another
+allocate, so it is not the fix on its own. The maze is a function of the scenario
+and a seed both sides already hold, which is the first thing to weigh: a capture
+that names the generator instead of its output is three orders of magnitude
+smaller. This is a network and capture sizing task rather than a scenario one, and
+it wants its own measurement pass. Until it lands, `td` is solo-only and the fleet
+cannot serve it.
 
 ### Retain peer crossings for the projection
 

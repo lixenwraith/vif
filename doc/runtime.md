@@ -684,6 +684,14 @@ per scenario, and the command validates the name and latches which one comes nex
 Everything operator-owned restarts with it. See
 [HFSM and configuration](fsm-and-configuration.md) §2.
 
+In a session every participant does this together. Only the coordinator may ask;
+it broadcasts `MsgSessionRestart` before its transport goes and rebuilds solo,
+reopening its address once its clock runs. Each guest latches the same restart,
+rebuilds on its own command line and redials, arriving through the mid-run gate a
+reconnect has always used — so the roster, the world install and the scenario
+transfer are the paths that already existed. Nothing is carried in the notice: the
+offer a guest is given when it redials names what is being played.
+
 A `:new` command emits `EventGameResetRequest` and requests scheduler reset
 without reconstructing the process. In a live session only the coordinator may
 request it; the request crosses and every participant applies it at one barrier

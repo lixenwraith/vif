@@ -304,22 +304,32 @@ func handleNewCommand(ctx *engine.GameContext, args []string, purge bool) Comman
 	if len(args) == 1 {
 		return changeScenario(ctx, args[0])
 	}
-	if ctx.World.LiveSession() {
-		if !ctx.World.IsSessionCoordinator() {
-			setCommandError(ctx, "Only the host can reset a live session")
-			return CommandResult{Continue: true, KeepPaused: false}
-		}
-		ctx.PushCrossing(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
-	} else {
-		ctx.PushEvent(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
+	if !resetGame(ctx, purge) {
+		return CommandResult{Continue: true, KeepPaused: false}
 	}
 	cmd := ":new"
 	if purge {
 		cmd = ":new!"
 	}
 	ctx.SetLastCommand(cmd)
-	ctx.MacroClearFlag.Store(true) // Signal macro reset
 	return CommandResult{Continue: true, KeepPaused: true}
+}
+
+// resetGame requests a new game on the run as it stands, crossing it in a live
+// session so every participant resets from one artifact. False means the request
+// was refused and the caller has already been told why.
+func resetGame(ctx *engine.GameContext, purge bool) bool {
+	if ctx.World.LiveSession() {
+		if !ctx.World.IsSessionCoordinator() {
+			setCommandError(ctx, "Only the host can reset a live session")
+			return false
+		}
+		ctx.PushCrossing(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
+	} else {
+		ctx.PushEvent(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
+	}
+	ctx.MacroClearFlag.Store(true) // Signal macro reset
+	return true
 }
 
 // changeScenario asks the runtime to rebuild this run on another scenario. The
@@ -336,12 +346,15 @@ func changeScenario(ctx *engine.GameContext, name string) CommandResult {
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 	ctx.SetLastCommand(":n " + name)
-	ctx.MacroClearFlag.Store(true)
 	if !changed {
 		// Already running these bytes, so a reset is the same new game without a
-		// restart's cost
-		ctx.PushEvent(event.EventGameResetRequest, &event.GameResetPayload{})
+		// restart's cost — and in a session it crosses, as a bare :n does
+		if !resetGame(ctx, false) {
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		return CommandResult{Continue: true, KeepPaused: true}
 	}
+	ctx.MacroClearFlag.Store(true)
 	// Nothing to report on the restart path: the loop returns before the next
 	// frame, and what the operator sees is the new scenario.
 	return CommandResult{Continue: true, KeepPaused: true}

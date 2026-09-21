@@ -266,6 +266,13 @@ than `scenario_id` is what a mismatched scenario is refused on: two roots may
 install the same scenario under different names or paths, and the same name may
 cover an edit. The name is what the refusal message and the log records say.
 
+`MsgSessionRestart` is the coordinator saying the session is rebuilding on another
+scenario. It carries nothing — each participant already knows the address it came
+in on, and the offer it is given when it redials names what is being played — and
+it is taken only from the participant the term names, because one that could make
+its peers tear down and redial on demand could empty a session. See
+[Runtime and concurrency](runtime.md) for the restart itself.
+
 A joiner whose own roots hold no scenario with that digest asks the coordinator
 for one, between the offer and the reply: `MsgScenarioRequest` names the digest,
 `MsgScenarioBody` carries the deflated canonical form in capture-sized chunks. It
