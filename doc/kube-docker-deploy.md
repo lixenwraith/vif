@@ -537,58 +537,84 @@ only; the session then renders exactly as it did before there was a browser path
 The bridge is the one process in the deployment that speaks WebSocket, and it is
 off-the-shelf so that the game and the allocator do not have to be. `websocat` is
 the reference. Its release asset is verified by checksum at build time, because a
-pod cannot refuse its own image:
+pod cannot refuse its own image.
+
+Docker on this node is a build tool, not a runtime (§4). It is started for the
+build and stopped afterwards, and it sets `FORWARD` to `DROP` on start — which
+severs every live session's NodePort path — so drain the fleet first with
+`./deploy/k3s/session.sh blockers` and restore the policy both times — the same sequence
+[`update-vif-image.sh`](../deploy/guest/update-vif-image.sh) performs for the
+session image. Read the version and the asset checksum from the upstream release
+page first; the build fails without both rather than shipping whatever a mirror
+served:
 
 ```sh
-# Read the version and the asset checksum from the upstream release page, then:
+WS_VERSION=<upstream release tag>
+WS_SHA256=<sha256 of its linux-musl asset>
+: "${WS_VERSION:?}" "${WS_SHA256:?}"
+
+sudo systemctl start docker.service
+sudo iptables -P FORWARD ACCEPT
+
 docker build --network host \
   -f deploy/docker/Dockerfile.ws-bridge \
   --build-arg WEBSOCAT_VERSION="$WS_VERSION" \
   --build-arg WEBSOCAT_SHA256="$WS_SHA256" \
   -t "vif-ws-bridge:$WS_VERSION" .
-docker save "vif-ws-bridge:$WS_VERSION" | sudo k3s ctr images import -
-sudo k3s ctr images ls | grep vif-ws-bridge
+
+archive=$(mktemp "${TMPDIR:-/tmp}/vif-ws-bridge.XXXXXX.tar")
+docker save --output "$archive" "vif-ws-bridge:$WS_VERSION"
+sudo k3s ctr -n k8s.io images import "$archive"
+rm -f "$archive"
+
+sudo systemctl disable --now docker.service docker.socket containerd.service
+sudo iptables -P FORWARD ACCEPT
+sudo k3s crictl inspecti "docker.io/library/vif-ws-bridge:$WS_VERSION" >/dev/null
 ```
 
-The build fails without both arguments rather than shipping whatever the mirror
-served. Reference the result by digest past the lab, for the reason the session
-image is referenced by digest.
+`docker save` writes the local tag and containerd normalises it, so the reference
+the allocator is given is `docker.io/library/vif-ws-bridge:$WS_VERSION` — the same
+shape the session image ends up with. Use a digest past the lab, for the reason the
+session image uses one.
 
-Prove the three things the workload assumes of it — that it answers a handshake,
-that it opens one TCP connection per client, and that it carries bytes rather than
-text — before a pod depends on it. The image is its own test client, so nothing
-else has to be installed, and the sleep holds stdin open long enough for the echo
-to arrive:
+Then prove the three things the workload assumes of it: that it answers a
+handshake, that it opens one connection to the game per client, and that it
+carries bytes rather than text. K3s's own containerd runs it, so this needs no
+Docker and exercises the runtime that will actually run it. The image is its own
+test client, and `literal:` stands in for the game — a listener that answers every
+connection, which proves the bridge established one:
 
 ```sh
-WS="vif-ws-bridge:$WS_VERSION"
-# A stand-in game: a TCP listener that echoes. Then the bridge, on its own args.
-docker run -d --rm --name ws-echo --network host --entrypoint /ws-bridge "$WS" \
-  --binary tcp-l:127.0.0.1:7777 mirror:
-docker run -d --rm --name ws-front --network host "$WS"
-{ printf 'vi-fighter'; sleep 1; } |
-  docker run --rm -i --network host --entrypoint /ws-bridge "$WS" \
-    --binary - ws://127.0.0.1:7779
-docker rm -f ws-front ws-echo
+WS="docker.io/library/vif-ws-bridge:$WS_VERSION"
+CTR="sudo k3s ctr -n k8s.io"
+
+$CTR run -d --net-host "$WS" ws-echo /ws-bridge --binary tcp-l:127.0.0.1:7777 literal:pong
+$CTR run -d --net-host "$WS" ws-front
+$CTR run --rm --net-host "$WS" ws-probe /ws-bridge --binary -E ws://127.0.0.1:7779 -
+echo "probe exit=$?"
+
+for c in ws-front ws-echo; do
+  $CTR task kill -s SIGKILL "$c" 2>/dev/null || true
+  $CTR task rm "$c" 2>/dev/null || true
+  $CTR container rm "$c" 2>/dev/null || true
+done
 ```
 
-Expected: `vi-fighter` back on stdout. Nothing back means the argument vector is
-wrong for this image, and the vector — not the manifest's expectation of it — is
-what to correct, in `deploy/k3s/30-session.yaml` and `bridgeSidecar` together.
-This tests the image; §13 tests the session.
+Expected: `pong` on stdout and `probe exit=0`. A non-zero exit is the handshake or
+the loopback hop, and the argument vector is what to correct — in
+`deploy/k3s/30-session.yaml` and `bridgeSidecar` together, never one of them. The
+specifiers (`tcp-l:`, `ws-l:`, `literal:`, `-E`) are the reference bridge's; a
+substitute image names its own, which its `--help` lists. This tests the image;
+§13 tests the session, and a browser is the only thing that tests the whole path.
 
-A substitute image is allowed and must accept the argument vector in
-`deploy/k3s/30-session.yaml`: serve WebSocket on `0.0.0.0:7779`, open one
-connection to `127.0.0.1:7777` per client, binary frames. It must also run as UID
-65532 on a read-only root filesystem with no capabilities, because the namespace is
-Pod Security `restricted` and will refuse anything else.
-
-The sidecar needs K3s **1.29 or later**: a restartable init container is what makes
-a bridge fault survivable, and on an older API server the `restartPolicy` field on
-an init container is rejected. Check before building anything:
+A substitute image must also run as UID 65532 on a read-only root filesystem with
+no capabilities, because the namespace is Pod Security `restricted` and refuses
+anything else. The sidecar needs a Kubernetes API at 1.29 or later; K3s carries the
+same version number, so `v1.29.0+k3s1` and above qualify and nothing has to be
+migrated off K3s:
 
 ```sh
-kubectl version -o json | jq -r .serverVersion.gitVersion
+sudo kubectl version -o json | jq -r '.serverVersion.gitVersion'
 ```
 
 ## 9. The fleet objects and the shared volumes
@@ -1153,6 +1179,36 @@ code -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
 
 Expect `400`, `403`, `101`. Then open the session page in a browser and play: the
 tab is a participant like any other, and `state` counts it as a guest.
+
+The bridge port carries no NetworkPolicy allowance, and that is only safe if the
+policies are enforced and node-origin traffic is exempt from them
+([`20-networkpolicy.yaml`](../deploy/k3s/20-networkpolicy.yaml) states the
+argument). Both halves are one check, and it needs the live session above — a
+probe with an empty address tests nothing and says so loudly rather than timing
+out against a number reinterpreted as an address:
+
+```sh
+POD_IP=$(sudo kubectl -n vif get pod -l app.kubernetes.io/component=session \
+  -o jsonpath='{.items[0].status.podIP}')
+: "${POD_IP:?no session pod is running; allocate one first}"
+
+# From the node, which is where the allocator runs: both ports answer.
+bash -c "</dev/tcp/$POD_IP/7777" && echo "node -> 7777 open"
+bash -c "</dev/tcp/$POD_IP/7779" && echo "node -> 7779 open"
+
+# From a pod in another namespace: the game port, and nothing else.
+sudo kubectl -n default run np-probe --rm -i --restart=Never --image=busybox \
+  --quiet --command -- sh -c \
+  "for p in 7777 7778 7779; do nc -zw2 $POD_IP \$p && echo \$p open || echo \$p refused; done" \
+  </dev/null
+```
+
+Expect both node lines, then `7777 open`, `7778 refused`, `7779 refused`. All three
+open means NetworkPolicy is not being enforced, which makes `allow-operator-ports`
+a comment and publishes every session's roster and log stream to any pod in the
+cluster — a finding about the cluster rather than about this route. A node line that
+fails while the pod probe refuses 7779 means node traffic is *not* exempt, and the
+`ipBlock` fallback in that file is the fix.
 
 Quit the remote client and immediately verify vacancy and the file the session
 wrote:

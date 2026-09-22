@@ -102,7 +102,9 @@ The browser bridge image has no updater: it is a pinned third-party binary that
 changes on its own schedule. Build and import it as in
 [the procedure §8.1](../doc/kube-docker-deploy.md#81-the-browser-bridge-image),
 then point `VIF_ALLOCATOR_WS_BRIDGE_IMAGE` at the new reference. Sessions already
-running keep the image they started with.
+running keep the image they started with — but drain before building anyway:
+starting Docker sets `FORWARD` to `DROP`, which severs their NodePort path until
+the policy is restored.
 
 The image updater accepts only the Dockerfile's OCI `headless` build profile, so
 every subsequently allocated pod omits terminal presentation and audio code.

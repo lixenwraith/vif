@@ -221,16 +221,20 @@ without moving Kubernetes lifecycle code into the game.
 ## 6. Browser launch arguments
 
 Go's browser support already accepts an argument vector through `Go.argv` in
-`wasm_exec.js`. `web/terminal.js` now fills it from two page-controlled sources:
+`wasm_exec.js`. `web/terminal.js` fills it from two page-controlled sources:
 
 1. `window.VIF_ARGS`, set before the terminal script loads;
 2. repeated `arg` query parameters.
 
-Examples:
+`web/terminal.js` is the launcher, and a deployment's page loads that same file
+rather than a copy of it. What the page owns is where its assets live: the vendor
+paths, and the binary's own name through `data-wasm` on the script tag. A site
+whose `script-src` omits `'unsafe-inline'` cannot set a global before the script
+runs, which is why the binary is an attribute rather than another `window` value.
 
 ```html
 <script src="vif-config.js"></script>
-<script src="terminal.js"></script>
+<script src="terminal.js" data-wasm="vi-fighter.wasm"></script>
 ```
 
 ```javascript
@@ -239,7 +243,7 @@ window.VIF_ARGS = ['-d', '-seed=42'];
 ```
 
 ```text
-https://lixen.com/vif/?arg=-d&arg=-seed%3D42
+https://<site>/projects/vi-fighter/wasm/?arg=-d&arg=-seed%3D42
 ```
 
 The launcher accepts at most 64 arguments of at most 1,024 characters each.

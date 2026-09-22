@@ -527,7 +527,8 @@ addon, and a Go WASM instance. JavaScript batches Go writes into microtasks,
 forwards text/binary input, reports resizes, prevents the context menu, and
 maintains focus. `make serve` builds `web/vif.wasm` and serves this directory.
 Before launch, `web/terminal.js` maps `window.VIF_ARGS` and repeated `arg` query
-parameters into `Go.argv`.
+parameters into `Go.argv`, and reads the binary's name from `data-wasm` on its own
+script tag so the same file serves this harness and a deployment's launcher page.
 
 The browser build does not perform native config-root discovery for `scenario.toml`,
 keymap, content, audio overrides, or logs. Embedded assets make it playable;

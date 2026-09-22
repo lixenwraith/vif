@@ -8,6 +8,8 @@ html, body {
     height: 100%;
     background: #000;
     overflow: hidden;
+    overscroll-behavior: none;   /* no pull-to-refresh mid-run */
+    color-scheme: dark;
 }
 
 #terminal {
@@ -15,19 +17,25 @@ html, body {
     height: 100%;
 }
 
-#loading {
+#loading,
+#nojs {
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+    max-width: 90vw;
     color: #888;
     font-family: monospace;
     font-size: 16px;
+    line-height: 1.5;
+    text-align: center;
+    font-variant-numeric: tabular-nums;   /* the byte counter must not reflow */
 }
 
-#loading.hidden {
-    display: none;
-}
+#nojs a { color: #8ea2ff; }
+
+#loading.hidden { display: none; }
+#loading.error  { color: #f44; }
 
 /* xterm container fills viewport */
 .xterm {

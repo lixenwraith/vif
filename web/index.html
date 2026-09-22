@@ -2,18 +2,20 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>vif</title>
+    <title>vi-fighter</title>
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="lib/xterm.min.css">
     <link rel="stylesheet" href="terminal.css">
 </head>
 <body>
 <div id="terminal"></div>
-<div id="loading">Loading vif...</div>
+<div id="loading">Loading vi-fighter...</div>
+<noscript><div id="nojs">vi-fighter requires JavaScript and WebAssembly.<br><a href="/">Back</a></div></noscript>
 <script src="lib/xterm.min.js"></script>
 <script src="lib/addon-fit.min.js"></script>
 <script src="lib/addon-webgl.min.js"></script>
 <script src="wasm_exec.js"></script>
-<script src="terminal.js"></script>
+<!-- data-wasm is what `make wasm` writes here; the site's launcher names its own. -->
+<script src="terminal.js" data-wasm="vif.wasm"></script>
 </body>
 </html>

@@ -50,7 +50,8 @@ spec:
 # rule for 7779 could not be narrower: no selector expresses "the node", so it
 # would have to omit `from` and thereby admit every pod in the cluster.
 #
-# Prove that rather than believe it. If node-to-pod turns out to be filtered, the
+# Prove that rather than believe it: §13 of doc/kube-docker-deploy.md is where the
+# check lives, against a live session. If node-to-pod turns out to be filtered, the
 # narrow fix is the address the node reaches pods from, which `ip route get <a
 # session pod IP>` prints as `src`, as an ipBlock on port wsgame.
 ---
