@@ -15,8 +15,8 @@ and P3 is an idea.
 - Priority: P0
 - Affected files: `deploy/docker/Dockerfile.ws-bridge`, `deploy/guest`,
   `deploy/website/vif.nginx.example`, `doc/kube-docker-deploy.md`
-- Prerequisite: a K3s at 1.29 or later, which is what makes a restartable init
-  container a sidecar rather than a step the pod waits for
+- Prerequisite: the pinned bridge image, built and imported into the node's
+  containerd; the API version the sidecar needs is satisfied
 
 The code is in place: the browser dials `wss://<site>/vif/ws/<session>` over a
 `net.Conn` built from the page's own WebSocket, the allocator validates and

@@ -554,6 +554,29 @@ The build fails without both arguments rather than shipping whatever the mirror
 served. Reference the result by digest past the lab, for the reason the session
 image is referenced by digest.
 
+Prove the three things the workload assumes of it — that it answers a handshake,
+that it opens one TCP connection per client, and that it carries bytes rather than
+text — before a pod depends on it. The image is its own test client, so nothing
+else has to be installed, and the sleep holds stdin open long enough for the echo
+to arrive:
+
+```sh
+WS="vif-ws-bridge:$WS_VERSION"
+# A stand-in game: a TCP listener that echoes. Then the bridge, on its own args.
+docker run -d --rm --name ws-echo --network host --entrypoint /ws-bridge "$WS" \
+  --binary tcp-l:127.0.0.1:7777 mirror:
+docker run -d --rm --name ws-front --network host "$WS"
+{ printf 'vi-fighter'; sleep 1; } |
+  docker run --rm -i --network host --entrypoint /ws-bridge "$WS" \
+    --binary - ws://127.0.0.1:7779
+docker rm -f ws-front ws-echo
+```
+
+Expected: `vi-fighter` back on stdout. Nothing back means the argument vector is
+wrong for this image, and the vector — not the manifest's expectation of it — is
+what to correct, in `deploy/k3s/30-session.yaml` and `bridgeSidecar` together.
+This tests the image; §13 tests the session.
+
 A substitute image is allowed and must accept the argument vector in
 `deploy/k3s/30-session.yaml`: serve WebSocket on `0.0.0.0:7779`, open one
 connection to `127.0.0.1:7777` per client, binary frames. It must also run as UID
@@ -1557,6 +1580,7 @@ POD_IP=$(sudo kubectl -n vif get pod \
 CLUSTER_IP=$(sudo kubectl -n vif get svc "$SERVICE" -o jsonpath='{.spec.clusterIP}')
 
 bash -c "</dev/tcp/$POD_IP/7777"          # pod route and policy
+bash -c "</dev/tcp/$POD_IP/7779"          # the bridge, which no policy admits
 bash -c "</dev/tcp/$CLUSTER_IP/7777"      # Service DNAT
 bash -c "</dev/tcp/127.0.0.1/31700"       # local NodePort
 bash -c "</dev/tcp/192.0.2.20/31700"      # node address and NodePort
@@ -1593,6 +1617,10 @@ Each row below was a dead end in the proof-of-concept run when it was not known:
 | Traffic is visible on `cni0`. | It reached the pod side of routing. A moving `KUBE-POD-FW-*` counter proves the NetworkPolicy path ran. |
 | A finished session first refuses and later times out. | While its Service exists with no endpoint, kube-proxy rejects; after Job TTL garbage-collects the Service, the node filter drops an unassigned port. |
 | A pod shows `0/2` and never becomes Ready. | A pod is Ready only when every container is. A healthy session beside a second container in `ImagePullBackOff` reads as not Ready. |
+| A create answers `504 session_not_ready` and the pod never leaves `Init`. | A sidecar that cannot start holds the containers after it. `kubectl -n vif describe pod` names the bridge image it could not pull. |
+| The browser route answers `503 session_unreachable` while `vif -join` works. | The allocator reached the pod's `/health` and not its 7779. The bridge is the difference: read its container's state, then test `$POD_IP/7779` above. A refusal there with a running bridge is the policy case `20-networkpolicy.yaml` names. |
+| The handshake answers `400` with no `Upgrade` reaching the allocator. | An edge that dropped the hop-by-hop headers. The `map` must be in the `http` context and both headers set in the location (§12). |
+| A browser session ends after about thirty seconds of a full lobby. | A stream-layer `proxy_timeout` shorter than the game's ten-second heartbeat, or an idle-connection bound below it somewhere on the TLS path (§12). |
 | A NodePort that answered before does not now. | `FORWARD` policy is `DROP`. Docker sets it and a stop does not restore it (§4). |
 | The Docker build cannot resolve DNS. | The node ruleset does not accept `docker0`. Build with `--network host` (§8). |
 | `kubectl auth can-i get pods/log` answers `yes`. | Positional `pods/log` parses as `TYPE/NAME`. Use `--subresource=log` (§9). |

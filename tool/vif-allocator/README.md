@@ -83,6 +83,12 @@ them from `port`, because path-routed sessions key them on the identifier instea
 `ws_url` is absent where the deployment publishes no browser route, which is what a
 page keyed on it reads as "this fleet is for native clients".
 
+`-web-origin` is one origin, not a list, and `ws_url` is built from it. A site
+answering several hostnames must therefore canonicalize: a page loaded from another
+one of them is handed a `ws_url` whose origin this allocator refuses, and a page
+that checks the URL it was given against its own location will hide the link rather
+than offer a broken one.
+
 The browser route validates before it upgrades — method, identifier syntax,
 `Origin` against `-web-origin`, the session's liveness and readiness in reconciled
 Kubernetes state, and `-web-max` concurrent connections for that session — and then

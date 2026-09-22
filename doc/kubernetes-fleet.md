@@ -362,7 +362,10 @@ about whether that is the answer. The sidecar also adds 25m/16Mi requested and
 until H3 measures it.
 
 **What does not change.** No second NodePort is published: 7779 is a private
-container port reachable from the node and named by no Service. The site's
+container port named by no Service, and it gains no NetworkPolicy allowance — the
+namespace's default deny is what keeps every pod off it, and the node reaches it by
+whatever already carries its `/health` probe past a rule that admits only the
+monitoring namespace. The site's
 `connect-src 'self'` already permits the same-origin socket, and the nginx block —
 `Upgrade` and `Connection` preserved, buffering off, session-length timeouts, the
 two rate-limit zones — is in
@@ -393,8 +396,9 @@ stands between here and there:
 These constraints hold for every change until then:
 
 - keep the `vif` namespace at Pod Security `restricted`;
-- keep the bridge a sidecar with no volumes, no credential and no published
-  NodePort, and pin its image by digest like the session image;
+- keep the bridge a sidecar with no volumes, no credential, no published NodePort
+  and no NetworkPolicy allowance, and pin its image by digest like the session
+  image;
 - session pods mount only the `vif-fleet-logs` PVC — never a direct `hostPath`;
 - the game writes complete JSONL records, and no component tails Kubernetes pod
   logs, splices allocator JSON, or inserts a field after serialization;

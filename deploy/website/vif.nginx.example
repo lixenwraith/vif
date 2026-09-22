@@ -16,13 +16,18 @@ map $http_upgrade $vif_connection_upgrade {
     ''      close;
 }
 
-# What the session route is bounded by at the edge; see the location below.
+# What the session route is bounded by at the edge; see the location below. A site
+# whose TLS is terminated behind a PROXY-protocol stream proxy must key these on
+# $proxy_protocol_addr instead, the way its other zones are keyed: at http level
+# $binary_remote_addr is the proxy, so one zone would hold the whole site.
 limit_conn_zone $binary_remote_addr zone=vif_ws_conn:10m;
 limit_req_zone  $binary_remote_addr zone=vif_ws_req:10m rate=12r/m;
 
-# The site's Content-Security-Policy must permit the same-origin socket. CSP 3
-# says 'self' covers wss:// on the page's own host, and naming it as well costs
-# nothing and does not depend on a browser having implemented that clause:
+# The Content-Security-Policy on the page that *opens* the socket — the one
+# loading the WASM build, not the one listing sessions — must permit it. CSP 3
+# says 'self' covers wss:// on the page's own host; naming it as well costs
+# nothing and needs no browser to have implemented that clause. A page carrying
+# its own <meta> policy intersects with the header, so both want the value:
 #
 #   connect-src 'self' wss://<site-host>;
 
@@ -63,6 +68,12 @@ location = /vif/api/logs {
 #
 # Origin is forwarded unchanged, because it is the whole of same-origin here and
 # the allocator compares it against its -web-origin. Do not set it.
+#
+# A proxy_set_header in a location replaces every one inherited from the server,
+# so the four below are all this route sends. That is correct here: the allocator
+# reads only Origin, which travels as an ordinary request header. `http2 on` is
+# also fine — nginx offers no RFC 8441, so a browser opens its socket on a
+# separate HTTP/1.1 connection; an empty Upgrade is where to look if it does not.
 location ~ "^/vif/ws/[0-9a-f]{16}$" {
     proxy_pass http://vif_allocator;
     proxy_http_version 1.1;
@@ -76,11 +87,19 @@ location ~ "^/vif/ws/[0-9a-f]{16}$" {
     proxy_send_timeout 3600s;
 
     # The per-player bound the game cannot apply here: every browser reaches the
-    # pod from the same loopback address, so its per-address admission limiter
-    # sees one player. This and the allocator's per-session ceiling replace it.
+    # pod from one loopback address, so its admission limiter sees one player.
+    # Four is a household behind one address — raise it behind carrier NAT. This
+    # and the allocator's -web-max are the whole of the bound, so both are numbers
+    # somebody should choose rather than inherit.
     limit_conn vif_ws_conn 4;
     limit_req zone=vif_ws_req burst=4 nodelay;
 }
+
+# A stream-layer proxy_timeout in front of this server bounds *inactivity* on the
+# whole TLS connection, and a session holds one open for the length of a match. The
+# game heartbeats every ten seconds in both directions, so a 30-second stream
+# timeout is not reached by a live session; anything under that interval ends
+# matches for a reason no log on this host will name.
 
 # Exact locations, because /healthz, /readyz and every other allocator path stay
 # on the node: a /vif/ prefix would publish whatever is added there later.

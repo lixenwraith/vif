@@ -41,40 +41,18 @@ spec:
     - ports:
         - protocol: TCP
           port: game
----
-# The browser bridge port, from the node.
+# The browser bridge port has no rule, deliberately.
 #
-# Nothing publishes 7779: no NodePort names it, the host forwards only the game
-# range, and the namespace's default-deny egress means no sibling session pod can
-# dial it either. What reaches it is the node's own allocator, which arrives with a
-# node address no pod or namespace selector can express — so this rule is written
-# without a `from`, exactly as the game rule above is, and the reachability it
-# leaves is "the node, and nothing else that exists".
+# 7779 is named by no Service and forwarded by no firewall, and the default deny
+# above refuses it to every pod — the namespace has no egress, so a session cannot
+# dial its neighbour's bridge either. The node's allocator reaches it by whatever
+# already carries its /health probe past a rule admitting only monitoring, and a
+# rule for 7779 could not be narrower: no selector expresses "the node", so it
+# would have to omit `from` and thereby admit every pod in the cluster.
 #
-# Narrow it where the node address is stable and known. It is not committed here
-# because a repository file must not carry a real machine address:
-#
-#   ingress:
-#     - from:
-#         - ipBlock: {cidr: <node-address>/32}
-#       ports:
-#         - protocol: TCP
-#           port: wsgame
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-ws-bridge-ingress
-  namespace: vif
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: vi-fighter
-      app.kubernetes.io/component: session
-  policyTypes: [Ingress]
-  ingress:
-    - ports:
-        - protocol: TCP
-          port: wsgame
+# Prove that rather than believe it. If node-to-pod turns out to be filtered, the
+# narrow fix is the address the node reaches pods from, which `ip route get <a
+# session pod IP>` prints as `src`, as an ipBlock on port wsgame.
 ---
 # The operator ports, from the monitoring namespace only.
 #
