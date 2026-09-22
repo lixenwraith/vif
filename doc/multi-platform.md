@@ -37,7 +37,7 @@ The useful commands are:
 ```bash
 make release                 # bin/vif
 make headless                # bin/vif-headless
-make wasm                    # web/vif.wasm
+make wasm                    # web/vi-fighter.wasm
 make windows                 # bin/vif.exe
 
 go build -tags=vif_noaudio ./cmd/vif
@@ -226,15 +226,14 @@ Go's browser support already accepts an argument vector through `Go.argv` in
 1. `window.VIF_ARGS`, set before the terminal script loads;
 2. repeated `arg` query parameters.
 
-`web/terminal.js` is the launcher, and a deployment's page loads that same file
-rather than a copy of it. What the page owns is where its assets live: the vendor
-paths, and the binary's own name through `data-wasm` on the script tag. A site
-whose `script-src` omits `'unsafe-inline'` cannot set a global before the script
-runs, which is why the binary is an attribute rather than another `window` value.
+`web/` is the launcher, and it is copied to a deployment as it stands: the same
+page, the same script, the same vendor tree at `/vendor/xterm-5.5/`, the same
+`vi-fighter.wasm` the Makefile writes. A deployment that edits any of them has
+forked the launcher, and the fork is only visible the next time one side changes.
 
 ```html
 <script src="vif-config.js"></script>
-<script src="terminal.js" data-wasm="vi-fighter.wasm"></script>
+<script src="terminal.js"></script>
 ```
 
 ```javascript

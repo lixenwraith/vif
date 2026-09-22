@@ -40,7 +40,7 @@ The Makefile targets are:
 | `release` | Generate and build a stripped `-trimpath` native binary. |
 | `headless` | Build `bin/vif-headless` without terminal presentation, renderers, or audio. |
 | `nolog` | Release-style build with the `novlog` tag. |
-| `wasm` | Build audio-free `web/vif.wasm` for the xterm.js host. |
+| `wasm` | Build audio-free `web/vi-fighter.wasm` for the xterm.js host. |
 | `windows` | Experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0` cross-build. |
 | `run` | Build the dev binary and execute it. |
 | `test` | Generate and run `go test -race ./...`. |
@@ -525,10 +525,14 @@ the experimental Windows cross-build into a release target.
 `web/index.html` creates an xterm.js terminal, optional WebGL renderer, fit
 addon, and a Go WASM instance. JavaScript batches Go writes into microtasks,
 forwards text/binary input, reports resizes, prevents the context menu, and
-maintains focus. `make serve` builds `web/vif.wasm` and serves this directory.
-Before launch, `web/terminal.js` maps `window.VIF_ARGS` and repeated `arg` query
-parameters into `Go.argv`, and reads the binary's name from `data-wasm` on its own
-script tag so the same file serves this harness and a deployment's launcher page.
+maintains focus. `make serve` builds `web/vi-fighter.wasm` and serves this
+directory. Before launch, `web/terminal.js` maps `window.VIF_ARGS` and repeated
+`arg` query parameters into `Go.argv`.
+
+`web/` is the deployed launcher, not a harness that resembles one. Its asset paths
+are absolute (`/vendor/xterm-5.5/`) so they resolve both under `make serve`, which
+serves this directory at the root, and under a site that installs it at a path.
+Copy the directory; do not rewrite a path in it.
 
 The browser build does not perform native config-root discovery for `scenario.toml`,
 keymap, content, audio overrides, or logs. Embedded assets make it playable;

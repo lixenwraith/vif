@@ -1093,6 +1093,14 @@ location ~ "^/projects/vi-fighter/session/(?<vifsession>[a-z0-9]+)/$" {
 }
 ```
 
+The launcher that runs the build is [`web/`](../web) in this repository, copied to
+the site as it stands — page, script, stylesheet, `wasm_exec.js`, the
+`/vendor/xterm-5.5/` tree and the `vi-fighter.wasm` the Makefile writes. Its paths
+are absolute so that one directory serves both `make serve` and the site; editing
+one of them at install time forks the launcher, and the first symptom is a page
+that loads nothing and never requests the module, because `Terminal` was undefined
+before the loader ran.
+
 The page reads its own identifier from its URL, asks the list endpoint for that
 row, and keeps the user-facing strings distinct: the HTTPS page URL, the raw
 `<site-host>:31703` join target a native client is given, and the `ws_url` a

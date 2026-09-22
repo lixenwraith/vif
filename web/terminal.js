@@ -1,11 +1,7 @@
 (function() {
     'use strict';
 
-    // The page names the binary, because the page already names where its vendor
-    // assets are: one script serves the repository's harness and the site's
-    // launcher, which install their assets at different roots.
-    const script = document.currentScript;
-    const WASM_PATH = (script && script.dataset.wasm) || 'vif.wasm';
+    const WASM_PATH = 'vi-fighter.wasm';
 
     let term;
     let fitAddon;
