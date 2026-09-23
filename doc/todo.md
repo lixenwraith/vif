@@ -462,6 +462,16 @@ with `import species "species_7": configuration does not match destination
 engine`: the staging world derives a species' engine seed from a root that no
 longer matches the one the coordinator registered it under. Tick-zero joins work.
 
+### Refuse a join on the scenario's bytes, not its name
+
+- Priority: P2
+- Affected files: `internal/app/replay.go`, `internal/network/identity.go`
+
+`resolveJoinScenario` keeps a root that holds the coordinator's bytes whatever it
+calls them, but `sessionAnchorFields` and the network identity also compare
+`scenario_id`, so identical bytes under another name are refused. `resource.Scenario`
+says the digest is the only thing a session may be refused on.
+
 ### Say why a session reads as unavailable
 
 - Priority: P2

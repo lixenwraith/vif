@@ -67,45 +67,46 @@ func recordViolation(what string) {
 }
 
 // auditScope names the system whose Update is running, so a violation names a
-// writer. Written only under updateMutex, by UpdateLocked.
-var auditScope struct {
+// writer. Per world, under that world's updateMutex, because a staging world
+// settles while the live one ticks and neither may read the other's scope.
+type auditScope struct {
 	name   string
 	domain SystemDomain
 	active bool
 }
 
 // setAuditScope attributes subsequent component writes to a system
-func setAuditScope(name string, d SystemDomain) {
-	auditScope.name, auditScope.domain, auditScope.active = name, d, true
+func (w *World) setAuditScope(name string, d SystemDomain) {
+	w.audit = auditScope{name: name, domain: d, active: true}
 }
 
-func clearAuditScope() { auditScope.name, auditScope.active = "", false }
+func (w *World) clearAuditScope() { w.audit = auditScope{} }
 
 // auditScopeName attributes a write to the running system, or to the settle pass
 // when no system is on the stack
-func auditScopeName() string {
-	if auditScope.active {
-		return auditScope.name
+func (w *World) auditScopeName() string {
+	if w.audit.active {
+		return w.audit.name
 	}
 	return "event"
 }
 
 // auditComponentDomain reports an attachment contradicting the entity's domain
 // tag. Diagnostic only; it never blocks the write.
-func auditComponentDomain(e core.Entity, bit uint64) {
+func auditComponentDomain(w *World, e core.Entity, bit uint64) {
 	rule, ok := componentDomains[bit]
 	if !ok || rule.domain == e.Domain() {
 		return
 	}
 	recordViolation("component " + rule.field + " wants " + rule.domain.String() +
 		", entity is " + e.Domain().String() + " id " + strconv.FormatUint(e.ID(), 10) +
-		" (in " + auditScopeName() + ")")
+		" (in " + w.auditScopeName() + ")")
 	vlog.Warn("domain", "msg", "component domain mismatch",
 		"component", rule.field,
 		"want", rule.domain.String(),
 		"got", e.Domain().String(),
 		"id", e.ID(),
-		"system", auditScopeName())
+		"system", w.auditScopeName())
 }
 
 // auditEntityDomain reports a shared-profile system writing a player entity, which
@@ -113,12 +114,12 @@ func auditComponentDomain(e core.Entity, bit uint64) {
 // Attach-only: SetComponent and SetPosition reach AddComponentMask on first insert,
 // so a GetPtr mutation or a MoveUnsafe is the static checker's business, not this one.
 func auditEntityDomain(w *World, e core.Entity) {
-	if !auditScope.active || auditScope.domain != SystemShared ||
+	if !w.audit.active || w.audit.domain != SystemShared ||
 		e.Domain() != core.DomainPlayer || w.Domain() == core.DomainPlayer {
 		return
 	}
-	recordViolation("shared system " + auditScope.name + " wrote player entity id " +
+	recordViolation("shared system " + w.audit.name + " wrote player entity id " +
 		strconv.FormatUint(e.ID(), 10))
 	vlog.Warn("domain", "msg", "shared system wrote player entity",
-		"system", auditScope.name, "id", e.ID())
+		"system", w.audit.name, "id", e.ID())
 }

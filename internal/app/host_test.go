@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -103,6 +104,7 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 	// exactly the ticks the host completed while its world was in transit. A host
 	// frozen for the transfer would prove the easy half of this.
 	stopTicking := tickInBackground(host)
+	defer stopTicking()
 
 	guest, _ := mustSocketJoiner(t, addr, seed, 120, 40)
 	stopTicking()
@@ -286,11 +288,12 @@ func dialSession(t *testing.T, addr string) (*network.PendingJoin, network.Sessi
 }
 
 // tickInBackground keeps one instance running while the caller does something that
-// needs a live host, and returns the stop. The gap a joiner closes is exactly the
-// ticks the host completed while its world was in transit, so a host frozen for the
-// transfer would prove the easy half. The pacing is faster than the game interval on
-// purpose: at 50 ms a loopback transfer finishes inside one tick and there is no gap.
+// needs a live host, and returns the stop. The pacing is faster than the game
+// interval on purpose: at 50 ms a loopback transfer finishes inside one tick and
+// there is no gap for a joiner to close. Stop is idempotent; callers also defer it,
+// so a Fatal cannot leave the ticker running into the next test.
 func tickInBackground(a *App) (stop func()) {
+	var once sync.Once
 	done, stopped := make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(done)
@@ -305,7 +308,7 @@ func tickInBackground(a *App) (stop func()) {
 		}
 	}()
 	return func() {
-		close(stopped)
+		once.Do(func() { close(stopped) })
 		<-done
 	}
 }
@@ -315,6 +318,7 @@ func tickInBackground(a *App) (stop func()) {
 func joinAndLeave(t *testing.T, host *App, addr string, seed uint64) uint64 {
 	t.Helper()
 	stopTicking := tickInBackground(host)
+	defer stopTicking()
 
 	guest, port := mustSocketJoiner(t, addr, seed, 120, 40)
 	stopTicking()

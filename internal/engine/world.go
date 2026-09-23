@@ -41,6 +41,7 @@ type World struct {
 	nextEntityID  [core.DomainCount]uint64
 	componentMask map[core.Entity]uint64
 	updateMutex   UpdateMutex
+	audit         auditScope // the system a domain violation is attributed to
 
 	// === Self-synchronized ===
 	// Readable from any goroutine, including the post-tick telemetry tail
@@ -131,7 +132,7 @@ func (w *World) Domain() core.Domain { return core.Domain(w.domain.Load()) }
 // Callers MUST hold updateMutex, matching removeEntity/wipeAll.
 func (w *World) AddComponentMask(e core.Entity, bit uint64) {
 	if domainAudit.Load() {
-		auditComponentDomain(e, bit)
+		auditComponentDomain(w, e, bit)
 		auditEntityDomain(w, e)
 	}
 	w.componentMask[e] |= bit
@@ -291,12 +292,12 @@ func (w *World) UpdateLocked() {
 		e := &w.systems[i]
 		// Attribution is a per-tick decision, matching the audit gate itself
 		if audit {
-			setAuditScope(e.sys.Name(), e.profile.Domain)
+			w.setAuditScope(e.sys.Name(), e.profile.Domain)
 		}
 		e.sys.Update()
 	}
 	if audit {
-		clearAuditScope()
+		w.clearAuditScope()
 	}
 }
 

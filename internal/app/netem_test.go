@@ -103,6 +103,7 @@ func TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers(t *testing.T) {
 	// admitting one over a shaped link is the *refusal* path, which
 	// TestAJoinIsRefusedWhenTheLinkCannotCarryTheFloor covers on its own.
 	stopTicking := tickInBackground(host)
+	defer stopTicking()
 	guest, _ := mustSocketJoiner(t, addr, seed, 120, 40)
 	stopTicking()
 

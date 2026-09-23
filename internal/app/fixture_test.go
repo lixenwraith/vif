@@ -3,6 +3,7 @@
 package app
 
 import (
+	"os"
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -11,6 +12,21 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
+
+// TestMain hides the machine's config roots. A joiner's config resolves the default
+// scenario through them, so an installed one would make "the host's embedded
+// scenario" mean something else on a developer's machine than on CI.
+func TestMain(m *testing.M) {
+	empty, err := os.MkdirTemp("", "vif-app-test-")
+	if err != nil {
+		panic(err)
+	}
+	_ = os.Setenv("XDG_CONFIG_HOME", empty)
+	_ = os.Setenv("XDG_CONFIG_DIRS", empty)
+	code := m.Run()
+	_ = os.RemoveAll(empty)
+	os.Exit(code)
+}
 
 // mustHeadless builds a driven App on the embedded assets, failing the test on error
 func mustHeadless(t *testing.T, seed uint64, w, h int) *App {
