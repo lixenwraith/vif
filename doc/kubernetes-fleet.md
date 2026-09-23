@@ -68,7 +68,7 @@ it does not move an in-memory session into an unrelated pod.
 |---|---|---|---|
 | G | next | **Hand off a deployment a stranger can install.** The documentation reduction is done: the procedure, this plan, the artifact indexes and the runbook describe the deployed design rather than the batches that produced it. | Both rehearsals below reach a first session with no undocumented step, and every resource value in `deploy/k3s/30-session.yaml` cites a number from H3. |
 | G1 | next | **Rehearse from bare Arch Linux and from bare Ubuntu.** Record package and service differences, and fix every command that assumes the production node. | A second node reaches [§13 of the procedure](kube-docker-deploy.md#13-first-session) without a step its operator had to invent. |
-| W1 | next | **Commission the browser path.** The code and the objects exist and nothing has run them: build and pin the bridge image, import it, set `-web-origin` and `-ws-bridge-image`, publish the edge route with its rate limits. | A browser joins a live session through the site, plays, drops and rejoins, and the session ends on its own grace with no operator step invented on the way. |
+| W1 | next | **Commission the browser path.** The code and the objects exist and nothing has run them on the node: `update-vif-ws-bridge.sh`, then `update-vif-allocator.sh`, then the edge route with its rate limits. | A browser joins a live session through the site, plays, drops and rejoins, and the session ends on its own grace with no operator step invented on the way. |
 | H3 | next | **Measure a full roster.** Nine sessions driven by headless joiners for the fleet-level readings — CPU, memory, tmpfs, log rate, rotations — plus one real four-player session over real links, through a tower and a storm and on `wad/scenario/td`, for the hour that tick slips and correction magnitude need. Include the bridge sidecar, whose envelope is an estimate. | Requests and limits in `30-session.yaml`, and the quota totals, come from the four-player measurement rather than from single-guest history and estimates. |
 | H1 | partly done | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do has to be bounded. The two startup holes are closed: the tick-zero gate is bounded by one world install, a peer that leaves or goes silent costs the lobby rather than the session, and a confirmation is keyed to the link it arrived on. | Remaining: a handshake fuzz target for malformed, oversized, replayed and half-open cases, which `internal/network` has no equivalent of. |
 | H16 | partly done | **Automate image delivery.** Nightly CI publishes the final headless Dockerfile to GHCR under moving and commit-addressed tags; `deploy/guest/update-vif-image.sh` still provides the checked local build/import boundary. | Choose the node's registry/promotion policy, authenticate pulls without a long-lived off-node deployment credential, and move new sessions to a verified digest while existing matches finish. |
@@ -346,7 +346,7 @@ dependency on the path every player takes. Kubernetes already has the missing
 piece. The bridge is a *restartable init container*, which is a sidecar: it starts
 after the config check and before the game, it restarts on its own, and — unlike
 an ordinary container in a `backoffLimit: 0` Job — its exit is not the pod's and
-therefore not the end of somebody's match. It needs K3s 1.29 or later.
+therefore not the end of somebody's match.
 [Multi-platform §5](multi-platform.md#5-browser-networking) holds the alternatives
 and why each was refused, including the earlier plan's own rule against a
 WebSocket-to-TCP layer: the rule was about a translation hop *between* the
@@ -397,8 +397,8 @@ These constraints hold for every change until then:
 
 - keep the `vif` namespace at Pod Security `restricted`;
 - keep the bridge a sidecar with no volumes, no credential, no published NodePort
-  and no NetworkPolicy allowance, and pin its image by digest like the session
-  image;
+  and no NetworkPolicy allowance, its image imported by
+  `update-vif-ws-bridge.sh`;
 - session pods mount only the `vif-fleet-logs` PVC — never a direct `hostPath`;
 - the game writes complete JSONL records, and no component tails Kubernetes pod
   logs, splices allocator JSON, or inserts a field after serialization;

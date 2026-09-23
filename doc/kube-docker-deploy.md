@@ -531,91 +531,27 @@ what ran.
 
 ### 8.1 The browser bridge image
 
-Skip this and everything about `-web-origin` if the fleet serves native clients
-only; the session then renders exactly as it did before there was a browser path.
+Skip this if the fleet serves native clients only; then leave
+`VIF_ALLOCATOR_WEB_ORIGIN` and `VIF_ALLOCATOR_WS_BRIDGE_IMAGE` empty in
+[`vif-allocator.env`](../deploy/guest/vif-allocator.env).
 
-The bridge is the one process in the deployment that speaks WebSocket, and it is
-off-the-shelf so that the game and the allocator do not have to be. `websocat` is
-the reference. Its release asset is verified by checksum at build time, because a
-pod cannot refuse its own image.
-
-Docker on this node is a build tool, not a runtime (§4). It is started for the
-build and stopped afterwards, and it sets `FORWARD` to `DROP` on start — which
-severs every live session's NodePort path — so drain the fleet first with
-`./deploy/k3s/session.sh blockers` and restore the policy both times — the same sequence
-[`update-vif-image.sh`](../deploy/guest/update-vif-image.sh) performs for the
-session image. Read the version and the asset checksum from the upstream release
-page first; the build fails without both rather than shipping whatever a mirror
-served:
+The bridge is websocat, run as a sidecar container inside every session pod: that
+is how it reaches the game on the pod's own loopback and ends with the session. A
+container starts only from an image, and a Pod Security `restricted` pod cannot
+mount the node's `/usr/bin`, so the websocat installed on the node is packaged into
+one. No Docker: the image is a single layer holding the binary and any shared
+libraries it links, imported straight into K3s containerd.
 
 ```sh
-WS_VERSION=<upstream release tag>
-WS_SHA256=<sha256 of its linux-musl asset>
-: "${WS_VERSION:?}" "${WS_SHA256:?}"
-
-sudo systemctl start docker.service
-sudo iptables -P FORWARD ACCEPT
-
-docker build --network host \
-  -f deploy/docker/Dockerfile.ws-bridge \
-  --build-arg WEBSOCAT_VERSION="$WS_VERSION" \
-  --build-arg WEBSOCAT_SHA256="$WS_SHA256" \
-  -t "vif-ws-bridge:$WS_VERSION" .
-
-archive=$(mktemp "${TMPDIR:-/tmp}/vif-ws-bridge.XXXXXX.tar")
-docker save --output "$archive" "vif-ws-bridge:$WS_VERSION"
-sudo k3s ctr -n k8s.io images import "$archive"
-rm -f "$archive"
-
-sudo systemctl disable --now docker.service docker.socket containerd.service
-sudo iptables -P FORWARD ACCEPT
-sudo k3s crictl inspecti "docker.io/library/vif-ws-bridge:$WS_VERSION" >/dev/null
+# Arch: websocat from the AUR (1.x). Then, as the repository user:
+./deploy/guest/update-vif-ws-bridge.sh
 ```
 
-`docker save` writes the local tag and containerd normalises it, so the reference
-the allocator is given is `docker.io/library/vif-ws-bridge:$WS_VERSION` — the same
-shape the session image ends up with. Use a digest past the lab, for the reason the
-session image uses one.
-
-Then prove the three things the workload assumes of it: that it answers a
-handshake, that it opens one connection to the game per client, and that it
-carries bytes rather than text. K3s's own containerd runs it, so this needs no
-Docker and exercises the runtime that will actually run it. The image is its own
-test client, and `literal:` stands in for the game — a listener that answers every
-connection, which proves the bridge established one:
-
-```sh
-WS="docker.io/library/vif-ws-bridge:$WS_VERSION"
-CTR="sudo k3s ctr -n k8s.io"
-
-$CTR run -d --net-host "$WS" ws-echo /ws-bridge --binary tcp-l:127.0.0.1:7777 literal:pong
-$CTR run -d --net-host "$WS" ws-front
-$CTR run --rm --net-host "$WS" ws-probe /ws-bridge --binary -E ws://127.0.0.1:7779 -
-echo "probe exit=$?"
-
-for c in ws-front ws-echo; do
-  $CTR task kill -s SIGKILL "$c" 2>/dev/null || true
-  $CTR task rm "$c" 2>/dev/null || true
-  $CTR container rm "$c" 2>/dev/null || true
-done
-```
-
-Expected: `pong` on stdout and `probe exit=0`. A non-zero exit is the handshake or
-the loopback hop, and the argument vector is what to correct — in
-`deploy/k3s/30-session.yaml` and `bridgeSidecar` together, never one of them. The
-specifiers (`tcp-l:`, `ws-l:`, `literal:`, `-E`) are the reference bridge's; a
-substitute image names its own, which its `--help` lists. This tests the image;
-§13 tests the session, and a browser is the only thing that tests the whole path.
-
-A substitute image must also run as UID 65532 on a read-only root filesystem with
-no capabilities, because the namespace is Pod Security `restricted` and refuses
-anything else. The sidecar needs a Kubernetes API at 1.29 or later; K3s carries the
-same version number, so `v1.29.0+k3s1` and above qualify and nothing has to be
-migrated off K3s:
-
-```sh
-sudo kubectl version -o json | jq -r '.serverVersion.gitVersion'
-```
+It imports the reference `VIF_ALLOCATOR_WS_BRIDGE_IMAGE` names and then runs the
+image once as a pod would — UID 65532, read-only root — printing
+`websocat 1.x` and `ready: …`. A websocat upgrade is the same command; sessions
+allocated afterwards take the new image and running ones keep theirs, so the fleet
+need not be empty. §11 publishes the route that uses it.
 
 ## 9. The fleet objects and the shared volumes
 
@@ -873,8 +809,11 @@ sudo install -o root -g root -m 0755 bin/vif-allocator /usr/local/bin/vif-alloca
 sudo install -o root -g vif-allocator -m 0640 \
   /var/lib/rancher/k3s/server/tls/server-ca.crt \
   /etc/vif-allocator/server-ca.crt
-sudo install -o root -g vif-allocator -m 0640 \
-  deploy/guest/vif-allocator.env.example /etc/vif-allocator/allocator.env
+# The settings are deploy/guest/vif-allocator.env, edited in the repository; the
+# session image line is the one §8's update-vif-image.sh printed as "ready:".
+{ cat deploy/guest/vif-allocator.env
+  echo "VIF_ALLOCATOR_IMAGE=docker.io/library/vi-fighter:<tag>"; } |
+  sudo install -o root -g vif-allocator -m 0640 /dev/stdin /etc/vif-allocator/allocator.env
 sudo install -o root -g root -m 0755 \
   deploy/guest/vif-allocator-refresh-token.sh \
   /usr/local/libexec/vif-allocator-refresh-token
@@ -882,12 +821,6 @@ sudo install -o root -g root -m 0644 \
   deploy/guest/vif-allocator.service \
   deploy/guest/vif-allocator-token.service \
   deploy/guest/vif-allocator-token.timer /etc/systemd/system/
-
-# Set the imported image tag, the public join host, the session page base, the
-# scenarios a caller may ask for, and — for a browser path — the site origin and
-# the imported bridge image. There are no secrets in this file; keep its write
-# permission with root.
-sudoedit /etc/vif-allocator/allocator.env
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now vif-allocator-token.timer vif-allocator.service
@@ -1681,7 +1614,7 @@ Each row below was a dead end in the proof-of-concept run when it was not known:
 | Traffic is visible on `cni0`. | It reached the pod side of routing. A moving `KUBE-POD-FW-*` counter proves the NetworkPolicy path ran. |
 | A finished session first refuses and later times out. | While its Service exists with no endpoint, kube-proxy rejects; after Job TTL garbage-collects the Service, the node filter drops an unassigned port. |
 | A pod shows `0/2` and never becomes Ready. | A pod is Ready only when every container is. A healthy session beside a second container in `ImagePullBackOff` reads as not Ready. |
-| A create answers `504 session_not_ready` and the pod never leaves `Init`. | A sidecar that cannot start holds the containers after it. `kubectl -n vif describe pod` names the bridge image it could not pull. |
+| A create answers `504 session_not_ready` and the pod never leaves `Init`. | A sidecar that cannot start holds the containers after it. `kubectl -n vif describe pod` names the bridge image it could not pull: run `update-vif-ws-bridge.sh`. |
 | The browser route answers `503 session_unreachable` while `vif -join` works. | The allocator reached the pod's `/health` and not its 7779. The bridge is the difference: read its container's state, then test `$POD_IP/7779` above. A refusal there with a running bridge is the policy case `20-networkpolicy.yaml` names. |
 | The handshake answers `400` with no `Upgrade` reaching the allocator. | An edge that dropped the hop-by-hop headers. The `map` must be in the `http` context and both headers set in the location (§12). |
 | A browser session ends after about thirty seconds of a full lobby. | A stream-layer `proxy_timeout` shorter than the game's ten-second heartbeat, or an idle-connection bound below it somewhere on the TLS path (§12). |

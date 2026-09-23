@@ -121,12 +121,9 @@ sudo k3s crictl inspecti "$runtime_image" >/dev/null
 
 if sudo test -f "$allocator_env"; then
 	sudo cat "$allocator_env" >"$env_copy"
-	if ! grep -q '^VIF_ALLOCATOR_IMAGE=' "$env_copy"; then
-		echo "$0: $allocator_env has no VIF_ALLOCATOR_IMAGE entry" >&2
-		exit 1
-	fi
-	sed "s|^VIF_ALLOCATOR_IMAGE=.*|VIF_ALLOCATOR_IMAGE=$runtime_image|" \
-		"$env_copy" >"$env_copy.next"
+	# The one setting deploy/guest/vif-allocator.env does not carry.
+	{ grep -v '^VIF_ALLOCATOR_IMAGE=' "$env_copy" || true
+	  printf 'VIF_ALLOCATOR_IMAGE=%s\n' "$runtime_image"; } >"$env_copy.next"
 	sudo install -o root -g "$allocator_group" -m 0640 "$env_copy.next" "$allocator_env"
 	echo "updated $allocator_env"
 fi

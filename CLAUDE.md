@@ -60,3 +60,16 @@ an event or manifest definition changed.
 - Do not run the full `go test ./...`, `go vet ./...` or `test/scenario.sh all`
   sweeps; they cost more time than they catch. The user runs them.
 - Do not run `-race` tests, they take a long time and the user verifies them.
+
+## Deployment facts
+
+Settled. Do not check, flag, or ask about any of these again.
+
+- The node is Arch Linux running **K3s v1.34**. Every Kubernetes feature this repo
+  uses, restartable init containers included, is available. Never add, suggest or
+  ask for a version check.
+- websocat 1.x is installed on the node from the AUR;
+  `deploy/guest/update-vif-ws-bridge.sh` packages it as the sidecar image.
+- The site is `https://lixen.com`. The allocator's settings are
+  `deploy/guest/vif-allocator.env`, installed by `update-vif-allocator.sh`; the
+  node's copy is never edited by hand.

@@ -24,7 +24,7 @@ back one out.
 | `logwisp.sysusers` | `/etc/sysusers.d/` | root 0644 | creates the locked `logwisp` identity; tmpfs read access comes from the `vif-fleet` supplementary group alone |
 | `logwisp.service` | `/etc/systemd/system/` | root 0644 | read-only view of the fleet tmpfs, inaccessible K3s and allocator credential paths, no dependency on games or the allocator |
 | `../logwisp/aggregator.toml` | `/etc/logwisp/vif-fleet.toml` | root 0644 | `raw = true`, `from = "start"`, bounded flow and clients, loopback-only sink |
-| `vif-allocator.env.example` | `/etc/vif-allocator/allocator.env` | `root:vif-allocator` 0640 | the imported image tag, the public join host, the session page base, the scenarios a request may select, and the site origin and bridge image that publish the browser route |
+| `vif-allocator.env` | `/etc/vif-allocator/allocator.env` | `root:vif-allocator` 0640 | this deployment's allocator settings, installed by `update-vif-allocator.sh`; edited here, never on the node. `VIF_ALLOCATOR_IMAGE` alone is added on the node, by `update-vif-image.sh` |
 | `vif-allocator.service` | `/etc/systemd/system/` | root 0644 | `/usr/local/bin/vif-allocator`, the CA copy and the token file; `Type=notify` |
 | `vif-allocator-token.service` / `.timer` | `/etc/systemd/system/` | root 0644 | root-only atomic rotation of the short-lived ServiceAccount token, every six hours |
 | `vif-allocator-refresh-token.sh` | `/usr/local/libexec/vif-allocator-refresh-token` | root 0755 | the rotation the oneshot runs |
@@ -42,7 +42,8 @@ disabled with `FORWARD ACCEPT` restored.
 |---|---|---|
 | `install-logwisp.sh [checkout]` | first install of the pinned binary, identity, configuration and unit | an existing installation; a pin that is not an ancestor of upstream `main` |
 | `update-logwisp.sh [checkout]` | LogWisp's binary, configuration and unit only | a stopped `logwisp.service`; the same unreachable pin |
-| `update-vif-allocator.sh` | the allocator binary, env and unit | a dirty worktree; a non-empty fleet |
+| `update-vif-allocator.sh [--diff]` | the allocator binary, unit, and env from `vif-allocator.env`; `--diff` only prints the env change | a dirty worktree; a non-empty fleet; a bridge image K3s does not hold |
+| `update-vif-ws-bridge.sh [websocat]` | the sidecar image `VIF_ALLOCATOR_WS_BRIDGE_IMAGE` names, packaged from the node's websocat without Docker and run once as the pod runs it | a websocat that is not 1.x. **Not** an occupied fleet: running pods keep their image |
 | `update-vif-image.sh [tag]` | the headless session image, and `VIF_ALLOCATOR_IMAGE` with it; rejects an image without the `headless` profile label | a dirty worktree; an occupied fleet |
 | `update-vif-wad.sh [dir]` | the node's scenario volume at `/var/db/vif/wad`, by atomic rename; validates every scenario first, with a binary built from the checkout and the layout a pod mounts | a tree that is not laid out like `wad/`; a scenario that does not load. **Not** an occupied fleet: a running match keeps the tree it mounted |
 

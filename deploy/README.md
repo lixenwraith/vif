@@ -9,7 +9,6 @@ the design and open work behind it are
 | Path | What it is |
 |---|---|
 | `docker/Dockerfile` | Multi-stage build: pinned Go builder, `scratch` final layer holding the static non-root `vif_headless` binary and nothing else. Built with `make image` from the repository root. |
-| `docker/Dockerfile.ws-bridge` | The browser bridge sidecar: one verified static WebSocket-to-loopback-TCP binary in a `scratch` layer, non-root, no shell. The release checksum is a required build argument, so an unpinned build fails. |
 | `k3s/00-namespace.yaml` | The `vif` namespace with `restricted` Pod Security enforced, and the permissionless service account a session runs as. |
 | `k3s/05-log-volume.yaml` | The no-provisioner StorageClass, node-affine local PV, and one shared volatile PVC. Render `${NODE_NAME}` before applying. |
 | `k3s/06-log-volume-check.yaml` | A Restricted probe that binds both claims on a fresh node: it writes a record through the log claim and loads a scenario through the wad claim. Render `${IMAGE}` and `${SCENARIO}`, verify its JSONL, then delete the pod and the file. |

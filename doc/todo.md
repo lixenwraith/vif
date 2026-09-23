@@ -13,10 +13,9 @@ and P3 is an idea.
 ### Commission the browser session path on the node
 
 - Priority: P0
-- Affected files: `deploy/docker/Dockerfile.ws-bridge`, `deploy/guest`,
-  `deploy/website/vif.nginx.example`, `doc/kube-docker-deploy.md`
-- Prerequisite: the pinned bridge image, built and imported into the node's
-  containerd; the API version the sidecar needs is satisfied
+- Affected files: `deploy/guest`, `deploy/website/vif.nginx.example`,
+  `doc/kube-docker-deploy.md`
+- Prerequisite: `update-vif-ws-bridge.sh` has imported the sidecar image
 
 Off the node, everything but the edge and the cluster network has carried
 players: headless Chromium through the allocator's upgrade proxy (its production
@@ -24,8 +23,8 @@ server deadlines) and websocat 1.14.1 with the sidecar's own arguments, into a
 fleet-shaped `-serve`. Two tabs held a match for 100 s, one leaving mid-run, and a
 1 MB capture in 64-byte messages did not overrun `wsQueueMessages`.
 
-Build and pin the bridge image, import it into K3s, set `-web-origin` and
-`-ws-bridge-image`, publish the edge route with its rate limits, then verify the
+Import the bridge image, run `update-vif-allocator.sh` to publish the route,
+add the edge location with its rate limits, then verify the
 production TLS/CSP path under slow links, tab suspension, reconnects and session
 expiry. Measure what the sidecar actually costs and reconcile it with the values in
 `deploy/k3s/30-session.yaml` and the quota totals, which are estimates.

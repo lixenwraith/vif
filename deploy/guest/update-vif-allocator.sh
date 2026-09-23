@@ -1,26 +1,31 @@
 #!/bin/sh
-# Build and deploy the allocator from this vi-fighter revision. New allocations
-# pause during the short cutover, and one known-good binary/config/unit is kept.
+# Build and deploy the allocator from this vi-fighter revision, with its settings
+# from deploy/guest/vif-allocator.env. New allocations pause during the short
+# cutover, and one known-good binary/config/unit is kept. --diff prints what the
+# installed settings would become and changes nothing.
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
+diff_only=false
 case ${1:-} in
-	-h|--help) sed -n '2,3p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	-h|--help) sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	--diff) diff_only=true ;;
 	'') ;;
-	*) echo "usage: $0" >&2; exit 2 ;;
+	*) echo "usage: $0 [--diff]" >&2; exit 2 ;;
 esac
 
 binary=/usr/local/bin/vif-allocator
 installed_env=/etc/vif-allocator/allocator.env
 installed_unit=/etc/systemd/system/vif-allocator.service
 source_unit=$repo_root/deploy/guest/vif-allocator.service
+source_env=$repo_root/deploy/guest/vif-allocator.env
 backup_binary=/usr/local/libexec/vif-allocator.previous
 backup_env=/etc/vif-allocator/allocator.env.previous
 backup_unit=/etc/systemd/system/vif-allocator.service.previous
 
 test "$(git -C "$repo_root" rev-parse --show-toplevel)" = "$repo_root"
-if [ -n "$(git -C "$repo_root" status --porcelain)" ]; then
+if [ "$diff_only" = false ] && [ -n "$(git -C "$repo_root" status --porcelain)" ]; then
 	echo "$0: the vi-fighter worktree differs from HEAD" >&2
 	exit 1
 fi
@@ -31,13 +36,11 @@ for installed in "$binary" "$installed_env" "$installed_unit"; do
 		{ echo "$0: missing installed file: $installed" >&2; exit 1; }
 done
 [ -r "$source_unit" ] || { echo "$0: missing unit: $source_unit" >&2; exit 1; }
+[ -r "$source_env" ] || { echo "$0: missing settings: $source_env" >&2; exit 1; }
 systemctl is-active --quiet vif-allocator.service || {
 	echo "$0: vif-allocator.service must be active before an update" >&2
 	exit 1
 }
-
-make -C "$repo_root" allocator
-[ -x "$repo_root/bin/vif-allocator" ]
 
 stage_root=$(mktemp -d "${TMPDIR:-/tmp}/vif-allocator-update.XXXXXX")
 allocator_stopped=false
@@ -70,22 +73,31 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+# The repository file is every setting but the session image, which names what
+# this node last built: update-vif-image.sh writes it and this carries it over.
 sudo cat "$installed_env" >"$stage_root/allocator.env"
-if grep -q '^VIF_ALLOCATOR_LOG_STREAM_URL=' "$stage_root/allocator.env"; then
-	sed 's|^VIF_ALLOCATOR_LOG_STREAM_URL=.*|VIF_ALLOCATOR_LOG_STREAM_URL=http://127.0.0.1:8081/stream|' \
-		"$stage_root/allocator.env" >"$stage_root/allocator.env.next"
+image_line=$(grep '^VIF_ALLOCATOR_IMAGE=' "$stage_root/allocator.env" | tail -n 1 || true)
+[ -n "$image_line" ] || {
+	echo "$0: $installed_env names no VIF_ALLOCATOR_IMAGE; run update-vif-image.sh first" >&2
+	exit 1
+}
+{ cat "$source_env"; printf '%s\n' "$image_line"; } >"$stage_root/allocator.env.next"
+echo "allocator.env, installed -> next:"
+if cmp -s "$stage_root/allocator.env" "$stage_root/allocator.env.next"; then
+	echo "  (no change)"
 else
-	cp "$stage_root/allocator.env" "$stage_root/allocator.env.next"
-	printf '%s\n' 'VIF_ALLOCATOR_LOG_STREAM_URL=http://127.0.0.1:8081/stream' \
-		>>"$stage_root/allocator.env.next"
+	diff -u "$stage_root/allocator.env" "$stage_root/allocator.env.next" | sed '1,2d' || true
 fi
-# Settings the installed unit now passes. Added only when absent, because an
-# operator's raised ceiling has to survive an update, and a flag whose variable is
-# unset expands to nothing and fails the parse.
-for setting in 'VIF_ALLOCATOR_PLAYERS_MAX=4' 'VIF_ALLOCATOR_LOG_LEVEL_MIN=debug'; do
-	grep -q "^${setting%%=*}=" "$stage_root/allocator.env.next" ||
-		printf '%s\n' "$setting" >>"$stage_root/allocator.env.next"
-done
+[ "$diff_only" = false ] || exit 0
+
+bridge_image=$(sed -n 's/^VIF_ALLOCATOR_WS_BRIDGE_IMAGE=//p' "$source_env")
+if [ -n "$bridge_image" ] && ! sudo k3s crictl inspecti "$bridge_image" >/dev/null 2>&1; then
+	echo "$0: $bridge_image is not in K3s; run deploy/guest/update-vif-ws-bridge.sh first" >&2
+	exit 1
+fi
+
+make -C "$repo_root" allocator
+[ -x "$repo_root/bin/vif-allocator" ]
 
 if ! "$repo_root/deploy/k3s/session.sh" blockers; then
 	echo "$0: the fleet must be empty before the allocator update" >&2
@@ -117,10 +129,12 @@ curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/healthz
 curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/readyz
 sudo cmp -s "$source_unit" "$installed_unit"
 sudo cmp -s "$repo_root/bin/vif-allocator" "$binary"
-sudo grep -Fx 'VIF_ALLOCATOR_LOG_STREAM_URL=http://127.0.0.1:8081/stream' \
-	"$installed_env" >/dev/null
-sudo grep -q '^VIF_ALLOCATOR_PLAYERS_MAX=' "$installed_env"
-sudo grep -q '^VIF_ALLOCATOR_LOG_LEVEL_MIN=' "$installed_env"
+sudo cat "$installed_env" | cmp -s "$stage_root/allocator.env.next" -
+# A published browser route answers a plain GET with not_an_upgrade, not 501.
+if [ -n "$bridge_image" ]; then
+	curl --connect-timeout 2 --max-time 5 -sS \
+		http://127.0.0.1:9080/vif/ws/0000000000000000 | grep -q not_an_upgrade
+fi
 
 rollback_required=false
 allocator_stopped=false

@@ -92,19 +92,18 @@ their connection runs through it, unlike a native `-join` — so the empty-fleet
 gate below is what keeps that from ending somebody's match.
 
 ```sh
+./deploy/guest/update-vif-allocator.sh --diff   # what the env from the repo changes
 ./deploy/guest/update-vif-allocator.sh          # allocator binary, env, unit
+./deploy/guest/update-vif-ws-bridge.sh          # sidecar image from the node's websocat
 ./deploy/guest/update-logwisp.sh                # pinned LogWisp only
 ./deploy/guest/update-vif-image.sh              # session image, tag from HEAD
 ./deploy/guest/update-vif-image.sh v1.2.3       # session image, explicit tag
 ```
 
-The browser bridge image has no updater: it is a pinned third-party binary that
-changes on its own schedule. Build and import it as in
-[the procedure §8.1](../doc/kube-docker-deploy.md#81-the-browser-bridge-image),
-then point `VIF_ALLOCATOR_WS_BRIDGE_IMAGE` at the new reference. Sessions already
-running keep the image they started with — but drain before building anyway:
-starting Docker sets `FORWARD` to `DROP`, which severs their NodePort path until
-the policy is restored.
+Allocator settings live in `deploy/guest/vif-allocator.env`: edit and commit them
+there, then run the allocator updater, which installs that file and keeps only the
+node's `VIF_ALLOCATOR_IMAGE`. The bridge updater needs no drain and no Docker; run
+it after a websocat upgrade, and running sessions keep the image they started with.
 
 The image updater accepts only the Dockerfile's OCI `headless` build profile, so
 every subsequently allocated pod omits terminal presentation and audio code.

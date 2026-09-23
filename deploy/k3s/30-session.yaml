@@ -113,7 +113,7 @@ spec:
           # A restartable init container, not an ordinary one: with restartPolicy
           # Never and backoffLimit 0, a container that exited non-zero would be a
           # Failed pod and a dead match. A sidecar restarts by itself and never
-          # decides whether the pod finished. Needs Kubernetes 1.29 or later.
+          # decides whether the pod finished.
           image: "${WS_BRIDGE_IMAGE}"
           imagePullPolicy: IfNotPresent
           restartPolicy: Always
