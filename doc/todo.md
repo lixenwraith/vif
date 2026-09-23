@@ -18,11 +18,11 @@ and P3 is an idea.
 - Prerequisite: the pinned bridge image, built and imported into the node's
   containerd; the API version the sidecar needs is satisfied
 
-The client has joined and played end to end in headless Chromium against a local
-`-serve` behind a websocat-equivalent bridge: tick-zero and mid-run joins, the
-scenario transfer, and a 1 MB capture split into 64-byte messages without
-overrunning `wsQueueMessages`. The allocator route, the edge and the real bridge
-image have not carried a player.
+Off the node, everything but the edge and the cluster network has carried
+players: headless Chromium through the allocator's upgrade proxy (its production
+server deadlines) and websocat 1.14.1 with the sidecar's own arguments, into a
+fleet-shaped `-serve`. Two tabs held a match for 100 s, one leaving mid-run, and a
+1 MB capture in 64-byte messages did not overrun `wsQueueMessages`.
 
 Build and pin the bridge image, import it into K3s, set `-web-origin` and
 `-ws-bridge-image`, publish the edge route with its rate limits, then verify the
