@@ -43,6 +43,18 @@ ceiling stand in for it today. Decide whether that is the answer or whether the
 allocator should carry a per-address bound of its own, which means deciding whether
 it may trust a forwarded address at all.
 
+### Decide what `page_url` names
+
+- Priority: P1
+- Affected files: `tool/vif-allocator/allocator.go`, the site
+
+`page_url` is `-page-base` with the session's NodePort appended, and no deployment
+has built the page it names: the reference site has no `session/` tree, so the link
+the fleet page renders falls through that server's `try_files` and answers the
+homepage with 200. Either build one page that reads its own identifier from the
+URL, or drop the field and let `join_target` and `ws_url` be the whole of what a
+session publishes.
+
 ### Add browser admission authentication
 
 - Priority: P1
