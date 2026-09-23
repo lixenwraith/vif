@@ -1,29 +1,39 @@
 #!/bin/sh
-# Package this node's websocat 1.x as the session pods' WebSocket sidecar, with no
-# Docker: one layer of the binary and the libraries it links, imported into K3s as
-# VIF_ALLOCATOR_WS_BRIDGE_IMAGE from vif-allocator.env and run once as a pod runs
-# it. No drain needed: running sessions keep their image.
-# Usage: update-vif-ws-bridge.sh [websocat]   (default: the one on PATH)
+# Package websocat 1.x as the session pods' WebSocket sidecar and import it into
+# K3s as VIF_ALLOCATOR_WS_BRIDGE_IMAGE, with no Docker. The binary is the one on
+# PATH, else the pinned GitHub release build-websocat.sh builds into bin/. An image
+# already current is left alone; --diff only says whether it is, exiting 1 if not.
+# Usage: update-vif-ws-bridge.sh [--diff] [websocat]
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
+diff_only=false
 case ${1:-} in
 	-h|--help) sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	--diff) diff_only=true; shift ;;
 esac
-[ "$#" -le 1 ] || { echo "usage: $0 [websocat]" >&2; exit 2; }
+[ "$#" -le 1 ] || { echo "usage: $0 [--diff] [websocat]" >&2; exit 2; }
 
+ref=$(sed -n 's/^VIF_ALLOCATOR_WS_BRIDGE_IMAGE=//p' "$repo_root/deploy/guest/vif-allocator.env")
+[ -n "$ref" ] || { echo "$0: vif-allocator.env names no VIF_ALLOCATOR_WS_BRIDGE_IMAGE" >&2; exit 2; }
+tag=$(sed -n 's/^tag=//p' "$script_dir/build-websocat.sh")
+built=$repo_root/bin/websocat-$tag
 source_bin=${1:-$(command -v websocat || true)}
-[ -n "$source_bin" ] && [ -x "$source_bin" ] ||
-	{ echo "$0: no websocat binary; install it or name one" >&2; exit 1; }
+[ -n "$source_bin" ] || source_bin=$built
+if [ ! -x "$source_bin" ]; then
+	if [ "$diff_only" = true ]; then
+		echo "websocat is not installed: would build $tag from GitHub and import $ref"
+		exit 1
+	fi
+	"$script_dir/build-websocat.sh" "$built"
+fi
 version=$("$source_bin" --version 2>/dev/null || true)
 case "$version" in
 	'websocat 1.'*) ;;
 	*) echo "$0: $source_bin reports '$version'; the sidecar's arguments are websocat 1.x's" >&2; exit 1 ;;
 esac
 
-ref=$(sed -n 's/^VIF_ALLOCATOR_WS_BRIDGE_IMAGE=//p' "$repo_root/deploy/guest/vif-allocator.env")
-[ -n "$ref" ] || { echo "$0: vif-allocator.env names no VIF_ALLOCATOR_WS_BRIDGE_IMAGE" >&2; exit 1; }
 case $(uname -m) in
 	x86_64) arch=amd64 ;;
 	aarch64) arch=arm64 ;;
@@ -76,6 +86,17 @@ EOF
 printf '%s' '{"imageLayoutVersion":"1.0.0"}' >"$layout/oci-layout"
 printf '%s' "{\"schemaVersion\":2,\"manifests\":[{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"digest\":\"sha256:$manifest_digest\",\"size\":$manifest_size,\"platform\":{\"architecture\":\"$arch\",\"os\":\"linux\"},\"annotations\":{\"io.containerd.image.name\":\"$ref\",\"org.opencontainers.image.ref.name\":\"${ref##*:}\"}}]}" >"$layout/index.json"
 tar -C "$layout" -cf "$work/image.tar" oci-layout index.json blobs
+
+# The layout is deterministic, so an unchanged websocat is an unchanged digest.
+imported=$(sudo k3s ctr -n k8s.io images ls | awk -v ref="$ref" '$1 == ref { print $3 }')
+if [ "$imported" = "sha256:$manifest_digest" ]; then
+	[ "$diff_only" = true ] || echo "current: $ref ($version)"
+	exit 0
+fi
+if [ "$diff_only" = true ]; then
+	echo "$ref: ${imported:-not imported} -> sha256:$manifest_digest ($version from $source_bin)"
+	exit 1
+fi
 
 echo "importing $ref ($version, $(echo "$libs" | grep -c . || true) linked libraries)"
 sudo k3s ctr -n k8s.io images import "$work/image.tar"

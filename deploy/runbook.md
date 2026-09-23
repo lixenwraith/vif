@@ -2,8 +2,26 @@
 
 Day-to-day operations on the K3s node, from the vi-fighter repository root.
 [`../doc/kube-docker-deploy.md`](../doc/kube-docker-deploy.md) commissions a node;
-this page is what you run afterwards. Every command here is the canonical one — if
-the procedure shows a longer variant, it is proving something extra.
+this page is what you run afterwards.
+
+## Deploy a change
+
+```sh
+git pull
+./deploy/update.sh --diff      # what differs, per component; changes nothing
+./deploy/update.sh             # the same diffs, then the updates, in order
+./deploy/update.sh wad bridge  # only the named components
+```
+
+Components are `objects` (namespace, quota, policy, Role), `wad`, `bridge`,
+`image`, `allocator` and `logwisp`. A current one is skipped. Installed lines print
+green and incoming ones red. `image`, `allocator` and `logwisp` need an empty
+fleet and refuse otherwise, naming the components that do not; `wad` and `bridge`
+never interrupt a match, since a running pod keeps what it started with. Each
+component keeps one `.previous` set, and
+[`guest/README.md`](guest/README.md) restores it. Settings for the allocator are
+[`guest/vif-allocator.env`](guest/vif-allocator.env), committed here and never
+edited on the node.
 
 ## Where things stand
 
@@ -25,8 +43,7 @@ left the fleet.
 
 ## Empty the fleet
 
-The update helpers refuse to run while any fleet object exists, and the LogWisp
-gate also requires an empty tmpfs.
+`image`, `allocator` and `logwisp` refuse to update while any fleet object exists.
 
 ```sh
 ./deploy/k3s/session.sh drain
@@ -74,53 +91,15 @@ Both arguments are optional and bounded by `-players-max` and `-log-level-min`;
 | `the fleet is not empty` | Printed by `blockers` above one annotated line per surviving object, then by the helper that called it. A finished Job is the usual cause: it outlives the match by its 120-second `ttlSecondsAfterFinished`, so the public session list is already empty while the update still refuses. | Wait out the TTL the report names, or `./deploy/k3s/session.sh drain`. |
 | `a fleet object remained after allocation stopped` | A session was created between the first check and the stop. | Re-run `drain`; it waits for the cascade. |
 | `the fleet did not drain` | A pod outlived the background cascade by more than 60 seconds. | `./deploy/k3s/session.sh drain --force` |
-| `the vi-fighter worktree differs from HEAD` | Uncommitted changes. The updater builds from HEAD, so it refuses to install something the tree does not describe. | Commit, stash, or check out the revision you mean to deploy. |
-| `missing installed file: /etc/vif-allocator/allocator.env` | Not actually missing: that directory is `root:vif-allocator` 0750. An older helper tested it unprivileged. | Update the checkout; the helper reads it through `sudo`. |
+| `the worktree differs from HEAD` | Uncommitted changes. Updates build from HEAD, so they refuse to install something the tree does not describe; `--diff` still runs. | Commit, stash, or check out the revision you mean to deploy. |
+| `empty the fleet first … or update only: …` | `image`, `allocator` or `logwisp` differs while a fleet object exists. | `./deploy/k3s/session.sh drain`, or run only the components it names. |
+| `… is not in K3s; run deploy/guest/update-vif-ws-bridge.sh first` | The allocator would name a bridge image containerd does not hold. | `./deploy/update.sh bridge` |
+| `websocat 1.x`, `git is required`, `cargo is required` | No websocat package and no toolchain to build the pinned release. | Install websocat (AUR), or `sudo pacman -S git rust`. |
 | `pinned revision is not an ancestor of LogWisp main` | `deploy/logwisp/REVISION` names a commit that upstream `main` does not contain, usually a pull-request head a squash merge discarded. | Repin to the merged commit on `main`. |
 | `logwisp.service must be active before an update` | The updater replaces a running service and keeps one rollback set; it will not install onto a stopped one. | `sudo systemctl start logwisp.service` |
 | `the served stream bounds are not {...}` | The restarted LogWisp is not serving the queue, connection and timeout bounds in `deploy/logwisp/aggregator.toml`, so the install did not take. The previous build is already back. | Compare the message against `curl -fsS http://127.0.0.1:8081/status \| jq .server`. A pinned revision too old to carry a setting is the usual cause. |
 | `cannot read the sink bounds from ...aggregator.toml` | The HTTP sink block lost one of `client_buffer_size`, `max_connections` or `write_timeout_ms`, which the verification reads from it. | Restore the setting; the updater will not install a configuration it cannot check. |
 | `docker.service must be inactive before the temporary build` | Docker is a build tool here, not a runtime, and the node baseline keeps it disabled. | `sudo systemctl disable --now docker.service docker.socket containerd.service` |
-
-## Updates
-
-Each builds first, keeps one rollback set at `.previous`, and restores it if
-verification fails. Announce the pause: no session can be created while the
-allocator is down, and the stream stops while LogWisp restarts. Where the browser
-route is published, stopping the allocator also drops every browser player —
-their connection runs through it, unlike a native `-join` — so the empty-fleet
-gate below is what keeps that from ending somebody's match.
-
-```sh
-./deploy/guest/update-vif-allocator.sh --diff   # what the env from the repo changes
-./deploy/guest/update-vif-allocator.sh          # allocator binary, env, unit
-./deploy/guest/update-vif-ws-bridge.sh          # sidecar image from the node's websocat
-./deploy/guest/update-logwisp.sh                # pinned LogWisp only
-./deploy/guest/update-vif-image.sh              # session image, tag from HEAD
-./deploy/guest/update-vif-image.sh v1.2.3       # session image, explicit tag
-```
-
-Allocator settings live in `deploy/guest/vif-allocator.env`: edit and commit them
-there, then run the allocator updater, which installs that file and keeps only the
-node's `VIF_ALLOCATOR_IMAGE`. The bridge updater needs no drain and no Docker; run
-it after a websocat upgrade, and running sessions keep the image they started with.
-
-The image updater accepts only the Dockerfile's OCI `headless` build profile, so
-every subsequently allocated pod omits terminal presentation and audio code.
-
-The allocator and image updaters check for an idle fleet but do not empty one —
-drain first. The LogWisp one does not touch K3s or the allocator, so on a fleet
-node stop allocation around it yourself:
-
-```sh
-sudo systemctl stop vif-allocator.service
-./deploy/k3s/session.sh blockers && ./deploy/guest/update-logwisp.sh
-sudo systemctl start vif-allocator.service
-```
-
-Roll one back by restoring its `.previous` set; the per-component blocks in
-[`guest/README.md`](guest/README.md) carry the exact commands, including the
-readiness wait. `.previous` is one update back, not a fixed version.
 
 ## Watch the stream
 

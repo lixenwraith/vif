@@ -16,12 +16,10 @@ map $http_upgrade $vif_connection_upgrade {
     ''      close;
 }
 
-# What the session route is bounded by at the edge; see the location below. A site
-# whose TLS is terminated behind a PROXY-protocol stream proxy must key these on
-# $proxy_protocol_addr instead, the way its other zones are keyed: at http level
-# $binary_remote_addr is the proxy, so one zone would hold the whole site.
-limit_conn_zone $binary_remote_addr zone=vif_ws_conn:10m;
-limit_req_zone  $binary_remote_addr zone=vif_ws_req:10m rate=12r/m;
+# What the session route is bounded by at the edge; see the location below. The site
+# takes connections over PROXY protocol, so the player is $proxy_protocol_addr.
+limit_conn_zone $proxy_protocol_addr zone=vif_ws_conn:10m;
+limit_req_zone  $proxy_protocol_addr zone=vif_ws_req:10m rate=12r/m;
 
 # The Content-Security-Policy on the page that *opens* the socket — the one
 # loading the WASM build, not the one listing sessions — must permit it. CSP 3

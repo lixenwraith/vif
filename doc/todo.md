@@ -10,24 +10,15 @@ and P3 is an idea.
 
 ## Browser sessions and mobile
 
-### Commission the browser session path on the node
+### Exercise the browser path's edges
 
-- Priority: P0
-- Affected files: `deploy/guest`, `deploy/website/vif.nginx.example`,
-  `doc/kube-docker-deploy.md`
-- Prerequisite: `update-vif-ws-bridge.sh` has imported the sidecar image
+- Priority: P1
+- Affected files: `internal/network/websocket_wasm.go`, `deploy/k3s/30-session.yaml`
 
-Off the node, everything but the edge and the cluster network has carried
-players: headless Chromium through the allocator's upgrade proxy (its production
-server deadlines) and websocat 1.14.1 with the sidecar's own arguments, into a
-fleet-shaped `-serve`. Two tabs held a match for 100 s, one leaving mid-run, and a
-1 MB capture in 64-byte messages did not overrun `wsQueueMessages`.
-
-Import the bridge image, run `update-vif-allocator.sh` to publish the route,
-add the edge location with its rate limits, then verify the
-production TLS/CSP path under slow links, tab suspension, reconnects and session
-expiry. Measure what the sidecar actually costs and reconcile it with the values in
-`deploy/k3s/30-session.yaml` and the quota totals, which are estimates.
+A browser guest has joined and played on the deployed node. Not yet run: a dropped
+socket rejoining, a suspended tab, and expiry with a browser in the session. The
+sidecar's CPU and memory are still the estimate in `30-session.yaml`; the hop
+itself costs about 40 µs a round trip.
 
 ### Restore a per-player bound for browser participants
 
@@ -240,6 +231,26 @@ retain that distinction.
 
 Diagnoses and what each item follows from are in
 [Troubleshooting](troubleshooting.md).
+
+### Stop one slow participant setting everyone's playout lead
+
+- Priority: P1
+- Affected files: `internal/app/barrier.go`, `internal/converge/lead.go`
+
+The lead is the worst link's `hops × ⌈(RTT + 2·jitter)/tick⌉`, and `hops` is 2 from
+the second guest on, so two guests at 150 ms RTT wait 6–10 ticks (300–500 ms) for
+their own crossings. A browser guest's late probe replies — its one thread busy
+rendering — widen that worst link for everyone. Decide per-hop one-way costs, and
+whether a participant's own stalls should count.
+
+### Find the glyphs a region change left behind in a browser run
+
+- Priority: P2
+- Affected files: `internal/system` glyph and region handling, `wad/scenario/main`
+
+Once, in `main`'s tower region, a browser guest kept the previous region's glyphs,
+or kept the glyph system running although the region disables it. Not reproduced;
+check whether a region swap clears glyphs on a guest that installed a capture.
 
 ### Split "compared" from "carried" in the status surface
 

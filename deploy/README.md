@@ -1,13 +1,15 @@
 # Deployment artifacts
 
-The container image, the K3s objects an allocated session is made of, and the
-node-side files that carry them. The procedure that installs them, in order, is
-[doc/kube-docker-deploy.md](../doc/kube-docker-deploy.md) — **start there** — and
-the design and open work behind it are
-[doc/kubernetes-fleet.md](../doc/kubernetes-fleet.md).
+| You want to | Go to |
+|---|---|
+| Deploy a change to the node | `git pull && ./deploy/update.sh --diff && ./deploy/update.sh` |
+| Operate it | [`runbook.md`](runbook.md) |
+| Commission a new node | [`doc/kube-docker-deploy.md`](../doc/kube-docker-deploy.md) |
+| Read the design and open work | [`doc/kubernetes-fleet.md`](../doc/kubernetes-fleet.md) |
 
 | Path | What it is |
 |---|---|
+| `update.sh` | The node's one deploy command: diffs every component against HEAD (installed green, incoming red), gates on an empty fleet where a component needs it, and runs the helpers below in dependency order, skipping what is current. |
 | `docker/Dockerfile` | Multi-stage build: pinned Go builder, `scratch` final layer holding the static non-root `vif_headless` binary and nothing else. Built with `make image` from the repository root. |
 | `k3s/00-namespace.yaml` | The `vif` namespace with `restricted` Pod Security enforced, and the permissionless service account a session runs as. |
 | `k3s/05-log-volume.yaml` | The no-provisioner StorageClass, node-affine local PV, and one shared volatile PVC. Render `${NODE_NAME}` before applying. |

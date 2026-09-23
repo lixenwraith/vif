@@ -1,18 +1,18 @@
 #!/bin/sh
 # Build and deploy the allocator from this vi-fighter revision, with its settings
 # from deploy/guest/vif-allocator.env. New allocations pause during the short
-# cutover, and one known-good binary/config/unit is kept. --diff prints what the
-# installed settings would become and changes nothing.
+# cutover, and one known-good binary/config/unit is kept. --render prints the env
+# file it would install; deploy/update.sh shows it against the installed one.
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
-diff_only=false
+render_only=false
 case ${1:-} in
 	-h|--help) sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-	--diff) diff_only=true ;;
+	--render) render_only=true ;;
 	'') ;;
-	*) echo "usage: $0 [--diff]" >&2; exit 2 ;;
+	*) echo "usage: $0 [--render]" >&2; exit 2 ;;
 esac
 
 binary=/usr/local/bin/vif-allocator
@@ -24,8 +24,24 @@ backup_binary=/usr/local/libexec/vif-allocator.previous
 backup_env=/etc/vif-allocator/allocator.env.previous
 backup_unit=/etc/systemd/system/vif-allocator.service.previous
 
+# The repository's settings plus the node's VIF_ALLOCATOR_IMAGE, which names what
+# this node last built: update-vif-image.sh writes it and this carries it over.
+render_env() {
+	image_line=$(sudo cat "$installed_env" | grep '^VIF_ALLOCATOR_IMAGE=' | tail -n 1 || true)
+	[ -n "$image_line" ] || {
+		echo "$0: $installed_env names no VIF_ALLOCATOR_IMAGE; run update-vif-image.sh first" >&2
+		return 1
+	}
+	cat "$source_env"
+	printf '%s\n' "$image_line"
+}
+if [ "$render_only" = true ]; then
+	render_env
+	exit
+fi
+
 test "$(git -C "$repo_root" rev-parse --show-toplevel)" = "$repo_root"
-if [ "$diff_only" = false ] && [ -n "$(git -C "$repo_root" status --porcelain)" ]; then
+if [ -n "$(git -C "$repo_root" status --porcelain)" ]; then
 	echo "$0: the vi-fighter worktree differs from HEAD" >&2
 	exit 1
 fi
@@ -73,22 +89,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-# The repository file is every setting but the session image, which names what
-# this node last built: update-vif-image.sh writes it and this carries it over.
-sudo cat "$installed_env" >"$stage_root/allocator.env"
-image_line=$(grep '^VIF_ALLOCATOR_IMAGE=' "$stage_root/allocator.env" | tail -n 1 || true)
-[ -n "$image_line" ] || {
-	echo "$0: $installed_env names no VIF_ALLOCATOR_IMAGE; run update-vif-image.sh first" >&2
-	exit 1
-}
-{ cat "$source_env"; printf '%s\n' "$image_line"; } >"$stage_root/allocator.env.next"
-echo "allocator.env, installed -> next:"
-if cmp -s "$stage_root/allocator.env" "$stage_root/allocator.env.next"; then
-	echo "  (no change)"
-else
-	diff -u "$stage_root/allocator.env" "$stage_root/allocator.env.next" | sed '1,2d' || true
-fi
-[ "$diff_only" = false ] || exit 0
+render_env >"$stage_root/allocator.env.next"
 
 bridge_image=$(sed -n 's/^VIF_ALLOCATOR_WS_BRIDGE_IMAGE=//p' "$source_env")
 if [ -n "$bridge_image" ] && ! sudo k3s crictl inspecti "$bridge_image" >/dev/null 2>&1; then

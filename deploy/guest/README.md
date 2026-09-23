@@ -42,8 +42,9 @@ disabled with `FORWARD ACCEPT` restored.
 |---|---|---|
 | `install-logwisp.sh [checkout]` | first install of the pinned binary, identity, configuration and unit | an existing installation; a pin that is not an ancestor of upstream `main` |
 | `update-logwisp.sh [checkout]` | LogWisp's binary, configuration and unit only | a stopped `logwisp.service`; the same unreachable pin |
-| `update-vif-allocator.sh [--diff]` | the allocator binary, unit, and env from `vif-allocator.env`; `--diff` only prints the env change | a dirty worktree; a non-empty fleet; a bridge image K3s does not hold |
-| `update-vif-ws-bridge.sh [websocat]` | the sidecar image `VIF_ALLOCATOR_WS_BRIDGE_IMAGE` names, packaged from the node's websocat without Docker and run once as the pod runs it | a websocat that is not 1.x. **Not** an occupied fleet: running pods keep their image |
+| `update-vif-allocator.sh [--render]` | the allocator binary, unit, and env from `vif-allocator.env`; `--render` prints that env and changes nothing | a dirty worktree; a non-empty fleet; a bridge image K3s does not hold |
+| `update-vif-ws-bridge.sh [--diff] [websocat]` | the sidecar image `VIF_ALLOCATOR_WS_BRIDGE_IMAGE` names, from the websocat on `PATH` or one `build-websocat.sh` builds, without Docker; skipped when the digest is already imported | a websocat that is not 1.x. **Not** an occupied fleet: running pods keep their image |
+| `build-websocat.sh OUTPUT` | builds the pinned websocat release from GitHub with cargo, no default features | a missing `git` or `cargo` |
 | `update-vif-image.sh [tag]` | the headless session image, and `VIF_ALLOCATOR_IMAGE` with it; rejects an image without the `headless` profile label | a dirty worktree; an occupied fleet |
 | `update-vif-wad.sh [dir]` | the node's scenario volume at `/var/db/vif/wad`, by atomic rename; validates every scenario first, with a binary built from the checkout and the layout a pod mounts | a tree that is not laid out like `wad/`; a scenario that does not load. **Not** an occupied fleet: a running match keeps the tree it mounted |
 

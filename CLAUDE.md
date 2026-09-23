@@ -71,5 +71,10 @@ Settled. Do not check, flag, or ask about any of these again.
 - websocat 1.x is installed on the node from the AUR;
   `deploy/guest/update-vif-ws-bridge.sh` packages it as the sidecar image.
 - The site is `https://lixen.com`. The allocator's settings are
-  `deploy/guest/vif-allocator.env`, installed by `update-vif-allocator.sh`; the
-  node's copy is never edited by hand.
+  `deploy/guest/vif-allocator.env`; the node's copy is never edited by hand.
+- A deploy is `git pull && ./deploy/update.sh` on the node (`--diff` previews).
+  Route every node change through it and its helpers, not through new manual steps.
+- Host, node networking and the site's nginx are configured outside this public
+  repository. Do not propose, document or ask about them; when a task needs them
+  the user supplies that content. The site's nginx takes PROXY protocol
+  throughout, so a client address there is `$proxy_protocol_addr`.
