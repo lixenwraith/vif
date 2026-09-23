@@ -2,10 +2,6 @@ BINARY := vif
 SRC := ./cmd/vif
 BIN_DIR := bin
 WEB_DIR := web
-# The module's name on the web, which web/index.html hardcodes. It is not $(BINARY):
-# web/ is copied to a deployment as it stands, so the page and the artifact it
-# names have to agree in the repository rather than at install time.
-WASM := vi-fighter.wasm
 GOFLAGS := -trimpath
 LDFLAGS := -s -w
 TAGS ?=
@@ -114,7 +110,7 @@ nolog: generate | $(BIN_DIR)
 
 # wasm selects vlog/stub.go and the audio-free system manifest automatically.
 wasm: generate | $(WEB_DIR)
-	GOOS=js GOARCH=wasm go build $(GOFLAGS) -tags "vif_noaudio $(TAGS)" -ldflags="$(LDFLAGS)" -o $(WEB_DIR)/$(WASM) $(SRC)
+	GOOS=js GOARCH=wasm go build $(GOFLAGS) -tags "vif_noaudio $(TAGS)" -ldflags="$(LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
 
 # windows is experimental and untested
 windows: generate | $(BIN_DIR)

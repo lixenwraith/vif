@@ -1,7 +1,7 @@
 (function() {
     'use strict';
 
-    const WASM_PATH = 'vi-fighter.wasm';
+    const WASM_PATH = 'vif.wasm';
 
     let term;
     let fitAddon;
@@ -151,7 +151,7 @@
                     chunks.push(value);
                     received += value.length;
                     if (total && received > total) total = 0;   // compressed length; drop it
-                    loading.textContent = 'Loading vi-fighter… ' + fmtProgress(received, total);
+                    loading.textContent = 'Loading vif… ' + fmtProgress(received, total);
                 }
                 bytes = new Uint8Array(received);
                 let offset = 0;
@@ -164,8 +164,8 @@
             const result = await WebAssembly.instantiate(bytes, go.importObject);
             instance = result.instance;
         } catch (err) {
-            console.error('vi-fighter: WASM load failed', err);
-            showError('Failed to load vi-fighter (' + err.message + '). Reload to retry.');
+            console.error('vif: WASM load failed', err);
+            showError('Failed to load vif (' + err.message + '). Reload to retry.');
             return;
         }
 

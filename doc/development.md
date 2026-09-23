@@ -40,7 +40,7 @@ The Makefile targets are:
 | `release` | Generate and build a stripped `-trimpath` native binary. |
 | `headless` | Build `bin/vif-headless` without terminal presentation, renderers, or audio. |
 | `nolog` | Release-style build with the `novlog` tag. |
-| `wasm` | Build audio-free `web/vi-fighter.wasm` for the xterm.js host. |
+| `wasm` | Build audio-free `web/vif.wasm` for the xterm.js host. |
 | `windows` | Experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0` cross-build. |
 | `run` | Build the dev binary and execute it. |
 | `test` | Generate and run `go test -race ./...`. |
@@ -525,7 +525,7 @@ the experimental Windows cross-build into a release target.
 `web/index.html` creates an xterm.js terminal, optional WebGL renderer, fit
 addon, and a Go WASM instance. JavaScript batches Go writes into microtasks,
 forwards text/binary input, reports resizes, prevents the context menu, and
-maintains focus. `make serve` builds `web/vi-fighter.wasm` and serves this
+maintains focus. `make serve` builds `web/vif.wasm` and serves this
 directory. Before launch, `web/terminal.js` maps `window.VIF_ARGS` and repeated
 `arg` query parameters into `Go.argv`.
 

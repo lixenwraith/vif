@@ -37,7 +37,7 @@ The useful commands are:
 ```bash
 make release                 # bin/vif
 make headless                # bin/vif-headless
-make wasm                    # web/vi-fighter.wasm
+make wasm                    # web/vif.wasm
 make windows                 # bin/vif.exe
 
 go build -tags=vif_noaudio ./cmd/vif
@@ -228,7 +228,7 @@ Go's browser support already accepts an argument vector through `Go.argv` in
 
 `web/` is the launcher, and it is copied to a deployment as it stands: the same
 page, the same script, the same vendor tree at `/vendor/xterm-5.5/`, the same
-`vi-fighter.wasm` the Makefile writes. A deployment that edits any of them has
+`vif.wasm` the Makefile writes. A deployment that edits any of them has
 forked the launcher, and the fork is only visible the next time one side changes.
 
 ```html
