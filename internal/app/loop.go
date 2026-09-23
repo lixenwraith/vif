@@ -42,11 +42,14 @@ func Run(cfg Config) error {
 		// Hosting resumes after the clock rather than before it: this run is not
 		// waiting for a lobby, it is reopening a door its guests are already at.
 		cfg.HostAddress, cfg.resumeHost = "", next.Host
-		if next.Rejoin {
+		switch {
+		case next.Rejoin:
 			if next.Join != "" {
 				cfg.JoinAddress = next.Join
 			}
-		} else {
+		case next.Join != "":
+			cfg = cfg.joining(next.Join)
+		default:
 			// Not following anyone: a run that led its session, and one that
 			// inherited it and has nobody left, both start over on their own.
 			cfg.JoinAddress = ""

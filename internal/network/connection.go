@@ -377,6 +377,25 @@ func IsWebSocketTarget(target string) bool {
 	return strings.HasPrefix(target, "ws://") || strings.HasPrefix(target, "wss://")
 }
 
+// joinScheme prefixes the link a player is handed, so one string is both a thing
+// to click and a thing to paste after -join.
+const joinScheme = "vif://"
+
+// ParseJoinTarget splits a join target into the address to dial and the session
+// named on it: host:port, or [vif://]host:port/name where one address serves
+// several. The name a target carries wins over the fallback. A browser route is
+// dialled whole: its path is the front door's, not a session name.
+func ParseJoinTarget(target, fallback string) (addr, name string) {
+	if IsWebSocketTarget(target) {
+		return target, fallback
+	}
+	addr, name = strings.TrimPrefix(target, joinScheme), fallback
+	if a, n, ok := strings.Cut(addr, "/"); ok {
+		addr, name = a, n
+	}
+	return addr, name
+}
+
 // dial establishes a connection with optional TLS
 func dial(addr string, cfg *Config) (net.Conn, error) {
 	if IsWebSocketTarget(addr) {

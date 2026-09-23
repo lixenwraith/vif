@@ -32,7 +32,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "blossom", "decay", "cleaner", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region",
-	"host", "session",
+	"host", "join", "session",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -119,6 +119,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleDustCommand(ctx)
 	case "host":
 		return handleHostCommand(ctx, args)
+	case "join":
+		return handleJoinCommand(ctx, args)
 	case "session":
 		return handleSessionCommand(ctx)
 	default:
@@ -666,6 +668,25 @@ func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// handleJoinCommand replaces this solo run with one joined to a session.
+// Usage: :join <target>   the same forms -join takes
+func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if ctx.SessionCtl == nil {
+		setCommandError(ctx, "This runtime has no session transport")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	if len(args) != 1 {
+		setCommandError(ctx, "Usage: :join <target>  (e.g. :join host:7777, or the wss:// link a browser is given)")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	if err := ctx.SessionCtl.Join(args[0]); err != nil {
+		setCommandError(ctx, "Join: "+err.Error())
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	ctx.MacroClearFlag.Store(true)
+	return CommandResult{Continue: true, KeepPaused: true}
 }
 
 // handleSessionCommand reports what this run is part of.

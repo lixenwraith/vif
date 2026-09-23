@@ -162,6 +162,7 @@ var topics = []topicDef{
 			{Keys: ":auto [on|off|main]", Desc: "Cycle or set auto-fire; both weapons by default"},
 			{Keys: ":mouse enable|disable|free", Desc: "Pointer master switch"},
 			{Keys: ":host <addr>", Desc: "Open this running game to participants, e.g. :host :7777; they join at the current tick"},
+			{Keys: ":join <target>", Desc: "Leave this solo game for the session at target, in any form -join takes; a failed join ends the program"},
 			{Keys: ":session", Desc: "Report the session role, address, participant identity, peers and tick"},
 		},
 	},

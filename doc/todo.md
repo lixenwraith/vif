@@ -18,11 +18,11 @@ and P3 is an idea.
 - Prerequisite: the pinned bridge image, built and imported into the node's
   containerd; the API version the sidecar needs is satisfied
 
-The code is in place: the browser dials `wss://<site>/vif/ws/<session>` over a
-`net.Conn` built from the page's own WebSocket, the allocator validates and
-reverse-proxies the upgrade to the session's pod, and a bridge sidecar there turns
-it into the loopback TCP connection the game already serves. What is left is a
-deployment nobody has run.
+The client has joined and played end to end in headless Chromium against a local
+`-serve` behind a websocat-equivalent bridge: tick-zero and mid-run joins, the
+scenario transfer, and a 1 MB capture split into 64-byte messages without
+overrunning `wsQueueMessages`. The allocator route, the edge and the real bridge
+image have not carried a player.
 
 Build and pin the bridge image, import it into K3s, set `-web-origin` and
 `-ws-bridge-image`, publish the edge route with its rate limits, then verify the
@@ -451,6 +451,16 @@ The start gate now excuses a participant that leaves, but `AdmitMeasuredLink`
 refusing one still fails `startHostSessionOn` and ends the run — so with two guests
 in the lobby, one unusable link takes the other's match with it. Refuse the
 participant and continue with the rest, the way the mid-run gate already does.
+
+### Let a mid-run join install a GA scenario
+
+- Priority: P1
+- Affected files: `internal/system/genetic.go`, `internal/app/snapshot_stage.go`
+
+A second guest joining a running `td` session, native or browser, fails staging
+with `import species "species_7": configuration does not match destination
+engine`: the staging world derives a species' engine seed from a root that no
+longer matches the one the coordinator registered it under. Tick-zero joins work.
 
 ### Say why a session reads as unavailable
 

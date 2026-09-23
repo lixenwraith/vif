@@ -161,7 +161,8 @@ produced, exactly as it does from TCP. The inbound queue is bounded at
 closed rather than left growing the tab's heap.
 
 The browser is refused `-host` and `-serve` before initialization, because it can
-bind nothing. A `-join` naming a `host:port` is refused for the same reason.
+bind nothing, and a `-join` or `:join` naming a `host:port` for the same reason. A
+browser guest never advertises a port, even in a migrate session.
 
 ### Where WebSocket is spoken
 
@@ -251,10 +252,14 @@ browser history, logs, and sometimes referrers, so secrets and substantial paylo
 do not belong there. A path supplied through `-s`, `-f`, or another file flag also
 does not make that file exist in the browser filesystem.
 
-The page passes `-join=wss://<site>/vif/ws/<session>` through this bridge. A
-target with a `ws://` or `wss://` scheme is dialled whole; the `host:port` and
-`[vif://]host:port/name` forms are parsed as they were, so a link a native player
-was handed still means what it meant.
+The page passes `-join=wss://<site>/vif/ws/<session>` through this bridge; typing
+`:join <that link>` in a running solo game does the same without a reload. A
+`ws://` or `wss://` target is dialled whole, and the `host:port` and
+`[vif://]host:port/name` forms are parsed as they were.
+
+A browser has no terminal to print an exit error to, so the launcher keeps the
+tail of stderr and, once the program exits, shows its last line (or the crash
+that ended it) in place of the terminal. A refused or failed join reads there.
 
 ## 7. External maps and assets
 

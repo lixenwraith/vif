@@ -47,8 +47,9 @@ type restartRequest struct {
 
 	// Rejoin says the next run follows this session rather than leads it, and Join
 	// where to dial when the command line's address is not where the session is
-	// now — succession moves the door. Without Rejoin the next run is solo, which
-	// is what an authority with an empty roster has actually become.
+	// now — succession moves the door. Join alone is a :join target, dialled once as
+	// -join is. With neither the next run is solo, which is what an authority with
+	// an empty roster has actually become.
 	Rejoin bool
 	Join   string
 }
@@ -239,7 +240,7 @@ func (a *App) init() error {
 	if err := a.initScheduler(); err != nil {
 		return err
 	}
-	a.bindSessionController()
+	a.ctx.SessionCtl = sessionControl{a}
 
 	vlog.Info("app", "msg", "init complete",
 		"width", a.ctx.Width,

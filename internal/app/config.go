@@ -247,6 +247,14 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 	return local, local.Validate()
 }
 
+// joining is this configuration pointed at the session a :join names, as -join
+// would have built it. -players goes: it caps a roster this run no longer hosts.
+func (c Config) joining(target string) Config {
+	c.HostAddress, c.Participants = "", 0
+	c.JoinAddress, c.SessionName = network.ParseJoinTarget(target, "")
+	return c
+}
+
 // Normalize fills unset fields that carry a defined default
 func (c *Config) Normalize() {
 	if c.Mode.OwnsGeometry() {

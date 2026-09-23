@@ -243,6 +243,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:auto [on\|off\|main]` | Cycle or set automatic fire. |
 | `:mouse enable\|disable\|free` | Control terminal mouse input. |
 | `:host <addr>` | Open this running game to participants (`:host :7777`). Refused if the run is already in a session. |
+| `:join <target>` | Replace this solo game with the session at target, in any form `-join` takes; a browser takes only its `wss://` link. Refused while in a session; a dial that fails ends the program with the reason. |
 | `:session` | Report the session role, address, participant identity, its cursor slot, peer count and tick. |
 | `:system <runtime-name> enable\|disable` | Toggle a system that honors meta-system commands. |
 | `:flow [group]`, `:graph [group]` | Toggle navigation flow-field or route-graph debug views. |

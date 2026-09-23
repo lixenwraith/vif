@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -224,9 +225,9 @@ func TestAJoinTargetCarriesTheSessionName(t *testing.T) {
 		{"host.example:7777/7f3c1a", "host.example:7777", "7f3c1a"},
 		{"wss://site.example/vif/ws/7f3c1a", "wss://site.example/vif/ws/7f3c1a", ""},
 	} {
-		addr, name := parseJoinTarget(tc.target, "")
+		addr, name := network.ParseJoinTarget(tc.target, "")
 		if addr != tc.addr || name != tc.name {
-			t.Errorf("parseJoinTarget(%q) = %q %q, want %q %q", tc.target, addr, name, tc.addr, tc.name)
+			t.Errorf("ParseJoinTarget(%q) = %q %q, want %q %q", tc.target, addr, name, tc.addr, tc.name)
 		}
 	}
 	if err := (sessionFlags{join: "host.example:7777/7f_3c"}).validateInvocation(false, false, ""); err == nil {

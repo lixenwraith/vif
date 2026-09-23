@@ -29,6 +29,7 @@ html, body {
     font-size: 16px;
     line-height: 1.5;
     text-align: center;
+    overflow-wrap: anywhere;              /* an exit reason can carry a whole URL */
     font-variant-numeric: tabular-nums;   /* the byte counter must not reflow */
 }
 

@@ -306,10 +306,11 @@ func newJoiningApp(cfg Config) (*App, error) {
 	// authorship can move: where it cannot, a guest's port is for nothing. What is
 	// declared is what was actually bound, which is why this cannot wait until the
 	// transport exists — the reply goes out first. See internal/converge/reach.go.
+	// A browser is never dialled, and js/wasm's net would bind a port nobody reaches.
 	var listener net.Listener
 	var declared string
 	gate := &converge.PeerLinkGate{}
-	if !offer.FixedAuthority && !cfg.NoAdvertise {
+	if !offer.FixedAuthority && !cfg.NoAdvertise && buildHasSocketNetwork {
 		listener, declared = converge.BindAdvertised(cfg.ListenAddress, cfg.JoinAddress, cfg.networkConfig)
 	}
 	closeListener := func() {

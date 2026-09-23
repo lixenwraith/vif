@@ -218,7 +218,9 @@ initialization.
 playing**, at whatever tick it has reached — same acceptor, same identity
 allocation, same capture. The flag is the right shape when every participant is
 present before the run starts; the command is the right shape for everything else,
-including reconnect. `:session` reports what a run is part of.
+including reconnect. `:join <target>` is its other half: a solo run, or one its
+session left alone, rebuilds itself joined to target. `:session` reports what a run
+is part of.
 
 ### Two-terminal verification
 

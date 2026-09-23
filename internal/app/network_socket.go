@@ -13,5 +13,3 @@ func (a *App) initNetworkService() error {
 	a.networkSvc = service.NewNetworkService(a.cfg.networkConfig)
 	return a.hub.Register(a.networkSvc)
 }
-
-func (a *App) bindSessionController() { a.ctx.SessionCtl = sessionControl{a} }

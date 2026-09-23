@@ -245,7 +245,7 @@ func buildConfig() app.Config {
 
 	// Validated in validateInvocation; a link's name overrides nothing, because a
 	// joiner has no -name of its own.
-	cfg.JoinAddress, cfg.SessionName = parseJoinTarget(flagSession.join, cfg.SessionName)
+	cfg.JoinAddress, cfg.SessionName = network.ParseJoinTarget(flagSession.join, cfg.SessionName)
 
 	if flagSession.serve != "" {
 		cfg.HostAddress = flagSession.serve
@@ -416,7 +416,7 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	if f.name != "" && (f.join != "" || (f.host == "" && f.serve == "")) {
 		return fmt.Errorf("-name is what a host answers to; a joiner names the session in its -join target")
 	}
-	if _, name := parseJoinTarget(f.join, f.name); name != "" {
+	if _, name := network.ParseJoinTarget(f.join, f.name); name != "" {
 		if err := validSessionName(name); err != nil {
 			return err
 		}
@@ -450,28 +450,6 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		}
 	}
 	return nil
-}
-
-// joinScheme prefixes the link a player is handed, so one string is both a thing
-// to click and a thing to paste after -join.
-const joinScheme = "vif://"
-
-// parseJoinTarget splits a join target into the address to dial and the session
-// named on it: host:port, or [vif://]host:port/name where one address serves
-// several. The name a target carries wins over the fallback, which is what a host
-// put there with -name.
-//
-// A browser route is dialled whole: its path is the front door's, not a session
-// name this client sends, and cutting at the first '/' would take one for the other.
-func parseJoinTarget(target, fallback string) (addr, name string) {
-	if network.IsWebSocketTarget(target) {
-		return target, fallback
-	}
-	addr, name = strings.TrimPrefix(target, joinScheme), fallback
-	if a, n, ok := strings.Cut(addr, "/"); ok {
-		addr, name = a, n
-	}
-	return addr, name
 }
 
 // validSessionName holds a name to what a URL path, a Kubernetes object name and a

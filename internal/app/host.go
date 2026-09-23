@@ -25,6 +25,7 @@ import (
 type sessionControl struct{ a *App }
 
 func (c sessionControl) BeginHosting(addr string) error { return c.a.beginHostingLocked(addr) }
+func (c sessionControl) Join(target string) error       { return c.a.joinLocked(target) }
 func (c sessionControl) SessionSummary() string         { return c.a.sessionSummaryLocked() }
 
 func (c sessionControl) ChangeScenario(name string) (bool, error) {
@@ -102,6 +103,31 @@ func (a *App) receiveSessionRestart(from uint32, addr string) {
 	}
 }
 
+// joinLocked latches the restart that replaces this run with one joined to target.
+// The next configuration is validated now, while the operator can read why it was
+// refused; the dial happens after teardown, exactly as -join's does. A run left
+// alone by its session may join another. Caller MUST hold updateMutex.
+func (a *App) joinLocked(target string) error {
+	if a.cfg.Mode != ModePlay {
+		return fmt.Errorf("%s mode has no restart loop", a.cfg.Mode)
+	}
+	if port := a.sessionTransportLocked(); a.cfg.HostAddress != "" || (port != nil && port.PeerCount() > 0) {
+		return errors.New("this run is already in a session")
+	}
+	next := a.cfg.joining(target)
+	if err := next.Validate(); err != nil {
+		return err
+	}
+	if !network.IsWebSocketTarget(next.JoinAddress) {
+		if _, _, err := net.SplitHostPort(next.JoinAddress); err != nil {
+			return fmt.Errorf("%q: %w", target, err)
+		}
+	}
+	a.restart.Store(&restartRequest{Join: target})
+	vlog.Info("app", "msg", "join requested", "target", target)
+	return nil
+}
+
 // BeginHosting opens a running instance to participants, for a caller that holds
 // no lock. The operator command path reaches beginHostingLocked instead.
 func (a *App) BeginHosting(addr string) error {
@@ -117,7 +143,7 @@ func (a *App) BeginHosting(addr string) error {
 // cost `:log on` pays. Caller MUST hold updateMutex.
 func (a *App) beginHostingLocked(addr string) error {
 	if !buildHasSocketNetwork {
-		return errors.New("host: browser build has no socket transport; a WebSocket adapter is required")
+		return errors.New("host: a browser build can join a session but not host one")
 	}
 	if addr == "" {
 		return errors.New("host: no address")
@@ -231,7 +257,10 @@ func (a *App) SessionSummary() string {
 // Caller MUST hold updateMutex.
 func (a *App) sessionSummaryLocked() string {
 	if a.sessionTransportLocked() == nil {
-		return "Solo run; :host <addr> opens it to participants"
+		if !buildHasSocketNetwork {
+			return "Solo run; :join <wss:// link> joins a session"
+		}
+		return "Solo run; :host <addr> opens it to participants, :join <target> joins one"
 	}
 	peers := a.world.Resources.Status.Ints.Get("network.peers").Load()
 	participant := a.world.LocalParticipant()

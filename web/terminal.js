@@ -107,6 +107,40 @@
         return ['vif'].concat(args);
     }
 
+    /* Why the program ended. stderr is a Go program's only word on that, and
+       wasm_exec sends it to the console alone; kept here, it is shown on the page
+       once the program exits instead of leaving a terminal that simply stopped. */
+    let lastLine = '';
+    let crashLine = '';
+
+    function watchStderr() {
+        const fs = globalThis.fs;
+        const writeSync = fs.writeSync;
+        const errDecoder = new TextDecoder('utf-8');
+        let partial = '';
+        fs.writeSync = function(fd, buf) {
+            if (fd === 2) {
+                const lines = (partial + errDecoder.decode(buf, { stream: true })).split('\n');
+                partial = lines.pop();
+                for (const line of lines.map(l => l.trim()).filter(Boolean)) {
+                    // A crash's first line names it; the rest is its stack.
+                    if (!crashLine && /^(panic|fatal error|CRASH DETECTED):/.test(line)) crashLine = line;
+                    lastLine = line;
+                }
+            }
+            return writeSync.call(this, fd, buf);
+        };
+    }
+
+    function showExit(code) {
+        if (code === 0) {
+            showMessage('vif has exited. Reload to start again.', false);
+            return;
+        }
+        const reason = (crashLine || lastLine || 'exit code ' + code).replace(/\.$/, '');
+        showMessage('vif stopped: ' + reason + '. Reload to retry.', true);
+    }
+
     // === WASM Loading ===
     const MB = 1048576; // 1024 * 1024 bytes in 1 Megabyte
     const fmtProgress = (received, total) => total
@@ -117,12 +151,14 @@
         // typeof, not a bare identifier: `!WebAssembly` throws a ReferenceError
         // on a browser that lacks it, which is the case being tested for.
         if (typeof WebAssembly === 'undefined') {
-            showError('WebAssembly is not supported by this browser.');
+            showMessage('WebAssembly is not supported by this browser.', true);
             return;
         }
 
         const loading = document.getElementById('loading');
         const go = new Go();
+        watchStderr();
+        go.exit = showExit;   // wasm_exec's hook for the program's exit code
         let instance;
 
         try {
@@ -165,7 +201,7 @@
             instance = result.instance;
         } catch (err) {
             console.error('vif: WASM load failed', err);
-            showError('Failed to load vif (' + err.message + '). Reload to retry.');
+            showMessage('Failed to load vif (' + err.message + '). Reload to retry.', true);
             return;
         }
 
@@ -268,11 +304,11 @@
         });
     }
 
-    function showError(msg) {
+    function showMessage(msg, isError) {
         const el = document.getElementById('loading');
         el.textContent = msg;
         el.classList.remove('hidden');
-        el.classList.add('error');
+        el.classList.toggle('error', isError);
     }
 
     // === Entry Point ===
