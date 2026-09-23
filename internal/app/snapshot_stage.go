@@ -83,7 +83,8 @@ func (s *StagedInstall) StagingWorld() *App { return s.staging }
 // the staging world takes the authority's world, this instance's owner-authored
 // values and what it applied after the capture, and simulates to the present, so
 // a transition already made is neither torn down nor rebuilt and the clock never
-// moves backwards (multi-player.md §3.3). A failure here is an inconsistency.
+// moves backwards (multi-player.md §3.3). The live lock is held throughout: a tick
+// landing between the projection and the write would be overwritten.
 func (s *StagedInstall) Commit() error {
 	switch {
 	case s.committed:
@@ -91,39 +92,48 @@ func (s *StagedInstall) Commit() error {
 	case s.discarded:
 		return errors.New("staged install already discarded")
 	}
-	var err error
+	var (
+		err    error
+		behind uint64
+	)
 	started := time.Now() // [wall] telemetry only
 	live, staging, header := s.live, s.staging, s.capture.Header
 
-	// The ledger is settled against the authority's world as installed, before the
-	// projection re-derives this instance's own predictions over it.
-	live.confirmPredictions(header.Tick, staging)
+	live.world.RunSafe(func() {
+		// The ledger is settled against the authority's world as installed, before
+		// the projection re-derives this instance's own predictions over it.
+		live.confirmPredictionsLocked(header.Tick, staging)
 
-	// A capture ahead of the clock is adopted at its own tick: the buffer holds one
-	// inside the lead, so reaching here ahead is a join or a jump, and either takes
-	// the world as it is. One behind is projected to the present.
-	at, tick := live.Position().Tick, header.Tick
-	behind := uint64(0)
-	if at > tick {
-		behind, tick = at-tick, at
-	}
-	live.prepareProjection(staging)
-	live.feedProjection(staging, header)
-	staging.Tick(int(behind))
-	// What the live world settled after its last completed tick — a copy the queue
-	// published at once, a record the authority received late — is due now.
-	staging.receiveDue(tick + 1)
+		// A capture ahead of the clock is adopted at its own tick: the buffer holds
+		// one inside the lead, so reaching here ahead is a join or a jump. One behind
+		// is projected to the present.
+		at, tick := live.Position().Tick, header.Tick
+		if at > tick {
+			behind, tick = at-tick, at
+		}
+		live.prepareProjectionLocked(staging)
+		live.feedProjectionLocked(staging, header)
+		staging.Tick(int(behind))
+		// What the live world settled after its last completed tick — a copy the
+		// queue published at once, a record the authority received late — is due now.
+		staging.receiveDue(tick + 1)
 
-	var projected snapshot.SharedCapture
-	projected, err = staging.CaptureShared()
-	if err == nil {
-		// The authority's identity and fences, at the live tick: what the barrier
-		// prunes by is what the host applied, and the projection has moved the
-		// world to where this instance stands.
-		projected.Header = header
-		projected.Header.Tick = tick
-		s.difference, err = live.reconcileShared(projected)
-	}
+		var projected snapshot.SharedCapture
+		projected, err = staging.CaptureShared()
+		if err == nil {
+			// The authority's identity and fences, at the live tick: what the barrier
+			// prunes by is what the host applied, and the projection has moved the
+			// world to where this instance stands.
+			projected.Header = header
+			projected.Header.Tick = tick
+			s.difference, err = live.writeSharedLocked(projected, true, true)
+		}
+		if err == nil {
+			m := live.telemetry
+			m.InstallTick.Store(int64(header.Tick))
+			m.Projected.Store(int64(behind))
+		}
+	})
 	staging.world.RunSafe(func() { staging.world.DestroyDomainEntities(core.DomainPlayer) })
 	s.commitDur = time.Since(started)
 	s.committed = true
@@ -133,13 +143,8 @@ func (s *StagedInstall) Commit() error {
 			"tick", header.Tick, "error", err.Error())
 		return fmt.Errorf("commit a staged capture: %w", err)
 	}
-	live.world.RunSafe(func() {
-		m := live.telemetry
-		m.StageUS.Store(s.stageDur.Microseconds())
-		m.CommitUS.Store(s.commitDur.Microseconds())
-		m.InstallTick.Store(int64(header.Tick))
-		m.Projected.Store(int64(behind))
-	})
+	live.telemetry.StageUS.Store(s.stageDur.Microseconds())
+	live.telemetry.CommitUS.Store(s.commitDur.Microseconds())
 	vlog.Info("app", "msg", "capture installed",
 		"tick", header.Tick, "projected_ticks", behind,
 		"stage_ms", s.stageDur.Milliseconds(), "commit_ms", s.commitDur.Milliseconds(),
@@ -149,23 +154,20 @@ func (s *StagedInstall) Commit() error {
 	return nil
 }
 
-// prepareProjection makes the staging world this instance's predictor: it drives
-// no cursor, so no player-domain system simulates for one; it holds this instance's
-// owner-authored values, which the shared species it predicts react to; and its
-// barrier defers by the session's lead under the session's authority, so anything it
-// re-derives applies at the tick the live world applies it.
-func (a *App) prepareProjection(staging *App) {
+// prepareProjectionLocked makes the staging world this instance's predictor: it
+// drives no cursor, so no player-domain system simulates for one; it holds this
+// instance's owner-authored values, which the shared species it predicts react to;
+// and its barrier defers by the session's lead under the session's authority.
+// Caller MUST hold the live world's updateMutex.
+func (a *App) prepareProjectionLocked(staging *App) {
 	var (
-		ctl       engine.LocalControl
 		lead      uint64
 		authority uint32
 	)
-	a.world.RunSafe(func() {
-		ctl = a.world.CaptureCursorControl()
-		if r := a.world.Resources.Network; r != nil {
-			lead, authority = r.BarrierDelayTicks, r.Authority.Load()
-		}
-	})
+	ctl := a.world.CaptureCursorControl()
+	if r := a.world.Resources.Network; r != nil {
+		lead, authority = r.BarrierDelayTicks, r.Authority.Load()
+	}
 	staging.world.RunSafe(func() {
 		w := staging.world
 		w.DisownCursors()

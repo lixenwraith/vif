@@ -83,6 +83,12 @@ type selectiveState struct {
 	// the clock reaches the tick it describes; a newer arrival replaces it.
 	heldManifest []byte
 
+	// wantTick is the tick a manifest waiting on this instance's clock names, and
+	// atTick the world read at exactly that tick by TickClosed; answerManifest takes
+	// it, so an index is compared against the tick it describes.
+	wantTick uint64
+	atTick   *snapshot.SharedCapture
+
 	// wantKeyframe records that this receiver has asked for a whole world and is
 	// waiting for one, so a manifest arriving in the meantime is answered with the
 	// same request rather than starting a repair that cannot help.
@@ -508,6 +514,59 @@ func (c *Corrections) holdsRetention(tick uint64) bool {
 	return ok
 }
 
+// worldAt is this instance's world at tick: the reading TickClosed took there, or
+// the present when the manifest arrived too late for one, which is counted.
+func (c *Corrections) worldAt(tick uint64) (snapshot.SharedCapture, error) {
+	c.selectiveMu.Lock()
+	at := c.selective.atTick
+	if at != nil && at.Header.Tick <= tick {
+		c.selective.atTick = nil
+	}
+	c.selectiveMu.Unlock()
+	if at != nil && at.Header.Tick == tick {
+		err := c.inst.SealCapture(at)
+		return *at, err
+	}
+	c.tel.ManifestsOffTick.Add(1)
+	return c.inst.CaptureShared()
+}
+
+// TickClosed runs under the world lock after every tick. A guest reads its world
+// here when a waiting manifest names this tick; a host wakes its pump, so a
+// publication describes the tick that just closed rather than a timer's phase.
+func (c *Corrections) TickClosed(tick uint64) {
+	if c.authority.isAuthority() {
+		c.signal()
+		return
+	}
+	c.selectiveMu.Lock()
+	want := c.selective.wantTick
+	c.selectiveMu.Unlock()
+	if want != tick {
+		if c.holdingThrough(tick) {
+			c.signal()
+		}
+		return
+	}
+	at, err := c.inst.CaptureSharedLocked()
+	if err != nil {
+		vlog.Warn("app", "msg", "manifest tick capture", "tick", tick, "error", err.Error())
+		return
+	}
+	c.selectiveMu.Lock()
+	c.selective.atTick, c.selective.wantTick = &at, 0
+	c.selectiveMu.Unlock()
+	c.signal()
+}
+
+// signal wakes whichever loop this run drives without blocking the tick.
+func (c *Corrections) signal() {
+	select {
+	case c.wake <- struct{}{}:
+	default:
+	}
+}
+
 // answerManifest indexes this instance's own world against one manifest and
 // answers it.
 func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
@@ -537,7 +596,7 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		return 0
 	}
 
-	mine, err := c.inst.CaptureShared()
+	mine, err := c.worldAt(want.Header.Tick)
 	if err != nil {
 		vlog.Warn("app", "msg", "manifest comparison capture", "error", err.Error())
 		return 0
@@ -762,6 +821,9 @@ func (c *Corrections) ReceiveSelective(kind uint8, from uint32, body []byte) {
 		c.selective.source = from
 		c.selective.manifests = keepNewest(
 			append(c.selective.manifests, body), parameter.SnapshotCorrectionQueue)
+		if ahead, ok := c.manifestAhead(body); ok && ahead > 0 {
+			c.selective.wantTick = c.inst.Position().Tick + ahead
+		}
 	case network.MsgStateShard:
 		c.selective.shardSets = keepNewest(
 			append(c.selective.shardSets, body), parameter.SnapshotCorrectionQueue)

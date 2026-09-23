@@ -305,17 +305,6 @@ that lateness a second attacker's hit answers `opened` differently on two
 instances. The per-attacker budget and the additive join closed the composition;
 which hit owns the override is the same choice as kill credit above.
 
-### Retain peer crossings for the projection
-
-- Priority: P2
-- Affected files: `internal/system/network.go`, `internal/app/replay_suffix.go`
-- Prerequisite: none
-
-A projection re-applies this instance's own suffix and the agreed artifacts, but
-an ordinary crossing from another participant applied inside the projected window
-is not retained, so the projection lacks it until the next correction carries it.
-Retaining applied peer artifacts under the same age bound closes it.
-
 ### Predict a typed gold member instead of publishing it
 
 - Priority: P2

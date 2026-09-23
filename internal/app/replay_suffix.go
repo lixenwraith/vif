@@ -14,7 +14,7 @@ import (
 type replaySource interface {
 	LocalReplaySuffix(fence uint64) ([]event.ScheduledWireFrame, []event.Origin, bool)
 	ReplaySuffixSize() (int, int64)
-	RetainedAfter(tick uint64) ([]event.ScheduledWireFrame, []uint32, []event.Origin)
+	RetainedAfter(tick uint64, fences network.CrossingFences) ([]event.ScheduledWireFrame, []uint32, []event.Origin)
 }
 
 // replaySink is the projection world's half of the same seam.
@@ -22,15 +22,16 @@ type replaySink interface {
 	ScheduleReplay([]event.ScheduledWireFrame, []uint32, []event.Origin)
 }
 
-// feedProjection puts on the projection world's schedule everything this instance
+// feedProjectionLocked puts on the projection world's schedule everything this instance
 // applied after the capture that the capture does not contain: its own crossings
 // past the authority's fence for its source, and the agreed artifacts due after the
 // capture's tick. Each applies at its own tick as the projection simulates forward,
 // which is what makes the projection the world this instance would have reached.
 // Retention is bounded, and a suffix missing a record is unavailable rather than
 // shorter — a shorter suffix is a different history. See doc/multi-player.md §3.3.
-func (a *App) feedProjection(staging *App, header snapshot.CaptureHeader) {
-	src, local := a.replaySource()
+// Caller MUST hold the live world's updateMutex.
+func (a *App) feedProjectionLocked(staging *App, header snapshot.CaptureHeader) {
+	src, local := a.replaySourceLocked()
 	if src == nil {
 		return // no session barrier: nothing was ever retained
 	}
@@ -62,7 +63,7 @@ func (a *App) feedProjection(staging *App, header snapshot.CaptureHeader) {
 	for i := range sources {
 		sources[i] = local
 	}
-	agreed, agreedSources, agreedOrigins := src.RetainedAfter(tick)
+	agreed, agreedSources, agreedOrigins := src.RetainedAfter(tick, header.Crossings)
 	dst.ScheduleReplay(append(frames, agreed...), append(sources, agreedSources...),
 		append(origins, agreedOrigins...))
 	m.ReplayReplayed.Add(int64(len(frames)))
@@ -72,22 +73,20 @@ func (a *App) feedProjection(staging *App, header snapshot.CaptureHeader) {
 	}
 }
 
-// replaySource finds the barrier that retains the suffix, and this instance's own
-// participant identity, under one world lock: the caller needs both and reading them
-// apart would let a departure land between them.
-func (a *App) replaySource() (replaySource, uint32) {
-	var (
-		out   replaySource
-		local uint32
-	)
-	a.world.RunSafe(func() {
-		local = a.world.LocalParticipant()
-		for _, sys := range a.world.Systems() {
-			if r, ok := sys.(replaySource); ok {
-				out = r
-				return
-			}
+// replaySourceLocked finds the barrier that retains the suffix, and this instance's
+// own participant identity. Caller MUST hold updateMutex.
+func (a *App) replaySourceLocked() (replaySource, uint32) {
+	local := a.world.LocalParticipant()
+	for _, sys := range a.world.Systems() {
+		if r, ok := sys.(replaySource); ok {
+			return r, local
 		}
-	})
+	}
+	return nil, local
+}
+
+// replaySource is replaySourceLocked for a caller that does not hold the lock.
+func (a *App) replaySource() (out replaySource, local uint32) {
+	a.world.RunSafe(func() { out, local = a.replaySourceLocked() })
 	return out, local
 }

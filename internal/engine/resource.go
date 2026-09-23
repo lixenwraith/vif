@@ -1009,6 +1009,11 @@ type NetworkResource struct {
 	// that opened the session.
 	Authority atomic.Uint32
 	Term      atomic.Uint64
+
+	// OnTickClosed runs under the world lock after every completed tick, so the
+	// session layer can read a world at exactly the tick a held manifest names. It
+	// must not block.
+	OnTickClosed func(completedTick uint64)
 }
 
 // NewNetworkResource binds a poll endpoint and its deterministic barrier identity.

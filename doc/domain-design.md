@@ -327,8 +327,9 @@ Local view changes do not mark Shared navigation dirty.
 
 A value selected by this participant's input is reflected locally at once. The
 local cursor prediction is a bounded FIFO of requested absolute cells not yet
-announced by Shared simulation. Input, camera, and rendering read it; Shared
-systems do not.
+announced by Shared simulation. Input, camera, rendering and the weapons read it
+through `World.CursorCell` — shots and orbs leave the cell the player sees, and
+what they hit crosses as Shared events like any other; Shared systems do not.
 
 `World.PushCursorMove` advances prediction and emits the crossing atomically from
 the producer's perspective. An expected applied cell pops the queue. An

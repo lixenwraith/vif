@@ -1037,6 +1037,13 @@ func (c *Corrections) holding() bool {
 	return c.haveHeld
 }
 
+// holdingThrough reports whether a held correction has become due by tick.
+func (c *Corrections) holdingThrough(tick uint64) bool {
+	c.installedMu.Lock()
+	defer c.installedMu.Unlock()
+	return c.haveHeld && c.held.Header.Tick <= tick
+}
+
 // SetBaseline records the keyframe later deltas are computed against, and the
 // tick the convergence floor is measured from.
 func (c *Corrections) SetBaseline(cap snapshot.SharedCapture) {

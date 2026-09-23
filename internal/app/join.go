@@ -320,6 +320,7 @@ func (a *App) attachTransportLocked(port engine.NetworkPort) {
 	// install itself needs.
 	r.OnCorrection = a.receiveCorrection
 	r.OnSelective = a.receiveSelective
+	r.OnTickClosed = a.tickClosed
 	r.OnAuthority = a.receiveAuthorityFrame
 	r.OnPeerLost = a.reportPeerLost
 	r.OnSessionRestart = a.receiveSessionRestart

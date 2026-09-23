@@ -10,10 +10,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/status"
 )
 
-// Instance is the run this protocol authors or follows. It is the whole of what the
-// package needs from the world: every method takes the world lock itself, so none
-// may be called by a caller already holding it, and nothing here is called from
-// inside a tick.
+// Instance is the run this protocol authors or follows. Every method takes the world
+// lock itself except CaptureSharedLocked, which only TickClosed calls from inside a
+// tick.
 type Instance interface {
 	// Position is the run and tick every schedule and every containment rule is
 	// measured against; Driven marks a run whose caller paces its own cadence.
@@ -41,6 +40,10 @@ type Instance interface {
 	// instance provably holds already. VerifyCaptureIdentity answers whether a
 	// header describes this session without the body a full verification hashes.
 	CaptureShared() (snapshot.SharedCapture, error)
+	// CaptureSharedLocked is the read without its seal, for TickClosed, which runs
+	// under the world lock; SealCapture pins and hashes it outside the lock.
+	CaptureSharedLocked() (snapshot.SharedCapture, error)
+	SealCapture(*snapshot.SharedCapture) error
 	InstallCapture(snapshot.SharedCapture) (engine.WorldDifference, error)
 	AdoptAuthority(snapshot.CaptureHeader)
 	VerifyCaptureIdentity(snapshot.CaptureHeader) error

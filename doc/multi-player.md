@@ -56,7 +56,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Global environment | Shared wind events are re-derived rather than sent. Every instance consumes two draws from the same Shared environment stream, applies the gust to its own drains and predicted Shared species, and restores active wind state through corrections. |
 | Corrections | A correction starts with a versioned hash index. Equal roots send no state. Mismatches descend to independently proved pages. Compressed whole keyframes remain the bounded fallback. |
 | Correction playout | The clock never moves backwards. A correction behind this instance's tick is projected: simulated forward in the staging world, over what this instance applied since, and written at the present. One ahead of the clock inside the lead waits for its tick; the newest waiting one wins, and one further ahead is taken as the jump it is. |
-| Local replay | A guest retains a bounded canonical suffix of its own crossings; a projection re-applies those past the installed capture's fence for its source, at their own ticks. |
+| Replay | A guest retains a bounded suffix of its own crossings and of what it applied from others; a projection re-applies each past the installed capture's fence for its source, at its own tick. |
 | Crossing ordering | Snapshot schema 5 carries one applied-sequence fence per participant. A receiver removes ordinary frames the installed world already holds — including ones whose nominal receive tick is still ahead — and keeps the ones it does not, including ones whose receive tick is long past. |
 | Local FSM lifecycle | A live install replays only config-marked persistent `ClassLocal` exit/entry events for crossed state paths; staging and all ordinary actions remain side-effect free. |
 | Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. Every host arms the same mid-run gate once its own lobby is done, so a reconnect takes one path whether the session started with `-host`, `-serve`, a script, or `:host`. |
@@ -215,17 +215,17 @@ distance; a capture level with the clock projects zero ticks and still takes the
 open epoch, which is where a typed member and a late-arriving record live.
 
 The projection is fed what the capture does not contain and this instance applied
-after it: its own ordinary crossings past the capture's fence for its source, in
-their encoded wire form, and the applied barrier-bound artifacts due after the
-capture's tick, each at its own apply tick. Production ticks bound retention age;
-they do not choose membership, and neither does the apply tick. A crossing still
-pending on the live barrier is not fed — the barrier applies it at its tick, and
-an install leaves the barrier and the D-18 queue alone. The suffix is bounded by
-ticks, records, and encoded bytes; if retention has a hole, the guest installs the
-authority alone and reports the skipped replay rather than guessing at a partial
-history. Ordinary crossings from *other* participants applied inside the window
-are not retained, so a projection loses them until the next correction; that gap
-is in `doc/todo.md`.
+after it: its own ordinary crossings past the capture's fence for its source, the
+other participants' ordinary crossings past theirs, and the barrier-bound artifacts
+due after the capture's tick, each at its own apply tick. Fences, not ticks, choose
+membership; production ticks only bound retention age. A crossing still pending on
+the live barrier is not fed — the barrier applies it at its tick, and an install
+leaves the barrier and the D-18 queue alone. Retention is bounded by ticks, records
+and bytes; if the local suffix has a hole, the guest installs the authority alone
+and reports the skipped replay rather than guessing at a partial history.
+
+The whole commit — projection and write — runs under the live world lock, so no
+live tick can land between the tick the projection reached and the write.
 
 A capture ahead of the clock is a join or a jump and is adopted at its own tick;
 inside the lead it waits (§4.1).
@@ -357,16 +357,21 @@ capture behind the clock is now projected (§3.3) and moves nothing; the buffer 
 for the other direction.
 
 A correction describing a tick this instance has not reached, within the lead, is
-held until it has, and it is compared there too: a manifest over a tick this
-instance has not run would name every page different and buy a repair of nothing,
-so it waits with the same rule. The newest arrival while one waits replaces it —
-an older one describes a world the authority has left — so at most one is ever
-delayed and never by more than the lead. One further ahead than the lead is not
-a correction this instance can wait for; it is adopted at its own tick as the jump
-it is, counted in `snapshot.corrections_jumped`. A hash-only acknowledgement
-behind the clock is not adopted at all: the world already equals it, and adopting
-its tick would be the rewind. `snapshot.corrections_held` counts the deferrals; a
-session whose paths deliver worlds of one age holds none.
+held until it has. A manifest ahead of the clock is held the same way, and the world
+it is compared against is read at the close of exactly the tick it names
+(`Corrections.TickClosed`, under the tick's lock), so a guest that runs past that
+tick before the corrector answers still answers for it. A manifest that arrives
+after its tick is compared against the present and counted in
+`snapshot.manifests_off_tick`; the repair it buys is correct but carries state a
+tick-exact comparison would not have. The newest arrival while one waits replaces
+it, so at most one is ever delayed and never by more than the lead. One further
+ahead than the lead is adopted at its own tick as the jump it is, counted in
+`snapshot.corrections_jumped`. A hash-only acknowledgement behind the clock is not
+adopted: the world already equals it, and adopting its tick would be the rewind.
+
+The host publishes at the close of the tick it describes rather than on a timer's
+phase: `TickClosed` wakes its pump, so an index leaves with the epoch of the same
+tick and reaches a paced guest before that guest runs the tick.
 
 ## 5. Membership, topology, and authority continuity
 

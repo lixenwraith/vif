@@ -87,65 +87,80 @@ func (a *App) installStatusLocked(state snapshot.StatusState) {
 // a world that never existed.
 func (a *App) CaptureShared() (snapshot.SharedCapture, error) {
 	var (
-		cap       snapshot.SharedCapture
-		err       error
-		crossings network.CrossingFences
+		cap snapshot.SharedCapture
+		err error
 	)
-	a.world.RunSafe(func() {
-		cap.World = a.world.CaptureSharedWorld()
-		cap.Streams = a.world.Resources.Rand.SaveStreams(core.DomainShared)
-		cap.FSM = a.scheduler.ExportFSM()
-		cap.Status = a.captureStatusLocked()
-		cap.Systems, err = a.captureSystemStatesLocked()
-		for _, sys := range a.world.Systems() {
-			if fences, ok := sys.(interface {
-				AppliedCrossingFences() network.CrossingFences
-			}); ok {
-				crossings = fences.AppliedCrossingFences()
-				break
-			}
-		}
-
-		// The header's tick and crossing fences are part of the world reading, not
-		// labels added afterwards. Reading them under the same lock prevents a tick,
-		// a just-dispatched local input, or a peer frame applied a moment ago from
-		// falling between the body and the boundary that tells receivers what the
-		// body contains.
-		st := a.Position()
-		reg := a.world.Resources.Status
-		cfg := a.world.Resources.Config
-		term, holder := a.authorityStamp()
-		cap.Header = snapshot.CaptureHeader{
-			Term:           term,
-			Authority:      holder,
-			Schema:         snapshot.Schema,
-			JournalSchema:  uint64(event.JournalSchema),
-			Run:            st.Run,
-			Tick:           st.Tick,
-			TickInterval:   parameter.GameUpdateInterval,
-			Seed:           a.world.Resources.Rand.Root(),
-			Session:        a.world.Resources.Rand.Session(),
-			ScenarioID:     a.scenario.Name,
-			ScenarioDigest: a.scenario.Digest(),
-			ContentID:      reg.Strings.Get("content.source").Load(),
-			ContentFiles:   uint64(reg.Ints.Get("content.files").Load()),
-			ContentBlocks:  uint64(reg.Ints.Get("content.blocks").Load()),
-			ContentLines:   uint64(reg.Ints.Get("content.lines").Load()),
-			MapWidth:       cfg.MapWidth,
-			MapHeight:      cfg.MapHeight,
-		}
-		cap.Header.Crossings = crossings
-	})
+	a.world.RunSafe(func() { cap, err = a.captureSharedLocked() })
 	if err != nil {
 		return snapshot.SharedCapture{}, err
 	}
-	cap.Header.ContentPin = service.MustGet[*service.ContentService](a.hub, "content").Pin()
-
-	cap.Header.Integrity, err = snapshot.Integrity(cap)
-	if err != nil {
+	if err := a.sealCapture(&cap); err != nil {
 		return snapshot.SharedCapture{}, err
 	}
 	return cap, nil
+}
+
+// captureSharedLocked is the read itself. The header's tick and crossing fences are
+// read with the body, so nothing applied between them can fall outside what the
+// header says the body contains. Caller MUST hold updateMutex.
+func (a *App) captureSharedLocked() (snapshot.SharedCapture, error) {
+	var (
+		cap snapshot.SharedCapture
+		err error
+	)
+	cap.World = a.world.CaptureSharedWorld()
+	cap.Streams = a.world.Resources.Rand.SaveStreams(core.DomainShared)
+	cap.FSM = a.scheduler.ExportFSM()
+	cap.Status = a.captureStatusLocked()
+	cap.Systems, err = a.captureSystemStatesLocked()
+	if err != nil {
+		return snapshot.SharedCapture{}, err
+	}
+	for _, sys := range a.world.Systems() {
+		if fences, ok := sys.(interface {
+			AppliedCrossingFences() network.CrossingFences
+		}); ok {
+			cap.Header.Crossings = fences.AppliedCrossingFences()
+			break
+		}
+	}
+	st := a.Position()
+	reg := a.world.Resources.Status
+	cfg := a.world.Resources.Config
+	term, holder := a.authorityStamp()
+	crossings := cap.Header.Crossings
+	cap.Header = snapshot.CaptureHeader{
+		Term:           term,
+		Authority:      holder,
+		Schema:         snapshot.Schema,
+		JournalSchema:  uint64(event.JournalSchema),
+		Run:            st.Run,
+		Tick:           st.Tick,
+		TickInterval:   parameter.GameUpdateInterval,
+		Seed:           a.world.Resources.Rand.Root(),
+		Session:        a.world.Resources.Rand.Session(),
+		ScenarioID:     a.scenario.Name,
+		ScenarioDigest: a.scenario.Digest(),
+		ContentID:      reg.Strings.Get("content.source").Load(),
+		ContentFiles:   uint64(reg.Ints.Get("content.files").Load()),
+		ContentBlocks:  uint64(reg.Ints.Get("content.blocks").Load()),
+		ContentLines:   uint64(reg.Ints.Get("content.lines").Load()),
+		MapWidth:       cfg.MapWidth,
+		MapHeight:      cfg.MapHeight,
+		Crossings:      crossings,
+	}
+	return cap, nil
+}
+
+// sealCapture pins the corpus and hashes the capture, outside the world lock.
+func (a *App) sealCapture(cap *snapshot.SharedCapture) error {
+	cap.Header.ContentPin = service.MustGet[*service.ContentService](a.hub, "content").Pin()
+	integrity, err := snapshot.Integrity(*cap)
+	if err != nil {
+		return err
+	}
+	cap.Header.Integrity = integrity
+	return nil
 }
 
 // captureSystemStatesLocked collects every declared carrier's state, in system
@@ -203,8 +218,12 @@ func (a *App) InstallShared(cap snapshot.SharedCapture) error {
 // as installed in authority, which is this world after a direct install and the
 // staging world before a projection re-derives this instance's own predictions.
 func (a *App) confirmPredictions(tick uint64, authority *App) {
-	alive := authority.world.Components.Combat.HasEntity
-	a.world.RunSafe(func() { a.world.ConfirmPredictedDeaths(tick, alive) })
+	a.world.RunSafe(func() { a.confirmPredictionsLocked(tick, authority) })
+}
+
+// confirmPredictionsLocked is confirmPredictions under the caller's lock.
+func (a *App) confirmPredictionsLocked(tick uint64, authority *App) {
+	a.world.ConfirmPredictedDeaths(tick, authority.world.Components.Combat.HasEntity)
 }
 
 // installShared writes a capture whose identity has already been established, by
@@ -231,7 +250,13 @@ func (a *App) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal 
 		err  error
 		diff engine.WorldDifference
 	)
-	a.world.RunSafe(func() {
+	a.world.RunSafe(func() { diff, err = a.writeSharedLocked(cap, reconcile, reconcileLocal) })
+	return diff, err
+}
+
+// writeSharedLocked is writeShared under the caller's lock.
+func (a *App) writeSharedLocked(cap snapshot.SharedCapture, reconcile, reconcileLocal bool) (diff engine.WorldDifference, err error) {
+	func() {
 		// Dry run first: a carrier that rejects its record must do so before the
 		// stores are touched. A staging pass cannot answer the second question — a
 		// carrier that refuses because of state the *live* world holds is invisible
@@ -316,7 +341,7 @@ func (a *App) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal 
 		// Last, so a carrier that publishes on load does not overwrite the
 		// captured surface with a value derived from this instance's own history.
 		a.installStatusLocked(cap.Status)
-	})
+	}()
 	return diff, err
 }
 

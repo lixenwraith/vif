@@ -68,6 +68,10 @@ func (i instance) DrainOffTick() {
 }
 
 func (i instance) CaptureShared() (snapshot.SharedCapture, error) { return i.a.CaptureShared() }
+func (i instance) CaptureSharedLocked() (snapshot.SharedCapture, error) {
+	return i.a.captureSharedLocked()
+}
+func (i instance) SealCapture(cap *snapshot.SharedCapture) error { return i.a.sealCapture(cap) }
 
 // InstallCapture resolves a capture against the staging world, projects it to this
 // instance's tick and commits it between two ticks, reporting how far this instance
@@ -132,6 +136,13 @@ func (a *App) receiveCorrection(_ uint64, body []byte) {
 func (a *App) receiveSelective(kind uint8, from uint32, body []byte) {
 	if a.corrections != nil {
 		a.corrections.ReceiveSelective(kind, from, body)
+	}
+}
+
+// tickClosed runs under the world lock after every tick; see Corrections.TickClosed.
+func (a *App) tickClosed(tick uint64) {
+	if a.corrections != nil {
+		a.corrections.TickClosed(tick)
 	}
 }
 

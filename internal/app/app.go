@@ -297,6 +297,7 @@ func (a *App) initWorld() {
 		r.SharedDigest = a.sharedDigestLocked
 		r.OnCorrection = a.receiveCorrection
 		r.OnSelective = a.receiveSelective
+		r.OnTickClosed = a.tickClosed
 		r.OnAuthority = a.receiveAuthorityFrame
 		r.OnPeerLost = a.reportPeerLost
 		r.OnSessionRestart = a.receiveSessionRestart

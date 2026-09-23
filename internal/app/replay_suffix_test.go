@@ -534,6 +534,32 @@ func TestALateGuestActionIsNotUndoneByTheCorrectionThatMissedIt(t *testing.T) {
 	}
 }
 
+// TestAPeerCrossingSurvivesAProjectionThatPredatesIt: the host's own move applies on
+// both at its agreed tick, and a correction read before that tick must not take it
+// back off the guest — the projection re-applies what the guest applied from a peer.
+func TestAPeerCrossingSurvivesAProjectionThatPredatesIt(t *testing.T) {
+	t.Parallel()
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+	deliverCorrection(t, host, []*App{guest}, advance)
+
+	advance()
+	cap := mustCaptureShared(t, host)
+	before := cursorCell(t, guest, 0)
+	inject(t, host, intentMotion(input.MotionRight, 1))
+	for range parameter.NetworkBarrierDelayTicks + 1 {
+		advance()
+	}
+	moved := cursorCell(t, guest, 0)
+	if moved == before {
+		t.Fatalf("the host's move never reached the guest; cursor still at %v", moved)
+	}
+
+	installCorrection(t, guest, cap)
+	if got := cursorCell(t, guest, 0); got != moved {
+		t.Fatalf("the projection took the host's move back: cursor at %v, want %v", got, moved)
+	}
+}
+
 // lagHostReceive delays everything one instance receives, leaving what it sends
 // untouched. That asymmetry is the condition: the guest's crossings arrive after the
 // ticks they named while the authority's corrections still reach the guest on time.

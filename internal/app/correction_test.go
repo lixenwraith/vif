@@ -922,6 +922,31 @@ func divergeGuest(t *testing.T, guest *App) {
 	}
 }
 
+// TestAManifestAheadOfTheClockIsComparedAtItsTick: a guest that runs past the tick
+// an index names before it can answer still answers for that tick, so a converged
+// guest is proved converged rather than repaired onto the world it already had.
+func TestAManifestAheadOfTheClockIsComparedAtItsTick(t *testing.T) {
+	t.Parallel()
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+	deliverCorrection(t, host, []*App{guest}, advance)
+	advance()
+
+	host.Tick(1)
+	if err := host.corrections.Publish(); err != nil {
+		t.Fatalf("publish correction: %v", err)
+	}
+	hashOnly := statOf(guest, "snapshot.corrections_hash_only")
+	guest.Tick(3) // drains the index a tick early, then runs two past it
+	guest.ApplyPendingCorrections()
+
+	if got := statOf(guest, "snapshot.corrections_hash_only") - hashOnly; got != 1 {
+		t.Fatalf("the guest recorded %d hash-only corrections for an index it matched at its tick", got)
+	}
+	if got := statOf(guest, "snapshot.manifests_off_tick"); got != 0 {
+		t.Fatalf("%d manifests were compared off their tick", got)
+	}
+}
+
 // TestAConvergedGuestReceivesTheIndexAndNoState as a session: a
 // guest whose prediction was right gets hashes and nothing else.
 func TestAConvergedGuestReceivesTheIndexAndNoState(t *testing.T) {

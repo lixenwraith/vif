@@ -86,6 +86,9 @@ func (s *stub) CaptureShared() (snapshot.SharedCapture, error) {
 	return s.world, nil
 }
 
+func (s *stub) CaptureSharedLocked() (snapshot.SharedCapture, error) { return s.world, nil }
+func (s *stub) SealCapture(*snapshot.SharedCapture) error            { return nil }
+
 func (s *stub) InstallCapture(cap snapshot.SharedCapture) (engine.WorldDifference, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

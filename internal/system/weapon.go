@@ -407,7 +407,7 @@ func (s *WeaponSystem) redistributeOrbs(orbs orbSlots) {
 
 // spawnOrbEntity creates an orb entity for a weapon type
 func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType component.WeaponType) core.Entity {
-	ownerPos, ok := s.world.Positions.GetPosition(ownerEntity)
+	ownerPos, ok := s.world.CursorCell(ownerEntity)
 	if !ok {
 		return 0
 	}
@@ -452,7 +452,7 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 	dt := s.world.Resources.Time.DeltaTime
 	config := s.world.Resources.Config
 
-	cursorPos, ok := s.world.Positions.GetPosition(cursor)
+	cursorPos, ok := s.world.CursorCell(cursor)
 	if !ok {
 		return
 	}
@@ -648,7 +648,7 @@ func (s *WeaponSystem) handleFireMain(cursor core.Entity) {
 	}
 
 	// Fire Main Weapon (Cleaner)
-	if pos, ok := s.world.Positions.GetPosition(cursor); ok {
+	if pos, ok := s.world.CursorCell(cursor); ok {
 		s.world.PushLocal(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
 			Entity:    cursor,
 			OriginX:   pos.X,
@@ -662,7 +662,7 @@ func (s *WeaponSystem) handleFireMain(cursor core.Entity) {
 
 // fireAllWeapons discharges every ready weapon in one cursor's loadout
 func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.WeaponComponent, orbs orbSlots) {
-	cursorPos, ok := s.world.Positions.GetPosition(cursor)
+	cursorPos, ok := s.world.CursorCell(cursor)
 	if !ok {
 		return
 	}
