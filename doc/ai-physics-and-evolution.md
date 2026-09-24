@@ -53,7 +53,12 @@ pretending its footprint can stand in the blocked cell.
 
 Generation stamps avoid clearing full distance/direction arrays on each
 recompute. A reusable binary min-heap reduces allocation. `DirNone` identifies
-blocked/unreachable cells and `DirTarget` a seed/arrival cell.
+blocked/unreachable cells and `DirTarget` a seed/arrival cell. Each settled cell
+asks the wall test about its eight neighbours once, a diagonal's corners being two
+of them. Navigation and loot pass `Position.WallTest`: a grid read from the wall
+store on the derivation's first probe, exact to `HasBlockingWallAt` under any wall
+change between derivations, so a field touches the walls and not every grid cell.
+Both equivalences are fuzzed against the direct query.
 
 ## 3. Flow-field cache and target groups
 
@@ -83,7 +88,9 @@ cursor read "direct path" and drove into the wall between it and its own.
 
 `LootSystem` therefore keeps one single-goal field per owner cursor, built from
 the same `FlowFieldCache` and the same shared walls, and does its own
-line-of-sight check against the same cursor it steers toward. A field is built
+line-of-sight check against the same cursor it steers toward. No field covers a
+wall cell, so a drop a wall lands on without displacing it — a correction installs
+shared walls under player-domain loot — is pushed out as a spawn displaces it. A field is built
 the first time a cursor drops something and released when that cursor goes; a
 tick with none of its drops in flight recomputes nothing. Anything else that
 becomes owned rather than contested belongs on the same seam: give it a private

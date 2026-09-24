@@ -390,3 +390,10 @@ Measured with a scripted guest and the `-script` benchmark:
   about every neighbour of every cell. They now read a grid built from the store once
   per derivation (`Position.WallTest`): the `td` script runs in 28 s, from 49.5 s,
   with identical stat records throughout.
+
+A drop then stuck inside a wall. No field has ever covered a wall cell, and
+`PushEntityFromBlocked` moved the grid cell but left the sub-cell position in the
+wall, so a pushed kinetic entity walked back in. It now moves both, and loot pushes
+itself out of a wall a correction installed under it. In the browser build in the
+tower region, navigation is about 3% of the thread; answering manifests and
+applying corrections is about half of it (`doc/todo.md`).

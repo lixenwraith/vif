@@ -240,7 +240,9 @@ Diagnoses and what each item follows from are in
 - Affected files: `wad/scenario/main/tower.toml`, `internal/system/eye.go`
 
 A guest present when the region starts answers 77% of manifests hash-only, against
-95% on the main map; the differing sections are eye, genotype, combat and fsm.
+95% on the main map; the differing sections are eye, genotype, combat and fsm. In the
+browser build the answer is the cost: each manifest captures and hashes the whole
+world, maze walls included, about half of the client's busy thread there.
 
 ### Find the glyphs a region change left behind in a browser run
 
