@@ -386,7 +386,7 @@ Measured with a scripted guest and the `-script` benchmark:
   `CropOnResize` the capture leaves local, so a guest that joined after a level setup
   never matched: 0% hash-only in the tower region, now 59%. Entered with the guest
   present it is 77%, against 95% on the main map; the rest is prediction divergence
-  among its interacting eyes, snakes and pylons (`doc/todo.md`).
+  among its interacting eyes, snakes and pylons (§11).
 - **Walls probed per cell.** Flow fields asked the spatial grid and the wall store
   about every neighbour of every cell. They now read a grid built from the store once
   per derivation (`Position.WallTest`): the `td` script runs in 28 s, from 49.5 s,
@@ -397,9 +397,33 @@ A drop then stuck inside a wall. No field has ever covered a wall cell, and
 wall, so a pushed kinetic entity walked back in. It now moves both, and loot pushes
 itself out of a wall a correction installed under it. In the browser build in the
 tower region, navigation is about 3% of the thread; answering manifests and
-applying corrections is about half of it (`doc/todo.md`).
+applying corrections is about half of it. §11 removed most of the repairs and
+installs; the capture and hash every answer takes remain (`doc/todo.md`).
 
 Once, in the tower region, a browser guest kept the previous region's glyphs, or
 kept the glyph system running although the region disables it. It did not recur
 and is noted rather than tracked; a second sighting should record whether that
 guest had installed a capture across the region change.
+
+## 11. Sixth round (2026-09-25, the tower region's hash-only rate)
+
+Measured in-process: a host and a guest meshed on `main`'s tower region, both in
+`:god`, moving and firing at random, the guest trailing the host by the link. Four
+causes, fixed in order; the fraction is the guest's manifests answered hash-only.
+
+- **The authority's cursor was compared.** Its owner-authored cells are a mirror on
+  every guest, refreshed every `NetworkSyncTicks`, and a weapon cooldown or a
+  shield's last drain moves every tick: 2% of manifests matched while both fought.
+  Every participant's cursor is now outside the hashed surface (multi-player.md §4).
+- **A dispatch phase that depended on traffic.** The wire phase settled only when
+  this instance received something, so the last tick's leftovers were dispatched
+  before `Time.Update` on one instance and after it on another; an eye's genotype
+  took a spawn time one tick apart. In a session it now settles every tick.
+- **A snake body aliased the live world.** `SnakeBodyComponent` had no
+  `DetachSnapshot`, so a retained capture's segments kept moving after it was taken,
+  and a repair served pages that no longer matched the hashes published for them.
+- **Overlay flags in the compared surface.** `effects.strobe_active` and
+  `effects.grayout_active` are `TransientSystem`'s, scoped to one cursor.
+
+With all four, 599 of 599 at zero latency and 593 of 595 at three ticks
+(`TestATowerGuestAnswersHashOnly` holds 95% at two).

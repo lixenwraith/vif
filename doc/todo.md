@@ -234,49 +234,29 @@ retain that distinction.
 Diagnoses and what each item follows from are in
 [Troubleshooting](troubleshooting.md).
 
-### Find what diverges a guest in the tower region
+### Hash only what changed when a guest answers a manifest
 
-- Priority: P1
-- Affected files: `internal/system/network.go`, `internal/engine/snapshot_roster.go`,
-  `internal/system/interaction.go`, `internal/snapshot/manifest.go`
-- Prerequisite: a delayed-link harness that counts, per section, what a guest in the
-  tower region answers wrong
-
-A guest present when the region starts answers 77% of manifests hash-only, against
-95% on the main map; the differing sections are eye, genotype, combat and fsm. The
-lead suspect is owner-authored cursor state: `writeCursorState` skips the owner, so
-shield, energy and heat change at once there and a lead later elsewhere, while eye
-and snake contact reads them from shared systems — the shape crossings had before
-they applied at one tick. If confirmed, shared readers take the committed copy on
-every instance and the live value stays with presentation. The browser cost is the
-other half: every answer captures and hashes the whole world, maze walls included;
-per-store write counters would let an unwritten section keep its hash.
-
-### Keep the correction magnitude to the shared surface
-
-- Priority: P3
-- Affected files: `internal/gen-manifest/main.go`, `internal/app/capture.go`
+- Priority: P2
+- Affected files: `internal/snapshot/manifest.go`, `internal/engine/store.go`
 - Prerequisite: none
 
-`SharedWorldDifference` counts the owner-authored cells of a cursor this instance
-authors, which `RebindCursorRoster` then restores, so a projected install reports a
-phantom entity per owned cursor. The generated difference can skip the nine stores
-`snapshot_roster.go` restores for the entities `CaptureCursorControl` held.
+Answering a manifest captures and hashes the whole shared world, maze walls
+included, which in the browser build in the tower region is most of what a guest
+spends now that the answer is almost always hash-only. A write counter per store
+would let a section keep its last hash while nothing wrote to it.
 
 ### Find what makes a networkless soak load-sensitive
 
-- Priority: P2
-- Affected files: `internal/app/soak_test.go`, `internal/event/pool.go`,
-  `internal/event/batch_pool.go`
-- Prerequisite: a reproduction; 36 runs under parallel load, and 12 more beside six
-  spinning cores, stayed clean
+- Priority: P3
+- Affected files: `internal/app/soak_test.go`
+- Prerequisite: a failing seed
 
 `TestSoakAppsAreIndependent` failed twice in nine loaded suite runs with two worlds
-of one seed differing in their position digest. A headless App ticks on its caller
-with no scheduler goroutine, the streaming GA has no workers, and the domain audit
-only records, so what parallel Apps still share is the payload pools
-(`CharacterTypedPayloadPool`, the batch pools): a payload read after its release is
-the candidate, and moving the pools onto the World the smallest step.
+of one seed differing in their position digest. Not reproduced since in 48 loaded
+runs and four whole-package runs, and ruled out by review: every pooled payload has
+one handler that reads nothing after releasing it, the GA refills deterministically,
+no simulation path reads the wall clock, and no package state a world reads changes
+at run time. A failing seed is what would reopen it.
 
 ## Fleet logging
 
