@@ -272,7 +272,7 @@ type GameEvent struct {
 
 `Seq` is the queue slot assigned at push and orders concurrent producers.
 `Origin` names the producer (`system`, `input`, `macro`, `command`, `network`,
-or `debug`); it never changes dispatch behavior.
+`debug`, `session` or `device`); it never changes dispatch behavior.
 
 `EventNone` is zero and is also used as the scheduler's tick sentinel; it does
 not represent a dispatched gameplay effect.
@@ -305,8 +305,9 @@ The queue also owns the replay position `(run, tick, boundary)`. Run advances
 when reset rebases tick, tick opens at the top of a simulation body, and
 boundary advances after each non-empty explicit settle group. These counters
 advance even without a journal, so one attached mid-run stamps its first event
-honestly. `OriginSystem` events are derived simulation work and are omitted;
-every other origin is captured and later reinjected in queue-slot order.
+honestly. `OriginSystem` events are derived simulation work and `OriginDevice`
+ones drive this machine's speakers, so both are omitted; every other origin is
+captured and later reinjected in queue-slot order.
 
 `JournalRecord` stores TOML payload text against the generated registry
 prototype plus dense journal sequence and sparse queue sequence, and carries the

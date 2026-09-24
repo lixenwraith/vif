@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/resource"
@@ -24,8 +25,9 @@ const panStep = 4
 // PlayJournal replays a recorded run on the terminal. Several paths reassemble a
 // rotated set. The anchor names the scenario; roots says where to look for it, so
 // a journal recorded against a scenario that is not installed replays under the
-// same -config-dir the run used.
-func PlayJournal(roots resource.Options, paths ...string) error {
+// same -config-dir the run used. The journal carries no mute state: muted is the
+// viewer's, as -mute is the player's.
+func PlayJournal(roots resource.Options, muted bool, paths ...string) error {
 	event.EnsureRegistry()
 
 	set, err := journal.Load(paths...)
@@ -45,7 +47,7 @@ func PlayJournal(roots resource.Options, paths ...string) error {
 		return err
 	}
 	cfg.Resources.Dir = roots.Dir
-	cfg.AudioMuted = false // the anchor carries no mute state; a viewer wants sound
+	cfg.AudioMuted = muted
 	a, err := NewReplay(cfg)
 	if err != nil {
 		return err
@@ -250,46 +252,16 @@ func (p *player) frame() {
 	a.orchestrator.RenderFrame(renderCtx, a.world)
 }
 
-// key applies one playback control; false quits. Bindings are fixed rather than
-// routed through the keymap: these drive the viewer, not the game.
+// key applies one viewer key; false quits. Playback bindings are fixed rather than
+// routed through the keymap: these drive the viewer, not the game. Any other key is
+// offered to the keymap for the game bindings a viewer owns.
 func (p *player) key(ev terminal.Event) bool {
 	if ev.Key != terminal.KeyRune {
-		return true
-	}
-	if p.live {
-		// Pause, step and rate are instance-local. A participant cannot stop or slow
-		// only its own copy of a live session, so the viewer keeps pan and quit.
-		switch ev.Rune {
-		case 'q':
-			return false
-		case 'h':
-			p.panX -= panStep
-		case 'l':
-			p.panX += panStep
-		case 'k':
-			p.panY -= panStep
-		case 'j':
-			p.panY += panStep
-		case '0':
-			p.panX, p.panY = 0, 0
-		default:
-			return true
-		}
-		p.report()
-		return true
+		return p.offer(ev)
 	}
 	switch ev.Rune {
 	case 'q':
 		return false
-	case ' ':
-		p.paused = !p.paused
-		p.budget = 0
-	case '.':
-		p.paused, p.step = true, p.step+1
-	case '+', '=':
-		p.scale = engine.ScaleStep(p.scale, 1)
-	case '-', '_':
-		p.scale = engine.ScaleStep(p.scale, -1)
 	case 'h':
 		p.panX -= panStep
 	case 'l':
@@ -300,11 +272,64 @@ func (p *player) key(ev terminal.Event) bool {
 		p.panY += panStep
 	case '0':
 		p.panX, p.panY = 0, 0
+	case ' ', '.', '+', '=', '-', '_':
+		// Pause, step and rate are instance-local. A participant cannot stop or slow
+		// only its own copy of a live session, so the viewer keeps pan and quit.
+		if p.live {
+			return true
+		}
+		p.control(ev.Rune)
 	default:
-		return true
+		return p.offer(ev)
 	}
 	p.report()
 	return true
+}
+
+// control applies one pause, step or rate key
+func (p *player) control(r rune) {
+	switch r {
+	case ' ':
+		p.paused = !p.paused
+		p.budget = 0
+	case '.':
+		p.paused, p.step = true, p.step+1
+	case '+', '=':
+		p.scale = engine.ScaleStep(p.scale, 1)
+	case '-', '_':
+		p.scale = engine.ScaleStep(p.scale, -1)
+	}
+}
+
+// offer parses a key as the game would, in NORMAL, and keeps only what a viewer
+// owns: its speakers and its exit. Everything else the keymap makes of a key is the
+// recorded player's to do.
+func (p *player) offer(ev terminal.Event) bool {
+	p.a.inputMachine.SetMode(input.ModeNormal)
+	intent := p.a.inputMachine.Process(ev)
+	if intent == nil {
+		return true
+	}
+	switch intent.Type {
+	case input.IntentQuit:
+		return false
+	case input.IntentToggleAudioCycle:
+		return p.route(intent)
+	}
+	return true
+}
+
+// route applies one viewer intent through the game's router and settles it at
+// once, since nothing else dispatches between a replay's ticks. The viewer is
+// out-of-band control rather than the recorded player, so none of it is effort.
+func (p *player) route(intent *input.Intent) bool {
+	a := p.a
+	cont := true
+	a.world.RunSafe(func() {
+		a.world.WithOrigin(event.OriginDebug, func() { cont = a.router.Handle(intent) })
+	})
+	a.Settle()
+	return cont
 }
 
 // report publishes playback state through the status bar the renderer already draws

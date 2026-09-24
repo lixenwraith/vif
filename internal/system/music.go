@@ -64,6 +64,11 @@ func NewMusicSystem(world *engine.World) engine.System {
 		s.player = world.Resources.Audio.Engine
 	}
 	s.Init()
+	// A run that begins muted starts on its first unmute; one that begins audible,
+	// as -mute=false does, has no transition to start on.
+	if s.player != nil && !s.player.IsMusicMuted() {
+		s.startMusic()
+	}
 	return s
 }
 
@@ -249,8 +254,7 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 }
 
 // applyMusicAudible gates the music bus. The sequencer is frozen, not stopped,
-// so position and phrase survive the mute. Start only covers a session that
-// began muted and never ran.
+// so position and phrase survive the mute; start covers a run that began muted.
 func (s *MusicSystem) applyMusicAudible(audible bool) {
 	if audible == !s.player.IsMusicMuted() {
 		return

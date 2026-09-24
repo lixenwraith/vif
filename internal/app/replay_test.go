@@ -535,6 +535,24 @@ func TestReplayAcrossAPMFold(t *testing.T) {
 	}
 }
 
+// TestAudioMuteStaysOutOfTheJournal is the rule that the speakers a run played on
+// are no part of it: whoever replays the run holds their own mute, so a recorded
+// toggle would only flip theirs from wherever it stands.
+func TestAudioMuteStaysOutOfTheJournal(t *testing.T) {
+	t.Parallel()
+	cap, _, _, _ := journalRun(t, func(t *testing.T, a *App) int {
+		r := newScriptRunner(t, a)
+		r.step(1, &input.Intent{Type: input.IntentToggleAudioCycle, Count: 1})
+		r.step(1, intentMotion(input.MotionRight, 1))
+		return r.done()
+	})
+	for _, rec := range cap.Records() {
+		if rec.Type == event.EventSoundMuteToggle {
+			t.Fatalf("jseq %d journals the audio mute, origin %s", rec.JSeq, rec.Origin)
+		}
+	}
+}
+
 // TestResizeReflowsAndRejects covers the whole resize boundary: ScreenSize stays an
 // exact inverse of the forward derivation, a degenerate report is dropped rather than
 // clamped, and a replayed mid-run change reproduces in both crop modes — crop destroys

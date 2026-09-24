@@ -63,9 +63,9 @@ func (eq *EventQueue) publish(event GameEvent) {
 			event.Seq = currentTail
 
 			// Last point the producer owns the payload: once published a
-			// handler may recycle it. The origin compare keeps the system
-			// hot path to one register test.
-			if event.Origin != OriginSystem {
+			// handler may recycle it. Journaled is register compares, which
+			// keeps the system hot path cheap.
+			if event.Origin.Journaled() {
 				if j := eq.journal.Load(); j != nil {
 					j.record(&event, *eq.stamp.Load())
 				}

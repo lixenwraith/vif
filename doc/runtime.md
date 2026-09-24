@@ -423,8 +423,8 @@ For a render frame, the application:
 
 `app.PlayJournal` loads journal records, rebuilds config and geometry from the
 first anchor, verifies the resolved config/corpus fingerprint, and drives a
-`ModeReplay` App with `ReplayDriver`. Terminal input never enters the keymap or
-mode router. These viewer keys are fixed:
+`ModeReplay` App with `ReplayDriver`. These viewer keys are fixed; any other key
+is parsed by the keymap, which keeps only quit and the audio toggle:
 
 The reader API accepts several files and sorts/deduplicates them by `jseq`, so
 a rotated set can be reassembled. The current `cmd/vif -replay <file>` surface
@@ -443,9 +443,9 @@ reconstruct the missing initial world without a world snapshot.
 
 Terminal resize changes presentation only; the simulation retains recorded
 geometry. Playback pacing converts the recorded tick interval and recorded
-speed to wall time, then applies the viewer's relative speed. Audio is enabled
-and starts unmuted because journal anchors do not carry the original mute
-state.
+speed to wall time, then applies the viewer's relative speed. The mute is the
+viewer's: the journal never records it, a replay starts as `-mute` says, and
+the keymap's audio toggle (Ctrl+S) cycles it.
 
 The current render buffer is terminal-sized. If a recording is wider than the
 viewer terminal, content outside that buffer is clipped before pan is applied;

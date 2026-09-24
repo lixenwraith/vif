@@ -47,7 +47,7 @@ func Run(Config) error {
 	return fmt.Errorf("interactive play is unavailable in a vif_headless build; use -serve")
 }
 
-func PlayJournal(resource.Options, ...string) error {
+func PlayJournal(resource.Options, bool, ...string) error {
 	return fmt.Errorf("journal presentation is unavailable in a vif_headless build")
 }
 

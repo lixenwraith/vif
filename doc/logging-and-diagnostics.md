@@ -666,8 +666,8 @@ correlated by `run` and `tick`.
 `event.Journal` to the event queue and open a dedicated
 `vif-jrn-*.jsonl` logger. The Recorder owns attachment, final counters, and file
 drain; an injected in-memory `journal.Capture` remains caller-owned. Capture
-records every event whose origin is not `OriginSystem`; application producers
-assign one of the valid origins below.
+records every event whose origin is `Journaled` — all but `system` and `device`;
+application producers assign one of the valid origins below.
 The journal logger is separate from the session logger and has no level or
 scope gate: `:log off`, `-lv error`, or
 `-ls none` cannot silence a capture.
@@ -688,6 +688,7 @@ Only a platform with no resolvable user-state/cache location falls back to
 | `network` | Remote producer. |
 | `debug` | Harness or out-of-band APIs such as `App.Region`. |
 | `session` | Roster/lifecycle observation from the session layer. |
+| `device` | This machine's own output, the audio mute; never journaled. |
 
 The dispatcher does not branch on origin. The value exists for APM admission
 and replay capture; replay injects the same event with the recorded origin.

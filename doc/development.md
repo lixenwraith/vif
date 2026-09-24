@@ -578,7 +578,7 @@ record shapes, scopes, the status registry, the flight recorder, and the
 diagnostic playbooks. This section covers only the build-facing policy.
 
 Replay capture is a separate `vif-jrn-*` JSONL sink. `-j` records every
-non-system-origin event regardless of session log level/scope, and its anchor
+journaled-origin event regardless of session log level/scope, and its anchor
 carries the seed, RNG session, config/corpus identity and fingerprint, fixed
 tick interval, and simulation geometry. `-replay` runs those records through a
 manual-clock App; this is reproduction input, not another diagnostic scope.

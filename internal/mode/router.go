@@ -338,10 +338,10 @@ func (r *Router) handleEscape() bool {
 	return true
 }
 
-// Replace handleToggleEffectMute and handleToggleMusicMute with:
+// handleToggleAudioCycle asks AudioSystem to advance parameter.AudioMaskCycle. The
+// mute is this machine's, so it is neither journaled nor counted as an action.
 func (r *Router) handleToggleAudioCycle() bool {
-	// A nil payload forces AudioSystem to default to parameter.AudioMaskCycle
-	r.ctx.PushLocal(event.EventSoundMuteToggle, nil)
+	r.ctx.PushLocalOrigin(event.EventSoundMuteToggle, nil, event.OriginDevice)
 	return true
 }
 
