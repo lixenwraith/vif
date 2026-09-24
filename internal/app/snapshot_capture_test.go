@@ -2,6 +2,8 @@ package app
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
@@ -15,6 +17,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/paths"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
@@ -112,7 +116,7 @@ func TestCaptureStagingIgnoresLocalRuntimeOptions(t *testing.T) {
 				stageCfg.NoAdvertise || stageCfg.FixedAuthority {
 				t.Fatalf("staging inherited local runtime options: %+v", stageCfg)
 			}
-			if stageCfg.Seed != receiver.cfg.Seed || stageCfg.Session != receiver.cfg.Session ||
+			if stageCfg.Seed != receiver.cfg.Seed || stageCfg.Session != cap.Header.Session ||
 				stageCfg.Resources.Embedded != receiver.cfg.Resources.Embedded {
 				t.Fatalf("staging lost simulation identity: %+v", stageCfg)
 			}
@@ -605,4 +609,47 @@ func withUnregisterableGeneticState(t *testing.T, cap snapshot.SharedCapture) sn
 	}
 	out.Header.Integrity = integrity
 	return out
+}
+
+// TestAGAScenarioStagesAcrossAReset: td registers its species while a reset is
+// dispatched, a joiner while it is constructed, and a staging world never resets.
+// Every one of them must derive the same species seeds, or the install is refused.
+func TestAGAScenarioStagesAcrossAReset(t *testing.T) {
+	t.Parallel()
+	td := resource.Options{Scenario: "../../wad/scenario/td"}
+	if _, err := os.Stat(filepath.Join(td.Scenario, paths.ScenarioFile)); err != nil {
+		t.Skipf("external scenario %s not present", td.Scenario)
+	}
+	reset := func(a *App) {
+		a.Context().PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{}, event.OriginDebug)
+		a.Settle()
+		a.Tick(20)
+	}
+	host, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 160, Height: 50, Resources: td})
+	if err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	defer host.Close()
+	reset(host)
+
+	cfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 160, Height: 50, Resources: td},
+		sessionOfferFor(host.JoinAnchor(), 2))
+	if err != nil {
+		t.Fatalf("join config: %v", err)
+	}
+	cfg.Resources.Scenario = td.Scenario
+	guest, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatalf("guest: %v", err)
+	}
+	defer guest.Close()
+
+	if _, err := guest.StageShared(mustRoundTrip(t, host)); err != nil {
+		t.Fatalf("a join after the host's reset: %v", err)
+	}
+	reset(host)
+	reset(guest)
+	if _, err := guest.StageShared(mustRoundTrip(t, host)); err != nil {
+		t.Fatalf("an install after a reset both took: %v", err)
+	}
 }

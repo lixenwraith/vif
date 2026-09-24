@@ -198,17 +198,25 @@ func (s *StagedInstall) Discard() {
 	s.release()
 }
 
+// stagingKey is what a staging world cannot be re-used across: the D-14 map
+// latch decides what a capture's placements mean, and the RNG session decides
+// every root a system reads at Init, which a staging world never re-runs.
+type stagingKey struct {
+	w, h    int
+	session uint64
+}
+
 // stagingWorld returns the second world captures resolve into, building it the first
 // time and re-using it after; the second return says whether its FSM boot queue
 // still needs settling. A world that kept anything from the previous install would
-// resolve the next capture against a world the sender never had. Different map
-// bounds cannot be re-used: the D-14 latch decides what a capture's placements mean.
+// resolve the next capture against a world the sender never had.
 func (a *App) stagingWorld(cap snapshot.SharedCapture) (*App, bool, error) {
 	a.stageMu.Lock()
 	defer a.stageMu.Unlock()
 
+	key := stagingKey{cap.Header.MapWidth, cap.Header.MapHeight, cap.Header.Session}
 	if a.staging != nil {
-		if a.stagingW == cap.Header.MapWidth && a.stagingH == cap.Header.MapHeight {
+		if a.stagedFor == key {
 			return a.staging, false, nil
 		}
 		a.staging.Close()
@@ -218,8 +226,7 @@ func (a *App) stagingWorld(cap snapshot.SharedCapture) (*App, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	a.staging = staging
-	a.stagingW, a.stagingH = cap.Header.MapWidth, cap.Header.MapHeight
+	a.staging, a.stagedFor = staging, key
 	return staging, true, nil
 }
 
@@ -231,7 +238,7 @@ func (a *App) stagingWorld(cap snapshot.SharedCapture) (*App, bool, error) {
 func (a *App) discardStagingWorld() {
 	a.stageMu.Lock()
 	staging := a.staging
-	a.staging, a.stagingW, a.stagingH = nil, 0, 0
+	a.staging, a.stagedFor = nil, stagingKey{}
 	a.stageMu.Unlock()
 	if staging != nil {
 		staging.Close()
@@ -249,8 +256,8 @@ func (s *StagedInstall) release() { s.staging = nil }
 // newStagingApp builds the second world a capture is resolved into: this instance's
 // configuration with every outward-facing part removed — no transport, no journal,
 // no telemetry cadence — keeping what decides whether a capture loads, which is the
-// seed, the scenario and the corpus. The map latch comes from the capture, because
-// a world built on different bounds would answer a different question.
+// seed, the scenario and the corpus. The map latch and the session come from the
+// capture: a world on other bounds or another session's roots answers another question.
 func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 	// Project only the inputs that can change the simulated world. Starting from
 	// the live Config and subtracting known I/O options is brittle: a newly added
@@ -277,7 +284,7 @@ func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 			Provided: &staged,
 		},
 		Seed:      a.cfg.Seed,
-		Session:   a.cfg.Session,
+		Session:   cap.Header.Session,
 		RecTicks:  -1,
 		StatTicks: -1,
 		LockMap:   true,
@@ -300,8 +307,7 @@ func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 
 // installSharedResolved is InstallShared without the identity check: StageShared has
 // already asked the live instance, and a staging world built from the same
-// configuration would re-derive the same verdict — and would fail outright after a
-// reset, whose session counter a freshly constructed world has not reached.
+// configuration would re-derive the same verdict.
 func (a *App) installSharedResolved(cap snapshot.SharedCapture) error {
 	// The staging world proves that the position resolves; it does not present or
 	// simulate this participant's local effects. Reconciliation belongs only to

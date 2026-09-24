@@ -46,21 +46,16 @@ type GeneticSystem struct {
 	trackKeys     []core.Entity
 	pendingDeaths []event.SpeciesKilledPayload
 
-	// registrations is every species declaration this run has processed, by
-	// species id.
-	//
-	// It is here because a registration is a *shared* fact with a private effect.
-	// The declaration arrives as EventGeneticRegisterSpecies from an FSM region's
-	// entry actions (wad/scenario/main/tower.toml raises the one this game has), so both
-	// participants derive it — but not at the same tick, because a guest predicts
-	// the transition and may reach it before the authority does. The registered set
-	// then differs, and Registry.Import refuses a state whose set does not match:
-	// a guest that ran ahead could never adopt the authority again, and every
-	// correction after it failed. Carrying the declarations in the capture makes
-	// the set adoptable in both directions — register what the authority has and
-	// this instance does not, drop what it does not have — which is what D-19 asks
-	// of any private state that decides a future shared outcome.
+	// registrations is every species declaration this run has processed, in
+	// species order. A guest may predict a region's entry before the authority, so
+	// the capture carries the declarations and an install registers or drops
+	// species to match: Registry.Import refuses a differing set (D-19).
 	registrations []event.GeneticRegisterSpeciesPayload
+
+	// seedRoot is read at Init, when every stream of this game is drawn, rather
+	// than at a registration whose timing relative to the session advance differs
+	// between an authority's reset and a joiner's construction.
+	seedRoot uint64
 
 	eyeTracked     int64
 	telemetryTicks int
@@ -123,6 +118,7 @@ func (s *GeneticSystem) Init() {
 	s.statTypeFit.Store("-")
 	s.buffers.Reset()
 
+	s.seedRoot = s.world.Resources.Rand.DomainRoot(core.DomainShared)
 	// A reset replaces the run, so the declarations belong to it as well: the FSM
 	// re-enters its regions and raises them again.
 	for _, r := range s.registrations {
@@ -247,8 +243,7 @@ func (s *GeneticSystem) registerSpeciesLocked(payload *event.GeneticRegisterSpec
 
 	cfg := parameter.GAStreamingConfig()
 	// Per-species seed: one root, independent streams, stable across runs
-	cfg.Seed = vmath.DeriveSeed(s.world.Resources.Rand.DomainRoot(core.DomainShared),
-		"genetic:"+strconv.Itoa(int(payload.Species)))
+	cfg.Seed = vmath.DeriveSeed(s.seedRoot, "genetic:"+strconv.Itoa(int(payload.Species)))
 	config := registry.SpeciesConfig{
 		ID:                 registry.SpeciesID(payload.Species),
 		Name:               fmt.Sprintf("species_%d", payload.Species),

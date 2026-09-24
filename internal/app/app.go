@@ -160,10 +160,9 @@ type App struct {
 	// this one, built on first use and re-used for the life of the run: building one
 	// per install costs 9 to 31 ms, which a correction five times a second cannot
 	// afford.
-	stageMu  sync.Mutex
-	staging  *App
-	stagingW int
-	stagingH int
+	stageMu   sync.Mutex
+	staging   *App
+	stagedFor stagingKey
 }
 
 // New wires the runtime, releasing anything already started on failure. Errors are
