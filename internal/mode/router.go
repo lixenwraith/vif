@@ -1075,8 +1075,10 @@ func (r *Router) moveMouseCursor(intent *input.Intent) bool {
 
 	player := r.ctx.World.Resources.Player.Entity
 
-	// Same-cell motion is a no-op, reduce free mode reporting
-	if cur, ok := r.ctx.World.Positions.GetPosition(player); ok && cur.X == gameX && cur.Y == gameY {
+	// A report on the cell the cursor is already bound for is no move and no action.
+	// That cell is the D-18 prediction: the store lags it by a settle or a playout
+	// lead, so testing the store re-sent every repeated report as a new move.
+	if cur, ok := r.ctx.World.CursorCell(player); ok && cur.X == gameX && cur.Y == gameY {
 		return true
 	}
 

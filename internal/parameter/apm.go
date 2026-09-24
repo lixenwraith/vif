@@ -1,20 +1,14 @@
 package parameter
 
-import "time"
-
 // APM admission policy — APM exists solely to drive adaptive music.
-// The Router is the single admission point; machine input (macro playback,
-// mouse auto-fire) admits zero by design.
+// The scheduler admits each dispatched input-origin event at full weight; macro
+// playback and auto-fire, like every other origin, admit nothing.
 // Units are milli-actions; GameState divides by APMUnit at publish.
 const (
 	APMUnit         = 1000
-	APMWeightFull   = 1000                   // distinct action
-	APMWeightRepeat = 400                    // same action outside the dedup window
-	APMRepeatWindow = 250 * time.Millisecond // identical actions inside window: dropped
-	APMMaxPerSecond = 5000                   // ceiling: 5 full actions/s ~= TierPeakAPM
+	APMWeightFull   = 1000 // one action
+	APMMaxPerSecond = 5000 // ceiling: 5 full actions/s ~= TierPeakAPM
 
 	// APMPendingBurstMax caps actions folded into a single APM bucket
 	APMPendingBurstMax = 4 * APMMaxPerSecond
-
-	MouseAPMSampleInterval = 150 * time.Millisecond
 )

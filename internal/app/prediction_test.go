@@ -6,6 +6,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
@@ -121,4 +122,50 @@ func TestAPredictedSharedDeathRewardsItsPlayerOnce(t *testing.T) {
 	if got, want := boostGranted(guest, cursor), parameter.BoostBaseDuration; got != want {
 		t.Fatalf("the kill granted %s of boost, want the %s one reward pays", got, want)
 	}
+}
+
+// TestPointerMovesOnlyToANewCell is the pointer's half of D-18: a report on the cell
+// the cursor is already bound for is no move and no action, and one naming the cell
+// it is leaving is a move. The store lags the prediction until the move settles, so
+// both answers are read from the prediction.
+func TestPointerMovesOnlyToANewCell(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, fixtureSeed, 100, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+
+	var from, to [2]int
+	a.World().RunSafe(func() {
+		pos, _ := a.World().LocalCursor()
+		from, to = [2]int{pos.X, pos.Y}, [2]int{pos.X + 2, pos.Y}
+	})
+	// Reports arrive between settles, as a terminal delivers them inside one frame.
+	report := func(cell [2]int) {
+		var tx, ty int
+		a.World().RunSafe(func() {
+			cfg := a.World().Resources.Config
+			ox, oy := cfg.MapOffset()
+			tx = a.Context().GameXOffset + cell[0] - cfg.CameraX + ox
+			ty = a.Context().GameYOffset + cell[1] - cfg.CameraY + oy
+		})
+		a.handleIntent(&input.Intent{Type: input.IntentMouseMove, Count: tx, Char: rune(ty)})
+	}
+
+	before := a.pushed()
+	report(to)
+	report(to)
+	if n := a.pushed() - before; n != 1 {
+		t.Fatalf("two reports on one cell pushed %d events, want one move", n)
+	}
+	report(from)
+	if n := a.pushed() - before; n != 2 {
+		t.Fatalf("a report on the cell being left pushed %d events in all, want a second move", n-1)
+	}
+
+	a.Settle()
+	a.World().RunSafe(func() {
+		if pos, _ := a.World().Positions.GetPosition(a.World().Resources.Player.Entity); pos.X != from[0] || pos.Y != from[1] {
+			t.Fatalf("cursor settled on (%d,%d), want the last reported cell %v", pos.X, pos.Y, from)
+		}
+	})
 }
