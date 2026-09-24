@@ -284,7 +284,8 @@ func (a *App) writeSharedLocked(cap snapshot.SharedCapture, reconcile, reconcile
 
 		if reconcile {
 			// The measurement and the write are one pass over the same stores.
-			diff = engine.SharedWorldDifference(a.world.CaptureSharedWorld(), cap.World)
+			diff = engine.SharedWorldDifference(a.world.CaptureSharedWorld().WithoutLocalCursorState(),
+				cap.World.WithoutLocalCursorState())
 			a.world.ReconcileSharedWorld(cap.World)
 		} else {
 			a.world.InstallSharedWorld(cap.World)

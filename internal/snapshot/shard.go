@@ -433,7 +433,7 @@ func ValidateShardSet(set CorrectionShardSet, tick uint64, authority uint32, roo
 func ApplyShardSet(mine *SharedCapture, index *Manifest, set CorrectionShardSet) (ShardRepair, error) {
 	var rep ShardRepair
 	touched := make(map[string]bool, len(set.Shards))
-	cursors := ownerAuthoredCursors(*mine, set.Authority)
+	cursors := ownerAuthoredCursors(*mine)
 
 	for _, sh := range set.Shards {
 		n, err := applyShard(mine, cursors, sh)

@@ -749,10 +749,6 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 		t.Fatalf("relayed shard set: %v", err)
 	}
 	relaySet.Served = 2
-	relayBody, err := snapshot.EncodeShardSet(relaySet)
-	if err != nil {
-		t.Fatalf("relayed shard encode: %v", err)
-	}
 	if err := snapshot.ValidateShardSet(relaySet, next.Header.Tick, 1, authority.Root(), next.Header); err != nil {
 		t.Fatalf("a relayed answer did not bind to the authority's manifest: %v", err)
 	}
@@ -767,11 +763,14 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 		pages, repairWire, len(rootBody), repairWire, parameter.SnapshotManifestRetention,
 		len(authority.Summary().Sections), rows)
 
-	// A relayed answer is the authority's content, so it may not cost more than
-	// the direct one; the slack is for the served-by stamp it adds.
-	if len(relayBody) > len(shardBody)+64 {
+	// A relayed answer is the authority's content, so it may carry nothing beyond
+	// the served-by stamp. Compared before compression, which moves by tens of bytes
+	// on content this similar.
+	direct, _ := json.Marshal(set)
+	relayed, _ := json.Marshal(relaySet)
+	if stamp := len(`"served":2,`); len(relayed) > len(direct)+stamp {
 		t.Fatalf("a relayed repair is %d bytes against %d direct; a relay serves the "+
-			"same pages and must not cost more to say so", len(relayBody), len(shardBody))
+			"same pages and must not cost more to say so", len(relayed), len(direct))
 	}
 }
 

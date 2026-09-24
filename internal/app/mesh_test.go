@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
@@ -19,6 +20,14 @@ import (
 // candidate list a real session would publish — it travels in the offer, so a
 // fixture that wants a leaf out of the candidates leaves it out.
 func meshSession(t *testing.T, seed uint64, n int, links [][2]int, chain ...network.PeerID) []*App {
+	t.Helper()
+	return meshSessionOf(t, Config{Seed: seed, Width: 120, Height: 40,
+		Resources: resource.Options{Embedded: true}}, n, links, chain...)
+}
+
+// meshSessionOf is meshSession on a configuration of the caller's, for a scenario
+// the embedded assets do not ship.
+func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...network.PeerID) []*App {
 	t.Helper()
 
 	offer := network.SessionOffer{
@@ -34,7 +43,11 @@ func meshSession(t *testing.T, seed uint64, n int, links [][2]int, chain ...netw
 
 	apps := make([]*App, n)
 	for i := range apps {
-		apps[i] = mustHeadless(t, seed, 120, 40)
+		a, err := NewHeadless(cfg)
+		if err != nil {
+			t.Fatalf("headless: %v", err)
+		}
+		apps[i] = a
 	}
 	t.Cleanup(func() {
 		for _, a := range apps {

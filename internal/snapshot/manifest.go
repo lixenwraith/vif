@@ -226,7 +226,7 @@ type Manifest struct {
 // requirement 8's outside-the-lock half — the bounded read stays where it was, and
 // the partitioning, marshalling and hashing are charged to the publisher.
 func BuildManifest(cap SharedCapture, authority uint32) (*Manifest, error) {
-	cursors := ownerAuthoredCursors(cap, authority)
+	cursors := ownerAuthoredCursors(cap)
 	m := &Manifest{
 		summary: CorrectionManifest{
 			Version:   ManifestVersion,
@@ -310,30 +310,17 @@ func storeManifestRows(name string, scratch []engine.StoreRow, cursors map[core.
 	return rows, nil
 }
 
-// ownerAuthoredCursors is the cursor set whose owner-authored cells stay *outside*
-// the hashed surface: every cursor the authority does not own.
-//
-// The asymmetry is the point, and it has three cases rather than two. A cursor the
-// authority owns has the authority as its single author, so its cells are exactly
-// the ones every receiver adopts at install and exactly the ones a repair should
-// carry. A cursor naming no participant is authored by nobody — every instance
-// reads it as ControlRemote — so its cells are ordinary shared state. A cursor
-// anyone else owns is authored somewhere else: the authority holds a mirror one
-// sync period behind at best, and the owner keeps its own over anything an install
-// writes (D-13, snapshot_roster.go). Only that third case is excluded, because
-// only it would produce a disagreement that survives every repair; the
-// owner-authored sync stream stays its carrier, which is where the domain model
-// already puts it.
-func ownerAuthoredCursors(cap SharedCapture, authority uint32) map[core.Entity]bool {
+// ownerAuthoredCursors is the cursor set whose owner-authored cells stay outside the
+// hashed surface: every cursor a participant owns, the authority's included. Each
+// instance holds another's as a mirror up to a sync period old, which a timer that
+// moves every tick never matches, and the sync stream is their carrier (D-13). A
+// cursor naming no participant has no separate author, so its cells are compared.
+func ownerAuthoredCursors(cap SharedCapture) map[core.Entity]bool {
 	out := make(map[core.Entity]bool, len(cap.World.Cursor))
 	for _, en := range cap.World.Cursor {
-		// A cursor naming no participant has no separate author: every instance
-		// reads it as ControlRemote, nobody keeps its own values over an install,
-		// and its cells are ordinary shared state that a repair must carry.
-		if en.Value.PeerID == 0 || en.Value.PeerID == authority {
-			continue
+		if en.Value.PeerID != 0 {
+			out[en.Entity] = true
 		}
-		out[en.Entity] = true
 	}
 	return out
 }
@@ -531,7 +518,7 @@ func (m *Manifest) sectionRowsFor(cap SharedCapture, ids []string) (map[string][
 			return nil, err
 		}
 	}
-	cursors := ownerAuthoredCursors(cap, m.authority)
+	cursors := ownerAuthoredCursors(cap)
 	var scratch []engine.StoreRow
 	for i := range engine.SharedWorldStoreCount {
 		name := engine.SharedWorldStoreNames[i]

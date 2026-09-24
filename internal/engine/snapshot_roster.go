@@ -114,6 +114,43 @@ func (w *World) restoreOwnedCursorState(s ownedCursorState) {
 	writeOwned(c.Pulse, s.entity, s.pulse)
 }
 
+// WithoutLocalCursorState returns s without what RebindCursorRoster re-derives or
+// restores: every cursor's control assignment, and the owner-authored cells of each
+// one a participant owns, whose carrier is the sync stream. A correction that
+// differs only there has moved no shared state; the manifest compares the same.
+func (s SharedWorldState) WithoutLocalCursorState() SharedWorldState {
+	authored := make(map[core.Entity]bool, len(s.Cursor))
+	cursors := make([]StoreEntry[component.CursorComponent], len(s.Cursor))
+	for i, en := range s.Cursor {
+		if en.Value.PeerID != 0 {
+			authored[en.Entity] = true
+		}
+		en.Value.Control = 0
+		cursors[i] = en
+	}
+	s.Cursor = cursors
+	s.Energy = dropOwned(s.Energy, authored)
+	s.Heat = dropOwned(s.Heat, authored)
+	s.Shield = dropOwned(s.Shield, authored)
+	s.Boost = dropOwned(s.Boost, authored)
+	s.Weapon = dropOwned(s.Weapon, authored)
+	s.Combat = dropOwned(s.Combat, authored)
+	s.CursorView = dropOwned(s.CursorView, authored)
+	s.Ping = dropOwned(s.Ping, authored)
+	s.Pulse = dropOwned(s.Pulse, authored)
+	return s
+}
+
+func dropOwned[T any](rows []StoreEntry[T], authored map[core.Entity]bool) []StoreEntry[T] {
+	out := make([]StoreEntry[T], 0, len(rows))
+	for _, r := range rows {
+		if !authored[r.Entity] {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 // RebindCursorRoster rebuilds the roster from the installed cursor store, restores
 // this instance's own control assignment, and puts back the owner-authored state of
 // every cursor that assignment leaves it authoring.

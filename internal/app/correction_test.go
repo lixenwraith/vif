@@ -11,8 +11,10 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
+	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // correctionSteps is how often the two-participant criteria assert convergence.
@@ -1315,5 +1317,81 @@ func TestACorrectionDoesNotStallTheOwnerStateSync(t *testing.T) {
 	if got := rodCharges(host, cursor); got != second {
 		t.Fatalf("host mirror stalled at %d charges after an install rewound the guest, it authored %d",
 			got, second)
+	}
+}
+
+// TestATowerGuestAnswersHashOnly: in the tower region both participants fight, so
+// owner-authored cursor state moves every tick, snakes rewrite their segments in
+// place and overlays toggle. None of it may reach the compared world, or a guest
+// there repairs nearly every manifest instead of proving the authority's world.
+func TestATowerGuestAnswersHashOnly(t *testing.T) {
+	t.Parallel()
+	apps := meshSessionOf(t, towerScenario(t, 0x70E4), 2, [][2]int{{1, 2}})
+	host, guest := apps[0], apps[1]
+	const lead = 2
+	for _, a := range apps {
+		transportOf(t, a).SetShape(network.LinkShape{LatencyTicks: lead})
+		injectExCommand(t, a, "god")
+	}
+	host.Region(event.RegionSpawn, "tower", "TowerSetup")
+	host.Settle()
+	for range 120 {
+		tickAll(apps)
+	}
+	// The guest trails the authority by the link, which is where pacing holds it.
+	for range lead {
+		host.Tick(1)
+		_ = host.corrections.PublishDue()
+	}
+
+	rng := vmath.NewFastRand(7)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	for range 1200 {
+		for _, a := range apps {
+			if rng.Intn(3) == 0 {
+				inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+			}
+			if rng.Intn(6) == 0 {
+				inject(t, a, &input.Intent{Type: input.IntentFireMain, Count: 1})
+			}
+		}
+		host.Tick(1)
+		_ = host.corrections.PublishDue()
+		guest.Tick(1)
+		guest.ApplyPendingCorrections()
+	}
+
+	manifests := statOf(guest, "snapshot.manifests_received")
+	hashOnly := statOf(guest, "snapshot.corrections_hash_only")
+	if manifests == 0 || hashOnly*100 < manifests*95 {
+		t.Fatalf("the guest answered %d of %d manifests hash-only, want 95%%", hashOnly, manifests)
+	}
+}
+
+// TestAnInstallMeasuresNoLocalCursorState: every instance re-derives its cursors'
+// control and keeps the owner-authored cells the sync stream carries, so a
+// correction measures the shared state it moved and nothing of those.
+func TestAnInstallMeasuresNoLocalCursorState(t *testing.T) {
+	t.Parallel()
+	host, apps := liveInstance(t, 0x0A11)
+	guest := apps[1]
+	advance := func() { tickAll(apps) }
+
+	var hostCursor core.Entity
+	host.World().RunSafe(func() { hostCursor = host.World().Resources.Player.Slot(0) })
+	from := cursorPosition(host, hostCursor)
+	host.Context().PushEventOrigin(event.EventCursorMoveRequest,
+		&event.CursorMoveRequestPayload{Entity: hostCursor, X: from.X + 7, Y: from.Y + 3}, event.OriginDebug)
+	host.Settle()
+	guest.World().RunSafe(func() {
+		w := guest.World()
+		if e, ok := w.Components.Energy.GetPtr(w.Resources.Player.Entity); ok {
+			e.Current += 1234
+		}
+	})
+
+	deliverCorrectionNow(t, host, apps[1:], advance)
+	if n := statOf(guest, "snapshot.correction_entities"); n != 1 {
+		t.Fatalf("the correction measured %d entities, want the one cursor it moved", n)
 	}
 }

@@ -337,9 +337,12 @@ the general RNG section includes the environment stream position, and Shared
 component pages include the species kinetic result. Player drains remain local
 and resume from the same per-tick samples after an install.
 
-Owner-authored cursor cells are excluded when the receiver owns that cursor, and
-cursor control assignment is normalised for both hashing and repair. Those values
-are re-bound locally after installation.
+The owner-authored cells of every cursor a participant owns, the authority's
+included, are outside the hashed surface: each instance holds another's as a mirror
+up to `NetworkSyncTicks` old, the sync stream is their carrier, and comparing them
+made a guest whose peer was fighting repair nearly every manifest. Cursor control
+assignment is normalised for hashing and repair. The correction magnitude leaves
+out the same cells, and all of them are re-bound locally after installation.
 
 The manifest root intentionally excludes tick-local header metadata so a predictor
 can compare state with an earlier authority tick. A shard set must nevertheless

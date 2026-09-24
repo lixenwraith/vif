@@ -35,6 +35,7 @@ var deniedSharedPrefix = []string{
 	"lightning.", "flash.", "fadeout.", "splash.", "spirit.", "loot.",
 	"weapon.", "energy.", "heat.", "typing.", "ping.", "boost.",
 	"glyph.", "nugget.", "fuse.", "shield.", "cleaner.", "camera.", "transient.",
+	"effects.", // TransientSystem's overlays, scoped to this instance's cursor
 	"motion_marker.", "materialize.", "soft_collision.", "audio.", "music.",
 	"death.", "timer.",
 	// Combat resolves targets in both domains from one set of counters, so the
