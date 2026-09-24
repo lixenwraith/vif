@@ -273,6 +273,11 @@ const (
 	// crossProcessContinueTicks is the gate itself.
 	crossProcessContinueTicks = 500
 
+	// crossProcessWidth keeps the 117-column viewport the epoch control was measured
+	// on: at another width the seed's world need not reach an epoch-relative instant
+	// inside the continuation, and the control would have nothing to bite on.
+	crossProcessWidth = 117 + parameter.LeftMargin
+
 	captureFile   = "capture.json"
 	originSurface = "origin.surface"
 	joinerSurface = "joiner.surface"
@@ -368,7 +373,7 @@ func TestCrossProcessChild(t *testing.T) {
 // crossProcessOrigin warms a world, writes the capture, and writes what its own
 // continuation of that world comes to.
 func crossProcessOrigin(t *testing.T, dir string, seed uint64) {
-	a := mustHeadless(t, seed, 120, 40)
+	a := mustHeadless(t, seed, crossProcessWidth, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
 	a.Tick(crossProcessWarmTicks)
@@ -413,7 +418,7 @@ func crossProcessOrigin(t *testing.T, dir string, seed uint64) {
 // crossProcessReceiver builds its own world, drives it to a different tick, then
 // installs the capture and continues.
 func crossProcessReceiver(t *testing.T, dir string, seed uint64, out string) {
-	a := mustHeadless(t, seed, 120, 40)
+	a := mustHeadless(t, seed, crossProcessWidth, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
 

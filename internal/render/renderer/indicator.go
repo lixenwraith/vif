@@ -31,17 +31,13 @@ func (r *IndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	// centred map would sit inside a black margin with numbered rows beside it.
 	pf := ctx.PlayfieldViewportRect()
 
-	// --- Row indicators (left gutter: padding, digit, padding) ---
+	// --- Row indicators (left gutter, its digit against the game area) ---
 	for y := range ctx.ViewportHeight {
 		screenY := ctx.GameYOffset + y
-		pad := visual.RgbBackground
 		if y < pf.Y0 || y >= pf.Y1 {
-			pad = visual.RgbVoid
-		}
-		for x := range ctx.GameXOffset {
-			buf.SetWithBg(x, screenY, ' ', pad, pad)
-		}
-		if pad == visual.RgbVoid {
+			for x := range ctx.GameXOffset {
+				buf.SetWithBg(x, screenY, ' ', visual.RgbVoid, visual.RgbVoid)
+			}
 			continue
 		}
 
@@ -76,7 +72,7 @@ func (r *IndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			}
 		}
 
-		buf.SetWithBg(1, screenY, ch, fg, bg)
+		buf.SetWithBg(ctx.GameXOffset-1, screenY, ch, fg, bg)
 	}
 
 	// --- Column indicators (bottom row) ---
@@ -121,8 +117,13 @@ func (r *IndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		buf.SetWithBg(screenX, indicatorY, ch, fg, bg)
 	}
 
-	// The corner under the row gutter is outside the map on both axes.
+	// The corner joins the two gutters where both reach it, and continues the void
+	// where either stops short of it.
+	corner := visual.RgbBackground
+	if pf.Y1 < ctx.ViewportHeight || pf.X0 > 0 {
+		corner = visual.RgbVoid
+	}
 	for x := range ctx.GameXOffset {
-		buf.SetWithBg(x, indicatorY, ' ', visual.RgbVoid, visual.RgbVoid)
+		buf.SetWithBg(x, indicatorY, ' ', corner, corner)
 	}
 }

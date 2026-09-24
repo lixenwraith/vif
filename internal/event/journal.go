@@ -41,7 +41,10 @@ import (
 //
 // 14: EventPlayoutLead is a local record of the lead this instance stamps its own
 // crossings with, not a barrier-bound session value the authority published.
-const JournalSchema = 14
+//
+// 15: The row gutter narrowed to one column, so the terminal an anchor names is a
+// viewport two columns wider, and a script reading viewport_width reads another value.
+const JournalSchema = 15
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.

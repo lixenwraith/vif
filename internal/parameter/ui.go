@@ -10,8 +10,8 @@ const (
 	// TopMargin for status bar (1 line for heat meter)
 	TopMargin = 1
 
-	// LeftMargin (1 left padding + 1 digit + 1 right padding)
-	LeftMargin = 3
+	// LeftMargin is the row gutter: one column holding the relative row digit
+	LeftMargin = 1
 )
 
 // Status Bar & Modes
