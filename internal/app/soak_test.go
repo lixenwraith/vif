@@ -59,7 +59,7 @@ var towerRegions = []journal.FuzzRegion{
 	{Name: "main", State: "MainSpawnGold"},
 	{Name: "quasar", State: "QuasarFuse"},
 	{Name: "storm", State: "StormSetup"},
-	{Name: "monitor", State: "MonitorWarmup"},
+	{Name: "monitor", State: "MonitorActive"},
 	{Name: "tower", State: "TowerSetup"},
 }
 

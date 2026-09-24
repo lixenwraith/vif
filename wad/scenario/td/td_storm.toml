@@ -30,10 +30,31 @@ parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 180, g = 0, b = 255 }, intensity = 1.0, duration_ms = 400 } },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "STORM BREACH - KILL IT BEFORE IT REACHES THE TOWERS" } },
+]
+transitions = [
+    { trigger = "Tick", target = "StSpawn" },
+]
+
+# Same shape as main's StormSetup: a refused spawn asks again rather than falling
+# through StLive's defensive timeout, which would clear a storm never fought.
+[states.StSpawn]
+parent = "Root"
+on_enter = [
     { action = "EmitEvent", event = "EventStormSpawnRequest" },
 ]
 transitions = [
-    { trigger = "Tick", target = "StLive", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+    { trigger = "EventSpeciesCreated", target = "StLive", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 4 } },
+    { trigger = "Tick", target = "StLive", guard = "And", guard_args = { guards = [
+        { name = "StateTimeExceeds", args = { ms = 500 } },
+        { name = "StatusBoolEquals", args = { key = "storm.active", value = true } },
+    ] } },
+    { trigger = "Tick", target = "StSpawnRetry", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.StSpawnRetry]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "StSpawn", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
 ]
 
 [states.StLive]

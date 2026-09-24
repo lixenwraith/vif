@@ -261,7 +261,7 @@ var EmbeddedRegions = []FuzzRegion{
 	{"main", "MainSpawnGold"},
 	{"quasar", "QuasarFuse"},
 	{"storm", "StormSetup"},
-	{"monitor", "MonitorWarmup"},
+	{"monitor", "MonitorActive"},
 	{"placeholder", "PlaceholderSetup"},
 }
 
