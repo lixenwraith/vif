@@ -229,6 +229,14 @@ Manual intensity changes always use per-bar track reveal, while automatic
 changes reveal only when intensity rises. Decide whether manual decreases should
 retain that distinction.
 
+### Pause the mixer with replay playback
+
+- Priority: P3
+- Affected files: `internal/app/play.go`
+
+A replay's SPACE stops the ticks, not the mixer, so music plays on over a paused
+replay; the viewer's command line does pause it, through the game's pause.
+
 ## Multiplayer
 
 Diagnoses and what each item follows from are in

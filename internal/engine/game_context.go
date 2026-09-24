@@ -93,6 +93,10 @@ type GameContext struct {
 
 	AutoFire atomic.Uint32 // AutoFireOff, AutoFireMain, or AutoFireBoth
 
+	// Viewer marks the command line as a replay viewer's: the recording authors the
+	// world, so a command may inspect it but not change it.
+	Viewer atomic.Bool
+
 	// === Main-Loop Exclusive ===
 
 	// Terminal geometry, written only by MetaSystem's EventScreenResize handler
@@ -101,6 +105,10 @@ type GameContext struct {
 
 	Width, Height            int // Terminal dimensions
 	GameXOffset, GameYOffset int // Game area offset from terminal origin
+
+	// The surface overlays are placed on when it is not the simulated terminal;
+	// zero when it is. Written by a replay's presenting loop, which runs its ticks.
+	presentW, presentH int
 
 	// === Context Exclusive ===
 
@@ -374,9 +382,20 @@ func (ctx *GameContext) OverlayGeometry() OverlayGeometry {
 	return OverlayGeometry{}
 }
 
+// SetPresentationSize places overlays on a surface other than the simulated
+// terminal: a replay simulates the recorded screen and draws on the viewer's.
+func (ctx *GameContext) SetPresentationSize(width, height int) {
+	ctx.presentW, ctx.presentH = width, height
+	ctx.recomputeOverlayGeometry()
+}
+
 // recomputeOverlayGeometry republishes window placement and screen telemetry
 func (ctx *GameContext) recomputeOverlayGeometry() {
-	g := ComputeOverlayGeometry(ctx.Width, ctx.Height)
+	w, h := ctx.Width, ctx.Height
+	if ctx.presentW > 0 {
+		w, h = ctx.presentW, ctx.presentH
+	}
+	g := ComputeOverlayGeometry(w, h)
 	ctx.overlayGeom.Store(&g)
 	ctx.statScreenW.Store(int64(ctx.Width))
 	ctx.statScreenH.Store(int64(ctx.Height))

@@ -423,34 +423,31 @@ For a render frame, the application:
 
 `app.PlayJournal` loads journal records, rebuilds config and geometry from the
 first anchor, verifies the resolved config/corpus fingerprint, and drives a
-`ModeReplay` App with `ReplayDriver`. These viewer keys are fixed; any other key
-is parsed by the keymap, which keeps only quit and the audio toggle:
+`ModeReplay` App with `ReplayDriver`. The reader API accepts several files and
+sorts/deduplicates them by `jseq`; `cmd/vif -replay <file>` passes one path. A set
+whose first anchor says `StartRun != 0` or `StartTick != 0` is refused: input
+records alone cannot reconstruct the initial world without a world snapshot.
 
-The reader API accepts several files and sorts/deduplicates them by `jseq`, so
-a rotated set can be reassembled. The current `cmd/vif -replay <file>` surface
-passes one path. A set whose first anchor says `StartRun != 0` or
-`StartTick != 0` is refused by `ConfigFromAnchor`: input records alone cannot
-reconstruct the missing initial world without a world snapshot.
+The playback keys are fixed; `:help` lists them. Any other key is parsed by the
+keymap in NORMAL, which keeps only quit, the audio toggle and `:`.
 
 | Key | Playback action |
 |---|---|
 | `SPACE` | Pause/resume. |
 | `.` | Advance one tick while paused. |
 | `+` / `-` | Move the viewer rate up/down the rational scale ladder. |
-| `h j k l` | Pan presentation left/down/up/right by four cells. |
-| `0` | Reset pan. |
+| `h j k l` / `0` | Scroll a map larger than the view by four cells; re-centre. |
+| Ctrl+S | Cycle the viewer's mute, which starts as `-mute` says; no journal records it. |
+| `:` | Command line: `help`, `about`, `debug`, `content`, `flow`, `graph`, `log`, `q`. |
 | `q` | Quit. |
 
-Terminal resize changes presentation only; the simulation retains recorded
-geometry. Playback pacing converts the recorded tick interval and recorded
-speed to wall time, then applies the viewer's relative speed. The mute is the
-viewer's: the journal never records it, a replay starts as `-mute` says, and
-the keymap's audio toggle (Ctrl+S) cycles it.
-
-The current render buffer is terminal-sized. If a recording is wider than the
-viewer terminal, content outside that buffer is clipped before pan is applied;
-pan can move toward the recorded area but cannot recover cells that were never
-rendered into the buffer. A windowed composite is the planned seam.
+Pacing converts the recorded tick interval and speed to wall time, then applies
+the viewer's rate. The simulation keeps its recorded geometry; the frame is laid
+out for the viewer's terminal, and a resize re-lays it. A map the view holds is
+centred in void as the game centres it; a larger one is shown from the recorded
+view's centre, and scroll stops at the map's edges. The command line pauses
+playback, as the game's does, and hands the recorded mode and pause back when it
+closes; a command that would change the recording is refused.
 
 ### Authored headless scripts
 

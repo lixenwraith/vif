@@ -51,6 +51,16 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 	cmd := parts[0]
 	args := parts[1:]
 
+	// A replay's viewer inspects a world the recording authors
+	if ctx.Viewer.Load() {
+		switch cmd {
+		case "h", "help", "?", "about", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit":
+		default:
+			setCommandError(ctx, "Command unavailable in a replay: :"+cmd)
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+	}
+
 	// A live operator may inspect the instance and author its own player state,
 	// but may not mutate shared scheduling, systems or FSM configuration locally.
 	if ctx.World.LiveSession() {

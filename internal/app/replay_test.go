@@ -305,7 +305,8 @@ func TestReplayReproducesRecordedRuns(t *testing.T) {
 }
 
 // TestModeChangedAppliesWithoutRouter covers the applier directly, so a MetaSystem
-// regression fails here rather than as an opaque snapshot diff
+// regression fails here rather than as an opaque snapshot diff. Leaving overlay mode
+// closes the overlay, or a replayed :help would stay open with no router to close it.
 func TestModeChangedAppliesWithoutRouter(t *testing.T) {
 	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
@@ -324,6 +325,20 @@ func TestModeChangedAppliesWithoutRouter(t *testing.T) {
 	}
 	if s := a.World().Resources.Status.Strings.Get("context.mode").Load(); s != core.ModeNames[core.ModeVisual] {
 		t.Fatalf("context.mode %q, want %q", s, core.ModeNames[core.ModeVisual])
+	}
+
+	a.Context().PushLocalOrigin(event.EventModeChanged,
+		&event.ModeChangedPayload{Mode: core.ModeOverlay}, event.OriginDebug)
+	a.Context().PushLocalOrigin(event.EventMetaHelpRequest, nil, event.OriginDebug)
+	a.Settle()
+	if !a.Context().IsOverlayActive() {
+		t.Fatal("a replayed help request opened no overlay")
+	}
+	a.Context().PushLocalOrigin(event.EventModeChanged,
+		&event.ModeChangedPayload{Mode: core.ModeNormal}, event.OriginDebug)
+	a.Settle()
+	if a.Context().IsOverlayActive() {
+		t.Fatal("the overlay outlived overlay mode")
 	}
 }
 

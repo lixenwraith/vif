@@ -191,6 +191,18 @@ var topics = []topicDef{
 		},
 	},
 	{
+		Key: "replay", Title: "REPLAY (-replay, -script -watch)",
+		Entries: []entryDef{
+			{Keys: "Space", Desc: "Pause or resume playback"},
+			{Keys: ".", Desc: "Pause and advance one tick"},
+			{Keys: "+  -", Desc: "Faster and slower playback"},
+			{Keys: "h j k l  0", Desc: "Scroll a map larger than the terminal, stopping at its edges; 0 re-centres on the recorded view"},
+			{Actions: []string{"toggle_audio_cycle"}, Desc: "Cycle audio; a replay starts as -mute says"},
+			{Keys: ":", Desc: "Command line: help, about, debug, content, flow, graph, log and quit"},
+			{Keys: "q", Desc: "Quit the replay"},
+		},
+	},
+	{
 		Key: "logging", Title: "LOGGING",
 		Entries: []entryDef{
 			{Keys: ":log", Desc: "Report the session log target, level, scope and recorder depth"},

@@ -143,6 +143,10 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 		}
 		s.ctx.SetMode(p.Mode)
 		s.ctx.World.UpdateBoundsRadius()
+		// An overlay lives only in overlay mode, so a replayed close closes it too
+		if p.Mode != core.ModeOverlay {
+			s.ctx.SetOverlayContent(nil)
+		}
 
 	case event.EventLevelSetup:
 		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {

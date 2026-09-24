@@ -122,12 +122,10 @@ the cell under the pointer is the cell the renderer drew there; deriving the two
 separately is what made a click on a centered map land short by half the margin.
 
 Replay separates simulation geometry from presentation geometry. The journal
-anchor fixes the former; terminal resize only resizes the orchestrator, and
-`h/j/k/l` shifts presentation offsets without mutating the recorded camera or
-viewport. The current render buffer is still terminal-sized, so a recording
-wider than the viewer terminal is clipped before pan and the pan control can
-reach only cells that entered that buffer. A future windowed composite is
-needed to pan over the whole recorded surface.
+anchor fixes the former; each frame's context is re-laid for the viewer's
+terminal, with its own viewport, centring and camera derived from the recorded
+camera plus the viewer's `h/j/k/l` scroll, clamped to the map. The recorded camera
+and viewport are never written.
 
 ## 3. Compositor data model
 

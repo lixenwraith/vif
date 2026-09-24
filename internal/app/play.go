@@ -141,12 +141,22 @@ type player struct {
 	live    bool
 	signals <-chan os.Signal
 
-	budget     time.Duration // wall time owed to the simulation
-	step       int           // ticks granted while paused
-	panX, panY int
-	paused     bool
-	done       bool
-	err        error // the stream's own failure, returned by run
+	budget       time.Duration // wall time owed to the simulation
+	step         int           // ticks granted while paused
+	panX, panY   int           // view offset from the recorded one, as the map edges allow
+	termW, termH int           // the viewer's terminal, which the recording need not fit
+	paused       bool
+	done         bool
+	cmd          *viewerCommand // open while the viewer holds the command line or an overlay
+	err          error          // the stream's own failure, returned by run
+}
+
+// viewerCommand is the recorded player's operator state a viewer's command line
+// borrows, handed back when it closes: the mode the bar and ping bounds show, and
+// the pause APM admission and the mixer follow.
+type viewerCommand struct {
+	mode   core.GameMode
+	paused bool
 }
 
 // run drives the presentation loop until the viewer quits. NewReplay has already
@@ -163,6 +173,8 @@ func (p *player) run() error {
 		defer stopSignals()
 	}
 
+	p.termW, p.termH = p.a.term.Size()
+	p.a.ctx.SetPresentationSize(p.termW, p.termH)
 	p.report()
 	last := time.Now()
 
@@ -175,7 +187,9 @@ func (p *player) run() error {
 			switch ev.Type {
 			case terminal.EventResize:
 				// Presentation only: the simulation keeps its recorded geometry
+				p.termW, p.termH = ev.Width, ev.Height
 				p.a.orchestrator.Resize(ev.Width, ev.Height)
+				p.a.ctx.SetPresentationSize(ev.Width, ev.Height)
 			case terminal.EventClosed, terminal.EventError:
 				return nil
 			case terminal.EventKey:
@@ -195,9 +209,10 @@ func (p *player) run() error {
 	}
 }
 
-// advance grants the simulation the ticks the elapsed wall time paid for
+// advance grants the simulation the ticks the elapsed wall time paid for. Nothing
+// plays while the viewer holds the command line, as the game pauses for it.
 func (p *player) advance(elapsed time.Duration) {
-	if p.done {
+	if p.done || p.cmd != nil {
 		return
 	}
 	if p.paused {
@@ -241,21 +256,45 @@ func (p *player) tickOnce() bool {
 	return true
 }
 
-// frame renders one presented frame; the pan offset shifts the game area within
-// the terminal without touching simulation geometry
+// frame renders one presented frame, laid out for the viewer's terminal rather than
+// the recorded one: the simulation keeps its geometry and only the view moves.
 func (p *player) frame() {
 	a := p.a
 	a.ctx.IncrementFrameNumber()
-	renderCtx := a.renderContext()
-	renderCtx.GameXOffset -= p.panX
-	renderCtx.GameYOffset -= p.panY
-	a.orchestrator.RenderFrame(renderCtx, a.world)
+	rc := a.renderContext()
+	w := max(p.termW-rc.GameXOffset, 1)
+	h := max(p.termH-rc.GameYOffset-parameter.BottomMargin, 1)
+	rc.CameraX, rc.MapOffsetX, p.panX = viewAxis(rc.CameraX, rc.ViewportWidth, w, rc.MapWidth, p.panX)
+	rc.CameraY, rc.MapOffsetY, p.panY = viewAxis(rc.CameraY, rc.ViewportHeight, h, rc.MapHeight, p.panY)
+	rc.ViewportWidth, rc.ViewportHeight = w, h
+	rc.ScreenWidth, rc.ScreenHeight = p.termW, p.termH
+	a.orchestrator.RenderFrame(rc, a.world)
+}
+
+// viewAxis places the viewer's view on one axis as the game would at its size: a
+// map the view holds is centred and does not scroll; a larger one is shown from the
+// recorded view's centre, moved by pan and stopped at the map's edges. The pan kept
+// is what the edges allowed, so a key back the other way moves the view at once.
+func viewAxis(camera, recorded, size, mapSize, pan int) (cam, offset, kept int) {
+	if mapSize <= size {
+		return 0, (size - mapSize) / 2, 0
+	}
+	from := camera + (recorded-size)/2
+	cam = max(0, min(from+pan, mapSize-size))
+	return cam, 0, cam - from
 }
 
 // key applies one viewer key; false quits. Playback bindings are fixed rather than
 // routed through the keymap: these drive the viewer, not the game. Any other key is
 // offered to the keymap for the game bindings a viewer owns.
 func (p *player) key(ev terminal.Event) bool {
+	if p.cmd != nil {
+		// The viewer's command line or overlay, parsed as the game parses it
+		if intent := p.a.inputMachine.Process(ev); intent != nil {
+			return p.command(intent)
+		}
+		return true
+	}
 	if ev.Key != terminal.KeyRune {
 		return p.offer(ev)
 	}
@@ -302,8 +341,8 @@ func (p *player) control(r rune) {
 }
 
 // offer parses a key as the game would, in NORMAL, and keeps only what a viewer
-// owns: its speakers and its exit. Everything else the keymap makes of a key is the
-// recorded player's to do.
+// owns: its speakers, its exit and, off a live session, the command line.
+// Everything else the keymap makes of a key is the recorded player's to do.
 func (p *player) offer(ev terminal.Event) bool {
 	p.a.inputMachine.SetMode(input.ModeNormal)
 	intent := p.a.inputMachine.Process(ev)
@@ -315,7 +354,40 @@ func (p *player) offer(ev terminal.Event) bool {
 		return false
 	case input.IntentToggleAudioCycle:
 		return p.route(intent)
+	case input.IntentModeSwitch:
+		if intent.ModeTarget == input.ModeTargetCommand && !p.live {
+			a := p.a
+			p.cmd = &viewerCommand{mode: a.ctx.GetMode(), paused: a.ctx.TimeCtl.IsPaused()}
+			a.ctx.Viewer.Store(true)
+			return p.command(intent)
+		}
 	}
+	return true
+}
+
+// command routes one intent of the viewer's command session and hands the borrowed
+// state back once the router has returned to NORMAL, so playback resumes in the
+// mode and pause it recorded.
+func (p *player) command(intent *input.Intent) bool {
+	a := p.a
+	if !p.route(intent) {
+		return false
+	}
+	if a.ctx.IsCommandMode() || a.ctx.IsOverlayMode() {
+		return true
+	}
+	c := p.cmd
+	p.cmd = nil
+	a.ctx.Viewer.Store(false)
+	a.world.RunSafe(func() {
+		if a.ctx.GetMode() != c.mode {
+			a.ctx.RequestMode(c.mode)
+		}
+		if a.ctx.TimeCtl.IsPaused() != c.paused {
+			a.ctx.SetPaused(c.paused)
+		}
+	})
+	a.Settle()
 	return true
 }
 
@@ -341,7 +413,8 @@ func (p *player) report() {
 	case p.paused:
 		state = "PAUSE"
 	}
-	keys := "SPACE . +- hjkl 0 q"
+	// The keys are on :help rather than on a bar the recording's messages share
+	keys := ":h for keys"
 	if p.live {
 		state, keys = "LIVE", "hjkl 0 q"
 	}
