@@ -255,9 +255,11 @@ entity. Recording is idempotent, so a re-derivation after a rollback adds nothin
 An install settles the ledger against the world it just wrote: an entity the
 authority does not have is proved dead and raised once as `EventSpeciesKillConfirmed`,
 and one the authority still holds a convergence floor later is dropped as the
-misprediction it was. `LootSystem` and `BoostSystem` consume the confirmed form and
-ignore the predicted one; everything else consumes `EventSpeciesKilled` exactly as
-before, because the capture already reconciles what it holds.
+misprediction it was. So is one past the authority's shared allocator: it existed
+only here, and the install re-issues its id to whatever the authority spawns next.
+`LootSystem` and `BoostSystem` consume the confirmed form and ignore the predicted
+one; everything else consumes `EventSpeciesKilled` exactly as before, because the
+capture already reconciles what it holds.
 
 Three cases close the edges. An instance that stops predicting — it took the term,
 or the last peer went — releases everything it holds, because the world it predicted

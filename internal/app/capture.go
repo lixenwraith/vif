@@ -223,7 +223,7 @@ func (a *App) confirmPredictions(tick uint64, authority *App) {
 
 // confirmPredictionsLocked is confirmPredictions under the caller's lock.
 func (a *App) confirmPredictionsLocked(tick uint64, authority *App) {
-	a.world.ConfirmPredictedDeaths(tick, authority.world.Components.Combat.HasEntity)
+	a.world.ConfirmPredictedDeaths(tick, authority.world)
 }
 
 // installShared writes a capture whose identity has already been established, by

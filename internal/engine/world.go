@@ -154,6 +154,12 @@ func (w *World) HasEntity(e core.Entity) bool {
 	return ok
 }
 
+// Issued reports whether this world's allocator has reached e. Caller MUST hold
+// updateMutex.
+func (w *World) Issued(e core.Entity) bool {
+	return e.Domain() < core.DomainCount && e.ID() < w.nextEntityID[e.Domain()]
+}
+
 // RemoveComponentMask clears a component bit for the specified entity
 // Caller MUST hold updateMutex
 func (w *World) RemoveComponentMask(e core.Entity, bit uint64) {
