@@ -252,47 +252,6 @@ every instance and the live value stays with presentation. The browser cost is t
 other half: every answer captures and hashes the whole world, maze walls included;
 per-store write counters would let an unwritten section keep its hash.
 
-### Decide who owns a contested shared hit
-
-- Priority: P2
-- Affected files: `internal/system/combat.go`, `internal/component/combat.go`,
-  `internal/engine/prediction.go`
-- Prerequisite: none; it is a rule to choose
-
-`LastDamagedBy` and the knockback override `SpendKineticImmunity` reports as
-`opened` both follow arrival order, and a hit that missed the lead is applied late
-by the authority, so for that lateness two instances disagree on the kill's credit
-and on which hit overrides. The correction repairs the world, but the ledger pays
-the credit its own prediction recorded, and the authority's world no longer holds
-the dead entity to read it from. One rule for both, made where the hit is produced
-and independent of arrival order, closes both; the per-attacker window was that
-answer for the damage budget.
-
-### Predict a typed gold member instead of publishing it
-
-- Priority: P2
-- Affected files: `internal/system/network.go`, `internal/system/typing.go`,
-  `internal/render/renderer`
-- Prerequisite: none
-
-`EventCompositeMemberDestroyed` is the one crossing its producer applies at once
-(`producerImmediate`), because `isLeftmostMember` validates the next keystroke
-against the live run; a correction inside the lead shows the member again for a
-tick. A player-domain tombstone the check skips and the glyph renderer hides would
-let the member cross at the agreed tick like everything else.
-
-### Retire a splash whose shared anchor an install re-issues
-
-- Priority: P3
-- Affected files: `internal/app/capture.go`, `internal/system/splash.go`
-- Prerequisite: none
-
-An install restores the authority's shared allocator, so the ids from its
-`NextEntity` up to this instance's are issued again. The prediction ledger drops
-entries in that range; a timer splash anchored in it keeps counting on whatever
-composite takes the id until it expires. The install knows the range and can hand
-it to the one other holder of a bare shared id.
-
 ### Keep the correction magnitude to the shared surface
 
 - Priority: P3

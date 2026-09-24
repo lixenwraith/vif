@@ -69,11 +69,10 @@ not spawn, and `Update` raises the timer for the remaining duration. `Update` ru
 only on the live world, so the staging world does not queue one. This also covers
 the join case, where the first capture always arrives without a local spawn.
 
-**Not fixed.** The rare inverse — a timer for a gold that is not there. A splash
-anchors to a bare `core.Entity`, and a capture restores `NextEntity`, so an
-install that rolls the allocator back re-issues shared ids. A splash whose anchor
-died can therefore find a *different* composite under the same id and keep
-counting. See `doc/todo.md`.
+**Since.** The inverse — a timer for a gold that is not there. A mispredicted
+composite spawn shifts a guest's shared allocation, so its gold can hold an id the
+authority gives to something else, and the timer anchored there kept counting over
+it. `LoadShared` now cancels the timer of the header an install replaces.
 
 ## 3. Issue 2 — the cycle damage multiplier does not reach the guest
 
@@ -134,10 +133,10 @@ Species-authored invulnerability is a different thing and says so: quasar shield
 storm phase and the snake head call `SealDamageImmunity`, which opens a window no
 attacker may spend.
 
-**Not fixed.** Kinetic immunity is still one window per target, and it suppresses
-homing as well as knockback — a swarm under continuous two-player fire barely
-steers. Whether two participants should be able to knock one body around twice as
-hard is a physics question, not a networking one. See `doc/todo.md`.
+**Since.** Kinetic immunity is per attacker as well, with the opener replacing the
+velocity and every joiner adding to it, so a window composes to one vector in any
+order. Kill credit follows the same set rather than the last writer (§8 gap 11 of
+[Multiplayer](multi-player.md)).
 
 **Incomplete.** This was the right change and not the whole one: the swarms that
 would not die were not being refused damage, they were never asked. §7.1.
@@ -272,8 +271,9 @@ destroyed, or two at once, and the last candidate, the selective repair, cannot
 either: `ApplyShardSet` refuses a splice whose rebuilt root differs, and the root
 counts each section's rows, so an entity only the receiver holds is dropped or the
 repair is refused (pinned in `TestSeveralSectionsRepairWithoutAnUnrelatedOne`).
-What remains visible is a typed member shown again inside the lead and a timer on a
-re-issued anchor, both in `doc/todo.md`.
+The typed member shown again inside the lead and the timer on a re-issued anchor
+are both closed since: a typed member leaves at its agreed tick, and an install
+cancels the timer of the gold header it replaces.
 
 ### 7.3 `scenario.sh drain`
 
