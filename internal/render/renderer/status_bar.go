@@ -51,7 +51,6 @@ type StatusBarRenderer struct {
 	statLag         *atomic.Int64
 	statRTT         *atomic.Int64
 	statLoss        *atomic.Int64
-	statPeers       *atomic.Int64
 	statHostLost    *atomic.Bool
 	statMigrating   *atomic.Bool
 	statCadence     *atomic.Int64
@@ -101,7 +100,6 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statLag:       statusReg.Ints.Get("network.lag_ticks"),
 		statRTT:       statusReg.Ints.Get("network.link_rtt_us"),
 		statLoss:      statusReg.Ints.Get("network.link_loss_pct"),
-		statPeers:     statusReg.Ints.Get("network.peers"),
 		statHostLost:  statusReg.Bools.Get("network.host_lost"),
 		statMigrating: statusReg.Bools.Get("network.migrating"),
 
@@ -516,7 +514,8 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 	// loss n%   probes went unanswered often enough for the link to be the cause;
 	// slow      the cadence backed off and prediction carries more.
 	rtt := r.statRTT.Load()
-	text := fmt.Sprintf(" Net: %d %s", r.statPeers.Load(), status.FormatLatency(rtt))
+	// Players rather than links: a guest holds one link whatever the session's size.
+	text := fmt.Sprintf(" %dP %s", r.gameCtx.World.Resources.Player.Count(), status.FormatLatency(rtt))
 	severity := latencySeverity(rtt)
 	loss := r.statLoss.Load()
 	switch {

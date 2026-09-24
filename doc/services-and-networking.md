@@ -187,7 +187,7 @@ different seed. The coordinator assigns canonical participant IDs and roster
 slots; both instances create the roster in slot order and mark only their own
 cursor human-controlled.
 
-The status bar shows `Net: wait`, `Net: 1 <round trip>` or `Net: down` — one
+The status bar shows `Net: wait`, `<players>P <round trip>` or `Net: down` — one
 badge, chosen by severity. The D-14 latch used to be printed beside each of them, and it is not a
 thing to watch: it is on for every session run from before its first joiner to
 after its last one leaves, and off for every solo run, which is the only one whose

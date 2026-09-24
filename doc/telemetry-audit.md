@@ -367,7 +367,7 @@ the effect's current name; death API unification removed the two obsolete
 | `snapshot.corrections_refused` (int) | Corrections that could not be resolved — a delta naming a keyframe this instance does not hold, or a body its header does not describe. Not an error: the next keyframe is self-sufficient. |
 | `snapshot.corrections_superseded` (int) | Corrections a fresher one overtook before they were applied, plus any the queue dropped. |
 | `snapshot.correction_entries` (int) | Component cells the last correction moved: how far this instance's prediction had drifted when the authority arrived. |
-| `snapshot.correction_entities` (int) | The distinct shared entities behind them. Shown in the status bar as `Net: n ~m`. |
+| `snapshot.correction_entities` (int) | The distinct shared entities behind them. |
 | `snapshot.correction_cells` (int) | The largest distance a shared placement moved — the correction a player would actually see. |
 | `snapshot.correction_tick` (int) | The tick the last applied correction described. |
 | `snapshot.corrections_held` (int) | Corrections the playout buffer deferred because this instance had not reached the tick they describe. Nonzero says the exchange paths are delivering worlds of different ages, which is the ordinary case on a link with a round trip; a steady rise with no corrections applied beside it is the buffer stalling rather than smoothing. |
@@ -381,7 +381,7 @@ the effect's current name; death API unification removed the two obsolete
 | `snapshot.cadence_budget_bps` (int) | What the tightest link was measured to allow after the utilisation share. Zero means no link has been measured *while saturated*, which on a loopback or a fat link is the ordinary case. |
 | `snapshot.cadence_floor_bps` (int) | What the convergence floor costs on a world this size: the cheapest schedule that still delivers a whole world per floor window. A budget below it is the unrecoverable condition. |
 | `snapshot.cadence_constrained` (bool) | The link moved the operating point *worse* than nominal. This is the design working: prediction carries more, the magnitude rises and stays bounded. Shown in the status bar as `LNK`. |
-| `snapshot.cadence_floor_breached` (bool) | No schedule the controller may choose delivers a whole world inside the guaranteed window, or none arrived. This is not the design working, and it is the one condition adaptation may not hide. Shown as `Net: n slow!`. |
+| `snapshot.cadence_floor_breached` (bool) | No schedule the controller may choose delivers a whole world inside the guaranteed window, or none arrived. This is not the design working, and it is the one condition adaptation may not hide. Shown as `nP <round trip> slow!`. |
 | `snapshot.manifests_sent` (int) | Correction indexes this host published. |
 | `snapshot.manifests_received` (int) | Indexes this receiver was sent, including the ones an older one was superseded by before it could be answered. |
 | `snapshot.manifests_off_tick` (int) | Indexes compared against this receiver's present because no reading at the tick they describe was taken — neither held ahead of it nor promised by the index before. |

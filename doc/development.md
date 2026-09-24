@@ -237,7 +237,7 @@ from terminal 2 — the guest arrives holding the host's world at the tick it ha
 reached. `:session` on either side reports the role, address, identity, the cursor
 slot that identity drives, peers and tick.
 
-Both sides should show `Net: 1` and its round trip, two cursors, and the same shared actors and
+Both sides should show `2P` and its round trip, two cursors, and the same shared actors and
 score/progression after either participant moves, types and fires. Use terminals
 of different sizes and resize one mid-run: the shared map must not follow either
 terminal. Quit the joiner and continue on the host; its badge becomes `Net: down`

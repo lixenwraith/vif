@@ -531,7 +531,7 @@ Mismatches increment drift telemetry and name position, kinetics, combat, contex
 status, or combined surface. Guests are expected to differ provisionally, so a
 digest is diagnostic rather than a failure state.
 
-The player-visible distinction is one badge — `Net: n <round trip>`, coloured
+The player-visible distinction is one badge — `nP <round trip>`, n players, coloured
 green, amber or red by the worst of the round trip and the state below — with at
 most one qualifier, chosen by severity so a worse fact hides a lesser one:
 

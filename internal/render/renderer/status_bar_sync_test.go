@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -13,6 +14,14 @@ func newStatusBar(t *testing.T) (*StatusBarRenderer, *engine.ManualClock) {
 	t.Helper()
 	clock := engine.NewManualClock()
 	return NewStatusBarRenderer(engine.NewGameContextWithClock(engine.NewWorld(), 80, 24, clock)), clock
+}
+
+// seatPlayers fills the first n roster slots, which is what the badge counts.
+func seatPlayers(r *StatusBarRenderer, n int) {
+	w := r.gameCtx.World
+	for slot := range n {
+		w.Resources.Player.Bind(uint8(slot), w.CreateEntity(core.DomainShared))
+	}
 }
 
 // TestStatusBarNetworkBadgeIsOneCellChosenBySeverity pins the collapse.
@@ -32,15 +41,16 @@ func TestStatusBarNetworkBadgeIsOneCellChosenBySeverity(t *testing.T) {
 		t.Fatalf("waiting item = %#v, %t", item, ok)
 	}
 
-	// A link with no completed round trip yet has no reading to show.
+	// A link with no completed round trip yet has no reading to show. The count is
+	// players, not links: a headless host's two guests read 2P on every instance.
 	r.statNet.Store("connected")
-	r.statPeers.Store(2)
-	if item, ok := r.networkBadge(); !ok || item.text != " Net: 2 -- " {
+	seatPlayers(r, 2)
+	if item, ok := r.networkBadge(); !ok || item.text != " 2P -- " {
 		t.Fatalf("unmeasured item = %#v, %t", item, ok)
 	}
 
 	r.statRTT.Store(42_000)
-	if item, ok := r.networkBadge(); !ok || item.text != " Net: 2 42ms " || item.bg != visual.RgbNetGoodBg {
+	if item, ok := r.networkBadge(); !ok || item.text != " 2P 42ms " || item.bg != visual.RgbNetGoodBg {
 		t.Fatalf("converged item = %#v, %t", item, ok)
 	}
 
@@ -49,13 +59,13 @@ func TestStatusBarNetworkBadgeIsOneCellChosenBySeverity(t *testing.T) {
 	r.statCadence.Store(8)
 	r.statConstrained.Store(true)
 	item, ok := r.networkBadge()
-	if !ok || item.text != " Net: 2 42ms slow " || item.bg != visual.RgbNetWarnBg {
+	if !ok || item.text != " 2P 42ms slow " || item.bg != visual.RgbNetWarnBg {
 		t.Fatalf("constrained item = %#v, %t", item, ok)
 	}
 
 	// Loss outranks it: the link itself is dropping what the cadence plans around.
 	r.statLoss.Store(7)
-	if item, ok := r.networkBadge(); !ok || item.text != " Net: 2 42ms loss 7% " {
+	if item, ok := r.networkBadge(); !ok || item.text != " 2P 42ms loss 7% " {
 		t.Fatalf("lossy item = %#v, %t", item, ok)
 	}
 
@@ -64,7 +74,7 @@ func TestStatusBarNetworkBadgeIsOneCellChosenBySeverity(t *testing.T) {
 	r.statStale.Store(true)
 	r.statLag.Store(7)
 	item, ok = r.networkBadge()
-	if !ok || item.text != " Net: 2 42ms desync 7 " || item.bg != visual.RgbNetWarnBg {
+	if !ok || item.text != " 2P 42ms desync 7 " || item.bg != visual.RgbNetWarnBg {
 		t.Fatalf("stale item = %#v, %t", item, ok)
 	}
 
@@ -72,7 +82,7 @@ func TestStatusBarNetworkBadgeIsOneCellChosenBySeverity(t *testing.T) {
 	// system degrading, the system unable to keep its guarantee.
 	r.statFloor.Store(true)
 	item, ok = r.networkBadge()
-	if !ok || item.text != " Net: 2 42ms slow! " || item.bg != visual.RgbNetBadBg {
+	if !ok || item.text != " 2P 42ms slow! " || item.bg != visual.RgbNetBadBg {
 		t.Fatalf("floor item = %#v, %t", item, ok)
 	}
 }
@@ -83,7 +93,6 @@ func TestStatusBarNetworkBadgeIsOneCellChosenBySeverity(t *testing.T) {
 func TestStatusBarBadgeColoursAnUnqualifiedLinkByItsRoundTrip(t *testing.T) {
 	r, _ := newStatusBar(t)
 	r.statNet.Store("connected")
-	r.statPeers.Store(1)
 
 	r.statRTT.Store(int64(parameter.StatusNetLatencyWarn / time.Microsecond))
 	if item, _ := r.networkBadge(); item.bg != visual.RgbNetWarnBg {
@@ -97,12 +106,11 @@ func TestStatusBarBadgeColoursAnUnqualifiedLinkByItsRoundTrip(t *testing.T) {
 }
 
 // TestStatusBarAuthorityLossHidesTheLinkItDescribed is the reading the severity
-// order exists for: after the host has gone, a peer count describes a session this
+// order exists for: after the host has gone, a player count describes a session this
 // instance is no longer in.
 func TestStatusBarAuthorityLossHidesTheLinkItDescribed(t *testing.T) {
 	r, _ := newStatusBar(t)
 	r.statNet.Store("connected")
-	r.statPeers.Store(1)
 	r.statCadence.Store(4)
 	r.statFloor.Store(true)
 
@@ -134,7 +142,7 @@ func TestStatusBarAuthorityLossHidesTheLinkItDescribed(t *testing.T) {
 func TestStatusBarNetworkCellHoldsItsWidth(t *testing.T) {
 	r, clock := newStatusBar(t)
 	r.statNet.Store("connected")
-	r.statPeers.Store(2)
+	seatPlayers(r, 2)
 	r.statRTT.Store(42_000)
 	first, _ := r.networkItem()
 
@@ -145,7 +153,7 @@ func TestStatusBarNetworkCellHoldsItsWidth(t *testing.T) {
 	}
 
 	clock.Step(parameter.StatusNetworkHoldDuration)
-	if item, _ := r.networkItem(); item.text != " Net: 2 42ms desync 7 " {
+	if item, _ := r.networkItem(); item.text != " 2P 42ms desync 7 " {
 		t.Fatalf("the cell is %q after its hold, want the current reading", item.text)
 	}
 }
