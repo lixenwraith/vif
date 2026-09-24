@@ -69,15 +69,14 @@ type anchorField struct {
 
 // sessionAnchorFields are what two participants in one session must agree on:
 // record layout and tick rate, the seed and session counter every RNG stream
-// derives from, and the scenario the simulation reads. Terminal geometry is absent
-// because it is per-instance, and so is the corpus: glyphs are player domain, read
-// from each machine's own roots and never reconciled (D-11, doc/multi-player.md).
+// derives from, and the scenario's bytes, whose name is only a lookup hint.
+// Geometry is per-instance, and the corpus is player domain, read from each
+// machine's own roots and never reconciled (D-11, doc/multi-player.md).
 func (a *App) sessionAnchorFields(an event.JournalAnchor) []anchorField {
 	return []anchorField{
 		{"schema", an.Schema, uint64(event.JournalSchema)},
 		{"seed", an.Seed, a.world.Resources.Rand.Root()},
 		{"session", an.Session, a.world.Resources.Rand.Session()},
-		{"scenario_id", an.ScenarioID, a.scenario.Name},
 		{"scenario_digest", an.ScenarioDigest, a.scenario.Digest()},
 		{"tick_ns", an.TickInterval, int64(parameter.GameUpdateInterval)},
 	}

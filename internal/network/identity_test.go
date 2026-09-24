@@ -11,8 +11,7 @@ func sampleIdentity() PeerIdentity {
 	return PeerIdentity{
 		Protocol: ProtocolVersion, Simulation: "abc123", CaptureSchema: 4,
 		JournalSchema: 11, TickIntervalNS: 50_000_000,
-		Seed: 0x5EED, Session: 1, ScenarioID: "embedded",
-		ScenarioDigest: "sha256:2604b13fd259",
+		Seed: 0x5EED, Session: 1, ScenarioDigest: "sha256:2604b13fd259",
 	}
 }
 
@@ -35,7 +34,6 @@ func TestVerifyNamesTheFirstDifference(t *testing.T) {
 		"tick_ns":         func(p *PeerIdentity) { p.TickIntervalNS = 33_000_000 },
 		"seed":            func(p *PeerIdentity) { p.Seed = 1 },
 		"session":         func(p *PeerIdentity) { p.Session = 2 },
-		"scenario_id":     func(p *PeerIdentity) { p.ScenarioID = "wad/scenario/td/scenario.toml" },
 		"scenario_digest": func(p *PeerIdentity) { p.ScenarioDigest = "sha256:deadbeef0000" },
 	}
 	for field, break_ := range cases {
@@ -61,7 +59,7 @@ func TestVerifyBuildIgnoresWhatAPeerCannotKnowYet(t *testing.T) {
 	t.Parallel()
 	local := sampleIdentity()
 	remote := sampleIdentity()
-	remote.Seed, remote.Session, remote.ScenarioID, remote.ScenarioDigest = 0, 0, "", ""
+	remote.Seed, remote.Session, remote.ScenarioDigest = 0, 0, ""
 
 	if err := local.VerifyBuild(remote); err != nil {
 		t.Fatalf("a peer with no world yet failed the build check: %v", err)
@@ -97,7 +95,7 @@ func TestSessionFromKeepsTheBuildLocal(t *testing.T) {
 	if got.Simulation != "abc123" || got.CaptureSchema != 4 || got.Protocol != ProtocolVersion {
 		t.Fatalf("a build field was lost: %+v", got)
 	}
-	if got.Seed != 0x5EED || got.Session != 3 || got.ScenarioID != "embedded" {
+	if got.Seed != 0x5EED || got.Session != 3 || got.ScenarioDigest != "sha256:2604b13fd259" {
 		t.Fatalf("a session field was not adopted: %+v", got)
 	}
 }

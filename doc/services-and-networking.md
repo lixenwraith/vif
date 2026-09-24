@@ -265,12 +265,12 @@ The identity has two halves, because they become knowable at different moments:
 | Half | Fields | Checked |
 |---|---|---|
 | Build | `protocol`, `simulation`, `capture_schema`, `journal_schema`, `tick_ns` | By the dialer against the offer, before it constructs a world; and again by the coordinator. |
-| Session | `seed`, `session`, `scenario_id`, `scenario_digest`, `content_id`, `content_pin`, and the corpus file/block/line counts | By the coordinator only. A dialer has no world yet, so it has none of these. |
+| Session | `seed`, `session`, `scenario_digest` | By the coordinator only. A dialer has no world yet, so it has none of these. |
 
-`scenario_digest` is the SHA-256 of the scenario's canonical form, and it rather
-than `scenario_id` is what a mismatched scenario is refused on: two roots may
-install the same scenario under different names or paths, and the same name may
-cover an edit. The name is what the refusal message and the log records say.
+`scenario_digest` is the SHA-256 of the scenario's canonical form and the only
+scenario field compared: two roots may install the same scenario under different
+names, and the same name may cover an edit. The anchor's `scenario_id` is a lookup
+hint and what the log records say. The corpus is player domain and not compared.
 
 `MsgSessionRestart` is the coordinator saying the session is rebuilding on another
 scenario. It carries nothing — each participant already knows the address it came
