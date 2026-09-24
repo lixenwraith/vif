@@ -1256,19 +1256,18 @@ func (s *NetworkSystem) Update() {
 	}
 }
 
-// Receive drains transport state and publishes every artifact due before nextTick.
-// Caller holds the world lock.
-func (s *NetworkSystem) Receive(nextTick uint64) int {
-	queued := 0
+// Receive drains transport state, publishes every artifact due before nextTick
+// and reports whether a session is live. Caller holds the world lock.
+func (s *NetworkSystem) Receive(nextTick uint64) (live bool) {
 	p := s.port()
 	s.refreshLink(p)
 	s.publishConnectionTelemetry(p)
 	if s.enabled && p != nil {
-		queued += s.drain(p)
+		s.drain(p)
 	}
-	queued += s.applyDue(nextTick)
+	s.applyDue(nextTick)
 	s.publishBarrierTelemetry(nextTick, p)
-	return queued
+	return s.barrierActive.Load()
 }
 
 // Flush closes completedTick's production epoch, including an empty marker.
@@ -1358,8 +1357,8 @@ func (s *NetworkSystem) linkReport(completedTick uint64) network.LinkReport {
 }
 
 // drain translates one tick's transport notifications into events
-func (s *NetworkSystem) drain(p engine.NetworkPort) int {
-	return s.drainWith(p, p.Drain)
+func (s *NetworkSystem) drain(p engine.NetworkPort) {
+	s.drainWith(p, p.Drain)
 }
 
 // DrainOffTick translates what the endpoint already holds without the poll
@@ -1381,26 +1380,22 @@ func (s *NetworkSystem) DrainOffTick() {
 }
 
 // drainWith is one poll of the endpoint, whichever door it came through.
-func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbound) int) int {
+func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbound) int) {
 	n := poll(s.buf[:])
-	queued := 0
 	for i := range n {
 		in := &s.buf[i]
 		switch in.Kind {
 		case network.InboundConnect:
 			s.world.PushLocal(event.EventNetworkConnect, &event.NetworkConnectPayload{PeerID: uint32(in.Peer)})
-			queued++
 		case network.InboundDisconnect:
 			s.world.PushLocal(event.EventNetworkDisconnect, &event.NetworkDisconnectPayload{PeerID: uint32(in.Peer)})
 			s.reportDisconnect(uint32(in.Peer), p.PeerCount())
 			s.forgetDigestPeer(uint32(in.Peer))
 			s.noticeDeparture(uint32(in.Peer))
-			queued++
 		case network.InboundMessage:
-			queued += s.dispatchMessage(uint32(in.Peer), in.Msg)
+			s.dispatchMessage(uint32(in.Peer), in.Msg)
 		}
 	}
-	return queued
 }
 
 // reportDisconnect names link loss when it happens. A digest cannot: once the edge
@@ -1594,9 +1589,9 @@ func (s *NetworkSystem) publishConnectionTelemetry(p engine.NetworkPort) {
 // Raw participant input is not one of them — a peer sends the resolved artifact,
 // never the keystroke that produced it — so an unrecognised type is counted and
 // discarded rather than translated.
-func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) int {
+func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) {
 	if msg == nil {
-		return 0
+		return
 	}
 	switch msg.Type {
 	case network.MsgEvent:
@@ -1622,7 +1617,6 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) int {
 	default:
 		s.statDrop.Add(1)
 	}
-	return 0
 }
 
 // receiveCorrection reassembles one authoritative correction and hands the body to
@@ -2227,7 +2221,7 @@ func (s *NetworkSystem) relayBatch(from uint32, batch event.WireBatch) {
 }
 
 // applyDue publishes due artifacts in the same source/sequence order everywhere.
-func (s *NetworkSystem) applyDue(nextTick uint64) int {
+func (s *NetworkSystem) applyDue(nextTick uint64) {
 	s.writeDueStates(nextTick)
 	s.mu.Lock()
 	due := make([]barrierArtifact, 0, len(s.scheduled))
@@ -2307,7 +2301,6 @@ func (s *NetworkSystem) applyDue(nextTick uint64) int {
 	s.statPeerArtifacts.Store(int64(peer))
 	s.statPeerApplied.Store(peer != 0)
 	s.statRecv.Add(int64(peer))
-	return len(due)
 }
 
 // admissibleFromSource is the host's validation, and it is deliberately narrow.

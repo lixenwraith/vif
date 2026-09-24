@@ -1164,7 +1164,10 @@ func (s *Scheduler) processTick() {
 		// at the same tick (SimEpoch). The pacing clock still decides *when* this
 		// tick runs, and RealTime below still reports the wall.
 		tickTime = SimTime(tick, s.tickInterval)
-		if s.world.Resources.Event.Queue.ReceiveWire(tick) > 0 {
+		// Settled on every tick of a session, not only one that delivered something:
+		// arrivals are this instance's own traffic, and settling on them gave the last
+		// tick's leftovers a different phase and GameTime on each instance.
+		if s.world.Resources.Event.Queue.ReceiveWire(tick) {
 			s.settleLocked("wire")
 		}
 
