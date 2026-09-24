@@ -623,6 +623,10 @@ func (s *NetworkSystem) barrierDelayTicks() uint64 {
 // tick on every instance, so the despawn it derives does too (D-5) — which is the
 // whole reason a disconnect is not acted on where it is observed.
 func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
+	s.forgetParticipant(p.Participant)
+	if int(p.Participant) < len(s.departed) {
+		s.departed[p.Participant] = true
+	}
 	if int(p.Slot) >= parameter.MaxPlayers {
 		return
 	}
@@ -632,32 +636,37 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 	}
 	s.world.PushEvent(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{Slot: p.Slot})
 	s.lastSync[p.Slot], s.stateSeen[p.Slot], s.rawStateSeen[p.Slot] = 0, 0, 0
-	s.forgetCrossingFence(p.Participant)
-	if int(p.Participant) < len(s.departed) {
-		s.departed[p.Participant] = true
-	}
 }
 
-// forgetCrossingFence drops what this instance had applied from a participant that
-// has left, so the identity is clean for whoever takes it next.
-//
-// An identity is returned to the pool on departure and handed out again, and a
-// participant's sequence starts at one — so a fence left behind claims a captured
-// world contains crossings a *later* holder of that identity has not produced yet.
-// Every receiver of that capture then discards its first crossings as already
-// applied, and the rejoining participant discards its own from the queue that had
-// not been sent and from the replay suffix, which is exactly the disappearing
-// keystroke §3.2 of the multiplayer document exists to prevent.
-//
-// It runs from the departure crossing rather than from the disconnect, so every
-// instance forgets at the same agreed tick and their capture headers keep agreeing.
-func (s *NetworkSystem) forgetCrossingFence(participant uint32) {
+// forgetParticipant clears a departed identity for whoever takes it next, whose
+// sequence starts at one: its fence, and the ordinary crossings of its still
+// scheduled or retained. Applied after the departure, one of those re-raised the
+// fence and the next holder's first crossings read as applied everywhere (§3.2).
+// Committed copies precede the departure on every link, so all instances drop alike.
+func (s *NetworkSystem) forgetParticipant(participant uint32) {
 	if participant == 0 || int(participant) >= len(s.appliedPeerSeq) {
 		return
 	}
+	ordinary := func(a barrierArtifact) bool {
+		et, ok := event.GetEventType(a.frame.Event)
+		return a.source == participant && (!ok || !barrierBound(et))
+	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.appliedPeerSeq[participant] = 0
-	s.mu.Unlock()
+	kept := make(network.CrossingFences, 0, len(s.snapshotFences)) // shared with the capture header
+	for _, f := range s.snapshotFences {
+		if f.Source != network.PeerID(participant) {
+			kept = append(kept, f)
+		}
+	}
+	s.snapshotFences = kept
+	s.scheduled = slices.DeleteFunc(s.scheduled, ordinary)
+	s.scheduledBytes = 0
+	for _, a := range s.scheduled {
+		s.scheduledBytes += frameBytes(a.frame)
+	}
+	s.applied = slices.DeleteFunc(s.applied, ordinary)
 }
 
 // Cross encodes and schedules a crossing when a peer is live, taking the event: the

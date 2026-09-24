@@ -234,3 +234,24 @@ func TestAnOwnerSyncIsWrittenAtTheCommittedTick(t *testing.T) {
 		t.Fatalf("the guest scheduled %+v, want the committed sync at 104", guest.states)
 	}
 }
+
+// TestADepartedIdentityLeavesNoFence: an identity is handed out again and its next
+// holder's sequence starts at one, so nothing of the departed holder may keep its
+// fence up — including a crossing it had committed for a tick after its departure,
+// and a departure that finds its cursor already gone.
+func TestADepartedIdentityLeavesNoFence(t *testing.T) {
+	t.Parallel()
+	event.EnsureRegistry()
+	s := sessionSystem(t, 1, 100, &linkedPort{peers: []uint32{2}})
+	s.scheduleCrossings(2, rawBatch(t, 2, 99, 101, 108))
+	s.applyDue(101)
+	if got := s.AppliedCrossingFences().Seq(2); got != 1 {
+		t.Fatalf("fence for participant 2 = %d after its first crossing, want 1", got)
+	}
+
+	s.removeParticipant(&event.ParticipantDepartedPayload{Participant: 2, Slot: 5})
+	s.applyDue(108)
+	if got := s.AppliedCrossingFences().Seq(2); got != 0 {
+		t.Fatalf("fence for participant 2 = %d after it departed, want none", got)
+	}
+}
