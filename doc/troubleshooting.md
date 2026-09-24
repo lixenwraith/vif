@@ -135,8 +135,7 @@ attacker may spend.
 
 **Since.** Kinetic immunity is per attacker as well, with the opener replacing the
 velocity and every joiner adding to it, so a window composes to one vector in any
-order. Kill credit follows the same set rather than the last writer (§8 gap 11 of
-[Multiplayer](multi-player.md)).
+order. Kill credit stays with the cursor that landed the killing hit (§12).
 
 **Incomplete.** This was the right change and not the whole one: the swarms that
 would not die were not being refused damage, they were never asked. §7.1.
@@ -427,3 +426,19 @@ causes, fixed in order; the fraction is the guest's manifests answered hash-only
 
 With all four, 599 of 599 at zero latency and 593 of 595 at three ticks
 (`TestATowerGuestAnswersHashOnly` holds 95% at two).
+
+## 12. Seventh round (2026-09-24, one terminal guest at 100 ms)
+
+The guest's cursor left a trail and rolled back often. Its log read
+`local_fence: 978` at every install, pruning all of its own scheduled crossings as
+`sequence_superseded`, though its sequence had just started at one: it held
+participant id 2, whose previous holder had reached 978. The forget ran only when
+the departure found a remote cursor to despawn, and a crossing the departed holder
+had committed for a later tick re-raised the fence after it. The guest's input then
+reached its screen only through corrections. A departure now forgets the identity
+first and drops the holder's ordinary crossings still scheduled or retained
+(`TestADepartedIdentityLeavesNoFence`).
+
+The engaged-set kill credit of the previous change is reverted. It credited one of
+the cursors that had hit the target within a second, picked by the target's id,
+rather than the one that killed it; `LastDamagedBy` names the killer again.

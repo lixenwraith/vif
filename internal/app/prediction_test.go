@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -16,9 +15,8 @@ import (
 func zeroHitPoints(a *App, e, killer core.Entity) {
 	a.World().RunSafe(func() {
 		if c, ok := a.World().Components.Combat.GetPtr(e); ok {
-			slot, owned := a.World().CursorSlot(killer)
 			c.HitPoints = 0
-			c.CreditSpent = component.AttackerBit(slot, owned)
+			c.LastDamagedBy = killer
 		}
 	})
 }

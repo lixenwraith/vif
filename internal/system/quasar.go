@@ -174,7 +174,7 @@ func (s *QuasarSystem) Update() {
 			}
 			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 				Entity:       headerEntity,
-				KillerEntity: creditedCursor(s.world, headerEntity, combatComp),
+				KillerEntity: combatComp.LastDamagedBy,
 				Species:      component.SpeciesQuasar,
 				X:            killX,
 				Y:            killY,

@@ -779,10 +779,10 @@ entry says what is actually absent rather than what is imperfect, and how to see
     the kinetic immunity window. What a hit still costs is the lead itself, paid
     as the distance between the D-18 prediction and the store rather than as input
     latency. A crossing that misses the lead still lands later on the authority
-    than on its producer, so contested outcomes follow the attacker set rather than
-    arrival order: a knockback window's impulses compose to one vector whichever
-    hit opened it, and a kill is credited from the cursors engaged in it for
-    `CombatCreditWindow`, which spans the lateness the commit admits.
+    than on its producer. A knockback window's impulses compose to one vector
+    whichever hit opened it; a kill is credited to the cursor whose hit killed it,
+    so two cursors finishing one target inside that lateness can each be credited
+    on their own instance.
 
 ## 9. Verification
 

@@ -116,8 +116,7 @@ func DigestWorld(w *engine.World, scope engine.DomainScope) WorldDigest {
 			i64(int64(c.RemainingKineticImmunity)).
 			u64(uint64(c.KineticImmunitySpent)).
 			i64(int64(c.RemainingDamageImmunity)).
-			u64(uint64(c.DamageImmunitySpent)).
-			u64(uint64(c.CreditSpent))
+			u64(uint64(c.DamageImmunitySpent))
 	}
 
 	wd.Entities = newHash().

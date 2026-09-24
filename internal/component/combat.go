@@ -1,7 +1,6 @@
 package component
 
 import (
-	"math/bits"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -66,6 +65,10 @@ type CombatComponent struct {
 	// OwnerEntity indicates owner/parent of the entity with combat component (e.g. cursor is the parent of cleaner)
 	OwnerEntity core.Entity
 
+	// LastDamagedBy identifies the cursor that most recently dealt HP damage.
+	// Zero means the last damaging attack was not owned by a live cursor.
+	LastDamagedBy core.Entity
+
 	// CombatEntityType
 	CombatEntityType CombatEntityType
 
@@ -98,13 +101,6 @@ type CombatComponent struct {
 
 	// StunnedRemaining is remaining stun duration (movement suppressed)
 	StunnedRemaining time.Duration
-
-	// CreditSpent names the cursors that landed damage in the engagement still
-	// open, one bit per roster slot, and CreditRemaining closes it. A kill is
-	// credited from the set rather than from the last writer: a late crossing
-	// changes arrival order on its producer, not the set.
-	CreditSpent     uint32
-	CreditRemaining time.Duration
 }
 
 // unownedAttacker is the immunity bit for an attack no cursor owns
@@ -161,31 +157,6 @@ func (c *CombatComponent) SpendKineticImmunity(attacker uint32, d time.Duration)
 func (c *CombatComponent) SealKineticImmunity(d time.Duration) {
 	c.RemainingKineticImmunity = d
 	c.KineticImmunitySpent = ^uint32(0)
-}
-
-// Credit records a landed damaging hit. A cursor joins the engagement and keeps it
-// open; an attack no cursor owns ends it, so a species' blow credits nobody.
-func (c *CombatComponent) Credit(attacker uint32, d time.Duration) {
-	if attacker&unownedAttacker != 0 {
-		c.CreditSpent, c.CreditRemaining = 0, 0
-		return
-	}
-	c.CreditSpent |= attacker
-	c.CreditRemaining = d
-}
-
-// CreditedSlot is the roster slot a kill of e is credited to: one of the engaged
-// cursors, picked by e so contested kills spread across the roster.
-func (c *CombatComponent) CreditedSlot(e core.Entity) (uint8, bool) {
-	set := c.CreditSpent &^ unownedAttacker
-	n := bits.OnesCount32(set)
-	if n == 0 {
-		return 0, false
-	}
-	for k := e.ID() % uint64(n); k > 0; k-- {
-		set &= set - 1
-	}
-	return uint8(bits.TrailingZeros32(set)), true
 }
 
 // AttackerBit names an attacking cursor's slot inside a target's immunity window.

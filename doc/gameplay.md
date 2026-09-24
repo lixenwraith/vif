@@ -163,12 +163,11 @@ resetting the remaining overheat or triggering the penalty sound.
 
 Boost is a per-cursor timed reward. A correct character or a species kill
 credited to that cursor activates it for 9 seconds when inactive or extends it
-by 10 seconds when already active. A target keeps the set of cursors engaged
-with it — each damaging hit joins or holds it open for a second, an unowned attack
-clears it — and a fatal species lifecycle path publishes `EventSpeciesKilled`
-crediting one of them, picked by the dying entity rather than by who hit last, so
-every participant credits the same cursor. Lifecycle deaths and kills no cursor is
-engaged in grant no boost. A typing error deactivates the typing cursor's boost.
+by 10 seconds when already active. Combat systems retain the last damaging
+cursor on the target, and fatal species lifecycle paths publish
+`EventSpeciesKilled` carrying that credit; lifecycle deaths or unowned attacks
+carry no cursor and grant no boost. A typing error deactivates the typing
+cursor's boost.
 
 While active, boost doubles the per-character heat gain and prevents ordinary
 energy penalties. Passive drain and explicit spends remain effective.

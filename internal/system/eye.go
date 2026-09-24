@@ -165,7 +165,7 @@ func (s *EyeSystem) Update() {
 			}
 			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 				Entity:       headerEntity,
-				KillerEntity: creditedCursor(s.world, headerEntity, combatComp),
+				KillerEntity: combatComp.LastDamagedBy,
 				Species:      component.SpeciesEye,
 				SubType:      uint8(eyeComp.Type),
 				X:            killX,

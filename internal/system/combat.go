@@ -281,15 +281,6 @@ func (s *CombatSystem) Update() {
 			}
 		}
 
-		// A closed engagement credits nobody still in it
-		if combatComp.CreditRemaining > 0 {
-			combatComp.CreditRemaining -= dt
-			if combatComp.CreditRemaining <= 0 {
-				combatComp.CreditRemaining = 0
-				combatComp.CreditSpent = 0
-			}
-		}
-
 		// Update hit flash timer
 		if combatComp.RemainingHitFlash > 0 {
 			combatComp.RemainingHitFlash -= dt
@@ -309,16 +300,6 @@ func (s *CombatSystem) Update() {
 func (s *CombatSystem) attackerBit(cursor core.Entity) uint32 {
 	slot, ok := s.world.CursorSlot(cursor)
 	return component.AttackerBit(slot, ok)
-}
-
-// creditedCursor is the cursor a kill of e is credited to, or zero when no cursor
-// is engaged in it. Every species death reads its credit here.
-func creditedCursor(w *engine.World, e core.Entity, c *component.CombatComponent) core.Entity {
-	slot, ok := c.CreditedSlot(e)
-	if !ok {
-		return 0
-	}
-	return w.Resources.Player.Slot(slot)
 }
 
 // joining is the profile a hit uses: its own when it opens the target's knockback
@@ -431,8 +412,8 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 
 					memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
 					memberCombat.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
-					memberCombat.Credit(attacker, parameter.CombatCreditWindow)
-					targetCombatComp.Credit(attacker, parameter.CombatCreditWindow)
+					memberCombat.LastDamagedBy = damageCursor
+					targetCombatComp.LastDamagedBy = damageCursor
 					damageTargetDead = memberCombat.HitPoints == 0
 				}
 			}
@@ -453,7 +434,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 
 				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
 				targetCombatComp.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
-				targetCombatComp.Credit(attacker, parameter.CombatCreditWindow)
+				targetCombatComp.LastDamagedBy = damageCursor
 				damageTargetDead = targetCombatComp.HitPoints == 0
 			}
 		}
@@ -616,7 +597,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				s.recordDamage(attackerType, memberCombat.CombatEntityType, dealt, 0)
 				memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
 				memberCombat.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
-				memberCombat.Credit(attacker, parameter.CombatCreditWindow)
+				memberCombat.LastDamagedBy = damageCursor
 				damageApplied = true
 				resolved = true
 			}
@@ -657,8 +638,8 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	}
 	if damageApplied {
 		resolved = true
-		// Ablative species credit a kill from the header, so a member hit engages it
-		targetCombatComp.Credit(attacker, parameter.CombatCreditWindow)
+		// Ablative species credit a whole-species kill from the header
+		targetCombatComp.LastDamagedBy = damageCursor
 	}
 
 	// Apply kinetic effect
