@@ -236,254 +236,88 @@ Diagnoses and what each item follows from are in
 
 ### Find what diverges a guest in the tower region
 
-- Priority: P2
-- Affected files: `wad/scenario/main/tower.toml`, `internal/system/eye.go`
+- Priority: P1
+- Affected files: `internal/system/network.go`, `internal/engine/snapshot_roster.go`,
+  `internal/system/interaction.go`, `internal/snapshot/manifest.go`
+- Prerequisite: a delayed-link harness that counts, per section, what a guest in the
+  tower region answers wrong
 
 A guest present when the region starts answers 77% of manifests hash-only, against
-95% on the main map; the differing sections are eye, genotype, combat and fsm. In the
-browser build the answer is the cost: each manifest captures and hashes the whole
-world, maze walls included, about half of the client's busy thread there.
+95% on the main map; the differing sections are eye, genotype, combat and fsm. The
+lead suspect is owner-authored cursor state: `writeCursorState` skips the owner, so
+shield, energy and heat change at once there and a lead later elsewhere, while eye
+and snake contact reads them from shared systems — the shape crossings had before
+they applied at one tick. If confirmed, shared readers take the committed copy on
+every instance and the live value stays with presentation. The browser cost is the
+other half: every answer captures and hashes the whole world, maze walls included;
+per-store write counters would let an unwritten section keep its hash.
 
-### Find the glyphs a region change left behind in a browser run
-
-- Priority: P2
-- Affected files: `internal/system` glyph and region handling, `wad/scenario/main`
-
-Once, in `main`'s tower region, a browser guest kept the previous region's glyphs,
-or kept the glyph system running although the region disables it. Not reproduced;
-check whether a region swap clears glyphs on a guest that installed a capture.
-
-### Split "compared" from "carried" in the status surface
-
-- Priority: P1
-- Affected files: `internal/snapshot/surface.go`, `internal/app/capture.go`
-- Prerequisite: name every excluded cell an FSM guard or system reads
-
-`SharedKey` decides both what two instances compare and what a capture carries,
-so a mixed-domain cell is dropped from the correction as well. `meta` carries
-`kills.*` and `energy.damage_multiplier` around it; a second predicate removes the
-workaround.
-
-### Make kill credit independent of crossing order
+### Decide who owns a contested shared hit
 
 - Priority: P2
-- Affected files: `internal/system/combat.go`, `internal/component/combat.go`
-- Prerequisite: a rule for which of two participants owns a shared kill
+- Affected files: `internal/system/combat.go`, `internal/component/combat.go`,
+  `internal/engine/prediction.go`
+- Prerequisite: none; it is a rule to choose
 
-`CombatComponent.LastDamagedBy` is the last writer's cursor, and two participants
-damaging one target write it in opposite orders when one hit missed the lead and
-the authority applied it late. The authority's correction repairs it, so the
-divergence is one cadence of credit rather than a permanent one. The boost is no longer awarded
-inside that cadence — the prediction ledger holds it until a world proves the death
-(multi-player.md §3.4) — but the credit it then pays is the one the local
-prediction recorded, and the entity is gone from the authority's world by the time
-that world arrives, so nothing can read the credit back off it. The knockback
-window's answer was a budget per attacker; credit's is a choice about who owns the
-kill, made where the kill is produced.
-
-### Key the prediction ledger on more than an entity id
-
-- Priority: P2
-- Affected files: `internal/engine/prediction.go`, `internal/engine/world.go`
-- Prerequisite: a generation on shared entity ids, which the allocator rollback
-  already wants for its own reasons
-
-An install restores the allocator counter, so a shared id can be issued twice
-inside the ledger's window and a held derivation would then be proved or refused
-against a different entity. A generation would make the key exact.
-
-### Agree which knockback opens a shared window
-
-- Priority: P2
-- Affected files: `internal/component/combat.go`, `internal/system/combat.go`
-- Prerequisite: a decision on whether a crossing-carried hit may ever override
-
-`SpendKineticImmunity` reports `opened` from a timer, and `opened` is what picks
-the override profile over the additive one. Every copy of a hit now applies at the
-agreed tick, so the window opens together; what still differs is a hit that missed
-the lead, which the authority applies late in arrival order, so for the length of
-that lateness a second attacker's hit answers `opened` differently on two
-instances. The per-attacker budget and the additive join closed the composition;
-which hit owns the override is the same choice as kill credit above.
+`LastDamagedBy` and the knockback override `SpendKineticImmunity` reports as
+`opened` both follow arrival order, and a hit that missed the lead is applied late
+by the authority, so for that lateness two instances disagree on the kill's credit
+and on which hit overrides. The correction repairs the world, but the ledger pays
+the credit its own prediction recorded, and the authority's world no longer holds
+the dead entity to read it from. One rule for both, made where the hit is produced
+and independent of arrival order, closes both; the per-attacker window was that
+answer for the damage budget.
 
 ### Predict a typed gold member instead of publishing it
 
 - Priority: P2
-- Affected files: `internal/system/network.go`, `internal/system/typing.go`
-- Prerequisite: a local tombstone the leftmost-member check can read
+- Affected files: `internal/system/network.go`, `internal/system/typing.go`,
+  `internal/render/renderer`
+- Prerequisite: none
 
-`EventCompositeMemberDestroyed` is the one crossing its producer still applies at
-once, because `isLeftmostMember` validates the next keystroke against the live run;
-a correction inside the lead shows the member once more for a tick. A player-domain
-tombstone the check consults would let the member cross like everything else.
+`EventCompositeMemberDestroyed` is the one crossing its producer applies at once
+(`producerImmediate`), because `isLeftmostMember` validates the next keystroke
+against the live run; a correction inside the lead shows the member again for a
+tick. A player-domain tombstone the check skips and the glyph renderer hides would
+let the member cross at the agreed tick like everything else.
+
+### Retire a splash whose shared anchor an install re-issues
+
+- Priority: P3
+- Affected files: `internal/app/capture.go`, `internal/system/splash.go`
+- Prerequisite: none
+
+An install restores the authority's shared allocator, so the ids from its
+`NextEntity` up to this instance's are issued again. The prediction ledger drops
+entries in that range; a timer splash anchored in it keeps counting on whatever
+composite takes the id until it expires. The install knows the range and can hand
+it to the one other holder of a bare shared id.
 
 ### Keep the correction magnitude to the shared surface
 
 - Priority: P3
-- Affected files: `internal/engine/snapshot_world_gen.go`, `tools/`
+- Affected files: `internal/gen-manifest/main.go`, `internal/app/capture.go`
 - Prerequisite: none
 
-`SharedWorldDifference` counts the owner-authored set of a cursor this instance
-authors, which the reconcile then restores, so a projected install reports one
-phantom entity per owned cursor.
+`SharedWorldDifference` counts the owner-authored cells of a cursor this instance
+authors, which `RebindCursorRoster` then restores, so a projected install reports a
+phantom entity per owned cursor. The generated difference can skip the nine stores
+`snapshot_roster.go` restores for the entities `CaptureCursorControl` held.
 
 ### Find what makes a networkless soak load-sensitive
 
 - Priority: P2
 - Affected files: `internal/app/soak_test.go`, `internal/event/pool.go`,
-  `internal/event/batch_pool.go`, `internal/engine/component_domain.go`
-- Prerequisite: a reproduction; 36 runs under parallel load here stayed clean
+  `internal/event/batch_pool.go`
+- Prerequisite: a reproduction; 36 runs under parallel load, and 12 more beside six
+  spinning cores, stayed clean
 
-`TestSoakAppsAreIndependent` failed twice in nine loaded suite runs with two
-worlds of one seed differing in their position digest, so the simulation itself
-took a different path. The headless clock is virtual and the audit gate is the only
-process-wide switch a world reads; what parallel Apps share is the payload pools
-(`CharacterTypedPayloadPool`, the batch pools) and `auditScope`, so a payload read
-after its release to a shared pool is the candidate. Moving the pools onto the
-World, or `-count` under load until it reproduces, is the smallest step.
-
-### Rename the participant identity type
-
-- Priority: P3
-- Affected files: `internal/network/connection.go` and every site naming `PeerID`,
-  `CursorComponent.PeerID` included
-- Prerequisite: none; it is mechanical, and the component field is a capture
-  schema change that both sides of a session already have to match on
-
-`network.PeerID` is a participant identity that the transport also uses to
-address a link. The vocabulary calls the first a participant and the second a
-peer, so the type contradicts the document that defines it. Presentation now
-says `participant` everywhere; the type is what remains.
-
-### Audit what a pruned crossing loses
-
-- Priority: P1
-- Affected files: `internal/system/network.go`, `internal/app/barrier.go`
-- Prerequisite: the split above, so a counter can be carried instead of replayed
-
-An authority frame the capture's fence already claims is discarded on the
-receiver. That is correct for shared component state and wrong for every other
-effect the frame would have had. Enumerate them.
-
-### Retire a zap bolt when a correction ends the zap
-
-- Priority: P2
-- Affected files: `internal/system/quasar.go`, `internal/system/lightning.go`
-- Prerequisite: none
-
-A bolt whose owner an install removed is now retired by `LightningSystem`, but an
-install that clears `IsZapping` under a live quasar leaves one: the despawn is on
-the range transition and the corrected state arrives without one. `QuasarSystem` is
-shared-profile and cannot read the player store to find the bolt, so the answer is a
-lease the owner renews while zapping rather than a lookup.
-
-### Give a splash anchor a generation
-
-- Priority: P2
-- Affected files: `internal/system/splash.go`, `internal/component/splash.go`
-- Prerequisite: decide whether shared ids may be re-issued at all
-
-A capture restores `NextEntity`, so an install that rolls the allocator back
-re-issues shared ids. A timer splash whose anchor died can find a different
-composite under the same id and keep counting.
-
-### Confirm the storm skip
-
-- Priority: P2
-- Affected files: `wad/scenario/main/storm.toml`, `internal/system/storm.go`
-- Prerequisite: a run that reaches three quasar kills with a crowded map centre
-
-The spawn retry and the carried kill counters address both candidate mechanisms
-without either being confirmed. `storm.spawn_failures` and a `StormSetupRetry` in
-`fsm.storm` tell them apart. `wad/scenario/td/td_storm.toml` still waits blind.
-
-### Prove or rule out a stale gold surviving a correction
-
-- Priority: P1
-- Affected files: `internal/converge/selective.go`, `internal/snapshot/manifest.go`
-- Prerequisite: a two-instance repro that leaves the guest holding two sequences
-
-A guest was seen holding a gold the host had destroyed, and once two at a time.
-Every destruction path clears the carrier and destroys the composite, and
-`ReconcileSharedWorld` drops shared entities the capture does not name, so the
-remaining candidate is a selective repair whose page reconstruction keeps an
-entity only the receiver holds.
-
-### Let a scripted participant survive a tick jump
-
-- Priority: P2
-- Affected files: `internal/journal/script.go`
-- Prerequisite: decide whether a replay must still refuse the same overshoot
-
-`ScriptDriver.applyCurrent` fails the run when the world tick has passed an
-action's target tick. A correction moves the world tick, so a scripted guest in a
-live session ends itself for a reason the session is entitled to. A replay has no
-corrections and should keep refusing it.
-
-### Keep shared FSM guards off owner-authored keys
-
-- Priority: P3
-- Affected files: `wad/scenario/main/monitor.toml`
-- Prerequisite: a replicated liveness signal to replace the slot mirror
-
-`MonitorWarmup` guards on `player.0.heat.current` and `player.0.energy.current`.
-Both are owner-authored, so a receiver never writes them and no capture carries
-them. The state is unreachable today, which is why it is a latent hole.
-
-### Drop the three shared streams nothing draws from
-
-- Priority: P3
-- Affected files: `internal/system/quasar.go`, `swarm.go`, `snake.go`
-- Prerequisite: retune `TestASlowPeerDoesNotSlowAFastOne`'s shaped budget
-
-Each issues a Shared stream in `Init` and never draws from it, so every capture
-carries and every correction restores three dead positions. Removing them shrinks
-the capture enough that the cadence test's 500 B/tick shape stops saturating, so it
-needs a lower budget in the same change. Costs a capture schema bump.
-
-### Let a refused link cost one participant, not the session
-
-- Priority: P2
-- Affected files: `internal/app/session.go`
-- Prerequisite: none
-
-The start gate now excuses a participant that leaves, but `AdmitMeasuredLink`
-refusing one still fails `startHostSessionOn` and ends the run — so with two guests
-in the lobby, one unusable link takes the other's match with it. Refuse the
-participant and continue with the rest, the way the mid-run gate already does.
-
-### Let a mid-run join install a GA scenario
-
-- Priority: P1
-- Affected files: `internal/system/genetic.go`, `internal/app/snapshot_stage.go`
-
-A second guest joining a running `td` session, native or browser, fails staging
-with `import species "species_7": configuration does not match destination
-engine`: the staging world derives a species' engine seed from a root that no
-longer matches the one the coordinator registered it under. Tick-zero joins work.
-
-### Refuse a join on the scenario's bytes, not its name
-
-- Priority: P2
-- Affected files: `internal/app/replay.go`, `internal/network/identity.go`
-
-`resolveJoinScenario` keeps a root that holds the coordinator's bytes whatever it
-calls them, but `sessionAnchorFields` and the network identity also compare
-`scenario_id`, so identical bytes under another name are refused. `resource.Scenario`
-says the digest is the only thing a session may be refused on.
-
-### Say why a session reads as unavailable
-
-- Priority: P2
-- Affected files: `tool/vif-allocator/allocator.go`
-- Prerequisite: none
-
-`listSessions` swallows a health-probe error and reports the session as
-`phase=starting`, `reason=health unavailable`. That hid a parse bug for the whole
-life of the endpoint: every session carrying a health `reason` read as starting.
-The parse is fixed and pinned; the swallow is not, and the next cause will be as
-invisible. It needs a logger the allocator does not have, at a rate the fleet page
-polls.
+`TestSoakAppsAreIndependent` failed twice in nine loaded suite runs with two worlds
+of one seed differing in their position digest. A headless App ticks on its caller
+with no scheduler goroutine, the streaming GA has no workers, and the domain audit
+only records, so what parallel Apps still share is the payload pools
+(`CharacterTypedPayloadPool`, the batch pools): a payload read after its release is
+the candidate, and moving the pools onto the World the smallest step.
 
 ## Fleet logging
 

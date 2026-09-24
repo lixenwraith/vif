@@ -153,7 +153,8 @@ func TestOneMismatchRepairsOnlyItsPage(t *testing.T) {
 	}
 }
 
-// TestSeveralSectionsRepairWithoutAnUnrelatedOne.
+// TestSeveralSectionsRepairWithoutAnUnrelatedOne. One perturbation is an entity only
+// the receiver holds, which the splice must drop: the rebuilt root counts rows.
 func TestSeveralSectionsRepairWithoutAnUnrelatedOne(t *testing.T) {
 	t.Parallel()
 	cap, host := manifestFixture(t)
@@ -162,6 +163,9 @@ func TestSeveralSectionsRepairWithoutAnUnrelatedOne(t *testing.T) {
 		t.Fatal("the fixture world is too small to perturb two sections")
 	}
 	mine.World.Glyph[0].Value.Rune = 'Z' + 1
+	stale := core.Entity(mine.World.NextEntity + 100)
+	mine.World.Glyph = append(mine.World.Glyph, mine.World.Glyph[0])
+	mine.World.Glyph[len(mine.World.Glyph)-1].Entity = stale
 	mine.Status.Ints[0].Value += 7
 	mine.World.NextEntity += 3
 
@@ -198,6 +202,11 @@ func TestSeveralSectionsRepairWithoutAnUnrelatedOne(t *testing.T) {
 	}
 	if guest.Root() != host.Root() {
 		t.Fatal("the repaired capture does not reproduce the authority's root")
+	}
+	for _, row := range mine.World.Glyph {
+		if row.Entity == stale {
+			t.Fatal("the repair kept an entity only the receiver held")
+		}
 	}
 }
 

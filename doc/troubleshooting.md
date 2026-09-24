@@ -179,23 +179,27 @@ receiver corrected past `StormSetup` held the storm's entities and simulated non
 of them, because `Update` returns immediately on `rootEntity == 0`.
 
 **Uncertain.** No capture of the failure exists, so neither mechanism is confirmed
-as *the* cause. `storm.spawn_failures` and `fsm.storm` distinguish them: a spawn
-refusal increments the counter and now shows as `StormSetupRetry` rather than as a
-silent 2.5 s in `StormActive`.
+as *the* cause, and both are addressed. `storm.spawn_failures` and `fsm.storm`
+distinguish them in a field log: a spawn refusal increments the counter and shows as
+`StormSetupRetry` rather than a silent 2.5 s in `StormActive`. `td`'s breach takes
+the same retry (`StSpawn`).
 
 ## 6. What these fixes do not close
 
-- The pruning rule in §1B is unchanged, and it is right for what it was written
-  for. What is missing is an inventory of what else a host crossing does. Two such
-  effects are now carried; the rest of the audit is open.
-- `SharedKey` still answers "compare this?" and "carry this?" with one predicate.
-  Two carriers work around it. Splitting the predicate is the real fix.
-- `MonitorWarmup` guards on `player.0.heat.current` and `player.0.energy.current`.
-  They are owner-authored (D-13), so a guest never writes them and the capture
-  never carries them. The state is unreachable in the shipped config, so it is a
-  latent D-20 hole rather than a live defect.
+Closed since (2026-09-24):
 
-Each of these is one line in [TODO](todo.md).
+- **The pruning rule.** A capture follows the epochs it fences on one ordered link,
+  and every copy of a crossing now applies at one tick, so a fenced frame has been
+  applied before the capture claiming it installs. A 3-tick latency mesh with both
+  participants moving every other tick counted zero
+  `network.artifacts_authority_superseded` in 1200 ticks; a non-zero count in a
+  field log reopens the inventory.
+- **`SharedKey` answering two questions.** Every excluded cell a shared guard or
+  system reads — `kills.*`, `energy.damage_multiplier`, `session.all_defeated` — is
+  carried and compared through `MetaSystem`'s record, and the other excluded groups
+  are telemetry. A second predicate would be a second carrier for the same values.
+- **`MonitorWarmup`**, which guarded on owner-authored keys and nothing entered, is
+  deleted.
 
 ## 7. Second round (2026-09-10, after the above landed)
 
@@ -263,14 +267,13 @@ glyphs, drains and nuggets — a different set on each instance inside a replica
 footprint. Shared occupancy stays `CommitShared`'s to refuse, which is what keeps
 the change to the domain the report named.
 
-**Not closed.** Neither of these explains a guest holding a gold the host has
-destroyed, or two at once. Every destruction path pushes
-`EventCompositeDestroyRequest` and clears the carrier's state, and
-`ReconcileSharedWorld` removes shared entities the capture does not name, so a
-stale sequence should not survive a correction. The remaining candidate is the
-selective repair: an entity only the receiver holds must land in a page whose
-hash differs, and the reconstruction must then drop it. That path is not proved
-either way here. See `doc/todo.md`.
+**Ruled out since.** Neither of these explains a guest holding a gold the host had
+destroyed, or two at once, and the last candidate, the selective repair, cannot
+either: `ApplyShardSet` refuses a splice whose rebuilt root differs, and the root
+counts each section's rows, so an entity only the receiver holds is dropped or the
+repair is refused (pinned in `TestSeveralSectionsRepairWithoutAnUnrelatedOne`).
+What remains visible is a typed member shown again inside the lead and a timer on a
+re-issued anchor, both in `doc/todo.md`.
 
 ### 7.3 `scenario.sh drain`
 
@@ -284,8 +287,8 @@ no part in.
 The scenario now asserts what the signal is actually promising: the probe reports
 `live=true ready=false phase=draining`, the process survives the signal, **the
 tick advances while draining**, and the session ends itself naming a reason. The
-guest is no longer part of the claim. That a scripted participant cannot survive
-a tick jump is real and is in `doc/todo.md`.
+guest is no longer part of the claim. A scripted participant in a session now
+schedules on the ticks it issues, so a jump or a reset no longer ends it.
 
 ## 8. Third round (2026-09-20, internet host, two remote guests)
 
@@ -330,13 +333,11 @@ guest whose predicted quasar the authority did not have kept a bolt with
 `Duration == 0` and an hour `Remaining`: it drew from the dead header's last cell
 for the rest of the session.
 
-**Fix.** `LightningSystem` retires a bolt whose owner the world no longer holds,
-the way `SplashSystem` already retires a timer whose anchor is gone.
-
-**Not closed.** The same install can clear `IsZapping` under a live quasar, which
-leaves a bolt until that quasar's next zap-stop or death. `QuasarSystem` is
-shared-profile and may not read the player store to find the bolt, so the fix is a
-lease the owner renews rather than a lookup. See `doc/todo.md`.
+**Fix.** A tracked bolt lives on a lease its owner renews with every target
+update (`LightningTrackedLease`). An install that removes the quasar, or clears
+`IsZapping` under a live one, stops the renewals and the bolt retires within the
+lease. `QuasarSystem` is shared-profile and may not read the player store, so the
+lease, not a lookup, is the one mechanism.
 
 ## 9. Fourth round (2026-09-23, fleet, a terminal and a browser guest)
 
@@ -397,3 +398,8 @@ wall, so a pushed kinetic entity walked back in. It now moves both, and loot pus
 itself out of a wall a correction installed under it. In the browser build in the
 tower region, navigation is about 3% of the thread; answering manifests and
 applying corrections is about half of it (`doc/todo.md`).
+
+Once, in the tower region, a browser guest kept the previous region's glyphs, or
+kept the glyph system running although the region disables it. It did not recur
+and is noted rather than tracked; a second sighting should record whether that
+guest had installed a capture across the region change.

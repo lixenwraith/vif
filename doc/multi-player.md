@@ -717,10 +717,9 @@ entry says what is actually absent rather than what is imperfect, and how to see
    `event.EmitDeath` stays where it is: moving it to `World` was a preference, not
    a boundary fix.
 
-   What is left of gap 7 is the last item on its list: `combat.` and `kills.` are
-   excluded from the compared shared surface because they aggregate both domains
-   into one set of counters. Splitting them per domain is what would let them back
-   in, and that is a telemetry redesign rather than a boundary fix.
+   The last item on its list is closed too: `kills.*` is compared and carried in
+   `MetaSystem`'s record, which the systems section hashes, and `combat.*` is
+   telemetry nothing decides on.
 
 ### Open
 
