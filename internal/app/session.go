@@ -747,16 +747,18 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	}
 
 	// The lobby's links have been up for the whole wait, so the convergence floor is
-	// decided per link rather than from the gate's aggregate transfer. A participant
-	// that cannot carry a whole world per floor window is refused here for the same
-	// reason a mid-run join is; one that is no longer on the link has no link to
-	// judge and leaves through the ordinary departure the loop is about to drain.
+	// decided per link. A participant that cannot carry a whole world per floor
+	// window is dropped like one that never confirmed: it leaves through the ordinary
+	// departure the loop is about to drain, and the others keep their match.
 	for _, participant := range offer.Roster {
-		if participant.ID == offer.Host || !port.Connected(uint32(participant.ID)) {
+		id := participant.ID
+		if id == offer.Host || !port.Connected(uint32(id)) {
 			continue
 		}
-		if err := a.corrections.AdmitMeasuredLink(port, participant.ID); err != nil {
-			return fmt.Errorf("session start: %w", err)
+		if err := a.corrections.AdmitMeasuredLink(port, id); err != nil {
+			port.Disconnect(uint32(id))
+			vlog.Warn("app", "msg", "participant refused at the start gate",
+				"peer", id, "error", err.Error())
 		}
 	}
 
