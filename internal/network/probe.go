@@ -21,6 +21,7 @@ import (
 	"encoding/binary"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
 )
 
@@ -135,9 +136,8 @@ func decodeEcho(b []byte) (seq uint32, sent time.Time, inBytes uint64, report Li
 type linkMeter struct {
 	link *linkpace.Link
 
-	seq     uint32 // last probe sent
-	echoed  uint32 // last probe answered
-	pending bool   // a probe is outstanding
+	seq    uint32 // last probe sent
+	echoed uint32 // last probe answered
 
 	lastDelivered uint64
 	lastEchoAt    time.Time
@@ -160,16 +160,18 @@ func newLinkMeter() *linkMeter {
 	return &linkMeter{link: linkpace.NewLink(linkpace.LinkConfig{})}
 }
 
-// nextProbe advances the sequence, charging the previous probe as lost when it
-// was never answered. A probe that went unanswered is the only loss signal this
-// protocol has: corrections are not acknowledged and epochs are not repaired, so
-// nothing else on the link ever notices a frame that did not arrive.
+// probeLostAfter is how many probes may go out after the last one answered before
+// each further one is charged as lost.
+const probeLostAfter = uint32(parameter.NetworkProbeLostAfter / parameter.NetworkProbeInterval)
+
+// nextProbe advances the sequence, charging a miss while no echo has come back for
+// NetworkProbeLostAfter. A probe is the only loss signal this protocol has, and a
+// stream delivers every one: an echo slower than the probe interval is a slow link.
 func (m *linkMeter) nextProbe() uint32 {
-	if m.pending {
+	if m.seq-m.echoed >= probeLostAfter {
 		m.link.Miss()
 	}
 	m.seq++
-	m.pending = true
 	return m.seq
 }
 
@@ -177,10 +179,7 @@ func (m *linkMeter) nextProbe() uint32 {
 //
 // sentBytes is what this instance has queued for that peer, and delivered is
 // what the peer says it has received; the difference is the backlog, which is
-// what separates "the link is fast" from "the sender was idle". An echo for a
-// probe older than the newest is folded in anyway — its round trip is real — but
-// it does not clear the outstanding flag, so the newer probe is still charged as
-// lost if it never returns.
+// what separates "the link is fast" from "the sender was idle".
 func (m *linkMeter) observe(now, sent time.Time, seq uint32, delivered uint64, sentBytes uint64, report LinkReport) {
 	sample := linkpace.Sample{
 		RTT:       now.Sub(sent),
@@ -202,11 +201,6 @@ func (m *linkMeter) observe(now, sent time.Time, seq uint32, delivered uint64, s
 		}
 	}
 	m.lastDelivered, m.lastEchoAt, m.haveDelivered = delivered, now, true
-	if seq >= m.echoed {
-		m.echoed = seq
-	}
-	if seq == m.seq {
-		m.pending = false
-	}
+	m.echoed = max(m.echoed, seq)
 	m.link.Observe(sample)
 }

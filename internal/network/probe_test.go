@@ -45,24 +45,29 @@ func TestEchoCarriesTheProbeBackUntouched(t *testing.T) {
 	}
 }
 
-// TestAnUnansweredProbeIsTheOnlyLossSignal: nothing acknowledges a correction and
-// nothing repairs an epoch, so a probe that never comes back is the only thing on
-// this link that notices a frame did not arrive.
-func TestAnUnansweredProbeIsTheOnlyLossSignal(t *testing.T) {
+// TestOnlyAProbeThatStopsComingBackIsLost: an echo slower than the probe interval
+// is a slow link, not a lost probe; a link that answers nothing for
+// NetworkProbeLostAfter is.
+func TestOnlyAProbeThatStopsComingBackIsLost(t *testing.T) {
 	m := newLinkMeter()
 	now := time.Unix(0, 0)
-	for range 5 {
-		seq := m.nextProbe()
-		now = now.Add(40 * time.Millisecond)
-		m.observe(now, now.Add(-20*time.Millisecond), seq, 0, 0, LinkReport{})
+	late := 3 * parameter.NetworkProbeInterval / 2
+	for i := range 20 {
+		m.nextProbe()
+		if i > 1 {
+			m.observe(now, now.Add(-late), uint32(i-1), 0, 0, LinkReport{})
+		}
+		now = now.Add(parameter.NetworkProbeInterval)
 	}
-	answered := m.link.Metrics().Loss
+	if got := m.link.Metrics().Loss; got != 0 {
+		t.Fatalf("echoes %v late counted as %.3f loss", late, got)
+	}
 
-	for range 5 {
-		m.nextProbe() // each one charges the previous, which was never answered
+	for range probeLostAfter + 1 {
+		m.nextProbe()
 	}
-	if got := m.link.Metrics().Loss; got <= answered {
-		t.Fatalf("five unanswered probes left loss at %.3f (was %.3f)", got, answered)
+	if got := m.link.Metrics().Loss; got == 0 {
+		t.Fatal("a link silent past NetworkProbeLostAfter counted no loss")
 	}
 }
 

@@ -672,14 +672,14 @@ any peer has been seen closing this instance stands, taken every tick rather tha
 once at admission, with `network.stale` set past the playout lead — the point at
 which this participant's own crossings reach the host after the ticks they name;
 the badge names it `desync`, since a lag measured in ticks is not the delay the
-round trip already states. `network.link_loss_pct` is the share of probes that went
-unanswered, named past `StatusNetLossWarnPct`. And the `snapshot.cadence` group is
-the operating point, of which the bar draws only which of two conditions holds —
-`cadence_constrained`, which is the design working, drawn as `slow`, or
-`cadence_floor_breached`, which is not, drawn as `slow!`. The rest — jitter, the
-cadence itself, the keyframe interval, the byte rates — is a diagnostic panel
-rather than a glance, and `:session` and the status snapshot are where they can be
-read against each other.
+round trip already states. `network.link_loss_pct` is the share of probes sent
+while no echo had come back for `NetworkProbeLostAfter`, named past
+`StatusNetLossWarnPct`. And the `snapshot.cadence` group is the operating point,
+of which the bar draws only which of two conditions holds — `cadence_constrained`,
+which is the design working, drawn as `slow`, or `cadence_floor_breached`, which
+is not, drawn as `slow!`. The rest — jitter, the cadence itself, the keyframe
+interval, the byte rates — is a diagnostic panel rather than a glance, and
+`:session` and the status snapshot are where they can be read against each other.
 
 Loss that happens outside the barrier is published rather than swallowed, because
 either direction would otherwise desynchronise silently:

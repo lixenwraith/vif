@@ -294,6 +294,10 @@ const (
 	// also how quickly a link change becomes steerable: about a second and a half.
 	NetworkProbeInterval = 200 * time.Millisecond
 
+	// NetworkProbeLostAfter is how long a link may go without any echo before its
+	// probes count as lost. A stream loses nothing, so this is a link that stopped.
+	NetworkProbeLostAfter = time.Second
+
 	// SnapshotFloorGraceTicks is how far past the floor a receiver waits before
 	// calling its own condition unrecoverable. The floor is a publication
 	// guarantee; a receiver additionally pays the transfer and the install, so
