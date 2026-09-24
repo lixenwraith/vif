@@ -258,7 +258,7 @@ func TestCaptureCarriesEveryDeclaredSystem(t *testing.T) {
 	// that moved to a system's Player stream would silently stop being restorable
 	// and drop below it. Which domain a capture may carry is D-8's rule, pinned in
 	// TestCorrectionLeavesPlayerStreamsAlone.
-	if len(cap.Streams) < 10 {
+	if len(cap.Streams) < 8 {
 		t.Errorf("capture carries %d shared RNG streams; the run issues more", len(cap.Streams))
 	}
 }

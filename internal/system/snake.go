@@ -20,7 +20,6 @@ var snakeLateralOffsets = [3]int{0, -1, 1}
 // SnakeSystem manages snake entity lifecycle
 type SnakeSystem struct {
 	world *engine.World
-	rng   *vmath.FastRand
 
 	// Telemetry
 	statActive          *atomic.Bool
@@ -51,7 +50,6 @@ func NewSnakeSystem(world *engine.World) engine.System {
 }
 
 func (s *SnakeSystem) Init() {
-	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statProtected.Store(0)

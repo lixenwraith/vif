@@ -24,9 +24,6 @@ type SwarmSystem struct {
 	// Runtime state
 	active bool
 
-	// Random source for knockback impulse randomization
-	rng *vmath.FastRand
-
 	// Telemetry
 	statActive          *atomic.Bool
 	statCount           *atomic.Int64
@@ -62,7 +59,6 @@ func NewSwarmSystem(world *engine.World) engine.System {
 
 func (s *SwarmSystem) Init() {
 	s.active = false
-	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statPlayerKills.Store(0)

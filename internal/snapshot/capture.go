@@ -21,19 +21,10 @@ import (
 )
 
 // Schema is the capture layout version, distinct from the journal schema. A
-// header names both so a mismatch says which one moved.
-//
-// 5 replaced the authority's single crossing fence with one per participant, so a
-// receiver classifies every source's ordinary crossings by sequence rather than
-// only the authority's.
-//
-// 6 dropped the Player-domain RNG streams. A capture is the shared world (D-2), and
-// carrying a participant's own streams installed the sender's positions over every
-// receiver's.
-//
-// 8 dropped the corpus fingerprint for the same reason, once glyphs became player
-// domain: the status surface still compared and carried it.
-const Schema = 8
+// header names both so a mismatch says which one moved. It also moves when the set
+// a capture carries changes, since two builds would then refuse each other's
+// installs: 9 dropped three Shared RNG streams nothing drew from.
+const Schema = 9
 
 // SharedCapture is the shared world at one tick (D-19): the shared component
 // stores, the allocator's next ID, the Shared RNG stream positions, and the private

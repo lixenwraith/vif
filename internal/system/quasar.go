@@ -20,9 +20,6 @@ import (
 type QuasarSystem struct {
 	world *engine.World
 
-	// Random source for knockback impulse randomization
-	rng *vmath.FastRand
-
 	// Telemetry
 	statActive          *atomic.Bool
 	statCount           *atomic.Int64
@@ -53,7 +50,6 @@ func NewQuasarSystem(world *engine.World) engine.System {
 }
 
 func (s *QuasarSystem) Init() {
-	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statProtected.Store(0)
