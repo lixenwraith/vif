@@ -234,6 +234,14 @@ retain that distinction.
 Diagnoses and what each item follows from are in
 [Troubleshooting](troubleshooting.md).
 
+### Find what diverges a guest in the tower region
+
+- Priority: P2
+- Affected files: `wad/scenario/main/tower.toml`, `internal/system/eye.go`
+
+A guest present when the region starts answers 77% of manifests hash-only, against
+95% on the main map; the differing sections are eye, genotype, combat and fsm.
+
 ### Find the glyphs a region change left behind in a browser run
 
 - Priority: P2

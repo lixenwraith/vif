@@ -377,3 +377,16 @@ websocat as the pod runs it, and a 150 ms delay proxy on `main`:
 - **websocat without `TCP_NODELAY`.** A minor share of the jitter; see `doc/todo.md`.
 
 The session pod stayed near 7 ms of CPU per 100 ms throughout, far inside its limit.
+
+After the fix the tower region still corrected every few seconds, and `td` slowed.
+Measured with a scripted guest and the `-script` benchmark:
+
+- **A local flag in the compared surface.** `context.map_locked` derives from a
+  `CropOnResize` the capture leaves local, so a guest that joined after a level setup
+  never matched: 0% hash-only in the tower region, now 59%. Entered with the guest
+  present it is 77%, against 95% on the main map; the rest is prediction divergence
+  among its interacting eyes, snakes and pylons (`doc/todo.md`).
+- **Walls probed per cell.** Flow fields asked the spatial grid and the wall store
+  about every neighbour of every cell. They now read a grid built from the store once
+  per derivation (`Position.WallTest`): the `td` script runs in 28 s, from 49.5 s,
+  with identical stat records throughout.
