@@ -1,6 +1,7 @@
 package component
 
 import (
+	"math/bits"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -65,10 +66,6 @@ type CombatComponent struct {
 	// OwnerEntity indicates owner/parent of the entity with combat component (e.g. cursor is the parent of cleaner)
 	OwnerEntity core.Entity
 
-	// LastDamagedBy identifies the cursor that most recently dealt HP damage.
-	// Zero means the last damaging attack was not owned by a live cursor.
-	LastDamagedBy core.Entity
-
 	// CombatEntityType
 	CombatEntityType CombatEntityType
 
@@ -101,6 +98,13 @@ type CombatComponent struct {
 
 	// StunnedRemaining is remaining stun duration (movement suppressed)
 	StunnedRemaining time.Duration
+
+	// CreditSpent names the cursors that landed damage in the engagement still
+	// open, one bit per roster slot, and CreditRemaining closes it. A kill is
+	// credited from the set rather than from the last writer: a late crossing
+	// changes arrival order on its producer, not the set.
+	CreditSpent     uint32
+	CreditRemaining time.Duration
 }
 
 // unownedAttacker is the immunity bit for an attack no cursor owns
@@ -132,21 +136,16 @@ func (c *CombatComponent) SealDamageImmunity(d time.Duration) {
 }
 
 // KineticImmuneTo reports whether this attacker already spent its knockback in the
-// open window. Per attacker for the reason damage is, and for a second one: a
-// crossing applies at once on its producer and a playout lead later everywhere
-// else, so a shared latch is taken by whichever participant's hit that instance
-// applied first — its own — and the other's is discarded rather than delayed. Two
-// participants hitting one swarm then sent it opposite ways on their two screens
-// until the next correction.
+// open window. Per attacker for the reason damage is: a shared latch would discard
+// whichever hit an instance applied second, and a late crossing changes which.
 func (c *CombatComponent) KineticImmuneTo(attacker uint32) bool {
 	return c.RemainingKineticImmunity != 0 && c.KineticImmunitySpent&attacker != 0
 }
 
 // SpendKineticImmunity records a landed knockback, opening the window when it is
-// closed, and reports whether this hit is the one that opened it. That answer is
-// what decides override against additive: the opening hit replaces the target's
-// velocity and every hit joining the window adds to it, so a window's impulses
-// compose to the same vector whatever order an instance saw them in.
+// closed, and reports whether this hit opened it. The opener replaces the target's
+// velocity and every joiner adds to it, so a window's impulses compose to the same
+// vector in any order and no hit needs to own it.
 func (c *CombatComponent) SpendKineticImmunity(attacker uint32, d time.Duration) (opened bool) {
 	if c.RemainingKineticImmunity == 0 {
 		c.RemainingKineticImmunity = d
@@ -162,6 +161,31 @@ func (c *CombatComponent) SpendKineticImmunity(attacker uint32, d time.Duration)
 func (c *CombatComponent) SealKineticImmunity(d time.Duration) {
 	c.RemainingKineticImmunity = d
 	c.KineticImmunitySpent = ^uint32(0)
+}
+
+// Credit records a landed damaging hit. A cursor joins the engagement and keeps it
+// open; an attack no cursor owns ends it, so a species' blow credits nobody.
+func (c *CombatComponent) Credit(attacker uint32, d time.Duration) {
+	if attacker&unownedAttacker != 0 {
+		c.CreditSpent, c.CreditRemaining = 0, 0
+		return
+	}
+	c.CreditSpent |= attacker
+	c.CreditRemaining = d
+}
+
+// CreditedSlot is the roster slot a kill of e is credited to: one of the engaged
+// cursors, picked by e so contested kills spread across the roster.
+func (c *CombatComponent) CreditedSlot(e core.Entity) (uint8, bool) {
+	set := c.CreditSpent &^ unownedAttacker
+	n := bits.OnesCount32(set)
+	if n == 0 {
+		return 0, false
+	}
+	for k := e.ID() % uint64(n); k > 0; k-- {
+		set &= set - 1
+	}
+	return uint8(bits.TrailingZeros32(set)), true
 }
 
 // AttackerBit names an attacking cursor's slot inside a target's immunity window.

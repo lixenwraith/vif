@@ -949,7 +949,7 @@ func (s *StormSystem) destroyCircle(stormComp *component.StormComponent, index i
 	circleEntity := stormComp.Circles[index]
 	var killerEntity core.Entity
 	if combatComp, ok := s.world.Components.Combat.GetComponent(circleEntity); ok {
-		killerEntity = combatComp.LastDamagedBy
+		killerEntity = creditedCursor(s.world, circleEntity, &combatComp)
 	}
 
 	// Get position for event; the final circle may already be positionless.

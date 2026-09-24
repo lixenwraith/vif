@@ -21,10 +21,10 @@ import (
 )
 
 // Schema is the capture layout version, distinct from the journal schema. A
-// header names both so a mismatch says which one moved. It also moves when the set
-// a capture carries changes, since two builds would then refuse each other's
-// installs: 9 dropped three Shared RNG streams nothing drew from.
-const Schema = 9
+// header names both so a mismatch says which one moved. It also moves when what a
+// capture carries changes, since two builds would then misread each other's
+// installs: 10 replaced the combat component's last writer with a credit set.
+const Schema = 10
 
 // SharedCapture is the shared world at one tick (D-19): the shared component
 // stores, the allocator's next ID, the Shared RNG stream positions, and the private

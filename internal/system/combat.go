@@ -281,6 +281,15 @@ func (s *CombatSystem) Update() {
 			}
 		}
 
+		// A closed engagement credits nobody still in it
+		if combatComp.CreditRemaining > 0 {
+			combatComp.CreditRemaining -= dt
+			if combatComp.CreditRemaining <= 0 {
+				combatComp.CreditRemaining = 0
+				combatComp.CreditSpent = 0
+			}
+		}
+
 		// Update hit flash timer
 		if combatComp.RemainingHitFlash > 0 {
 			combatComp.RemainingHitFlash -= dt
@@ -302,12 +311,20 @@ func (s *CombatSystem) attackerBit(cursor core.Entity) uint32 {
 	return component.AttackerBit(slot, ok)
 }
 
+// creditedCursor is the cursor a kill of e is credited to, or zero when no cursor
+// is engaged in it. Every species death reads its credit here.
+func creditedCursor(w *engine.World, e core.Entity, c *component.CombatComponent) core.Entity {
+	slot, ok := c.CreditedSlot(e)
+	if !ok {
+		return 0
+	}
+	return w.Resources.Player.Slot(slot)
+}
+
 // joining is the profile a hit uses: its own when it opens the target's knockback
-// window, and additive when it joins one another attacker opened. An override that
-// joins would leave each instance holding whichever impulse it applied last, and
-// each applies its own first; adding is what makes the window's impulses compose to
-// the same vector on both. The scratch is the system's for the same reason the
-// artifact generator is: one hit uses it and is done with it.
+// window, additive when it joins one. An override that joined would leave each
+// instance holding whichever impulse it applied last. The scratch is the system's:
+// one hit uses it and is done with it.
 func (s *CombatSystem) joining(p *physics.CollisionProfile, opened bool) *physics.CollisionProfile {
 	if opened || p.Mode == physics.ImpulseAdditive {
 		return p
@@ -414,8 +431,8 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 
 					memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
 					memberCombat.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
-					memberCombat.LastDamagedBy = damageCursor
-					targetCombatComp.LastDamagedBy = damageCursor
+					memberCombat.Credit(attacker, parameter.CombatCreditWindow)
+					targetCombatComp.Credit(attacker, parameter.CombatCreditWindow)
 					damageTargetDead = memberCombat.HitPoints == 0
 				}
 			}
@@ -436,7 +453,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 
 				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
 				targetCombatComp.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
-				targetCombatComp.LastDamagedBy = damageCursor
+				targetCombatComp.Credit(attacker, parameter.CombatCreditWindow)
 				damageTargetDead = targetCombatComp.HitPoints == 0
 			}
 		}
@@ -599,7 +616,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				s.recordDamage(attackerType, memberCombat.CombatEntityType, dealt, 0)
 				memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
 				memberCombat.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
-				memberCombat.LastDamagedBy = damageCursor
+				memberCombat.Credit(attacker, parameter.CombatCreditWindow)
 				damageApplied = true
 				resolved = true
 			}
@@ -630,7 +647,6 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				s.recordDamage(attackerType, targetCombatComp.CombatEntityType, dealt, 0)
 				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
 				targetCombatComp.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
-				targetCombatComp.LastDamagedBy = damageCursor
 				damageApplied = true
 				resolved = true
 				if targetCombatComp.HitPoints == 0 {
@@ -641,9 +657,8 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	}
 	if damageApplied {
 		resolved = true
-		// Ablative species read the header when deciding which cursor receives
-		// whole-species kill credit; keep it synchronized with the last member hit.
-		targetCombatComp.LastDamagedBy = damageCursor
+		// Ablative species credit a kill from the header, so a member hit engages it
+		targetCombatComp.Credit(attacker, parameter.CombatCreditWindow)
 	}
 
 	// Apply kinetic effect

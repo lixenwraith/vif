@@ -420,7 +420,7 @@ func (s *TowerSystem) handleTowerDeath(headerEntity core.Entity) {
 	}
 	var killerEntity core.Entity
 	if combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity); ok {
-		killerEntity = combatComp.LastDamagedBy
+		killerEntity = creditedCursor(s.world, headerEntity, &combatComp)
 	}
 
 	// Every terminal species death uses the same notification. Reward systems

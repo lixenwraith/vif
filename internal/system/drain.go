@@ -339,7 +339,7 @@ func (s *DrainSystem) processDrainStates() {
 			killX, killY := entry.killPos()
 			s.world.PushEventDomain(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 				Entity:       entry.entity,
-				KillerEntity: entry.combatComp.LastDamagedBy,
+				KillerEntity: creditedCursor(s.world, entry.entity, &entry.combatComp),
 				Species:      component.SpeciesDrain,
 				X:            killX,
 				Y:            killY,
@@ -964,7 +964,7 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, a.entity)
 		s.world.PushEventDomain(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 			Entity:       a.entity,
-			KillerEntity: a.combatComp.LastDamagedBy,
+			KillerEntity: creditedCursor(s.world, a.entity, &a.combatComp),
 			Species:      component.SpeciesDrain,
 			X:            a.pos.X,
 			Y:            a.pos.Y,

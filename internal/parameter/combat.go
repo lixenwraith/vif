@@ -50,6 +50,10 @@ const (
 
 	// CombatHitFlashDuration is yellow flash duration and immunity window on cleaner hit
 	CombatHitFlashDuration = 150 * time.Millisecond
+
+	// CombatCreditWindow keeps a cursor in a target's kill credit as long as the
+	// commit admits its crossing late, so a late hit and the kill still meet
+	CombatCreditWindow = NetworkCommitLateTicks * GameUpdateInterval
 )
 
 // Kinetic Collision Impulse

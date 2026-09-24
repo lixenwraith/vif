@@ -456,7 +456,7 @@ func TestCombatRecordsCursorDamageCreditOnUnitAndAblativeHeader(t *testing.T) {
 		AttackType: component.CombatAttackProjectile,
 	})
 	unitCombat, _ := w.Components.Combat.GetComponent(unit)
-	if unitCombat.HitPoints != 0 || unitCombat.LastDamagedBy != cursor {
+	if unitCombat.HitPoints != 0 || creditedCursor(w, unit, &unitCombat) != cursor {
 		t.Fatalf("unit combat = %#v, want fatal credit for cursor %d", unitCombat, cursor)
 	}
 
@@ -486,7 +486,8 @@ func TestCombatRecordsCursorDamageCreditOnUnitAndAblativeHeader(t *testing.T) {
 
 	headerCombat, _ := w.Components.Combat.GetComponent(header)
 	memberCombat, _ := w.Components.Combat.GetComponent(member)
-	if memberCombat.HitPoints != 0 || memberCombat.LastDamagedBy != cursor || headerCombat.LastDamagedBy != cursor {
+	if memberCombat.HitPoints != 0 || creditedCursor(w, member, &memberCombat) != cursor ||
+		creditedCursor(w, header, &headerCombat) != cursor {
 		t.Fatalf("ablative combat = header %#v member %#v, want fatal credit for cursor %d", headerCombat, memberCombat, cursor)
 	}
 
@@ -503,8 +504,44 @@ func TestCombatRecordsCursorDamageCreditOnUnitAndAblativeHeader(t *testing.T) {
 		AttackType: component.CombatAttackExplosion,
 	})
 	areaCombat, _ := w.Components.Combat.GetComponent(areaTarget)
-	if areaCombat.HitPoints != 0 || areaCombat.LastDamagedBy != cursor {
+	if areaCombat.HitPoints != 0 || creditedCursor(w, areaTarget, &areaCombat) != cursor {
 		t.Fatalf("area combat = %#v, want fatal credit for cursor %d", areaCombat, cursor)
+	}
+}
+
+// TestAContestedKillIsCreditedFromTheSetNotTheOrder: a crossing that missed the
+// lead applies earlier on its producer than anywhere else, so two cursors' hits on
+// one target arrive in opposite orders on two instances. Both must credit one cursor.
+func TestAContestedKillIsCreditedFromTheSetNotTheOrder(t *testing.T) {
+	credited := make(map[core.Entity]bool)
+	for _, reversed := range []bool{false, true} {
+		w, first, second := testCursorWorld(t)
+		combat := NewCombatSystem(w).(*CombatSystem)
+		target := w.CreateEntity(core.DomainShared)
+		w.Components.Combat.SetComponent(target, component.CombatComponent{
+			OwnerEntity:      target,
+			CombatEntityType: component.CombatEntityDrain,
+			HitPoints:        2 * parameter.CombatDamageCleaner,
+		})
+		order := []core.Entity{first, second}
+		if reversed {
+			order = []core.Entity{second, first}
+		}
+		for _, attacker := range order {
+			combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
+				OwnerEntity: attacker, OriginEntity: attacker,
+				TargetEntity: target, HitEntity: target,
+				AttackType: component.CombatAttackProjectile,
+			})
+		}
+		c, _ := w.Components.Combat.GetComponent(target)
+		if c.HitPoints != 0 {
+			t.Fatalf("reversed=%v: target survived with %d", reversed, c.HitPoints)
+		}
+		credited[creditedCursor(w, target, &c)] = true
+	}
+	if len(credited) != 1 || credited[0] {
+		t.Fatalf("credited %v across the two orders, want one cursor", credited)
 	}
 }
 
@@ -579,7 +616,7 @@ func TestCombatClearsStaleCursorCreditWhenSpeciesDealsFatalDamage(t *testing.T) 
 	})
 
 	targetCombat, _ = w.Components.Combat.GetComponent(target)
-	if targetCombat.HitPoints != 0 || targetCombat.LastDamagedBy != 0 {
+	if targetCombat.HitPoints != 0 || creditedCursor(w, target, &targetCombat) != 0 {
 		t.Fatalf("target combat = %#v, want fatal non-cursor damage with no player credit", targetCombat)
 	}
 }
@@ -594,7 +631,7 @@ func TestTowerDeathEmitsSpeciesKillWithOptionalCursorCredit(t *testing.T) {
 		SpawnY: 9,
 		Type:   component.TowerCyan,
 	})
-	w.Components.Combat.SetComponent(header, component.CombatComponent{LastDamagedBy: killer})
+	w.Components.Combat.SetComponent(header, component.CombatComponent{CreditSpent: component.AttackerBit(1, true)})
 	towers.handleTowerDeath(header)
 
 	kills := 0

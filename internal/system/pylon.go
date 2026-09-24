@@ -473,7 +473,7 @@ func (s *PylonSystem) handlePylonDeath(headerEntity core.Entity) {
 	}
 	var killerEntity core.Entity
 	if combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity); ok {
-		killerEntity = combatComp.LastDamagedBy
+		killerEntity = creditedCursor(s.world, headerEntity, &combatComp)
 	}
 
 	// Request composite destruction (header + remaining members)

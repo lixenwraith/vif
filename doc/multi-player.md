@@ -775,11 +775,11 @@ entry says what is actually absent rather than what is imperfect, and how to see
     impulse the authority had not — is gone, and with it the phase difference in
     the kinetic immunity window. What a hit still costs is the lead itself, paid
     as the distance between the D-18 prediction and the store rather than as input
-    latency. What remains is a two-attacker residual: a crossing that misses the
-    lead is applied late by the authority in arrival order, so which of two hits
-    on one body `SpendKineticImmunity` reports as opening the window can still
-    differ for the length of that lateness; it is in `doc/todo.md` as a choice
-    about who owns the override.
+    latency. A crossing that misses the lead still lands later on the authority
+    than on its producer, so contested outcomes follow the attacker set rather than
+    arrival order: a knockback window's impulses compose to one vector whichever
+    hit opened it, and a kill is credited from the cursors engaged in it for
+    `CombatCreditWindow`, which spans the lateness the commit admits.
 
 ## 9. Verification
 

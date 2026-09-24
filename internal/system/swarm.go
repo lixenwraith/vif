@@ -180,7 +180,7 @@ func (s *SwarmSystem) Update() {
 			}
 			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 				Entity:       headerEntity,
-				KillerEntity: combatComp.LastDamagedBy,
+				KillerEntity: creditedCursor(s.world, headerEntity, combatComp),
 				Species:      component.SpeciesSwarm,
 				X:            killX,
 				Y:            killY,

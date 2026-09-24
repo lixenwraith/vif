@@ -166,7 +166,7 @@ func (s *SnakeSystem) Update() {
 
 		// Check head death (unshielded and HP <= 0)
 		if !snakeComp.IsShielded && headCombat.HitPoints <= 0 {
-			s.handleSnakeDeath(rootEntity, snakeComp, headCombat.LastDamagedBy)
+			s.handleSnakeDeath(rootEntity, snakeComp, creditedCursor(s.world, snakeComp.HeadEntity, &headCombat))
 			continue
 		}
 
