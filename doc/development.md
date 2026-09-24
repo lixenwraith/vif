@@ -524,10 +524,11 @@ the experimental Windows cross-build into a release target.
 
 ### WASM host
 
-`web/index.html` creates an xterm.js terminal, optional WebGL renderer, fit
-addon, and a Go WASM instance. JavaScript batches Go writes into microtasks,
-forwards text/binary input, reports resizes, prevents the context menu, and
-maintains focus. `make serve` builds `web/vif.wasm` and serves this
+`web/index.html` creates an xterm.js terminal, optional WebGL renderer and fit
+addon, and starts the Go WASM instance in a Worker (`web/worker.js`), so a frame
+xterm takes long to draw never delays a tick, a probe echo or a socket read. The
+page batches the worker's writes into microtasks, relays text/binary input and
+resizes to it, prevents the context menu, and maintains focus. `make serve` builds `web/vif.wasm` and serves this
 directory. Before launch, `web/terminal.js` maps `window.VIF_ARGS` and repeated
 `arg` query parameters into `Go.argv`.
 

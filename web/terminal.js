@@ -6,6 +6,7 @@
     let term;
     let fitAddon;
     let webglAddon;
+    let program;   // the Worker running Go; see worker.js
 
     // === Write Batching (defensive, Go already batches) ===
     let pendingWrites = [];
@@ -32,21 +33,15 @@
         term.write(decoder.decode(combined, { stream: true }));
     }
 
-    // Go → JS: Write output to terminal
-    window.goTerminalWrite = function(data) {
+    // Go → JS: output to the terminal
+    function terminalWrite(data) {
         if (!term) return;
-
-        const bytes = new Uint8Array(data.length);
-        for (let i = 0; i < data.length; i++) {
-            bytes[i] = data[i];
-        }
-        pendingWrites.push(bytes);
-
+        pendingWrites.push(data);
         if (!writeScheduled) {
             writeScheduled = true;
             queueMicrotask(flushWrites);
         }
-    };
+    }
 
     // === Terminal Initialization ===
     function initTerminal() {
@@ -86,9 +81,6 @@
         term.open(container);
         fitAddon.fit();
 
-        // Expose for Go size query
-        window.xterm = term;
-
         return term;
     }
 
@@ -107,37 +99,12 @@
         return ['vif'].concat(args);
     }
 
-    /* Why the program ended. stderr is a Go program's only word on that, and
-       wasm_exec sends it to the console alone; kept here, it is shown on the page
-       once the program exits instead of leaving a terminal that simply stopped. */
-    let lastLine = '';
-    let crashLine = '';
-
-    function watchStderr() {
-        const fs = globalThis.fs;
-        const writeSync = fs.writeSync;
-        const errDecoder = new TextDecoder('utf-8');
-        let partial = '';
-        fs.writeSync = function(fd, buf) {
-            if (fd === 2) {
-                const lines = (partial + errDecoder.decode(buf, { stream: true })).split('\n');
-                partial = lines.pop();
-                for (const line of lines.map(l => l.trim()).filter(Boolean)) {
-                    // A crash's first line names it; the rest is its stack.
-                    if (!crashLine && /^(panic|fatal error|CRASH DETECTED):/.test(line)) crashLine = line;
-                    lastLine = line;
-                }
-            }
-            return writeSync.call(this, fd, buf);
-        };
-    }
-
-    function showExit(code) {
+    function showExit(code, reason) {
         if (code === 0) {
             showMessage('vif has exited. Reload to start again.', false);
             return;
         }
-        const reason = (crashLine || lastLine || 'exit code ' + code).replace(/\.$/, '');
+        reason = (reason || 'exit code ' + code).replace(/\.$/, '');
         showMessage('vif stopped: ' + reason + '. Reload to retry.', true);
     }
 
@@ -156,15 +123,12 @@
         }
 
         const loading = document.getElementById('loading');
-        const go = new Go();
-        watchStderr();
-        go.exit = showExit;   // wasm_exec's hook for the program's exit code
-        let instance;
+        let argv, bytes;
 
         try {
             // Before the fetch, so a refused argument vector is not paid for with
             // a download first.
-            go.argv = launchArguments();
+            argv = launchArguments();
 
             const response = await fetch(WASM_PATH);
             // Missing before: instantiateStreaming was fed the 404 page and
@@ -175,7 +139,6 @@
                tee()'d body cannot be handed to instantiateStreaming because both
                branches share one source. Cost is that compilation starts after
                the download instead of during it. */
-            let bytes;
             if (response.body) {
                 const reader = response.body.getReader();
                 const chunks = [];
@@ -197,42 +160,53 @@
             }
 
             loading.textContent = 'Compiling…';
-            const result = await WebAssembly.instantiate(bytes, go.importObject);
-            instance = result.instance;
         } catch (err) {
             console.error('vif: WASM load failed', err);
             showMessage('Failed to load vif (' + err.message + '). Reload to retry.', true);
             return;
         }
 
-        loading.classList.add('hidden');
-
-        // Not awaited: go.run()'s synchronous part runs Go's main until it first
-        // blocks, by which point goTerminalInput/Resize exist.
-        go.run(instance);
+        program = new Worker('worker.js');
+        program.onerror = function(e) {
+            showMessage('Failed to start vif (' + e.message + '). Reload to retry.', true);
+        };
+        program.onmessage = function(e) {
+            const msg = e.data;
+            switch (msg.type) {
+            case 'write':
+                loading.classList.add('hidden');   // compiled and drawing
+                terminalWrite(msg.data);
+                break;
+            case 'exit':
+                showExit(msg.code, msg.reason);
+                break;
+            case 'failed':
+                showMessage('Failed to load vif (' + msg.reason + '). Reload to retry.', true);
+                break;
+            }
+        };
+        program.postMessage({ type: 'start', bytes: bytes.buffer, argv: argv,
+            cols: term.cols, rows: term.rows }, [bytes.buffer]);
         wireHandlers();
+    }
+
+    function sendInput(arr) {
+        if (program) program.postMessage({ type: 'input', data: arr }, [arr.buffer]);
     }
 
     // === Event Wiring ===
     function wireHandlers() {
         // Input: xterm → Go
         term.onData(function(data) {
-            if (typeof window.goTerminalInput === 'function') {
-                const encoder = new TextEncoder();
-                const bytes = encoder.encode(data);
-                const arr = new Uint8Array(bytes);
-                window.goTerminalInput(arr);
-            }
+            sendInput(new TextEncoder().encode(data));
         });
 
         term.onBinary(function(data) {
-            if (typeof window.goTerminalInput === 'function') {
-                const arr = new Uint8Array(data.length);
-                for (let i = 0; i < data.length; i++) {
-                    arr[i] = data.charCodeAt(i);
-                }
-                window.goTerminalInput(arr);
+            const arr = new Uint8Array(data.length);
+            for (let i = 0; i < data.length; i++) {
+                arr[i] = data.charCodeAt(i);
             }
+            sendInput(arr);
         });
 
         /* Sizing. Mirrors FitAddon's own arithmetic: parent computed height minus
@@ -263,9 +237,7 @@
                 requestAnimationFrame(function() { fitNow(passes - 1); });
                 return;
             }
-            if (typeof window.goTerminalResize === 'function') {
-                window.goTerminalResize(term.cols, term.rows);
-            }
+            if (program) program.postMessage({ type: 'resize', cols: term.cols, rows: term.rows });
         }
 
         let fitTimer = 0;

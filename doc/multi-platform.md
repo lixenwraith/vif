@@ -335,6 +335,7 @@ go test ./...
 go vet ./...
 ./script/test.sh all
 node --check web/terminal.js
+node --check web/worker.js
 ```
 
 Compilation is not runtime certification. Before browser networking is advertised,
