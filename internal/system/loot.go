@@ -219,6 +219,13 @@ func (s *LootSystem) Update() {
 		}
 
 		curX, curY := physics.GridPos(&kineticComp.Kinetic)
+		// A wall that arrived without displacing the drop — a correction installs
+		// shared walls under player-domain loot — claims the cell as a spawn would.
+		if s.world.Positions.IsBlocked(curX, curY, component.WallBlockKinetic) {
+			if x, y, moved := s.world.PushEntityFromBlocked(lootEntity, component.WallBlockKinetic); moved {
+				curX, curY = x, y
+			}
+		}
 		owner := lootComp.Owner
 		ownerPos, hasOwner := s.world.Positions.GetPosition(owner)
 

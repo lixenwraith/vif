@@ -355,3 +355,20 @@ func TestLootRoutesFollowTheirOwnersLifetime(t *testing.T) {
 		t.Fatal("the surviving cursor lost its route")
 	}
 }
+
+// TestADropAWallLandedOnIsDisplacedAndCollected: a wall that arrived under a drop
+// without displacing it — a correction installs shared walls under player-domain
+// loot — leaves it where no field has a direction and physics bounces every step.
+func TestADropAWallLandedOnIsDisplacedAndCollected(t *testing.T) {
+	w, owner := soloCursorWorld(t)
+	for _, c := range [][2]int{{18, 10}, {19, 10}, {20, 10}, {18, 11}, {20, 11}} {
+		spawnWall(w, c[0], c[1]) // a notch open to the south
+	}
+	w.Positions.SetPosition(owner, component.PositionComponent{X: 3, Y: 3})
+	drop := dropLoot(w, NewLootSystem(w).(*LootSystem), 19, 11, owner)
+	spawnWall(w, 19, 11)
+
+	if flight := flyLoot(t, w, drop, owner, 400); flight.ticks < 0 {
+		t.Fatalf("the drop never left the wall that landed on it: %+v", flight)
+	}
+}
