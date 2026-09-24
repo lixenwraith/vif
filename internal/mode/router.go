@@ -1085,7 +1085,7 @@ func (r *Router) moveMouseCursor(intent *input.Intent) bool {
 		return false
 	}
 
-	OpJump(r.ctx, gameX, gameY)
+	r.ctx.World.PushPointerMove(player, gameX, gameY)
 	return true
 }
 

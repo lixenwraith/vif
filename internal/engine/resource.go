@@ -125,6 +125,10 @@ type ConfigResource struct {
 	// ColorMode for rendering pipeline (256-color vs TrueColor)
 	// Set after terminal initialization
 	ColorMode terminal.ColorMode `toml:"color_mode"`
+
+	// pointer records that the pointer made the last local placement; FollowCamera
+	// holds its narrower margins until another input moves the cursor.
+	pointer bool
 }
 
 // MapOffset returns the map's top-left corner in viewport coordinates: zero when
@@ -559,8 +563,12 @@ func (c *ConfigResource) FollowCamera(cursorX, cursorY int) {
 		return
 	}
 
-	marginX := min(parameter.CameraDeadZoneMarginX, c.ViewportWidth/2)
-	marginY := min(parameter.CameraDeadZoneMarginY, c.ViewportHeight/2)
+	marginX, marginY := parameter.CameraDeadZoneMarginX, parameter.CameraDeadZoneMarginY
+	if c.pointer {
+		marginX, marginY = parameter.CameraPointerMarginX, parameter.CameraPointerMarginY
+	}
+	marginX = min(marginX, c.ViewportWidth/2)
+	marginY = min(marginY, c.ViewportHeight/2)
 
 	shift := func(v, camera, viewport, margin int, scroll bool) int {
 		if !scroll {

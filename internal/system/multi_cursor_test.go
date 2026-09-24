@@ -894,3 +894,39 @@ func TestCameraAnchorsOnThePredictedCell(t *testing.T) {
 		t.Fatalf("camera = (%d, %d) after the announcements, want the origin", config.CameraX, config.CameraY)
 	}
 }
+
+// TestAPointerHeldStillLeavesTheMapStill: a pointer names a screen cell, so a view
+// that scrolls under it moves the cursor on every report until the map edge. Inside
+// the screen it does not scroll; at the edge each report scrolls a bounded step.
+func TestAPointerHeldStillLeavesTheMapStill(t *testing.T) {
+	w, local, _ := testCursorWorld(t)
+	config := w.Resources.Config
+	config.MapWidth, config.MapHeight = 400, 100
+	w.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
+	w.PushCursorMove(local, 300, 50) // a key move scrolls the view to the right side
+
+	report := func(vx, vy int) (int, int) {
+		x, y, ok := config.ViewportToMap(vx, vy)
+		if !ok {
+			t.Fatalf("viewport cell (%d,%d) is off the map", vx, vy)
+		}
+		w.PushPointerMove(local, x, y)
+		return config.CameraX, config.CameraY
+	}
+	quarter := config.ViewportWidth / 4
+	camX, camY := report(quarter, config.ViewportHeight/2)
+	for range 5 {
+		if x, y := report(quarter, config.ViewportHeight/2); x != camX || y != camY {
+			t.Fatalf("a still pointer moved the view from (%d,%d) to (%d,%d)", camX, camY, x, y)
+		}
+	}
+	for range 5 {
+		before := config.CameraX
+		if x, _ := report(0, config.ViewportHeight/2); before-x > parameter.CameraPointerMarginX {
+			t.Fatalf("one report at the edge scrolled %d cells", before-x)
+		}
+	}
+	if config.CameraX >= camX {
+		t.Fatal("a pointer at the edge did not scroll the view")
+	}
+}

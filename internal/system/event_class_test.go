@@ -35,7 +35,8 @@ var stampingPush = map[string]bool{
 // the helper to the type and the method it stands for, and
 // TestCrossingHelpersPushWhatTheyDeclare pins each mapping against the helper body.
 var crossingHelpers = map[string]string{
-	"PushCursorMove": "EventCursorMoveRequest",
+	"PushCursorMove":  "EventCursorMoveRequest",
+	"PushPointerMove": "EventCursorMoveRequest",
 }
 
 // crossingPushes is the D-3 table as code: every owner-resolved push of a
