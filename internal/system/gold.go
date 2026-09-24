@@ -382,8 +382,8 @@ func (s *GoldSystem) clearGoldSpawnArea(x, y, length int) {
 	s.sweep.destroy(s.world)
 }
 
-// requestTimerSplash raises the countdown anchored to the sequence header. No
-// cancel counterpart: the splash dies with its anchor.
+// requestTimerSplash raises the countdown anchored to the sequence header. It dies
+// with its anchor, or with the install that replaces the header (LoadShared).
 func (s *GoldSystem) requestTimerSplash(remaining time.Duration) {
 	s.world.PushLocal(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
 		AnchorEntity: s.headerEntity,
@@ -615,8 +615,13 @@ func (s *GoldSystem) LoadShared(data []byte) error {
 	}
 	now := s.world.Resources.Time.GameTime
 	// A header this instance did not spawn arrived with the capture rather than
-	// through spawnGold, so its timer splash was never raised here.
+	// through spawnGold, so its timer splash was never raised here. The one it
+	// replaces loses its timer: an install can hand that id to another composite,
+	// which would otherwise keep the countdown alive.
 	s.splashDue = snap.Active && snap.HeaderEntity != s.headerEntity
+	if s.headerEntity != 0 && snap.HeaderEntity != s.headerEntity {
+		s.world.PushLocal(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{AnchorEntity: s.headerEntity})
+	}
 	s.active = snap.Active
 	s.spawnEnabled = snap.SpawnEnabled
 	s.headerEntity = snap.HeaderEntity

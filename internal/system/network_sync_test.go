@@ -59,11 +59,11 @@ func TestCursorStateSyncWritesOnlyACoherentRemoteCursor(t *testing.T) {
 	}
 }
 
-// TestAnInstalledGoldSequenceRaisesItsTimerSplash: the countdown is a
-// player-domain effect spawnGold raises, so a receiver whose FSM was corrected
-// past the spawn holds the sequence and shows no timer. The carrier is the only
-// thing that can tell it the sequence is running here (D-6, D-19).
-func TestAnInstalledGoldSequenceRaisesItsTimerSplash(t *testing.T) {
+// TestTheTimerSplashFollowsTheInstalledGoldSequence: the countdown is a
+// player-domain effect spawnGold raises, so a receiver corrected past the spawn
+// shows none, and one whose sequence an install replaced keeps the old one on an
+// id the install may hand to another composite. The carrier owns both (D-6, D-19).
+func TestTheTimerSplashFollowsTheInstalledGoldSequence(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	gold := NewGoldSystem(w).(*GoldSystem)
 
@@ -104,6 +104,28 @@ func TestAnInstalledGoldSequenceRaisesItsTimerSplash(t *testing.T) {
 	gold.Update()
 	if got := anchors(); len(got) != 0 {
 		t.Fatalf("timer requests on the next tick = %v, want none", got)
+	}
+
+	next := w.CreateEntity(core.DomainShared)
+	data, err = json.Marshal(goldSnapshot{
+		Active: true, SpawnEnabled: true, HeaderEntity: next,
+		ExpiresIn: parameter.GoldDuration,
+	})
+	if err != nil {
+		t.Fatalf("marshal a second sequence: %v", err)
+	}
+	if err := gold.LoadShared(data); err != nil {
+		t.Fatalf("LoadShared: %v", err)
+	}
+	var cancelled []core.Entity
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if p, ok := ev.Payload.(*event.SplashTimerCancelPayload); ok {
+			cancelled = append(cancelled, p.AnchorEntity)
+		}
+	}
+	if len(cancelled) != 1 || cancelled[0] != header {
+		t.Fatalf("timer cancels after a replacing install = %v, want the replaced %d",
+			cancelled, uint64(header))
 	}
 }
 
