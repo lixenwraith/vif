@@ -20,6 +20,11 @@ type TypingSystem struct {
 	// Reusable delete collection scratch
 	deleteBuf []core.Entity
 
+	// typed holds the members this instance typed whose crossing has not applied,
+	// by the tick each was typed: the next keystroke validates against the run
+	// without them, and a member whose crossing went void is typeable once more.
+	typed map[core.Entity]uint64
+
 	// Roster-wide totals
 	statCorrect *atomic.Int64
 	statErrors  *atomic.Int64
@@ -35,7 +40,7 @@ type TypingSystem struct {
 
 // NewTypingSystem creates a new typing system
 func NewTypingSystem(world *engine.World) engine.System {
-	s := &TypingSystem{world: world}
+	s := &TypingSystem{world: world, typed: make(map[core.Entity]uint64, 16)}
 
 	reg := world.Resources.Status
 	s.statCorrect = reg.Ints.Get("typing.correct")
@@ -51,6 +56,7 @@ func NewTypingSystem(world *engine.World) engine.System {
 // Init resets session state for a new game, including every slot's streak
 func (s *TypingSystem) Init() {
 	s.deleteBuf = s.deleteBuf[:0]
+	clear(s.typed)
 	s.currentStreak = [parameter.MaxPlayers]int64{}
 	s.statCorrect.Store(0)
 	s.statErrors.Store(0)
@@ -66,8 +72,22 @@ func (s *TypingSystem) Name() string { return "typing" }
 // Priority returns the system's priority
 func (s *TypingSystem) Priority() int { return parameter.PriorityTyping }
 
-// Update is empty: typing is entirely event-driven
-func (s *TypingSystem) Update() {}
+// typedMemberTicks is the latest a typed member's crossing can apply: the longest
+// lead it may be stamped with, then as late as the authority still commits it.
+const typedMemberTicks = parameter.NetworkBarrierMaxDelayTicks + parameter.NetworkCommitLateTicks
+
+// Update forgets typed members once their crossing applied or can no longer apply
+func (s *TypingSystem) Update() {
+	if len(s.typed) == 0 {
+		return
+	}
+	now := s.world.Resources.Game.State.GetGameTicks()
+	for e, at := range s.typed {
+		if !s.world.Components.Member.HasEntity(e) || now > at+typedMemberTicks {
+			delete(s.typed, e)
+		}
+	}
+}
 
 // EventTypes returns the event types TypingSystem handles
 func (s *TypingSystem) EventTypes() []event.EventType {
@@ -301,13 +321,16 @@ func (s *TypingSystem) handleCompositeMember(cursor, entity, anchorID core.Entit
 	// Visual feedback
 	s.emitTypingFeedback(cursor, glyph.Type)
 
-	// Signal composite system
+	// Signal composite system. The member leaves at its crossing's agreed tick like
+	// every other shared change, so the run it leaves is counted without the members
+	// already typed here.
 	remaining := 0
 	for _, m := range header.MemberEntries {
-		if m.Entity != 0 && m.Entity != entity {
+		if _, typed := s.typed[m.Entity]; m.Entity != 0 && m.Entity != entity && !typed {
 			remaining++
 		}
 	}
+	s.typed[entity] = s.world.Resources.Game.State.GetGameTicks()
 	s.world.PushCrossing(event.EventCompositeMemberDestroyed, &event.CompositeMemberDestroyedPayload{
 		HeaderEntity:   anchorID,
 		MemberEntity:   entity,
@@ -356,8 +379,8 @@ func (s *TypingSystem) clearSlot(slot uint8) {
 	s.statMaxStreak.Store(slot, 0)
 }
 
-// isLeftmostMember returns true if entity is the leftmost living member
-// Ordering: X ascending → Y ascending → EntityID ascending
+// isLeftmostMember returns true if entity is the leftmost living member not already
+// typed here. Ordering: X ascending → Y ascending → EntityID ascending
 // O(n) single pass, zero allocation
 func (s *TypingSystem) isLeftmostMember(entity core.Entity, header *component.HeaderComponent) bool {
 	var leftmost core.Entity
@@ -365,7 +388,7 @@ func (s *TypingSystem) isLeftmostMember(entity core.Entity, header *component.He
 	leftmostY := math.MaxInt
 
 	for _, m := range header.MemberEntries {
-		if m.Entity == 0 {
+		if _, typed := s.typed[m.Entity]; m.Entity == 0 || typed {
 			continue
 		}
 		pos, ok := s.world.Positions.GetPosition(m.Entity)

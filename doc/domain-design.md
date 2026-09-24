@@ -499,7 +499,9 @@ the Shared navigation field answers nearest-target questions and cannot answer
 A local crossing is scheduled on this instance's own barrier and encoded into the
 source's next epoch for peers; every copy waits for the same absolute `ApplyTick`.
 At tick open, due frames sort by `(ApplyTick, Source, Seq)` and settle before
-`BeginTick`. A typed gold member is the one copy published at once.
+`BeginTick`. There is no exception: a typed gold member leaves at its tick too, and
+the typist's next keystroke validates against the run without the members it has
+already typed.
 
 A correction never rewinds the world tick or the source's production epoch. Peers
 use `ProducedTick` as a replay key, and an install moves the epoch forward only

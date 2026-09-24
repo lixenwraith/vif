@@ -196,11 +196,10 @@ func TestACorrectionBehindTheClockIsProjectedNotRewound(t *testing.T) {
 	assertCorrected(t, want, guest, "guest")
 }
 
-// TestAGoldSequenceSurvivesACorrectionWithoutATick: a typed member is the one
-// crossing its producer applies at once, so a whole run typed inside one tick is
-// retained as a suffix, projected over a correction taken before it, and every
-// member is still gone afterwards.
-func TestAGoldSequenceSurvivesACorrectionWithoutATick(t *testing.T) {
+// TestAGoldRunTypedInsideTheLeadSurvivesACorrection: a typed member leaves at its
+// crossing's agreed tick like any other, so a run typed inside one tick must still
+// score every keystroke, and a correction taken before it must not bring it back.
+func TestAGoldRunTypedInsideTheLeadSurvivesACorrection(t *testing.T) {
 	t.Parallel()
 	host, apps := liveInstance(t, 0x601D)
 	guest := apps[1]
@@ -220,8 +219,7 @@ func TestAGoldSequenceSurvivesACorrectionWithoutATick(t *testing.T) {
 		t.Fatalf("the guest holds %d gold members, want %d", len(run), parameter.GoldSequenceLength)
 	}
 
-	// The authority is read before the run is typed, at a tick the guest has not
-	// already installed.
+	// The authority is read before the run is typed.
 	advance()
 	if err := host.corrections.Publish(); err != nil {
 		t.Fatalf("publish: %v", err)
@@ -233,43 +231,36 @@ func TestAGoldSequenceSurvivesACorrectionWithoutATick(t *testing.T) {
 		w.Resources.Player.DropPrediction()
 	})
 	inject(t, guest, intentModeSwitch(input.ModeTargetInsert))
+	errors := statOf(guest, "typing.errors")
 	startTick := guest.Position().Tick
-	for i, m := range run {
+	for _, m := range run {
 		inject(t, guest, intentTextChar(m.rune))
-		if got := guest.Position().Tick; got != startTick {
-			t.Fatalf("typing member %d advanced tick %d to %d", i, startTick, got)
-		}
-		guest.World().RunSafe(func() {
-			if guest.World().Components.Glyph.HasEntity(m.entity) {
-				t.Fatalf("typed gold member %d remains renderable before a tick", i)
-			}
-		})
+	}
+	if got := guest.Position().Tick; got != startTick {
+		t.Fatalf("typing advanced tick %d to %d", startTick, got)
+	}
+	if got := statOf(guest, "typing.errors"); got != errors {
+		t.Fatalf("a run typed inside the lead scored %d errors", got-errors)
 	}
 
-	// The correction describes a world in which the run is still standing. The
-	// projection is what keeps it gone.
-	replayed := statOf(guest, "snapshot.replay_records")
 	for range parameter.NetworkRelayHopLimit {
 		host.ApplyPendingCorrections()
 		guest.ApplyPendingCorrections()
-		if statOf(guest, "snapshot.replay_records") > replayed {
-			break
-		}
 		advance()
 	}
-	if statOf(guest, "snapshot.replay_records") <= replayed {
-		t.Fatal("the correction replayed none of the typed sequence")
+	for range parameter.NetworkBarrierMaxDelayTicks {
+		advance()
 	}
 	guest.World().RunSafe(func() {
 		for i, m := range run {
 			if guest.World().Components.Glyph.HasEntity(m.entity) {
-				t.Fatalf("gold member %d came back after the correction", i)
+				t.Fatalf("gold member %d survived its crossing and the correction", i)
 			}
 		}
 	})
 
-	// And the session converges: the host applies the same crossings at the agreed
-	// tick, and the next correction finds nothing left to disagree about.
+	// The host applied the same crossings at the same ticks, so the next
+	// correction finds nothing left to disagree about.
 	want := deliverCorrection(t, host, []*App{guest}, advance)
 	assertCorrected(t, want, guest, "guest")
 }
