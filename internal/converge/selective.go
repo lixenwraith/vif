@@ -132,6 +132,8 @@ func (c *Corrections) publishManifest(port engine.NetworkPort, index *snapshot.M
 		return b, nil
 	}
 
+	summary.Sections = nil // the root leads; see CorrectionManifest.Sections
+
 	var missed []uint32
 	sent, bytes := 0, 0
 	for _, id := range due {
@@ -168,6 +170,27 @@ func (c *Corrections) publishManifest(port engine.NetworkPort, index *snapshot.M
 		c.recordSelectiveSizeLocked(bytes / sent)
 	}
 	return missed, nil
+}
+
+// sendIndex answers a receiver whose root differed with the section summaries of
+// the index it was sent, from retention; an adopted index serves as well as an
+// authored one, because its root is provably the authority's.
+func (c *Corrections) sendIndex(port engine.NetworkPort, id uint32, tick uint64) bool {
+	c.publishMu.Lock()
+	held, ok := c.retainedAtLocked(tick)
+	c.publishMu.Unlock()
+	if !ok || port == nil {
+		return false
+	}
+	body, err := snapshot.EncodeManifest(held.index.Summary())
+	if err != nil || len(body) > network.MaxPayloadSize {
+		return false
+	}
+	if !port.Send(id, uint8(network.MsgStateManifest), body) {
+		return false
+	}
+	c.tel.ManifestBytesSent.Add(int64(len(body)))
+	return true
 }
 
 // retainLocked adds one capture and its index to the bounded ring.
@@ -266,6 +289,11 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		m.ShardsRefused.Add(1)
 		return
 	}
+	if req.Index && c.sendIndex(port, pending.from, req.Tick) {
+		return
+	}
+	// An index this instance no longer retains is answered as a whole world.
+	req.Keyframe = req.Keyframe || req.Index
 	c.publishMu.Lock()
 	p := c.peers[pending.from]
 	if p != nil {
@@ -623,22 +651,27 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		return 0
 	}
 
-	mine, err := c.worldAt(want.Header.Tick)
-	if err != nil {
-		vlog.Warn("app", "msg", "manifest comparison capture", "error", err.Error())
-		return 0
-	}
-	// Compared under the authority's term rather than this instance's. The two are
-	// the same in the ordinary case; across a handoff a receiver that has adopted
-	// the record may still be holding a capture stamped a moment earlier, and
-	// comparing under two generations would make every root differ for a reason
-	// that is not a disagreement about the world.
-	mine.Header.Term = want.Header.Term
+	// The sections of an index whose root this instance already answered are
+	// compared against the world that answer read, not a fresh one.
 	started := time.Now() // [wall] telemetry only; outside the world lock
-	index, err := snapshot.BuildManifest(mine, want.Authority)
-	if err != nil {
-		vlog.Warn("app", "msg", "manifest comparison index", "error", err.Error())
-		return 0
+	var (
+		mine  snapshot.SharedCapture
+		index *snapshot.Manifest
+	)
+	if prior := c.takeAwaiting(want.Header.Tick); prior != nil && want.Sections != nil {
+		mine, index = prior.capture, prior.index
+	} else {
+		if mine, err = c.worldAt(want.Header.Tick); err != nil {
+			vlog.Warn("app", "msg", "manifest comparison capture", "error", err.Error())
+			return 0
+		}
+		// Compared under the authority's term, so a capture stamped just before a
+		// handoff was adopted does not differ from the index for that reason alone.
+		mine.Header.Term = want.Header.Term
+		if index, err = snapshot.BuildManifest(mine, want.Authority); err != nil {
+			vlog.Warn("app", "msg", "manifest comparison index", "error", err.Error())
+			return 0
+		}
 	}
 	req, sections, pages := snapshot.CompareRequest(index, want)
 	req.Term = want.Header.Term
@@ -661,6 +694,7 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		// can be settled against. A header behind the clock proves the same about
 		// a world this instance has already moved past, so it is not adopted.
 		m.HashOnly.Add(1)
+		c.proved(want.Header.Tick)
 		mine.Header = want.Header
 		if at := c.inst.Position(); at.Run == want.Header.Run && at.Tick <= want.Header.Tick {
 			c.adoptAuthority(mine)
@@ -773,6 +807,7 @@ func (c *Corrections) applyRepair(body []byte) {
 		c.requestKeyframe(awaiting.from, awaiting.manifest)
 		return
 	}
+	c.proved(repaired.Header.Tick)
 	// Installing may be what finally lets this instance answer for the tick it is
 	// holding a manifest to forward for.
 	c.flushForward()

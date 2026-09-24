@@ -190,11 +190,10 @@ type CorrectionManifest struct {
 	// one. Two places to read one fact is how the two stop agreeing.
 	Authority uint32 `json:"authority"`
 
-	// Sections is every section, always. The alternative — sending only the
-	// sections that changed since the last manifest — would make a manifest
-	// meaningful only against the one before it, and the point of the index is
-	// that it is meaningful against any state at all.
-	Sections []SectionSummary `json:"sections"`
+	// Sections is every section, or none: a publication leads with the root alone,
+	// because a receiver that agrees needs nothing more, and one that does not asks
+	// for them. Never a subset, which would be meaningful only against another index.
+	Sections []SectionSummary `json:"sections,omitempty"`
 
 	// Next is the tick the sender means to index for this receiver next, outside the
 	// root: the receiver reads its own world there as that tick closes, so an index

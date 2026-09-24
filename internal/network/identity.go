@@ -14,7 +14,7 @@ import (
 // disagreement that makes every other check meaningless — two builds that do not
 // agree on what a frame is cannot usefully compare what is in one. Bump it when a
 // change would be misread rather than rejected by the older side.
-const ProtocolVersion uint32 = 2
+const ProtocolVersion uint32 = 3
 
 // IdentityRefusalTag marks a join refused because the peer would not simulate the
 // same session. It travels inside the refusal text because that is what the join

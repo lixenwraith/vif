@@ -461,6 +461,15 @@ const (
 	NetworkAdmitBurst   = 6
 	NetworkAdmitTracked = 1024
 
+	// NetworkStreamLevel is the deflate level each link's stream runs at. Levels 1-6
+	// drop their history on any flushed block under 128 bytes, which is most bursts;
+	// 7 is the cheapest that keeps it, a third of level 1's bytes on recorded traffic.
+	NetworkStreamLevel = 7
+
+	// NetworkWriteLinger is how long a link's writer waits after the first frame of
+	// a burst for the rest of it, so one tick's frames leave in one write.
+	NetworkWriteLinger = 2 * time.Millisecond
+
 	// NetworkEpochWindow is how far behind a source's newest epoch a late one may
 	// still be admitted. A mesh delivers by several paths at once, so epochs from one
 	// source arrive out of order and a high-water mark alone would discard epochs the

@@ -2,15 +2,19 @@ package network
 
 import (
 	"bufio"
+	"compress/flate"
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 // PeerID uniquely identifies a connected peer
@@ -52,8 +56,7 @@ type Peer struct {
 
 	// I/O
 	conn   net.Conn
-	reader *bufio.Reader
-	writer *bufio.Writer
+	stream *flateStream
 
 	// Send queue
 	sendCh chan *Message
@@ -75,8 +78,7 @@ func newPeer(id PeerID, conn net.Conn, cfg *Config) *Peer {
 		ID:                id,
 		Addr:              conn.RemoteAddr().String(),
 		conn:              conn,
-		reader:            bufio.NewReaderSize(conn, cfg.ReadBufferSize),
-		writer:            bufio.NewWriterSize(conn, cfg.WriteBufferSize),
+		stream:            openFlateStream(conn, cfg.ReadBufferSize, cfg.WriteBufferSize),
 		sendCh:            make(chan *Message, cfg.SendQueueSize),
 		closeCh:           make(chan struct{}),
 		readTimeout:       cfg.DisconnectTimeout,
@@ -130,7 +132,7 @@ func (p *Peer) readLoop(handler func(PeerID, *Message)) {
 		if p.readTimeout > 0 {
 			_ = p.conn.SetReadDeadline(time.Now().Add(p.readTimeout))
 		}
-		msg, err := Decode(p.reader)
+		msg, err := Decode(p.stream)
 		if err != nil {
 			return
 		}
@@ -158,6 +160,9 @@ func (p *Peer) writeLoop() {
 		defer ticker.Stop()
 	}
 
+	linger := time.NewTimer(0)
+	<-linger.C
+	defer linger.Stop()
 	for {
 		var msg *Message
 		select {
@@ -167,18 +172,81 @@ func (p *Peer) writeLoop() {
 		case <-heartbeat:
 			msg = NewMessage(MsgHeartbeat, nil)
 		}
-		msg.Seq = p.OutSeq.Add(1)
-		msg.Ack = p.InSeq.Load()
 		if p.writeTimeout > 0 {
 			_ = p.conn.SetWriteDeadline(time.Now().Add(p.writeTimeout))
 		}
-		if err := msg.Encode(p.writer); err != nil {
-			return
+		// One flush per burst: a tick queues its epoch, syncs and digests together,
+		// and the linger lets the rest of them join the first in one write.
+		linger.Reset(parameter.NetworkWriteLinger)
+	batch:
+		for {
+			msg.Seq = p.OutSeq.Add(1)
+			msg.Ack = p.InSeq.Load()
+			if err := msg.Encode(p.stream); err != nil {
+				return
+			}
+			select {
+			case msg = <-p.sendCh:
+			case <-linger.C:
+				break batch
+			case <-p.closeCh:
+				return
+			}
 		}
-		if err := p.writer.Flush(); err != nil {
+		if err := p.stream.Flush(); err != nil {
 			return
 		}
 	}
+}
+
+// flateStream carries a link's frames through one deflate stream per direction, so
+// each frame is compressed against the ones before it rather than alone. Until
+// opened it passes bytes through plain, which is how a join's handshake travels.
+type flateStream struct {
+	net.Conn
+	r  io.Reader
+	bw *bufio.Writer
+	w  *flate.Writer
+}
+
+// openFlateStream opens conn's stream in place, so every holder of a join's stream
+// reads through the one decoder that has seen its bytes.
+func openFlateStream(conn net.Conn, readBuf, writeBuf int) *flateStream {
+	s, ok := conn.(*flateStream)
+	if !ok {
+		s = &flateStream{Conn: conn}
+	}
+	if s.w == nil {
+		s.bw = bufio.NewWriterSize(s.Conn, max(writeBuf, 4096))
+		s.w, _ = flate.NewWriter(s.bw, parameter.NetworkStreamLevel) // a valid level cannot fail
+		s.r = flate.NewReader(bufio.NewReaderSize(s.Conn, max(readBuf, 4096)))
+	}
+	return s
+}
+
+func (s *flateStream) Read(p []byte) (int, error) {
+	if s.r == nil {
+		return s.Conn.Read(p)
+	}
+	return s.r.Read(p)
+}
+
+func (s *flateStream) Write(p []byte) (int, error) {
+	if s.w == nil {
+		return s.Conn.Write(p)
+	}
+	return s.w.Write(p)
+}
+
+// Flush sends everything written so far.
+func (s *flateStream) Flush() error {
+	if s.w == nil {
+		return nil
+	}
+	if err := s.w.Flush(); err != nil {
+		return err
+	}
+	return s.bw.Flush()
 }
 
 // PeerManager handles multiple peer connections

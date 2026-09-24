@@ -348,6 +348,12 @@ payload, so a partial stream read never reaches the game. Per-peer send assigns
 sequence and ack values at actual write time; broadcast clones a message per peer.
 Ack is observational—there is no retransmission policy.
 
+The handshake travels plain. From the join reply on, each direction of a link is
+one deflate stream (`NetworkStreamLevel`), so a frame compresses against every frame
+before it. The writer takes the frames queued within `NetworkWriteLinger` of a
+burst's first and sync-flushes once. Go's levels 1-6 drop their history on a flushed
+block under 128 bytes, which is most bursts; 7 keeps it.
+
 Control messages carry heartbeat, join offer/reply, start/ready gates and
 disconnect notices. `MsgSessionRoute` (0x05) is the exception to the coordinator
 speaking first: a dialer that was given a session name sends it as one frame before
@@ -442,17 +448,19 @@ world installed from a prefix.
 `MsgStateManifest` (0x28), `MsgStateRequest` (0x29) and `MsgStateShard` (0x2A) are
 the Phase 6 selective exchange, and they are the only three messages in this
 protocol that form a request/response pair carrying game state. A manifest is a
-compact index over the same capture a correction would have carried — root, one
-summary per section, and the capture header. A request is a receiver's answer to
-one: either an acknowledgement that the roots agreed, or the page hashes of the
-sections that did not. A shard set is the repair the second kind provokes.
+compact index over the same capture a correction would have carried: the root and
+the capture header, and one summary per section once a receiver whose root differed
+asks for them with `index`. A request is a receiver's answer to one: an
+acknowledgement that the roots agreed, that ask, or the page hashes of the sections
+that did not. A shard set is the repair the second kind provokes.
 
 None of the three is chunked. Each is bounded to one transport frame by
 construction — `parameter.SnapshotShardBytesMax` caps a repair well inside the
 65,535-byte payload field — and a repair too wide for one frame is not a repair:
 the host answers it with a keyframe, which is chunked, self-sufficient and already
-part of the protocol. All three use the same 10-byte compression envelope as a
-capture, so the wire figures the cadence is priced from are compressed bytes.
+part of the protocol. All three use a capture's 10-byte envelope. A shard set is
+deflated in it; a manifest and a request carry the plain codec, because they repeat
+their predecessors and compress against them on the link's stream.
 
 A manifest travels one hop past the authority and no further. A participant with
 more than one link forwards it to the participants behind it — but only for a tick

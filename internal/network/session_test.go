@@ -93,6 +93,7 @@ func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 	if gotOffer.Assigned != 2 || gotOffer.Host != 1 {
 		t.Fatalf("offer assignment = host %d guest %d", gotOffer.Host, gotOffer.Assigned)
 	}
+	guestCfg := pending.TransportConfig() // before the stream opens, as the app takes it
 	if err := pending.Complete(nil, JoinerReport{}); err != nil {
 		t.Fatalf("accept: %v", err)
 	}
@@ -114,11 +115,20 @@ func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 	}
 	waitFor(t, func() bool { return host.Confirmed(2) }, host.Changes(), "guest ready")
 
-	guest := NewSocketPort(pending.TransportConfig())
+	guest := NewSocketPort(guestCfg)
 	if err := guest.Start(); err != nil {
 		t.Fatalf("guest start: %v", err)
 	}
 	waitFor(t, func() bool { return guest.PeerCount() == 1 }, guest.Changes(), "guest peer")
+
+	// The gate again compresses against bytes only the join's decoder has seen, so
+	// the port has to read on through that decoder.
+	if !host.Send(2, uint8(MsgEvent), final) {
+		t.Fatal("host send failed")
+	}
+	waitInbound(t, guest, func(in Inbound) bool {
+		return in.Kind == InboundMessage && in.Peer == 1 && in.Msg != nil && string(in.Msg.Payload) == string(final)
+	})
 
 	body := []byte("framed payload")
 	if !guest.Send(1, uint8(MsgEvent), body) {

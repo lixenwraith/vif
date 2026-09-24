@@ -431,7 +431,8 @@ ticks.
 
 A correction exchange is selective:
 
-1. the authority sends a deterministic manifest of section hashes;
+1. the authority sends the root of a deterministic manifest, and its section hashes
+   to a receiver whose root differs;
 2. an equal root produces a hash-only acknowledgement and no state body;
 3. a mismatch descends only into differing sections and pages;
 4. returned pages prove their own hash and must reconstruct the authority root;

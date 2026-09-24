@@ -402,7 +402,7 @@ func refuseJoin(conn net.Conn, cause error, timeout time.Duration) {
 
 // PendingJoin owns a dialled stream until the startup gate transfers it to a port.
 type PendingJoin struct {
-	conn        net.Conn
+	conn        *flateStream
 	base        Config
 	offer       SessionOffer
 	replied     bool
@@ -540,7 +540,16 @@ func (p *PendingJoin) answerProbe(msg *Message) {
 		_ = p.conn.SetWriteDeadline(time.Now().Add(p.base.WriteTimeout))
 		defer p.conn.SetWriteDeadline(time.Time{})
 	}
-	_ = NewMessage(MsgLinkEcho, echo).Encode(p.conn)
+	_ = p.send(NewMessage(MsgLinkEcho, echo))
+}
+
+// send writes one frame, flushing it through the stream once the join has opened
+// one.
+func (p *PendingJoin) send(msg *Message) error {
+	if err := msg.Encode(p.conn); err != nil {
+		return err
+	}
+	return p.conn.Flush()
 }
 
 // maxDeferredJoinFrames bounds what one join may buffer off its stream.
@@ -607,7 +616,7 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 			return nil, SessionOffer{}, err
 		}
 	}
-	return &PendingJoin{conn: conn, base: *base, offer: offer}, offer, nil
+	return &PendingJoin{conn: &flateStream{Conn: conn}, base: *base, offer: offer}, offer, nil
 }
 
 // TransportConfig returns a client config that adopts the negotiated identity.
@@ -648,6 +657,9 @@ func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
 		_ = p.conn.Close()
 		return joinErr
 	}
+	// Everything after the reply travels on the link's compressed stream, the
+	// coordinator's side of which opens as it reads this reply.
+	openFlateStream(p.conn, p.base.ReadBufferSize, p.base.WriteBufferSize)
 	return err
 }
 
@@ -735,7 +747,7 @@ func (p *PendingJoin) Ready() error {
 		_ = p.conn.SetWriteDeadline(time.Now().Add(p.base.WriteTimeout))
 		defer p.conn.SetWriteDeadline(time.Time{})
 	}
-	if err := NewMessage(MsgReady, nil).Encode(p.conn); err != nil {
+	if err := p.send(NewMessage(MsgReady, nil)); err != nil {
 		return err
 	}
 	p.transferred = true

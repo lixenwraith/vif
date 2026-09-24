@@ -81,6 +81,10 @@ type CorrectionRequest struct {
 	// the convergence floor has elapsed without one arriving.
 	Keyframe bool `json:"keyframe,omitempty"`
 
+	// Index asks for the section summaries of a manifest that arrived as its root
+	// alone: the roots differed, and pages can only be chosen section by section.
+	Index bool `json:"index,omitempty"`
+
 	// Sections is empty exactly when the roots matched, which is the healthy case
 	// and the one this protocol exists to make cheap.
 	Sections []SectionRequest `json:"sections,omitempty"`
@@ -94,7 +98,7 @@ type CorrectionRequest struct {
 
 // Converged reports whether this request asks for nothing: the hash-only case.
 func (r CorrectionRequest) Converged() bool {
-	return !r.Keyframe && len(r.Sections) == 0
+	return !r.Keyframe && !r.Index && len(r.Sections) == 0
 }
 
 // CorrectionShard is one repaired page.
@@ -168,7 +172,7 @@ func DecodeUnserved(b []byte) (CorrectionUnserved, error) {
 }
 
 // EncodeManifest renders a manifest summary in the bounded, compressed envelope.
-func EncodeManifest(m CorrectionManifest) ([]byte, error) { return EncodeJSON(m) }
+func EncodeManifest(m CorrectionManifest) ([]byte, error) { return EncodePlainJSON(m) }
 
 // DecodeManifest parses what EncodeManifest produced.
 func DecodeManifest(b []byte) (CorrectionManifest, error) {
@@ -180,7 +184,7 @@ func DecodeManifest(b []byte) (CorrectionManifest, error) {
 }
 
 // EncodeCorrectionRequest renders one answer to a manifest.
-func EncodeCorrectionRequest(r CorrectionRequest) ([]byte, error) { return EncodeJSON(r) }
+func EncodeCorrectionRequest(r CorrectionRequest) ([]byte, error) { return EncodePlainJSON(r) }
 
 // DecodeCorrectionRequest parses what EncodeCorrectionRequest produced.
 func DecodeCorrectionRequest(b []byte) (CorrectionRequest, error) {
@@ -229,6 +233,10 @@ func CompareRequest(mine *Manifest, want CorrectionManifest) (CorrectionRequest,
 	}
 	sections, pages := len(want.Sections), 0
 	if mine.Root() == want.Root {
+		return req, sections, pages
+	}
+	if want.Sections == nil {
+		req.Index = true
 		return req, sections, pages
 	}
 	for _, s := range want.Sections {

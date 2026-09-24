@@ -89,11 +89,11 @@ func TestEqualRootsProduceOnlyHashTraffic(t *testing.T) {
 		t.Fatalf("a converged request produced %d shards", len(set.Shards))
 	}
 
-	// The compact half is what actually travels, and it has to be materially
-	// smaller than the correction it replaces or the exchange is not worth a round
-	// trip. The capture here is a quiet world; the storm figure is reported by
-	// TestSelectiveCorrectionCostAtTheStormHighWater.
-	manifestBody, err := snapshot.EncodeManifest(host.Summary())
+	// The root alone is what travels to a receiver that agrees, and it has to be
+	// materially smaller than the correction it replaces.
+	root := host.Summary()
+	root.Sections = nil
+	manifestBody, err := snapshot.EncodeManifest(root)
 	if err != nil {
 		t.Fatalf("manifest encode: %v", err)
 	}
@@ -102,10 +102,9 @@ func TestEqualRootsProduceOnlyHashTraffic(t *testing.T) {
 		t.Fatalf("capture encode: %v", err)
 	}
 	if len(manifestBody) >= len(captureBody) {
-		t.Fatalf("the index is %d bytes against a %d-byte capture", len(manifestBody), len(captureBody))
+		t.Fatalf("the root is %d bytes against a %d-byte capture", len(manifestBody), len(captureBody))
 	}
-	t.Logf("quiet world: index %d bytes, capture %d bytes, %d sections",
-		len(manifestBody), len(captureBody), len(host.Summary().Sections))
+	t.Logf("quiet world: root %d bytes, capture %d bytes", len(manifestBody), len(captureBody))
 }
 
 // TestOneMismatchRepairsOnlyItsPage: an injected disagreement in
@@ -599,6 +598,12 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 	if err != nil {
 		t.Fatalf("manifest encode: %v", err)
 	}
+	root := authority.Summary()
+	root.Sections = nil
+	rootBody, err := snapshot.EncodeManifest(root)
+	if err != nil {
+		t.Fatalf("root encode: %v", err)
+	}
 
 	// A converged receiver: one root comparison, an empty request, no state.
 	mirror, err := snapshot.BuildManifest(cloneCapture(t, next), 1)
@@ -656,8 +661,11 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 		t.Fatal("the repaired capture does not reproduce the authority's root")
 	}
 
-	convergedWire := len(manifestBody) + len(ackBody)
-	repairWire := len(manifestBody) + len(requestBody) + len(shardBody)
+	// A receiver that disagrees asks for the sections before it can choose pages.
+	indexAsk, _, _ := snapshot.CompareRequest(stale, root)
+	convergedWire := len(rootBody) + len(ackBody)
+	repairWire := len(rootBody) + len(mustEncodeRequest(t, indexAsk)) + len(manifestBody) +
+		len(requestBody) + len(shardBody)
 	t.Logf("index: %d sections, %d bytes | converged exchange %d bytes "+
 		"(%d section hashes compared, %d page hashes) | build %9s compare %9s",
 		len(authority.Summary().Sections), len(manifestBody), convergedWire,
@@ -747,7 +755,7 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 	t.Logf("one repair of %d pages: direct %d B on the authority's link | relayed %d B on the "+
 		"authority's link and %d B on the relay's | relay retention holds %d records of "+
 		"%d sections and %d indexed rows",
-		pages, repairWire, len(manifestBody), repairWire, parameter.SnapshotManifestRetention,
+		pages, repairWire, len(rootBody), repairWire, parameter.SnapshotManifestRetention,
 		len(authority.Summary().Sections), rows)
 
 	// A relayed answer is the authority's content, so it may not cost more than

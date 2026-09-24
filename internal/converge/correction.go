@@ -298,7 +298,7 @@ func (c *Corrections) publishRound(force bool) error {
 
 	c.forgetRestartedRunLocked()
 	tick := c.inst.Position().Tick
-	keyframe := !c.haveKey || tick >= c.lastKeyTick+c.keyPeriod
+	keyframe := (!c.haveKey || tick >= c.lastKeyTick+c.keyPeriod) && !c.allProvedLocked(ids, tick)
 	due := c.dueLocked(ids, tick, force, keyframe)
 	if len(due) == 0 {
 		c.publishPlanTelemetryLocked(ids)
@@ -1033,6 +1033,27 @@ func (c *Corrections) holding() bool {
 	c.installedMu.Lock()
 	defer c.installedMu.Unlock()
 	return c.haveHeld
+}
+
+// allProvedLocked reports whether every peer has proved it holds the authority's
+// world recently — a hash-only answer is that proof — so a keyframe would carry
+// nothing any of them lacks. Caller MUST hold publishMu.
+func (c *Corrections) allProvedLocked(ids []uint32, tick uint64) bool {
+	for _, id := range ids {
+		p := c.peers[id]
+		if p == nil || !p.converged || tick >= p.answeredTick+parameter.SnapshotFloorKeyframeTicks/2 {
+			return false
+		}
+	}
+	return len(ids) > 0
+}
+
+// proved records that this instance holds the authority's world as of tick, which
+// meets the convergence floor as a whole keyframe would.
+func (c *Corrections) proved(tick uint64) {
+	c.installedMu.Lock()
+	c.keyTick = max(c.keyTick, tick)
+	c.installedMu.Unlock()
 }
 
 // holdingThrough reports whether a held correction has become due by tick.

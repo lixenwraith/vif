@@ -317,11 +317,13 @@ each direct peer according to that link's cadence:
 
 1. Build a deterministic manifest over component stores, allocator values, RNG
    streams, declared system state, status surface, and shared FSM state.
-2. Send the root and section summaries.
+2. Send the root and header alone.
 3. If the receiver produces the same root, acknowledge a hash-only correction and
-   install the authority header without transferring state.
-4. Otherwise compare page hashes only in differing sections and return the pages
-   that differ.
+   install the authority header without transferring state. That answer proves the
+   receiver holds the authority's world, so while every peer has proved it within
+   half the convergence floor the keyframe cadence sends none.
+4. Otherwise the receiver asks for the section summaries, compares page hashes only
+   in differing sections, and the authority returns the pages that differ.
 5. Validate every page hash, reconstruct the authority root, reconcile through a
    reusable staging world, and commit between ticks.
 6. Refuse stale, foreign, malformed, or unverifiable repairs and recover at the

@@ -26,6 +26,7 @@ import (
 const (
 	snapshotWireHeader  = 10
 	snapshotWireVersion = 1
+	snapshotCodecPlain  = 0
 	snapshotCodecFlate  = 1
 )
 
@@ -44,7 +45,14 @@ var (
 // BestSpeed is intentional: the storm high-water measurement shows most of the
 // available byte reduction at this level while keeping encode work below a
 // millisecond on the reference machine.
-func EncodeJSON(v any) ([]byte, error) {
+func EncodeJSON(v any) ([]byte, error) { return encodeJSON(v, snapshotCodecFlate) }
+
+// EncodePlainJSON is EncodeJSON left for the link's stream to compress: a small
+// body that repeats itself message to message compresses against its predecessors
+// there, and alone hardly at all.
+func EncodePlainJSON(v any) ([]byte, error) { return encodeJSON(v, snapshotCodecPlain) }
+
+func encodeJSON(v any, codec byte) ([]byte, error) {
 	plain, err := json.Marshal(v)
 	if err != nil {
 		return nil, err
@@ -58,10 +66,14 @@ func EncodeJSON(v any) ([]byte, error) {
 	out.Grow(snapshotWireHeader + len(plain)/4)
 	_, _ = out.Write(snapshotWireMagic[:])
 	_ = out.WriteByte(snapshotWireVersion)
-	_ = out.WriteByte(snapshotCodecFlate)
+	_ = out.WriteByte(codec)
 	var size [4]byte
 	binary.BigEndian.PutUint32(size[:], uint32(len(plain)))
 	_, _ = out.Write(size[:])
+	if codec == snapshotCodecPlain {
+		_, _ = out.Write(plain)
+		return out.Bytes(), nil
+	}
 
 	w := snapshotDeflaters.Get().(*flate.Writer)
 	w.Reset(&out)
@@ -94,12 +106,19 @@ func DecodeJSON(body []byte, dst any) error {
 	if body[4] != snapshotWireVersion {
 		return fmt.Errorf("snapshot envelope: unsupported version %d", body[4])
 	}
-	if body[5] != snapshotCodecFlate {
+	if body[5] != snapshotCodecFlate && body[5] != snapshotCodecPlain {
 		return fmt.Errorf("snapshot envelope: unsupported codec %d", body[5])
 	}
 	plainBytes := binary.BigEndian.Uint32(body[6:10])
 	if plainBytes == 0 || plainBytes > network.MaxSnapshotPlainBytes {
 		return fmt.Errorf("snapshot envelope: names %d plain bytes", plainBytes)
+	}
+	if body[5] == snapshotCodecPlain {
+		if len(body)-snapshotWireHeader != int(plainBytes) {
+			return fmt.Errorf("snapshot envelope: carries %d plain bytes, names %d",
+				len(body)-snapshotWireHeader, plainBytes)
+		}
+		return json.Unmarshal(body[snapshotWireHeader:], dst)
 	}
 
 	r := flate.NewReader(bytes.NewReader(body[snapshotWireHeader:]))

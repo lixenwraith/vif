@@ -49,6 +49,10 @@ func outstandingRepair(t *testing.T, host, guest *run, corrupt func(*snapshot.Co
 	if err := host.c.Publish(); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
+	// The index leads with its root; the guest's differs, so it asks for the
+	// sections and answers those.
+	deliver([]*run{guest}, 1)
+	deliver([]*run{host}, 1)
 	deliver([]*run{guest}, 1)
 
 	guest.c.selectiveMu.Lock()
@@ -184,5 +188,33 @@ func TestAWidenedPeerIsServedForItsWholeWindow(t *testing.T) {
 	}
 	if host.stat("snapshot.manifests_sent") <= manifests {
 		t.Fatal("the peer never returned to the selective exchange")
+	}
+}
+
+// TestAPeerThatProvedTheWorldIsNotSentAKeyframe: a hash-only answer meets the
+// convergence floor as a keyframe would, so the keyframe period passing sends none.
+func TestAPeerThatProvedTheWorldIsNotSentAKeyframe(t *testing.T) {
+	t.Parallel()
+	host, guest := exchange(t)
+	host.c.publishMu.Lock()
+	keyTick := host.c.lastKeyTick
+	host.c.publishMu.Unlock()
+
+	for range parameter.SnapshotFloorKeyframeTicks + parameter.SnapshotCorrectionTicks {
+		host.world.advance(1)
+		guest.world.advance(1)
+		if err := host.c.Publish(); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+		deliver([]*run{guest, host}, 1)
+	}
+	host.c.publishMu.Lock()
+	sent := host.c.lastKeyTick
+	host.c.publishMu.Unlock()
+	if sent != keyTick {
+		t.Fatalf("the host sent a keyframe at %d to a peer that answered hash-only", sent)
+	}
+	if guest.stat("snapshot.corrections_hash_only") == 0 {
+		t.Fatal("the guest never proved it held the host's world")
 	}
 }
