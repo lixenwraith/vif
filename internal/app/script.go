@@ -79,6 +79,11 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 	if err != nil {
 		return journal.ScriptStats{}, err
 	}
+	if cfg.HostAddress != "" || cfg.JoinAddress != "" {
+		if err := driver.Live(); err != nil {
+			return journal.ScriptStats{}, err
+		}
+	}
 	if a.cfg.Mode == ModeScript {
 		return runPresentedScript(a, driver, path, interval, paced, signals)
 	}

@@ -266,11 +266,8 @@ there is a window neither gate can serve, so a dial landing in it is refused wit
 `ErrSessionStarting` — a refusal the dialer retries, rather than an identity and a
 silent wait for a start gate no longer being sent.
 
-A scripted participant can only enter a session at tick zero. Its actions are
-anchored to absolute ticks, so one admitted through the mid-run gate finds its
-first action already past and stops with `script passed action`. Size the lobby
-with `-players` when a scripted guest has to be in the session — which is what
-`script/test.sh host-loss` does.
+A scripted participant schedules its actions on the ticks it issues, so it may
+enter through the mid-run gate like anyone else ([Development](development.md)).
 
 Together these make a scripted participant: one side of a session plays a fixed
 sequence at real time while a person plays the other freely, which is how a

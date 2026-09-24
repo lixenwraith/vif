@@ -144,8 +144,12 @@ func TestCheckedInScriptsCompile(t *testing.T) {
 			if script.Ticks <= 0 {
 				t.Fatalf("ticks = %d; a script declares a hard budget", script.Ticks)
 			}
-			if _, err := NewScriptDriver(&scriptFake{}, script); err != nil {
+			driver, err := NewScriptDriver(&scriptFake{}, script)
+			if err != nil {
 				t.Fatalf("NewScriptDriver() error = %v", err)
+			}
+			if err := driver.Live(); err != nil {
+				t.Fatalf("a shipped session script cannot run live: %v", err)
 			}
 		})
 	}
@@ -170,5 +174,53 @@ intent = "motion_right"
 	err = driver.RunAll()
 	if err == nil || !strings.Contains(err.Error(), "before action") {
 		t.Fatalf("RunAll() error = %v, want unreached-action error", err)
+	}
+}
+
+// TestALiveScriptKeepsItsOwnClock: in a session a correction jumps the world tick
+// and a reset starts a new run, neither of which the participant chose. A live
+// driver schedules on the ticks it issued; a replay still refuses the overshoot.
+func TestALiveScriptKeepsItsOwnClock(t *testing.T) {
+	script, err := ParseScript([]byte(`
+schema = 1
+ticks = 4
+[[action]]
+tick = 2
+intent = "motion_right"
+`))
+	if err != nil {
+		t.Fatalf("ParseScript() error = %v", err)
+	}
+	for _, live := range []bool{false, true} {
+		target := &scriptFake{}
+		driver, err := NewScriptDriver(target, script)
+		if err != nil {
+			t.Fatalf("NewScriptDriver() error = %v", err)
+		}
+		if live {
+			if err := driver.Live(); err != nil {
+				t.Fatalf("Live() error = %v", err)
+			}
+		}
+		if _, err := driver.Step(); err != nil {
+			t.Fatalf("live=%v first step: %v", live, err)
+		}
+		target.position = event.Stamp{Run: 1, Tick: 40}
+		err = driver.RunAll()
+		switch {
+		case live && (err != nil || len(target.intents) != 1):
+			t.Fatalf("live run: error %v, %d intents; want the action on its own tick", err, len(target.intents))
+		case !live && err == nil:
+			t.Fatal("a replay accepted a position it had passed")
+		}
+	}
+
+	script.Actions[0].Run = 1
+	driver, err := NewScriptDriver(&scriptFake{}, script)
+	if err != nil {
+		t.Fatalf("NewScriptDriver() error = %v", err)
+	}
+	if err := driver.Live(); err == nil {
+		t.Fatal("a live script was allowed to name a run")
 	}
 }

@@ -303,7 +303,7 @@ it is in.
 Every participant of one session must use the same rate. Only the `max` case is
 enforced, because the runtime cannot see a peer's pace: a faster participant is
 rebased to the authority's tick by every correction, which keeps the session
-correct and moves the ticks a script's actions were authored against. A dedicated
+correct and moves the world under a script's own schedule. A dedicated
 host and an interactive participant always run real time.
 
 ### A dedicated host
@@ -384,11 +384,10 @@ step and rate are instance-local and half a session cannot be paused.
 takes no flag on the host half: it runs solo, opens hosting with `:host`, and the
 guest dials it once the log says so.
 
-A guest half of a mid-run pair carries no action before a tick the join cannot
-have passed: a joiner enters at whatever tick the host had reached, which depends
-on when the operator started it, and a script action at an absolute tick the run is
-already past is an error rather than a no-op. The tick *budget* is relative — the
-driver counts the ticks it issues — so the budget itself needs no adjusting.
+In a session the driver schedules actions on the ticks it has issued, not on the
+world's position: a join, a correction's jump or a reset moves the world and not the
+schedule, so a guest half may join mid-run and `run` is refused. A solo run stays
+absolute, and an action whose position it has passed is an error.
 
 Use distinct log directories so each terminal's session log and journal are
 unambiguous. Scripts do not inspect/assert world state or transport a snapshot;

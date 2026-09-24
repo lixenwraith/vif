@@ -247,9 +247,7 @@ host-loss)
 	auth=${AUTHORITY:-migrate}
 	D=$(mktemp -d)
 	note "host + $n guests, -authority $auth; logs in $D"
-	# -players sizes the lobby so every guest starts at tick zero. An authored
-	# script is anchored to absolute ticks, so one that joined mid-run would find
-	# its first action already past and stop — see doc/runtime.md §1.1.
+	# -players sizes the lobby so every guest starts at tick zero.
 	"$BIN" -script script/sparring-host.toml -host "$HOST:$PORT" -authority "$auth" \
 		-players "$((n + 1))" >"$D/host.log" 2>&1 &
 	HOST_PID=$!
@@ -367,10 +365,7 @@ drain)
 	alive "$SERVE_PID" || fail "the signal cut the match instead of draining it"
 
 	# What the signal has to prove is that it drains rather than kills, so the
-	# clock still moving after it is the claim. The guest is deliberately not part
-	# of it: a scripted participant whose target tick a correction moves past ends
-	# its own run, and whether that beat the deadline was a wall-clock race the
-	# host had no part in.
+	# clock still moving after it is the claim; the guest is not part of it.
 	before=$(echo "$body" | sed -n 's/^tick=//p')
 	sleep 1
 	after=$(probe_get /health | sed -n 's/^tick=//p') || fail "the probe stopped answering"
@@ -430,8 +425,7 @@ maxmap)
 		-l="$HL" -lv info -ls app >/dev/null 2>&1 &
 	SERVE_PID=$!
 	wait_for 20 'probe_get /health' || fail "the host never answered its probe"
-	# The install moves the world tick past the script's next action, so the guest
-	# ends on that rather than on a clean exit. Its log is what is asserted.
+	# The guest runs until the timeout; its log is what is asserted.
 	timeout 40 "$BIN" -script script/sparring-guest.toml -join "$HOST:$PORT" \
 		-config-dir "$ROOT" -l="$GL" -lv info -ls app >/dev/null 2>&1 || true
 	grep -qh '"msg":"join installed the session world"' "$GL"/*.jsonl 2>/dev/null \

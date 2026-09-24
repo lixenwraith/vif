@@ -315,6 +315,7 @@ type ScriptDriver struct {
 	next    int
 	ticks   uint64
 	done    bool
+	live    bool
 }
 
 // NewScriptDriver validates and binds an authored script.
@@ -324,6 +325,19 @@ func NewScriptDriver(target ScriptTarget, script Script) (*ScriptDriver, error) 
 		return nil, err
 	}
 	return &ScriptDriver{target: target, script: script, actions: actions}, nil
+}
+
+// Live schedules actions on the ticks this driver has issued instead of the
+// world's position: in a session the authority jumps the tick and ends runs, so an
+// absolute position is one a participant cannot hold. A replay stays absolute.
+func (d *ScriptDriver) Live() error {
+	for _, a := range d.actions {
+		if a.run != 0 {
+			return fmt.Errorf("action %d names run %d; in a session the authority ends runs", a.index, a.run)
+		}
+	}
+	d.live = true
+	return nil
 }
 
 // Stats returns current progress and the target's live position.
@@ -371,6 +385,9 @@ func (d *ScriptDriver) applyCurrent() error {
 	for d.next < len(d.actions) {
 		a := d.actions[d.next]
 		cmp := compareRunTick(a.run, a.tick, pos.Run, pos.Tick)
+		if d.live {
+			cmp = compareRunTick(0, a.tick, 0, d.ticks)
+		}
 		if cmp < 0 {
 			return fmt.Errorf("script passed action %d at run %d tick %d; target is at run %d tick %d",
 				a.index, a.run, a.tick, pos.Run, pos.Tick)
