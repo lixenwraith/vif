@@ -33,10 +33,10 @@ func TestGuttersNumberOnlyReachableRowsAndColumns(t *testing.T) {
 
 	pf := ctx.PlayfieldViewportRect()
 
-	// Row gutter: the two indicator columns.
+	// Row gutter: every column of it, padding included.
 	for y := range ctx.ViewportHeight {
 		inPlay := y >= pf.Y0 && y < pf.Y1
-		for _, x := range []int{0, 1} {
+		for x := range ctx.GameXOffset {
 			got := buf.CellAt(x, ctx.GameYOffset+y).Bg
 			if !inPlay && got != visual.RgbVoid {
 				t.Fatalf("out-of-play row %d gutter col %d = %v, want void %v", y, x, got, visual.RgbVoid)
@@ -47,8 +47,13 @@ func TestGuttersNumberOnlyReachableRowsAndColumns(t *testing.T) {
 		}
 	}
 
-	// Column gutter: the row under the game area.
+	// Column gutter: the row under the game area, and the corner under the row gutter.
 	indicatorY := ctx.GameYOffset + ctx.ViewportHeight
+	for x := range ctx.GameXOffset {
+		if got := buf.CellAt(x, indicatorY).Bg; got != visual.RgbVoid {
+			t.Fatalf("corner col %d = %v, want void %v", x, got, visual.RgbVoid)
+		}
+	}
 	for x := range ctx.ViewportWidth {
 		inPlay := x >= pf.X0 && x < pf.X1
 		got := buf.CellAt(ctx.GameXOffset+x, indicatorY).Bg
