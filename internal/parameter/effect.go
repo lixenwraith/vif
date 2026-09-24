@@ -25,6 +25,10 @@ const (
 	// LightningZapDuration is the visual duration of short zap effects (energy drain, buff)
 	// One tick: the shortest interval a game-time duration can span
 	LightningZapDuration = GameUpdateInterval
+
+	// LightningTrackedLease retires a tracked bolt its owner stopped renewing; a
+	// renewal raised in one tick is dispatched in the next, so it spans several
+	LightningTrackedLease = 4 * GameUpdateInterval
 )
 
 // Spirit Entity

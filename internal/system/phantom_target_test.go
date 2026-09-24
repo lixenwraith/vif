@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 // newStormBreachFixture spawns a storm and returns the systems the incident ran
@@ -133,29 +134,37 @@ func TestOffMapEntityIsNotATarget(t *testing.T) {
 	}
 }
 
-// TestTrackedLightningRetiresWithItsOwner: a correction removes a shared entity by
-// writing the world, not by replaying the despawn that ends the player-domain
-// effects keyed to it, and a tracked bolt carries no duration to retire itself.
-func TestTrackedLightningRetiresWithItsOwner(t *testing.T) {
+// TestTrackedLightningRetiresWhenItsLeaseLapses: an install that removes a quasar or
+// ends its zap writes the shared world without the despawn that ends the
+// player-domain bolt keyed to it, so the bolt lives only while its owner renews it.
+func TestTrackedLightningRetiresWhenItsLeaseLapses(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
+	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
 	lightning := NewLightningSystem(w).(*LightningSystem)
 
 	owner := w.CreateEntity(core.DomainShared)
-	w.Components.Quasar.SetComponent(owner, component.QuasarComponent{})
 	lightning.HandleEvent(event.GameEvent{
 		Type:    event.EventLightningSpawnRequest,
 		Payload: &event.LightningSpawnRequestPayload{Owner: owner, OriginEntity: owner, Tracked: true},
 	})
 
-	lightning.Update()
+	lease := int(parameter.LightningTrackedLease / parameter.GameUpdateInterval)
+	for range 3 * lease {
+		lightning.HandleEvent(event.GameEvent{
+			Type:    event.EventLightningUpdateRequest,
+			Payload: &event.LightningUpdateRequestPayload{Owner: owner},
+		})
+		lightning.Update()
+	}
 	if n := w.Components.Lightning.CountEntities(); n != 1 {
-		t.Fatalf("bolts under a live owner = %d, want 1", n)
+		t.Fatalf("bolts under a renewing owner = %d, want 1", n)
 	}
 
-	w.DestroyEntity(owner)
-	lightning.Update()
+	for range lease {
+		lightning.Update()
+	}
 	if n := w.Components.Lightning.CountEntities(); n != 0 {
-		t.Fatalf("orphaned bolts = %d, want none", n)
+		t.Fatalf("bolts after the lease lapsed = %d, want none", n)
 	}
 }

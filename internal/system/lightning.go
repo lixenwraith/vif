@@ -1,8 +1,6 @@
 package system
 
 import (
-	"time"
-
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
@@ -63,22 +61,12 @@ func (s *LightningSystem) Update() {
 			continue
 		}
 
-		// A bolt whose owner left is orphaned: an install writes the shared world
-		// rather than replaying the lifecycle that ends the player-domain effects
-		// keyed to a shared entity (D-6), and a tracked bolt has no duration to
-		// retire it, so it would render for the rest of the session.
-		if lc.Owner != 0 && !s.world.HasEntity(lc.Owner) {
-			toDestroy = append(toDestroy, e)
-			continue
-		}
-
-		// Advance animation frame for tracked mode (dancing effect)
+		// A tracked bolt lives on a lease its owner renews each tick it updates the
+		// target: an install that removes the owner or ends its zap writes the shared
+		// world without the despawn (D-6), and the lapsed lease retires the bolt.
 		if lc.Duration == 0 {
 			lc.AnimFrame++
-			continue // Tracked mode: no duration decrement
 		}
-
-		// Non-tracked: decrement remaining time
 		lc.Remaining -= deltaTime
 		if lc.Remaining <= 0 {
 			toDestroy = append(toDestroy, e)
@@ -159,10 +147,10 @@ func (s *LightningSystem) spawnLightning(p *event.LightningSpawnRequestPayload) 
 		Remaining:    p.Duration,
 	}
 
-	// Tracked mode: Duration=0 signals manual lifecycle
+	// Tracked mode: Duration=0 signals a lease renewed by updateTarget
 	if p.Tracked {
 		lc.Duration = 0
-		lc.Remaining = time.Hour // Effectively infinite for renderer check
+		lc.Remaining = parameter.LightningTrackedLease
 	}
 
 	s.world.Components.Lightning.SetComponent(e, lc)
@@ -178,6 +166,9 @@ func (s *LightningSystem) updateTarget(p *event.LightningUpdateRequestPayload) {
 		}
 		lc.TargetX = p.TargetX
 		lc.TargetY = p.TargetY
+		if lc.Duration == 0 {
+			lc.Remaining = parameter.LightningTrackedLease
+		}
 		return
 	}
 }
