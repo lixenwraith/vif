@@ -65,6 +65,9 @@ var deniedSharedKey = map[string]bool{
 	// Whole-store counts sum both domains; the shared position digest covers the
 	// shared half.
 	"nav.entities": true,
+	// How this instance answers its own resize, from a CropOnResize the capture
+	// leaves local: a joiner after a level setup holds a different one.
+	"context.map_locked": true,
 }
 
 // allowedSharedKey re-admits a key its group prefix denies. spatial.indexed_shared
