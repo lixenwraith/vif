@@ -31,6 +31,7 @@ type NavigationSystem struct {
 
 	// Composite passability grid (shared, recomputed on wall changes)
 	compositePassability *navigation.CompositePassability
+	walls                []bool // the WallTest grid a derivation reads
 
 	// Per-tick resolved target snapshot; avoids per-entity TargetResource locking
 	targets [component.MaxTargetGroups]engine.TargetGroupState
@@ -262,10 +263,7 @@ func (s *NavigationSystem) recomputeCompositePassability() {
 	if s.compositePassability == nil {
 		return
 	}
-	isWall := func(x, y int) bool {
-		return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic)
-	}
-	s.compositePassability.Compute(isWall)
+	s.compositePassability.Compute(s.world.Positions.WallTest(component.WallBlockKinetic, &s.walls))
 }
 
 func (s *NavigationSystem) Update() {
@@ -292,10 +290,7 @@ func (s *NavigationSystem) Update() {
 	s.snapshotTargets()
 	s.refreshRouteGraphs()
 
-	// Wall checker for point entities
-	isBlockedPoint := func(x, y int) bool {
-		return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic)
-	}
+	isBlockedPoint := s.world.Positions.WallTest(component.WallBlockKinetic, &s.walls)
 
 	// Wall checker for composites (uses pre-computed passability)
 	isBlockedComposite := s.compositePassability.IsBlocked
@@ -1026,9 +1021,7 @@ func (s *NavigationSystem) LoadShared(data []byte) error {
 	// The walls are the installed ones now, so the grid every composite path is
 	// tested against has to be rebuilt before any field is derived from it.
 	s.recomputeCompositePassability()
-	isBlockedPoint := func(x, y int) bool {
-		return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic)
-	}
+	isBlockedPoint := s.world.Positions.WallTest(component.WallBlockKinetic, &s.walls)
 	isBlockedComposite := s.compositePassability.IsBlocked
 
 	for _, phase := range snap.Groups {

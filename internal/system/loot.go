@@ -77,6 +77,7 @@ type LootSystem struct {
 	// target slice its recompute is fed from
 	ownerRoutes map[core.Entity]*ownerRoute
 	routeGoal   [1]vmath.Point
+	walls       []bool // the WallTest grid a recompute reads
 
 	// Telemetry
 	statDrops       *atomic.Int64
@@ -309,9 +310,7 @@ func (s *LootSystem) refreshOwnerRoutes(loots []core.Entity) {
 	if config.MapWidth <= 0 || config.MapHeight <= 0 {
 		return
 	}
-	blocked := func(x, y int) bool {
-		return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic)
-	}
+	blocked := s.world.Positions.WallTest(component.WallBlockKinetic, &s.walls)
 
 	var recomputes int64
 	for owner, r := range s.ownerRoutes {

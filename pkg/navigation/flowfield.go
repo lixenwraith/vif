@@ -254,25 +254,24 @@ func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
 		cx := idx % w
 		cy := idx / w
 
+		// Each neighbour is tested once: a diagonal's corner cells are the two
+		// orthogonal neighbours beside it, in bounds whenever the diagonal is.
+		var blocked [DirCount]bool
+		for d := range DirCount {
+			nx, ny := cx+DirVectors[d][0], cy+DirVectors[d][1]
+			blocked[d] = nx < 0 || nx >= f.Width || ny < 0 || ny >= f.Height || isBlocked(nx, ny)
+		}
+
 		for dirIdx := int8(0); dirIdx < DirCount; dirIdx++ {
+			if blocked[dirIdx] {
+				continue
+			}
+			if dirIdx%2 == 1 && (blocked[dirIdx-1] || blocked[(dirIdx+1)%DirCount]) {
+				continue
+			}
+
 			nx := cx + DirVectors[dirIdx][0]
 			ny := cy + DirVectors[dirIdx][1]
-
-			if nx < 0 || nx >= f.Width || ny < 0 || ny >= f.Height {
-				continue
-			}
-
-			if isBlocked(nx, ny) {
-				continue
-			}
-
-			dx, dy := DirVectors[dirIdx][0], DirVectors[dirIdx][1]
-			if dx != 0 && dy != 0 {
-				if isBlocked(cx+dx, cy) || isBlocked(cx, cy+dy) {
-					continue
-				}
-			}
-
 			nIdx := ny*w + nx
 			newDist := entry.dist + dirCosts[dirIdx]
 

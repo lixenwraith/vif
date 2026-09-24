@@ -312,6 +312,54 @@ func (p *Position) ClearAllComponents() {
 
 // --- Wall ---
 
+// WallTest returns HasBlockingWallAt for mask as a grid read from the wall store on
+// its first call into buf, reused across calls. A derivation that probes every cell
+// several times pays one store pass instead; it is exact while walls cannot change.
+// SYNC: caller holds World.updateMutex for as long as it calls the result
+func (p *Position) WallTest(mask component.WallBlockMask, buf *[]bool) func(x, y int) bool {
+	var w, h int
+	built := false
+	return func(x, y int) bool {
+		if !built {
+			w, h = p.buildWallGrid(mask, buf)
+			built = true
+		}
+		if x < 0 || y < 0 || x >= w || y >= h {
+			return false
+		}
+		return (*buf)[y*w+x]
+	}
+}
+
+// buildWallGrid marks every cell HasBlockingWallAt would answer true for: a wall of
+// mask that the grid holds there, which is not every stored one under soft clipping.
+func (p *Position) buildWallGrid(mask component.WallBlockMask, buf *[]bool) (w, h int) {
+	if p.world == nil {
+		return 0, 0
+	}
+	config := p.world.Resources.Config
+	w, h = min(config.MapWidth, p.grid.Width), min(config.MapHeight, p.grid.Height)
+	w, h = max(w, 0), max(h, 0)
+	if n := w * h; cap(*buf) < n {
+		*buf = make([]bool, n)
+	} else {
+		*buf = (*buf)[:n]
+		clear(*buf)
+	}
+	grid := *buf
+	p.world.Components.Wall.Each(func(e core.Entity, wall *component.WallComponent) bool {
+		if e.Domain() == core.DomainPlayer || (mask != 0 && wall.BlockMask&mask == 0) {
+			return true
+		}
+		if pos, ok := p.GetPosition(e); ok && pos.X >= 0 && pos.X < w && pos.Y >= 0 && pos.Y < h &&
+			p.grid.containsEntityAt(e, pos.X, pos.Y) {
+			grid[pos.Y*w+pos.X] = true
+		}
+		return true
+	})
+	return w, h
+}
+
 // HasBlockingWallAt returns true if a wall exists at (x, y) that blocks the given mask
 // O(k) where k = entities at cell (typically 1-3)
 // SYNC: caller holds World.updateMutex; "Unsafe" name retained for compatibility

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
@@ -77,5 +78,40 @@ func assertPartition(t *testing.T, g *SpatialGrid, x, y, wantShared, wantPlayer 
 		if e.Domain() != core.DomainPlayer {
 			t.Fatalf("shared entity %d inside the player run", e)
 		}
+	}
+}
+
+// TestWallTestAnswersAsHasBlockingWallAt: the grid a derivation reads is the live
+// query cell for cell — mask, domain, soft-clipped walls and out-of-bounds included.
+func TestWallTestAnswersAsHasBlockingWallAt(t *testing.T) {
+	w := NewWorld()
+	NewGameContextWithClock(w, 40, 24, NewManualClock())
+	wall := func(domain core.Domain, x, y int, mask component.WallBlockMask) {
+		e := w.CreateEntity(domain)
+		w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+		w.Components.Wall.SetComponent(e, component.WallComponent{BlockMask: mask})
+	}
+	wall(core.DomainShared, 2, 2, component.WallBlockKinetic)
+	wall(core.DomainShared, 3, 2, component.WallBlockCursor)
+	wall(core.DomainPlayer, 4, 2, component.WallBlockKinetic)
+	for range parameter.MaxEntitiesPerCell {
+		w.Positions.SetPosition(w.CreateEntity(core.DomainShared), component.PositionComponent{X: 5, Y: 2})
+	}
+	wall(core.DomainShared, 5, 2, component.WallBlockKinetic) // clipped out of the grid
+
+	cfg := w.Resources.Config
+	var buf []bool
+	for _, mask := range []component.WallBlockMask{0, component.WallBlockKinetic} {
+		test := w.Positions.WallTest(mask, &buf)
+		for y := -1; y <= cfg.MapHeight; y++ {
+			for x := -1; x <= cfg.MapWidth; x++ {
+				if got, want := test(x, y), w.Positions.HasBlockingWallAt(x, y, mask); got != want {
+					t.Fatalf("mask %d at (%d,%d): WallTest %t, HasBlockingWallAt %t", mask, x, y, got, want)
+				}
+			}
+		}
+	}
+	if !w.Positions.WallTest(component.WallBlockKinetic, &buf)(2, 2) {
+		t.Fatal("the kinetic wall the test is built around was not seen")
 	}
 }
