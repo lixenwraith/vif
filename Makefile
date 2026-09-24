@@ -20,6 +20,12 @@ KEYMAP_SRC := internal/asset/input/keymap.toml
 DESTDIR ?=
 PREFIX ?= /usr
 SYSCONFDIR ?= /etc
+# FreeBSD packages each Go release under its own name: go.mod's 1.27 is go127.
+GO_FREEBSD := $(shell sed -n 's/^go \([0-9]*\)\.\([0-9]*\).*/go\1\2/p' go.mod)
+ifeq ($(shell uname),FreeBSD)
+GO ?= $(GO_FREEBSD)
+endif
+GO ?= go
 
 .DEFAULT_GOAL := help
 
@@ -56,8 +62,8 @@ $(WEB_DIR):
 	mkdir -p $(WEB_DIR)
 
 check-go:
-	@if ! command -v go >/dev/null 2>&1; then \
-		echo "Go compiler not found."; \
+	@if ! command -v $(GO) >/dev/null 2>&1; then \
+		echo "Go compiler ($(GO)) not found."; \
 		CMD=""; \
 		if [ -f /etc/arch-release ]; then \
 			CMD="sudo pacman -S go"; \
@@ -66,7 +72,7 @@ check-go:
 				CMD="sudo snap install go --classic"; \
 			fi; \
 		elif [ "$$(uname)" = "FreeBSD" ]; then \
-			CMD="sudo pkg install lang/go"; \
+			CMD="sudo pkg install $(GO_FREEBSD)"; \
 		fi; \
 		if [ -n "$$CMD" ]; then \
 			echo "Proposed installation: $$CMD"; \
@@ -87,61 +93,61 @@ check-go:
 	fi
 
 generate: check-go
-	go generate ./internal/manifest/...
+	$(GO) generate ./internal/manifest/...
 
 dev: generate | $(BIN_DIR)
-	go build -race -tags "$(TAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
+	$(GO) build -race -tags "$(TAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 serve: wasm | $(BIN_DIR)
-	go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/http-server ./tool/http-server
+	$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/http-server ./tool/http-server
 	./$(BIN_DIR)/http-server -dir $(WEB_DIR) -port $(PORT)
 
 release: generate | $(BIN_DIR)
-	go build $(GOFLAGS) -tags "$(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
+	$(GO) build $(GOFLAGS) -tags "$(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # headless is a build profile, not merely -serve at runtime: renderer and audio
 # constructors are absent from the dependency graph.
 headless: generate | $(BIN_DIR)
-	go build $(GOFLAGS) -tags "vif_headless $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-headless $(SRC)
+	$(GO) build $(GOFLAGS) -tags "vif_headless $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-headless $(SRC)
 
 # nolog strips logging; internal/vlog is not linked
 nolog: generate | $(BIN_DIR)
-	go build $(GOFLAGS) -tags "novlog $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
+	$(GO) build $(GOFLAGS) -tags "novlog $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # wasm selects vlog/stub.go and the audio-free system manifest automatically.
 wasm: generate | $(WEB_DIR)
-	GOOS=js GOARCH=wasm go build $(GOFLAGS) -tags "vif_noaudio $(TAGS)" -ldflags="$(LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
+	GOOS=js GOARCH=wasm $(GO) build $(GOFLAGS) -tags "vif_noaudio $(TAGS)" -ldflags="$(LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
 
 # windows is experimental and untested
 windows: generate | $(BIN_DIR)
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(GOFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
 
 tools: | $(BIN_DIR)
-	go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/ ./cmd/ascimage ./cmd/soundlab ./tool/...
+	$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/ ./cmd/ascimage ./cmd/soundlab ./tool/...
 
 allocator: | $(BIN_DIR)
-	go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/vif-allocator ./tool/vif-allocator
+	$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/vif-allocator ./tool/vif-allocator
 
 test: generate
-	go test -race ./...
+	$(GO) test -race ./...
 
 # verify covers the build-tag matrix a single-target build would miss
 verify: generate test
-	go build ./...
-	go build -tags novlog ./...
-	go build -tags vif_noaudio $(SRC)
-	go build -tags vif_headless $(SRC)
-	go test -tags vif_noaudio ./internal/... $(SRC)
-	go test -tags vif_headless ./internal/manifest ./internal/system $(SRC)
-	GOOS=js GOARCH=wasm go build $(SRC)
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags "novlog vif_noaudio" $(SRC)
-	@if go list -deps -tags vif_headless $(SRC) | grep -Eq '/internal/render($$|/)|/pkg/audio$$'; then \
+	$(GO) build ./...
+	$(GO) build -tags novlog ./...
+	$(GO) build -tags vif_noaudio $(SRC)
+	$(GO) build -tags vif_headless $(SRC)
+	$(GO) test -tags vif_noaudio ./internal/... $(SRC)
+	$(GO) test -tags vif_headless ./internal/manifest ./internal/system $(SRC)
+	GOOS=js GOARCH=wasm $(GO) build $(SRC)
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -tags "novlog vif_noaudio" $(SRC)
+	@if $(GO) list -deps -tags vif_headless $(SRC) | grep -Eq '/internal/render($$|/)|/pkg/audio$$'; then \
 		echo "FAIL: vif_headless imports presentation or audio implementation"; exit 1; \
 	fi
-	@if GOOS=js GOARCH=wasm go list -deps $(SRC) | grep -Eq '/pkg/audio$$'; then \
+	@if GOOS=js GOARCH=wasm $(GO) list -deps $(SRC) | grep -Eq '/pkg/audio$$'; then \
 		echo "FAIL: wasm imports the audio implementation"; exit 1; \
 	fi
-	go vet ./...
+	$(GO) vet ./...
 
 run: dev
 	./$(BIN_DIR)/$(BINARY)
@@ -220,9 +226,9 @@ image-check:
 # arch-check covers architectural boundaries, isolated from standard build blockers.
 # The list of packages is snapshot dynamically at execution to avoid build delays across other targets.
 arch-check:
-	@pkgs="$(if $(ARCH_LEAF_PKGS),$(ARCH_LEAF_PKGS),$$(go list ./pkg/... 2>/dev/null | tr '\n' ' '))"; \
+	@pkgs="$(if $(ARCH_LEAF_PKGS),$(ARCH_LEAF_PKGS),$$($(GO) list ./pkg/... 2>/dev/null | tr '\n' ' '))"; \
 	if [ -z "$$pkgs" ]; then echo "arch-check: no packages found in pkg/"; exit 0; fi; \
-	bad=$$(go list -deps $$pkgs | grep 'vi-fighter/internal' || true); \
+	bad=$$($(GO) list -deps $$pkgs | grep 'vi-fighter/internal' || true); \
 	if [ -n "$$bad" ]; then echo "FAIL: leaf package(s) import internal:"; echo "$$bad"; exit 1; fi; \
 	echo "arch-check: $$pkgs clean"
 

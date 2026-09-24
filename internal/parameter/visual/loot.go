@@ -16,6 +16,7 @@ type LootVisualDef struct {
 
 // LootVisuals defines the visual attributes of loot
 // Can't be cleanly placed in parameters due to cyclic dependency
+// Weapon loot is lettered for its attack (Lightning, Missile, Pulse), the name players use
 var LootVisuals = map[component.LootType]LootVisualDef{
 	component.LootRod: {
 		Rune:       'L',
@@ -28,7 +29,7 @@ var LootVisuals = map[component.LootType]LootVisualDef{
 		GlowColor:  RgbLootLauncherGlow,
 	},
 	component.LootDisruptor: {
-		Rune:       'D',
+		Rune:       'P',
 		InnerColor: RgbOrbDisruptor,
 		GlowColor:  RgbLootDisruptorGlow,
 	},

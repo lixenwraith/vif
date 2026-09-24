@@ -15,11 +15,11 @@ git pull
 
 Components are `objects` (namespace, quota, policy, Role), `wad`, `bridge`,
 `image`, `allocator` and `logwisp`. A current one is skipped. Installed lines print
-green and incoming ones red. `image`, `allocator` and `logwisp` need an empty
-fleet and refuse otherwise, naming the components that do not; `wad` and `bridge`
-never interrupt a match, since a running pod keeps what it started with. Each
-component keeps one `.previous` set, and
-[`guest/README.md`](guest/README.md) restores it. Settings for the allocator are
+green and incoming ones red; a file the update removes prints as `deleted <path>`.
+`image`, `allocator` and `logwisp` need an empty fleet and refuse otherwise, naming
+the components that do not; `wad` and `bridge` never interrupt a match, since a
+running pod keeps what it started with. Each component keeps one `.previous` set,
+and [`guest/README.md`](guest/README.md) restores it. Settings for the allocator are
 [`guest/vif-allocator.env`](guest/vif-allocator.env), committed here and never
 edited on the node.
 

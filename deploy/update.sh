@@ -82,14 +82,20 @@ check_objects() {
 	return "$status"
 }
 
+# The installer swaps in exactly its categories, so the whole installed root is
+# compared: a removed file or a category no longer served is deleted by the update.
 check_wad() {
-	status=0
-	for category in scenario image; do
-		rc=0
-		out=$(diff -ruN "$wad_root/$category" "$repo_root/wad/$category" 2>&1) || rc=$?
-		[ "$rc" -eq 0 ] || { printf '%s\n' "$out" | paint; status=1; }
+	categories=$(sed -n 's/^categories="\(.*\)"$/\1/p' "$guest/update-vif-wad.sh")
+	[ -n "$categories" ] || return 2
+	mkdir "$work/incoming"
+	for category in $categories; do
+		ln -s "$repo_root/wad/$category" "$work/incoming/$category"
 	done
-	return "$status"
+	rc=0
+	out=$(cd "$work" && diff -ru --unidirectional-new-file "$wad_root" incoming 2>&1) || rc=$?
+	[ "$rc" -ne 0 ] || return 0
+	printf '%s\n' "$out" | sed "s|^Only in \([^:]*\): \(.*\)|${old}deleted \1/\2$off|" | paint
+	return 1
 }
 
 check_bridge() {
