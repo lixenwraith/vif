@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"math/rand/v2"
 	"testing"
 	"unsafe"
 
@@ -81,37 +82,70 @@ func assertPartition(t *testing.T, g *SpatialGrid, x, y, wantShared, wantPlayer 
 	}
 }
 
-// TestWallTestAnswersAsHasBlockingWallAt: the grid a derivation reads is the live
-// query cell for cell — mask, domain, soft-clipped walls and out-of-bounds included.
-func TestWallTestAnswersAsHasBlockingWallAt(t *testing.T) {
-	w := NewWorld()
-	NewGameContextWithClock(w, 40, 24, NewManualClock())
-	wall := func(domain core.Domain, x, y int, mask component.WallBlockMask) {
-		e := w.CreateEntity(domain)
-		w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
-		w.Components.Wall.SetComponent(e, component.WallComponent{BlockMask: mask})
+// FuzzWallTestAnswersAsHasBlockingWallAt: the grid a derivation reads is the live
+// query cell for cell — any mask, either domain, soft-clipped walls, out of bounds
+// — and one built after walls are destroyed, moved, remasked or spawned sees them.
+func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
+	for seed := range uint64(16) {
+		f.Add(seed)
 	}
-	wall(core.DomainShared, 2, 2, component.WallBlockKinetic)
-	wall(core.DomainShared, 3, 2, component.WallBlockCursor)
-	wall(core.DomainPlayer, 4, 2, component.WallBlockKinetic)
-	for range parameter.MaxEntitiesPerCell {
-		w.Positions.SetPosition(w.CreateEntity(core.DomainShared), component.PositionComponent{X: 5, Y: 2})
-	}
-	wall(core.DomainShared, 5, 2, component.WallBlockKinetic) // clipped out of the grid
+	f.Fuzz(func(t *testing.T, seed uint64) {
+		rng := rand.New(rand.NewPCG(seed, seed>>7))
+		w := NewWorld()
+		NewGameContextWithClock(w, 12+rng.IntN(40), 8+rng.IntN(20), NewManualClock())
+		cfg := w.Resources.Config
+		masks := []component.WallBlockMask{component.WallBlockNone, component.WallBlockCursor,
+			component.WallBlockKinetic, component.WallBlockKinetic | component.WallBlockSpawn, component.WallBlockAll}
+		var walls []core.Entity
+		spawn := func() {
+			domain := core.DomainShared
+			if rng.IntN(8) == 0 {
+				domain = core.DomainPlayer
+			}
+			x, y := rng.IntN(cfg.MapWidth), rng.IntN(cfg.MapHeight)
+			if rng.IntN(16) == 0 { // a full cell soft-clips the wall out of the grid
+				for range parameter.MaxEntitiesPerCell {
+					w.Positions.SetPosition(w.CreateEntity(core.DomainShared), component.PositionComponent{X: x, Y: y})
+				}
+			}
+			e := w.CreateEntity(domain)
+			w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+			w.Components.Wall.SetComponent(e, component.WallComponent{BlockMask: masks[rng.IntN(len(masks))]})
+			walls = append(walls, e)
+		}
+		for range rng.IntN(cfg.MapWidth * cfg.MapHeight / 2) {
+			spawn()
+		}
 
-	cfg := w.Resources.Config
-	var buf []bool
-	for _, mask := range []component.WallBlockMask{0, component.WallBlockKinetic} {
-		test := w.Positions.WallTest(mask, &buf)
-		for y := -1; y <= cfg.MapHeight; y++ {
-			for x := -1; x <= cfg.MapWidth; x++ {
-				if got, want := test(x, y), w.Positions.HasBlockingWallAt(x, y, mask); got != want {
-					t.Fatalf("mask %d at (%d,%d): WallTest %t, HasBlockingWallAt %t", mask, x, y, got, want)
+		var buf []bool
+		for round := range 2 {
+			if round == 1 { // a storm between two derivations
+				for _, e := range walls {
+					switch rng.IntN(6) {
+					case 0:
+						w.DestroyEntity(e)
+					case 1:
+						if wall, ok := w.Components.Wall.GetPtr(e); ok {
+							wall.BlockMask = masks[rng.IntN(len(masks))]
+						}
+					case 2:
+						w.Positions.SetPosition(e, component.PositionComponent{X: rng.IntN(cfg.MapWidth), Y: rng.IntN(cfg.MapHeight)})
+					}
+				}
+				for range rng.IntN(20) {
+					spawn()
+				}
+			}
+			for _, mask := range masks {
+				test := w.Positions.WallTest(mask, &buf)
+				for y := -1; y <= cfg.MapHeight; y++ {
+					for x := -1; x <= cfg.MapWidth; x++ {
+						if got, want := test(x, y), w.Positions.HasBlockingWallAt(x, y, mask); got != want {
+							t.Fatalf("round %d mask %d at (%d,%d): WallTest %t, HasBlockingWallAt %t", round, mask, x, y, got, want)
+						}
+					}
 				}
 			}
 		}
-	}
-	if !w.Positions.WallTest(component.WallBlockKinetic, &buf)(2, 2) {
-		t.Fatal("the kinetic wall the test is built around was not seen")
-	}
+	})
 }
