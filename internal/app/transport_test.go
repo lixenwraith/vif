@@ -708,16 +708,16 @@ func testWireFrameRoundTrip(t *testing.T) {
 		t.Fatalf("encode: %s", encErr)
 	}
 
-	body, err := event.EncodeFrames([]event.WireFrame{frame})
+	body, err := event.EncodeWireBatch(event.WireBatch{Source: 1, Frames: []event.ScheduledWireFrame{{Frame: frame}}})
 	if err != nil {
-		t.Fatalf("encode frames: %v", err)
+		t.Fatalf("encode batch: %v", err)
 	}
-	frames, err := event.DecodeFrames(body)
-	if err != nil || len(frames) != 1 {
-		t.Fatalf("decode frames = (%d, %v), want one frame", len(frames), err)
+	batch, err := event.DecodeWireBatch(body)
+	if err != nil || len(batch.Frames) != 1 {
+		t.Fatalf("decode batch = (%d, %v), want one frame", len(batch.Frames), err)
 	}
 
-	et, payload, domain, err := frames[0].Decode()
+	et, payload, domain, err := batch.Frames[0].Frame.Decode()
 	if err != nil {
 		t.Fatalf("decode frame: %v", err)
 	}

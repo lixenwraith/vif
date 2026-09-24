@@ -152,7 +152,6 @@ type AuthorityReport struct {
 	RetainedAt uint64
 	Roster     []network.RosterEntry
 	Anchor     event.JoinAnchor
-	Delay      uint64
 }
 
 // Authoring reports whether this instance is the one publishing the world, which
@@ -168,7 +167,7 @@ func (u *Authority) State() AuthorityReport {
 		Term: u.term, Authority: u.holder, Local: u.local,
 		Migrations: u.statMigrations.Load(),
 		Migrating:  u.contested != 0, Fork: u.fork,
-		Roster: slices.Clone(u.roster), Anchor: u.anchor, Delay: u.delay,
+		Roster: slices.Clone(u.roster), Anchor: u.anchor,
 	}
 	u.mu.Unlock()
 	out.RetainedAt, out.Retained = u.corrections.retentionEvidence()

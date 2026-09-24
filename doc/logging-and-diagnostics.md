@@ -198,6 +198,9 @@ records is a list that goes stale.
 | `recorder flush failed` | ERROR | `reason`, `error` | recorder |
 | `snapshot saved` | INFO | `path` | `:d save` |
 | `network session active` | INFO | `local`, `slot`, `coordinator`, `barrier_delay_ticks`, `peers` | this instance's one statement of who it is |
+| `playout lead adopted` | INFO | `ticks`, `tick` | a change of this instance's own lead, at the tick its journaled event dispatched |
+| `participant evicted as too slow` | WARN | `participant`, `late_per_s`, `bytes_per_s`, `window` | the authority's slow policy (multi-player.md §3.5) |
+| `uncommitted crossings dropped at handoff` | INFO | `crossings` | a guest following a new authority |
 | `session summary` | INFO | `summary` | the `-serve` loop, every 30 s; the same line `:session` prints |
 | `peer link opened` / `peer link lost` | INFO / WARN | `peer`, plus `address` on the dial and `authority_lost`, `remaining_peers` on the loss | `reach.dial`, `NetworkSystem.reportDisconnect` |
 

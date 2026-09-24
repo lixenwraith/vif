@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/converge"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/lifecycle"
@@ -162,6 +163,10 @@ type Config struct {
 	// which an orchestrator replaces at the same address, off for an interactive
 	// one. See doc/multi-player.md §5.
 	FixedAuthority bool
+
+	// SlowPolicy is when this run, while authoring, evicts a participant that cannot
+	// keep up; nil keeps the default. See converge.SlowPolicy.
+	SlowPolicy *converge.SlowPolicy
 
 	// Participants is a ceiling on the roster, itself included; zero means the whole
 	// roster. On an interactive host an explicit value is also what the startup

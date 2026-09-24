@@ -53,7 +53,9 @@ func TestWireEncodingBudget(t *testing.T) {
 	if encErr != "" {
 		t.Fatal(encErr)
 	}
-	stateBody, err := event.EncodeFrames([]event.WireFrame{state})
+	stateBody, err := event.EncodeWireBatch(event.WireBatch{
+		Source: 2, Frames: []event.ScheduledWireFrame{{Frame: state, ApplyTick: 101}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

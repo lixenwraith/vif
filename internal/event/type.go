@@ -117,7 +117,7 @@ const (
 	EventParticipantJoined
 	// EventParticipantDeparted (ParticipantDepartedPayload) [bus] removes a participant from the session roster
 	EventParticipantDeparted
-	// EventPlayoutLead (PlayoutLeadPayload) [bus] carries the lead the session's crossings are deferred by
+	// EventPlayoutLead (PlayoutLeadPayload) [local] carries the lead this instance stamps its own crossings with
 	EventPlayoutLead
 	// EventCursorStateSync (CursorStatePayload) [local] carries one cursor's owner-authored state to the instances that do not simulate it
 	EventCursorStateSync

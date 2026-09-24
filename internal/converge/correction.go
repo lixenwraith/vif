@@ -989,11 +989,9 @@ func (c *Corrections) hold(cap snapshot.SharedCapture) bool {
 	return true
 }
 
-// holdWindow is how far ahead of the clock a correction is worth waiting for: the
-// playout lead, which is also how late this instance's own crossings may already be
-// landing. Never less than a tick, so a lead of none still absorbs a jittered path.
+// holdWindow is how far ahead of the clock a correction is worth waiting for.
 func (c *Corrections) holdWindow() uint64 {
-	return max(c.authority.State().Delay, 1)
+	return parameter.NetworkHoldTicks
 }
 
 // reached reports whether this instance's clock has arrived at the tick a

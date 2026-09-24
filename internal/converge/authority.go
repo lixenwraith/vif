@@ -5,7 +5,9 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -20,6 +22,12 @@ type Authority struct {
 	inst Instance
 	tel  snapshot.Telemetry
 
+	// slow is the eviction policy and watch the window each participant is being
+	// judged over; see driveEviction. Touched only by the correction loop.
+	slow      SlowPolicy
+	watch     map[network.PeerID]slowWatch
+	statEvict *atomic.Int64
+
 	// corrections is what authorship produces, and reach the links it needs to
 	// move: a successor seeds its cadence from what it installed, and a survivor
 	// with no link to the participant taking over dials down the chain.
@@ -32,12 +40,6 @@ type Authority struct {
 	local  network.PeerID
 	roster []network.RosterEntry
 	anchor event.JoinAnchor
-	delay  uint64
-
-	// leadPublished is the tick the playout lead was last announced on, and
-	// leadLowSince the tick a lower measurement first held. See lead.go.
-	leadPublished uint64
-	leadLowSince  uint64
 
 	// chain is the succession candidate list: every participant that declared a
 	// port, in join order, adopted whole from an offer, a handoff or MsgPeerList.
@@ -104,6 +106,88 @@ func newAuthority(inst Instance, tel snapshot.Telemetry, reg *status.Registry) *
 		statFork:       reg.Bools.Get("network.fork"),
 		statMigrating:  reg.Bools.Get("network.migrating"),
 		statHostLost:   reg.Bools.Get("network.host_lost"),
+		watch:          make(map[network.PeerID]slowWatch),
+		statEvict:      reg.Ints.Get("network.evicted"),
+		slow: SlowPolicy{
+			Window:         parameter.NetworkSlowWindow,
+			LatePerSecond:  parameter.NetworkSlowLatePerSecond,
+			BytesPerSecond: parameter.NetworkSlowBytesPerSecond,
+		},
+	}
+}
+
+// SlowPolicy is when the authority evicts a participant that cannot keep up: over
+// Window, its crossings reached the authority late at least LatePerSecond, and its
+// link carried at least BytesPerSecond. Zero drops a criterion; both zero, or no
+// window, disables eviction.
+type SlowPolicy struct {
+	Window         time.Duration
+	LatePerSecond  float64
+	BytesPerSecond float64
+}
+
+func (p SlowPolicy) enabled() bool {
+	return p.Window > 0 && (p.LatePerSecond > 0 || p.BytesPerSecond > 0)
+}
+
+// slowWatch is one participant's current window: where it started, the late count
+// it started from, and whether it is the grace window after the participant arrived.
+type slowWatch struct {
+	since time.Time
+	late  uint64
+	grace bool
+}
+
+// SetSlowPolicy replaces the eviction policy. Call before the session runs.
+func (u *Authority) SetSlowPolicy(p SlowPolicy) { u.slow = p }
+
+// driveEviction judges each participant's last window on the authority. Only a
+// participant's own late crossings count, as the authority received them from its
+// link, so a slow participant's actions relayed to the others never mark them; the
+// first window after one arrives is grace, because a join catches up.
+func (u *Authority) driveEviction(now time.Time) {
+	if !u.slow.enabled() || !u.isAuthority() {
+		clear(u.watch)
+		return
+	}
+	link, _ := u.inst.Transport().(engine.LinkMeasuringPort)
+	local := u.inst.LocalParticipant()
+	seen := make(map[network.PeerID]bool, len(u.watch))
+	for _, e := range u.currentRoster() {
+		if uint32(e.ID) == local {
+			continue
+		}
+		seen[e.ID] = true
+		late := u.inst.CommitLate(uint32(e.ID))
+		w, ok := u.watch[e.ID]
+		if !ok || late < w.late {
+			u.watch[e.ID] = slowWatch{since: now, late: late, grace: true}
+			continue
+		}
+		elapsed := now.Sub(w.since)
+		if elapsed < u.slow.Window {
+			continue
+		}
+		u.watch[e.ID] = slowWatch{since: now, late: late}
+		rate := float64(late-w.late) / elapsed.Seconds()
+		var bps float64
+		if link != nil {
+			bps = link.LinkMetric(uint32(e.ID)).Throughput
+		}
+		if w.grace || rate < u.slow.LatePerSecond || bps < u.slow.BytesPerSecond {
+			continue
+		}
+		if u.inst.DropParticipant(uint32(e.ID)) {
+			u.statEvict.Add(1)
+			vlog.Warn("app", "msg", "participant evicted as too slow",
+				"participant", e.ID, "late_per_s", rate, "bytes_per_s", bps,
+				"window", u.slow.Window.String())
+		}
+	}
+	for id := range u.watch {
+		if !seen[id] {
+			delete(u.watch, id)
+		}
 	}
 }
 
@@ -118,7 +202,6 @@ func (u *Authority) Open(o network.SessionOffer, local network.PeerID) {
 	u.local = local
 	u.roster = slices.Clone(o.Roster)
 	u.anchor = o.Anchor
-	u.delay = o.BarrierDelayTicks
 	u.chain = slices.Clone(o.Chain)
 	u.fixed = o.FixedAuthority
 	u.fork = false
@@ -312,10 +395,7 @@ func (u *Authority) drive() {
 	// The reachability work runs on the same loop and for the same reason: it is
 	// between two ticks, on every instance, whichever half of the protocol it is.
 	u.reach.drive(contested != 0)
-
-	// So does the playout lead, which is the authority's half alone: it reads the
-	// links it measures and publishes what the whole session then defers by.
-	u.driveLead()
+	u.driveEviction(time.Now()) // [wall] a policy over the link, not the game
 	if contested == 0 {
 		return
 	}
@@ -369,12 +449,11 @@ func (u *Authority) trySucceed() {
 	}
 	u.published = true
 	rec := network.HandoffRecord{
-		Term:              term,
-		Authority:         local,
-		Predecessor:       lost,
-		Roster:            roster,
-		Anchor:            u.anchor,
-		BarrierDelayTicks: u.delay,
+		Term:        term,
+		Authority:   local,
+		Predecessor: lost,
+		Roster:      roster,
+		Anchor:      u.anchor,
 		// The predecessor's identity returns to the pool, so its entry describes
 		// nobody now.
 		Chain:        u.chain.Without(lost),
@@ -468,7 +547,7 @@ func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 	}
 	u.term, u.holder = rec.Term, rec.Authority
 	u.roster = slices.Clone(rec.Roster)
-	u.anchor, u.delay = rec.Anchor, rec.BarrierDelayTicks
+	u.anchor = rec.Anchor
 	u.chain = slices.Clone(rec.Chain)
 	u.record = rec
 	u.accepted[rec.Term] = rec

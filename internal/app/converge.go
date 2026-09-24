@@ -100,12 +100,21 @@ func (i instance) AdoptAuthority(h snapshot.CaptureHeader) {
 	i.a.world.RunSafe(func() { i.a.telemetry.InstallTick.Store(int64(h.Tick)) })
 }
 
-func (i instance) PlayoutLead(r []network.RosterEntry) (uint64, uint64, []network.PeerID) {
-	return i.a.playoutLead(r)
+// DropParticipant closes one participant's link; a direct neighbour observes the
+// loss and the authority turns it into one departure at one agreed tick.
+func (i instance) DropParticipant(id uint32) bool {
+	p, ok := i.a.sessionTransport().(engine.PeerDroppingPort)
+	return ok && p.Disconnect(id)
 }
 
-func (i instance) SetPlayoutLead(ticks uint64)    { i.a.crossPlayoutLead(ticks) }
-func (i instance) DropParticipant(id uint32) bool { return i.a.dropParticipant(id) }
+func (i instance) CommitLate(id uint32) (n uint64) {
+	i.a.world.RunSafe(func() {
+		if r := i.a.world.Resources.Network; r != nil && int(id) < len(r.CommitLate) {
+			n = r.CommitLate[id].Load()
+		}
+	})
+	return n
+}
 
 func (i instance) AuthorityChanged(rec network.HandoffRecord, mine bool) {
 	i.a.applyAuthorityChange(rec, mine)
@@ -243,7 +252,6 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 	a.sessionOffer.Host = rec.Authority
 	a.sessionOffer.Term = rec.Term
 	a.sessionOffer.Anchor = rec.Anchor
-	a.sessionOffer.BarrierDelayTicks = rec.BarrierDelayTicks
 	a.sessionOffer.Roster = slices.Clone(rec.Roster)
 	a.sessionMu.Unlock()
 
@@ -256,6 +264,14 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 		a.crossPredecessorDeparture(rec)
 		return
 	}
+	// The crossings the lost authority was sent are nobody's to commit now.
+	a.world.RunSafe(func() {
+		for _, sys := range a.world.Systems() {
+			if d, ok := sys.(interface{ DropUncommitted() }); ok {
+				d.DropUncommitted()
+			}
+		}
+	})
 	a.corrections.FollowAuthority(rec)
 }
 

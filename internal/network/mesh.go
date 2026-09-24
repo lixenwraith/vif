@@ -226,9 +226,6 @@ func (p *MeshPort) meterLocked(id PeerID) *linkMeter {
 // ParticipantID is the canonical source order used by the barrier.
 func (p *MeshPort) ParticipantID() uint32 { return uint32(p.local) }
 
-// BarrierDelayTicks returns the default playout lead used by the in-process link.
-func (p *MeshPort) BarrierDelayTicks() uint64 { return parameter.NetworkBarrierDelayTicks }
-
 // addLink records a neighbour, reporting whether it was new.
 func (p *MeshPort) addLink(peer *MeshPort) bool {
 	p.mu.Lock()

@@ -268,6 +268,8 @@ Ping is the exception because nothing reads a remote cursor's copy — the rende
 reads the local cursor's — so a mirror frozen at its creation value costs nothing.
 The two lists are otherwise the same and have to stay so: a value on one and not the
 other is either hashed and unrepairable, or repairable and silently overwritten.
+The sync is committed like a crossing: the authority writes a guest's at its own
+next tick and relays it with that tick, so every instance writes it at one tick.
 
 Position is different: it is Shared and changes through
 `EventCursorMoveRequest`. Protection is a deterministic creation constant.

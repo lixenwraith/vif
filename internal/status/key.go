@@ -97,7 +97,7 @@ func splitKey(key string) (group, name, playerSlot string) {
 		// and whether this instance is a local fork of it rather than part of it.
 		case name == "term", name == "authority", name == "migrations",
 			name == "fork", name == "host_lost", name == "migrating",
-			name == "term_refused", name == "term_stale", name == "handoff_bytes":
+			name == "term_refused", name == "term_stale", name == "handoff_bytes", name == "evicted":
 			return "network.authority", name, ""
 		case strings.HasPrefix(name, "barrier_"):
 			return "network.barrier", strings.TrimPrefix(name, "barrier_"), ""
@@ -106,6 +106,8 @@ func splitKey(key string) (group, name, playerSlot string) {
 		case strings.HasPrefix(name, "relay_"), strings.HasPrefix(name, "transport_"),
 			strings.HasPrefix(name, "link_"):
 			return "network.link", name, ""
+		case strings.HasPrefix(name, "pace_"), strings.HasPrefix(name, "commit_"):
+			return "network.pace", name, ""
 		}
 
 	case "snapshot":

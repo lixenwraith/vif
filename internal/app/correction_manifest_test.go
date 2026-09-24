@@ -702,8 +702,7 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 	handoffBody, err := network.EncodeHandoff(network.HandoffRecord{
 		Term: network.FirstTerm + 1, Authority: 2, Predecessor: 1,
 		Roster: roster, Anchor: a.JoinAnchor(),
-		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
-		EvidenceTick:      base.Header.Tick,
+		EvidenceTick: base.Header.Tick,
 	})
 	if err != nil {
 		t.Fatalf("handoff encode: %v", err)

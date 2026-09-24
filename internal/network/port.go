@@ -119,9 +119,6 @@ func (p *SocketPort) DialPeer(addr string) error {
 	return p.transport.DialPeer(addr, p.config.ParticipantID)
 }
 
-// BarrierDelayTicks returns the playout lead negotiated by the handshake.
-func (p *SocketPort) BarrierDelayTicks() uint64 { return p.config.BarrierDelayTicks }
-
 // Send queues one framed message for a canonical participant.
 func (p *SocketPort) Send(peerID uint32, msgType uint8, payload []byte) bool {
 	return p.transport.Send(PeerID(peerID), NewMessage(MessageType(msgType), payload))

@@ -108,7 +108,8 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 				"address", a.HostAddr(), "tick", a.Position().Tick)
 		}
 		if paced {
-			nextTick = nextTick.Add(interval)
+			trim, step := a.scheduler.TakePace()
+			nextTick = nextTick.Add(engine.PacedInterval(interval, trim, step))
 			if !waitScriptTick(signals, time.Until(nextTick)) {
 				return driver.Stats(), nil
 			}

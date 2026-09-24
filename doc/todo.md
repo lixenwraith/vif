@@ -232,17 +232,6 @@ retain that distinction.
 Diagnoses and what each item follows from are in
 [Troubleshooting](troubleshooting.md).
 
-### Stop one slow participant setting everyone's playout lead
-
-- Priority: P1
-- Affected files: `internal/app/barrier.go`, `internal/converge/lead.go`
-
-The lead is the worst link's `hops × ⌈(RTT + 2·jitter)/tick⌉`, and `hops` is 2 from
-the second guest on, so two guests at 150 ms RTT wait 6–10 ticks (300–500 ms) for
-their own crossings. A browser guest's late probe replies — its one thread busy
-rendering — widen that worst link for everyone. Decide per-hop one-way costs, and
-whether a participant's own stalls should count.
-
 ### Find the glyphs a region change left behind in a browser run
 
 - Priority: P2

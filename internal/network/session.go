@@ -37,8 +37,7 @@ type SessionOffer struct {
 
 	// Roster is everyone the coordinator admitted, the cursorless one included.
 	// ParticipantCount is what a count of participants means; len(Roster) is not.
-	Roster            []RosterEntry `json:"participants"`
-	BarrierDelayTicks uint64        `json:"barrier_delay_ticks"`
+	Roster []RosterEntry `json:"participants"`
 
 	// Chain is the succession candidate list with the address each was confirmed
 	// at. Beside the roster rather than inside RosterEntry, which SameRoster
@@ -126,9 +125,6 @@ func (r JoinerReport) Sized() bool { return r.Width > 0 && r.Height > 0 }
 func (o SessionOffer) Validate() error {
 	if o.Host == 0 || o.Assigned == 0 || o.Host == o.Assigned {
 		return errors.New("join offer carries invalid participant assignment")
-	}
-	if o.BarrierDelayTicks == 0 {
-		return errors.New("join offer carries no barrier delay")
 	}
 	if o.Term < FirstTerm {
 		return errors.New("join offer carries no authority term")
@@ -619,7 +615,6 @@ func (p *PendingJoin) TransportConfig() *Config {
 	cfg := p.base
 	cfg.Role = RolePeer
 	cfg.ParticipantID = p.offer.Assigned
-	cfg.BarrierDelayTicks = p.offer.BarrierDelayTicks
 	cfg.preconnected = p.conn
 	cfg.preconnectedPeer = p.offer.Host
 	return &cfg

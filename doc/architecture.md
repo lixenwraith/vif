@@ -368,13 +368,11 @@ and nothing else: a dial is budgeted per address, the handshake is bounded and o
 the accept path, and every buffer an arriving frame can reach is capped, but
 nothing proves who the peer is. The artifact barrier exchanges crossings without
 a synchronous per-tick round trip, and because every artifact names the absolute
-tick it applies at, a node relays what it receives so a participant reaches
-instances its producer never linked to. Its playout lead is a receive-side
-interpolation buffer: a participant applies its *own* crossing in the tick it
-produced it for, which is what makes local input feel local. The exception is the
-artifact that decides what the world *is* rather than what happens in it — a roster
-change, a reset, a species allocation — which lands on one agreed tick everywhere,
-because a capture references shared entities by id.
+tick it applies at, the authority commits each one and relays it, so a participant
+reaches instances its producer never linked to. A participant stamps its own
+crossings with the lead its own link asks for, and every instance applies each at
+the tick the authority committed it to; the D-18 prediction is what makes local
+input feel local. See [Multiplayer](multi-player.md) §3.5.
 
 A participant may also arrive at any tick. `:host <addr>` opens a run that is
 already playing; the joiner receives the shared world as a chunked capture (D-19),
@@ -408,8 +406,7 @@ migration moves the session and not only its authorship; see
 [Multiplayer](multi-player.md) §5.3.
 
 Remaining limitations include unauthenticated plaintext native links, no browser
-transport, no merge for explicit minority forks, and a producer's own crossing
-still landing a playout lead before the authority's copy of it does. Remote
+transport, and no merge for explicit minority forks. Remote
 crossing fences record the highest applied sequence rather than a contiguous
 prefix, a bounded trade-off documented in the fleet plan. The domain boundary,
 event classification, wire

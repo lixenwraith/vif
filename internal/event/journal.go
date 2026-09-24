@@ -38,7 +38,10 @@ import (
 // carries its digest. A path is the same simulation on one machine and nothing on
 // another, so it could neither refuse an edited scenario nor admit an identical
 // one installed elsewhere.
-const JournalSchema = 13
+//
+// 14: EventPlayoutLead is a local record of the lead this instance stamps its own
+// crossings with, not a barrier-bound session value the authority published.
+const JournalSchema = 14
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.

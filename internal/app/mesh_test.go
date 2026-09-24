@@ -22,11 +22,10 @@ func meshSession(t *testing.T, seed uint64, n int, links [][2]int, chain ...netw
 	t.Helper()
 
 	offer := network.SessionOffer{
-		Host:              1,
-		Assigned:          2,
-		Term:              network.FirstTerm,
-		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
-		Chain:             meshChain(chain),
+		Host:     1,
+		Assigned: 2,
+		Term:     network.FirstTerm,
+		Chain:    meshChain(chain),
 	}
 	for i := range n {
 		offer.Roster = append(offer.Roster,

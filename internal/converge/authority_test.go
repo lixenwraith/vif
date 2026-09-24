@@ -6,9 +6,9 @@ package converge
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/network"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 // chainOf renders identities as chain entries; an in-process session needs no
@@ -28,7 +28,7 @@ func record(u *Authority, term network.AuthorityTerm, authority, predecessor net
 	held := u.State()
 	return network.HandoffRecord{
 		Term: term, Authority: authority, Predecessor: predecessor,
-		Roster: held.Roster, Anchor: held.Anchor, BarrierDelayTicks: held.Delay,
+		Roster: held.Roster, Anchor: held.Anchor,
 	}
 }
 
@@ -110,7 +110,6 @@ func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 	guest.u.Open(network.SessionOffer{
 		Host: 1, Assigned: 2, Term: network.FirstTerm,
 		Roster: roster(2), Chain: chainOf(1, 2), FixedAuthority: true,
-		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 	}, 2)
 
 	// The succession still opens — opening it is what floods the loss to survivors
@@ -143,7 +142,6 @@ func TestTheSuccessionOrderIsTheOrderTheRuleElects(t *testing.T) {
 	r.u.Open(network.SessionOffer{
 		Host: 1, Assigned: 4, Term: network.FirstTerm,
 		Roster: roster(4), Chain: chainOf(3, 4),
-		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 	}, 4)
 
 	got := r.u.successionOrder()
@@ -170,5 +168,29 @@ func TestAGuestAdmitsAPeerLink(t *testing.T) {
 	}
 	if err := guest.r.admitPeerLink(3); err == nil {
 		t.Fatal("a guest admitted a link from itself")
+	}
+}
+
+// TestOnlyTheParticipantThatStaysLateIsEvicted: the first window after arrival is
+// grace, a participant whose own crossings keep landing late is dropped at the end
+// of a window, and one that is never late is kept whatever the session costs it.
+func TestOnlyTheParticipantThatStaysLateIsEvicted(t *testing.T) {
+	t.Parallel()
+	host := newRun(t, 1, nil, roster(3))
+	host.open(1, nil, true)
+	host.u.SetSlowPolicy(SlowPolicy{Window: time.Second, LatePerSecond: 1})
+	host.world.late = map[uint32]uint64{}
+	start := time.Unix(1_000_000, 0)
+
+	host.u.driveEviction(start)
+	host.world.late[2] = 50
+	host.u.driveEviction(start.Add(2 * time.Second))
+	if len(host.world.dropped) != 0 {
+		t.Fatalf("evicted %v inside the grace window", host.world.dropped)
+	}
+	host.world.late[2] = 100
+	host.u.driveEviction(start.Add(4 * time.Second))
+	if len(host.world.dropped) != 1 || host.world.dropped[0] != 2 {
+		t.Fatalf("evicted %v, want only the late participant 2", host.world.dropped)
 	}
 }

@@ -91,11 +91,10 @@ type HandoffRecord struct {
 	Predecessor PeerID        `json:"predecessor"`
 
 	// The membership, moved whole. Roster and slot assignments are the closed
-	// roster (D-11) and must be byte-identical across the handoff; the anchor and
-	// the barrier delay are what a joiner admitted by the successor adopts.
-	Roster            []RosterEntry    `json:"roster"`
-	Anchor            event.JoinAnchor `json:"anchor"`
-	BarrierDelayTicks uint64           `json:"barrier_delay_ticks"`
+	// roster (D-11) and must be byte-identical across the handoff; the anchor is
+	// what a joiner admitted by the successor adopts.
+	Roster []RosterEntry    `json:"roster"`
+	Anchor event.JoinAnchor `json:"anchor"`
 
 	// Chain is the candidate list the successor is taking over with, moved whole
 	// for the same reason the roster is.
@@ -148,9 +147,6 @@ func (h HandoffRecord) Validate(roster []RosterEntry, chain SuccessionChain) err
 	if h.Authority != want {
 		return fmt.Errorf("handoff names participant %d as the successor to %d; this roster designates %d",
 			h.Authority, h.Predecessor, want)
-	}
-	if h.BarrierDelayTicks == 0 {
-		return errors.New("handoff carries no barrier delay")
 	}
 	return nil
 }

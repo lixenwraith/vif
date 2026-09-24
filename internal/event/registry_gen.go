@@ -211,7 +211,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventNetworkDisconnect:               ClassLocal,
 	EventParticipantJoined:               ClassBus,
 	EventParticipantDeparted:             ClassBus,
-	EventPlayoutLead:                     ClassBus,
+	EventPlayoutLead:                     ClassLocal,
 	EventCursorStateSync:                 ClassLocal,
 	EventGameResetRequest:                ClassBus,
 	EventMetaDebugRequest:                ClassLocal,

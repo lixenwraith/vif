@@ -170,7 +170,7 @@ func TestOnlyTheDesignatedSuccessorMayHoldATerm(t *testing.T) {
 	roster := []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}}
 	base := network.HandoffRecord{
 		Term: network.FirstTerm + 1, Authority: 2, Predecessor: 1,
-		Roster: roster, BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
+		Roster: roster,
 	}
 	if err := base.Validate(roster, nil); err != nil {
 		t.Fatalf("the designated successor's own record was refused: %v", err)
@@ -309,12 +309,11 @@ func handOff(t *testing.T, apps []*App, to int) {
 	t.Helper()
 	held := apps[to].authority.State()
 	body, err := network.EncodeHandoff(network.HandoffRecord{
-		Term:              held.Term + 1,
-		Authority:         network.PeerID(to + 1),
-		Predecessor:       1,
-		Roster:            held.Roster,
-		Anchor:            held.Anchor,
-		BarrierDelayTicks: held.Delay,
+		Term:        held.Term + 1,
+		Authority:   network.PeerID(to + 1),
+		Predecessor: 1,
+		Roster:      held.Roster,
+		Anchor:      held.Anchor,
 	})
 	if err != nil {
 		t.Fatalf("encode the handoff: %v", err)
@@ -342,12 +341,11 @@ func TestMembershipIsByteIdenticalAcrossAHandoff(t *testing.T) {
 	type membership struct {
 		roster  []network.RosterEntry
 		anchor  string
-		delay   uint64
 		cursors []uint64
 	}
 	read := func(a *App) membership {
 		held := a.authority.State()
-		m := membership{roster: held.Roster, anchor: held.Anchor.Anchor.ScenarioID, delay: held.Delay}
+		m := membership{roster: held.Roster, anchor: held.Anchor.Anchor.ScenarioID}
 		a.World().RunSafe(func() {
 			for slot := range len(apps) {
 				m.cursors = append(m.cursors, uint64(a.World().Resources.Player.Slot(uint8(slot))))
@@ -380,9 +378,8 @@ func TestMembershipIsByteIdenticalAcrossAHandoff(t *testing.T) {
 					i+2, j, got.roster[j], want.roster[j])
 			}
 		}
-		if got.anchor != want.anchor || got.delay != want.delay {
-			t.Fatalf("survivor %d anchor/delay moved: %q/%d, was %q/%d",
-				i+2, got.anchor, got.delay, want.anchor, want.delay)
+		if got.anchor != want.anchor {
+			t.Fatalf("survivor %d anchor moved: %q, was %q", i+2, got.anchor, want.anchor)
 		}
 		for slot := range got.cursors {
 			if got.cursors[slot] != want.cursors[slot] {
@@ -421,7 +418,7 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	// rather than "who went".
 	host.openAuthority(network.SessionOffer{
 		Anchor: host.JoinAnchor(), Host: 2, Assigned: hostParticipantID,
-		Term: network.FirstTerm, BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
+		Term:   network.FirstTerm,
 		Roster: []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
 	}, hostParticipantID)
 	host.reportPeerLost(2)

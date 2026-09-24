@@ -49,7 +49,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 
 | Area | Current behaviour |
 |---|---|
-| Local input | Every crossing applies at one agreed tick, a playout lead after its production, on its producer as on its peers. The D-18 prediction answers the keystroke at once; the shared store moves when the crossing does. The one exception is a typed gold member, which the producer removes at once because the next keystroke validates against the live run. |
+| Local input | Every crossing applies at one tick on every instance, its producer's included: the producer stamps it with its own lead and the authority commits it (§3.5). The D-18 prediction answers the keystroke and the weapons fire from the predicted cell; the shared store moves when the crossing applies. The one exception is a typed gold member, which the producer removes at once because the next keystroke validates against the live run. |
 | Shared authority | The host's Shared world is canonical. A guest's predicted result is provisional until the next correction. |
 | Player state | Each instance simulates only its Player domain. Owner-authored cursor values have one writer and travel as values; a receiver keeps the values it authors across an install. |
 | Predicted derivations | A shared death a predicting instance derives is stamped `PhasePredicted` and held in a ledger. Presentation follows it; the player-domain rewards behind it are paid once, when an authoritative world proves the entity gone. |
@@ -62,9 +62,9 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. Every host arms the same mid-run gate once its own lobby is done, so a reconnect takes one path whether the session started with `-host`, `-serve`, a script, or `:host`. |
 | Roster | Every admitted peer holds an identity, a term and a vote; a roster slot binds it to a cursor and makes it a participant. The coordinator of a dedicated host holds no slot, so it is a peer and not a participant, and a session of one guest has one participant in a roster of two. |
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
-| Playout lead | Re-derived by the authority from the worst measured round trip — the whole round trip plus a reordering allowance, times the topology's hop count — and published as a barrier-bound crossing. No lead at all with nobody on the far end, `NetworkBarrierDelayTicks` with nothing measured, `NetworkBarrierMinDelayTicks` to `NetworkBarrierMaxDelayTicks` once a link has been probed. It widens at once and narrows on a window. |
-| Playout ceiling | A link whose *smallest* observed round trip asks for more than `NetworkBarrierMaxDelayTicks` is dropped rather than absorbed. The smoothed round trip is not the test: a backlogged link is the cadence controller's problem, not the barrier's. |
-| Mesh and relay | Epochs, owner state, corrections, and authority records flood with per-source duplicate suppression. A relay with retained authority content keeps selective repair available to participants behind it. |
+| Playout lead | Per participant (§3.5): a guest's own round trip to the authority plus a jitter allowance and a relay tick, less how late the authority's epochs land on it; the authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
+| Commit and pacing | The authority commits every guest crossing — as stamped, late at its next tick, or void past `NetworkCommitLateTicks` — and relays only the committed copy. Every guest paces its tick interval so the authority's epochs land inside its band. A participant whose own crossings stay late is evicted by policy (§3.5). |
+| Mesh and relay | Committed epochs, owner state, corrections, and authority records flood with per-source duplicate suppression; a raw epoch travels only toward the authority. A relay with retained authority content keeps selective repair available to participants behind it. |
 | Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is never elected (§5.3). |
 | Host loss | `-authority migrate` (default off `-serve`): **the first survivor in the succession chain** takes the next term, with no vote, because every survivor computes it from state it already holds identically. `-authority host` (default on `-serve`): nobody takes it and every survivor continues alone. |
 | Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, and tick interval, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted rather than compared — `PeerIdentity.SessionFrom` takes the coordinator's, and a scenario no local root holds arrives over the wire. The corpus is neither: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
@@ -118,7 +118,6 @@ A correction must not be repairing entity allocation or run numbering.
 | `EventSwarmSpawnRequest` / `EventQuasarSpawnRequest` | allocates a shared species from a drain fusion |
 | `EventDrainDefeated` | advances the shared progression a region gates its spawns on |
 | `EventCursorDefeatState` | folds into `session.all_defeated`, which `MonitorGlobalReset` rebuilds the level on |
-| `EventPlayoutLead` | changes the lead every instance defers its own crossings by |
 
 The last two are the least obvious and each was a visible defect. A producer that
 counted its ninth drain a lead early entered the escalation a lead early and built
@@ -272,44 +271,44 @@ replay does for the level-triggered half (D-19). Neither covers the other: a hol
 that follows a Shared region is re-derived from the imported state, and a one-shot
 reward is held until the state that caused it is proved.
 
-### 3.5 The lead the session defers by
+### 3.5 Command frames, the commit and pacing
 
-The playout lead is session identity — every instance defers its own crossings by
-the same number of ticks, and a reproduction of the run defers by the same again —
-so it is authored by one instance and travels rather than being measured
-independently. The authority re-derives it between ticks from the links it measures
-and publishes each value as the barrier-bound crossing in §3.1's table; the offer
-and the handoff record carry the same number to a participant with no history to
-apply.
+Each participant stamps its own crossings with the lead its own link asks for, and
+nobody defers by anyone else's. A guest's lead (`ownLead`) is its round trip to the
+authority plus `NetworkBarrierJitterMargin` times its variation, plus
+`NetworkRelaySlackTicks` for the authority to relay it, less how late the
+authority's epochs already land on it; the authority's own is one tick. It rises at
+once and falls after `NetworkBarrierRenegotiateTicks` of a lower reading. Each change
+is a local, journaled `EventPlayoutLead`, so a reproduction switches on the same tick.
 
-Three answers rather than a constant. A roster with nobody on the far end takes no
-lead at all: nothing is sent, so nothing is waiting for it, which is what makes a
-hosted solo run cost no input latency. A roster with nothing measured keeps
-`NetworkBarrierDelayTicks`, because an unready link is no evidence rather than a
-fast one. A measured link asks for its whole round trip plus a reordering
-allowance, times the hop count, between `NetworkBarrierMinDelayTicks` and
-`NetworkBarrierMaxDelayTicks` — so an in-process or loopback session defers by one
-tick where it used to pay three. The round trip and not half of it, because the
-authority reads a guest's crossing a correction's age after the guest produced it:
-a lead of one way keeps the peer's copy on time and the authority's a correction
-late, and every capture read in between is missing it.
+The authority commits. A guest sends its epoch raw; the authority applies an on-time
+crossing at its stamped tick, a late one at its own next tick, and one more than
+`NetworkCommitLateTicks` late as void — applied nowhere, it only closes its source's
+fence, so its producer's projection stops replaying it. It relays the committed copy
+with the ticks it chose. Every other participant applies another's crossings only
+from that copy or the authority's own epochs, and passes a raw one on toward the
+authority. A producer with a link of its own is heard on that link; its identity on
+another is refused. A slow or stalling participant therefore delays only its own
+actions and pays for the corrections that repair its own early copies.
 
-The two directions are not symmetric. Widening is immediate, because an artifact
-that misses the lead costs a correction and one that clears it costs nothing;
-narrowing waits `NetworkBarrierRenegotiateTicks` of the lower measurement holding.
-That same window re-announces an unchanged lead, so a change a peer never received
-costs a window rather than the rest of the session. A narrowing lead would also
-number the next artifact below one already scheduled, and a receiver orders by
-`(ApplyTick, Source, Seq)`; the barrier therefore holds each source's newest apply
-tick and lets the production epoch catch up to it, which decays the lead by a tick
-per tick instead of reordering two of one source's crossings.
+A guest paces its clock against the authority (`observeAuthorityEpoch`): it trims its
+tick interval, by up to `NetworkPacePermilleMax`, until the latest authority epoch of
+`NetworkPaceWindow` lands between `NetworkPaceBandTicks` early and
+`NetworkAheadTicks` late, and steps past `NetworkPaceStepTicks` of error. Wall pacing
+only: the simulation step is fixed, so a trim shows as the world running a few
+percent fast or slow while it settles. In the band every committed crossing reaches
+the guest before its tick. `NetworkAheadTicks` lets a guest run ahead: each tick
+shortens its own lead by one and lands everyone else's crossings on it up to a tick
+late, repaired by its own corrections alone. It is zero: measured at 150 ms, a tick
+ahead saved at most one tick of lead and tripled the corrections that moved a
+placement on the guest that ran it.
 
-The ceiling is a refusal, not a clamp. It is judged on the link's *smallest*
-observed round trip, because a backlogged link reports an inflated one that the
-cadence controller is already narrowing the correction stream to relieve — dropping
-that participant would be answering a bandwidth problem by ending somebody's game.
-What the floor says is what the link costs with nothing queued on it, and past the
-ceiling that is not a session anyone can play.
+While authoring, the authority evicts a participant whose crossings, over
+`-slow-window`, reached it late at least `-slow-late` times a second while its link
+carried at least `-slow-bytes` a second (`driveEviction`). The first window after
+arrival is grace, and only a participant's own raw epochs count, so its actions
+relayed to the others never mark them. On a handoff a guest drops its own
+uncommitted crossings, scheduled and retained: the authority they went to is gone.
 
 ## 4. Correction pipeline
 
@@ -603,11 +602,16 @@ The useful runtime signals are:
   already represented them;
 - `network.artifacts_authority_superseded`: the subset discarded by the authority
   sequence fence rather than by tick;
-- `network.lag_ticks`, `network.stale`, and `network.barrier_late`: whether the
-  receive lead is being missed, and `network.barrier_delay_ticks` what the lead
-  currently is. It moves during a session now (§3.5): `playout lead renegotiated`
-  on the authority and `playout lead adopted` on every instance name each change,
-  and the two ticks must agree across the session;
+- `network.lag_ticks`, `network.stale`, and `network.barrier_late`: whether this
+  instance is behind the session and applying crossings late, and
+  `network.barrier_delay_ticks` its own lead (§3.5); `playout lead adopted` logs each
+  change;
+- `network.pace_late_ticks`, `network.pace_trim_permille` and `network.pace_steps`:
+  how late the authority's epochs land on this guest, and what its pacing does about
+  it; `network.commit_late` and `network.commit_void` on the authority count the
+  crossings it committed late and voided, `network.commit_refused_raw` on a guest the
+  raw epochs it passed on without applying, and `network.evicted` the participants
+  the slow policy dropped;
 - `network.listening`, `network.chain`, and `network.rejoin_attempts`: whether this
   instance bound a port of its own, how many succession candidates it holds, and how
   far a survivor with no link has walked the succession list;
@@ -677,17 +681,10 @@ entry says what is actually absent rather than what is imperfect, and how to see
 
 ### Closed since the last review
 
-2. **The playout lead is now measured, and re-measured.** `BarrierDelayTicks` travelled from
-   `SessionOffer` through `HandoffRecord` to `NetworkSystem.delayTicks` and every
-   writer put the same constant in it. It is derived at lobby close from the worst
-   measured round trip — the round trip plus a reordering allowance, times the hop count,
-   floored at the constant and capped at `NetworkBarrierMaxDelayTicks` — and
-   published as `network.barrier_delay_ticks`. It was chosen once because no
-   artifact between offers and handoffs could tell anyone it had changed; §3.5's
-   barrier-bound crossing is that artifact, so the authority now re-derives it
-   between ticks and the floor is a measurement rather than a constant. A session
-   that closes before a probe completes still keeps the constant, which is the
-   answer it had before.
+2. **No participant sets another's lead.** The session-wide lead — the worst link
+   times the hop count, published by the authority — is gone. Each participant stamps
+   its own crossings from its own link, the authority commits them, and guests pace
+   against it (§3.5); a stalling or slow participant delays and corrects only itself.
 
 3, 4, 5. **Reachability, and what it makes decidable.** A guest binds and declares,
    the coordinator publishes the whole chain, and every participant dials the current
@@ -786,13 +783,12 @@ entry says what is actually absent rather than what is imperfect, and how to see
 The automated suite covers domain boundaries, deterministic continuation,
 two-participant and mesh convergence, selective repair and fallback, replay
 retention, correction ordering, join/reconnect, link shaping, relay retention,
-authority succession, the playout lead's choice over a shaped link, the correction
+authority succession, the commit, pacing and own lead of §3.5, the correction
 playout buffer, the knockback an artifact rather than a stream position determines,
 the identity an explosion's re-derived hits inherit from it, the per-attacker window
 and additive join that make two participants' knockbacks compose the same way in
 either order, the one reward a shared death pays however many times a rollback makes
-a guest derive it, the lead a measured link narrows the session to and the tick every
-barrier adopts it on, the link the ceiling drops rather than absorbs,
+a guest derive it, the eviction that drops only the participant that stays late,
 the domain a capture's RNG streams may carry, the placement budget and
 the storm burst a shared stream draws before it reads a live position, the owner-state
 sync an install must not stall, the agreed tick a shared-identity crossing waits for

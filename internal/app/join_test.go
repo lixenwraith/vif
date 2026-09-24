@@ -9,7 +9,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
@@ -17,11 +16,10 @@ import (
 // that drives HostSession and JoinSessionAt directly instead of over a socket.
 func sessionOfferFor(an event.JoinAnchor, n int) network.SessionOffer {
 	o := network.SessionOffer{
-		Anchor:            an,
-		Host:              hostParticipantID,
-		Assigned:          2,
-		Term:              network.FirstTerm,
-		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
+		Anchor:   an,
+		Host:     hostParticipantID,
+		Assigned: 2,
+		Term:     network.FirstTerm,
 	}
 	for i := range n {
 		o.Roster = append(o.Roster,
@@ -216,7 +214,6 @@ func TestAJoinerAdoptsTheHostsRngSession(t *testing.T) {
 
 	cfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 120, Height: 40}, network.SessionOffer{
 		Anchor: an, Host: 1, Assigned: 2, Term: network.FirstTerm,
-		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 		Roster: []network.RosterEntry{
 			{ID: 1, Slot: 0}, {ID: 2, Slot: 1},
 		},

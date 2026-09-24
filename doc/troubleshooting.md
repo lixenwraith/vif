@@ -337,3 +337,25 @@ the way `SplashSystem` already retires a timer whose anchor is gone.
 leaves a bolt until that quasar's next zap-stop or death. `QuasarSystem` is
 shared-profile and may not read the player store to find the bolt, so the fix is a
 lease the owner renews rather than a lookup. See `doc/todo.md`.
+
+## 9. Fourth round (2026-09-23, fleet, a terminal and a browser guest)
+
+A terminal guest at 150 ms trailed its own shots by 300–500 ms, played worse while a
+browser guest was present, and saw small corrections several times a second.
+Measured with two scripted guests behind a 150 ms delay proxy on `main`:
+
+- **One lead for everyone.** The authority set a session-wide lead from the worst
+  link, so a stalling tab's inflated round trip raised everybody's to ten ticks. Each
+  participant now stamps its own, and the authority commits (multi-player.md §3.5).
+- **Unpaced clocks.** A lobby guest ran four ticks ahead of the authority and applied
+  99.6% of its peer's crossings late; no manifest matched at the tick it described.
+  Guests now pace against the authority's epochs.
+- **Lossy projection.** A projection dropped peer crossings and raced a live tick;
+  both closed (multi-player.md §3.3).
+- **Shots from the shared cell.** Weapons read the store, a lead behind the drawn
+  cursor; they read `CursorCell` now.
+
+Hash-only corrections went from 0% to 85–94%, installs from four a second to about
+one, and installs that moved a placement from half of them to 2–9%; a guest that
+freezes 150 ms in every 400 raises only its own lead. Owner-authored syncs are
+committed to a tick like crossings, which is what closed most of that last gap.

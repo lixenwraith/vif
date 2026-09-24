@@ -83,11 +83,11 @@ type selectiveState struct {
 	// the clock reaches the tick it describes; a newer arrival replaces it.
 	heldManifest []byte
 
-	// wantTick is the tick a manifest waiting on this instance's clock names, and
-	// atTick the world read at exactly that tick by TickClosed; answerManifest takes
-	// it, so an index is compared against the tick it describes.
-	wantTick uint64
-	atTick   *snapshot.SharedCapture
+	// want holds the ticks an index has named or promised this instance, and at the
+	// worlds TickClosed read as each closed; answerManifest takes the one its index
+	// describes. Both hold the newest two.
+	want []uint64
+	at   []snapshot.SharedCapture
 
 	// wantKeyframe records that this receiver has asked for a whole world and is
 	// waiting for one, so a manifest arriving in the meantime is answered with the
@@ -110,27 +110,38 @@ type selectiveState struct {
 // Caller MUST hold publishMu, and MUST NOT hold the world lock.
 func (c *Corrections) publishManifest(port engine.NetworkPort, index *snapshot.Manifest, due []uint32) ([]uint32, error) {
 	started := time.Now() // [wall] telemetry only; outside the world lock
-	body, err := snapshot.EncodeManifest(index.Summary())
-	if err != nil {
-		return due, fmt.Errorf("correction manifest encode: %w", err)
+	summary := index.Summary()
+	tick := summary.Header.Tick
+	// One body per promised next tick: peers on one cadence share it.
+	bodies := make(map[uint64][]byte, 1)
+	body := func(next uint64) ([]byte, error) {
+		if b, ok := bodies[next]; ok {
+			return b, nil
+		}
+		summary.Next = next
+		b, err := snapshot.EncodeManifest(summary)
+		if err != nil {
+			return nil, fmt.Errorf("correction manifest encode: %w", err)
+		}
+		if len(b) > network.MaxPayloadSize {
+			// Section summaries and a header outgrowing a frame would mean a section
+			// vector no descent could be cheap over; fall back rather than chunk it.
+			return nil, fmt.Errorf("correction manifest is %d bytes, past one frame", len(b))
+		}
+		bodies[next] = b
+		return b, nil
 	}
-	if len(body) > network.MaxPayloadSize {
-		// A manifest is section summaries and a header; outgrowing a frame would
-		// mean the world had grown a section vector no descent could be cheap
-		// over. Say so and let the caller fall back rather than chunk it.
-		return due, fmt.Errorf("correction manifest is %d bytes, past one frame", len(body))
-	}
-	tick := index.Summary().Header.Tick
-
-	m := c.tel
-	m.HashUS.Store(time.Since(started).Microseconds())
 
 	var missed []uint32
-	sent := 0
+	sent, bytes := 0, 0
 	for _, id := range due {
 		p := c.peers[id]
 		if p == nil {
 			continue
+		}
+		b, err := body(tick + p.plan.CadenceTicks)
+		if err != nil {
+			return due, err
 		}
 		switch {
 		case p.wide > 0:
@@ -138,20 +149,23 @@ func (c *Corrections) publishManifest(port engine.NetworkPort, index *snapshot.M
 			p.wide--
 		case p.silence >= parameter.SnapshotManifestSilenceCorrections:
 			// Answering nothing; the index cannot reach it.
-		case !port.Send(id, uint8(network.MsgStateManifest), body):
+		case !port.Send(id, uint8(network.MsgStateManifest), b):
 			p.refused++
 		default:
 			p.manifestTick = tick
 			p.silence++
 			sent++
+			bytes += len(b)
 			continue
 		}
 		missed = append(missed, id)
 	}
+	m := c.tel
+	m.HashUS.Store(time.Since(started).Microseconds())
 	if sent > 0 {
 		m.ManifestSent.Add(1)
-		m.ManifestBytesSent.Add(int64(len(body) * sent))
-		c.recordSelectiveSizeLocked(len(body))
+		m.ManifestBytesSent.Add(int64(bytes))
+		c.recordSelectiveSizeLocked(bytes / sent)
 	}
 	return missed, nil
 }
@@ -515,24 +529,34 @@ func (c *Corrections) holdsRetention(tick uint64) bool {
 }
 
 // worldAt is this instance's world at tick: the reading TickClosed took there, or
-// the present when the manifest arrived too late for one, which is counted.
+// the present when none was taken, which is counted.
 func (c *Corrections) worldAt(tick uint64) (snapshot.SharedCapture, error) {
+	var (
+		at    snapshot.SharedCapture
+		found bool
+	)
 	c.selectiveMu.Lock()
-	at := c.selective.atTick
-	if at != nil && at.Header.Tick <= tick {
-		c.selective.atTick = nil
+	kept := c.selective.at[:0]
+	for _, cap := range c.selective.at {
+		switch {
+		case cap.Header.Tick == tick:
+			at, found = cap, true
+		case cap.Header.Tick > tick:
+			kept = append(kept, cap)
+		}
 	}
+	c.selective.at = kept
 	c.selectiveMu.Unlock()
-	if at != nil && at.Header.Tick == tick {
-		err := c.inst.SealCapture(at)
-		return *at, err
+	if found {
+		err := c.inst.SealCapture(&at)
+		return at, err
 	}
 	c.tel.ManifestsOffTick.Add(1)
 	return c.inst.CaptureShared()
 }
 
 // TickClosed runs under the world lock after every tick. A guest reads its world
-// here when a waiting manifest names this tick; a host wakes its pump, so a
+// here when an index names or promises this tick; a host wakes its pump, so a
 // publication describes the tick that just closed rather than a timer's phase.
 func (c *Corrections) TickClosed(tick uint64) {
 	if c.authority.isAuthority() {
@@ -540,9 +564,12 @@ func (c *Corrections) TickClosed(tick uint64) {
 		return
 	}
 	c.selectiveMu.Lock()
-	want := c.selective.wantTick
+	wanted := slices.Contains(c.selective.want, tick)
+	if wanted {
+		c.selective.want = slices.DeleteFunc(c.selective.want, func(t uint64) bool { return t <= tick })
+	}
 	c.selectiveMu.Unlock()
-	if want != tick {
+	if !wanted {
 		if c.holdingThrough(tick) {
 			c.signal()
 		}
@@ -554,7 +581,7 @@ func (c *Corrections) TickClosed(tick uint64) {
 		return
 	}
 	c.selectiveMu.Lock()
-	c.selective.atTick, c.selective.wantTick = &at, 0
+	c.selective.at = keepNewest(append(c.selective.at, at), 2)
 	c.selectiveMu.Unlock()
 	c.signal()
 }
@@ -821,8 +848,12 @@ func (c *Corrections) ReceiveSelective(kind uint8, from uint32, body []byte) {
 		c.selective.source = from
 		c.selective.manifests = keepNewest(
 			append(c.selective.manifests, body), parameter.SnapshotCorrectionQueue)
-		if ahead, ok := c.manifestAhead(body); ok && ahead > 0 {
-			c.selective.wantTick = c.inst.Position().Tick + ahead
+		if m, err := snapshot.DecodeManifest(body); err == nil {
+			for _, t := range []uint64{m.Header.Tick, m.Next} {
+				if t > c.inst.Position().Tick && !slices.Contains(c.selective.want, t) {
+					c.selective.want = keepNewest(append(c.selective.want, t), 2)
+				}
+			}
 		}
 	case network.MsgStateShard:
 		c.selective.shardSets = keepNewest(

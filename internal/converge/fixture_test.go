@@ -36,13 +36,9 @@ type stub struct {
 	abandoned [][]network.RosterEntry
 	said      []string
 
-	// The playout lead: what the barrier defers by, what the links ask for, and
-	// what the authority did about it.
-	leadCurrent uint64
-	leadTarget  uint64
-	leadOverrun []network.PeerID
-	leads       []uint64
-	dropped     []uint32
+	// What the eviction policy reads, and what it decided.
+	late    map[uint32]uint64
+	dropped []uint32
 }
 
 // adopted is one call the succession made on the run: the record it moved to, and
@@ -110,18 +106,10 @@ func (s *stub) AdoptAuthority(h snapshot.CaptureHeader) {
 	s.adopted = append(s.adopted, h)
 }
 
-// PlayoutLead answers what the criterion staged; SetPlayoutLead and
-// DropParticipant record what the authority decided from it.
-func (s *stub) PlayoutLead([]network.RosterEntry) (uint64, uint64, []network.PeerID) {
+func (s *stub) CommitLate(id uint32) uint64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.leadCurrent, s.leadTarget, s.leadOverrun
-}
-
-func (s *stub) SetPlayoutLead(ticks uint64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.leads = append(s.leads, ticks)
+	return s.late[id]
 }
 
 func (s *stub) DropParticipant(id uint32) bool {
@@ -212,7 +200,6 @@ func (r *run) open(host network.PeerID, chain network.SuccessionChain, fixed boo
 	r.u.Open(network.SessionOffer{
 		Host: host, Assigned: network.PeerID(r.world.local), Term: network.FirstTerm,
 		Roster: r.world.WorldRoster(), Chain: chain, FixedAuthority: fixed,
-		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 	}, network.PeerID(r.world.local))
 }
 

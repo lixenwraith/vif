@@ -885,10 +885,9 @@ type PeerDroppingPort interface {
 	Disconnect(peerID uint32) bool
 }
 
-// NetworkSessionPort exposes barrier metadata negotiated before simulation starts.
+// NetworkSessionPort exposes the identity negotiated before simulation starts.
 type NetworkSessionPort interface {
 	ParticipantID() uint32
-	BarrierDelayTicks() uint64
 }
 
 // LinkMeasuringPort is a transport that measures its own links.
@@ -1010,6 +1009,16 @@ type NetworkResource struct {
 	Authority atomic.Uint32
 	Term      atomic.Uint64
 
+	// Pace is the permille a guest's tick interval is trimmed by and PaceStep the
+	// whole ticks its clock is still owed; NetworkSystem writes both from where the
+	// authority's epochs land, and the scheduler reads them. Wall pacing only.
+	Pace     atomic.Int32
+	PaceStep atomic.Int64
+
+	// CommitLate counts, per source, the crossings that reached this instance after
+	// the tick they named while it was authoring: the eviction policy's input.
+	CommitLate [parameter.MaxPlayers + 2]atomic.Uint64
+
 	// OnTickClosed runs under the world lock after every completed tick, so the
 	// session layer can read a world at exactly the tick a held manifest names. It
 	// must not block.
@@ -1024,9 +1033,6 @@ func NewNetworkResource(port NetworkPort) *NetworkResource {
 	if session, ok := port.(NetworkSessionPort); ok {
 		if id := session.ParticipantID(); id != 0 {
 			r.ParticipantID = id
-		}
-		if delay := session.BarrierDelayTicks(); delay != 0 {
-			r.BarrierDelayTicks = delay
 		}
 	}
 	return r

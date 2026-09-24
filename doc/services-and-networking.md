@@ -572,16 +572,15 @@ the flood. Because every frame names the absolute tick it applies at, a relayed
 artifact still lands on the same tick as the producer's own copy. A roster change
 travels the same way, produced only by the coordinator so it has one apply tick.
 
-`MsgStateSync` periodically copies only the D-13 owner-authored cursor set, and is
-applied only when the payload's entity and roster slot agree and its sequence is
-newer than that slot's last. Disconnect drains through the same poll boundary and
+`MsgStateSync` periodically copies only the D-13 owner-authored cursor set, is
+written at the tick the authority committed it to, and only when the payload's
+entity and roster slot agree and its sequence is newer than that slot's last. Disconnect drains through the same poll boundary and
 raises a local eight-second status message. While the coordinator remains
 reachable, its roster crossing despawns only cursors owned by that participant,
 releases that slot's sync sequence, and leaves both the barrier and the map latch
-in place: a session's
-playout lead and its bounds are properties of the run, so a stretch with no peer
-attached still defers its crossings by the same lead and still keeps the bounds
-every participant adopted. A departure is itself a crossing and lands at that lead
+in place: the barrier and the bounds are properties of the run, so a stretch with
+no peer attached still stamps its crossings by the lead it last adopted and still
+keeps the bounds every participant adopted. A departure is itself a crossing and lands at that lead
 rather than where the lost link was observed.
 
 At the same six-tick cadence, direct neighbours exchange a run/tick/hash sample
@@ -648,7 +647,8 @@ candidates the chain holds and whether this one is listening.
 
 Reachability has a surface of its own: `network.listening` says this instance bound
 a port for the session to dial back, `network.chain` how many candidates it holds,
-and `network.barrier_delay_ticks` what the playout lead was chosen to be. See [Multiplayer](multi-player.md) §5.3.
+and `network.barrier_delay_ticks` the lead this instance stamps its own crossings
+with. See [Multiplayer](multi-player.md) §3.5 and §5.3.
 
 The relay's own surface is `snapshot.relay`: how many authoritative records this
 instance is holding for a neighbour to ask about, how many repairs it answered from
@@ -698,12 +698,10 @@ What the operator surface still does not cover:
   neighbour's retention for *repairs*. It is also what the succession rule is
   shaped around: a star's leaves reach nobody once its centre goes, so the
   successor has to be a function of the roster rather than of a vote;
-- the playout lead is chosen once, at lobby close, from the worst measured link in
-  the closing roster times the topology's diameter, floored at three ticks and
-  capped at twenty. A lobby that closes before any probe completes keeps the floor,
-  which is what a dedicated host starting on its first guest usually does — so the
-  lead reflects the first guest's link and not a later one's, and it never moves
-  again. A partition still has no digest edge between its components;
+- each participant's lead follows its own link to the authority, which commits
+  every crossing (multi-player.md §3.5); a guest reached only by relay has its raw
+  epochs passed on toward the authority. A partition still has no digest edge
+  between its components;
 - live pause/speed/step are refused, because a suspended participant has no way
   back into the running session;
 - no lag compensation;

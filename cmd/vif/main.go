@@ -11,6 +11,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/app"
+	"github.com/lixenwraith/vi-fighter/internal/converge"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/lifecycle"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
@@ -257,6 +258,7 @@ func buildConfig() app.Config {
 	// the reconnect its guests want; a person's machine is not, so there the
 	// surviving guest continuing the game is worth more than the address staying put.
 	cfg.FixedAuthority = flagSession.serve != ""
+	cfg.SlowPolicy = &flagSession.slow
 	if flagSession.authority != "" {
 		cfg.FixedAuthority = flagSession.authority == authorityHost
 	}
@@ -338,6 +340,10 @@ type sessionFlags struct {
 	listen      string
 	noAdvertise bool
 
+	// slow is the eviction policy a host applies to a participant that cannot keep
+	// up; see converge.SlowPolicy.
+	slow converge.SlowPolicy
+
 	// name is what a host answers to when one address serves several sessions. A
 	// joiner carries it in the -join target rather than here, because a player is
 	// given one link and not two things to type.
@@ -382,6 +388,12 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 		authorityMigrate))
 	fs.BoolVar(&f.noAdvertise, "no-advertise", false,
 		"With -join, keep this participant's address out of the session. It plays normally and is never elected")
+	fs.DurationVar(&f.slow.Window, "slow-window", parameter.NetworkSlowWindow,
+		"With -host or -serve, the window a participant's lateness is judged over; 0 never evicts")
+	fs.Float64Var(&f.slow.LatePerSecond, "slow-late", parameter.NetworkSlowLatePerSecond,
+		"With -host or -serve, evict a participant whose crossings reach the authority late this often per second; 0 ignores lateness")
+	fs.Float64Var(&f.slow.BytesPerSecond, "slow-bytes", parameter.NetworkSlowBytesPerSecond,
+		"With -host or -serve, and whose link carries at least this many bytes per second; 0 ignores throughput")
 	fs.StringVar(&f.authority, "authority", "", fmt.Sprintf(
 		"What losing the authoring participant does: %q hands the session to the "+
 			"roster's next survivor, %q ends it and leaves every survivor playing alone. "+

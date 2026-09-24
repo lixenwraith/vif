@@ -947,6 +947,34 @@ func TestAManifestAheadOfTheClockIsComparedAtItsTick(t *testing.T) {
 	}
 }
 
+// TestAManifestBehindTheClockIsComparedAtThePromisedTick: an index names the tick
+// the next one will describe, so a guest already past that tick when the next index
+// arrives still answers for it rather than repairing onto the world it had.
+func TestAManifestBehindTheClockIsComparedAtThePromisedTick(t *testing.T) {
+	t.Parallel()
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+	deliverCorrection(t, host, []*App{guest}, advance)
+	advance()
+	deliverSameTick(t, host, []*App{guest}) // an index, and the promise it carries
+
+	cadence := int(statOf(host, "snapshot.cadence_ticks"))
+	hashOnly := statOf(guest, "snapshot.corrections_hash_only")
+	offTick := statOf(guest, "snapshot.manifests_off_tick")
+	host.Tick(cadence)
+	guest.Tick(cadence + 2)
+	if err := host.corrections.Publish(); err != nil {
+		t.Fatalf("publish correction: %v", err)
+	}
+	guest.ApplyPendingCorrections()
+
+	if got := statOf(guest, "snapshot.corrections_hash_only") - hashOnly; got != 1 {
+		t.Fatalf("the guest recorded %d hash-only corrections for an index it matched at the promised tick", got)
+	}
+	if got := statOf(guest, "snapshot.manifests_off_tick") - offTick; got != 0 {
+		t.Fatalf("%d manifests were compared off their tick", got)
+	}
+}
+
 // TestAConvergedGuestReceivesTheIndexAndNoState as a session: a
 // guest whose prediction was right gets hashes and nothing else.
 func TestAConvergedGuestReceivesTheIndexAndNoState(t *testing.T) {

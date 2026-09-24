@@ -4,8 +4,6 @@ import (
 	"crypto/tls"
 	"net"
 	"time"
-
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 // Role defines the network topology role
@@ -67,9 +65,8 @@ type Config struct {
 	// this many at once.
 	MaxHandshakes int
 
-	// Session identity and fixed playout delay are agreed by the join handshake.
-	ParticipantID     PeerID
-	BarrierDelayTicks uint64
+	// Session identity is agreed by the join handshake.
+	ParticipantID PeerID
 
 	// SessionName is what a dialer was told it is joining, sent as one frame before
 	// the handshake so a front door can place the connection on an address that
@@ -143,7 +140,6 @@ func DefaultConfig() *Config {
 		TLS:               nil, // Must be explicitly configured for production
 		MaxPeers:          16,
 		MaxHandshakes:     8,
-		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 		ConnectTimeout:    5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      5 * time.Second,

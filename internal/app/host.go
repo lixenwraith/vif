@@ -194,7 +194,6 @@ func (a *App) beginHostingLocked(addr string) error {
 	a.openAuthorityLocked(network.SessionOffer{
 		Anchor: a.joinAnchorLocked(), Host: hostParticipantID, Assigned: hostParticipantID,
 		Term: network.FirstTerm, Roster: roster,
-		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 	}, hostParticipantID)
 
 	// Attaching latches the world as shared (D-14) and installs the departure and

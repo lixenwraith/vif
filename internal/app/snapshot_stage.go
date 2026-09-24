@@ -157,7 +157,7 @@ func (s *StagedInstall) Commit() error {
 // prepareProjectionLocked makes the staging world this instance's predictor: it
 // drives no cursor, so no player-domain system simulates for one; it holds this
 // instance's owner-authored values, which the shared species it predicts react to;
-// and its barrier defers by the session's lead under the session's authority.
+// and its barrier stamps by this instance's own lead under the session's authority.
 // Caller MUST hold the live world's updateMutex.
 func (a *App) prepareProjectionLocked(staging *App) {
 	var (

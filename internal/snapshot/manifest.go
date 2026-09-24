@@ -195,6 +195,11 @@ type CorrectionManifest struct {
 	// meaningful only against the one before it, and the point of the index is
 	// that it is meaningful against any state at all.
 	Sections []SectionSummary `json:"sections"`
+
+	// Next is the tick the sender means to index for this receiver next, outside the
+	// root: the receiver reads its own world there as that tick closes, so an index
+	// arriving after its tick is still compared against the tick it describes.
+	Next uint64 `json:"next,omitempty"`
 }
 
 // section is one section as the sender holds it: the summary the wire

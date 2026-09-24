@@ -9,7 +9,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
-// boundsBatch is one peer's epoch carrying n artifacts that all apply at applyTick.
+// boundsBatch is one peer's committed epoch carrying n artifacts that all apply at
+// applyTick, as a guest receives it from the authority.
 // The payload is real: every frame these tests schedule must be one applyDue would
 // try to decode, or a cap that only ever held malformed frames would prove nothing.
 func boundsBatch(t *testing.T, source uint32, produced, applyTick uint64, n, pad int) []byte {
@@ -27,7 +28,7 @@ func boundsBatch(t *testing.T, source uint32, produced, applyTick uint64, n, pad
 		})
 	}
 	body, err := event.EncodeWireBatch(event.WireBatch{
-		Frames: frames, Source: source, ProducedTick: produced,
+		Frames: frames, Source: source, ProducedTick: produced, Committed: true,
 	})
 	if err != nil {
 		t.Fatalf("encode batch: %v", err)
@@ -120,7 +121,7 @@ func TestAnEpochFromBeyondTheHorizonDoesNotPoisonItsSource(t *testing.T) {
 
 // TestTheScheduleIsBoundedByCountAndByBytes covers both ceilings. Two bounds
 // because a peer can spend the budget either way: many small artifacts, or few
-// large ones.
+// large ones; the count is one participant's share, so a flood fills only its own.
 func TestTheScheduleIsBoundedByCountAndByBytes(t *testing.T) {
 	t.Parallel()
 
@@ -130,8 +131,8 @@ func TestTheScheduleIsBoundedByCountAndByBytes(t *testing.T) {
 		for epoch := range uint64(64) {
 			s.scheduleCrossings(2, boundsBatch(t, 2, epoch+1, 10, 128, 0))
 		}
-		if got := scheduledCount(s); got > parameter.NetworkScheduledMax {
-			t.Fatalf("held %d artifacts, ceiling is %d", got, parameter.NetworkScheduledMax)
+		if got := scheduledCount(s); got > parameter.NetworkScheduledPerSource {
+			t.Fatalf("held %d artifacts from one peer, its share is %d", got, parameter.NetworkScheduledPerSource)
 		}
 		if s.statScheduleFull.Load() == 0 {
 			t.Fatal("the count ceiling turned nothing away")

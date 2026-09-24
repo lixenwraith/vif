@@ -19,8 +19,7 @@ import (
 func cursorlessOffer(an event.JoinAnchor, guests int) network.SessionOffer {
 	o := network.SessionOffer{
 		Anchor: an, Host: hostParticipantID, Assigned: 2,
-		Term:              network.FirstTerm,
-		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
+		Term: network.FirstTerm,
 		Roster: []network.RosterEntry{
 			{ID: hostParticipantID, Slot: parameter.NoPlayerSlot},
 		},

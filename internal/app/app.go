@@ -86,11 +86,6 @@ type App struct {
 	// entry per accepted connection and closes into the offer the start gate sends.
 	sessionRoster []network.RosterEntry
 
-	// barrierDelay is the session's playout lead in ticks, chosen once when the
-	// coordinator closes its roster and carried by every offer it builds after
-	// that. See barrier.go. Zero until the first offer, which reads as the default.
-	barrierDelay uint64
-
 	// midRunPort is the socket a solo run opened for itself with :host. A run
 	// started with -host takes its endpoint from NetworkService instead, which the
 	// hub owns and closes; this one is owned here because nothing else knows it
@@ -350,6 +345,9 @@ func (a *App) initWorld() {
 	// is started, which is after construction returns.
 	a.corrections, a.authority, a.reach =
 		converge.New(instance{a}, a.telemetry, a.world.Resources.Status)
+	if a.cfg.SlowPolicy != nil {
+		a.authority.SetSlowPolicy(*a.cfg.SlowPolicy)
+	}
 
 	// Initial rate; ParseScale rejects "" so a bare run stays at real time
 	if s, ok := engine.ParseScale(a.cfg.TimeScaleSpec); ok {

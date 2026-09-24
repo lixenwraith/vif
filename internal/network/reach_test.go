@@ -47,8 +47,8 @@ func TestAnAddressIsNotRosterIdentity(t *testing.T) {
 	roster := []RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}}
 	rec := HandoffRecord{
 		Term: FirstTerm + 1, Authority: 2, Predecessor: 1,
-		Roster: roster, BarrierDelayTicks: 3,
-		Chain: SuccessionChain{{ID: 2, Addr: "10.0.0.2:7777"}},
+		Roster: roster,
+		Chain:  SuccessionChain{{ID: 2, Addr: "10.0.0.2:7777"}},
 	}
 	if err := rec.Validate(roster, rec.Chain); err != nil {
 		t.Fatalf("a valid record was refused: %v", err)

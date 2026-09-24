@@ -2,43 +2,74 @@ package parameter
 
 import "time"
 
-// Transport cadence. Crossings use a fixed playout delay; owner-authored state is
-// a periodic value sync whose interval trades freshness against traffic.
+// Transport cadence. Every participant stamps its own crossings with a lead its own
+// link to the authority asks for; owner-authored state is a periodic value sync.
 const (
-	// NetworkBarrierDelayTicks gives an artifact 150ms to reach every participant.
-	// It is the answer with no evidence: a session that closed before a probe
-	// completed, and a transport that cannot measure its links. A measured link
-	// asks for what it measured, down to NetworkBarrierMinDelayTicks.
+	// NetworkBarrierDelayTicks is the lead a guest stamps with before its link to the
+	// authority is measured, and the tick budget a join is admitted and a guest is
+	// called stale against.
 	NetworkBarrierDelayTicks = 3
 
-	// NetworkBarrierMinDelayTicks is the smallest lead a measured link is given.
-	// One tick rather than none: a remote copy applies at the tick its producer
-	// stamped, which is already past on every receiver, so zero makes every
-	// artifact late by construction. A session with nothing on the wire takes no
-	// lead at all — nobody is waiting for an artifact nobody is sent.
+	// NetworkBarrierMinDelayTicks and NetworkBarrierMaxDelayTicks bound a stamped
+	// lead. One tick is the authority's own: its crossings wait only for the tick
+	// that produced them to close. One second is where a lead stops being a buffer.
 	NetworkBarrierMinDelayTicks = 1
-
-	// NetworkBarrierRenegotiateTicks is the shortest interval between two published
-	// leads, the window a lower measurement holds through before the lead follows
-	// it down, and the re-announcement period that makes a change a peer never
-	// received cost one window rather than the session. Raising is immediate for
-	// the reason the cadence controller degrades immediately.
-	NetworkBarrierRenegotiateTicks = SnapshotFloorKeyframeTicks
-
-	// NetworkBarrierMaxDelayTicks is one second, and bounds what a measurement may
-	// ask for. Past this the lead has stopped being an interpolation buffer and
-	// become input latency the player feels on every remote actor; a link that
-	// wants more is one the cadence controller should be reporting rather than one
-	// the barrier should be absorbing. Missing the lead is survivable — §3.2's
-	// fences make a late artifact harmless — so the ceiling errs toward the
-	// responsive side.
 	NetworkBarrierMaxDelayTicks = 20
 
-	// NetworkBarrierJitterMargin multiplies the measured variation added on top of
-	// the one-way estimate. Two is the usual reordering allowance: it covers the
-	// tail of an ordinary distribution without letting one outlier set the lead
-	// for the session.
+	// NetworkBarrierRenegotiateTicks is how long a lower measurement holds before a
+	// participant's own lead follows it down; raising is immediate.
+	NetworkBarrierRenegotiateTicks = SnapshotFloorKeyframeTicks
+
+	// NetworkRelaySlackTicks is the tick a guest's lead leaves the authority to
+	// relay its crossing to the others before they reach the tick it names.
+	NetworkRelaySlackTicks = 1
+
+	// NetworkBarrierJitterMargin multiplies the measured round-trip variation added
+	// to the round trip a guest's lead covers.
 	NetworkBarrierJitterMargin = 2
+
+	// NetworkAheadTicks is how late, in ticks, a guest lets the authority's epochs
+	// reach it so its own crossings apply that much sooner. Everyone else's arrive
+	// that late on it too, and are repaired there, so only it pays.
+	NetworkAheadTicks = 0
+
+	// NetworkPaceBandTicks is the dead zone a guest's pacing rests in: the latest
+	// authority epoch in a window lands between this many ticks early and
+	// NetworkAheadTicks late.
+	NetworkPaceBandTicks = 1
+
+	// NetworkPaceWindow is how many authority epochs one pace decision reads; the
+	// latest of them decides, so a jittered arrival counts at its worst.
+	NetworkPaceWindow = 10
+
+	// NetworkPaceGainPermille and NetworkPacePermilleMax trim a guest's tick interval
+	// per tick of error, and bound it: the world runs up to 8% fast or slow while a
+	// guest drifts back into its band.
+	NetworkPaceGainPermille = 20
+	NetworkPacePermilleMax  = 80
+
+	// NetworkPaceStepTicks is the error a guest closes in one step rather than by
+	// trimming: a lobby that released it a round trip early is corrected at once.
+	// A backwards step is bounded by the debt the scheduler will run back to back.
+	NetworkPaceStepTicks     = 3
+	NetworkPaceStepBackTicks = 2
+
+	// NetworkCommitLateTicks is how late a guest's crossing may reach the authority
+	// and still be committed, at the authority's next tick. Past it the crossing is
+	// void: an action that old would land on a world its player no longer saw.
+	NetworkCommitLateTicks = 20
+
+	// NetworkHoldTicks is how far ahead of the clock a correction or manifest is
+	// worth waiting for; further ahead is a guest behind, which takes it at once.
+	NetworkHoldTicks = NetworkPaceStepTicks + NetworkPaceBandTicks
+
+	// NetworkSlowWindow, NetworkSlowLatePerSecond and NetworkSlowBytesPerSecond are
+	// the default eviction policy for a participant too slow to keep up: over the
+	// window, its crossings reached the authority late this often and its
+	// corrections cost this much. Both must hold; zero disables either.
+	NetworkSlowWindow         = 20 * time.Second
+	NetworkSlowLatePerSecond  = 5.0
+	NetworkSlowBytesPerSecond = 8 << 10
 
 	// NetworkSyncTicks is the period between owner-authored state syncs (D-13).
 	// One cursor's payload is small; this keeps remote presentation responsive.
@@ -407,6 +438,10 @@ const (
 	// counted rather than silently absorbed.
 	NetworkScheduledMax   = 4096
 	NetworkScheduledBytes = 4 << 20
+
+	// NetworkScheduledPerSource is one participant's share of the schedule, so a
+	// flooding peer fills its own share rather than everyone's.
+	NetworkScheduledPerSource = NetworkScheduledMax / MaxPlayers
 
 	// NetworkAdmitWindow, NetworkAdmitBurst and NetworkAdmitTracked bound how often
 	// one dialling host may be admitted to a session.

@@ -81,6 +81,11 @@ type Scheduler struct {
 	tickSlips       int64
 	tickSlipPending bool
 
+	// paceTrim and paceStep are the guest pacing read off NetworkResource under the
+	// tick's lock; whoever paces the ticks takes them with TakePace.
+	paceTrim int32
+	paceStep int64
+
 	eventDispatch [event.EventTypeCount]int64
 	eventDead     [event.EventTypeCount]int64
 	eventTypeBuf  []byte
@@ -599,7 +604,8 @@ func (s *Scheduler) schedulerLoop() {
 
 				s.processTick()
 
-				s.nextTickDeadline = s.nextTickDeadline.Add(s.tickInterval)
+				trim, step := s.TakePace()
+				s.nextTickDeadline = s.nextTickDeadline.Add(PacedInterval(s.tickInterval, trim, step))
 
 				// Re-read after the tick: the debt is what the tick consumed,
 				// not what was owed when it started
@@ -694,6 +700,20 @@ func (s *Scheduler) awaitFrame(t *time.Timer) bool {
 		return false
 	}
 	return true
+}
+
+// TakePace returns the trim and the owed step the last tick read, clearing the step.
+// Called by whichever goroutine paces the ticks, after a tick.
+func (s *Scheduler) TakePace() (trimPermille int32, stepTicks int64) {
+	step := s.paceStep
+	s.paceStep = 0
+	return s.paceTrim, step
+}
+
+// PacedInterval is the wall gap before the next tick: the interval trimmed by the
+// guest pace, plus whole ticks owed by a step. Negative only for a step back.
+func PacedInterval(interval time.Duration, trimPermille int32, stepTicks int64) time.Duration {
+	return interval + interval*time.Duration(trimPermille)/1000 + interval*time.Duration(stepTicks)
 }
 
 // stoppedTimer returns an armed-but-drained timer ready for Reset
@@ -1125,6 +1145,12 @@ func (s *Scheduler) processTick() {
 	)
 
 	s.world.RunSafe(func() {
+		if r := s.world.Resources.Network; r != nil {
+			s.paceTrim = r.Pace.Load()
+			s.paceStep += r.PaceStep.Swap(0)
+		} else {
+			s.paceTrim = 0
+		}
 		if s.tickSlipPending {
 			s.tickSlips++
 			s.tickSlipPending = false

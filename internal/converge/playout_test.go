@@ -5,6 +5,7 @@ package converge
 import (
 	"testing"
 
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
@@ -65,11 +66,12 @@ func TestASecondWaitingCorrectionTakesTheStep(t *testing.T) {
 	if n := guest.world.installs(); n != 0 {
 		t.Fatalf("the first correction installed %d times before its tick", n)
 	}
-	deliverBody(t, guest, capture(5, 0))
+	far := uint64(2 + parameter.NetworkHoldTicks)
+	deliverBody(t, guest, capture(far, 0))
 	if n := guest.world.installs(); n != 1 {
 		t.Fatalf("the second correction left %d installs, want the step taken", n)
 	}
-	if got := guest.world.Position().Tick; got != 5 {
-		t.Fatalf("the step left the clock at tick %d, want the newer authority's 5", got)
+	if got := guest.world.Position().Tick; got != far {
+		t.Fatalf("the step left the clock at tick %d, want the newer authority's %d", got, far)
 	}
 }

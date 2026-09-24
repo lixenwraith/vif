@@ -113,14 +113,15 @@ type ScheduledWireFrame struct {
 // ProducedTick it names the epoch uniquely — which is what lets a receiver
 // recognise a copy that reached it by a second path through the mesh.
 //
-// Hops counts the links crossed so far. It bounds a relay loop; it is not what
-// terminates flooding, which is the receiver's per-source epoch window, and it is
-// deliberately not part of the artifact's identity.
+// Hops counts the links crossed so far; it bounds a relay loop and is not part of
+// the artifact's identity. Committed marks the copy the authority relays, with the
+// apply ticks it chose; a guest's own copy to the authority is raw.
 type WireBatch struct {
 	Frames       []ScheduledWireFrame `json:"frames,omitempty"`
 	ProducedTick uint64               `json:"produced_tick"`
 	Source       uint32               `json:"source"`
 	Hops         uint8                `json:"hops,omitempty"`
+	Committed    bool                 `json:"committed,omitempty"`
 }
 
 // NewWireFrame encodes one crossing; an unencodable payload reports why rather
@@ -171,16 +172,6 @@ func decodeFramePayload(et EventType, text string) (any, error) {
 		return nil, err
 	}
 	return p, nil
-}
-
-// EncodeFrames packs one tick's crossings into a single message payload
-func EncodeFrames(frames []WireFrame) ([]byte, error) { return json.Marshal(frames) }
-
-// DecodeFrames unpacks a message payload back into frames
-func DecodeFrames(b []byte) ([]WireFrame, error) {
-	var out []WireFrame
-	err := json.Unmarshal(b, &out)
-	return out, err
 }
 
 // EncodeWireBatch serializes one closed barrier production epoch.
