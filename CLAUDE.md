@@ -51,6 +51,8 @@ It is the contract, not a suggestion.
 - `doc/` is already long. Condense when you touch it; do not append unless new concept or scope is being added.
 - A gap you are deferring goes in `doc/todo.md` as one line, not a comment.
 - PR bodies: what changed, why, how it was verified.
+- One task, one branch, one PR. Divide the work into commits on that branch; do not
+  split it across stacked PRs.
 
 ## Gates
 

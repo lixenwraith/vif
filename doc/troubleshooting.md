@@ -359,3 +359,21 @@ Hash-only corrections went from 0% to 85–94%, installs from four a second to a
 one, and installs that moved a placement from half of them to 2–9%; a guest that
 freezes 150 ms in every 400 raises only its own lead. Owner-authored syncs are
 committed to a tick like crossings, which is what closed most of that last gap.
+
+## 10. Fifth round (2026-09-24, fleet, a terminal and a browser guest on one machine)
+
+The browser guest's round trip and lag swung widely and it dropped out; the terminal
+beside it played normally. Measured with the browser build in headless Chromium,
+websocat as the pod runs it, and a 150 ms delay proxy on `main`:
+
+- **Go shared the page's thread with xterm.** Each new glyph and colour pair is a
+  rasterise and readback in xterm's WebGL atlas, about a hundred a second here; a
+  frame that stalls stalls every tick, probe echo and socket read with it. The
+  program now runs in a Worker: round trip 390 → 176 ms, jitter 150 → 16 ms, late
+  commits 158 → 9 and void 29 → 0 in 90 s, with the page equally saturated.
+- **Loss that was latency.** A probe counted as lost when the next went out first,
+  so every round trip over 200 ms read as up to half lost. It now counts once no echo
+  has come back for `NetworkProbeLostAfter`.
+- **websocat without `TCP_NODELAY`.** A minor share of the jitter; see `doc/todo.md`.
+
+The session pod stayed near 7 ms of CPU per 100 ms throughout, far inside its limit.

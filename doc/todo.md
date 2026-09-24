@@ -17,8 +17,10 @@ and P3 is an idea.
 
 A browser guest has joined and played on the deployed node. Not yet run: a dropped
 socket rejoining, a suspended tab, and expiry with a browser in the session. The
-sidecar's CPU and memory are still the estimate in `30-session.yaml`; the hop
-itself costs about 40 µs a round trip.
+sidecar's CPU and memory are still the estimate in `30-session.yaml`. The hop costs
+about 40 µs a round trip, except that websocat 1.x never sets `TCP_NODELAY`: about
+0.5% of browser-to-game frames wait 40–80 ms on a delayed ACK. A bridge that sets it
+removes that.
 
 ### Restore a per-player bound for browser participants
 
