@@ -406,6 +406,7 @@ func (a *allocator) listSessions(ctx context.Context) ([]session, error) {
 					state = observed
 					break
 				}
+				state.Reason = "health unavailable: " + probeErr.Error()
 			}
 			result[i] = a.sessionRecord(item.id, item.port, item.createdAt, routable, state)
 		}()

@@ -3,12 +3,14 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -62,7 +64,7 @@ func (p *podHealthProbe) probe(ctx context.Context, podIP string) (sessionHealth
 	}
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return sessionHealth{}, err
+		return sessionHealth{}, transportFailure(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -77,6 +79,20 @@ func (p *podHealthProbe) probe(ctx context.Context, podIP string) (sessionHealth
 		return sessionHealth{}, fmt.Errorf("health response exceeds %d bytes", maxHealthResponse)
 	}
 	return parseHealth(data)
+}
+
+// transportFailure says why a probe got no answer without the pod address a
+// transport error names, since the reason reaches the public session listing.
+func transportFailure(err error) error {
+	var netErr net.Error
+	switch {
+	case errors.As(err, &netErr) && netErr.Timeout():
+		return errors.New("probe timed out")
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return errors.New("probe refused")
+	default:
+		return errors.New("probe failed")
+	}
 }
 
 func parseHealth(data []byte) (sessionHealth, error) {
