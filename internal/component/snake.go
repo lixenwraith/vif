@@ -57,6 +57,13 @@ type SnakeBodyComponent struct {
 	Segments []SnakeSegment // Ordered head→tail
 }
 
+// DetachSnapshot returns a copy whose segments share no storage with this one;
+// SnakeSystem writes rest positions in place. See HeaderComponent.DetachSnapshot.
+func (b SnakeBodyComponent) DetachSnapshot() SnakeBodyComponent {
+	b.Segments = append([]SnakeSegment(nil), b.Segments...)
+	return b
+}
+
 // SnakeMemberComponent provides segment and lateral info for each body member
 type SnakeMemberComponent struct {
 	SegmentIndex  int // Which segment (0 = closest to head)

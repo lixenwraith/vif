@@ -1,25 +1,35 @@
 package engine
 
 import (
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 )
 
-// TestACaptureDoesNotShareStorageWithTheLiveWorld is the correction stream's
-// baseline invariant seen at its source.
-//
-// A capture is a reading of one instant, and a correction retains it for several:
-// the authority diffs the next capture against it, and a receiver reconstructs
-// against the copy it was sent. Two shared components own a slice — a composite
-// header's member table and a genotype's gene vector — and both are written in
-// place through Store.GetPtr, so a capture that kept the live backing array
-// changed under whoever retained it. What that produced was a delta computed
-// against a baseline neither side held: the diff saw the mutated array on both
-// sides, called the store unchanged, and the receiver reconstructed a body its
-// header did not describe.
+// TestACaptureDoesNotShareStorageWithTheLiveWorld: a capture is retained past the
+// instant it reads, and a shared component that owns a slice is written in place
+// through Store.GetPtr, so one sharing the live array changes under whoever kept
+// it. Every such component detaches; a snake body that did not served repairs
+// whose pages no longer matched the hashes published for them.
 func TestACaptureDoesNotShareStorageWithTheLiveWorld(t *testing.T) {
+	st := reflect.TypeOf(SharedWorldState{})
+	for i := range st.NumField() {
+		f := st.Field(i)
+		if f.Type.Kind() != reflect.Slice {
+			continue
+		}
+		v, ok := f.Type.Elem().FieldByName("Value")
+		if !ok || !holdsReference(v.Type) {
+			continue
+		}
+		if _, ok := v.Type.MethodByName("DetachSnapshot"); !ok {
+			t.Errorf("%s owns a reference and has no DetachSnapshot", v.Type)
+		}
+	}
+
 	w := NewWorld()
 	head := w.CreateEntity(core.DomainShared)
 	w.Components.Header.SetComponent(head, component.HeaderComponent{
@@ -76,4 +86,24 @@ func TestACaptureDoesNotShareStorageWithTheLiveWorld(t *testing.T) {
 	if before.Genotype[0].Value.Genes[0] != 0.25 {
 		t.Fatal("installing the capture let the installed world write back into its genes")
 	}
+}
+
+// holdsReference reports whether a value of t can share storage with a copy of it
+func holdsReference(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Slice, reflect.Map, reflect.Pointer, reflect.Interface, reflect.Chan, reflect.Func:
+		return true
+	case reflect.Array:
+		return holdsReference(t.Elem())
+	case reflect.Struct:
+		if t == reflect.TypeOf(time.Time{}) {
+			return false
+		}
+		for i := range t.NumField() {
+			if holdsReference(t.Field(i).Type) {
+				return true
+			}
+		}
+	}
+	return false
 }
