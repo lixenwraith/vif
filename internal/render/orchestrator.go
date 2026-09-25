@@ -52,6 +52,9 @@ func (o *RenderOrchestrator) Register(r SystemRenderer, priority RenderPriority)
 	o.renderers[pos] = entry
 }
 
+// SetConsole finishes every frame on a text console's palette
+func (o *RenderOrchestrator) SetConsole(c *Console) { o.buffer.SetConsole(c) }
+
 // Resize updates buffer dimensions and syncs terminal
 func (o *RenderOrchestrator) Resize(width, height int) {
 	o.buffer.Resize(width, height)

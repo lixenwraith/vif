@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -99,6 +100,13 @@ func (tr *TimeResource) DeltaTimeNano() int64 { return int64(tr.DeltaTime) }
 
 // --- Config Resource ---
 
+// ConsolePalette is a text console's sixteen colors in ANSI order and how many of them a
+// background can take. The zero value stands for the VGA palette the Linux console boots with.
+type ConsolePalette struct {
+	Colors   [16]color.RGB
+	BgColors int
+}
+
 // ConfigResource holds static or semi-static configuration data
 type ConfigResource struct {
 	// Map Dimensions (simulation bounds)
@@ -125,6 +133,9 @@ type ConfigResource struct {
 	// ColorMode for rendering pipeline (256-color vs TrueColor)
 	// Set after terminal initialization
 	ColorMode terminal.ColorMode `toml:"color_mode"`
+
+	// ConsolePalette is the text console a 256-color frame is drawn on; set with ColorMode
+	ConsolePalette ConsolePalette `toml:"-"`
 
 	// pointer records that the pointer made the last local placement; FollowCamera
 	// holds its narrower margins until another input moves the cursor.

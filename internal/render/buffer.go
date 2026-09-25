@@ -36,6 +36,7 @@ type RenderBuffer struct {
 	bgOverlay    backgroundOverlay
 	void         voidRegion
 	finalizeFunc func(*RenderBuffer)
+	console      *Console // quantizes each frame for a text console; nil keeps xterm's 256
 }
 
 // NewRenderBuffer creates a buffer with the specified dimensions
@@ -58,6 +59,9 @@ func NewRenderBuffer(colorMode terminal.ColorMode, width, height int) *RenderBuf
 	}
 	return b
 }
+
+// SetConsole makes every frame finish on a text console's palette; nil turns that off
+func (b *RenderBuffer) SetConsole(c *Console) { b.console = c }
 
 // Resize adjusts buffer dimensions, reallocates only if capacity insufficient
 func (b *RenderBuffer) Resize(width, height int) {
@@ -150,7 +154,7 @@ func (b *RenderBuffer) BackgroundAt(x, y int, fallback color.RGB) color.RGB {
 	}
 	cell := &b.cells[idx]
 	if cell.Attrs&terminal.AttrBg256 != 0 {
-		return visual.Palette256RGB(cell.Bg.R)
+		return b.paletteRGB(cell.Bg.R)
 	}
 	return cell.Bg
 }
@@ -200,7 +204,7 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg color.RGB, mode Blend
 	flags := uint8(mode) & 0xF0
 
 	b.masks[idx] |= b.currentMask
-	resolvePalette(dst, flags&flagFg != 0, flags&flagBg != 0)
+	b.resolvePalette(dst, flags&flagFg != 0, flags&flagBg != 0)
 
 	if mainRune != 0 {
 		dst.Rune = mainRune
@@ -297,7 +301,7 @@ func (b *RenderBuffer) SetBgScreen(x, y int, bg, base color.RGB, alpha float64) 
 	if !b.touched[idx] {
 		dst.Bg = base
 	} else {
-		resolvePalette(dst, false, true)
+		b.resolvePalette(dst, false, true)
 	}
 
 	dst.Bg = color.Screen(dst.Bg, bg, alpha)
@@ -338,15 +342,23 @@ func (b *RenderBuffer) SetBg256(x, y int, paletteIdx uint8) {
 
 // resolvePalette turns a cell's palette-indexed channels into RGB, so an RGB write
 // composes over the color rather than over the index its R byte holds
-func resolvePalette(dst *terminal.Cell, fg, bg bool) {
+func (b *RenderBuffer) resolvePalette(dst *terminal.Cell, fg, bg bool) {
 	if fg && dst.Attrs&terminal.AttrFg256 != 0 {
-		dst.Fg = visual.Palette256RGB(dst.Fg.R)
+		dst.Fg = b.paletteRGB(dst.Fg.R)
 		dst.Attrs &^= terminal.AttrFg256
 	}
 	if bg && dst.Attrs&terminal.AttrBg256 != 0 {
-		dst.Bg = visual.Palette256RGB(dst.Bg.R)
+		dst.Bg = b.paletteRGB(dst.Bg.R)
 		dst.Attrs &^= terminal.AttrBg256
 	}
+}
+
+// paletteRGB is the color an index shows: a console entry is the console's own color
+func (b *RenderBuffer) paletteRGB(i uint8) color.RGB {
+	if b.console != nil && i < 16 {
+		return b.console.Color(i)
+	}
+	return visual.Palette256RGB(i)
 }
 
 // === POST-PROCESSING ===
@@ -365,7 +377,7 @@ func (b *RenderBuffer) MutateDim(factor float64, targetMask uint8) {
 				continue
 			}
 			cell := &b.cells[i]
-			resolvePalette(cell, true, b.touched[i])
+			b.resolvePalette(cell, true, b.touched[i])
 			cell.Fg = color.Scale(cell.Fg, factor)
 			if b.touched[i] {
 				cell.Bg = color.Scale(cell.Bg, factor)
@@ -394,7 +406,7 @@ func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask, excludeMas
 				continue
 			}
 			cell := &b.cells[i]
-			resolvePalette(cell, true, b.touched[i])
+			b.resolvePalette(cell, true, b.touched[i])
 
 			fgGray := color.Grayscale(cell.Fg)
 			if fullGray {
@@ -422,6 +434,9 @@ func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask, excludeMas
 func (b *RenderBuffer) finalize() {
 	b.finalizeFunc(b)
 	b.fillVoid()
+	if b.console != nil {
+		b.quantize()
+	}
 }
 
 // fillVoid paints the declared non-playable margin. Only cells nothing drew are

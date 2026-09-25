@@ -47,6 +47,11 @@ func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorM
 func (a *App) initPresentation() {
 	w, h := a.term.Size()
 	a.orchestrator = render.NewRenderOrchestrator(a.term, w, h)
+	// 256 colors is for a text console, whose palette renderers choose their colors from
+	if cfg := a.world.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
+		cfg.ConsolePalette = render.DetectConsolePalette()
+		a.orchestrator.SetConsole(render.ConsoleFor(cfg.ConsolePalette))
+	}
 	for _, reg := range manifest.BuildRenderers(a.ctx) {
 		a.orchestrator.Register(reg.Renderer, reg.Priority)
 	}

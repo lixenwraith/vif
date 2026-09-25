@@ -214,8 +214,8 @@ which concrete renderer produced them:
 - the truecolor finalizer dims selected occupied backgrounds under glyphs;
 - strobe supplies a deferred background overlay for otherwise untouched cells.
 
-`MutateDim` and `MutateGrayscale` skip foreground/background channels marked as
-256-color indices. This avoids corrupting palette values with RGB arithmetic.
+An RGB write, blend or mutation over a 256-color index first resolves the index
+to its color, so no arithmetic ever runs on an index.
 
 ## 6. Finalization and color modes
 
@@ -236,13 +236,24 @@ a UI or debug layer that legitimately reaches into the margin keeps the colors
 it composed, and the pass walks the four margin bands rather than the whole
 area. Setting `RgbVoid` to `RgbBackground` restores the undifferentiated look.
 
+In 256-color mode the game draws for a text console, and a last pass settles
+every cell on one of the console's sixteen colors. The palette is the Linux
+console's live one (`/sys/module/vt/parameters/default_*`, which `setvtrgb`
+writes), FreeBSD vt's default, or VGA; it is in `Config.ConsolePalette` for
+renderers that pick colors from it. An entry (0-15) passes through, an xterm
+index keeps its hue family by the rules FreeBSD's teken documents, and RGB takes
+the nearest entry in CIELAB. Text that would vanish into its background, or UI
+text under a 2.5 contrast ratio, takes the nearest entry that shows. Styles are
+resolved rather than sent, because the Linux console recolors dim, italic and
+underlined text and FreeBSD brightens bold.
+
 Finalization is immediately followed by the terminal module's full-buffer
 `Flush`.
 
-The CLI can force xterm-256 (`-color 256`) or truecolor (`-color true`);
-`-color auto`, the default, lets the terminal capability select the mode. Visual parameter files provide truecolor and
-palette-specific values. Renderer logic should not assume every color channel
-contains RGB.
+The CLI can force 256-color (`-color 256`) or truecolor (`-color true`);
+`-color auto`, the default, lets the terminal capability select the mode. Visual
+parameter files provide truecolor and palette-specific values. Renderer logic
+should not assume every color channel contains RGB.
 
 ## 7. Layer inventory
 
