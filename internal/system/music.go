@@ -210,7 +210,8 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 				s.tier = p.Intensity
 				s.manualTier = true
 				if s.player.IsMusicPlaying() {
-					s.applyArrangement(true, s.fadeSamples(p.TransitionTime, rising), true)
+					// As automatic shifts do: a calmer tier swaps in whole, never rebuilt track by track
+					s.applyArrangement(true, s.fadeSamples(p.TransitionTime, rising), rising)
 				}
 			}
 		}
