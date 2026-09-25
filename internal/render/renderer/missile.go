@@ -1,6 +1,8 @@
 package renderer
 
 import (
+	"math"
+
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -104,71 +106,50 @@ func (r *MissileRenderer) renderMissileTrueColor(
 	r.renderBodyTrueColor(ctx, buf, kinetic)
 }
 
-// bodyCell resolves the screen cell and heading glyph of a missile body
-func (r *MissileRenderer) bodyCell(ctx render.RenderContext, kinetic *component.KineticComponent) (int, int, rune, bool) {
+// bodyCell resolves the screen cell a missile body occupies
+func (r *MissileRenderer) bodyCell(ctx render.RenderContext, kinetic *component.KineticComponent) (int, int, bool) {
 	point := vmath.PointAtF(kinetic.PreciseX, kinetic.PreciseY)
-	screenX, screenY, visible := ctx.MapToScreen(point.X, point.Y)
-	return screenX, screenY, r.directionChar(kinetic.VelX, kinetic.VelY), visible
+	return ctx.MapToScreen(point.X, point.Y)
 }
 
+// renderBodyTrueColor writes the head's glyph only, so it reads over any field under it
 func (r *MissileRenderer) renderBodyTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, kinetic *component.KineticComponent) {
-	if screenX, screenY, char, ok := r.bodyCell(ctx, kinetic); ok {
-		buf.Set(screenX, screenY, char, color.RGB{}, visual.RgbBackground, render.BlendReplace, 1.0, terminal.AttrBold)
+	if screenX, screenY, ok := r.bodyCell(ctx, kinetic); ok {
+		char := visual.MissileHeadChars[headingOctant(kinetic.VelX, kinetic.VelY)]
+		buf.SetFgOnly(screenX, screenY, char, visual.RgbMissileChildBody, terminal.AttrBold)
 	}
 }
 
 func (r *MissileRenderer) renderBody256(ctx render.RenderContext, buf *render.RenderBuffer, kinetic *component.KineticComponent) {
-	if screenX, screenY, char, ok := r.bodyCell(ctx, kinetic); ok {
+	if screenX, screenY, ok := r.bodyCell(ctx, kinetic); ok {
+		char := visual.MissileHeadChars256[headingOctant(kinetic.VelX, kinetic.VelY)]
 		buf.SetFgOnly(screenX, screenY, char, color.RGB{R: visual.Missile256Base}, terminal.AttrFg256|terminal.AttrBold)
 	}
 }
 
-// directionChar returns arrow character based on velocity direction
-func (r *MissileRenderer) directionChar(velX, velY float64) rune {
-	// 8-direction quantization
-	if velX == 0 && velY == 0 {
-		return visual.MissileBaseChar
+// headingOctant indexes a heading glyph table: E W S N, then SE NE SW NW, then 8 at rest.
+// An axis wins while the other velocity component is under half of it.
+func headingOctant(velX, velY float64) int {
+	absX, absY := math.Abs(velX), math.Abs(velY)
+	switch {
+	case absX == 0 && absY == 0:
+		return 8
+	case absY < absX/2 && velX > 0:
+		return 0
+	case absY < absX/2:
+		return 1
+	case absX < absY/2 && velY > 0:
+		return 2
+	case absX < absY/2:
+		return 3
+	case velX > 0 && velY > 0:
+		return 4
+	case velX > 0:
+		return 5
+	case velY > 0:
+		return 6
 	}
-
-	// Normalize and quantize to octant
-	absX := velX
-	if absX < 0 {
-		absX = -absX
-	}
-	absY := velY
-	if absY < 0 {
-		absY = -absY
-	}
-
-	// Threshold for diagonal vs cardinal (tan(22.5°) ≈ 0.414)
-	threshold := absX / 2.0 // Approximation
-
-	if absY < threshold {
-		// Horizontal
-		if velX > 0 {
-			return '▸' // Right
-		}
-		return '◂' // Left
-	}
-	if absX < threshold {
-		// Vertical
-		if velY > 0 {
-			return '▾' // Down
-		}
-		return '▴' // Up
-	}
-
-	// Diagonal
-	if velX > 0 {
-		if velY > 0 {
-			return '◢' // Down-right
-		}
-		return '◥' // Up-right
-	}
-	if velY > 0 {
-		return '◣' // Down-left
-	}
-	return '◤' // Up-left
+	return 7
 }
 
 // --- 256-Color Rendering ---
@@ -205,7 +186,7 @@ func (r *MissileRenderer) renderMissile256(
 
 		// Binary visibility for 256-color (no alpha blending)
 		if pt.Age < maxAge/2 {
-			buf.SetFgOnly(screenX, screenY, visual.MissileTrailChar,
+			buf.SetFgOnly(screenX, screenY, visual.MissileTrailChar256,
 				color.RGB{R: visual.Missile256Trail}, terminal.AttrFg256)
 		}
 	}

@@ -85,7 +85,7 @@ func (r *BulletRenderer) renderBulletTrueColor(
 		c = color.Lerp(visual.RgbBulletStormRed, visual.RgbBulletStormRedDim, t)
 	}
 
-	char := r.directionChar(kinetic.VelX, kinetic.VelY)
+	char := visual.BulletHeadChars[headingOctant(kinetic.VelX, kinetic.VelY)]
 	buf.Set(screenX, screenY, char, c, visual.RgbBlack, render.BlendAddFg, alpha, terminal.AttrBold)
 }
 
@@ -110,73 +110,6 @@ func (r *BulletRenderer) renderBullet256(
 		return
 	}
 
-	char := r.directionChar256(kinetic.VelX, kinetic.VelY)
+	char := visual.BulletHeadChars256[headingOctant(kinetic.VelX, kinetic.VelY)]
 	buf.SetFgOnly(screenX, screenY, char, color.RGB{R: visual.Bullet256StormRed}, terminal.AttrFg256|terminal.AttrBold)
-}
-
-func (r *BulletRenderer) directionChar(velX, velY float64) rune {
-	if velX == 0 && velY == 0 {
-		return '•'
-	}
-
-	absX, absY := velX, velY
-	if absX < 0 {
-		absX = -absX
-	}
-	if absY < 0 {
-		absY = -absY
-	}
-
-	threshold := absX / 2.0
-
-	if absY < threshold {
-		if velX > 0 {
-			return '▸'
-		}
-		return '◂'
-	}
-	if absX < threshold {
-		if velY > 0 {
-			return '▾'
-		}
-		return '▴'
-	}
-
-	if velX > 0 {
-		if velY > 0 {
-			return '◢'
-		}
-		return '◥'
-	}
-	if velY > 0 {
-		return '◣'
-	}
-	return '◤'
-}
-
-func (r *BulletRenderer) directionChar256(velX, velY float64) rune {
-	if velX == 0 && velY == 0 {
-		return '*'
-	}
-
-	absX, absY := velX, velY
-	if absX < 0 {
-		absX = -absX
-	}
-	if absY < 0 {
-		absY = -absY
-	}
-
-	threshold := absX / 2.0
-
-	if absY < threshold {
-		return '-'
-	}
-	if absX < threshold {
-		return '|'
-	}
-	if (velX > 0) == (velY > 0) {
-		return '\\'
-	}
-	return '/'
 }

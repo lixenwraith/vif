@@ -143,12 +143,7 @@ var (
 	RgbOrbCoronaLauncher  = color.BurntOrange
 	RgbOrbCoronaDisruptor = color.SageGreen
 
-	// Parent Missile: Chrome/White
-	RgbMissileParentBody       = color.White
-	RgbMissileParentTrailStart = color.NearWhite
-	RgbMissileParentTrailEnd   = color.SlateGray
-
-	// Child Missile: Deep Orange
+	// Missile: Deep Orange
 	RgbMissileChildBody       = color.TigerOrange
 	RgbMissileChildTrailStart = color.Bronze
 	RgbMissileChildTrailEnd   = color.Sienna

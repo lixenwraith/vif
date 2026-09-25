@@ -32,9 +32,18 @@ var Density256Chars = [4]rune{'·', '░', '▒', '█'}
 
 // Missile characters
 const (
-	MissileTrailChar  = '▪' // U+25AA Black Small Square
-	MissileParentChar = '◆' // U+25C6 Black Diamond
-	MissileBaseChar   = '▸' // U+25B8 Black Right-Pointing Small Triangle
+	MissileTrailChar = '▪' // U+25AA Black Small Square
+	// MissileTrailChar256 is in every Linux console font; ▪ is not
+	MissileTrailChar256 = '•'
+)
+
+// Heading glyphs, indexed by heading: E W S N SE NE SW NW, then at rest. The 256 sets hold
+// only glyphs every Linux console font carries, and those fonts have no diagonal triangles.
+var (
+	MissileHeadChars    = [9]rune{'▸', '◂', '▾', '▴', '◢', '◥', '◣', '◤', '▸'}
+	MissileHeadChars256 = [9]rune{'▶', '◀', '▼', '▲', '\\', '/', '/', '\\', '▶'}
+	BulletHeadChars     = [9]rune{'▸', '◂', '▾', '▴', '◢', '◥', '◣', '◤', '•'}
+	BulletHeadChars256  = [9]rune{'-', '-', '|', '|', '\\', '/', '/', '\\', '*'}
 )
 
 // Circle characters
