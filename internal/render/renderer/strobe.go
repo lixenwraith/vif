@@ -13,6 +13,7 @@ type strobeRenderFunc func(r *StrobeRenderer, ctx render.RenderContext, buf *ren
 type StrobeRenderer struct {
 	gameCtx    *engine.GameContext
 	renderFunc strobeRenderFunc
+	console    *render.Console
 }
 
 // NewStrobeRenderer creates a strobe post-processor
@@ -20,8 +21,8 @@ func NewStrobeRenderer(ctx *engine.GameContext) *StrobeRenderer {
 	r := &StrobeRenderer{
 		gameCtx: ctx,
 	}
-	if ctx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
-		r.renderFunc = strobeRenderNoop
+	if cfg := ctx.World.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
+		r.renderFunc, r.console = strobeRender256, render.ConsoleFor(cfg.ConsolePalette)
 	} else {
 		r.renderFunc = strobeRenderTrueColor
 	}
@@ -33,7 +34,15 @@ func (r *StrobeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	r.renderFunc(r, ctx, buf)
 }
 
-func strobeRenderNoop(_ *StrobeRenderer, _ render.RenderContext, _ *render.RenderBuffer) {}
+// strobeRender256 flashes in one step, while the envelope is past half its peak, in the console
+// background nearest the strobe color: a console cannot fade between its colors
+func strobeRender256(r *StrobeRenderer, _ render.RenderContext, buf *render.RenderBuffer) {
+	strobe := r.gameCtx.World.Resources.View.Strobe
+	if !strobe.Active || computeEnvelopeIntensity(strobe) < strobe.Intensity/2 {
+		return
+	}
+	buf.SetBackgroundOverlay(r.console.Color(r.console.NearestBackground(strobe.Color)), 1)
+}
 
 func strobeRenderTrueColor(r *StrobeRenderer, ctx render.RenderContext, buf *render.RenderBuffer) {
 	strobe := r.gameCtx.World.Resources.View.Strobe

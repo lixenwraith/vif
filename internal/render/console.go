@@ -180,6 +180,9 @@ func (c *Console) Background(i uint8) uint8 {
 	return i
 }
 
+// NearestBackground returns the background entry that looks closest to rgb
+func (c *Console) NearestBackground(rgb color.RGB) uint8 { return c.bgLUT[lutKey(rgb)] }
+
 // Family returns the two entries of rgb's hue, the one that looks darker on this palette first
 func (c *Console) Family(rgb color.RGB) (dark, light uint8) {
 	dark = cubeFamily(color.RGBTo256(rgb))

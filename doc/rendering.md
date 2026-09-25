@@ -210,9 +210,12 @@ which concrete renderer produced them:
 
 - grayout desaturates glyphs while excluding guidance, fields, transients,
   composites, health bars, and UI;
-- dim scales every category except UI;
+- dim scales every category except UI; on a text console, where a halved color
+  is mostly black, it grays them instead;
 - the truecolor finalizer dims selected occupied backgrounds under glyphs;
-- strobe supplies a deferred background overlay for otherwise untouched cells.
+- strobe supplies a deferred background overlay for otherwise untouched cells;
+  a console shows it in one step, in its nearest background, while the envelope
+  is past half its peak.
 
 An RGB write, blend or mutation over a 256-color index first resolves the index
 to its color, so no arithmetic ever runs on an index.
