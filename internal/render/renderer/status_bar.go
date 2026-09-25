@@ -89,7 +89,7 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statAudioMask: statusReg.Ints.Get("audio.mask"),
 
 		statFPS:   statusReg.Ints.Get("engine.fps"),
-		statAPM:   statusReg.Ints.Get("engine.apm"),
+		statAPM:   statusReg.Ints.Get("engine.music_apm"), // the rate music follows, not the minute's sum
 		statTicks: statusReg.Ints.Get("engine.ticks"),
 
 		statSpeed:     statusReg.Strings.Get("engine.speed"),
