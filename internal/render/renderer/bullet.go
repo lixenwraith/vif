@@ -79,10 +79,14 @@ func (r *BulletRenderer) renderBulletTrueColor(
 	}
 
 	// Color dims over lifetime
-	c := visual.RgbBulletStormRed
+	bright, dim := visual.RgbBulletPlayer, visual.RgbBulletPlayerDim
+	if bullet.Hostile {
+		bright, dim = visual.RgbBulletStormRed, visual.RgbBulletStormRedDim
+	}
+	c := bright
 	if lifetimeRatio > 0.5 {
 		t := (lifetimeRatio - 0.5) / 0.5
-		c = color.Lerp(visual.RgbBulletStormRed, visual.RgbBulletStormRedDim, t)
+		c = color.Lerp(bright, dim, t)
 	}
 
 	char := visual.BulletHeadChars[headingOctant(kinetic.VelX, kinetic.VelY)]
@@ -110,6 +114,10 @@ func (r *BulletRenderer) renderBullet256(
 		return
 	}
 
+	c := visual.Bullet256Player
+	if bullet.Hostile {
+		c = visual.Bullet256StormRed
+	}
 	char := visual.BulletHeadChars256[headingOctant(kinetic.VelX, kinetic.VelY)]
-	buf.SetFgOnly(screenX, screenY, char, color.RGB{R: visual.Bullet256StormRed}, terminal.AttrFg256|terminal.AttrBold)
+	buf.SetFgOnly(screenX, screenY, char, color.RGB{R: c}, terminal.AttrFg256|terminal.AttrBold)
 }

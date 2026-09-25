@@ -13,6 +13,7 @@ const (
 	WeaponRod WeaponType = iota
 	WeaponLauncher
 	WeaponDisruptor
+	WeaponTurret
 	WeaponCount
 )
 
@@ -23,6 +24,7 @@ const (
 	DeliveryLightning WeaponDelivery = iota // instant direct hit per target
 	DeliveryMissile                         // homing projectile, area damage on impact
 	DeliveryPulse                           // area burst at the emitter, fired only on a target inside it
+	DeliveryBullet                          // linear projectile per shot, direct damage on contact
 )
 
 // Aimed reports whether the delivery needs targets assigned before it fires
@@ -72,6 +74,10 @@ var WeaponSpecs = [WeaponCount]WeaponSpec{
 		Cooldown: parameter.WeaponCooldownDisruptor, MaxCharges: parameter.WeaponMaxChargeDisruptor,
 		HostedRange:  parameter.PulseRadiusX,
 		HostedDamage: CursorDamage{parameter.HostedDisruptorEnergy, -parameter.HostedDisruptorHeat}},
+	WeaponTurret: {Name: "turret", Delivery: DeliveryBullet, Attack: CombatAttackBullet,
+		Cooldown: parameter.WeaponCooldownTurret, MaxCharges: parameter.WeaponMaxChargeTurret,
+		HostedRange:  parameter.HostedTurretRange,
+		HostedDamage: CursorDamage{parameter.HostedTurretEnergy, -parameter.HostedTurretHeat}},
 }
 
 // WeaponComponent is a cursor's loadout: charges and cooldown per kind, and main fire's cooldown.

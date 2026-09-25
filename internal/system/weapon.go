@@ -33,6 +33,8 @@ type WeaponSystem struct {
 	orbs    [parameter.MaxPlayers]orbSlots
 	reapBuf []core.Entity
 
+	rng *vmath.FastRand // shot spread; a cursor's shots are this instance's alone
+
 	// Per-cursor loadout, by weapon kind
 	statHeld [component.WeaponCount]*status.PlayerBool
 	statOrbs *status.PlayerInt
@@ -73,6 +75,7 @@ func NewWeaponSystem(world *engine.World) engine.System {
 
 // Init resets session state for a new game, dropping every orb in the world
 func (s *WeaponSystem) Init() {
+	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	s.destroyAllOrbs()
 	s.orbs = [parameter.MaxPlayers]orbSlots{}
 	s.reapBuf = s.reapBuf[:0]
@@ -697,6 +700,8 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 			fired = s.fireMissiles(cursor, x, y, charges, assignments)
 		case component.DeliveryPulse:
 			fired = s.firePulse(cursor, x, y, spec.Attack)
+		case component.DeliveryBullet:
+			fired = s.fireBullets(cursor, x, y, spec.Attack, assignments)
 		}
 		if !fired {
 			continue
@@ -749,6 +754,36 @@ func (s *WeaponSystem) fireMissiles(cursor core.Entity, x, y, count int, assignm
 		HitEntities: hits,
 	})
 	return true
+}
+
+// fireBullets shoots one spread bullet per assignment from the emitter cell at the member it names
+func (s *WeaponSystem) fireBullets(cursor core.Entity, x, y int, attack component.CombatAttackType, assignments []TargetAssignment) bool {
+	originX, originY := vmath.Point{X: x, Y: y}.CenterF()
+	fired := false
+	for _, a := range assignments {
+		pos, ok := s.world.Positions.GetPosition(a.Hit)
+		if !ok {
+			continue
+		}
+		targetX, targetY := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+		dirX, dirY := vmath.Normalize2DF(targetX-originX, targetY-originY)
+		if dirX == 0 && dirY == 0 {
+			continue
+		}
+		spread := (s.rng.Float64() - 0.5) * 2 * parameter.TurretSpreadHalfAngle
+		dirX, dirY = vmath.RotateVectorF(dirX, dirY, spread)
+		s.world.PushLocal(event.EventBulletSpawnRequest, &event.BulletSpawnRequestPayload{
+			OriginX:     originX,
+			OriginY:     originY,
+			VelX:        dirX * parameter.TurretBulletSpeed,
+			VelY:        dirY * parameter.TurretBulletSpeed,
+			Owner:       cursor,
+			MaxLifetime: parameter.TurretBulletLifetime,
+			Attack:      attack,
+		})
+		fired = true
+	}
+	return fired
 }
 
 // firePulse bursts at the emitter cell when a target is inside the ellipse

@@ -12,9 +12,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
-// BulletSystem manages linear projectile lifecycle
-// Bullets travel in a straight line, collide with walls/boundaries/cursor/shield
-// Spawned via EventBulletSpawnRequest from any system
+// BulletSystem manages linear projectile lifecycle. Bullets travel in a straight
+// line and stop at walls and bounds; a hostile one strikes cursors and shields, a
+// cursor's resolves against species. Spawned via EventBulletSpawnRequest.
 type BulletSystem struct {
 	world   *engine.World
 	enabled bool
@@ -138,8 +138,8 @@ func (s *BulletSystem) Update() {
 	s.world.DestroyEntitiesBatch(toDestroy)
 }
 
-// traverseAndCollide walks the bullet path checking for wall, boundary, shield, and cursor collisions
-// Returns true if bullet should be destroyed
+// traverseAndCollide walks the bullet path to its first wall, boundary or target;
+// returns true if the bullet should be destroyed
 func (s *BulletSystem) traverseAndCollide(
 	bullet *component.BulletComponent,
 	fromX, fromY, toX, toY float64,
@@ -166,8 +166,23 @@ func (s *BulletSystem) traverseAndCollide(
 			return true
 		}
 
-		if cursor := CursorContactAt(s.world, cx, cy); cursor != 0 {
-			strikeCursor(s.world, cursor, bullet.Damage)
+		if bullet.Hostile {
+			if cursor := CursorContactAt(s.world, cx, cy); cursor != 0 {
+				strikeCursor(s.world, cursor, bullet.Damage)
+				return true
+			}
+		} else if target, hit, ok := CombatTargetAt(s.world, cx, cy, engine.ScopeBoth, 0, bullet.Owner); ok {
+			// Resolved by the target, not by the firing cursor's domain (D-10)
+			s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+				AttackType:   bullet.Attack,
+				OwnerEntity:  bullet.Owner,
+				OriginEntity: bullet.Owner,
+				TargetEntity: target,
+				HitEntity:    hit,
+				HasOrigin:    true,
+				OriginX:      cx,
+				OriginY:      cy,
+			}, target.Domain())
 			return true
 		}
 	}
@@ -181,7 +196,9 @@ func (s *BulletSystem) spawnBullet(p *event.BulletSpawnRequestPayload) {
 	s.world.Components.Bullet.SetComponent(e, component.BulletComponent{
 		Owner:       p.Owner,
 		MaxLifetime: p.MaxLifetime,
+		Hostile:     p.Hostile,
 		Damage:      p.Damage,
+		Attack:      p.Attack,
 	})
 
 	s.world.Components.Kinetic.SetComponent(e, component.KineticComponent{

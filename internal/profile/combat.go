@@ -110,6 +110,7 @@ var (
 	explosionProfiles    [component.CombatEntityCount]AttackProfile
 	missileProfiles      [component.CombatEntityCount]AttackProfile
 	pulseProfiles        [component.CombatEntityCount]AttackProfile
+	bulletProfiles       [component.CombatEntityCount]AttackProfile
 	selfDestructProfiles [component.CombatEntityCount]AttackProfile
 )
 
@@ -205,6 +206,18 @@ func init() {
 			EffectMask:  component.CombatEffectStun,
 		}
 		register(&pulseProfiles[d])
+	}
+
+	// Bullet: damage only, one per turret shot
+	for _, d := range cursorDefenders {
+		bulletProfiles[d] = AttackProfile{
+			AttackType:  component.CombatAttackBullet,
+			Attacker:    component.CombatEntityCursor,
+			Defender:    d,
+			DamageType:  component.CombatDamageDirect,
+			DamageValue: parameter.CombatDamageBullet,
+		}
+		register(&bulletProfiles[d])
 	}
 
 	// Eye self-destruct: uniform across every target

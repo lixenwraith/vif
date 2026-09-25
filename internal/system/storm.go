@@ -490,6 +490,15 @@ func (s *StormSystem) createCircleHeader(
 		AttackState: component.StormCircleAttackIdle,
 	})
 
+	if component.StormCircleType(index) == component.StormCircleRed {
+		s.world.Components.Mount.SetComponent(circleEntity, component.MountComponent{
+			Weapon:   component.WeaponTurret,
+			Trigger:  component.MountArmed,
+			Interval: parameter.StormRedFireInterval,
+			Muzzle:   parameter.StormCircleRadiusX * parameter.StormRedBulletSpawnMargin,
+		})
+	}
+
 	// Kinetic component for 2D collision compatibility
 	s.world.Components.Kinetic.SetComponent(circleEntity, component.KineticComponent{
 		Kinetic: physics.Kinetic{
@@ -1122,12 +1131,16 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 			continue
 		}
 
-		_, targetX, targetY, hasCursor := ClosestCursor(s.world, circlePos.X, circlePos.Y)
-		if !hasCursor {
+		if _, _, _, hasCursor := ClosestCursor(s.world, circlePos.X, circlePos.Y); !hasCursor {
 			continue
 		}
 
 		circleType := component.StormCircleType(circleComp.Index)
+		// The red turret is armed for the ticks a burst runs; the mount fires after this system
+		if mount, ok := s.world.Components.Mount.GetPtr(circleEntity); ok && circleType == component.StormCircleRed {
+			mount.Armed = circleComp.AttackState == component.StormCircleAttackActive
+		}
+
 		// Update invulnerable state, isConvex is guaranteed true with physics override
 		circleComp.IsInvulnerable = concave(circleComp) && circleComp.AttackState != component.StormCircleAttackActive
 
@@ -1147,12 +1160,6 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 					circleComp.AttackRemaining = s.getAttackDuration(circleType)
 					circleComp.AttackProgress = 0
 
-					// Seed the red aim; active ticks keep it aligned with live targeting.
-					if circleType == component.StormCircleRed {
-						circleComp.AttackTargetX = targetX
-						circleComp.AttackTargetY = targetY
-					}
-
 					// Blue: init attack (calculate target, trigger spawn)
 					if circleType == component.StormCircleBlue {
 						s.initBlueAttack(circleComp, circlePos.X, circlePos.Y)
@@ -1162,10 +1169,6 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 
 		case component.StormCircleAttackActive:
 			// ACTIVE: Run the attack, lock physics in convex
-			if circleType == component.StormCircleRed {
-				circleComp.AttackTargetX = targetX
-				circleComp.AttackTargetY = targetY
-			}
 			s.processCircleAttack(circleComp, circlePos.X, circlePos.Y)
 
 			circleComp.AttackRemaining -= dt
@@ -1233,7 +1236,7 @@ func (s *StormSystem) processCircleAttack(
 	case component.StormCircleGreen:
 		s.processGreenAttack(circleComp, circleX, circleY)
 	case component.StormCircleRed:
-		s.processRedAttack(circleComp, circleX, circleY)
+		s.processRedAttack(circleComp)
 	case component.StormCircleBlue:
 		s.processBlueAttack(circleComp)
 	}
@@ -1275,67 +1278,12 @@ func (s *StormSystem) processGreenAttack(
 	}
 }
 
-// processRedAttack emits the directional projectile burst toward the tracked target.
-func (s *StormSystem) processRedAttack(
-	circleComp *component.StormCircleComponent,
-	circleX, circleY int,
-) {
+// processRedAttack advances the burst's visual progress; the circle's turret mount fires it
+func (s *StormSystem) processRedAttack(circleComp *component.StormCircleComponent) {
 	totalDuration := parameter.StormRedBurstDuration.Seconds()
 	remaining := circleComp.AttackRemaining.Seconds()
-	progress := 1.0 - (remaining / totalDuration)
-	if progress < 0 {
-		progress = 0
-	}
-	if progress > 1 {
-		progress = 1
-	}
-	circleComp.AttackProgress = progress
-
+	circleComp.AttackProgress = min(max(1.0-remaining/totalDuration, 0), 1)
 	s.statRedActiveFrame.Add(1)
-
-	// Drawn before the aim is examined: whether the burst fires depends on live
-	// Shared positions two instances hold a playout lead apart, and a draw behind
-	// that test would leave the storm stream — which also decides the blue attack's
-	// angle and a circle's spawn height — at a different position on each (D-8).
-	spreadFrac := s.rng.Float64() - 0.5 // [-0.5, 0.5)
-
-	// Direction from circle center to the selected cursor's current position.
-	dx := float64(circleComp.AttackTargetX - circleX)
-	dy := float64(circleComp.AttackTargetY - circleY)
-	dist := vmath.MagnitudeF(dx, dy)
-	if dist < 1 {
-		return
-	}
-	dx /= dist
-	dy /= dist
-
-	// Spawn at exterior of circle ellipse with margin
-	// dx,dy are already the unit direction: cos(atan2(dy,dx)) == dx, sin == dy
-	spawnOffX := parameter.StormCircleRadiusX * parameter.StormRedBulletSpawnMargin * dx
-	spawnOffY := parameter.StormCircleRadiusY * parameter.StormRedBulletSpawnMargin * dy
-
-	circleCenterX, circleCenterY := vmath.Point{X: circleX, Y: circleY}.CenterF()
-	originX := circleCenterX + spawnOffX
-	originY := circleCenterY + spawnOffY
-
-	spreadRad := spreadFrac * 2.0 * parameter.StormRedBulletSpreadHalfAngle
-	bulletDirX, bulletDirY := vmath.RotateVectorF(dx, dy, spreadRad)
-
-	velX := bulletDirX * parameter.StormRedBulletSpeed
-	velY := bulletDirY * parameter.StormRedBulletSpeed
-
-	s.world.PushEvent(event.EventBulletSpawnRequest, &event.BulletSpawnRequestPayload{
-		OriginX:     originX,
-		OriginY:     originY,
-		VelX:        velX,
-		VelY:        velY,
-		Owner:       s.rootEntity,
-		MaxLifetime: parameter.StormRedBulletMaxLifetime,
-		Damage: component.CursorDamage{
-			EnergyDrain: parameter.StormRedDamageBulletEnergy,
-			HeatDelta:   -parameter.StormRedDamageHeat,
-		},
-	})
 }
 
 // initBlueAttack calculates target position at attack start

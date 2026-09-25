@@ -177,7 +177,7 @@ var Systems = []SystemDef{
 	{Name: "swarm", Constructor: "NewSwarmSystem", Domain: "shared", Requires: []string{"composite"},
 		Optional: []string{"navigation", "combat"}}, // shared stream and composite species with a D-12 footprint sweep
 	{Name: "storm", Constructor: "NewStormSystem", Domain: "shared", Snapshot: "state", Requires: []string{"composite"}, // the live root and pending blue spawns live outside any store
-		Optional: []string{"navigation", "combat", "bullet", "dust", "wall"}}, // shared stream and composite species with a D-12 footprint sweep
+		Optional: []string{"navigation", "combat", "mount", "dust", "wall"}}, // shared stream and composite species with a D-12 footprint sweep
 	{Name: "pylon", Constructor: "NewPylonSystem", Domain: "shared", Requires: []string{"composite"},
 		Optional: []string{"navigation", "combat"}}, // shared stream and composite species state
 	{Name: "snake", Constructor: "NewSnakeSystem", Domain: "shared", Requires: []string{"composite"},
@@ -185,7 +185,7 @@ var Systems = []SystemDef{
 	{Name: "eye", Constructor: "NewEyeSystem", Domain: "shared", Requires: []string{"composite"},
 		Optional: []string{"navigation", "combat"}}, // shared stream and composite species with a D-12 footprint sweep
 	{Name: "mount", Constructor: "NewMountSystem", Domain: "shared",
-		Optional: []string{"missile", "lightning", "transient", "shield", "heat"}}, // mounts are shared host state; their shots and cursor hits are per-instance (D-2, D-6)
+		Optional: []string{"bullet", "missile", "lightning", "transient", "shield", "heat"}}, // mounts are shared host state; their shots and cursor hits are per-instance (D-2, D-6)
 	{Name: "bullet", Constructor: "NewBulletSystem", Domain: "player", Optional: []string{"combat"}}, // player bullets; combat optionally resolves their hits
 
 	// --- Particles / Effects: player-domain by D-6 ---

@@ -64,6 +64,7 @@ const (
 	Loot256Rim        = ConBrightMagenta
 	Quasar256Rim      = ConWhite
 	Bullet256StormRed = ConBrightRed
+	Bullet256Player   = ConBrightBlue
 )
 
 // Effects the console cannot blend, drawn solid where TrueColor's blend is strong enough to show

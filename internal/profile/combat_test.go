@@ -10,10 +10,10 @@ func TestMatrixCoversCursorAttacks(t *testing.T) {
 	families := []component.CombatAttackType{
 		component.CombatAttackProjectile,
 		component.CombatAttackShield,
-		component.CombatAttackLightning,
 		component.CombatAttackExplosion,
-		component.CombatAttackMissile,
-		component.CombatAttackPulse,
+	}
+	for _, spec := range component.WeaponSpecs {
+		families = append(families, spec.Attack)
 	}
 	for _, atk := range families {
 		for _, d := range cursorDefenders {

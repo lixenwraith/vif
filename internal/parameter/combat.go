@@ -38,6 +38,9 @@ const (
 
 	// CombatDamagePulse is damage per pulse stun hit
 	CombatDamagePulse = 1
+
+	// CombatDamageBullet is damage per turret bullet hit
+	CombatDamageBullet = 1
 )
 
 // Timers
@@ -142,6 +145,17 @@ const (
 	HostedDisruptorEnergy = 500
 	HostedDisruptorHeat   = 5
 
+	HostedTurretRange  = 40.0
+	HostedTurretEnergy = 100
+	HostedTurretHeat   = 10
+
 	// MissileHostedMaxSpeed keeps a mounted launcher's missile outrunnable (cells/sec)
 	MissileHostedMaxSpeed = 40.0
+)
+
+// Turret bullets, a cursor's and a mount's alike
+const (
+	TurretBulletSpeed     = 50.0 // cells/sec
+	TurretSpreadHalfAngle = 0.26 // radians (~15°)
+	TurretBulletLifetime  = 4 * time.Second
 )

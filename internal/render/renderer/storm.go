@@ -569,8 +569,11 @@ func (r *StormRenderer) renderRedMuzzleFlash(ctx render.RenderContext, buf *rend
 		return
 	}
 
-	targetX := circleComp.AttackTargetX
-	targetY := circleComp.AttackTargetY
+	mount, ok := r.gameCtx.World.Components.Mount.GetPtr(circle.entity)
+	if !ok || !mount.HasAim {
+		return
+	}
+	targetX, targetY := mount.AimX, mount.AimY
 
 	dx := float64(targetX - circle.x)
 	dy := float64(targetY - circle.y)

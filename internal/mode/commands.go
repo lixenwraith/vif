@@ -804,9 +804,9 @@ func handleGodCommand(ctx *engine.GameContext) CommandResult {
 	player := ctx.World.Resources.Player.Entity
 	ctx.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: player, Value: parameter.HeatMax})
 	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: player, Value: parameter.GodEnergyAmount})
-	ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponRod})
-	ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponLauncher})
-	ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponDisruptor})
+	for wt := range component.WeaponCount {
+		ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: wt})
+	}
 	ctx.SetLastCommand(":god")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
@@ -816,9 +816,9 @@ func handleDemonCommand(ctx *engine.GameContext) CommandResult {
 	player := ctx.World.Resources.Player.Entity
 	ctx.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: player, Value: parameter.HeatMax})
 	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: player, Value: -parameter.GodEnergyAmount})
-	ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponRod})
-	ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponLauncher})
-	ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponDisruptor})
+	for wt := range component.WeaponCount {
+		ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: wt})
+	}
 	ctx.SetLastCommand(":demon")
 	return CommandResult{Continue: true, KeepPaused: false}
 }

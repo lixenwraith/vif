@@ -266,6 +266,7 @@ locally; only center/radius/attack geometry crosses for shared combat.
 | Rod | Direct lightning against unique nearest targets, rewarding energy in the attacker's current polarity. |
 | Launcher | Homing/area missiles assigned from the nearest-target set. |
 | Disruptor | Stun pulse centred on its orb; it fires only while a target is inside the ellipse. |
+| Turret | One spread bullet per charge from its orb at the nearest targets; each hit is direct damage. |
 
 Weapon ownership is represented by charge count: zero means not owned. Each
 owned type has an orbiting orb entity and a separate cooldown. The combat system
@@ -290,13 +291,13 @@ a blocked cleaner drains to its stop point.
 | Drain | Local population is `ceil(current heat × 10 / 100)`, capped at 10 and excluding overheat: heat 0 gives 0; 1–10 gives 1; 11–20 gives 2; 91–100 gives 10. Materializes, chases, drains shield energy, and removes heat on unshielded contact. |
 | Quasar | Large composite, 5 cells wide by 3 high. Tracks the cursor and emits lightning when the cursor leaves its effective range. It is created by fusing drains in the default progression. |
 | Swarm | Fast composite, 4 cells wide by 2 high, created from enraged drains. It tracks/charges, may teleport around blocked line of sight, absorbs drains, and has bounded charges/lifetime. |
-| Storm | Multi-part boss with independently moving circles and 3D orbital dynamics. The green circle pulses an area, the red circle tracks the nearest cursor with directional bullet bursts, and the blue circle creates swarm pressure. |
+| Storm | Multi-part boss with independently moving circles and 3D orbital dynamics. The green circle pulses an area, the red circle carries a turret it fires in bursts at the nearest cursor, and the blue circle creates swarm pressure. |
 | Pylon | Stationary ablative hostile structure/damage sponge that pushes nearby species. |
 | Snake | Segmented composite species with separately modeled head and body members and formation lifecycle. |
 | Eye | Five-by-three composite navigation attacker. It belongs to a target group, homes along routes, and self-destructs on contact; its parameters are evolution-managed. |
 | Tower | Player-owned stationary ablative structure. It blocks cursor placement and acts as a target in tower-defense scenarios. |
 | Gateway | Timed anchored spawner. It emits eye or snake spawn requests with route/adaptation metadata and disappears when its anchor is gone. |
-| Bullet | Straight projectile with bounds, wall, shield, and cursor collision handling. |
+| Bullet | Straight projectile stopped by bounds and walls; a mounted turret's strikes cursors and shields, a cursor's strikes species. |
 
 The component `SpeciesType` catalog includes drain, swarm, quasar, storm,
 pylon, snake, eye, and tower. Gateway and bullet are mechanics/entities but are

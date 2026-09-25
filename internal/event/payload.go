@@ -1025,13 +1025,15 @@ type MissileSpawnRequestPayload struct {
 
 // BulletSpawnRequestPayload requests creation of a linear projectile
 type BulletSpawnRequestPayload struct {
-	OriginX     float64                `toml:"origin_x"`
-	OriginY     float64                `toml:"origin_y"`
-	VelX        float64                `toml:"vel_x"`
-	VelY        float64                `toml:"vel_y"`
-	Owner       core.Entity            `toml:"owner"`
-	MaxLifetime time.Duration          `toml:"max_lifetime"`
-	Damage      component.CursorDamage `toml:"damage"`
+	OriginX     float64                    `toml:"origin_x"`
+	OriginY     float64                    `toml:"origin_y"`
+	VelX        float64                    `toml:"vel_x"`
+	VelY        float64                    `toml:"vel_y"`
+	Owner       core.Entity                `toml:"owner"`
+	MaxLifetime time.Duration              `toml:"max_lifetime"`
+	Hostile     bool                       `toml:"hostile"` // A mount's: strikes cursors for Damage
+	Damage      component.CursorDamage     `toml:"damage"`
+	Attack      component.CombatAttackType `toml:"attack"` // A cursor's: resolves against species
 }
 
 // --- Marker ---

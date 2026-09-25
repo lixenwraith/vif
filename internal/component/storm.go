@@ -29,7 +29,7 @@ type StormCircleType uint8
 
 const (
 	StormCircleGreen StormCircleType = iota // Index 0: area pulse
-	StormCircleRed                          // Index 1: directional projectile burst
+	StormCircleRed                          // Index 1: turret mount armed for each burst
 	StormCircleBlue                         // Index 2: TBD/no-op
 )
 
@@ -48,8 +48,8 @@ type StormCircleComponent struct {
 	CooldownRemaining time.Duration
 	AttackRemaining   time.Duration
 
-	// Red refreshes these Shared aim coordinates as its target moves. Blue reuses
-	// them for its fixed spawn target. The JSON names preserve the wire schema.
+	// Blue's fixed spawn target; red aims through its turret mount instead.
+	// The JSON names preserve the wire schema.
 	AttackTargetX int `json:"LockedTargetX"`
 	AttackTargetY int `json:"LockedTargetY"`
 

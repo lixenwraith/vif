@@ -215,4 +215,5 @@ var orbPalette = [component.WeaponCount]struct{ base, corona color.RGB }{
 	component.WeaponRod:       {visual.RgbOrbRod, visual.RgbOrbCoronaRod},
 	component.WeaponLauncher:  {visual.RgbOrbLauncher, visual.RgbOrbCoronaLauncher},
 	component.WeaponDisruptor: {visual.RgbOrbDisruptor, visual.RgbOrbCoronaDisruptor},
+	component.WeaponTurret:    {visual.RgbOrbTurret, visual.RgbOrbCoronaTurret},
 }

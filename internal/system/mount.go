@@ -18,6 +18,11 @@ import (
 type MountSystem struct {
 	world *engine.World
 
+	// A shot's draw is seeded from the tick and its host, never a stream, so neither
+	// store order nor a correction's replay can hand it to another shot (D-8)
+	sharedRoot uint64
+	rng        vmath.FastRand
+
 	statCount    *atomic.Int64
 	statFired    *atomic.Int64
 	statRejects  *atomic.Int64
@@ -40,6 +45,7 @@ func NewMountSystem(world *engine.World) engine.System {
 }
 
 func (s *MountSystem) Init() {
+	s.sharedRoot = vmath.DeriveSeed(s.world.Resources.Rand.DomainRoot(core.DomainShared), s.Name())
 	s.statCount.Store(0)
 	s.statFired.Store(0)
 	s.statRejects.Store(0)
@@ -206,6 +212,25 @@ func (s *MountSystem) fire(host, cursor core.Entity, m *component.MountComponent
 			Damage:      spec.HostedDamage,
 		})
 
+	case component.DeliveryBullet:
+		dx, dy := float64(m.AimX-pos.X), float64(m.AimY-pos.Y)
+		dist := vmath.MagnitudeF(dx, dy)
+		if dist < 1 {
+			return
+		}
+		spread := (s.shotRand(host).Float64() - 0.5) * 2 * parameter.TurretSpreadHalfAngle
+		dirX, dirY := vmath.RotateVectorF(dx/dist, dy/dist, spread)
+		s.world.PushLocal(event.EventBulletSpawnRequest, &event.BulletSpawnRequestPayload{
+			OriginX:     originX,
+			OriginY:     originY,
+			VelX:        dirX * parameter.TurretBulletSpeed,
+			VelY:        dirY * parameter.TurretBulletSpeed,
+			Owner:       host,
+			MaxLifetime: parameter.TurretBulletLifetime,
+			Hostile:     true,
+			Damage:      spec.HostedDamage,
+		})
+
 	case component.DeliveryPulse:
 		var ring blastArea
 		ring.resetOne(pos.X, pos.Y, parameter.PulseRadiusX)
@@ -214,4 +239,11 @@ func (s *MountSystem) fire(host, cursor core.Entity, m *component.MountComponent
 			X: pos.X, Y: pos.Y, Palette: component.PaletteHostile,
 		})
 	}
+}
+
+// shotRand seeds one host's draw for this tick
+func (s *MountSystem) shotRand(host core.Entity) *vmath.FastRand {
+	tick := s.world.Resources.Game.State.GetGameTicks()
+	s.rng.Reseed(vmath.Mix64(s.sharedRoot ^ tick*0x9E3779B97F4A7C15 ^ uint64(host)*0xD6E8FEB86659FD93))
+	return &s.rng
 }

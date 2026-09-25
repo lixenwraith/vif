@@ -47,6 +47,7 @@ const (
 	CombatAttackMissile
 	CombatAttackPulse
 	CombatAttackSelfDestruct
+	CombatAttackBullet
 	CombatAttackTypeCount
 )
 

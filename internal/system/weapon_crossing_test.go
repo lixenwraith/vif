@@ -1,6 +1,7 @@
 package system
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -115,5 +116,84 @@ func TestMountedWeaponRaisesOnlyLocalEvents(t *testing.T) {
 	}
 	if !struck[first] || !struck[second] || struck[remote] || rings != 1 {
 		t.Fatalf("struck = %v, rings = %d; want both local cursors, not %d, and one ring", struck, rings, remote)
+	}
+}
+
+// TestMountShotDrawsDependOnlyOnTickAndHost is D-8 for mounts: a correction can leave
+// two instances holding one store in different orders, so a shot's spread is seeded
+// from the tick and its host rather than drawn from a stream.
+func TestMountShotDrawsDependOnlyOnTickAndHost(t *testing.T) {
+	type velocity struct{ x, y float64 }
+	volley := func(reversed bool) map[core.Entity]velocity {
+		w, _, _ := testCursorWorld(t)
+		mounts := NewMountSystem(w).(*MountSystem)
+		hosts := []core.Entity{w.CreateEntity(core.DomainShared), w.CreateEntity(core.DomainShared)}
+		for i, host := range hosts {
+			w.Positions.SetPosition(host, component.PositionComponent{X: 20 + 10*i, Y: 12})
+		}
+		if reversed {
+			hosts[0], hosts[1] = hosts[1], hosts[0]
+		}
+		for _, host := range hosts {
+			w.Components.Mount.SetComponent(host, component.MountComponent{
+				Weapon: component.WeaponTurret, Interval: parameter.GameUpdateInterval,
+			})
+		}
+		mounts.Update()
+		shots := make(map[core.Entity]velocity)
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if p, ok := ev.Payload.(*event.BulletSpawnRequestPayload); ok {
+				shots[p.Owner] = velocity{p.VelX, p.VelY}
+			}
+		}
+		return shots
+	}
+	if inOrder, reversed := volley(false), volley(true); len(inOrder) != 2 || !maps.Equal(inOrder, reversed) {
+		t.Fatalf("shots = %v in store order, %v reversed; want two identical volleys", inOrder, reversed)
+	}
+}
+
+// TestPlayerBulletCrossesOnlyItsHit: a cursor's bullet is this instance's alone. A hit
+// on a Shared target is one direct request stamped Shared; a hit on a drain stays local.
+func TestPlayerBulletCrossesOnlyItsHit(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	bullets := NewBulletSystem(w).(*BulletSystem)
+
+	header := w.CreateEntity(core.DomainShared)
+	member := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(header, component.PositionComponent{X: 9, Y: 3})
+	w.Positions.SetPosition(member, component.PositionComponent{X: 9, Y: 5})
+	w.Components.Header.SetComponent(header, component.HeaderComponent{
+		Type:          component.CompositeTypeUnit,
+		MemberEntries: []component.MemberEntry{{Entity: member, OffsetY: 2}},
+	})
+	w.Components.Member.SetComponent(member, component.MemberComponent{HeaderEntity: header})
+	w.Components.Combat.SetComponent(header, component.CombatComponent{CombatEntityType: component.CombatEntitySwarm})
+
+	drain := w.CreateEntity(core.DomainPlayer)
+	w.Positions.SetPosition(drain, component.PositionComponent{X: 5, Y: 9})
+	w.Components.Combat.SetComponent(drain, component.CombatComponent{CombatEntityType: component.CombatEntityDrain})
+
+	shoot := func(velX, velY float64) event.GameEvent {
+		bullets.HandleEvent(event.GameEvent{Type: event.EventBulletSpawnRequest, Payload: &event.BulletSpawnRequestPayload{
+			OriginX: 5.5, OriginY: 5.5, VelX: velX, VelY: velY, Owner: cursor,
+			MaxLifetime: parameter.TurretBulletLifetime, Attack: component.CombatAttackBullet,
+		}})
+		bullets.Update()
+		events := w.Resources.Event.Queue.Consume()
+		if len(events) != 1 || events[0].Type != event.EventCombatAttackDirectRequest {
+			t.Fatalf("bullet events = %#v, want one direct request", events)
+		}
+		return events[0]
+	}
+
+	shared := shoot(100, 0)
+	hit, _ := shared.Payload.(*event.CombatAttackDirectRequestPayload)
+	if shared.Domain != core.DomainShared || hit.TargetEntity != header || hit.HitEntity != member || hit.OwnerEntity != cursor {
+		t.Fatalf("shared hit = %#v stamped %v, want header %d through member %d", hit, shared.Domain, header, member)
+	}
+	local := shoot(0, 100)
+	if hit, _ := local.Payload.(*event.CombatAttackDirectRequestPayload); local.Domain != core.DomainPlayer || hit.TargetEntity != drain {
+		t.Fatalf("drain hit = %#v stamped %v, want a local hit on %d", hit, local.Domain, drain)
 	}
 }

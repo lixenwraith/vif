@@ -92,23 +92,22 @@ func targetCell(w *engine.World, e core.Entity) (int, int, bool) {
 // scope selects the enumerated domains; shared species pass ScopeShared, weapons ScopeBoth.
 // It excludes self, every cursor, cursor-owned orbs, and entities owned by ownerEntity.
 func HasCombatTargetAt(w *engine.World, x, y int, scope engine.DomainScope, selfEntity, ownerEntity core.Entity) bool {
+	_, _, ok := CombatTargetAt(w, x, y, scope, selfEntity, ownerEntity)
+	return ok
+}
+
+// CombatTargetAt is HasCombatTargetAt naming the first target found and the occupant it was hit through
+func CombatTargetAt(w *engine.World, x, y int, scope engine.DomainScope, selfEntity, ownerEntity core.Entity) (target, hit core.Entity, ok bool) {
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	count := w.Positions.GetEntitiesAtInto(x, y, scope, entities[:])
 	for i := range count {
-		e := entities[i]
-		target, _, valid := ResolveTargetFromEntity(w, e, selfEntity)
-		if !valid {
+		target, hit, valid := ResolveTargetFromEntity(w, entities[i], selfEntity)
+		if !valid || isCursorOrOwnedOrb(w, target) || isOwnedBy(w, target, ownerEntity) {
 			continue
 		}
-		if isCursorOrOwnedOrb(w, target) {
-			continue
-		}
-		if isOwnedBy(w, target, ownerEntity) {
-			continue
-		}
-		return true
+		return target, hit, true
 	}
-	return false
+	return 0, 0, false
 }
 
 // FindTargetsInEllipse returns all combat targets with members inside the ellipse

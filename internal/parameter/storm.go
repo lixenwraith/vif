@@ -87,17 +87,12 @@ const (
 	StormGreenDamageEnergy     = 10000
 	StormGreenDamageHeat       = 10
 
-	// Red circle: directional projectile burst
-	StormRedInitialCooldown    = 1 * time.Second
-	StormRedBurstDuration      = 2 * time.Second
-	StormRedPostAttackDelay    = 1 * time.Second // Wait after burst before the next one
-	StormRedDamageHeat         = 10
-	StormRedDamageBulletEnergy = 100
-
-	StormRedBulletSpeed           = 50.0 // cells/sec
-	StormRedBulletSpreadHalfAngle = 0.26 // radians (~15°)
-	StormRedBulletSpawnMargin     = 1.15 // multiplier outside ellipse boundary
-	StormRedBulletMaxLifetime     = 4 * time.Second
+	// Red circle: a turret mount armed for each burst, one bullet a tick
+	StormRedInitialCooldown   = 1 * time.Second
+	StormRedBurstDuration     = 2 * time.Second
+	StormRedPostAttackDelay   = 1 * time.Second // Wait after burst before the next one
+	StormRedBulletSpawnMargin = 1.15            // multiplier outside ellipse boundary
+	StormRedFireInterval      = GameUpdateInterval
 
 	// Blue circle: swarm spawn
 	StormBlueInitialCooldown    = 5 * time.Second
