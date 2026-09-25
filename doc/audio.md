@@ -37,9 +37,8 @@ publish audio as unavailable, preserving telemetry and system controls. Event
 payloads retain compatible identifiers through the small `pkg/audio/model`
 package. Replay rebuilds simulation from recorded events,
 including sound requests, and starts playback unmuted
-because the journal anchor has no original mute-state field. Terminal playback
-controls pacing only; it does not route viewer keys through `AudioSystem` or
-the gameplay keymap.
+because the journal anchor has no original mute-state field. The viewer's
+pause holds the mixer, as the game's pause does.
 
 ## 2. Stream contract
 
@@ -238,11 +237,9 @@ The categorized locations are `audio/sounds.toml` and `audio/music.toml`.
 `-config-sounds` and `-config-music` are strict individual overrides. See
 [External filesystem layout](filesystem-layout.md).
 
-Malformed user definitions currently degrade to the shipped bank;
-the engine retains a combined specification error, but the game service does
-not yet present that error during play. `vi-fighter -check` now validates and
-reports both documents before startup; soundlab remains the interactive
-authoring surface.
+Malformed user definitions degrade to the shipped bank. Play reports the first
+line of the engine's combined specification error on the status bar; `vif -check`
+validates and reports both documents in full before startup.
 
 Built-in patterns and drums remain available even when no external file exists.
 Later same-name registrations replace a definition while preserving its runtime
