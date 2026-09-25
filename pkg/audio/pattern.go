@@ -1,7 +1,9 @@
 package audio
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"sync"
 )
 
@@ -56,178 +58,42 @@ var (
 	patternMu   sync.RWMutex
 )
 
-// Fill pattern IDs; written once in InitDefaultPatterns (main goroutine,
-// pre-mixer — happens-before via mixer goroutine creation), read-only afterward
+// fillIDs is the slot-2 fill bank; written once by collectFills before the mixer
+// exists (happens-before via its goroutine creation), read-only afterward.
 var fillIDs []PatternID
 
-// InitDefaultPatterns registers built-in patterns; config file overrides by name
-func InitDefaultPatterns() {
-	// --- Rhythm (slot 0) ---
-	RegisterPattern(&Pattern{
-		ID: PatternBeatBasic, Name: "beat_basic", Steps: 16,
-		Tracks: []Track{
-			{Instr: InstrKick, Events: fourFloor(0.9)},
-			{Instr: InstrHihat, Humanize: 0.5, Events: []Step{
-				{Pos: 2, Vel: 0.4}, {Pos: 6, Vel: 0.4}, {Pos: 10, Vel: 0.4}, {Pos: 14, Vel: 0.4},
-			}},
-		},
-	})
+// FillPrefix marks a pattern for the slot-2 fill bank.
+const FillPrefix = "fill_"
 
-	drivingHats := []Step{
-		{Pos: 0, Vel: 0.3}, {Pos: 2, Vel: 0.7}, {Pos: 4, Vel: 0.3}, {Pos: 6, Vel: 0.7},
-		{Pos: 8, Vel: 0.3}, {Pos: 10, Vel: 0.7}, {Pos: 12, Vel: 0.3}, {Pos: 14, Vel: 0.7},
-	}
-	RegisterPattern(&Pattern{
-		ID: PatternBeatDriving, Name: "beat_driving", Steps: 16,
-		Tracks: []Track{
-			{Instr: InstrKick, Events: fourFloor(1.0)},
-			{Instr: InstrHihat, Humanize: 0.6, Events: drivingHats},
-		},
-	})
-
-	// Driving + Euclidean syncopation (Elevated tier)
-	RegisterPattern(&Pattern{
-		ID: PatternBeatDrivingPlus, Name: "beat_driving_plus", Steps: 16,
-		Tracks: []Track{
-			{Instr: InstrKick, Events: fourFloor(1.0)},
-			{Instr: InstrHihat, Humanize: 0.6, Events: drivingHats},
-			{Instr: InstrHihat, Humanize: 0.7, Events: euclidEvents(EuclidMask(5, 16, 3), 16, 0.3, 0.45, 3, 0)},
-			{Instr: InstrSnare, Humanize: 0.5, Events: euclidEvents(EuclidMask(3, 16, 2), 16, 0.2, 0.2, 0, 0.3)}, // ghosts
-		},
-	})
-
-	RegisterPattern(&Pattern{
-		ID: PatternBeatBreakdown, Name: "beat_breakdown", Steps: 16,
-		Tracks: []Track{
-			{Instr: InstrKick, Events: []Step{{Pos: 0, Vel: 0.9}}},
-			{Instr: InstrClap, Humanize: 0.3, Events: []Step{{Pos: 8, Vel: 0.6}}},
-		},
-	})
-
-	intenseHats := make([]Step, 16)
-	for i := range intenseHats {
-		v := 0.3
-		if i%2 == 0 {
-			v = 0.55
-		}
-		intenseHats[i] = Step{Pos: i, Vel: v}
-	}
-	RegisterPattern(&Pattern{
-		ID: PatternBeatIntense, Name: "beat_intense", Steps: 16,
-		Tracks: []Track{
-			{Instr: InstrKick, Events: fourFloor(1.0)},
-			{Instr: InstrHihat, Humanize: 0.6, Events: intenseHats},
-			{Instr: InstrSnare, Humanize: 0.4, Events: []Step{
-				{Pos: 4, Vel: 0.9}, {Pos: 12, Vel: 0.9},
-				{Pos: 7, Vel: 0.35, Prob: 0.35}, {Pos: 15, Vel: 0.35, Prob: 0.35},
-			}},
-			{Instr: InstrClap, Humanize: 0.3, Events: []Step{{Pos: 12, Vel: 0.6}}},
-		},
-	})
-
-	// Breakbeat
-	RegisterPattern(&Pattern{
-		ID: PatternBeatBreaks, Name: "beat_breaks", Steps: 16,
-		Tracks: []Track{
-			{Instr: InstrKick, Events: []Step{
-				{Pos: 0, Vel: 0.95}, {Pos: 7, Vel: 0.7, Prob: 0.6}, {Pos: 10, Vel: 0.9},
-			}},
-			{Instr: InstrSnare, Humanize: 0.4, Events: []Step{
-				{Pos: 4, Vel: 0.9}, {Pos: 12, Vel: 0.9}, {Pos: 14, Vel: 0.3, Prob: 0.4},
-			}},
-			{Instr: InstrHihat, Humanize: 0.7, Events: euclidEvents(EuclidMask(7, 16, 0), 16, 0.35, 0.5, 4, 0)},
-		},
-	})
-
-	// Halftime
-	RegisterPattern(&Pattern{
-		ID: PatternBeatHalftime, Name: "beat_halftime", Steps: 16,
-		Tracks: []Track{
-			{Instr: InstrKick, Events: []Step{{Pos: 0, Vel: 1.0}, {Pos: 3, Vel: 0.5, Prob: 0.4}}},
-			{Instr: InstrSnare, Humanize: 0.3, Events: []Step{{Pos: 8, Vel: 0.95}}},
-			{Instr: InstrClap, Humanize: 0.3, Events: []Step{{Pos: 8, Vel: 0.4}}},
-			{Instr: InstrHihat, Humanize: 0.7, Events: euclidEvents(EuclidMask(4, 16, 2), 16, 0.3, 0.3, 0, 0)},
-		},
-	})
-
-	// --- Melody (slot 1): unchanged registrations + Humanize ---
-	RegisterPattern(&Pattern{
-		ID: PatternMelodyHold, Name: "melody_bassline", Steps: 16,
-		Tracks: []Track{
-			{Instr: InstrBass, FollowChord: true, Humanize: 0.15, Events: rollingBass()},
-		},
-	})
-
-	arp := make([]Step, 0, 8)
-	degs := []int{0, 2, 4, 7}
-	for i := range 8 {
-		arp = append(arp, Step{Pos: i * 2, Vel: 0.55, Deg: degs[i%4], Oct: 2, Dur: 1, Prob: 0.85})
-	}
-	RegisterPattern(&Pattern{
-		ID: PatternMelodyArpUp, Name: "melody_bass_arp", Steps: 16,
-		Tracks: []Track{
-			{Instr: InstrBass, FollowChord: true, Humanize: 0.15, Events: rollingBass()},
-			{Instr: InstrPiano, FollowChord: true, Humanize: 0.4, Events: arp},
-		},
-	})
-
-	arpDown := make([]Step, 0, 8)
-	for i := range 8 {
-		arpDown = append(arpDown, Step{Pos: i * 2, Vel: 0.55, Deg: degs[3-i%4], Oct: 2, Dur: 1, Prob: 0.85})
-	}
-	RegisterPattern(&Pattern{
-		ID: PatternMelodyArpDown, Name: "melody_bass_arp_down", Steps: 16,
-		Tracks: []Track{
-			{Instr: InstrBass, FollowChord: true, Humanize: 0.15, Events: rollingBass()},
-			{Instr: InstrPiano, FollowChord: true, Humanize: 0.4, Events: arpDown},
-		},
-	})
-
-	RegisterPattern(&Pattern{
-		ID: PatternMelodyChord, Name: "melody_full", Steps: 16,
-		Tracks: []Track{
-			{Instr: InstrBass, FollowChord: true, Humanize: 0.15, Events: rollingBass()},
-			{Instr: InstrPiano, FollowChord: true, Humanize: 0.4, Events: arp},
-			{Instr: InstrPad, FollowChord: true, Events: []Step{
-				{Pos: 0, Vel: 0.35, Deg: 0, Oct: 1, Dur: 16},
-				{Pos: 0, Vel: 0.3, Deg: 2, Oct: 1, Dur: 16},
-				{Pos: 0, Vel: 0.3, Deg: 4, Oct: 1, Dur: 16},
-			}},
-		},
-	})
-
-	// Generative melody
-	registerMelodyGen()
-
-	// Slot-2 fill bank (dynamic IDs, seeded rng selects at runtime)
-	roll := make([]Step, 16)
-	for i := range roll {
-		roll[i] = Step{Pos: i, Vel: 0.3 + 0.043*float64(i)}
-	}
+// collectFills fixes the fill bank at Start: every registered pattern named
+// FillPrefix*, in ID order. A fill defined after Start does not join it.
+func collectFills() {
 	fillIDs = fillIDs[:0]
-	fillIDs = append(fillIDs,
-		RegisterPattern(&Pattern{Name: "fill_snare_roll", Steps: 16, Tracks: []Track{
-			{Instr: InstrKick, Events: []Step{{Pos: 0, Vel: 0.9}}},
-			{Instr: InstrSnare, Humanize: 0.5, Events: roll},
-		}}),
-		RegisterPattern(&Pattern{Name: "fill_clap_build", Steps: 16, Tracks: []Track{
-			{Instr: InstrClap, Humanize: 0.4, Events: euclidEvents(EuclidMask(11, 16, 0), 16, 0.5, 0.65, 4, 0)},
-			{Instr: InstrSnare, Humanize: 0.3, Events: []Step{
-				{Pos: 8, Vel: 0.6}, {Pos: 12, Vel: 0.75}, {Pos: 14, Vel: 0.85}, {Pos: 15, Vel: 0.95},
-			}},
-		}}),
-		RegisterPattern(&Pattern{Name: "fill_kick_stutter", Steps: 16, Tracks: []Track{
-			{Instr: InstrKick, Events: []Step{
-				{Pos: 0, Vel: 0.9}, {Pos: 8, Vel: 0.7}, {Pos: 10, Vel: 0.75},
-				{Pos: 12, Vel: 0.8}, {Pos: 13, Vel: 0.85}, {Pos: 14, Vel: 0.9}, {Pos: 15, Vel: 0.95},
-			}},
-			{Instr: InstrHihat, Humanize: 0.6, Events: euclidEvents(EuclidMask(5, 16, 1), 16, 0.3, 0.3, 0, 0)},
-		}}),
-		RegisterPattern(&Pattern{Name: "fill_dropout", Steps: 16, Tracks: []Track{
-			{Instr: InstrKick, Events: []Step{{Pos: 0, Vel: 0.9}}},
-			{Instr: InstrSnare, Events: []Step{{Pos: 15, Vel: 0.9}}},
-		}}),
-	)
+	for _, p := range RegisteredPatterns() {
+		if strings.HasPrefix(p.Name, FillPrefix) {
+			fillIDs = append(fillIDs, p.ID)
+		}
+	}
+}
+
+// tierPools is each tier's rhythm and melody pool, resolved to IDs
+type tierPools [IntensityCount][2][]PatternID
+
+// resolveArrangements binds each tier's pattern names to IDs
+func resolveArrangements(tiers [IntensityCount]Arrangement) (tierPools, error) {
+	var out tierPools
+	for t, a := range tiers {
+		for slot, names := range [...][]string{a.Rhythm, a.Melody} {
+			for _, n := range names {
+				id := PatternIDByName(n)
+				if id == PatternSilence {
+					return out, fmt.Errorf("arrangement %s: unknown pattern %q", Intensity(t), n)
+				}
+				out[t][slot] = append(out[t][slot], id)
+			}
+		}
+	}
+	return out, nil
 }
 
 // RegisterPattern validates and adds or overwrites a pattern; ID
@@ -271,8 +137,7 @@ func RegisteredPatterns() []*Pattern {
 }
 
 // resetPatternRegistry clears the registry. fillIDs is written outside the
-// mutex under the same write-once contract InitDefaultPatterns relies on: the
-// caller guarantees no mixer exists.
+// mutex under collectFills' write-once contract: the caller guarantees no mixer.
 func resetPatternRegistry() {
 	patternMu.Lock()
 	patterns = make(map[PatternID]*Pattern)
@@ -294,40 +159,4 @@ func PatternIDByName(name string) PatternID {
 	patternMu.RLock()
 	defer patternMu.RUnlock()
 	return patternName[name]
-}
-
-// fourFloor is a 4-on-floor kick lane helper
-func fourFloor(vel float64) []Step {
-	return []Step{{Pos: 0, Vel: vel}, {Pos: 4, Vel: vel}, {Pos: 8, Vel: vel}, {Pos: 12, Vel: vel}}
-}
-
-// rollingBass is the psytrance offbeat-16th bass lane: k-b-b-b per beat
-func rollingBass() []Step {
-	ev := make([]Step, 0, 12)
-	for beat := range 4 {
-		base := beat * 4
-		ev = append(ev,
-			Step{Pos: base + 1, Vel: 0.85, Dur: 1},
-			Step{Pos: base + 2, Vel: 0.7, Dur: 1},
-			Step{Pos: base + 3, Vel: 0.7, Dur: 1},
-		)
-	}
-	return ev
-}
-
-// BuiltinPatternDefs returns the built-in patterns in authoring form. It must
-// register first: the built-ins are Go literals, not loaded data. Same
-// preconditions as InitDefaultPatterns — setup goroutine, no mixer. Anonymous
-// patterns are skipped; without a name they cannot be reloaded or overridden.
-func BuiltinPatternDefs() []*PatternDef {
-	InitDefaultPatterns()
-	pats := RegisteredPatterns()
-	out := make([]*PatternDef, 0, len(pats))
-	for _, p := range pats {
-		if p == nil || p.Name == "" {
-			continue
-		}
-		out = append(out, p.Def())
-	}
-	return out
 }

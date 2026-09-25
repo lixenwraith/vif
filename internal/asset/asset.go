@@ -1,7 +1,7 @@
 // Package asset embeds every file the binary must be able to play without a
 // host filesystem: the fallback scenario and typing corpus, the default keymap,
-// and the built-in sound bank. Each group is narrowed with fs.Sub so its runtime
-// root is the category directory, not internal/asset.
+// and the built-in sound and music banks. Each group is narrowed with fs.Sub so its
+// runtime root is the category directory, not internal/asset.
 package asset
 
 import (
@@ -29,16 +29,24 @@ var DefaultSoundFiles = []string{"sfx.toml", "drums.toml"}
 // DefaultKeymap is the keymap TOML the binary falls back to.
 var DefaultKeymap []byte
 
+// DefaultMusic is the built-in pattern bank, which a user music.toml overrides by name.
+var DefaultMusic []byte
+
 // A missing group is a broken build artifact, not a recoverable user error.
 func init() {
 	DefaultScenario = sub("scenario")
 	DefaultContent = sub("content")
 	DefaultSounds = sub("audio")
-	data, err := assetFS.ReadFile("input/keymap.toml")
+	DefaultKeymap = read("input/keymap.toml")
+	DefaultMusic = read("audio/music.toml")
+}
+
+func read(name string) []byte {
+	data, err := assetFS.ReadFile(name)
 	if err != nil {
-		panic("asset: embedded keymap missing")
+		panic("asset: embedded " + name + " missing")
 	}
-	DefaultKeymap = data
+	return data
 }
 
 func sub(dir string) fs.FS {

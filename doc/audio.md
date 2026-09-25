@@ -217,8 +217,10 @@ The target tempo is 100 BPM at calm activity, rises gradually through normal
 play, and reaches the engine's 180 BPM maximum at peak. The conductor slews
 rather than jumping (20 BPM/s upward, 16 BPM/s downward), ignores changes
 smaller than three BPM, and the sequencer applies each on the next beat, so
-tempo trails the five-second window by about a second. Tier changes select
-registered rhythm/melody arrangements and use quantization/crossfade/reveal policy.
+tempo trails the five-second window by about a second. Each tier names a rhythm
+and a melody pool (`parameter.TierArrangements`), resolved by name at engine
+`Start`; a tier change draws one of each and uses quantization/crossfade/reveal
+policy, and a slot already sounding its draw keeps playing.
 
 Explicit music events can start/stop, set patterns, play a melody note, change
 intensity, tempo, seed, swing, or harmony. A manually held intensity can later
@@ -241,9 +243,13 @@ Malformed user definitions degrade to the shipped bank. Play reports the first
 line of the engine's combined specification error on the status bar; `vif -check`
 validates and reports both documents in full before startup.
 
-Built-in patterns and drums remain available even when no external file exists.
-Later same-name registrations replace a definition while preserving its runtime
-ID, which allows live tooling to update a playing registry.
+The shipped banks are `internal/asset/audio/sfx.toml`, `drums.toml` and
+`music.toml`, embedded and handed to the engine as `BaseSounds` and
+`BasePatterns`; `pkg/audio` ships no authored content, and only the generative
+`melody_gen` is registered by code. A pattern named `fill_*` joins the slot-2 fill
+bank, which is fixed at `Start`. Later same-name registrations replace a
+definition while preserving its runtime ID, which allows live tooling to update
+a playing registry.
 
 ## 10. Soundlab
 
@@ -257,8 +263,8 @@ same engine. It offers:
 - validation, live registry apply/revert, audition, sequencer slot assignment,
   TOML save, and WAV export.
 
-Soundlab registers the same bank the game does, so its registry and the game's
-hold identical specs. An untitled `save sound` / `save pattern` writes to
+Soundlab registers the same sound and pattern banks the game does, from the same
+embedded assets, so its registry and the game's hold identical specs. An untitled `save sound` / `save pattern` writes to
 `audio/sounds.toml` / `audio/music.toml` under the user config root, which is
 where the next run reads its override from.
 
@@ -292,7 +298,7 @@ events and keep the sequencer unaware of gameplay concepts.
 | Mixer/SFX admission | `pkg/audio/mixer.go`, `cache.go`, `sound_render.go` |
 | Sound schema | `pkg/audio/sound_spec.go`, `sound_valid.go` |
 | Shared protocol identifiers | `pkg/audio/model` |
-| Shipped sound bank | `internal/asset/audio/*.toml`, `internal/parameter.BuiltinSounds` |
+| Shipped sound and music banks | `internal/asset/audio/*.toml`, `internal/parameter.BuiltinSounds`, `BuiltinPatterns` |
 | Sequencer/patterns | `pkg/audio/sequencer.go`, `pattern*.go`, `track.go`, `voice.go` |
 | Game service | `internal/service/adapter_audio.go` |
 | Game event adapters | `internal/system/audio.go`, `music.go` |

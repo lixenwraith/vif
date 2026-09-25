@@ -18,14 +18,6 @@ const (
 	slotMelody = 1
 )
 
-var tierArrangements = [audio.IntensityCount]audio.Arrangement{
-	audio.IntensityCalm:     {Rhythm: audio.PatternBeatBasic, Melody: audio.PatternMelodyHold},
-	audio.IntensityNormal:   {Rhythm: audio.PatternBeatDriving, Melody: audio.PatternMelodyHold},
-	audio.IntensityElevated: {Rhythm: audio.PatternBeatDrivingPlus, Melody: audio.PatternMelodyArpUp},
-	audio.IntensityIntense:  {Rhythm: audio.PatternBeatIntense, Melody: audio.PatternMelodyArpUp},
-	audio.IntensityPeak:     {Rhythm: audio.PatternBeatIntense, Melody: audio.PatternMelodyGen},
-}
-
 // MusicSystem is the conductor: maps game state to arrangement commands
 type MusicSystem struct {
 	world  *engine.World
@@ -67,9 +59,6 @@ func (s *MusicSystem) Init() {
 	s.arranged = false
 	s.enabled = true
 	if s.player != nil {
-		for t, a := range tierArrangements {
-			s.player.SetArrangement(audio.Intensity(t), a)
-		}
 		s.player.ResetMusic()
 	}
 }

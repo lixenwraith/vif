@@ -5,11 +5,27 @@ package parameter
 import (
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/asset"
 	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
 // Conductor policy: APM → tempo and arrangement tier. Everything here is game
 // interpretation of the music engine; the engine carries no APM concept.
+
+// BuiltinPatterns parses the shipped music bank; any pattern it drops is a broken build.
+func BuiltinPatterns() ([]*audio.Pattern, error) {
+	return audio.LoadPatternsTOML(asset.DefaultMusic)
+}
+
+// TierArrangements names the pools each tier draws its rhythm and melody from,
+// all in the shipped bank or code-registered (melody_gen).
+var TierArrangements = [audio.IntensityCount]audio.Arrangement{
+	audio.IntensityCalm:     {Rhythm: []string{"beat_basic"}, Melody: []string{"melody_bassline"}},
+	audio.IntensityNormal:   {Rhythm: []string{"beat_driving"}, Melody: []string{"melody_bassline"}},
+	audio.IntensityElevated: {Rhythm: []string{"beat_driving_plus"}, Melody: []string{"melody_bass_arp"}},
+	audio.IntensityIntense:  {Rhythm: []string{"beat_intense"}, Melody: []string{"melody_bass_arp"}},
+	audio.IntensityPeak:     {Rhythm: []string{"beat_intense"}, Melody: []string{"melody_gen"}},
+}
 
 // Tier thresholds (MusicAPM: 5s burst normalized to per-minute)
 const (

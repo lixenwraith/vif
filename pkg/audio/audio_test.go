@@ -55,6 +55,24 @@ func testBank() []*SoundDef {
 	}
 }
 
+// testPatterns is the package's own pattern set, for the same reason: a beat, a
+// chord-following melody and a fill, each owning every field a round trip carries.
+func testPatterns() []*Pattern {
+	return []*Pattern{
+		{Name: "beat", Desc: "four on the floor", Steps: 16, Tracks: []Track{
+			{Instr: InstrKick, Events: []Step{{Pos: 0, Vel: 1}, {Pos: 4, Vel: 1}, {Pos: 8, Vel: 1}, {Pos: 12, Vel: 1}}},
+			{Instr: InstrHihat, Humanize: 0.5, Events: []Step{{Pos: 2, Vel: 0.4, Prob: 0.8}}},
+		}},
+		{Name: "tune", Steps: 32, Tracks: []Track{
+			{Instr: InstrBass, FollowChord: true, Events: []Step{{Pos: 1, Vel: 0.8, Dur: 1}}},
+			{Instr: InstrPiano, FollowChord: true, Events: []Step{{Pos: 16, Vel: 0.5, Deg: 4, Oct: 2, Dur: 2}}},
+		}},
+		{Name: FillPrefix + "roll", Steps: 16, Tracks: []Track{
+			{Instr: InstrSnare, Events: []Step{{Pos: 15, Vel: 0.9}}},
+		}},
+	}
+}
+
 func checkBuffer(t *testing.T, name string, buf []float64) float64 {
 	t.Helper()
 	var peak float64
@@ -128,11 +146,7 @@ func TestRegistryFreezeAndReset(t *testing.T) {
 }
 
 func TestPatternRoundTrip(t *testing.T) {
-	t.Cleanup(ResetRegistries)
-	ResetRegistries()
-	InitDefaultPatterns()
-
-	pats := RegisteredPatterns()
+	pats := testPatterns()
 	data, err := MarshalPatterns(pats)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -154,7 +168,7 @@ func TestPatternRoundTrip(t *testing.T) {
 			t.Errorf("%s: missing after round trip", p.Name)
 			continue
 		}
-		if q.Steps != p.Steps || len(q.Tracks) != len(p.Tracks) {
+		if q.Steps != p.Steps || q.Desc != p.Desc || len(q.Tracks) != len(p.Tracks) {
 			t.Errorf("%s: shape differs", p.Name)
 			continue
 		}
@@ -226,6 +240,7 @@ func TestNullBackendLifecycle(t *testing.T) {
 	cfg := DefaultAudioConfig()
 	cfg.Enabled = true
 	cfg.BaseSounds = testBank()
+	cfg.BasePatterns = testPatterns()
 	cfg.ForceBackend = BackendNameNull
 	ae, err := NewAudioEngine(cfg)
 	if err != nil {
@@ -352,6 +367,7 @@ func startNullEngine(t *testing.T) *AudioEngine {
 	cfg := DefaultAudioConfig()
 	cfg.Enabled = true
 	cfg.BaseSounds = testBank()
+	cfg.BasePatterns = testPatterns()
 	cfg.ForceBackend = BackendNameNull
 	ae, err := NewAudioEngine(cfg)
 	if err != nil {
@@ -441,16 +457,17 @@ func TestDefineSoundRebindsDrumKit(t *testing.T) {
 func TestDefinePatternSwapsUnderPlayback(t *testing.T) {
 	ae := startNullEngine(t)
 	ae.StartMusic()
-	ae.SetPattern(0, PatternBeatBasic, MinCrossfadeSamples, false)
+	beat := PatternIDByName("beat")
+	ae.SetPattern(0, beat, MinCrossfadeSamples, false)
 	time.Sleep(3 * AudioBufferDuration)
 
-	p := GetPattern(PatternBeatBasic).Clone()
+	p := GetPattern(beat).Clone()
 	p.Tracks[0].Events = []Step{{Pos: 0, Vel: 0.5}, {Pos: 8, Vel: 0.5}}
 	id, err := ae.DefinePattern(p)
 	if err != nil {
 		t.Fatalf("define: %v", err)
 	}
-	if id != PatternBeatBasic {
+	if id != beat {
 		t.Errorf("name override changed id: %d", id)
 	}
 	time.Sleep(3 * AudioBufferDuration)
@@ -465,11 +482,7 @@ func TestDefinePatternSwapsUnderPlayback(t *testing.T) {
 }
 
 func TestPatternCloneIsDeep(t *testing.T) {
-	t.Cleanup(ResetRegistries)
-	ResetRegistries()
-	InitDefaultPatterns()
-
-	src := GetPattern(PatternBeatBasic)
+	src := testPatterns()[0]
 	c := src.Clone()
 	c.Tracks[0].Events[0].Vel = 0.01
 	c.Tracks[0].Humanize = 0.99

@@ -65,6 +65,29 @@ func TestSoundTableNamesAreBuiltin(t *testing.T) {
 	}
 }
 
+// A tier naming a pattern the shipped bank lacks fails AudioEngine.Start, which
+// aborts the game; melody_gen is the one pattern code registers instead.
+func TestTierPatternsAreBuiltin(t *testing.T) {
+	pats, err := BuiltinPatterns()
+	if err != nil {
+		t.Fatalf("builtin patterns: %v", err)
+	}
+	known := map[string]bool{audio.PatternMelodyGen.String(): true}
+	for _, p := range pats {
+		known[p.Name] = true
+	}
+	for tier, a := range TierArrangements {
+		if len(a.Rhythm) == 0 || len(a.Melody) == 0 {
+			t.Errorf("tier %s has an empty pool", audio.Intensity(tier))
+		}
+		for _, n := range slices.Concat(a.Rhythm, a.Melody) {
+			if !known[n] {
+				t.Errorf("tier %s names %q, which the shipped bank lacks", audio.Intensity(tier), n)
+			}
+		}
+	}
+}
+
 // Two rows for one name silently collapse the volume and shape maps to the
 // last writer. Aliasing is expressed by pointing two rows at one slot, never
 // by repeating a name.

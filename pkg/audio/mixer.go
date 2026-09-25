@@ -225,8 +225,6 @@ func (m *Mixer) apply(c audioCmd) {
 		m.outBroken = false
 	case cmdSeed:
 		m.sequencer.Reseed(c.seed)
-	case cmdArrangement:
-		m.sequencer.SetArrangement(c.tier, Arrangement{Rhythm: c.pattern, Melody: PatternID(c.i2)})
 	case cmdIntensity:
 		m.sequencer.SetIntensity(c.tier, c.i1, c.b, c.reveal)
 	case cmdReloadSound:

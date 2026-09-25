@@ -37,20 +37,9 @@ func InstrumentByName(s string) (InstrumentType, bool) {
 type PatternID = model.PatternID
 
 const (
-	PatternSilence         = model.PatternSilence
-	PatternBeatBasic       = model.PatternBeatBasic
-	PatternBeatDriving     = model.PatternBeatDriving
-	PatternBeatDrivingPlus = model.PatternBeatDrivingPlus
-	PatternBeatBreaks      = model.PatternBeatBreaks
-	PatternBeatHalftime    = model.PatternBeatHalftime
-	PatternBeatBreakdown   = model.PatternBeatBreakdown
-	PatternBeatIntense     = model.PatternBeatIntense
-	PatternMelodyHold      = model.PatternMelodyHold
-	PatternMelodyArpUp     = model.PatternMelodyArpUp
-	PatternMelodyArpDown   = model.PatternMelodyArpDown
-	PatternMelodyChord     = model.PatternMelodyChord
-	PatternMelodyGen       = model.PatternMelodyGen
-	PatternDynamic         = model.PatternDynamic
+	PatternSilence   = model.PatternSilence
+	PatternMelodyGen = model.PatternMelodyGen
+	PatternDynamic   = model.PatternDynamic
 )
 
 // === Harmony ===

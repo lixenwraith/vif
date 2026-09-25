@@ -16,6 +16,10 @@ const (
 	IntensityCount    = model.IntensityCount
 )
 
-// Arrangement is the pattern set for one tier; slot 2 stays free for the
-// auto-fill bank and embedder use
-type Arrangement = model.Arrangement
+// Arrangement names one tier's rhythm and melody pools; slot 2 stays free for the
+// auto-fill bank and embedder use. Start resolves the names, and the sequencer
+// draws one member per slot whenever the tier is applied.
+type Arrangement struct {
+	Rhythm []string
+	Melody []string
+}

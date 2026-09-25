@@ -42,12 +42,16 @@ func (s *AudioService) Init() error {
 	config.EffectVolumes = parameter.GameEffectVolumes
 	config.EffectShapes = parameter.GameEffectShapes
 
-	// pkg/audio ships no specs; the bank is embedder data.
+	// pkg/audio ships no specs or authored patterns; both banks are embedder data.
 	base, err := parameter.BuiltinSounds()
 	if err != nil {
 		return fmt.Errorf("built-in sounds: %w", err)
 	}
 	config.BaseSounds = base
+	if config.BasePatterns, err = parameter.BuiltinPatterns(); err != nil {
+		return fmt.Errorf("built-in patterns: %w", err)
+	}
+	config.Arrangements = parameter.TierArrangements
 
 	if s.src.MusicPath != "" {
 		data, err := os.ReadFile(s.src.MusicPath)
@@ -92,8 +96,7 @@ func (s *AudioService) Start() error {
 	// App.Loop, so no system has emitted EventSoundRequest yet.
 	//
 	// Fatal by design: a missing name means soundTable and the shipped bank
-	// disagree. Degrading would reinstate the failure this call fixes — every
-	// Play discarded on the SoundNone guard, with no counter and no log.
+	// disagree, and every Play of it would be a bad-ID rejection.
 	if err := parameter.ResolveSounds(); err != nil {
 		return fmt.Errorf("audio service: %w", err)
 	}

@@ -1,0 +1,293 @@
+# Built-in music patterns. A step is a sixteenth, sixteen to a bar; a 32-step
+# pattern is two. vel, prob and humanize are 0..1; deg is a scale degree and oct
+# an octave above the harmony root. A pattern named fill_* joins the slot-2 fill
+# bank. The tiers that draw from the rest name them in internal/parameter/music.go.
+
+# Rhythm: slot 0. Kick stays the first track, so a build-up reveals it first.
+
+[[pattern]]
+name = "beat_basic"
+desc = "Calm: four-on-the-floor kick under offbeat hats"
+steps = 16
+[[pattern.track]]
+instr = "kick"
+event = [{ pos = 0, vel = 0.9 }, { pos = 4, vel = 0.9 }, { pos = 8, vel = 0.9 }, { pos = 12, vel = 0.9 }]
+[[pattern.track]]
+instr = "hihat"
+humanize = 0.5
+event = [{ pos = 2, vel = 0.4 }, { pos = 6, vel = 0.4 }, { pos = 10, vel = 0.4 }, { pos = 14, vel = 0.4 }]
+
+[[pattern]]
+name = "beat_driving"
+desc = "Normal: full kick with alternating closed and open hats"
+steps = 16
+[[pattern.track]]
+instr = "kick"
+event = [{ pos = 0, vel = 1.0 }, { pos = 4, vel = 1.0 }, { pos = 8, vel = 1.0 }, { pos = 12, vel = 1.0 }]
+[[pattern.track]]
+instr = "hihat"
+humanize = 0.6
+event = [
+  { pos = 0, vel = 0.3 }, { pos = 2, vel = 0.7 }, { pos = 4, vel = 0.3 }, { pos = 6, vel = 0.7 },
+  { pos = 8, vel = 0.3 }, { pos = 10, vel = 0.7 }, { pos = 12, vel = 0.3 }, { pos = 14, vel = 0.7 }
+]
+
+[[pattern]]
+name = "beat_driving_plus"
+desc = "Elevated: driving with Euclidean hat syncopation and ghost snares"
+steps = 16
+[[pattern.track]]
+instr = "kick"
+event = [{ pos = 0, vel = 1.0 }, { pos = 4, vel = 1.0 }, { pos = 8, vel = 1.0 }, { pos = 12, vel = 1.0 }]
+[[pattern.track]]
+instr = "hihat"
+humanize = 0.6
+event = [
+  { pos = 0, vel = 0.3 }, { pos = 2, vel = 0.7 }, { pos = 4, vel = 0.3 }, { pos = 6, vel = 0.7 },
+  { pos = 8, vel = 0.3 }, { pos = 10, vel = 0.7 }, { pos = 12, vel = 0.3 }, { pos = 14, vel = 0.7 }
+]
+[[pattern.track]]
+instr = "hihat"
+humanize = 0.7
+event = [
+  { pos = 1, vel = 0.45 }, { pos = 4, vel = 0.3 }, { pos = 7, vel = 0.3 }, { pos = 10, vel = 0.45 },
+  { pos = 13, vel = 0.3 }
+]
+[[pattern.track]]
+instr = "snare"
+humanize = 0.5
+event = [{ pos = 4, vel = 0.2, prob = 0.3 }, { pos = 9, vel = 0.2, prob = 0.3 }, { pos = 14, vel = 0.2, prob = 0.3 }]
+
+[[pattern]]
+name = "beat_breaks"
+desc = "Breakbeat kick and snare over a seven-onset hat"
+steps = 16
+[[pattern.track]]
+instr = "kick"
+event = [{ pos = 0, vel = 0.95 }, { pos = 7, vel = 0.7, prob = 0.6 }, { pos = 10, vel = 0.9 }]
+[[pattern.track]]
+instr = "snare"
+humanize = 0.4
+event = [{ pos = 4, vel = 0.9 }, { pos = 12, vel = 0.9 }, { pos = 14, vel = 0.3, prob = 0.4 }]
+[[pattern.track]]
+instr = "hihat"
+humanize = 0.7
+event = [
+  { pos = 0, vel = 0.5 }, { pos = 3, vel = 0.35 }, { pos = 5, vel = 0.35 }, { pos = 7, vel = 0.35 },
+  { pos = 10, vel = 0.5 }, { pos = 12, vel = 0.35 }, { pos = 14, vel = 0.35 }
+]
+
+[[pattern]]
+name = "beat_halftime"
+desc = "Halftime: one snare a bar, room between the hits"
+steps = 16
+[[pattern.track]]
+instr = "kick"
+event = [{ pos = 0, vel = 1.0 }, { pos = 3, vel = 0.5, prob = 0.4 }]
+[[pattern.track]]
+instr = "snare"
+humanize = 0.3
+event = [{ pos = 8, vel = 0.95 }]
+[[pattern.track]]
+instr = "clap"
+humanize = 0.3
+event = [{ pos = 8, vel = 0.4 }]
+[[pattern.track]]
+instr = "hihat"
+humanize = 0.7
+event = [{ pos = 2, vel = 0.3 }, { pos = 6, vel = 0.3 }, { pos = 10, vel = 0.3 }, { pos = 14, vel = 0.3 }]
+
+[[pattern]]
+name = "beat_breakdown"
+desc = "Breakdown: a kick and a clap, for a scripted drop"
+steps = 16
+[[pattern.track]]
+instr = "kick"
+event = [{ pos = 0, vel = 0.9 }]
+[[pattern.track]]
+instr = "clap"
+humanize = 0.3
+event = [{ pos = 8, vel = 0.6 }]
+
+[[pattern]]
+name = "beat_intense"
+desc = "Intense: sixteenth hats, backbeat snare and chance ghosts"
+steps = 16
+[[pattern.track]]
+instr = "kick"
+event = [{ pos = 0, vel = 1.0 }, { pos = 4, vel = 1.0 }, { pos = 8, vel = 1.0 }, { pos = 12, vel = 1.0 }]
+[[pattern.track]]
+instr = "hihat"
+humanize = 0.6
+event = [
+  { pos = 0, vel = 0.55 }, { pos = 1, vel = 0.3 }, { pos = 2, vel = 0.55 }, { pos = 3, vel = 0.3 },
+  { pos = 4, vel = 0.55 }, { pos = 5, vel = 0.3 }, { pos = 6, vel = 0.55 }, { pos = 7, vel = 0.3 },
+  { pos = 8, vel = 0.55 }, { pos = 9, vel = 0.3 }, { pos = 10, vel = 0.55 }, { pos = 11, vel = 0.3 },
+  { pos = 12, vel = 0.55 }, { pos = 13, vel = 0.3 }, { pos = 14, vel = 0.55 }, { pos = 15, vel = 0.3 }
+]
+[[pattern.track]]
+instr = "snare"
+humanize = 0.4
+event = [{ pos = 4, vel = 0.9 }, { pos = 12, vel = 0.9 }, { pos = 7, vel = 0.35, prob = 0.35 }, { pos = 15, vel = 0.35, prob = 0.35 }]
+[[pattern.track]]
+instr = "clap"
+humanize = 0.3
+event = [{ pos = 12, vel = 0.6 }]
+
+# Melody: slot 1. Degrees resolve through the scale; follow_chord adds the bar's chord root.
+
+[[pattern]]
+name = "melody_bassline"
+desc = "Rolling offbeat bass following the chord"
+steps = 16
+[[pattern.track]]
+instr = "bass"
+follow_chord = true
+humanize = 0.15
+event = [
+  { pos = 1, vel = 0.85, dur = 1 }, { pos = 2, vel = 0.7, dur = 1 }, { pos = 3, vel = 0.7, dur = 1 },
+  { pos = 5, vel = 0.85, dur = 1 }, { pos = 6, vel = 0.7, dur = 1 }, { pos = 7, vel = 0.7, dur = 1 },
+  { pos = 9, vel = 0.85, dur = 1 }, { pos = 10, vel = 0.7, dur = 1 }, { pos = 11, vel = 0.7, dur = 1 },
+  { pos = 13, vel = 0.85, dur = 1 }, { pos = 14, vel = 0.7, dur = 1 }, { pos = 15, vel = 0.7, dur = 1 }
+]
+
+[[pattern]]
+name = "melody_bass_arp"
+desc = "Rolling bass under a rising piano arpeggio"
+steps = 16
+[[pattern.track]]
+instr = "bass"
+follow_chord = true
+humanize = 0.15
+event = [
+  { pos = 1, vel = 0.85, dur = 1 }, { pos = 2, vel = 0.7, dur = 1 }, { pos = 3, vel = 0.7, dur = 1 },
+  { pos = 5, vel = 0.85, dur = 1 }, { pos = 6, vel = 0.7, dur = 1 }, { pos = 7, vel = 0.7, dur = 1 },
+  { pos = 9, vel = 0.85, dur = 1 }, { pos = 10, vel = 0.7, dur = 1 }, { pos = 11, vel = 0.7, dur = 1 },
+  { pos = 13, vel = 0.85, dur = 1 }, { pos = 14, vel = 0.7, dur = 1 }, { pos = 15, vel = 0.7, dur = 1 }
+]
+[[pattern.track]]
+instr = "piano"
+follow_chord = true
+humanize = 0.4
+event = [
+  { pos = 0, vel = 0.55, oct = 2, dur = 1, prob = 0.85 }, { pos = 2, vel = 0.55, deg = 2, oct = 2, dur = 1, prob = 0.85 }, { pos = 4, vel = 0.55, deg = 4, oct = 2, dur = 1, prob = 0.85 },
+  { pos = 6, vel = 0.55, deg = 7, oct = 2, dur = 1, prob = 0.85 }, { pos = 8, vel = 0.55, oct = 2, dur = 1, prob = 0.85 }, { pos = 10, vel = 0.55, deg = 2, oct = 2, dur = 1, prob = 0.85 },
+  { pos = 12, vel = 0.55, deg = 4, oct = 2, dur = 1, prob = 0.85 }, { pos = 14, vel = 0.55, deg = 7, oct = 2, dur = 1, prob = 0.85 }
+]
+
+[[pattern]]
+name = "melody_bass_arp_down"
+desc = "Rolling bass under a falling piano arpeggio"
+steps = 16
+[[pattern.track]]
+instr = "bass"
+follow_chord = true
+humanize = 0.15
+event = [
+  { pos = 1, vel = 0.85, dur = 1 }, { pos = 2, vel = 0.7, dur = 1 }, { pos = 3, vel = 0.7, dur = 1 },
+  { pos = 5, vel = 0.85, dur = 1 }, { pos = 6, vel = 0.7, dur = 1 }, { pos = 7, vel = 0.7, dur = 1 },
+  { pos = 9, vel = 0.85, dur = 1 }, { pos = 10, vel = 0.7, dur = 1 }, { pos = 11, vel = 0.7, dur = 1 },
+  { pos = 13, vel = 0.85, dur = 1 }, { pos = 14, vel = 0.7, dur = 1 }, { pos = 15, vel = 0.7, dur = 1 }
+]
+[[pattern.track]]
+instr = "piano"
+follow_chord = true
+humanize = 0.4
+event = [
+  { pos = 0, vel = 0.55, deg = 7, oct = 2, dur = 1, prob = 0.85 }, { pos = 2, vel = 0.55, deg = 4, oct = 2, dur = 1, prob = 0.85 }, { pos = 4, vel = 0.55, deg = 2, oct = 2, dur = 1, prob = 0.85 },
+  { pos = 6, vel = 0.55, oct = 2, dur = 1, prob = 0.85 }, { pos = 8, vel = 0.55, deg = 7, oct = 2, dur = 1, prob = 0.85 }, { pos = 10, vel = 0.55, deg = 4, oct = 2, dur = 1, prob = 0.85 },
+  { pos = 12, vel = 0.55, deg = 2, oct = 2, dur = 1, prob = 0.85 }, { pos = 14, vel = 0.55, oct = 2, dur = 1, prob = 0.85 }
+]
+
+[[pattern]]
+name = "melody_full"
+desc = "Bass, rising arpeggio and a sustained pad triad"
+steps = 16
+[[pattern.track]]
+instr = "bass"
+follow_chord = true
+humanize = 0.15
+event = [
+  { pos = 1, vel = 0.85, dur = 1 }, { pos = 2, vel = 0.7, dur = 1 }, { pos = 3, vel = 0.7, dur = 1 },
+  { pos = 5, vel = 0.85, dur = 1 }, { pos = 6, vel = 0.7, dur = 1 }, { pos = 7, vel = 0.7, dur = 1 },
+  { pos = 9, vel = 0.85, dur = 1 }, { pos = 10, vel = 0.7, dur = 1 }, { pos = 11, vel = 0.7, dur = 1 },
+  { pos = 13, vel = 0.85, dur = 1 }, { pos = 14, vel = 0.7, dur = 1 }, { pos = 15, vel = 0.7, dur = 1 }
+]
+[[pattern.track]]
+instr = "piano"
+follow_chord = true
+humanize = 0.4
+event = [
+  { pos = 0, vel = 0.55, oct = 2, dur = 1, prob = 0.85 }, { pos = 2, vel = 0.55, deg = 2, oct = 2, dur = 1, prob = 0.85 }, { pos = 4, vel = 0.55, deg = 4, oct = 2, dur = 1, prob = 0.85 },
+  { pos = 6, vel = 0.55, deg = 7, oct = 2, dur = 1, prob = 0.85 }, { pos = 8, vel = 0.55, oct = 2, dur = 1, prob = 0.85 }, { pos = 10, vel = 0.55, deg = 2, oct = 2, dur = 1, prob = 0.85 },
+  { pos = 12, vel = 0.55, deg = 4, oct = 2, dur = 1, prob = 0.85 }, { pos = 14, vel = 0.55, deg = 7, oct = 2, dur = 1, prob = 0.85 }
+]
+[[pattern.track]]
+instr = "pad"
+follow_chord = true
+event = [{ pos = 0, vel = 0.35, oct = 1, dur = 16 }, { pos = 0, vel = 0.3, deg = 2, oct = 1, dur = 16 }, { pos = 0, vel = 0.3, deg = 4, oct = 1, dur = 16 }]
+
+# Fills: slot 2. The sequencer swaps one in on the last bar of each eight-bar phrase.
+
+[[pattern]]
+name = "fill_snare_roll"
+desc = "Fill: snare crescendo across the bar"
+steps = 16
+[[pattern.track]]
+instr = "kick"
+event = [{ pos = 0, vel = 0.9 }]
+[[pattern.track]]
+instr = "snare"
+humanize = 0.5
+event = [
+  { pos = 0, vel = 0.3 }, { pos = 1, vel = 0.34299999999999997 }, { pos = 2, vel = 0.386 }, { pos = 3, vel = 0.429 },
+  { pos = 4, vel = 0.472 }, { pos = 5, vel = 0.5149999999999999 }, { pos = 6, vel = 0.558 }, { pos = 7, vel = 0.601 },
+  { pos = 8, vel = 0.6439999999999999 }, { pos = 9, vel = 0.6869999999999999 }, { pos = 10, vel = 0.73 }, { pos = 11, vel = 0.7729999999999999 },
+  { pos = 12, vel = 0.8160000000000001 }, { pos = 13, vel = 0.859 }, { pos = 14, vel = 0.9019999999999999 }, { pos = 15, vel = 0.9449999999999998 }
+]
+
+[[pattern]]
+name = "fill_clap_build"
+desc = "Fill: clap build into a snare pickup"
+steps = 16
+[[pattern.track]]
+instr = "clap"
+humanize = 0.4
+event = [
+  { pos = 0, vel = 0.65 }, { pos = 2, vel = 0.5 }, { pos = 3, vel = 0.5 }, { pos = 5, vel = 0.5 },
+  { pos = 6, vel = 0.65 }, { pos = 8, vel = 0.5 }, { pos = 9, vel = 0.5 }, { pos = 11, vel = 0.5 },
+  { pos = 12, vel = 0.65 }, { pos = 14, vel = 0.5 }, { pos = 15, vel = 0.5 }
+]
+[[pattern.track]]
+instr = "snare"
+humanize = 0.3
+event = [{ pos = 8, vel = 0.6 }, { pos = 12, vel = 0.75 }, { pos = 14, vel = 0.85 }, { pos = 15, vel = 0.95 }]
+
+[[pattern]]
+name = "fill_kick_stutter"
+desc = "Fill: stuttering kicks into the downbeat"
+steps = 16
+[[pattern.track]]
+instr = "kick"
+event = [
+  { pos = 0, vel = 0.9 }, { pos = 8, vel = 0.7 }, { pos = 10, vel = 0.75 }, { pos = 12, vel = 0.8 },
+  { pos = 13, vel = 0.85 }, { pos = 14, vel = 0.9 }, { pos = 15, vel = 0.95 }
+]
+[[pattern.track]]
+instr = "hihat"
+humanize = 0.6
+event = [
+  { pos = 3, vel = 0.3 }, { pos = 6, vel = 0.3 }, { pos = 9, vel = 0.3 }, { pos = 12, vel = 0.3 },
+  { pos = 15, vel = 0.3 }
+]
+
+[[pattern]]
+name = "fill_dropout"
+desc = "Fill: the bar drops out to a kick and a last snare"
+steps = 16
+[[pattern.track]]
+instr = "kick"
+event = [{ pos = 0, vel = 0.9 }]
+[[pattern.track]]
+instr = "snare"
+event = [{ pos = 15, vel = 0.9 }]

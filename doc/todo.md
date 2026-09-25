@@ -189,16 +189,6 @@ operator's.
 
 ## Audio
 
-### Move built-in music patterns into an editable asset
-
-- Priority: P2
-- Affected files: `cmd/soundlab/session.go`, `pkg/audio`,
-  `internal/asset/audio/music.toml`
-- Prerequisite: define and validate the pattern document
-
-Replace the built-in Go registry literals with `internal/asset/audio/music.toml`
-so `soundlab` edits the same data the game loads.
-
 ### Make the mixer buffer configurable
 
 - Priority: P3

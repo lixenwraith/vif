@@ -21,7 +21,6 @@ const (
 	cmdMusicReset
 	cmdSwapOutput
 	cmdSeed
-	cmdArrangement
 	cmdIntensity
 	cmdReloadSound   // swap a rendered variant set; grows per-ID tables
 	cmdReloadPattern // re-resolve slots pointing at a replaced pattern
@@ -36,7 +35,7 @@ type audioCmd struct {
 	sound   SoundID
 	pattern PatternID
 	instr   InstrumentType
-	tier    Intensity // arrangement tier (§5)
+	tier    Intensity // arrangement tier
 	slot    int8      // sequencer slot; was overloaded onto i1/i2
 	f1      float64   // play volume | swing | music volume | note velocity
 	i1      int       // bpm | crossfade | midi note | harmony root | slot (mask)

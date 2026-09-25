@@ -98,9 +98,9 @@ type Sequencer struct {
 	slotPat  [MusicSlots]atomic.Int32
 	autoFill bool
 
-	// tier table, registered before playback, applied by SetIntensity
-	arrangements [IntensityCount]Arrangement
-	tier         Intensity
+	// tier pools, set at engine Start, drawn from by SetIntensity
+	tiers tierPools
+	tier  Intensity
 
 	running bool
 }
@@ -110,7 +110,7 @@ func NewSequencer(bpm int, kit *drumKit) *Sequencer {
 		harmony:  newHarmony(),
 		gains:    [MusicSlots]float64{0.7, 0.5, 0.5},
 		rng:      rand.New(rand.NewPCG(1, seqStream)),
-		gen:      newMelodyGen(), // pattern registered in InitDefaultPatterns before mixer exists
+		gen:      newMelodyGen(), // pattern registered at engine Start before the mixer exists
 		volume:   1.0,
 		autoFill: true,
 	}
@@ -406,22 +406,33 @@ func (s *Sequencer) Reset() {
 	s.publish()
 }
 
-// SetArrangement registers the pattern set for a tier
-func (s *Sequencer) SetArrangement(t Intensity, a Arrangement) {
-	if t >= 0 && t < IntensityCount {
-		s.arrangements[t] = a
-	}
-}
-
-// SetIntensity applies a registered tier to the rhythm and melody slots
+// SetIntensity draws the tier's rhythm and melody from its pools. A slot already
+// sounding its draw keeps playing, rather than restarting under a crossfade and
+// a reveal that would strip it back to one track.
 func (s *Sequencer) SetIntensity(t Intensity, crossfadeSamples int, quantize, reveal bool) {
 	if t < 0 || t >= IntensityCount {
 		return
 	}
 	s.tier = t
-	a := s.arrangements[t]
-	s.setPattern(0, a.Rhythm, crossfadeSamples, quantize, reveal)
-	s.setPattern(1, a.Melody, crossfadeSamples, quantize, reveal)
+	for slot, pool := range s.tiers[t] {
+		if id := s.draw(pool); id != s.slots[slot].activeID() {
+			s.setPattern(slot, id, crossfadeSamples, quantize, reveal)
+		} else {
+			s.slots[slot].pending = nil
+		}
+	}
+}
+
+// draw picks one pool member; a single member costs no rng, so a fixed
+// arrangement plays the same music for a given seed as it always has
+func (s *Sequencer) draw(pool []PatternID) PatternID {
+	switch len(pool) {
+	case 0:
+		return PatternSilence
+	case 1:
+		return pool[0]
+	}
+	return pool[s.rng.IntN(len(pool))]
 }
 
 // ReloadPattern re-resolves any slot pointing at id after the registry replaced

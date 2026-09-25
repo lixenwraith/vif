@@ -140,13 +140,25 @@ func (ae *AudioEngine) Start() error {
 	ae.cache.preloadAll(ae.config.EffectShapes)
 	kit := buildDrumKit(ae.cache)
 	ae.resolveVolumes()
-	InitDefaultPatterns()
+	for _, p := range ae.config.BasePatterns {
+		if RegisterPattern(p) == PatternSilence {
+			ae.running.Store(false)
+			return fmt.Errorf("base patterns: %w", ValidatePattern(p))
+		}
+	}
+	registerMelodyGen()
 	if len(ae.config.PatternTOML) > 0 {
 		pats, err := LoadPatternsTOML(ae.config.PatternTOML)
 		ae.specErr = errors.Join(ae.specErr, err)
 		for _, p := range pats {
 			RegisterPattern(p) // ID zero -> name-keyed override, dynamic otherwise
 		}
+	}
+	collectFills()
+	tiers, err := resolveArrangements(ae.config.Arrangements)
+	if err != nil {
+		ae.running.Store(false)
+		return err
 	}
 
 	cands, err := DetectBackends(ae.config.ForceBackend)
@@ -165,6 +177,7 @@ func (ae *AudioEngine) Start() error {
 	}
 
 	ae.mixer = NewMixer(w, ae.cache, kit)
+	ae.mixer.sequencer.tiers = tiers // before the mix goroutine exists
 	ae.mixer.SetMusicMuted(ae.musicMuted.Load())
 	ae.mixer.SetPaused(ae.paused.Load())
 	for _, c := range ae.preStart {
@@ -544,12 +557,7 @@ func (ae *AudioEngine) SetConfig(cfg *AudioConfig) {
 	ae.resolveVolumes()
 }
 
-// SetArrangement registers the pattern set for an intensity tier
-func (ae *AudioEngine) SetArrangement(t Intensity, a Arrangement) {
-	ae.send(audioCmd{op: cmdArrangement, tier: t, pattern: a.Rhythm, i2: int(a.Melody)})
-}
-
-// SetIntensity applies a registered tier to the rhythm and melody slots
+// SetIntensity draws a tier's rhythm and melody from its configured pools;
 // reveal requests the sequencer's per-bar track build-up on arrival
 func (ae *AudioEngine) SetIntensity(t Intensity, crossfadeSamples int, quantize, reveal bool) {
 	ae.send(audioCmd{op: cmdIntensity, tier: t, i1: crossfadeSamples, b: quantize, reveal: reveal})

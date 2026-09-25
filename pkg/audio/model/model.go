@@ -45,39 +45,18 @@ func InstrumentByName(name string) (InstrumentType, bool) {
 }
 
 // PatternID identifies a registered pattern; names, not numeric IDs, persist.
+// Only the patterns code owns have fixed IDs; authored ones are assigned at load.
 type PatternID int32
 
 const (
 	PatternSilence PatternID = iota
-	PatternBeatBasic
-	PatternBeatDriving
-	PatternBeatDrivingPlus
-	PatternBeatBreaks
-	PatternBeatHalftime
-	PatternBeatBreakdown
-	PatternBeatIntense
-	PatternMelodyHold
-	PatternMelodyArpUp
-	PatternMelodyArpDown
-	PatternMelodyChord
 	PatternMelodyGen
 	PatternDynamic PatternID = 100
 )
 
 var patternNames = map[PatternID]string{
-	PatternSilence:         "silence",
-	PatternBeatBasic:       "beat_basic",
-	PatternBeatDriving:     "beat_driving",
-	PatternBeatDrivingPlus: "beat_driving_plus",
-	PatternBeatBreaks:      "beat_breaks",
-	PatternBeatHalftime:    "beat_halftime",
-	PatternBeatBreakdown:   "beat_breakdown",
-	PatternBeatIntense:     "beat_intense",
-	PatternMelodyHold:      "melody_bassline",
-	PatternMelodyArpUp:     "melody_bass_arp",
-	PatternMelodyArpDown:   "melody_bass_arp_down",
-	PatternMelodyChord:     "melody_full",
-	PatternMelodyGen:       "melody_gen",
+	PatternSilence:   "silence",
+	PatternMelodyGen: "melody_gen",
 }
 
 func (p PatternID) String() string {
@@ -119,10 +98,4 @@ func (i Intensity) String() string {
 		return intensityNames[i]
 	}
 	return "unknown"
-}
-
-// Arrangement is the rhythm and melody selected for one intensity tier.
-type Arrangement struct {
-	Rhythm PatternID
-	Melody PatternID
 }

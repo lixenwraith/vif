@@ -23,7 +23,8 @@ type melodyGen struct {
 	lastDeg int
 }
 
-// registerMelodyGen installs the generative pattern (called from InitDefaultPatterns)
+// registerMelodyGen installs the generative pattern at Start, after the embedder's
+// bank so an authored pattern of the same name cannot displace the generator's
 func registerMelodyGen() {
 	RegisterPattern(&Pattern{
 		ID: PatternMelodyGen, Name: "melody_gen", Steps: 16,
@@ -129,4 +130,18 @@ func clampDeg(d int) int {
 		return 9
 	}
 	return d
+}
+
+// rollingBass is the psytrance offbeat-16th bass lane: k-b-b-b per beat
+func rollingBass() []Step {
+	ev := make([]Step, 0, 12)
+	for beat := range 4 {
+		base := beat * 4
+		ev = append(ev,
+			Step{Pos: base + 1, Vel: 0.85, Dur: 1},
+			Step{Pos: base + 2, Vel: 0.7, Dur: 1},
+			Step{Pos: base + 3, Vel: 0.7, Dur: 1},
+		)
+	}
+	return ev
 }
