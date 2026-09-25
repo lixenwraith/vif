@@ -559,7 +559,7 @@ func (w *World) predictRecordedCursorMove(eventType event.EventType, payload any
 		return
 	}
 	if p, ok := payload.(*event.CursorMoveRequestPayload); ok {
-		w.predictCursorMove(p.Entity, p.X, p.Y, w.Resources.Config.pointer) // a record does not say which input
+		w.predictCursorMove(p.Entity, p.X, p.Y, p.Pointer)
 	}
 }
 
@@ -772,7 +772,7 @@ func (w *World) PushCursorMove(e core.Entity, x, y int) {
 // Caller MUST hold updateMutex
 func (w *World) PushPointerMove(e core.Entity, x, y int) {
 	if !w.predictCursorMove(e, x, y, true) {
-		w.PushCrossing(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: e, X: x, Y: y})
+		w.PushCrossing(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: e, X: x, Y: y, Pointer: true})
 		return
 	}
 	w.Resources.Player.prediction.pointer = pendingPointer{x: x, y: y, origin: event.Origin(w.origin.Load()), set: true}
@@ -790,7 +790,7 @@ func (w *World) FlushPointerMove() bool {
 	}
 	roster.prediction.pointer = pendingPointer{}
 	w.pushEvent(event.EventCursorMoveRequest,
-		&event.CursorMoveRequestPayload{Entity: roster.Entity, X: p.x, Y: p.y}, p.origin, core.DomainPlayer)
+		&event.CursorMoveRequestPayload{Entity: roster.Entity, X: p.x, Y: p.y, Pointer: true}, p.origin, core.DomainPlayer)
 	return true
 }
 

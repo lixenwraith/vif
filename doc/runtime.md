@@ -575,7 +575,7 @@ state loss and is logged when observed.
 | System list | Single-threaded construction, then `World.Seal` | Read-only after scheduler start. |
 | Render buffer | Render orchestrator | Main/render path only; cleared and reused per frame. |
 | Context flags/counters | Atomics | Cross-goroutine reads for pause, macros, mouse, auto-fire, frame/status strings. |
-| APM history | `GameState.mu` plus atomic published totals | Scheduler rolls history; router atomically admits weighted actions. |
+| APM history | `GameState.mu` plus atomic published totals | Scheduler admits gestures at dispatch and rolls history. |
 | Target groups | `TargetResource` RW lock | Navigation writes; species/genetic code reads snapshots. |
 | Status metric values | Per-value atomics; set closed by `Registry.Freeze` | Systems cache pointers during construction; snapshots and the recorder load atomically off the world lock. |
 | Audio sequencer, voices, active effects | Mixer-goroutine confinement | Other goroutines send bounded commands or read atomic mirrors. |

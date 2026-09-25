@@ -17,7 +17,7 @@ type GameState struct {
 	// Runtime Metrics
 	GameTicks      atomic.Uint64
 	CurrentAPM     atomic.Uint64
-	PendingActions atomic.Uint64 // Actions in the current second bucket
+	PendingActions atomic.Uint64 // Admitted actions in the current second bucket
 	MusicAPM       atomic.Uint64 // Short-term APM for dynamic music (last 5s)
 
 	// === CLOCK-TICK STATE (mutex protected) ===
@@ -28,6 +28,10 @@ type GameState struct {
 	apmHistory      [60]uint64
 	apmHistoryIndex int
 	lastAPMTime     time.Time // Last time APM was updated
+
+	// One past the tick that last admitted an action, so zero is none.
+	// Written only by dispatch, under the world lock.
+	lastActionTick uint64
 }
 
 // initState initializes all game state fields to starting values
@@ -45,6 +49,7 @@ func (gs *GameState) initState() {
 	gs.apmHistory = [60]uint64{}
 	gs.apmHistoryIndex = 0
 	gs.lastAPMTime = time.Time{} // Zero value forces immediate update on first tick
+	gs.lastActionTick = 0
 }
 
 // NewGameState creates a new centralized game state
@@ -85,9 +90,15 @@ func (gs *GameState) SetGameTicks(ticks uint64) {
 	gs.GameTicks.Store(ticks)
 }
 
-// RecordActionWeight adds admitted milli-actions (Router admission gate)
-func (gs *GameState) RecordActionWeight(w uint64) {
-	gs.PendingActions.Add(w)
+// AdmitAction counts one player gesture. Pointer travel counts only once no action
+// has for APMPointerTicks, so a sweep fills the gaps of play rather than adding to it.
+func (gs *GameState) AdmitAction(pointer bool) {
+	t := gs.GameTicks.Load() + 1
+	if pointer && gs.lastActionTick != 0 && t-gs.lastActionTick < parameter.APMPointerTicks {
+		return
+	}
+	gs.lastActionTick = t
+	gs.PendingActions.Add(1)
 }
 
 // GetAPM returns the current calculated APM
@@ -110,8 +121,8 @@ func (gs *GameState) SetMode(m core.GameMode) {
 	gs.Mode.Store(int32(m))
 }
 
-// UpdateAPM rolls action history window and recalculates APM, called ~1/sec by scheduler.
-// Results stay in the atomics; the scheduler owns the metric cells and publishes them.
+// UpdateAPM rolls the action history once per simulated second; the scheduler calls it
+// every tick and owns the metric cells it publishes to.
 func (gs *GameState) UpdateAPM(currentTime time.Time) {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
@@ -132,10 +143,7 @@ func (gs *GameState) UpdateAPM(currentTime time.Time) {
 	// Commit this second's data
 	gs.lastAPMTime = currentTime // Advance time anchor
 
-	// Atomically swap pending actions to 0 to start new bucket
-	// Clamp the fold: a stalled tick, a step burst, or a resume must not deliver a
-	// spike bucket that misreads as a burst of play
-	actions := min(gs.PendingActions.Swap(0), parameter.APMPendingBurstMax)
+	actions := min(gs.PendingActions.Swap(0), parameter.APMMaxPerSecond)
 
 	// Update history ring buffer
 	gs.apmHistory[gs.apmHistoryIndex] = actions
@@ -146,8 +154,7 @@ func (gs *GameState) UpdateAPM(currentTime time.Time) {
 	for _, count := range gs.apmHistory {
 		total += count
 	}
-	currentAPM := total / parameter.APMUnit
-	gs.CurrentAPM.Store(currentAPM)
+	gs.CurrentAPM.Store(total)
 
 	// Calculate total over last 5 seconds (Music/Burst APM)
 	// We traverse backwards from current index
@@ -167,6 +174,5 @@ func (gs *GameState) UpdateAPM(currentTime time.Time) {
 		}
 	}
 	// Normalize 5s window to 1-minute rate
-	musicAPM := burstTotal * (60 / burstWindow) / parameter.APMUnit
-	gs.MusicAPM.Store(musicAPM)
+	gs.MusicAPM.Store(burstTotal * (60 / burstWindow))
 }

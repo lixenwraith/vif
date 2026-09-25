@@ -220,15 +220,18 @@ ordinary text in Insert, Search, and Command modes.
 ## 8. APM signal
 
 APM exists to drive adaptive music, not to score macros or raw device event
-rate. The router admits player intents through a weighted gate:
+rate. The scheduler admits dispatched input-origin events as gestures, so a
+replay reproduces the count from the journal:
 
-- macro-playback and automatic actions are excluded;
-- identical actions within 250 ms are dropped; later repeats have lower weight;
-- raw mouse movement is sampled at most every 150 ms;
-- admission is capped at the equivalent of five full actions per second.
+- macro playback, auto-fire, every other origin, and input while paused admit nothing;
+- one dispatch pass is one gesture: `:` pauses and changes mode, a click fires;
+- a pointer placement (`pointer` on the move record) counts only after 500 ms
+  without any other action, so a sweep alone stays in the Normal tier;
+- a one-second bucket holds at most six actions.
 
-`GameState` publishes a 60-second APM and a five-second music APM. The music
-system maps the short window to tempo and intensity; see [Audio](audio.md).
+`GameState` publishes a 60-second APM and a five-second music APM. The status bar
+shows the short window, which is the one the music system maps to tempo and
+intensity; see [Audio](audio.md).
 
 ## 9. Command mode
 

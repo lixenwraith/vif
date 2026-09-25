@@ -838,7 +838,7 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 
 	// APM admission; input while paused is not gameplay
 	apmOpen := !s.ctl.IsPaused()
-	var apmWeight uint64
+	var apmInput, apmPointer bool
 
 	// Harness observer, hoisted with the other gates
 	tap := s.tap
@@ -848,6 +848,11 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 		// Before any handler runs: a pooled payload is still the producer's
 		if tap != nil {
 			tap(ev)
+		}
+		if apmOpen && ev.Origin == event.OriginInput {
+			admit, pointer := apmAction(ev)
+			apmInput = apmInput || admit && !pointer
+			apmPointer = apmPointer || pointer
 		}
 
 		handlers, _ := s.eventRouter.GetHandlers(ev.Type)
@@ -885,10 +890,6 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 		}
 		s.world.Resources.Event.Queue.RecordCrossingApplied(ev.CrossingSeq)
 
-		if apmOpen && ev.Origin == event.OriginInput && apmAdmits(ev.Type) {
-			apmWeight += parameter.APMWeightFull
-		}
-
 		if brkEv != 0 && ev.Type == brkEv {
 			if bs := s.ctl.Trip(StepEvent, "", ev.Type); bs != nil {
 				s.breakHit(bs, event.GetEventName(ev.Type))
@@ -897,8 +898,10 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 		}
 	}
 
-	if apmWeight > 0 {
-		s.world.Resources.Game.State.RecordActionWeight(apmWeight)
+	// A pass carries one intent's events, so it is one gesture: `:` pauses and changes
+	// mode, a click fires and places the cursor
+	if apmInput || apmPointer {
+		s.world.Resources.Game.State.AdmitAction(!apmInput)
 	}
 
 	if summary {
@@ -916,10 +919,18 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 	return len(eventsList)
 }
 
-// apmAdmits reports whether an input-origin event counts as player effort.
+// apmAction reports whether an input-origin event counts as player effort and whether
+// it is pointer travel. Read before the handlers, which may release a pooled payload.
 // A screen resize carries OriginInput so a replay reflows, not because the player acted.
-func apmAdmits(t event.EventType) bool {
-	return t != event.EventScreenResize
+func apmAction(ev event.GameEvent) (admit, pointer bool) {
+	switch ev.Type {
+	case event.EventScreenResize:
+		return false, false
+	case event.EventCursorMoveRequest:
+		p, ok := ev.Payload.(*event.CursorMoveRequestPayload)
+		return true, ok && p.Pointer
+	}
+	return true, false
 }
 
 // dispatchAndProcessEvents settles pending events with an iteration cap and

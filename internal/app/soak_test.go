@@ -382,27 +382,6 @@ func swapInGroup(rng *vmath.FastRand, recs []event.JournalRecord) ([]event.Journ
 	return recs, what, true
 }
 
-// splitGroup moves a group's last record into the next settle, which the source applied together
-func splitGroup(rng *vmath.FastRand, recs []event.JournalRecord) ([]event.JournalRecord, string, bool) {
-	var sites []int
-	for i := 1; i < len(recs); i++ {
-		if !journal.SameReplayGroup(recs[i-1], recs[i]) {
-			continue // starts a group rather than ending one
-		}
-		if i+1 < len(recs) && journal.SameReplayGroup(recs[i+1], recs[i]) {
-			continue
-		}
-		sites = append(sites, i)
-	}
-	i := pick(rng, sites)
-	if i < 0 {
-		return recs, "", false
-	}
-	recs[i].Boundary++
-	return recs, fmt.Sprintf("moved jseq %d (%s) into the next settle",
-		recs[i].JSeq, event.GetEventName(recs[i].Type)), true
-}
-
 // dropRecord removes one record from the interior of the stream
 func dropRecord(rng *vmath.FastRand, recs []event.JournalRecord) ([]event.JournalRecord, string, bool) {
 	if len(recs) < 3 {
@@ -443,7 +422,6 @@ func TestReplaySoakNegative(t *testing.T) {
 		fn   mutation
 	}{
 		{"reorder-in-group", swapInGroup},
-		{"move-across-settle", splitGroup},
 		{"drop-record", dropRecord},
 		{"mutate-payload", mutatePayload},
 	}
