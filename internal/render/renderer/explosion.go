@@ -15,7 +15,8 @@ import (
 
 // ExplosionRenderer draws explosion field VFX using intensity accumulation
 type ExplosionRenderer struct {
-	gameCtx *engine.GameContext
+	gameCtx    *engine.GameContext
+	renderType explosionTypeRenderer
 
 	// Per-type accumulation buffers
 	accBufferDust    []float64
@@ -49,9 +50,17 @@ var explosionPalettes = [3]explosionPalette{
 	{visual.RgbEyeExplosionEdge, visual.RgbEyeExplosionMid, visual.RgbEyeExplosionCore},
 }
 
+// explosionTypeRenderer draws one explosion type's field in the colour mode chosen at construction
+type explosionTypeRenderer func(ctx render.RenderContext, buf *render.RenderBuffer, accBuffer []float64,
+	explosionType event.ExplosionType, minX, maxX, minY, maxY int)
+
 func NewExplosionRenderer(ctx *engine.GameContext) *ExplosionRenderer {
 	r := &ExplosionRenderer{
 		gameCtx: ctx,
+	}
+	r.renderType = r.renderTrueColor
+	if ctx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		r.renderType = r.render256
 	}
 
 	r.bufWidth = r.gameCtx.World.Resources.Config.ViewportWidth
@@ -97,18 +106,52 @@ func (r *ExplosionRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	buf.SetWriteMask(visual.MaskTransient)
 
 	if r.dustMaxX >= r.dustMinX && r.dustMaxY >= r.dustMinY {
-		r.renderTypeBuffer(ctx, buf, r.accBufferDust, event.ExplosionTypeDust,
+		r.renderType(ctx, buf, r.accBufferDust, event.ExplosionTypeDust,
 			r.dustMinX, r.dustMaxX, r.dustMinY, r.dustMaxY)
 	}
 
 	if r.missileMaxX >= r.missileMinX && r.missileMaxY >= r.missileMinY {
-		r.renderTypeBuffer(ctx, buf, r.accBufferMissile, event.ExplosionTypeMissile,
+		r.renderType(ctx, buf, r.accBufferMissile, event.ExplosionTypeMissile,
 			r.missileMinX, r.missileMaxX, r.missileMinY, r.missileMaxY)
 	}
 
 	if r.eyeMaxX >= r.eyeMinX && r.eyeMaxY >= r.eyeMinY {
-		r.renderEyeBuffer(ctx, buf, r.accBufferEye,
+		r.renderType(ctx, buf, r.accBufferEye, event.ExplosionTypeEye,
 			r.eyeMinX, r.eyeMaxX, r.eyeMinY, r.eyeMaxY)
+	}
+}
+
+func (r *ExplosionRenderer) renderTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, accBuffer []float64,
+	explosionType event.ExplosionType, minX, maxX, minY, maxY int) {
+	if explosionType == event.ExplosionTypeEye {
+		r.renderEyeBuffer(ctx, buf, accBuffer, minX, maxX, minY, maxY)
+		return
+	}
+	r.renderTypeBuffer(ctx, buf, accBuffer, explosionType, minX, maxX, minY, maxY)
+}
+
+// render256 draws the field as density glyphs, one console color per stage, where the console
+// shows a blended background only at the core; a cell already holding a glyph keeps it
+func (r *ExplosionRenderer) render256(ctx render.RenderContext, buf *render.RenderBuffer, accBuffer []float64,
+	explosionType event.ExplosionType, minX, maxX, minY, maxY int) {
+	stages := &visual.Explosion256[explosionType]
+	for vy := minY; vy <= maxY; vy++ {
+		rowOffset := vy * r.bufWidth
+		screenY := ctx.GameYOffset + vy
+
+		for vx := minX; vx <= maxX; vx++ {
+			intensity := accBuffer[rowOffset+vx]
+			if intensity < parameter.ExplosionEdgeThreshold {
+				continue
+			}
+			screenX := ctx.GameXOffset + vx
+			if under := buf.CellAt(screenX, screenY).Rune; under != 0 && under != ' ' {
+				continue
+			}
+			val := min(intensity, 1.0)
+			buf.SetFgOnly(screenX, screenY, visual.Density256Chars[min(int(val*4), 3)],
+				color.RGB{R: stages[min(int(val*3), 2)]}, terminal.AttrFg256)
+		}
 	}
 }
 

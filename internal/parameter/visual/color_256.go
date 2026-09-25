@@ -64,6 +64,31 @@ const (
 	Bullet256StormRed = ConBrightRed
 )
 
+// Effects the console cannot blend, drawn solid where TrueColor's blend is strong enough to show
+const (
+	Pulse256Positive  = ConBrightYellow
+	Pulse256Negative  = ConBrightMagenta
+	QuasarZap256Idle  = ConCyan
+	QuasarZap256Armed = ConRed
+	// Storm256Ring marks the near storm sphere, the one that can be hit
+	Storm256Ring       = ConWhite
+	Storm256GreenPulse = ConBrightGreen
+	Storm256Muzzle     = ConBrightYellow
+	Storm256BlueGlow   = ConYellow
+	// Effect256Threshold is the least blend alpha a solid 256-color effect cell stands for
+	Effect256Threshold = 0.25
+)
+
+// Storm256Bodies is each storm sphere's flat body, by StormCircleType
+var Storm256Bodies = [3]uint8{ConGreen, ConRed, ConBlue}
+
+// Explosion256 is each explosion type's edge, mid and core color: dust, missile, eye
+var Explosion256 = [3][3]uint8{
+	{ConBlue, ConCyan, ConBrightCyan},
+	{ConRed, ConYellow, ConBrightWhite},
+	{ConMagenta, ConBrightMagenta, ConBrightWhite},
+}
+
 // Palette256RGB returns the xterm RGB of a 256-color index, so an RGB blend can compose
 // over a palette cell; indices 0-15 take the VGA system colors
 func Palette256RGB(idx uint8) color.RGB {

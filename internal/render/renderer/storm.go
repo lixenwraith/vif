@@ -37,6 +37,12 @@ type stormSurfaceSample struct {
 type StormRenderer struct {
 	gameCtx *engine.GameContext
 
+	// Cell writers for the colour mode chosen at construction. The console, which shows
+	// neither shading nor a faint halo, gets flat bodies and solid effect cells instead.
+	bodyCell stormBodyCellRenderer
+	glowCell stormGlowCellRenderer
+	halo     bool
+
 	// Reusable slice for sorting
 	sortBuffer []stormCircleRender
 
@@ -51,6 +57,30 @@ type StormRenderer struct {
 
 	// Attack effect radii
 	greenAttackRadiusX, greenAttackRadiusY float64
+}
+
+// stormBodyCellRenderer draws one sphere body cell of circle type circle
+type stormBodyCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, c color.RGB, circle int)
+
+// stormGlowCellRenderer adds one effect cell; entry is its console color
+type stormGlowCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, c color.RGB, alpha float64, entry uint8)
+
+func stormBodyTrueColor(buf *render.RenderBuffer, screenX, screenY int, c color.RGB, _ int) {
+	buf.SetBgOnly(screenX, screenY, c)
+}
+
+func stormGlowTrueColor(buf *render.RenderBuffer, screenX, screenY int, c color.RGB, alpha float64, _ uint8) {
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendAdd, alpha, terminal.AttrNone)
+}
+
+func stormBody256(buf *render.RenderBuffer, screenX, screenY int, _ color.RGB, circle int) {
+	buf.SetBg256(screenX, screenY, visual.Storm256Bodies[circle%len(visual.Storm256Bodies)])
+}
+
+func stormGlow256(buf *render.RenderBuffer, screenX, screenY int, _ color.RGB, alpha float64, entry uint8) {
+	if alpha >= visual.Effect256Threshold {
+		buf.SetBg256(screenX, screenY, entry)
+	}
 }
 
 func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
@@ -88,8 +118,11 @@ func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
 	haloExtendY := haloExtendX * (ry / rx)
 	glowExtend := parameter.StormConvexGlowExtend
 
-	return &StormRenderer{
+	r := &StormRenderer{
 		gameCtx:    gameCtx,
+		bodyCell:   stormBodyTrueColor,
+		glowCell:   stormGlowTrueColor,
+		halo:       true,
 		sortBuffer: make([]stormCircleRender, 0, component.StormCircleCount),
 
 		radiusX:        rx,
@@ -108,6 +141,10 @@ func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
 		greenAttackRadiusX: rx * parameter.StormGreenRadiusMultiplier,
 		greenAttackRadiusY: ry * parameter.StormGreenRadiusMultiplier,
 	}
+	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		r.bodyCell, r.glowCell, r.halo = stormBody256, stormGlow256, false
+	}
+	return r
 }
 
 func (r *StormRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
@@ -211,7 +248,9 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 	// Render halo (background glow) only if NOT convex (Far/Concave)
 	// Front/Convex circles are vulnerable and show no shield halo
 	if !isConvex {
-		r.renderHalo(ctx, buf, circle, depthBright, baseR, baseG, baseB)
+		if r.halo {
+			r.renderHalo(ctx, buf, circle, depthBright, baseR, baseG, baseB)
+		}
 	} else {
 		// Render narrow glowing ring for convex (vulnerable) state
 		r.renderConvexGlow(ctx, buf, circle, depthBright, baseR, baseG, baseB)
@@ -297,7 +336,7 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 		}
 
 		c := color.RGB{R: uint8(red), G: uint8(green), B: uint8(blue)}
-		buf.SetBgOnly(screenX, screenY, c)
+		r.bodyCell(buf, screenX, screenY, c, circle.index)
 	}
 }
 
@@ -455,7 +494,7 @@ func (r *StormRenderer) renderConvexGlow(ctx render.RenderContext, buf *render.R
 			}
 
 			c := color.RGB{R: uint8(rVal), G: uint8(gVal), B: uint8(bVal)}
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendAdd, 1.0, terminal.AttrNone)
+			r.glowCell(buf, screenX, screenY, c, 1.0, visual.Storm256Ring)
 		}
 	}
 }
@@ -519,7 +558,7 @@ func (r *StormRenderer) renderGreenPulse(ctx render.RenderContext, buf *render.R
 				continue
 			}
 
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, pulseColor, render.BlendAdd, cellAlpha, terminal.AttrNone)
+			r.glowCell(buf, screenX, screenY, pulseColor, cellAlpha, visual.Storm256GreenPulse)
 		}
 	}
 }
@@ -595,7 +634,7 @@ func (r *StormRenderer) renderRedMuzzleFlash(ctx render.RenderContext, buf *rend
 			// Color: orange-red at base fading to dark red
 			c := color.Lerp(visual.RgbMuzzleFlashBase, visual.RgbMuzzleFlashTip, t)
 
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendAdd, alpha, terminal.AttrNone)
+			r.glowCell(buf, screenX, screenY, c, alpha, visual.Storm256Muzzle)
 		}
 	}
 }
@@ -681,7 +720,7 @@ func (r *StormRenderer) renderBlueGlow(ctx render.RenderContext, buf *render.Ren
 				continue
 			}
 
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, glowColor, render.BlendAdd, alpha, terminal.AttrNone)
+			r.glowCell(buf, screenX, screenY, glowColor, alpha, visual.Storm256BlueGlow)
 		}
 	}
 }

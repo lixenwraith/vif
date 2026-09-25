@@ -18,13 +18,36 @@ import (
 // QuasarRenderer draws the quasar boss entity components
 type QuasarRenderer struct {
 	gameCtx *engine.GameContext
+	zapCell quasarZapCellRenderer
 }
+
+// quasarZapCellRenderer draws one zap range border cell in the colour mode chosen at construction
+type quasarZapCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, armed bool)
 
 // NewQuasarRenderer creates the renderer
 func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
-	return &QuasarRenderer{
-		gameCtx: gameCtx,
+	r := &QuasarRenderer{gameCtx: gameCtx, zapCell: zapCellTrueColor}
+	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		r.zapCell = zapCell256
 	}
+	return r
+}
+
+func zapCellTrueColor(buf *render.RenderBuffer, screenX, screenY int, armed bool) {
+	c := visual.RgbDrain
+	if armed {
+		c = visual.RgbCombatEnraged
+	}
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendScreen, 0.4, terminal.AttrNone)
+}
+
+// zapCell256 draws the border solid: the console shows its 40% blend as black
+func zapCell256(buf *render.RenderBuffer, screenX, screenY int, armed bool) {
+	c := visual.QuasarZap256Idle
+	if armed {
+		c = visual.QuasarZap256Armed
+	}
+	buf.SetBg256(screenX, screenY, c)
 }
 
 // Render draws quasar composite parts (zap range and members)
@@ -63,13 +86,8 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 // renderZapRange renders zap range ellipse boundary
 func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.RenderBuffer, headerX, headerY int, quasar *component.QuasarComponent) {
-	// Use same color as quasar entity state
-	var borderColor color.RGB
-	if quasar.IsCharging || quasar.IsZapping {
-		borderColor = visual.RgbCombatEnraged
-	} else {
-		borderColor = visual.RgbDrain
-	}
+	// Same state colour as the quasar itself
+	armed := quasar.IsCharging || quasar.IsZapping
 
 	// Adaptive threshold calculation for consistent visual border width, target visual width in cells
 	borderHalfWidth := float64(parameter.QuasarZapBorderWidthCells) / 2.0
@@ -118,8 +136,7 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 			normDist := dist / quasar.ZapRadius
 
 			if normDist >= innerThreshold && normDist <= outerThreshold {
-				buf.Set(screenX, screenY, 0, visual.RgbBlack, borderColor,
-					render.BlendScreen, 0.4, terminal.AttrNone)
+				r.zapCell(buf, screenX, screenY, armed)
 			}
 		}
 	}

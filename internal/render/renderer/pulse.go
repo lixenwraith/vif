@@ -3,7 +3,6 @@ package renderer
 import (
 	"math"
 
-	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -14,7 +13,8 @@ import (
 
 // PulseRenderer draws disruptor pulse expanding ring effect
 type PulseRenderer struct {
-	gameCtx *engine.GameContext
+	gameCtx    *engine.GameContext
+	renderCell pulseCellRenderer
 
 	// Cached animation constants
 	radiusMultMin   float64 // 0.3
@@ -24,15 +24,43 @@ type PulseRenderer struct {
 	ringCount       float64 // 6
 }
 
+// pulseCellRenderer draws one ripple cell in the colour mode chosen at construction
+type pulseCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, alpha float64, negative bool)
+
 func NewPulseRenderer(gameCtx *engine.GameContext) *PulseRenderer {
-	return &PulseRenderer{
+	r := &PulseRenderer{
 		gameCtx:         gameCtx,
+		renderCell:      pulseCellTrueColor,
 		radiusMultMin:   0.3,
 		radiusMultRange: 0.7,
 		alphaMax:        0.9,
 		alphaThreshold:  0.03,
 		ringCount:       6.0,
 	}
+	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		r.renderCell = pulseCell256
+	}
+	return r
+}
+
+func pulseCellTrueColor(buf *render.RenderBuffer, screenX, screenY int, alpha float64, negative bool) {
+	c := visual.RgbPulsePositive
+	if negative {
+		c = visual.RgbPulseNegative
+	}
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendScreen, alpha, terminal.AttrNone)
+}
+
+// pulseCell256 draws a ripple cell solid where its blend would show, so the rings stay rings
+func pulseCell256(buf *render.RenderBuffer, screenX, screenY int, alpha float64, negative bool) {
+	if alpha < visual.Effect256Threshold {
+		return
+	}
+	c := visual.Pulse256Positive
+	if negative {
+		c = visual.Pulse256Negative
+	}
+	buf.SetBg256(screenX, screenY, c)
 }
 
 func (r *PulseRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
@@ -86,13 +114,6 @@ func (r *PulseRenderer) renderPulse(ctx render.RenderContext, buf *render.Render
 
 	if baseAlpha <= r.alphaThreshold {
 		return
-	}
-
-	var pulseColor color.RGB
-	if negativeEnergy {
-		pulseColor = visual.RgbPulseNegative
-	} else {
-		pulseColor = visual.RgbPulsePositive
 	}
 
 	// Scale precomputed inverse radii by 1/radiusMult²
@@ -152,7 +173,7 @@ func (r *PulseRenderer) renderPulse(ctx render.RenderContext, buf *render.Render
 				continue
 			}
 
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, pulseColor, render.BlendScreen, cellAlpha, terminal.AttrNone)
+			r.renderCell(buf, screenX, screenY, cellAlpha, negativeEnergy)
 		}
 	}
 }

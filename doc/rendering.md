@@ -246,10 +246,10 @@ writes), FreeBSD vt's default, or VGA; it is in `Config.ConsolePalette` for
 renderers that pick colors from it. An entry (0-15) passes through, an xterm
 index keeps its hue family by the rules FreeBSD's teken documents, and RGB takes
 the nearest entry in CIELAB, except that the theme background is the console's
-black. Text that would vanish into its background, or UI
-text under a 2.5 contrast ratio, takes the nearest entry that shows. Styles are
-resolved rather than sent, because the Linux console recolors dim, italic and
-underlined text and FreeBSD brightens bold.
+black. Text that would vanish into its background, or UI text under a 2.5
+contrast ratio, takes the nearest entry that shows. Styles are resolved rather
+than sent, because the Linux console recolors dim, italic and underlined text
+and FreeBSD brightens bold.
 
 Finalization is immediately followed by the terminal module's full-buffer
 `Flush`.
@@ -377,7 +377,9 @@ retains only game-specific asset interpretation and layering.
 3. Register the constructor in `internal/manifest/definition.go`.
 4. Run manifest generation.
 5. Select/test truecolor and 256-color paths, including foreground/background
-   palette attributes.
+   palette attributes. A 256 path names console entries (`visual.Con*`) and
+   draws what the console cannot blend as solid cells past
+   `visual.Effect256Threshold`.
 6. Verify behavior under camera cropping, centered small maps, terminal resize,
    pause, grayout/dim/strobe, and overlapping fields.
 7. Check that terminal flush remains outside the world lock and that no

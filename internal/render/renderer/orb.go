@@ -18,6 +18,7 @@ import (
 type OrbRenderer struct {
 	gameCtx   *engine.GameContext
 	renderOrb orbRenderFunc
+	fullChar  rune // a fully charged orb's glyph
 
 	// Precomputed ellipse containment (2:1 aspect)
 	effectInvRxSq    float64
@@ -39,9 +40,9 @@ func NewOrbRenderer(gameCtx *engine.GameContext) *OrbRenderer {
 		effectRadiusYInt: int(math.Floor(ry)),
 	}
 	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
-		r.renderOrb = r.renderOrb256
+		r.renderOrb, r.fullChar = r.renderOrb256, visual.OrbFullChar256
 	} else {
-		r.renderOrb = r.renderOrbTrueColor
+		r.renderOrb, r.fullChar = r.renderOrbTrueColor, visual.CircleBullsEye
 	}
 	return r
 }
@@ -73,11 +74,11 @@ func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 func (r *OrbRenderer) chargeGlyph(orb *component.OrbComponent) rune {
 	weaponComp, ok := r.gameCtx.World.Components.Weapon.GetPtr(orb.OwnerEntity)
 	if !ok {
-		return visual.CircleBullsEye
+		return r.fullChar
 	}
 	charges := weaponComp.Charges[orb.WeaponType]
 	if charges <= 0 || charges >= parameter.WeaponMaxCharges[orb.WeaponType] {
-		return visual.CircleBullsEye
+		return r.fullChar
 	}
 	return rune('0' + charges)
 }

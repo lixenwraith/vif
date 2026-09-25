@@ -33,7 +33,7 @@ func TestQuasarZapRangeIsClippedToMapBounds(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 20, 12)
-			(&QuasarRenderer{}).renderZapRange(ctx, buf, tt.x, tt.y, &component.QuasarComponent{ZapRadius: 5})
+			(&QuasarRenderer{zapCell: zapCellTrueColor}).renderZapRange(ctx, buf, tt.x, tt.y, &component.QuasarComponent{ZapRadius: 5})
 
 			var zero color.RGB
 			drawnInside := false
@@ -66,7 +66,7 @@ func TestQuasarZapRangeRespectsCameraViewport(t *testing.T) {
 		MapHeight:      14,
 	}
 	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 14, 8)
-	(&QuasarRenderer{}).renderZapRange(ctx, buf, ctx.CameraX, ctx.CameraY+3, &component.QuasarComponent{ZapRadius: 5})
+	(&QuasarRenderer{zapCell: zapCellTrueColor}).renderZapRange(ctx, buf, ctx.CameraX, ctx.CameraY+3, &component.QuasarComponent{ZapRadius: 5})
 
 	var zero color.RGB
 	drawnInside := false

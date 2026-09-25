@@ -37,6 +37,9 @@ const (
 	MissileTrailChar256 = '•'
 )
 
+// OrbFullChar256 is a full orb's glyph in 256 colors, where console fonts lack CircleBullsEye
+const OrbFullChar256 = '@'
+
 // Heading glyphs, indexed by heading: E W S N SE NE SW NW, then at rest. The 256 sets hold
 // only glyphs every Linux console font carries, and those fonts have no diagonal triangles.
 var (
