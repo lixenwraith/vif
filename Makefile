@@ -9,9 +9,10 @@ PORT ?= 8080
 CONTAINER_ENGINE ?= docker
 IMAGE ?= vi-fighter
 IMAGE_TAG ?= dev
-IMAGE_REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
+IMAGE_REVISION_DEFAULT != git rev-parse HEAD 2>/dev/null || echo unknown
+IMAGE_REVISION ?= $(IMAGE_REVISION_DEFAULT)
 IMAGE_VERSION ?= $(IMAGE_TAG)
-VIF_CONFIG_BASE := $(if $(XDG_CONFIG_HOME),$(XDG_CONFIG_HOME),$(HOME)/.config)
+VIF_CONFIG_BASE != test -n "$(XDG_CONFIG_HOME)" && echo "$(XDG_CONFIG_HOME)" || echo "$(HOME)/.config"
 VIF_CONFIG_DIR ?= $(VIF_CONFIG_BASE)/vi-fighter
 VIF_CONFIG_FORCE ?= 0
 WAD_DIR := wad
@@ -21,11 +22,8 @@ DESTDIR ?=
 PREFIX ?= /usr
 SYSCONFDIR ?= /etc
 # FreeBSD packages each Go release under its own name: go.mod's 1.27 is go127.
-GO_FREEBSD := $(shell sed -n 's/^go \([0-9]*\)\.\([0-9]*\).*/go\1\2/p' go.mod)
-ifeq ($(shell uname),FreeBSD)
-GO ?= $(GO_FREEBSD)
-endif
-GO ?= go
+GO_DEFAULT != uname -s | grep -q FreeBSD && sed -n 's/^go \([0-9]*\)\.\([0-9]*\).*/go\1\2/p' go.mod 2>/dev/null | grep . || echo go
+GO ?= $(GO_DEFAULT)
 
 .DEFAULT_GOAL := help
 
@@ -72,7 +70,7 @@ check-go:
 				CMD="sudo snap install go --classic"; \
 			fi; \
 		elif [ "$$(uname)" = "FreeBSD" ]; then \
-			CMD="sudo pkg install $(GO_FREEBSD)"; \
+			CMD="sudo pkg install $$(sed -n 's/^go \([0-9]*\)\.\([0-9]*\).*/go\1\2/p' go.mod 2>/dev/null | grep . || echo go)"; \
 		fi; \
 		if [ -n "$$CMD" ]; then \
 			echo "Proposed installation: $$CMD"; \
@@ -95,37 +93,37 @@ check-go:
 generate: check-go
 	$(GO) generate ./internal/manifest/...
 
-dev: generate | $(BIN_DIR)
+dev: generate $(BIN_DIR)
 	$(GO) build -race -tags "$(TAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
-serve: wasm | $(BIN_DIR)
+serve: wasm $(BIN_DIR)
 	$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/http-server ./tool/http-server
 	./$(BIN_DIR)/http-server -dir $(WEB_DIR) -port $(PORT)
 
-release: generate | $(BIN_DIR)
+release: generate $(BIN_DIR)
 	$(GO) build $(GOFLAGS) -tags "$(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # headless is a build profile, not merely -serve at runtime: renderer and audio
 # constructors are absent from the dependency graph.
-headless: generate | $(BIN_DIR)
+headless: generate $(BIN_DIR)
 	$(GO) build $(GOFLAGS) -tags "vif_headless $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-headless $(SRC)
 
 # nolog strips logging; internal/vlog is not linked
-nolog: generate | $(BIN_DIR)
+nolog: generate $(BIN_DIR)
 	$(GO) build $(GOFLAGS) -tags "novlog $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # wasm selects vlog/stub.go and the audio-free system manifest automatically.
-wasm: generate | $(WEB_DIR)
+wasm: generate $(WEB_DIR)
 	GOOS=js GOARCH=wasm $(GO) build $(GOFLAGS) -tags "vif_noaudio $(TAGS)" -ldflags="$(LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
 
 # windows is experimental and untested
-windows: generate | $(BIN_DIR)
+windows: generate $(BIN_DIR)
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
 
-tools: | $(BIN_DIR)
+tools: $(BIN_DIR)
 	$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/ ./cmd/ascimage ./cmd/soundlab ./tool/...
 
-allocator: | $(BIN_DIR)
+allocator: $(BIN_DIR)
 	$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/vif-allocator ./tool/vif-allocator
 
 test: generate
@@ -176,7 +174,7 @@ install-config-force:
 # wad-archive is that same install as one file, so what a player extracts over a
 # config root is what install-config would have written there. The release
 # publishes it because a binary alone resolves only the embedded scenario.
-wad-archive: | $(BIN_DIR)
+wad-archive: $(BIN_DIR)
 	@set -eu; \
 	stage=$$(mktemp -d); \
 	trap 'rm -rf "$$stage"' EXIT; \
@@ -226,7 +224,7 @@ image-check:
 # arch-check covers architectural boundaries, isolated from standard build blockers.
 # The list of packages is snapshot dynamically at execution to avoid build delays across other targets.
 arch-check:
-	@pkgs="$(if $(ARCH_LEAF_PKGS),$(ARCH_LEAF_PKGS),$$($(GO) list ./pkg/... 2>/dev/null | tr '\n' ' '))"; \
+	@pkgs="$(ARCH_LEAF_PKGS)"; pkgs="$${pkgs:-$$($(GO) list ./pkg/... 2>/dev/null | tr '\n' ' ')}"; \
 	if [ -z "$$pkgs" ]; then echo "arch-check: no packages found in pkg/"; exit 0; fi; \
 	bad=$$($(GO) list -deps $$pkgs | grep 'vi-fighter/internal' || true); \
 	if [ -n "$$bad" ]; then echo "FAIL: leaf package(s) import internal:"; echo "$$bad"; exit 1; fi; \
