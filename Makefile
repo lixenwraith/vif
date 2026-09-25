@@ -48,7 +48,7 @@ help:
 	@echo "  allocator Build the website-to-K3s session allocator"
 	@echo "  serve    Build wasm and http-server, then serve web/ directory (use PORT=8080 to change)"
 	@echo "  run      Build (dev) and run the game"
-	@echo "  install  Stage binary, wad and docs under DESTDIR/PREFIX for a distro package"
+	@echo "  install  Stage binary, wad, manual and docs under DESTDIR/PREFIX for a distro package"
 	@echo "  install-config Install the wad and default keymap under $(VIF_CONFIG_DIR)"
 	@echo "  install-config-force Replace files previously installed there"
 	@echo "  wad-archive Pack the wad as the config root a player extracts ($(WAD_ARCHIVE))"
@@ -191,14 +191,15 @@ wad-archive: $(BIN_DIR)
 
 # install stages a distro package: the binary, the wad as a system config root
 # ($(SYSCONFDIR)/xdg is the XDG_CONFIG_DIRS default the resolver already
-# searches), the licence, and the documentation. Build first; nothing here
-# compiles, so a packager controls the build flags.
+# searches), the licence, the manual, and the documentation. Build first; nothing
+# here compiles, so a packager controls the build flags.
 install:
 	@$(MAKE) -s install-config VIF_CONFIG_DIR='$(DESTDIR)$(SYSCONFDIR)/xdg/vi-fighter' VIF_CONFIG_FORCE=1
 	@set -eu; \
 	put() { install -d -m 0755 "$${3%/*}"; install -m "$$1" "$$2" "$$3"; echo "install $$3"; }; \
 	put 0755 $(BIN_DIR)/$(BINARY) '$(DESTDIR)$(PREFIX)/bin/$(BINARY)'; \
 	put 0644 LICENSE '$(DESTDIR)$(PREFIX)/share/licenses/vi-fighter/LICENSE'; \
+	put 0644 doc/vif.6 '$(DESTDIR)$(PREFIX)/share/man/man6/vif.6'; \
 	for src in README.md doc/*.md; do \
 		put 0644 "$$src" "$(DESTDIR)$(PREFIX)/share/doc/vi-fighter/$${src#doc/}"; \
 	done

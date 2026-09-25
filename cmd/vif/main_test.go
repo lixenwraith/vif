@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -270,13 +271,8 @@ func newDiagnosticFlagSet() (*flag.FlagSet, *logFlags, *setFlag[bool]) {
 	return fs, logs, &dev
 }
 
-// TestHelpListsEveryFlag is what keeps two lists of the same flags from drifting.
-//
-// Flags are registered where the group that owns them lives and presented from one
-// table in usage.go, which is the only way a short and a long form can share a
-// line. The cost of that split is that a flag can be added to one and not the
-// other — registered and unmentioned, or documented and gone — so the walk runs in
-// both directions.
+// TestHelpListsEveryFlag walks the registered flags against the help table in both
+// directions, so a flag cannot be registered and unmentioned, or documented and gone.
 func TestHelpListsEveryFlag(t *testing.T) {
 	registered := map[string]bool{}
 	for _, name := range registeredFlagNames() {
@@ -284,7 +280,7 @@ func TestHelpListsEveryFlag(t *testing.T) {
 	}
 
 	documented := map[string]bool{}
-	for _, section := range helpSections() {
+	for _, section := range helpSections("", "") {
 		if section.title == "" {
 			t.Error("a help section has no heading")
 		}
@@ -350,7 +346,7 @@ func TestHelpRendersOneLinePerFlag(t *testing.T) {
 	writeUsage(&out)
 	text := out.String()
 
-	for _, section := range helpSections() {
+	for _, section := range helpSections("", "") {
 		for _, line := range section.lines {
 			want := line.render()
 			n := strings.Count(text, "  "+want+" ")
@@ -361,5 +357,25 @@ func TestHelpRendersOneLinePerFlag(t *testing.T) {
 	}
 	if strings.Contains(text, "Alias of") {
 		t.Error("the help still describes a flag as an alias instead of sharing its line")
+	}
+}
+
+// TestManualIsTheHelpTable keeps doc/vif.6 generated from the flag table; after a
+// flag changes, VIF_WRITE_MANUAL=1 go test ./cmd/vif -run Manual rewrites it.
+func TestManualIsTheHelpTable(t *testing.T) {
+	const page = "../../doc/vif.6"
+	var want strings.Builder
+	writeManual(&want)
+	if os.Getenv("VIF_WRITE_MANUAL") == "1" {
+		if err := os.WriteFile(page, []byte(want.String()), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := os.ReadFile(page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != want.String() {
+		t.Fatalf("%s is stale; VIF_WRITE_MANUAL=1 go test ./cmd/vif -run Manual rewrites it", page)
 	}
 }

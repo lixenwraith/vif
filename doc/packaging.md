@@ -22,7 +22,9 @@ These hold regardless of which repository is targeted first.
   `install -D`; `$(MAKE) -s`, never a GNU long option.
 - **The build is reproducible and offline.** `-trimpath`, no `go generate` at
   package time (generated files are committed), no CGO. Vendoring or a module
-  cache is the packager's choice, not the Makefile's.
+  cache is the packager's choice, not the Makefile's. The manual `doc/vif.6` is
+  one of those files: it renders the `-h` table, `TestManualIsTheHelpTable` fails
+  when a flag outruns it, and `VIF_WRITE_MANUAL=1` on that test rewrites it.
 - **Version comes from VCS.** `vif -version` reports `debug.ReadBuildInfo`. Tag
   releases `vX.Y.Z` so a package's `pkgver` and the binary agree without an
   ldflags contract.
@@ -64,10 +66,9 @@ Ordered by what blocks a package review.
 | # | Gap | Notes |
 |---|---|---|
 | 1 | No stable tagged release | Promote a verified nightly commit to `v0.1.0` and attach a byte-stable source tarball. |
-| 2 | No man page | Arch and Debian both expect `vif.1`. The flag table in `cmd/vif/usage.go` is the source; generate or hand-write `doc/vif.1` and install it in the `install` target. |
-| 3 | No `.desktop` entry | Optional for a TUI game, but expected if it should appear in a menu. Needs `Terminal=true` and an icon. |
-| 4 | Shell completion | Not generated. `flag` gives no completion data; a hand-written `_vif` is the cheapest route. |
-| 5 | No upstream checksum policy | Distributions verify a tarball hash. GitHub's generated archives are not guaranteed byte-stable; publish a release asset instead. |
+| 2 | No `.desktop` entry | Optional for a TUI game, but expected if it should appear in a menu. Needs `Terminal=true` and an icon. |
+| 3 | Shell completion | Not generated. `flag` gives no completion data; a hand-written `_vif` is the cheapest route. |
+| 4 | No upstream checksum policy | Distributions verify a tarball hash. GitHub's generated archives are not guaranteed byte-stable; publish a release asset instead. |
 
 ## 4. Arch (AUR)
 

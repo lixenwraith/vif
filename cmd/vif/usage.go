@@ -1,20 +1,3 @@
-// The help text, as one table.
-//
-// Flags are registered where the group that owns them lives; this decides how they
-// are *presented*, which is a different problem with a different shape. The `flag`
-// package prints one paragraph per registered name, so a flag with a short and a
-// long form spends four lines saying one thing and an alias reads as a separate
-// option. Here a flag is one line, its forms share it, and the sections are the
-// order somebody looking for a flag would look in: what this process is, what it
-// loads, what it shows, what it runs, and what it records.
-//
-// The hint is a hint. It says what the flag selects and what the default is when
-// that is not obvious; why it exists belongs in doc/ and is linked from there.
-//
-// TestHelpListsEveryFlag walks the registered set against this table in both
-// directions, so a flag added without a line fails a test rather than going
-// unmentioned.
-
 package main
 
 import (
@@ -42,8 +25,10 @@ type flagSection struct {
 	lines []flagLine
 }
 
-// helpSections is the whole of the help, in print order.
-func helpSections() []flagSection {
+// helpSections is the whole of the help and the manual, one line per flag with every
+// form on it, in the order somebody looking for a flag would look. The log and
+// journal defaults are parameters: the help prints resolved paths, the manual XDG.
+func helpSections(logDir, journalDir string) []flagSection {
 	return []flagSection{{
 		title: "Session",
 		lines: []flagLine{
@@ -104,14 +89,14 @@ func helpSections() []flagSection {
 	}, {
 		title: "Diagnostics",
 		lines: []flagLine{
-			{names: []string{"l", "log"}, arg: "[=DIR]", hint: "Enable logging; DIR overrides " + paths.DefaultLogDir()},
+			{names: []string{"l", "log"}, arg: "[=DIR]", hint: "Enable logging; DIR overrides " + logDir},
 			{names: []string{"lv", "log-level"}, arg: "<level>", hint: "trace, debug, info, warn or error; implies -l"},
 			{names: []string{"ls", "log-scope"}, arg: "<spec>", hint: "Which subsystems log; see Scopes below; implies -l"},
 			{names: []string{"lt", "log-stat"}, arg: "<ticks>", hint: "Status snapshot period in game ticks, 0 disables; implies -l"},
 			{names: []string{"lr", "log-recorder"}, arg: "<ticks>", hint: "Flight recorder depth in game ticks, 0 disables; implies -l"},
 			{names: []string{"log-session-id"}, arg: "<id>", hint: "Attach a session ID to every application log record; implies -l"},
 			{names: []string{"log-stdout"}, hint: "Write the log to stdout as JSON instead of to a file; implies -l"},
-			{names: []string{"j", "journal"}, arg: "[=DIR]", hint: "Record a replay journal; DIR overrides " + paths.DefaultJournalDir()},
+			{names: []string{"j", "journal"}, arg: "[=DIR]", hint: "Record a replay journal; DIR overrides " + journalDir},
 			{names: []string{"dev"}, arg: "[=false]", hint: "Capture runtime stderr to a file; on by default for -race builds"},
 		},
 	}, {
@@ -123,11 +108,8 @@ func helpSections() []flagSection {
 	}}
 }
 
-// scopeRow is one selectable scope: the word and the letter that mean it. It is a
-// copy of vlog's own table rather than an export of it, because help text is not a
-// runtime dependency worth widening a package's surface for —
-// TestScopeNoteMatchesTheParser feeds every entry back through vlog.ParseScopes,
-// so a scope renamed there fails a test here.
+// scopeRows copies vlog's table rather than widening its surface for help text;
+// TestScopeNoteMatchesTheParser feeds every entry back through vlog.ParseScopes.
 var scopeRows = []struct{ name, letter string }{
 	{"app", "a"}, {"fsm", "f"}, {"event", "e"}, {"dispatch", "d"}, {"push", "p"},
 	{"input", "i"}, {"stat", "s"}, {"rec", "r"}, {"lock", "l"}, {"tap", "t"},
@@ -135,10 +117,6 @@ var scopeRows = []struct{ name, letter string }{
 
 // scopeNote is the one piece of grammar a hint cannot carry, so it is printed once
 // rather than crammed into -ls.
-//
-// It is also the correction to what the old hint implied by listing `all` beside
-// `+dispatch`: `all` is every scope, dispatch included, so `all+dispatch` says the
-// same thing twice.
 func scopeNote() string {
 	var names, letters strings.Builder
 	for _, row := range scopeRows {
@@ -154,20 +132,24 @@ func scopeNote() string {
 		"  Adjust    lead with + or - to add to or remove from the set already selected"
 }
 
+// summary names the program in the help and in the manual's NAME section.
+const summary = "a modal-motion arcade game"
+
 // writeUsage prints the whole help. The caller decides where: stdout and exit
 // zero when it was asked for, stderr and a failing exit when the flags were wrong.
 func writeUsage(w io.Writer) {
-	fmt.Fprint(w, "vi-fighter — a modal-motion arcade game\n\nUsage:\n  vif [flags]\n")
+	fmt.Fprint(w, "vi-fighter — "+summary+"\n\nUsage:\n  vif [flags]\n")
 
+	sections := helpSections(paths.DefaultLogDir(), paths.DefaultJournalDir())
 	width := 0
-	for _, section := range helpSections() {
+	for _, section := range sections {
 		for _, line := range section.lines {
 			if n := len(line.render()); n > width {
 				width = n
 			}
 		}
 	}
-	for _, section := range helpSections() {
+	for _, section := range sections {
 		fmt.Fprintf(w, "\n%s\n", section.title)
 		for _, line := range section.lines {
 			fmt.Fprintf(w, "  %-*s  %s\n", width, line.render(), line.hint)
@@ -192,12 +174,8 @@ func (l flagLine) render() string {
 	return out + " " + l.arg
 }
 
-// registeredFlagNames is every name this binary's flag set answers to, for the
-// test that keeps the table above honest.
-//
-// `testing` registers its own flags on the same set when the package is built as a
-// test binary, so `-test.` is skipped: those belong to the harness rather than to
-// the program, and no help this program prints should mention them.
+// registeredFlagNames is every name this binary answers to, for the test that keeps
+// the table honest; `-test.` flags belong to the test harness, not the program.
 func registeredFlagNames() []string {
 	var out []string
 	flag.VisitAll(func(f *flag.Flag) {
@@ -207,6 +185,84 @@ func registeredFlagNames() []string {
 		out = append(out, f.Name)
 	})
 	return out
+}
+
+// manualStateDir replaces the resolved state path, which would put the generating
+// user's home into a committed page.
+const manualStateDir = "$XDG_STATE_HOME/" + paths.AppDirName + "/"
+
+// writeManual renders doc/vif.6 from the help table; TestManualIsTheHelpTable
+// keeps the committed page equal to it.
+func writeManual(w io.Writer) {
+	fmt.Fprintf(w, `.\" Generated from cmd/vif/usage.go by TestManualIsTheHelpTable; do not edit.
+.TH VIF 6 "" vi-fighter
+.SH NAME
+vif \- %s
+.SH SYNOPSIS
+.B vif
+.RI [ flags ]
+.SH DESCRIPTION
+.B vif
+plays vi\-fighter in a terminal.
+The flags below also host, join or serve a networked session,
+replay or script a run, and validate the installed configuration.
+.PP
+Each resource resolves from its own flag, then
+.BR \-config\-dir ,
+then the user configuration root, then each system root,
+and finally the copy compiled into the binary.
+.SH OPTIONS
+`, roff(summary))
+	for _, section := range helpSections(manualStateDir+paths.LogDirName, manualStateDir+paths.JournalDirName) {
+		fmt.Fprintf(w, ".SS %s\n", roff(section.title))
+		for _, line := range section.lines {
+			fmt.Fprintf(w, ".TP\n.B %s\n%s\n", roff(line.render()), roff(line.hint))
+		}
+	}
+	note := strings.Split(scopeNote(), "\n")
+	fmt.Fprintf(w, ".SS %s\n.nf\n", roff(note[0]))
+	for _, line := range note[1:] {
+		fmt.Fprintln(w, roff(line))
+	}
+	fmt.Fprint(w, `.fi
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/vi\-fighter
+User configuration root, normally
+.IR ~/.config/vi\-fighter .
+.TP
+.I $XDG_CONFIG_DIRS/vi\-fighter
+System configuration roots, normally
+.IR /etc/xdg/vi\-fighter .
+.TP
+.I $XDG_STATE_HOME/vi\-fighter
+Logs and journals, normally
+.IR ~/.local/state/vi\-fighter .
+.SH SEE ALSO
+https://github.com/lixenwraith/vi\-fighter
+`)
+}
+
+// roff escapes one line of man(7) text: backslashes, hyphens as minus, a leading
+// control character, and non-ASCII as an escape both mandoc and groff read.
+func roff(s string) string {
+	var b strings.Builder
+	if strings.HasPrefix(s, ".") || strings.HasPrefix(s, "'") {
+		b.WriteString(`\&`)
+	}
+	for _, r := range s {
+		switch {
+		case r == '\\':
+			b.WriteString(`\e`)
+		case r == '-':
+			b.WriteString(`\-`)
+		case r > '~':
+			fmt.Fprintf(&b, `\[u%04X]`, r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // writeVersion prints what a downstream package and a bug report need. The Go

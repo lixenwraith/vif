@@ -109,14 +109,6 @@ Promote the selected commit to `v0.1.0` and publish a byte-stable source tarball
 with its checksum. Keep the moving nightly prerelease and headless GHCR image as
 development artifacts rather than treating them as the stable source archive.
 
-### Install a manual page
-
-- Priority: P1
-- Affected files: `cmd/vif/usage.go`, `doc/vif.1`, `Makefile`
-- Prerequisite: keep the flag table as the source of truth
-
-Generate `vif.1` from the flag table and install it through `make install`.
-
 ### Add a desktop launcher
 
 - Priority: P2

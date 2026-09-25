@@ -1,0 +1,179 @@
+.\" Generated from cmd/vif/usage.go by TestManualIsTheHelpTable; do not edit.
+.TH VIF 6 "" vi-fighter
+.SH NAME
+vif \- a modal\-motion arcade game
+.SH SYNOPSIS
+.B vif
+.RI [ flags ]
+.SH DESCRIPTION
+.B vif
+plays vi\-fighter in a terminal.
+The flags below also host, join or serve a networked session,
+replay or script a run, and validate the installed configuration.
+.PP
+Each resource resolves from its own flag, then
+.BR \-config\-dir ,
+then the user configuration root, then each system root,
+and finally the copy compiled into the binary.
+.SH OPTIONS
+.SS Session
+.TP
+.B \-host <addr>
+Bind and play a session, e.g. :7777
+.TP
+.B \-serve <addr>
+Bind a headless session with no local cursor
+.TP
+.B \-join <addr>
+Join a session at host:port, at the vif://host:port/name a link carries, or at a wss:// route
+.TP
+.B \-name <name>
+Name this host answers to, so one address can serve several sessions
+.TP
+.B \-players <n>
+Roster ceiling including self, 2..16; unset holds the whole roster and starts on the first guest
+.TP
+.B \-authority host|migrate
+Where authorship goes when the authoring participant leaves; default host with \-serve, migrate otherwise
+.TP
+.B \-slow\-window <dur>
+Window a participant's lateness is judged over; host only, 0 never evicts (default 20s)
+.TP
+.B \-slow\-late <n>
+Evict at this many late epochs per second over the window; 0 ignores lateness (default 5)
+.TP
+.B \-slow\-bytes <n>
+\&...and at least this many bytes per second on its link; 0 ignores throughput (default 8192)
+.TP
+.B \-listen <addr>
+Address this participant is dialled back on; \-join only, default the host's port then an ephemeral one
+.TP
+.B \-no\-advertise
+Keep this participant's address out of the session; \-join only, and it is never elected
+.TP
+.B \-size <WxH>
+Terminal\-equivalent size for a run that has no terminal
+.TP
+.B \-probe <addr>
+Health and metrics endpoint; \-serve only
+.TP
+.B \-first\-join <dur>
+Exit if no guest connects within this; \-serve only, 0 waits forever
+.TP
+.B \-empty <dur>
+Exit this long after the last guest leaves; \-serve only, 0 keeps the session
+.TP
+.B \-drain <dur>
+How long a termination signal waits for an empty roster; \-serve only, 0 exits at once
+.SS Configuration
+.TP
+.B \-d, \-config\-embedded
+Use the embedded scenario and content, ignoring \-s and \-f
+.TP
+.B \-config\-dir <dir>
+Configuration root holding scenario/ input/ audio/ content/ image/
+.TP
+.B \-s, \-config\-scenario <name|path>
+Installed scenario name, scenario.toml, or a scenario directory
+.TP
+.B \-f, \-config\-content <path>
+Content directory, or a single content file
+.TP
+.B \-k, \-config\-keymap <path>
+Keymap TOML
+.TP
+.B \-config\-music <path>
+Music pattern override TOML
+.TP
+.B \-config\-sounds <path>
+Sound definition override TOML
+.SS Presentation and audio
+.TP
+.B \-color auto|256|true
+Colour depth; auto detects the terminal
+.TP
+.B \-mute[=false]
+Start muted, which is the default; \-mute=false starts with sound
+.TP
+.B \-ab, \-audio\-backend <name>
+Force an audio backend instead of detecting one
+.SS Run
+.TP
+.B \-seed <n>
+Root RNG seed; 0 draws one and logs it
+.TP
+.B \-speed <rate>
+Simulation rate 1/8 1/4 1/2 1 2 4 8; with \-script also "max" for no wall pacing
+.TP
+.B \-script <path>
+Run an authored deterministic TOML tick script
+.TP
+.B \-watch
+Present a \-script run on this terminal instead of running it headlessly
+.TP
+.B \-replay <path>
+Replay a recorded journal instead of playing
+.TP
+.B \-check
+Validate the resolved scenario, keymap, audio and content, then exit
+.TP
+.B \-schema
+Print the FSM schema as JSON, then exit
+.SS Diagnostics
+.TP
+.B \-l, \-log[=DIR]
+Enable logging; DIR overrides $XDG_STATE_HOME/vi\-fighter/log
+.TP
+.B \-lv, \-log\-level <level>
+trace, debug, info, warn or error; implies \-l
+.TP
+.B \-ls, \-log\-scope <spec>
+Which subsystems log; see Scopes below; implies \-l
+.TP
+.B \-lt, \-log\-stat <ticks>
+Status snapshot period in game ticks, 0 disables; implies \-l
+.TP
+.B \-lr, \-log\-recorder <ticks>
+Flight recorder depth in game ticks, 0 disables; implies \-l
+.TP
+.B \-log\-session\-id <id>
+Attach a session ID to every application log record; implies \-l
+.TP
+.B \-log\-stdout
+Write the log to stdout as JSON instead of to a file; implies \-l
+.TP
+.B \-j, \-journal[=DIR]
+Record a replay journal; DIR overrides $XDG_STATE_HOME/vi\-fighter/journal
+.TP
+.B \-dev[=false]
+Capture runtime stderr to a file; on by default for \-race builds
+.SS Help
+.TP
+.B \-h, \-help
+Print this and exit
+.TP
+.B \-version
+Print the module version and commit a package should report
+.SS Scopes (\-ls)
+.nf
+  Names     app  fsm  event  dispatch  push  input  stat  rec  lock  tap
+  Letters   a    f    e      d         p     i      s     r    l     t
+  Sets      all is every scope, none is nothing
+  Combine   join names or letters with + or , \[u2014] "app+fsm+stat" and "afs" are one set
+  Adjust    lead with + or \- to add to or remove from the set already selected
+.fi
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/vi\-fighter
+User configuration root, normally
+.IR ~/.config/vi\-fighter .
+.TP
+.I $XDG_CONFIG_DIRS/vi\-fighter
+System configuration roots, normally
+.IR /etc/xdg/vi\-fighter .
+.TP
+.I $XDG_STATE_HOME/vi\-fighter
+Logs and journals, normally
+.IR ~/.local/state/vi\-fighter .
+.SH SEE ALSO
+https://github.com/lixenwraith/vi\-fighter
