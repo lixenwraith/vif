@@ -141,11 +141,11 @@ type Plan struct {
 	CadenceTicks     uint64
 	KeyframeInterval int
 
-	// Constrained reports that this plan is *worse* than the nominal one: a slower
-	// cadence, a longer keyframe interval, or both. A plan the demand pulled
-	// faster is not constrained — the link is carrying more than it was asked to,
-	// which is the opposite condition — and reporting the two alike would put a
-	// warning on the status bar of the participant being served best.
+	// Constrained reports that the link made this plan *worse* than the nominal
+	// one: a slower cadence, a longer keyframe interval, or both. A plan the demand
+	// pulled faster is not constrained, nor one it slowed for a quiet picture:
+	// either would put a warning on the status bar of a participant the link is
+	// serving exactly as asked.
 	Constrained bool
 
 	// FloorBreached reports the condition adaptation must never hide: the link
@@ -209,7 +209,7 @@ func (c *Controller) Plan() Plan { return c.plan }
 // the plan clamps to the floor and says so — it never continues down.
 func (c *Controller) Update(m Metrics, s Sizes, d Demand) Plan {
 	next := c.decide(m, s, d)
-	c.plan = c.step(next)
+	c.plan = c.step(next, c.desired(d))
 	return c.plan
 }
 
@@ -237,7 +237,6 @@ func (c *Controller) decide(m Metrics, s Sizes, d Demand) Plan {
 		if d.Known && (d.Drift >= b.UrgentDrift || d.Relevance >= b.UrgentRelevance) {
 			out.Reason = "demand"
 		}
-		out.Constrained = b.degraded(out)
 		return out
 	}
 
@@ -263,7 +262,10 @@ func (c *Controller) decide(m Metrics, s Sizes, d Demand) Plan {
 
 	if plan, ok := search(b, minTicks, s, budget); ok {
 		plan.FloorBps, plan.BudgetBps = out.FloorBps, budget
-		plan.Constrained = b.degraded(plan)
+		// The link's verdict, not the demand's: whether it carries the nominal point,
+		// which a quiet demand may simply not have asked for.
+		nominal, fits := search(b, max(b.NominalCadenceTicks, ticksFor(b, 2*m.Jitter)), s, budget)
+		plan.Constrained = !fits || b.degraded(nominal, b.NominalCadenceTicks)
 		if plan.Constrained && plan.Reason == "" {
 			plan.Reason = "link"
 		} else if plan.Reason == "" {
@@ -368,7 +370,7 @@ func clampToFloor(b Bounds, p Plan, s Sizes) Plan {
 
 // step moves the live plan toward the decided one, immediately when that is a
 // degradation and by one bounded step when it is a recovery.
-func (c *Controller) step(next Plan) Plan {
+func (c *Controller) step(next Plan, asked uint64) Plan {
 	cur := c.plan
 	out := next
 
@@ -395,7 +397,7 @@ func (c *Controller) step(next Plan) Plan {
 	}
 	if out.CadenceTicks != next.CadenceTicks || out.KeyframeInterval != next.KeyframeInterval {
 		out.PlannedBps = 0 // recomputed by the next decision; a stepped plan has no priced rate
-		out.Constrained = c.b.degraded(out)
+		out.Constrained = c.b.degraded(out, asked)
 		if out.Reason == "" || out.Reason == "nominal" {
 			out.Reason = "recovering"
 		}
@@ -403,10 +405,10 @@ func (c *Controller) step(next Plan) Plan {
 	return out
 }
 
-// degraded reports whether a plan is worse than the nominal operating point, in
-// either of the two directions a plan can be worse in.
-func (b Bounds) degraded(p Plan) bool {
-	return p.CadenceTicks > b.NominalCadenceTicks || p.KeyframeInterval > b.NominalKeyframe
+// degraded reports whether a plan is worse than both the nominal operating point
+// and the cadence the demand asked for, in either direction a plan can be worse in.
+func (b Bounds) degraded(p Plan, asked uint64) bool {
+	return p.CadenceTicks > max(b.NominalCadenceTicks, asked) || p.KeyframeInterval > b.NominalKeyframe
 }
 
 // rate prices one schedule: a keyframe plus the deltas that follow it, over the

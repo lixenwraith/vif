@@ -248,6 +248,10 @@ func TestDemandDecidesWhereInsideTheFeasibleRangeAPeerSits(t *testing.T) {
 	if quiet.CadenceTicks != b.QuietCadence {
 		t.Fatalf("a peer with nothing near it got cadence %d, want %d", quiet.CadenceTicks, b.QuietCadence)
 	}
+	// Slowed by its own demand, not by the link: nothing for its status bar to say
+	if quiet.Constrained {
+		t.Fatal("a quiet peer on a fat link reads as constrained")
+	}
 	ordinary := mustController(t, b).Update(fat, s, Demand{Known: true, Drift: 1})
 	if ordinary.CadenceTicks != b.NominalCadenceTicks {
 		t.Fatalf("an ordinary peer got cadence %d, want the nominal %d",
