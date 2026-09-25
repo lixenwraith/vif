@@ -1086,6 +1086,11 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 			if bySequence {
 				superseded++
 			}
+			// This source's own placement lands in the installed world rather than
+			// through CursorSystem, so it settles its D-18 prediction here.
+			if et, ok := event.GetEventType(a.frame.Event); ok && a.source == s.localSource && et == event.EventCursorMoveRequest {
+				s.world.Resources.Player.Reconcile(component.PositionComponent{}, true)
+			}
 			continue
 		}
 		keep = append(keep, a)
@@ -1093,15 +1098,6 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 	}
 	s.scheduled = keep
 	s.scheduledBytes = held
-	// A placement the capture proves applied is discarded here unannounced, so the
-	// D-18 queue keeps only what this source still has to apply.
-	moves := 0
-	for _, a := range s.scheduled {
-		if et, ok := event.GetEventType(a.frame.Event); ok && a.source == s.localSource && et == event.EventCursorMoveRequest {
-			moves++
-		}
-	}
-	s.world.Resources.Player.KeepPredictions(moves)
 	// The retained local suffix is pruned by this instance's own fence, for the same
 	// reason the schedule is: a record the captured world does not contain is still
 	// this participant's action, whatever its apply tick says. Pruning by tick here
@@ -2353,6 +2349,14 @@ func (s *NetworkSystem) admissibleFromSource(et event.EventType, source uint32) 
 func (s *NetworkSystem) publishBarrierTelemetry(nextTick uint64, p engine.NetworkPort) {
 	if p == nil || !p.IsRunning() || p.PeerCount() == 0 {
 		s.statPeerLag.Store(0)
+		return
+	}
+	// The authority waits on nobody: it commits a late crossing at its next tick
+	// (§3.5), so no peer epoch is required of it and it cannot fall behind one.
+	if s.isCoordinator() {
+		s.statPeerLag.Store(0)
+		s.statLag.Store(0)
+		s.statStale.Store(false)
 		return
 	}
 	s.mu.Lock()

@@ -410,17 +410,6 @@ func (pr *PlayerResource) Reconcile(pos component.PositionComponent, own bool) {
 	}
 }
 
-// KeepPredictions trims the queue to the own placements still pending, newest
-// kept: an install that proves some already applied discards them unannounced.
-func (pr *PlayerResource) KeepPredictions(pending int) {
-	q := &pr.prediction
-	if drop := q.count - pending; drop > 0 {
-		q.head = (q.head + drop) % len(q.cells)
-		q.count = pending
-	}
-	q.shed = max(pending-q.count, 0)
-}
-
 // DropPrediction abandons every outstanding prediction, so the local cell reads
 // the store again. Paired with anything that rebinds or retires the local cursor:
 // a queue outliving the entity it described would place its successor.
