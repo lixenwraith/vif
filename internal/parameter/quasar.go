@@ -66,8 +66,6 @@ const (
 	QuasarShieldPadY = 2
 	// QuasarShieldMaxOpacity is peak alpha at ellipse edge (TrueColor)
 	QuasarShieldMaxOpacity = 0.3
-	// QuasarShield256Palette is xterm-256 index for solid rim (light gray)
-	QuasarShield256Palette uint8 = 250
 )
 
 // Pre-computed inverse squared radii for ellipse overlap checks

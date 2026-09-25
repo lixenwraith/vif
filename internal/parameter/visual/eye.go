@@ -9,9 +9,6 @@ import (
 const (
 	// EyeMaxFrames is the upper bound on animation frames per eye type
 	EyeMaxFrames = 5
-
-	// Eye256FlashFg is xterm-256 bright yellow for hit flash
-	Eye256FlashFg = color.P256Yellow
 )
 
 var (
@@ -47,8 +44,9 @@ type EyeFrameArt struct {
 
 // EyeTypeVisual holds the complete visual specification for one eye type
 type EyeTypeVisual struct {
-	FgPalette  [8]color.RGB
-	BgPalette  [3]color.RGB
+	FgPalette [8]color.RGB
+	BgPalette [3]color.RGB
+	// Fg256 is the glyph color on the Bg256 body, a pair that reads on every console palette
 	Fg256      uint8
 	Bg256      uint8
 	FrameCount int
@@ -69,7 +67,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 		BgPalette: [3]color.RGB{
 			color.DeepNavy, color.Gunmetal, color.CobaltBlue,
 		},
-		Fg256: color.P256SteelBlue, Bg256: color.P256DeepNavy,
+		Fg256: ConWhite, Bg256: ConBlue,
 		FrameCount: 5,
 		Frames: [EyeMaxFrames]EyeFrameArt{
 			{
@@ -116,7 +114,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 		BgPalette: [3]color.RGB{
 			color.BlackRed, color.DarkAmber, color.Red,
 		},
-		Fg256: color.P256Orange, Bg256: color.P256DarkCrimson,
+		Fg256: ConBrightYellow, Bg256: ConRed,
 		FrameCount: 4,
 		Frames: [EyeMaxFrames]EyeFrameArt{
 			{
@@ -157,7 +155,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 		BgPalette: [3]color.RGB{
 			color.DeepNavy, color.CobaltBlue, color.SteelBlue,
 		},
-		Fg256: color.P256LightBlue, Bg256: color.P256DarkBlue,
+		Fg256: ConBrightWhite, Bg256: ConCyan,
 		FrameCount: 4,
 		Frames: [EyeMaxFrames]EyeFrameArt{
 			{
@@ -198,7 +196,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 		BgPalette: [3]color.RGB{
 			color.DeepNavy, color.CobaltBlue, {},
 		},
-		Fg256: color.P256Cyan, Bg256: color.P256DeepNavy,
+		Fg256: ConBrightCyan, Bg256: ConBlue,
 		FrameCount: 3,
 		Frames: [EyeMaxFrames]EyeFrameArt{
 			{
@@ -233,7 +231,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 		BgPalette: [3]color.RGB{
 			color.BlackRed, color.DarkCrimson, color.Red,
 		},
-		Fg256: color.P256Crimson, Bg256: color.P256Maroon,
+		Fg256: ConBrightWhite, Bg256: ConRed,
 		FrameCount: 4,
 		Frames: [EyeMaxFrames]EyeFrameArt{
 			{
@@ -274,7 +272,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 		BgPalette: [3]color.RGB{
 			color.DarkAmber, color.Amber, color.Gold,
 		},
-		Fg256: color.P256Gold, Bg256: color.P256DarkAmber,
+		Fg256: ConBlack, Bg256: ConYellow,
 		FrameCount: 4,
 		Frames: [EyeMaxFrames]EyeFrameArt{
 			{
@@ -315,7 +313,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 		BgPalette: [3]color.RGB{
 			color.Obsidian, color.DeepPurple, {},
 		},
-		Fg256: color.P256MediumPurple, Bg256: color.P256DarkPurpleBlue,
+		Fg256: ConBrightMagenta, Bg256: ConMagenta,
 		FrameCount: 4,
 		Frames: [EyeMaxFrames]EyeFrameArt{
 			{

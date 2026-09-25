@@ -106,13 +106,11 @@ func (r *HeatRenderer) cellTrueColor(buf *render.RenderBuffer, x, width int, fil
 	}
 }
 
-// cell256 renders with fixed 10-segment palette colors
+// cell256 renders with fixed 10-segment palette colors, overheat glyphs over the segment
 func (r *HeatRenderer) cell256(buf *render.RenderBuffer, x, width int, fillRune rune) {
+	buf.SetBg256(x, 0, visual.Heat256LUT[segmentIndex(x, width)])
 	if fillRune != 0 {
 		buf.SetFgOnly(x, 0, fillRune, visual.RgbWhite, terminal.AttrNone)
-	} else {
-		segment := segmentIndex(x, width)
-		buf.SetBg256(x, 0, visual.Heat256LUT[segment])
 	}
 }
 

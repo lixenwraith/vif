@@ -19,11 +19,10 @@ var (
 	RgbSnakeShieldTint = color.SkyTeal
 )
 
-// Snake 256-color fallback
+// Snake 256-color fallback; the head is drawn solid, so it can take a bright entry
 const (
-	Snake256Head      uint8 = 82 // Bright green
-	Snake256BodyFront uint8 = 76 // Medium green
-	Snake256BodyBack  uint8 = 28 // Dark green
+	Snake256Head = ConBrightGreen
+	Snake256Body = ConGreen
 )
 
 // Gradient and visual parameters

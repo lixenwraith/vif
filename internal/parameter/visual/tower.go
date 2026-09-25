@@ -18,7 +18,7 @@ type TowerTypeColors struct {
 	// TrueColor glow
 	GlowColor color.RGB
 
-	// 256-color palette per health zone
+	// 256-color palette per health zone; damaged is drawn as ▒ in its color over the healthy one
 	Palette256Healthy  uint8
 	Palette256Damaged  uint8
 	Palette256Critical uint8
@@ -35,9 +35,9 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 		CriticalBright:     color.Coral,
 		CriticalDark:       color.Brick,
 		GlowColor:          color.SkyTeal,
-		Palette256Healthy:  color.P256Cyan,
-		Palette256Damaged:  color.P256Gold,
-		Palette256Critical: color.P256Crimson,
+		Palette256Healthy:  ConCyan,
+		Palette256Damaged:  ConYellow,
+		Palette256Critical: ConRed,
 	},
 	// Type 1: Gold — Gold → WarmOrange → BrightRed
 	{
@@ -48,9 +48,9 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 		CriticalBright:     color.BrightRed,
 		CriticalDark:       color.Brick,
 		GlowColor:          color.Apricot,
-		Palette256Healthy:  color.P256Gold,
-		Palette256Damaged:  color.P256Amber,
-		Palette256Critical: color.P256Red,
+		Palette256Healthy:  ConYellow,
+		Palette256Damaged:  ConRed,
+		Palette256Critical: ConRed,
 	},
 	// Type 2: Violet — ElectricViolet → SoftLavender → Vermilion
 	{
@@ -61,9 +61,9 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 		CriticalBright:     color.Vermilion,
 		CriticalDark:       color.DarkCrimson,
 		GlowColor:          color.SoftLavender,
-		Palette256Healthy:  color.P256MediumPurple,
-		Palette256Damaged:  color.P256Violet,
-		Palette256Critical: color.P256Crimson,
+		Palette256Healthy:  ConMagenta,
+		Palette256Damaged:  ConWhite,
+		Palette256Critical: ConRed,
 	},
 	// Type 3: Emerald — EmeraldGreen → YellowGreen → BurntSienna
 	{
@@ -74,9 +74,9 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 		CriticalBright:     color.BurntSienna,
 		CriticalDark:       color.Brick,
 		GlowColor:          color.MintGreen,
-		Palette256Healthy:  color.P256Green,
-		Palette256Damaged:  color.P256YellowGreen,
-		Palette256Critical: color.P256Crimson,
+		Palette256Healthy:  ConGreen,
+		Palette256Damaged:  ConYellow,
+		Palette256Critical: ConRed,
 	},
 }
 

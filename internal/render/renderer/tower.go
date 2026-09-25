@@ -381,16 +381,18 @@ func (r *TowerRenderer) renderMembers256Color(
 
 		healthRatio, _ := calculateTowerMemberMetrics(towerComp, combatComp.HitPoints, member.OffsetX, member.OffsetY)
 
-		var paletteIdx uint8
 		switch {
 		case healthRatio >= visual.TowerHealthThresholdDamaged:
-			paletteIdx = tc.Palette256Healthy
+			buf.SetBg256(screenX, screenY, tc.Palette256Healthy)
 		case healthRatio >= visual.TowerHealthThresholdCritical:
-			paletteIdx = tc.Palette256Damaged
+			// Shading the damaged color over the healthy one shows the hue between them, which
+			// eight backgrounds rarely have; a glyph already in the cell keeps it
+			buf.SetBg256(screenX, screenY, tc.Palette256Healthy)
+			if buf.CellAt(screenX, screenY).Rune == 0 {
+				buf.SetFgOnly(screenX, screenY, '▒', color.RGB{R: tc.Palette256Damaged}, terminal.AttrFg256)
+			}
 		default:
-			paletteIdx = tc.Palette256Critical
+			buf.SetBg256(screenX, screenY, tc.Palette256Critical)
 		}
-
-		buf.SetBg256(screenX, screenY, paletteIdx)
 	}
 }

@@ -22,11 +22,11 @@ var (
 	RgbPylonGlow = color.SteelBlue
 )
 
-// Pylon 256-color palette indices
+// Pylon 256-color health zones
 const (
-	Pylon256Healthy  uint8 = 27  // Blue
-	Pylon256Damaged  uint8 = 34  // Green
-	Pylon256Critical uint8 = 160 // Red
+	Pylon256Healthy  = ConBlue
+	Pylon256Damaged  = ConGreen
+	Pylon256Critical = ConRed
 )
 
 // Pylon glow parameters (reuse storm values for consistency)

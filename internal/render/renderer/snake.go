@@ -378,18 +378,6 @@ func (r *SnakeRenderer) renderBody256Color(ctx render.RenderContext, buf *render
 			continue
 		}
 
-		var paletteIdx uint8
-		if segmentCount > 1 {
-			t := float64(i) / float64(segmentCount-1)
-			if t < 0.5 {
-				paletteIdx = visual.Snake256BodyFront
-			} else {
-				paletteIdx = visual.Snake256BodyBack
-			}
-		} else {
-			paletteIdx = visual.Snake256BodyFront
-		}
-
 		for _, memberEntity := range resolved[i].members {
 			if memberEntity == 0 {
 				continue
@@ -410,7 +398,7 @@ func (r *SnakeRenderer) renderBody256Color(ctx render.RenderContext, buf *render
 				continue
 			}
 
-			buf.SetBg256(screenX, screenY, paletteIdx)
+			buf.SetBg256(screenX, screenY, visual.Snake256Body)
 		}
 	}
 }
@@ -436,7 +424,8 @@ func (r *SnakeRenderer) renderHead256Color(ctx render.RenderContext, buf *render
 			continue
 		}
 
-		buf.SetBg256(screenX, screenY, visual.Snake256Head)
+		// Solid in the foreground, which takes bright colors where backgrounds cannot
+		buf.SetFgOnly(screenX, screenY, '█', color.RGB{R: visual.Snake256Head}, terminal.AttrFg256)
 	}
 }
 

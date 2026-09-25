@@ -222,11 +222,12 @@ func (r *EyeRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, ce
 	}
 
 	if hasCh {
-		fgIdx := tr.Fg256
+		// A hit inverts the eye: no one flash color shows on every body and console palette
+		attr := terminal.AttrFg256 | cell.Attr
 		if hasFlash {
-			fgIdx = visual.Eye256FlashFg
+			attr |= terminal.AttrReverse
 		}
-		buf.SetFgOnly(screenX, screenY, cell.Ch, color.RGB{R: fgIdx}, terminal.AttrFg256|cell.Attr)
+		buf.SetFgOnly(screenX, screenY, cell.Ch, color.RGB{R: tr.Fg256}, attr)
 	}
 }
 

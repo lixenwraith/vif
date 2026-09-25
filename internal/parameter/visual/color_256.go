@@ -2,19 +2,33 @@ package visual
 
 import "github.com/lixenwraith/color"
 
-// Heat256LUT contains xterm 256-palette indices for 10 heat segments
-// Progression: deep red → orange → yellow → green → cyan → blue → purple
+// The sixteen colors of a text console, which 256-color mode draws for; a 256-color table names
+// these to get exactly the console color it means. On a console with eight backgrounds, a bright
+// entry drawn as a background shows as its normal counterpart.
+const (
+	ConBlack uint8 = iota
+	ConRed
+	ConGreen
+	ConYellow
+	ConBlue
+	ConMagenta
+	ConCyan
+	ConWhite
+	ConGray
+	ConBrightRed
+	ConBrightGreen
+	ConBrightYellow
+	ConBrightBlue
+	ConBrightMagenta
+	ConBrightCyan
+	ConBrightWhite
+)
+
+// Heat256LUT holds the heat bar's ten segments, red through purple; eight backgrounds leave
+// six hues in the same order
 var Heat256LUT = [10]uint8{
-	color.P256Red,         // 0-10%
-	color.P256RedOrange,   // 10-20%
-	color.P256Orange,      // 20-30%
-	color.P256Gold,        // 30-40%
-	color.P256YellowGreen, // 40-50%
-	color.P256Green,       // 50-60%
-	color.P256Cyan,        // 60-70%
-	color.P256CobaltBlue,  // 70-80%
-	color.P256Indigo,      // 80-90%
-	color.P256Purple,      // 90-100%
+	ConRed, ConBrightRed, ConYellow, ConBrightYellow, ConGreen,
+	ConBrightGreen, ConCyan, ConBlue, ConBrightBlue, ConMagenta,
 }
 
 // Glyph256LUT is GlyphColorLUT for 256 colors: its three levels stay apart in xterm and,
@@ -28,21 +42,14 @@ var Glyph256LUT = [5][3]uint8{
 	{color.P256Yellow, color.P256Yellow, color.P256Yellow},                   // Gold
 }
 
-// 256-color palette indices for energy-based shield colors
+// Energy-based shield rims
 const (
-	Shield256Positive = color.P256Yellow // Bright yellow
-	Shield256Negative = color.P256Violet // Violet
+	Shield256Positive = ConBrightYellow
+	Shield256Negative = ConMagenta
 )
 
-// Lightning256ColorLUT is the background palette index per lightning color type. Purple
-// keeps red at cube level 4, the least a Linux console background shows as red.
-var Lightning256ColorLUT = [5]uint8{
-	color.P256Cyan,         // Bright cyan
-	color.P256Red,          // Bright red
-	color.P256Gold,         // Yellow-orange
-	color.P256Green,        // Bright green
-	color.Cube256(4, 1, 5), // Violet
-}
+// Lightning256ColorLUT is the background per lightning color type: cyan, red, gold, green, violet
+var Lightning256ColorLUT = [5]uint8{ConBrightCyan, ConBrightRed, ConBrightYellow, ConBrightGreen, ConBrightMagenta}
 
 // SpiritBaseOffsets color determines starting point in gradient (0-255) for spirit animation coloring
 // Uses existing HeatGradientLUT, progress maps to LUT range based on base color offset
@@ -57,19 +64,15 @@ var SpiritBaseOffsets = [8]int{
 	224, // White (wrap to red)
 }
 
-// 256-colors palette indices
+// 256-color entity colors
 const (
-	// Missile
-	Missile256Trail = color.P256Amber  // (5,3,0)
-	Missile256Base  = color.P256Orange // (5,2,0)
-
-	// Swarm charge line
-	SwarmChargeLine256Palette = color.P256Orchid // (4,2,4)
-
-	// Loot shield
-	Loot256Rim = color.P256Rose // (5,0,2)
-
-	Bullet256StormRed = color.P256Red // (5,0,0)
+	Missile256Trail           = ConYellow
+	Missile256Base            = ConBrightYellow
+	SwarmChargeLine256Palette = ConMagenta
+	// Loot256Rim is the magenta the Linux console showed its rose rim as, which reads well
+	Loot256Rim        = ConBrightMagenta
+	Quasar256Rim      = ConWhite
+	Bullet256StormRed = ConBrightRed
 )
 
 // Palette256RGB returns the xterm RGB of a 256-color index, so an RGB blend can compose

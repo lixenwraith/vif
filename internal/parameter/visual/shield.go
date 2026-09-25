@@ -88,7 +88,7 @@ func init() {
 		qrx, qry,
 		parameter.QuasarShieldMaxOpacity,
 		RgbQuasarShield, RgbQuasarShield,
-		parameter.QuasarShield256Palette, parameter.QuasarShield256Palette,
+		Quasar256Rim, Quasar256Rim,
 		color.RGB{},
 		0,
 		0,
