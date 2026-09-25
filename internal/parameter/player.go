@@ -47,6 +47,10 @@ const (
 	ShieldFeatherStartRatio = 0.85
 	// ShieldFeatherEndRatio is normalized distance where rendering stops (1.10)
 	ShieldFeatherEndRatio = 1.10
+
+	// ShieldHitSoundInterval spaces the hit sound of a drain landing every tick at
+	// main fire's cadence
+	ShieldHitSoundInterval = WeaponCooldownMain
 )
 
 // Weapon Cooldowns

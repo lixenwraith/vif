@@ -59,11 +59,11 @@ source = { kind = "osc", wave = "square", freq = 1318.51 }
 chain = [{ kind = "ar", attack = 0.005, release = 0.11 }]
 
 # The one preset that needs a bus: overdrive is nonlinear and must see the
-# sweep+sub sum, but not the noise texture.
+# sweep+sub sum, but not the noise texture. Length walks with pitch across the
+# takes, as bullet's do, so a hit every cooldown does not repeat one thud.
 [[sound]]
 name = "shield"
 duration = 0.10
-fixed_length = true
 norm = 0.95
 chain = [{ kind = "ar", attack = 0.002, release = 0.08 }]
 [[sound.bus]]

@@ -2,6 +2,7 @@ package system
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -20,7 +21,8 @@ type ShieldSystem struct {
 	statShieldHit *atomic.Int64
 	rejects       rejectionTelemetry
 
-	enabled bool
+	lastHitSound time.Time // game time of the last hit sound; local audio only
+	enabled      bool
 }
 
 // NewShieldSystem creates a new shield system
@@ -41,6 +43,7 @@ func (s *ShieldSystem) Init() {
 	s.statActive.Reset()
 	s.statShieldHit.Store(0)
 	s.rejects.Reset()
+	s.lastHitSound = time.Time{}
 	s.enabled = true
 }
 
@@ -123,6 +126,10 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 				Percentage: false,
 				Type:       component.EnergyDeltaPenalty,
 			})
+			if now := s.world.Resources.Time.GameTime; now.Sub(s.lastHitSound) >= parameter.ShieldHitSoundInterval {
+				s.lastHitSound = now
+				s.world.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{ID: parameter.Sfx.Shield})
+			}
 
 			s.statShieldHit.Add(1)
 		}
