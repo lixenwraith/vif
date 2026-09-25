@@ -100,12 +100,13 @@ Distribution-specific detail lives in [Packaging](packaging.md).
 ### Promote a nightly build to the first stable release
 
 - Priority: P0
-- Affected files: `doc/packaging.md`
+- Affected files: `doc/packaging.md`, `README.md`
 - Prerequisite: choose a nightly commit after the complete verification gate
   passes
 
 Tag the selected commit `v0.1.0` and publish the draft release the tag creates,
-which already carries the source archive and its checksum.
+which already carries the source archive and its checksum; then drop the "no final
+release" lines in `README.md` and [Packaging](packaging.md) §2.
 
 ### Finish the rename to vif
 

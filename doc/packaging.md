@@ -39,15 +39,20 @@ These hold regardless of which repository is targeted first.
 ## 2. Release surface
 
 `.github/workflows/release.yml` builds one set of archives: Linux amd64 client and
-headless server, FreeBSD amd64 client, the browser bundle, the wad, and
-`SHA256SUMS`. Nightly (daily or on dispatch) it moves the `nightly` tag and
-prerelease and pushes the `vif_headless` image to GHCR as `nightly` and
-`sha-<commit>`. A pushed `vX.Y.Z` tag instead drafts release `vX.Y.Z` with the
-same archives named for `X.Y.Z` plus `vif-X.Y.Z.tar.gz`, a `git archive`
-of the tag: the byte-stable source archive a distribution hashes. A tag pushes no
-image, moves nothing, and publishes nothing until a person publishes the draft;
-it fails if the committed generated files are stale, so the binaries are what
-the source archive builds.
+headless server, FreeBSD amd64 client, an experimental and untested Windows amd64
+zip, the browser bundle, the wad, and `SHA256SUMS`.
+
+- **Nightly** (daily or on dispatch) is never a release. It replaces the assets
+  of the `nightly` prerelease, titled and described as a development build, and
+  pushes the `vif_headless` image to GHCR as `nightly` and `sha-<commit>`.
+- **A `vX.Y.Z-suffix` tag** (`v0.1.0-rc.1`) drafts a GitHub pre-release whose
+  notes open by saying it is not a final release.
+- **A plain `vX.Y.Z` tag** drafts the final release. None has been pushed.
+
+A tag adds `vif-X.Y.Z.tar.gz`, a `git archive` of the tag and the byte-stable
+source archive a distribution hashes. It pushes no image, moves nothing, and
+publishes nothing until a person publishes the draft; it fails if the committed
+generated files are stale, so the binaries are what the source archive builds.
 
 `vif-*-wad.tar.gz` is `make wad-archive`, which is `install-config` into
 one file: it unpacks over a config root, so a downloaded binary reaches the
@@ -56,8 +61,8 @@ Makefile owns its contents so a release and a source install cannot drift.
 
 Downloads are at the repository's
 [`nightly` release](https://github.com/lixenwraith/vi-fighter/releases/tag/nightly);
-the image is `ghcr.io/lixenwraith/vi-fighter:nightly` or `sha-<commit>`. Neither
-build ships the experimental Windows cross-build. Content a client fetches for
+the image is `ghcr.io/lixenwraith/vi-fighter:nightly` or `sha-<commit>`. On
+Windows the wad archive unpacks into `%AppData%\vif`. Content a client fetches for
 itself, rather than one a person downloads and extracts, still needs its trust,
 origin and cache policy decided.
 

@@ -152,9 +152,9 @@ per-session Job and Service, and one node log reader behind the allocator. The
 image is built by `make image`; the installation and operating procedure is
 [doc/kube-docker-deploy.md](doc/kube-docker-deploy.md) and the design and work list
 behind it is [doc/kubernetes-fleet.md](doc/kubernetes-fleet.md).
-The nightly workflow publishes downloadable Linux, FreeBSD, browser, and headless
-server archives plus the headless container image; see
-[doc/packaging.md](doc/packaging.md).
+No final release exists yet. The nightly workflow publishes development builds,
+not releases: Linux, FreeBSD, browser, headless server and experimental Windows
+archives plus the headless container image; see [doc/packaging.md](doc/packaging.md).
 
 `script/test.sh` runs named setups for verifying behaviour by hand —
 `solo`, `host`/`join`, `serve`, `serve-fleet`, `probe`, and automated checks for the

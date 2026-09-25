@@ -131,7 +131,7 @@ binary in `scratch`; its exact layer size should be measured for each release.
 |---|---|---|
 | Linux | Developed and tested | Full audio backend discovery, Unix terminal/crash handling, TCP sessions, dedicated image |
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp`; the deployed node may itself be a VM on FreeBSD without changing the guest build |
-| Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`; audio and logging omitted; not a release artifact or development focus, and may be removed if field reports show it is broken |
+| Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`; audio and logging omitted; published as an untested zip, not a development focus, and may be removed if field reports show it is broken |
 | `js/wasm` | Solo play tested; session join built, not yet commissioned | xterm.js presentation; no audio, filesystem discovery, process execution, logging sink, or raw sockets. A session is joined over the page's own WebSocket (§5), never a socket |
 | Other native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 

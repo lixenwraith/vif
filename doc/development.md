@@ -506,8 +506,8 @@ covers generation, race tests, the compile matrix, and vet locally; host-I/O
 behavior remains separate runtime validation work.
 
 `.github/workflows/release.yml` builds the downloadable archives nightly and on a
-`vX.Y.Z` tag; [Packaging](packaging.md) §2 lists what each publishes. Neither
-ships the experimental Windows cross-build.
+`vX.Y.Z` tag; [Packaging](packaging.md) §2 lists what each publishes and how a
+nightly or pre-release says it is not a final release.
 
 ## 7. Platform matrix
 
@@ -516,7 +516,7 @@ ships the experimental Windows cross-build.
 | Linux | Primary native target | Unix signals/crash reset; process audio backends; optional stderr fd capture. |
 | FreeBSD | Native target | Unix handling plus optional `/dev/dsp` OSS backend. |
 | `js/wasm` | Supported constrained build | xterm.js host, embedded scenario/content/keymap, audio omitted, `vlog` stub, no host discovery or raw socket transport. |
-| Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; omitted from nightly releases and removable if field reports show it is broken. |
+| Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; published as an untested zip and removable if field reports show it is broken. |
 | Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification. |
 
 ### WASM host
