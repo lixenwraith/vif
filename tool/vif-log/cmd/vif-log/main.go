@@ -1,4 +1,4 @@
-// vif-log — terminal viewer for vi-fighter JSONL logs: the diagnostic stream
+// vif-log — terminal viewer for vif JSONL logs: the diagnostic stream
 // (vif-log-*.jsonl) and the replay journal (vif-jrn-*.jsonl), separately or
 // merged into one chronological view.
 package main

@@ -1,5 +1,5 @@
 [Unit]
-Description=Vi-Fighter standalone fleet log stream
+Description=vif standalone fleet log stream
 Documentation=https://github.com/lixenwraith/logwisp
 Wants=network-online.target
 After=network-online.target

@@ -567,7 +567,7 @@ func (s *MetaSystem) handleAboutRequest() {
 
 	// Store info as entries for the renderer to extract
 	content.Items = append(content.Items, core.OverlayCard{
-		Title: "VI-FIGHTER",
+		Title: "VIF",
 		Entries: []core.CardEntry{
 			{Key: "desc", Value: "A terminal-based rouge-like action typing game with vi-style keybindings. Made with love for terminal, Go, VIM, and Games :)"},
 			{Key: "version", Value: "0.1.0-alpha"},

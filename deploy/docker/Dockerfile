@@ -64,7 +64,7 @@ ARG REVISION=unknown
 ARG SOURCE=https://github.com/lixenwraith/vi-fighter
 
 LABEL org.opencontainers.image.title="vi-fighter" \
-      org.opencontainers.image.description="Vi-Fighter dedicated session server" \
+      org.opencontainers.image.description="vif dedicated session server" \
       org.opencontainers.image.source="${SOURCE}" \
       org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.version="${VERSION}" \

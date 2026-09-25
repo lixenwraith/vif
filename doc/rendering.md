@@ -1,6 +1,6 @@
 # Rendering Architecture
 
-Vi-Fighter renders a layered simulation into a terminal-cell compositor. The
+vif renders a layered simulation into a terminal-cell compositor. The
 renderer reads the ECS; it never owns gameplay state. The external terminal and
 color modules provide host I/O and color primitives, while this repository owns
 camera transforms, layer ordering, masks, visual policy, and every game-specific
@@ -365,7 +365,7 @@ wall. Pattern results become simulation spawn data; they are not drawn by
 bypassing the ECS/render pipeline.
 
 The `cmd/ascimage` tool performs image conversion and viewing. The external
-terminal/color modules now own general terminal and RGB primitives; Vi-Fighter
+terminal/color modules now own general terminal and RGB primitives; vif
 retains only game-specific asset interpretation and layering.
 
 ## 11. Adding a renderer

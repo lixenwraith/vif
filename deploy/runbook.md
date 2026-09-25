@@ -1,6 +1,6 @@
 # Node runbook
 
-Day-to-day operations on the K3s node, from the vi-fighter repository root.
+Day-to-day operations on the K3s node, from the vif repository root.
 [`../doc/kube-docker-deploy.md`](../doc/kube-docker-deploy.md) commissions a node;
 this page is what you run afterwards.
 

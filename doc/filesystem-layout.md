@@ -1,6 +1,6 @@
 # External Filesystem Layout
 
-Vi-Fighter treats external files as user-owned overrides of an executable that
+vif treats external files as user-owned overrides of an executable that
 remains self-contained. Native builds discover one categorized configuration
 tree and write runtime output to the platform user-state tree. Browser builds
 skip host discovery and use embedded assets.
@@ -35,15 +35,15 @@ contain the same optional regions.
 
 ## 2. Installed configuration tree
 
-The user root is Go's `os.UserConfigDir` plus `vi-fighter`:
-`$XDG_CONFIG_HOME/vi-fighter` (normally `~/.config/vi-fighter`) on Linux and
-FreeBSD, `%AppData%\vi-fighter` on Windows, `~/Library/Application Support/vi-fighter`
+The user root is Go's `os.UserConfigDir` plus `vif`:
+`$XDG_CONFIG_HOME/vif` (normally `~/.config/vif`) on Linux and
+FreeBSD, `%AppData%\vif` on Windows, `~/Library/Application Support/vif`
 on macOS. `make install-config` writes that same root. A distribution package
-installs the tree under `/etc/xdg/vi-fighter`, the `XDG_CONFIG_DIRS` default;
+installs the tree under `/etc/xdg/vif`, the `XDG_CONFIG_DIRS` default;
 system roots exist on Unix-like targets only.
 
 ```text
-vi-fighter/
+vif/
 ├── scenario/    named scenarios, each rooted at scenario.toml
 │   ├── main/    discovered default
 │   ├── blank/   authoring scaffold
@@ -129,8 +129,8 @@ the streams separate:
 
 | Output | Default | Override |
 |---|---|---|
-| Session logs, snapshots, recorder files, runtime stderr capture | `$XDG_STATE_HOME/vi-fighter/log/` | `-l=DIR` |
-| Replay journals | `$XDG_STATE_HOME/vi-fighter/journal/` | `-j=DIR` |
+| Session logs, snapshots, recorder files, runtime stderr capture | `$XDG_STATE_HOME/vif/log/` | `-l=DIR` |
+| Replay journals | `$XDG_STATE_HOME/vif/journal/` | `-j=DIR` |
 
 On platforms without an XDG state root, the platform user-cache directory is
 used. Only when no user location can be resolved does either stream fall back to

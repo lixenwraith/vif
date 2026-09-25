@@ -38,7 +38,7 @@ func main() {
 		// Move cursor to top-left
 		fmt.Print("\033[H")
 
-		fmt.Println("VI-FIGHTER SWARM VISUAL CONCEPTS (4x2)")
+		fmt.Println("VIF SWARM VISUAL CONCEPTS (4x2)")
 		fmt.Println("--------------------------------------")
 		fmt.Println("Press Ctrl+C to exit")
 		fmt.Println("")

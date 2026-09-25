@@ -1,6 +1,6 @@
 # Navigation, Physics, Adaptation, and Evolution
 
-Vi-Fighter's moving actors share reusable math and algorithm packages, while
+vif's moving actors share reusable math and algorithm packages, while
 systems retain game-specific policy. This document covers four related layers:
 grid navigation, continuous movement/collision, route adaptation, and genetic
 parameter evolution.

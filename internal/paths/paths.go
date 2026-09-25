@@ -1,4 +1,4 @@
-// Package paths defines Vi-Fighter's external filesystem layout. It owns
+// Package paths defines vif's external filesystem layout. It owns
 // platform discovery only; callers decide which resource names are required.
 package paths
 
@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	AppDirName = "vi-fighter"
+	AppDirName = "vif"
 
 	ScenarioDirName  = "scenario"
 	MainScenarioName = "main"

@@ -1,6 +1,6 @@
 # Generic kinetic analysis
 
-This document inventories Vi-Fighter's kinetic behavior and evaluates whether it
+This document inventories vif's kinetic behavior and evaluates whether it
 can move into a common `internal/system/kinetic.go` helper or a registered
 `KineticSystem`. It is a design report and implementation plan, not a commitment
 to make every moving entity use one update loop.

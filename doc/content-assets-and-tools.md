@@ -1,6 +1,6 @@
 # Content, Assets, and Authoring Tools
 
-Vi-Fighter loads typeable content once at startup, embeds a playable fallback,
+vif loads typeable content once at startup, embeds a playable fallback,
 and converts authored terminal-image assets into ordinary wall entities. This
 document distinguishes the text corpus, embedded assets, visual patterns, and
 the supported authoring tools.
@@ -278,7 +278,7 @@ experimental dependencies.
 
 - Prefer TOML when exact block boundaries or one-line tutorial messages matter.
 - Keep every output rune printable ASCII and every line within 256 runes.
-- Run `vi-fighter -check -f <path>` to exercise the real loader without opening
+- Run `vif -check -f <path>` to exercise the real loader without opening
   the game.
 - Inspect `content.rejected`/`:content` rather than assuming every directory
   file was accepted.

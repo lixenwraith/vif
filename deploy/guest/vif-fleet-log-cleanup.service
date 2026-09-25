@@ -1,5 +1,5 @@
 [Unit]
-Description=Prune volatile Vi-Fighter fleet logs
+Description=Prune volatile vif fleet logs
 RequiresMountsFor=/var/log/vif-fleet
 ConditionPathIsMountPoint=/var/log/vif-fleet
 

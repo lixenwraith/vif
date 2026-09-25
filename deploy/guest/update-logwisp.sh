@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build and deploy vi-fighter's pinned standalone LogWisp without controlling
+# Build and deploy vif's pinned standalone LogWisp without controlling
 # K3s or the allocator. The fleet procedure separately enforces its empty-fleet
 # maintenance gate. Retains one known-good binary/config/unit.
 #

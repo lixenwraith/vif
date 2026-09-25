@@ -1,6 +1,6 @@
 # Gameplay Design
 
-Vi-Fighter combines Vim-style text navigation with a real-time typing and
+vif combines Vim-style text navigation with a real-time typing and
 survival game. This document describes the current mechanics as implemented.
 Key bindings and parser details are in [Input and modes](input-and-modes.md),
 while campaign sequencing is authored through the state machine described in

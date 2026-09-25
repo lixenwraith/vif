@@ -1,4 +1,4 @@
-# Multi-instance domain model — vi-fighter
+# Multi-instance domain model — vif
 
 This document describes the multiplayer domain model as implemented. Rules D-1
 through D-24 define simulation ownership, transport, correction, admission, and

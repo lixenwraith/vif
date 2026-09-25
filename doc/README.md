@@ -1,6 +1,6 @@
-# Vi-Fighter Engineering Documentation
+# vif Engineering Documentation
 
-This directory describes the architecture and design of the current Vi-Fighter
+This directory describes the architecture and design of the current vif
 codebase. It was last audited on 2026-09-19, through the build-capability split,
 browser boundary, correction and authority protocol in `internal/converge`, the
 crossing barrier it orders against, the shared-world capture that a mid-run join
@@ -9,7 +9,7 @@ list.
 The implementation, generated manifest, and shipped configuration were treated as
 authoritative where older prose disagreed with the code.
 
-Vi-Fighter is a terminal action game that combines vi-style text navigation,
+vif is a terminal action game that combines vi-style text navigation,
 typing, shooting, data-driven encounters, adaptive species navigation, procedural
 audio, and a custom ECS. The documentation separates those concerns so that a
 reader can start with the application shape and then descend into a subsystem.

@@ -68,24 +68,24 @@ jobs:
 
           for target in linux-amd64 linux-amd64-headless freebsd-amd64; do
             cp README.md LICENSE "stage/$target/"
-            tar -C "stage/$target" -czf "dist/vi-fighter-$label-$target.tar.gz" .
+            tar -C "stage/$target" -czf "dist/vif-$label-$target.tar.gz" .
           done
           cp -R web/. stage/web/
-          tar -C stage/web -czf "dist/vi-fighter-$label-web.tar.gz" .
+          tar -C stage/web -czf "dist/vif-$label-web.tar.gz" .
 
           # One archive rather than a copy in each target's: the wad is the same
           # bytes on every platform. The Makefile owns what is in it, so the
           # release and make install-config cannot drift.
-          make wad-archive WAD_ARCHIVE="dist/vi-fighter-$label-wad.tar.gz"
+          make wad-archive WAD_ARCHIVE="dist/vif-$label-wad.tar.gz"
 
           # The source archive distributions build from. It is uploaded once, so
           # its bytes and checksum never change the way GitHub's generated ones may.
           if [ "$GITHUB_REF_TYPE" = tag ]; then
-            git archive --format=tar.gz --prefix="vi-fighter-$label/" \
-              -o "dist/vi-fighter-$label.tar.gz" "$GITHUB_REF_NAME"
+            git archive --format=tar.gz --prefix="vif-$label/" \
+              -o "dist/vif-$label.tar.gz" "$GITHUB_REF_NAME"
           fi
 
-          (cd dist && sha256sum vi-fighter-* > SHA256SUMS)
+          (cd dist && sha256sum vif-* > SHA256SUMS)
 
       - name: Upload release payload
         uses: actions/upload-artifact@v4
@@ -147,8 +147,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag \
-            --title "vi-fighter $GITHUB_REF_NAME" \
-            --notes "Release of ${GITHUB_SHA}. vi-fighter-${GITHUB_REF_NAME#v}.tar.gz is the source archive; SHA256SUMS covers every asset."
+            --title "vif $GITHUB_REF_NAME" \
+            --notes "Release of ${GITHUB_SHA}. vif-${GITHUB_REF_NAME#v}.tar.gz is the source archive; SHA256SUMS covers every asset."
 
       - name: Move nightly tag and publish assets
         if: github.ref_type != 'tag'

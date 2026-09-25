@@ -1,6 +1,6 @@
-# Vi-Fighter Architecture Overview
+# vif Architecture Overview
 
-Vi-Fighter is a Go terminal game built around a custom entity-component-system
+vif is a Go terminal game built around a custom entity-component-system
 (ECS), an event-settled fixed-step scheduler, a TOML-configured hierarchical
 state machine, a layered terminal compositor, and a procedural audio engine.
 The game combines vi-style cursor and text operations with real-time combat,
@@ -18,7 +18,7 @@ cross-platform lockstep guarantee.
 
 ```mermaid
 flowchart TD
-    Player["Player"] --> App["Vi-Fighter application"]
+    Player["Player"] --> App["vif application"]
     Author["Scenario or content author"] --> App
     App --> Terminal["Terminal or browser terminal"]
     App --> Audio["System audio process or sink"]
@@ -332,7 +332,7 @@ are now independent modules.
 | `github.com/lixenwraith/log` | Buffered asynchronous structured-log sink, rotation, retention, and transport below `internal/vlog`. |
 
 `golang.org/x/sys` and `golang.org/x/term` are indirect dependencies of this
-module graph. Vi-Fighter has no application CGO requirement, although external
+module graph. vif has no application CGO requirement, although external
 audio executables or an OSS device are runtime dependencies when sound is
 enabled.
 

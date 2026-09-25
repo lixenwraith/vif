@@ -1,6 +1,6 @@
 # vif-log
 
-A high-performance, terminal-based JSONL diagnostic log viewer engineered for the `vi-fighter` ECS game engine.
+A high-performance, terminal-based JSONL diagnostic log viewer engineered for the vif game.
 
 Designed to parse and navigate high-frequency ECS event streams and state snapshots with minimal overhead. Features zero-allocation index passes, lazy-loaded line evaluation, and asynchronous chronological merging of multiple log sources.
 

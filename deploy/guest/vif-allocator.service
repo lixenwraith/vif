@@ -1,5 +1,5 @@
 [Unit]
-Description=Vi-Fighter Kubernetes session allocator
+Description=vif Kubernetes session allocator
 After=network-online.target k3s.service vif-allocator-token.service logwisp.service
 Requires=k3s.service
 Wants=network-online.target vif-allocator-token.service logwisp.service

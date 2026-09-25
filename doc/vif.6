@@ -1,13 +1,14 @@
 .\" Generated from cmd/vif/usage.go by TestManualIsTheHelpTable; do not edit.
-.TH VIF 6 "" vi-fighter
+.TH VIF 6 "" vif
 .SH NAME
 vif \- a modal\-motion arcade game
 .SH SYNOPSIS
 .B vif
 .RI [ flags ]
 .SH DESCRIPTION
+Without flags,
 .B vif
-plays vi\-fighter in a terminal.
+starts a solo game in the terminal.
 The flags below also host, join or serve a networked session,
 replay or script a run, and validate the installed configuration.
 .PP
@@ -122,7 +123,7 @@ Print the FSM schema as JSON, then exit
 .SS Diagnostics
 .TP
 .B \-l, \-log[=DIR]
-Enable logging; DIR overrides $XDG_STATE_HOME/vi\-fighter/log
+Enable logging; DIR overrides $XDG_STATE_HOME/vif/log
 .TP
 .B \-lv, \-log\-level <level>
 trace, debug, info, warn or error; implies \-l
@@ -143,7 +144,7 @@ Attach a session ID to every application log record; implies \-l
 Write the log to stdout as JSON instead of to a file; implies \-l
 .TP
 .B \-j, \-journal[=DIR]
-Record a replay journal; DIR overrides $XDG_STATE_HOME/vi\-fighter/journal
+Record a replay journal; DIR overrides $XDG_STATE_HOME/vif/journal
 .TP
 .B \-dev[=false]
 Capture runtime stderr to a file; on by default for \-race builds
@@ -164,16 +165,16 @@ Print the module version and commit a package should report
 .fi
 .SH FILES
 .TP
-.I $XDG_CONFIG_HOME/vi\-fighter
+.I $XDG_CONFIG_HOME/vif
 User configuration root, normally
-.IR ~/.config/vi\-fighter .
+.IR ~/.config/vif .
 .TP
-.I $XDG_CONFIG_DIRS/vi\-fighter
+.I $XDG_CONFIG_DIRS/vif
 System configuration roots, normally
-.IR /etc/xdg/vi\-fighter .
+.IR /etc/xdg/vif .
 .TP
-.I $XDG_STATE_HOME/vi\-fighter
+.I $XDG_STATE_HOME/vif
 Logs and journals, normally
-.IR ~/.local/state/vi\-fighter .
+.IR ~/.local/state/vif .
 .SH SEE ALSO
 https://github.com/lixenwraith/vi\-fighter

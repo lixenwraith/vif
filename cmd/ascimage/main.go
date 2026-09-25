@@ -137,7 +137,7 @@ func printUsage() {
 	flag.PrintDefaults()
 	fmt.Fprintln(os.Stderr, "\nModes:")
 	fmt.Fprintln(os.Stderr, "  Image input:")
-	fmt.Fprintln(os.Stderr, "    Dual-mode (-dual): write .vifimg for vi-fighter pattern system")
+	fmt.Fprintln(os.Stderr, "    Dual-mode (-dual): write .vifimg for vif pattern system")
 	fmt.Fprintln(os.Stderr, "    File output (-o):  write ANSI sequences to file")
 	fmt.Fprintln(os.Stderr, "    Interactive:        view image with zoom/pan controls (default)")
 	fmt.Fprintln(os.Stderr, "  .vifimg input:")

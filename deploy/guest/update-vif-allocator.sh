@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build and deploy the allocator from this vi-fighter revision, with its settings
+# Build and deploy the allocator from this vif revision, with its settings
 # from deploy/guest/vif-allocator.env. New allocations pause during the short
 # cutover, and one known-good binary/config/unit is kept. --render prints the env
 # file it would install; deploy/update.sh shows it against the installed one.
@@ -42,7 +42,7 @@ fi
 
 test "$(git -C "$repo_root" rev-parse --show-toplevel)" = "$repo_root"
 if [ -n "$(git -C "$repo_root" status --porcelain)" ]; then
-	echo "$0: the vi-fighter worktree differs from HEAD" >&2
+	echo "$0: the vif worktree differs from HEAD" >&2
 	exit 1
 fi
 # /etc/vif-allocator is root:vif-allocator 0750, so an operator account cannot

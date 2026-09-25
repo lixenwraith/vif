@@ -18,10 +18,10 @@ VIF_CONFIG_BASE != case "$$(uname -s)" in \
 	Darwin) echo "$(HOME)/Library/Application Support" ;; \
 	*) test -n "$(XDG_CONFIG_HOME)" && echo "$(XDG_CONFIG_HOME)" || echo "$(HOME)/.config" ;; \
 	esac
-VIF_CONFIG_DIR ?= $(VIF_CONFIG_BASE)/vi-fighter
+VIF_CONFIG_DIR ?= $(VIF_CONFIG_BASE)/vif
 VIF_CONFIG_FORCE ?= 0
 WAD_DIR := wad
-WAD_ARCHIVE ?= $(BIN_DIR)/vi-fighter-wad.tar.gz
+WAD_ARCHIVE ?= $(BIN_DIR)/vif-wad.tar.gz
 KEYMAP_SRC := internal/asset/input/keymap.toml
 DESTDIR ?=
 PREFIX ?= /usr
@@ -194,14 +194,14 @@ wad-archive: $(BIN_DIR)
 # searches), the licence, the manual, and the documentation. Build first; nothing
 # here compiles, so a packager controls the build flags.
 install:
-	@$(MAKE) -s install-config VIF_CONFIG_DIR='$(DESTDIR)$(SYSCONFDIR)/xdg/vi-fighter' VIF_CONFIG_FORCE=1
+	@$(MAKE) -s install-config VIF_CONFIG_DIR='$(DESTDIR)$(SYSCONFDIR)/xdg/vif' VIF_CONFIG_FORCE=1
 	@set -eu; \
 	put() { install -d -m 0755 "$${3%/*}"; install -m "$$1" "$$2" "$$3"; echo "install $$3"; }; \
 	put 0755 $(BIN_DIR)/$(BINARY) '$(DESTDIR)$(PREFIX)/bin/$(BINARY)'; \
-	put 0644 LICENSE '$(DESTDIR)$(PREFIX)/share/licenses/vi-fighter/LICENSE'; \
+	put 0644 LICENSE '$(DESTDIR)$(PREFIX)/share/licenses/vif/LICENSE'; \
 	put 0644 doc/vif.6 '$(DESTDIR)$(PREFIX)/share/man/man6/vif.6'; \
 	for src in README.md doc/*.md; do \
-		put 0644 "$$src" "$(DESTDIR)$(PREFIX)/share/doc/vi-fighter/$${src#doc/}"; \
+		put 0644 "$$src" "$(DESTDIR)$(PREFIX)/share/doc/vif/$${src#doc/}"; \
 	done
 
 # image builds the deployment artifact from the repository root, which is the

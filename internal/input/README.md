@@ -2,7 +2,7 @@
 
 The complete runtime default is [`internal/asset/input/keymap.toml`](../asset/input/keymap.toml).
 It is embedded into every native and WASM build and installed as
-`$XDG_CONFIG_HOME/vi-fighter/input/keymap.toml` by `make install-config`.
+`$XDG_CONFIG_HOME/vif/input/keymap.toml` by `make install-config`.
 
 User documents may remain sparse: only supplied keys override the embedded
 table, and `"none"` removes a binding. For example:

@@ -180,7 +180,7 @@ The practical dependency rules are:
 
 ## 8. External module boundary
 
-| External module | Used by | What remains in Vi-Fighter |
+| External module | Used by | What remains in vif |
 |---|---|---|
 | `lixenwraith/terminal` | app, service, input, render, ascimage/tools | Game-specific input semantics, compositor, renderers, and layout. |
 | `lixenwraith/toml` | content, FSM, keymaps, audio specs, commands, genetic persistence | Schemas, validation policy, semantic models, and application resolution. |

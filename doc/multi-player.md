@@ -949,7 +949,7 @@ delivery tractability 15%, bandwidth 15%, latency 10%, continuity 10%.
 Lockstep turns network variance into a global stall and still needs reconnect
 state. Full state streaming makes host uplink scale with clients. Rollback wants
 cheap frequent saves, bounded side effects and many-tick re-simulation, which a
-high-churn ECS with an FSM over it does not offer; vi-fighter sends resolved
+high-churn ECS with an FSM over it does not offer; vif sends resolved
 crossings rather than a compact per-frame input stream, so it buys less here than
 it costs. CRDT merging cannot order collision, death and contested progression.
 

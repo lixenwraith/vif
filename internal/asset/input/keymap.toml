@@ -1,4 +1,4 @@
-# Vi-Fighter's complete built-in keymap. The runtime embeds this file, while
+# vif's complete built-in keymap. The runtime embeds this file, while
 # `make install-config` installs the same document as a user-editable override.
 
 [normal_keys]

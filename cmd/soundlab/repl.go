@@ -10,7 +10,7 @@ import (
 )
 
 func runREPL(s *Session, in io.Reader) {
-	fmt.Fprintln(s.out, "soundlab — vi-fighter audio editor. `help` lists commands, `quit` exits.")
+	fmt.Fprintln(s.out, "soundlab — vif audio editor. `help` lists commands, `quit` exits.")
 	sc := bufio.NewScanner(in)
 	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	for {

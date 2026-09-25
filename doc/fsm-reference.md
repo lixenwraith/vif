@@ -7,8 +7,8 @@ Entry config search order:
 1. `-s <path-or-name>` — file, directory containing `scenario.toml`, or a name
    resolved as `game/<name>/scenario.toml` under the configured roots;
 2. `game/main/scenario.toml` under `-config-dir <root>`;
-3. the same under `$XDG_CONFIG_HOME/vi-fighter` (normally
-   `~/.config/vi-fighter`);
+3. the same under `$XDG_CONFIG_HOME/vif` (normally
+   `~/.config/vif`);
 4. the same under each corresponding root in `$XDG_CONFIG_DIRS`;
 5. embedded default (`internal/asset/scenario/`; forced with `-d`).
 
@@ -22,7 +22,7 @@ Region `file` references resolve relative to the entry config's directory and
 cannot escape it (`..` is rejected). Installed layout:
 
 ```text
-~/.config/vi-fighter/
+~/.config/vif/
 ├── game/
 │   ├── main/
 │   │   ├── scenario.toml
@@ -39,9 +39,9 @@ cannot escape it (`..` is rejected). Installed layout:
     └── keymap.toml
 ```
 
-`vi-fighter -check [-g <name-or-path>]` validates resolved FSM, keymap, audio, and
+`vif -check [-g <name-or-path>]` validates resolved FSM, keymap, audio, and
 content config and exits; all state-level FSM errors are reported in one pass.
-`vi-fighter -schema` prints the machine schema (events, guards, actions) as JSON.
+`vif -schema` prints the machine schema (events, guards, actions) as JSON.
 
 ---
 

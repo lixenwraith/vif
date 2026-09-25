@@ -1,5 +1,5 @@
 [Unit]
-Description=Regularly prune volatile Vi-Fighter fleet logs
+Description=Regularly prune volatile vif fleet logs
 
 [Timer]
 OnBootSec=5m

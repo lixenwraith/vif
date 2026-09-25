@@ -142,7 +142,7 @@ screen positions over the glyph grid.
 The implementation is Vim-inspired, not an attempt to reproduce every Vim
 edge case. Commands operate on the two-dimensional game grid and delete glyph
 entities, so behavior around empty cells, camera edges, and composites is
-defined by Vi-Fighter's motion/operator code.
+defined by vif's motion/operator code.
 
 ## 5. Insert, search, and command text editing
 

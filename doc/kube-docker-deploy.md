@@ -26,7 +26,7 @@ kept outside this repository; §2 and §12 state only what they must provide.
 | D1 | **One node, no registry.** Images are imported straight into the node's containerd and every session container uses `imagePullPolicy: IfNotPresent`. |
 | D2 | **Docker is a build tool, not a runtime.** K3s runs its own containerd; Docker is started for a session-image or LogWisp build and disabled afterwards, because its `iptables` rules share a table with K3s's. |
 | D3 | **Cluster commands run through `sudo kubectl`.** K3s's kubeconfig stays root-readable (mode `0640`); never copy it to a login user. |
-| D4 | **The vi-fighter JSON line is the log contract.** Records originate in `internal/vlog` and every hop preserves those bytes; nothing reads a Kubernetes pod log. |
+| D4 | **The vif JSON line is the log contract.** Records originate in `internal/vlog` and every hop preserves those bytes; nothing reads a Kubernetes pod log. |
 | D5 | **The allocator runs on the node.** It needs the K3s API and node-local access to the pod probes; port 6443 never leaves the node. |
 | D6 | **The session transports are unauthenticated.** Anyone who can reach a forwarded port or the browser route can join; the forwarded surface and the application limits are the controls (fleet plan §4). |
 

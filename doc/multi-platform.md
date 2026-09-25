@@ -1,6 +1,6 @@
 # Build Profiles and Platform Boundaries
 
-Vi-Fighter has two independent kinds of variation:
+vif has two independent kinds of variation:
 
 - a **runtime mode** chooses how one process runs: interactive play, replay,
   authored script, caller-driven headless simulation, or dedicated server;

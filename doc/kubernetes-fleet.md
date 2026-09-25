@@ -1,6 +1,6 @@
 # The session fleet: design and work list
 
-Vi-Fighter dedicated servers run one session per container on K3s. A website asks
+vif dedicated servers run one session per container on K3s. A website asks
 for a game, one container appears, and it ends itself when nobody is in it.
 
 This is what the design is, what it cost when it was measured, and what is left.
@@ -305,7 +305,7 @@ What a cluster has not yet been asked:
   during an on-demand build. The image is imported into K3s's embedded containerd.
 - **One health path.** The code answers "should this process still be running";
   everything else is in the body, where the allocator reads it.
-- **The vi-fighter JSON line is the log contract.** The workload writes it to the
+- **The vif JSON line is the log contract.** The workload writes it to the
   node-local PVC, and LogWisp and the allocator carry those same bytes without
   parsing or reshaping them.
 - **The public stream is session output only.** K3s, kernel, host journal and the

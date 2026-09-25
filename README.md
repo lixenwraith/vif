@@ -1,12 +1,12 @@
-# Vi-Fighter
+# vif
 
-Vi-Fighter is a real-time terminal game that combines Vim-style navigation and
+vif is a real-time terminal game that combines Vim-style navigation and
 text operations with typing, shooting, procedural encounters, adaptive species
 movement, and generative audio.
 
 The game is written in Go and has no application CGO requirement. Terminal,
 TOML, color, and logging primitives are maintained as separate Go modules;
-Vi-Fighter owns the ECS, gameplay, input semantics, compositor, scenario
+vif owns the ECS, gameplay, input semantics, compositor, scenario
 configuration, audio policy, and reusable simulation libraries.
 
 ## Highlights
@@ -123,8 +123,8 @@ boundary.
 
 Editable files ship in `wad/`, laid out exactly as they install; everything the
 binary can play without a filesystem is embedded in `internal/asset`. User
-configuration defaults to `$XDG_CONFIG_HOME/vi-fighter`; logs and journals
-default to separate directories under `$XDG_STATE_HOME/vi-fighter`. See the
+configuration defaults to `$XDG_CONFIG_HOME/vif`; logs and journals
+default to separate directories under `$XDG_STATE_HOME/vif`. See the
 [external filesystem layout](doc/filesystem-layout.md) for exact precedence,
 installation, and WASM behavior, and [packaging](doc/packaging.md) for the
 distribution checklists.

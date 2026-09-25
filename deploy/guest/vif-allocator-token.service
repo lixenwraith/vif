@@ -1,5 +1,5 @@
 [Unit]
-Description=Rotate the Vi-Fighter allocator ServiceAccount token
+Description=Rotate the vif allocator ServiceAccount token
 After=k3s.service
 Requires=k3s.service
 

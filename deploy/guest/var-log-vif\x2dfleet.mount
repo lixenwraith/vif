@@ -1,5 +1,5 @@
 [Unit]
-Description=Vi-Fighter volatile fleet log storage
+Description=vif volatile fleet log storage
 Before=k3s.service logwisp.service
 
 [Mount]

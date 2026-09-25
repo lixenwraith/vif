@@ -1,6 +1,6 @@
 # Audio Architecture
 
-Vi-Fighter includes a pure-Go synthesis, effects, mixing, and music-sequencing
+vif includes a pure-Go synthesis, effects, mixing, and music-sequencing
 engine. It streams raw PCM to an external host process/device; there is no CGO
 audio dependency. Game policy is layered over the reusable `pkg/audio` engine
 by the audio service and the `AudioSystem`/`MusicSystem` pair.

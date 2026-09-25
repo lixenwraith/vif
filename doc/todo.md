@@ -107,6 +107,18 @@ Distribution-specific detail lives in [Packaging](packaging.md).
 Tag the selected commit `v0.1.0` and publish the draft release the tag creates,
 which already carries the source archive and its checksum.
 
+### Finish the rename to vif
+
+- Priority: P1
+- Affected files: `go.mod` and every import, `deploy/k3s/`, `deploy/docker/Dockerfile`,
+  `tool/vif-allocator/model.go`, the image scripts
+- Prerequisite: the GitHub repository renamed to `vif`
+
+The shipped name is vif; two identities still say vi-fighter. The module path,
+repository URLs and GHCR image follow the GitHub rename. The fleet's
+`app.kubernetes.io` labels and node image name select live sessions and images, so
+renaming them wants a deploy with no session running and the old images removed.
+
 ### Add a desktop launcher
 
 - Priority: P2
@@ -129,7 +141,7 @@ Provide shell completion for `vif` and install it in the appropriate data path.
 - Affected files: AUR packaging metadata and `doc/packaging.md`
 - Prerequisite: establish the release-package metadata first
 
-Publish `vi-fighter-git` alongside the release-based AUR package.
+Publish `vif-git` alongside the release-based AUR package.
 
 ### Let a request name the map size
 

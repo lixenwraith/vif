@@ -1,6 +1,6 @@
 # vif-allocator
 
-`vif-allocator` is the narrow HTTP boundary between the vi-fighter website and
+`vif-allocator` is the narrow HTTP boundary between the vif website and
 the `vif` namespace. Kubernetes still schedules, isolates, limits, terminates and
 garbage-collects every session. The allocator only performs the fixed transaction
 that Kubernetes has no anonymous endpoint for:

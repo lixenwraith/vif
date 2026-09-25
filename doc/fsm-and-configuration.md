@@ -1,6 +1,6 @@
 # FSM and Gameplay Configuration
 
-Vi-Fighter's encounter progression is a generic hierarchical state machine
+vif's encounter progression is a generic hierarchical state machine
 bound to the game through a small host adapter. TOML defines regions, state
 hierarchies, transitions, guards, and actions; Go systems implement the actual
 mechanics those actions request.
@@ -36,8 +36,8 @@ The scenario entry is resolved in this order:
 1. `-s <path-or-name>`, where a path is `scenario.toml` or a directory containing
    it, and a name resolves under `scenario/<name>/` in the configured roots;
 2. `scenario/main/scenario.toml` under a root passed with `-config-dir`;
-3. the same under the user config root, normally `$XDG_CONFIG_HOME/vi-fighter`
-   or `~/.config/vi-fighter`;
+3. the same under the user config root, normally `$XDG_CONFIG_HOME/vif`
+   or `~/.config/vif`;
 4. the same under each `$XDG_CONFIG_DIRS` system root;
 5. the embedded default.
 
@@ -74,9 +74,9 @@ declarations or other top-level keys are rejected. Circular includes and
 duplicate state names are errors, and filesystem traversal outside the config
 root is not accepted.
 
-Use `vi-fighter -check [-g <name-or-path>]` to resolve, parse, assemble, and validate
+Use `vif -check [-g <name-or-path>]` to resolve, parse, assemble, and validate
 the FSM plus keymap, audio overrides, and content without starting the terminal
-game. `vi-fighter -schema`
+game. `vif -schema`
 prints generated JSON describing known events, actions, guards, and payloads.
 
 ## 3. Root schema

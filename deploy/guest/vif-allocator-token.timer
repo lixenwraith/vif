@@ -1,5 +1,5 @@
 [Unit]
-Description=Regularly rotate the Vi-Fighter allocator token
+Description=Regularly rotate the vif allocator token
 
 [Timer]
 OnBootSec=2m

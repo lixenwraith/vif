@@ -1,6 +1,6 @@
 # Logging, Telemetry, and Diagnostics
 
-Vi-Fighter's diagnostic surface has five cooperating layers: a structured JSON
+vif's diagnostic surface has five cooperating layers: a structured JSON
 Lines session log, a status metric registry with periodic snapshots, an
 in-memory flight recorder that flushes only on a trigger, a dedicated replay
 journal, and a runtime stderr capture that folds Go runtime output back into
@@ -60,7 +60,7 @@ payload is an open key-value map.
 | `trace` | Present only on `vlog.Trace` records: a `->` joined call chain |
 
 `-log-session-id=<id>` adds `fields.session_id` to every record emitted through
-the vi-fighter logging facade. The key is absent when the flag is absent. IDs
+the vif logging facade. The key is absent when the flag is absent. IDs
 use the DNS-safe lowercase alphanumeric-and-hyphen subset of multiplayer session
 names. With file output, the active file is `<id>.jsonl`, so concurrent fleet
 sessions cannot collide on the ordinary timestamp-derived filename.
@@ -653,8 +653,8 @@ a configured log directory, it opens a standalone
 sidecar path. An embedder can also enable `Config.RecTicks` without starting a
 session logger.
 
-The native default is `$XDG_STATE_HOME/vi-fighter/log/` (normally
-`~/.local/state/vi-fighter/log/`), overridden by `-l=DIR`. Runtime stderr
+The native default is `$XDG_STATE_HOME/vif/log/` (normally
+`~/.local/state/vif/log/`), overridden by `-l=DIR`. Runtime stderr
 captures and on-demand snapshots use the same diagnostic directory.
 
 Both files carry the same envelope and open together in one viewer instance,
@@ -672,7 +672,7 @@ The journal logger is separate from the session logger and has no level or
 scope gate: `:log off`, `-lv error`, or
 `-ls none` cannot silence a capture.
 
-Its default is the separate `$XDG_STATE_HOME/vi-fighter/journal/` directory.
+Its default is the separate `$XDG_STATE_HOME/vif/journal/` directory.
 Only a platform with no resolvable user-state/cache location falls back to
 `./log/`. See
 [External filesystem layout](filesystem-layout.md).

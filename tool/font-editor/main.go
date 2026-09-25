@@ -699,7 +699,7 @@ func (e *Editor) drawHeader(cells []terminal.Cell) {
 	if e.modified {
 		modMark = "*"
 	}
-	header := fmt.Sprintf(" VI-FIGHTER FONT EDITOR │ '%c' (0x%02X)%s ", e.current, e.current, modMark)
+	header := fmt.Sprintf(" VIF FONT EDITOR │ '%c' (0x%02X)%s ", e.current, e.current, modMark)
 	startX := max(0, (e.width-len(header))/2)
 	e.drawText(cells, startX, 1, header, ColorText, ColorBg, terminal.AttrBold)
 }

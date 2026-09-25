@@ -138,7 +138,7 @@ const summary = "a modal-motion arcade game"
 // writeUsage prints the whole help. The caller decides where: stdout and exit
 // zero when it was asked for, stderr and a failing exit when the flags were wrong.
 func writeUsage(w io.Writer) {
-	fmt.Fprint(w, "vi-fighter — "+summary+"\n\nUsage:\n  vif [flags]\n")
+	fmt.Fprint(w, "vif — "+summary+"\n\nUsage:\n  vif [flags]\n")
 
 	sections := helpSections(paths.DefaultLogDir(), paths.DefaultJournalDir())
 	width := 0
@@ -195,15 +195,16 @@ const manualStateDir = "$XDG_STATE_HOME/" + paths.AppDirName + "/"
 // keeps the committed page equal to it.
 func writeManual(w io.Writer) {
 	fmt.Fprintf(w, `.\" Generated from cmd/vif/usage.go by TestManualIsTheHelpTable; do not edit.
-.TH VIF 6 "" vi-fighter
+.TH VIF 6 "" vif
 .SH NAME
 vif \- %s
 .SH SYNOPSIS
 .B vif
 .RI [ flags ]
 .SH DESCRIPTION
+Without flags,
 .B vif
-plays vi\-fighter in a terminal.
+starts a solo game in the terminal.
 The flags below also host, join or serve a networked session,
 replay or script a run, and validate the installed configuration.
 .PP
@@ -227,17 +228,17 @@ and finally the copy compiled into the binary.
 	fmt.Fprint(w, `.fi
 .SH FILES
 .TP
-.I $XDG_CONFIG_HOME/vi\-fighter
+.I $XDG_CONFIG_HOME/vif
 User configuration root, normally
-.IR ~/.config/vi\-fighter .
+.IR ~/.config/vif .
 .TP
-.I $XDG_CONFIG_DIRS/vi\-fighter
+.I $XDG_CONFIG_DIRS/vif
 System configuration roots, normally
-.IR /etc/xdg/vi\-fighter .
+.IR /etc/xdg/vif .
 .TP
-.I $XDG_STATE_HOME/vi\-fighter
+.I $XDG_STATE_HOME/vif
 Logs and journals, normally
-.IR ~/.local/state/vi\-fighter .
+.IR ~/.local/state/vif .
 .SH SEE ALSO
 https://github.com/lixenwraith/vi\-fighter
 `)
