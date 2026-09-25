@@ -27,6 +27,7 @@ type slotState struct {
 	revealN     int       // >0: per-bar progressive track reveal on incoming pattern
 	fillSavedID PatternID // slot 2: restored after auto-fill bar
 	inFill      bool
+	drawn       bool // the tier's pool chose this slot's pattern, so a phrase may vary it
 }
 
 func (ss *slotState) player() *PatternPlayer {
@@ -200,6 +201,7 @@ func (s *Sequencer) Generate(buf []float64) {
 				s.barCount++
 				s.harmony.advanceBar()
 				s.applyPendingTransitions()
+				s.updateVariation()
 				s.updateReveal()
 				s.updateFill()
 				s.updateMelodyGen()
@@ -313,6 +315,27 @@ func (s *Sequencer) updateFill() {
 	}
 }
 
+// updateVariation swaps one drawn slot for another member of its tier's pool on
+// each phrase downbeat, alternating melody and rhythm, so a held tier keeps moving.
+// A slot mid-transition or mid-reveal is left to finish.
+func (s *Sequencer) updateVariation() {
+	if s.barCount%PhraseBars != 0 {
+		return
+	}
+	slot := int(s.barCount/PhraseBars) % 2
+	ss := &s.slots[slot]
+	pool := s.tiers[s.tier][slot]
+	if !ss.drawn || len(pool) < 2 || ss.pending != nil || ss.fading || ss.revealN > 0 {
+		return
+	}
+	// Uniform over the other members: the last stands in for a draw of the current
+	i := s.rng.IntN(len(pool) - 1)
+	if pool[i] == ss.activeID() {
+		i = len(pool) - 1
+	}
+	s.startTransition(slot, pool[i], MinCrossfadeSamples)
+}
+
 // updateMelodyGen regenerates the generative lead once per bar while active
 // Unquantized starts play bass-only until the next bar seeds the lead
 func (s *Sequencer) updateMelodyGen() {
@@ -321,7 +344,11 @@ func (s *Sequencer) updateMelodyGen() {
 	}
 }
 
+// SetPattern places a pattern explicitly, which phrase variation then leaves alone
 func (s *Sequencer) SetPattern(slot int, p PatternID, crossfadeSamples int, quantize bool) {
+	if slot >= 0 && slot < MusicSlots {
+		s.slots[slot].drawn = false
+	}
 	s.setPattern(slot, p, crossfadeSamples, quantize, false)
 }
 
@@ -402,6 +429,7 @@ func (s *Sequencer) Reset() {
 		ss.xPos, ss.xLen = 0, 0
 		ss.revealN = 0
 		ss.inFill = false
+		ss.drawn = false
 	}
 	s.publish()
 }
@@ -415,6 +443,7 @@ func (s *Sequencer) SetIntensity(t Intensity, crossfadeSamples int, quantize, re
 	}
 	s.tier = t
 	for slot, pool := range s.tiers[t] {
+		s.slots[slot].drawn = true
 		if id := s.draw(pool); id != s.slots[slot].activeID() {
 			s.setPattern(slot, id, crossfadeSamples, quantize, reveal)
 		} else {

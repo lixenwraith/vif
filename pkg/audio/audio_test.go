@@ -521,3 +521,31 @@ func TestPlayBufferAuditions(t *testing.T) {
 		t.Error("mixer never admitted the preview")
 	}
 }
+
+// TestHeldTierVariesDrawnSlots is the rule that a tier held for a phrase moves on to
+// another member of a pool, while a slot placed explicitly stays where it was put.
+func TestHeldTierVariesDrawnSlots(t *testing.T) {
+	t.Cleanup(ResetRegistries)
+	ResetRegistries()
+	var ids [4]PatternID
+	for i := range ids {
+		ids[i] = RegisterPattern(&Pattern{Name: string(rune('a' + i)), Steps: 16, Tracks: []Track{
+			{Instr: InstrBass, Events: []Step{{Pos: 0, Vel: 0.5, Dur: 1}}},
+		}})
+	}
+	s := NewSequencer(MaxBPM, nil)
+	s.tiers[IntensityCalm] = [2][]PatternID{{ids[0], ids[1]}, {ids[2], ids[3]}}
+	s.SetIntensity(IntensityCalm, 0, false, false)
+	s.SetPattern(1, ids[2], 0, false)
+	rhythm := s.slots[0].activeID()
+	s.Start()
+
+	// Phrase downbeats alternate melody (bar 8) and rhythm (bar 16)
+	s.Generate(make([]float64, 2*PhraseBars*SamplesPerBar(MaxBPM)+1))
+	if got := s.slots[0].activeID(); got == rhythm {
+		t.Errorf("drawn rhythm still on %d after two phrases", got)
+	}
+	if got := s.slots[1].activeID(); got != ids[2] {
+		t.Errorf("explicit melody moved to %d", got)
+	}
+}

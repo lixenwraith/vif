@@ -189,6 +189,16 @@ operator's.
 
 ## Audio
 
+### Resolve soundlab's audio documents as the game does
+
+- Priority: P2
+- Affected files: `cmd/soundlab/main.go`, `cmd/soundlab/session.go`
+
+Soundlab registers only the embedded banks and saves an untitled document to the
+user root, while the game resolves `audio/music.toml` and `audio/sounds.toml`
+through `-config-dir`, the user root and an install's XDG system roots. Load both
+through `resource.Audio` as the game's overrides, and take `-config-dir`.
+
 ### Make the mixer buffer configurable
 
 - Priority: P3

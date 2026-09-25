@@ -193,7 +193,9 @@ patterns can transition immediately or quantized with A/B crossfade. A minimum
 256-sample fade prevents hard-cut voice tails. Track reveal supports staged
 intensity build-up. Slot 2 can substitute a seeded fill on the last bar of each
 eight-bar phrase and restore the previous pattern on the downbeat; explicit
-slot-2 editing disables that surprise behavior.
+slot-2 editing disables that surprise behavior. On each phrase downbeat the
+sequencer also swaps one tier-drawn slot, melody and rhythm in turn, for another
+member of its pool; a slot placed explicitly is left alone.
 
 Harmony holds root note, scale, and chord progression. Pattern degrees resolve
 through the current harmony at trigger time. With the same seed and identical
