@@ -59,3 +59,35 @@ const (
 
 	Bullet256StormRed = color.P256Red // (5,0,0)
 )
+
+// Palette256RGB returns the xterm RGB of a 256-color index, so an RGB blend can compose
+// over a palette cell; indices 0-15 take the VGA system colors
+func Palette256RGB(idx uint8) color.RGB {
+	switch {
+	case idx >= 232:
+		v := 8 + 10*(idx-232)
+		return color.RGB{R: v, G: v, B: v}
+	case idx >= 16:
+		r, g, b := color.CubeRGB256(idx)
+		return color.RGB{R: cubeLevel(r), G: cubeLevel(g), B: cubeLevel(b)}
+	}
+	lo, hi := uint8(0), uint8(0xaa)
+	if idx >= 8 {
+		lo, hi = 0x55, 0xff
+	}
+	channel := func(bit uint8) uint8 {
+		if idx&bit != 0 {
+			return hi
+		}
+		return lo
+	}
+	return color.RGB{R: channel(1), G: channel(2), B: channel(4)}
+}
+
+// cubeLevel maps an xterm color cube coordinate (0-5) to its channel value
+func cubeLevel(l uint8) uint8 {
+	if l == 0 {
+		return 0
+	}
+	return 55 + 40*l
+}

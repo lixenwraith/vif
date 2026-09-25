@@ -3,11 +3,14 @@ package system
 import (
 	"sync/atomic"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 )
 
 // DeathSystem routes death requests through protection checks and effect emission
@@ -164,12 +167,13 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 	// Fadeout handles its own data extraction from WallComponent
 	if effectEvent == event.EventFadeoutSpawnOne {
 		if wallComp, ok := s.world.Components.Wall.GetPtr(entity); ok {
+			fg, bg := wallFadeoutColors(wallComp)
 			s.world.PushLocal(event.EventFadeoutSpawnOne, &event.FadeoutSpawnPayload{
 				X:       entityPos.X,
 				Y:       entityPos.Y,
 				Char:    wallComp.Rune,
-				FgColor: wallComp.FgColor,
-				BgColor: wallComp.BgColor,
+				FgColor: fg,
+				BgColor: bg,
 			})
 		} else {
 			s.statMissingEffectData.Add(1)
@@ -403,12 +407,26 @@ func (s *DeathSystem) extractFadeout(entity core.Entity) (event.FadeoutSpawnEntr
 	if !ok {
 		return event.FadeoutSpawnEntry{}, false
 	}
+	fg, bg := wallFadeoutColors(wallComp)
 	return event.FadeoutSpawnEntry{
 		X: pos.X, Y: pos.Y,
 		Char:    wallComp.Rune,
-		FgColor: wallComp.FgColor,
-		BgColor: wallComp.BgColor,
+		FgColor: fg,
+		BgColor: bg,
 	}, true
+}
+
+// wallFadeoutColors returns a wall's colours as RGB for the fadeout to blend: a
+// 256-colour pattern wall holds palette indices in its colours' R bytes
+func wallFadeoutColors(wall *component.WallComponent) (color.RGB, color.RGB) {
+	fg, bg := wall.FgColor, wall.BgColor
+	if wall.Attrs&terminal.AttrFg256 != 0 {
+		fg = visual.Palette256RGB(fg.R)
+	}
+	if wall.Attrs&terminal.AttrBg256 != 0 {
+		bg = visual.Palette256RGB(bg.R)
+	}
+	return fg, bg
 }
 
 // --- Shared helpers ---

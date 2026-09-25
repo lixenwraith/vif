@@ -148,7 +148,11 @@ func (b *RenderBuffer) BackgroundAt(x, y int, fallback color.RGB) color.RGB {
 	if !b.touched[idx] {
 		return fallback
 	}
-	return b.cells[idx].Bg
+	cell := &b.cells[idx]
+	if cell.Attrs&terminal.AttrBg256 != 0 {
+		return visual.Palette256RGB(cell.Bg.R)
+	}
+	return cell.Bg
 }
 
 // SetWriteMask sets the mask for subsequent draw operations
@@ -196,6 +200,7 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg color.RGB, mode Blend
 	flags := uint8(mode) & 0xF0
 
 	b.masks[idx] |= b.currentMask
+	resolvePalette(dst, flags&flagFg != 0, flags&flagBg != 0)
 
 	if mainRune != 0 {
 		dst.Rune = mainRune
@@ -276,6 +281,7 @@ func (b *RenderBuffer) SetBgOnly(x, y int, bg color.RGB) {
 	idx := y*b.width + x
 
 	b.cells[idx].Bg = bg
+	b.cells[idx].Attrs &^= terminal.AttrBg256
 	b.touched[idx] = true
 	b.masks[idx] |= b.currentMask
 }
@@ -290,6 +296,8 @@ func (b *RenderBuffer) SetBgScreen(x, y int, bg, base color.RGB, alpha float64) 
 	dst := &b.cells[idx]
 	if !b.touched[idx] {
 		dst.Bg = base
+	} else {
+		resolvePalette(dst, false, true)
 	}
 
 	dst.Bg = color.Screen(dst.Bg, bg, alpha)
@@ -328,11 +336,23 @@ func (b *RenderBuffer) SetBg256(x, y int, paletteIdx uint8) {
 	b.masks[idx] |= b.currentMask
 }
 
+// resolvePalette turns a cell's palette-indexed channels into RGB, so an RGB write
+// composes over the color rather than over the index its R byte holds
+func resolvePalette(dst *terminal.Cell, fg, bg bool) {
+	if fg && dst.Attrs&terminal.AttrFg256 != 0 {
+		dst.Fg = visual.Palette256RGB(dst.Fg.R)
+		dst.Attrs &^= terminal.AttrFg256
+	}
+	if bg && dst.Attrs&terminal.AttrBg256 != 0 {
+		dst.Bg = visual.Palette256RGB(dst.Bg.R)
+		dst.Attrs &^= terminal.AttrBg256
+	}
+}
+
 // === POST-PROCESSING ===
 
 // MutateDim multiplies colors by factor for cells matching targetMask
-// Skips 256-color palette cells to prevent palette index corruption
-// Respects Fg/Bg granularity: touched cells get both mutated, untouched get Fg only
+// Touched cells get both channels mutated, untouched cells Fg only
 func (b *RenderBuffer) MutateDim(factor float64, targetMask uint8) {
 	if factor >= 1.0 {
 		return
@@ -345,13 +365,9 @@ func (b *RenderBuffer) MutateDim(factor float64, targetMask uint8) {
 				continue
 			}
 			cell := &b.cells[i]
-
-			// Skip 256-color fg - scaling palette index corrupts color
-			if cell.Attrs&terminal.AttrFg256 == 0 {
-				cell.Fg = color.Scale(cell.Fg, factor)
-			}
-
-			if b.touched[i] && cell.Attrs&terminal.AttrBg256 == 0 {
+			resolvePalette(cell, true, b.touched[i])
+			cell.Fg = color.Scale(cell.Fg, factor)
+			if b.touched[i] {
 				cell.Bg = color.Scale(cell.Bg, factor)
 			}
 		}
@@ -360,8 +376,7 @@ func (b *RenderBuffer) MutateDim(factor float64, targetMask uint8) {
 
 // MutateGrayscale desaturates cells matching targetMask
 // intensity: 0.0 = no change, 1.0 = full grayscale
-// Skips 256-color palette cells to prevent palette index corruption
-// Respects Fg/Bg granularity: touched cells get both mutated, untouched get Fg only
+// Touched cells get both channels mutated, untouched cells Fg only
 func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask, excludeMask uint8) {
 	if intensity <= 0.0 {
 		return
@@ -379,18 +394,16 @@ func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask, excludeMas
 				continue
 			}
 			cell := &b.cells[i]
+			resolvePalette(cell, true, b.touched[i])
 
-			// Skip 256-color fg - grayscale conversion corrupts palette index
-			if cell.Attrs&terminal.AttrFg256 == 0 {
-				fgGray := color.Grayscale(cell.Fg)
-				if fullGray {
-					cell.Fg = fgGray
-				} else {
-					cell.Fg = color.Lerp(cell.Fg, fgGray, intensity)
-				}
+			fgGray := color.Grayscale(cell.Fg)
+			if fullGray {
+				cell.Fg = fgGray
+			} else {
+				cell.Fg = color.Lerp(cell.Fg, fgGray, intensity)
 			}
 
-			if b.touched[i] && cell.Attrs&terminal.AttrBg256 == 0 {
+			if b.touched[i] {
 				bgGray := color.Grayscale(cell.Bg)
 				if fullGray {
 					cell.Bg = bgGray
