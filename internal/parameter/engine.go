@@ -54,6 +54,16 @@ const (
 
 	// DevDrainInterval is the poll period for captured stderr in dev mode
 	DevDrainInterval = 500 * time.Millisecond
+
+	// ProfWindow is the profiler's averaging window; windows close on ticks [wall]
+	ProfWindow = time.Second
+
+	// ProfTopN is how many modules the prof.top card ranks
+	ProfTopN = 10
+
+	// ProfCaptureDefault/ProfCaptureMax bound a timed :d cpu or :d trace [wall]
+	ProfCaptureDefault = 10 * time.Second
+	ProfCaptureMax     = 5 * time.Minute
 )
 
 // ECS & Resources Limits

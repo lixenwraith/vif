@@ -212,6 +212,9 @@ func (p *player) run() error {
 // advance grants the simulation the ticks the elapsed wall time paid for. Nothing
 // plays while the viewer holds the command line, as the game pauses for it.
 func (p *player) advance(elapsed time.Duration) {
+	if p.done || p.cmd != nil || p.paused {
+		p.a.world.Resources.Prof.Hold() // a profiler window spans played time only
+	}
 	if p.done || p.cmd != nil {
 		return
 	}

@@ -2,9 +2,11 @@ package mode
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/component"
@@ -12,6 +14,8 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/paths"
+	"github.com/lixenwraith/vif/internal/prof"
 	"github.com/lixenwraith/vif/internal/status"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
@@ -663,10 +667,102 @@ func handleTelemetrySaveCommand(ctx *engine.GameContext) CommandResult {
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
-// handleDebugCommand is reserved for the debugging tools
-func handleDebugCommand(ctx *engine.GameContext, _ []string) CommandResult {
-	setCommandError(ctx, "Debug tools are not available yet; telemetry moved to :t")
+// handleDebugCommand opens the profiler report, or runs a profiling subcommand
+func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if len(args) == 0 {
+		ctx.RequestMode(core.ModeOverlay)
+		ctx.SetPaused(true)
+		ctx.PushLocal(event.EventMetaDebugRequest, nil)
+		return CommandResult{Continue: true, KeepPaused: true}
+	}
+
+	switch kind := strings.ToLower(args[0]); kind {
+	case "p", "prof":
+		handleProfCommand(ctx, args[1:])
+	case "cpu", "trace":
+		handleCaptureCommand(ctx, kind, args[1:])
+	case "heap":
+		dir := diagnosticsDir()
+		core.Go(func() {
+			path, err := prof.WriteHeap(dir)
+			reportCapture(ctx, "Heap profile", path, err)
+		})
+		ctx.SetStatusMessage("Writing heap profile", parameter.StatusMessageDefaultTimeout, false)
+		ctx.SetLastCommand(":d heap")
+	default:
+		setCommandError(ctx, "Usage: :debug [prof [on|off]|cpu [s]|heap|trace [s]]")
+	}
 	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// handleProfCommand toggles or sets the profiler; starting it pins its cards
+func handleProfCommand(ctx *engine.GameContext, args []string) {
+	p := ctx.World.Resources.Prof
+	on, explicit, ok := parseToggleArg(args)
+	if !ok {
+		setCommandError(ctx, "Usage: :d prof [on|off]")
+		return
+	}
+	if !explicit {
+		on = !p.Profiling()
+	}
+	p.SetOn(on)
+	msg := "Profiler off"
+	if on {
+		for _, key := range [...]string{"prof", "prof.top"} {
+			if !slices.Contains(ctx.OverlayPins(), key) {
+				ctx.ToggleOverlayPin(key)
+			}
+		}
+		msg = "Profiler on: its cards are pinned to the HUD, :d shows every module"
+	}
+	vlog.Info("app", "msg", "profiler", "on", on)
+	ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, false)
+	ctx.SetLastCommand(":d prof " + toggleWord(on))
+}
+
+// handleCaptureCommand starts a timed CPU profile or execution trace
+func handleCaptureCommand(ctx *engine.GameContext, kind string, args []string) {
+	d := parameter.ProfCaptureDefault
+	if len(args) > 0 {
+		secs, err := strconv.Atoi(args[0])
+		if err != nil || secs < 1 || time.Duration(secs)*time.Second > parameter.ProfCaptureMax {
+			setCommandError(ctx, fmt.Sprintf("Usage: :d %s [seconds], at most %v", kind, parameter.ProfCaptureMax))
+			return
+		}
+		d = time.Duration(secs) * time.Second
+	}
+
+	start, label := prof.StartCPU, "CPU profile"
+	if kind == "trace" {
+		start, label = prof.StartTrace, "Trace"
+	}
+	path, err := start(diagnosticsDir(), d, func(path string, err error) { reportCapture(ctx, label, path, err) })
+	if err != nil {
+		setCommandError(ctx, label+" failed: "+err.Error())
+		return
+	}
+	ctx.SetStatusMessage(fmt.Sprintf("%s for %v to %s", label, d, path), d, true)
+	ctx.SetLastCommand(fmt.Sprintf(":d %s %d", kind, int(d.Seconds())))
+}
+
+// reportCapture announces a finished capture from whichever goroutine wrote it
+func reportCapture(ctx *engine.GameContext, label, path string, err error) {
+	if err != nil {
+		setCommandError(ctx, label+" failed: "+err.Error())
+		return
+	}
+	vlog.Info("app", "msg", "capture saved", "kind", label, "path", path)
+	ctx.SetStatusMessage(label+" saved to "+path, parameter.StatusMessageDefaultTimeout, true)
+}
+
+// diagnosticsDir is where captures land: the log directory, or the platform
+// default in a build without logging
+func diagnosticsDir() string {
+	if dir := vlog.Dir(); dir != "" {
+		return dir
+	}
+	return paths.DefaultLogDir()
 }
 
 // handleHelpCommand triggers help overlay event

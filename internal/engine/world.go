@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/prof"
 	"github.com/lixenwraith/vif/internal/vlog"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -218,6 +219,7 @@ func (w *World) Clear() {
 type systemEntry struct {
 	sys     System
 	profile SystemProfile
+	update  *prof.Timer // bound at Seal
 }
 
 // AddSystem registers a system under its declared profile and sorts by priority.
@@ -293,6 +295,8 @@ func (w *World) Systems() []System {
 
 // UpdateLocked runs all systems assuming the caller already holds updateMutex
 func (w *World) UpdateLocked() {
+	p := w.Resources.Prof
+	phase := p.BeginPhase(prof.PhaseSystems)
 	audit := domainAudit.Load()
 	for i := range w.systems {
 		e := &w.systems[i]
@@ -300,17 +304,25 @@ func (w *World) UpdateLocked() {
 		if audit {
 			w.setAuditScope(e.sys.Name(), e.profile.Domain)
 		}
+		span := p.Begin(e.update)
 		e.sys.Update()
+		span.End()
 	}
 	if audit {
 		w.clearAuditScope()
 	}
+	phase.End()
 }
 
-// Seal freezes the system set; called by Scheduler.Start before its tick and
-// event goroutines begin ranging it
+// Seal freezes the system set and binds each system's profiler timer; called by
+// Scheduler.Start before its tick and event goroutines begin ranging it
 func (w *World) Seal() {
-	w.sealed.Store(true)
+	if w.sealed.Swap(true) {
+		return
+	}
+	for i := range w.systems {
+		w.systems[i].update = w.Resources.Prof.Timer(prof.KindSystem, w.systems[i].sys.Name())
+	}
 }
 
 // AllowSystemDisable reports whether name may be disabled. A system declaring

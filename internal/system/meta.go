@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/component"
@@ -18,7 +19,7 @@ import (
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
-// MetaSystem handles meta-game commands like Reset, Debug, and Help
+// MetaSystem handles meta-game commands like Reset, Telemetry, Debug, and Help
 type MetaSystem struct {
 	ctx *engine.GameContext
 
@@ -106,6 +107,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventLevelSetup,
 		event.EventScreenResize,
 		event.EventMetaTelemetryRequest,
+		event.EventMetaDebugRequest,
 		event.EventMetaHelpRequest,
 		event.EventMetaAboutRequest,
 		event.EventGamePauseRequest,
@@ -179,6 +181,9 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventMetaTelemetryRequest:
 		s.handleTelemetryRequest()
+
+	case event.EventMetaDebugRequest:
+		s.handleDebugRequest()
 
 	case event.EventMetaHelpRequest:
 		s.handleHelpRequest()
@@ -552,6 +557,42 @@ func telemetryCard(v status.GroupView, pinned bool) core.OverlayCard {
 		Entries: entries,
 		Pinned:  pinned,
 	}
+}
+
+// handleDebugRequest shows the profiler report: its state, the phase and process
+// groups, and every timed module ranked by its share of the last window
+func (s *MetaSystem) handleDebugRequest() {
+	p := s.world.Resources.Prof
+	content := &core.OverlayContent{Title: "DEBUG", Layout: core.OverlayLayoutDoc}
+	section := func(key, title string, entries []core.CardEntry) {
+		content.Items = append(content.Items, core.OverlayCard{Key: key, Title: title, Entries: entries})
+	}
+
+	if !p.Profiling() {
+		section("profiler", "PROFILER", []core.CardEntry{
+			{Key: "off", Value: ":d prof on times every system, event handler and renderer and pins the prof cards to the HUD"},
+			{Key: "captures", Value: ":d cpu, :d heap and :d trace write pprof and trace files beside the logs"},
+		})
+		s.ctx.SetOverlayContent(content)
+		return
+	}
+
+	for _, g := range [...]struct{ key, title string }{{"prof", "PHASES"}, {"proc", "PROCESS"}} {
+		if v, ok := s.world.Resources.Status.GroupView(g.key); ok {
+			section(g.key, g.title, telemetryCard(v, false).Entries)
+		}
+	}
+	report := p.Report()
+	modules := make([]core.CardEntry, 0, len(report))
+	for _, m := range report {
+		modules = append(modules, core.CardEntry{Key: m.Label, Value: fmt.Sprintf(
+			"%.1f%%  avg %v  max %v  %.0f/s", m.Share, m.Avg.Round(time.Microsecond), m.Max.Round(time.Microsecond), m.PerSec)})
+	}
+	if len(modules) == 0 {
+		modules = append(modules, core.CardEntry{Key: "collecting", Value: "the first window closes after a second of play"})
+	}
+	section("modules", "MODULES BY SHARE OF THE LAST SECOND OF PLAY", modules)
+	s.ctx.SetOverlayContent(content)
 }
 
 // handleHelpRequest projects the help topics against the active key bindings

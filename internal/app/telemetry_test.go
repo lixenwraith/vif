@@ -71,8 +71,10 @@ func persistentTelemetryKey(kind, key string) bool {
 	// bytes, the install, the ticks a join had to catch up. It describes a transfer
 	// rather than a game, and :new does not undo a join, so it survives a reset for
 	// the same reason the corpus fingerprint and the recorder's own counters do.
+	// prof.* and proc.* measure the process, which a reset does not restart.
 	if strings.HasPrefix(key, "content.") || strings.HasPrefix(key, "rec.") ||
-		strings.HasPrefix(key, "stat.") || strings.HasPrefix(key, "snapshot.") {
+		strings.HasPrefix(key, "stat.") || strings.HasPrefix(key, "snapshot.") ||
+		strings.HasPrefix(key, "prof.") || strings.HasPrefix(key, "proc.") {
 		return true
 	}
 	// Who is authoring and under which generation is a property of the session

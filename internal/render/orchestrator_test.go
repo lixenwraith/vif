@@ -64,7 +64,7 @@ func TestScreenSpaceLayersStayUnclipped(t *testing.T) {
 	o := NewRenderOrchestrator(term, screenW, screenH)
 
 	ui := color.RGB{B: 200}
-	o.Register(&scribbler{c: ui}, PriorityOverlay)
+	o.Register(Registration{Renderer: &scribbler{c: ui}, Priority: PriorityOverlay})
 	o.RenderFrame(centredContext(), engine.NewWorld())
 
 	for y := range screenH {
@@ -87,7 +87,7 @@ func TestTheMarginIsPresentedAsOutOfPlay(t *testing.T) {
 	o := NewRenderOrchestrator(term, screenW, screenH)
 
 	drawn := color.RGB{R: 200}
-	o.Register(&scribbler{c: drawn}, PriorityBullet)
+	o.Register(Registration{Renderer: &scribbler{c: drawn}, Priority: PriorityBullet})
 
 	ctx := centredContext()
 	o.RenderFrame(ctx, engine.NewWorld())
@@ -123,7 +123,7 @@ func TestACroppedMapIsUnchanged(t *testing.T) {
 	o := NewRenderOrchestrator(term, screenW, screenH)
 
 	drawn := color.RGB{R: 200}
-	o.Register(&scribbler{c: drawn}, PriorityBullet)
+	o.Register(Registration{Renderer: &scribbler{c: drawn}, Priority: PriorityBullet})
 
 	ctx := croppedContext()
 	o.RenderFrame(ctx, engine.NewWorld())

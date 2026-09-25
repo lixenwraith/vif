@@ -4,12 +4,15 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
+	"github.com/lixenwraith/vif/internal/prof"
 )
 
 type rendererEntry struct {
+	name     string
 	renderer SystemRenderer
 	priority RenderPriority
-	index    int // registration order for stable sort
+	index    int         // registration order for stable sort
+	timer    *prof.Timer // bound the first frame the profiler runs
 }
 
 // RenderOrchestrator coordinates the render pipeline
@@ -18,6 +21,7 @@ type RenderOrchestrator struct {
 	buffer    *RenderBuffer
 	renderers []rendererEntry
 	regCount  int
+	prof      *prof.Profiler // profiler the timers are bound to
 }
 
 // NewRenderOrchestrator creates an orchestrator with the given terminal and dimensions
@@ -29,10 +33,12 @@ func NewRenderOrchestrator(term terminal.Terminal, width, height int) *RenderOrc
 	}
 }
 
-// Register adds a renderer at the specified priority. Maintains sorted order via insertion sort
-func (o *RenderOrchestrator) Register(r SystemRenderer, priority RenderPriority) {
+// Register adds a renderer at its priority. Maintains sorted order via insertion sort
+func (o *RenderOrchestrator) Register(reg Registration) {
+	priority := reg.Priority
 	entry := rendererEntry{
-		renderer: r,
+		name:     reg.Name,
+		renderer: reg.Renderer,
 		priority: priority,
 		index:    o.regCount,
 	}
@@ -63,6 +69,15 @@ func (o *RenderOrchestrator) Resize(width, height int) {
 
 // RenderFrame executes the render pipeline: clear, render all, flush, show
 func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World) {
+	p := world.Resources.Prof
+	if p.On() && o.prof != p {
+		o.prof = p
+		for i := range o.renderers {
+			o.renderers[i].timer = p.Timer(prof.KindRender, o.renderers[i].name)
+		}
+	}
+	defer p.BeginPhase(prof.PhaseFrame).End()
+
 	// Buffer is orchestrator-owned; no lock needed for clear
 	o.buffer.Clear()
 
@@ -73,7 +88,10 @@ func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World)
 	playfield := ctx.PlayfieldRect()
 	o.buffer.SetVoidRegion(ctx.GameAreaRect(), playfield, visual.RgbVoid)
 
+	wait := p.BeginPhase(prof.PhaseFrameWait)
 	world.Lock()
+	wait.End()
+	render := p.BeginPhase(prof.PhaseRender)
 	for _, entry := range o.renderers {
 		// Skip if renderer implements VisibilityToggle and is not visible
 		if vt, ok := entry.renderer.(VisibilityToggle); ok && !vt.IsVisible() {
@@ -84,11 +102,15 @@ func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World)
 		} else {
 			o.buffer.ClearClip()
 		}
+		span := p.Begin(entry.timer)
 		entry.renderer.Render(ctx, o.buffer)
+		span.End()
 	}
 	o.buffer.ClearClip()
+	render.End()
 	world.Unlock()
 
 	// Terminal I/O outside the world lock: stalled terminal write mustn't block evel loop
+	defer p.BeginPhase(prof.PhaseFlush).End()
 	o.buffer.FlushToTerminal(o.term)
 }

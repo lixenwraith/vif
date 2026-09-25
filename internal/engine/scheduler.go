@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/prof"
 	"github.com/lixenwraith/vif/internal/status"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
@@ -48,6 +49,9 @@ type Scheduler struct {
 
 	// tap observes every event before dispatch; harness-only, set before Start
 	tap func(event.GameEvent)
+
+	// handlerTimers attributes dispatch time to each handler; bound by Prepare
+	handlerTimers map[event.Handler]*prof.Timer
 
 	// Finite GameState Machine
 	fsm *fsm.Machine[*World]
@@ -497,8 +501,28 @@ func (s *Scheduler) Prepare() {
 	if s.world.Resources.Status.Frozen() {
 		return
 	}
+	s.bindHandlerTimers()
 	s.world.Seal() // no system registration once the goroutines are live
 	s.world.Resources.Status.Freeze()
+}
+
+// bindHandlerTimers gives every registered handler a profiler timer
+func (s *Scheduler) bindHandlerTimers() {
+	p := s.world.Resources.Prof
+	s.handlerTimers = make(map[event.Handler]*prof.Timer)
+	for t := range event.EventTypeCount {
+		handlers, _ := s.eventRouter.GetHandlers(event.EventType(t))
+		for _, h := range handlers {
+			if _, ok := s.handlerTimers[h]; ok {
+				continue
+			}
+			name := strings.TrimPrefix(fmt.Sprintf("%T", h), "*")
+			if n, ok := h.(interface{ Name() string }); ok {
+				name = n.Name()
+			}
+			s.handlerTimers[h] = p.Timer(prof.KindEvents, name)
+		}
+	}
 }
 
 // RunTicks advances the simulation by n ticks as fast as the caller's goroutine
@@ -586,6 +610,7 @@ func (s *Scheduler) schedulerLoop() {
 				continue // drain the allowance without sleeping
 			}
 			wasPaused = true
+			s.world.Resources.Prof.Hold()
 			// Game time is frozen, so no game duration converts; poll on wall time
 			sleepDuration = parameter.PausedPollInterval
 		} else {
@@ -824,6 +849,9 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 	if len(eventsList) == 0 {
 		return 0
 	}
+	p := s.world.Resources.Prof
+	timed := p.On()
+	defer p.BeginPhase(prof.PhaseDispatch).End()
 
 	// Gates hoisted out of the loop: one atomic load each per pass.
 	// Payloads are pooled and released by their handlers, so only the type
@@ -892,7 +920,13 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 		}
 
 		for _, h := range handlers {
+			var timer *prof.Timer
+			if timed {
+				timer = s.handlerTimers[h]
+			}
+			span := p.Begin(timer)
 			h.HandleEvent(ev)
+			span.End()
 		}
 		s.world.Resources.Event.Queue.RecordCrossingApplied(ev.CrossingSeq)
 
@@ -1171,7 +1205,12 @@ func (s *Scheduler) processTick() {
 		droppedDelta     uint64
 	)
 
+	p := s.world.Resources.Prof
+	wait := p.BeginPhase(prof.PhaseTickWait)
 	s.world.RunSafe(func() {
+		wait.End()
+		defer p.BeginPhase(prof.PhaseTick).End()
+
 		// Pointer reports since the last tick cross as one placement, settled as the
 		// input they are before the barrier opens the tick
 		if s.world.FlushPointerMove() {
@@ -1224,7 +1263,9 @@ func (s *Scheduler) processTick() {
 		s.dispatchAndProcessEvents("pre")
 
 		// 4. FSM Update: Advance state machine (may emit new events via Actions)
+		fsmSpan := p.BeginPhase(prof.PhaseFSM)
 		s.fsm.Update(s.world, s.tickInterval)
+		fsmSpan.End()
 
 		// 5. FSM telemetry (after update, before post-settling)
 		// Transitions are reported by the OnTransition tap, not sampled here:
@@ -1299,7 +1340,9 @@ func (s *Scheduler) processTick() {
 
 	// Status snapshot: world lock released and every stat above committed,
 	// so the reading belongs to exactly this tick. Lock-free by construction.
+	statusSpan := p.BeginPhase(prof.PhaseStatus)
 	s.world.Resources.Status.Tick(ticks)
+	statusSpan.End()
 
 	// Anchor cadence: a rotated journal file must be interpretable on its own
 	if event.AnchorDue(ticks) {
@@ -1315,4 +1358,6 @@ func (s *Scheduler) processTick() {
 			Slot:          slot,
 		})
 	}
+
+	p.Publish()
 }

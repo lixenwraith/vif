@@ -929,11 +929,11 @@ import (
 	"github.com/lixenwraith/vif/internal/render/renderer"
 )
 
-// BuildRenderers constructs every active renderer paired with its priority.
+// BuildRenderers constructs every active renderer paired with its name and priority.
 func BuildRenderers(ctx *engine.GameContext) []render.Registration {
 	return []render.Registration{
 {{- range .Renderers }}
-		{Renderer: renderer.{{ .Constructor }}(ctx), Priority: render.{{ .Priority }}},
+		{Name: "{{ .Name }}", Renderer: renderer.{{ .Constructor }}(ctx), Priority: render.{{ .Priority }}},
 {{- end }}
 	}
 }

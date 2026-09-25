@@ -127,6 +127,8 @@ const (
 	EventGameResetRequest
 	// EventMetaTelemetryRequest [local] signals a request to show the telemetry overlay
 	EventMetaTelemetryRequest
+	// EventMetaDebugRequest [local] signals a request to show the profiler report
+	EventMetaDebugRequest
 	// EventMetaHelpRequest [local] signals a request to show help overlay
 	EventMetaHelpRequest
 	// EventMetaAboutRequest [local] signals a request to show about overlay

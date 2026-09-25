@@ -180,6 +180,11 @@ var topics = []topicDef{
 	{
 		Key: "debug", Title: "DEBUG COMMANDS",
 		Entries: []entryDef{
+			{Keys: ":d  :debug", Desc: "Profiler report: phases, process, and every timed module ranked by its share of the last second of play"},
+			{Keys: ":d prof [on|off]", Desc: "Time every system, event handler, renderer and engine phase, and sample CPU, memory, GC and I/O; starting pins the prof cards to the HUD"},
+			{Keys: ":d cpu [s]", Desc: "CPU profile for s seconds, default 10, to vif-cpu-<time>.pprof; samples carry kind and module labels for pprof -tagfocus"},
+			{Keys: ":d heap", Desc: "Heap profile to vif-heap-<time>.pprof: live and allocated space by call site"},
+			{Keys: ":d trace [s]", Desc: "Execution trace for s seconds to vif-trace-<time>.out with a region per timed module, for go tool trace"},
 			{Keys: ":speed [rate]  :sp [rate]", Desc: "Solo simulation rate: 1/8 1/4 1/2 1 2 4 8, or + - reset; unavailable live"},
 			{Keys: ":step [n]  :st [n]", Desc: "Solo pause and advance n settled game ticks; unavailable live"},
 			{Keys: ":step [rate] fsm [region] [pause]", Desc: "Solo run until the next FSM transition, then restore; unavailable live"},
@@ -205,7 +210,7 @@ var topics = []topicDef{
 			{Keys: "+  -", Desc: "Faster and slower playback"},
 			{Keys: "h j k l  0", Desc: "Scroll a map larger than the terminal, stopping at its edges; 0 re-centres on the recorded view"},
 			{Actions: []string{"toggle_audio_cycle"}, Desc: "Cycle audio; a replay starts as -mute says"},
-			{Keys: ":", Desc: "Command line: help, about, telemetry, hud, content, flow, graph, log and quit"},
+			{Keys: ":", Desc: "Command line: help, about, telemetry, hud, debug, content, flow, graph, log and quit"},
 			{Keys: "q", Desc: "Quit the replay"},
 		},
 	},

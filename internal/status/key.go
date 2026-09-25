@@ -83,6 +83,11 @@ func splitKey(key string) (group, name, playerSlot string) {
 			return "event.settle", metric, ""
 		}
 
+	case "prof":
+		if metric, ok := strings.CutPrefix(name, "top."); ok {
+			return "prof.top", metric, ""
+		}
+
 	case "eye":
 		if metric, ok := strings.CutPrefix(name, "ga."); ok {
 			return "eye.ga", metric, ""
@@ -206,11 +211,14 @@ var combatMetricPartitions = [...]struct {
 }
 
 // activityGatedGroups names group prefixes whose cards are noise until something
-// happens: wide per-type partitions that stay zero in most sessions. Declare a
-// prefix here rather than teaching a consumer to special-case a group.
+// happens: wide per-type partitions that stay zero in most sessions, and the
+// profiler's groups, which read zero while it is off. Declare a prefix here
+// rather than teaching a consumer to special-case a group.
 var activityGatedGroups = [...]string{
 	"combat.absorbed.",
 	"combat.damage.",
+	"prof",
+	"proc",
 }
 
 // groupGate returns the visibility rule a group selects. A non-empty slot marks a

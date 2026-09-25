@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/prof"
 	"github.com/lixenwraith/vif/internal/status"
 	"github.com/lixenwraith/vif/internal/vlog"
 	"github.com/lixenwraith/vif/pkg/navigation"
@@ -194,6 +195,7 @@ func newGameContext(world *World, width, height int, clock Clock, corr *vlog.Cor
 	world.updateMutex.BindStatus(world.Resources.Status)
 	world.Positions.BindTelemetry(world.Resources.Status)
 	world.BindPredictionTelemetry(world.Resources.Status)
+	world.Resources.Prof = prof.New(world.Resources.Status)
 	world.Resources.NavigationDebug = &ctx.NavigationDebug
 
 	// 2. Context metrics; registered before Freeze, written by their owners

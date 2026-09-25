@@ -131,7 +131,7 @@ the streams separate:
 
 | Output | Default | Override |
 |---|---|---|
-| Session logs, snapshots, recorder files, runtime stderr capture | `$XDG_STATE_HOME/vif/log/` | `-l=DIR` |
+| Session logs, snapshots, recorder files, runtime stderr capture, profiles and traces | `$XDG_STATE_HOME/vif/log/` | `-l=DIR` |
 | Replay journals | `$XDG_STATE_HOME/vif/journal/` | `-j=DIR` |
 
 On platforms without an XDG state root, the platform user-cache directory is

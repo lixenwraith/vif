@@ -84,6 +84,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/paths` | Platform config-root and user-state discovery and categorized resource names; performs no resource I/O. |
 | `internal/resource` | Resolve the game config, keymap, corpus and audio overrides against the config-root precedence rule, and validate what those paths resolve to for `-check`. |
 | `internal/pattern` | Convert a dual-mode `.vifimg` asset into wall spawn cells. One file, one path, no drawing. |
+| `internal/prof` | Profiler: per-module wall time on the tick, event and render paths, process CPU/memory/GC/I/O sampling, and pprof CPU/heap and execution-trace captures. Publishes into the status registry; one atomic load per timed call while off. |
 | `internal/probe` | The supervised run's HTTP endpoint: `/health` and `/metrics`. Stdlib only and stateless — a snapshot function supplies the run's answer and a status registry supplies the metrics, so the run decides what its words mean and this decides only how to say them. |
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |

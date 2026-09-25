@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/prof"
 	"github.com/lixenwraith/vif/internal/status"
 	"github.com/lixenwraith/vif/pkg/genetic/registry"
 	"github.com/lixenwraith/vif/pkg/linkpace"
@@ -56,6 +57,7 @@ type Resource struct {
 
 	// Telemetry
 	Status *status.Registry
+	Prof   *prof.Profiler
 
 	// Bridged resources from services
 	Files   *FileResource

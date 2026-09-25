@@ -35,6 +35,8 @@ It is the contract, not a suggestion.
 
 - Implement what was asked. Do not add tables, indirection, telemetry, tests or
   abstraction that nothing asked for.
+  Exception: a task that explicitly invites obvious additions ("add any obvious
+  options") gets them, each named in the PR body; ask before any that is not obvious.
 - One mechanism per problem. Two mechanisms doing one job is a bug.
 - Delete before adding. If a change is net-positive lines for a fix, justify it.
 - Reverting an existing API to "improve" it is not a fix. Leave working code alone.

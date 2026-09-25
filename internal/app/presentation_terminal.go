@@ -53,7 +53,7 @@ func (a *App) initPresentation() {
 		a.orchestrator.SetConsole(render.ConsoleFor(cfg.ConsolePalette))
 	}
 	for _, reg := range manifest.BuildRenderers(a.ctx) {
-		a.orchestrator.Register(reg.Renderer, reg.Priority)
+		a.orchestrator.Register(reg)
 	}
 }
 
