@@ -3,12 +3,15 @@
 package system
 
 import (
+	"cmp"
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/pkg/audio"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -31,6 +34,13 @@ type MusicSystem struct {
 	manualTier bool
 	arranged   bool // first auto-arrangement applied; slots start silent otherwise
 
+	// What the sequencer sounds, for the debug HUD's music card; a slot's name is
+	// looked up only when its pattern changes
+	statGroup, statTier *status.AtomicString
+	statSlot            [audio.MusicSlots]*status.AtomicString
+	statBPM             *atomic.Int64
+	lastSlot            [audio.MusicSlots]audio.PatternID
+
 	enabled bool
 }
 
@@ -40,6 +50,12 @@ func NewMusicSystem(world *engine.World) engine.System {
 	if world.Resources.Audio != nil {
 		s.player = world.Resources.Audio.Engine
 	}
+	reg := world.Resources.Status
+	s.statGroup, s.statTier = reg.Strings.Get("music.group"), reg.Strings.Get("music.tier")
+	for slot, key := range [...]string{"music.rhythm", "music.melody", "music.fill"} {
+		s.statSlot[slot] = reg.Strings.Get(key)
+	}
+	s.statBPM = reg.Ints.Get("music.bpm")
 	s.Init()
 	// A run that begins muted starts on its first unmute; one that begins audible,
 	// as -mute=false does, has no transition to start on.
@@ -58,6 +74,13 @@ func (s *MusicSystem) Init() {
 	s.manualTier = false
 	s.arranged = false
 	s.enabled = true
+	s.statGroup.Store("")
+	s.statTier.Store("")
+	s.statBPM.Store(0)
+	for slot, stat := range s.statSlot {
+		stat.Store("")
+		s.lastSlot[slot] = -1 // next publish names every slot
+	}
 	if s.player != nil {
 		s.player.ResetMusic()
 		// Pool draws, variation and fills follow the run's seed: a run opens on its
@@ -245,11 +268,34 @@ func (s *MusicSystem) applyMusicAudible(audible bool) {
 
 // Update implements System interface
 func (s *MusicSystem) Update() {
+	if s.player == nil {
+		return
+	}
+	s.publish()
 	// Skip the slew while muted — the sequencer is frozen, commands
-	if !s.enabled || s.player == nil || s.player.IsMusicMuted() || !s.player.IsMusicPlaying() {
+	if !s.enabled || s.player.IsMusicMuted() || !s.player.IsMusicPlaying() {
 		return
 	}
 	s.syncToAPM()
+}
+
+// publish reports the group, tier, requested tempo and each slot's pattern
+func (s *MusicSystem) publish() {
+	s.statGroup.StoreIfChanged(cmp.Or(s.player.MusicGroup(), "-"))
+	s.statTier.StoreIfChanged(s.tier.String())
+	s.statBPM.Store(int64(s.lastBPM))
+	for slot, stat := range s.statSlot {
+		id := s.player.SlotPattern(slot)
+		if id == s.lastSlot[slot] {
+			continue
+		}
+		s.lastSlot[slot] = id
+		name := "-"
+		if p := audio.GetPattern(id); p != nil && p.Name != "" {
+			name = p.Name
+		}
+		stat.Store(name)
+	}
 }
 
 // applyArrangement draws the tier from the current group
