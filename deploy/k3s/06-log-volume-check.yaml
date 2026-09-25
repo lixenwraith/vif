@@ -11,9 +11,9 @@ metadata:
   name: vif-log-volume-check
   namespace: vif
   labels:
-    app.kubernetes.io/name: vi-fighter
+    app.kubernetes.io/name: vif
     app.kubernetes.io/component: storage-check
-    app.kubernetes.io/part-of: vi-fighter-fleet
+    app.kubernetes.io/part-of: vif-fleet
 spec:
   restartPolicy: Never
   activeDeadlineSeconds: 30

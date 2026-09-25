@@ -28,9 +28,9 @@ metadata:
   name: vif-session-${SESSION_ID}
   namespace: vif
   labels: &labels
-    app.kubernetes.io/name: vi-fighter
+    app.kubernetes.io/name: vif
     app.kubernetes.io/component: session
-    app.kubernetes.io/part-of: vi-fighter-fleet
+    app.kubernetes.io/part-of: vif-fleet
     vif.lixenwraith.dev/session: "${SESSION_ID}"
 spec:
   # A session is not retryable. Its world is gone with the process, and a second
@@ -277,9 +277,9 @@ metadata:
   # Repeated rather than aliased: a YAML anchor does not cross a document
   # boundary, and an alias that resolves to nothing is a Service with no labels.
   labels:
-    app.kubernetes.io/name: vi-fighter
+    app.kubernetes.io/name: vif
     app.kubernetes.io/component: session
-    app.kubernetes.io/part-of: vi-fighter-fleet
+    app.kubernetes.io/part-of: vif-fleet
     vif.lixenwraith.dev/session: "${SESSION_ID}"
   # Set by the allocator to the Job's UID, so deleting the Job removes this with
   # it. A Service that outlived its session would hold a node port against the

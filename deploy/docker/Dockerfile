@@ -10,7 +10,7 @@
 #
 # Build from the repository root, which is the context this expects:
 #
-#   docker build -f deploy/docker/Dockerfile -t vi-fighter:dev .
+#   docker build -f deploy/docker/Dockerfile -t vif:dev .
 #   make image                      # the same, with the revision label filled in
 #
 # The result is one layer containing the dedicated build. See
@@ -63,13 +63,13 @@ ARG VERSION=dev
 ARG REVISION=unknown
 ARG SOURCE=https://github.com/lixenwraith/vif
 
-LABEL org.opencontainers.image.title="vi-fighter" \
+LABEL org.opencontainers.image.title="vif" \
       org.opencontainers.image.description="vif dedicated session server" \
       org.opencontainers.image.source="${SOURCE}" \
       org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.licenses="BSD-3-Clause" \
-      dev.lixenwraith.vi-fighter.build-profile="headless"
+      dev.lixenwraith.vif.build-profile="headless"
 
 COPY --from=build /out/vif /vif
 

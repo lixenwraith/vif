@@ -9,7 +9,7 @@ import (
 
 func TestParseConfigUsesFleetDefaults(t *testing.T) {
 	cfg, err := parseConfig([]string{
-		"-image", "docker.io/library/vi-fighter:test",
+		"-image", "docker.io/library/vif:test",
 		"-join-host", "play.example.com",
 		"-page-base", "https://play.example.com/projects/vi-fighter/session/",
 		"-log-stream-url", "http://127.0.0.1:8081/stream",
@@ -36,9 +36,9 @@ func TestParseConfigUsesFleetDefaults(t *testing.T) {
 func TestParseConfigRequiresFixedSiteValues(t *testing.T) {
 	for _, args := range [][]string{
 		{"-join-host", "play.example.com", "-page-base", "https://play.example.com/session/", "-log-stream-url", "http://127.0.0.1:8081/stream"},
-		{"-image", "vi-fighter:test", "-page-base", "https://play.example.com/session/", "-log-stream-url", "http://127.0.0.1:8081/stream"},
-		{"-image", "vi-fighter:test", "-join-host", "play.example.com", "-log-stream-url", "http://127.0.0.1:8081/stream"},
-		{"-image", "vi-fighter:test", "-join-host", "play.example.com", "-page-base", "https://play.example.com/session/"},
+		{"-image", "vif:test", "-page-base", "https://play.example.com/session/", "-log-stream-url", "http://127.0.0.1:8081/stream"},
+		{"-image", "vif:test", "-join-host", "play.example.com", "-log-stream-url", "http://127.0.0.1:8081/stream"},
+		{"-image", "vif:test", "-join-host", "play.example.com", "-page-base", "https://play.example.com/session/"},
 	} {
 		if _, err := parseConfig(args, io.Discard); err == nil {
 			t.Fatalf("parseConfig(%q) succeeded", args)
@@ -48,7 +48,7 @@ func TestParseConfigRequiresFixedSiteValues(t *testing.T) {
 
 func TestParseConfigRejectsUnsafeLogStreamURL(t *testing.T) {
 	base := []string{
-		"-image", "docker.io/library/vi-fighter:test",
+		"-image", "docker.io/library/vif:test",
 		"-join-host", "play.example.com",
 		"-page-base", "https://play.example.com/session/",
 	}
@@ -73,7 +73,7 @@ func TestParseConfigRejectsUnsafeLogStreamURL(t *testing.T) {
 // hand an anonymous caller the fleet's log rate or a sixteen-player world.
 func TestRequestBoundsFailClosed(t *testing.T) {
 	base := []string{
-		"-image", "docker.io/library/vi-fighter:test",
+		"-image", "docker.io/library/vif:test",
 		"-join-host", "play.example.com",
 		"-page-base", "https://play.example.com/session/",
 		"-log-stream-url", "http://127.0.0.1:8081/stream",
@@ -109,7 +109,7 @@ func TestRequestBoundsFailClosed(t *testing.T) {
 // must not fail to parse; a required one must still say which it is.
 func TestAnUnsetUnitVariableKeepsTheDefault(t *testing.T) {
 	required := []string{
-		"-image", "docker.io/library/vi-fighter:test",
+		"-image", "docker.io/library/vif:test",
 		"-join-host", "play.example.com",
 		"-page-base", "https://play.example.com/projects/vi-fighter/session/",
 		"-log-stream-url", "http://127.0.0.1:8081/stream",
@@ -148,7 +148,7 @@ func TestAnUnsetUnitVariableKeepsTheDefault(t *testing.T) {
 
 func TestTheBrowserRouteAndItsBridgeAreOneSwitch(t *testing.T) {
 	base := []string{
-		"-image", "vi-fighter:test",
+		"-image", "vif:test",
 		"-join-host", "play.example.com",
 		"-page-base", "https://play.example.com/session/",
 		"-log-stream-url", "http://127.0.0.1:8081/stream",

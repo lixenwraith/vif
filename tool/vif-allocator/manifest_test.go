@@ -9,7 +9,7 @@ import (
 func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 	object := buildJob("abc123", workloadConfig{
 		Namespace: "vif",
-		Image:     "docker.io/library/vi-fighter:revision",
+		Image:     "docker.io/library/vif:revision",
 		Players:   4,
 		MapSize:   "120x40",
 		Scenario:  "main",
@@ -24,7 +24,7 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 	text := string(encoded)
 	for _, want := range []string{
 		`"name":"vif-session-abc123"`,
-		`"image":"docker.io/library/vi-fighter:revision"`,
+		`"image":"docker.io/library/vif:revision"`,
 		`"backoffLimit":0`,
 		`"ttlSecondsAfterFinished":120`,
 		`"-l=/var/log/vif-fleet","-log-session-id=abc123"`,
@@ -61,7 +61,7 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 // a fleet with no browser route must render the pod it rendered before there was
 // one.
 func TestTheBridgeIsARestartableSidecarAndOnlyWhenConfigured(t *testing.T) {
-	base := workloadConfig{Namespace: "vif", Image: "vi-fighter:revision", Players: 4,
+	base := workloadConfig{Namespace: "vif", Image: "vif:revision", Players: 4,
 		MapSize: "120x40", Scenario: "main", FirstJoin: "90s", Empty: "90s", Drain: "20s"}
 	plain, err := json.Marshal(buildJob("abc123", base))
 	if err != nil {

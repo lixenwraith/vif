@@ -3,9 +3,9 @@ package main
 import "strings"
 
 const (
-	applicationName = "vi-fighter"
+	applicationName = "vif"
 	componentName   = "session"
-	partOfName      = "vi-fighter-fleet"
+	partOfName      = "vif-fleet"
 	sessionPrefix   = "vif-session-"
 
 	labelApplication = "app.kubernetes.io/name"

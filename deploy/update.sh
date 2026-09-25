@@ -106,7 +106,7 @@ check_image() {
 	sudo_copy /etc/vif-allocator/allocator.env "$work/allocator.env"
 	installed=$(sed -n 's/^VIF_ALLOCATOR_IMAGE=//p' "$work/allocator.env" | tail -n 1)
 	tag=${installed##*:}
-	incoming=vi-fighter:$(git_ rev-parse --short=8 HEAD)
+	incoming=vif:$(git_ rev-parse --short=8 HEAD)
 	if [ -n "$tag" ] && git_ rev-parse -q --verify "$tag^{commit}" >/dev/null; then
 		if git_ diff --quiet "$tag" HEAD -- cmd internal pkg go.mod go.sum deploy/docker/Dockerfile &&
 			sudo k3s crictl inspecti "$installed" >/dev/null 2>&1; then

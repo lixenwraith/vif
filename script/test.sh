@@ -12,7 +12,7 @@ BIN=${BIN:-./bin/vif}
 HOST=${HOST:-127.0.0.1}
 PORT=${PORT:-7777}
 PROBE_PORT=${PROBE_PORT:-7778}
-IMAGE=${IMAGE:-vi-fighter:dev}
+IMAGE=${IMAGE:-vif:dev}
 
 fail() { printf 'FAIL %s\n' "$*" >&2; exit 1; }
 pass() { printf 'PASS %s\n' "$*"; }
@@ -551,7 +551,7 @@ fleet)
 	# the claims rather than the whole document, which carries a session id.
 	command -v go >/dev/null 2>&1 || fail "go not found"
 	rendered=$(SCENARIO=td LOG_LEVEL=debug PLAYERS=4 \
-		./deploy/k3s/render-session.sh fleetcheck 31700 vi-fighter:dev 4 120x40)
+		./deploy/k3s/render-session.sh fleetcheck 31700 vif:dev 4 120x40)
 	for want in \
 		'"-config-dir"' '"-s"' '"td"' '"debug"' \
 		'claimName: vif-fleet-wad' 'subPath: scenario' 'subPath: image' \

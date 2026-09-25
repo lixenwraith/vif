@@ -193,7 +193,7 @@ func testAllocatorConfig(t *testing.T) allocatorConfig {
 	return allocatorConfig{
 		Workload: workloadConfig{
 			Namespace: "vif",
-			Image:     "docker.io/library/vi-fighter:test",
+			Image:     "docker.io/library/vif:test",
 			Players:   4,
 			MapSize:   "120x40",
 			LogLevel:  "info",

@@ -4,8 +4,8 @@ kind: StorageClass
 metadata:
   name: vif-node-log
   labels:
-    app.kubernetes.io/name: vi-fighter
-    app.kubernetes.io/part-of: vi-fighter-fleet
+    app.kubernetes.io/name: vif
+    app.kubernetes.io/part-of: vif-fleet
 provisioner: kubernetes.io/no-provisioner
 reclaimPolicy: Retain
 volumeBindingMode: WaitForFirstConsumer
@@ -16,8 +16,8 @@ kind: PersistentVolume
 metadata:
   name: vif-fleet-logs
   labels:
-    app.kubernetes.io/name: vi-fighter
-    app.kubernetes.io/part-of: vi-fighter-fleet
+    app.kubernetes.io/name: vif
+    app.kubernetes.io/part-of: vif-fleet
 spec:
   capacity:
     storage: 256Mi
@@ -41,8 +41,8 @@ metadata:
   name: vif-fleet-logs
   namespace: vif
   labels:
-    app.kubernetes.io/name: vi-fighter
-    app.kubernetes.io/part-of: vi-fighter-fleet
+    app.kubernetes.io/name: vif
+    app.kubernetes.io/part-of: vif-fleet
 spec:
   accessModes: [ReadWriteOnce]
   volumeMode: Filesystem

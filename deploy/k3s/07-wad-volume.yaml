@@ -16,8 +16,8 @@ kind: StorageClass
 metadata:
   name: vif-node-wad
   labels:
-    app.kubernetes.io/name: vi-fighter
-    app.kubernetes.io/part-of: vi-fighter-fleet
+    app.kubernetes.io/name: vif
+    app.kubernetes.io/part-of: vif-fleet
 provisioner: kubernetes.io/no-provisioner
 reclaimPolicy: Retain
 volumeBindingMode: WaitForFirstConsumer
@@ -28,8 +28,8 @@ kind: PersistentVolume
 metadata:
   name: vif-fleet-wad
   labels:
-    app.kubernetes.io/name: vi-fighter
-    app.kubernetes.io/part-of: vi-fighter-fleet
+    app.kubernetes.io/name: vif
+    app.kubernetes.io/part-of: vif-fleet
 spec:
   # The shipped tree is about 200 KiB. 8 Mi is three orders of magnitude of
   # headroom for authored scenarios and the images they name, and small enough
@@ -56,8 +56,8 @@ metadata:
   name: vif-fleet-wad
   namespace: vif
   labels:
-    app.kubernetes.io/name: vi-fighter
-    app.kubernetes.io/part-of: vi-fighter-fleet
+    app.kubernetes.io/name: vif
+    app.kubernetes.io/part-of: vif-fleet
 spec:
   accessModes: [ReadOnlyMany]
   volumeMode: Filesystem

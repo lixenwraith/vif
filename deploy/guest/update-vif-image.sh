@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build the dedicated-session image once, import it into K3s containerd, point
-# vif-allocator at it, and remove older vi-fighter tags. This is the manual
+# vif-allocator at it, and remove older vif tags. This is the manual
 # release path until CI delivers the same artifact automatically.
 #
 # Run as the ordinary repository user (a member of the docker group):
@@ -36,8 +36,8 @@ case "$tag" in
 	''|*[!A-Za-z0-9_.-]*) echo "$0: invalid image tag: $tag" >&2; exit 2 ;;
 esac
 
-image_name=${VIF_IMAGE_NAME:-vi-fighter}
-runtime_repository=${VIF_RUNTIME_REPOSITORY:-docker.io/library/vi-fighter}
+image_name=${VIF_IMAGE_NAME:-vif}
+runtime_repository=${VIF_RUNTIME_REPOSITORY:-docker.io/library/vif}
 local_image=$image_name:$tag
 runtime_image=$runtime_repository:$tag
 allocator_env=${VIF_ALLOCATOR_ENV:-/etc/vif-allocator/allocator.env}
@@ -101,7 +101,7 @@ docker build --network host \
 	-t "$local_image" .
 
 image_profile=$(docker image inspect \
-	--format '{{ index .Config.Labels "dev.lixenwraith.vi-fighter.build-profile" }}' \
+	--format '{{ index .Config.Labels "dev.lixenwraith.vif.build-profile" }}' \
 	"$local_image")
 if [ "$image_profile" != headless ]; then
 	echo "$0: refusing image with build profile '$image_profile' (expected headless)" >&2
@@ -130,16 +130,19 @@ fi
 
 # Remove named runtime references only after the new image is imported and the
 # allocator configuration is updated. Shared content still needed by the new
-# image remains in containerd's content store.
+# image remains in containerd's content store. vi-fighter is the name images had
+# before the rename; see doc/todo.md.
 old_runtime_images=$(sudo k3s ctr -n k8s.io images list -q | awk -v keep="$runtime_image" '
-	/^docker[.]io\/library\/vi-fighter:/ && $0 != keep { print }
+	/^docker[.]io\/library\/(vif|vi-fighter):/ && $0 != keep { print }
 ')
 for old_image in $old_runtime_images; do
 	echo "removing old K3s image $old_image"
 	sudo k3s crictl rmi "$old_image"
 done
 
-old_docker_images=$(docker image ls "$image_name" --format '{{.Repository}}:{{.Tag}}' | awk -v keep="$local_image" '$0 != keep && $0 !~ /:<none>$/')
+old_docker_images=$(for repository in "$image_name" vi-fighter; do
+	docker image ls "$repository" --format '{{.Repository}}:{{.Tag}}'
+done | awk -v keep="$local_image" '$0 != keep && $0 !~ /:<none>$/')
 for old_image in $old_docker_images; do
 	echo "removing old Docker image $old_image"
 	docker image rm "$old_image"

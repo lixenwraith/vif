@@ -249,7 +249,7 @@ and writes a record through the log claim:
 
 ```sh
 VIF_TAG=$(git rev-parse --short=8 HEAD)
-sed -e "s|\${IMAGE}|docker.io/library/vi-fighter:$VIF_TAG|g" -e "s|\${SCENARIO}|main|g" \
+sed -e "s|\${IMAGE}|docker.io/library/vif:$VIF_TAG|g" -e "s|\${SCENARIO}|main|g" \
   deploy/k3s/06-log-volume-check.yaml | sudo kubectl apply -f -
 sudo kubectl -n vif wait --for=jsonpath='{.status.phase}'=Succeeded \
   pod/vif-log-volume-check --timeout=90s
@@ -297,7 +297,7 @@ sudo install -o root -g root -m 0755 bin/vif-allocator /usr/local/bin/vif-alloca
 sudo install -o root -g vif-allocator -m 0640 \
   /var/lib/rancher/k3s/server/tls/server-ca.crt /etc/vif-allocator/server-ca.crt
 { cat deploy/guest/vif-allocator.env
-  echo "VIF_ALLOCATOR_IMAGE=docker.io/library/vi-fighter:$(git rev-parse --short=8 HEAD)"; } |
+  echo "VIF_ALLOCATOR_IMAGE=docker.io/library/vif:$(git rev-parse --short=8 HEAD)"; } |
   sudo install -o root -g vif-allocator -m 0640 /dev/stdin /etc/vif-allocator/allocator.env
 sudo install -D -o root -g root -m 0755 deploy/guest/vif-allocator-refresh-token.sh \
   /usr/local/libexec/vif-allocator-refresh-token
@@ -392,7 +392,7 @@ the same template without the allocator.
 
 ```sh
 FIRST_JOIN=20m EMPTY_GRACE=20m ./deploy/k3s/session.sh create s1 31700 \
-  "docker.io/library/vi-fighter:$(git rev-parse --short=8 HEAD)"
+  "docker.io/library/vif:$(git rev-parse --short=8 HEAD)"
 ./deploy/k3s/session.sh delete s1
 ```
 

@@ -3,7 +3,8 @@
 set -eu
 
 namespace=vif
-fleet_label=app.kubernetes.io/part-of=vi-fighter-fleet
+# vi-fighter-fleet is the label sessions carried before the rename; see doc/todo.md.
+fleet_label='app.kubernetes.io/part-of in (vif-fleet,vi-fighter-fleet)'
 session_label=vif.lixenwraith.dev/session
 fleet_logs=${VIF_FLEET_LOGS:-/var/log/vif-fleet}
 allocator=${VIF_ALLOCATOR_URL:-http://127.0.0.1:9080}
@@ -273,7 +274,7 @@ case "$command" in
 			exit 1
 		fi
 		port=${3:-$(free_port)}
-		image=${4:-${IMAGE:-vi-fighter:dev}}
+		image=${4:-${IMAGE:-vif:dev}}
 		players=${5:-${PLAYERS:-4}}
 		map_size=${6:-${MAP_SIZE:-120x40}}
 

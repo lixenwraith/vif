@@ -10,8 +10,8 @@ kind: Namespace
 metadata:
   name: vif
   labels:
-    app.kubernetes.io/name: vi-fighter
-    app.kubernetes.io/part-of: vi-fighter-fleet
+    app.kubernetes.io/name: vif
+    app.kubernetes.io/part-of: vif-fleet
     # Enforced, not merely audited. A session pod needs no privilege of any kind:
     # no root, no capabilities, no host namespace, no writable root filesystem.
     # `restricted` is the level that says so, and enforcing it means a workload

@@ -34,7 +34,7 @@ usage() {
 
 SESSION_ID=$1
 GAME_NODEPORT=$2
-IMAGE=${3:-vi-fighter:dev}
+IMAGE=${3:-vif:dev}
 PLAYERS=${4:-4}
 MAP_SIZE=${5:-120x40}
 FIRST_JOIN=${FIRST_JOIN:-90s}
