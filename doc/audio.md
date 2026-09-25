@@ -193,9 +193,16 @@ patterns can transition immediately or quantized with A/B crossfade. A minimum
 256-sample fade prevents hard-cut voice tails. Track reveal supports staged
 intensity build-up. Slot 2 can substitute a seeded fill on the last bar of each
 eight-bar phrase and restore the previous pattern on the downbeat; explicit
-slot-2 editing disables that surprise behavior. On each phrase downbeat the
-sequencer also swaps one tier-drawn slot, melody and rhythm in turn, for another
-member of its pool; a slot placed explicitly is left alone.
+slot-2 editing disables that surprise behavior.
+
+Drawn music comes from groups. A pattern's `role` (rhythm, melody or fill),
+`groups` and `tiers` place it; `Start` builds each group's pool per tier and role
+from the registry, and a group shares one bass figure and kick feel, so what it
+draws follows what it drew before. The sequencer holds one group: a tier change
+draws both slots from it, moving only when it does not cover the tier; each
+phrase downbeat swaps one drawn slot, melody and rhythm in turn, within it; and
+after four phrases both slots move to another group behind the phrase's fill.
+Fills come from the same group and tier. A slot placed explicitly is left alone.
 
 Harmony holds root note, scale, and chord progression. Pattern degrees resolve
 through the current harmony at trigger time. With the same seed and identical
@@ -220,10 +227,9 @@ The target tempo is 100 BPM at calm activity, rises gradually through normal
 play, and reaches the engine's 180 BPM maximum at peak. The conductor slews
 rather than jumping (20 BPM/s upward, 16 BPM/s downward), ignores changes
 smaller than three BPM, and the sequencer applies each on the next beat, so
-tempo trails the five-second window by about a second. Each tier names a rhythm
-and a melody pool (`parameter.TierArrangements`), resolved by name at engine
-`Start`; a tier change draws one of each and uses quantization/crossfade/reveal
-policy, and a slot already sounding its draw keeps playing.
+tempo trails the five-second window by about a second. A tier change draws from
+the current group under quantization/crossfade/reveal policy, and a slot already
+sounding its draw keeps playing.
 
 Explicit music events can start/stop, set patterns, play a melody note, change
 intensity, tempo, seed, swing, or harmony. A manually held intensity can later
@@ -248,11 +254,11 @@ validates and reports both documents in full before startup.
 
 The shipped banks are `internal/asset/audio/sfx.toml`, `drums.toml` and
 `music.toml`, embedded and handed to the engine as `BaseSounds` and
-`BasePatterns`; `pkg/audio` ships no authored content, and only the generative
-`melody_gen` is registered by code. A pattern named `fill_*` joins the slot-2 fill
-bank, which is fixed at `Start`. Later same-name registrations replace a
-definition while preserving its runtime ID, which allows live tooling to update
-a playing registry.
+`BasePatterns`; `pkg/audio` ships no authored content. `melody_gen` reserves its
+fixed ID in code and takes its bass and placement from the bank; the generator
+rewrites its second track. Group pools are fixed at `Start`. Later same-name
+registrations replace a definition while preserving its runtime ID, which allows
+live tooling to update a playing registry.
 
 ## 10. Soundlab
 

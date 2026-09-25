@@ -97,6 +97,7 @@ const (
 
 	PhraseBars    = 8
 	FillEveryBars = 8
+	GroupPhrases  = 4 // phrases one group holds before the music moves to another
 )
 
 // --- Instrument voices (ADSR seconds; sustain is a level) ---

@@ -61,9 +61,11 @@ func newPatternDoc() *doc[*audio.PatternDef] {
 }
 
 // clonePatternDef is the deep copy PatternDef lacks. StepDef is a value
-// struct, so cloning the event slices is sufficient.
+// struct, so cloning the slices is sufficient.
 func clonePatternDef(d *audio.PatternDef) *audio.PatternDef {
 	c := *d
+	c.Groups = slices.Clone(d.Groups)
+	c.Tiers = slices.Clone(d.Tiers)
 	c.Track = slices.Clone(d.Track)
 	for i := range c.Track {
 		c.Track[i].Event = slices.Clone(d.Track[i].Event)

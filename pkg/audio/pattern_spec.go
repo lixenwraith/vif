@@ -3,6 +3,7 @@ package audio
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -20,12 +21,16 @@ type PatternSpecFile struct {
 	Pattern []*PatternDef `toml:"pattern"`
 }
 
-// PatternDef is one authored pattern.
+// PatternDef is one authored pattern. Role, Groups and Tiers place it in the drawn
+// arrangement; see Pattern.
 type PatternDef struct {
-	Name  string     `toml:"name"`
-	Desc  string     `toml:"desc,omitempty"`
-	Steps int        `toml:"steps"`
-	Track []TrackDef `toml:"track"`
+	Name   string     `toml:"name"`
+	Desc   string     `toml:"desc,omitempty"`
+	Steps  int        `toml:"steps"`
+	Role   string     `toml:"role,omitempty"`   // rhythm, melody or fill
+	Groups []string   `toml:"groups,omitempty"` // none joins every group
+	Tiers  []string   `toml:"tiers,omitempty"`  // intensity names it is drawn at
+	Track  []TrackDef `toml:"track"`
 }
 
 // TrackDef is one instrument lane.
@@ -57,7 +62,19 @@ func (d *PatternDef) Pattern() (*Pattern, error) {
 	if d.Name == "" {
 		return nil, errors.New("pattern: empty name")
 	}
-	p := &Pattern{Name: d.Name, Desc: d.Desc, Steps: d.Steps}
+	p := &Pattern{Name: d.Name, Desc: d.Desc, Steps: d.Steps, Groups: slices.Clone(d.Groups)}
+	role := slices.Index(roleNames[:], d.Role)
+	if role < 0 {
+		return nil, fmt.Errorf("pattern %q: unknown role %q", d.Name, d.Role)
+	}
+	p.Role = Role(role)
+	for _, n := range d.Tiers {
+		t := slices.IndexFunc(intensities(), func(i Intensity) bool { return i.String() == n })
+		if t < 0 {
+			return nil, fmt.Errorf("pattern %q: unknown tier %q", d.Name, n)
+		}
+		p.Tiers |= 1 << t
+	}
 	for i := range d.Track {
 		td := &d.Track[i]
 		instr, ok := InstrumentByName(td.Instr)
@@ -91,7 +108,12 @@ func (p *Pattern) Def() *PatternDef {
 	if p == nil {
 		return nil
 	}
-	d := &PatternDef{Name: p.Name, Desc: p.Desc, Steps: p.Steps}
+	d := &PatternDef{Name: p.Name, Desc: p.Desc, Steps: p.Steps, Role: p.Role.String(), Groups: slices.Clone(p.Groups)}
+	for _, t := range intensities() {
+		if p.Tiers&(1<<t) != 0 {
+			d.Tiers = append(d.Tiers, t.String())
+		}
+	}
 	for i := range p.Tracks {
 		tr := &p.Tracks[i]
 		td := TrackDef{
@@ -135,6 +157,14 @@ func ValidatePattern(p *Pattern) error {
 	if len(p.Tracks) > MaxPatternTracks {
 		return e("%d tracks, want at most %d", len(p.Tracks), MaxPatternTracks)
 	}
+	if p.Role >= roleCount || p.Tiers >= 1<<IntensityCount {
+		return e("role %d or tiers %#x out of range", p.Role, p.Tiers)
+	}
+	for _, g := range p.Groups {
+		if g == "" || len(g) > MaxPatternNameLen || strings.ContainsAny(g, "\x00\n\r\t") {
+			return e("invalid group %q", g)
+		}
+	}
 	for i := range p.Tracks {
 		tr := &p.Tracks[i]
 		if tr.Instr < 0 || tr.Instr >= InstrumentCount {
@@ -172,4 +202,13 @@ func ValidatePattern(p *Pattern) error {
 		}
 	}
 	return nil
+}
+
+// intensities lists the tiers in order, the names a pattern's tiers key uses
+func intensities() []Intensity {
+	out := make([]Intensity, IntensityCount)
+	for i := range out {
+		out[i] = Intensity(i)
+	}
+	return out
 }

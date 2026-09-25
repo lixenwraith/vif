@@ -1,9 +1,7 @@
 package audio
 
 import (
-	"fmt"
 	"slices"
-	"strings"
 	"sync"
 )
 
@@ -26,14 +24,42 @@ type Track struct {
 	Events      []Step
 }
 
-// Pattern is the unified rhythm/melody pattern
+// Pattern is the unified rhythm/melody pattern. Role, Groups and Tiers place it in
+// the drawn arrangement: in its role's slot, in every group listed (all when none),
+// at every tier set. A pattern without a role or a tier plays only when placed.
 type Pattern struct {
 	ID     PatternID
 	Name   string
 	Desc   string
 	Steps  int
 	Tracks []Track
+	Role   Role
+	Groups []string
+	Tiers  uint8 // bit per Intensity
 }
+
+// Role is the slot a drawn pattern plays in
+type Role uint8
+
+const (
+	RoleNone Role = iota
+	RoleRhythm
+	RoleMelody
+	RoleFill
+	roleCount
+)
+
+var roleNames = [roleCount]string{"", "rhythm", "melody", "fill"}
+
+func (r Role) String() string {
+	if r < roleCount {
+		return roleNames[r]
+	}
+	return "invalid"
+}
+
+// slot is the sequencer slot a role plays in: rhythm 0, melody 1, fill 2
+func (r Role) slot() int { return int(r) - 1 }
 
 // Clone deep-copies a pattern. Mandatory before editing anything obtained from
 // RegisteredPatterns or GetPattern: the mixer reads those structs directly from
@@ -44,6 +70,7 @@ func (p *Pattern) Clone() *Pattern {
 		return nil
 	}
 	c := *p
+	c.Groups = slices.Clone(p.Groups)
 	c.Tracks = slices.Clone(p.Tracks)
 	for i := range c.Tracks {
 		c.Tracks[i].Events = slices.Clone(p.Tracks[i].Events)
@@ -58,42 +85,59 @@ var (
 	patternMu   sync.RWMutex
 )
 
-// fillIDs is the slot-2 fill bank; written once by collectFills before the mixer
-// exists (happens-before via its goroutine creation), read-only afterward.
-var fillIDs []PatternID
-
-// FillPrefix marks a pattern for the slot-2 fill bank.
-const FillPrefix = "fill_"
-
-// collectFills fixes the fill bank at Start: every registered pattern named
-// FillPrefix*, in ID order. A fill defined after Start does not join it.
-func collectFills() {
-	fillIDs = fillIDs[:0]
-	for _, p := range RegisteredPatterns() {
-		if strings.HasPrefix(p.Name, FillPrefix) {
-			fillIDs = append(fillIDs, p.ID)
-		}
-	}
+// arrangement is every group's pools by tier and role, built from the registry at
+// Start and immutable afterward. A pattern changed or defined later keeps the place
+// it had then, or has none.
+type arrangement struct {
+	groups []string
+	pools  [][IntensityCount][roleCount - 1][]PatternID
 }
 
-// tierPools is each tier's rhythm and melody pool, resolved to IDs
-type tierPools [IntensityCount][2][]PatternID
-
-// resolveArrangements binds each tier's pattern names to IDs
-func resolveArrangements(tiers [IntensityCount]Arrangement) (tierPools, error) {
-	var out tierPools
-	for t, a := range tiers {
-		for slot, names := range [...][]string{a.Rhythm, a.Melody} {
-			for _, n := range names {
-				id := PatternIDByName(n)
-				if id == PatternSilence {
-					return out, fmt.Errorf("arrangement %s: unknown pattern %q", Intensity(t), n)
-				}
-				out[t][slot] = append(out[t][slot], id)
+// buildArrangement places every registered pattern. Groups keep the order their
+// first member was registered in; a bank naming none is one unnamed group.
+func buildArrangement() arrangement {
+	pats := RegisteredPatterns()
+	var a arrangement
+	for _, p := range pats {
+		for _, g := range p.Groups {
+			if !slices.Contains(a.groups, g) {
+				a.groups = append(a.groups, g)
 			}
 		}
 	}
-	return out, nil
+	if len(a.groups) == 0 {
+		a.groups = []string{""}
+	}
+	a.pools = make([][IntensityCount][roleCount - 1][]PatternID, len(a.groups))
+	for _, p := range pats {
+		if p.Role == RoleNone {
+			continue
+		}
+		for gi, g := range a.groups {
+			if len(p.Groups) > 0 && !slices.Contains(p.Groups, g) {
+				continue
+			}
+			for t := range IntensityCount {
+				if p.Tiers&(1<<t) != 0 {
+					a.pools[gi][t][p.Role.slot()] = append(a.pools[gi][t][p.Role.slot()], p.ID)
+				}
+			}
+		}
+	}
+	return a
+}
+
+// pool is one group's members for a tier and role; nil outside the arrangement
+func (a *arrangement) pool(group int, t Intensity, r Role) []PatternID {
+	if group < 0 || group >= len(a.pools) || t < 0 || t >= IntensityCount || r == RoleNone {
+		return nil
+	}
+	return a.pools[group][t][r.slot()]
+}
+
+// covers reports whether a group can draw both slots at a tier
+func (a *arrangement) covers(group int, t Intensity) bool {
+	return len(a.pool(group, t, RoleRhythm)) > 0 && len(a.pool(group, t, RoleMelody)) > 0
 }
 
 // RegisterPattern validates and adds or overwrites a pattern; ID
@@ -136,15 +180,13 @@ func RegisteredPatterns() []*Pattern {
 	return out
 }
 
-// resetPatternRegistry clears the registry. fillIDs is written outside the
-// mutex under collectFills' write-once contract: the caller guarantees no mixer.
+// resetPatternRegistry clears the registry; the caller guarantees no mixer.
 func resetPatternRegistry() {
 	patternMu.Lock()
 	patterns = make(map[PatternID]*Pattern)
 	patternName = make(map[string]PatternID)
 	nextDynamic = PatternID(PatternDynamic)
 	patternMu.Unlock()
-	fillIDs = nil
 }
 
 // GetPattern retrieves a pattern by ID

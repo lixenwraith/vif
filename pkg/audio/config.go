@@ -19,11 +19,9 @@ type AudioConfig struct {
 	// ships no specs or authored patterns of its own: the embedder owns them, and
 	// SoundTOML and PatternTOML override them by name.
 	BaseSounds   []*SoundDef
-	BasePatterns []*Pattern
-	SoundTOML    []byte // raw sounds.toml
-	PatternTOML  []byte // raw music.toml
-	// Arrangements names each tier's pools; an unknown name fails Start.
-	Arrangements [IntensityCount]Arrangement
+	BasePatterns []*Pattern // their roles, groups and tiers are the drawn arrangement
+	SoundTOML    []byte     // raw sounds.toml
+	PatternTOML  []byte     // raw music.toml
 }
 
 // DefaultAudioConfig returns a neutral configuration

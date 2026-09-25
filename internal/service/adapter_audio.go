@@ -51,7 +51,6 @@ func (s *AudioService) Init() error {
 	if config.BasePatterns, err = parameter.BuiltinPatterns(); err != nil {
 		return fmt.Errorf("built-in patterns: %w", err)
 	}
-	config.Arrangements = parameter.TierArrangements
 
 	if s.src.MusicPath != "" {
 		data, err := os.ReadFile(s.src.MusicPath)

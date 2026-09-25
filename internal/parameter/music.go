@@ -12,35 +12,10 @@ import (
 // Conductor policy: APM → tempo and arrangement tier. Everything here is game
 // interpretation of the music engine; the engine carries no APM concept.
 
-// BuiltinPatterns parses the shipped music bank; any pattern it drops is a broken build.
+// BuiltinPatterns parses the shipped music bank, whose roles, groups and tiers are the
+// drawn arrangement; any pattern it drops is a broken build.
 func BuiltinPatterns() ([]*audio.Pattern, error) {
 	return audio.LoadPatternsTOML(asset.DefaultMusic)
-}
-
-// TierArrangements names the pools each tier draws its rhythm and melody from,
-// all in the shipped bank or code-registered (melody_gen). beat_breakdown is left
-// out on purpose: it is a drop for a scripted moment, not a groove to hold.
-var TierArrangements = [audio.IntensityCount]audio.Arrangement{
-	audio.IntensityCalm: {
-		Rhythm: []string{"beat_basic", "beat_pulse", "beat_minimal", "beat_halftime"},
-		Melody: []string{"melody_bassline", "melody_drone", "melody_pulse_bass", "melody_pad_bells"},
-	},
-	audio.IntensityNormal: {
-		Rhythm: []string{"beat_driving", "beat_shuffle", "beat_offbeat", "beat_rolling", "beat_tribal"},
-		Melody: []string{"melody_bassline", "melody_octave_bass", "melody_call", "melody_pulse_bass"},
-	},
-	audio.IntensityElevated: {
-		Rhythm: []string{"beat_driving_plus", "beat_breaks", "beat_electro", "beat_stomp", "beat_syncopated"},
-		Melody: []string{"melody_bass_arp", "melody_bass_arp_down", "melody_arp_updown", "melody_stabs"},
-	},
-	audio.IntensityIntense: {
-		Rhythm: []string{"beat_intense", "beat_gallop", "beat_double", "beat_storm"},
-		Melody: []string{"melody_bass_arp", "melody_arp_fast", "melody_acid", "melody_full"},
-	},
-	audio.IntensityPeak: {
-		Rhythm: []string{"beat_intense", "beat_hammer", "beat_frenzy", "beat_storm"},
-		Melody: []string{"melody_gen", "melody_lead_pad", "melody_acid", "melody_arp_fast"},
-	},
 }
 
 // Tier thresholds (MusicAPM: 5s burst normalized to per-minute)

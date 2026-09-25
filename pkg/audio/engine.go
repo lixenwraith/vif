@@ -140,13 +140,13 @@ func (ae *AudioEngine) Start() error {
 	ae.cache.preloadAll(ae.config.EffectShapes)
 	kit := buildDrumKit(ae.cache)
 	ae.resolveVolumes()
+	registerMelodyGen()
 	for _, p := range ae.config.BasePatterns {
 		if RegisterPattern(p) == PatternSilence {
 			ae.running.Store(false)
 			return fmt.Errorf("base patterns: %w", ValidatePattern(p))
 		}
 	}
-	registerMelodyGen()
 	if len(ae.config.PatternTOML) > 0 {
 		pats, err := LoadPatternsTOML(ae.config.PatternTOML)
 		ae.specErr = errors.Join(ae.specErr, err)
@@ -154,12 +154,7 @@ func (ae *AudioEngine) Start() error {
 			RegisterPattern(p) // ID zero -> name-keyed override, dynamic otherwise
 		}
 	}
-	collectFills()
-	tiers, err := resolveArrangements(ae.config.Arrangements)
-	if err != nil {
-		ae.running.Store(false)
-		return err
-	}
+	arr := buildArrangement()
 
 	cands, err := DetectBackends(ae.config.ForceBackend)
 	if err != nil {
@@ -177,7 +172,7 @@ func (ae *AudioEngine) Start() error {
 	}
 
 	ae.mixer = NewMixer(w, ae.cache, kit)
-	ae.mixer.sequencer.tiers = tiers // before the mix goroutine exists
+	ae.mixer.sequencer.arr = arr // before the mix goroutine exists
 	ae.mixer.SetMusicMuted(ae.musicMuted.Load())
 	ae.mixer.SetPaused(ae.paused.Load())
 	for _, c := range ae.preStart {
@@ -667,6 +662,18 @@ func (ae *AudioEngine) Transport() (bar int64, step int, running bool) {
 	}
 	p := ae.mixer.sequencer.pos.Load()
 	return int64(p >> 8), int(p & 0xff), ae.mixer.musicRunning.Load()
+}
+
+// MusicGroup names the group the sequencer draws from; "" before any tier is applied
+func (ae *AudioEngine) MusicGroup() string {
+	if ae.mixer == nil {
+		return ""
+	}
+	seq := ae.mixer.sequencer
+	if g := int(seq.groupPub.Load()); g >= 0 && g < len(seq.arr.groups) {
+		return seq.arr.groups[g]
+	}
+	return ""
 }
 
 // SlotPattern reports what a slot is currently sounding, which differs from the

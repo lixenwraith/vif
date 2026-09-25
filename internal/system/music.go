@@ -252,7 +252,7 @@ func (s *MusicSystem) Update() {
 	s.syncToAPM()
 }
 
-// applyArrangement applies the tier's registered pattern set
+// applyArrangement draws the tier from the current group
 // reveal requests the sequencer's per-bar track build-up
 func (s *MusicSystem) applyArrangement(quantize bool, fade int, reveal bool) {
 	s.player.SetIntensity(s.tier, fade, quantize, reveal)

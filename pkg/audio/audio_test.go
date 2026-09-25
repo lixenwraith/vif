@@ -3,6 +3,7 @@ package audio
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -59,15 +60,15 @@ func testBank() []*SoundDef {
 // chord-following melody and a fill, each owning every field a round trip carries.
 func testPatterns() []*Pattern {
 	return []*Pattern{
-		{Name: "beat", Desc: "four on the floor", Steps: 16, Tracks: []Track{
+		{Name: "beat", Desc: "four on the floor", Steps: 16, Role: RoleRhythm, Groups: []string{"g"}, Tiers: 0b11, Tracks: []Track{
 			{Instr: InstrKick, Events: []Step{{Pos: 0, Vel: 1}, {Pos: 4, Vel: 1}, {Pos: 8, Vel: 1}, {Pos: 12, Vel: 1}}},
 			{Instr: InstrHihat, Humanize: 0.5, Events: []Step{{Pos: 2, Vel: 0.4, Prob: 0.8}}},
 		}},
-		{Name: "tune", Steps: 32, Tracks: []Track{
+		{Name: "tune", Steps: 32, Role: RoleMelody, Groups: []string{"g", "h"}, Tiers: 0b1, Tracks: []Track{
 			{Instr: InstrBass, FollowChord: true, Events: []Step{{Pos: 1, Vel: 0.8, Dur: 1}}},
 			{Instr: InstrPiano, FollowChord: true, Events: []Step{{Pos: 16, Vel: 0.5, Deg: 4, Oct: 2, Dur: 2}}},
 		}},
-		{Name: FillPrefix + "roll", Steps: 16, Tracks: []Track{
+		{Name: "roll", Steps: 16, Role: RoleFill, Tiers: 0b10000, Tracks: []Track{
 			{Instr: InstrSnare, Events: []Step{{Pos: 15, Vel: 0.9}}},
 		}},
 	}
@@ -168,7 +169,8 @@ func TestPatternRoundTrip(t *testing.T) {
 			t.Errorf("%s: missing after round trip", p.Name)
 			continue
 		}
-		if q.Steps != p.Steps || q.Desc != p.Desc || len(q.Tracks) != len(p.Tracks) {
+		if q.Steps != p.Steps || q.Desc != p.Desc || len(q.Tracks) != len(p.Tracks) ||
+			q.Role != p.Role || q.Tiers != p.Tiers || !slices.Equal(q.Groups, p.Groups) {
 			t.Errorf("%s: shape differs", p.Name)
 			continue
 		}
@@ -529,12 +531,10 @@ func TestHeldTierVariesDrawnSlots(t *testing.T) {
 	ResetRegistries()
 	var ids [4]PatternID
 	for i := range ids {
-		ids[i] = RegisterPattern(&Pattern{Name: string(rune('a' + i)), Steps: 16, Tracks: []Track{
-			{Instr: InstrBass, Events: []Step{{Pos: 0, Vel: 0.5, Dur: 1}}},
-		}})
+		ids[i] = registerDrawn(string(rune('a'+i)), Role(i/2+1), "g")
 	}
 	s := NewSequencer(MaxBPM, nil)
-	s.tiers[IntensityCalm] = [2][]PatternID{{ids[0], ids[1]}, {ids[2], ids[3]}}
+	s.arr = buildArrangement()
 	s.SetIntensity(IntensityCalm, 0, false, false)
 	s.SetPattern(1, ids[2], 0, false)
 	rhythm := s.slots[0].activeID()
@@ -547,5 +547,41 @@ func TestHeldTierVariesDrawnSlots(t *testing.T) {
 	}
 	if got := s.slots[1].activeID(); got != ids[2] {
 		t.Errorf("explicit melody moved to %d", got)
+	}
+}
+
+// registerDrawn registers a one-note calm pattern in one group for a role
+func registerDrawn(name string, r Role, group string) PatternID {
+	return RegisterPattern(&Pattern{Name: name, Steps: 16, Role: r, Groups: []string{group}, Tiers: 1 << IntensityCalm,
+		Tracks: []Track{{Instr: InstrBass, Events: []Step{{Pos: 0, Vel: 0.5, Dur: 1}}}}})
+}
+
+// TestDrawsHoldOneGroup is the cohesion rule: both drawn slots always come from one
+// group, and after GroupPhrases they move to another group together.
+func TestDrawsHoldOneGroup(t *testing.T) {
+	t.Cleanup(ResetRegistries)
+	ResetRegistries()
+	groupOf := map[PatternID]string{}
+	for _, g := range []string{"x", "y"} {
+		for i, r := range []Role{RoleRhythm, RoleRhythm, RoleMelody, RoleMelody} {
+			groupOf[registerDrawn(fmt.Sprint(g, i), r, g)] = g
+		}
+	}
+	s := NewSequencer(MaxBPM, nil)
+	s.arr = buildArrangement()
+	s.SetIntensity(IntensityCalm, 0, false, false)
+	first := groupOf[s.slots[0].activeID()]
+	s.Start()
+
+	bar := make([]float64, SamplesPerBar(MaxBPM))
+	for b := range GroupPhrases * PhraseBars {
+		s.Generate(bar)
+		if r, m := groupOf[s.slots[0].activeID()], groupOf[s.slots[1].activeID()]; r != m {
+			t.Fatalf("bar %d plays rhythm from %q under melody from %q", b, r, m)
+		}
+	}
+	s.Generate(bar[:1]) // the last downbeat falls on the next sample
+	if got := groupOf[s.slots[0].activeID()]; got == first || got != groupOf[s.slots[1].activeID()] {
+		t.Errorf("still in group %q after %d phrases", got, GroupPhrases)
 	}
 }

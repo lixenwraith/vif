@@ -23,8 +23,9 @@ type melodyGen struct {
 	lastDeg int
 }
 
-// registerMelodyGen installs the generative pattern at Start, after the embedder's
-// bank so an authored pattern of the same name cannot displace the generator's
+// registerMelodyGen reserves the generator's fixed ID at Start, before the embedder's
+// bank, which may override it by name with its own bass and placement; the lead
+// track the generator rewrites stays the second
 func registerMelodyGen() {
 	RegisterPattern(&Pattern{
 		ID: PatternMelodyGen, Name: "melody_gen", Steps: 16,

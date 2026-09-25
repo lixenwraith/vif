@@ -99,9 +99,13 @@ type Sequencer struct {
 	slotPat  [MusicSlots]atomic.Int32
 	autoFill bool
 
-	// tier pools, set at engine Start, drawn from by SetIntensity
-	tiers tierPools
-	tier  Intensity
+	// The drawn arrangement, set at engine Start; the group the tier draws from and the
+	// phrases it has held, with its index published for telemetry
+	arr          arrangement
+	group        int
+	groupPhrases int
+	groupPub     atomic.Int32
+	tier         Intensity
 
 	running bool
 }
@@ -119,6 +123,7 @@ func NewSequencer(bpm int, kit *drumKit) *Sequencer {
 		s.slots[i].cur = NewPatternPlayer(kit)
 		s.slots[i].nxt = NewPatternPlayer(kit)
 	}
+	s.setGroup(-1)
 	s.SetBPM(bpm, false)
 	return s
 }
@@ -292,8 +297,9 @@ func (s *Sequencer) updateReveal() {
 
 // updateFill runs the slot-2 auto-fill: fill bar on the last bar of each phrase,
 // previous pattern restored on the downbeat; skipped while slot 2 is user-driven
+// The fill comes from the group and tier drawing, or the first group before any has.
 func (s *Sequencer) updateFill() {
-	if !s.autoFill || len(fillIDs) == 0 {
+	if !s.autoFill {
 		return
 	}
 	ss := &s.slots[2]
@@ -302,10 +308,11 @@ func (s *Sequencer) updateFill() {
 	}
 	switch s.barCount % FillEveryBars {
 	case FillEveryBars - 1:
-		if !ss.inFill {
+		fills := s.arr.pool(max(s.group, 0), s.tier, RoleFill)
+		if !ss.inFill && len(fills) > 0 {
 			ss.fillSavedID = ss.activeID()
 			ss.inFill = true
-			s.startTransition(2, fillIDs[s.rng.IntN(len(fillIDs))], MinCrossfadeSamples)
+			s.startTransition(2, fills[s.rng.IntN(len(fills))], MinCrossfadeSamples)
 		}
 	case 0:
 		if ss.inFill {
@@ -315,16 +322,28 @@ func (s *Sequencer) updateFill() {
 	}
 }
 
-// updateVariation swaps one drawn slot for another member of its tier's pool on
-// each phrase downbeat, alternating melody and rhythm, so a held tier keeps moving.
-// A slot mid-transition or mid-reveal is left to finish.
+// updateVariation moves a held tier on at each phrase downbeat. After GroupPhrases
+// in one group, both drawn slots move together to another group covering the tier,
+// behind the fill that closed the phrase; otherwise one drawn slot, melody and rhythm
+// in turn, swaps to another member of its pool, leaving one mid-transition alone.
 func (s *Sequencer) updateVariation() {
-	if s.barCount%PhraseBars != 0 {
+	if s.barCount%PhraseBars != 0 || s.group < 0 {
 		return
+	}
+	if s.groupPhrases++; s.groupPhrases >= GroupPhrases {
+		if g := s.otherGroup(s.tier); g >= 0 {
+			s.setGroup(g)
+			for slot := range 2 {
+				if s.slots[slot].drawn {
+					s.setPattern(slot, s.draw(s.arr.pool(g, s.tier, Role(slot+1))), MinCrossfadeSamples, false, false)
+				}
+			}
+			return
+		}
 	}
 	slot := int(s.barCount/PhraseBars) % 2
 	ss := &s.slots[slot]
-	pool := s.tiers[s.tier][slot]
+	pool := s.arr.pool(s.group, s.tier, Role(slot+1))
 	if !ss.drawn || len(pool) < 2 || ss.pending != nil || ss.fading || ss.revealN > 0 {
 		return
 	}
@@ -334,6 +353,34 @@ func (s *Sequencer) updateVariation() {
 		i = len(pool) - 1
 	}
 	s.startTransition(slot, pool[i], MinCrossfadeSamples)
+}
+
+// otherGroup draws a group other than the current one that covers the tier; -1 if none
+func (s *Sequencer) otherGroup(t Intensity) int {
+	n := 0
+	for g := range s.arr.groups {
+		if g != s.group && s.arr.covers(g, t) {
+			n++
+		}
+	}
+	if n == 0 {
+		return -1
+	}
+	k := s.rng.IntN(n)
+	for g := range s.arr.groups {
+		if g != s.group && s.arr.covers(g, t) {
+			if k == 0 {
+				return g
+			}
+			k--
+		}
+	}
+	return -1
+}
+
+func (s *Sequencer) setGroup(g int) {
+	s.group, s.groupPhrases = g, 0
+	s.groupPub.Store(int32(g))
 }
 
 // updateMelodyGen regenerates the generative lead once per bar while active
@@ -431,23 +478,31 @@ func (s *Sequencer) Reset() {
 		ss.inFill = false
 		ss.drawn = false
 	}
+	s.setGroup(-1)
 	s.publish()
 }
 
-// SetIntensity draws the tier's rhythm and melody from its pools. A slot already
-// sounding its draw keeps playing, rather than restarting under a crossfade and
-// a reveal that would strip it back to one track.
+// SetIntensity draws the tier's rhythm and melody from the current group's pools,
+// moving to another group only when this one does not cover the tier. A slot already
+// sounding its draw keeps playing, rather than restarting under a crossfade and a
+// reveal that would strip it back to one track.
 func (s *Sequencer) SetIntensity(t Intensity, crossfadeSamples int, quantize, reveal bool) {
 	if t < 0 || t >= IntensityCount {
 		return
 	}
 	s.tier = t
-	for slot, pool := range s.tiers[t] {
-		s.slots[slot].drawn = true
-		if id := s.draw(pool); id != s.slots[slot].activeID() {
+	if !s.arr.covers(s.group, t) {
+		if g := s.otherGroup(t); g >= 0 {
+			s.setGroup(g)
+		}
+	}
+	for slot := range 2 {
+		ss := &s.slots[slot]
+		ss.drawn = true
+		if id := s.draw(s.arr.pool(s.group, t, Role(slot+1))); id != ss.activeID() {
 			s.setPattern(slot, id, crossfadeSamples, quantize, reveal)
 		} else {
-			s.slots[slot].pending = nil
+			ss.pending = nil
 		}
 	}
 }

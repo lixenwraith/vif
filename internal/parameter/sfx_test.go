@@ -65,24 +65,34 @@ func TestSoundTableNamesAreBuiltin(t *testing.T) {
 	}
 }
 
-// A tier naming a pattern the shipped bank lacks fails AudioEngine.Start, which
-// aborts the game; melody_gen is the one pattern code registers instead.
-func TestTierPatternsAreBuiltin(t *testing.T) {
+// A group draws both slots at every tier, with a second member each to vary to, so a
+// tier change or a group change never leaves a slot silent or stuck on one pattern.
+func TestShippedGroupsCoverEveryTier(t *testing.T) {
 	pats, err := BuiltinPatterns()
 	if err != nil {
 		t.Fatalf("builtin patterns: %v", err)
 	}
-	known := map[string]bool{audio.PatternMelodyGen.String(): true}
+	groups := map[string]bool{}
 	for _, p := range pats {
-		known[p.Name] = true
-	}
-	for tier, a := range TierArrangements {
-		if len(a.Rhythm) == 0 || len(a.Melody) == 0 {
-			t.Errorf("tier %s has an empty pool", audio.Intensity(tier))
+		for _, g := range p.Groups {
+			groups[g] = true
 		}
-		for _, n := range slices.Concat(a.Rhythm, a.Melody) {
-			if !known[n] {
-				t.Errorf("tier %s names %q, which the shipped bank lacks", audio.Intensity(tier), n)
+	}
+	if len(groups) < 2 {
+		t.Fatalf("shipped bank names %d groups, want several to move between", len(groups))
+	}
+	for g := range groups {
+		for tier := range audio.IntensityCount {
+			var n [2]int
+			for _, p := range pats {
+				in := len(p.Groups) == 0 || slices.Contains(p.Groups, g)
+				if in && p.Tiers&(1<<tier) != 0 && (p.Role == audio.RoleRhythm || p.Role == audio.RoleMelody) {
+					n[p.Role-audio.RoleRhythm]++
+				}
+			}
+			if n[0] < 2 || n[1] < 2 {
+				t.Errorf("group %s at %s draws from %d rhythms and %d melodies, want two of each",
+					g, tier, n[0], n[1])
 			}
 		}
 	}
