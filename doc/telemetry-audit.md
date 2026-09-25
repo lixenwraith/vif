@@ -306,7 +306,7 @@ the effect's current name; death API unification removed the two obsolete
 | `network.barrier_late` (int) | Artifacts admitted after their scheduled apply tick. Under an authority this is an ordering decision rather than a divergence — the host applies what reaches it in the order it reaches it — but it is still what says a participant's link is not keeping the playout lead. |
 | `network.barrier_peer_applied` (bool) | Whether the most recent boundary admitted a peer artifact. |
 | `network.barrier_peer_artifacts` (int) | Peer artifacts admitted at the most recent boundary. |
-| `network.barrier_peer_lag_ticks` (int) | Closed-epoch lag beyond this instance's own lead. |
+| `network.barrier_peer_lag_ticks` (int) | Closed-epoch lag beyond this instance's own lead, over live participants; zero on the authority, which commits a late crossing rather than waiting for it. |
 | `network.pace_late_ticks` (int) | How late the latest authority epoch of the pacing window landed on this guest, in ticks; negative is early. |
 | `network.pace_trim_permille` (int) | The trim pacing applies to this guest's tick interval; positive runs it slower. |
 | `network.pace_steps` (int) | Whole-tick steps pacing took, for an error too large to trim away. |
@@ -314,7 +314,7 @@ the effect's current name; death API unification removed the two obsolete
 | `network.commit_void` (int) | The subset too late to apply, which only closed their source's fence. |
 | `network.commit_refused_raw` (int) | On a guest: another participant's raw epochs, passed on toward the authority and not applied. |
 | `network.evicted` (int) | Participants the slow policy dropped while this instance authored. |
-| `network.barrier_ran_without_peer` (int) | Tick boundaries reached before every required peer epoch marker. |
+| `network.barrier_ran_without_peer` (int) | Tick boundaries reached before every required peer epoch marker; the authority requires none. |
 | `network.crossings_received` (int) | Peer crossing artifacts decoded and admitted. |
 | `network.crossings_sent` (int) | Local crossing artifacts sent in closed epochs. |
 | `network.corrections_received` (int) | Authoritative corrections reassembled from the wire. |

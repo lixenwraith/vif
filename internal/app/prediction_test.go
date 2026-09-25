@@ -181,6 +181,11 @@ func TestAPointerSweepCrossesOncePerTick(t *testing.T) {
 	}
 
 	report(fromX+5, fromY)
+	a.Tick(1)
+	if moves != 1 {
+		t.Fatalf("a report on the cell the cursor holds placed it again: %d placements", moves)
+	}
+
 	report(fromX+6, fromY)
 	a.World().RunSafe(func() { a.World().PushCursorMove(cursor, fromX+9, fromY) })
 	a.Settle()

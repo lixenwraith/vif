@@ -431,7 +431,9 @@ func (pr *PlayerResource) Reconcile(pos component.PositionComponent, own bool) {
 		q.head = (q.head + 1) % len(q.cells)
 		q.count--
 	case !own && q.count > 0:
-		pr.prediction = cursorPrediction{shed: q.shed + q.count}
+		// A pointer placement not yet crossed is a request still to send, not a
+		// prediction, so the snap keeps it
+		pr.prediction = cursorPrediction{shed: q.shed + q.count, pointer: q.pointer}
 	}
 }
 
