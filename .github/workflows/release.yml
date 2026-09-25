@@ -1,12 +1,16 @@
-name: Nightly Release
+name: Release
 
+# The schedule moves the nightly prerelease; a v* tag drafts a stable release that
+# a person publishes. Both build the same archives.
 on:
   schedule:
     - cron: '17 3 * * *'
   workflow_dispatch:
+  push:
+    tags: ['v*']
 
 concurrency:
-  group: nightly-release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -36,12 +40,18 @@ jobs:
         run: go mod download
 
       - name: Refresh generated registries
-        run: go generate ./internal/event ./internal/manifest
+        shell: bash
+        run: |
+          go generate ./internal/event ./internal/manifest
+          # A release's binaries must be what its source archive builds.
+          if [ "$GITHUB_REF_TYPE" = tag ]; then git diff --exit-code; fi
 
       - name: Build archives
         shell: bash
         run: |
           set -euo pipefail
+          label=nightly
+          if [ "$GITHUB_REF_TYPE" = tag ]; then label=${GITHUB_REF_NAME#v}; fi
           mkdir -p dist stage/linux-amd64 stage/linux-amd64-headless \
             stage/freebsd-amd64 stage/web
 
@@ -58,17 +68,24 @@ jobs:
 
           for target in linux-amd64 linux-amd64-headless freebsd-amd64; do
             cp README.md LICENSE "stage/$target/"
-            tar -C "stage/$target" -czf "dist/vi-fighter-nightly-$target.tar.gz" .
+            tar -C "stage/$target" -czf "dist/vi-fighter-$label-$target.tar.gz" .
           done
           cp -R web/. stage/web/
-          tar -C stage/web -czf dist/vi-fighter-nightly-web.tar.gz .
+          tar -C stage/web -czf "dist/vi-fighter-$label-web.tar.gz" .
 
           # One archive rather than a copy in each target's: the wad is the same
           # bytes on every platform. The Makefile owns what is in it, so the
           # release and make install-config cannot drift.
-          make wad-archive WAD_ARCHIVE=dist/vi-fighter-nightly-wad.tar.gz
+          make wad-archive WAD_ARCHIVE="dist/vi-fighter-$label-wad.tar.gz"
 
-          (cd dist && sha256sum vi-fighter-nightly-* > SHA256SUMS)
+          # The source archive distributions build from. It is uploaded once, so
+          # its bytes and checksum never change the way GitHub's generated ones may.
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            git archive --format=tar.gz --prefix="vi-fighter-$label/" \
+              -o "dist/vi-fighter-$label.tar.gz" "$GITHUB_REF_NAME"
+          fi
+
+          (cd dist && sha256sum vi-fighter-* > SHA256SUMS)
 
       - name: Upload release payload
         uses: actions/upload-artifact@v4
@@ -80,6 +97,7 @@ jobs:
 
   image:
     name: Publish headless container
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -107,8 +125,9 @@ jobs:
             ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
 
   release:
-    name: Update nightly prerelease
+    name: Publish release assets
     needs: [artifacts, image]
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -122,7 +141,17 @@ jobs:
           name: nightly-release
           path: dist
 
+      - name: Draft the tagged release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag \
+            --title "vi-fighter $GITHUB_REF_NAME" \
+            --notes "Release of ${GITHUB_SHA}. vi-fighter-${GITHUB_REF_NAME#v}.tar.gz is the source archive; SHA256SUMS covers every asset."
+
       - name: Move nightly tag and publish assets
+        if: github.ref_type != 'tag'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash

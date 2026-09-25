@@ -505,11 +505,9 @@ matrix, Windows cross-compilation, or terminal/audio smoke tests. `make verify`
 covers generation, race tests, the compile matrix, and vet locally; host-I/O
 behavior remains separate runtime validation work.
 
-`.github/workflows/nightly.yml` runs daily and on manual dispatch. It builds
-downloadable Linux amd64, Linux amd64 headless, FreeBSD amd64, and browser
-archives with checksums, updates the moving `nightly` prerelease, and pushes the
-headless Dockerfile to GHCR as moving and commit-addressed tags. It does not turn
-the experimental Windows cross-build into a release target.
+`.github/workflows/release.yml` builds the downloadable archives nightly and on a
+`vX.Y.Z` tag; [Packaging](packaging.md) §2 lists what each publishes. Neither
+ships the experimental Windows cross-build.
 
 ## 7. Platform matrix
 

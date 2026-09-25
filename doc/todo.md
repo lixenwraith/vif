@@ -100,14 +100,12 @@ Distribution-specific detail lives in [Packaging](packaging.md).
 ### Promote a nightly build to the first stable release
 
 - Priority: P0
-- Affected files: `.github/workflows/nightly.yml`, release artifacts and
-  `doc/packaging.md`
+- Affected files: `doc/packaging.md`
 - Prerequisite: choose a nightly commit after the complete verification gate
   passes
 
-Promote the selected commit to `v0.1.0` and publish a byte-stable source tarball
-with its checksum. Keep the moving nightly prerelease and headless GHCR image as
-development artifacts rather than treating them as the stable source archive.
+Tag the selected commit `v0.1.0` and publish the draft release the tag creates,
+which already carries the source archive and its checksum.
 
 ### Add a desktop launcher
 

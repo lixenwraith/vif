@@ -34,30 +34,30 @@ These hold regardless of which repository is targeted first.
   vendored or redistributed content (typing corpus, images, sound specs) must
   be licence-checked before it enters `wad/`.
 
-## 2. Nightly release surface
+## 2. Release surface
 
-`.github/workflows/nightly.yml` runs daily and on manual dispatch. It updates the
-moving `nightly` prerelease with Linux amd64 client and headless-server archives,
-a FreeBSD amd64 client archive, a complete browser bundle, the wad archive, and
-`SHA256SUMS`. It also publishes the same Dockerfile's `vif_headless` image to GHCR
-as both `nightly` and an immutable `sha-<commit>` tag.
+`.github/workflows/release.yml` builds one set of archives: Linux amd64 client and
+headless server, FreeBSD amd64 client, the browser bundle, the wad, and
+`SHA256SUMS`. Nightly (daily or on dispatch) it moves the `nightly` tag and
+prerelease and pushes the `vif_headless` image to GHCR as `nightly` and
+`sha-<commit>`. A pushed `vX.Y.Z` tag instead drafts release `vX.Y.Z` with the
+same archives named for `X.Y.Z` plus `vi-fighter-X.Y.Z.tar.gz`, a `git archive`
+of the tag: the byte-stable source archive a distribution hashes. A tag pushes no
+image, moves nothing, and publishes nothing until a person publishes the draft;
+it fails if the committed generated files are stale, so the binaries are what
+the source archive builds.
 
-`vi-fighter-nightly-wad.tar.gz` is `make wad-archive`, which is `install-config`
-into one file: it unpacks over a config root, so a downloaded binary reaches the
-installed scenarios and corpus rather than only the embedded scenario. It is one
-archive for every target because the wad is platform-independent, and the Makefile
-owns its contents so the release and a source install cannot drift.
+`vi-fighter-*-wad.tar.gz` is `make wad-archive`, which is `install-config` into
+one file: it unpacks over a config root, so a downloaded binary reaches the
+installed scenarios and corpus rather than only the embedded scenario. The
+Makefile owns its contents so a release and a source install cannot drift.
 
-Downloads appear at the repository's
-[`nightly` release](https://github.com/lixenwraith/vi-fighter/releases/tag/nightly),
-and the image is `ghcr.io/lixenwraith/vi-fighter:nightly` or its immutable
-`sha-<commit>` counterpart.
-
-Nightlies are download and deployment candidates, not stable source releases.
-They intentionally exclude the experimental Windows cross-build. A stable tag
-still needs a byte-stable source archive and checksum. Content a client fetches
-for itself, rather than one a person downloads and extracts, still needs its
-trust, origin and cache policy decided.
+Downloads are at the repository's
+[`nightly` release](https://github.com/lixenwraith/vi-fighter/releases/tag/nightly);
+the image is `ghcr.io/lixenwraith/vi-fighter:nightly` or `sha-<commit>`. Neither
+build ships the experimental Windows cross-build. Content a client fetches for
+itself, rather than one a person downloads and extracts, still needs its trust,
+origin and cache policy decided.
 
 ## 3. Gaps to close before a first submission
 
@@ -65,10 +65,9 @@ Ordered by what blocks a package review.
 
 | # | Gap | Notes |
 |---|---|---|
-| 1 | No stable tagged release | Promote a verified nightly commit to `v0.1.0` and attach a byte-stable source tarball. |
+| 1 | No stable tagged release | Tag a verified nightly commit `v0.1.0` and publish the draft §2 creates. |
 | 2 | No `.desktop` entry | Optional for a TUI game, but expected if it should appear in a menu. Needs `Terminal=true` and an icon. |
 | 3 | Shell completion | Not generated. `flag` gives no completion data; a hand-written `_vif` is the cheapest route. |
-| 4 | No upstream checksum policy | Distributions verify a tarball hash. GitHub's generated archives are not guaranteed byte-stable; publish a release asset instead. |
 
 ## 4. Arch (AUR)
 
