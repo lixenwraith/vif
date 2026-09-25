@@ -905,4 +905,3 @@ func (app *AppState) nodeMatchesFilter(node *TreeNode) bool {
 
 	return app.Filter.FilteredPaths[node.Path]
 }
-

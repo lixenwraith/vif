@@ -62,7 +62,7 @@ Makefile owns its contents so a release and a source install cannot drift.
 
 Downloads are at the repository's
 [`nightly` release](https://github.com/lixenwraith/vif/releases/tag/nightly);
-the image is `ghcr.io/lixenwraith/vi-fighter:nightly` or `sha-<commit>`. On
+the image is `ghcr.io/lixenwraith/vif:nightly` or `sha-<commit>`. On
 Windows the wad archive unpacks into `%AppData%\vif`. Content a client fetches for
 itself, rather than one a person downloads and extracts, still needs its trust,
 origin and cache policy decided.

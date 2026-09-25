@@ -39,4 +39,3 @@ var DefaultTheme = Theme{
 	ViewerFold:       color.RGB{R: 100, G: 140, B: 180},
 	ViewerMatch:      color.RGB{R: 80, G: 120, B: 60},
 }
-

@@ -264,4 +264,3 @@ func (app *AppState) ToggleHelp() {
 	app.Help.Visible = !app.Help.Visible
 	app.Help.Scroll = 0
 }
-

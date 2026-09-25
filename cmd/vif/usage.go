@@ -249,7 +249,7 @@ before it.
 Logs and journals, normally
 .IR ~/.local/state/vif .
 .SH SEE ALSO
-https://github.com/lixenwraith/vi\-fighter
+https://github.com/lixenwraith/vif
 `)
 }
 
