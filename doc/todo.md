@@ -229,6 +229,22 @@ at run time. A failing seed is what would reopen it. A shared-world parity diff
 (entities created 13 against 12) failed once in a loaded whole-package run too, and
 passed in 25 isolated runs of the tests that print it.
 
+## Rendering
+
+### Use sixteen console backgrounds on Linux
+
+- Priority: P3
+- Affected files: `internal/render/console.go`
+
+The framebuffer console shows a bright background under SGR 5, which vgacon blinks instead; telling them apart would give Linux FreeBSD's sixteen backgrounds.
+
+### Draw the flow-field debug view from console glyphs
+
+- Priority: P3
+- Affected files: `internal/render/renderer/flow_debug.go`
+
+Its diagonal arrows and `◆●` are missing from console fonts, so in 256 colours the view shows their fallbacks.
+
 ## Fleet logging
 
 ### Repin LogWisp past the fleet stream fixes

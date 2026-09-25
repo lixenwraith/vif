@@ -115,8 +115,10 @@ const (
 	OverlayCardCols3 = 100
 	OverlayCardCols2 = 60
 
-	// OverlayPinMarker prefixes the title of a pinned card
-	OverlayPinMarker = '●'
+	// OverlayPinMarker prefixes the title of a pinned card; console fonts lack it, so 256
+	// colors draw OverlayPinMarker256
+	OverlayPinMarker    = '●'
+	OverlayPinMarker256 = '•'
 )
 
 // Overlay Document (help)

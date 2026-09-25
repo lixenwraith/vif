@@ -22,7 +22,7 @@ var SwarmPatternChars = [2][2][4]rune{
 }
 
 // SwarmPatternChars256 draws the two swarm frames from double-line box drawing, which every
-// Linux console font carries: a ring for O and the ring pinched inward for X
+// console font carries: a ring for O and the ring pinched inward for X
 var SwarmPatternChars256 = [2][2][4]rune{
 	{
 		{'╔', '═', '═', '╗'},

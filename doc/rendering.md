@@ -377,9 +377,10 @@ retains only game-specific asset interpretation and layering.
 3. Register the constructor in `internal/manifest/definition.go`.
 4. Run manifest generation.
 5. Select/test truecolor and 256-color paths, including foreground/background
-   palette attributes. A 256 path names console entries (`visual.Con*`) and
-   draws what the console cannot blend as solid cells past
-   `visual.Effect256Threshold`.
+   palette attributes. A 256 path names console entries (`visual.Con*`), draws
+   what the console cannot blend as solid cells past
+   `visual.Effect256Threshold`, and keeps to glyphs every console font has
+   (`TestConsoleGlyphsAreInEveryConsoleFont`).
 6. Verify behavior under camera cropping, centered small maps, terminal resize,
    pause, grayout/dim/strobe, and overlapping fields.
 7. Check that terminal flush remains outside the world lock and that no

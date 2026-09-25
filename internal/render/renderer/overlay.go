@@ -93,8 +93,9 @@ var overlayCardBreakpoints = map[int]int{
 
 // OverlayRenderer draws the modal overlay window
 type OverlayRenderer struct {
-	gameCtx *engine.GameContext
-	adapter *TUIAdapter
+	gameCtx   *engine.GameContext
+	adapter   *TUIAdapter
+	pinMarker rune
 
 	// Layout cache, rebuilt when the content or the content viewport changes
 	content *core.OverlayContent
@@ -110,9 +111,11 @@ type OverlayRenderer struct {
 
 // NewOverlayRenderer creates a new overlay renderer
 func NewOverlayRenderer(gameCtx *engine.GameContext) *OverlayRenderer {
-	return &OverlayRenderer{
-		gameCtx: gameCtx,
+	r := &OverlayRenderer{gameCtx: gameCtx, pinMarker: parameter.OverlayPinMarker}
+	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		r.pinMarker = parameter.OverlayPinMarker256
 	}
+	return r
 }
 
 // IsVisible implements render.VisibilityToggle
@@ -333,7 +336,7 @@ func (r *OverlayRenderer) renderCard(region tui.Region, card *core.OverlayCard, 
 	if off == 0 && card.Title != "" && region.W > 4 {
 		title := " " + card.Title + " "
 		if card.Pinned {
-			title = " " + string(parameter.OverlayPinMarker) + " " + card.Title + " "
+			title = " " + string(r.pinMarker) + " " + card.Title + " "
 		}
 		if tui.RuneLen(title) > region.W-4 {
 			title = tui.Truncate(title, region.W-4)

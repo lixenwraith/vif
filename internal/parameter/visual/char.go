@@ -27,13 +27,13 @@ var QuadrantChars = [16]rune{
 // DensityChars are shade glyphs ordered from lowest to highest density
 var DensityChars = [4]rune{'░', '▒', '▓', '█'}
 
-// Density256Chars is DensityChars from glyphs every Linux console font carries; they lack ▓
+// Density256Chars is DensityChars from glyphs every console font carries; they lack ▓
 var Density256Chars = [4]rune{'·', '░', '▒', '█'}
 
 // Missile characters
 const (
 	MissileTrailChar = '▪' // U+25AA Black Small Square
-	// MissileTrailChar256 is in every Linux console font; ▪ is not
+	// MissileTrailChar256 is in every console font; ▪ is not
 	MissileTrailChar256 = '•'
 )
 
@@ -41,7 +41,7 @@ const (
 const OrbFullChar256 = '@'
 
 // Heading glyphs, indexed by heading: E W S N SE NE SW NW, then at rest. The 256 sets hold
-// only glyphs every Linux console font carries, and those fonts have no diagonal triangles.
+// only glyphs every console font carries, and those fonts have no diagonal triangles.
 var (
 	MissileHeadChars    = [9]rune{'▸', '◂', '▾', '▴', '◢', '◥', '◣', '◤', '▸'}
 	MissileHeadChars256 = [9]rune{'▶', '◀', '▼', '▲', '\\', '/', '/', '\\', '▶'}

@@ -72,31 +72,45 @@ func (r *WallRenderer) renderCellTrueColor(buf *render.RenderBuffer, screenX, sc
 	}
 }
 
-// renderCell256 updated to use per-cell colors with fallback
+// renderCell256 draws a wall cell from its palette indices, taking the nearest where it has RGB
 func (r *WallRenderer) renderCell256(buf *render.RenderBuffer, screenX, screenY int,
 	char rune, fg, bg color.RGB, renderFg, renderBg bool, attrs terminal.Attr) {
 
-	if renderBg {
-		// Use per-cell palette index if set, otherwise fallback to default
-		// In 256 mode, palette index stored in RGB.R
-		var paletteIdx uint8
-		if attrs&terminal.AttrBg256 != 0 {
-			paletteIdx = bg.R
+	fgIdx, bgIdx := wallIndex256(fg, attrs&terminal.AttrFg256 != 0), wallIndex256(bg, attrs&terminal.AttrBg256 != 0)
+	char, swap := wallShade256(char)
+	if swap {
+		if renderFg && renderBg {
+			fgIdx, bgIdx = bgIdx, fgIdx
 		} else {
-			paletteIdx = terminal.RGBTo256(bg)
+			char = '▒'
 		}
-		buf.SetBg256(screenX, screenY, paletteIdx)
 	}
 
-	if renderFg && char != 0 {
-		// Use per-cell fg palette index if set
-		var fgIdx uint8
-		if attrs&terminal.AttrFg256 != 0 {
-			fgIdx = fg.R
-		} else {
-			fgIdx = terminal.RGBTo256(fg)
-		}
-		buf.SetFgOnly(screenX, screenY, char,
-			color.RGB{R: fgIdx}, terminal.AttrFg256)
+	if renderBg {
+		buf.SetBg256(screenX, screenY, bgIdx)
 	}
+	if renderFg && char != 0 {
+		buf.SetFgOnly(screenX, screenY, char, color.RGB{R: fgIdx}, terminal.AttrFg256)
+	}
+}
+
+func wallIndex256(c color.RGB, index bool) uint8 {
+	if index {
+		return c.R
+	}
+	return terminal.RGBTo256(c)
+}
+
+// wallShade256 is the shade mixing a quadrant block's two colors in the share it fills, since
+// console fonts lack quadrants: a quarter ░, a half ▒, three quarters ░ with the colors swapped
+func wallShade256(char rune) (shade rune, swap bool) {
+	switch char {
+	case '▘', '▝', '▖', '▗':
+		return '░', false
+	case '▀', '▄', '▌', '▐', '▚', '▞':
+		return '▒', false
+	case '▛', '▜', '▙', '▟', '▓':
+		return '░', true
+	}
+	return char, false
 }

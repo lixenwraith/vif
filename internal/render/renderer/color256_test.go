@@ -1,10 +1,12 @@
 package renderer
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
 )
@@ -68,6 +70,38 @@ func TestShield256RimClosesOnEveryAxis(t *testing.T) {
 			if !crossed {
 				t.Errorf("shield type %d: no rim cell towards %v", shieldType, dir)
 			}
+		}
+	}
+}
+
+// consoleGlyphs are the non-ASCII symbols in the kernel's CP437 map (Arch's console), in every
+// font Ubuntu's setupcon installs for Latin scripts, and in FreeBSD vt's default font
+const consoleGlyphs = "·×÷°±•‼←↑→↓≈≡≤≥─│┌┐└┘├┤┬┴┼═║╒╓╔╕╖╗╘╙╚╛╜╝╞╟╠╡╢╣╤╥╦╧╨╩╪╫╬█░▒■▲▶▼◀♦"
+
+// TestConsoleGlyphsAreInEveryConsoleFont: a console draws a glyph its font lacks as '#' or a
+// replacement mark, so everything a 256-colour path draws is ASCII or in consoleGlyphs.
+func TestConsoleGlyphsAreInEveryConsoleFont(t *testing.T) {
+	t.Parallel()
+	glyphs := []rune{visual.MissileTrailChar256, visual.OrbFullChar256, visual.HealthBarChar, parameter.OverlayPinMarker256}
+	for _, set := range [][]rune{visual.Density256Chars[:], visual.MissileHeadChars256[:], visual.BulletHeadChars256[:],
+		visual.BoxDrawSingleLUT[:], visual.BoxDrawDoubleLUT[:]} {
+		glyphs = append(glyphs, set...)
+	}
+	for _, frame := range visual.SwarmPatternChars256 {
+		for _, row := range frame {
+			glyphs = append(glyphs, row[:]...)
+		}
+	}
+	for _, text := range parameter.AudioText {
+		glyphs = append(glyphs, []rune(text)...)
+	}
+	for _, quadrant := range "▘▝▖▗▀▄▌▐▚▞▛▜▙▟▓" {
+		shade, _ := wallShade256(quadrant)
+		glyphs = append(glyphs, shade)
+	}
+	for _, r := range glyphs {
+		if (r < ' ' || r > '~') && !strings.ContainsRune(consoleGlyphs, r) {
+			t.Errorf("%q is missing from some console font", r)
 		}
 	}
 }
