@@ -180,6 +180,14 @@ func (c *Console) Background(i uint8) uint8 {
 	return i
 }
 
+// TextOn returns black or bright white, whichever reads better on background entry bg
+func (c *Console) TextOn(bg uint8) uint8 {
+	if c.Contrast(0, bg) > c.Contrast(15, bg) {
+		return 0
+	}
+	return 15
+}
+
 // NearestBackground returns the background entry that looks closest to rgb
 func (c *Console) NearestBackground(rgb color.RGB) uint8 { return c.bgLUT[lutKey(rgb)] }
 

@@ -23,13 +23,99 @@ type statusItem struct {
 	bg   color.RGB
 }
 
+// with returns the item's colours around text
+func (s statusItem) with(text string) statusItem {
+	s.text = text
+	return s
+}
+
+// statusPalette holds the status bar's colours. TrueColor takes the theme's; a text console
+// takes fixed entries, each apart from the items beside it and with the text that reads best on
+// it, since a theme colour could land on any of eight backgrounds, black included.
+type statusPalette struct {
+	audio            [4]statusItem // by channel mask
+	mode             [5]statusItem // normal, visual, insert, search, command
+	net              [3]statusItem // by severity
+	wait, speed      statusItem
+	alarm            statusItem // a pending step, a breakpoint, the multiplier, a recording
+	energy, negative statusItem
+	blink            [5]statusItem // by blink type 1-4, then white
+	energyError      color.RGB
+	boost            statusItem
+	apm, gt, fps     statusItem
+	label            statusItem // the colour mode, text included
+	phase            func(index, total int64) statusItem
+}
+
+func statusPaletteTrueColor() *statusPalette {
+	on := func(bg color.RGB) statusItem { return statusItem{fg: visual.RgbBlack, bg: bg} }
+	text := func(bg color.RGB) statusItem { return statusItem{fg: visual.RgbStatusText, bg: bg} }
+	return &statusPalette{
+		audio: [4]statusItem{
+			on(visual.RgbAudioBothOff), on(visual.RgbAudioEffectsOnly), on(visual.RgbAudioMusicOnly), on(visual.RgbAudioBothOn),
+		},
+		mode: [5]statusItem{
+			text(visual.RgbModeNormalBg), text(visual.RgbModeVisualBg), text(visual.RgbModeInsertBg),
+			text(visual.RgbModeSearchBg), text(visual.RgbModeCommandBg),
+		},
+		net:         [3]statusItem{on(visual.RgbNetGoodBg), on(visual.RgbNetWarnBg), on(visual.RgbNetBadBg)},
+		wait:        on(visual.RgbGtBg),
+		speed:       on(visual.RgbGtBg),
+		alarm:       on(visual.RgbCursorError),
+		energy:      on(visual.RgbEnergyBg),
+		negative:    statusItem{fg: visual.RgbEnergyBg, bg: visual.RgbBlack},
+		energyError: visual.RgbCursorError,
+		boost:       text(visual.RgbBoostBg),
+		apm:         on(visual.RgbApmBg),
+		gt:          on(visual.RgbGtBg),
+		fps:         on(visual.RgbFpsBg),
+		label:       on(visual.RgbColorModeIndicator).with(" TC "),
+		blink: [5]statusItem{
+			on(visual.RgbEnergyBlinkBlue), on(visual.RgbEnergyBlinkGreen), on(visual.RgbEnergyBlinkRed),
+			on(visual.RgbGlyphGold), on(visual.RgbEnergyBlinkWhite),
+		},
+		phase: func(index, total int64) statusItem {
+			return on(render.RainbowIndexColor(index, total, visual.RgbModeNormalBg))
+		},
+	}
+}
+
+// statusPalette256 names console entries; the audio letter is drawn on the bar's own black, so it
+// needs no background apart from the mode beside it
+func statusPalette256(c *render.Console) *statusPalette {
+	on := func(bg uint8) statusItem { return statusItem{fg: c.Color(c.TextOn(bg)), bg: c.Color(bg)} }
+	letter := func(fg uint8) statusItem { return statusItem{fg: c.Color(fg), bg: visual.RgbBackground} }
+	phase := on(visual.ConBlue)
+	return &statusPalette{
+		audio: [4]statusItem{
+			letter(visual.ConBrightRed), letter(visual.ConBrightGreen), letter(visual.ConBrightYellow), letter(visual.ConBrightCyan),
+		},
+		mode: [5]statusItem{
+			on(visual.ConCyan), on(visual.ConYellow), on(visual.ConGreen), on(visual.ConWhite), on(visual.ConMagenta),
+		},
+		net:         [3]statusItem{on(visual.ConGreen), on(visual.ConYellow), on(visual.ConRed)},
+		wait:        on(visual.ConYellow),
+		speed:       on(visual.ConYellow),
+		alarm:       on(visual.ConRed),
+		energy:      on(visual.ConWhite),
+		negative:    letter(visual.ConBrightWhite),
+		energyError: c.Color(visual.ConRed),
+		boost:       on(visual.ConMagenta),
+		apm:         on(visual.ConGreen),
+		gt:          on(visual.ConYellow),
+		fps:         on(visual.ConCyan),
+		label:       on(visual.ConWhite).with(" 256 "),
+		blink: [5]statusItem{
+			on(visual.ConBlue), on(visual.ConGreen), on(visual.ConRed), on(visual.ConYellow), on(visual.ConWhite),
+		},
+		phase: func(int64, int64) statusItem { return phase },
+	}
+}
+
 // StatusBarRenderer draws the status bar at the bottom
 type StatusBarRenderer struct {
 	gameCtx *engine.GameContext
-
-	// Colour mode label and the audio glyph that mode's terminals can draw
-	modeLabel string
-	audioStr  string
+	pal     *statusPalette
 
 	// Sound/Audio indicator
 	statAudioMask *atomic.Int64
@@ -84,9 +170,7 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 
 	r := &StatusBarRenderer{
 		gameCtx: gameCtx,
-
-		modeLabel: " TC ",
-		audioStr:  parameter.AudioStr,
+		pal:     statusPaletteTrueColor(),
 
 		statAudioMask: statusReg.Ints.Get("audio.mask"),
 
@@ -118,8 +202,8 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 
 		statDamageMultiplier: statusReg.Ints.Get("energy.damage_multiplier"),
 	}
-	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
-		r.modeLabel, r.audioStr = " 256 ", parameter.AudioStr256
+	if cfg := gameCtx.World.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
+		r.pal = statusPalette256(render.ConsoleFor(cfg.ConsolePalette))
 	}
 	return r
 }
@@ -175,12 +259,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			timerVal = elapsed.Seconds()
 		}
 
-		phaseBg := render.RainbowIndexColor(phaseIdx, phaseTotal, visual.RgbModeNormalBg)
-		rightItems = append(rightItems, statusItem{
-			text: fmt.Sprintf(" %s: %.1fs ", phaseName, timerVal),
-			fg:   visual.RgbBlack,
-			bg:   phaseBg,
-		})
+		rightItems = append(rightItems, r.pal.phase(phaseIdx, phaseTotal).with(fmt.Sprintf(" %s: %.1fs ", phaseName, timerVal)))
 	}
 
 	// Priority 2: Energy
@@ -193,47 +272,28 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	if hasEnergy {
 		energyVal = energyComp.Current
 	}
-	energyText := fmt.Sprintf(" Energy: %s ", status.FormatCount(energyVal))
-
-	var energyFg, energyBg color.RGB
+	energy := r.pal.energy
 	if energyVal < 0 {
-		energyFg, energyBg = visual.RgbEnergyBg, visual.RgbBlack
-	} else {
-		energyFg, energyBg = visual.RgbBlack, visual.RgbEnergyBg
+		energy = r.pal.negative
 	}
 
 	view, hasView := r.gameCtx.World.Components.CursorView.GetPtr(playerEntity)
 	if hasView && view.BlinkActive && view.BlinkRemaining > 0 {
-		typeCode := view.BlinkType
-		if typeCode == 0 {
-			energyFg = visual.RgbCursorError
-		} else {
-			var blinkColor color.RGB
-			switch typeCode {
-			case 1:
-				blinkColor = visual.RgbEnergyBlinkBlue
-			case 2:
-				blinkColor = visual.RgbEnergyBlinkGreen
-			case 3:
-				blinkColor = visual.RgbEnergyBlinkRed
-			case 4:
-				blinkColor = visual.RgbGlyphGold
-			default:
-				blinkColor = visual.RgbEnergyBlinkWhite
-			}
-			energyFg, energyBg = visual.RgbBlack, blinkColor
+		switch typeCode := view.BlinkType; {
+		case typeCode == 0:
+			energy.fg = r.pal.energyError
+		case typeCode > 0 && typeCode < len(r.pal.blink):
+			energy = r.pal.blink[typeCode-1]
+		default:
+			energy = r.pal.blink[len(r.pal.blink)-1]
 		}
 	}
-	rightItems = append(rightItems, statusItem{text: energyText, fg: energyFg, bg: energyBg})
+	rightItems = append(rightItems, energy.with(fmt.Sprintf(" Energy: %s ", status.FormatCount(energyVal))))
 
 	// Priority 3: Damage Multiplier (cycle scaling)
 	dmgMult := r.statDamageMultiplier.Load()
 	if dmgMult > 1 {
-		rightItems = append(rightItems, statusItem{
-			text: fmt.Sprintf(" x%s ", status.FormatCount(dmgMult)),
-			fg:   visual.RgbBlack,
-			bg:   visual.RgbCursorError, // Red background
-		})
+		rightItems = append(rightItems, r.pal.alarm.with(fmt.Sprintf(" x%s ", status.FormatCount(dmgMult))))
 	}
 
 	// Priority 4: Boost (conditional)
@@ -243,11 +303,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		if remaining < 0 {
 			remaining = 0
 		}
-		rightItems = append(rightItems, statusItem{
-			text: fmt.Sprintf(" Boost: %.1fs ", remaining),
-			fg:   visual.RgbStatusText,
-			bg:   visual.RgbBoostBg,
-		})
+		rightItems = append(rightItems, r.pal.boost.with(fmt.Sprintf(" Boost: %.1fs ", remaining)))
 	}
 
 	// Priority 5: Grid (conditional)
@@ -264,77 +320,48 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Priority 6-9: Metrics (lowest priority, dropped first)
-	rightItems = append(rightItems, statusItem{
-		text: fmt.Sprintf(" APM: %d ", r.statAPM.Load()),
-		fg:   visual.RgbBlack,
-		bg:   visual.RgbApmBg,
-	})
-	rightItems = append(rightItems, statusItem{
-		text: fmt.Sprintf(" GT: %d ", r.statTicks.Load()),
-		fg:   visual.RgbBlack,
-		bg:   visual.RgbGtBg,
-	})
-	rightItems = append(rightItems, statusItem{
-		text: fmt.Sprintf(" FPS: %d ", r.statFPS.Load()),
-		fg:   visual.RgbBlack,
-		bg:   visual.RgbFpsBg,
-	})
-
-	rightItems = append(rightItems, statusItem{
-		text: r.modeLabel,
-		fg:   visual.RgbBlack,
-		bg:   visual.RgbColorModeIndicator,
-	})
+	rightItems = append(rightItems,
+		r.pal.apm.with(fmt.Sprintf(" APM: %d ", r.statAPM.Load())),
+		r.pal.gt.with(fmt.Sprintf(" GT: %d ", r.statTicks.Load())),
+		r.pal.fps.with(fmt.Sprintf(" FPS: %d ", r.statFPS.Load())),
+		r.pal.label,
+	)
 
 	// === RENDER LEFT-SIDE FIXED ELEMENTS ===
 	x := 0
 
 	// Audio state indicator; -1 = no audio resource
 	if mv := r.statAudioMask.Load(); mv >= 0 {
-		var audioBgColor color.RGB
-		switch uint8(mv) {
-		case parameter.AudioChanNone:
-			audioBgColor = visual.RgbAudioBothOff
-		case parameter.AudioChanMusic:
-			audioBgColor = visual.RgbAudioMusicOnly
-		case parameter.AudioChanEffects:
-			audioBgColor = visual.RgbAudioEffectsOnly
-		default:
-			audioBgColor = visual.RgbAudioBothOn
-		}
-		for _, ch := range r.audioStr {
+		mask := uint8(mv) & parameter.AudioChanAll
+		audio := r.pal.audio[mask]
+		for _, ch := range parameter.AudioText[mask] {
 			if x >= ctx.ScreenWidth {
 				return
 			}
-			buf.SetWithBg(x, statusY, ch, visual.RgbBlack, audioBgColor)
+			buf.SetWithBg(x, statusY, ch, audio.fg, audio.bg)
 			x++
 		}
 	}
 
 	// Mode indicator
 	var modeText string
-	var modeBgColor color.RGB
+	var mode statusItem
 	if r.gameCtx.IsSearchMode() {
-		modeText = parameter.ModeTextSearch
-		modeBgColor = visual.RgbModeSearchBg
+		modeText, mode = parameter.ModeTextSearch, r.pal.mode[3]
 	} else if r.gameCtx.IsCommandMode() {
-		modeText = parameter.ModeTextCommand
-		modeBgColor = visual.RgbModeCommandBg
+		modeText, mode = parameter.ModeTextCommand, r.pal.mode[4]
 	} else if r.gameCtx.IsInsertMode() {
-		modeText = parameter.ModeTextInsert
-		modeBgColor = visual.RgbModeInsertBg
+		modeText, mode = parameter.ModeTextInsert, r.pal.mode[2]
 	} else if r.gameCtx.IsVisualMode() {
-		modeText = parameter.ModeTextVisual
-		modeBgColor = visual.RgbModeVisualBg
+		modeText, mode = parameter.ModeTextVisual, r.pal.mode[1]
 	} else {
-		modeText = parameter.ModeTextNormal
-		modeBgColor = visual.RgbModeNormalBg
+		modeText, mode = parameter.ModeTextNormal, r.pal.mode[0]
 	}
 	for _, ch := range modeText {
 		if x >= ctx.ScreenWidth {
 			return
 		}
-		buf.SetWithBg(x, statusY, ch, visual.RgbStatusText, modeBgColor)
+		buf.SetWithBg(x, statusY, ch, mode.fg, mode.bg)
 		x++
 	}
 
@@ -345,7 +372,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		recX := x - len(modeText)
 		for i, ch := range recText {
 			if recX+i < ctx.ScreenWidth {
-				buf.SetWithBg(recX+i, statusY, ch, visual.RgbBlack, visual.RgbCursorError)
+				buf.SetWithBg(recX+i, statusY, ch, r.pal.alarm.fg, r.pal.alarm.bg)
 			}
 		}
 	}
@@ -485,7 +512,7 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 	// Losing the authority is a permanent change for this run and outranks
 	// everything, including the link state that described the host that went.
 	if r.statHostLost.Load() {
-		return statusItem{text: " Host lost ", fg: visual.RgbBlack, bg: visual.RgbNetBadBg}, true
+		return r.pal.net[severityFailing].with(" Host lost "), true
 	}
 	// Transient by construction: the badge is cleared a fixed number of ticks after
 	// the handoff is adopted, so the two states a player reads are either side of it.
@@ -495,7 +522,7 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 		if n := r.statRejoin.Load(); n > 0 {
 			text = fmt.Sprintf(" Migrating %d ", n)
 		}
-		return statusItem{text: text, fg: visual.RgbBlack, bg: visual.RgbNetWarnBg}, true
+		return r.pal.net[severityDegrading].with(text), true
 	}
 	state := r.statNet.Load()
 	if state == "" || state == "off" {
@@ -503,10 +530,10 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 	}
 	switch state {
 	case "down":
-		return statusItem{text: " Net: down ", fg: visual.RgbBlack, bg: visual.RgbNetBadBg}, true
+		return r.pal.net[severityFailing].with(" Net: down "), true
 	case "connected":
 	default:
-		return statusItem{text: " Net: wait ", fg: visual.RgbBlack, bg: visual.RgbGtBg}, true
+		return r.pal.wait.with(" Net: wait "), true
 	}
 
 	// slow!     no cadence delivers a whole world inside the guaranteed window;
@@ -530,7 +557,7 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 	default:
 		text += " "
 	}
-	return statusItem{text: text, fg: visual.RgbBlack, bg: netSeverityBg[severity]}, true
+	return r.pal.net[severity].with(text), true
 }
 
 // Link health as a player reads it, worst wins; latencySeverity is the round trip
@@ -540,8 +567,6 @@ const (
 	severityDegrading
 	severityFailing
 )
-
-var netSeverityBg = [...]color.RGB{visual.RgbNetGoodBg, visual.RgbNetWarnBg, visual.RgbNetBadBg}
 
 func latencySeverity(us int64) int {
 	switch rtt := time.Duration(us) * time.Microsecond; {
@@ -557,27 +582,15 @@ func latencySeverity(us int64) int {
 // off real time or a step request is pending
 func (r *StatusBarRenderer) timeItem() (statusItem, bool) {
 	if step := r.statStep.Load(); step > 0 {
-		return statusItem{
-			text: fmt.Sprintf(" STEP %d ", step),
-			fg:   visual.RgbBlack,
-			bg:   visual.RgbCursorError,
-		}, true
+		return r.pal.alarm.with(fmt.Sprintf(" STEP %d ", step)), true
 	}
 
 	speed := r.statSpeed.Load()
 	if brk := r.statBreak.Load(); brk != "" && brk != "-" {
-		return statusItem{
-			text: fmt.Sprintf(" %sx>%s ", speed, brk),
-			fg:   visual.RgbBlack,
-			bg:   visual.RgbCursorError,
-		}, true
+		return r.pal.alarm.with(fmt.Sprintf(" %sx>%s ", speed, brk)), true
 	}
 	if speed != "" && speed != "1" {
-		return statusItem{
-			text: fmt.Sprintf(" %sx ", speed),
-			fg:   visual.RgbBlack,
-			bg:   visual.RgbGtBg,
-		}, true
+		return r.pal.speed.with(fmt.Sprintf(" %sx ", speed)), true
 	}
 	return statusItem{}, false
 }

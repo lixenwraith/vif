@@ -4,16 +4,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/internal/render"
 )
 
 func newStatusBar(t *testing.T) (*StatusBarRenderer, *engine.ManualClock) {
 	t.Helper()
 	clock := engine.NewManualClock()
-	return NewStatusBarRenderer(engine.NewGameContextWithClock(engine.NewWorld(), 80, 24, clock)), clock
+	gameCtx := engine.NewGameContextWithClock(engine.NewWorld(), 80, 24, clock)
+	gameCtx.World.Resources.Config.ColorMode = terminal.ColorModeTrueColor
+	return NewStatusBarRenderer(gameCtx), clock
 }
 
 // seatPlayers fills the first n roster slots, which is what the badge counts.
@@ -155,5 +160,36 @@ func TestStatusBarNetworkCellHoldsItsWidth(t *testing.T) {
 	clock.Step(parameter.StatusNetworkHoldDuration)
 	if item, _ := r.networkItem(); item.text != " 2P 42ms desync 7 " {
 		t.Fatalf("the cell is %q after its hold, want the current reading", item.text)
+	}
+}
+
+// TestConsoleStatusItemsReadOnTheirBackgrounds is the field that vanished: on a text console
+// every item's text reads on its background, and only text-only items share the bar's black.
+func TestConsoleStatusItemsReadOnTheirBackgrounds(t *testing.T) {
+	t.Parallel()
+	ubuntu := engine.ConsolePalette{BgColors: 8}
+	for i, h := range [16]uint32{0x010101, 0xde382b, 0x39b54a, 0xffc706, 0x006fb8, 0x762671, 0x2cb5e9, 0xcccccc,
+		0x808080, 0xff0000, 0x00ff00, 0xffff00, 0x0000ff, 0xff00ff, 0x00ffff, 0xffffff} {
+		ubuntu.Colors[i] = color.RGB{R: uint8(h >> 16), G: uint8(h >> 8), B: uint8(h)}
+	}
+	var entries [16]uint8
+	for i := range entries {
+		entries[i] = uint8(i)
+	}
+	for name, p := range map[string]engine.ConsolePalette{"vga": render.VGAPalette, "ubuntu": ubuntu, "freebsd": render.FreeBSDPalette} {
+		c := render.ConsoleFor(p)
+		pal := statusPalette256(c)
+		textOnly := append(pal.audio[:], pal.negative)
+		items := append(append(append([]statusItem{pal.wait, pal.speed, pal.alarm, pal.energy, pal.boost,
+			pal.apm, pal.gt, pal.fps, pal.label, pal.phase(0, 1)}, pal.mode[:]...), pal.net[:]...), pal.blink[:]...)
+		for i, item := range append(items, textOnly...) {
+			fg, bg := c.Nearest(item.fg, entries[:]...), c.NearestBackground(item.bg)
+			if got := c.Contrast(fg, bg); got < 2.5 {
+				t.Errorf("%s: item %d text %d on %d has contrast %.2f", name, i, fg, bg, got)
+			}
+			if i < len(items) && bg == visual.ConBlack {
+				t.Errorf("%s: item %d takes the bar's own background", name, i)
+			}
+		}
 	}
 }

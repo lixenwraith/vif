@@ -14,6 +14,10 @@ const (
 	LeftMargin = 1
 )
 
+// AudioText is the audio indicator by channel mask (muted, effects, music, both): a letter
+// every terminal font has, which says the state without its color
+var AudioText = [4]string{" X ", " S ", " M ", " O "}
+
 // Status Bar & Modes
 const (
 	// Mode indicator text (padded to ModeIndicatorWidth)
@@ -23,11 +27,6 @@ const (
 	ModeTextSearch  = " SEARCH "
 	ModeTextCommand = "  CMD   "
 	ModeTextRecord  = " REC"
-
-	// UI Symbols
-	AudioStr = "♫ "
-	// AudioStr256 is AudioStr from a glyph every Linux console font carries; they lack ♫
-	AudioStr256 = "≈ "
 
 	// StatusMessageDefaultTimeout is how long status message on status bar lasts
 	StatusMessageDefaultTimeout = 2 * time.Second

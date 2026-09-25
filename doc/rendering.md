@@ -342,7 +342,11 @@ draws a fixed priority of items: session badge, time control, FSM phase, energy,
 damage multiplier, boost, grid state, and lower-priority metrics that are dropped
 first when space is tight. Typed input takes the space it needs from them; a
 status message takes only what they leave, so a notice never reflows the bar, and
-every message expires on wall time at `StatusMessageMaxDuration` or sooner.
+every message expires on wall time at `StatusMessageMaxDuration` or sooner. Its
+colors come from one palette per color mode: the theme's in truecolor, and on a
+text console fixed entries, each apart from the items beside it and with the text
+that reads best on it. The audio state is a letter: X muted, S effects, M music,
+O both.
 
 The relative row and column gutters number only the rows and columns the
 playfield covers and mark the rest with the void color, so the chrome agrees
