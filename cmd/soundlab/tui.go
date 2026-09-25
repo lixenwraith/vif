@@ -1,3 +1,5 @@
+//go:build !vif_headless && !vif_noaudio && !wasm
+
 package main
 
 // TUI shell over the same dispatch table the REPL uses. Every mutation and

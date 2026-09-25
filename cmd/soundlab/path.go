@@ -1,3 +1,5 @@
+//go:build !vif_headless && !vif_noaudio && !wasm
+
 package main
 
 // Path addressing over the toml key space. Deliberately a reflection walk

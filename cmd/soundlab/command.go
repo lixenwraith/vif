@@ -1,3 +1,5 @@
+//go:build !vif_headless && !vif_noaudio && !wasm
+
 package main
 
 // The verb table is the whole API: the REPL, script runner and (next pass)

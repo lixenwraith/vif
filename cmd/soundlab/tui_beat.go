@@ -1,3 +1,5 @@
+//go:build !vif_headless && !vif_noaudio && !wasm
+
 package main
 
 // Beat editor: a step grid over a document PatternDef, rendered in the strip

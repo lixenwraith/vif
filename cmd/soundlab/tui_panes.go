@@ -1,3 +1,5 @@
+//go:build !vif_headless && !vif_noaudio && !wasm
+
 package main
 
 // Data and render side of the TUI: log capture, browser lists, the

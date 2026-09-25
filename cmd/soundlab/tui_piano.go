@@ -1,3 +1,5 @@
+//go:build !vif_headless && !vif_noaudio && !wasm
+
 package main
 
 // Piano mode: a two-row strip above the input line, tracker key layout.

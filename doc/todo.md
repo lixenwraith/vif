@@ -141,16 +141,6 @@ Provide shell completion for `vif` and install it in the appropriate data path.
 
 Publish `vi-fighter-git` alongside the release-based AUR package.
 
-### Let the whole tree build headless
-
-- Priority: P3
-- Affected files: `cmd/soundlab`
-
-`go build -tags=vif_headless ./...` fails: `cmd/soundlab` is fourteen untagged
-files over `parameter.BuiltinSounds`, which the tag removes. The gates and
-`script/test.sh deploy` therefore build `./cmd/vif` alone, as the image does, so a
-break confined to soundlab is invisible. Tag the package out, or give it a stub.
-
 ### Let a request name the map size
 
 - Priority: P2
