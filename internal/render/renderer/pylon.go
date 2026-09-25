@@ -21,12 +21,11 @@ type pylonColorEntry struct {
 }
 
 // pylonRenderFunc defines the render strategy signature, selected at initialization
-type pylonRenderFunc func(r *PylonRenderer, ctx render.RenderContext, buf *render.RenderBuffer)
+type pylonRenderFunc func(ctx render.RenderContext, buf *render.RenderBuffer)
 
 // PylonRenderer draws pylon entities with health-based coloring
 type PylonRenderer struct {
-	gameCtx   *engine.GameContext
-	colorMode terminal.ColorMode
+	gameCtx *engine.GameContext
 
 	// Pre-computed color gradient (256 entries for health ratio 0.0-1.0)
 	colorLUT [256]pylonColorEntry
@@ -39,25 +38,18 @@ type PylonRenderer struct {
 }
 
 func NewPylonRenderer(gameCtx *engine.GameContext) *PylonRenderer {
-	colorMode := gameCtx.World.Resources.Config.ColorMode
-
 	r := &PylonRenderer{
 		gameCtx:   gameCtx,
-		colorMode: colorMode,
 		glowColor: visual.RgbPylonGlow,
 	}
 
 	// Build color LUT
 	r.buildColorLUT()
 
-	// Select render path based on color mode
-	switch colorMode {
-	case terminal.ColorModeTrueColor:
-		r.renderFunc = (*PylonRenderer).renderTrueColor
-	case terminal.ColorMode256:
-		r.renderFunc = (*PylonRenderer).render256Color
-	default:
-		r.renderFunc = (*PylonRenderer).renderBasicColor
+	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		r.renderFunc = r.render256Color
+	} else {
+		r.renderFunc = r.renderTrueColor
 	}
 
 	return r
@@ -103,7 +95,7 @@ func (r *PylonRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	}
 
 	buf.SetWriteMask(visual.MaskComposite)
-	r.renderFunc(r, ctx, buf)
+	r.renderFunc(ctx, buf)
 }
 
 func (r *PylonRenderer) renderTrueColor(ctx render.RenderContext, buf *render.RenderBuffer) {
@@ -395,99 +387,5 @@ func (r *PylonRenderer) renderMembers256Color(
 		}
 
 		buf.SetBg256(screenX, screenY, paletteIdx)
-	}
-}
-
-func (r *PylonRenderer) renderBasicColor(ctx render.RenderContext, buf *render.RenderBuffer) {
-	r.gameCtx.World.Components.Pylon.Each(func(headerEntity core.Entity, pylonComp *component.PylonComponent) bool {
-		headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headerEntity)
-		if !ok {
-			return true
-		}
-
-		r.renderMembersBasicColor(ctx, buf, pylonComp, headerComp)
-		return true
-	})
-}
-
-func (r *PylonRenderer) renderMembersBasicColor(
-	ctx render.RenderContext,
-	buf *render.RenderBuffer,
-	pylonComp *component.PylonComponent,
-	headerComp *component.HeaderComponent,
-) {
-	radiusX := float64(pylonComp.RadiusX)
-	radiusY := float64(pylonComp.RadiusY)
-	if radiusX < 1 {
-		radiusX = 1
-	}
-	if radiusY < 1 {
-		radiusY = 1
-	}
-
-	invRxSq := 1.0 / (radiusX * radiusX)
-	invRySq := 1.0 / (radiusY * radiusY)
-
-	minHP := pylonComp.MinHP
-	maxHP := pylonComp.MaxHP
-	hpRange := maxHP - minHP
-
-	for _, member := range headerComp.MemberEntries {
-		if member.Entity == 0 {
-			continue
-		}
-
-		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(member.Entity)
-		if !ok || combatComp.HitPoints <= 0 {
-			continue
-		}
-
-		pos, ok := r.gameCtx.World.Positions.GetPosition(member.Entity)
-		if !ok {
-			continue
-		}
-
-		screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
-		if !visible {
-			continue
-		}
-
-		dx := float64(member.OffsetX)
-		dy := float64(member.OffsetY)
-		normDistSq := dx*dx*invRxSq + dy*dy*invRySq
-		normDist := math.Sqrt(normDistSq)
-
-		var initialHP int
-		if hpRange > 0 {
-			if normDist > 1.0 {
-				normDist = 1.0
-			}
-			initialHP = maxHP - int(float64(hpRange)*normDist)
-		} else {
-			initialHP = maxHP
-		}
-		if initialHP < minHP {
-			initialHP = minHP
-		}
-		if initialHP <= 0 {
-			initialHP = 1
-		}
-
-		healthRatio := float64(combatComp.HitPoints) / float64(initialHP)
-		if healthRatio > 1.0 {
-			healthRatio = 1.0
-		}
-
-		var colorIdx uint8
-		switch {
-		case healthRatio >= visual.PylonHealthThresholdDamaged:
-			colorIdx = visual.PylonBasicHealthy
-		case healthRatio >= visual.PylonHealthThresholdCritical:
-			colorIdx = visual.PylonBasicDamaged
-		default:
-			colorIdx = visual.PylonBasicCritical
-		}
-
-		buf.SetBg256(screenX, screenY, colorIdx)
 	}
 }

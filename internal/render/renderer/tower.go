@@ -20,12 +20,11 @@ type towerColorEntry struct {
 }
 
 // towerRenderFunc defines the render strategy signature, selected at initialization
-type towerRenderFunc func(r *TowerRenderer, ctx render.RenderContext, buf *render.RenderBuffer)
+type towerRenderFunc func(ctx render.RenderContext, buf *render.RenderBuffer)
 
 // TowerRenderer draws tower entities with health-based coloring and target-aware glow
 type TowerRenderer struct {
-	gameCtx   *engine.GameContext
-	colorMode terminal.ColorMode
+	gameCtx *engine.GameContext
 
 	// Pre-computed color gradient per visual type (256 entries for health ratio 0.0-1.0)
 	colorLUTs [component.TowerTypeCount][256]towerColorEntry
@@ -35,22 +34,16 @@ type TowerRenderer struct {
 }
 
 func NewTowerRenderer(gameCtx *engine.GameContext) *TowerRenderer {
-	colorMode := gameCtx.World.Resources.Config.ColorMode
-
 	r := &TowerRenderer{
-		gameCtx:   gameCtx,
-		colorMode: colorMode,
+		gameCtx: gameCtx,
 	}
 
 	r.buildColorLUTs()
 
-	switch colorMode {
-	case terminal.ColorModeTrueColor:
-		r.renderFunc = (*TowerRenderer).renderTrueColor
-	case terminal.ColorMode256:
-		r.renderFunc = (*TowerRenderer).render256Color
-	default:
-		r.renderFunc = (*TowerRenderer).renderBasicColor
+	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		r.renderFunc = r.render256Color
+	} else {
+		r.renderFunc = r.renderTrueColor
 	}
 
 	return r
@@ -96,7 +89,7 @@ func (r *TowerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	}
 
 	buf.SetWriteMask(visual.MaskComposite)
-	r.renderFunc(r, ctx, buf)
+	r.renderFunc(ctx, buf)
 }
 
 // isActiveTarget returns true if any target group references this tower header entity
@@ -399,65 +392,5 @@ func (r *TowerRenderer) renderMembers256Color(
 		}
 
 		buf.SetBg256(screenX, screenY, paletteIdx)
-	}
-}
-
-// === Basic Color ===
-
-func (r *TowerRenderer) renderBasicColor(ctx render.RenderContext, buf *render.RenderBuffer) {
-	r.gameCtx.World.Components.Tower.Each(func(headerEntity core.Entity, towerComp *component.TowerComponent) bool {
-		headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headerEntity)
-		if !ok {
-			return true
-		}
-
-		visualType := clampVisualType(towerComp.Type)
-		r.renderMembersBasicColor(ctx, buf, towerComp, headerComp, visualType)
-		return true
-	})
-}
-
-func (r *TowerRenderer) renderMembersBasicColor(
-	ctx render.RenderContext,
-	buf *render.RenderBuffer,
-	towerComp *component.TowerComponent,
-	headerComp *component.HeaderComponent,
-	visualType int,
-) {
-	tc := &visual.TowerTypes[visualType]
-
-	for _, member := range headerComp.MemberEntries {
-		if member.Entity == 0 {
-			continue
-		}
-
-		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(member.Entity)
-		if !ok || combatComp.HitPoints <= 0 {
-			continue
-		}
-
-		pos, ok := r.gameCtx.World.Positions.GetPosition(member.Entity)
-		if !ok {
-			continue
-		}
-
-		screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
-		if !visible {
-			continue
-		}
-
-		healthRatio, _ := calculateTowerMemberMetrics(towerComp, combatComp.HitPoints, member.OffsetX, member.OffsetY)
-
-		var colorIdx uint8
-		switch {
-		case healthRatio >= visual.TowerHealthThresholdDamaged:
-			colorIdx = tc.BasicHealthy
-		case healthRatio >= visual.TowerHealthThresholdCritical:
-			colorIdx = tc.BasicDamaged
-		default:
-			colorIdx = tc.BasicCritical
-		}
-
-		buf.SetBg256(screenX, screenY, colorIdx)
 	}
 }

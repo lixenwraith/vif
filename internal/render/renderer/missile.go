@@ -63,7 +63,7 @@ func (r *MissileRenderer) renderMissileTrueColor(
 	// === Trail ===
 	maxAge := parameter.MissileTrailMaxAge
 	if maxAge <= 0 {
-		r.renderBody(ctx, buf, missile, kinetic, true)
+		r.renderBodyTrueColor(ctx, buf, kinetic)
 		return
 	}
 
@@ -101,34 +101,24 @@ func (r *MissileRenderer) renderMissileTrueColor(
 	}
 
 	// === Body ===
-	r.renderBody(ctx, buf, missile, kinetic, true)
+	r.renderBodyTrueColor(ctx, buf, kinetic)
 }
 
-// --- Body Rendering (Shared) ---
-
-func (r *MissileRenderer) renderBody(
-	ctx render.RenderContext,
-	buf *render.RenderBuffer,
-	missile *component.MissileComponent,
-	kinetic *component.KineticComponent,
-	trueColor bool,
-) {
+// bodyCell resolves the screen cell and heading glyph of a missile body
+func (r *MissileRenderer) bodyCell(ctx render.RenderContext, kinetic *component.KineticComponent) (int, int, rune, bool) {
 	point := vmath.PointAtF(kinetic.PreciseX, kinetic.PreciseY)
-	mapX := point.X
-	mapY := point.Y
+	screenX, screenY, visible := ctx.MapToScreen(point.X, point.Y)
+	return screenX, screenY, r.directionChar(kinetic.VelX, kinetic.VelY), visible
+}
 
-	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
-	if !visible {
-		return
+func (r *MissileRenderer) renderBodyTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, kinetic *component.KineticComponent) {
+	if screenX, screenY, char, ok := r.bodyCell(ctx, kinetic); ok {
+		buf.Set(screenX, screenY, char, color.RGB{}, visual.RgbBackground, render.BlendReplace, 1.0, terminal.AttrBold)
 	}
+}
 
-	var bodyColor color.RGB
-	char := r.directionChar(kinetic.VelX, kinetic.VelY)
-
-	if trueColor {
-		buf.Set(screenX, screenY, char, bodyColor, visual.RgbBackground,
-			render.BlendReplace, 1.0, terminal.AttrBold)
-	} else {
+func (r *MissileRenderer) renderBody256(ctx render.RenderContext, buf *render.RenderBuffer, kinetic *component.KineticComponent) {
+	if screenX, screenY, char, ok := r.bodyCell(ctx, kinetic); ok {
 		buf.SetFgOnly(screenX, screenY, char, color.RGB{R: visual.Missile256Base}, terminal.AttrFg256|terminal.AttrBold)
 	}
 }
@@ -192,7 +182,7 @@ func (r *MissileRenderer) renderMissile256(
 	// === Trail ===
 	maxAge := parameter.MissileTrailMaxAge
 	if maxAge <= 0 {
-		r.renderBody(ctx, buf, missile, kinetic, false)
+		r.renderBody256(ctx, buf, kinetic)
 		return
 	}
 
@@ -221,5 +211,5 @@ func (r *MissileRenderer) renderMissile256(
 	}
 
 	// === Body ===
-	r.renderBody(ctx, buf, missile, kinetic, false)
+	r.renderBody256(ctx, buf, kinetic)
 }

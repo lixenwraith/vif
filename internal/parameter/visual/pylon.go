@@ -29,13 +29,6 @@ const (
 	Pylon256Critical uint8 = 160 // Red
 )
 
-// Pylon basic color (8/16 color terminals)
-const (
-	PylonBasicHealthy  uint8 = 4 // Blue
-	PylonBasicDamaged  uint8 = 2 // Green
-	PylonBasicCritical uint8 = 1 // Red
-)
-
 // Pylon glow parameters (reuse storm values for consistency)
 const (
 	PylonGlowExtend         = 1.5

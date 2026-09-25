@@ -21,15 +21,21 @@ const (
 // TeleportLineRenderer draws a phase-based beam from swarm origin to teleport destination
 // Phases: Fill (beam extends) → Hold (full line) → Recede (darkness sweeps)
 type TeleportLineRenderer struct {
-	gameCtx *engine.GameContext
-	is256   bool
+	gameCtx    *engine.GameContext
+	renderCell teleportLineCellRenderer
 }
 
+// teleportLineCellRenderer draws one beam cell at the given intensity
+type teleportLineCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, intensity float64)
+
 func NewTeleportLineRenderer(ctx *engine.GameContext) *TeleportLineRenderer {
-	return &TeleportLineRenderer{
-		gameCtx: ctx,
-		is256:   ctx.World.Resources.Config.ColorMode == terminal.ColorMode256,
+	r := &TeleportLineRenderer{gameCtx: ctx}
+	if ctx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		r.renderCell = r.cell256
+	} else {
+		r.renderCell = r.cellTrueColor
 	}
+	return r
 }
 
 func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
@@ -139,17 +145,7 @@ func (r *TeleportLineRenderer) renderBeam(
 
 			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 			if visible {
-				intensity := r.calcIntensity(progress, t, segStart, segEnd)
-
-				if r.is256 {
-					if intensity > parameter.SwarmTeleport256Threshold {
-						buf.SetBg256(screenX, screenY, visual.SwarmChargeLine256Palette)
-					}
-				} else {
-					scaledColor := color.Scale(visual.RgbSwarmTeleport, intensity)
-					buf.Set(screenX, screenY, 0, visual.RgbBlack, scaledColor,
-						render.BlendMaxBg, 1.0, terminal.AttrNone)
-				}
+				r.renderCell(buf, screenX, screenY, r.calcIntensity(progress, t, segStart, segEnd))
 			}
 		}
 
@@ -192,5 +188,17 @@ func (r *TeleportLineRenderer) calcIntensity(progress, t, segStart, segEnd float
 	default:
 		// Recede: cells closer to target stay brighter
 		return 0.3 + 0.7*posInSeg
+	}
+}
+
+func (r *TeleportLineRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, intensity float64) {
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, color.Scale(visual.RgbSwarmTeleport, intensity),
+		render.BlendMaxBg, 1.0, terminal.AttrNone)
+}
+
+// cell256 has no intensity ramp, so dim beam cells are dropped rather than scaled
+func (r *TeleportLineRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, intensity float64) {
+	if intensity > parameter.SwarmTeleport256Threshold {
+		buf.SetBg256(screenX, screenY, visual.SwarmChargeLine256Palette)
 	}
 }

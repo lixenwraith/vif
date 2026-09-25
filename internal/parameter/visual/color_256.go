@@ -49,25 +49,13 @@ var SpiritBaseOffsets = [8]int{
 const (
 	// Missile
 	Missile256Trail = color.P256Amber  // (5,3,0)
-	Missile256Body  = color.P256Gold   // (5,4,0)
 	Missile256Base  = color.P256Orange // (5,2,0)
 
 	// Swarm charge line
 	SwarmChargeLine256Palette = color.P256Orchid // (4,2,4)
 
-	// Wall fallback
-	Wall256PaletteDefault = color.P256Gray // Grayscale step 8
-
 	// Loot shield
 	Loot256Rim = color.P256Rose // (5,0,2)
 
-	// Storm rendering palette indices
-	Storm256Bright = color.P256LightCyan // (1,5,5)
-	Storm256Normal = color.P256Teal      // (0,4,4)
-	Storm256Dark   = color.P256DeepTeal  // (0,1,1)
-
 	Bullet256StormRed = color.P256Red // (5,0,0)
 )
-
-// Eye explosion
-var Eye256Explosion = color.P256MediumPurple // (3,1,5)

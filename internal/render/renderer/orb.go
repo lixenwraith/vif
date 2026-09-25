@@ -17,7 +17,7 @@ import (
 // OrbRenderer draws weapon orbs with corona glow (TrueColor) or simple sigil (256)
 type OrbRenderer struct {
 	gameCtx   *engine.GameContext
-	colorMode terminal.ColorMode
+	renderOrb orbRenderFunc
 
 	// Precomputed ellipse containment (2:1 aspect)
 	effectInvRxSq    float64
@@ -31,15 +31,23 @@ func NewOrbRenderer(gameCtx *engine.GameContext) *OrbRenderer {
 	ry := parameter.OrbCoronaRadiusY
 	invRxSq, invRySq := vmath.EllipseInvRadiiSqF(rx, ry)
 
-	return &OrbRenderer{
+	r := &OrbRenderer{
 		gameCtx:          gameCtx,
-		colorMode:        gameCtx.World.Resources.Config.ColorMode,
 		effectInvRxSq:    invRxSq,
 		effectInvRySq:    invRySq,
 		effectRadiusXInt: int(math.Floor(rx)),
 		effectRadiusYInt: int(math.Floor(ry)),
 	}
+	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		r.renderOrb = r.renderOrb256
+	} else {
+		r.renderOrb = r.renderOrbTrueColor
+	}
+	return r
 }
+
+// orbRenderFunc draws one orb whose map cell is visible
+type orbRenderFunc func(ctx render.RenderContext, buf *render.RenderBuffer, mapX, mapY int, orb *component.OrbComponent, glyph rune)
 
 // Render draws all weapon orbs
 func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
@@ -50,47 +58,12 @@ func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	// TrueColor path: precompute corona rotation once per frame
-	if r.colorMode == terminal.ColorModeTrueColor {
-		gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
-		angle := 0.0
-		if parameter.OrbCoronaPeriodMs > 0 {
-			angle = float64(gameTimeMs%parameter.OrbCoronaPeriodMs) / float64(parameter.OrbCoronaPeriodMs) * vmath.TwoPi
-		}
-		coronaRotDirX := vmath.CosF(angle)
-		coronaRotDirY := vmath.SinF(angle)
-
-		orbs.Each(func(entity core.Entity, orbComp *component.OrbComponent) bool {
-			pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
-			if !ok {
-				return true
-			}
-
-			if !ctx.IsInViewport(pos.X, pos.Y) {
-				return true
-			}
-
-			glyph := r.chargeGlyph(orbComp)
-			r.renderOrbTrueColor(ctx, buf, pos.X, pos.Y, orbComp, glyph, coronaRotDirX, coronaRotDirY)
-			return true
-		})
-		return
-	}
-
-	// 256-color path: simple sigil only
 	orbs.Each(func(entity core.Entity, orbComp *component.OrbComponent) bool {
 		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
-		if !ok {
+		if !ok || !ctx.IsInViewport(pos.X, pos.Y) {
 			return true
 		}
-
-		screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
-		if !visible {
-			return true
-		}
-
-		glyph := r.chargeGlyph(orbComp)
-		r.renderOrb256(buf, screenX, screenY, orbComp, glyph)
+		r.renderOrb(ctx, buf, pos.X, pos.Y, orbComp, r.chargeGlyph(orbComp))
 		return true
 	})
 }
@@ -110,7 +83,8 @@ func (r *OrbRenderer) chargeGlyph(orb *component.OrbComponent) rune {
 }
 
 // renderOrb256 draws simple colored character for 256-color mode
-func (r *OrbRenderer) renderOrb256(buf *render.RenderBuffer, screenX, screenY int, orb *component.OrbComponent, glyph rune) {
+func (r *OrbRenderer) renderOrb256(ctx render.RenderContext, buf *render.RenderBuffer, mapX, mapY int, orb *component.OrbComponent, glyph rune) {
+	screenX, screenY, _ := ctx.MapToScreen(mapX, mapY)
 	var c color.RGB
 	if orb.FlashRemaining > 0 {
 		c = visual.RgbOrbFlash
@@ -121,7 +95,7 @@ func (r *OrbRenderer) renderOrb256(buf *render.RenderBuffer, screenX, screenY in
 }
 
 // renderOrbTrueColor draws corona glow with optional flash burst
-func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, mapX, mapY int, orb *component.OrbComponent, glyph rune, rotDirX, rotDirY float64) {
+func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, mapX, mapY int, orb *component.OrbComponent, glyph rune) {
 	baseColor := r.baseColor(orb.WeaponType)
 
 	if orb.FlashRemaining > 0 {
@@ -130,7 +104,12 @@ func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.R
 		return
 	}
 
-	r.renderCorona(ctx, buf, mapX, mapY, r.coronaColor(orb.WeaponType), rotDirX, rotDirY)
+	angle := 0.0
+	if parameter.OrbCoronaPeriodMs > 0 {
+		gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
+		angle = float64(gameTimeMs%parameter.OrbCoronaPeriodMs) / float64(parameter.OrbCoronaPeriodMs) * vmath.TwoPi
+	}
+	r.renderCorona(ctx, buf, mapX, mapY, r.coronaColor(orb.WeaponType), vmath.CosF(angle), vmath.SinF(angle))
 
 	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 	if visible {

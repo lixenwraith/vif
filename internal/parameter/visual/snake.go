@@ -26,12 +26,6 @@ const (
 	Snake256BodyBack  uint8 = 28 // Dark green
 )
 
-// Snake basic color (8/16 color terminals)
-const (
-	SnakeBasicHead uint8 = 2 // Green
-	SnakeBasicBody uint8 = 2 // Green
-)
-
 // Gradient and visual parameters
 const (
 	// Lateral edge falloff (0.0 = same as center, 1.0 = fully faded)

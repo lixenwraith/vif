@@ -14,15 +14,21 @@ import (
 // Active only during SwarmStateLock within the pulse visibility window
 // Two pulses travel swarm→target at charge speed, acting as countdown before the charge
 type ChargeLineRenderer struct {
-	gameCtx *engine.GameContext
-	is256   bool
+	gameCtx    *engine.GameContext
+	renderCell chargeLineCellRenderer
 }
 
+// chargeLineCellRenderer draws one pulse cell at the given trail alpha
+type chargeLineCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, alpha float64)
+
 func NewChargeLineRenderer(ctx *engine.GameContext) *ChargeLineRenderer {
-	return &ChargeLineRenderer{
-		gameCtx: ctx,
-		is256:   ctx.World.Resources.Config.ColorMode == terminal.ColorMode256,
+	r := &ChargeLineRenderer{gameCtx: ctx}
+	if ctx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		r.renderCell = r.cell256
+	} else {
+		r.renderCell = r.cellTrueColor
 	}
+	return r
 }
 
 func (r *ChargeLineRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
@@ -131,16 +137,7 @@ func (r *ChargeLineRenderer) tracePulse(
 				if trailDist <= trailLen {
 					screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 					if visible {
-						cellAlpha := baseAlpha * (1.0 - trailDist/trailLen)
-						if r.is256 {
-							if cellAlpha > parameter.SwarmChargeLine256Threshold {
-								buf.SetBg256(screenX, screenY, visual.SwarmChargeLine256Palette)
-							}
-						} else {
-							buf.Set(screenX, screenY, 0, visual.RgbBlack,
-								visual.RgbSwarmChargeLine, render.BlendMaxBg,
-								cellAlpha, terminal.AttrNone)
-						}
+						r.renderCell(buf, screenX, screenY, baseAlpha*(1.0-trailDist/trailLen))
 					}
 				}
 			}
@@ -157,5 +154,16 @@ func (r *ChargeLineRenderer) tracePulse(
 				mapY += stepY
 			}
 		}
+	}
+}
+
+func (r *ChargeLineRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, alpha float64) {
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, visual.RgbSwarmChargeLine, render.BlendMaxBg, alpha, terminal.AttrNone)
+}
+
+// cell256 has no alpha, so faint trail cells are dropped rather than dimmed
+func (r *ChargeLineRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, alpha float64) {
+	if alpha > parameter.SwarmChargeLine256Threshold {
+		buf.SetBg256(screenX, screenY, visual.SwarmChargeLine256Palette)
 	}
 }

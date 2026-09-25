@@ -22,12 +22,11 @@ type snakeBodyColorEntry struct {
 }
 
 // snakeRenderFunc defines the render strategy signature
-type snakeRenderFunc func(r *SnakeRenderer, ctx render.RenderContext, buf *render.RenderBuffer)
+type snakeRenderFunc func(ctx render.RenderContext, buf *render.RenderBuffer)
 
 // SnakeRenderer draws snake entities with body gradients and shield glow
 type SnakeRenderer struct {
-	gameCtx   *engine.GameContext
-	colorMode terminal.ColorMode
+	gameCtx *engine.GameContext
 
 	// Pre-computed body color gradient LUT (segment index → color pair)
 	// Index 0 = head-adjacent, index 255 = max tail
@@ -40,22 +39,16 @@ type SnakeRenderer struct {
 }
 
 func NewSnakeRenderer(gameCtx *engine.GameContext) *SnakeRenderer {
-	colorMode := gameCtx.World.Resources.Config.ColorMode
-
 	r := &SnakeRenderer{
-		gameCtx:   gameCtx,
-		colorMode: colorMode,
+		gameCtx: gameCtx,
 	}
 
 	r.buildBodyColorLUT()
 
-	switch colorMode {
-	case terminal.ColorModeTrueColor:
-		r.renderFunc = (*SnakeRenderer).renderTrueColor
-	case terminal.ColorMode256:
-		r.renderFunc = (*SnakeRenderer).render256Color
-	default:
-		r.renderFunc = (*SnakeRenderer).renderBasicColor
+	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		r.renderFunc = r.render256Color
+	} else {
+		r.renderFunc = r.renderTrueColor
 	}
 
 	return r
@@ -79,7 +72,7 @@ func (r *SnakeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	}
 
 	buf.SetWriteMask(visual.MaskComposite)
-	r.renderFunc(r, ctx, buf)
+	r.renderFunc(ctx, buf)
 }
 
 func (r *SnakeRenderer) renderTrueColor(ctx render.RenderContext, buf *render.RenderBuffer) {
@@ -444,93 +437,6 @@ func (r *SnakeRenderer) renderHead256Color(ctx render.RenderContext, buf *render
 		}
 
 		buf.SetBg256(screenX, screenY, visual.Snake256Head)
-	}
-}
-
-// --- Basic Color Path ---
-
-func (r *SnakeRenderer) renderBasicColor(ctx render.RenderContext, buf *render.RenderBuffer) {
-	r.gameCtx.World.Components.Snake.Each(func(_ core.Entity, snakeComp *component.SnakeComponent) bool {
-		// Body
-		if snakeComp.BodyEntity != 0 {
-			r.renderBodyBasicColor(ctx, buf, snakeComp.BodyEntity)
-		}
-
-		// Head
-		r.renderHeadBasicColor(ctx, buf, snakeComp.HeadEntity)
-		return true
-	})
-}
-
-func (r *SnakeRenderer) renderBodyBasicColor(ctx render.RenderContext, buf *render.RenderBuffer, bodyEntity core.Entity) {
-	bodyComp, ok := r.gameCtx.World.Components.SnakeBody.GetPtr(bodyEntity)
-	if !ok {
-		return
-	}
-
-	segmentCount := len(bodyComp.Segments)
-	if segmentCount == 0 {
-		return
-	}
-
-	resolved := r.resolveBodyMembers(bodyEntity, segmentCount)
-	if len(resolved) != segmentCount {
-		return
-	}
-
-	for i := range bodyComp.Segments {
-		seg := &bodyComp.Segments[i]
-		if !seg.Connected || !resolved[i].hasAny {
-			continue
-		}
-
-		for _, memberEntity := range resolved[i].members {
-			if memberEntity == 0 {
-				continue
-			}
-
-			combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(memberEntity)
-			if !ok || combatComp.HitPoints <= 0 {
-				continue
-			}
-
-			pos, ok := r.gameCtx.World.Positions.GetPosition(memberEntity)
-			if !ok {
-				continue
-			}
-
-			screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
-			if !visible {
-				continue
-			}
-
-			buf.SetBg256(screenX, screenY, visual.SnakeBasicBody)
-		}
-	}
-}
-
-func (r *SnakeRenderer) renderHeadBasicColor(ctx render.RenderContext, buf *render.RenderBuffer, headEntity core.Entity) {
-	headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headEntity)
-	if !ok {
-		return
-	}
-
-	for _, member := range headerComp.MemberEntries {
-		if member.Entity == 0 {
-			continue
-		}
-
-		pos, ok := r.gameCtx.World.Positions.GetPosition(member.Entity)
-		if !ok {
-			continue
-		}
-
-		screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
-		if !visible {
-			continue
-		}
-
-		buf.SetBg256(screenX, screenY, visual.SnakeBasicHead)
 	}
 }
 

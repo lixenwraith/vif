@@ -22,11 +22,6 @@ type TowerTypeColors struct {
 	Palette256Healthy  uint8
 	Palette256Damaged  uint8
 	Palette256Critical uint8
-
-	// Basic (8/16) color per health zone
-	BasicHealthy  uint8
-	BasicDamaged  uint8
-	BasicCritical uint8
 }
 
 // TowerTypes defines visual properties indexed by TowerComponent.VisualType
@@ -43,9 +38,6 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 		Palette256Healthy:  color.P256Cyan,
 		Palette256Damaged:  color.P256Gold,
 		Palette256Critical: color.P256Crimson,
-		BasicHealthy:       6, // Cyan
-		BasicDamaged:       3, // Yellow
-		BasicCritical:      1, // Red
 	},
 	// Type 1: Gold — Gold → WarmOrange → BrightRed
 	{
@@ -59,9 +51,6 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 		Palette256Healthy:  color.P256Gold,
 		Palette256Damaged:  color.P256Amber,
 		Palette256Critical: color.P256Red,
-		BasicHealthy:       3, // Yellow
-		BasicDamaged:       3, // Yellow
-		BasicCritical:      1, // Red
 	},
 	// Type 2: Violet — ElectricViolet → SoftLavender → Vermilion
 	{
@@ -75,9 +64,6 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 		Palette256Healthy:  color.P256MediumPurple,
 		Palette256Damaged:  color.P256Violet,
 		Palette256Critical: color.P256Crimson,
-		BasicHealthy:       5, // Magenta
-		BasicDamaged:       5, // Magenta
-		BasicCritical:      1, // Red
 	},
 	// Type 3: Emerald — EmeraldGreen → YellowGreen → BurntSienna
 	{
@@ -91,9 +77,6 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 		Palette256Healthy:  color.P256Green,
 		Palette256Damaged:  color.P256YellowGreen,
 		Palette256Critical: color.P256Crimson,
-		BasicHealthy:       2, // Green
-		BasicDamaged:       2, // Green
-		BasicCritical:      1, // Red
 	},
 }
 

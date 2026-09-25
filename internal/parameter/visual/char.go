@@ -35,13 +35,6 @@ var Half256Chars = [4]rune{
 	'\u2588', // 11 - both halves (█) - was 219
 }
 
-// Horizontal256Chars provides horizontal half-cell characters
-// Reserved for future horizontal sub-pixel support
-var Horizontal256Chars = [2]rune{
-	'\u258C', // ▌ - left half - was 221
-	'\u258E', // ▐ - right half - was 222
-}
-
 // Density256Chars provides intensity variants for trail, glow effects, ordered from lowest to highest density
 var Density256Chars = [4]rune{
 	'\u2591', // ░ - light shade (25%) - was 176
