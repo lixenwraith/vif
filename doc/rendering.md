@@ -272,7 +272,7 @@ also the visual stacking order; exact integer priorities are in
 | Base entities | `sigil`, `glyph`, `gold`, `healthbar` |
 | Species/structures | `pylon`, `tower`, `storm`, `eye`, `snake`, `drain`, `quasar`, `swarm` |
 | Cleaner/materialize | `cleaner`, `materialize`, `teleportline` |
-| Fields/projectiles | `shield`, `ember`, `orb`, `lightning`, `missile`, `pulse`, `bullet` |
+| Fields/projectiles | `shield`, `ember`, `orb`, `lightning`, `missile`, `pulse`, `beam`, `bullet` |
 | Particles | `flash`, `fadeout`, `explosion`, `spirit` |
 | Overlay effects | `splash`, `marker` |
 | Post-process | `grayout`, `strobe`, `dim` |

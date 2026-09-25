@@ -125,35 +125,39 @@ func TestCalculateCentroidFMatchesInt(t *testing.T) {
 	}
 }
 
-// TestBandCellsAreExactlyItsContents: the cells a band enumerates are the cells it
-// contains, solid on diagonals, so what draws a beam and what it hits agree.
-func TestBandCellsAreExactlyItsContents(t *testing.T) {
-	for _, dir := range Octants {
-		for half := range 3 {
-			b := Band{X: 20, Y: 20, DX: dir[0], DY: dir[1], Length: 6, Half: half}
-			cells := make(map[[2]int]bool)
-			for along := 1; along <= b.Length; along++ {
-				for across := -half; across <= half; across++ {
-					x, y := b.Cell(along, across)
+// TestRayCellsAreExactlyItsContents: the cells a ray enumerates are the cells it
+// contains, solid at any angle, so what draws a beam and what it hits agree; and a
+// ray aimed at a cell passes through it at its knee.
+func TestRayCellsAreExactlyItsContents(t *testing.T) {
+	dirs := [][2]int{{5, 2}, {-3, 7}, {1, -4}, {-6, -6}, {9, 0}, {0, -2}}
+	for _, o := range Octants {
+		dirs = append(dirs, o)
+	}
+	for _, d := range dirs {
+		for near := range 2 {
+			knee := max(IntAbs(d[0]), IntAbs(d[1]))
+			r := Ray{X: 30, Y: 30, DX: float64(d[0]), DY: float64(d[1]), Length: 12, Knee: knee, Near: near, Far: near + 1}
+			if x, y := r.Center(knee); x != 30+d[0] || y != 30+d[1] {
+				t.Fatalf("ray %+v: step %d is (%d, %d), want the aimed cell (%d, %d)", r, knee, x, y, 30+d[0], 30+d[1])
+			}
+			cells, want := make(map[[2]int]bool), 0
+			for i := 1; i <= r.Length; i++ {
+				want += 2*r.Half(i) + 1
+				for across := -r.Half(i); across <= r.Half(i); across++ {
+					x, y := r.Cell(i, across)
 					cells[[2]int{x, y}] = true
 				}
 			}
-			for y := range 41 {
-				for x := range 41 {
-					if b.Contains(x, y) != cells[[2]int{x, y}] {
-						t.Fatalf("band %+v: cell (%d, %d) contained %v, enumerated %v", b, x, y, b.Contains(x, y), cells[[2]int{x, y}])
+			for y := range 61 {
+				for x := range 61 {
+					if r.Contains(x, y) != cells[[2]int{x, y}] {
+						t.Fatalf("ray %+v: cell (%d, %d) contained %v, enumerated %v", r, x, y, r.Contains(x, y), cells[[2]int{x, y}])
 					}
 				}
 			}
-			if len(cells) != b.Length*(2*half+1) {
-				t.Fatalf("band %+v enumerates %d cells, want %d", b, len(cells), b.Length*(2*half+1))
+			if len(cells) != want {
+				t.Fatalf("ray %+v enumerates %d cells, want %d", r, len(cells), want)
 			}
 		}
-	}
-	if dx, dy := Octant(10, 3); dx != 1 || dy != 0 {
-		t.Fatalf("Octant(10, 3) = (%d, %d), want east", dx, dy)
-	}
-	if dx, dy := Octant(-4, 5); dx != -1 || dy != 1 {
-		t.Fatalf("Octant(-4, 5) = (%d, %d), want south-west", dx, dy)
 	}
 }

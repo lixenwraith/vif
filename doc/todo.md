@@ -245,6 +245,13 @@ A mounted beam destroying walls and glyphs, mounted weapons striking other speci
 
 PvP: a hit on a remote cursor crosses as its impact and the victim's owner applies it, as `strikeCursor` does for mounts.
 
+### Fan a fully charged beam into spokes
+
+- Priority: P3
+- Affected files: `internal/system/weapon.go`, `internal/component/beam.go`
+
+Charges beyond the ray could add rays 360°/n apart, one through the orb; a sweep already passes each target once a turn, so spokes trade coverage for crossings.
+
 ### Move storm's green circle onto a disruptor mount
 
 - Priority: P3

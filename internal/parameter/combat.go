@@ -42,7 +42,7 @@ const (
 	// CombatDamageBullet is damage per turret bullet hit
 	CombatDamageBullet = 1
 
-	// CombatDamageBeam is damage per member a beam covers
+	// CombatDamageBeam is damage per member a beam covers, times its charges
 	CombatDamageBeam = 1
 )
 
@@ -152,22 +152,24 @@ const (
 	HostedTurretEnergy = 100
 	HostedTurretHeat   = 10
 
-	HostedBeamEnergy = 250 // per strike, every BeamHitInterval inside a firing beam
+	HostedBeamRange  = 40.0 // an aiming beam's reach to its cursor; a beam runs to the first wall
+	HostedBeamEnergy = 250  // per strike, every BeamHitInterval inside a firing beam
 	HostedBeamHeat   = 5
 
 	// MissileHostedMaxSpeed keeps a mounted launcher's missile outrunnable (cells/sec)
 	MissileHostedMaxSpeed = 40.0
 )
 
-// Beams: a cursor's fires at once for BeamFlash; a mount's warns, fires, then rests
+// Beams run to the first wall or the map edge. A cursor's runs from the cursor
+// through its orb, one cell wide to the orb and BeamWidth past it, for BeamDuration
+// and BeamDurationPerCharge a charge past the first; a mount's warns, fires, rests.
 const (
-	BeamWidth       = 3    // cells across, centre included
-	BeamMaxLength   = 60.0 // cells along; the first wall stops it sooner
-	BeamFlash       = 200 * time.Millisecond
-	BeamWarning     = 750 * time.Millisecond
-	BeamFiring      = 1000 * time.Millisecond
-	BeamHitInterval = 250 * time.Millisecond
-	BeamEffectCap   = 16
+	BeamWidth             = 3 // cells across, centre included
+	BeamDuration          = 1500 * time.Millisecond
+	BeamDurationPerCharge = 750 * time.Millisecond
+	BeamWarning           = 750 * time.Millisecond
+	BeamFiring            = 1000 * time.Millisecond
+	BeamHitInterval       = 250 * time.Millisecond // a mount's; a cursor's strikes every tick
 )
 
 // Turret bullets, a cursor's and a mount's alike

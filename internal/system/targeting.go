@@ -309,21 +309,20 @@ func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, scope 
 	return final
 }
 
-// traceBeam lays a band from a cell in one of eight directions, up to maxLength steps
-// and short of the first wall that blocks kinetics or the map edge
-func traceBeam(w *engine.World, x, y, dx, dy int, maxLength float64, width int) vmath.Band {
-	band := vmath.Band{X: x, Y: y, DX: dx, DY: dy, Half: max(width-1, 0) / 2}
-	if dx == 0 && dy == 0 {
-		return band
+// traceRay is how many steps a ray runs before the first wall that blocks kinetics
+// or the map edge
+func traceRay(w *engine.World, r vmath.Ray) int {
+	if r.DX == 0 && r.DY == 0 {
+		return 0
 	}
-	for along := 1; along <= int(maxLength); along++ {
-		cx, cy := x+along*dx, y+along*dy
-		if w.Positions.IsOutOfBounds(cx, cy) || w.Positions.HasBlockingWallAt(cx, cy, component.WallBlockKinetic) {
-			break
+	limit := w.Resources.Config.MapWidth + w.Resources.Config.MapHeight
+	for i := 1; i <= limit; i++ {
+		x, y := r.Center(i)
+		if w.Positions.IsOutOfBounds(x, y) || w.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
+			return i - 1
 		}
-		band.Length = along
 	}
-	return band
+	return limit
 }
 
 // isOwnedBy returns true if entity is the owner or its CombatComponent,OwnerEntity matches

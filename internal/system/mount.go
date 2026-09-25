@@ -118,6 +118,8 @@ func (s *MountSystem) attach(p *event.MountRequestPayload) {
 		Lane:     uint8(p.Lane),
 		Width:    width,
 	})
+	// A beam the replaced mount had in flight would have nothing left to end it
+	s.world.Components.Beam.RemoveEntity(p.Host, false)
 }
 
 func (s *MountSystem) Update() {
@@ -141,7 +143,7 @@ func (s *MountSystem) Update() {
 		}
 		cursor := s.aim(m, pos)
 		if component.WeaponSpecs[m.Weapon].Delivery == component.DeliveryBeam {
-			s.cycleBeam(cursor, m, pos, dt)
+			s.cycleBeam(host, cursor, m, pos, dt)
 			continue
 		}
 		if cursor == 0 || m.Cooldown > 0 || (m.Trigger == component.MountArmed && !m.Armed) {
@@ -251,56 +253,64 @@ func (s *MountSystem) fire(host, cursor core.Entity, m *component.MountComponent
 	}
 }
 
-// cycleBeam runs a beam mount's warn, fire, rest cycle. The band is laid when the
-// warning starts and holds until rest, so a cursor sees where it will strike; a
-// laned beam cycles whether or not a cursor is in range.
-func (s *MountSystem) cycleBeam(cursor core.Entity, m *component.MountComponent, pos component.PositionComponent, dt time.Duration) {
-	damage := component.WeaponSpecs[m.Weapon].HostedDamage
-	switch m.Phase {
-	case component.MountResting:
+// cycleBeam runs a beam mount's warn, fire, rest cycle on the host's BeamComponent.
+// The ray is laid when the warning starts and holds until rest, so a cursor sees
+// where it will strike; a laned beam cycles whether or not a cursor is in range.
+func (s *MountSystem) cycleBeam(host, cursor core.Entity, m *component.MountComponent, pos component.PositionComponent, dt time.Duration) {
+	beams := s.world.Components.Beam
+	beam, ok := beams.GetPtr(host)
+	if !ok {
 		if m.Cooldown > 0 || (m.Trigger == component.MountArmed && !m.Armed) {
 			return
 		}
-		dx, dy := 0, 0
-		if m.Lane > 0 {
-			dx, dy = vmath.Octants[m.Lane-1][0], vmath.Octants[m.Lane-1][1]
-		} else if cursor != 0 {
-			dx, dy = vmath.Octant(float64(m.AimX-pos.X), float64(m.AimY-pos.Y))
-		}
-		if dx == 0 && dy == 0 {
+		ray, ok := layLane(s.world, m, pos, cursor)
+		if !ok {
 			return
 		}
-		reach := m.Range
-		if reach <= 0 {
-			reach = parameter.BeamMaxLength
-		}
-		m.Band = traceBeam(s.world, pos.X, pos.Y, dx, dy, reach, m.Width)
-		m.Phase, m.PhaseRemaining = component.MountWarning, parameter.BeamWarning
-		s.world.PushLocal(event.EventBeamVisualRequest, &event.BeamVisualRequestPayload{
-			Band: m.Band, Warning: parameter.BeamWarning, Firing: parameter.BeamFiring, Palette: component.PaletteHostile,
+		beams.SetComponent(host, component.BeamComponent{
+			Ray: ray, Phase: component.BeamWarning,
+			Remaining: parameter.BeamWarning, Duration: parameter.BeamWarning,
+			HitInterval: parameter.BeamHitInterval, Scale: 1, Palette: component.PaletteHostile,
 		})
 		s.statFired.Add(1)
-
-	case component.MountWarning:
-		m.PhaseRemaining -= dt
-		if m.PhaseRemaining > 0 {
-			return
-		}
-		m.Phase, m.PhaseRemaining = component.MountFiring, parameter.BeamFiring
-		strikeCursorsIn(s.world, m.Band.Contains, damage)
-		m.Cooldown = parameter.BeamHitInterval
-
-	case component.MountFiring:
-		m.PhaseRemaining -= dt
-		if m.PhaseRemaining <= 0 {
-			m.Phase, m.Cooldown = component.MountResting, m.Interval
-			return
-		}
-		if m.Cooldown <= 0 {
-			strikeCursorsIn(s.world, m.Band.Contains, damage)
-			m.Cooldown = parameter.BeamHitInterval
-		}
+		return
 	}
+
+	beam.Remaining -= dt
+	switch {
+	case beam.Phase == component.BeamWarning && beam.Remaining <= 0:
+		beam.Phase, beam.Remaining, beam.Duration, beam.HitTimer =
+			component.BeamFiring, parameter.BeamFiring, parameter.BeamFiring, 0
+	case beam.Phase == component.BeamWarning:
+		return
+	case beam.Remaining <= 0:
+		beams.RemoveEntity(host, false)
+		m.Cooldown = m.Interval
+		return
+	}
+	if beam.HitTimer -= dt; beam.HitTimer <= 0 {
+		strikeCursorsIn(s.world, beam.Ray.Contains, component.WeaponSpecs[m.Weapon].HostedDamage)
+		beam.HitTimer = beam.HitInterval
+	}
+}
+
+// layLane lays a mount's ray from its host: along its fixed lane, or straight at the
+// cursor it aims at, Width cells across
+func layLane(w *engine.World, m *component.MountComponent, pos component.PositionComponent, cursor core.Entity) (vmath.Ray, bool) {
+	var dx, dy float64
+	switch {
+	case m.Lane > 0:
+		dx, dy = float64(vmath.Octants[m.Lane-1][0]), float64(vmath.Octants[m.Lane-1][1])
+	case cursor != 0:
+		dx, dy = float64(m.AimX-pos.X), float64(m.AimY-pos.Y)
+	}
+	if dx == 0 && dy == 0 {
+		return vmath.Ray{}, false
+	}
+	half := max(m.Width-1, 0) / 2
+	ray := vmath.Ray{X: pos.X, Y: pos.Y, DX: dx, DY: dy, Near: half, Far: half}
+	ray.Length = traceRay(w, ray)
+	return ray, true
 }
 
 // shotRand seeds one host's draw for this tick

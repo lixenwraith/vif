@@ -167,9 +167,10 @@ var (
 	RgbPulseNegative = color.Orchid
 	RgbPulseHostile  = color.Vermilion
 
-	// Beam colors (polarity-based, and a mounted beam's)
-	RgbBeamPositive = color.PaleGold
-	RgbBeamNegative = color.LightOrchid
+	// Beam colors: a white core, sides in the cleaner's polarity colours or a mount's red
+	RgbBeamCore     = color.White
+	RgbBeamPositive = RgbCleanerBasePositive
+	RgbBeamNegative = RgbCleanerBaseNegative
 	RgbBeamHostile  = color.BrightRed
 
 	// Audio indicator colors

@@ -7,10 +7,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
-// TransientResource holds player-domain spatial explosion, pulse and beam presentation.
+// TransientResource holds player-domain spatial explosion and pulse presentation.
 // Systems write, renderers read. All fields are render-frame stable.
 type TransientResource struct {
 	// Fixed backing, zero alloc
@@ -19,9 +18,6 @@ type TransientResource struct {
 
 	PulseBacking [parameter.PulseEffectCap]PulseEffect
 	PulseCount   int
-
-	BeamBacking [parameter.BeamEffectCap]BeamEffect
-	BeamCount   int
 }
 
 // ViewResource holds player-domain screen-space effect state; never replicated.
@@ -63,15 +59,6 @@ type PulseEffect struct {
 	Palette component.WeaponPalette
 }
 
-// BeamEffect is one beam for rendering: its warning line, then its band
-type BeamEffect struct {
-	Band        vmath.Band
-	Age         int64 // Nanoseconds since the warning began
-	WarningNano int64
-	DurNano     int64 // Warning and firing together
-	Palette     component.WeaponPalette
-}
-
 // NewTransientResource creates initialized resource
 func NewTransientResource() *TransientResource {
 	return &TransientResource{}
@@ -95,11 +82,10 @@ func (r *TransientResource) ExplosionCenters() []ExplosionCenter {
 	return r.ExplosionBacking[:r.ExplosionCount]
 }
 
-// Clear drops every explosion center, pulse ring and beam
+// Clear drops every explosion center and pulse ring
 func (r *TransientResource) Clear() {
 	r.ExplosionCount = 0
 	r.PulseCount = 0
-	r.BeamCount = 0
 }
 
 // --- Pulse API ---
@@ -107,9 +93,4 @@ func (r *TransientResource) Clear() {
 // PulseEffects returns active slice view (no allocation)
 func (r *TransientResource) PulseEffects() []PulseEffect {
 	return r.PulseBacking[:r.PulseCount]
-}
-
-// BeamEffects returns active slice view (no allocation)
-func (r *TransientResource) BeamEffects() []BeamEffect {
-	return r.BeamBacking[:r.BeamCount]
 }

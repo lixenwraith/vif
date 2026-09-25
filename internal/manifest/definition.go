@@ -71,6 +71,7 @@ var Components = []ComponentDef{
 	{"Lightning", "LightningComponent", "player"},
 	{"Missile", "MissileComponent", "player"},
 	{"Mount", "MountComponent", "shared"},
+	{"Beam", "BeamComponent", ""},
 	{"Spirit", "SpiritComponent", ""},
 	{"Materialize", "MaterializeComponent", ""},
 

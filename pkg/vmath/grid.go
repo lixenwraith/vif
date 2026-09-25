@@ -1,5 +1,7 @@
 package vmath
 
+import "math"
+
 // CalculateCentroid computes the geometric center of a set of 2D points
 // Returns (0,0) if the input slice is empty
 // coords contains interleaved X,Y values (len must be even)
@@ -19,46 +21,66 @@ func CalculateCentroid(coords []int) (int, int) {
 	return sumX / count, sumY / count
 }
 
-// Band is a straight strip of cells along one of eight directions: the cells 1 to
-// Length steps from (X, Y) along (DX, DY), each widened Half cells across. The
-// across axis is vertical for a horizontal band and horizontal otherwise, so a
-// diagonal band is solid rather than a checkerboard.
-type Band struct {
-	X, Y, DX, DY, Length, Half int
+// Ray is a straight strip of cells from (X, Y) toward (DX, DY), in any direction:
+// steps 1 to Length along its major axis, each spanning Half(step) cells either
+// side of the line across the minor axis — Near up to step Knee, Far beyond it. A
+// ray aimed at a cell whose major distance is Knee passes through that cell.
+type Ray struct {
+	X, Y         int
+	DX, DY       float64
+	Length, Knee int
+	Near, Far    int
 }
 
-// Contains reports whether a cell lies inside the band
-func (b Band) Contains(x, y int) bool {
-	if b.DY == 0 {
-		along := (x - b.X) * b.DX
-		return along >= 1 && along <= b.Length && IntAbs(y-b.Y) <= b.Half
+func (r Ray) xMajor() bool { return AbsF(r.DX) >= AbsF(r.DY) }
+
+// minorAt is the line's minor-axis offset at step i
+func (r Ray) minorAt(i int) int {
+	if r.DX == 0 && r.DY == 0 {
+		return 0
 	}
-	along := (y - b.Y) * b.DY
-	return along >= 1 && along <= b.Length && IntAbs(x-(b.X+along*b.DX)) <= b.Half
+	if r.xMajor() {
+		return int(math.Round(float64(i) * r.DY / AbsF(r.DX)))
+	}
+	return int(math.Round(float64(i) * r.DX / AbsF(r.DY)))
 }
 
-// Cell returns the cell `along` steps down the band and `across` cells to its side
-func (b Band) Cell(along, across int) (int, int) {
-	x, y := b.X+along*b.DX, b.Y+along*b.DY
-	if b.DY == 0 {
+// Center returns the line's cell at step i
+func (r Ray) Center(i int) (int, int) {
+	if r.xMajor() {
+		return r.X + i*int(SignF(r.DX)), r.Y + r.minorAt(i)
+	}
+	return r.X + r.minorAt(i), r.Y + i*int(SignF(r.DY))
+}
+
+// Half is the cells either side of the line at step i
+func (r Ray) Half(i int) int {
+	if i <= r.Knee {
+		return r.Near
+	}
+	return r.Far
+}
+
+// Cell returns the cell `across` cells to the side of the line at step i
+func (r Ray) Cell(i, across int) (int, int) {
+	x, y := r.Center(i)
+	if r.xMajor() {
 		return x, y + across
 	}
 	return x + across, y
 }
 
+// Contains reports whether a cell lies inside the ray
+func (r Ray) Contains(x, y int) bool {
+	if r.DX == 0 && r.DY == 0 {
+		return false
+	}
+	i, off := (x-r.X)*int(SignF(r.DX)), y-r.Y
+	if !r.xMajor() {
+		i, off = (y-r.Y)*int(SignF(r.DY)), x-r.X
+	}
+	return i >= 1 && i <= r.Length && IntAbs(off-r.minorAt(i)) <= r.Half(i)
+}
+
 // Octants are the eight grid directions clockwise from east, y growing down
 var Octants = [8][2]int{{1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1}}
-
-// Octant snaps a vector to the nearest of the eight grid directions; zero stays zero
-func Octant(dx, dy float64) (int, int) {
-	const tanEighth = 0.41421356237309503 // tan(π/8), the bisector of an axis and a diagonal
-	ax, ay := AbsF(dx), AbsF(dy)
-	sx, sy := int(SignF(dx)), int(SignF(dy))
-	switch {
-	case ay <= tanEighth*ax:
-		return sx, 0
-	case ax <= tanEighth*ay:
-		return 0, sy
-	}
-	return sx, sy
-}

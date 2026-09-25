@@ -60,7 +60,7 @@ const (
 	WeaponCooldownLauncher  = 1000 * time.Millisecond
 	WeaponCooldownDisruptor = 2000 * time.Millisecond
 	WeaponCooldownTurret    = 500 * time.Millisecond
-	WeaponCooldownBeam      = 1500 * time.Millisecond
+	WeaponCooldownBeam      = 6000 * time.Millisecond // from firing, so more charges beam for more of it
 )
 
 // Weapon Max Charges, read through component.WeaponSpecs

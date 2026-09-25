@@ -220,6 +220,7 @@ func (s *WeaponSystem) Update() {
 		}
 		orbs := s.ensureOrbs(cursor, slot, weaponComp)
 		s.updateOrbs(cursor, slot, orbs)
+		s.advanceBeams(cursor, orbs, dt)
 		return true
 	})
 }
@@ -703,7 +704,7 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 		case component.DeliveryBullet:
 			fired = s.fireBullets(cursor, x, y, spec.Attack, assignments)
 		case component.DeliveryBeam:
-			fired = s.fireBeams(cursor, x, y, spec.Attack, assignments)
+			fired = len(assignments) > 0 && s.fireBeam(cursor, orbs[wt], charges)
 		}
 		if !fired {
 			continue
@@ -811,46 +812,82 @@ func (s *WeaponSystem) firePulse(cursor core.Entity, x, y int, attack component.
 	return true
 }
 
-// fireBeams lays one beam from the emitter cell toward each assigned target, once per
-// direction. Each target group inside a band takes one area hit: a drain's is local,
-// a Shared target's crosses as its member set and the owner cursor (D-3).
-func (s *WeaponSystem) fireBeams(cursor core.Entity, x, y int, attack component.CombatAttackType, assignments []TargetAssignment) bool {
-	var laid [3][3]bool
-	fired := false
-	for _, a := range assignments {
-		pos, ok := s.world.Positions.GetPosition(a.Hit)
+// fireBeam lights a beam from the cursor through its orb, lasting longer and
+// striking harder the more charges it holds; advanceBeams carries it from there
+func (s *WeaponSystem) fireBeam(cursor, orb core.Entity, charges int) bool {
+	if orb == 0 {
+		return false
+	}
+	duration := parameter.BeamDuration + time.Duration(charges-1)*parameter.BeamDurationPerCharge
+	beam := component.BeamComponent{
+		Phase: component.BeamFiring, Remaining: duration, Duration: duration,
+		Scale: charges, Palette: s.palette(cursor),
+	}
+	s.layBeam(cursor, orb, &beam)
+	s.world.Components.Beam.SetComponent(orb, beam)
+	return true
+}
+
+// advanceBeams re-lays each of a cursor's beams through its orb as the orb orbits
+// and strikes what it covers every tick: a sweep crosses a far target in about one,
+// and combat's per-attacker immunity is what rates each target
+func (s *WeaponSystem) advanceBeams(cursor core.Entity, orbs orbSlots, dt time.Duration) {
+	beams := s.world.Components.Beam
+	for wt, orb := range orbs {
+		beam, ok := beams.GetPtr(orb)
 		if !ok {
 			continue
 		}
-		dx, dy := vmath.Octant(float64(pos.X-x), float64(pos.Y-y))
-		if (dx == 0 && dy == 0) || laid[dx+1][dy+1] {
+		if beam.Remaining -= dt; beam.Remaining <= 0 {
+			beams.RemoveEntity(orb, false)
 			continue
 		}
-		laid[dx+1][dy+1] = true
-		band := traceBeam(s.world, x, y, dx, dy, parameter.BeamMaxLength, parameter.BeamWidth)
-		for _, g := range FindTargetsIn(s.world, band.Contains, engine.ScopeBoth, cursor) {
-			hit := &event.CombatAttackAreaRequestPayload{
-				AttackType:   attack,
-				OwnerEntity:  cursor,
-				OriginEntity: cursor,
-				TargetEntity: g.Target,
-				HitEntities:  g.Members,
-				HasOrigin:    true,
-				OriginX:      x,
-				OriginY:      y,
-			}
-			if g.Target.Domain() == core.DomainShared {
-				s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, hit)
-			} else {
-				s.world.PushLocal(event.EventCombatAttackAreaRequest, hit)
-			}
-		}
-		s.world.PushLocal(event.EventBeamVisualRequest, &event.BeamVisualRequestPayload{
-			Band: band, Firing: parameter.BeamFlash, Palette: s.palette(cursor),
-		})
-		fired = true
+		s.layBeam(cursor, orb, beam)
+		s.strikeBeam(cursor, beam, component.WeaponSpecs[wt].Attack)
 	}
-	return fired
+}
+
+// layBeam runs a beam from the cursor's cell through its orb's: one cell wide up to
+// the orb and BeamWidth past it, to the first wall or the map edge. An orb on the
+// cursor's own cell leaves the last ray in place.
+func (s *WeaponSystem) layBeam(cursor, orb core.Entity, beam *component.BeamComponent) {
+	from, ok := s.world.CursorCell(cursor)
+	if !ok {
+		return
+	}
+	to, ok := s.world.Positions.GetPosition(orb)
+	dx, dy := to.X-from.X, to.Y-from.Y
+	if !ok || (dx == 0 && dy == 0) {
+		return
+	}
+	beam.Ray = vmath.Ray{
+		X: from.X, Y: from.Y, DX: float64(dx), DY: float64(dy),
+		Knee: max(vmath.IntAbs(dx), vmath.IntAbs(dy)), Far: (parameter.BeamWidth - 1) / 2,
+	}
+	beam.Ray.Length = traceRay(s.world, beam.Ray)
+}
+
+// strikeBeam hits every combat target group a beam covers once: a drain's locally,
+// a Shared target's as one crossing naming its members and the owner (D-3)
+func (s *WeaponSystem) strikeBeam(cursor core.Entity, beam *component.BeamComponent, attack component.CombatAttackType) {
+	for _, g := range FindTargetsIn(s.world, beam.Ray.Contains, engine.ScopeBoth, cursor) {
+		hit := &event.CombatAttackAreaRequestPayload{
+			AttackType:   attack,
+			OwnerEntity:  cursor,
+			OriginEntity: cursor,
+			TargetEntity: g.Target,
+			HitEntities:  g.Members,
+			HasOrigin:    true,
+			OriginX:      beam.Ray.X,
+			OriginY:      beam.Ray.Y,
+			Scale:        uint8(beam.Scale),
+		}
+		if g.Target.Domain() == core.DomainShared {
+			s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, hit)
+		} else {
+			s.world.PushLocal(event.EventCombatAttackAreaRequest, hit)
+		}
+	}
 }
 
 // palette is the colour a cursor's discharge draws in, by its energy polarity

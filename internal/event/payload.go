@@ -587,15 +587,6 @@ type PulseVisualRequestPayload struct {
 	Palette component.WeaponPalette `toml:"palette"`
 }
 
-// BeamVisualRequestPayload is player-domain presentation for one beam: a warning
-// line for Warning, then the full band for Firing.
-type BeamVisualRequestPayload struct {
-	Band    vmath.Band              `toml:"band"`
-	Warning time.Duration           `toml:"warning"`
-	Firing  time.Duration           `toml:"firing"`
-	Palette component.WeaponPalette `toml:"palette"`
-}
-
 // ExplosionVisualBatchRequestPayload is player-domain presentation for a group
 // of centers. It is not pooled: the local queue owns the producer's slice copy.
 type ExplosionVisualBatchRequestPayload struct {
@@ -977,6 +968,7 @@ type CombatAttackAreaRequestPayload struct {
 	OriginX    int   `toml:"origin_x"`
 	OriginY    int   `toml:"origin_y"`
 	ChainDepth uint8 `toml:"chain_depth"`
+	Scale      uint8 `toml:"scale"` // Damage multiplier; zero is one
 }
 
 // CombatHealRequestPayload adds uncapped hit points to a live target.

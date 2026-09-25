@@ -34,7 +34,7 @@ flowchart LR
     Mount --> Delivery
     Delivery --> Combat["combat profiles: species targets"]
     Delivery --> Strike["strikeCursor: cursor targets"]
-    Delivery --> Transient["transient rings and beams, missile, bullet and lightning entities"]
+    Delivery --> Presented["transient rings; beam, missile, bullet and lightning components"]
 ```
 
 `component.WeaponSpecs` is the one table of weapon kinds: status name, delivery,
@@ -47,7 +47,7 @@ combat attack family, cursor cooldown and charge cap, and the hosted range and
 | Launcher | missile | one homing missile per charge; the blast is explosion geometry | one hostile missile that homes on cursors |
 | Disruptor | pulse | stun burst centred on the orb when a target is inside | strikes every cursor inside its ring |
 | Turret | bullet | one spread bullet per charge, direct damage | hostile bullets; storm's red circle is one |
-| Beam | beam | 3-cell band to the first wall per target direction | warns, fires, rests along a locked band |
+| Beam | beam | sustained ray from the cursor through its orb, sweeping as the orb orbits | warns, fires, rests along a locked ray |
 
 ## 3. Drivers
 
@@ -68,10 +68,19 @@ may set the component itself. Each tick it:
 - seeds a shot's spread from the tick and the host, never a stream, so store order
   and a correction's replay cannot reorder draws (D-8).
 
-A beam mount cycles instead: at rest until ready, then a warning with the band laid
-and locked (its lane, or 8-way toward the aim), then firing, striking the cursors
-inside every `BeamHitInterval`, then rest for its interval. A laned beam needs no
-cursor in range; that is the level obstacle.
+A beam is a `vmath.Ray` in a `BeamComponent`: any angle, run to the first wall or
+the map edge, one width up to its knee and another past it. A cursor's beam sits on
+its orb: laid every tick from the cursor through the orb, one cell wide to the orb
+and three past it, so it sweeps as the orb orbits. It strikes every tick, and
+combat's per-attacker immunity rates each target, because a sweep crosses a far
+target in about one tick. More charges beam longer and multiply its area hits'
+damage through `Scale`; its cooldown runs from firing, so they also beam more of it.
+
+A beam mount cycles on its host's `BeamComponent`: at rest until ready, then a
+warning with the ray laid and locked (its lane, or straight at the aim), then firing,
+striking the cursors inside every `BeamHitInterval`, then rest for its interval. A
+laned beam needs no cursor in range; that is the level obstacle. Width is the
+mount's to set; a cursor's is fixed.
 
 Storm's red circle carries a turret mount the storm arms from the state each tick
 opens with, so the burst fires on its active ticks exactly; the storm renderer
@@ -89,7 +98,7 @@ with `CursorContactAt`, shields first.
 |---|---|
 | Rod, turret bullet, cleaner on a Shared target | one direct request stamped Shared (stamped class) |
 | Missile blast, disruptor pulse | explosion geometry: centre, radius, attack, owner |
-| Beam band on a Shared target | area crossing: target, member set, owner |
+| Beam on a Shared target, each tick it covers it | area crossing: target, member set, owner, scale |
 | Any hit on a drain | local; drains are Player-domain |
 
 The cleaner is the always-held main weapon: its impact chains into a lightning
@@ -100,16 +109,18 @@ why the cleaner's bolt starts at the cursor and the rod's at its orb.
 
 Renderers draw only what exists on their instance. Orbs take their kind's colour
 from `orbPalette`. A discharge's `WeaponPalette` is positive or negative by the
-cursor's energy, or hostile for a mount. Pulse rings and beams are fixed-capacity
-lists in `TransientResource`, raised by `EventPulseVisualRequest` and
-`EventBeamVisualRequest`; missiles and bullets draw hostile colours from their
-`Hostile` flag; lightning uses its colour table. Every one has a 256-colour path.
+cursor's energy, or hostile for a mount. Pulse rings are a fixed-capacity list in
+`TransientResource`, raised by `EventPulseVisualRequest`. Beams are drawn straight
+from their `BeamComponent`: a white core, sides in the palette where the ray widens,
+a mount's warning as its core line alone. Missiles and bullets draw hostile colours
+from their `Hostile` flag; lightning uses its colour table. Each has a 256-colour
+path.
 
 ## 6. Tick order
 
 `weapon` runs early with the player state. Host species run next, then `mount`
 after every host so a host arms before its mount fires, then `combat`. Lightning,
-missile and bullet integrate after combat; `transient` ages rings and beams late.
+missile and bullet integrate after combat; `transient` ages rings late.
 
 ## 7. Adding a weapon
 
@@ -121,5 +132,7 @@ missile and bullet integrate after combat; `transient` ages rings and beams late
 5. A player-domain push of a replicated event must be named in `crossingPushes`
    with the artifact it crosses; `TestEventClassMatchesSystemProfile` enforces it.
 
-Telemetry: `weapon.<kind>`, `weapon.<kind>_fired`, `weapon.kind_rejects`,
-`mount.count`, `mount.fired`, `mount.host_rejects`, and the missile and bullet keys.
+Telemetry: the `weapon` card holds the loadout and orbs, `weapon.fired` and
+`weapon.rejects` the counters; `combat.damage.family` is the damage each attack
+family deals, which is how a weapon's effect reads; `mount`, `missile` and `bullet`
+hold their own.

@@ -593,13 +593,14 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		s.statCursor.Add(1)
 	}
 	attacker := s.attackerBit(damageCursor)
+	perHit := attack.DamageValue * max(int(payload.Scale), 1)
 
 	// Damage routing
 	var targetDead bool
 	damageApplied := false
 
 	if isComposite && headerComp.Type == component.CompositeTypeAblative {
-		if attack.DamageValue != 0 {
+		if perHit != 0 {
 			for _, hitEntity := range hits {
 				if hitEntity == targetEntity {
 					continue
@@ -610,10 +611,10 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				}
 				if memberCombat.DamageImmuneTo(attacker) {
 					s.statImmune.Add(1)
-					s.recordDamage(attack.AttackType, attackerType, memberCombat.CombatEntityType, 0, attack.DamageValue)
+					s.recordDamage(attack.AttackType, attackerType, memberCombat.CombatEntityType, 0, perHit)
 					continue
 				}
-				dealt := min(memberCombat.HitPoints, attack.DamageValue)
+				dealt := min(memberCombat.HitPoints, perHit)
 				memberCombat.HitPoints -= dealt
 				s.recordDamage(attack.AttackType, attackerType, memberCombat.CombatEntityType, dealt, 0)
 				memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
@@ -624,7 +625,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 			}
 		}
 	} else {
-		if attack.DamageValue == 0 {
+		if perHit == 0 {
 			// Zero-damage area profile (shield); effects below still apply
 		} else {
 			validHitCount := 0
@@ -639,7 +640,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 					}
 				}
 			}
-			damageValue := attack.DamageValue * validHitCount
+			damageValue := perHit * validHitCount
 			if targetCombatComp.DamageImmuneTo(attacker) {
 				s.statImmune.Add(1)
 				s.recordDamage(attack.AttackType, attackerType, targetCombatComp.CombatEntityType, 0, damageValue)

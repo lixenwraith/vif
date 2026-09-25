@@ -294,8 +294,6 @@ const (
 	EventExplosionVisualBatchRequest
 	// EventPulseVisualRequest (PulseVisualRequestPayload) [local] presents one disruptor pulse ring for its producer
 	EventPulseVisualRequest
-	// EventBeamVisualRequest (BeamVisualRequestPayload) [local] presents one beam, its warning first, for its producer
-	EventBeamVisualRequest
 
 	// --- Dust ---
 

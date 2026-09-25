@@ -72,6 +72,7 @@ const (
 	Pulse256Positive  = ConBrightYellow
 	Pulse256Negative  = ConBrightMagenta
 	Pulse256Hostile   = ConRed
+	Beam256Core       = ConBrightWhite
 	Beam256Positive   = ConBrightYellow
 	Beam256Negative   = ConBrightMagenta
 	Beam256Hostile    = ConBrightRed

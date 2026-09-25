@@ -198,10 +198,11 @@ func TestPlayerBulletCrossesOnlyItsHit(t *testing.T) {
 	}
 }
 
-// TestPlayerBeamCrossesOnlyItsImpacts: a cursor's beam and its visual are this
-// instance's alone. A Shared target inside the band crosses once as its member set
-// and the owner; a drain's hit stays local; cursors in the band are not targets.
-func TestPlayerBeamCrossesOnlyItsImpacts(t *testing.T) {
+// TestPlayerBeamRunsThroughItsOrbAndCrossesOnlyItsImpacts: a cursor's beam runs
+// from the cursor through its orb, one cell wide to the orb and wider past it, and
+// follows the orb. A Shared target crosses once as its members, owner and charge
+// scale; a drain's hit stays local; nothing else leaves this instance.
+func TestPlayerBeamRunsThroughItsOrbAndCrossesOnlyItsImpacts(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	weapon := NewWeaponSystem(w).(*WeaponSystem)
 
@@ -209,51 +210,62 @@ func TestPlayerBeamCrossesOnlyItsImpacts(t *testing.T) {
 	near := w.CreateEntity(core.DomainShared)
 	far := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(header, component.PositionComponent{X: 9, Y: 2})
-	w.Positions.SetPosition(near, component.PositionComponent{X: 9, Y: 5})
-	w.Positions.SetPosition(far, component.PositionComponent{X: 10, Y: 6})
+	w.Positions.SetPosition(near, component.PositionComponent{X: 7, Y: 5})
+	w.Positions.SetPosition(far, component.PositionComponent{X: 12, Y: 6})
 	w.Components.Header.SetComponent(header, component.HeaderComponent{
 		Type:          component.CompositeTypeUnit,
-		MemberEntries: []component.MemberEntry{{Entity: near, OffsetY: 3}, {Entity: far, OffsetX: 1, OffsetY: 4}},
+		MemberEntries: []component.MemberEntry{{Entity: near, OffsetX: -2, OffsetY: 3}, {Entity: far, OffsetX: 3, OffsetY: 4}},
 	})
 	w.Components.Member.SetComponent(near, component.MemberComponent{HeaderEntity: header})
 	w.Components.Member.SetComponent(far, component.MemberComponent{HeaderEntity: header})
 	w.Components.Combat.SetComponent(header, component.CombatComponent{CombatEntityType: component.CombatEntitySwarm})
 
-	drain := w.CreateEntity(core.DomainPlayer)
-	w.Positions.SetPosition(drain, component.PositionComponent{X: 12, Y: 4})
-	w.Components.Combat.SetComponent(drain, component.CombatComponent{CombatEntityType: component.CombatEntityDrain})
+	drain := func(x, y int) core.Entity {
+		e := w.CreateEntity(core.DomainPlayer)
+		w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+		w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntityDrain})
+		return e
+	}
+	wide, beside := drain(14, 4), drain(7, 4)
 
 	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
-	weaponComp.Charges[component.WeaponBeam] = 1
-	weapon.fireAllWeapons(cursor, weaponComp, orbSlots{})
+	weaponComp.Charges[component.WeaponBeam] = 2
+	weapon.Update()
+	orbs := weapon.orbsOf(cursor)
+	w.Positions.SetPosition(orbs[component.WeaponBeam], component.PositionComponent{X: 9, Y: 5})
+	w.Resources.Event.Queue.Consume()
+	weapon.fireAllWeapons(cursor, weaponComp, orbs)
+	weapon.advanceBeams(cursor, orbs, parameter.GameUpdateInterval)
 
-	var crossings, locals, beams int
+	var crossings int
+	struck := make(map[core.Entity]bool)
 	for _, ev := range w.Resources.Event.Queue.Consume() {
-		switch p := ev.Payload.(type) {
-		case *event.CombatAttackAreaRequestPayload:
-			if event.OnWire(ev) {
-				crossings++
-				if p.TargetEntity != header || len(p.HitEntities) != 2 || p.OwnerEntity != cursor {
-					t.Fatalf("crossing = %#v, want header %d with both members", p, header)
-				}
-			} else if locals++; p.TargetEntity != drain {
-				t.Fatalf("local hit = %#v, want drain %d", p, drain)
-			}
-		case *event.BeamVisualRequestPayload:
-			if event.OnWire(ev) || p.Band.DX != 1 || p.Band.DY != 0 {
-				t.Fatalf("beam visual = %#v, want a local eastward band", p)
-			}
-			beams++
-		default:
+		p, ok := ev.Payload.(*event.CombatAttackAreaRequestPayload)
+		if !ok {
 			t.Fatalf("unexpected %s", event.GetEventName(ev.Type))
 		}
+		if event.OnWire(ev) {
+			crossings++
+			if p.TargetEntity != header || len(p.HitEntities) != 2 || p.OwnerEntity != cursor || p.Scale != 2 {
+				t.Fatalf("crossing = %#v, want header %d with both members at scale 2", p, header)
+			}
+		}
+		struck[p.TargetEntity] = true
 	}
-	if crossings != 1 || locals != 1 || beams != 1 {
-		t.Fatalf("crossings, local hits, beams = %d, %d, %d; want one each", crossings, locals, beams)
+	if crossings != 1 || !struck[wide] || struck[beside] {
+		t.Fatalf("crossings = %d, struck = %v; want one crossing, %d hit past the orb, %d beside the narrow part spared",
+			crossings, struck, wide, beside)
+	}
+
+	w.Positions.SetPosition(orbs[component.WeaponBeam], component.PositionComponent{X: 5, Y: 9})
+	weapon.advanceBeams(cursor, orbs, parameter.GameUpdateInterval)
+	w.Resources.Event.Queue.Consume()
+	if beam, _ := w.Components.Beam.GetComponent(orbs[component.WeaponBeam]); beam.Ray.DX != 0 || beam.Ray.DY <= 0 {
+		t.Fatalf("ray = %+v after the orb moved south, want it to follow", beam.Ray)
 	}
 }
 
-// TestMountedBeamWarnsBeforeItStrikes: a laned beam draws its warning for the whole
+// TestMountedBeamWarnsBeforeItStrikes: a laned beam holds its warning for the whole
 // warning window without a hit, then strikes the local cursors inside its band.
 func TestMountedBeamWarnsBeforeItStrikes(t *testing.T) {
 	w, _, second := testCursorWorld(t)
@@ -266,16 +278,15 @@ func TestMountedBeamWarnsBeforeItStrikes(t *testing.T) {
 		Host: host, Weapon: component.WeaponBeam, Lane: 1,
 	}})
 
-	mount.Update()
-	if events := w.Resources.Event.Queue.Consume(); len(events) != 1 || events[0].Type != event.EventBeamVisualRequest {
-		t.Fatalf("first tick = %#v, want only the warning", events)
-	}
 	warningTicks := int(parameter.BeamWarning / parameter.GameUpdateInterval)
-	for range warningTicks - 1 {
+	for range warningTicks {
 		mount.Update()
 		if events := w.Resources.Event.Queue.Consume(); len(events) != 0 {
 			t.Fatalf("warning tick = %#v, want nothing", events)
 		}
+	}
+	if beam, ok := w.Components.Beam.GetComponent(host); !ok || beam.Phase != component.BeamWarning {
+		t.Fatalf("beam = %+v, want the host warning", beam)
 	}
 	mount.Update()
 	events := w.Resources.Event.Queue.Consume()
