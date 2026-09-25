@@ -47,6 +47,7 @@ type CombatSystem struct {
 	statStunImmune    *atomic.Int64
 
 	statLive              [component.CombatEntityCount]*atomic.Int64
+	statDamageFamily      [component.CombatAttackTypeCount]*atomic.Int64
 	statDamageAttacker    [component.CombatEntityCount]*atomic.Int64
 	statDamageDefender    [component.CombatEntityCount]*atomic.Int64
 	statAbsorbAttacker    [component.CombatEntityCount]*atomic.Int64
@@ -59,6 +60,20 @@ type CombatSystem struct {
 	statChainDepthMax     *atomic.Int64
 
 	enabled bool
+}
+
+// combatAttackNames keys the damage each attack family deals, which is how a
+// weapon's effect reads in telemetry
+var combatAttackNames = [component.CombatAttackTypeCount]string{
+	component.CombatAttackProjectile:   "projectile",
+	component.CombatAttackShield:       "shield",
+	component.CombatAttackLightning:    "lightning",
+	component.CombatAttackExplosion:    "explosion",
+	component.CombatAttackMissile:      "missile",
+	component.CombatAttackPulse:        "pulse",
+	component.CombatAttackSelfDestruct: "self_destruct",
+	component.CombatAttackBullet:       "bullet",
+	component.CombatAttackBeam:         "beam",
 }
 
 var combatEntityNames = [component.CombatEntityCount]string{
@@ -104,6 +119,9 @@ func NewCombatSystem(world *engine.World) engine.System {
 	s.statChainFollowups = reg.Ints.Get("combat.chain_followups")
 	s.statChainDepthTotal = reg.Ints.Get("combat.chain_depth_total")
 	s.statChainDepthMax = reg.Ints.Get("combat.chain_depth_max")
+	for i, name := range combatAttackNames {
+		s.statDamageFamily[i] = reg.Ints.Get("combat.damage_family_" + name)
+	}
 	for i, name := range combatEntityNames {
 		s.statLive[i] = reg.Ints.Get("combat.live_" + name)
 		s.statDamageAttacker[i] = reg.Ints.Get("combat.damage_attacker_" + name)
@@ -144,6 +162,9 @@ func (s *CombatSystem) Init() {
 		s.statChainDepthTotal,
 		s.statChainDepthMax,
 	} {
+		stat.Store(0)
+	}
+	for _, stat := range s.statDamageFamily {
 		stat.Store(0)
 	}
 	for i := range component.CombatEntityCount {
@@ -403,11 +424,11 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 			if attack.DamageValue != 0 {
 				if memberCombat.DamageImmuneTo(attacker) {
 					s.statImmune.Add(1)
-					s.recordDamage(attackerType, memberCombat.CombatEntityType, 0, attack.DamageValue)
+					s.recordDamage(attack.AttackType, attackerType, memberCombat.CombatEntityType, 0, attack.DamageValue)
 				} else {
 					dealt := min(memberCombat.HitPoints, attack.DamageValue)
 					memberCombat.HitPoints -= dealt
-					s.recordDamage(attackerType, memberCombat.CombatEntityType, dealt, 0)
+					s.recordDamage(attack.AttackType, attackerType, memberCombat.CombatEntityType, dealt, 0)
 					resolved = true
 
 					memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
@@ -425,11 +446,11 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		if attack.DamageValue != 0 {
 			if targetCombatComp.DamageImmuneTo(attacker) {
 				s.statImmune.Add(1)
-				s.recordDamage(attackerType, targetCombatComp.CombatEntityType, 0, attack.DamageValue)
+				s.recordDamage(attack.AttackType, attackerType, targetCombatComp.CombatEntityType, 0, attack.DamageValue)
 			} else {
 				dealt := min(targetCombatComp.HitPoints, attack.DamageValue)
 				targetCombatComp.HitPoints -= dealt
-				s.recordDamage(attackerType, targetCombatComp.CombatEntityType, dealt, 0)
+				s.recordDamage(attack.AttackType, attackerType, targetCombatComp.CombatEntityType, dealt, 0)
 				resolved = true
 
 				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
@@ -589,12 +610,12 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				}
 				if memberCombat.DamageImmuneTo(attacker) {
 					s.statImmune.Add(1)
-					s.recordDamage(attackerType, memberCombat.CombatEntityType, 0, attack.DamageValue)
+					s.recordDamage(attack.AttackType, attackerType, memberCombat.CombatEntityType, 0, attack.DamageValue)
 					continue
 				}
 				dealt := min(memberCombat.HitPoints, attack.DamageValue)
 				memberCombat.HitPoints -= dealt
-				s.recordDamage(attackerType, memberCombat.CombatEntityType, dealt, 0)
+				s.recordDamage(attack.AttackType, attackerType, memberCombat.CombatEntityType, dealt, 0)
 				memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
 				memberCombat.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
 				memberCombat.LastDamagedBy = damageCursor
@@ -621,11 +642,11 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 			damageValue := attack.DamageValue * validHitCount
 			if targetCombatComp.DamageImmuneTo(attacker) {
 				s.statImmune.Add(1)
-				s.recordDamage(attackerType, targetCombatComp.CombatEntityType, 0, damageValue)
+				s.recordDamage(attack.AttackType, attackerType, targetCombatComp.CombatEntityType, 0, damageValue)
 			} else if validHitCount > 0 {
 				dealt := min(targetCombatComp.HitPoints, damageValue)
 				targetCombatComp.HitPoints -= dealt
-				s.recordDamage(attackerType, targetCombatComp.CombatEntityType, dealt, 0)
+				s.recordDamage(attack.AttackType, attackerType, targetCombatComp.CombatEntityType, dealt, 0)
 				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
 				targetCombatComp.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
 				damageApplied = true
@@ -879,13 +900,14 @@ func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequest
 	return true
 }
 
-// recordDamage records resolved damage and absorption by both sides of an attack.
-func (s *CombatSystem) recordDamage(attackerType, defenderType component.CombatEntityType, dealt, absorbed int) {
+// recordDamage records resolved damage and absorption by both sides of an attack and its family.
+func (s *CombatSystem) recordDamage(family component.CombatAttackType, attackerType, defenderType component.CombatEntityType, dealt, absorbed int) {
 	if attackerType < 0 || attackerType >= component.CombatEntityCount || defenderType < 0 || defenderType >= component.CombatEntityCount {
 		return
 	}
 	if dealt > 0 {
 		s.statDamage.Add(int64(dealt))
+		s.statDamageFamily[family].Add(int64(dealt))
 		s.statDamageAttacker[attackerType].Add(int64(dealt))
 		s.statDamageDefender[defenderType].Add(int64(dealt))
 	}

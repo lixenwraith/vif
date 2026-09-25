@@ -19,6 +19,9 @@ type BulletSystem struct {
 	world   *engine.World
 	enabled bool
 
+	statCount          *atomic.Int64
+	statSpawned        *atomic.Int64
+	statHits           *atomic.Int64
 	statWallCollisions *atomic.Int64
 	statBoundaryHits   *atomic.Int64
 	statGridSteps      *atomic.Int64
@@ -28,6 +31,9 @@ type BulletSystem struct {
 func NewBulletSystem(world *engine.World) engine.System {
 	s := &BulletSystem{world: world}
 	reg := world.Resources.Status
+	s.statCount = reg.Ints.Get("bullet.count")
+	s.statSpawned = reg.Ints.Get("bullet.spawned")
+	s.statHits = reg.Ints.Get("bullet.hits")
 	s.statWallCollisions = reg.Ints.Get("bullet.wall_collisions")
 	s.statBoundaryHits = reg.Ints.Get("bullet.boundary_hits")
 	s.statGridSteps = reg.Ints.Get("bullet.grid_steps")
@@ -38,6 +44,9 @@ func NewBulletSystem(world *engine.World) engine.System {
 }
 
 func (s *BulletSystem) Init() {
+	s.statCount.Store(0)
+	s.statSpawned.Store(0)
+	s.statHits.Store(0)
 	s.statWallCollisions.Store(0)
 	s.statBoundaryHits.Store(0)
 	s.statGridSteps.Store(0)
@@ -95,6 +104,7 @@ func (s *BulletSystem) Update() {
 	dtSec := dt.Seconds()
 
 	bullets := s.world.Components.Bullet
+	s.statCount.Store(int64(bullets.CountEntities()))
 	if bullets.CountEntities() == 0 {
 		return
 	}
@@ -169,6 +179,7 @@ func (s *BulletSystem) traverseAndCollide(
 		if bullet.Hostile {
 			if cursor := CursorContactAt(s.world, cx, cy); cursor != 0 {
 				strikeCursor(s.world, cursor, bullet.Damage)
+				s.statHits.Add(1)
 				return true
 			}
 		} else if target, hit, ok := CombatTargetAt(s.world, cx, cy, engine.ScopeBoth, 0, bullet.Owner); ok {
@@ -183,6 +194,7 @@ func (s *BulletSystem) traverseAndCollide(
 				OriginX:      cx,
 				OriginY:      cy,
 			}, target.Domain())
+			s.statHits.Add(1)
 			return true
 		}
 	}
@@ -212,4 +224,5 @@ func (s *BulletSystem) spawnBullet(p *event.BulletSpawnRequestPayload) {
 
 	origin := vmath.PointAtF(p.OriginX, p.OriginY)
 	s.world.Positions.SetPosition(e, component.PositionComponent{X: origin.X, Y: origin.Y})
+	s.statSpawned.Add(1)
 }

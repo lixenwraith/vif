@@ -59,6 +59,14 @@ func splitKey(key string) (group, name, playerSlot string) {
 			return "combat.rejects", name, ""
 		}
 
+	case "weapon":
+		if metric, ok := strings.CutSuffix(name, "_fired"); ok {
+			return "weapon.fired", metric, ""
+		}
+		if metric, ok := strings.CutSuffix(name, "_rejects"); ok {
+			return "weapon.rejects", metric, ""
+		}
+
 	case "death":
 		if metric, ok := strings.CutPrefix(name, "batch_"); ok {
 			return "death.batch", metric, ""
@@ -193,6 +201,7 @@ var combatMetricPartitions = [...]struct {
 	{"absorbed_defender_", "combat.absorbed.defender"},
 	{"damage_attacker_", "combat.damage.attacker"},
 	{"damage_defender_", "combat.damage.defender"},
+	{"damage_family_", "combat.damage.family"},
 	{"live_", "combat.live"},
 }
 

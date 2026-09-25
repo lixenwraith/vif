@@ -12,6 +12,7 @@ func TestSplitKeyUsesBoundedSemanticGroups(t *testing.T) {
 		{"adapt.buf_pending_deaths_hwm", "adapt.buffers", "pending_deaths_hwm"},
 		{"combat.absorbed_attacker_cursor", "combat.absorbed.attacker", "cursor"},
 		{"combat.damage_defender_drain", "combat.damage.defender", "drain"},
+		{"combat.damage_family_beam", "combat.damage.family", "beam"},
 		{"combat.chain_depth_max", "combat.chain", "depth_max"},
 		{"combat.effect_stun", "combat.effects", "stun"},
 		{"combat.immune_rejects", "combat.rejects", "immune"},
@@ -27,6 +28,9 @@ func TestSplitKeyUsesBoundedSemanticGroups(t *testing.T) {
 		{"player.count", "player", "count"},
 		{"storm.protected_player_rejects", "storm.protection", "protected_player_rejects"},
 		{"undotted", GroupMisc, "undotted"},
+		{"weapon.main_fired", "weapon.fired", "main"},
+		{"weapon.kind_rejects", "weapon.rejects", "kind"},
+		{"weapon.orbs_reaped", "weapon", "orbs_reaped"},
 	}
 
 	for _, tt := range tests {
