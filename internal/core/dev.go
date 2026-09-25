@@ -29,7 +29,7 @@ type RuntimeReport struct {
 	Lines  int
 	Kind   string // data race, fatal, panic, summary, output
 	Head   string // first line
-	At     string // first vi-fighter frame, empty when absent
+	At     string // first vif frame, empty when absent
 }
 
 var (
@@ -261,7 +261,7 @@ func classify(head string) string {
 	return "output"
 }
 
-// firstFrame returns the innermost vi-fighter stack frame in a block
+// firstFrame returns the innermost vif stack frame in a block
 func firstFrame(body string) string {
 	for _, line := range strings.Split(body, "\n") {
 		if t := strings.TrimSpace(line); strings.HasPrefix(t, modulePath) {

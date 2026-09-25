@@ -26,7 +26,7 @@ to build the normal binary.
 
 ```bash
 git clone https://github.com/lixenwraith/vif
-cd vi-fighter
+cd vif
 make dev       # generated code + race-enabled debug build
 ./bin/vif
 ```

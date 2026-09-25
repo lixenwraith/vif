@@ -773,7 +773,7 @@ enters the alternate screen, then polls the file every
 | `path` | the capture file |
 | `offset`, `bytes`, `lines` | block location and size within it |
 | `head` | first line, truncated to 200 characters |
-| `at` | innermost vi-fighter stack frame, empty when absent |
+| `at` | innermost vif stack frame, empty when absent |
 
 The text stays in the capture file; the log holds a pointer. Blocks are split
 on the race delimiter and an incomplete trailing line is held back, so a block

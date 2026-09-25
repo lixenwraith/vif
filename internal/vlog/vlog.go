@@ -1,7 +1,7 @@
 //go:build !wasm && !novlog
 
 // Package vlog is the process-wide logging facade. Leaf package: it imports
-// only the standard library and lixenwraith/log, so any vi-fighter package may
+// only the standard library and lixenwraith/log, so any vif package may
 // use it without creating a cycle.
 //
 // ARGUMENT LIFETIME: records are formatted asynchronously on the logger

@@ -57,7 +57,7 @@ The module currently declares Go 1.27.1.
 
 ```bash
 git clone https://github.com/lixenwraith/vif --depth 1
-cd vi-fighter
+cd vif
 make release
 ./bin/vif
 ```
