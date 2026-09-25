@@ -108,18 +108,6 @@ Tag the selected commit `v0.1.0` and publish the draft release the tag creates,
 which already carries the source archive and its checksum; then drop the "no final
 release" lines in `README.md` and [Packaging](packaging.md) §2.
 
-### Drop the pre-rename fleet names
-
-- Priority: P2
-- Affected files: `deploy/k3s/session.sh`, `deploy/guest/update-vif-image.sh`
-- Prerequisite: the node has deployed the rename once
-
-`session.sh` selects `vi-fighter-fleet` sessions beside `vif-fleet` ones, so the
-first deploy's empty-fleet check and `drain` still see sessions started before it,
-and `update-vif-image.sh` prunes `vi-fighter` images beside `vif` ones. After one
-deploy neither can exist; drop both. That deploy also re-runs the volume loop in
-[Deploying the session fleet](kube-docker-deploy.md) §9 for the volumes' new labels.
-
 ### Publish a development AUR package
 
 - Priority: P3

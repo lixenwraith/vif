@@ -3,8 +3,7 @@
 set -eu
 
 namespace=vif
-# vi-fighter-fleet is the label sessions carried before the rename; see doc/todo.md.
-fleet_label='app.kubernetes.io/part-of in (vif-fleet,vi-fighter-fleet)'
+fleet_label=app.kubernetes.io/part-of=vif-fleet
 session_label=vif.lixenwraith.dev/session
 fleet_logs=${VIF_FLEET_LOGS:-/var/log/vif-fleet}
 allocator=${VIF_ALLOCATOR_URL:-http://127.0.0.1:9080}

@@ -130,19 +130,16 @@ fi
 
 # Remove named runtime references only after the new image is imported and the
 # allocator configuration is updated. Shared content still needed by the new
-# image remains in containerd's content store. vi-fighter is the name images had
-# before the rename; see doc/todo.md.
+# image remains in containerd's content store.
 old_runtime_images=$(sudo k3s ctr -n k8s.io images list -q | awk -v keep="$runtime_image" '
-	/^docker[.]io\/library\/(vif|vi-fighter):/ && $0 != keep { print }
+	/^docker[.]io\/library\/vif:/ && $0 != keep { print }
 ')
 for old_image in $old_runtime_images; do
 	echo "removing old K3s image $old_image"
 	sudo k3s crictl rmi "$old_image"
 done
 
-old_docker_images=$(for repository in "$image_name" vi-fighter; do
-	docker image ls "$repository" --format '{{.Repository}}:{{.Tag}}'
-done | awk -v keep="$local_image" '$0 != keep && $0 !~ /:<none>$/')
+old_docker_images=$(docker image ls "$image_name" --format '{{.Repository}}:{{.Tag}}' | awk -v keep="$local_image" '$0 != keep && $0 !~ /:<none>$/')
 for old_image in $old_docker_images; do
 	echo "removing old Docker image $old_image"
 	docker image rm "$old_image"
