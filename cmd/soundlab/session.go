@@ -24,7 +24,7 @@ type Session struct {
 	out    io.Writer
 
 	// bpm mirrors the last requested tempo so `note` can size durations in
-	// steps. The sequencer clamps and bar-quantizes its own copy; one pending
+	// steps. The sequencer clamps and beat-quantizes its own copy; one pending
 	// change of skew does not matter for an audition length.
 	bpm      int
 	startErr error

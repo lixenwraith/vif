@@ -189,7 +189,7 @@ define step position, velocity, scale degree, octave, duration, probability,
 instrument, chord-following, and humanization. Tonal voices include bass,
 piano/FM, pads, and fallback synthesis; the drum kit uses cached effects.
 
-Tempo is clamped to 80–180 BPM. Tempo changes can wait for the next bar;
+Tempo is clamped to 80–180 BPM. Tempo changes can wait for the next beat;
 patterns can transition immediately or quantized with A/B crossfade. A minimum
 256-sample fade prevents hard-cut voice tails. Track reveal supports staged
 intensity build-up. Slot 2 can substitute a seeded fill on the last bar of each
@@ -216,9 +216,10 @@ music APM and maps it to:
 
 The target tempo is 100 BPM at calm activity, rises gradually through normal
 play, and reaches the engine's 180 BPM maximum at peak. The conductor slews
-rather than jumping (8 BPM/s upward, 10 BPM/s downward) and ignores changes
-smaller than three BPM. Tier changes select registered rhythm/melody
-arrangements and use quantization/crossfade/reveal policy.
+rather than jumping (20 BPM/s upward, 16 BPM/s downward), ignores changes
+smaller than three BPM, and the sequencer applies each on the next beat, so
+tempo trails the five-second window by about a second. Tier changes select
+registered rhythm/melody arrangements and use quantization/crossfade/reveal policy.
 
 Explicit music events can start/stop, set patterns, play a melody note, change
 intensity, tempo, seed, swing, or harmony. A manually held intensity can later

@@ -26,21 +26,6 @@ var tierArrangements = [audio.IntensityCount]audio.Arrangement{
 	audio.IntensityPeak:     {Rhythm: audio.PatternBeatIntense, Melody: audio.PatternMelodyGen},
 }
 
-func tierForAPM(apm uint64) audio.Intensity {
-	switch {
-	case apm < parameter.TierNormalAPM:
-		return audio.IntensityCalm
-	case apm < parameter.TierElevatedAPM:
-		return audio.IntensityNormal
-	case apm < parameter.TierIntenseAPM:
-		return audio.IntensityElevated
-	case apm < parameter.TierPeakAPM:
-		return audio.IntensityIntense
-	default:
-		return audio.IntensityPeak
-	}
-}
-
 // MusicSystem is the conductor: maps game state to arrangement commands
 type MusicSystem struct {
 	world  *engine.World
@@ -301,7 +286,7 @@ func (s *MusicSystem) startMusic() {
 	apm := s.world.Resources.Game.State.GetMusicAPM()
 	s.syncTempo(apm)
 	if !s.manualTier {
-		s.tier = tierForAPM(apm)
+		s.tier = parameter.TierForAPM(apm)
 	}
 	s.arranged = true
 	s.applyArrangement(false, 0, false) // silent source: immediate, no build-up
@@ -315,7 +300,7 @@ func (s *MusicSystem) syncToAPM() {
 	if s.manualTier {
 		return
 	}
-	tier := tierForAPM(apm)
+	tier := parameter.TierForAPM(apm)
 	if tier == s.tier && s.arranged {
 		return
 	}
@@ -336,7 +321,7 @@ func (s *MusicSystem) syncTempo(apm uint64) {
 	}
 	bpm := int(s.bpmF + 0.5)
 	if d := bpm - s.lastBPM; d >= parameter.BPMHysteresis || -d >= parameter.BPMHysteresis {
-		s.player.SetMusicBPM(bpm) // bar-quantized at the sequencer
+		s.player.SetMusicBPM(bpm) // beat-quantized at the sequencer
 		s.lastBPM = bpm
 	}
 }

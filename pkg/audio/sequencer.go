@@ -74,7 +74,7 @@ const seqStream = 0x9E3779B97F4A7C15 // fixed PCG stream selector; seed varies p
 // Mixer-goroutine confined: no synchronization
 type Sequencer struct {
 	bpm            int
-	pendingBPM     int // applied at next bar boundary; 0 = none
+	pendingBPM     int // applied at next beat boundary; 0 = none
 	samplesPerStep int
 	swing          float64
 	volume         float64
@@ -135,7 +135,8 @@ func (s *Sequencer) SetBPM(bpm int, quantize bool) {
 	} else if bpm > MaxBPM {
 		bpm = MaxBPM
 	}
-	// bar-quantized tempo application removes mid-bar step-grid lurch
+	// beat-quantized: a tempo change never splits a beat, and a slewed ramp moves
+	// in steps of a beat rather than lurching once a bar
 	if quantize && s.running {
 		s.pendingBPM = bpm
 		return
@@ -176,7 +177,7 @@ func (s *Sequencer) Generate(buf []float64) {
 		return
 	}
 	for i := range buf {
-		// live samplesPerStep read — pending BPM applies mid-buffer at bars
+		// live samplesPerStep read — pending BPM applies mid-buffer at beats
 		spS := int64(s.samplesPerStep)
 		effectiveStepLen := spS
 		if s.swing > 0 {
@@ -192,10 +193,12 @@ func (s *Sequencer) Generate(buf []float64) {
 			s.samplePos = 0
 			s.currentStep = (s.currentStep + 1) % int64(MaxPatternLen)
 
+			if s.currentStep%int64(StepsPerBeat) == 0 {
+				s.applyPendingBPM()
+			}
 			if s.currentStep%int64(StepsPerBar) == 0 {
 				s.barCount++
 				s.harmony.advanceBar()
-				s.applyPendingBPM()
 				s.applyPendingTransitions()
 				s.updateReveal()
 				s.updateFill()

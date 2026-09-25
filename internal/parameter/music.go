@@ -19,13 +19,9 @@ const (
 	TierPeakAPM     = 300
 )
 
-// APMToBPM maps burst APM to target tempo; the sequencer re-clamps to
-// [audio.MinBPM, audio.MaxBPM]. The calm floor must stay >= audio.MinBPM.
-//
-// breakpoints are tied to the tier thresholds instead of literals (60 / 120 / 180).
-// The mid-range knee moves from APM 120 to TierIntenseAPM (220),
-// so tempo rises more slowly through normal play and peak tempo is only reached at TierPeakAPM.
-// To keep the original curve, substitute: <=60 → 100; <=120 → 100 + (apm-60)*40/60; else 140 + (apm-120)*40/60.
+// APMToBPM maps burst APM to target tempo, with breakpoints on the tier thresholds:
+// calm holds the floor, normal through elevated climbs to the knee at TierIntenseAPM,
+// and peak tempo arrives at TierPeakAPM. The calm floor must stay >= audio.MinBPM.
 func APMToBPM(apm uint64) int {
 	const (
 		calmBPM   = 100
@@ -60,12 +56,12 @@ func TierForAPM(apm uint64) audio.Intensity {
 	}
 }
 
-// Tempo dynamics: the conductor slews toward the APM target, the sequencer
-// applies the result bar-quantized
+// Tempo dynamics: the conductor slews toward the APM target and the sequencer
+// applies it beat-quantized, so tempo trails the five-second window by about a second
 const (
 	BPMHysteresis = 3    // ignore smaller deltas
-	BPMRiseRate   = 8.0  // BPM per second, upward
-	BPMFallRate   = 10.0 // BPM per second, downward
+	BPMRiseRate   = 20.0 // BPM per second, upward
+	BPMFallRate   = 16.0 // BPM per second, downward
 )
 
 // Arrangement transition presets

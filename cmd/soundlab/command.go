@@ -61,7 +61,7 @@ func init() {
 		"slot": {"slot <0|1|2> <pattern|-> [fade_ms] [q]", "assign a pattern; dirty patterns auto-apply; - = silence", 2, 4, cmdSlot},
 
 		"music": {"music start|stop|reset", "transport control", 1, 1, cmdMusic},
-		"bpm":   {"bpm <n>", "tempo, bar-quantized", 1, 1, cmdBPM},
+		"bpm":   {"bpm <n>", "tempo, beat-quantized", 1, 1, cmdBPM},
 		"swing": {"swing <f>", "shuffle 0..0.5", 1, 1, cmdSwing},
 		"fill":  {"fill on|off", "slot-2 auto-fill (off while auditioning slot 2)", 1, 1, cmdFill},
 		"key":   {"key <root> <scale> [deg...]", "harmony: MIDI root, scale name, chord degrees", 2, -1, cmdKey},
