@@ -200,7 +200,8 @@ member of its pool; a slot placed explicitly is left alone.
 Harmony holds root note, scale, and chord progression. Pattern degrees resolve
 through the current harmony at trigger time. With the same seed and identical
 bar-aligned command schedule, generated music is reproducible; wall-clock
-arrival relative to bars is not a recorded replay contract.
+arrival relative to bars is not a recorded replay contract. The conductor seeds
+the sequencer from the run's own music stream, so each run draws its own pools.
 
 ## 8. Adaptive game conductor
 

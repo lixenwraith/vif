@@ -60,6 +60,9 @@ func (s *MusicSystem) Init() {
 	s.enabled = true
 	if s.player != nil {
 		s.player.ResetMusic()
+		// Pool draws, variation and fills follow the run's seed: a run opens on its
+		// own music and a replay of it on the same
+		s.player.SetMusicSeed(int64(s.rng.Next()))
 	}
 }
 
