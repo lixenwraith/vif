@@ -4,8 +4,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/input"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // `qa` ... `q` : Record to 'a'

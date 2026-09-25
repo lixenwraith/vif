@@ -3,8 +3,8 @@ package app
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/network"
-	"github.com/lixenwraith/vi-fighter/internal/resource"
+	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/resource"
 )
 
 func geometryServer(t *testing.T, w, h int) *App {

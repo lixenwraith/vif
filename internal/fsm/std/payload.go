@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/internal/fsm"
+	"github.com/lixenwraith/vif/internal/fsm"
 )
 
 // === Payload Variable Injection ===

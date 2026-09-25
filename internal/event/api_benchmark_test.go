@@ -3,7 +3,7 @@ package event
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 func popBenchmarkEvent(q *EventQueue) GameEvent {

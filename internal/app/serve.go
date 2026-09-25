@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/lifecycle"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/vlog"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/lifecycle"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // serveReportInterval is how often a server logs what it is holding. It is a log

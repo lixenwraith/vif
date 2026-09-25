@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/lixenwraith/color"
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // SplashSlot identifies the visual purpose of a splash for uniqueness enforcement

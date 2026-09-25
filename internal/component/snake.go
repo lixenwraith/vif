@@ -1,8 +1,8 @@
 package component
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // Snake trail buffer sizing

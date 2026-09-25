@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 func TestEmberEllipseUsesTerminalAspectRatio(t *testing.T) {

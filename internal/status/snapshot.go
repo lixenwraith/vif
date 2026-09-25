@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/internal/vlog"
+	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // SubStat is the vlog subsystem tag on every snapshot record.

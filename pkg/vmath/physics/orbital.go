@@ -3,7 +3,7 @@ package physics
 import (
 	"math"
 
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // OrbitalVelocity returns tangential velocity for circular orbit: v = sqrt(a * r)

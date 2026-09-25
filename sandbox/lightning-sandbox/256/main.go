@@ -9,7 +9,7 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/render"
+	"github.com/lixenwraith/vif/internal/render"
 )
 
 // ==========================================

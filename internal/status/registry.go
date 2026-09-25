@@ -4,7 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/internal/vlog"
+	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // Registry is the central metrics facade.

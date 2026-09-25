@@ -5,8 +5,8 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
 )
 
 // captureTerminal is the smallest host the pipeline will accept: it keeps the

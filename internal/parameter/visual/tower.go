@@ -2,7 +2,7 @@ package visual
 
 import (
 	"github.com/lixenwraith/color"
-	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vif/internal/component"
 )
 
 // TowerTypeColors holds per-type health gradient, glow, and palette colors

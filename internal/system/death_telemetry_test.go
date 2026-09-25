@@ -3,10 +3,10 @@ package system
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 func TestDeathTelemetrySeparatesEffectTypes(t *testing.T) {

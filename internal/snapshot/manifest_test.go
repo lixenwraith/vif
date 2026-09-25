@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // TestHashesAreDomainSeparated pins the construction the proofs rest on: the same

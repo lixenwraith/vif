@@ -14,10 +14,10 @@ import (
 	"hash/fnv"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/fsm"
-	"github.com/lixenwraith/vi-fighter/internal/network"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/internal/network"
 )
 
 // Schema is the capture layout version, distinct from the journal schema. A

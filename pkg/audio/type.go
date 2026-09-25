@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lixenwraith/vi-fighter/pkg/audio/model"
+	"github.com/lixenwraith/vif/pkg/audio/model"
 )
 
 // === Instruments ===

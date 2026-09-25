@@ -3,7 +3,7 @@ package journal
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 func TestRecorderAttachesAccountsAndDetaches(t *testing.T) {

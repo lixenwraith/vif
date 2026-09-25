@@ -2,7 +2,7 @@
 
 package engine
 
-import "github.com/lixenwraith/vi-fighter/internal/core"
+import "github.com/lixenwraith/vif/internal/core"
 
 // componentRule names the entity domain a component bit may attach to
 type componentRule struct {

@@ -1,11 +1,11 @@
 package manifest
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/fsm"
-	"github.com/lixenwraith/vi-fighter/internal/fsm/std"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/internal/fsm/std"
 )
 
 // RegisterFSMComponents installs the FSM standard library bound to the ECS world,

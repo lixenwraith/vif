@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/internal/status"
+	"github.com/lixenwraith/vif/internal/status"
 )
 
 // metricPrefix namespaces every exported series. One prefix rather than a per-

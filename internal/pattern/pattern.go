@@ -7,8 +7,8 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/pkg/ascimage"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/pkg/ascimage"
 )
 
 // PatternCell holds visual data + offset for one cell

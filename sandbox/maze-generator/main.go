@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/pkg/maze"
+	"github.com/lixenwraith/vif/pkg/maze"
 )
 
 func main() {

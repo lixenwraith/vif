@@ -1,6 +1,6 @@
 package manifest
 
-import "github.com/lixenwraith/vi-fighter/internal/engine"
+import "github.com/lixenwraith/vif/internal/engine"
 
 // ProfileFor returns a system's declared profile. An unknown name is a wiring
 // regression, not a runtime condition.

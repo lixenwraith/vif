@@ -1,6 +1,6 @@
 package parameter
 
-import "github.com/lixenwraith/vi-fighter/pkg/genetic"
+import "github.com/lixenwraith/vif/pkg/genetic"
 
 // Genetic Algorithm - Population
 const (

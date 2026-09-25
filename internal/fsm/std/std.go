@@ -11,8 +11,8 @@
 package std
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/fsm"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm"
 )
 
 // Host exposes embedder capabilities to FSM scripts

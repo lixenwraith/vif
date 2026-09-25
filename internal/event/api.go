@@ -1,8 +1,8 @@
 package event
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // EmitDeath requests destruction of one or more entities with an optional effect.

@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/asset"
+	"github.com/lixenwraith/vif/internal/asset"
 )
 
 // KeyBehavior classifies how a key is processed.

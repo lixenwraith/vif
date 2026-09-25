@@ -1,6 +1,6 @@
 package event
 
-import "github.com/lixenwraith/vi-fighter/internal/vlog"
+import "github.com/lixenwraith/vif/internal/vlog"
 
 // Journal record subs; the offline verifier filters on these
 const (

@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/asset"
-	"github.com/lixenwraith/vi-fighter/internal/fsm"
+	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/fsm"
 )
 
 // EmbeddedLabel is the name recorded for a built-in asset, scenario or corpus.

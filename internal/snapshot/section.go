@@ -17,8 +17,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/fsm"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/fsm"
 )
 
 // applyMetaShard writes the shared allocator counter and the lifetime totals.

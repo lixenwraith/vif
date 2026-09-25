@@ -3,7 +3,7 @@ package snapshot
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/internal/status"
+	"github.com/lixenwraith/vif/internal/status"
 )
 
 // Telemetry is what a capture, a correction and the selective exchange cost the

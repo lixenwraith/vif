@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/manifest"
-	"github.com/lixenwraith/vi-fighter/internal/network"
-	"github.com/lixenwraith/vi-fighter/internal/snapshot"
+	"github.com/lixenwraith/vif/internal/manifest"
+	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
 // TestTheHostRefusesAPeerThatSkippedItsOwnCheck is the whole point of moving the

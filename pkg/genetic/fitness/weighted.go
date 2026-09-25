@@ -1,6 +1,6 @@
 package fitness
 
-import "github.com/lixenwraith/vi-fighter/pkg/genetic/tracking"
+import "github.com/lixenwraith/vif/pkg/genetic/tracking"
 
 // WeightedAggregator calculates fitness as a weighted sum of normalized metrics
 type WeightedAggregator struct {

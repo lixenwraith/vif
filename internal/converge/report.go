@@ -5,8 +5,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/network"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/network"
 )
 
 // PeerCadence is one link's operating point and the measurements it came from.

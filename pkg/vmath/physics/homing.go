@@ -1,6 +1,6 @@
 package physics
 
-import "github.com/lixenwraith/vi-fighter/pkg/vmath"
+import "github.com/lixenwraith/vif/pkg/vmath"
 
 // HomingProfile defines homing behavior parameters
 type HomingProfile struct {

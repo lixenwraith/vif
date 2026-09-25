@@ -3,7 +3,7 @@ package component
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // GatewayComponent manages timed species spawning anchored to a parent entity

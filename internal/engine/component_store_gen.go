@@ -3,8 +3,8 @@
 package engine
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // Component ID Bitmasks Mapping for Engine-Level Entity Signatures

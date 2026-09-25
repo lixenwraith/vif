@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/journal"
-	"github.com/lixenwraith/vi-fighter/internal/resource"
+	"github.com/lixenwraith/vif/internal/journal"
+	"github.com/lixenwraith/vif/internal/resource"
 )
 
 type presentationState struct{}

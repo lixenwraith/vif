@@ -4,8 +4,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // Precomputed inverse squared radii for ellipse containment

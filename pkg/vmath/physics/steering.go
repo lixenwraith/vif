@@ -1,6 +1,6 @@
 package physics
 
-import "github.com/lixenwraith/vi-fighter/pkg/vmath"
+import "github.com/lixenwraith/vif/pkg/vmath"
 
 // IntegratePosition advances position by velocity, ignoring acceleration
 func IntegratePosition(k *Kinetic, dt float64) (x, y int) {

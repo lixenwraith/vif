@@ -1,6 +1,6 @@
 package help
 
-import "github.com/lixenwraith/vi-fighter/internal/input"
+import "github.com/lixenwraith/vif/internal/input"
 
 // topics is the documentation source of truth. Key columns come from the live
 // key table wherever an action owns them; literals cover input the table does

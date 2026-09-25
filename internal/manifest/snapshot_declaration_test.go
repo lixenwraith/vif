@@ -4,7 +4,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vif/internal/engine"
 )
 
 // TestSnapshotDeclarationsMatchImplementations is D-19 made mechanical, and it is

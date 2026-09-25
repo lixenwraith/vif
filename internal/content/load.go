@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // Load reads every eligible file at the root of fsys into an immutable corpus.

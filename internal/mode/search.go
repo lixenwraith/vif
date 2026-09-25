@@ -1,8 +1,8 @@
 package mode
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // PerformSearch searches for a text pattern and moves cursor to first match

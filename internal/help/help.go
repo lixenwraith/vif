@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lixenwraith/vi-fighter/internal/input"
+	"github.com/lixenwraith/vif/internal/input"
 )
 
 // Topic is a resolved help section

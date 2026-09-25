@@ -6,13 +6,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/input"
-	"github.com/lixenwraith/vi-fighter/internal/journal"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/vlog"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/journal"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // ScriptPaceMax is the -speed token that removes wall pacing from a script run.

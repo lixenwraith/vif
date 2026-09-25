@@ -3,7 +3,7 @@ package component
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // TrailCapacity is ring buffer size for trail particles

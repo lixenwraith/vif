@@ -3,8 +3,8 @@
 package manifest
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/system"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/system"
 )
 
 // BuildSystems constructs every active system in manifest order

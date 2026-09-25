@@ -25,7 +25,7 @@ to build the normal binary.
 ## 2. Common build workflow
 
 ```bash
-git clone https://github.com/lixenwraith/vi-fighter
+git clone https://github.com/lixenwraith/vif
 cd vi-fighter
 make dev       # generated code + race-enabled debug build
 ./bin/vif

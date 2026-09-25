@@ -13,7 +13,7 @@ import (
 	"fmt"
 
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // stampedCrossings names the Stamped types a player-domain producer pushes at a

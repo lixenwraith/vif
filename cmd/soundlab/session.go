@@ -12,9 +12,9 @@ import (
 	"path/filepath"
 
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/paths"
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/paths"
+	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 // Session owns the engine and the two working documents. Single-goroutine by

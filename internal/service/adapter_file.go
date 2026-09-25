@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vif/internal/engine"
 )
 
 // FileSource supplies categorized configuration roots in lookup order.

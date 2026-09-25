@@ -1,8 +1,8 @@
 package mode
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 // OpMove requests cursor placement from a motion result; CursorSystem applies it

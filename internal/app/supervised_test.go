@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/lifecycle"
-	"github.com/lixenwraith/vi-fighter/internal/network"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/resource"
+	"github.com/lixenwraith/vif/internal/lifecycle"
+	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/resource"
 )
 
 // supervisedServer is a dedicated host with a probe and, optionally, the lifetime

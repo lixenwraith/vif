@@ -3,7 +3,7 @@ package profile
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vif/internal/component"
 )
 
 func TestMatrixCoversCursorAttacks(t *testing.T) {

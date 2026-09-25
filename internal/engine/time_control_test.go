@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/status"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/status"
 )
 
 func newTestControl() *TimeControl {

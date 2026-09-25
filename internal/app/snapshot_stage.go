@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/resource"
-	"github.com/lixenwraith/vi-fighter/internal/snapshot"
-	"github.com/lixenwraith/vi-fighter/internal/vlog"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/resource"
+	"github.com/lixenwraith/vif/internal/snapshot"
+	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // StagedInstall is a capture resolved against a second world and waiting for its

@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // JournalSchema is the record layout version; bump on any field change.

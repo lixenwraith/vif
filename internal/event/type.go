@@ -1,6 +1,6 @@
 package event
 
-import "github.com/lixenwraith/vi-fighter/internal/core"
+import "github.com/lixenwraith/vif/internal/core"
 
 // GameEvent represents a single game event with metadata
 type GameEvent struct {

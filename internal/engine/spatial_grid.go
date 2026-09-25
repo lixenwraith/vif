@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // DomainScope selects which half of a partitioned cell an enumeration visits.

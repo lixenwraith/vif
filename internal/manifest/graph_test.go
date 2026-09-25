@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vif/internal/engine"
 )
 
 // buildWorld returns a world carrying every manifest system

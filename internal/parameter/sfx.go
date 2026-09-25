@@ -1,6 +1,6 @@
 package parameter
 
-import "github.com/lixenwraith/vi-fighter/pkg/audio/model"
+import "github.com/lixenwraith/vif/pkg/audio/model"
 
 // SoundSet is the game's sound-effect ID table. The zero value is model.SoundNone,
 // which Play counts as a bad-ID rejection, so AudioService.Start treats an unresolved

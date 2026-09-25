@@ -3,7 +3,7 @@ package physics
 import (
 	"math"
 
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // WallQueryFunc returns true if the footprint at the given top-left coordinates is blocked

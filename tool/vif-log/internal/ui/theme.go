@@ -3,7 +3,7 @@ package ui
 import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/logfile"
 )
 
 // Theme extends the tui theme with log-specific colors.

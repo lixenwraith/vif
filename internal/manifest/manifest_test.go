@@ -3,8 +3,8 @@ package manifest
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 // scratchWorld builds a world with resources but no services, enough to

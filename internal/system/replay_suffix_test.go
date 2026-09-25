@@ -3,8 +3,8 @@ package system
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // The retention half of Phase 6's replay, tested where it lives.

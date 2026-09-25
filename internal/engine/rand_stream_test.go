@@ -3,7 +3,7 @@ package engine
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // TestSaveStreamsReportsOneDomainsIssuedStreams answers the "~24 per-system RNG

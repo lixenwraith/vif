@@ -3,7 +3,7 @@ package renderer
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vif/internal/component"
 )
 
 func TestCleanerVisibleTrailShrinksWhileBlocked(t *testing.T) {

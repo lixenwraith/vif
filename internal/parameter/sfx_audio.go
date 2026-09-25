@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/internal/asset"
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
+	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 // BuiltinSounds parses the shipped sound bank.

@@ -1,6 +1,6 @@
 package navigation
 
-import "github.com/lixenwraith/vi-fighter/pkg/vmath"
+import "github.com/lixenwraith/vif/pkg/vmath"
 
 // Route graph tuning. It lives here rather than in the game's parameter package
 // so this leaf stays free of internal imports.

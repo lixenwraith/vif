@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/lixenwraith/vi-fighter/internal/parameter"
+import "github.com/lixenwraith/vif/internal/parameter"
 
 // OverlayGeometry is the resolved overlay window placement for one terminal size.
 // X and Y are screen coordinates; every other coordinate is relative to the window.

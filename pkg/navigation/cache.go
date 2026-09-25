@@ -1,6 +1,6 @@
 package navigation
 
-import "github.com/lixenwraith/vi-fighter/pkg/vmath"
+import "github.com/lixenwraith/vif/pkg/vmath"
 
 // FlowFieldCache manages flow field recomputation with throttling
 type FlowFieldCache struct {

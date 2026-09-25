@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
+	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 func loadBuiltins(t *testing.T) []*audio.SoundDef {

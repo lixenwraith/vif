@@ -1,6 +1,6 @@
 package navigation
 
-import "github.com/lixenwraith/vi-fighter/pkg/vmath"
+import "github.com/lixenwraith/vif/pkg/vmath"
 
 // Direction constants for flow field
 // Index into NavSenseDirections: N=0, NE=1, E=2, SE=3, S=4, SW=5, W=6, NW=7

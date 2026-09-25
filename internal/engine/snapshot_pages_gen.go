@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // StoreRow is one component cell in the manifest's canonical form: the entity it

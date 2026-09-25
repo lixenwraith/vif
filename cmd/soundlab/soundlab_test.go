@@ -14,9 +14,9 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vi-fighter/internal/paths"
-	"github.com/lixenwraith/vi-fighter/internal/resource"
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
+	"github.com/lixenwraith/vif/internal/paths"
+	"github.com/lixenwraith/vif/internal/resource"
+	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 func newTestSession(t *testing.T, out *bytes.Buffer) *Session {

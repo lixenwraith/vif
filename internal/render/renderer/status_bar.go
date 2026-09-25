@@ -8,12 +8,12 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
-	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/vi-fighter/internal/status"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
+	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/internal/status"
 )
 
 // statusItem is one right-aligned run of status bar cells

@@ -13,7 +13,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
+	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 // pkey is one keycap on the strip: cell x, strip row (0 = blacks, 1 =

@@ -3,8 +3,8 @@ package mode
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/input"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/input"
 )
 
 func TestSelectedCardScrollDeltaTraversesClippedCard(t *testing.T) {

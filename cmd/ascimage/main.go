@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/vi-fighter/pkg/ascimage"
+	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/ascimage"
 )
 
 func main() {

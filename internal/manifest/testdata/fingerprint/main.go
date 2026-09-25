@@ -6,7 +6,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/lixenwraith/vi-fighter/internal/manifest"
+	"github.com/lixenwraith/vif/internal/manifest"
 )
 
 func main() { fmt.Println(manifest.FingerprintString()) }

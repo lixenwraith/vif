@@ -6,9 +6,9 @@ import (
 	"io"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/internal/asset"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/paths"
+	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/paths"
 )
 
 // flagLine is one flag: every name it answers to, the argument it takes, and the

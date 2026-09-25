@@ -8,9 +8,9 @@ package journal
 import (
 	"errors"
 
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/input"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // FuzzOptions configures the random driver

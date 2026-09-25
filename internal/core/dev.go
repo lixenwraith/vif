@@ -16,7 +16,7 @@ import (
 const (
 	stderrPrefix  = "vif-stderr-"
 	raceDelimiter = "=================="
-	modulePath    = "github.com/lixenwraith/vi-fighter"
+	modulePath    = "github.com/lixenwraith/vif"
 	maxDrainBytes = 256 << 10
 	headMaxLen    = 200
 )

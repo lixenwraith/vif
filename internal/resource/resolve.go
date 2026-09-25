@@ -10,8 +10,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lixenwraith/vi-fighter/internal/paths"
-	"github.com/lixenwraith/vi-fighter/internal/service"
+	"github.com/lixenwraith/vif/internal/paths"
+	"github.com/lixenwraith/vif/internal/service"
 )
 
 // Options names the resource overrides a run was started with. An empty field

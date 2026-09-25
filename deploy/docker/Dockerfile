@@ -61,7 +61,7 @@ FROM scratch
 
 ARG VERSION=dev
 ARG REVISION=unknown
-ARG SOURCE=https://github.com/lixenwraith/vi-fighter
+ARG SOURCE=https://github.com/lixenwraith/vif
 
 LABEL org.opencontainers.image.title="vi-fighter" \
       org.opencontainers.image.description="vif dedicated session server" \

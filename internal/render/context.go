@@ -3,7 +3,7 @@ package render
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vif/internal/engine"
 )
 
 // RenderContext provides frame state for renderers, passed by value

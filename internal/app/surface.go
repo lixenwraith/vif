@@ -1,8 +1,8 @@
 package app
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/snapshot"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
 // Snapshot returns the sorted context and registry state as comparable lines.

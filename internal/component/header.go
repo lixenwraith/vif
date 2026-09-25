@@ -1,6 +1,6 @@
 package component
 
-import "github.com/lixenwraith/vi-fighter/internal/core"
+import "github.com/lixenwraith/vif/internal/core"
 
 // Behavior routes composite events to behavior-specific systems
 type Behavior uint8

@@ -4,9 +4,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/probe"
-	"github.com/lixenwraith/vi-fighter/internal/vlog"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/probe"
+	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // startProbe binds the endpoint, if one was configured. It runs before the lobby:

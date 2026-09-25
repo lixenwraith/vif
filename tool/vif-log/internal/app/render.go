@@ -8,9 +8,9 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/keys"
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/ui"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/keys"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/logfile"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/ui"
 )
 
 // paneOrder fixes render order. The list sizes itself first so the status bar

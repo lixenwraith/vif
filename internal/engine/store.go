@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // Store is a sparse-set container for component type T.

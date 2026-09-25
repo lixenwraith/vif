@@ -3,7 +3,7 @@ package component
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // LightningColorType defines the visual color variant of a lightning bolt, indexed to renderer color LUT

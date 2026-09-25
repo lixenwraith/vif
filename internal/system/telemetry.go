@@ -3,11 +3,11 @@ package system
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/status"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/status"
+	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
 // eachRosterSlot hands fn every roster slot and the cursor in it, zero for empty.

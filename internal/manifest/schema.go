@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/fsm"
-	"github.com/lixenwraith/vi-fighter/internal/fsm/std"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/internal/fsm/std"
 )
 
 // SchemaVersion is the FSM schema contract version consumed by the map editor.

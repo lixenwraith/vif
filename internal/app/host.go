@@ -8,14 +8,14 @@ import (
 	"slices"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/network"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/resource"
-	"github.com/lixenwraith/vi-fighter/internal/status"
-	"github.com/lixenwraith/vi-fighter/internal/vlog"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/resource"
+	"github.com/lixenwraith/vif/internal/status"
+	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // sessionControl adapts App to engine.SessionController. Every method is the locked

@@ -6,7 +6,7 @@ import (
 	"sort"
 
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 // ReplayTarget is the runtime surface needed to reproduce a journal. App owns

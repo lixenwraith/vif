@@ -5,11 +5,11 @@ import (
 	"math"
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/status"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/status"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // Position maintains a spatial index using a fixed-capacity dense grid, multiple entities per cell (up to MaxEntitiesPerCell)

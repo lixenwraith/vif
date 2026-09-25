@@ -11,16 +11,16 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/network"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/status"
-	"github.com/lixenwraith/vi-fighter/pkg/genetic/registry"
-	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
-	"github.com/lixenwraith/vi-fighter/pkg/navigation"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/status"
+	"github.com/lixenwraith/vif/pkg/genetic/registry"
+	"github.com/lixenwraith/vif/pkg/linkpace"
+	"github.com/lixenwraith/vif/pkg/navigation"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // Resource holds singleton game resources, initialized during GameContext creation, accessed via World.Resources

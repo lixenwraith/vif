@@ -5,7 +5,7 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
 )
 
 // centredContext is the geometry the defect appears in: a terminal larger than

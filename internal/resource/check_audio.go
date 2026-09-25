@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
+	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 func checkAudio(o Options, w io.Writer) error {

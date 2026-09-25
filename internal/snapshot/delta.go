@@ -27,8 +27,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/fsm"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/fsm"
 )
 
 // SharedCaptureDelta is one capture expressed against a baseline capture.

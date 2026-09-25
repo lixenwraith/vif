@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/fsm"
+	"github.com/lixenwraith/vif/internal/fsm"
 )
 
 // === Core Guard Factories ===

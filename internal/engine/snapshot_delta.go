@@ -26,8 +26,8 @@ package engine
 import (
 	"reflect"
 
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // StoreDelta is one component store's difference against a baseline.

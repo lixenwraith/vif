@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vif/internal/engine"
 )
 
 func TestFileServiceContributesCategorizedOpenCapability(t *testing.T) {

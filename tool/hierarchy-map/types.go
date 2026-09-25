@@ -119,7 +119,7 @@ func NewCategoryUIState() *CategoryUIState {
 // Layout constants
 const (
 	SizeWarningThreshold = 300 * 1024
-	defaultModulePath    = "github.com/lixenwraith/vi-fighter"
+	defaultModulePath    = "github.com/lixenwraith/vif"
 )
 
 // Pane identifies which pane has focus

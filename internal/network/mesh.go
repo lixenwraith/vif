@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/linkpace"
 )
 
 // meshEpoch is the origin of the mesh's virtual clock. A mesh has no wall time

@@ -2,7 +2,7 @@
 
 package app
 
-import "github.com/lixenwraith/vi-fighter/internal/service"
+import "github.com/lixenwraith/vif/internal/service"
 
 const buildHasSocketNetwork = true
 

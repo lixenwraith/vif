@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/network"
+	"github.com/lixenwraith/vif/internal/network"
 )
 
 // TestSuccessionSkipsALeaf is what the chain buys the election: the roster's

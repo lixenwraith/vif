@@ -3,7 +3,7 @@ package component
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // BulletComponent marks a linear projectile entity with contact damage

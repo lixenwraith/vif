@@ -1,7 +1,7 @@
 package component
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // NavigationComponent provides pathfinding state for kinetic entities

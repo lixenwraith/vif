@@ -3,7 +3,7 @@ package parameter
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // Snake head dimensions (5×3, appears square in terminal)

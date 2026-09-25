@@ -1,8 +1,8 @@
 package content
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // Cursor walks a corpus one block at a time: sequential within a source, random

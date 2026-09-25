@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/journal"
-	"github.com/lixenwraith/vi-fighter/internal/paths"
-	"github.com/lixenwraith/vi-fighter/internal/resource"
-	"github.com/lixenwraith/vi-fighter/internal/snapshot"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/journal"
+	"github.com/lixenwraith/vif/internal/paths"
+	"github.com/lixenwraith/vif/internal/resource"
+	"github.com/lixenwraith/vif/internal/snapshot"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // Soak profile. Each iteration is reproducible from its seed: rerun one with

@@ -1,6 +1,6 @@
 package std
 
-import "github.com/lixenwraith/vi-fighter/internal/fsm"
+import "github.com/lixenwraith/vif/internal/fsm"
 
 // === Variable Actions ===
 

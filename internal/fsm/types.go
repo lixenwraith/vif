@@ -3,7 +3,7 @@ package fsm
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 // StateID is a unique identifier for a node

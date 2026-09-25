@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/logfile"
 )
 
 // cells returns the columns' occupied extents, in placement order, so an

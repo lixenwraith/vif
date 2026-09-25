@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vif/internal/component"
 )
 
 // captureSink records journal output in memory, for tests that need no file

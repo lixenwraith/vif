@@ -3,7 +3,7 @@ package fitness
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/pkg/genetic/tracking"
+	"github.com/lixenwraith/vif/pkg/genetic/tracking"
 )
 
 const eps = 1e-12

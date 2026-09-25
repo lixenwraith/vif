@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/input"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/input"
 )
 
 // TestReplayViewStopsAtTheMapEdges is the scroll rule: a map the viewer's view holds

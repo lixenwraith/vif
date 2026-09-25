@@ -6,11 +6,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/resource"
-	"github.com/lixenwraith/vi-fighter/internal/snapshot"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/resource"
+	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
 // TestMain hides the machine's config roots. A joiner's config resolves the default

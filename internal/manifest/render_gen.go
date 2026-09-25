@@ -5,9 +5,9 @@
 package manifest
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/vi-fighter/internal/render/renderer"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/internal/render/renderer"
 )
 
 // BuildRenderers constructs every active renderer paired with its priority.

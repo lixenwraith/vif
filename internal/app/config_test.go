@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/input"
-	"github.com/lixenwraith/vi-fighter/internal/paths"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/paths"
 )
 
 func TestNetworkSessionConfigValidation(t *testing.T) {

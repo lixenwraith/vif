@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // TestClampMapSizeBoundsEveryShape covers the three ways a requested map can be

@@ -3,8 +3,8 @@ package engine
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 // TestADeathTheAuthorityNeverIssuedIsDropped: an install restores the authority's

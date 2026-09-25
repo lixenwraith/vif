@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 // LoadScenario parses a scenario TOML byte slice and populates the Machine

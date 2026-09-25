@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 )
 
 // FNV-1a 64, inlined so a per-tick digest allocates nothing

@@ -4,8 +4,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 func draws(r *vmath.FastRand, n int) []uint64 {

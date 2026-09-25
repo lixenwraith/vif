@@ -6,8 +6,8 @@ package converge
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/network"
-	"github.com/lixenwraith/vi-fighter/internal/snapshot"
+	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
 // TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies is the gate the role

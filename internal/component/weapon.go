@@ -3,7 +3,7 @@ package component
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // WeaponType names one weapon kind; WeaponSpecs holds what it does

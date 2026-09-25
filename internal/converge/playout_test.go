@@ -5,8 +5,8 @@ package converge
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/snapshot"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
 // receiver is a guest of a two-participant session, which is the side that

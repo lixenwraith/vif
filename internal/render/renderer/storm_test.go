@@ -3,7 +3,7 @@ package renderer
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/render"
+	"github.com/lixenwraith/vif/internal/render"
 )
 
 func TestStormEffectBoundsClipToVisibleMap(t *testing.T) {

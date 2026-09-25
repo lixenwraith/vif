@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
+	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 func cmdSet(s *Session, a []string) error {

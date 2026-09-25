@@ -2,7 +2,7 @@
 
 package engine
 
-import "github.com/lixenwraith/vi-fighter/pkg/audio"
+import "github.com/lixenwraith/vif/pkg/audio"
 
 type audioResources struct {
 	Audio *AudioResource

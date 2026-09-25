@@ -3,7 +3,7 @@ package parameter
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // Swarm Entity

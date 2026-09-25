@@ -57,7 +57,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 // AuthorityTerm is the authority generation. Term zero is "no session"; a session

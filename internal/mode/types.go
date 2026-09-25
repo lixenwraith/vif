@@ -1,6 +1,6 @@
 package mode
 
-import "github.com/lixenwraith/vi-fighter/internal/engine"
+import "github.com/lixenwraith/vif/internal/engine"
 
 // RangeType defines the shape of the target region
 type RangeType int

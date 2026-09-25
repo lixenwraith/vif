@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // Staged link shaping over a real socket under `tc netem`. The in-process mesh

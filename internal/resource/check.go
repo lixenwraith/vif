@@ -7,12 +7,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/fsm"
-	"github.com/lixenwraith/vi-fighter/internal/input"
-	"github.com/lixenwraith/vi-fighter/internal/manifest"
-	"github.com/lixenwraith/vi-fighter/internal/service"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/manifest"
+	"github.com/lixenwraith/vif/internal/service"
 )
 
 // Check validates every resolved external resource without starting the game.

@@ -2,9 +2,9 @@ package renderer
 
 import (
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
-	"github.com/lixenwraith/vi-fighter/internal/render"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
+	"github.com/lixenwraith/vif/internal/render"
 )
 
 // DimRenderer applies brightness reduction to masked cells

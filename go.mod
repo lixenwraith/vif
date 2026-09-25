@@ -1,4 +1,4 @@
-module github.com/lixenwraith/vi-fighter
+module github.com/lixenwraith/vif
 
 go 1.27.1
 

@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
+	"github.com/lixenwraith/vif/pkg/vmath"
+	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
 func TestMassRatioClamped(t *testing.T) {

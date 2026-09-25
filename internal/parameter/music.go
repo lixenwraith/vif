@@ -6,8 +6,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/asset"
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
+	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 // Conductor policy: APM → tempo and arrangement tier. Everything here is game

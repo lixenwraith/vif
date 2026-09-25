@@ -433,8 +433,8 @@ var componentStoreTemplate = template.Must(template.New("store").Parse(`// Code 
 package engine
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // Component ID Bitmasks Mapping for Engine-Level Entity Signatures
@@ -813,8 +813,8 @@ var buildTemplate = template.Must(template.New("build").Parse(`// Code generated
 package manifest
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/system"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/system"
 )
 
 // BuildSystems constructs every active system in manifest order
@@ -872,8 +872,8 @@ var buildAudioTemplate = template.Must(template.New("buildAudio").Parse(`// Code
 package manifest
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/system"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/system"
 )
 
 func buildAudioSystems(w *engine.World) []engine.System {
@@ -898,8 +898,8 @@ var buildNoAudioTemplate = template.Must(template.New("buildNoAudio").Parse(`// 
 package manifest
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/system"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/system"
 )
 
 func buildAudioSystems(w *engine.World) []engine.System {
@@ -924,9 +924,9 @@ var renderTemplate = template.Must(template.New("render").Parse(`// Code generat
 package manifest
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/vi-fighter/internal/render/renderer"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/internal/render/renderer"
 )
 
 // BuildRenderers constructs every active renderer paired with its priority.
@@ -964,7 +964,7 @@ var componentDomainTemplate = template.Must(template.New("domain").Parse(`// Cod
 
 package engine
 
-import "github.com/lixenwraith/vi-fighter/internal/core"
+import "github.com/lixenwraith/vif/internal/core"
 
 // componentRule names the entity domain a component bit may attach to
 type componentRule struct {
@@ -993,8 +993,8 @@ package engine
 import (
 	"slices"
 
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // StoreEntry is one entity's component in a capture. The reference is a
@@ -1275,7 +1275,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // StoreRow is one component cell in the manifest's canonical form: the entity it

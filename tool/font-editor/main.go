@@ -11,7 +11,7 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/asset"
+	"github.com/lixenwraith/vif/internal/asset"
 )
 
 // Editor constants

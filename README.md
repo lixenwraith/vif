@@ -56,7 +56,7 @@ for headless recordings, not arbitrary live sessions or across platforms.
 The module currently declares Go 1.27.1.
 
 ```bash
-git clone https://github.com/lixenwraith/vi-fighter --depth 1
+git clone https://github.com/lixenwraith/vif --depth 1
 cd vi-fighter
 make release
 ./bin/vif

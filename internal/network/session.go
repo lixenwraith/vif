@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // RosterEntry is one coordinator-assigned participant and roster slot.

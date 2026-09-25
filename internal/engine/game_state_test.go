@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // TestAPMCountsGesturesNotEvents is the rule a mouse sweep broke: a pointer placing the

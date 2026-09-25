@@ -1,6 +1,6 @@
 package fitness
 
-import "github.com/lixenwraith/vi-fighter/pkg/genetic/tracking"
+import "github.com/lixenwraith/vif/pkg/genetic/tracking"
 
 // Aggregator calculates fitness score from collected metrics
 type Aggregator interface {

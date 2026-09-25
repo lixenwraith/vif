@@ -7,9 +7,9 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
+	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/vmath"
+	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
 // --- Visual Constants ---

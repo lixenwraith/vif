@@ -1,6 +1,6 @@
 package physics
 
-import "github.com/lixenwraith/vi-fighter/pkg/vmath"
+import "github.com/lixenwraith/vif/pkg/vmath"
 
 // Kinetic is a 2D point-mass state in float64.
 // Position is a sub-cell coordinate in cells; grid cells are vmath.Point.

@@ -7,12 +7,12 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/internal/asset"
-	"github.com/lixenwraith/vi-fighter/internal/content"
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/status"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/content"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/status"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // ContentSource selects where the corpus is read from.

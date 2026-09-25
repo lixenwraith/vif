@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 // pushMethods are the World methods that put an event on the queue. PushEventFull

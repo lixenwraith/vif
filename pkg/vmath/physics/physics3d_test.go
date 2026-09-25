@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 func v3(x, y, z float64) vmath.Vec3F {

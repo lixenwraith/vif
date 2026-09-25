@@ -3,7 +3,7 @@ package event
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // EventQueue is a lock-free MPSC ring buffer for game events

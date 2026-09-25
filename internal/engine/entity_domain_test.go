@@ -3,7 +3,7 @@ package engine
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // TestEntityDomainRoundTrip verifies the [domain:8][id:56] packing

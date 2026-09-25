@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/logfile"
 )
 
 func init() {

@@ -61,7 +61,7 @@ installed scenarios and corpus rather than only the embedded scenario. The
 Makefile owns its contents so a release and a source install cannot drift.
 
 Downloads are at the repository's
-[`nightly` release](https://github.com/lixenwraith/vi-fighter/releases/tag/nightly);
+[`nightly` release](https://github.com/lixenwraith/vif/releases/tag/nightly);
 the image is `ghcr.io/lixenwraith/vi-fighter:nightly` or `sha-<commit>`. On
 Windows the wad archive unpacks into `%AppData%\vif`. Content a client fetches for
 itself, rather than one a person downloads and extracts, still needs its trust,
@@ -100,7 +100,7 @@ Target `vif` (release) with `vif-git` optional.
 Target `games/vif`. FreeBSD is a first-class runtime target: the OSS
 audio backend exists for it.
 
-1. `USES=go:modules`, `GO_MODULE=github.com/lixenwraith/vi-fighter`,
+1. `USES=go:modules`, `GO_MODULE=github.com/lixenwraith/vif`,
    `GO_TARGET=./cmd/vif`.
 2. Ports staging sets `DESTDIR`, `PREFIX` and `SYSCONFDIR`, which the Makefile
    also defaults to `/usr/local` and `/usr/local/etc` on FreeBSD. The system root

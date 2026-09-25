@@ -5,7 +5,7 @@ package converge
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // TestCadenceBoundsAreTheGameParameters: pkg may not see internal, so the envelope

@@ -3,7 +3,7 @@ package help
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/input"
+	"github.com/lixenwraith/vif/internal/input"
 )
 
 // documentedByLiteral lists actions whose keys appear inside a literal entry,

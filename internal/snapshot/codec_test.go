@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/network"
+	"github.com/lixenwraith/vif/internal/network"
 )
 
 func TestSnapshotWireEnvelopeRoundTripsAndIsBounded(t *testing.T) {

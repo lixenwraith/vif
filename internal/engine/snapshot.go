@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/status"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/status"
 )
 
 // SnapshotContext emits the state an on-demand dump needs that the registry does

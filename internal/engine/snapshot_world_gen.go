@@ -5,8 +5,8 @@ package engine
 import (
 	"slices"
 
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // StoreEntry is one entity's component in a capture. The reference is a

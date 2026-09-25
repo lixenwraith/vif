@@ -2,7 +2,7 @@
 
 package engine
 
-import "github.com/lixenwraith/vi-fighter/internal/status"
+import "github.com/lixenwraith/vif/internal/status"
 
 // UpdateMutex is no-op on WASM (single-threaded)
 type UpdateMutex struct{}

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/fsm"
-	"github.com/lixenwraith/vi-fighter/internal/fsm/std"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/internal/fsm/std"
 )
 
 const reconcileConfig = `

@@ -1,8 +1,8 @@
 package profile
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
 // Offset blend; mirrors collision.go

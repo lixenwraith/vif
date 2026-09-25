@@ -6,8 +6,8 @@ package converge
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/snapshot"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
 // exchange is a host and a guest on one link, the guest holding the host's world

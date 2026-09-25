@@ -9,10 +9,10 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/filter"
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/keys"
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/ui"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/filter"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/keys"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/logfile"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/ui"
 )
 
 const (

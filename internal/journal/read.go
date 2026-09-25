@@ -12,8 +12,8 @@ import (
 	"os"
 	"slices"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 // Set is one parsed journal: its anchors in emission order, and its records in

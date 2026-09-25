@@ -1,7 +1,7 @@
 package service
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vif/internal/engine"
 )
 
 // Service is a lifecycle-managed external resource (I/O boundary).

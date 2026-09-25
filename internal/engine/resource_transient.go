@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"github.com/lixenwraith/color"
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // TransientResource holds player-domain spatial explosion and pulse presentation.

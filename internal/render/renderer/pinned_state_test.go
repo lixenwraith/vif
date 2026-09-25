@@ -4,8 +4,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/render"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/render"
 )
 
 func TestPinnedHUDOriginIsTopLeft(t *testing.T) {

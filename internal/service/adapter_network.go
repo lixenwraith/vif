@@ -3,8 +3,8 @@ package service
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/network"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/network"
 )
 
 // NetworkService bridges the transport to the ECS via a drained inbound

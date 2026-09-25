@@ -1,6 +1,6 @@
 package navigation
 
-import "github.com/lixenwraith/vi-fighter/pkg/vmath"
+import "github.com/lixenwraith/vif/pkg/vmath"
 
 // Source is the read side of a flow field: the direction to step from a cell and
 // how far that cell is from the goal. Both FlowField and FlowFieldCache satisfy

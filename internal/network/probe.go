@@ -21,8 +21,8 @@ import (
 	"encoding/binary"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/linkpace"
 )
 
 // probePayload is [Seq:4][SentNano:8]: a sequence number to pair an echo with

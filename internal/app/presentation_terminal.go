@@ -4,10 +4,10 @@ package app
 
 import (
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/manifest"
-	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/vi-fighter/internal/service"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/manifest"
+	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/internal/service"
 )
 
 type presentationState struct {

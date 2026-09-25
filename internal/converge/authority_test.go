@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/network"
+	"github.com/lixenwraith/vif/internal/network"
 )
 
 // chainOf renders identities as chain entries; an in-process session needs no

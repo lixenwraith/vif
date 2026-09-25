@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/app"
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/filter"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/app"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/filter"
 )
 
 const tickInterval = 50 * time.Millisecond // 20 fps clock

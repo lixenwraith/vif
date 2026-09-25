@@ -1,6 +1,6 @@
 package parameter
 
-import "github.com/lixenwraith/vi-fighter/pkg/vmath"
+import "github.com/lixenwraith/vif/pkg/vmath"
 
 // Flocking separation
 var (

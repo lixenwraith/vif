@@ -6,7 +6,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 // Capture is an in-memory JournalSink for deterministic harnesses. Retaining a

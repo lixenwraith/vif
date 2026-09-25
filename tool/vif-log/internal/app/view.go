@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/export"
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/filter"
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/export"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/filter"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/logfile"
 )
 
 // sortDir is the display order of the sort column.

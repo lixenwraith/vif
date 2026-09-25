@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/fsm"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm"
 )
 
 // EmitEventArgs holds pre-compiled event data for the EmitEvent action

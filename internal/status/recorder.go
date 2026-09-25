@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/vlog"
+	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // SubRec is the vlog subsystem tag on every flight-recorder record.

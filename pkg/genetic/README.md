@@ -499,7 +499,7 @@ import (
     "fmt"
     "math/rand/v2"
 
-    "github.com/lixenwraith/vi-fighter/pkg/genetic"
+    "github.com/lixenwraith/vif/pkg/genetic"
 )
 
 func main() {

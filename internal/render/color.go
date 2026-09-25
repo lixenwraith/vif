@@ -2,7 +2,7 @@ package render
 
 import (
 	"github.com/lixenwraith/color"
-	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
 )
 
 // HeatGradientLUT holds the pre-calculated rainbow gradient

@@ -7,15 +7,15 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/internal/asset"
-	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/help"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/status"
-	"github.com/lixenwraith/vi-fighter/internal/vlog"
+	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/help"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/status"
+	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // MetaSystem handles meta-game commands like Reset, Debug, and Help
@@ -574,7 +574,7 @@ func (s *MetaSystem) handleAboutRequest() {
 			{Key: "version", Value: version},
 			{Key: "engine", Value: "Custom ECS, Data-driven HFSM, Double-buffered ANSI renderer"},
 			{Key: "go", Value: "1.25+"},
-			{Key: "github", Value: "github.com/lixenwraith/vi-fighter"},
+			{Key: "github", Value: "github.com/lixenwraith/vif"},
 			{Key: "author", Value: "Lixen Wraith"},
 			{Key: "website", Value: "lixen.com"},
 			{Key: "license", Value: "BSD-3"},

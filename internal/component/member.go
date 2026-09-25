@@ -1,7 +1,7 @@
 package component
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // MemberComponent provides O(1) anchor resolution from any child entity

@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 const tickDt = 1.0 / 60.0

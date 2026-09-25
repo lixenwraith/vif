@@ -3,7 +3,7 @@ package filter
 import (
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
+	"github.com/lixenwraith/vif/tool/vif-log/internal/logfile"
 )
 
 func match(f Filter, d logfile.Domain) bool {

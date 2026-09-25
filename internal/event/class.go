@@ -1,6 +1,6 @@
 package event
 
-import "github.com/lixenwraith/vi-fighter/internal/core"
+import "github.com/lixenwraith/vif/internal/core"
 
 // EventClass is an event type's replication class (D-10). It answers one
 // question: must this record appear identically in every instance's journal?

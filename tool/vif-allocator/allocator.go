@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/paths"
+	"github.com/lixenwraith/vif/internal/paths"
 )
 
 var (

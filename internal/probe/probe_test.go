@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/internal/status"
+	"github.com/lixenwraith/vif/internal/status"
 )
 
 func serve(t *testing.T, snap func() Snapshot, reg *status.Registry) string {

@@ -33,7 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/status"
+	"github.com/lixenwraith/vif/internal/status"
 )
 
 // shutdownGrace bounds how long Close waits for in-flight probe requests. A probe

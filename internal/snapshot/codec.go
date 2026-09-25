@@ -10,7 +10,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/lixenwraith/vi-fighter/internal/network"
+	"github.com/lixenwraith/vif/internal/network"
 )
 
 // Snapshot bodies have a deliberately small, versioned envelope before the

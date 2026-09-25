@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 func newMessageContext(t *testing.T) (*GameContext, *ManualClock) {
