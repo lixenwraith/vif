@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
@@ -215,6 +216,9 @@ func (s *TransientSystem) updatePulses() {
 
 // addPulse appends a ring, replacing the oldest when the bounded array is full
 func (s *TransientSystem) addPulse(p *event.PulseVisualRequestPayload) {
+	if p.Palette >= component.PaletteCount {
+		return
+	}
 	transient := s.world.Resources.Transient
 	idx := transient.PulseCount
 	if idx < parameter.PulseEffectCap {
@@ -228,7 +232,7 @@ func (s *TransientSystem) addPulse(p *event.PulseVisualRequestPayload) {
 		}
 	}
 	transient.PulseBacking[idx] = engine.PulseEffect{
-		X: p.X, Y: p.Y, DurNano: parameter.PulseEffectDuration.Nanoseconds(), Negative: p.Negative,
+		X: p.X, Y: p.Y, DurNano: parameter.PulseEffectDuration.Nanoseconds(), Palette: p.Palette,
 	}
 }
 

@@ -28,23 +28,50 @@ const (
 // Aimed reports whether the delivery needs targets assigned before it fires
 func (d WeaponDelivery) Aimed() bool { return d != DeliveryPulse }
 
-// WeaponSpec is one weapon kind's static profile, whatever carries it
+// WeaponSpec is one weapon kind's static profile, whatever carries it. A cursor's
+// discharge resolves against species through Attack; a hosted one strikes cursors.
 type WeaponSpec struct {
 	Name       string // status key and command name
 	Delivery   WeaponDelivery
 	Attack     CombatAttackType
-	Cooldown   time.Duration
+	Cooldown   time.Duration // a cursor's; a mount without an interval of its own takes it too
 	MaxCharges int
+
+	HostedRange  float64      // cells a mounted weapon reaches, horizontally; vertical is half
+	HostedDamage CursorDamage // what a mounted weapon's hit costs a cursor
 }
+
+// CursorDamage is a hit on a cursor: energy drained through an active shield,
+// heat changed without one (negative reduces)
+type CursorDamage struct {
+	EnergyDrain int
+	HeatDelta   int
+}
+
+// WeaponPalette selects the colours a discharge draws with
+type WeaponPalette uint8
+
+const (
+	PalettePositive WeaponPalette = iota // a cursor's weapon at non-negative energy
+	PaletteNegative                      // a cursor's weapon at negative energy
+	PaletteHostile                       // a mounted weapon
+	PaletteCount
+)
 
 // WeaponSpecs is indexed by WeaponType
 var WeaponSpecs = [WeaponCount]WeaponSpec{
 	WeaponRod: {Name: "rod", Delivery: DeliveryLightning, Attack: CombatAttackLightning,
-		Cooldown: parameter.WeaponCooldownRod, MaxCharges: parameter.WeaponMaxChargeRod},
+		Cooldown: parameter.WeaponCooldownRod, MaxCharges: parameter.WeaponMaxChargeRod,
+		HostedRange:  parameter.HostedRodRange,
+		HostedDamage: CursorDamage{parameter.HostedRodEnergy, -parameter.HostedRodHeat}},
 	WeaponLauncher: {Name: "launcher", Delivery: DeliveryMissile, Attack: CombatAttackMissile,
-		Cooldown: parameter.WeaponCooldownLauncher, MaxCharges: parameter.WeaponMaxChargeLauncher},
+		Cooldown: parameter.WeaponCooldownLauncher, MaxCharges: parameter.WeaponMaxChargeLauncher,
+		HostedRange:  parameter.HostedLauncherRange,
+		HostedDamage: CursorDamage{parameter.HostedLauncherEnergy, -parameter.HostedLauncherHeat}},
 	WeaponDisruptor: {Name: "disruptor", Delivery: DeliveryPulse, Attack: CombatAttackPulse,
-		Cooldown: parameter.WeaponCooldownDisruptor, MaxCharges: parameter.WeaponMaxChargeDisruptor},
+		Cooldown: parameter.WeaponCooldownDisruptor, MaxCharges: parameter.WeaponMaxChargeDisruptor,
+		HostedRange:  parameter.PulseRadiusX,
+		HostedDamage: CursorDamage{parameter.HostedDisruptorEnergy, -parameter.HostedDisruptorHeat}},
 }
 
 // WeaponComponent is a cursor's loadout: charges and cooldown per kind, and main fire's cooldown.

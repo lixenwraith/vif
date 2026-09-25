@@ -392,6 +392,16 @@ type WeaponFireRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
+// MountRequestPayload puts one weapon on a Shared host, replacing any it carried.
+// Zero interval and range take the weapon's hosted defaults; zero muzzle fires from the host cell.
+type MountRequestPayload struct {
+	Host       core.Entity          `toml:"host"`
+	Weapon     component.WeaponType `toml:"weapon"`
+	IntervalMs int                  `toml:"interval_ms"`
+	Range      int                  `toml:"range"`
+	Muzzle     float64              `toml:"muzzle"`
+}
+
 // FireSpecialRequestPayload names the cursor firing its special
 type FireSpecialRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
@@ -569,9 +579,9 @@ type ExplosionVisualRequestPayload struct {
 
 // PulseVisualRequestPayload is player-domain presentation for one disruptor pulse.
 type PulseVisualRequestPayload struct {
-	X        int  `toml:"x"`
-	Y        int  `toml:"y"`
-	Negative bool `toml:"negative"` // Firing energy polarity selects the palette
+	X       int                     `toml:"x"`
+	Y       int                     `toml:"y"`
+	Palette component.WeaponPalette `toml:"palette"`
 }
 
 // ExplosionVisualBatchRequestPayload is player-domain presentation for a group
@@ -1001,12 +1011,14 @@ type LootSpawnRequestPayload struct {
 
 // MissileSpawnRequestPayload contains missile spawn parameters
 type MissileSpawnRequestPayload struct {
-	Targets     []core.Entity `toml:"targets"`      // Prioritized target entities
-	HitEntities []core.Entity `toml:"hit_entities"` // Corresponding hit points (member or same as target)
-	OwnerEntity core.Entity   `toml:"owner_entity"` // Cursor
-	OriginX     int           `toml:"origin_x"`
-	OriginY     int           `toml:"origin_y"`
-	Count       int           `toml:"count"`
+	Targets     []core.Entity          `toml:"targets"`      // Prioritized target entities
+	HitEntities []core.Entity          `toml:"hit_entities"` // Corresponding hit points (member or same as target)
+	OwnerEntity core.Entity            `toml:"owner_entity"` // Cursor, or a mount's Shared host
+	OriginX     int                    `toml:"origin_x"`
+	OriginY     int                    `toml:"origin_y"`
+	Count       int                    `toml:"count"`
+	Hostile     bool                   `toml:"hostile"` // A mount's: targets cursors
+	Damage      component.CursorDamage `toml:"damage"`  // A hostile blast's cost to each cursor in it
 }
 
 // --- Bullet ---
@@ -1019,7 +1031,7 @@ type BulletSpawnRequestPayload struct {
 	VelY        float64                `toml:"vel_y"`
 	Owner       core.Entity            `toml:"owner"`
 	MaxLifetime time.Duration          `toml:"max_lifetime"`
-	Damage      component.BulletDamage `toml:"damage"`
+	Damage      component.CursorDamage `toml:"damage"`
 }
 
 // --- Marker ---

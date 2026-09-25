@@ -3,7 +3,9 @@ package renderer
 import (
 	"math"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -25,7 +27,20 @@ type PulseRenderer struct {
 }
 
 // pulseCellRenderer draws one ripple cell in the colour mode chosen at construction
-type pulseCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, alpha float64, negative bool)
+type pulseCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, alpha float64, palette component.WeaponPalette)
+
+var (
+	pulseTrueColor = [component.PaletteCount]color.RGB{
+		component.PalettePositive: visual.RgbPulsePositive,
+		component.PaletteNegative: visual.RgbPulseNegative,
+		component.PaletteHostile:  visual.RgbPulseHostile,
+	}
+	pulse256 = [component.PaletteCount]uint8{
+		component.PalettePositive: visual.Pulse256Positive,
+		component.PaletteNegative: visual.Pulse256Negative,
+		component.PaletteHostile:  visual.Pulse256Hostile,
+	}
+)
 
 func NewPulseRenderer(gameCtx *engine.GameContext) *PulseRenderer {
 	r := &PulseRenderer{
@@ -43,24 +58,16 @@ func NewPulseRenderer(gameCtx *engine.GameContext) *PulseRenderer {
 	return r
 }
 
-func pulseCellTrueColor(buf *render.RenderBuffer, screenX, screenY int, alpha float64, negative bool) {
-	c := visual.RgbPulsePositive
-	if negative {
-		c = visual.RgbPulseNegative
-	}
-	buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendScreen, alpha, terminal.AttrNone)
+func pulseCellTrueColor(buf *render.RenderBuffer, screenX, screenY int, alpha float64, palette component.WeaponPalette) {
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, pulseTrueColor[palette], render.BlendScreen, alpha, terminal.AttrNone)
 }
 
 // pulseCell256 draws a ripple cell solid where its blend would show, so the rings stay rings
-func pulseCell256(buf *render.RenderBuffer, screenX, screenY int, alpha float64, negative bool) {
+func pulseCell256(buf *render.RenderBuffer, screenX, screenY int, alpha float64, palette component.WeaponPalette) {
 	if alpha < visual.Effect256Threshold {
 		return
 	}
-	c := visual.Pulse256Positive
-	if negative {
-		c = visual.Pulse256Negative
-	}
-	buf.SetBg256(screenX, screenY, c)
+	buf.SetBg256(screenX, screenY, pulse256[palette])
 }
 
 // Render draws every pulse ring this instance produced
@@ -81,12 +88,12 @@ func (r *PulseRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		if progress < 0.0 || progress > 1.0 {
 			continue
 		}
-		r.renderPulse(ctx, buf, p.X, p.Y, progress, p.Negative)
+		r.renderPulse(ctx, buf, p.X, p.Y, progress, p.Palette)
 	}
 }
 
 func (r *PulseRenderer) renderPulse(ctx render.RenderContext, buf *render.RenderBuffer,
-	originX, originY int, progress float64, negativeEnergy bool) {
+	originX, originY int, progress float64, palette component.WeaponPalette) {
 
 	// Two-phase animation: expand (0-0.5) then fade (0.5-1.0)
 	pulsePhase := progress * 2.0
@@ -164,7 +171,7 @@ func (r *PulseRenderer) renderPulse(ctx render.RenderContext, buf *render.Render
 				continue
 			}
 
-			r.renderCell(buf, screenX, screenY, cellAlpha, negativeEnergy)
+			r.renderCell(buf, screenX, screenY, cellAlpha, palette)
 		}
 	}
 }

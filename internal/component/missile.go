@@ -17,7 +17,12 @@ type MissileTrailPoint struct {
 
 // MissileComponent holds missile entity state (pure data)
 type MissileComponent struct {
-	Owner core.Entity // Owner player
+	Owner core.Entity // Owner cursor, or the Shared host of a mounted launcher
+
+	// Hostile marks a mounted launcher's missile: it homes on cursors and Damage is what
+	// its blast costs each cursor inside it
+	Hostile bool
+	Damage  CursorDamage
 
 	// Target assignment
 	TargetEntity core.Entity // Header for composite, entity for single

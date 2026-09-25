@@ -229,6 +229,8 @@ const (
 	EventWeaponFireRequest
 	// EventFireSpecialRequest (FireSpecialRequestPayload) [local] signals player intent to fire special ability
 	EventFireSpecialRequest
+	// EventMountRequest (MountRequestPayload) [shared] puts a weapon on a Shared host
+	EventMountRequest
 
 	// --- Heat ---
 

@@ -128,3 +128,20 @@ const (
 	// PulseEffectCap is the maximum number of concurrent pulse rings; the oldest is replaced
 	PulseEffectCap = 16
 )
+
+// Mounted weapons: a hit costs a cursor energy through an active shield, heat without one
+const (
+	HostedRodRange  = 20.0 // cells, horizontal; vertical is half
+	HostedRodEnergy = 500
+	HostedRodHeat   = 5
+
+	HostedLauncherRange  = 40.0
+	HostedLauncherEnergy = 1000
+	HostedLauncherHeat   = 10
+
+	HostedDisruptorEnergy = 500
+	HostedDisruptorHeat   = 5
+
+	// MissileHostedMaxSpeed keeps a mounted launcher's missile outrunnable (cells/sec)
+	MissileHostedMaxSpeed = 40.0
+)

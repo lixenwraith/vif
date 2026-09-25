@@ -57,6 +57,8 @@ var SpiritBaseOffsets = [8]int{
 const (
 	Missile256Trail           = ConYellow
 	Missile256Base            = ConBrightYellow
+	Missile256HostileTrail    = ConRed
+	Missile256HostileBase     = ConBrightRed
 	SwarmChargeLine256Palette = ConMagenta
 	// Loot256Rim is the magenta the Linux console showed its rose rim as, which reads well
 	Loot256Rim        = ConBrightMagenta
@@ -68,6 +70,7 @@ const (
 const (
 	Pulse256Positive  = ConBrightYellow
 	Pulse256Negative  = ConBrightMagenta
+	Pulse256Hostile   = ConRed
 	QuasarZap256Idle  = ConCyan
 	QuasarZap256Armed = ConRed
 	// Storm256Ring marks the near storm sphere, the one that can be hit

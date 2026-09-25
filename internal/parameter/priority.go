@@ -36,11 +36,13 @@ const (
 
 	PriorityGateway // After Tower, before Eye — spawns eyes for the tick
 	PriorityEye     // After Gateway
+	PriorityMount   // After every host species: a host arms its mount before the mount fires
 	PriorityCombat
 	PriorityLoot // After species entities and combat
 	PriorityParticle
 	PriorityLightning // After Quasar
 	PriorityMissile   // After Weapon
+	PriorityBullet    // After Mount and Storm, which request bullets
 	PriorityFlash
 	PriorityFadeout
 	PriorityUI

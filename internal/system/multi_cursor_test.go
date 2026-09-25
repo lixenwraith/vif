@@ -293,42 +293,42 @@ func TestNavigationGroupZeroPublishesRoster(t *testing.T) {
 	}
 }
 
-func TestBulletCollisionAddressesHitCursor(t *testing.T) {
+// TestShotContactStrikesOnlyTheTouchedOwnedCursor: a hosted shot addresses the
+// cursor it touched, shield before cell, and a remote cursor's hit is its owner's.
+func TestShotContactStrikesOnlyTheTouchedOwnedCursor(t *testing.T) {
 	w, first, second := testCursorWorld(t)
-	bullets := NewBulletSystem(w).(*BulletSystem)
-	damage := component.BulletDamage{EnergyDrain: -7, HeatDelta: -11}
+	remote := spawnRemoteCursor(t, w, 2, 25, 5, 9)
+	damage := component.CursorDamage{EnergyDrain: -7, HeatDelta: -11}
 
-	if !bullets.collideCursor(&component.BulletComponent{Damage: damage}, 15, 5) {
-		t.Fatal("direct hit did not collide with slot-one cursor")
+	if hit := CursorContactAt(w, 15, 5); hit != second {
+		t.Fatalf("contact at slot-one cell = %d, want %d", hit, second)
 	}
+	strikeCursor(w, second, damage)
 	events := w.Resources.Event.Queue.Consume()
-	if len(events) != 1 || events[0].Type != event.EventHeatAddRequest {
-		t.Fatalf("direct-hit events = %#v, want one heat command", events)
-	}
 	heat, ok := events[0].Payload.(*event.HeatAddRequestPayload)
-	if !ok || heat.Entity != second || heat.Delta != damage.HeatDelta {
-		t.Fatalf("heat payload = %#v, want entity %d delta %d", events[0].Payload, second, damage.HeatDelta)
+	if len(events) != 1 || !ok || heat.Entity != second || heat.Delta != damage.HeatDelta {
+		t.Fatalf("direct-hit events = %#v, want one heat command for %d", events, second)
 	}
 
-	shield, ok := w.Components.Shield.GetComponent(first)
-	if !ok {
-		t.Fatal("slot-zero cursor has no shield component")
-	}
-	shield.Active = true
-	shield.InvRxSq = 1
-	shield.InvRySq = 1
+	shield, _ := w.Components.Shield.GetComponent(first)
+	shield.Active, shield.InvRxSq, shield.InvRySq = true, 1, 1
 	w.Components.Shield.SetComponent(first, shield)
-
-	if !bullets.collideCursor(&component.BulletComponent{Damage: damage}, 5, 5) {
-		t.Fatal("shield hit did not collide with slot-zero cursor")
+	if hit := CursorContactAt(w, 5, 5); hit != first {
+		t.Fatalf("contact at shielded cell = %d, want %d", hit, first)
 	}
+	strikeCursor(w, first, damage)
 	events = w.Resources.Event.Queue.Consume()
-	if len(events) != 1 || events[0].Type != event.EventShieldDrainRequest {
-		t.Fatalf("shield-hit events = %#v, want one shield command", events)
-	}
 	drain, ok := events[0].Payload.(*event.ShieldDrainRequestPayload)
-	if !ok || drain.Entity != first || drain.Value != damage.EnergyDrain {
-		t.Fatalf("shield payload = %#v, want entity %d value %d", events[0].Payload, first, damage.EnergyDrain)
+	if len(events) != 1 || !ok || drain.Entity != first || drain.Value != damage.EnergyDrain {
+		t.Fatalf("shield-hit events = %#v, want one shield command for %d", events, first)
+	}
+
+	if hit := CursorContactAt(w, 25, 5); hit != remote {
+		t.Fatalf("contact at remote cell = %d, want %d", hit, remote)
+	}
+	strikeCursor(w, remote, damage)
+	if events = w.Resources.Event.Queue.Consume(); len(events) != 0 {
+		t.Fatalf("remote-hit events = %#v, want none: its owner applies it", events)
 	}
 }
 

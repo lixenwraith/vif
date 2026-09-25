@@ -132,22 +132,24 @@ func (s *MissileSystem) Update() {
 
 		if s.updateMissile(missileComp, kineticComp, dtSec) {
 			x, y := physics.GridPos(&kineticComp.Kinetic)
-
-			// Missile is player-domain: resolve its own half before the request crosses
 			s.blast.resetOne(x, y, parameter.MissileExplosionRadius)
-			strikePlayerTargets(s.world, missileComp.Owner, &s.blast, component.CombatAttackMissile)
 			s.world.PushLocal(event.EventExplosionVisualRequest, &event.ExplosionVisualRequestPayload{
 				X: x, Y: y, Radius: parameter.MissileExplosionRadius,
 				Type: event.ExplosionTypeMissile,
 			})
-
-			s.world.PushCrossing(event.EventExplosionRequest, &event.ExplosionRequestPayload{
-				Entity: missileComp.Owner,
-				X:      x,
-				Y:      y,
-				Radius: parameter.MissileExplosionRadius,
-				Attack: component.CombatAttackMissile,
-			})
+			if missileComp.Hostile {
+				strikeCursorsInBlast(s.world, &s.blast, missileComp.Damage)
+			} else {
+				// Missile is player-domain: resolve its own half before the request crosses
+				strikePlayerTargets(s.world, missileComp.Owner, &s.blast, component.CombatAttackMissile)
+				s.world.PushCrossing(event.EventExplosionRequest, &event.ExplosionRequestPayload{
+					Entity: missileComp.Owner,
+					X:      x,
+					Y:      y,
+					Radius: parameter.MissileExplosionRadius,
+					Attack: component.CombatAttackMissile,
+				})
+			}
 			toDestroy = append(toDestroy, missileEntity)
 			s.statImpacts.Add(1)
 			continue
@@ -205,14 +207,14 @@ func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *componen
 
 		// Homing via physics
 		physics.ApplyHoming(&k.Kinetic, targetX, targetY, &profile.MissileHoming, dt)
-		k.VelX, k.VelY = physics.CapSpeed(k.VelX, k.VelY, parameter.MissileMaxSpeed)
+		k.VelX, k.VelY = physics.CapSpeed(k.VelX, k.VelY, missileSpeed(m.Hostile))
 
 		// Integrate position
 		physics.IntegratePosition(&k.Kinetic, dt)
 	}
 
 	// General combat collision: the missile detonates on any target contact.
-	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY, m.Owner)
+	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY, m)
 	if hitType != impactNone {
 		k.PreciseX, k.PreciseY = vmath.Point{X: impactX, Y: impactY}.CenterF()
 		return true
@@ -229,8 +231,9 @@ const (
 	impactCombatant
 )
 
-// traverseForImpact walks the path checking for wall and combatant collisions.
-func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64, owner core.Entity) (x, y int, hit impactType) {
+// traverseForImpact walks the path checking for wall and combatant collisions;
+// a hostile missile's combatants are cursors and their shields.
+func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64, m *component.MissileComponent) (x, y int, hit impactType) {
 	from := vmath.PointAtF(fromX, fromY)
 	to := vmath.PointAtF(toX, toY)
 
@@ -257,9 +260,13 @@ func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64, owner 
 			return lastSafeX, lastSafeY, impactWall
 		}
 
-		// Combatant collision
-		// Both domains: the missile is player-domain, so a drain detonates it too
-		if HasCombatTargetAt(s.world, currX, currY, engine.ScopeBoth, 0, owner) {
+		// Combatant collision: a hostile missile's are cursors and their shields; a
+		// player missile's span both domains, so a drain detonates it too
+		if m.Hostile {
+			if CursorContactAt(s.world, currX, currY) != 0 {
+				return currX, currY, impactCombatant
+			}
+		} else if HasCombatTargetAt(s.world, currX, currY, engine.ScopeBoth, 0, m.Owner) {
 			return currX, currY, impactCombatant
 		}
 
@@ -298,7 +305,17 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 		}
 	}
 
-	// 3. Retarget: nearest combatant
+	// 3. Retarget: nearest cursor for a hostile missile, nearest combatant otherwise
+	if m.Hostile {
+		cell := vmath.PointAtF(missileX, missileY)
+		cursor, x, y, ok := ClosestCursor(s.world, cell.X, cell.Y)
+		if !ok {
+			return 0, 0, false
+		}
+		m.TargetEntity, m.HitEntity = cursor, cursor
+		cx, cy := vmath.Point{X: x, Y: y}.CenterF()
+		return cx, cy, true
+	}
 	targets := FindNearestTargets(s.world, missileX, missileY, 1, engine.ScopeBoth, m.Owner)
 	if len(targets) == 0 {
 		return 0, 0, false
@@ -360,7 +377,7 @@ func (s *MissileSystem) handleSpawnRequest(p *event.MissileSpawnRequestPayload) 
 
 		// Stagger initial speed slightly for visual spread
 		speedFactor := 1.0 - parameter.MissileStaggerFactor*float64(i)
-		speed := parameter.MissileMaxSpeed * speedFactor
+		speed := missileSpeed(p.Hostile) * speedFactor
 
 		vx := dirX * speed
 		vy := dirY * speed
@@ -371,15 +388,25 @@ func (s *MissileSystem) handleSpawnRequest(p *event.MissileSpawnRequestPayload) 
 			hit = p.HitEntities[i%len(p.HitEntities)]
 		}
 
-		s.spawnMissile(p.OwnerEntity, originX, originY, vx, vy, target, hit)
+		s.spawnMissile(p, originX, originY, vx, vy, target, hit)
 	}
 }
 
-func (s *MissileSystem) spawnMissile(owner core.Entity, x, y, vx, vy float64, target, hit core.Entity) {
+// missileSpeed is the cap a missile homes under; a mounted launcher's is outrunnable
+func missileSpeed(hostile bool) float64 {
+	if hostile {
+		return parameter.MissileHostedMaxSpeed
+	}
+	return parameter.MissileMaxSpeed
+}
+
+func (s *MissileSystem) spawnMissile(p *event.MissileSpawnRequestPayload, x, y, vx, vy float64, target, hit core.Entity) {
 	e := s.world.CreateEntity(core.DomainPlayer)
 
 	s.world.Components.Missile.SetComponent(e, component.MissileComponent{
-		Owner:        owner,
+		Owner:        p.OwnerEntity,
+		Hostile:      p.Hostile,
+		Damage:       p.Damage,
 		TargetEntity: target,
 		HitEntity:    hit,
 	})

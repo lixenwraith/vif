@@ -47,8 +47,7 @@ func (s *BulletSystem) Init() {
 
 func (s *BulletSystem) Name() string { return "bullet" }
 
-// Priority: define parameter.PriorityBullet, schedule after storm and before render
-func (s *BulletSystem) Priority() int { return 0 }
+func (s *BulletSystem) Priority() int { return parameter.PriorityBullet }
 
 func (s *BulletSystem) EventTypes() []event.EventType {
 	return []event.EventType{
@@ -167,48 +166,10 @@ func (s *BulletSystem) traverseAndCollide(
 			return true
 		}
 
-		if s.collideCursor(bullet, cx, cy) {
+		if cursor := CursorContactAt(s.world, cx, cy); cursor != 0 {
+			strikeCursor(s.world, cursor, bullet.Damage)
 			return true
 		}
-	}
-
-	return false
-}
-
-// collideCursor checks shields before direct hits in deterministic roster order.
-func (s *BulletSystem) collideCursor(bullet *component.BulletComponent, x, y int) bool {
-	for i := range parameter.MaxPlayers {
-		cursor := s.world.Resources.Player.Slot(uint8(i))
-		cursorPos, ok := s.world.Positions.GetPosition(cursor)
-		if !ok {
-			continue
-		}
-		shield, ok := s.world.Components.Shield.GetComponent(cursor)
-		if !ok || !shield.Active || !vmath.EllipseContainsPointF(x, y, cursorPos.X, cursorPos.Y, shield.InvRxSq, shield.InvRySq) {
-			continue
-		}
-		s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-			Entity: cursor,
-			Value:  bullet.Damage.EnergyDrain,
-		})
-		return true
-	}
-
-	for i := range parameter.MaxPlayers {
-		cursor := s.world.Resources.Player.Slot(uint8(i))
-		cursorPos, ok := s.world.Positions.GetPosition(cursor)
-		if !ok || cursorPos.X != x || cursorPos.Y != y {
-			continue
-		}
-		shield, ok := s.world.Components.Shield.GetComponent(cursor)
-		if ok && shield.Active {
-			continue
-		}
-		s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-			Entity: cursor,
-			Delta:  bullet.Damage.HeatDelta,
-		})
-		return true
 	}
 
 	return false

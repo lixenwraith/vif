@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
@@ -52,10 +53,10 @@ type ExplosionCenter struct {
 
 // PulseEffect is one disruptor ring for rendering, fixed at its firing cell
 type PulseEffect struct {
-	X, Y     int
-	Age      int64 // Nanoseconds since spawn
-	DurNano  int64 // Lifetime in nanoseconds
-	Negative bool  // Firing energy polarity
+	X, Y    int
+	Age     int64 // Nanoseconds since spawn
+	DurNano int64 // Lifetime in nanoseconds
+	Palette component.WeaponPalette
 }
 
 // NewTransientResource creates initialized resource

@@ -770,10 +770,11 @@ func (s *WeaponSystem) firePulse(cursor core.Entity, x, y int, attack component.
 		Attack: attack,
 	})
 
-	energy, ok := s.world.Components.Energy.GetPtr(cursor)
-	s.world.PushLocal(event.EventPulseVisualRequest, &event.PulseVisualRequestPayload{
-		X: x, Y: y, Negative: ok && energy.Current < 0,
-	})
+	palette := component.PalettePositive
+	if energy, ok := s.world.Components.Energy.GetPtr(cursor); ok && energy.Current < 0 {
+		palette = component.PaletteNegative
+	}
+	s.world.PushLocal(event.EventPulseVisualRequest, &event.PulseVisualRequestPayload{X: x, Y: y, Palette: palette})
 	return true
 }
 

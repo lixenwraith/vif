@@ -65,11 +65,14 @@ func (r *MissileRenderer) renderMissileTrueColor(
 	// === Trail ===
 	maxAge := parameter.MissileTrailMaxAge
 	if maxAge <= 0 {
-		r.renderBodyTrueColor(ctx, buf, kinetic)
+		r.renderBodyTrueColor(ctx, buf, missile, kinetic)
 		return
 	}
 
 	startCol, endCol := visual.RgbMissileChildTrailStart, visual.RgbMissileChildTrailEnd
+	if missile.Hostile {
+		startCol, endCol = visual.RgbMissileHostileTrailStart, visual.RgbMissileHostileTrailEnd
+	}
 
 	prevX, prevY := kinetic.PreciseX, kinetic.PreciseY
 
@@ -103,7 +106,7 @@ func (r *MissileRenderer) renderMissileTrueColor(
 	}
 
 	// === Body ===
-	r.renderBodyTrueColor(ctx, buf, kinetic)
+	r.renderBodyTrueColor(ctx, buf, missile, kinetic)
 }
 
 // bodyCell resolves the screen cell a missile body occupies
@@ -113,17 +116,25 @@ func (r *MissileRenderer) bodyCell(ctx render.RenderContext, kinetic *component.
 }
 
 // renderBodyTrueColor writes the head's glyph only, so it reads over any field under it
-func (r *MissileRenderer) renderBodyTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, kinetic *component.KineticComponent) {
+func (r *MissileRenderer) renderBodyTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, missile *component.MissileComponent, kinetic *component.KineticComponent) {
 	if screenX, screenY, ok := r.bodyCell(ctx, kinetic); ok {
+		c := visual.RgbMissileChildBody
+		if missile.Hostile {
+			c = visual.RgbMissileHostileBody
+		}
 		char := visual.MissileHeadChars[headingOctant(kinetic.VelX, kinetic.VelY)]
-		buf.SetFgOnly(screenX, screenY, char, visual.RgbMissileChildBody, terminal.AttrBold)
+		buf.SetFgOnly(screenX, screenY, char, c, terminal.AttrBold)
 	}
 }
 
-func (r *MissileRenderer) renderBody256(ctx render.RenderContext, buf *render.RenderBuffer, kinetic *component.KineticComponent) {
+func (r *MissileRenderer) renderBody256(ctx render.RenderContext, buf *render.RenderBuffer, missile *component.MissileComponent, kinetic *component.KineticComponent) {
 	if screenX, screenY, ok := r.bodyCell(ctx, kinetic); ok {
+		c := visual.Missile256Base
+		if missile.Hostile {
+			c = visual.Missile256HostileBase
+		}
 		char := visual.MissileHeadChars256[headingOctant(kinetic.VelX, kinetic.VelY)]
-		buf.SetFgOnly(screenX, screenY, char, color.RGB{R: visual.Missile256Base}, terminal.AttrFg256|terminal.AttrBold)
+		buf.SetFgOnly(screenX, screenY, char, color.RGB{R: c}, terminal.AttrFg256|terminal.AttrBold)
 	}
 }
 
@@ -163,8 +174,12 @@ func (r *MissileRenderer) renderMissile256(
 	// === Trail ===
 	maxAge := parameter.MissileTrailMaxAge
 	if maxAge <= 0 {
-		r.renderBody256(ctx, buf, kinetic)
+		r.renderBody256(ctx, buf, missile, kinetic)
 		return
+	}
+	trail := visual.Missile256Trail
+	if missile.Hostile {
+		trail = visual.Missile256HostileTrail
 	}
 
 	for i := range missile.TrailLen {
@@ -187,10 +202,10 @@ func (r *MissileRenderer) renderMissile256(
 		// Binary visibility for 256-color (no alpha blending)
 		if pt.Age < maxAge/2 {
 			buf.SetFgOnly(screenX, screenY, visual.MissileTrailChar256,
-				color.RGB{R: visual.Missile256Trail}, terminal.AttrFg256)
+				color.RGB{R: trail}, terminal.AttrFg256)
 		}
 	}
 
 	// === Body ===
-	r.renderBody256(ctx, buf, kinetic)
+	r.renderBody256(ctx, buf, missile, kinetic)
 }

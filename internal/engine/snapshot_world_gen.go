@@ -61,6 +61,7 @@ type SharedWorldState struct {
 	Genotype     []StoreEntry[component.GenotypeComponent]     `json:"genotype,omitempty"`
 	Lightning    []StoreEntry[component.LightningComponent]    `json:"lightning,omitempty"`
 	Missile      []StoreEntry[component.MissileComponent]      `json:"missile,omitempty"`
+	Mount        []StoreEntry[component.MountComponent]        `json:"mount,omitempty"`
 	Spirit       []StoreEntry[component.SpiritComponent]       `json:"spirit,omitempty"`
 	Materialize  []StoreEntry[component.MaterializeComponent]  `json:"materialize,omitempty"`
 	Target       []StoreEntry[component.TargetComponent]       `json:"target,omitempty"`
@@ -306,6 +307,14 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 		}
 		if v, ok := w.Components.Missile.GetComponent(e); ok {
 			s.Missile = append(s.Missile, StoreEntry[component.MissileComponent]{Entity: e, Value: DetachSnapshotValue(v)})
+		}
+	}
+	for _, e := range w.Components.Mount.Entities() {
+		if e.Domain() != core.DomainShared {
+			continue
+		}
+		if v, ok := w.Components.Mount.GetComponent(e); ok {
+			s.Mount = append(s.Mount, StoreEntry[component.MountComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Spirit.Entities() {
@@ -597,6 +606,9 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	for _, en := range s.Missile {
 		w.Components.Missile.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
+	for _, en := range s.Mount {
+		w.Components.Mount.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
+	}
 	for _, en := range s.Spirit {
 		w.Components.Spirit.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
@@ -723,6 +735,7 @@ type SharedWorldDelta struct {
 	Genotype     StoreDelta[component.GenotypeComponent]     `json:"genotype,omitzero"`
 	Lightning    StoreDelta[component.LightningComponent]    `json:"lightning,omitzero"`
 	Missile      StoreDelta[component.MissileComponent]      `json:"missile,omitzero"`
+	Mount        StoreDelta[component.MountComponent]        `json:"mount,omitzero"`
 	Spirit       StoreDelta[component.SpiritComponent]       `json:"spirit,omitzero"`
 	Materialize  StoreDelta[component.MaterializeComponent]  `json:"materialize,omitzero"`
 	Target       StoreDelta[component.TargetComponent]       `json:"target,omitzero"`
@@ -785,6 +798,7 @@ func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
 	d.Genotype = diffStore(base.Genotype, next.Genotype)
 	d.Lightning = diffStore(base.Lightning, next.Lightning)
 	d.Missile = diffStore(base.Missile, next.Missile)
+	d.Mount = diffStore(base.Mount, next.Mount)
 	d.Spirit = diffStore(base.Spirit, next.Spirit)
 	d.Materialize = diffStore(base.Materialize, next.Materialize)
 	d.Target = diffStore(base.Target, next.Target)
@@ -843,6 +857,7 @@ func ApplySharedWorldDelta(base SharedWorldState, d SharedWorldDelta) SharedWorl
 	s.Genotype = applyStore(base.Genotype, d.Genotype)
 	s.Lightning = applyStore(base.Lightning, d.Lightning)
 	s.Missile = applyStore(base.Missile, d.Missile)
+	s.Mount = applyStore(base.Mount, d.Mount)
 	s.Spirit = applyStore(base.Spirit, d.Spirit)
 	s.Materialize = applyStore(base.Materialize, d.Materialize)
 	s.Target = applyStore(base.Target, d.Target)
@@ -900,6 +915,7 @@ func (d SharedWorldDelta) DeltaEntries() int {
 	n += d.Genotype.Entries()
 	n += d.Lightning.Entries()
 	n += d.Missile.Entries()
+	n += d.Mount.Entries()
 	n += d.Spirit.Entries()
 	n += d.Materialize.Entries()
 	n += d.Target.Entries()
@@ -960,6 +976,7 @@ func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
 	w.Entries += countStoreDifference(a.Genotype, b.Genotype, touched)
 	w.Entries += countStoreDifference(a.Lightning, b.Lightning, touched)
 	w.Entries += countStoreDifference(a.Missile, b.Missile, touched)
+	w.Entries += countStoreDifference(a.Mount, b.Mount, touched)
 	w.Entries += countStoreDifference(a.Spirit, b.Spirit, touched)
 	w.Entries += countStoreDifference(a.Materialize, b.Materialize, touched)
 	w.Entries += countStoreDifference(a.Target, b.Target, touched)
@@ -1093,6 +1110,9 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	for _, en := range s.Missile {
 		target[en.Entity] = struct{}{}
 	}
+	for _, en := range s.Mount {
+		target[en.Entity] = struct{}{}
+	}
 	for _, en := range s.Spirit {
 		target[en.Entity] = struct{}{}
 	}
@@ -1211,6 +1231,7 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	reconcileStore(w.Components.Genotype, s.Genotype)
 	reconcileStore(w.Components.Lightning, s.Lightning)
 	reconcileStore(w.Components.Missile, s.Missile)
+	reconcileStore(w.Components.Mount, s.Mount)
 	reconcileStore(w.Components.Spirit, s.Spirit)
 	reconcileStore(w.Components.Materialize, s.Materialize)
 	reconcileStore(w.Components.Target, s.Target)

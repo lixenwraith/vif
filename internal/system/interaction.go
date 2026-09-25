@@ -1,8 +1,10 @@
 package system
 
 import (
+	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -52,6 +54,50 @@ func ClosestCursor(w *engine.World, fromX, fromY int) (core.Entity, int, int, bo
 		}
 	}
 	return best, bestX, bestY, best != 0
+}
+
+// CursorContactAt returns the cursor a shot entering a cell touches: an active
+// shield containing the cell first, then an unshielded cursor on it, each in
+// deterministic roster order. Zero when the cell touches none.
+func CursorContactAt(w *engine.World, x, y int) core.Entity {
+	for i := range parameter.MaxPlayers {
+		cursor := w.Resources.Player.Slot(uint8(i))
+		pos, ok := w.Positions.GetPosition(cursor)
+		if !ok {
+			continue
+		}
+		shield, ok := w.Components.Shield.GetPtr(cursor)
+		if ok && shield.Active && vmath.EllipseContainsPointF(x, y, pos.X, pos.Y, shield.InvRxSq, shield.InvRySq) {
+			return cursor
+		}
+	}
+	for i := range parameter.MaxPlayers {
+		cursor := w.Resources.Player.Slot(uint8(i))
+		if pos, ok := w.Positions.GetPosition(cursor); ok && pos.X == x && pos.Y == y {
+			return cursor
+		}
+	}
+	return 0
+}
+
+// strikeCursor applies a mounted weapon's hit to one cursor: energy through an
+// active shield, heat without one. Only the cursor's owner applies it; every other
+// instance saw the same shot and leaves the hit to that owner (D-2).
+func strikeCursor(w *engine.World, cursor core.Entity, damage component.CursorDamage) {
+	if !w.SimulatesLocally(cursor) {
+		return
+	}
+	if shield, ok := w.Components.Shield.GetPtr(cursor); ok && shield.Active {
+		w.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+			Entity: cursor,
+			Value:  damage.EnergyDrain,
+		})
+		return
+	}
+	w.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+		Entity: cursor,
+		Delta:  damage.HeatDelta,
+	})
 }
 
 // CheckCursorOverlaps queries every cursor that touches an entity or its shield.

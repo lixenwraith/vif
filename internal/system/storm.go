@@ -1331,7 +1331,7 @@ func (s *StormSystem) processRedAttack(
 		VelY:        velY,
 		Owner:       s.rootEntity,
 		MaxLifetime: parameter.StormRedBulletMaxLifetime,
-		Damage: component.BulletDamage{
+		Damage: component.CursorDamage{
 			EnergyDrain: parameter.StormRedDamageBulletEnergy,
 			HeatDelta:   -parameter.StormRedDamageHeat,
 		},

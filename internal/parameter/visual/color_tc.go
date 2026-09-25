@@ -148,14 +148,20 @@ var (
 	RgbMissileChildTrailStart = color.Bronze
 	RgbMissileChildTrailEnd   = color.Sienna
 
+	// Mounted launcher's missile: red
+	RgbMissileHostileBody       = color.BrightRed
+	RgbMissileHostileTrailStart = color.Brick
+	RgbMissileHostileTrailEnd   = color.Oxblood
+
 	// Missile impact explosion (warm palette)
 	RgbMissileExplosionCore = color.Ivory
 	RgbMissileExplosionMid  = color.WarmOrange
 	RgbMissileExplosionEdge = color.Rust
 
-	// Pulse effect colors (polarity-based)
+	// Pulse effect colors (polarity-based, and a mounted disruptor's)
 	RgbPulsePositive = color.Buttercream
 	RgbPulseNegative = color.Orchid
+	RgbPulseHostile  = color.Vermilion
 
 	// Audio indicator colors
 	RgbAudioBothOff     = color.IndianRed
