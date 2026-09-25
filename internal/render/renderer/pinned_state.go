@@ -268,9 +268,10 @@ func (r *PinnedStatsRenderer) drawLine(buf *render.RenderBuffer, x, y, width int
 	drawFg(buf, x+width-tui.RuneLen(val), y, val, visual.RgbHudValue, terminal.AttrNone)
 }
 
-// drawFg writes text over the blended panel background
+// drawFg writes text over the blended panel background, one cell per rune
 func drawFg(buf *render.RenderBuffer, x, y int, s string, fg color.RGB, attr terminal.Attr) {
-	for i, ch := range s {
-		buf.SetFgOnly(x+i, y, ch, fg, attr)
+	for _, ch := range s {
+		buf.SetFgOnly(x, y, ch, fg, attr)
+		x++
 	}
 }
