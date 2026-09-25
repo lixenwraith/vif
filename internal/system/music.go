@@ -264,6 +264,7 @@ func (s *MusicSystem) applyMusicAudible(audible bool) {
 	if audible {
 		s.startMusic()
 	}
+	s.publish() // a pause stops Update, not the mute key
 }
 
 // Update implements System interface
@@ -272,15 +273,30 @@ func (s *MusicSystem) Update() {
 		return
 	}
 	s.publish()
-	// Skip the slew while muted — the sequencer is frozen, commands
-	if !s.enabled || s.player.IsMusicMuted() || !s.player.IsMusicPlaying() {
+	// The sequencer is frozen while muted; a slew would queue commands it cannot play
+	if !s.enabled || !s.audible() {
 		return
 	}
 	s.syncToAPM()
 }
 
-// publish reports the group, tier, requested tempo and each slot's pattern
+func (s *MusicSystem) audible() bool {
+	return !s.player.IsMusicMuted() && s.player.IsMusicPlaying()
+}
+
+// publish reports the group, tier, requested tempo and each slot's pattern. Silent
+// music reports none, since a muted sequencer holds the patterns it would resume on.
 func (s *MusicSystem) publish() {
+	if !s.audible() {
+		s.statGroup.StoreIfChanged("-")
+		s.statTier.StoreIfChanged("-")
+		s.statBPM.Store(0)
+		for slot, stat := range s.statSlot {
+			stat.StoreIfChanged("-")
+			s.lastSlot[slot] = -1
+		}
+		return
+	}
 	s.statGroup.StoreIfChanged(cmp.Or(s.player.MusicGroup(), "-"))
 	s.statTier.StoreIfChanged(s.tier.String())
 	s.statBPM.Store(int64(s.lastBPM))
@@ -358,8 +374,8 @@ func (s *MusicSystem) syncTempo(apm uint64) {
 	} else if target < s.bpmF {
 		s.bpmF = max(target, s.bpmF-parameter.BPMFallRate*dt)
 	}
-	// Hysteresis stops chatter, but a slew that has settled sends its target: stepping in
-	// threes toward 180 otherwise stranded the tempo at 178
+	// Hysteresis stops chatter; a settled slew sends its target, or a step short of the
+	// hysteresis would strand the tempo below it
 	bpm := int(s.bpmF + 0.5)
 	settled := s.bpmF == target && bpm != s.lastBPM
 	if d := bpm - s.lastBPM; d >= parameter.BPMHysteresis || -d >= parameter.BPMHysteresis || settled {

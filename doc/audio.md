@@ -235,7 +235,7 @@ about a second. A tier change draws from
 the current group under quantization/crossfade/reveal policy, and a slot already
 sounding its draw keeps playing. The `music.*` status group (the debug HUD's music
 card, and the periodic stat log) names the group, tier, requested tempo and the
-pattern in each slot.
+pattern in each slot, and reads `-` while music is muted or stopped.
 
 Explicit music events can start/stop, set patterns, play a melody note, change
 intensity, tempo, seed, swing, or harmony. A manually held intensity can later
