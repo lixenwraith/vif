@@ -48,9 +48,19 @@ wait_for() {
 alive() { kill -0 "$1" 2>/dev/null; }
 gone() { ! kill -0 "$1" 2>/dev/null; }
 
+# own_ports refuses to start a host while something already answers on the probe
+# port. A leftover host passes the probe check, takes the guest and logs to its own
+# directory, which reads as this host never serving.
+own_ports() {
+	if probe_get /health >/dev/null 2>&1; then
+		fail "something already answers on $HOST:$PROBE_PORT; stop it or set PORT and PROBE_PORT"
+	fi
+}
+
 # serve_bg starts a dedicated host with the given extra flags, setting SERVE_PID and
 # LOG. Not a command substitution: that would run it in a subshell and lose both.
 serve_bg() {
+	own_ports
 	LOG=$(mktemp)
 	"$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" \
 		-d -size 120x40 -log-stdout -lv info "$@" >"$LOG" 2>&1 &
@@ -395,6 +405,7 @@ transfer)
 	need_bin
 	[ -d wad/scenario/main ] || fail "wad/scenario/main is not in this checkout"
 	ROOT=$(mktemp -d); HL=$(mktemp -d); GL=$(mktemp -d)
+	own_ports
 	"$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -config-dir wad -s main \
 		-size 120x40 -players 1 -first-join 30s -empty 15s \
 		-l="$HL" -lv info -ls app >/dev/null 2>&1 &
@@ -420,6 +431,7 @@ maxmap)
 	need_bin
 	[ -d wad/scenario/td ] || fail "wad/scenario/td is not in this checkout"
 	ROOT=$(mktemp -d); HL=$(mktemp -d); GL=$(mktemp -d)
+	own_ports
 	"$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -config-dir wad -s td \
 		-size 120x40 -players 1 -first-join 30s -empty 15s \
 		-l="$HL" -lv info -ls app >/dev/null 2>&1 &
@@ -470,6 +482,7 @@ corpus)
 	"$BIN" -check -config-dir "$ROOT" -s main | grep -q "content ok: $ROOT/content (1 files" \
 		|| fail "the guest root did not resolve to its own single-file corpus"
 
+	own_ports
 	"$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -config-dir wad -s main \
 		-size 120x40 -players 1 -first-join 30s -empty 15s \
 		-l="$HL" -lv info -ls all >/dev/null 2>&1 &
@@ -612,6 +625,7 @@ deploy)
 	# none, so an installed content/ would be a category nothing asked for.
 	grep -q '^content ok: embedded' "$headless/check" \
 		|| fail "a session resolved a corpus off the volume: $headless/check"
+	own_ports
 	"$headless/vif" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -authority host \
 		-l="$mount/log" -log-session-id=volume-check -lv=info \
 		-config-dir="$mount" -s=main -first-join=3s -empty=3s -drain=3s >/dev/null 2>&1 \
