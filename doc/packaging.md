@@ -16,6 +16,10 @@ These hold regardless of which repository is targeted first.
   roots → embedded, and nothing else. Never reintroduce a `./config` probe.
 - **Honour the environment.** `DESTDIR`, `PREFIX`, `SYSCONFDIR`, `XDG_*`. No
   target may write outside `DESTDIR`, and none may require network access.
+- **The Makefile runs under GNU make and FreeBSD make.** `!=` rather than
+  `$(shell)`, no conditionals, functions or order-only prerequisites, and
+  recipes use only options BSD tools share: `install -d` then `install -m`, never
+  `install -D`; `$(MAKE) -s`, never a GNU long option.
 - **The build is reproducible and offline.** `-trimpath`, no `go generate` at
   package time (generated files are committed), no CGO. Vendoring or a module
   cache is the packager's choice, not the Makefile's.

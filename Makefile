@@ -160,7 +160,8 @@ install-config:
 		if [ -e "$$2" ] && [ "$$force" != 1 ]; then \
 			echo "keep    $$2"; \
 		else \
-			install -D -m 0644 "$$1" "$$2"; \
+			install -d -m 0755 "$${2%/*}"; \
+			install -m 0644 "$$1" "$$2"; \
 			echo "install $$2"; \
 		fi; \
 	}; \
@@ -169,7 +170,7 @@ install-config:
 	install -d -m 0755 "$$root/audio"
 
 install-config-force:
-	@$(MAKE) --no-print-directory install-config VIF_CONFIG_FORCE=1
+	@$(MAKE) -s install-config VIF_CONFIG_FORCE=1
 
 # wad-archive is that same install as one file, so what a player extracts over a
 # config root is what install-config would have written there. The release
@@ -178,8 +179,7 @@ wad-archive: $(BIN_DIR)
 	@set -eu; \
 	stage=$$(mktemp -d); \
 	trap 'rm -rf "$$stage"' EXIT; \
-	$(MAKE) --no-print-directory install-config \
-		VIF_CONFIG_DIR="$$stage" VIF_CONFIG_FORCE=1 >/dev/null; \
+	$(MAKE) -s install-config VIF_CONFIG_DIR="$$stage" VIF_CONFIG_FORCE=1 >/dev/null; \
 	install -m 0644 LICENSE "$$stage/LICENSE"; \
 	tar -C "$$stage" -czf $(WAD_ARCHIVE) .; \
 	echo "packed $(WAD_ARCHIVE)"
@@ -189,17 +189,13 @@ wad-archive: $(BIN_DIR)
 # searches), the licence, and the documentation. Build first; nothing here
 # compiles, so a packager controls the build flags.
 install:
-	install -D -m 0755 $(BIN_DIR)/$(BINARY) $(DESTDIR)$(PREFIX)/bin/$(BINARY)
+	@$(MAKE) -s install-config VIF_CONFIG_DIR='$(DESTDIR)$(SYSCONFDIR)/xdg/vi-fighter' VIF_CONFIG_FORCE=1
 	@set -eu; \
-	root='$(DESTDIR)$(SYSCONFDIR)/xdg/vi-fighter'; \
-	for src in $$(find $(WAD_DIR) -type f); do \
-		install -D -m 0644 "$$src" "$$root/$${src#$(WAD_DIR)/}"; \
-	done; \
-	install -D -m 0644 $(KEYMAP_SRC) "$$root/input/keymap.toml"
-	install -D -m 0644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/vi-fighter/LICENSE
-	@set -eu; \
+	put() { install -d -m 0755 "$${3%/*}"; install -m "$$1" "$$2" "$$3"; echo "install $$3"; }; \
+	put 0755 $(BIN_DIR)/$(BINARY) '$(DESTDIR)$(PREFIX)/bin/$(BINARY)'; \
+	put 0644 LICENSE '$(DESTDIR)$(PREFIX)/share/licenses/vi-fighter/LICENSE'; \
 	for src in README.md doc/*.md; do \
-		install -D -m 0644 "$$src" "$(DESTDIR)$(PREFIX)/share/doc/vi-fighter/$${src#doc/}"; \
+		put 0644 "$$src" "$(DESTDIR)$(PREFIX)/share/doc/vi-fighter/$${src#doc/}"; \
 	done
 
 # image builds the deployment artifact from the repository root, which is the
