@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -28,9 +29,38 @@ type Session struct {
 	// change of skew does not matter for an audition length.
 	bpm      int
 	startErr error
+	files    audioFiles
 }
 
-func NewSession(backend string, masterVol float64, out io.Writer) (*Session, error) {
+// audioFiles is where the game reads its audio overrides and where an untitled
+// save must land for the next run to read it first, resolved as vif resolves them
+type audioFiles struct {
+	music, sounds             string // "" = the embedded bank
+	musicTarget, soundsTarget string // "" = no configuration root
+}
+
+// resolveAudioFiles applies vif's -config-dir, -config-music and -config-sounds
+func resolveAudioFiles(dir, music, sounds string) (audioFiles, error) {
+	if err := paths.CheckRoot(dir); err != nil {
+		return audioFiles{}, err
+	}
+	roots := paths.ConfigRoots(dir)
+	var f audioFiles
+	var err error
+	if f.music, err = paths.ConfigFile(roots, music, paths.AudioDirName, paths.MusicConfigFile); err != nil {
+		return f, fmt.Errorf("music config: %w", err)
+	}
+	if f.sounds, err = paths.ConfigFile(roots, sounds, paths.AudioDirName, paths.SoundConfigFile); err != nil {
+		return f, fmt.Errorf("sound config: %w", err)
+	}
+	f.musicTarget, _ = paths.ConfigTarget(roots, music, paths.AudioDirName, paths.MusicConfigFile)
+	f.soundsTarget, _ = paths.ConfigTarget(roots, sounds, paths.AudioDirName, paths.SoundConfigFile)
+	return f, nil
+}
+
+// NewSession starts the engine on the banks and overrides the game would load, and
+// seeds each document from its override so a save writes back what the game reads.
+func NewSession(backend string, masterVol float64, out io.Writer, files audioFiles) (*Session, error) {
 	cfg := audio.DefaultAudioConfig()
 	cfg.Enabled = true
 	cfg.MasterVolume = masterVol
@@ -44,6 +74,16 @@ func NewSession(backend string, masterVol float64, out io.Writer) (*Session, err
 	if cfg.BasePatterns, err = parameter.BuiltinPatterns(); err != nil {
 		return nil, err
 	}
+	if files.music != "" {
+		if cfg.PatternTOML, err = os.ReadFile(files.music); err != nil {
+			return nil, err
+		}
+	}
+	if files.sounds != "" {
+		if cfg.SoundTOML, err = os.ReadFile(files.sounds); err != nil {
+			return nil, err
+		}
+	}
 
 	eng, err := audio.NewAudioEngine(cfg)
 	if err != nil {
@@ -55,6 +95,7 @@ func NewSession(backend string, masterVol float64, out io.Writer) (*Session, err
 		pats:   newPatternDoc(),
 		out:    out,
 		bpm:    audio.DefaultBPM,
+		files:  files,
 	}
 	// A failed Start latches silent mode but the engine stays valid, and
 	// rendering is engine-independent: edit, validate and export all work
@@ -64,7 +105,36 @@ func NewSession(backend string, masterVol float64, out io.Writer) (*Session, err
 	// to a random fill once per phrase — game drama, editor confusion. Forced
 	// off here; :fill on restores it for auditioning the fill bank.
 	s.eng.SetAutoFill(false)
+	if err := eng.SpecError(); err != nil {
+		fmt.Fprintf(out, "override errors, the game falls back the same way:\n%v\n", err)
+	}
+	s.adoptOverrides()
 	return s, nil
+}
+
+// adoptOverrides loads each override the engine registered as a clean document that
+// saves to its target, which differs from the source only when the source is a
+// system root: the save then shadows it from the user root, as the game reads. One
+// that fails to load loses its target, so an untitled save cannot overwrite it.
+func (s *Session) adoptOverrides() {
+	if f := s.files.sounds; f != "" {
+		fmt.Fprintf(s.out, "sounds override %s, saving to %s\n", f, s.files.soundsTarget)
+		if err := s.loadSoundFile(f, true); err != nil {
+			fmt.Fprintf(s.out, "not adopted: %v\n", err)
+			s.files.soundsTarget = ""
+		} else {
+			s.sounds.replaceAll(s.sounds.all(), s.files.soundsTarget, false)
+		}
+	}
+	if f := s.files.music; f != "" {
+		fmt.Fprintf(s.out, "music override %s, saving to %s\n", f, s.files.musicTarget)
+		if err := s.loadPatternFile(f, true); err != nil {
+			fmt.Fprintf(s.out, "not adopted: %v\n", err)
+			s.files.musicTarget = ""
+		} else {
+			s.pats.replaceAll(s.pats.all(), s.files.musicTarget, false)
+		}
+	}
 }
 
 func (s *Session) Close() {
@@ -160,30 +230,21 @@ func (s *Session) seedBuiltinPatterns() error {
 	return nil
 }
 
-// overridePath is where the game reads a user audio override, so an untitled
-// document saves straight into the path the next run picks up.
-func overridePath(name string) (string, error) {
-	roots := paths.ConfigRoots("")
-	if len(roots) == 0 {
-		return "", errors.New("no user config root; name a file")
+// saveFile picks where a save lands: the named file, else the document's own, else
+// the file the next run with this session's roots reads first. The directory of an
+// override the user root never held yet is created.
+func saveFile(named, src, target string) (string, error) {
+	file := cmp.Or(named, src, target)
+	if file == "" {
+		return "", errors.New("no save target; name a file")
 	}
-	dir := filepath.Join(roots[0], paths.AudioDirName)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, name), nil
+	return file, os.MkdirAll(filepath.Dir(file), 0o755)
 }
 
-func (s *Session) saveSounds(file string) error {
-	if file == "" {
-		file = s.sounds.src
-	}
-	if file == "" {
-		p, err := overridePath(paths.SoundConfigFile)
-		if err != nil {
-			return err
-		}
-		file = p
+func (s *Session) saveSounds(named string) error {
+	file, err := saveFile(named, s.sounds.src, s.files.soundsTarget)
+	if err != nil {
+		return err
 	}
 	// Name-shadow model: the root re-emits every sound in the document.
 	// Includes still load first and are overridden per name, so reloading
@@ -205,16 +266,10 @@ func (s *Session) saveSounds(file string) error {
 	return nil
 }
 
-func (s *Session) savePatterns(file string) error {
-	if file == "" {
-		file = s.pats.src
-	}
-	if file == "" {
-		p, err := overridePath(paths.MusicConfigFile)
-		if err != nil {
-			return err
-		}
-		file = p
+func (s *Session) savePatterns(named string) error {
+	file, err := saveFile(named, s.pats.src, s.files.musicTarget)
+	if err != nil {
+		return err
 	}
 	data, err := audio.MarshalPatternDefs(s.pats.all())
 	if err != nil {

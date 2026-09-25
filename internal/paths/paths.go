@@ -3,6 +3,8 @@
 package paths
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -66,6 +68,61 @@ func ConfigRoots(override string) []string {
 		add(filepath.Join(base, AppDirName))
 	}
 	return roots
+}
+
+// CheckRoot rejects a -config-dir that is not an existing directory; empty is none.
+func CheckRoot(dir string) error {
+	if dir == "" {
+		return nil
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("-config-dir: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("-config-dir %q is not a directory", dir)
+	}
+	return nil
+}
+
+// FindFile returns category/name under the first root holding it, or "".
+func FindFile(roots []string, category, name string) string {
+	for _, root := range roots {
+		candidate := filepath.Join(root, category, name)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
+}
+
+// ConfigFile resolves one optional document: an explicit path wins and must be a
+// file; otherwise the first root holding category/name, or "" for the embedded one.
+func ConfigFile(roots []string, explicit, category, name string) (string, error) {
+	if explicit == "" {
+		return FindFile(roots, category, name), nil
+	}
+	info, err := os.Stat(explicit)
+	if err != nil {
+		return "", err
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("%s is a directory", explicit)
+	}
+	return explicit, nil
+}
+
+// ConfigTarget is where a document must be written for the next run with these
+// roots to read it first: the explicit path, else category/name under the first
+// root. A system root further down stays untouched and is shadowed.
+func ConfigTarget(roots []string, explicit, category, name string) (string, error) {
+	if explicit != "" {
+		return explicit, nil
+	}
+	if len(roots) == 0 {
+		return "", errors.New("no configuration root; name a file")
+	}
+	return filepath.Join(roots[0], category, name), nil
 }
 
 // DefaultLogDir returns the writable session-log directory. The XDG state

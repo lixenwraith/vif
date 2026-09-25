@@ -267,9 +267,12 @@ same engine. It offers:
   TOML save, and WAV export.
 
 Soundlab registers the same sound and pattern banks the game does, from the same
-embedded assets, so its registry and the game's hold identical specs. An untitled `save sound` / `save pattern` writes to
-`audio/sounds.toml` / `audio/music.toml` under the user config root, which is
-where the next run reads its override from.
+embedded assets, and takes vif's `-config-dir`, `-config-music` and
+`-config-sounds`. It resolves both overrides through `internal/paths` exactly as
+the game does, registers them, and opens them as its documents, so its registry
+and the game's hold identical specs. A save writes back to the file the next run
+reads first: the override's own file, or the user root's (or `-config-dir`'s)
+when the override came from an installed system root, which it then shadows.
 
 The working document and live registry are separate: edits do not affect audio
 until `apply`; `revert` restores the document from the canonical registry. Its

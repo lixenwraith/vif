@@ -8,15 +8,16 @@ import (
 	"syscall"
 )
 
-// CLI flags, matching the game binary's house style.
+// CLI flags, matching the game binary's house style; the -config flags are vif's.
 var (
-	flagBackend  = flag.String("ab", "", "Force audio backend by name (pacat, aplay, null, wav:out.wav, ...)")
-	flagHeadless = flag.Bool("headless", false, "Discard audio output (equivalent to -ab null)")
-	flagScript   = flag.String("s", "", "Execute script file and exit")
-	flagSound    = flag.String("snd", "", "Sound TOML to load at startup")
-	flagPat      = flag.String("pat", "", "Pattern TOML to load at startup")
-	flagVol      = flag.Float64("vol", 0.7, "Master volume 0..1")
-	flagTUI      = flag.Bool("tui", false, "Full-screen TUI (default: line REPL)")
+	flagBackend   = flag.String("ab", "", "Force audio backend by name (pacat, aplay, null, wav:out.wav, ...)")
+	flagHeadless  = flag.Bool("headless", false, "Discard audio output (equivalent to -ab null)")
+	flagScript    = flag.String("s", "", "Execute script file and exit")
+	flagConfigDir = flag.String("config-dir", "", "Configuration root holding audio/ (as vif)")
+	flagMusic     = flag.String("config-music", "", "Music pattern override TOML (as vif)")
+	flagSounds    = flag.String("config-sounds", "", "Sound definition override TOML (as vif)")
+	flagVol       = flag.Float64("vol", 0.7, "Master volume 0..1")
+	flagTUI       = flag.Bool("tui", false, "Full-screen TUI (default: line REPL)")
 )
 
 func main() {
@@ -32,24 +33,17 @@ func run() error {
 	if *flagHeadless {
 		backend = "null"
 	}
-	s, err := NewSession(backend, *flagVol, os.Stdout)
+	files, err := resolveAudioFiles(*flagConfigDir, *flagMusic, *flagSounds)
+	if err != nil {
+		return err
+	}
+	s, err := NewSession(backend, *flagVol, os.Stdout, files)
 	if err != nil {
 		return err
 	}
 	defer s.Close()
 	if s.startErr != nil {
 		fmt.Fprintf(s.out, "audio backend: %v (silent mode; edit/validate/export still work)\n", s.startErr)
-	}
-
-	if *flagSound != "" {
-		if err := s.loadSoundFile(*flagSound, true); err != nil {
-			return err
-		}
-	}
-	if *flagPat != "" {
-		if err := s.loadPatternFile(*flagPat, true); err != nil {
-			return err
-		}
 	}
 
 	if *flagScript != "" {

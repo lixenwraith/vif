@@ -46,14 +46,8 @@ type Options struct {
 
 // Validate reports conflicts between the overrides themselves.
 func (o Options) Validate() error {
-	if o.Dir != "" {
-		info, err := os.Stat(o.Dir)
-		if err != nil {
-			return fmt.Errorf("-config-dir: %w", err)
-		}
-		if !info.IsDir() {
-			return fmt.Errorf("-config-dir %q is not a directory", o.Dir)
-		}
+	if err := paths.CheckRoot(o.Dir); err != nil {
+		return err
 	}
 	if o.Embedded && (o.Scenario != "" || o.Content != "") {
 		return errors.New("-d is mutually exclusive with -s and -f")
@@ -111,11 +105,7 @@ func isScenarioName(name string) bool {
 // Keymap returns the external keymap path. An empty path selects the embedded
 // default keymap.
 func Keymap(o Options) (string, error) {
-	if o.Keymap != "" {
-		return explicitFile(o.Keymap)
-	}
-	r := newResolver(o)
-	return r.file(paths.InputDirName, paths.KeymapConfigFile), nil
+	return paths.ConfigFile(newResolver(o).roots, o.Keymap, paths.InputDirName, paths.KeymapConfigFile)
 }
 
 // Files supplies the ordered configuration roots to FileService. Resolution
@@ -155,37 +145,20 @@ func Corpus(o Options) (service.ContentSource, error) {
 // Audio resolves optional music and sound override documents. Empty paths leave
 // the shipped sound bank and built-in patterns in place.
 func Audio(o Options) (service.AudioSource, error) {
-	r := newResolver(o)
-	music, err := r.optionalFile(o.Music, paths.AudioDirName, paths.MusicConfigFile)
+	roots := newResolver(o).roots
+	music, err := paths.ConfigFile(roots, o.Music, paths.AudioDirName, paths.MusicConfigFile)
 	if err != nil {
 		return service.AudioSource{}, fmt.Errorf("music config: %w", err)
 	}
-	sounds, err := r.optionalFile(o.Sounds, paths.AudioDirName, paths.SoundConfigFile)
+	sounds, err := paths.ConfigFile(roots, o.Sounds, paths.AudioDirName, paths.SoundConfigFile)
 	if err != nil {
 		return service.AudioSource{}, fmt.Errorf("sound config: %w", err)
 	}
 	return service.AudioSource{MusicPath: music, SoundPath: sounds}, nil
 }
 
-func (r resolver) optionalFile(explicit, category, name string) (string, error) {
-	if explicit != "" {
-		return explicitFile(explicit)
-	}
-	return r.file(category, name), nil
-}
-
-// Roots are already in priority order, so the first hit wins.
-func (r resolver) file(category, name string) string {
-	for _, root := range r.roots {
-		if candidate := filepath.Join(root, category, name); fileExists(candidate) {
-			return candidate
-		}
-	}
-	return ""
-}
-
 func (r resolver) scenario(name string) string {
-	return r.file(filepath.Join(paths.ScenarioDirName, name), paths.ScenarioFile)
+	return paths.FindFile(r.roots, filepath.Join(paths.ScenarioDirName, name), paths.ScenarioFile)
 }
 
 func (r resolver) dir(category string) string {
@@ -195,17 +168,6 @@ func (r resolver) dir(category string) string {
 		}
 	}
 	return ""
-}
-
-func explicitFile(p string) (string, error) {
-	info, err := os.Stat(p)
-	if err != nil {
-		return "", err
-	}
-	if info.IsDir() {
-		return "", fmt.Errorf("%s is a directory", p)
-	}
-	return p, nil
 }
 
 func dirExists(p string) bool {

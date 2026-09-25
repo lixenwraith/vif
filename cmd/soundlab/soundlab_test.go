@@ -12,12 +12,14 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
+	"github.com/lixenwraith/vi-fighter/internal/paths"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
 func newTestSession(t *testing.T, out *bytes.Buffer) *Session {
 	t.Helper()
-	s, err := NewSession("null", 0.5, out)
+	s, err := NewSession("null", 0.5, out, audioFiles{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -534,5 +536,52 @@ func TestDeleteKey(t *testing.T) {
 	a.deleteSel()
 	if s.pats.has("dp") {
 		t.Fatal("second same-name d must delete")
+	}
+}
+
+// TestAudioFilesFollowVif is the rule that soundlab reads the override vif reads, and
+// that an untitled save lands where the next vif run reads first: an installed system
+// root is shadowed from the user root, never written.
+func TestAudioFilesFollowVif(t *testing.T) {
+	base := t.TempDir()
+	user, sys, dir := filepath.Join(base, "user"), filepath.Join(base, "sys"), filepath.Join(base, "dir")
+	t.Setenv("XDG_CONFIG_HOME", user)
+	t.Setenv("XDG_CONFIG_DIRS", sys)
+	installed := filepath.Join(sys, paths.AppDirName, paths.AudioDirName, paths.MusicConfigFile)
+	for _, d := range []string{filepath.Dir(installed), dir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pat := "[[pattern]]\nname = \"installed\"\nsteps = 16\n[[pattern.track]]\ninstr = \"kick\"\nevent = [{ pos = 0, vel = 1.0 }]\n"
+	if err := os.WriteFile(installed, []byte(pat), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, root := range []string{"", dir} {
+		f, err := resolveAudioFiles(root, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		vif, err := resource.Audio(resource.Options{Dir: root})
+		if err != nil || f.music != vif.MusicPath || f.sounds != vif.SoundPath {
+			t.Fatalf("root %q: soundlab reads %+v, vif %+v (%v)", root, f, vif, err)
+		}
+	}
+
+	f, _ := resolveAudioFiles("", "", "")
+	var out bytes.Buffer
+	s, err := NewSession("null", 0.5, &out, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, "save pattern\n")
+	vif, _ := resource.Audio(resource.Options{})
+	if want := filepath.Join(user, paths.AppDirName, paths.AudioDirName, paths.MusicConfigFile); vif.MusicPath != want {
+		t.Errorf("after save vif reads %q, want the user root's %q", vif.MusicPath, want)
+	}
+	if data, _ := os.ReadFile(vif.MusicPath); !strings.Contains(string(data), "installed") {
+		t.Errorf("the saved override lost the installed pattern:\n%s", data)
 	}
 }

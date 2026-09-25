@@ -108,10 +108,10 @@ func TestOptionsRejectUnusableOverrides(t *testing.T) {
 	file := filepath.Join(base, "file")
 	writeFixture(t, file)
 
-	if _, err := explicitFile(base); err == nil {
+	if _, err := Keymap(Options{Keymap: base}); err == nil {
 		t.Fatal("directory accepted as an explicit config file")
 	}
-	if _, err := explicitFile(filepath.Join(base, "missing.toml")); err == nil {
+	if _, err := Keymap(Options{Keymap: filepath.Join(base, "missing.toml")}); err == nil {
 		t.Fatal("missing explicit config file accepted")
 	}
 	for _, tc := range []struct {
