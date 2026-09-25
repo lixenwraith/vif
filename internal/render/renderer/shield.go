@@ -107,13 +107,10 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 
 func shieldFrameTrueColor(*ShieldPainter) {}
 
-// shieldFrame256 resolves the rim and glow palettes, dimming a peer's the way TrueColor scales its blend
+// shieldFrame256 resolves the rim and glow palettes. A peer's is not dimmed as in TrueColor:
+// the console shows a dimmed rim as black, and the peer cursor already says whose it is
 func shieldFrame256(p *ShieldPainter) {
 	p.rim256, p.glow256 = p.style.Palette256, color.RGBTo256(p.style.GlowColor)
-	if scale := float64(p.style.BlendScale); scale < 1 {
-		p.rim256 = color.RGBTo256(color.Screen(visual.RgbBackground, p.style.Color, scale))
-		p.glow256 = color.RGBTo256(color.Screen(visual.RgbBackground, p.style.GlowColor, scale))
-	}
 }
 
 // shieldCellTrueColor renders linear gradient with feather fade

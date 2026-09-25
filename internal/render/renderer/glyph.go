@@ -14,6 +14,7 @@ import (
 type GlyphRenderer struct {
 	gameCtx    *engine.GameContext
 	renderCell glyphCellRenderer
+	levels256  [5][3]uint8 // console entry per [GlyphType][GlyphLevel]
 }
 
 // glyphCellRenderer draws one glyph in the colour mode chosen at construction
@@ -22,8 +23,8 @@ type glyphCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, glyp
 // NewGlyphRenderer creates a new glyph renderer
 func NewGlyphRenderer(gameCtx *engine.GameContext) *GlyphRenderer {
 	r := &GlyphRenderer{gameCtx: gameCtx}
-	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
-		r.renderCell = r.cell256
+	if cfg := gameCtx.World.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
+		r.renderCell, r.levels256 = r.cell256, glyphLevels256(render.ConsoleFor(cfg.ConsolePalette))
 	} else {
 		r.renderCell = r.cellTrueColor
 	}
@@ -65,5 +66,20 @@ func (r *GlyphRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY
 }
 
 func (r *GlyphRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, glyph *component.GlyphComponent) {
-	buf.SetFgOnly(screenX, screenY, glyph.Rune, color.RGB{R: visual.Glyph256LUT[glyph.Type][glyph.Level]}, terminal.AttrFg256)
+	buf.SetFgOnly(screenX, screenY, glyph.Rune, color.RGB{R: r.levels256[glyph.Type][glyph.Level]}, terminal.AttrFg256)
+}
+
+// glyphLevels256 gives each glyph type its hue's two console entries, darker for Dark and
+// lighter for Normal and Bright, ordered by how they look on this palette; a console hue has
+// no third entry to keep Normal apart from Bright
+func glyphLevels256(c *render.Console) (levels [5][3]uint8) {
+	for typ, tc := range visual.GlyphColorLUT {
+		dark, light := c.Family(tc[component.GlyphNormal])
+		if tc[component.GlyphDark] == tc[component.GlyphNormal] {
+			dark = c.Nearest(tc[component.GlyphNormal], dark, light)
+			light = dark
+		}
+		levels[typ] = [3]uint8{dark, light, light}
+	}
+	return levels
 }

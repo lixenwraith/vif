@@ -134,12 +134,12 @@ func newConsole(p engine.ConsolePalette) *Console {
 	}
 	for i := range 256 {
 		if i < 16 {
-			c.fgIndex[i], c.bgIndex[i] = uint8(i), c.bgOf(uint8(i))
+			c.fgIndex[i], c.bgIndex[i] = uint8(i), c.Background(uint8(i))
 			continue
 		}
 		family, rgb := cubeFamily(uint8(i)), visual.Palette256RGB(uint8(i))
 		c.fgIndex[i] = c.Nearest(rgb, family, family|8)
-		c.bgIndex[i] = c.bgOf(c.fgIndex[i])
+		c.bgIndex[i] = c.Background(c.fgIndex[i])
 	}
 	for bg := range uint8(16) {
 		for fg := range uint8(16) {
@@ -171,13 +171,23 @@ func (c *Console) Contrast(a, b uint8) float64 {
 	return (hi + 0.05) / (lo + 0.05)
 }
 
-// bgOf is the background an entry takes: a bright one falls to its normal counterpart where
-// backgrounds have only eight
-func (c *Console) bgOf(i uint8) uint8 {
+// Background is the entry a background drawn in entry i shows: a bright one falls to its
+// normal counterpart where backgrounds have only eight
+func (c *Console) Background(i uint8) uint8 {
 	if i >= c.bgColors {
 		return i &^ 8
 	}
 	return i
+}
+
+// Family returns the two entries of rgb's hue, the one that looks darker on this palette first
+func (c *Console) Family(rgb color.RGB) (dark, light uint8) {
+	dark = cubeFamily(color.RGBTo256(rgb))
+	light = dark | 8
+	if c.lab[light][0] < c.lab[dark][0] {
+		dark, light = light, dark
+	}
+	return dark, light
 }
 
 // fgEntry is the entry a cell's foreground takes; index says the color holds a palette index
@@ -232,6 +242,11 @@ func (b *RenderBuffer) quantize() {
 			fg, fgIndex, bg, bgIndex = bg, bgIndex, fg, fgIndex
 		}
 		f, g := c.fgEntry(fg, fgIndex), c.bgEntry(bg, bgIndex)
+		// The theme background is the console's black, where text reads best, whichever
+		// entry is nearest (FreeBSD's dark gray)
+		if !bgIndex && bg == visual.RgbBackground {
+			g = 0
+		}
 		if cell.Attrs&terminal.AttrDim != 0 {
 			f = dimEntry(f)
 		}
@@ -267,7 +282,10 @@ func lutKey(c color.RGB) int {
 // documents: a gray is dark or light; else, with the smallest component removed, the one left,
 // or the larger of two by two steps, or else their mixture
 func cubeFamily(i uint8) uint8 {
-	if i >= 232 {
+	switch {
+	case i < 16:
+		return i &^ 8
+	case i >= 232:
 		return grayFamily(visual.Palette256RGB(i).R)
 	}
 	steps := [6]int{0, 2, 3, 4, 5, 6} // cube level over 0x28, the xterm step

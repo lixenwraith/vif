@@ -46,22 +46,27 @@ func TestPaletteIndexKeepsItsConsoleHue(t *testing.T) {
 }
 
 // TestQuantizedTextStaysVisible: text on a background of its own entry takes one that shows,
-// UI text is held to a contrast, and a full block keeps its color.
+// UI text is held to a contrast, a full block keeps its color, and the theme background under
+// text is the console's black even where a dark gray is nearer.
 func TestQuantizedTextStaysVisible(t *testing.T) {
 	t.Parallel()
 	yellow := color.RGB{R: color.P256Yellow}
 	for name, p := range testPalettes {
 		c := ConsoleFor(p)
-		b := NewRenderBuffer(terminal.ColorMode256, 3, 1)
+		b := NewRenderBuffer(terminal.ColorMode256, 4, 1)
 		b.SetConsole(c)
 		b.SetWriteMask(visual.MaskGlyph)
 		b.Set(0, 0, 'a', yellow, yellow, BlendReplace, 1, terminal.AttrFg256|terminal.AttrBg256)
 		b.Set(1, 0, '█', yellow, yellow, BlendReplace, 1, terminal.AttrFg256|terminal.AttrBg256)
 		b.SetWriteMask(visual.MaskUI)
 		b.SetWithBg(2, 0, 'u', visual.RgbWhite, color.RGB{R: 200, G: 200, B: 200})
+		b.SetFgOnly(3, 0, 'p', c.Color(1), terminal.AttrNone)
 		b.finalize()
 
 		glyph, block, ui := b.CellAt(0, 0), b.CellAt(1, 0), b.CellAt(2, 0)
+		if playfield := b.CellAt(3, 0); playfield.Bg.R != 0 {
+			t.Errorf("%s: the theme background shows as %d", name, playfield.Bg.R)
+		}
 		if labDistance(c.lab[glyph.Fg.R], c.lab[glyph.Bg.R]) < consoleClashDE {
 			t.Errorf("%s: glyph %d on %d vanishes", name, glyph.Fg.R, glyph.Bg.R)
 		}

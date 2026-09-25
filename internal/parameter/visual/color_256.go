@@ -31,17 +31,6 @@ var Heat256LUT = [10]uint8{
 	ConBrightGreen, ConCyan, ConBlue, ConBrightBlue, ConMagenta,
 }
 
-// Glyph256LUT is GlyphColorLUT for 256 colors: its three levels stay apart in xterm and,
-// through the Linux console's 16 colors, Dark stays apart from Normal and Bright. Blue sits
-// on the cube's cyan side, where no common console palette turns it near-black.
-var Glyph256LUT = [5][3]uint8{
-	{color.Cube256(0, 2, 0), color.Cube256(0, 5, 0), color.Cube256(1, 5, 1)}, // Green
-	{color.Cube256(1, 2, 3), color.Cube256(1, 3, 5), color.Cube256(2, 3, 5)}, // Blue
-	{color.Cube256(3, 0, 0), color.Cube256(5, 0, 0), color.Cube256(5, 1, 1)}, // Red
-	{color.Cube256(5, 5, 5), color.Cube256(5, 5, 5), color.Cube256(5, 5, 5)}, // White
-	{color.P256Yellow, color.P256Yellow, color.P256Yellow},                   // Gold
-}
-
 // Energy-based shield rims
 const (
 	Shield256Positive = ConBrightYellow

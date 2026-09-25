@@ -270,14 +270,10 @@ func emberFrameTrueColor(p *EmberPainter, _ render.RenderContext, heatChanged bo
 	}
 }
 
-// emberFrame256 takes the heat bar's leading colour; a peer's heat gradient colour is dimmed like its shield
+// emberFrame256 takes the heat bar's leading colour at the owner's heat, undimmed for a peer
+// like its shield
 func emberFrame256(p *EmberPainter, ctx render.RenderContext, _ bool) {
-	if p.blendScale >= 1 {
-		p.palette256 = heatLead256(p.lastHeat, ctx.ScreenWidth)
-		return
-	}
-	lead := render.HeatGradientLUT[min(max(p.lastHeat, 0), 100)*255/100]
-	p.palette256 = color.RGBTo256(color.Screen(visual.RgbBackground, lead, p.blendScale))
+	p.palette256 = heatLead256(p.lastHeat, ctx.ScreenWidth)
 }
 
 // buildColorLUT populates the 1D color/power map array (invoked on heat change)

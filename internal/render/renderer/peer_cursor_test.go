@@ -50,6 +50,7 @@ func peerContext(ctx *engine.GameContext) render.RenderContext {
 func TestPeerCursorsAreDrawnAndTheLocalOneIsNot(t *testing.T) {
 	t.Parallel()
 	gameCtx, cursors := peerWorld(t, 3)
+	gameCtx.World.Resources.Config.ColorMode = terminal.ColorModeTrueColor
 	rc := peerContext(gameCtx)
 
 	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 80, 24)
@@ -141,7 +142,9 @@ func TestPeerShieldBlendsAtThirtyPercent(t *testing.T) {
 	}
 }
 
-func TestPeerShieldPaletteBlendsFromThemeBackground(t *testing.T) {
+// TestConsolePeerFieldsAreNotDimmed: the console shows a dimmed rim or ember as black, so in
+// 256 colours a peer's shield and ember take the palette the local player's would.
+func TestConsolePeerFieldsAreNotDimmed(t *testing.T) {
 	t.Parallel()
 	gameCtx, cursors := peerWorld(t, 2)
 	gameCtx.World.Resources.Config.ColorMode = terminal.ColorMode256
@@ -154,15 +157,24 @@ func TestPeerShieldPaletteBlendsFromThemeBackground(t *testing.T) {
 	gameCtx.World.Components.Shield.SetComponent(peer, component.ShieldComponent{
 		Type: component.ShieldTypePlayer, Active: true,
 	})
+	shield := render.NewRenderBuffer(terminal.ColorMode256, 80, 24)
+	NewShieldRenderer(gameCtx).Render(rc, shield)
 
-	buf := render.NewRenderBuffer(terminal.ColorMode256, 80, 24)
-	NewShieldRenderer(gameCtx).Render(rc, buf)
+	// A burning ember takes the shield's place
+	gameCtx.World.Components.Heat.SetComponent(peer, component.HeatComponent{Current: 100, EmberActive: true})
+	ember := render.NewRenderBuffer(terminal.ColorMode256, 80, 24)
+	NewEmberRenderer(gameCtx).Render(rc, ember)
 
-	cfg := &visual.ShieldConfigs[component.ShieldTypePlayer]
-	want := color.RGBTo256(color.Screen(visual.RgbBackground, cfg.Color, visual.PeerFieldBlend))
-	got := buf.CellAt(pos.X+8, pos.Y)
-	if got.Attrs&terminal.AttrBg256 == 0 || got.Bg.R != want {
-		t.Fatalf("peer shield palette = (%d, %v), want (%d, bg256)", got.Bg.R, got.Attrs, want)
+	for name, tc := range map[string]struct {
+		cell terminal.Cell
+		want uint8
+	}{
+		"shield": {shield.CellAt(pos.X+8, pos.Y), visual.ShieldConfigs[component.ShieldTypePlayer].Palette256},
+		"ember":  {ember.CellAt(pos.X+5, pos.Y), heatLead256(100, rc.ScreenWidth)},
+	} {
+		if tc.cell.Attrs&terminal.AttrBg256 == 0 || tc.cell.Bg.R != tc.want {
+			t.Errorf("peer %s palette = (%d, %v), want (%d, bg256)", name, tc.cell.Bg.R, tc.cell.Attrs, tc.want)
+		}
 	}
 }
 
@@ -199,30 +211,6 @@ func TestPeerEmberIsDimmerWithoutDarkeningTheTheme(t *testing.T) {
 		if peerChannels[channel] < baseChannels[channel] || peerChannels[channel] >= localChannels[channel] {
 			t.Fatalf("channel %d peer/local/base = %d/%d/%d, want peer between theme and local", channel, peerChannels[channel], localChannels[channel], baseChannels[channel])
 		}
-	}
-}
-
-func TestPeerEmberPaletteBlendsFromThemeBackground(t *testing.T) {
-	t.Parallel()
-	gameCtx, cursors := peerWorld(t, 2)
-	gameCtx.World.Resources.Config.ColorMode = terminal.ColorMode256
-	rc := peerContext(gameCtx)
-
-	peer := cursors[1]
-	pos := component.PositionComponent{X: 50, Y: 10}
-	gameCtx.World.Positions.SetPosition(peer, pos)
-	gameCtx.World.Components.Heat.SetComponent(peer, component.HeatComponent{Current: 100, EmberActive: true})
-	gameCtx.World.Components.Shield.SetComponent(peer, component.ShieldComponent{
-		Type: component.ShieldTypePlayer, Active: true,
-	})
-
-	buf := render.NewRenderBuffer(terminal.ColorMode256, 80, 24)
-	NewEmberRenderer(gameCtx).Render(rc, buf)
-
-	want := color.RGBTo256(color.Screen(visual.RgbBackground, render.HeatGradientLUT[255], visual.PeerFieldBlend))
-	got := buf.CellAt(pos.X+5, pos.Y)
-	if got.Attrs&terminal.AttrBg256 == 0 || got.Bg.R != want {
-		t.Fatalf("peer ember palette = (%d, %v), want (%d, bg256)", got.Bg.R, got.Attrs, want)
 	}
 }
 
