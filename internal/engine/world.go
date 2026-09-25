@@ -804,15 +804,15 @@ func (w *World) FollowLocalCursor() {
 }
 
 // ReconcileLocalCursor settles an announced placement against the D-18 prediction
-// queue. CursorSystem calls it for every cursor it moves; only the local one holds
-// predictions, and the caller learns nothing about them — the prediction is read by
-// player-domain producers and the view alone.
+// queue; own marks one applied from this instance's own crossing. CursorSystem calls
+// it for every cursor it moves; only the local one holds predictions, and the caller
+// learns nothing about them — they are read by player-domain producers and the view.
 // Caller MUST hold updateMutex
-func (w *World) ReconcileLocalCursor(e core.Entity, x, y int) {
+func (w *World) ReconcileLocalCursor(e core.Entity, x, y int, own bool) {
 	if !w.Resources.Player.IsLocal(e) {
 		return
 	}
-	w.Resources.Player.Reconcile(component.PositionComponent{X: x, Y: y})
+	w.Resources.Player.Reconcile(component.PositionComponent{X: x, Y: y}, own)
 }
 
 // CursorSlot returns the roster slot a cursor entity occupies

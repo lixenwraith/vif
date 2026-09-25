@@ -214,17 +214,19 @@ type PlayerResource struct {
 	// not yet seen announced, oldest first. A placement crosses as a D-3 artifact
 	// and reaches the store a playout lead later, so a producer that resolved its
 	// next motion from the store would resolve it from a cell the player has
-	// already left. Ring rather than slice: the depth is bounded by the lead, and
-	// prediction must not allocate on the input path.
+	// already left. Ring rather than slice: prediction must not allocate on input.
 	prediction cursorPrediction
 }
 
 // cursorPrediction is the D-18 queue as one value, so an install that keeps the
-// cursor can keep what it has requested.
+// cursor can keep what it has requested. Shed counts own placements still in
+// flight whose cells the ring no longer holds, so each is consumed when it lands
+// rather than taken for the placement after it.
 type cursorPrediction struct {
 	cells  [parameter.MaxPredictedCursorCells]component.PositionComponent
 	head   int
 	count  int
+	shed   int
 	latest component.PositionComponent
 }
 
@@ -376,30 +378,47 @@ func (pr *PlayerResource) Clear() {
 // The caller has already resolved the cell CursorSystem will announce, so a
 // prediction that survives to its announcement matches it exactly.
 func (pr *PlayerResource) Predict(pos component.PositionComponent) {
-	if pr.prediction.count == len(pr.prediction.cells) {
-		// Nothing is reconciling. Fall back to the store rather than carry a queue
-		// whose head no announcement will ever match.
-		pr.DropPrediction()
+	q := &pr.prediction
+	if q.count == len(q.cells) {
+		// A pointer sweep outruns the ring inside one lead. The oldest cell goes,
+		// not the queue: its placement is still in flight and lands as shed.
+		q.head = (q.head + 1) % len(q.cells)
+		q.count--
+		q.shed++
 	}
-	pr.prediction.cells[(pr.prediction.head+pr.prediction.count)%len(pr.prediction.cells)] = pos
-	pr.prediction.count++
-	pr.prediction.latest = pos
+	q.cells[(q.head+q.count)%len(q.cells)] = pos
+	q.count++
+	q.latest = pos
 }
 
-// Reconcile settles one announced placement of the local cursor against the
-// prediction queue. Matching the oldest outstanding prediction pops it; anything
-// else is an authoritative value the prediction did not produce, and D-18 discards
-// the prediction rather than merging it.
-func (pr *PlayerResource) Reconcile(pos component.PositionComponent) {
-	if pr.prediction.count == 0 {
-		return
+// Reconcile settles one announced placement of the local cursor. Own is one this
+// instance's barrier applied from its own crossing: those land in the order they
+// were produced, so each consumes the oldest outstanding one whatever cell a
+// clamp made of it. A placement without that identity — solo play, or a replay —
+// settles on matching cells. Anything else is an authoritative value the
+// prediction did not produce: D-18 snaps to it, and what was in flight is shed.
+func (pr *PlayerResource) Reconcile(pos component.PositionComponent, own bool) {
+	q := &pr.prediction
+	switch {
+	case own && q.shed > 0:
+		q.shed--
+	case own && q.count > 0, q.count > 0 && q.cells[q.head] == pos:
+		q.head = (q.head + 1) % len(q.cells)
+		q.count--
+	case !own && q.count > 0:
+		pr.prediction = cursorPrediction{shed: q.shed + q.count}
 	}
-	if pr.prediction.cells[pr.prediction.head] != pos {
-		pr.DropPrediction()
-		return
+}
+
+// KeepPredictions trims the queue to the own placements still pending, newest
+// kept: an install that proves some already applied discards them unannounced.
+func (pr *PlayerResource) KeepPredictions(pending int) {
+	q := &pr.prediction
+	if drop := q.count - pending; drop > 0 {
+		q.head = (q.head + drop) % len(q.cells)
+		q.count = pending
 	}
-	pr.prediction.head = (pr.prediction.head + 1) % len(pr.prediction.cells)
-	pr.prediction.count--
+	q.shed = max(pending-q.count, 0)
 }
 
 // DropPrediction abandons every outstanding prediction, so the local cell reads

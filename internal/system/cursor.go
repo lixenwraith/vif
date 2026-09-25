@@ -90,7 +90,7 @@ func (s *CursorSystem) HandleEvent(ev event.GameEvent) {
 		}
 	case event.EventCursorMoveRequest:
 		if p, ok := ev.Payload.(*event.CursorMoveRequestPayload); ok {
-			s.move(p)
+			s.move(p, ev.CrossingSeq != 0)
 		}
 
 	case event.EventCursorSetLocalRequest:
@@ -101,8 +101,9 @@ func (s *CursorSystem) HandleEvent(ev event.GameEvent) {
 }
 
 // move applies a placement and announces it. The producer owns validation; the clamp
-// here only stops a stale request from stranding a cursor off-grid.
-func (s *CursorSystem) move(p *event.CursorMoveRequestPayload) {
+// here only stops a stale request from stranding a cursor off-grid. Own marks a
+// placement this instance's barrier applied from its own crossing.
+func (s *CursorSystem) move(p *event.CursorMoveRequestPayload, own bool) {
 	e := s.world.ResolveCursor(p.Entity)
 	if e == 0 {
 		s.statCursorRejects.Add(1)
@@ -124,10 +125,9 @@ func (s *CursorSystem) move(p *event.CursorMoveRequestPayload) {
 	}
 
 	// The applied cell is the authority. It settles one D-18 prediction if this
-	// instance requested it, and replaces the whole queue if it did not — a level
-	// setup, a wall push-out or a peer's reset places the local cursor too, and
-	// nothing the local participant predicted describes where it landed.
-	s.world.ReconcileLocalCursor(e, x, y)
+	// instance requested it, and replaces the queue if it did not — a level setup,
+	// a wall push-out or a peer's reset places the local cursor too.
+	s.world.ReconcileLocalCursor(e, x, y, own)
 
 	s.world.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{Entity: e, X: x, Y: y})
 }

@@ -15,12 +15,10 @@ const MaxPlayers = 16
 // case.
 const NoPlayerSlot uint8 = 0xFF
 
-// MaxPredictedCursorCells bounds D-18's outstanding local cursor predictions: the
-// cells this instance has requested and not yet seen announced. One playout lead of
-// input fits many times over, so reaching it means reconciliation has stopped
-// arriving at all — a peer stalled, or a request the barrier never applied. The
-// queue is dropped at that point and the local cell falls back to the store, which
-// is what the participant saw before prediction existed.
+// MaxPredictedCursorCells bounds D-18's ring of cells this instance has requested
+// and not yet seen announced. A pointer sweep outruns it inside one playout lead;
+// the oldest cell is then shed, which the view never shows since it reads the
+// newest, and its placement is consumed without a cell when it lands.
 const MaxPredictedCursorCells = 64
 
 // Shield

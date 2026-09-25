@@ -1,9 +1,11 @@
 package app
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
@@ -168,4 +170,58 @@ func TestPointerMovesOnlyToANewCell(t *testing.T) {
 			t.Fatalf("cursor settled on (%d,%d), want the last reported cell %v", pos.X, pos.Y, from)
 		}
 	})
+}
+
+// TestAPointerSweepOutlastsItsRingAndACorrection is D-18 across the session path: a
+// sustained sweep keeps more cells in flight than the ring holds, as a pointer does
+// at over a dozen cells a tick, and the view stays on the newest cell through every tick
+// and a correction installed part-way; once the sweep has landed the queue is empty.
+func TestAPointerSweepOutlastsItsRingAndACorrection(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x5EEDBEEF, 2, [][2]int{{1, 2}})
+	host, guest := apps[0], apps[1]
+	cursor := localCursors(t, apps)[1]
+	tickAll(apps)
+
+	// Enough per tick that one lead of the sweep is more than the ring holds
+	perTick := parameter.MaxPredictedCursorCells/parameter.NetworkBarrierDelayTicks + 8
+	var lastX, lastY, n int
+	sweep := func() {
+		guest.World().RunSafe(func() {
+			for range perTick {
+				lastX, lastY = 10+n%40, 5+(n/40)%20
+				guest.World().PushPointerMove(cursor, lastX, lastY)
+				n++
+			}
+		})
+	}
+	view := func(stage string) {
+		t.Helper()
+		var pos component.PositionComponent
+		guest.World().RunSafe(func() { pos, _ = guest.World().CursorCell(cursor) })
+		if pos.X != lastX || pos.Y != lastY {
+			t.Fatalf("%s: view on (%d,%d), want the newest cell (%d,%d)", stage, pos.X, pos.Y, lastX, lastY)
+		}
+	}
+	advance := func() { sweep(); tickAll(apps); view(fmt.Sprintf("after %d cells", n)) }
+
+	for range 2 * parameter.NetworkBarrierDelayTicks {
+		advance()
+	}
+	deliverCorrectionNow(t, host, apps[1:], advance)
+	view("the correction")
+	for range parameter.NetworkBarrierDelayTicks {
+		advance()
+	}
+	for range parameter.NetworkBarrierDelayTicks + 1 {
+		tickAll(apps)
+	}
+	if pos := cursorPosition(guest, cursor); pos.X != lastX || pos.Y != lastY {
+		t.Fatalf("store on (%d,%d) after the sweep landed, want (%d,%d)", pos.X, pos.Y, lastX, lastY)
+	}
+	var depth int
+	guest.World().RunSafe(func() { depth = guest.World().Resources.Player.PredictedDepth() })
+	if depth != 0 {
+		t.Fatalf("the queue holds %d cells after the whole sweep landed", depth)
+	}
 }

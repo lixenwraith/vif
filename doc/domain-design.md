@@ -334,8 +334,13 @@ through `World.CursorCell` — shots and orbs leave the cell the player sees, an
 what they hit crosses as Shared events like any other; Shared systems do not.
 
 `World.PushCursorMove` advances prediction and emits the crossing atomically from
-the producer's perspective. An expected applied cell pops the queue. An
-authoritative move the prediction did not produce clears the queue and snaps.
+the producer's perspective. This instance's own placements land in production
+order, so each consumes the oldest outstanding prediction by its crossing identity,
+whatever cell a clamp made of it; one without identity (solo play, replay) pops on a
+matching cell. An authoritative move the prediction did not produce clears the queue
+and snaps, and the own placements already in flight are then consumed without
+touching a newer prediction. A sweep that outruns the ring sheds its oldest cells
+the same way, and an install trims the queue to the own placements still pending.
 Replay reconstructs prediction from recorded Player-stamped move requests.
 
 ### D-19 — Every future-affecting Shared value is restorable

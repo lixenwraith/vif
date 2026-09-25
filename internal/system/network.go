@@ -1093,6 +1093,15 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 	}
 	s.scheduled = keep
 	s.scheduledBytes = held
+	// A placement the capture proves applied is discarded here unannounced, so the
+	// D-18 queue keeps only what this source still has to apply.
+	moves := 0
+	for _, a := range s.scheduled {
+		if et, ok := event.GetEventType(a.frame.Event); ok && a.source == s.localSource && et == event.EventCursorMoveRequest {
+			moves++
+		}
+	}
+	s.world.Resources.Player.KeepPredictions(moves)
 	// The retained local suffix is pruned by this instance's own fence, for the same
 	// reason the schedule is: a record the captured world does not contain is still
 	// this participant's action, whatever its apply tick says. Pruning by tick here

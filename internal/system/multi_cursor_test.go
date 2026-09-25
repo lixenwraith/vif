@@ -1,6 +1,7 @@
 package system
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -928,5 +929,55 @@ func TestAPointerHeldStillLeavesTheMapStill(t *testing.T) {
 	}
 	if config.CameraX >= camX {
 		t.Fatal("a pointer at the edge did not scroll the view")
+	}
+}
+
+// TestOwnPlacementsInFlightNeverWalkTheViewBack is the D-18 rule a pointer sweep
+// depends on: a sweep predicts more cells than the ring holds within one playout
+// lead, and this instance's own placements land in the order they were produced,
+// so none of them — nor a foreign placement between them — may move the view off
+// the newest cell the player's input selected.
+func TestOwnPlacementsInFlightNeverWalkTheViewBack(t *testing.T) {
+	w, local, _ := testCursorWorld(t)
+	cursors := NewCursorSystem(w).(*CursorSystem)
+
+	cell := func(i int) (int, int) { return 1 + i%30, 1 + i/30 }
+	sweep := parameter.MaxPredictedCursorCells + 20
+	for i := range sweep {
+		x, y := cell(i)
+		w.PushPointerMove(local, x, y)
+	}
+	lastX, lastY := cell(sweep - 1)
+	var inFlight []event.GameEvent
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if ev.Type == event.EventCursorMoveRequest {
+			// What the barrier stamps on this instance's own crossing at dispatch
+			ev.CrossingSeq = uint64(len(inFlight) + 1)
+			inFlight = append(inFlight, ev)
+		}
+	}
+	viewAt := func(stage string, x, y int) {
+		t.Helper()
+		if pos, _ := w.CursorCell(local); pos.X != x || pos.Y != y {
+			t.Fatalf("%s: view on (%d,%d), want (%d,%d)", stage, pos.X, pos.Y, x, y)
+		}
+	}
+
+	half := len(inFlight) / 2
+	for i, ev := range inFlight[:half] {
+		cursors.HandleEvent(ev)
+		viewAt(fmt.Sprintf("own placement %d of %d landed", i+1, len(inFlight)), lastX, lastY)
+	}
+
+	// A foreign placement snaps the view, and a newer prediction survives the own
+	// placements that were already in flight when it came.
+	cursors.HandleEvent(event.GameEvent{Type: event.EventCursorMoveRequest,
+		Payload: &event.CursorMoveRequestPayload{Entity: local, X: 35, Y: 20}})
+	viewAt("foreign placement", 35, 20)
+	w.PushPointerMove(local, 36, 20)
+	w.Resources.Event.Queue.Consume()
+	for _, ev := range inFlight[half:] {
+		cursors.HandleEvent(ev)
+		viewAt("an older own placement landed after a newer prediction", 36, 20)
 	}
 }
