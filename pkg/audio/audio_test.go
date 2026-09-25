@@ -585,3 +585,40 @@ func TestDrawsHoldOneGroup(t *testing.T) {
 		t.Errorf("still in group %q after %d phrases", got, GroupPhrases)
 	}
 }
+
+// TestTransitionKeepsIncomingWhole is the rule a tier change broke: the incoming
+// pattern's downbeat sounds at full level whatever the fade, and a build-up starts
+// from as many tracks as the outgoing pattern sounded.
+func TestTransitionKeepsIncomingWhole(t *testing.T) {
+	t.Cleanup(ResetRegistries)
+	ResetRegistries()
+	note := []Step{{Pos: 0, Vel: 0.8, Dur: 4}}
+	quiet := RegisterPattern(&Pattern{Name: "quiet", Steps: 16, Tracks: []Track{
+		{Instr: InstrBass}, {Instr: InstrBass},
+	}})
+	full := RegisterPattern(&Pattern{Name: "full", Steps: 16, Tracks: []Track{
+		{Instr: InstrBass, Events: note}, {Instr: InstrPad}, {Instr: InstrPad},
+	}})
+	peak := func(fade int) (float64, *Sequencer) {
+		s := NewSequencer(MaxBPM, nil)
+		s.SetPattern(1, quiet, 0, false)
+		s.Start()
+		s.setPattern(1, full, fade, true, true) // lands on the next downbeat, as a tier does
+		s.Generate(make([]float64, SamplesPerBar(MaxBPM)))
+		buf := make([]float64, SamplesPerStep(MaxBPM))
+		s.Generate(buf)
+		var p float64
+		for _, v := range buf {
+			p = max(p, math.Abs(v))
+		}
+		return p, s
+	}
+	snap, _ := peak(0)
+	faded, s := peak(AudioSampleRate)
+	if faded < 0.99*snap {
+		t.Errorf("a one-second fade plays the incoming downbeat at %.3f, a snap at %.3f", faded, snap)
+	}
+	if got := s.slots[1].revealN; got != 2 {
+		t.Errorf("build-up starts from %d tracks, want the 2 the outgoing pattern sounded", got)
+	}
+}

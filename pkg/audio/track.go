@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"math/bits"
 	"math/rand/v2"
 )
 
@@ -223,6 +224,14 @@ func (p *PatternPlayer) SetPattern(id PatternID) {
 }
 
 func (p *PatternPlayer) SetMask(mask uint32) { p.mask = mask }
+
+// heard counts the tracks this player sounds; a reveal mask is a prefix
+func (p *PatternPlayer) heard() int {
+	if p.patternData == nil {
+		return 0
+	}
+	return min(len(p.patternData.Tracks), bits.OnesCount32(p.mask))
+}
 
 func (p *PatternPlayer) Reset() {
 	p.patternData = nil

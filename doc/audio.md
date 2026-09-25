@@ -189,9 +189,11 @@ instrument, chord-following, and humanization. Tonal voices include bass,
 piano/FM, pads, and fallback synthesis; the drum kit uses cached effects.
 
 Tempo is clamped to 80–180 BPM. Tempo changes can wait for the next beat;
-patterns can transition immediately or quantized with A/B crossfade. A minimum
-256-sample fade prevents hard-cut voice tails. Track reveal supports staged
-intensity build-up. Slot 2 can substitute a seeded fill on the last bar of each
+patterns can transition immediately or quantized to the bar. The incoming
+pattern plays at full level from its first trigger while the outgoing one's
+ringing tails fade out, over at least 256 samples so none is hard-cut. A reveal
+builds a rising tier up from as many tracks as the outgoing pattern sounded,
+adding one a bar, so a build-up never starts thinner than what it replaces. Slot 2 can substitute a seeded fill on the last bar of each
 eight-bar phrase and restore the previous pattern on the downbeat; explicit
 slot-2 editing disables that surprise behavior.
 

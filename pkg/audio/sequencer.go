@@ -1,7 +1,6 @@
 package audio
 
 import (
-	"math"
 	"math/rand/v2"
 	"sync/atomic"
 )
@@ -14,8 +13,8 @@ type patternTransition struct {
 }
 
 // slotState owns the A/B PatternPlayer pair for one layer
-// During a fade: nxt receives step triggers and ramps in; cur stops receiving
-// triggers and its active voices ring out under the complementary gain
+// During a fade: nxt receives step triggers at full level; cur stops receiving
+// triggers and its active voices ring out under a falling gain
 type slotState struct {
 	cur, nxt   *PatternPlayer
 	curID      PatternID
@@ -55,13 +54,16 @@ func (ss *slotState) snap() {
 	ss.fading = false
 }
 
-// sample renders the equal-power (√t / √(1−t)) mix of the pair
+// sample renders a transition: the incoming pattern at full level from its first
+// trigger, over the outgoing one's tails fading out. The outgoing pattern stops
+// triggering when the transition starts, so a fade-in would only have swallowed
+// the incoming downbeat.
 func (ss *slotState) sample() float64 {
 	if !ss.fading {
 		return ss.cur.Sample()
 	}
 	t := float64(ss.xPos) / float64(ss.xLen)
-	out := ss.cur.Sample()*math.Sqrt(1.0-t) + ss.nxt.Sample()*math.Sqrt(t)
+	out := ss.cur.Sample()*(1-t) + ss.nxt.Sample()
 	ss.xPos++
 	if ss.xPos >= ss.xLen {
 		ss.snap()
@@ -205,9 +207,11 @@ func (s *Sequencer) Generate(buf []float64) {
 			if s.currentStep%int64(StepsPerBar) == 0 {
 				s.barCount++
 				s.harmony.advanceBar()
+				// Reveals advance before transitions arm new ones, which then hold
+				// their first bar as armed
+				s.updateReveal()
 				s.applyPendingTransitions()
 				s.updateVariation()
-				s.updateReveal()
 				s.updateFill()
 				s.updateMelodyGen()
 			}
@@ -264,13 +268,20 @@ func (s *Sequencer) applyPendingTransitions() {
 		if p == nil || (p.targetBar >= 0 && p.targetBar > s.barCount) {
 			continue
 		}
-		faded := s.startTransition(si, p.pattern, p.crossfadeSamples)
 		ss.pending = nil
-		// Reveal is requested explicitly; inferring it from
-		// crossfade >= SamplesPerBar made build-ups tempo-dependent
-		if faded && p.reveal {
-			s.armReveal(ss, p.pattern)
-		}
+		s.beginTransition(si, p.pattern, p.crossfadeSamples, p.reveal)
+	}
+}
+
+// beginTransition swaps a slot now. The outgoing pattern's reveal runs until here,
+// so a quantized request never leaves it frozen part-built for the rest of its bar.
+// Reveal is requested explicitly; inferring it from the crossfade made build-ups
+// tempo-dependent.
+func (s *Sequencer) beginTransition(slot int, id PatternID, fade int, reveal bool) {
+	ss := &s.slots[slot]
+	ss.revealN = 0
+	if s.startTransition(slot, id, fade) && reveal {
+		s.armReveal(ss, id)
 	}
 }
 
@@ -406,12 +417,9 @@ func (s *Sequencer) setPattern(slot int, p PatternID, fade int, quantize, reveal
 		return
 	}
 	ss := &s.slots[slot]
-	ss.revealN = 0
 	if !quantize {
 		ss.pending = nil
-		if s.startTransition(slot, p, fade) && reveal {
-			s.armReveal(ss, p)
-		}
+		s.beginTransition(slot, p, fade, reveal)
 		s.publish()
 		return
 	}
@@ -420,12 +428,17 @@ func (s *Sequencer) setPattern(slot int, p PatternID, fade int, quantize, reveal
 	}
 }
 
-// armReveal masks the incoming pattern to its first track; updateReveal
-// admits one more per bar. A silent-source snap has nothing to build from
+// armReveal masks the incoming pattern to as many tracks as the outgoing one was
+// sounding, at least one, and updateReveal admits one more per bar: a build-up only
+// ever adds to what played before it. A silent-source snap has nothing to build from.
 func (s *Sequencer) armReveal(ss *slotState, id PatternID) {
-	if pat := GetPattern(id); pat != nil && len(pat.Tracks) > 1 {
-		ss.revealN = 1
-		ss.nxt.SetMask(1)
+	pat := GetPattern(id)
+	if pat == nil {
+		return
+	}
+	if n := max(ss.cur.heard(), 1); n < len(pat.Tracks) {
+		ss.revealN = n
+		ss.nxt.SetMask(1<<n - 1)
 	}
 }
 
