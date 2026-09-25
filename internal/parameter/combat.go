@@ -124,4 +124,7 @@ const (
 
 	// PulseEffectDuration is pulse visual effect duration
 	PulseEffectDuration = 250 * time.Millisecond
+
+	// PulseEffectCap is the maximum number of concurrent pulse rings; the oldest is replaced
+	PulseEffectCap = 16
 )

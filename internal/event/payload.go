@@ -567,6 +567,13 @@ type ExplosionVisualRequestPayload struct {
 	Type     ExplosionType `toml:"type"`
 }
 
+// PulseVisualRequestPayload is player-domain presentation for one disruptor pulse.
+type PulseVisualRequestPayload struct {
+	X        int  `toml:"x"`
+	Y        int  `toml:"y"`
+	Negative bool `toml:"negative"` // Firing energy polarity selects the palette
+}
+
 // ExplosionVisualBatchRequestPayload is player-domain presentation for a group
 // of centers. It is not pooled: the local queue owns the producer's slice copy.
 type ExplosionVisualBatchRequestPayload struct {
@@ -691,17 +698,11 @@ type CursorStatePayload struct {
 	BlinkType      int   `toml:"blink_type"`
 	BlinkLevel     int   `toml:"blink_level"`
 
-	PulseOriginX   int   `toml:"pulse_origin_x"`
-	PulseOriginY   int   `toml:"pulse_origin_y"`
-	PulseDuration  int64 `toml:"pulse_duration"`
-	PulseRemaining int64 `toml:"pulse_remaining"`
-
 	Slot         uint8 `toml:"slot"`
 	EmberActive  bool  `toml:"ember_active"`
 	ShieldActive bool  `toml:"shield_active"`
 	BoostActive  bool  `toml:"boost_active"`
 	BlinkActive  bool  `toml:"blink_active"`
-	PulseActive  bool  `toml:"pulse_active"`
 }
 
 // CursorSpawnRequestPayload asks for a cursor entity

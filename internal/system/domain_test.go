@@ -28,7 +28,7 @@ var allowedDomainAccess = map[string]string{
 // name alone cannot tell the two apart.
 var ownerAuthoredStores = map[string]bool{
 	"Energy": true, "Heat": true, "Boost": true,
-	"Weapon": true, "CursorView": true, "Ping": true, "Pulse": true,
+	"Weapon": true, "CursorView": true, "Ping": true,
 }
 
 // ownerAuthoredCreators may write the D-13 set despite a shared profile: they create

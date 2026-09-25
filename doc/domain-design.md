@@ -133,9 +133,9 @@ per-target combat requests derived from that geometry do not.
 
 ### D-6 — Presentation and personal effects are Player-domain
 
-Lightning, flash, fadeout, splash, motion markers, explosion smoke, materialise
-beams, dust, particles (decay and blossom), orbs, bullets, missiles, and loot are
-Player-domain.
+Lightning, flash, fadeout, splash, motion markers, explosion smoke, pulse rings,
+materialise beams, dust, particles (decay and blossom), orbs, bullets, missiles,
+and loot are Player-domain.
 They may depend on local view state and must not decide a Shared outcome.
 
 An effect keyed to a Shared entity retires with it. An install writes the world
@@ -261,7 +261,7 @@ re-derived:
 
 - energy, heat, boost, shield, weapon, and cursor combat values;
 - `CursorComponent.Control` and `PeerID`;
-- `CursorViewComponent`, `PingComponent`, and `PulseComponent` presentation.
+- `CursorViewComponent` and `PingComponent` presentation.
 
 Every one of them is excluded from what a receiver repairs for a cursor it does not
 own, and every one but `PingComponent` is also transported on the owner-state sync.

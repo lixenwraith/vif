@@ -63,35 +63,26 @@ func pulseCell256(buf *render.RenderBuffer, screenX, screenY int, alpha float64,
 	buf.SetBg256(screenX, screenY, c)
 }
 
+// Render draws every pulse ring this instance produced
 func (r *PulseRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	if !r.gameCtx.World.Resources.Player.Valid() {
+	pulses := r.gameCtx.World.Resources.Transient.PulseEffects()
+	if len(pulses) == 0 {
 		return
-	}
-	cursorEntity := r.gameCtx.World.Resources.Player.Entity
-
-	pulseComp, ok := r.gameCtx.World.Components.Pulse.GetPtr(cursorEntity)
-	if !ok {
-		return
-	}
-
-	// Progress runs from zero at the start to one at the end.
-	remainingNs := pulseComp.Remaining.Nanoseconds()
-	durationNs := pulseComp.Duration.Nanoseconds()
-	if durationNs == 0 {
-		return
-	}
-	progress := 1.0 - float64(remainingNs)/float64(durationNs)
-	if progress < 0.0 || progress > 1.0 {
-		return
-	}
-
-	negativeEnergy := false
-	if energyComp, ok := r.gameCtx.World.Components.Energy.GetPtr(cursorEntity); ok {
-		negativeEnergy = energyComp.Current < 0
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
-	r.renderPulse(ctx, buf, pulseComp.OriginX, pulseComp.OriginY, progress, negativeEnergy)
+	for i := range pulses {
+		p := &pulses[i]
+		if p.DurNano <= 0 {
+			continue
+		}
+		// Progress runs from zero at the start to one at the end.
+		progress := float64(p.Age) / float64(p.DurNano)
+		if progress < 0.0 || progress > 1.0 {
+			continue
+		}
+		r.renderPulse(ctx, buf, p.X, p.Y, progress, p.Negative)
+	}
 }
 
 func (r *PulseRenderer) renderPulse(ctx render.RenderContext, buf *render.RenderBuffer,

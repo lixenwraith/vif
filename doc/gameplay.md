@@ -265,7 +265,7 @@ locally; only center/radius/attack geometry crosses for shared combat.
 | Main cleaner | Directional player attack/effect originating at the owning cursor. Each impact chains into the rod's lightning, so the energy drain and its zap span the firing cursor and the species rather than the impact cell. |
 | Rod | Direct lightning against unique nearest targets, rewarding energy in the attacker's current polarity. |
 | Launcher | Homing/area missiles assigned from the nearest-target set. |
-| Disruptor | Pulse/disruption behavior centered through its charged orb path. |
+| Disruptor | Stun pulse centred on its orb; it fires only while a target is inside the ellipse. |
 
 Weapon ownership is represented by charge count: zero means not owned. Each
 owned type has an orbiting orb entity and a separate cooldown. The combat system

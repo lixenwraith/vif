@@ -174,7 +174,7 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// Update advances cooldowns, pulse and orbit for every cursor
+// Update advances cooldowns and orbit for every cursor
 func (s *WeaponSystem) Update() {
 	if !s.enabled {
 		return
@@ -210,14 +210,6 @@ func (s *WeaponSystem) Update() {
 				continue
 			}
 			weaponComp.Cooldown[wt] = max(weaponComp.Cooldown[wt]-dt, 0)
-		}
-
-		// Update pulse effect timer
-		if pulseComp, ok := s.world.Components.Pulse.GetPtr(cursor); ok {
-			pulseComp.Remaining -= dt
-			if pulseComp.Remaining <= 0 {
-				s.world.Components.Pulse.RemoveEntity(cursor, false)
-			}
 		}
 
 		slot, ok := s.world.CursorSlot(cursor)
@@ -264,6 +256,15 @@ func (s *WeaponSystem) removeAllWeapons(cursor core.Entity) {
 	if slot, ok := s.world.CursorSlot(cursor); ok {
 		s.statOrbs.Store(slot, 0)
 	}
+}
+
+// emitterCell is the cell a weapon's shot leaves from: its orb's, or the cursor's
+// while the orb is not yet placed
+func (s *WeaponSystem) emitterCell(orbEntity core.Entity, cursorPos component.PositionComponent) (int, int) {
+	if pos, ok := s.world.Positions.GetPosition(orbEntity); ok {
+		return pos.X, pos.Y
+	}
+	return cursorPos.X, cursorPos.Y
 }
 
 // triggerOrbFlash activates flash effect on specified orb
@@ -709,15 +710,8 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 
 			weaponComp.Cooldown[wt] = parameter.WeaponCooldownRod
 			s.statRodFired.Add(1)
-
-			rodOrbEntity := orbs[wt]
-			originX, originY := cursorPos.X, cursorPos.Y
-			if rodOrbEntity != 0 {
-				s.triggerOrbFlash(rodOrbEntity)
-				if orbPos, ok := s.world.Positions.GetPosition(rodOrbEntity); ok {
-					originX, originY = orbPos.X, orbPos.Y
-				}
-			}
+			s.triggerOrbFlash(orbs[wt])
+			originX, originY := s.emitterCell(orbs[wt], cursorPos)
 
 			// Rod fires at unique targets only - assignments may repeat under overflow
 			seen := make(map[core.Entity]bool, len(assignments))
@@ -751,15 +745,8 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 
 			weaponComp.Cooldown[wt] = parameter.WeaponCooldownLauncher
 			s.statLauncherFired.Add(1)
-			launcherOrbEntity := orbs[wt]
-
-			originX, originY := cursorPos.X, cursorPos.Y
-			if launcherOrbEntity != 0 {
-				s.triggerOrbFlash(launcherOrbEntity)
-				if orbPos, ok := s.world.Positions.GetPosition(launcherOrbEntity); ok {
-					originX, originY = orbPos.X, orbPos.Y
-				}
-			}
+			s.triggerOrbFlash(orbs[wt])
+			originX, originY := s.emitterCell(orbs[wt], cursorPos)
 
 			targets := make([]core.Entity, len(assignments))
 			hits := make([]core.Entity, len(assignments))
@@ -783,40 +770,34 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 	}
 }
 
-// fireDisruptorWeapon discharges one cursor's area pulse
+// fireDisruptorWeapon discharges one cursor's area pulse, centred on its orb
 func (s *WeaponSystem) fireDisruptorWeapon(cursor core.Entity, cursorPos component.PositionComponent, weaponComp *component.WeaponComponent, orbs orbSlots) {
-	targets := FindTargetsInEllipse(s.world, cursorPos.X, cursorPos.Y, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq, engine.ScopeBoth, cursor)
+	orb := orbs[component.WeaponDisruptor]
+	x, y := s.emitterCell(orb, cursorPos)
+	targets := FindTargetsInEllipse(s.world, x, y, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq, engine.ScopeBoth, cursor)
 	if len(targets) == 0 {
 		return
 	}
 
-	// Consume cooldown
 	weaponComp.Cooldown[component.WeaponDisruptor] = parameter.WeaponCooldownDisruptor
 	s.statDisruptorFired.Add(1)
-
-	// Visual orb flash
-	if disruptorOrbEntity := orbs[component.WeaponDisruptor]; disruptorOrbEntity != 0 {
-		s.triggerOrbFlash(disruptorOrbEntity)
-	}
+	s.triggerOrbFlash(orb)
 
 	// Resolve player targets here; shared targets are re-derived from the crossing geometry.
 	var pulse blastArea
-	pulse.resetOne(cursorPos.X, cursorPos.Y, parameter.PulseRadiusX)
+	pulse.resetOne(x, y, parameter.PulseRadiusX)
 	strikePlayerTargets(s.world, cursor, &pulse, component.CombatAttackPulse)
 	s.world.PushCrossing(event.EventExplosionRequest, &event.ExplosionRequestPayload{
 		Entity: cursor,
-		X:      cursorPos.X,
-		Y:      cursorPos.Y,
+		X:      x,
+		Y:      y,
 		Radius: parameter.PulseRadiusX,
 		Attack: component.CombatAttackPulse,
 	})
 
-	// Set pulse effect on the firing cursor for visual feedback
-	s.world.Components.Pulse.SetComponent(cursor, component.PulseComponent{
-		OriginX:   cursorPos.X,
-		OriginY:   cursorPos.Y,
-		Duration:  parameter.PulseEffectDuration,
-		Remaining: parameter.PulseEffectDuration,
+	energy, ok := s.world.Components.Energy.GetPtr(cursor)
+	s.world.PushLocal(event.EventPulseVisualRequest, &event.PulseVisualRequestPayload{
+		X: x, Y: y, Negative: ok && energy.Current < 0,
 	})
 }
 

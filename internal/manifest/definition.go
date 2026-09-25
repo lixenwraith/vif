@@ -70,7 +70,6 @@ var Components = []ComponentDef{
 	{"Genotype", "GenotypeComponent", "shared"},
 	{"Lightning", "LightningComponent", "player"},
 	{"Missile", "MissileComponent", "player"},
-	{"Pulse", "PulseComponent", "shared"},
 	{"Spirit", "SpiritComponent", ""},
 	{"Materialize", "MaterializeComponent", ""},
 

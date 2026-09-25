@@ -8,12 +8,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
-// TransientResource holds player-domain spatial explosion presentation.
+// TransientResource holds player-domain spatial explosion and pulse presentation.
 // Systems write, renderers read. All fields are render-frame stable.
 type TransientResource struct {
 	// Fixed backing, zero alloc
 	ExplosionBacking [parameter.ExplosionCenterCap]ExplosionCenter
 	ExplosionCount   int
+
+	PulseBacking [parameter.PulseEffectCap]PulseEffect
+	PulseCount   int
 }
 
 // ViewResource holds player-domain screen-space effect state; never replicated.
@@ -47,6 +50,14 @@ type ExplosionCenter struct {
 	Type      event.ExplosionType // Explosion variant for palette selection
 }
 
+// PulseEffect is one disruptor ring for rendering, fixed at its firing cell
+type PulseEffect struct {
+	X, Y     int
+	Age      int64 // Nanoseconds since spawn
+	DurNano  int64 // Lifetime in nanoseconds
+	Negative bool  // Firing energy polarity
+}
+
 // NewTransientResource creates initialized resource
 func NewTransientResource() *TransientResource {
 	return &TransientResource{}
@@ -70,7 +81,15 @@ func (r *TransientResource) ExplosionCenters() []ExplosionCenter {
 	return r.ExplosionBacking[:r.ExplosionCount]
 }
 
-// ClearExplosions resets explosion state
-func (r *TransientResource) ClearExplosions() {
+// Clear drops every explosion center and pulse ring
+func (r *TransientResource) Clear() {
 	r.ExplosionCount = 0
+	r.PulseCount = 0
+}
+
+// --- Pulse API ---
+
+// PulseEffects returns active slice view (no allocation)
+func (r *TransientResource) PulseEffects() []PulseEffect {
+	return r.PulseBacking[:r.PulseCount]
 }

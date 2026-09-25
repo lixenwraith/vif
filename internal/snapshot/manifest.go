@@ -136,7 +136,7 @@ func normaliseStoreValue(store string, raw json.RawMessage) (json.RawMessage, er
 // or repairable and silently overwritten.
 var ownerAuthoredStores = map[string]bool{
 	"energy": true, "heat": true, "shield": true, "boost": true,
-	"weapon": true, "combat": true, "cursorview": true, "ping": true, "pulse": true,
+	"weapon": true, "combat": true, "cursorview": true, "ping": true,
 }
 
 // ManifestRow is one indexed cell in its canonical form.

@@ -2497,11 +2497,6 @@ func (s *NetworkSystem) readCursorState(cursor core.Entity, slot uint8) *event.C
 		p.BlinkActive, p.BlinkType, p.BlinkLevel = c.BlinkActive, c.BlinkType, c.BlinkLevel
 		p.BlinkRemaining = int64(c.BlinkRemaining)
 	}
-	if c, ok := s.world.Components.Pulse.GetComponent(cursor); ok {
-		p.PulseActive = true
-		p.PulseOriginX, p.PulseOriginY = c.OriginX, c.OriginY
-		p.PulseDuration, p.PulseRemaining = int64(c.Duration), int64(c.Remaining)
-	}
 	return p
 }
 
@@ -2660,16 +2655,6 @@ func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 		c.BurstFlashRemaining = time.Duration(p.BurstFlash)
 		c.BlinkActive, c.BlinkType, c.BlinkLevel = p.BlinkActive, p.BlinkType, p.BlinkLevel
 		c.BlinkRemaining = time.Duration(p.BlinkRemaining)
-	}
-	switch {
-	case p.PulseActive:
-		s.world.Components.Pulse.SetComponent(cursor, component.PulseComponent{
-			OriginX: p.PulseOriginX, OriginY: p.PulseOriginY,
-			Duration:  time.Duration(p.PulseDuration),
-			Remaining: time.Duration(p.PulseRemaining),
-		})
-	case s.world.Components.Pulse.HasEntity(cursor):
-		s.world.Components.Pulse.RemoveEntity(cursor, false)
 	}
 	s.statState.Add(1)
 	return true

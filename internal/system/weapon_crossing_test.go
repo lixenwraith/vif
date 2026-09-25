@@ -9,8 +9,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
-// TestDisruptorCrossesGeometry keeps player combat local and lets the shared
-// explosion consumer derive its own targets from one replicated pulse artifact.
+// TestDisruptorCrossesGeometry keeps player combat and the ring local, centres both
+// on the disruptor orb, and lets the shared explosion consumer derive its own
+// targets from one replicated pulse artifact.
 func TestDisruptorCrossesGeometry(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	weapon := NewWeaponSystem(w).(*WeaponSystem)
@@ -40,13 +41,18 @@ func TestDisruptorCrossesGeometry(t *testing.T) {
 		HitPoints:        1,
 	})
 
+	orb := w.CreateEntity(core.DomainPlayer)
+	w.Positions.SetPosition(orb, component.PositionComponent{X: 8, Y: 7})
+	var orbs orbSlots
+	orbs[component.WeaponDisruptor] = orb
+
 	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
 	cursorPos, _ := w.Positions.GetPosition(cursor)
-	weapon.fireDisruptorWeapon(cursor, cursorPos, weaponComp, orbSlots{})
+	weapon.fireDisruptorWeapon(cursor, cursorPos, weaponComp, orbs)
 
 	events := w.Resources.Event.Queue.Consume()
-	if len(events) != 2 {
-		t.Fatalf("disruptor events = %#v, want one player attack and one crossing", events)
+	if len(events) != 3 {
+		t.Fatalf("disruptor events = %#v, want a player attack, a crossing and a ring", events)
 	}
 	local, ok := events[0].Payload.(*event.CombatAttackAreaRequestPayload)
 	if !ok || events[0].Type != event.EventCombatAttackAreaRequest || local.TargetEntity != drain {
@@ -56,9 +62,13 @@ func TestDisruptorCrossesGeometry(t *testing.T) {
 	if !ok || events[1].Type != event.EventExplosionRequest || events[1].Domain != core.DomainPlayer {
 		t.Fatalf("crossing event = %#v, want player-stamped explosion request", events[1])
 	}
-	if crossing.Entity != cursor || crossing.X != cursorPos.X || crossing.Y != cursorPos.Y ||
+	if crossing.Entity != cursor || crossing.X != 8 || crossing.Y != 7 ||
 		crossing.Radius != parameter.PulseRadiusX || crossing.Attack != component.CombatAttackPulse {
-		t.Fatalf("crossing payload = %#v, want complete pulse geometry", crossing)
+		t.Fatalf("crossing payload = %#v, want complete pulse geometry at the orb", crossing)
+	}
+	ring, ok := events[2].Payload.(*event.PulseVisualRequestPayload)
+	if !ok || events[2].Domain != core.DomainPlayer || ring.X != 8 || ring.Y != 7 {
+		t.Fatalf("ring event = %#v, want a local pulse visual at the orb", events[2])
 	}
 
 	explosion.HandleEvent(events[1])

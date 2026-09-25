@@ -128,7 +128,7 @@ generated typed store and mask bit.
 |---|---|
 | Identity and presentation | `Glyph`, `Sigil`, `Nugget`, `Cursor`, `Protection`, `Kinetic`, `Wall`, `Loot`, `Gateway` |
 | Player state | `Energy`, `Heat`, `Shield`, `Boost`, `Weapon`, `Orb`, `Ping`, `CursorView` |
-| General behavior | `Particle`, `Cleaner`, `Dust`, `Navigation`, `Combat`, `Genotype`, `Lightning`, `Missile`, `Pulse`, `Spirit`, `Materialize` |
+| General behavior | `Particle`, `Cleaner`, `Dust`, `Navigation`, `Combat`, `Genotype`, `Lightning`, `Missile`, `Spirit`, `Materialize` |
 | Species and structures | `Target`, `TargetAnchor`, `Drain`, `Quasar`, `Swarm`, `Storm`, `StormCircle`, `Bullet`, `Pylon`, `Snake`, `SnakeHead`, `SnakeBody`, `SnakeMember`, `Eye`, `Tower` |
 | Composite entities | `Header`, `Member` |
 | Transient effects | `Flash`, `Fadeout`, `Splash`, `Marker` |

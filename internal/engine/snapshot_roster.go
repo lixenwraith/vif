@@ -35,12 +35,10 @@ type ownedCursorState struct {
 	combat owned[component.CombatComponent]
 	view   owned[component.CursorViewComponent]
 	ping   owned[component.PingComponent]
-	pulse  owned[component.PulseComponent]
 }
 
-// owned is one component as this instance held it, absence included: pulse runs
-// only while a disruptor does, and a capture that added one must not leave it
-// behind on a cursor whose owner has none.
+// owned is one component as this instance held it, absence included, so a restore
+// never leaves behind a component the capture added and the owner does not hold.
 type owned[T any] struct {
 	value T
 	held  bool
@@ -95,7 +93,6 @@ func (w *World) readOwnedCursorState(e core.Entity) ownedCursorState {
 		combat: readOwned(c.Combat, e),
 		view:   readOwned(c.CursorView, e),
 		ping:   readOwned(c.Ping, e),
-		pulse:  readOwned(c.Pulse, e),
 	}
 }
 
@@ -111,7 +108,6 @@ func (w *World) restoreOwnedCursorState(s ownedCursorState) {
 	writeOwned(c.Combat, s.entity, s.combat)
 	writeOwned(c.CursorView, s.entity, s.view)
 	writeOwned(c.Ping, s.entity, s.ping)
-	writeOwned(c.Pulse, s.entity, s.pulse)
 }
 
 // WithoutLocalCursorState returns s without what RebindCursorRoster re-derives or
@@ -137,7 +133,6 @@ func (s SharedWorldState) WithoutLocalCursorState() SharedWorldState {
 	s.Combat = dropOwned(s.Combat, authored)
 	s.CursorView = dropOwned(s.CursorView, authored)
 	s.Ping = dropOwned(s.Ping, authored)
-	s.Pulse = dropOwned(s.Pulse, authored)
 	return s
 }
 
