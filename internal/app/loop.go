@@ -124,6 +124,7 @@ func (a *App) Loop() (*restartRequest, error) {
 	if err := a.hub.StartAll(); err != nil {
 		return nil, err
 	}
+	a.reportAudioSpec()
 	if a.cfg.HostAddress != "" {
 		if err := a.startHostSession(sigChan); err != nil {
 			if errors.Is(err, errSessionCanceled) {
