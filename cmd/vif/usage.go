@@ -187,14 +187,20 @@ func registeredFlagNames() []string {
 	return out
 }
 
-// manualStateDir replaces the resolved state path, which would put the generating
-// user's home into a committed page.
-const manualStateDir = "$XDG_STATE_HOME/" + paths.AppDirName + "/"
+// generatedBy heads every file rendered from the help table and committed:
+// TestGeneratedFilesAreTheHelpTable keeps each equal to its renderer.
+const generatedBy = "Generated from cmd/vif/usage.go by TestGeneratedFilesAreTheHelpTable; do not edit."
 
-// writeManual renders doc/vif.6 from the help table; TestManualIsTheHelpTable
-// keeps the committed page equal to it.
+// portableSections is the table as committed files print it: the XDG form of the
+// state directories rather than the generating user's home.
+func portableSections() []flagSection {
+	dir := "$XDG_STATE_HOME/" + paths.AppDirName + "/"
+	return helpSections(dir+paths.LogDirName, dir+paths.JournalDirName)
+}
+
+// writeManual renders doc/vif.6.
 func writeManual(w io.Writer) {
-	fmt.Fprintf(w, `.\" Generated from cmd/vif/usage.go by TestManualIsTheHelpTable; do not edit.
+	fmt.Fprintf(w, `.\" %s
 .TH VIF 6 "" vif
 .SH NAME
 vif \- %s
@@ -213,8 +219,8 @@ Each resource resolves from its own flag, then
 then the user configuration root, then each system root,
 and finally the copy compiled into the binary.
 .SH OPTIONS
-`, roff(summary))
-	for _, section := range helpSections(manualStateDir+paths.LogDirName, manualStateDir+paths.JournalDirName) {
+`, generatedBy, roff(summary))
+	for _, section := range portableSections() {
 		fmt.Fprintf(w, ".SS %s\n", roff(section.title))
 		for _, line := range section.lines {
 			fmt.Fprintf(w, ".TP\n.B %s\n%s\n", roff(line.render()), roff(line.hint))
@@ -267,6 +273,119 @@ func roff(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// completion is what a flag's argument completes to, read from its arg column: an
+// [=value] is no separate argument, and a free <word> such as <addr> offers nothing.
+type completion int
+
+const (
+	completeNone completion = iota
+	completeWord
+	completeFile
+	completeDir
+	completeChoice // the |-separated words of arg
+)
+
+func (l flagLine) completion() completion {
+	switch {
+	case l.arg == "" || strings.HasPrefix(l.arg, "["):
+		return completeNone
+	case l.arg == "<dir>":
+		return completeDir
+	case strings.Contains(l.arg, "path"):
+		return completeFile
+	case !strings.HasPrefix(l.arg, "<"):
+		return completeChoice
+	}
+	return completeWord
+}
+
+// forms is every name of the flag with its dash.
+func (l flagLine) forms() []string {
+	out := make([]string, len(l.names))
+	for i, name := range l.names {
+		out[i] = "-" + name
+	}
+	return out
+}
+
+func portableLines() []flagLine {
+	var out []flagLine
+	for _, section := range portableSections() {
+		out = append(out, section.lines...)
+	}
+	return out
+}
+
+// writeBashCompletion renders deploy/package/vif.bash.
+func writeBashCompletion(w io.Writer) {
+	fmt.Fprintf(w, "# %s\n_vif() {\n\tlocal cur=${COMP_WORDS[COMP_CWORD]}\n\tCOMPREPLY=()\n", generatedBy)
+	fmt.Fprint(w, "\tcase ${COMP_WORDS[COMP_CWORD-1]} in\n")
+	var all []string
+	for _, line := range portableLines() {
+		all = append(all, line.forms()...)
+		action := ""
+		switch line.completion() {
+		case completeNone:
+			continue
+		case completeFile:
+			action = " compopt -o default"
+		case completeDir:
+			action = " compopt -o dirnames"
+		case completeChoice:
+			action = ` mapfile -t COMPREPLY < <(compgen -W '` + strings.ReplaceAll(line.arg, "|", " ") + `' -- "$cur")`
+		}
+		fmt.Fprintf(w, "\t%s)%s ;;\n", strings.Join(line.forms(), "|"), action)
+	}
+	fmt.Fprintf(w, "\t*) mapfile -t COMPREPLY < <(compgen -W '%s' -- \"$cur\") ;;\n", strings.Join(all, " "))
+	fmt.Fprint(w, "\tesac\n}\ncomplete -F _vif vif\n")
+}
+
+// writeZshCompletion renders deploy/package/_vif; aliases exclude one another.
+func writeZshCompletion(w io.Writer) {
+	fmt.Fprintf(w, "#compdef vif\n# %s\n_arguments", generatedBy)
+	quote := strings.NewReplacer(`'`, `'\''`, `[`, `\[`, `]`, `\]`)
+	for _, line := range portableLines() {
+		forms := line.forms()
+		spec := "'" + forms[0]
+		if len(forms) > 1 {
+			spec = "'(" + strings.Join(forms, " ") + ")'{" + strings.Join(forms, ",") + "}'"
+		}
+		spec += "[" + quote.Replace(line.hint) + "]"
+		switch line.completion() {
+		case completeWord:
+			spec += ":" + strings.Trim(line.arg, "<>") + ": "
+		case completeFile:
+			spec += ":path:_files"
+		case completeDir:
+			spec += ":dir:_files -/"
+		case completeChoice:
+			spec += ":value:(" + strings.ReplaceAll(line.arg, "|", " ") + ")"
+		}
+		fmt.Fprintf(w, " \\\n  %s'", spec)
+	}
+	fmt.Fprintln(w)
+}
+
+// writeFishCompletion renders deploy/package/vif.fish.
+func writeFishCompletion(w io.Writer) {
+	fmt.Fprintf(w, "# %s\ncomplete -c vif -f\n", generatedBy)
+	quote := strings.NewReplacer(`\`, `\\`, `'`, `\'`)
+	for _, line := range portableLines() {
+		out := "complete -c vif -o " + strings.Join(line.names, " -o ")
+		switch line.completion() {
+		case completeWord:
+			out += " -x"
+		case completeFile:
+			out += " -r -F"
+		case completeDir:
+			out += " -x -a '(__fish_complete_directories)'"
+		case completeChoice:
+			out += " -x -a '" + strings.ReplaceAll(line.arg, "|", " ") + "'"
+		}
+		fmt.Fprintf(w, "%s -d '%s'\n", out, quote.Replace(line.hint))
+	}
 }
 
 // writeVersion prints what a downstream package and a bug report need; see

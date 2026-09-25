@@ -360,22 +360,28 @@ func TestHelpRendersOneLinePerFlag(t *testing.T) {
 	}
 }
 
-// TestManualIsTheHelpTable keeps doc/vif.6 generated from the flag table; after a
-// flag changes, VIF_WRITE_MANUAL=1 go test ./cmd/vif -run Manual rewrites it.
-func TestManualIsTheHelpTable(t *testing.T) {
-	const page = "../../doc/vif.6"
-	var want strings.Builder
-	writeManual(&want)
-	if os.Getenv("VIF_WRITE_MANUAL") == "1" {
-		if err := os.WriteFile(page, []byte(want.String()), 0o644); err != nil {
+// TestGeneratedFilesAreTheHelpTable keeps every file rendered from the flag table
+// committed as rendered; after a flag changes, VIF_WRITE_GENERATED=1 rewrites them.
+func TestGeneratedFilesAreTheHelpTable(t *testing.T) {
+	for page, render := range map[string]func(io.Writer){
+		"../../doc/vif.6":               writeManual,
+		"../../deploy/package/vif.bash": writeBashCompletion,
+		"../../deploy/package/_vif":     writeZshCompletion,
+		"../../deploy/package/vif.fish": writeFishCompletion,
+	} {
+		var want strings.Builder
+		render(&want)
+		if os.Getenv("VIF_WRITE_GENERATED") == "1" {
+			if err := os.WriteFile(page, []byte(want.String()), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got, err := os.ReadFile(page)
+		if err != nil {
 			t.Fatal(err)
 		}
-	}
-	got, err := os.ReadFile(page)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != want.String() {
-		t.Fatalf("%s is stale; VIF_WRITE_MANUAL=1 go test ./cmd/vif -run Manual rewrites it", page)
+		if string(got) != want.String() {
+			t.Errorf("%s is stale; VIF_WRITE_GENERATED=1 go test ./cmd/vif -run Generated rewrites it", page)
+		}
 	}
 }
