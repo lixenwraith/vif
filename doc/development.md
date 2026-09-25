@@ -608,9 +608,8 @@ logging cannot extend lock time.
 `-lt`/`:log stat` controls periodic emission; the default period is a coarse
 heartbeat because the flight recorder holds fine-grained history. `-lr`/`:log
 rec` controls the recorder, which keeps the last N ticks of the full registry
-in memory and writes only on a trigger. `:d save` writes an on-demand
-standalone context plus registry snapshot while command mode has a stable paused
-view.
+in memory and writes only on a trigger. `:t save` writes an on-demand
+standalone context plus registry snapshot captured under the world lock.
 
 ## 10. Crash and runtime capture
 

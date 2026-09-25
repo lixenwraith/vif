@@ -117,6 +117,7 @@ g = "motion_screen_top"
 G = "motion_screen_bottom"
 space = "overlay_activate"
 q = "overlay_close"
+"/" = "overlay_filter"
 
 [overlay_keys]
 up = "motion_up"

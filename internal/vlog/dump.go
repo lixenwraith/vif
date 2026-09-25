@@ -12,10 +12,10 @@ import (
 // dumpTimeout bounds the synchronous drain of a snapshot file
 const dumpTimeout = 3 * time.Second
 
-// Dump writes a standalone snapshot file using a second logger instance,
-// independent of the session logger's state, level and scopes.
+// Dump writes a standalone snapshot file stamped run/tick, using a second logger
+// instance independent of the session logger's state, level and scopes.
 // Blocking: opens, fills, drains and closes before returning. Operator paths only.
-func Dump(fill func(emit func(sub string, args ...any))) (string, error) {
+func Dump(run, tick uint64, fill func(emit func(sub string, args ...any))) (string, error) {
 	mu.Lock()
 	dir, spawn := cfg.Dir, cfg.Spawn
 	mu.Unlock()
@@ -38,9 +38,10 @@ func Dump(fill func(emit func(sub string, args ...any))) (string, error) {
 		return "", err
 	}
 
-	// Correlation stamp matches the session so a snapshot joins on run/tick
+	// The caller's stamp, not the current one: the values may predate the write
 	fill(func(sub string, args ...any) {
-		l.LogContext(context(sub), l.Flags()|log.FlagKV, LevelInfo, 0, sessionArgs(args)...)
+		ctx := log.Context{Tag: sub, Vals: [log.ContextSlots]uint64{run, tick}}
+		l.LogContext(ctx, l.Flags()|log.FlagKV, LevelInfo, 0, sessionArgs(args)...)
 	})
 
 	if err := l.Shutdown(dumpTimeout); err != nil {

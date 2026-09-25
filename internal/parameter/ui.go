@@ -98,7 +98,7 @@ const (
 	OverlayPageOverlap = 1
 )
 
-// Overlay Cards (debug)
+// Overlay Cards (telemetry)
 const (
 	// OverlayCardFrameRows is the card rows consumed by its top and bottom border
 	OverlayCardFrameRows = 2
@@ -145,13 +145,6 @@ const (
 	HelpSectionGap = 1
 )
 
-// Overlay hint variants, longest first; the renderer draws the widest that fits
-const (
-	OverlayHintFull  = "ESC close · j/k scroll · PgUp/PgDn page"
-	OverlayHintShort = "ESC close · j/k scroll"
-	OverlayHintMin   = "ESC close"
-)
-
 // Splash Layout
 const (
 	// SplashMinDistance is the minimum distance from cursor for magnifier placement
@@ -168,9 +161,17 @@ const (
 // Overlay hint variants per layout, longest first; the renderer draws the widest that fits
 var (
 	OverlayHintsCards = []string{
-		"ESC close · hjkl select · SPACE pin · :h keys",
-		"ESC close · hjkl select · SPACE pin",
-		"ESC close · SPACE pin",
+		"ESC close · / filter · hjkl select · SPACE pin to HUD · :t save snapshot · :h keys",
+		"ESC close · / filter · hjkl select · SPACE pin to HUD · :t save snapshot",
+		"ESC close · / filter · SPACE pin to HUD",
+		"ESC close · / filter",
+		"ESC close",
+	}
+	// Card hints behind the filter prompt, while editing and once kept
+	OverlayHintsFilterEdit = []string{"ENTER keep · ESC clear", "ESC clear"}
+	OverlayHintsFilter     = []string{
+		"ESC close · / edit · hjkl select · SPACE pin to HUD",
+		"ESC close · / edit · SPACE pin",
 		"ESC close",
 	}
 	OverlayHintsDoc = []string{

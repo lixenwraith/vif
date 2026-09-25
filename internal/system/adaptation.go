@@ -234,7 +234,7 @@ func (s *AdaptationSystem) Update() {
 
 	s.pruneDrained(ar)
 
-	// Debug overlay only; 2 Hz avoids per-tick sort/format garbage
+	// Telemetry only; 2 Hz avoids per-tick sort/format garbage
 	s.telemetryTicks++
 	if s.telemetryTicks >= parameter.AdaptTelemetryInterval {
 		s.telemetryTicks = 0

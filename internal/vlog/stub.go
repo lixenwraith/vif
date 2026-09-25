@@ -84,13 +84,16 @@ func JournalPath() string              { return "" }
 func Journal(string, ...any)           {}
 func LastJournalPath() string          { return "" }
 
-func ScopeOf(string) Scope                            { return ScopeTap }
-func Scopes() Scope                                   { return ScopeNone }
-func SetScopes(Scope)                                 {}
-func ScopeString(Scope) string                        { return "none" }
-func Dump(func(func(string, ...any))) (string, error) { return "", ErrDisabled }
-func Stamp() (uint64, uint64)                         { return 0, 0 }
-func SetCrashFlush(func())                            {}
+func ScopeOf(string) Scope     { return ScopeTap }
+func Scopes() Scope            { return ScopeNone }
+func SetScopes(Scope)          {}
+func ScopeString(Scope) string { return "none" }
+func Stamp() (uint64, uint64)  { return 0, 0 }
+func SetCrashFlush(func())     {}
+
+func Dump(uint64, uint64, func(func(string, ...any))) (string, error) {
+	return "", ErrDisabled
+}
 
 func EmitSet(string, uint64, uint64, func(func(...any))) (string, error) {
 	return "", ErrDisabled

@@ -24,7 +24,7 @@ type MetaSystem struct {
 
 	world *engine.World
 
-	// Context and player telemetry, published for the debug overlay and HUD
+	// Context and player telemetry, published for the telemetry overlay and HUD
 	statMapW    *atomic.Int64
 	statMapH    *atomic.Int64
 	statCameraX *atomic.Int64
@@ -105,7 +105,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventModeChanged,
 		event.EventLevelSetup,
 		event.EventScreenResize,
-		event.EventMetaDebugRequest,
+		event.EventMetaTelemetryRequest,
 		event.EventMetaHelpRequest,
 		event.EventMetaAboutRequest,
 		event.EventGamePauseRequest,
@@ -177,8 +177,8 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 			dbg.ShowComposite = !dbg.ShowComposite
 		}
 
-	case event.EventMetaDebugRequest:
-		s.handleDebugRequest()
+	case event.EventMetaTelemetryRequest:
+		s.handleTelemetryRequest()
 
 	case event.EventMetaHelpRequest:
 		s.handleHelpRequest()
@@ -493,35 +493,55 @@ func (s *MetaSystem) handleScreenResize(p *event.ScreenResizePayload) {
 	s.ctx.HandleResizeLocked()
 }
 
-// handleDebugRequest shows the debug overlay, pinned groups first
-func (s *MetaSystem) handleDebugRequest() {
+// handleTelemetryRequest shows the telemetry overlay narrowed by the operator's
+// filter, pinned groups first
+func (s *MetaSystem) handleTelemetryRequest() {
 	reg := s.world.Resources.Status
 	views := reg.VisibleViews()
 	pins := s.ctx.OverlayPins()
+	terms := strings.Fields(strings.ToLower(s.ctx.OverlayFilter()))
 
 	content := &core.OverlayContent{
-		Title: "DEBUG",
+		Title: "TELEMETRY",
 		Items: make([]core.OverlayItem, 0, len(views)),
 	}
 
 	// Pinned groups lead in pin order; the rest keep the registry's sorted order
 	for _, key := range pins {
-		if v, ok := reg.GroupView(key); ok && v.Visible() {
-			content.Items = append(content.Items, debugCard(v, true))
+		if v, ok := reg.GroupView(key); ok && v.Visible() && groupMatches(v, terms) {
+			content.Items = append(content.Items, telemetryCard(v, true))
 		}
 	}
 	for i := range views {
-		if slices.Contains(pins, views[i].Name()) {
+		if slices.Contains(pins, views[i].Name()) || !groupMatches(views[i], terms) {
 			continue
 		}
-		content.Items = append(content.Items, debugCard(views[i], false))
+		content.Items = append(content.Items, telemetryCard(views[i], false))
+	}
+	if len(terms) > 0 {
+		content.Title = fmt.Sprintf("TELEMETRY %d/%d", len(content.Items), len(views))
 	}
 
 	s.ctx.SetOverlayContent(content)
 }
 
-// debugCard projects one metric group into an overlay card
-func debugCard(v status.GroupView, pinned bool) core.OverlayCard {
+// groupMatches reports whether every term occurs in the group name or in one of
+// its metric names
+func groupMatches(v status.GroupView, terms []string) bool {
+	for _, term := range terms {
+		found := strings.Contains(v.Name(), term)
+		for i := 0; !found && i < v.Len(); i++ {
+			found = strings.Contains(v.MetricName(i), term)
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+// telemetryCard projects one metric group into an overlay card
+func telemetryCard(v status.GroupView, pinned bool) core.OverlayCard {
 	entries := make([]core.CardEntry, v.Len())
 	for i := range entries {
 		entries[i] = core.CardEntry{Key: v.MetricName(i), Value: v.Value(i)}

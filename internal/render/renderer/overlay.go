@@ -183,7 +183,7 @@ func (r *OverlayRenderer) renderContent(root tui.Region, g engine.OverlayGeometr
 		if r.masonry != nil {
 			r.renderScrollBar(root, g, r.masonry.Viewport)
 		}
-		r.renderHint(root, g, parameter.OverlayHintsCards)
+		r.renderCardsHint(root, g)
 	}
 }
 
@@ -280,7 +280,14 @@ func (r *OverlayRenderer) docOpts() tui.DocOpts {
 
 // renderCards draws the visible masonry slice, keeping the selection in view
 func (r *OverlayRenderer) renderCards(body tui.Region) {
-	if r.masonry == nil || len(r.cards) == 0 {
+	if len(r.cards) == 0 {
+		if q := r.gameCtx.OverlayFilter(); q != "" {
+			body.TextCenter(body.H/2, "no group or metric matches /"+q,
+				visual.RgbOverlayHint, visual.RgbOverlayBg, terminal.AttrDim)
+		}
+		return
+	}
+	if r.masonry == nil {
 		return
 	}
 
@@ -408,6 +415,35 @@ func (r *OverlayRenderer) renderHint(root tui.Region, g engine.OverlayGeometry, 
 		}
 		root.Text(1+(avail-n)/2, g.HintY, hint, visual.RgbOverlayHint, visual.RgbOverlayBg, terminal.AttrDim)
 		return
+	}
+}
+
+// renderCardsHint puts the filter prompt left of the hints while a query is
+// edited or kept, otherwise draws the plain card hints
+func (r *OverlayRenderer) renderCardsHint(root tui.Region, g engine.OverlayGeometry) {
+	query, editing := r.gameCtx.OverlayFilter(), r.gameCtx.IsOverlayFilterEditing()
+	if query == "" && !editing {
+		r.renderHint(root, g, parameter.OverlayHintsCards)
+		return
+	}
+	if g.HintY < 0 {
+		return
+	}
+
+	avail := g.W - 4 // one cell of margin inside each border
+	prompt, tiers := "/"+query, parameter.OverlayHintsFilter
+	if editing {
+		prompt, tiers = prompt+string(parameter.StatusCursorChar), parameter.OverlayHintsFilterEdit
+	}
+	prompt = tui.TruncateLeft(prompt, avail)
+	root.Text(2, g.HintY, prompt, visual.RgbSearchInputText, visual.RgbOverlayBg, terminal.AttrNone)
+
+	free := avail - tui.RuneLen(prompt) - 2 // gap between prompt and hints
+	for _, hint := range tiers {
+		if n := tui.RuneLen(hint); n <= free {
+			root.Text(2+avail-n, g.HintY, hint, visual.RgbOverlayHint, visual.RgbOverlayBg, terminal.AttrDim)
+			return
+		}
 	}
 }
 

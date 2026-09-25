@@ -125,8 +125,8 @@ const (
 
 	// EventGameResetRequest (GameResetPayload) [bus] resets the session; shared producers re-derive it, operator producers cross it
 	EventGameResetRequest
-	// EventMetaDebugRequest [local] signals a request to show debug overlay
-	EventMetaDebugRequest
+	// EventMetaTelemetryRequest [local] signals a request to show the telemetry overlay
+	EventMetaTelemetryRequest
 	// EventMetaHelpRequest [local] signals a request to show help overlay
 	EventMetaHelpRequest
 	// EventMetaAboutRequest [local] signals a request to show about overlay

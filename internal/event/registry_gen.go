@@ -34,7 +34,7 @@ func InitRegistry() {
 	RegisterType("EventPlayoutLead", EventPlayoutLead, &PlayoutLeadPayload{})
 	RegisterType("EventCursorStateSync", EventCursorStateSync, &CursorStatePayload{})
 	RegisterType("EventGameResetRequest", EventGameResetRequest, &GameResetPayload{})
-	RegisterType("EventMetaDebugRequest", EventMetaDebugRequest, nil)
+	RegisterType("EventMetaTelemetryRequest", EventMetaTelemetryRequest, nil)
 	RegisterType("EventMetaHelpRequest", EventMetaHelpRequest, nil)
 	RegisterType("EventMetaAboutRequest", EventMetaAboutRequest, nil)
 	RegisterType("EventMetaStatusMessageRequest", EventMetaStatusMessageRequest, &MetaStatusMessagePayload{})
@@ -216,7 +216,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventPlayoutLead:                     ClassLocal,
 	EventCursorStateSync:                 ClassLocal,
 	EventGameResetRequest:                ClassBus,
-	EventMetaDebugRequest:                ClassLocal,
+	EventMetaTelemetryRequest:            ClassLocal,
 	EventMetaHelpRequest:                 ClassLocal,
 	EventMetaAboutRequest:                ClassLocal,
 	EventMetaStatusMessageRequest:        ClassLocal,

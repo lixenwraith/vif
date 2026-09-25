@@ -37,7 +37,7 @@ stateDiagram-v2
     Normal --> Visual: v
     Normal --> Search: slash
     Normal --> Command: colon
-    Normal --> Overlay: help/about/debug
+    Normal --> Overlay: help/about/telemetry
     Insert --> Normal: Escape
     Visual --> Normal: Escape
     Search --> Normal: confirm or Escape
@@ -52,11 +52,11 @@ stateDiagram-v2
 | Insert | Type glyphs at the cursor; arrows move; Delete/Space/Backspace support edit-like deletion. | Continues in real time. |
 | Search | Edit and confirm a forward search pattern; `n`/`N` repeat later. | Uses text-entry routing. |
 | Command | Edit and execute a colon command with history. | Pauses a single-instance game; a live network session continues. |
-| Overlay | Navigate help, about, or debug content. | Pauses a single-instance game; a live network session continues. |
+| Overlay | Navigate help, about, or telemetry content; `/` filters telemetry cards. | Pauses a single-instance game; a live network session continues. |
 
 Escape resets pending parser state and normally returns to Normal. Command and
 overlay completion coordinate their own pause result in a single-instance game,
-so a command such as `:new`, `:help`, or `:debug` can intentionally keep the game
+so a command such as `:new`, `:help`, or `:telemetry` can intentionally keep the game
 paused until its follow-up state is ready. `MetaSystem` refuses the pause request
 when a peer is live, leaving those modes available as non-blocking inspection.
 
@@ -245,7 +245,7 @@ The command dispatcher recognizes aliases shown in the first column.
 |---|---|
 | `:quit`, `:q` | Exit. |
 | `:new`, `:n` | Reset simulation state; in a live session only the host may request it, and both participants reset. |
-| `:new!` | Reset and purge the initiating operator's free-mouse, auto-fire, speed, debug HUD, and pins. |
+| `:new!` | Reset and purge the initiating operator's free-mouse, auto-fire, speed, telemetry HUD, and pins. |
 | `:n <scenario>` | Rebuild the run on another scenario, by installed name or path. A scenario declares its own regions, so a different one needs a run of its own; naming the one already loaded resets in place instead. In a live session only the host may ask, and every guest rebuilds and rejoins with it. |
 | `:help`, `:h`, `:?`; `:about` | Open overlays. |
 | `:content` | Show corpus telemetry. |
@@ -265,7 +265,8 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:region list\|spawn\|pause\|resume\|terminate ...` | Issue one scheduler-owned region primitive. |
 | `:log ...` | Start/stop logging; set level/scope and snapshot period. |
 | `:log rec [ticks\|flush\|fsm [on\|off]]` | Configure, request, or transition-trigger the flight recorder. |
-| `:debug [save]` | Open debug overlay; `save` writes a solo point-in-time status snapshot and is unavailable live. |
+| `:telemetry [save\|hud\|unpin]`, `:t` | Open the telemetry overlay; `save` writes a point-in-time status snapshot, `unpin` clears pins. |
+| `:hud [on\|off]` | Toggle or set the pinned-card HUD; `:t hud` is the same. |
 | `:emit <EventName> [{ TOML payload }]` | Construct and publish a registered event for testing. |
 | `:energy <value>`, `:heat <0-100>`, `:boost` | Directly manipulate player state for development. |
 | `:god`, `:demon` | Apply high positive/negative energy test states. |
@@ -287,26 +288,30 @@ command does, and it does it **inside the router's critical section** — the wh
 intent path runs under the world lock and `mode/` must never acquire it itself. The
 command reaches `engine.SessionController`, whose methods are therefore the
 lock-held forms; an implementation that took the lock again wedges the instance at
-the tick the command lands on, with neither a tick nor a signal able to recover it. Resizes retain D-14's locked map bounds. Help, debug
+the tick the command lands on, with neither a tick nor a signal able to recover it. Resizes retain D-14's locked map bounds. Help, telemetry
 and about overlays remain local and do not pause; logging and view controls are
 local inspection. Player grants and effect commands remain available because
 they author the invoking cursor or use the ordinary player-to-shared crossing
 path. The host's reset is the exceptional session-wide command and crosses at an
 agreed tick; a guest reset is refused.
 
-Free-mouse and auto-fire preferences, time scale, debug HUD visibility, and
+Free-mouse and auto-fire preferences, time scale, telemetry HUD visibility, and
 pinned overlay cards are operator-owned and survive plain `:new`. Both reset
 forms clear macros and transient command/overlay state. `:new!` additionally
 turns the initiating instance's two preferences off, restores 1x, and clears its
 HUD/pins; peers retain their own operator choices when the shared reset arrives.
 Logging state is process diagnostic configuration and survives both forms.
 
-Debug cards contain at most 15 metrics. Empty player slots are omitted until
+Telemetry cards contain at most 15 metrics. Empty player slots are omitted until
 they become active. A clipped selected card consumes `j`/`k` scroll steps before
-selection moves beyond it; page motions still move by viewport rows. The live
-HUD starts at the viewport's top-left and wraps pinned cards into columns. If
-the viewport cannot fit every whole card, a `hidden` line names the omitted
-groups; the HUD intentionally has no focus or navigation mode of its own.
+selection moves beyond it; page motions still move by viewport rows. `/` edits a
+card filter in the overlay's hint row while the overlay keeps its mode: every
+space-separated term must occur in the group or one of its metric names, Enter
+keeps the filter for navigation, Escape clears it, and closing the overlay drops
+it. Pinning a card turns the HUD on. The live HUD starts at the viewport's
+top-left and wraps pinned cards into columns. If the viewport cannot fit every
+whole card, a `hidden` line names the omitted groups; the HUD intentionally has
+no focus or navigation mode of its own.
 
 Replay terminal keys are not entries in this command table or the keymap. A
 `ModeReplay` App reserves `SPACE . + - h j k l 0 q` for viewer pause, step,

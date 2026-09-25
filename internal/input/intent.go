@@ -63,6 +63,7 @@ const (
 	IntentOverlayClose    // ESC/q
 	IntentOverlayPageUp   // PgUp
 	IntentOverlayPageDown // PgDn
+	IntentOverlayFilter   // / - edit the telemetry card filter
 
 	// Mouse
 	IntentMouseLeftDown  // Left press: move cursor + fire main

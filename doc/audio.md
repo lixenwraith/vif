@@ -233,7 +233,7 @@ changes smaller than three BPM until the slew settles on its target, and the
 sequencer applies each on the next beat, so tempo trails the five-second window by
 about a second. A tier change draws from
 the current group under quantization/crossfade/reveal policy, and a slot already
-sounding its draw keeps playing. The `music.*` status group (the debug HUD's music
+sounding its draw keeps playing. The `music.*` status group (the telemetry HUD's music
 card, and the periodic stat log) names the group, tier, requested tempo and the
 pattern in each slot, and reads `-` while music is muted or stopped.
 

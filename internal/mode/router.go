@@ -287,6 +287,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleOverlayPageScroll(1)
 	case input.IntentOverlayClose:
 		return r.handleOverlayClose()
+	case input.IntentOverlayFilter:
+		return r.handleOverlayFilter()
 
 	// Mouse
 	case input.IntentMouseLeftDown:
@@ -322,6 +324,11 @@ func (r *Router) handleEscape() bool {
 		r.resetCommandHistoryBrowse()
 		r.ctx.SetPaused(false)
 	case core.ModeOverlay:
+		if r.ctx.IsOverlayFilterEditing() {
+			r.endOverlayFilter()
+			r.setOverlayFilter("")
+			return true
+		}
 		r.ctx.SetPaused(false)
 	case core.ModeNormal:
 		// ESC in Normal mode triggers ping grid, no mode change
@@ -635,6 +642,8 @@ func (r *Router) handleTextChar(intent *input.Intent) bool {
 		r.handleSearchChar(intent.Char)
 	case core.ModeCommand:
 		r.handleCommandChar(intent.Char)
+	case core.ModeOverlay:
+		r.setOverlayFilter(r.ctx.OverlayFilter() + string(intent.Char))
 	}
 
 	return true
@@ -691,6 +700,10 @@ func (r *Router) handleTextBackspace() bool {
 		}
 	case core.ModeInsert:
 		return r.handleInsertDeleteBack()
+	case core.ModeOverlay:
+		if q := []rune(r.ctx.OverlayFilter()); len(q) > 0 {
+			r.setOverlayFilter(string(q[:len(q)-1]))
+		}
 	}
 
 	return true
@@ -738,6 +751,9 @@ func (r *Router) handleTextConfirm() bool {
 		}
 
 		return result.Continue
+
+	case core.ModeOverlay:
+		r.endOverlayFilter()
 	}
 
 	return true

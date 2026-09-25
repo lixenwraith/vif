@@ -34,7 +34,7 @@ type MusicSystem struct {
 	manualTier bool
 	arranged   bool // first auto-arrangement applied; slots start silent otherwise
 
-	// What the sequencer sounds, for the debug HUD's music card; a slot's name is
+	// What the sequencer sounds, for the telemetry HUD's music card; a slot's name is
 	// looked up only when its pattern changes
 	statGroup, statTier *status.AtomicString
 	statSlot            [audio.MusicSlots]*status.AtomicString

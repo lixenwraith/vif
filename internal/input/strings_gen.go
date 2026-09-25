@@ -84,6 +84,8 @@ func (i IntentType) String() string {
 		return "IntentOverlayPageUp"
 	case IntentOverlayPageDown:
 		return "IntentOverlayPageDown"
+	case IntentOverlayFilter:
+		return "IntentOverlayFilter"
 	case IntentMouseLeftDown:
 		return "IntentMouseLeftDown"
 	case IntentMouseLeftUp:

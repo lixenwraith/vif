@@ -277,7 +277,7 @@ also the visual stacking order; exact integer priorities are in
 | Overlay effects | `splash`, `marker` |
 | Post-process | `grayout`, `strobe`, `dim` |
 | UI | `heat`, `indicator`, `statusbar`, `peer_cursor`, `cursor` |
-| Debug | `overlay`, `flowfield` |
+| Debug and telemetry | `flowfield`, `pinned_state`, `overlay` |
 
 Some rendered concepts do not have a same-named component or system. For
 example, charge/teleport lines are projections of species state, ember is a
@@ -352,7 +352,7 @@ The relative row and column gutters number only the rows and columns the
 playfield covers and mark the rest with the void color, so the chrome agrees
 with the margin it borders rather than numbering cells no motion can reach.
 
-The overlay renderer adapts help/about/debug content into buffer cells. Flow
+The overlay renderer adapts help/about/telemetry content into buffer cells. Flow
 debug can show a target group's flow field or route graph and is controlled via
 `:flow [group]` and `:graph [group]`. Debug layers are part of the normal
 pipeline but are visibility-gated.

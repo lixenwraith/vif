@@ -146,6 +146,10 @@ type GameContext struct {
 	overlayCards      atomic.Pointer[[]OverlayCardRef]
 	overlayPins       atomic.Pointer[[]string]
 
+	// Telemetry card filter; editing routes text input to the query
+	overlayFilter        atomic.Pointer[string]
+	overlayFilterEditing atomic.Bool
+
 	// OverlayHUD draws pinned metric groups over the game area
 	OverlayHUD atomic.Bool
 
@@ -462,8 +466,8 @@ func (ctx *GameContext) OverlayPinsRef() *[]string {
 	return ctx.overlayPins.Load()
 }
 
-// ToggleOverlayPin adds or removes a group key, preserving pin order.
-// Copy-on-write: readers keep the snapshot they loaded.
+// ToggleOverlayPin adds or removes a group key, preserving pin order; a new pin
+// turns the HUD on. Copy-on-write: readers keep the snapshot they loaded.
 func (ctx *GameContext) ToggleOverlayPin(key string) {
 	cur := ctx.OverlayPins()
 	next := make([]string, 0, len(cur)+1)
@@ -477,6 +481,7 @@ func (ctx *GameContext) ToggleOverlayPin(key string) {
 	}
 	if !found {
 		next = append(next, key)
+		ctx.OverlayHUD.Store(true)
 	}
 	ctx.overlayPins.Store(&next)
 }
@@ -487,13 +492,34 @@ func (ctx *GameContext) ClearOverlayPins() {
 	ctx.overlayPins.Store(&empty)
 }
 
+// OverlayFilter returns the telemetry card query, empty when unfiltered
+func (ctx *GameContext) OverlayFilter() string {
+	if p := ctx.overlayFilter.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+func (ctx *GameContext) SetOverlayFilter(query string) {
+	ctx.overlayFilter.Store(&query)
+}
+
+// IsOverlayFilterEditing reports whether text input edits the card query
+func (ctx *GameContext) IsOverlayFilterEditing() bool {
+	return ctx.overlayFilterEditing.Load()
+}
+
+func (ctx *GameContext) SetOverlayFilterEditing(editing bool) {
+	ctx.overlayFilterEditing.Store(editing)
+}
+
 // Session state is operator-owned: it describes how the game is being observed and
 // driven, not the game itself, so it survives EventGameResetRequest.
 // The list below is its definition; anything not named is world state and is rebuilt by reset.
 //
 //	MouseFreeMode, AutoFire   input preferences
 //	TimeCtl scale             simulation rate
-//	OverlayHUD, overlay pins  debug overlay layout
+//	OverlayHUD, overlay pins  telemetry overlay layout
 //
 // Logging is excluded because target, level, scope and recorder depth are process
 // configuration, and clearing them mid-session would close the log being read.
@@ -818,6 +844,9 @@ func (ctx *GameContext) SetOverlayContent(content *core.OverlayContent) {
 		ctx.overlayActive.Store(false)
 		empty := ""
 		ctx.overlayTitle.Store(&empty)
+		// The filter belongs to one viewing; the next open starts unfiltered
+		ctx.overlayFilter.Store(&empty)
+		ctx.overlayFilterEditing.Store(false)
 	}
 	ctx.overlayScroll.Store(0)
 	ctx.overlayContentH.Store(0)

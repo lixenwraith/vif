@@ -690,15 +690,6 @@ func TestLiveSessionRefusesAnInstanceLocalPause(t *testing.T) {
 		tickAll(apps)
 	}
 	assertMeshParity(t, apps, 0)
-
-	// A synchronous snapshot drains a second log sink while the world lock is
-	// held. That may exceed the playout lead, so it is not a live inspection
-	// operation even though the non-blocking debug overlay remains available.
-	apps[0].Context().ClearStatusMessage()
-	mode.ExecuteCommand(apps[0].Context(), "d save")
-	if got := apps[0].Context().GetStatusMessage(); got != "Snapshot save unavailable in a live session" {
-		t.Fatalf(":d save status=%q", got)
-	}
 }
 
 // TestCoordinatorResetCrossesAndPreservesRoster reproduces :new as an operator

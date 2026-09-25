@@ -108,6 +108,7 @@ func buildActionRegistry() map[string]KeyEntry {
 		"overlay_activate":  {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayActivate},
 		"overlay_page_up":   {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayPageUp},
 		"overlay_page_down": {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayPageDown},
+		"overlay_filter":    {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayFilter},
 
 		// Text mode
 		"text_backspace":      {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentTextBackspace},

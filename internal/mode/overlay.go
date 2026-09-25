@@ -1,6 +1,7 @@
 package mode
 
 import (
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
@@ -78,9 +79,32 @@ func (r *Router) handleOverlayActivate() bool {
 		return true
 	}
 	r.ctx.ToggleOverlayPin(key)
-	// The debug overlay is the only card layout; MetaSystem owns the projection
-	r.ctx.PushLocal(event.EventMetaDebugRequest, nil)
+	// Telemetry is the only card layout; MetaSystem owns the projection
+	r.ctx.PushLocal(event.EventMetaTelemetryRequest, nil)
 	return true
+}
+
+// handleOverlayFilter opens the card query for editing; the overlay keeps its
+// mode and only the input machine switches to text entry
+func (r *Router) handleOverlayFilter() bool {
+	if c := r.ctx.GetOverlayContent(); c == nil || c.Layout != core.OverlayLayoutCards {
+		return true
+	}
+	r.ctx.SetOverlayFilterEditing(true)
+	r.machine.SetMode(input.ModeSearch)
+	return true
+}
+
+// endOverlayFilter returns input to card navigation, keeping the query
+func (r *Router) endOverlayFilter() {
+	r.ctx.SetOverlayFilterEditing(false)
+	r.machine.SetMode(input.ModeOverlay)
+}
+
+// setOverlayFilter narrows the cards as the query is typed
+func (r *Router) setOverlayFilter(query string) {
+	r.ctx.SetOverlayFilter(query)
+	r.ctx.PushLocal(event.EventMetaTelemetryRequest, nil)
 }
 
 // moveOverlaySelection resolves a directional move against the published card index

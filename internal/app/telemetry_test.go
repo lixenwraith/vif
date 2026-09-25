@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/status"
 )
@@ -292,7 +293,7 @@ func TestSharedDigestCarriesDetailOnlyOnRequest(t *testing.T) {
 	}
 }
 
-func TestTelemetryGroupsFitDebugCards(t *testing.T) {
+func TestTelemetryGroupsFitOverlayCards(t *testing.T) {
 	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
 	if err != nil {
@@ -332,6 +333,51 @@ func TestTelemetryGroupsFitDebugCards(t *testing.T) {
 		if !visiblePlayers[want] {
 			t.Errorf("active roster group %q is hidden", want)
 		}
+	}
+}
+
+// TestTelemetryFilterNarrowsCardsUntilTheOverlayCloses drives the filter through
+// the router: every card left matches the query, a new pin turns the HUD on, and
+// closing the overlay drops the query so the next open is unfiltered.
+func TestTelemetryFilterNarrowsCardsUntilTheOverlayCloses(t *testing.T) {
+	t.Parallel()
+	a, err := NewHeadless(scriptConfig(fixtureSeed))
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+	ctx := a.Context()
+	r := newScriptRunner(t, a)
+
+	r.step(1, intentModeSwitch(input.ModeTargetCommand))
+	r.step(1, intentCommandBody("t")...)
+	all := len(ctx.GetOverlayContent().Cards())
+
+	edit := []*input.Intent{{Type: input.IntentOverlayFilter}}
+	for _, c := range "ENGINE" {
+		edit = append(edit, intentTextChar(c))
+	}
+	r.step(1, append(edit, &input.Intent{Type: input.IntentTextConfirm})...)
+	cards := ctx.GetOverlayContent().Cards()
+	if len(cards) == 0 || len(cards) >= all || ctx.IsOverlayFilterEditing() {
+		t.Fatalf("filter kept %d of %d cards, editing=%v", len(cards), all, ctx.IsOverlayFilterEditing())
+	}
+	for _, c := range cards {
+		if !strings.Contains(c.Key, "engine") && !slices.ContainsFunc(c.Entries, func(e core.CardEntry) bool {
+			return strings.Contains(e.Key, "engine")
+		}) {
+			t.Errorf("card %q does not match the filter", c.Key)
+		}
+	}
+
+	r.step(1, &input.Intent{Type: input.IntentOverlayActivate})
+	if !ctx.OverlayHUD.Load() || len(ctx.OverlayPins()) != 1 {
+		t.Fatalf("pin %v left the HUD off", ctx.OverlayPins())
+	}
+
+	r.step(1, intentOverlayClose())
+	if ctx.OverlayFilter() != "" || ctx.GetMode() != core.ModeNormal {
+		t.Fatalf("close left filter %q in mode %d", ctx.OverlayFilter(), ctx.GetMode())
 	}
 }
 

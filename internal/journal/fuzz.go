@@ -245,13 +245,13 @@ var fuzzCommands = [...]string{
 	"free on", "free off", "auto on", "auto off",
 	"mouse enable", "mouse disable",
 	"speed 2", "speed 1/2", "speed reset", "step off",
-	"d hud", "d unpin", "flow", "graph", "flow 0",
+	"hud", "t unpin", "flow", "graph", "flow 0",
 	"system typing disable", "system typing enable",
 	"system particle disable", "system particle enable",
 	"region list",
 }
 
-var fuzzOverlays = [...]string{"d", "h", "about"}
+var fuzzOverlays = [...]string{"t", "h", "about"}
 
 // FuzzRegion pairs a declared region with the state a spawn enters it at
 type FuzzRegion struct{ Name, State string }

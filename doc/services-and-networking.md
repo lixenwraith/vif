@@ -192,7 +192,7 @@ badge, chosen by severity. The D-14 latch used to be printed beside each of them
 thing to watch: it is on for every session run from before its first joiner to
 after its last one leaves, and off for every solo run, which is the only one whose
 terminal may still crop. It is a fact about the run, so `:session` names it and the
-`network.session` debug card exposes state, peer count, connected state and map
+`network.session` telemetry card exposes state, peer count, connected state and map
 latch separately.
 
 ## 7. Transport roles and lifecycle

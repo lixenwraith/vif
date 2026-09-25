@@ -2,7 +2,7 @@
 
 This audit covers every system constructed by `manifest.BuildSystems`, `MetaSystem`, and telemetry owned by `internal/engine` and `internal/event`. The table describes the final wiring; the defect table preserves the Phase 1 findings from the pre-fix tree.
 
-Every metric is consumed generically by the status snapshot, debug overlay, pinning UI, and `vif-log` registry traversal. “Generic only” means no code or configuration reads the key by name outside its producer. Player patterns expand across roster slots 0–15 and retain the legacy slot-zero mirror; inactive slots keep their frozen schema but are omitted from live views and output until active. Stable keys project into semantic groups of at most 15 fields for overlay and log presentation.
+Every metric is consumed generically by the status snapshot, telemetry overlay, pinning UI, and `vif-log` registry traversal. “Generic only” means no code or configuration reads the key by name outside its producer. Player patterns expand across roster slots 0–15 and retain the legacy slot-zero mirror; inactive slots keep their frozen schema but are omitted from live views and output until active. Stable keys project into semantic groups of at most 15 fields for overlay and log presentation.
 
 ## Phase 1 system audit
 
@@ -58,7 +58,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Adaptation | `adapt.{graphs,populations,g1,g2,g3,g4,buf_*_hwm}` | `NewAdaptationSystem` | Adaptation processing; expensive strings on snapshot cadence | `Init` | Generic only |
 | Genetic | `eye.ga.{generation,best,avg,pending,outcomes,tracked,typefit}`, `eye.buf_ga_*_hwm` | `NewGeneticSystem` | GA processing; formatted type fitness on snapshot cadence | `Init` | Generic only |
 | Audio | `audio.{backend,silent,played,dropped,mask,effect_muted,music_muted,rej_*}` | `NewAudioSystem` | Session deltas from backend/update | `Init` with backend baselines | `audio.mask` is read by the status bar; remainder generic |
-| Music | `music.{group,tier,bpm,rhythm,melody,fill}` | `NewMusicSystem` | `MusicSystem.Update` from the sequencer readout | Next update | Debug HUD card; generic |
+| Music | `music.{group,tier,bpm,rhythm,melody,fill}` | `NewMusicSystem` | `MusicSystem.Update` from the sequencer readout | Next update | Telemetry HUD card; generic |
 | Music | None | — | — | — | — |
 | Meta | `context.{map_w,map_h,camera_x,camera_y}`, `player.<slot>.{x,y}`, `kills.{<species>,total,uncredited}`, `session.all_defeated` | `NewMetaSystem` | Debug/map publication, lifecycle fold and resolved species-kill handler | `Init` | Kill keys and `session.all_defeated` are FSM guards; remainder generic |
 | Network | `network.{crossings_sent,crossings_received,state_applied,frames_dropped,barrier_deferred,barrier_applied_local,barrier_applied_peer,barrier_late,barrier_ran_without_peer,barrier_peer_lag_ticks,barrier_peer_artifacts,barrier_peer_applied,peers,connected,state,map_latched,artifacts_pre_install,artifacts_refused,corrections_received,join_lag_ticks,lag_ticks,stale,digest_mismatches,drift_part,drift_tick}`, `context.map_locked` | `NewNetworkSystem` | Transport polling, playout admission, cursor sync, connection state and the running staleness measurement | `Init` | Status bar reads peer/state/latch, `stale`/`lag_ticks` and the `link_rtt_us`/`link_loss_pct` pair; remainder generic |
@@ -90,7 +90,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Unreset metrics | `drain.{spawned,fusions,despawned,spawn_failures}`, all `eye.ga.*`, `nav.{entities,recomputes,roi_cells}`, `storm.nudge_count`, audio backend totals, scheduler session totals | Written values survived `EventGameResetRequest` | All session counters/strings now reset in `Init` or the scheduler reset path; audio publishes deltas from reset baselines |
 | Misleading gauge | `drain.count` | Used `Drain.CountEntities()`, including entities with death already queued; pause forced a false zero | Publishes only live, non-dying drains and preserves the live gauge while paused |
 | Misleading counters | `dust.created`, `swarm.player_kills`, `combat.hits_*`, audio totals | Dust counted dark entries it skipped; swarm counted every HP death as a player kill; combat counted pre-resolution; audio exposed backend-lifetime totals | Counts now follow actual creation, resolved cursor credit, state-changing attacks, and session deltas |
-| Consumerless by key | Most diagnostic counters, including all newly added coverage | No exact-key lookup outside the producer | Deliberately retained: the debug overlay, pinned cards, snapshots, recorder, and `vif-log` enumerate the registry generically |
+| Consumerless by key | Most diagnostic counters, including all newly added coverage | No exact-key lookup outside the producer | Deliberately retained: the telemetry overlay, pinned cards, snapshots, recorder, and `vif-log` enumerate the registry generically |
 | Removed/renamed keys | `death.one_packed`, `death.one_fallback` | Baseline registry had 488 keys; the Phase 1 result had 752 | Death API unification retired the two obsolete one-entity path counters; the current registry has 750 keys, a net 262 additions |
 
 ## Deliberately unchanged or excluded

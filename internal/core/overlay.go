@@ -4,7 +4,7 @@ package core
 type OverlayLayout uint8
 
 const (
-	OverlayLayoutCards OverlayLayout = iota // Masonry cards (debug)
+	OverlayLayoutCards OverlayLayout = iota // Masonry cards (telemetry)
 	OverlayLayoutDoc                        // Single-column sections (help)
 	OverlayLayoutAbout                      // Logo and info panel
 )

@@ -196,7 +196,7 @@ records is a list that goes stale.
 | `recorder depth changed` | INFO | `ticks` | `:log rec N` |
 | `recorder flush` | INFO | `reason`, `t0`, `ticks`, `records`, `us` | recorder, when the session log absorbed the flush |
 | `recorder flush failed` | ERROR | `reason`, `error` | recorder |
-| `snapshot saved` | INFO | `path` | `:d save` |
+| `snapshot saved` | INFO | `path` | `:t save` |
 | `network session active` | INFO | `local`, `slot`, `coordinator`, `barrier_delay_ticks`, `peers` | this instance's one statement of who it is |
 | `playout lead adopted` | INFO | `ticks`, `tick` | a change of this instance's own lead, at the tick its journaled event dispatched |
 | `participant evicted as too slow` | WARN | `participant`, `late_per_s`, `bytes_per_s`, `window` | the authority's slow policy (multi-player.md §3.5) |
@@ -431,7 +431,7 @@ different numbers and both names are accurate; only reading one for the other is
 wrong.
 
 The bounded roster still registers every slot before `Freeze`, but inactive
-slots do not produce periodic snapshot records or debug cards. The flight
+slots do not produce periodic snapshot records or telemetry cards. The flight
 recorder emits a player's groups when that slot was active anywhere in the
 flushed history window. Bare single-player keys such as `energy.current` mirror
 slot 0 temporarily for configuration compatibility.
@@ -450,16 +450,18 @@ owners of the convention:
 | `_ms` | milliseconds |
 | anything else | plain count |
 
-Display consumers — the debug overlay, the status bar, log viewers — resolve
+Display consumers — the telemetry overlay, the status bar, log viewers — resolve
 through `FormatInt`. The log stores the raw integer. Where a value has to fit a
 column rather than a line, `FormatCount` gives it a thousandfold suffix and
 `FormatLatency` picks the time unit; both are display only.
 
-The debug overlay scrolls through the full height of a clipped selected card
-before `j`/`k` moves to its neighbour. Its pinned-card HUD is anchored at the
-top-left, wraps whole cards into additional columns, and reports any groups it
-cannot fit in a one-line `hidden` notice. HUD width expands immediately but
-contracts only after a stable narrow interval, preventing value-width jitter.
+The telemetry overlay (`:t`) shows one card per visible group. `/` filters the
+cards by group or metric name, and `j`/`k` scrolls through the full height of a
+clipped selected card before moving to its neighbour. Space pins a card; a new
+pin turns on the HUD (`:hud`), which is anchored at the top-left, wraps whole
+cards into additional columns, and reports any groups it cannot fit in a
+one-line `hidden` notice. HUD width expands immediately but contracts only after
+a stable narrow interval, preventing value-width jitter.
 
 ### Freeze
 
@@ -513,10 +515,10 @@ disables periodic emission entirely without affecting the recorder.
 
 ## 7. On-demand snapshot
 
-`:d save` writes a standalone file `vif-snap-<timestamp>.jsonl` through a
-second logger instance, independent of the session logger's state, level, and
-scopes. Command mode holds the world lock and the pause, so the values are a
-single coherent tick.
+`:t save` writes a standalone file `vif-snap-<timestamp>.jsonl` into the log
+directory through a second logger instance, independent of the session logger's
+state, level, and scopes. The records are captured while command mode holds the
+world lock, so the values are one coherent tick, and stamped with that tick.
 
 The file contains the full registry snapshot plus four records that have no
 registry mirror, emitted by `GameContext.SnapshotContext`:
@@ -529,10 +531,10 @@ registry mirror, emitted by `GameContext.SnapshotContext`:
 | `session` | frame, pause, macro recording/playback, mouse preferences, and auto-fire |
 
 `session` is operator-owned and omitted by `App.SnapshotSimulation`; the full
-snapshot keeps it for `:d save` and perturbation diagnostics.
+snapshot keeps it for `:t save` and perturbation diagnostics.
 
-The call is blocking: it opens, fills, drains, and closes before returning.
-This is an operator cost, acceptable at a command prompt and nowhere else.
+The file is written off the lock on its own goroutine, so a live session's tick
+never waits on disk; the status bar reports the path once the drain completes.
 
 ## 8. Flight recorder
 
@@ -850,7 +852,7 @@ use their independently configured journal directory.
 | `:log rec <ticks>` | Set the recorder depth; discards history |
 | `:log rec flush` | Request a window flush on the next tick |
 | `:log rec fsm [on\|off]` | Toggle the FSM transition trigger |
-| `:d save` | Write a standalone snapshot (§7) |
+| `:t save` | Write a standalone snapshot (§7) |
 | `:content` | Corpus telemetry in the status bar |
 
 `:log` reports `log <path> | level <L> | scope <S> | stat <N> | rec <M>`.

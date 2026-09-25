@@ -133,7 +133,7 @@ func runScript(t *testing.T, a *App) int {
 	return r.done()
 }
 
-// runOverlayScript drives the debug overlay through command mode and closes it.
+// runOverlayScript drives the telemetry overlay through command mode and closes it.
 // Every mode change and pause change on this path is an event; the overlay's own
 // state (content, scroll, selection, pins) is view state and appears in no snapshot.
 func runOverlayScript(t *testing.T, a *App) int {
@@ -141,12 +141,12 @@ func runOverlayScript(t *testing.T, a *App) int {
 	r := newScriptRunner(t, a)
 
 	r.step(1, intentModeSwitch(input.ModeTargetCommand))
-	r.step(1, intentCommandBody("d")...) // EventMetaDebugRequest, RequestMode(Overlay), pause
+	r.step(1, intentCommandBody("t")...) // EventMetaTelemetryRequest, RequestMode(Overlay), pause
 	if a.Context().GetMode() != core.ModeOverlay {
-		t.Fatalf("mode %d after :d, want overlay", a.Context().GetMode())
+		t.Fatalf("mode %d after :t, want overlay", a.Context().GetMode())
 	}
 	if !a.Context().IsOverlayActive() {
-		t.Fatal(":d built no overlay content")
+		t.Fatal(":t built no overlay content")
 	}
 	r.step(1, intentOverlayClose())
 	if a.Context().GetMode() != core.ModeNormal {
@@ -428,7 +428,7 @@ func TestSnapshotSimulationExcludesSession(t *testing.T) {
 		t.Fatalf("session state reached the simulation view at line %d:\n  before %s\n  after  %s", i, x, y)
 	}
 	if _, _, _, ok := snapshot.FirstDiff(wantFull, a.Snapshot()); !ok {
-		t.Fatal("full snapshot ignored a session change: :d save no longer reports operator state")
+		t.Fatal("full snapshot ignored a session change: :t save no longer reports operator state")
 	}
 }
 

@@ -594,9 +594,9 @@ critical section.
 
 `App.handleIntent` runs command mode under the world lock, so a command that
 performs I/O stalls the tick, the event loop and rendering for its duration.
-`:log on` opens the session file. `:d save` opens a second logger, fills it,
-drains it and closes it, bounded by a 3 s drain timeout; it is therefore refused
-while a live session has peers because that hold can exceed the playout lead.
+`:log on` opens the session file. `:t save` only captures its records under the
+lock; a second logger drains them to disk on its own goroutine, bounded by a 3 s
+drain timeout, so it is available in a live session too.
 Both are deliberate operator costs and neither is reachable from gameplay
 input. `:log off` and `:log rec flush` are explicitly not in this class — the
 first detaches the sink and drains on another goroutine, the second only sets a
@@ -709,12 +709,12 @@ being driven or observed and survives plain `:new`. Its explicit contract is:
 
 - free-mouse and auto-fire preferences;
 - the current time scale;
-- debug HUD visibility and pinned overlay cards.
+- telemetry HUD visibility and pinned overlay cards.
 
 Both `:new` and `:new!` clear recorded/playing macros, close overlays, return to
 Normal mode, and clear command/search/status text. `:new!` additionally purges
 the initiating instance's operator contract: free mouse and auto-fire become
-off, speed returns to 1x, and the debug HUD/pins are cleared. A peer receiving
+off, speed returns to 1x, and the telemetry HUD/pins are cleared. A peer receiving
 the crossed reset retains its own operator state. Logging target, level, scope,
 snapshot period, and recorder depth are process diagnostics and are never part
 of this purge.
