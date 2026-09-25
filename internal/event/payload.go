@@ -384,10 +384,10 @@ type ShieldDrainRequestPayload struct {
 // WeaponAddRequestPayload adds a weapon to cursor
 type WeaponAddRequestPayload struct {
 	Entity core.Entity          `toml:"entity"`
-	Weapon component.WeaponType `toml:"weapon"` // 0=rod, 1=launcher, 2=spray
+	Weapon component.WeaponType `toml:"weapon"`
 }
 
-// WeaponFireRequestPayload adds a weapon to cursor
+// WeaponFireRequestPayload names the cursor firing main and its ready loadout
 type WeaponFireRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
 }

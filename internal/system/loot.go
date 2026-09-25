@@ -584,7 +584,7 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 		// Max-charge check, repeats drops until this cursor is capped
 		wt := profile.Reward.WeaponType
 		weapons, ok := s.world.Components.Weapon.GetComponent(cursor)
-		return ok && weapons.Charges[wt] >= parameter.WeaponMaxCharges[wt]
+		return ok && weapons.Charges[wt] >= component.WeaponSpecs[wt].MaxCharges
 	}
 
 	var results []DropResult
@@ -700,7 +700,7 @@ func (s *LootSystem) allPlayersCapped(weaponType component.WeaponType) bool {
 		}
 		players++
 		weapons, ok := s.world.Components.Weapon.GetComponent(cursor)
-		if !ok || weapons.Charges[weaponType] < parameter.WeaponMaxCharges[weaponType] {
+		if !ok || weapons.Charges[weaponType] < component.WeaponSpecs[weaponType].MaxCharges {
 			return false
 		}
 	}

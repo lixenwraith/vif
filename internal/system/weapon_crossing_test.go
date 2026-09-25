@@ -47,8 +47,8 @@ func TestDisruptorCrossesGeometry(t *testing.T) {
 	orbs[component.WeaponDisruptor] = orb
 
 	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
-	cursorPos, _ := w.Positions.GetPosition(cursor)
-	weapon.fireDisruptorWeapon(cursor, cursorPos, weaponComp, orbs)
+	weaponComp.Charges[component.WeaponDisruptor] = 1
+	weapon.fireAllWeapons(cursor, weaponComp, orbs)
 
 	events := w.Resources.Event.Queue.Consume()
 	if len(events) != 3 {

@@ -33,19 +33,16 @@ type WeaponSystem struct {
 	orbs    [parameter.MaxPlayers]orbSlots
 	reapBuf []core.Entity
 
-	// Per-cursor loadout
-	statRod       *status.PlayerBool
-	statLauncher  *status.PlayerBool
-	statDisruptor *status.PlayerBool
-	statOrbs      *status.PlayerInt
+	// Per-cursor loadout, by weapon kind
+	statHeld [component.WeaponCount]*status.PlayerBool
+	statOrbs *status.PlayerInt
 
 	// Roster-wide fire counters
-	statMainFired      *atomic.Int64
-	statRodFired       *atomic.Int64
-	statLauncherFired  *atomic.Int64
-	statDisruptorFired *atomic.Int64
-	statOrbsReaped     *atomic.Int64
-	rejects            rejectionTelemetry
+	statMainFired  *atomic.Int64
+	statFired      [component.WeaponCount]*atomic.Int64
+	statOrbsReaped *atomic.Int64
+	statKind       *atomic.Int64
+	rejects        rejectionTelemetry
 
 	enabled bool
 }
@@ -55,15 +52,14 @@ func NewWeaponSystem(world *engine.World) engine.System {
 	s := &WeaponSystem{world: world}
 
 	reg := world.Resources.Status
-	s.statRod = status.NewPlayerBool(reg, parameter.MaxPlayers, "weapon.rod", "weapon.rod")
-	s.statLauncher = status.NewPlayerBool(reg, parameter.MaxPlayers, "weapon.launcher", "weapon.launcher")
-	s.statDisruptor = status.NewPlayerBool(reg, parameter.MaxPlayers, "weapon.disruptor", "weapon.disruptor")
+	for wt, spec := range component.WeaponSpecs {
+		key := "weapon." + spec.Name
+		s.statHeld[wt] = status.NewPlayerBool(reg, parameter.MaxPlayers, key, key)
+		s.statFired[wt] = reg.Ints.Get(key + "_fired")
+	}
 	s.statOrbs = status.NewPlayerInt(reg, parameter.MaxPlayers, "weapon.orbs", "weapon.orbs")
-
 	s.statMainFired = reg.Ints.Get("weapon.main_fired")
-	s.statRodFired = reg.Ints.Get("weapon.rod_fired")
-	s.statLauncherFired = reg.Ints.Get("weapon.launcher_fired")
-	s.statDisruptorFired = reg.Ints.Get("weapon.disruptor_fired")
+	s.statKind = reg.Ints.Get("weapon.kind_rejects")
 	// An orb the store held and no loadout justified. Zero is the ordinary reading:
 	// a rising count is a lifecycle the index no longer agrees with, which is the
 	// gauge the per-slot weapon.orbs cell could not offer while it counted
@@ -80,15 +76,14 @@ func (s *WeaponSystem) Init() {
 	s.destroyAllOrbs()
 	s.orbs = [parameter.MaxPlayers]orbSlots{}
 	s.reapBuf = s.reapBuf[:0]
-	s.statRod.Reset()
-	s.statLauncher.Reset()
-	s.statDisruptor.Reset()
+	for wt := range component.WeaponCount {
+		s.statHeld[wt].Reset()
+		s.statFired[wt].Store(0)
+	}
 	s.statOrbs.Reset()
 	s.statMainFired.Store(0)
-	s.statRodFired.Store(0)
-	s.statLauncherFired.Store(0)
-	s.statDisruptorFired.Store(0)
 	s.statOrbsReaped.Store(0)
+	s.statKind.Store(0)
 	s.rejects.Reset()
 	s.enabled = true
 }
@@ -155,6 +150,10 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventWeaponAddRequest:
 		if payload, ok := ev.Payload.(*event.WeaponAddRequestPayload); ok {
+			if payload.Weapon < 0 || payload.Weapon >= component.WeaponCount {
+				s.statKind.Add(1)
+				return
+			}
 			cursor := s.world.ResolveOwnedCursor(payload.Entity)
 			if cursor == 0 {
 				s.rejects.cursor.Add(1)
@@ -230,7 +229,7 @@ func (s *WeaponSystem) addWeapon(cursor core.Entity, weapon component.WeaponType
 	}
 
 	firstAcquire := weaponComp.Charges[weapon] == 0
-	if maxCharge := parameter.WeaponMaxCharges[weapon]; weaponComp.Charges[weapon] < maxCharge {
+	if weaponComp.Charges[weapon] < component.WeaponSpecs[weapon].MaxCharges {
 		weaponComp.Charges[weapon]++
 	}
 
@@ -661,144 +660,121 @@ func (s *WeaponSystem) handleFireMain(cursor core.Entity) {
 	s.fireAllWeapons(cursor, weaponComp, s.orbsOf(cursor))
 }
 
-// fireAllWeapons discharges every ready weapon in one cursor's loadout
+// fireAllWeapons discharges every ready weapon in one cursor's loadout, each from its orb
 func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.WeaponComponent, orbs orbSlots) {
 	cursorPos, ok := s.world.CursorCell(cursor)
 	if !ok {
 		return
 	}
 
-	// Resolve targets once for all weapons
-	fromX, fromY := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.CenterF()
-
-	// Single shared fetch for Rod+Launcher, sized to whichever needs more targets this tick
-	// collapses two Combat/Member store scans+sorts into one per fire cycle
-	rodCharges := weaponComp.Charges[component.WeaponRod]
-	rodReady := rodCharges > 0 && weaponComp.Cooldown[component.WeaponRod] <= 0
-
-	launcherCharges := weaponComp.Charges[component.WeaponLauncher]
-	launcherReady := launcherCharges > 0 && weaponComp.Cooldown[component.WeaponLauncher] <= 0
-
-	var sharedAssignments []TargetAssignment
-	if rodReady || launcherReady {
-		maxNeeded := 0
-		if rodReady {
-			maxNeeded = rodCharges
+	// Aimed weapons share one nearest-target query from the cursor, sized to the
+	// largest ready loadout, so a fire cycle scans and sorts the stores once.
+	need := 0
+	for wt, charges := range weaponComp.Charges {
+		if charges > 0 && weaponComp.Cooldown[wt] <= 0 && component.WeaponSpecs[wt].Delivery.Aimed() {
+			need = max(need, charges)
 		}
-		if launcherReady && launcherCharges > maxNeeded {
-			maxNeeded = launcherCharges
-		}
-		sharedAssignments = FindNearestTargets(s.world, fromX, fromY, maxNeeded, engine.ScopeBoth, cursor)
+	}
+	var nearest []TargetAssignment
+	if need > 0 {
+		fromX, fromY := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.CenterF()
+		nearest = FindNearestTargets(s.world, fromX, fromY, need, engine.ScopeBoth, cursor)
 	}
 
-	for wt := range weaponComp.Charges {
-		charges := weaponComp.Charges[wt]
+	for wt, charges := range weaponComp.Charges {
 		if charges <= 0 || weaponComp.Cooldown[wt] > 0 {
 			continue
 		}
+		spec := &component.WeaponSpecs[wt]
+		x, y := s.emitterCell(orbs[wt], cursorPos)
+		assignments := nearest[:min(len(nearest), charges)]
 
-		switch component.WeaponType(wt) {
-		case component.WeaponRod:
-			// Slice shared result instead of independent fetch
-			assignments := sharedAssignments
-			if len(assignments) > charges {
-				assignments = assignments[:charges]
-			}
-			if len(assignments) == 0 {
-				continue
-			}
-
-			weaponComp.Cooldown[wt] = parameter.WeaponCooldownRod
-			s.statRodFired.Add(1)
-			s.triggerOrbFlash(orbs[wt])
-			originX, originY := s.emitterCell(orbs[wt], cursorPos)
-
-			// Rod fires at unique targets only - assignments may repeat under overflow
-			seen := make(map[core.Entity]bool, len(assignments))
-			for _, a := range assignments {
-				if seen[a.Target] {
-					continue
-				}
-				seen[a.Target] = true
-
-				// Resolved by the target, not by the firing cursor's domain (D-10).
-				s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
-					AttackType:   component.CombatAttackLightning,
-					OwnerEntity:  cursor,
-					OriginEntity: cursor,
-					TargetEntity: a.Target,
-					HitEntity:    a.Hit,
-					HasOrigin:    true,
-					OriginX:      originX,
-					OriginY:      originY,
-				}, a.Target.Domain())
-			}
-
-		case component.WeaponLauncher:
-			assignments := sharedAssignments
-			if len(assignments) > charges {
-				assignments = assignments[:charges]
-			}
-			if len(assignments) == 0 {
-				continue
-			}
-
-			weaponComp.Cooldown[wt] = parameter.WeaponCooldownLauncher
-			s.statLauncherFired.Add(1)
-			s.triggerOrbFlash(orbs[wt])
-			originX, originY := s.emitterCell(orbs[wt], cursorPos)
-
-			targets := make([]core.Entity, len(assignments))
-			hits := make([]core.Entity, len(assignments))
-			for i, a := range assignments {
-				targets[i] = a.Target
-				hits[i] = a.Hit
-			}
-
-			s.world.PushLocal(event.EventMissileSpawnRequest, &event.MissileSpawnRequestPayload{
-				OwnerEntity: cursor,
-				OriginX:     originX,
-				OriginY:     originY,
-				Count:       charges,
-				Targets:     targets,
-				HitEntities: hits,
-			})
-
-		case component.WeaponDisruptor:
-			s.fireDisruptorWeapon(cursor, cursorPos, weaponComp, orbs)
+		var fired bool
+		switch spec.Delivery {
+		case component.DeliveryLightning:
+			fired = s.fireLightning(cursor, x, y, spec.Attack, assignments)
+		case component.DeliveryMissile:
+			fired = s.fireMissiles(cursor, x, y, charges, assignments)
+		case component.DeliveryPulse:
+			fired = s.firePulse(cursor, x, y, spec.Attack)
 		}
+		if !fired {
+			continue
+		}
+		weaponComp.Cooldown[wt] = spec.Cooldown
+		s.statFired[wt].Add(1)
+		s.triggerOrbFlash(orbs[wt])
 	}
 }
 
-// fireDisruptorWeapon discharges one cursor's area pulse, centred on its orb
-func (s *WeaponSystem) fireDisruptorWeapon(cursor core.Entity, cursorPos component.PositionComponent, weaponComp *component.WeaponComponent, orbs orbSlots) {
-	orb := orbs[component.WeaponDisruptor]
-	x, y := s.emitterCell(orb, cursorPos)
+// fireLightning strikes each unique assigned target from the emitter cell;
+// assignments repeat under overflow, a bolt does not
+func (s *WeaponSystem) fireLightning(cursor core.Entity, x, y int, attack component.CombatAttackType, assignments []TargetAssignment) bool {
+	for i, a := range assignments {
+		if slices.ContainsFunc(assignments[:i], func(b TargetAssignment) bool { return b.Target == a.Target }) {
+			continue
+		}
+		// Resolved by the target, not by the firing cursor's domain (D-10).
+		s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+			AttackType:   attack,
+			OwnerEntity:  cursor,
+			OriginEntity: cursor,
+			TargetEntity: a.Target,
+			HitEntity:    a.Hit,
+			HasOrigin:    true,
+			OriginX:      x,
+			OriginY:      y,
+		}, a.Target.Domain())
+	}
+	return len(assignments) > 0
+}
+
+// fireMissiles launches one missile per charge from the emitter cell at the assigned targets
+func (s *WeaponSystem) fireMissiles(cursor core.Entity, x, y, count int, assignments []TargetAssignment) bool {
+	if len(assignments) == 0 {
+		return false
+	}
+	targets := make([]core.Entity, len(assignments))
+	hits := make([]core.Entity, len(assignments))
+	for i, a := range assignments {
+		targets[i] = a.Target
+		hits[i] = a.Hit
+	}
+	s.world.PushLocal(event.EventMissileSpawnRequest, &event.MissileSpawnRequestPayload{
+		OwnerEntity: cursor,
+		OriginX:     x,
+		OriginY:     y,
+		Count:       count,
+		Targets:     targets,
+		HitEntities: hits,
+	})
+	return true
+}
+
+// firePulse bursts at the emitter cell when a target is inside the ellipse
+func (s *WeaponSystem) firePulse(cursor core.Entity, x, y int, attack component.CombatAttackType) bool {
 	targets := FindTargetsInEllipse(s.world, x, y, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq, engine.ScopeBoth, cursor)
 	if len(targets) == 0 {
-		return
+		return false
 	}
-
-	weaponComp.Cooldown[component.WeaponDisruptor] = parameter.WeaponCooldownDisruptor
-	s.statDisruptorFired.Add(1)
-	s.triggerOrbFlash(orb)
 
 	// Resolve player targets here; shared targets are re-derived from the crossing geometry.
 	var pulse blastArea
 	pulse.resetOne(x, y, parameter.PulseRadiusX)
-	strikePlayerTargets(s.world, cursor, &pulse, component.CombatAttackPulse)
+	strikePlayerTargets(s.world, cursor, &pulse, attack)
 	s.world.PushCrossing(event.EventExplosionRequest, &event.ExplosionRequestPayload{
 		Entity: cursor,
 		X:      x,
 		Y:      y,
 		Radius: parameter.PulseRadiusX,
-		Attack: component.CombatAttackPulse,
+		Attack: attack,
 	})
 
 	energy, ok := s.world.Components.Energy.GetPtr(cursor)
 	s.world.PushLocal(event.EventPulseVisualRequest, &event.PulseVisualRequestPayload{
 		X: x, Y: y, Negative: ok && energy.Current < 0,
 	})
+	return true
 }
 
 // publishLoadout mirrors one cursor's owned weapons into its roster slot
@@ -807,9 +783,9 @@ func (s *WeaponSystem) publishLoadout(cursor core.Entity, weaponComp *component.
 	if !ok {
 		return
 	}
-	s.statRod.Store(slot, weaponComp.Charges[component.WeaponRod] > 0)
-	s.statLauncher.Store(slot, weaponComp.Charges[component.WeaponLauncher] > 0)
-	s.statDisruptor.Store(slot, weaponComp.Charges[component.WeaponDisruptor] > 0)
+	for wt, charges := range weaponComp.Charges {
+		s.statHeld[wt].Store(slot, charges > 0)
+	}
 }
 
 // publishSlots mirrors every rostered cursor's loadout, a peer's included. Orb
@@ -819,19 +795,22 @@ func (s *WeaponSystem) publishSlots() {
 	eachRosterSlot(s.world, func(slot uint8, cursor core.Entity) {
 		weapon, ok := s.world.Components.Weapon.GetPtr(cursor)
 		if !ok {
-			s.statRod.Store(slot, false)
-			s.statLauncher.Store(slot, false)
-			s.statDisruptor.Store(slot, false)
+			s.clearLoadout(slot)
 			return
 		}
 		s.publishLoadout(cursor, weapon)
 	})
 }
 
+// clearLoadout zeroes one slot's held-weapon cells
+func (s *WeaponSystem) clearLoadout(slot uint8) {
+	for wt := range component.WeaponCount {
+		s.statHeld[wt].Store(slot, false)
+	}
+}
+
 // clearSlot zeroes a retired slot's cells
 func (s *WeaponSystem) clearSlot(slot uint8) {
-	s.statRod.Store(slot, false)
-	s.statLauncher.Store(slot, false)
-	s.statDisruptor.Store(slot, false)
+	s.clearLoadout(slot)
 	s.statOrbs.Store(slot, 0)
 }

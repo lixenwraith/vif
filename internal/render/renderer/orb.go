@@ -77,7 +77,7 @@ func (r *OrbRenderer) chargeGlyph(orb *component.OrbComponent) rune {
 		return r.fullChar
 	}
 	charges := weaponComp.Charges[orb.WeaponType]
-	if charges <= 0 || charges >= parameter.WeaponMaxCharges[orb.WeaponType] {
+	if charges <= 0 || charges >= component.WeaponSpecs[orb.WeaponType].MaxCharges {
 		return r.fullChar
 	}
 	return rune('0' + charges)
@@ -90,14 +90,14 @@ func (r *OrbRenderer) renderOrb256(ctx render.RenderContext, buf *render.RenderB
 	if orb.FlashRemaining > 0 {
 		c = visual.RgbOrbFlash
 	} else {
-		c = r.baseColor(orb.WeaponType)
+		c = orbPalette[orb.WeaponType].base
 	}
 	buf.SetFgOnly(screenX, screenY, glyph, c, terminal.AttrNone)
 }
 
 // renderOrbTrueColor draws corona glow with optional flash burst
 func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, mapX, mapY int, orb *component.OrbComponent, glyph rune) {
-	baseColor := r.baseColor(orb.WeaponType)
+	baseColor := orbPalette[orb.WeaponType].base
 
 	if orb.FlashRemaining > 0 {
 		progress := orb.FlashRemaining.Seconds() / parameter.OrbFlashDuration.Seconds()
@@ -110,7 +110,7 @@ func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.R
 		gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
 		angle = float64(gameTimeMs%parameter.OrbCoronaPeriodMs) / float64(parameter.OrbCoronaPeriodMs) * vmath.TwoPi
 	}
-	r.renderCorona(ctx, buf, mapX, mapY, r.coronaColor(orb.WeaponType), vmath.CosF(angle), vmath.SinF(angle))
+	r.renderCorona(ctx, buf, mapX, mapY, orbPalette[orb.WeaponType].corona, vmath.CosF(angle), vmath.SinF(angle))
 
 	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 	if visible {
@@ -210,30 +210,9 @@ func (r *OrbRenderer) renderBurst(ctx render.RenderContext, buf *render.RenderBu
 	}
 }
 
-// baseColor returns sigil color for weapon type
-func (r *OrbRenderer) baseColor(wt component.WeaponType) color.RGB {
-	switch wt {
-	case component.WeaponRod:
-		return visual.RgbOrbRod
-	case component.WeaponLauncher:
-		return visual.RgbOrbLauncher
-	case component.WeaponDisruptor:
-		return visual.RgbOrbDisruptor
-	default:
-		return visual.RgbOrbFlash
-	}
-}
-
-// coronaColor returns glow color for weapon type
-func (r *OrbRenderer) coronaColor(wt component.WeaponType) color.RGB {
-	switch wt {
-	case component.WeaponRod:
-		return visual.RgbOrbCoronaRod
-	case component.WeaponLauncher:
-		return visual.RgbOrbCoronaLauncher
-	case component.WeaponDisruptor:
-		return visual.RgbOrbCoronaDisruptor
-	default:
-		return visual.RgbOrbFlash
-	}
+// orbPalette is each weapon kind's sigil and corona color
+var orbPalette = [component.WeaponCount]struct{ base, corona color.RGB }{
+	component.WeaponRod:       {visual.RgbOrbRod, visual.RgbOrbCoronaRod},
+	component.WeaponLauncher:  {visual.RgbOrbLauncher, visual.RgbOrbCoronaLauncher},
+	component.WeaponDisruptor: {visual.RgbOrbDisruptor, visual.RgbOrbCoronaDisruptor},
 }

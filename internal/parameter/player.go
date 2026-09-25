@@ -61,16 +61,12 @@ const (
 	WeaponCooldownDisruptor = 2000 * time.Millisecond
 )
 
-// Weapon Max Charges — component owns Charges storage, parameter owns the cap table
-// (component already imports parameter; parameter importing component would cycle)
-// Indexed by component.WeaponType ordinal: Rod=0, Launcher=1, Disruptor=2
+// Weapon Max Charges, read through component.WeaponSpecs
 const (
 	WeaponMaxChargeRod       = 10
 	WeaponMaxChargeLauncher  = 10
 	WeaponMaxChargeDisruptor = 1
 )
-
-var WeaponMaxCharges = [3]int{WeaponMaxChargeRod, WeaponMaxChargeLauncher, WeaponMaxChargeDisruptor}
 
 // Weapon Orb Configuration
 const (
