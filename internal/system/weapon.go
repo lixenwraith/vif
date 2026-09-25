@@ -702,6 +702,8 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 			fired = s.firePulse(cursor, x, y, spec.Attack)
 		case component.DeliveryBullet:
 			fired = s.fireBullets(cursor, x, y, spec.Attack, assignments)
+		case component.DeliveryBeam:
+			fired = s.fireBeams(cursor, x, y, spec.Attack, assignments)
 		}
 		if !fired {
 			continue
@@ -805,12 +807,58 @@ func (s *WeaponSystem) firePulse(cursor core.Entity, x, y int, attack component.
 		Attack: attack,
 	})
 
-	palette := component.PalettePositive
-	if energy, ok := s.world.Components.Energy.GetPtr(cursor); ok && energy.Current < 0 {
-		palette = component.PaletteNegative
-	}
-	s.world.PushLocal(event.EventPulseVisualRequest, &event.PulseVisualRequestPayload{X: x, Y: y, Palette: palette})
+	s.world.PushLocal(event.EventPulseVisualRequest, &event.PulseVisualRequestPayload{X: x, Y: y, Palette: s.palette(cursor)})
 	return true
+}
+
+// fireBeams lays one beam from the emitter cell toward each assigned target, once per
+// direction. Each target group inside a band takes one area hit: a drain's is local,
+// a Shared target's crosses as its member set and the owner cursor (D-3).
+func (s *WeaponSystem) fireBeams(cursor core.Entity, x, y int, attack component.CombatAttackType, assignments []TargetAssignment) bool {
+	var laid [3][3]bool
+	fired := false
+	for _, a := range assignments {
+		pos, ok := s.world.Positions.GetPosition(a.Hit)
+		if !ok {
+			continue
+		}
+		dx, dy := vmath.Octant(float64(pos.X-x), float64(pos.Y-y))
+		if (dx == 0 && dy == 0) || laid[dx+1][dy+1] {
+			continue
+		}
+		laid[dx+1][dy+1] = true
+		band := traceBeam(s.world, x, y, dx, dy, parameter.BeamMaxLength, parameter.BeamWidth)
+		for _, g := range FindTargetsIn(s.world, band.Contains, engine.ScopeBoth, cursor) {
+			hit := &event.CombatAttackAreaRequestPayload{
+				AttackType:   attack,
+				OwnerEntity:  cursor,
+				OriginEntity: cursor,
+				TargetEntity: g.Target,
+				HitEntities:  g.Members,
+				HasOrigin:    true,
+				OriginX:      x,
+				OriginY:      y,
+			}
+			if g.Target.Domain() == core.DomainShared {
+				s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, hit)
+			} else {
+				s.world.PushLocal(event.EventCombatAttackAreaRequest, hit)
+			}
+		}
+		s.world.PushLocal(event.EventBeamVisualRequest, &event.BeamVisualRequestPayload{
+			Band: band, Firing: parameter.BeamFlash, Palette: s.palette(cursor),
+		})
+		fired = true
+	}
+	return fired
+}
+
+// palette is the colour a cursor's discharge draws in, by its energy polarity
+func (s *WeaponSystem) palette(cursor core.Entity) component.WeaponPalette {
+	if energy, ok := s.world.Components.Energy.GetPtr(cursor); ok && energy.Current < 0 {
+		return component.PaletteNegative
+	}
+	return component.PalettePositive
 }
 
 // publishLoadout mirrors one cursor's owned weapons into its roster slot

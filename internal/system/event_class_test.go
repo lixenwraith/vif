@@ -50,6 +50,9 @@ var crossingPushes = map[string]string{
 	"dust:EventExplosionBatchRequest": "dust detonation; centers, radius, attack family and owner cross",
 	"weapon:EventExplosionRequest":    "disruptor pulse; center, ellipse radius, attack family and owner cross",
 
+	// A beam band's hit on a Shared target: its member set and owner cross, as a shield impact's do.
+	"weapon:EventCombatAttackAreaCrossingRequest": "beam band; each Shared target's member set and the owner cross",
+
 	// D-3 table, drain fusion: the spawn request carries the header cell only.
 	"fuse:EventQuasarSpawnRequest": "drain fusion; the quasar header cell crosses",
 	"fuse:EventSwarmSpawnRequest":  "drain fusion; the swarm header cell crosses",

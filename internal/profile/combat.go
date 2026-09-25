@@ -111,6 +111,7 @@ var (
 	missileProfiles      [component.CombatEntityCount]AttackProfile
 	pulseProfiles        [component.CombatEntityCount]AttackProfile
 	bulletProfiles       [component.CombatEntityCount]AttackProfile
+	beamProfiles         [component.CombatEntityCount]AttackProfile
 	selfDestructProfiles [component.CombatEntityCount]AttackProfile
 )
 
@@ -218,6 +219,18 @@ func init() {
 			DamageValue: parameter.CombatDamageBullet,
 		}
 		register(&bulletProfiles[d])
+	}
+
+	// Beam: area damage per member the band covers
+	for _, d := range cursorDefenders {
+		beamProfiles[d] = AttackProfile{
+			AttackType:  component.CombatAttackBeam,
+			Attacker:    component.CombatEntityCursor,
+			Defender:    d,
+			DamageType:  component.CombatDamageArea,
+			DamageValue: parameter.CombatDamageBeam,
+		}
+		register(&beamProfiles[d])
 	}
 
 	// Eye self-destruct: uniform across every target

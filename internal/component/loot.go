@@ -51,7 +51,7 @@ var DropTables = map[SpeciesType]SpeciesDropTable{
 	},
 	SpeciesSnake: {
 		Tiers: []DropTier{
-			{Unique: true, Entries: []DropEntry{{LootDisruptor, 1.0, 1, 2}}},
+			{Unique: true, Entries: []DropEntry{{LootDisruptor, 1.0, 1, 2}, {LootBeam, 1.0, 1, 0}}},
 			{Unique: false, Entries: []DropEntry{{LootEnergy, 1.0, 3, 0}}},
 		},
 	},
@@ -74,6 +74,7 @@ const (
 	LootHeat
 	LootEnergy
 	LootTurret
+	LootBeam
 	LootCount // Sentinel for array sizing
 )
 
@@ -137,6 +138,11 @@ var (
 		WeaponType: WeaponTurret,
 	}
 
+	rewardBeam = RewardProfile{
+		Type:       RewardWeapon,
+		WeaponType: WeaponBeam,
+	}
+
 	rewardHeat = RewardProfile{
 		Type:  RewardHeat,
 		Delta: parameter.LootHeatRewardValue,
@@ -156,4 +162,5 @@ var LootProfiles = [LootCount]LootProfile{
 	LootHeat:      {Reward: &rewardHeat},
 	LootEnergy:    {Reward: &rewardEnergy},
 	LootTurret:    {Reward: &rewardTurret},
+	LootBeam:      {Reward: &rewardBeam},
 }

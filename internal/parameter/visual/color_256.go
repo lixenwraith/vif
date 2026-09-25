@@ -72,6 +72,10 @@ const (
 	Pulse256Positive  = ConBrightYellow
 	Pulse256Negative  = ConBrightMagenta
 	Pulse256Hostile   = ConRed
+	Beam256Positive   = ConBrightYellow
+	Beam256Negative   = ConBrightMagenta
+	Beam256Hostile    = ConBrightRed
+	Beam256Warning    = ConRed // every palette's warning line: a warning reads as one colour
 	QuasarZap256Idle  = ConCyan
 	QuasarZap256Armed = ConRed
 	// Storm256Ring marks the near storm sphere, the one that can be hit

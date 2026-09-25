@@ -60,6 +60,7 @@ const (
 	WeaponCooldownLauncher  = 1000 * time.Millisecond
 	WeaponCooldownDisruptor = 2000 * time.Millisecond
 	WeaponCooldownTurret    = 500 * time.Millisecond
+	WeaponCooldownBeam      = 1500 * time.Millisecond
 )
 
 // Weapon Max Charges, read through component.WeaponSpecs
@@ -68,6 +69,7 @@ const (
 	WeaponMaxChargeLauncher  = 10
 	WeaponMaxChargeDisruptor = 1
 	WeaponMaxChargeTurret    = 5
+	WeaponMaxChargeBeam      = 3
 )
 
 // Weapon Orb Configuration

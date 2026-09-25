@@ -100,6 +100,16 @@ func strikeCursor(w *engine.World, cursor core.Entity, damage component.CursorDa
 	})
 }
 
+// strikeCursorsIn strikes every rostered cursor whose cell contains accepts, in roster order
+func strikeCursorsIn(w *engine.World, contains func(x, y int) bool, damage component.CursorDamage) {
+	for i := range parameter.MaxPlayers {
+		cursor := w.Resources.Player.Slot(uint8(i))
+		if pos, ok := w.Positions.GetPosition(cursor); ok && contains(pos.X, pos.Y) {
+			strikeCursor(w, cursor, damage)
+		}
+	}
+}
+
 // CheckCursorOverlaps queries every cursor that touches an entity or its shield.
 func CheckCursorOverlaps(w *engine.World, entity core.Entity) CursorOverlaps {
 	var result CursorOverlaps

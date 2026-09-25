@@ -124,3 +124,36 @@ func TestCalculateCentroidFMatchesInt(t *testing.T) {
 		t.Errorf("centroidF = (%v,%v), want (2,4)", x, y)
 	}
 }
+
+// TestBandCellsAreExactlyItsContents: the cells a band enumerates are the cells it
+// contains, solid on diagonals, so what draws a beam and what it hits agree.
+func TestBandCellsAreExactlyItsContents(t *testing.T) {
+	for _, dir := range Octants {
+		for half := range 3 {
+			b := Band{X: 20, Y: 20, DX: dir[0], DY: dir[1], Length: 6, Half: half}
+			cells := make(map[[2]int]bool)
+			for along := 1; along <= b.Length; along++ {
+				for across := -half; across <= half; across++ {
+					x, y := b.Cell(along, across)
+					cells[[2]int{x, y}] = true
+				}
+			}
+			for y := range 41 {
+				for x := range 41 {
+					if b.Contains(x, y) != cells[[2]int{x, y}] {
+						t.Fatalf("band %+v: cell (%d, %d) contained %v, enumerated %v", b, x, y, b.Contains(x, y), cells[[2]int{x, y}])
+					}
+				}
+			}
+			if len(cells) != b.Length*(2*half+1) {
+				t.Fatalf("band %+v enumerates %d cells, want %d", b, len(cells), b.Length*(2*half+1))
+			}
+		}
+	}
+	if dx, dy := Octant(10, 3); dx != 1 || dy != 0 {
+		t.Fatalf("Octant(10, 3) = (%d, %d), want east", dx, dy)
+	}
+	if dx, dy := Octant(-4, 5); dx != -1 || dy != 1 {
+		t.Fatalf("Octant(-4, 5) = (%d, %d), want south-west", dx, dy)
+	}
+}

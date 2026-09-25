@@ -1,6 +1,10 @@
 package component
 
-import "time"
+import (
+	"time"
+
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+)
 
 // MountTrigger decides when a mounted weapon fires
 type MountTrigger uint8
@@ -8,6 +12,15 @@ type MountTrigger uint8
 const (
 	MountAuto  MountTrigger = iota // whenever ready and a cursor is in range
 	MountArmed                     // only while its host holds Armed
+)
+
+// MountPhase is where a beam mount is in its warn, fire, rest cycle
+type MountPhase uint8
+
+const (
+	MountResting MountPhase = iota
+	MountWarning
+	MountFiring
 )
 
 // MountComponent is one weapon a Shared host carries: a species, a structure or an
@@ -25,4 +38,12 @@ type MountComponent struct {
 	// Aim is the cursor cell the mount tracks, for renderers; HasAim is false while none is in range
 	AimX, AimY int
 	HasAim     bool
+
+	// A beam's cycle: Lane fixes its direction (1-8 index vmath.Octants, 0 aims), and the
+	// Band it warns with is locked until it rests again
+	Lane           uint8
+	Width          int
+	Phase          MountPhase
+	PhaseRemaining time.Duration
+	Band           vmath.Band
 }

@@ -138,7 +138,7 @@ func (s *MissileSystem) Update() {
 				Type: event.ExplosionTypeMissile,
 			})
 			if missileComp.Hostile {
-				strikeCursorsInBlast(s.world, &s.blast, missileComp.Damage)
+				strikeCursorsIn(s.world, s.blast.contains, missileComp.Damage)
 			} else {
 				// Missile is player-domain: resolve its own half before the request crosses
 				strikePlayerTargets(s.world, missileComp.Owner, &s.blast, component.CombatAttackMissile)

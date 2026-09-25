@@ -393,13 +393,16 @@ type WeaponFireRequestPayload struct {
 }
 
 // MountRequestPayload puts one weapon on a Shared host, replacing any it carried.
-// Zero interval and range take the weapon's hosted defaults; zero muzzle fires from the host cell.
+// Zero interval, range and width take the weapon's hosted defaults; zero muzzle fires
+// from the host cell. A beam's Lane (1-8, vmath.Octants) fixes its direction; 0 aims.
 type MountRequestPayload struct {
 	Host       core.Entity          `toml:"host"`
 	Weapon     component.WeaponType `toml:"weapon"`
 	IntervalMs int                  `toml:"interval_ms"`
 	Range      int                  `toml:"range"`
 	Muzzle     float64              `toml:"muzzle"`
+	Lane       int                  `toml:"lane"`
+	Width      int                  `toml:"width"`
 }
 
 // FireSpecialRequestPayload names the cursor firing its special
@@ -581,6 +584,15 @@ type ExplosionVisualRequestPayload struct {
 type PulseVisualRequestPayload struct {
 	X       int                     `toml:"x"`
 	Y       int                     `toml:"y"`
+	Palette component.WeaponPalette `toml:"palette"`
+}
+
+// BeamVisualRequestPayload is player-domain presentation for one beam: a warning
+// line for Warning, then the full band for Firing.
+type BeamVisualRequestPayload struct {
+	Band    vmath.Band              `toml:"band"`
+	Warning time.Duration           `toml:"warning"`
+	Firing  time.Duration           `toml:"firing"`
 	Palette component.WeaponPalette `toml:"palette"`
 }
 

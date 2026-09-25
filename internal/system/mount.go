@@ -92,7 +92,7 @@ func (s *MountSystem) HandleEvent(ev event.GameEvent) {
 func (s *MountSystem) attach(p *event.MountRequestPayload) {
 	_, placed := s.world.Positions.GetPosition(p.Host)
 	if !placed || p.Host.Domain() != core.DomainShared || s.world.Components.Cursor.HasEntity(p.Host) ||
-		p.Weapon < 0 || p.Weapon >= component.WeaponCount {
+		p.Weapon < 0 || p.Weapon >= component.WeaponCount || p.Lane < 0 || p.Lane > len(vmath.Octants) {
 		s.statRejects.Add(1)
 		return
 	}
@@ -105,12 +105,18 @@ func (s *MountSystem) attach(p *event.MountRequestPayload) {
 	if reach <= 0 {
 		reach = spec.HostedRange
 	}
+	width := p.Width
+	if width <= 0 {
+		width = parameter.BeamWidth
+	}
 	s.world.Components.Mount.SetComponent(p.Host, component.MountComponent{
 		Weapon:   p.Weapon,
 		Trigger:  component.MountAuto,
 		Interval: interval,
 		Range:    reach,
 		Muzzle:   p.Muzzle,
+		Lane:     uint8(p.Lane),
+		Width:    width,
 	})
 }
 
@@ -134,6 +140,10 @@ func (s *MountSystem) Update() {
 			continue
 		}
 		cursor := s.aim(m, pos)
+		if component.WeaponSpecs[m.Weapon].Delivery == component.DeliveryBeam {
+			s.cycleBeam(cursor, m, pos, dt)
+			continue
+		}
 		if cursor == 0 || m.Cooldown > 0 || (m.Trigger == component.MountArmed && !m.Armed) {
 			continue
 		}
@@ -234,10 +244,62 @@ func (s *MountSystem) fire(host, cursor core.Entity, m *component.MountComponent
 	case component.DeliveryPulse:
 		var ring blastArea
 		ring.resetOne(pos.X, pos.Y, parameter.PulseRadiusX)
-		strikeCursorsInBlast(s.world, &ring, spec.HostedDamage)
+		strikeCursorsIn(s.world, ring.contains, spec.HostedDamage)
 		s.world.PushLocal(event.EventPulseVisualRequest, &event.PulseVisualRequestPayload{
 			X: pos.X, Y: pos.Y, Palette: component.PaletteHostile,
 		})
+	}
+}
+
+// cycleBeam runs a beam mount's warn, fire, rest cycle. The band is laid when the
+// warning starts and holds until rest, so a cursor sees where it will strike; a
+// laned beam cycles whether or not a cursor is in range.
+func (s *MountSystem) cycleBeam(cursor core.Entity, m *component.MountComponent, pos component.PositionComponent, dt time.Duration) {
+	damage := component.WeaponSpecs[m.Weapon].HostedDamage
+	switch m.Phase {
+	case component.MountResting:
+		if m.Cooldown > 0 || (m.Trigger == component.MountArmed && !m.Armed) {
+			return
+		}
+		dx, dy := 0, 0
+		if m.Lane > 0 {
+			dx, dy = vmath.Octants[m.Lane-1][0], vmath.Octants[m.Lane-1][1]
+		} else if cursor != 0 {
+			dx, dy = vmath.Octant(float64(m.AimX-pos.X), float64(m.AimY-pos.Y))
+		}
+		if dx == 0 && dy == 0 {
+			return
+		}
+		reach := m.Range
+		if reach <= 0 {
+			reach = parameter.BeamMaxLength
+		}
+		m.Band = traceBeam(s.world, pos.X, pos.Y, dx, dy, reach, m.Width)
+		m.Phase, m.PhaseRemaining = component.MountWarning, parameter.BeamWarning
+		s.world.PushLocal(event.EventBeamVisualRequest, &event.BeamVisualRequestPayload{
+			Band: m.Band, Warning: parameter.BeamWarning, Firing: parameter.BeamFiring, Palette: component.PaletteHostile,
+		})
+		s.statFired.Add(1)
+
+	case component.MountWarning:
+		m.PhaseRemaining -= dt
+		if m.PhaseRemaining > 0 {
+			return
+		}
+		m.Phase, m.PhaseRemaining = component.MountFiring, parameter.BeamFiring
+		strikeCursorsIn(s.world, m.Band.Contains, damage)
+		m.Cooldown = parameter.BeamHitInterval
+
+	case component.MountFiring:
+		m.PhaseRemaining -= dt
+		if m.PhaseRemaining <= 0 {
+			m.Phase, m.Cooldown = component.MountResting, m.Interval
+			return
+		}
+		if m.Cooldown <= 0 {
+			strikeCursorsIn(s.world, m.Band.Contains, damage)
+			m.Cooldown = parameter.BeamHitInterval
+		}
 	}
 }
 

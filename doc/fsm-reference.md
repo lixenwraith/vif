@@ -380,7 +380,7 @@ Per-cursor state is published under `player.<slot>.<metric>`:
 
 The bare keys `energy.current`, `heat.current`, `heat.overheat`, `heat.at_max`,
 `heat.ember`, `shield.active`, `boost.active`, `boost.remaining`, `weapon.rod`,
-`weapon.launcher`, `weapon.disruptor`, `weapon.turret`, `weapon.orbs`, `typing.max_streak`,
+`weapon.launcher`, `weapon.disruptor`, `weapon.turret`, `weapon.beam`, `weapon.orbs`, `typing.max_streak`,
 `player.x`, `player.y` mirror **the slot this instance drives**. That is what
 "the player" means on a status bar or in an operator command, and it is why the
 mirror follows the roster rather than slot 0: slot 0 is the coordinator's cursor,

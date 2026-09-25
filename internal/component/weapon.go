@@ -14,6 +14,7 @@ const (
 	WeaponLauncher
 	WeaponDisruptor
 	WeaponTurret
+	WeaponBeam
 	WeaponCount
 )
 
@@ -25,6 +26,7 @@ const (
 	DeliveryMissile                         // homing projectile, area damage on impact
 	DeliveryPulse                           // area burst at the emitter, fired only on a target inside it
 	DeliveryBullet                          // linear projectile per shot, direct damage on contact
+	DeliveryBeam                            // straight 8-way band to the first wall, area damage along it
 )
 
 // Aimed reports whether the delivery needs targets assigned before it fires
@@ -78,6 +80,10 @@ var WeaponSpecs = [WeaponCount]WeaponSpec{
 		Cooldown: parameter.WeaponCooldownTurret, MaxCharges: parameter.WeaponMaxChargeTurret,
 		HostedRange:  parameter.HostedTurretRange,
 		HostedDamage: CursorDamage{parameter.HostedTurretEnergy, -parameter.HostedTurretHeat}},
+	WeaponBeam: {Name: "beam", Delivery: DeliveryBeam, Attack: CombatAttackBeam,
+		Cooldown: parameter.WeaponCooldownBeam, MaxCharges: parameter.WeaponMaxChargeBeam,
+		HostedRange:  parameter.BeamMaxLength,
+		HostedDamage: CursorDamage{parameter.HostedBeamEnergy, -parameter.HostedBeamHeat}},
 }
 
 // WeaponComponent is a cursor's loadout: charges and cooldown per kind, and main fire's cooldown.

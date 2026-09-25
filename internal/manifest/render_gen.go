@@ -37,6 +37,7 @@ func BuildRenderers(ctx *engine.GameContext) []render.Registration {
 		{Renderer: renderer.NewLightningRenderer(ctx), Priority: render.PriorityLightning},
 		{Renderer: renderer.NewMissileRenderer(ctx), Priority: render.PriorityMissile},
 		{Renderer: renderer.NewPulseRenderer(ctx), Priority: render.PriorityPulse},
+		{Renderer: renderer.NewBeamRenderer(ctx), Priority: render.PriorityBeam},
 		{Renderer: renderer.NewBulletRenderer(ctx), Priority: render.PriorityBullet},
 		{Renderer: renderer.NewFlashRenderer(ctx), Priority: render.PriorityFlash},
 		{Renderer: renderer.NewFadeoutRenderer(ctx), Priority: render.PriorityFadeout},

@@ -5,7 +5,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -89,17 +88,8 @@ func strikePlayerTargets(w *engine.World, owner core.Entity, area *blastArea, at
 	}
 }
 
-// strikeCursorsInBlast strikes every rostered cursor the area covers, in roster
-// order; each instance applies only its own cursors' hits (see strikeCursor)
-func strikeCursorsInBlast(w *engine.World, area *blastArea, damage component.CursorDamage) {
-	for i := range parameter.MaxPlayers {
-		cursor := w.Resources.Player.Slot(uint8(i))
-		pos, ok := w.Positions.GetPosition(cursor)
-		if !ok {
-			continue
-		}
-		if _, _, hit := area.find(pos.X, pos.Y); hit {
-			strikeCursor(w, cursor, damage)
-		}
-	}
+// contains reports whether a cell is inside any center's blast
+func (a *blastArea) contains(x, y int) bool {
+	_, _, ok := a.find(x, y)
+	return ok
 }

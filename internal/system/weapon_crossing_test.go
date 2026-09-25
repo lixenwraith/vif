@@ -197,3 +197,90 @@ func TestPlayerBulletCrossesOnlyItsHit(t *testing.T) {
 		t.Fatalf("drain hit = %#v stamped %v, want a local hit on %d", hit, local.Domain, drain)
 	}
 }
+
+// TestPlayerBeamCrossesOnlyItsImpacts: a cursor's beam and its visual are this
+// instance's alone. A Shared target inside the band crosses once as its member set
+// and the owner; a drain's hit stays local; cursors in the band are not targets.
+func TestPlayerBeamCrossesOnlyItsImpacts(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	weapon := NewWeaponSystem(w).(*WeaponSystem)
+
+	header := w.CreateEntity(core.DomainShared)
+	near := w.CreateEntity(core.DomainShared)
+	far := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(header, component.PositionComponent{X: 9, Y: 2})
+	w.Positions.SetPosition(near, component.PositionComponent{X: 9, Y: 5})
+	w.Positions.SetPosition(far, component.PositionComponent{X: 10, Y: 6})
+	w.Components.Header.SetComponent(header, component.HeaderComponent{
+		Type:          component.CompositeTypeUnit,
+		MemberEntries: []component.MemberEntry{{Entity: near, OffsetY: 3}, {Entity: far, OffsetX: 1, OffsetY: 4}},
+	})
+	w.Components.Member.SetComponent(near, component.MemberComponent{HeaderEntity: header})
+	w.Components.Member.SetComponent(far, component.MemberComponent{HeaderEntity: header})
+	w.Components.Combat.SetComponent(header, component.CombatComponent{CombatEntityType: component.CombatEntitySwarm})
+
+	drain := w.CreateEntity(core.DomainPlayer)
+	w.Positions.SetPosition(drain, component.PositionComponent{X: 12, Y: 4})
+	w.Components.Combat.SetComponent(drain, component.CombatComponent{CombatEntityType: component.CombatEntityDrain})
+
+	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
+	weaponComp.Charges[component.WeaponBeam] = 1
+	weapon.fireAllWeapons(cursor, weaponComp, orbSlots{})
+
+	var crossings, locals, beams int
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		switch p := ev.Payload.(type) {
+		case *event.CombatAttackAreaRequestPayload:
+			if event.OnWire(ev) {
+				crossings++
+				if p.TargetEntity != header || len(p.HitEntities) != 2 || p.OwnerEntity != cursor {
+					t.Fatalf("crossing = %#v, want header %d with both members", p, header)
+				}
+			} else if locals++; p.TargetEntity != drain {
+				t.Fatalf("local hit = %#v, want drain %d", p, drain)
+			}
+		case *event.BeamVisualRequestPayload:
+			if event.OnWire(ev) || p.Band.DX != 1 || p.Band.DY != 0 {
+				t.Fatalf("beam visual = %#v, want a local eastward band", p)
+			}
+			beams++
+		default:
+			t.Fatalf("unexpected %s", event.GetEventName(ev.Type))
+		}
+	}
+	if crossings != 1 || locals != 1 || beams != 1 {
+		t.Fatalf("crossings, local hits, beams = %d, %d, %d; want one each", crossings, locals, beams)
+	}
+}
+
+// TestMountedBeamWarnsBeforeItStrikes: a laned beam draws its warning for the whole
+// warning window without a hit, then strikes the local cursors inside its band.
+func TestMountedBeamWarnsBeforeItStrikes(t *testing.T) {
+	w, _, second := testCursorWorld(t)
+	spawnRemoteCursor(t, w, 2, 25, 5, 9)
+	mount := NewMountSystem(w).(*MountSystem)
+
+	host := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(host, component.PositionComponent{X: 10, Y: 5})
+	mount.HandleEvent(event.GameEvent{Type: event.EventMountRequest, Payload: &event.MountRequestPayload{
+		Host: host, Weapon: component.WeaponBeam, Lane: 1,
+	}})
+
+	mount.Update()
+	if events := w.Resources.Event.Queue.Consume(); len(events) != 1 || events[0].Type != event.EventBeamVisualRequest {
+		t.Fatalf("first tick = %#v, want only the warning", events)
+	}
+	warningTicks := int(parameter.BeamWarning / parameter.GameUpdateInterval)
+	for range warningTicks - 1 {
+		mount.Update()
+		if events := w.Resources.Event.Queue.Consume(); len(events) != 0 {
+			t.Fatalf("warning tick = %#v, want nothing", events)
+		}
+	}
+	mount.Update()
+	events := w.Resources.Event.Queue.Consume()
+	heat, ok := events[0].Payload.(*event.HeatAddRequestPayload)
+	if len(events) != 1 || !ok || heat.Entity != second {
+		t.Fatalf("strike = %#v, want one heat hit on %d, the only local cursor in the band", events, second)
+	}
+}

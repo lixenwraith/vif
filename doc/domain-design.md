@@ -82,7 +82,7 @@ never enters the replay suffix (D-9).
 | Personal drain death affecting shared progression | owner cursor |
 | Typing or nugget cursor advance | cursor and absolute destination cell |
 | Pointer placement | cursor and the newest cell the pointer named that tick |
-| Owned shield striking shared species | target/member set and owner cursor |
+| Owned shield or beam striking shared species | target/member set and owner cursor |
 | Cursor entering or leaving combined defeat state | cursor and state |
 
 Effects on Player targets do not cross. Shared follow-up events derived from a

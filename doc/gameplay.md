@@ -267,6 +267,7 @@ locally; only center/radius/attack geometry crosses for shared combat.
 | Launcher | Homing/area missiles assigned from the nearest-target set. |
 | Disruptor | Stun pulse centred on its orb; it fires only while a target is inside the ellipse. |
 | Turret | One spread bullet per charge from its orb at the nearest targets; each hit is direct damage. |
+| Beam | A 3-cell band from its orb to the first wall, 8-way toward each of up to one target per charge; every target inside takes area damage. |
 
 Weapon ownership is represented by charge count: zero means not owned. Each
 owned type has an orbiting orb entity and a separate cooldown. The combat system

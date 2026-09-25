@@ -262,6 +262,7 @@ var Renderers = []RendererDef{
 	{"lightning", "NewLightningRenderer", "PriorityLightning"},
 	{"missile", "NewMissileRenderer", "PriorityMissile"},
 	{"pulse", "NewPulseRenderer", "PriorityPulse"},
+	{"beam", "NewBeamRenderer", "PriorityBeam"},
 	{"bullet", "NewBulletRenderer", "PriorityBullet"},
 
 	// --- Particles ---
