@@ -34,13 +34,14 @@ const (
 	Shield256Negative = color.P256Violet // Violet
 )
 
-// Lightning256ColorLUT is 256-color fixed palette indices per lightning color type
+// Lightning256ColorLUT is the background palette index per lightning color type. Purple
+// keeps red at cube level 4, the least a Linux console background shows as red.
 var Lightning256ColorLUT = [5]uint8{
-	color.P256Cyan,   // Bright cyan
-	color.P256Red,    // Bright red
-	color.P256Gold,   // Yellow-orange
-	color.P256Green,  // Bright green
-	color.P256Purple, // Medium purple
+	color.P256Cyan,         // Bright cyan
+	color.P256Red,          // Bright red
+	color.P256Gold,         // Yellow-orange
+	color.P256Green,        // Bright green
+	color.Cube256(4, 1, 5), // Violet
 }
 
 // SpiritBaseOffsets color determines starting point in gradient (0-255) for spirit animation coloring

@@ -26,6 +26,8 @@ const (
 
 	// UI Symbols
 	AudioStr = "♫ "
+	// AudioStr256 is AudioStr from a glyph every Linux console font carries; they lack ♫
+	AudioStr256 = "≈ "
 
 	// StatusMessageDefaultTimeout is how long status message on status bar lasts
 	StatusMessageDefaultTimeout = 2 * time.Second

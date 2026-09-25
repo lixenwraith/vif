@@ -21,21 +21,15 @@ var SwarmPatternChars = [2][2][4]rune{
 	},
 }
 
-// // SwarmPatternChars defines visual patterns for swarm composite
-// var SwarmPatternChars = [3][2][4]rune{
-// 	// Pattern 0: Pulse State A (Bold/Expanded) - "The Aggressor"
-// 	{
-// 		{'╔', '═', '═', '╗'},
-// 		{'╚', '═', '═', '╝'},
-// 	},
-// 	// Pattern 1: Pulse State B (Thin/Contracted) - "The Drone"
-// 	{
-// 		{'┌', '─', '─', '┐'},
-// 		{'└', '─', '─', '┘'},
-// 	},
-// 	// Pattern 2: Attack/Transition State (Mix) - "The Glitch"
-// 	{
-// 		{'╓', '─', '─', '╖'},
-// 		{'╙', '─', '─', '╜'},
-// 	},
-// }
+// SwarmPatternChars256 draws the two swarm frames from double-line box drawing, which every
+// Linux console font carries: a ring for O and the ring pinched inward for X
+var SwarmPatternChars256 = [2][2][4]rune{
+	{
+		{'╔', '═', '═', '╗'},
+		{'╚', '═', '═', '╝'},
+	},
+	{
+		{'═', '╗', '╔', '═'},
+		{'═', '╝', '╚', '═'},
+	},
+}

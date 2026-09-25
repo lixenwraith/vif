@@ -27,8 +27,9 @@ type statusItem struct {
 type StatusBarRenderer struct {
 	gameCtx *engine.GameContext
 
-	// Color mode (persist throughout runtime)
-	colorMode terminal.ColorMode
+	// Colour mode label and the audio glyph that mode's terminals can draw
+	modeLabel string
+	audioStr  string
 
 	// Sound/Audio indicator
 	statAudioMask *atomic.Int64
@@ -81,10 +82,11 @@ type StatusBarRenderer struct {
 func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 	statusReg := gameCtx.World.Resources.Status
 
-	return &StatusBarRenderer{
+	r := &StatusBarRenderer{
 		gameCtx: gameCtx,
 
-		colorMode: gameCtx.World.Resources.Config.ColorMode,
+		modeLabel: " TC ",
+		audioStr:  parameter.AudioStr,
 
 		statAudioMask: statusReg.Ints.Get("audio.mask"),
 
@@ -116,6 +118,10 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 
 		statDamageMultiplier: statusReg.Ints.Get("energy.damage_multiplier"),
 	}
+	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		r.modeLabel, r.audioStr = " 256 ", parameter.AudioStr256
+	}
+	return r
 }
 
 // Render implements SystemRenderer
@@ -274,14 +280,8 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		bg:   visual.RgbFpsBg,
 	})
 
-	var colorModeStr string
-	if r.colorMode == terminal.ColorModeTrueColor {
-		colorModeStr = " TC "
-	} else {
-		colorModeStr = " 256 "
-	}
 	rightItems = append(rightItems, statusItem{
-		text: colorModeStr,
+		text: r.modeLabel,
 		fg:   visual.RgbBlack,
 		bg:   visual.RgbColorModeIndicator,
 	})
@@ -302,7 +302,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		default:
 			audioBgColor = visual.RgbAudioBothOn
 		}
-		for _, ch := range parameter.AudioStr {
+		for _, ch := range r.audioStr {
 			if x >= ctx.ScreenWidth {
 				return
 			}

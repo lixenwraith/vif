@@ -15,14 +15,17 @@ import (
 
 // SwarmRenderer draws the swarm composite
 type SwarmRenderer struct {
-	gameCtx *engine.GameContext
+	gameCtx  *engine.GameContext
+	patterns *[parameter.SwarmPatternCount][parameter.SwarmHeight][parameter.SwarmWidth]rune
 }
 
 // NewSwarmRenderer creates a new swarm renderer
 func NewSwarmRenderer(gameCtx *engine.GameContext) *SwarmRenderer {
-	return &SwarmRenderer{
-		gameCtx: gameCtx,
+	r := &SwarmRenderer{gameCtx: gameCtx, patterns: &visual.SwarmPatternChars}
+	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		r.patterns = &visual.SwarmPatternChars256
 	}
+	return r
 }
 
 // Render draws all active swarm entities
@@ -97,7 +100,7 @@ func (r *SwarmRenderer) renderMembers(
 			continue
 		}
 
-		ch := visual.SwarmPatternChars[patternIdx][row][col]
+		ch := r.patterns[patternIdx][row][col]
 		buf.SetFgOnly(screenX, screenY, ch, c, terminal.AttrNone)
 	}
 }

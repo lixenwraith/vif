@@ -15,6 +15,7 @@ type HeatRenderer struct {
 	burstBlink bool
 
 	renderCell heatCellRenderer
+	density    *[4]rune
 }
 
 // heatCellRenderer draws one filled bar cell in the colour mode chosen at construction
@@ -27,9 +28,9 @@ func NewHeatRenderer(ctx *engine.GameContext) *HeatRenderer {
 	}
 
 	if r.gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
-		r.renderCell = r.cell256
+		r.renderCell, r.density = r.cell256, &visual.Density256Chars
 	} else {
-		r.renderCell = r.cellTrueColor
+		r.renderCell, r.density = r.cellTrueColor, &visual.DensityChars
 	}
 	return r
 }
@@ -61,7 +62,7 @@ func (r *HeatRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 
 	var overheatRune rune
 	if overheat > 0 {
-		overheatRune = visual.Density256Chars[overheat/25]
+		overheatRune = r.density[overheat/25]
 	} else {
 		overheatRune = 0
 	}

@@ -1,7 +1,6 @@
 package renderer
 
 import (
-	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -17,8 +16,8 @@ import (
 type lightningBoltRenderer func(ctx render.RenderContext, buf *render.RenderBuffer,
 	points []struct{ X, Y int }, colorType component.LightningColorType, alpha float64)
 
-// LightningRenderer draws transient energy beams using sub-pixel resolution
-// Supports dual rendering paths: TrueColor (quadrant chars) and 256-color (half-blocks)
+// LightningRenderer draws transient energy beams: quadrant characters at 2x2 sub-cell
+// resolution in TrueColor, background-filled cells in 256 colors
 type LightningRenderer struct {
 	gameCtx *engine.GameContext
 
@@ -48,8 +47,7 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		return
 	}
 
-	// Use MaskNone for fg-only rendering - prevents OcclusionDim from dimming underlying bg
-	// Works for 256, if any issue, branch and switch 256 back to MaskTransient
+	// MaskNone keeps OcclusionDim off the background under a TrueColor bolt
 	buf.SetWriteMask(visual.MaskNone)
 
 	lightnings.Each(func(_ core.Entity, l *component.LightningComponent) bool {
@@ -267,101 +265,24 @@ func (r *LightningRenderer) traceSubPixelLineQuadrant(hits map[uint64]uint8, sx0
 	}
 }
 
-// renderLightning256 draws lightning using CP437 half-block characters
-// Provides vertical half-cell resolution with fixed palette color
-// Uses SetFgOnly to preserve theme background during finalize
+// renderLightning256 fills the background of every cell the bolt crosses: console
+// fonts lack the half blocks, and the text under the bolt stays readable
 func (r *LightningRenderer) renderLightning256(ctx render.RenderContext, buf *render.RenderBuffer,
 	points []struct{ X, Y int }, colorType component.LightningColorType, alpha float64) {
-	// Skip rendering if nearly faded out
-	// No alpha blending in 256-color mode - binary visibility threshold
+	// No alpha in 256 colors: a bolt is drawn until it has nearly faded
 	if alpha < 0.1 {
 		return
 	}
-
-	// Get fixed palette color for this lightning type
 	paletteIdx := visual.Lightning256ColorLUT[colorType]
 
-	// Accumulate vertical half hits per cell
-	// Key: packed (x,y), Value: half bitmap (bit0=top, bit1=bottom)
 	cellHits := make(map[uint64]uint8)
-
 	for i := range len(points) - 1 {
-		r.traceSubPixelLineHalf(cellHits, points[i].X, points[i].Y, points[i+1].X, points[i+1].Y)
+		r.traceSubPixelLineQuadrant(cellHits, points[i].X, points[i].Y, points[i+1].X, points[i+1].Y)
 	}
-
-	// Render accumulated half-blocks with foreground-only write
-	for key, bits := range cellHits {
-		// Unpack cell coordinates from map key
-		mapX := int(int64(key >> 32))
-		mapY := int(int64(key & 0xFFFFFFFF))
-
-		// Transform to screen with visibility check
-		screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
-		if !visible {
-			continue
-		}
-
-		// Get half-block character from bitmap
-		char := visual.Half256Chars[bits]
-		if char == ' ' {
-			continue
-		}
-
-		// SetFgOnly: write character and foreground color, preserve existing background
-		// This allows finalize() to set theme background on untouched cells
-		// Fg.R stores palette index when AttrFg256 is set
-		buf.SetFgOnly(screenX, screenY, char, color.RGB{R: paletteIdx}, terminal.AttrFg256)
-	}
-}
-
-// traceSubPixelLineHalf traces a line in sub-pixel space, accumulating vertical half hits
-// Uses Bresenham's algorithm at 2x resolution
-// Half bitmap: bit0=top (sy%2==0), bit1=bottom (sy%2==1)
-func (r *LightningRenderer) traceSubPixelLineHalf(hits map[uint64]uint8, sx0, sy0, sx1, sy1 int) {
-	dx := sx1 - sx0
-	if dx < 0 {
-		dx = -dx
-	}
-	dy := sy1 - sy0
-	if dy < 0 {
-		dy = -dy
-	}
-
-	stepX := -1
-	if sx0 < sx1 {
-		stepX = 1
-	}
-	stepY := -1
-	if sy0 < sy1 {
-		stepY = 1
-	}
-
-	err := dx - dy
-
-	for {
-		// Convert sub-pixel to cell + vertical half position
-		cx, cy := sx0/2, sy0/2
-		halfY := sy0 & 1 // 0 = top half, 1 = bottom half
-
-		// Half bitmap encoding: bit0=top, bit1=bottom
-		halfBit := uint8(1 << halfY)
-
-		// Pack cell coordinates into 64-bit map key
-		key := uint64(cx)<<32 | uint64(cy)
-		hits[key] |= halfBit
-
-		if sx0 == sx1 && sy0 == sy1 {
-			break
-		}
-
-		e2 := 2 * err
-		if e2 > -dy {
-			err -= dy
-			sx0 += stepX
-		}
-		if e2 < dx {
-			err += dx
-			sy0 += stepY
+	for key := range cellHits {
+		screenX, screenY, visible := ctx.MapToScreen(int(int64(key>>32)), int(int64(key&0xFFFFFFFF)))
+		if visible {
+			buf.SetBg256(screenX, screenY, paletteIdx)
 		}
 	}
 }
