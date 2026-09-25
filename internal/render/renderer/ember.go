@@ -57,12 +57,10 @@ type EmberPainter struct {
 	ringInvWidthSq   float64
 
 	// Caching and Precalculation States
-	lastHeat       int
-	colorLUT       [256]emberLayerColors
-	invRadiiSqLUT  [256]struct{ invRxSq, invRySq float64 }
-	palette256     uint8
-	peerPalette256 uint8
-	framePalette   uint8
+	lastHeat      int
+	colorLUT      [256]emberLayerColors
+	invRadiiSqLUT [256]struct{ invRxSq, invRySq float64 }
+	palette256    uint8
 }
 
 // EmberRenderer renders ember effect for entities with active ember state
@@ -272,18 +270,14 @@ func emberFrameTrueColor(p *EmberPainter, _ render.RenderContext, heatChanged bo
 	}
 }
 
-// emberFrame256 picks the solid palette colour, dimmed for a peer
-func emberFrame256(p *EmberPainter, _ render.RenderContext, heatChanged bool) {
-	if heatChanged {
-		paletteHeat := min(max(100-int(p.params.RingAlpha*200.0), 0), 100)
-		p.palette256 = visual.Ember256PaletteIndex(paletteHeat)
-		dimColor := color.Screen(visual.RgbBackground, render.HeatGradientLUT[paletteHeat*255/100], visual.PeerFieldBlend)
-		p.peerPalette256 = color.RGBTo256(dimColor)
+// emberFrame256 takes the heat bar's leading colour; a peer's heat gradient colour is dimmed like its shield
+func emberFrame256(p *EmberPainter, ctx render.RenderContext, _ bool) {
+	if p.blendScale >= 1 {
+		p.palette256 = heatLead256(p.lastHeat, ctx.ScreenWidth)
+		return
 	}
-	p.framePalette = p.palette256
-	if p.blendScale < 1 {
-		p.framePalette = p.peerPalette256
-	}
+	lead := render.HeatGradientLUT[min(max(p.lastHeat, 0), 100)*255/100]
+	p.palette256 = color.RGBTo256(color.Screen(visual.RgbBackground, lead, p.blendScale))
 }
 
 // buildColorLUT populates the 1D color/power map array (invoked on heat change)
@@ -414,7 +408,7 @@ func emberCell256(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY in
 		return
 	}
 
-	buf.SetBg256(screenX, screenY, p.framePalette)
+	buf.SetBg256(screenX, screenY, p.palette256)
 }
 
 // powApprox approximates x^n without a per-cell transcendental call.

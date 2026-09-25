@@ -30,13 +30,14 @@ func peerWorld(t *testing.T, slots int) (*engine.GameContext, []core.Entity) {
 	return ctx, cursors
 }
 
-// peerContext is the render context for a world, built directly: the renderer
-// reads only the viewport and map geometry from it.
+// peerContext is the render context for a world, built directly: the renderers
+// read only the viewport, map and screen geometry from it.
 func peerContext(ctx *engine.GameContext) render.RenderContext {
 	cfg := ctx.World.Resources.Config
 	return render.RenderContext{
 		ViewportWidth: cfg.ViewportWidth, ViewportHeight: cfg.ViewportHeight,
 		MapWidth: cfg.MapWidth, MapHeight: cfg.MapHeight,
+		ScreenWidth: ctx.Width, ScreenHeight: ctx.Height,
 	}
 }
 
@@ -253,7 +254,7 @@ func TestPlayerFieldsRenderLocalLast(t *testing.T) {
 	}
 	buf.Clear()
 	NewEmberRenderer(gameCtx).Render(rc, buf)
-	wantEmber := visual.Ember256PaletteIndex(100)
+	wantEmber := heatLead256(100, rc.ScreenWidth)
 	if got := buf.CellAt(pos.X+5, pos.Y); got.Attrs&terminal.AttrBg256 == 0 || got.Bg.R != wantEmber {
 		t.Fatalf("overlapping ember palette = (%d, %v), want local (%d, bg256)", got.Bg.R, got.Attrs, wantEmber)
 	}

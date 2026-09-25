@@ -150,20 +150,3 @@ func InterpolateEmberParams(heat int) EmberParams {
 		HeatFactor: t,
 	}
 }
-
-// Ember256PaletteIndex returns xterm-256 palette index for given heat (0-100)
-// Maps to Heat256LUT for consistent heat visualization
-func Ember256PaletteIndex(heat int) uint8 {
-	if heat < 0 {
-		heat = 0
-	}
-	if heat > 100 {
-		heat = 100
-	}
-	// Map 0-100 to 0-9 index
-	idx := heat / 10
-	if idx > 9 {
-		idx = 9
-	}
-	return Heat256LUT[idx]
-}

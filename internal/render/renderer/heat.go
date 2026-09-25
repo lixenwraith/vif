@@ -17,8 +17,7 @@ type HeatRenderer struct {
 	renderCell heatCellRenderer
 }
 
-// heatCellRenderer function type definition specifying signature for renderer callback
-// Defines the interface for rendering strategy (256-color vs TrueColor) selected initialization
+// heatCellRenderer draws one filled bar cell in the colour mode chosen at construction
 type heatCellRenderer func(buf *render.RenderBuffer, x, width int, fillRune rune)
 
 // NewHeatRenderer creates a heat meter renderer
@@ -57,8 +56,8 @@ func (r *HeatRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 	}
 
 	maxX := ctx.ScreenWidth - 1
-	heatFillWidth := (maxX * heat) / 100
-	overheatFillWidth := (maxX * overheat) / 100
+	heatFillWidth := heatBarFill(heat, ctx.ScreenWidth)
+	overheatFillWidth := heatBarFill(overheat, ctx.ScreenWidth)
 
 	var overheatRune rune
 	if overheat > 0 {
@@ -116,11 +115,17 @@ func (r *HeatRenderer) cell256(buf *render.RenderBuffer, x, width int, fillRune 
 	}
 }
 
-// segmentIndex calculates which segment in which segment of the heat bar the X coordinate falls into
+// segmentIndex returns which of the ten 256-colour bar segments column x falls in
 func segmentIndex(x, width int) int {
-	segment := (x * 10) / (width - 1)
-	if segment > 9 {
-		segment = 9
-	}
-	return segment
+	return min(max(x*10/max(width-1, 1), 0), 9)
+}
+
+// heatBarFill returns the last bar column a 0-100 level fills
+func heatBarFill(level, width int) int {
+	return ((width - 1) * level) / 100
+}
+
+// heatLead256 returns the palette colour of the bar's last filled cell
+func heatLead256(heat, width int) uint8 {
+	return visual.Heat256LUT[segmentIndex(heatBarFill(min(max(heat, 0), 100), width), width)]
 }
