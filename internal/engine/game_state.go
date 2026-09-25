@@ -29,9 +29,11 @@ type GameState struct {
 	apmHistoryIndex int
 	lastAPMTime     time.Time // Last time APM was updated
 
-	// One past the tick that last admitted an action, so zero is none.
+	// Pointer travel not yet counted, in columns, and the last cell the pointer named.
 	// Written only by dispatch, under the world lock.
-	lastActionTick uint64
+	pointerTravel      int
+	pointerX, pointerY int
+	pointerSeen        bool
 }
 
 // initState initializes all game state fields to starting values
@@ -49,7 +51,7 @@ func (gs *GameState) initState() {
 	gs.apmHistory = [60]uint64{}
 	gs.apmHistoryIndex = 0
 	gs.lastAPMTime = time.Time{} // Zero value forces immediate update on first tick
-	gs.lastActionTick = 0
+	gs.pointerTravel, gs.pointerX, gs.pointerY, gs.pointerSeen = 0, 0, 0, false
 }
 
 // NewGameState creates a new centralized game state
@@ -90,14 +92,25 @@ func (gs *GameState) SetGameTicks(ticks uint64) {
 	gs.GameTicks.Store(ticks)
 }
 
-// AdmitAction counts one player gesture. Pointer travel counts only once no action
-// has for APMPointerTicks, so a sweep fills the gaps of play rather than adding to it.
-func (gs *GameState) AdmitAction(pointer bool) {
-	t := gs.GameTicks.Load() + 1
-	if pointer && gs.lastActionTick != 0 && t-gs.lastActionTick < parameter.APMPointerTicks {
+// MovePointer accrues the travel of a pointer placement. A row counts two columns,
+// as a cell is twice as tall as it is wide.
+func (gs *GameState) MovePointer(x, y int) {
+	if gs.pointerSeen {
+		gs.pointerTravel += abs(x-gs.pointerX) + 2*abs(y-gs.pointerY)
+	}
+	gs.pointerX, gs.pointerY, gs.pointerSeen = x, y, true
+}
+
+// AdmitAction counts one gesture for a dispatch pass: always for input, and for pointer
+// travel once it covers APMPointerCells. A counted gesture spends all accrued travel,
+// so one flick is one action however far it went.
+func (gs *GameState) AdmitAction(input bool) {
+	switch {
+	case gs.pointerTravel >= parameter.APMPointerCells:
+		gs.pointerTravel = 0
+	case !input:
 		return
 	}
-	gs.lastActionTick = t
 	gs.PendingActions.Add(1)
 }
 

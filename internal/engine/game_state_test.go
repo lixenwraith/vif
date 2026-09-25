@@ -8,25 +8,38 @@ import (
 )
 
 // TestAPMCountsGesturesNotEvents is the rule a mouse sweep broke: a pointer placing the
-// cursor every tick is travel, not twenty actions a second, and input arriving faster
-// than a player acts reads the per-second ceiling.
+// cursor every tick counts by how far it travels, never more than once a placement, and
+// input arriving faster than a player acts reads the per-second ceiling.
 func TestAPMCountsGesturesNotEvents(t *testing.T) {
 	perSecond := uint64(time.Second / parameter.GameUpdateInterval)
-	musicAPM := func(admit func(*GameState)) uint64 {
+	ceiling := uint64(60 * parameter.APMMaxPerSecond)
+	musicAPM := func(admit func(*GameState, int)) uint64 {
 		gs := NewGameState()
-		for range 7 * perSecond {
-			admit(gs)
+		for i := range int(7 * perSecond) {
+			admit(gs, i)
 			gs.UpdateAPM(SimTime(gs.IncrementGameTicks(), parameter.GameUpdateInterval))
 		}
 		return gs.GetMusicAPM()
 	}
-
-	sweep := musicAPM(func(gs *GameState) { gs.AdmitAction(true) })
-	if limit := 60 * perSecond / parameter.APMPointerTicks; sweep == 0 || sweep > limit {
-		t.Errorf("pointer sweep reads %d APM, want 1..%d", sweep, limit)
+	pointer := func(step int) func(*GameState, int) {
+		return func(gs *GameState, i int) {
+			gs.MovePointer(i*step%100, 0)
+			gs.AdmitAction(false)
+		}
 	}
-	storm := musicAPM(func(gs *GameState) { gs.AdmitAction(false) })
-	if limit := uint64(60 * parameter.APMMaxPerSecond); storm != limit {
-		t.Errorf("an input storm reads %d APM, want the ceiling %d", storm, limit)
+
+	// A column a tick is a slow reposition: a keystroke per APMPointerCells columns
+	want := 60 * perSecond / parameter.APMPointerCells
+	if got := musicAPM(pointer(1)); got+12 < want || got > want+12 {
+		t.Errorf("slow pointer reads %d APM, want about %d", got, want)
+	}
+	if got := musicAPM(pointer(parameter.APMPointerCells + 1)); got != ceiling {
+		t.Errorf("fast pointer reads %d APM, want the ceiling %d", got, ceiling)
+	}
+	if got := musicAPM(pointer(0)); got != 0 {
+		t.Errorf("a pointer that never moves reads %d APM", got)
+	}
+	if got := musicAPM(func(gs *GameState, _ int) { gs.AdmitAction(true) }); got != ceiling {
+		t.Errorf("an input storm reads %d APM, want the ceiling %d", got, ceiling)
 	}
 }

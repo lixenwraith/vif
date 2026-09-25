@@ -225,8 +225,9 @@ replay reproduces the count from the journal:
 
 - macro playback, auto-fire, every other origin, and input while paused admit nothing;
 - one dispatch pass is one gesture: `:` pauses and changes mode, a click fires;
-- a pointer placement (`pointer` on the move record) counts only after 500 ms
-  without any other action, so a sweep alone stays in the Normal tier;
+- a pointer placement (`pointer` on the move record) counts one gesture per six
+  columns travelled (a row is two), at most one per placement, so a dodging pointer
+  reads like mashed keys and a slow reposition like a few presses;
 - a one-second bucket holds at most six actions.
 
 `GameState` publishes a 60-second APM and a five-second music APM. The status bar

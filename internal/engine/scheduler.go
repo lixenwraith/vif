@@ -851,8 +851,11 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 		}
 		if apmOpen && ev.Origin == event.OriginInput {
 			admit, pointer := apmAction(ev)
-			apmInput = apmInput || admit && !pointer
-			apmPointer = apmPointer || pointer
+			if pointer != nil {
+				s.world.Resources.Game.State.MovePointer(pointer.X, pointer.Y)
+			}
+			apmInput = apmInput || admit && pointer == nil
+			apmPointer = apmPointer || pointer != nil
 		}
 
 		handlers, _ := s.eventRouter.GetHandlers(ev.Type)
@@ -901,7 +904,7 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 	// A pass carries one intent's events, so it is one gesture: `:` pauses and changes
 	// mode, a click fires and places the cursor
 	if apmInput || apmPointer {
-		s.world.Resources.Game.State.AdmitAction(!apmInput)
+		s.world.Resources.Game.State.AdmitAction(apmInput)
 	}
 
 	if summary {
@@ -919,18 +922,20 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 	return len(eventsList)
 }
 
-// apmAction reports whether an input-origin event counts as player effort and whether
-// it is pointer travel. Read before the handlers, which may release a pooled payload.
-// A screen resize carries OriginInput so a replay reflows, not because the player acted.
-func apmAction(ev event.GameEvent) (admit, pointer bool) {
+// apmAction reports whether an input-origin event counts as player effort, and the
+// placement when it is pointer travel. Read before the handlers, which may release a
+// pooled payload. A screen resize carries OriginInput so a replay reflows, not because
+// the player acted.
+func apmAction(ev event.GameEvent) (admit bool, pointer *event.CursorMoveRequestPayload) {
 	switch ev.Type {
 	case event.EventScreenResize:
-		return false, false
+		return false, nil
 	case event.EventCursorMoveRequest:
-		p, ok := ev.Payload.(*event.CursorMoveRequestPayload)
-		return true, ok && p.Pointer
+		if p, ok := ev.Payload.(*event.CursorMoveRequestPayload); ok && p.Pointer {
+			return true, p
+		}
 	}
-	return true, false
+	return true, nil
 }
 
 // dispatchAndProcessEvents settles pending events with an iteration cap and
