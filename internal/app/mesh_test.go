@@ -410,6 +410,16 @@ func TestDepartureReachesTheWholeMesh(t *testing.T) {
 		}
 	}
 	assertMeshParity(t, survivors, 0)
+
+	// Nor does the departed source's last epoch read as a peer falling behind.
+	for range 2 * parameter.NetworkBarrierDelayTicks {
+		tickAll(survivors)
+	}
+	for i, a := range survivors {
+		if lag := statOf(a, "network.barrier_peer_lag_ticks"); lag != 0 {
+			t.Fatalf("participant %d reports peer lag %d after a departure", i+1, lag)
+		}
+	}
 }
 
 // wireBytes is what one participant has sent and received in total, which is the

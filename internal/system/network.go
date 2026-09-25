@@ -2360,7 +2360,9 @@ func (s *NetworkSystem) publishBarrierTelemetry(nextTick uint64, p engine.Networ
 	seen := 0
 	for source := 1; source < len(s.epochs); source++ {
 		newest := s.epochs[source].newest()
-		if uint32(source) == local || newest == 0 {
+		// A departed source's window keeps its last epoch, so it would read as a
+		// peer falling further behind on every tick for the rest of the run
+		if uint32(source) == local || newest == 0 || s.departed[source] {
 			continue
 		}
 		if seen == 0 || newest < minPeer {
