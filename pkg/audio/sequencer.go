@@ -323,12 +323,12 @@ func (s *Sequencer) updateFill() {
 		if !ss.inFill && len(fills) > 0 {
 			ss.fillSavedID = ss.activeID()
 			ss.inFill = true
-			s.startTransition(2, fills[s.rng.IntN(len(fills))], MinCrossfadeSamples)
+			s.startTransition(2, fills[s.rng.IntN(len(fills))], s.beatFade())
 		}
 	case 0:
 		if ss.inFill {
 			ss.inFill = false
-			s.startTransition(2, ss.fillSavedID, MinCrossfadeSamples)
+			s.startTransition(2, ss.fillSavedID, s.beatFade())
 		}
 	}
 }
@@ -346,7 +346,7 @@ func (s *Sequencer) updateVariation() {
 			s.setGroup(g)
 			for slot := range 2 {
 				if s.slots[slot].drawn {
-					s.setPattern(slot, s.draw(s.arr.pool(g, s.tier, Role(slot+1))), MinCrossfadeSamples, false, false)
+					s.setPattern(slot, s.draw(s.arr.pool(g, s.tier, Role(slot+1))), s.beatFade(), false, false)
 				}
 			}
 			return
@@ -363,8 +363,12 @@ func (s *Sequencer) updateVariation() {
 	if pool[i] == ss.activeID() {
 		i = len(pool) - 1
 	}
-	s.startTransition(slot, pool[i], MinCrossfadeSamples)
+	s.startTransition(slot, pool[i], s.beatFade())
 }
+
+// beatFade lets the outgoing pattern's tails ring out over one beat, as a player
+// would let a held chord go; the incoming one is at full level from its first hit
+func (s *Sequencer) beatFade() int { return s.samplesPerStep * StepsPerBeat }
 
 // otherGroup draws a group other than the current one that covers the tier; -1 if none
 func (s *Sequencer) otherGroup(t Intensity) int {
