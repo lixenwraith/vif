@@ -126,57 +126,76 @@ func TestAPredictedSharedDeathRewardsItsPlayerOnce(t *testing.T) {
 	}
 }
 
-// TestPointerMovesOnlyToANewCell is the pointer's half of D-18: a report on the cell
-// the cursor is already bound for is no move and no action, and one naming the cell
-// it is leaving is a move. The store lags the prediction until the move settles, so
-// both answers are read from the prediction.
-func TestPointerMovesOnlyToANewCell(t *testing.T) {
+// TestAPointerSweepCrossesOncePerTick is the pointer's half of D-18: the view
+// follows every cell the pointer names, the shared world gets the newest one a tick
+// as a single placement, and a key move made after it still lands after it. A report
+// on the cell the cursor is already bound for is no placement at all.
+func TestAPointerSweepCrossesOncePerTick(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, fixtureSeed, 100, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
 
-	var from, to [2]int
+	var cursor core.Entity
+	var fromX, fromY int
 	a.World().RunSafe(func() {
+		cursor = a.World().Resources.Player.Entity
 		pos, _ := a.World().LocalCursor()
-		from, to = [2]int{pos.X, pos.Y}, [2]int{pos.X + 2, pos.Y}
+		fromX, fromY = pos.X, pos.Y
 	})
-	// Reports arrive between settles, as a terminal delivers them inside one frame.
-	report := func(cell [2]int) {
+	report := func(x, y int) {
 		var tx, ty int
 		a.World().RunSafe(func() {
 			cfg := a.World().Resources.Config
 			ox, oy := cfg.MapOffset()
-			tx = a.Context().GameXOffset + cell[0] - cfg.CameraX + ox
-			ty = a.Context().GameYOffset + cell[1] - cfg.CameraY + oy
+			tx = a.Context().GameXOffset + x - cfg.CameraX + ox
+			ty = a.Context().GameYOffset + y - cfg.CameraY + oy
 		})
 		a.handleIntent(&input.Intent{Type: input.IntentMouseMove, Count: tx, Char: rune(ty)})
 	}
-
-	before := a.pushed()
-	report(to)
-	report(to)
-	if n := a.pushed() - before; n != 1 {
-		t.Fatalf("two reports on one cell pushed %d events, want one move", n)
+	view := func() (pos component.PositionComponent) {
+		a.World().RunSafe(func() { pos, _ = a.World().CursorCell(cursor) })
+		return pos
 	}
-	report(from)
-	if n := a.pushed() - before; n != 2 {
-		t.Fatalf("a report on the cell being left pushed %d events in all, want a second move", n-1)
-	}
-
-	a.Settle()
-	a.World().RunSafe(func() {
-		if pos, _ := a.World().Positions.GetPosition(a.World().Resources.Player.Entity); pos.X != from[0] || pos.Y != from[1] {
-			t.Fatalf("cursor settled on (%d,%d), want the last reported cell %v", pos.X, pos.Y, from)
+	var moves int
+	a.SetDispatchTap(func(ev event.GameEvent) {
+		if ev.Type == event.EventCursorMoveRequest {
+			moves++
 		}
 	})
+
+	before := a.pushed()
+	for dx := 1; dx <= 5; dx++ {
+		report(fromX+dx, fromY)
+		if pos := view(); pos.X != fromX+dx {
+			t.Fatalf("view on column %d after the pointer named %d", pos.X, fromX+dx)
+		}
+	}
+	if n := a.pushed() - before; n != 0 {
+		t.Fatalf("a sweep between two ticks pushed %d events before the tick", n)
+	}
+	a.Tick(1)
+	if moves != 1 || cursorPosition(a, cursor).X != fromX+5 {
+		t.Fatalf("the tick applied %d placements, store column %d; want one, to %d",
+			moves, cursorPosition(a, cursor).X, fromX+5)
+	}
+
+	report(fromX+5, fromY)
+	report(fromX+6, fromY)
+	a.World().RunSafe(func() { a.World().PushCursorMove(cursor, fromX+9, fromY) })
+	a.Settle()
+	a.Tick(1)
+	if moves != 3 || cursorPosition(a, cursor).X != fromX+9 {
+		t.Fatalf("pointer then key applied %d placements in all, store column %d; want 3, ending at %d",
+			moves, cursorPosition(a, cursor).X, fromX+9)
+	}
 }
 
-// TestAPointerSweepOutlastsItsRingAndACorrection is D-18 across the session path: a
-// sustained sweep keeps more cells in flight than the ring holds, as a pointer does
-// at over a dozen cells a tick, and the view stays on the newest cell through every tick
-// and a correction installed part-way; once the sweep has landed the queue is empty.
-func TestAPointerSweepOutlastsItsRingAndACorrection(t *testing.T) {
+// TestASweepOutlastsItsRingAndACorrection is D-18 across the session path: a
+// sustained sweep of key moves keeps more cells in flight than the ring holds, and
+// the view stays on the newest cell through every tick and a correction installed
+// part-way; once the sweep has landed the queue is empty.
+func TestASweepOutlastsItsRingAndACorrection(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 2, [][2]int{{1, 2}})
 	host, guest := apps[0], apps[1]
@@ -190,7 +209,7 @@ func TestAPointerSweepOutlastsItsRingAndACorrection(t *testing.T) {
 		guest.World().RunSafe(func() {
 			for range perTick {
 				lastX, lastY = 10+n%40, 5+(n/40)%20
-				guest.World().PushPointerMove(cursor, lastX, lastY)
+				guest.World().PushCursorMove(cursor, lastX, lastY)
 				n++
 			}
 		})

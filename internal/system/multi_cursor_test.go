@@ -932,11 +932,11 @@ func TestAPointerHeldStillLeavesTheMapStill(t *testing.T) {
 	}
 }
 
-// TestOwnPlacementsInFlightNeverWalkTheViewBack is the D-18 rule a pointer sweep
-// depends on: a sweep predicts more cells than the ring holds within one playout
-// lead, and this instance's own placements land in the order they were produced,
-// so none of them — nor a foreign placement between them — may move the view off
-// the newest cell the player's input selected.
+// TestOwnPlacementsInFlightNeverWalkTheViewBack is the D-18 rule a fast sweep —
+// a macro, a counted motion — depends on: it predicts more cells than the ring holds
+// within one playout lead, and this instance's own placements land in the order they
+// were produced, so none of them, nor a foreign placement between them, may move the
+// view off the newest cell the player's input selected.
 func TestOwnPlacementsInFlightNeverWalkTheViewBack(t *testing.T) {
 	w, local, _ := testCursorWorld(t)
 	cursors := NewCursorSystem(w).(*CursorSystem)
@@ -945,7 +945,7 @@ func TestOwnPlacementsInFlightNeverWalkTheViewBack(t *testing.T) {
 	sweep := parameter.MaxPredictedCursorCells + 20
 	for i := range sweep {
 		x, y := cell(i)
-		w.PushPointerMove(local, x, y)
+		w.PushCursorMove(local, x, y)
 	}
 	lastX, lastY := cell(sweep - 1)
 	var inFlight []event.GameEvent
@@ -955,6 +955,9 @@ func TestOwnPlacementsInFlightNeverWalkTheViewBack(t *testing.T) {
 			ev.CrossingSeq = uint64(len(inFlight) + 1)
 			inFlight = append(inFlight, ev)
 		}
+	}
+	if len(inFlight) != sweep {
+		t.Fatalf("%d placements in flight, want the sweep's %d", len(inFlight), sweep)
 	}
 	viewAt := func(stage string, x, y int) {
 		t.Helper()
@@ -974,7 +977,7 @@ func TestOwnPlacementsInFlightNeverWalkTheViewBack(t *testing.T) {
 	cursors.HandleEvent(event.GameEvent{Type: event.EventCursorMoveRequest,
 		Payload: &event.CursorMoveRequestPayload{Entity: local, X: 35, Y: 20}})
 	viewAt("foreign placement", 35, 20)
-	w.PushPointerMove(local, 36, 20)
+	w.PushCursorMove(local, 36, 20)
 	w.Resources.Event.Queue.Consume()
 	for _, ev := range inFlight[half:] {
 		cursors.HandleEvent(ev)

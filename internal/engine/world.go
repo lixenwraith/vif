@@ -496,8 +496,9 @@ func (w *World) PushLocal(eventType event.EventType, payload any) {
 // mechanic determines a shared outcome. Stamped player, which is what separates it
 // from the same type pushed by a shared system re-deriving its own copy — every
 // Bus type has producers of both kinds. The journal replicates both; the wire
-// carries only this one (event.OnWire).
+// carries only this one (event.OnWire). A pending pointer placement crosses first.
 func (w *World) PushCrossing(eventType event.EventType, payload any) {
+	w.FlushPointerMove()
 	w.pushEvent(eventType, payload, event.Origin(w.origin.Load()), core.DomainPlayer)
 }
 
@@ -765,31 +766,58 @@ func (w *World) PushCursorMove(e core.Entity, x, y int) {
 }
 
 // PushPointerMove is PushCursorMove for a cell the pointer named, which the camera
-// follows with its pointer margins (see CameraPointerMarginX).
+// follows with its pointer margins (see CameraPointerMarginX). The view moves at
+// once; the placement waits for the next tick, retargeted by every later report,
+// so a sweep crosses its newest cell once a tick rather than every cell it passed.
 // Caller MUST hold updateMutex
 func (w *World) PushPointerMove(e core.Entity, x, y int) {
-	w.predictCursorMove(e, x, y, true)
-	w.PushCrossing(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: e, X: x, Y: y})
+	if !w.predictCursorMove(e, x, y, true) {
+		w.PushCrossing(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: e, X: x, Y: y})
+		return
+	}
+	w.Resources.Player.prediction.pointer = pendingPointer{x: x, y: y, origin: event.Origin(w.origin.Load()), set: true}
+}
+
+// FlushPointerMove crosses the pending pointer placement, reporting whether there
+// was one. The scheduler calls it before each tick; any other crossing this
+// instance produces calls it first, so placements keep the order they were made in.
+// Caller MUST hold updateMutex
+func (w *World) FlushPointerMove() bool {
+	roster := w.Resources.Player
+	p := roster.prediction.pointer
+	if !p.set {
+		return false
+	}
+	roster.prediction.pointer = pendingPointer{}
+	w.pushEvent(event.EventCursorMoveRequest,
+		&event.CursorMoveRequestPayload{Entity: roster.Entity, X: p.x, Y: p.y}, p.origin, core.DomainPlayer)
+	return true
 }
 
 // predictCursorMove records the cell CursorSystem.move will announce for this
-// request. It clamps exactly as that handler does: a prediction of the requested
-// cell rather than the applied one would never match its own announcement, and
-// every request would snap.
-func (w *World) predictCursorMove(e core.Entity, x, y int, pointer bool) {
+// request, reporting whether it did. It clamps exactly as that handler does: a
+// prediction of the requested cell rather than the applied one would never match
+// its own announcement, and every request would snap.
+func (w *World) predictCursorMove(e core.Entity, x, y int, pointer bool) bool {
 	if !w.Resources.Player.IsLocal(e) || !w.SimulatesLocally(e) {
-		return
+		return false
 	}
 	w.Resources.Config.pointer = pointer
 	if _, ok := w.Positions.GetPosition(e); !ok {
-		return // move announces nothing for a cursor with no cell, so nothing reconciles
+		return false // move announces nothing for a cursor with no cell, so nothing reconciles
 	}
 	config := w.Resources.Config
-	w.Resources.Player.Predict(component.PositionComponent{
+	cell := component.PositionComponent{
 		X: max(0, min(x, config.MapWidth-1)),
 		Y: max(0, min(y, config.MapHeight-1)),
-	})
+	}
+	if roster := w.Resources.Player; pointer && roster.prediction.pointer.set {
+		roster.Retarget(cell)
+	} else {
+		roster.Predict(cell)
+	}
 	w.FollowLocalCursor()
+	return true
 }
 
 // FollowLocalCursor re-anchors the view on the cell this instance's cursor occupies,

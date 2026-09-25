@@ -1145,6 +1145,11 @@ func (s *Scheduler) processTick() {
 	)
 
 	s.world.RunSafe(func() {
+		// Pointer reports since the last tick cross as one placement, settled as the
+		// input they are before the barrier opens the tick
+		if s.world.FlushPointerMove() {
+			s.settleLocked("input")
+		}
 		if r := s.world.Resources.Network; r != nil {
 			s.paceTrim = r.Pace.Load()
 			s.paceStep += r.PaceStep.Swap(0)

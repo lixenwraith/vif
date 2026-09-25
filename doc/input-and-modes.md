@@ -200,7 +200,10 @@ Translation runs terminal to viewport by the game-area offsets, then viewport to
 map through `ConfigResource.ViewportToMap`, which is the inverse of the centering
 the renderer applies. A pointer in the margin around a map smaller than the
 viewport resolves to no cell and is rejected rather than clamped, so a click can
-only ever land on the cell drawn under it.
+only ever land on the cell drawn under it. The cursor is drawn on every cell the
+pointer names at once; the simulation is placed on the newest of them once a tick,
+so a fast sweep costs one placement a tick and cells it only passed are never
+visited (D-18).
 
 `:mouse enable|disable|free` controls reporting and free motion. `:free` is a
 short toggle for free mouse motion. Input is ignored while suspended, in

@@ -81,6 +81,7 @@ never enters the replay suffix (D-9).
 | Dying drain donation | target and heal amount |
 | Personal drain death affecting shared progression | owner cursor |
 | Typing or nugget cursor advance | cursor and absolute destination cell |
+| Pointer placement | cursor and the newest cell the pointer named that tick |
 | Owned shield striking shared species | target/member set and owner cursor |
 | Cursor entering or leaving combined defeat state | cursor and state |
 
@@ -334,14 +335,18 @@ through `World.CursorCell` — shots and orbs leave the cell the player sees, an
 what they hit crosses as Shared events like any other; Shared systems do not.
 
 `World.PushCursorMove` advances prediction and emits the crossing atomically from
-the producer's perspective. This instance's own placements land in production
-order, so each consumes the oldest outstanding prediction by its crossing identity,
-whatever cell a clamp made of it; one without identity (solo play, replay) pops on a
-matching cell. An authoritative move the prediction did not produce clears the queue
-and snaps, and the own placements already in flight are then consumed without
-touching a newer prediction. A sweep that outruns the ring sheds its oldest cells
-the same way, and an install trims the queue to the own placements still pending.
-Replay reconstructs prediction from recorded Player-stamped move requests.
+the producer's perspective. A pointer places the cursor on every cell it names, but
+crosses only the newest once a tick, before the tick opens or before any other
+crossing this instance makes: cells it passed between ticks are never placed.
+
+This instance's own placements land in production order, so each consumes the
+oldest outstanding prediction by its crossing identity, whatever cell a clamp made
+of it; one without identity (solo play, replay) pops on a matching cell. An
+authoritative move the prediction did not produce clears the queue and snaps, and
+the own placements already in flight are then consumed without touching a newer
+prediction. A sweep that outruns the ring sheds its oldest cells the same way, and
+an own placement an install discards as already applied is consumed there. Replay
+reconstructs prediction from recorded Player-stamped move requests.
 
 ### D-19 — Every future-affecting Shared value is restorable
 

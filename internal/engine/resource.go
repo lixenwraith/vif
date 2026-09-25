@@ -228,6 +228,19 @@ type cursorPrediction struct {
 	count  int
 	shed   int
 	latest component.PositionComponent
+
+	// pointer is the placement the pointer has named since the last tick, not yet
+	// crossed. Its cell is the ring's newest, retargeted by every later report, so
+	// a sweep crosses one placement a tick however many cells it passed.
+	pointer pendingPointer
+}
+
+// pendingPointer is one uncrossed pointer placement and the origin it was reported
+// under, which it keeps for the journal and APM when it crosses.
+type pendingPointer struct {
+	x, y   int
+	origin event.Origin
+	set    bool
 }
 
 // CursorRosterEntry is the instance-local control assignment for one shared
@@ -388,6 +401,18 @@ func (pr *PlayerResource) Predict(pos component.PositionComponent) {
 	}
 	q.cells[(q.head+q.count)%len(q.cells)] = pos
 	q.count++
+	q.latest = pos
+}
+
+// Retarget moves the newest prediction to a cell the pointer named since, for a
+// pointer placement that has not crossed yet.
+func (pr *PlayerResource) Retarget(pos component.PositionComponent) {
+	q := &pr.prediction
+	if q.count == 0 {
+		pr.Predict(pos)
+		return
+	}
+	q.cells[(q.head+q.count-1)%len(q.cells)] = pos
 	q.latest = pos
 }
 
