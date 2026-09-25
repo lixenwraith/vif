@@ -36,3 +36,11 @@ func (a *App) reportAudioSpec() {
 	a.ctx.SetStatusMessage("Audio config: "+first+" (built-in used; -check lists all)",
 		parameter.StatusMessageMaxDuration, false)
 }
+
+// holdMixer pauses the mixer with a replay viewer's pause, which stops ticks but not
+// the music; a pause the recording itself holds keeps it held.
+func (a *App) holdMixer(viewer bool) {
+	if r := a.world.Resources.Audio; r != nil && r.Engine != nil {
+		r.Engine.SetPaused(viewer || a.ctx.TimeCtl.IsPaused())
+	}
+}

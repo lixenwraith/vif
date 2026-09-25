@@ -216,8 +216,12 @@ func (p *player) advance(elapsed time.Duration) {
 		return
 	}
 	if p.paused {
+		stepped := p.step > 0
 		for p.step > 0 && p.tickOnce() {
 			p.step--
+		}
+		if stepped {
+			p.a.holdMixer(true) // a recorded unpause inside the step released it
 		}
 		return
 	}
@@ -331,8 +335,10 @@ func (p *player) control(r rune) {
 	case ' ':
 		p.paused = !p.paused
 		p.budget = 0
+		p.a.holdMixer(p.paused)
 	case '.':
 		p.paused, p.step = true, p.step+1
+		p.a.holdMixer(true)
 	case '+', '=':
 		p.scale = engine.ScaleStep(p.scale, 1)
 	case '-', '_':
@@ -388,6 +394,7 @@ func (p *player) command(intent *input.Intent) bool {
 		}
 	})
 	a.Settle()
+	a.holdMixer(p.paused)
 	return true
 }
 

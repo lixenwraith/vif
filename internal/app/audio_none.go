@@ -19,3 +19,5 @@ func validateAudioBuildConfig(cfg Config) error {
 func (a *App) initAudioService() error { return nil }
 
 func (a *App) reportAudioSpec() {}
+
+func (a *App) holdMixer(bool) {}
