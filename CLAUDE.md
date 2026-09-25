@@ -23,8 +23,9 @@ It is the contract, not a suggestion.
 ## Data
 
 - Embedded files live in `internal/asset/`. External files live in `wad/`, laid
-  out exactly as they install. Nowhere else, and never beside the code that
-  reads them.
+  out exactly as they install. Distribution files installed outside a config
+  root (desktop entry, icons, shell completion) live in `deploy/package/`; the
+  manual is `doc/vif.6`. Nowhere else, and never beside the code that reads them.
 - `pkg/` never imports `internal/`. A leaf package that needs game data takes it
   from its caller.
 - Resolution is flag, `-config-dir`, user root, XDG system roots, embedded.

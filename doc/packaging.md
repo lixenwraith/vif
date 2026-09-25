@@ -22,9 +22,10 @@ These hold regardless of which repository is targeted first.
   `install -D`; `$(MAKE) -s`, never a GNU long option.
 - **The build is reproducible and offline.** `-trimpath`, no `go generate` at
   package time (generated files are committed), no CGO. Vendoring or a module
-  cache is the packager's choice, not the Makefile's. The manual `doc/vif.6` is
-  one of those files: it renders the `-h` table, `TestManualIsTheHelpTable` fails
-  when a flag outruns it, and `VIF_WRITE_MANUAL=1` on that test rewrites it.
+  cache is the packager's choice, not the Makefile's. The manual `doc/vif.6` and
+  the bash, zsh and fish completion in `deploy/package/` are such files: they
+  render the `-h` table, `TestGeneratedFilesAreTheHelpTable` fails when a flag
+  outruns them, and `VIF_WRITE_GENERATED=1` on that test rewrites them.
 - **Version comes from the source, never from flags.** `git archive` expands
   `internal/asset/version.txt` to the tag and commit (`export-subst`, which
   GitHub's archives honour too), and a checkout build reads Go's VCS stamp, so
@@ -68,13 +69,11 @@ origin and cache policy decided.
 
 ## 3. Gaps to close before a first submission
 
-Ordered by what blocks a package review.
-
-| # | Gap | Notes |
-|---|---|---|
-| 1 | No stable tagged release | Tag a verified nightly commit `v0.1.0` and publish the draft §2 creates. |
-| 2 | No `.desktop` entry | Optional for a TUI game, but expected if it should appear in a menu. Needs `Terminal=true` and an icon. |
-| 3 | Shell completion | Not generated. `flag` gives no completion data; a hand-written `_vif` is the cheapest route. |
+`make install` stages everything a package review expects: the binary, the system
+config root, the licence, `man6/vif.6`, a `Terminal=true` desktop entry with
+scalable and symbolic icons, and bash, zsh and fish completion. What remains is a
+stable tagged release: tag a verified nightly commit `v0.1.0` and publish the
+draft §2 creates.
 
 ## 4. Arch (AUR)
 

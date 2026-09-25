@@ -120,22 +120,6 @@ repository URLs and GHCR image follow the GitHub rename. The fleet's
 `app.kubernetes.io` labels and node image name select live sessions and images, so
 renaming them wants a deploy with no session running and the old images removed.
 
-### Add a desktop launcher
-
-- Priority: P2
-- Affected files: packaging assets and `Makefile`
-- Prerequisite: select an installable icon
-
-Add a `.desktop` entry with `Terminal=true` and install its icon.
-
-### Add shell completion
-
-- Priority: P2
-- Affected files: `cmd/vif/usage.go`, completion assets, `Makefile`
-- Prerequisite: choose generated or maintained completion definitions
-
-Provide shell completion for `vif` and install it in the appropriate data path.
-
 ### Publish a development AUR package
 
 - Priority: P3

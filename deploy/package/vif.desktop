@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=vif
+GenericName=Arcade Game
+Comment=A modal-motion arcade game
+Exec=vif
+Icon=vif
+Terminal=true
+Categories=Game;ArcadeGame;
+Keywords=vi;vim;typing;

@@ -21,6 +21,7 @@ VIF_CONFIG_BASE != case "$$(uname -s)" in \
 VIF_CONFIG_DIR ?= $(VIF_CONFIG_BASE)/vif
 VIF_CONFIG_FORCE ?= 0
 WAD_DIR := wad
+PKG_DIR := deploy/package
 WAD_ARCHIVE ?= $(BIN_DIR)/vif-wad.tar.gz
 KEYMAP_SRC := internal/asset/input/keymap.toml
 DESTDIR ?=
@@ -51,7 +52,7 @@ help:
 	@echo "  allocator Build the website-to-K3s session allocator"
 	@echo "  serve    Build wasm and http-server, then serve web/ directory (use PORT=8080 to change)"
 	@echo "  run      Build (dev) and run the game"
-	@echo "  install  Stage binary, wad, manual and docs under DESTDIR/PREFIX for a distro package"
+	@echo "  install  Stage binary, wad, manual, launcher, completion and docs under DESTDIR/PREFIX"
 	@echo "  install-config Install the wad and default keymap under $(VIF_CONFIG_DIR)"
 	@echo "  install-config-force Replace files previously installed there"
 	@echo "  wad-archive Pack the wad as the config root a player extracts ($(WAD_ARCHIVE))"
@@ -194,8 +195,9 @@ wad-archive: $(BIN_DIR)
 
 # install stages a distro package: the binary, the wad as a system config root
 # ($(SYSCONFDIR)/xdg is the XDG_CONFIG_DIRS default the resolver already
-# searches), the licence, the manual, and the documentation. Build first; nothing
-# here compiles, so a packager controls the build flags.
+# searches), the licence, the manual, the desktop entry and icons, shell completion,
+# and the documentation. Build first; nothing here compiles, so a packager controls
+# the build flags.
 install:
 	@$(MAKE) -s install-config VIF_CONFIG_DIR='$(DESTDIR)$(SYSCONFDIR)/xdg/vif' VIF_CONFIG_FORCE=1
 	@set -eu; \
@@ -203,6 +205,12 @@ install:
 	put 0755 $(BIN_DIR)/$(BINARY) '$(DESTDIR)$(PREFIX)/bin/$(BINARY)'; \
 	put 0644 LICENSE '$(DESTDIR)$(PREFIX)/share/licenses/vif/LICENSE'; \
 	put 0644 doc/vif.6 '$(DESTDIR)$(PREFIX)/share/man/man6/vif.6'; \
+	put 0644 $(PKG_DIR)/vif.desktop '$(DESTDIR)$(PREFIX)/share/applications/vif.desktop'; \
+	put 0644 $(PKG_DIR)/vif.svg '$(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/vif.svg'; \
+	put 0644 $(PKG_DIR)/vif-symbolic.svg '$(DESTDIR)$(PREFIX)/share/icons/hicolor/symbolic/apps/vif-symbolic.svg'; \
+	put 0644 $(PKG_DIR)/vif.bash '$(DESTDIR)$(PREFIX)/share/bash-completion/completions/vif'; \
+	put 0644 $(PKG_DIR)/_vif '$(DESTDIR)$(PREFIX)/share/zsh/site-functions/_vif'; \
+	put 0644 $(PKG_DIR)/vif.fish '$(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d/vif.fish'; \
 	for src in README.md doc/*.md; do \
 		put 0644 "$$src" "$(DESTDIR)$(PREFIX)/share/doc/vif/$${src#doc/}"; \
 	done
