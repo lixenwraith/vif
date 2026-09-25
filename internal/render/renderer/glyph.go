@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -11,14 +12,22 @@ import (
 
 // GlyphRenderer draws typeable spawned content entities
 type GlyphRenderer struct {
-	gameCtx *engine.GameContext
+	gameCtx    *engine.GameContext
+	renderCell glyphCellRenderer
 }
+
+// glyphCellRenderer draws one glyph in the colour mode chosen at construction
+type glyphCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, glyph *component.GlyphComponent)
 
 // NewGlyphRenderer creates a new glyph renderer
 func NewGlyphRenderer(gameCtx *engine.GameContext) *GlyphRenderer {
-	return &GlyphRenderer{
-		gameCtx: gameCtx,
+	r := &GlyphRenderer{gameCtx: gameCtx}
+	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+		r.renderCell = r.cell256
+	} else {
+		r.renderCell = r.cellTrueColor
 	}
+	return r
 }
 
 // Render draws all glyph entities
@@ -46,9 +55,15 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 			return true
 		}
 
-		fg := visual.GlyphColorLUT[glyph.Type][glyph.Level]
-
-		buf.SetFgOnly(screenX, screenY, glyph.Rune, fg, terminal.AttrNone)
+		r.renderCell(buf, screenX, screenY, glyph)
 		return true
 	})
+}
+
+func (r *GlyphRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, glyph *component.GlyphComponent) {
+	buf.SetFgOnly(screenX, screenY, glyph.Rune, visual.GlyphColorLUT[glyph.Type][glyph.Level], terminal.AttrNone)
+}
+
+func (r *GlyphRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, glyph *component.GlyphComponent) {
+	buf.SetFgOnly(screenX, screenY, glyph.Rune, color.RGB{R: visual.Glyph256LUT[glyph.Type][glyph.Level]}, terminal.AttrFg256)
 }
