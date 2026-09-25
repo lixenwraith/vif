@@ -37,6 +37,8 @@ It is the contract, not a suggestion.
 - One mechanism per problem. Two mechanisms doing one job is a bug.
 - Delete before adding. If a change is net-positive lines for a fix, justify it.
 - Reverting an existing API to "improve" it is not a fix. Leave working code alone.
+- Per-kind data lives in one table indexed by its kind (`component.WeaponSpecs`, the
+  combat profile matrix); a new kind adds a row, never a switch or a parallel field.
 
 ## Tests
 

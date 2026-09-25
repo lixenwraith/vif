@@ -27,6 +27,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Multiplayer](multi-player.md) | Medium/detail | What a session guarantees, how a correction is ordered and contained, how authorship moves, what is still missing, and why this protocol rather than another. **Start here for multiplayer.** |
 | [Troubleshooting](troubleshooting.md) | Medium/detail | Diagnosis of the 2026-09-10 two-instance defects: what an installed FSM state does not run, what a pruned crossing loses, and why a contested immunity window reads as no damage. |
 | [Gameplay systems](gameplay.md) | Domain detail | What are the player mechanics, world mechanics, species, encounters, and system responsibilities? |
+| [Combat and weapons](combat.md) | Domain detail | How are weapon kinds defined, fired by cursors and by mounts on Shared hosts, resolved against species and cursors, and what crosses? |
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |
 | [Rendering](rendering.md) | Domain detail | How are ECS state, compositing, color modes, masks, post-processing, and terminal output connected? |

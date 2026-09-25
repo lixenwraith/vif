@@ -689,11 +689,9 @@ departing cursor, and reconnect must take a current world.
 
 Domain-boundary debt is named rather than merely present:
 
-- the ambient-Shared pushes of Local-class events are **pinned** by
-  `TestAmbientLocalPushesArePinned` rather than fixed: each is a shared mechanic
-  raising a per-instance effect (D-6), fixing them is thirty gameplay judgements
-  rather than one refactor, and the pin is what makes each deliberate and every new
-  one a test failure;
+- a shared system pushing a Local-class event is a per-instance effect (D-6) and is
+  not checked; the reverse, a player-domain push of a replicated event, must name its
+  crossing in `crossingPushes` or `TestEventClassMatchesSystemProfile` fails;
 - the programmatic operator surface is **closed**: `App.SetupLevel`, `App.Region`
   and `App.Reset` share one guard that reads the event's declared class;
 - splitting mixed combat telemetry so Shared results compare directly is what

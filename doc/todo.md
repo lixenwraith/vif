@@ -229,6 +229,36 @@ at run time. A failing seed is what would reopen it. A shared-world parity diff
 (entities created 13 against 12) failed once in a loaded whole-package run too, and
 passed in 25 isolated runs of the tests that print it.
 
+## Combat
+
+### Let mounted weapons strike more than cursors
+
+- Priority: P3
+- Affected files: `internal/system/mount.go`, `internal/profile/combat.go`
+
+A mounted beam destroying walls and glyphs, mounted weapons striking other species, and each instance's own drains; Shared outcomes must resolve from Shared geometry, not a Player-domain shot.
+
+### Let cursor weapons strike other cursors
+
+- Priority: P3
+- Affected files: `internal/system/weapon.go`, `internal/system/bullet.go`, `internal/profile/combat.go`
+
+PvP: a hit on a remote cursor crosses as its impact and the victim's owner applies it, as `strikeCursor` does for mounts.
+
+### Move storm's green circle onto a disruptor mount
+
+- Priority: P3
+- Affected files: `internal/system/storm.go`
+
+Its area pulse is the hosted disruptor's shape; the red circle's turret mount is the pattern.
+
+### Route species contact damage through strikeCursor
+
+- Priority: P3
+- Affected files: `internal/system/{quasar,swarm,storm,eye,pylon,snake,drain}.go`
+
+Each still writes the shield-drain-or-heat pair by hand; `TestSharedCursorOverlapOutcomesStayOwnerResolved` counts must move with it.
+
 ## Rendering
 
 ### Use sixteen console backgrounds on Linux

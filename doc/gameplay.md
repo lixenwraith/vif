@@ -50,7 +50,7 @@ template applied to every admitted cursor, not only slot zero.
 | Heat | Bounded typing momentum; excess becomes overheat and can trigger a burst. |
 | Boost | Timed reward from correct typing or credited kills that protects ordinary energy penalties and accelerates heat gain. |
 | Shield | Elliptical defensive/collection area active whenever energy is nonzero. |
-| Weapon | Charge counts, orbiting indicators, and independent cooldowns for three weapon types. |
+| Weapon | Charge counts, orbiting indicators, and independent cooldowns per weapon kind; see [Combat and weapons](combat.md). |
 | Ping | Crosshair, selection/grid feedback, and cursor movement visuals. |
 | Combat | Player ownership/type and hit-point metadata used by the combat matrix. |
 
@@ -385,7 +385,7 @@ declares for itself:
 | Typing/world | `typing`, `composite`, `wall`, `tower`, `gateway`, `loot`, `glyph`, `nugget`, `particle`, `gold` |
 | Spawning/effects | `materialize`, `cleaner`, `fuse`, `spirit`, `lightning`, `missile` |
 | Motion/environment/combat | `navigation`, `soft_collision`, `environment`, `combat` |
-| Species | `drain`, `quasar`, `swarm`, `storm`, `pylon`, `snake`, `eye`, `bullet` |
+| Species | `drain`, `quasar`, `swarm`, `storm`, `pylon`, `snake`, `eye`, `mount`, `bullet` |
 | Particles | `dust`, `flash`, `fadeout`, `marker`, `explosion`, `motion_marker`, `splash` |
 | Lifecycle/learning | `death`, `timer`, `adaptation`, `genetic` |
 | Sound | `audio`, `music` |
