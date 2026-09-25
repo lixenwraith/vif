@@ -124,10 +124,6 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 				Type:       component.EnergyDeltaPenalty,
 			})
 
-			s.world.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{
-				// SoundType: audio.SoundShield,
-			})
-
 			s.statShieldHit.Add(1)
 		}
 	}
