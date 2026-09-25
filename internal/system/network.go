@@ -2050,8 +2050,10 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	if late > 0 {
 		s.statCommitLate.Add(int64(late))
 		s.statCommitVoid.Add(int64(void))
+		// One per epoch: a link is slow by how often its ticks land late, not by
+		// how much its player did in each of them
 		if r := s.world.Resources.Network; r != nil {
-			r.CommitLate[batch.Source].Add(uint64(late))
+			r.CommitLate[batch.Source].Add(1)
 		}
 	}
 	if installed > 0 {

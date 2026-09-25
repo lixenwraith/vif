@@ -65,7 +65,7 @@ const (
 
 	// NetworkSlowWindow, NetworkSlowLatePerSecond and NetworkSlowBytesPerSecond are
 	// the default eviction policy for a participant too slow to keep up: over the
-	// window, its crossings reached the authority late this often and its
+	// window, its epochs reached the authority late this often and its
 	// corrections cost this much. Both must hold; zero disables either.
 	NetworkSlowWindow         = 20 * time.Second
 	NetworkSlowLatePerSecond  = 5.0

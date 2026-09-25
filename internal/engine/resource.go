@@ -1042,8 +1042,8 @@ type NetworkResource struct {
 	Pace     atomic.Int32
 	PaceStep atomic.Int64
 
-	// CommitLate counts, per source, the crossings that reached this instance after
-	// the tick they named while it was authoring: the eviction policy's input.
+	// CommitLate counts, per source, the epochs that reached this instance with a
+	// crossing past the tick it named while it was authoring: the eviction input.
 	CommitLate [parameter.MaxPlayers + 2]atomic.Uint64
 
 	// OnTickClosed runs under the world lock after every completed tick, so the

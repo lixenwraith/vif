@@ -83,8 +83,9 @@ func TestTheAuthorityChoosesTheTickALateCrossingApplies(t *testing.T) {
 			t.Fatalf("crossing %d void = %t", i, a.void)
 		}
 	}
-	if late := s.world.Resources.Network.CommitLate[2].Load(); late != 2 {
-		t.Fatalf("the authority counted %d late crossings from participant 2, want 2", late)
+	// Eviction weighs epochs, so the one epoch carrying both late crossings is one
+	if late := s.world.Resources.Network.CommitLate[2].Load(); late != 1 {
+		t.Fatalf("the authority counted %d late epochs from participant 2, want 1", late)
 	}
 	s.applyDue(101)
 	if fence := s.AppliedCrossingFences().Seq(2); fence != 3 {

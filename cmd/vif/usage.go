@@ -59,7 +59,7 @@ func helpSections() []flagSection {
 			{names: []string{"slow-window"}, arg: "<dur>",
 				hint: fmt.Sprintf("Window a participant's lateness is judged over; host only, 0 never evicts (default %s)", parameter.NetworkSlowWindow)},
 			{names: []string{"slow-late"}, arg: "<n>",
-				hint: fmt.Sprintf("Evict at this many late crossings per second over the window; 0 ignores lateness (default %g)", parameter.NetworkSlowLatePerSecond)},
+				hint: fmt.Sprintf("Evict at this many late epochs per second over the window; 0 ignores lateness (default %g)", parameter.NetworkSlowLatePerSecond)},
 			{names: []string{"slow-bytes"}, arg: "<n>",
 				hint: fmt.Sprintf("...and at least this many bytes per second on its link; 0 ignores throughput (default %d)", parameter.NetworkSlowBytesPerSecond)},
 			{names: []string{"listen"}, arg: "<addr>",

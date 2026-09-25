@@ -305,9 +305,10 @@ late, repaired by its own corrections alone. It is zero: measured at 150 ms, a t
 ahead saved at most one tick of lead and tripled the corrections that moved a
 placement on the guest that ran it.
 
-While authoring, the authority evicts a participant whose crossings, over
+While authoring, the authority evicts a participant whose epochs, over
 `-slow-window`, reached it late at least `-slow-late` times a second while its link
-carried at least `-slow-bytes` a second (`driveEviction`). The first window after
+carried at least `-slow-bytes` a second (`driveEviction`). Epochs rather than
+crossings: a player sweeping the pointer is not a slower link than one standing still. The first window after
 arrival is grace, and only a participant's own raw epochs count, so its actions
 relayed to the others never mark them. On a handoff a guest drops its own
 uncommitted crossings, scheduled and retained: the authority they went to is gone.

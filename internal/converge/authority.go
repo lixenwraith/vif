@@ -117,7 +117,7 @@ func newAuthority(inst Instance, tel snapshot.Telemetry, reg *status.Registry) *
 }
 
 // SlowPolicy is when the authority evicts a participant that cannot keep up: over
-// Window, its crossings reached the authority late at least LatePerSecond, and its
+// Window, its epochs reached the authority late at least LatePerSecond, and its
 // link carried at least BytesPerSecond. Zero drops a criterion; both zero, or no
 // window, disables eviction.
 type SlowPolicy struct {
