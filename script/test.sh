@@ -399,14 +399,17 @@ identity)
 	;;
 
 transfer)
-	# A guest with no configuration root of its own joins a host playing an
-	# installed scenario. What proves the transfer is that the guest could not have
-	# resolved that scenario locally: its root is empty.
+	# The host plays a copy of the wad whose entry carries a nonce, so no root the
+	# guest searches — its own, the user's, XDG's or the embedded one — can hold the
+	# scenario: an installed copy of the same wad would otherwise satisfy the join
+	# locally and the host would never be asked. The transfer is the only way in.
 	need_bin
 	[ -d wad/scenario/main ] || fail "wad/scenario/main is not in this checkout"
-	ROOT=$(mktemp -d); HL=$(mktemp -d); GL=$(mktemp -d)
+	ROOT=$(mktemp -d); HL=$(mktemp -d); GL=$(mktemp -d); WAD=$(mktemp -d)
+	cp -R wad/. "$WAD"
+	printf '\n# transfer nonce %s-%s\n' "$$" "$(date +%s)" >>"$WAD/scenario/main/scenario.toml"
 	own_ports
-	"$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -config-dir wad -s main \
+	"$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -config-dir "$WAD" -s main \
 		-size 120x40 -players 1 -first-join 30s -empty 15s \
 		-l="$HL" -lv info -ls app >/dev/null 2>&1 &
 	SERVE_PID=$!
@@ -419,8 +422,8 @@ transfer)
 		|| fail "the guest never received a scenario: $GL"
 	grep -qh '"msg":"join installed the session world"' "$GL"/*.jsonl 2>/dev/null \
 		|| fail "the guest received a scenario but never joined: $GL"
-	rm -rf "$ROOT" "$HL" "$GL"
-	pass "a guest with no root received the session's scenario and joined on it"
+	rm -rf "$ROOT" "$HL" "$GL" "$WAD"
+	pass "a guest that could not hold the scenario received it and joined on it"
 	;;
 
 maxmap)

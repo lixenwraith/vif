@@ -62,7 +62,7 @@ them believes it is hosting one. See
 |---|---|
 | `check` | embedded, default `wad/scenario/main`, and named `wad/scenario/td` all resolve |
 | `scenario` | `:n td` then `:n main` each rebuild the run: three scenario records, the last matching the first. Needs a `script(1)` that can give it a pty, and skips rather than fails without one |
-| `transfer` | a guest whose configuration root is empty joins a host playing an installed scenario: the host serves it, the guest receives it and installs the session world on it |
+| `transfer` | a guest joins a host playing a nonce-stamped copy of the wad's scenario, which no root on the machine can hold: the host serves it, the guest receives it and installs the session world on it |
 | `follow` | a host with a guest types `:n blank`: the guest is told, rebuilds, redials, receives the new scenario off the wire and installs the session world again. Two terminals, so it needs a pty like `scenario` |
 | `corpus` | a guest whose `content/` holds one file the host does not have joins a host reading five: glyphs are player domain, so nothing is reconciled and no `content_id` appears in either log |
 | `fleet` | the hand-rendered session template and the allocator's own render carry the same arguments, mounts and claims |
