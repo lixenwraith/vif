@@ -96,10 +96,10 @@ audio backend exists for it.
 
 1. `USES=go:modules`, `GO_MODULE=github.com/lixenwraith/vi-fighter`,
    `GO_TARGET=./cmd/vif`.
-2. Ports staging already sets `DESTDIR`/`PREFIX`; `SYSCONFDIR` defaults to
-   `${PREFIX}/etc`, so the system config root becomes
-   `/usr/local/etc/xdg/vif`. Confirm that root is on `XDG_CONFIG_DIRS`
-   for the target release, or set it in `pkg-message`.
+2. Ports staging sets `DESTDIR`, `PREFIX` and `SYSCONFDIR`, which the Makefile
+   also defaults to `/usr/local` and `/usr/local/etc` on FreeBSD. The system root
+   is `/usr/local/etc/xdg/vif`, which a FreeBSD binary searches with
+   `XDG_CONFIG_DIRS` unset, so no `pkg-message` is needed.
 3. Every installed file needs a `pkg-plist` entry; generate it from
    `make install DESTDIR=$(mktemp -d)` output rather than by hand.
 4. `LICENSE=BSD3CLAUSE` with `LICENSE_FILE=${WRKSRC}/LICENSE`.

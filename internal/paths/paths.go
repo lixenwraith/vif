@@ -165,6 +165,10 @@ func systemConfigBases() []string {
 	spec := os.Getenv("XDG_CONFIG_DIRS")
 	if spec == "" {
 		spec = "/etc/xdg"
+		if runtime.GOOS == "freebsd" {
+			// Ports install under /usr/local, which the XDG default does not name.
+			spec = "/usr/local/etc/xdg:/etc/xdg"
+		}
 	}
 
 	var out []string

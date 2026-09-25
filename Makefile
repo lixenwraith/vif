@@ -24,8 +24,11 @@ WAD_DIR := wad
 WAD_ARCHIVE ?= $(BIN_DIR)/vif-wad.tar.gz
 KEYMAP_SRC := internal/asset/input/keymap.toml
 DESTDIR ?=
-PREFIX ?= /usr
-SYSCONFDIR ?= /etc
+# FreeBSD keeps everything outside the base system under /usr/local.
+PREFIX_DEFAULT != uname -s | grep -q FreeBSD && echo /usr/local || echo /usr
+PREFIX ?= $(PREFIX_DEFAULT)
+SYSCONFDIR_DEFAULT != uname -s | grep -q FreeBSD && echo /usr/local/etc || echo /etc
+SYSCONFDIR ?= $(SYSCONFDIR_DEFAULT)
 # FreeBSD packages each Go release under its own name: go.mod's 1.27 is go127.
 GO_DEFAULT != uname -s | grep -q FreeBSD && sed -n 's/^go \([0-9]*\)\.\([0-9]*\).*/go\1\2/p' go.mod 2>/dev/null | grep . || echo go
 GO ?= $(GO_DEFAULT)
