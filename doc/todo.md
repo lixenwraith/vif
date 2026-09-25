@@ -225,7 +225,9 @@ of one seed differing in their position digest. Not reproduced since in 48 loade
 runs and four whole-package runs, and ruled out by review: every pooled payload has
 one handler that reads nothing after releasing it, the GA refills deterministically,
 no simulation path reads the wall clock, and no package state a world reads changes
-at run time. A failing seed is what would reopen it.
+at run time. A failing seed is what would reopen it. A shared-world parity diff
+(entities created 13 against 12) failed once in a loaded whole-package run too, and
+passed in 25 isolated runs of the tests that print it.
 
 ## Fleet logging
 

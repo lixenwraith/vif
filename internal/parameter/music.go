@@ -3,6 +3,7 @@
 package parameter
 
 import (
+	"math"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/asset"
@@ -26,26 +27,18 @@ const (
 	TierPeakAPM     = 300
 )
 
-// APMToBPM maps burst APM to target tempo, with breakpoints on the tier thresholds:
-// calm holds the floor, normal through elevated climbs to the knee at TierIntenseAPM,
-// and peak tempo arrives at TierPeakAPM. The calm floor must stay >= audio.MinBPM.
+// APMToBPM maps burst APM to target tempo on a square root, RestBPM + k·√APM with k
+// placing audio.MaxBPM at the admission ceiling: the first actions move it most, and
+// the last BPM ask for sustained, varied input (half the range at a quarter of the
+// ceiling, the top 10% only above 81% of it). RestBPM must stay >= audio.MinBPM.
 func APMToBPM(apm uint64) int {
-	const (
-		calmBPM   = 100
-		normalBPM = 140
-		peakBPM   = audio.MaxBPM
-	)
-	switch {
-	case apm <= TierNormalAPM:
-		return calmBPM
-	case apm <= TierIntenseAPM:
-		return calmBPM + int(uint64(normalBPM-calmBPM)*(apm-TierNormalAPM)/(TierIntenseAPM-TierNormalAPM))
-	case apm <= TierPeakAPM:
-		return normalBPM + int(uint64(peakBPM-normalBPM)*(apm-TierIntenseAPM)/(TierPeakAPM-TierIntenseAPM))
-	default:
-		return peakBPM
-	}
+	ceiling := float64(60 * APMMaxPerSecond)
+	f := math.Sqrt(min(float64(apm), ceiling) / ceiling)
+	return RestBPM + int(math.Round(float64(audio.MaxBPM-RestBPM)*f))
 }
+
+// RestBPM is the tempo of a player not acting
+const RestBPM = 100
 
 // TierForAPM maps burst APM to an arrangement tier
 func TierForAPM(apm uint64) audio.Intensity {

@@ -358,8 +358,11 @@ func (s *MusicSystem) syncTempo(apm uint64) {
 	} else if target < s.bpmF {
 		s.bpmF = max(target, s.bpmF-parameter.BPMFallRate*dt)
 	}
+	// Hysteresis stops chatter, but a slew that has settled sends its target: stepping in
+	// threes toward 180 otherwise stranded the tempo at 178
 	bpm := int(s.bpmF + 0.5)
-	if d := bpm - s.lastBPM; d >= parameter.BPMHysteresis || -d >= parameter.BPMHysteresis {
+	settled := s.bpmF == target && bpm != s.lastBPM
+	if d := bpm - s.lastBPM; d >= parameter.BPMHysteresis || -d >= parameter.BPMHysteresis || settled {
 		s.player.SetMusicBPM(bpm) // beat-quantized at the sequencer
 		s.lastBPM = bpm
 	}

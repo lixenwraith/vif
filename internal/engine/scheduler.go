@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"fmt"
 	"io/fs"
 	"strconv"
@@ -838,7 +839,8 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 
 	// APM admission; input while paused is not gameplay
 	apmOpen := !s.ctl.IsPaused()
-	var apmInput, apmPointer bool
+	var apmKey uint64
+	var apmPointer bool
 
 	// Harness observer, hoisted with the other gates
 	tap := s.tap
@@ -850,12 +852,13 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 			tap(ev)
 		}
 		if apmOpen && ev.Origin == event.OriginInput {
-			admit, pointer := apmAction(ev)
+			key, pointer := s.apmAction(ev)
 			if pointer != nil {
 				s.world.Resources.Game.State.MovePointer(pointer.X, pointer.Y)
+				apmPointer = true
+			} else if apmKey == 0 {
+				apmKey = key // the pass's first input names its gesture
 			}
-			apmInput = apmInput || admit && pointer == nil
-			apmPointer = apmPointer || pointer != nil
 		}
 
 		handlers, _ := s.eventRouter.GetHandlers(ev.Type)
@@ -903,8 +906,8 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 
 	// A pass carries one intent's events, so it is one gesture: `:` pauses and changes
 	// mode, a click fires and places the cursor
-	if apmInput || apmPointer {
-		s.world.Resources.Game.State.AdmitAction(apmInput)
+	if apmKey != 0 || apmPointer {
+		s.world.Resources.Game.State.AdmitAction(apmKey)
 	}
 
 	if summary {
@@ -922,20 +925,28 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 	return len(eventsList)
 }
 
-// apmAction reports whether an input-origin event counts as player effort, and the
-// placement when it is pointer travel. Read before the handlers, which may release a
-// pooled payload. A screen resize carries OriginInput so a replay reflows, not because
-// the player acted.
-func apmAction(ev event.GameEvent) (admit bool, pointer *event.CursorMoveRequestPayload) {
-	switch ev.Type {
-	case event.EventScreenResize:
-		return false, nil
-	case event.EventCursorMoveRequest:
-		if p, ok := ev.Payload.(*event.CursorMoveRequestPayload); ok && p.Pointer {
-			return true, p
-		}
+// apmAction names the key an input-origin event was, zero when it is no effort, or
+// returns the placement when it is pointer travel. A key is the event type, with a
+// motion's direction and a typed character, so h then l are two keys and ll one.
+// Read before the handlers, which may release a pooled payload and move the cursor.
+// A screen resize carries OriginInput so a replay reflows, not because the player acted.
+func (s *Scheduler) apmAction(ev event.GameEvent) (key uint64, pointer *event.CursorMoveRequestPayload) {
+	if ev.Type == event.EventScreenResize {
+		return 0, nil
 	}
-	return true, nil
+	key = uint64(ev.Type) << 32
+	switch p := ev.Payload.(type) {
+	case *event.CursorMoveRequestPayload:
+		if p.Pointer {
+			return 0, p
+		}
+		if at, ok := s.world.Positions.GetPosition(p.Entity); ok {
+			key |= uint64(cmp.Compare(p.X, at.X)+1)<<2 | uint64(cmp.Compare(p.Y, at.Y)+1)
+		}
+	case *event.CharacterTypedPayload:
+		key |= uint64(uint32(p.Char))
+	}
+	return key, nil
 }
 
 // dispatchAndProcessEvents settles pending events with an iteration cap and

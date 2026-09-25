@@ -54,7 +54,7 @@ const (
 const (
 	DefaultBPM   = 140 // psytrance range 135-150
 	MinBPM       = 80
-	MaxBPM       = 180
+	MaxBPM       = 200
 	StepsPerBeat = 4 // 16th notes
 	BeatsPerBar  = 4 // 4/4
 	StepsPerBar  = StepsPerBeat * BeatsPerBar

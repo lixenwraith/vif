@@ -188,7 +188,7 @@ define step position, velocity, scale degree, octave, duration, probability,
 instrument, chord-following, and humanization. Tonal voices include bass,
 piano/FM, pads, and fallback synthesis; the drum kit uses cached effects.
 
-Tempo is clamped to 80–180 BPM. Tempo changes can wait for the next beat;
+Tempo is clamped to 80–200 BPM. Tempo changes can wait for the next beat;
 patterns can transition immediately or quantized to the bar. The incoming
 pattern plays at full level from its first trigger while the outgoing one's
 ringing tails fade out, over at least 256 samples so none is hard-cut. A reveal
@@ -225,11 +225,13 @@ music APM and maps it to:
 | 220–299 | Intense |
 | 300 and above | Peak |
 
-The target tempo is 100 BPM at calm activity, rises gradually through normal
-play, and reaches the engine's 180 BPM maximum at peak. The conductor slews
-rather than jumping (20 BPM/s upward, 16 BPM/s downward), ignores changes
-smaller than three BPM, and the sequencer applies each on the next beat, so
-tempo trails the five-second window by about a second. A tier change draws from
+The target tempo is `100 + 100·√(APM/480)` BPM: 100 at rest, 135 at 60 APM, 150
+at 120, 168 at 220, 179 at 300, and the engine's 200 maximum only at the 480
+ceiling, which a pointer alone (six gestures a second, 187 BPM) cannot reach. The
+conductor slews rather than jumping (20 BPM/s upward, 16 BPM/s downward), ignores
+changes smaller than three BPM until the slew settles on its target, and the
+sequencer applies each on the next beat, so tempo trails the five-second window by
+about a second. A tier change draws from
 the current group under quantization/crossfade/reveal policy, and a slot already
 sounding its draw keeps playing. The `music.*` status group (the debug HUD's music
 card, and the periodic stat log) names the group, tier, requested tempo and the
