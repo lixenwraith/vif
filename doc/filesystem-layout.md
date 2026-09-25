@@ -35,9 +35,12 @@ contain the same optional regions.
 
 ## 2. Installed configuration tree
 
-On Linux and FreeBSD the user root is `$XDG_CONFIG_HOME/vi-fighter` (normally
-`~/.config/vi-fighter`); a distribution package installs the same tree under
-`/etc/xdg/vi-fighter`, which is the `XDG_CONFIG_DIRS` default.
+The user root is Go's `os.UserConfigDir` plus `vi-fighter`:
+`$XDG_CONFIG_HOME/vi-fighter` (normally `~/.config/vi-fighter`) on Linux and
+FreeBSD, `%AppData%\vi-fighter` on Windows, `~/Library/Application Support/vi-fighter`
+on macOS. `make install-config` writes that same root. A distribution package
+installs the tree under `/etc/xdg/vi-fighter`, the `XDG_CONFIG_DIRS` default;
+system roots exist on Unix-like targets only.
 
 ```text
 vi-fighter/

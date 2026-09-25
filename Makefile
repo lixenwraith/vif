@@ -12,7 +12,12 @@ IMAGE_TAG ?= dev
 IMAGE_REVISION_DEFAULT != git rev-parse HEAD 2>/dev/null || echo unknown
 IMAGE_REVISION ?= $(IMAGE_REVISION_DEFAULT)
 IMAGE_VERSION ?= $(IMAGE_TAG)
-VIF_CONFIG_BASE != test -n "$(XDG_CONFIG_HOME)" && echo "$(XDG_CONFIG_HOME)" || echo "$(HOME)/.config"
+# The user root the binary reads is Go's os.UserConfigDir, so this mirrors it.
+VIF_CONFIG_BASE != case "$$(uname -s)" in \
+	*_NT*) cygpath -u '$(APPDATA)' ;; \
+	Darwin) echo "$(HOME)/Library/Application Support" ;; \
+	*) test -n "$(XDG_CONFIG_HOME)" && echo "$(XDG_CONFIG_HOME)" || echo "$(HOME)/.config" ;; \
+	esac
 VIF_CONFIG_DIR ?= $(VIF_CONFIG_BASE)/vi-fighter
 VIF_CONFIG_FORCE ?= 0
 WAD_DIR := wad
