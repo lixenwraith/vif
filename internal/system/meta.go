@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/lixenwraith/vi-fighter/internal/asset"
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
@@ -565,12 +566,12 @@ func (s *MetaSystem) handleAboutRequest() {
 		Layout: core.OverlayLayoutAbout,
 	}
 
-	// Store info as entries for the renderer to extract
+	version, _ := asset.Version()
 	content.Items = append(content.Items, core.OverlayCard{
 		Title: "VIF",
 		Entries: []core.CardEntry{
 			{Key: "desc", Value: "A terminal-based rouge-like action typing game with vi-style keybindings. Made with love for terminal, Go, VIM, and Games :)"},
-			{Key: "version", Value: "0.1.0-alpha"},
+			{Key: "version", Value: version},
 			{Key: "engine", Value: "Custom ECS, Data-driven HFSM, Double-buffered ANSI renderer"},
 			{Key: "go", Value: "1.25+"},
 			{Key: "github", Value: "github.com/lixenwraith/vi-fighter"},

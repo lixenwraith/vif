@@ -17,3 +17,5 @@ tmp/
 log/**/*.jsonl
 tmp/**/*.jsonl
 journal/**/*.jsonl
+/dist/
+/stage/

@@ -25,9 +25,11 @@ These hold regardless of which repository is targeted first.
   cache is the packager's choice, not the Makefile's. The manual `doc/vif.6` is
   one of those files: it renders the `-h` table, `TestManualIsTheHelpTable` fails
   when a flag outruns it, and `VIF_WRITE_MANUAL=1` on that test rewrites it.
-- **Version comes from VCS.** `vif -version` reports `debug.ReadBuildInfo`. Tag
-  releases `vX.Y.Z` so a package's `pkgver` and the binary agree without an
-  ldflags contract.
+- **Version comes from the source, never from flags.** `git archive` expands
+  `internal/asset/version.txt` to the tag and commit (`export-subst`, which
+  GitHub's archives honour too), and a checkout build reads Go's VCS stamp, so
+  `vif -version` names the tag without an ldflags contract. Only a Go module
+  proxy zip carries neither and reports `(devel)`.
 - **Runtime state is XDG.** Logs and journals under `$XDG_STATE_HOME`; nothing
   in `/var`, nothing beside the binary.
 - **Licence stays declarable.** BSD-3-Clause, one `LICENSE` at the root. Any

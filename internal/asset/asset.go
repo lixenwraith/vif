@@ -1,12 +1,15 @@
 // Package asset embeds every file the binary must be able to play without a
 // host filesystem: the fallback scenario and typing corpus, the default keymap,
-// and the built-in sound and music banks. Each group is narrowed with fs.Sub so its
-// runtime root is the category directory, not internal/asset.
+// and the built-in sound and music banks, plus the version a source archive
+// carries. Each group is narrowed with fs.Sub so its runtime root is the category
+// directory, not internal/asset.
 package asset
 
 import (
 	"embed"
 	"io/fs"
+	"runtime/debug"
+	"strings"
 )
 
 //go:embed scenario/*.toml content/*.toml input/keymap.toml audio/*.toml
@@ -39,6 +42,38 @@ func init() {
 	DefaultSounds = sub("audio")
 	DefaultKeymap = read("input/keymap.toml")
 	DefaultMusic = read("audio/music.toml")
+}
+
+// versionStamp is "$Format:...$" in a checkout; git archive, GitHub's archives
+// included, expands it to the tag and commit through .gitattributes export-subst.
+//
+//go:embed version.txt
+var versionStamp string
+
+// Version is the release and commit the binary was built from: a source archive's
+// stamp first, since an unpacked archive may sit inside an unrelated repository,
+// then the Go toolchain's VCS stamp, then "(devel)" and no commit.
+func Version() (version, revision string) {
+	if !strings.HasPrefix(versionStamp, "$Format") {
+		switch fields := strings.Fields(versionStamp); len(fields) {
+		case 2:
+			return fields[0], fields[1]
+		case 1:
+			return "(devel)", fields[0]
+		}
+	}
+	version = "(devel)"
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		if bi.Main.Version != "" {
+			version = bi.Main.Version
+		}
+		for _, s := range bi.Settings {
+			if s.Key == "vcs.revision" {
+				revision = s.Value
+			}
+		}
+	}
+	return version, revision
 }
 
 func read(name string) []byte {

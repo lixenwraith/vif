@@ -4,9 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"runtime/debug"
 	"strings"
 
+	"github.com/lixenwraith/vi-fighter/internal/asset"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/paths"
 )
@@ -269,19 +269,10 @@ func roff(s string) string {
 	return b.String()
 }
 
-// writeVersion prints what a downstream package and a bug report need. The Go
-// toolchain stamps both from VCS, so no build flag has to supply them; a build
-// from an unversioned tree reports "(devel)" and no commit.
+// writeVersion prints what a downstream package and a bug report need; see
+// asset.Version for where each comes from.
 func writeVersion(w io.Writer) {
-	version, revision := "unknown", ""
-	if bi, ok := debug.ReadBuildInfo(); ok {
-		version = bi.Main.Version
-		for _, s := range bi.Settings {
-			if s.Key == "vcs.revision" {
-				revision = s.Value
-			}
-		}
-	}
+	version, revision := asset.Version()
 	if revision != "" {
 		fmt.Fprintf(w, "vif %s (%s)\n", version, revision)
 		return
