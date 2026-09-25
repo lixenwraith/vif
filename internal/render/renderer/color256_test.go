@@ -5,6 +5,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
 )
 
@@ -41,6 +42,31 @@ func TestEmber256WearsTheHeatBarLeadColour(t *testing.T) {
 			ember.Render(rc, buf)
 			if got := buf.CellAt(pos.X+1, pos.Y); got.Attrs&terminal.AttrBg256 == 0 || got.Bg.R != want {
 				t.Fatalf("width %d heat %d: ember palette (%d, %v), heat bar lead %d", width, heat, got.Bg.R, got.Attrs, want)
+			}
+		}
+	}
+}
+
+// TestShield256RimClosesOnEveryAxis: every shield's 256-colour rim crosses both
+// axes on both sides of its centre, however few cells tall the shield is.
+func TestShield256RimClosesOnEveryAxis(t *testing.T) {
+	t.Parallel()
+	const w, h, cx, cy = 60, 30, 30, 15
+	rc := render.RenderContext{ViewportWidth: w, ViewportHeight: h, MapWidth: w, MapHeight: h}
+	p := NewShieldPainter(terminal.ColorMode256)
+
+	for shieldType := range visual.ShieldConfigs {
+		cfg := &visual.ShieldConfigs[shieldType]
+		buf := render.NewRenderBuffer(terminal.ColorMode256, w, h)
+		p.Paint(buf, rc, cx, cy, ShieldStyle{Config: cfg, BlendScale: 1, Palette256: cfg.Palette256, SkipX: -1, SkipY: -1})
+
+		for _, dir := range [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}} {
+			crossed := false
+			for n := 1; n <= cfg.VisualRadiusXInt && !crossed; n++ {
+				crossed = buf.CellAt(cx+dir[0]*n, cy+dir[1]*n).Attrs&terminal.AttrBg256 != 0
+			}
+			if !crossed {
+				t.Errorf("shield type %d: no rim cell towards %v", shieldType, dir)
 			}
 		}
 	}

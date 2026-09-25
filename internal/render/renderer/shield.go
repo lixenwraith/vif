@@ -43,7 +43,7 @@ type ShieldPainter struct {
 	glowActive       bool
 	rotDirX, rotDirY float64
 	cellDx, cellDy   float64
-	rim256           uint8
+	rim256, glow256  uint8
 }
 
 // NewShieldPainter creates a painter dispatching to the appropriate color mode
@@ -107,11 +107,12 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 
 func shieldFrameTrueColor(*ShieldPainter) {}
 
-// shieldFrame256 dims a peer's rim the way the TrueColor path scales its blend
+// shieldFrame256 resolves the rim and glow palettes, dimming a peer's the way TrueColor scales its blend
 func shieldFrame256(p *ShieldPainter) {
-	p.rim256 = p.style.Palette256
-	if p.style.BlendScale < 1 {
-		p.rim256 = color.RGBTo256(color.Screen(visual.RgbBackground, p.style.Color, float64(p.style.BlendScale)))
+	p.rim256, p.glow256 = p.style.Palette256, color.RGBTo256(p.style.GlowColor)
+	if scale := float64(p.style.BlendScale); scale < 1 {
+		p.rim256 = color.RGBTo256(color.Screen(visual.RgbBackground, p.style.Color, scale))
+		p.glow256 = color.RGBTo256(color.Screen(visual.RgbBackground, p.style.GlowColor, scale))
 	}
 }
 
@@ -170,12 +171,20 @@ func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, sc
 	buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.GlowColor, render.BlendSoftLight, intensity, terminal.AttrNone)
 }
 
-// shieldCell256 renders discrete rim for 256-color terminals
+// shieldCell256 renders a solid rim band, lit in the glow colour where it faces the rotating glow
 func shieldCell256(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq float64) {
-	if normalizedDistSq < visual.Shield256Threshold {
+	cfg := p.style.Config
+	if normalizedDistSq < cfg.Rim256Min || normalizedDistSq > cfg.Rim256Max {
 		return
 	}
-	buf.SetBg256(screenX, screenY, p.rim256)
+	palette := p.rim256
+	if p.glowActive {
+		cellDirX, cellDirY := vmath.Normalize2DF(p.cellDx, p.cellDy)
+		if vmath.DotProductF(cellDirX, cellDirY, p.rotDirX, p.rotDirY) >= visual.Shield256GlowDot {
+			palette = p.glow256
+		}
+	}
+	buf.SetBg256(screenX, screenY, palette)
 }
 
 // --- Cursor Shield Renderer ---

@@ -14,8 +14,10 @@ const (
 	ShieldPlayerGlowIntensity = 0.7
 	// PeerFieldBlend keeps remote shield and ember fields subordinate to the local cursor.
 	PeerFieldBlend = 0.3
-	// Shield256Threshold is normalized distSq below which 256-color rim is transparent
-	Shield256Threshold = 0.64
+	// Shield256RimStart is the normalized distSq a 256-color rim starts at when the shield is large enough
+	Shield256RimStart = 0.64
+	// Shield256GlowDot is the least alignment with the glow direction that lights a 256-color rim cell
+	Shield256GlowDot = 0.8
 	// ShieldGlowEdgeThreshold is normalized distSq below which glow is suppressed
 	ShieldGlowEdgeThreshold = 0.36
 )
@@ -43,6 +45,10 @@ type ShieldConfig struct {
 	// Visual params - accessed per-cell for alpha
 	MaxOpacity    float64
 	GlowIntensity float64
+
+	// 256-color rim band in normalized distSq
+	Rim256Min float64
+	Rim256Max float64
 
 	// Iteration bounds - accessed once per entity
 	VisualRadiusXInt int
@@ -106,6 +112,7 @@ func buildShieldConfig(rx, ry, maxOpacity float64, colorMain, colorAlt color.RGB
 
 	visualRxInt := int(math.Ceil(rx*parameter.ShieldFeatherEndRatio)) + 1
 	visualRyInt := int(math.Ceil(ry*parameter.ShieldFeatherEndRatio)) + 1
+	rimMin, rimMax := rim256Band(invRxSq, invRySq, visualRxInt, visualRyInt)
 
 	return ShieldConfig{
 		RadiusX:          rx,
@@ -116,6 +123,8 @@ func buildShieldConfig(rx, ry, maxOpacity float64, colorMain, colorAlt color.RGB
 		VisualRadiusYInt: visualRyInt,
 		MaxOpacity:       maxOpacity,
 		GlowIntensity:    glowIntensity,
+		Rim256Min:        rimMin,
+		Rim256Max:        rimMax,
 		GlowPeriod:       glowPeriod,
 		Color:            colorMain,
 		ColorAlt:         colorAlt,
@@ -123,4 +132,22 @@ func buildShieldConfig(rx, ry, maxOpacity float64, colorMain, colorAlt color.RGB
 		Palette256Alt:    paletteAlt,
 		GlowColor:        glowColor,
 	}
+}
+
+// rim256Band fits the 256-color rim to the cell grid: it spans from the outermost drawn cell on
+// each axis inward, starting before Shield256RimStart when a shield is too small for that band
+// to hold a whole row or column, so every shield closes into a ring
+func rim256Band(invRxSq, invRySq float64, reachX, reachY int) (float64, float64) {
+	var edgeX, edgeY float64
+	for n := reachX; n > 0 && edgeX == 0; n-- {
+		if d := vmath.EllipseDistSqF(float64(n), 0, invRxSq, invRySq); d <= ShieldFeatherEnd {
+			edgeX = d
+		}
+	}
+	for n := reachY; n > 0 && edgeY == 0; n-- {
+		if d := vmath.EllipseDistSqF(0, float64(n), invRxSq, invRySq); d <= ShieldFeatherEnd {
+			edgeY = d
+		}
+	}
+	return min(Shield256RimStart, edgeX, edgeY), max(edgeX, edgeY)
 }
