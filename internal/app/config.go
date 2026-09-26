@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/converge"
@@ -102,6 +103,9 @@ type Config struct {
 
 	// AudioMuted is the initial effect mute state
 	AudioMuted bool
+
+	// AudioBuffer is the mixer period; zero is the audio package's default
+	AudioBuffer time.Duration
 
 	// LogScope is the initial scope spec; "" = all
 	LogScope string

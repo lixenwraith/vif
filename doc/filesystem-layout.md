@@ -24,8 +24,8 @@ wad/                            internal/asset/
 │   ├── main/   default          ├── content/   fallback corpus
 │   ├── blank/  scaffold         ├── input/     default keymap
 │   └── td/     tower defence    ├── audio/     built-in sound bank
-├── content/    typing corpus    └── splash_font.go
-└── image/      .vifimg assets
+├── content/    typing corpus    ├── vif.toml   default settings
+└── image/      .vifimg assets   └── splash_font.go
 ```
 
 The external `main` scenario and the embedded fallback are intentionally
@@ -45,6 +45,7 @@ only.
 
 ```text
 vif/
+├── vif.toml     settings: flag defaults (§3)
 ├── scenario/    named scenarios, each rooted at scenario.toml
 │   ├── main/    discovered default
 │   ├── blank/   authoring scaffold
@@ -104,12 +105,17 @@ session resolves its scenario from the node and its corpus and keymap from the
 binary. That is deliberate: a native guest running `-d` has to be able to join one,
 and its content identity is `embedded`.
 
-A scenario is content, not configuration, which is why it is named for what it is
-and lives in its own category. The word *configuration* is reserved here for what
-settles how this process runs: the roots above, the keymap and audio overrides,
-and a future `vif.toml` at the root of each of them, which would supply what CLI
-flags and environment variables supply today under the same precedence. Nothing
-reads such a file yet; the name is held so the category stays one thing.
+`vif.toml` at the top of a root holds what a flag would otherwise say on every run:
+`[paths]` names another root (`root`, read as `-config-dir` is), the log and
+journal directories, and the scenario, content and keymap `-s`, `-f` and `-k`
+take; `[audio] buffer_ms` sets the mixer period. It is found like any resource,
+from `-config-dir` down to the system roots; the first file wins whole, a key it
+omits keeps the embedded default, and the `vif.toml` inside its own `root` is not
+read. Every key is a default: a flag given on the command line wins, and `-d`
+still takes the embedded scenario and content. A relative path is relative to the
+file, `~/` is the home directory, and an unknown key is refused. `-check` names
+the file it read. Music and sound overrides stay out of it, because a run that
+creates no audio refuses them and a default must not break `-serve`.
 
 ## 4. Installation
 
@@ -131,8 +137,8 @@ the streams separate:
 
 | Output | Default | Override |
 |---|---|---|
-| Session logs, snapshots, recorder files, runtime stderr capture, profiles and traces | `$XDG_STATE_HOME/vif/log/` | `-l=DIR` |
-| Replay journals | `$XDG_STATE_HOME/vif/journal/` | `-j=DIR` |
+| Session logs, snapshots, recorder files, runtime stderr capture, profiles and traces | `$XDG_STATE_HOME/vif/log/` | `-l=DIR`, `paths.log` |
+| Replay journals | `$XDG_STATE_HOME/vif/journal/` | `-j=DIR`, `paths.journal` |
 
 On platforms without an XDG state root, the platform user-cache directory is
 used. Only when no user location can be resolved does either stream fall back to
@@ -143,7 +149,7 @@ boolean-style flags, a directory must use the equals form.
 
 ## 6. Package ownership and WASM
 
-`internal/paths` owns platform directory discovery and names. `internal/resource`
+`internal/paths` owns platform directory discovery, names and `vif.toml`. `internal/resource`
 owns composition-time resource selection. Loaders in `internal/fsm`,
 `internal/input`, `internal/content`, and `internal/service` receive
 already-resolved files or filesystem capabilities; they do not invent search

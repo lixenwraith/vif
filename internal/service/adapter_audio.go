@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -15,17 +15,18 @@ import (
 
 type AudioService struct {
 	audioEngine *audio.AudioEngine
-	disabled    atomic.Bool
 
 	initMuted   bool
 	initBackend string
+	initBuffer  time.Duration
 	src         AudioSource
 }
 
-func NewAudioService(muted bool, forceBackend string, src AudioSource) *AudioService {
+func NewAudioService(muted bool, forceBackend string, buffer time.Duration, src AudioSource) *AudioService {
 	return &AudioService{
 		initMuted:   muted,
 		initBackend: forceBackend,
+		initBuffer:  buffer,
 		src:         src,
 	}
 }
@@ -37,6 +38,7 @@ func (s *AudioService) Init() error {
 	config := audio.DefaultAudioConfig()
 	config.Enabled = !s.initMuted
 	config.ForceBackend = s.initBackend
+	config.Buffer = s.initBuffer
 
 	// Inject game-specific parameters, breaking cyclic dependency
 	config.EffectVolumes = parameter.GameEffectVolumes
@@ -69,15 +71,14 @@ func (s *AudioService) Init() error {
 
 	eng, err := audio.NewAudioEngine(config)
 	if err != nil {
-		s.disabled.Store(true)
-		return nil // error discarded; no telemetry, no surface
+		return fmt.Errorf("audio: %w", err) // a configuration the player wrote
 	}
 	s.audioEngine = eng
 	return nil
 }
 
 func (s *AudioService) Start() error {
-	if s.disabled.Load() || s.audioEngine == nil {
+	if s.audioEngine == nil {
 		return nil // Sfx stays SoundNone: every Play is a no-op
 	}
 
@@ -111,7 +112,7 @@ func (s *AudioService) Stop() error {
 }
 
 func (s *AudioService) Contribute(r *engine.Resource) {
-	if s.disabled.Load() || s.audioEngine == nil {
+	if s.audioEngine == nil {
 		return
 	}
 	r.Audio = &engine.AudioResource{Engine: s.audioEngine}

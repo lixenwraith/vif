@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"flag"
 	"fmt"
 	"net"
@@ -61,6 +62,9 @@ var (
 	flagSession      sessionFlags
 	flagJournal      = newSetFlag(true, parseOutputDirFlag)
 	flagDev          = newSetFlag(true, parseBoolFlag)
+
+	// settings is vif.toml as the roots of -config-dir resolved it.
+	settings paths.Settings
 )
 
 func init() {
@@ -94,9 +98,18 @@ func main() {
 		return
 	}
 
+	var (
+		settingsPath string
+		err          error
+	)
+	if settings, settingsPath, err = paths.LoadSettings(flagConfig.dir); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(exitFailure)
+	}
+	applySettings(settings)
+
 	setupDiagnostics()
 
-	var err error
 	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, *flagWatch, flagSession)
 	switch {
 	case sessionErr != nil:
@@ -104,6 +117,7 @@ func main() {
 	case *flagSchema:
 		err = manifest.Schema(os.Stdout)
 	case *flagCheck:
+		fmt.Println("settings ok:", cmp.Or(settingsPath, "embedded default"))
 		err = resource.Check(buildConfig().Resources, os.Stdout)
 	case *flagReplay != "":
 		err = app.PlayJournal(flagConfig.options(), *flagMute, *flagReplay)
@@ -267,6 +281,7 @@ func buildConfig() app.Config {
 	}
 
 	cfg.AudioMuted = *flagMute
+	cfg.AudioBuffer = time.Duration(settings.Audio.BufferMs) * time.Millisecond
 
 	switch *flagColor {
 	case colourTrue:
@@ -277,6 +292,26 @@ func buildConfig() app.Config {
 	// colourAuto leaves ColorModeSet false, which is the terminal deciding.
 
 	return cfg
+}
+
+// applySettings makes vif.toml the default of each path flag it names: a flag given
+// on the command line keeps its value, -d keeps the embedded scenario and content,
+// and -l and -j still decide whether a stream is written.
+func applySettings(s paths.Settings) {
+	fill := func(flag *string, file string) {
+		if *flag == "" {
+			*flag = file
+		}
+	}
+	p := s.Paths
+	fill(&flagConfig.dir, p.Root)
+	fill(&flagConfig.keymap, p.Keymap)
+	fill(&flagLogs.dir.value, p.Log)
+	fill(&flagJournal.value, p.Journal)
+	if !flagConfig.embedded {
+		fill(&flagConfig.scenario, p.Scenario)
+		fill(&flagConfig.content, p.Content)
+	}
 }
 
 // configFlags groups every runtime file override. Short flags remain for

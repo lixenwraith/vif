@@ -24,6 +24,7 @@ WAD_DIR := wad
 PKG_DIR := deploy/package
 WAD_ARCHIVE ?= $(BIN_DIR)/vif-wad.tar.gz
 KEYMAP_SRC := internal/asset/input/keymap.toml
+SETTINGS_SRC := internal/asset/vif.toml
 DESTDIR ?=
 # FreeBSD keeps everything outside the base system under /usr/local.
 PREFIX_DEFAULT != uname -s | grep -q FreeBSD && echo /usr/local || echo /usr
@@ -53,7 +54,7 @@ help:
 	@echo "  serve    Build wasm and http-server, then serve web/ directory (use PORT=8080 to change)"
 	@echo "  run      Build (dev) and run the game"
 	@echo "  install  Stage binary, wad, manual, launcher, completion and docs under DESTDIR/PREFIX"
-	@echo "  install-config Install the wad and default keymap under $(VIF_CONFIG_DIR)"
+	@echo "  install-config Install the wad, default keymap and vif.toml under $(VIF_CONFIG_DIR)"
 	@echo "  install-config-force Replace files previously installed there"
 	@echo "  wad-archive Pack the wad as the config root a player extracts ($(WAD_ARCHIVE))"
 	@echo "  image    Build the dedicated-session container image (scratch, static, non-root)"
@@ -176,6 +177,7 @@ install-config:
 	}; \
 	for src in $$(find $(WAD_DIR) -type f); do copy_file "$$src" "$$root/$${src#$(WAD_DIR)/}"; done; \
 	copy_file $(KEYMAP_SRC) "$$root/input/keymap.toml"; \
+	copy_file $(SETTINGS_SRC) "$$root/vif.toml"; \
 	install -d -m 0755 "$$root/audio"
 
 install-config-force:

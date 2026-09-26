@@ -15,10 +15,10 @@ import (
 // maxPreStartCmds bounds the pre-Start buffer; the mixer queue is 256
 const maxPreStartCmds = 64
 
-// mixerStopTimeout bounds Stop's wait for the mix goroutine. Bounded rather
-// than indefinite because a wedged backend must not hang shutdown and leave the
-// terminal in raw mode; on timeout Stop proceeds and leaks the goroutine.
-const mixerStopTimeout = 5 * AudioBufferDuration
+// mixerStopPeriods bounds Stop's wait for the mix goroutine, in mixer periods.
+// Bounded rather than indefinite because a wedged backend must not hang shutdown
+// and leave the terminal in raw mode; on timeout Stop proceeds and leaks it.
+const mixerStopPeriods = 5
 
 // Play rejection reasons, index-aligned with RejectNames. Exported so the
 // embedder can publish them without mirroring the enum.
@@ -49,6 +49,7 @@ func RejectNames() [RejectCount]string { return rejectNames }
 // sequencer, tracks, and voices are mixer-confined and lock-free
 type AudioEngine struct {
 	config *AudioConfig
+	buffer time.Duration // resolved mixer period
 	cache  *soundCache
 	mixer  *Mixer
 
@@ -99,8 +100,17 @@ func NewAudioEngine(cfg ...*AudioConfig) (*AudioEngine, error) {
 	if len(cfg) > 0 && cfg[0] != nil {
 		config = cfg[0]
 	}
+	buffer := config.Buffer
+	if buffer == 0 {
+		buffer = AudioBufferDuration
+	}
+	if buffer < AudioBufferMin || buffer > AudioBufferMax || buffer%AudioBufferStep != 0 {
+		return nil, fmt.Errorf("buffer %v: want a multiple of %v from %v to %v",
+			buffer, AudioBufferStep, AudioBufferMin, AudioBufferMax)
+	}
 	ae := &AudioEngine{
 		config:     config,
+		buffer:     buffer,
 		cache:      newSoundCache(),
 		stderrTail: &tailBuffer{},
 		stopChan:   make(chan struct{}),
@@ -171,7 +181,7 @@ func (ae *AudioEngine) Start() error {
 		return err
 	}
 
-	ae.mixer = NewMixer(w, ae.cache, kit)
+	ae.mixer = NewMixer(w, ae.cache, kit, ae.buffer)
 	ae.mixer.sequencer.arr = arr // before the mix goroutine exists
 	ae.mixer.SetMusicMuted(ae.musicMuted.Load())
 	ae.mixer.SetPaused(ae.paused.Load())
@@ -247,7 +257,7 @@ func (ae *AudioEngine) attach(c *BackendConfig) (io.Writer, error) {
 		close(exit)
 	}()
 
-	silence := make([]byte, AudioBufferSamples*AudioBytesPerFrame)
+	silence := make([]byte, bufferFrames(ae.buffer)*AudioBytesPerFrame)
 	if _, err := stdin.Write(silence); err != nil {
 		cmd.Process.Kill()
 		<-exit
@@ -339,7 +349,7 @@ func (ae *AudioEngine) Stop() {
 	ae.beMu.Unlock()
 
 	if ae.mixer != nil {
-		ae.mixer.Wait(mixerStopTimeout)
+		ae.mixer.Wait(mixerStopPeriods * ae.buffer)
 	}
 	ae.wg.Wait()
 }

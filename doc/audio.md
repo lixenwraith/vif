@@ -48,8 +48,8 @@ pause holds the mixer, as the game's pause does.
 | Channels | 2 (stereo) |
 | Format | Signed 16-bit little-endian PCM |
 | Bytes per frame | 4 |
-| Buffer duration | 50 ms |
-| Frames per buffer | 2,205 |
+| Buffer duration | 50 ms; `vif.toml` `[audio] buffer_ms`, 10–200 in steps of 10 |
+| Frames per buffer | 441 per 10 ms (2,205 at 50) |
 
 Every mixer pass drains pending commands, renders music and effects into
 separate floating-point buses, sidechain-ducks music under effects, applies the

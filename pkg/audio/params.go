@@ -13,11 +13,13 @@ const (
 	AudioBitDepth      = 16
 	AudioBytesPerFrame = AudioChannels * (AudioBitDepth / 8) // 4
 
-	// AudioBufferDuration sets mixer tick rate and output latency
+	// AudioBufferDuration is the default mixer period, which sets output latency.
+	// AudioConfig.Buffer chooses another inside AudioBufferMin..AudioBufferMax in
+	// AudioBufferStep, the shortest period that is a whole number of frames (441).
 	AudioBufferDuration = 50 * time.Millisecond
-
-	// AudioBufferSamples is frames per mixer tick
-	AudioBufferSamples = AudioSampleRate * int(AudioBufferDuration/time.Millisecond) / 1000 // 2205
+	AudioBufferMin      = 10 * time.Millisecond
+	AudioBufferMax      = 200 * time.Millisecond
+	AudioBufferStep     = 10 * time.Millisecond
 
 	// AudioProbeWindow is the backend survival window after the probe write
 	AudioProbeWindow = 60 * time.Millisecond

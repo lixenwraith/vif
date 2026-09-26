@@ -22,7 +22,7 @@ func (a *App) initAudioService() error {
 	if err != nil {
 		return err
 	}
-	return a.hub.Register(service.NewAudioService(a.cfg.AudioMuted, a.cfg.AudioBackend, src))
+	return a.hub.Register(service.NewAudioService(a.cfg.AudioMuted, a.cfg.AudioBackend, a.cfg.AudioBuffer, src))
 }
 
 // reportAudioSpec says in play that a malformed sounds.toml or music.toml fell back to

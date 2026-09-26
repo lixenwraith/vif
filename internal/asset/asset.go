@@ -1,8 +1,7 @@
 // Package asset embeds every file the binary must be able to play without a
-// host filesystem: the fallback scenario and typing corpus, the default keymap,
-// and the built-in sound and music banks, plus the version a source archive
-// carries. Each group is narrowed with fs.Sub so its runtime root is the category
-// directory, not internal/asset.
+// host filesystem: the fallback scenario and typing corpus, the default keymap and
+// settings, the built-in sound and music banks, and the version a source archive
+// carries. Each group is narrowed with fs.Sub so its runtime root is its category.
 package asset
 
 import (
@@ -12,7 +11,7 @@ import (
 	"strings"
 )
 
-//go:embed scenario/*.toml content/*.toml input/keymap.toml audio/*.toml
+//go:embed scenario/*.toml content/*.toml input/keymap.toml audio/*.toml vif.toml
 var assetFS embed.FS
 
 var (
@@ -35,6 +34,9 @@ var DefaultKeymap []byte
 // DefaultMusic is the built-in pattern bank, which a user music.toml overrides by name.
 var DefaultMusic []byte
 
+// DefaultSettings is the vif.toml whose values stand when no root holds one.
+var DefaultSettings []byte
+
 // A missing group is a broken build artifact, not a recoverable user error.
 func init() {
 	DefaultScenario = sub("scenario")
@@ -42,6 +44,7 @@ func init() {
 	DefaultSounds = sub("audio")
 	DefaultKeymap = read("input/keymap.toml")
 	DefaultMusic = read("audio/music.toml")
+	DefaultSettings = read("vif.toml")
 }
 
 // versionStamp is "$Format:...$" in a checkout; git archive, GitHub's archives

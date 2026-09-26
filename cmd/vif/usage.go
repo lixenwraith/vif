@@ -218,6 +218,10 @@ Each resource resolves from its own flag, then
 .BR \-config\-dir ,
 then the user configuration root, then each system root,
 and finally the copy compiled into the binary.
+The first root holding a
+.I vif.toml
+supplies the defaults of the path flags and the audio buffer;
+a flag given on the command line wins.
 .SH OPTIONS
 `, generatedBy, roff(summary))
 	for _, section := range portableSections() {
@@ -237,6 +241,10 @@ and finally the copy compiled into the binary.
 .I $XDG_CONFIG_HOME/vif
 User configuration root, normally
 .IR ~/.config/vif .
+.TP
+.I vif.toml
+Settings at the top of a configuration root: another root, the log, journal,
+scenario, content and keymap paths, and the audio mixer buffer.
 .TP
 .I $XDG_CONFIG_DIRS/vif
 System configuration roots, normally

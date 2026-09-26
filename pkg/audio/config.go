@@ -1,5 +1,7 @@
 package audio
 
+import "time"
+
 // DefaultEffectVolume is the neutral per-sound level shipped by the package.
 // Embedders overlay EffectVolumes / EffectShapes at service wiring; no
 // game-specific mix lives here
@@ -22,6 +24,13 @@ type AudioConfig struct {
 	BasePatterns []*Pattern // their roles, groups and tiers are the drawn arrangement
 	SoundTOML    []byte     // raw sounds.toml
 	PatternTOML  []byte     // raw music.toml
+	// Buffer is the mixer period; zero is AudioBufferDuration.
+	Buffer time.Duration
+}
+
+// bufferFrames is how many frames one mixer period of d renders.
+func bufferFrames(d time.Duration) int {
+	return int(int64(AudioSampleRate) * int64(d) / int64(time.Second))
 }
 
 // DefaultAudioConfig returns a neutral configuration

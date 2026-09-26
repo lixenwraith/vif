@@ -1,0 +1,24 @@
+# vif.toml: what a flag would otherwise say on every run. A flag given on the
+# command line wins. The first configuration root holding this file supplies it
+# (-config-dir, the user root, then the XDG system roots); a key it leaves out
+# keeps the default written here. A relative path is relative to this file, and
+# "~/" is the home directory; an empty path is the platform default.
+
+[paths]
+# A configuration root searched before the user root, as -config-dir names one.
+# The vif.toml inside it is not read.
+root = ""
+# Where -l writes session logs and -j writes replay journals; the flags still
+# turn the streams on. Default $XDG_STATE_HOME/vif/log and .../journal.
+log = ""
+journal = ""
+# What -s, -f and -k name: a scenario name or path, a content directory or
+# file, a keymap file.
+scenario = ""
+content = ""
+keymap = ""
+
+[audio]
+# Mixer period and output latency, in milliseconds: a multiple of 10 from 10
+# to 200. Shorter reacts sooner and underruns more easily on a loaded machine.
+buffer_ms = 50

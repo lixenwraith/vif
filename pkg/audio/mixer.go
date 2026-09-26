@@ -34,6 +34,8 @@ type Mixer struct {
 	dropped atomic.Uint64
 	errChan chan error
 
+	period time.Duration // one mixer pass, set at construction
+
 	// --- mix-goroutine confined ---
 	output    io.Writer
 	outBroken bool
@@ -53,8 +55,9 @@ type Mixer struct {
 }
 
 // NewMixer creates a mixer writing to out
-func NewMixer(out io.Writer, cache *soundCache, kit *drumKit) *Mixer {
+func NewMixer(out io.Writer, cache *soundCache, kit *drumKit, period time.Duration) *Mixer {
 	m := &Mixer{
+		period:    period,
 		output:    out,
 		cache:     cache,
 		kit:       kit,
@@ -157,10 +160,10 @@ func onePoleCoef(tau time.Duration) float64 {
 // loop: drain commands, render, write — one pass per buffer tick
 func (m *Mixer) loop() {
 	defer close(m.done)
-	ticker := time.NewTicker(AudioBufferDuration)
+	ticker := time.NewTicker(m.period)
 	defer ticker.Stop()
 
-	n := AudioBufferSamples
+	n := bufferFrames(m.period)
 	m.musicBuf = make([]float64, n)
 	m.sfxBuf = make([]float64, n)
 	mixBuf := make([]float64, n)
