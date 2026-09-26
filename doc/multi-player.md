@@ -263,7 +263,8 @@ capture already reconciles what it holds.
 
 Three cases close the edges. An instance that stops predicting — it took the term,
 or the last peer went — releases everything it holds, because the world it predicted
-is the only one there is. A reset drops the ledger, for the reason it drops the
+is the only one there is. It stops as a tick opens (`World.LatchSession`), so a
+derivation's phase never hangs on when a link noticed its peer, and journals it. A reset drops the ledger, for the reason it drops the
 replay suffix. Past `parameter.PredictionLedgerMax` the oldest entry is released
 unproved rather than discarded: losing a player's progression to a bound is worse
 than paying it a cadence early.

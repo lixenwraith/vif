@@ -1,11 +1,16 @@
 package event
 
-import "github.com/lixenwraith/vif/internal/vlog"
+import (
+	"encoding/base64"
+
+	"github.com/lixenwraith/vif/internal/vlog"
+)
 
 // Journal record subs; the offline verifier filters on these
 const (
-	SubJournalRecord = "journal"
-	SubJournalAnchor = "anchor"
+	SubJournalRecord  = "journal"
+	SubJournalAnchor  = "anchor"
+	SubJournalCapture = "capture"
 )
 
 // vlogSink writes journal output to the dedicated vlog journal session
@@ -57,4 +62,16 @@ func (vlogSink) Anchor(a JournalAnchor) {
 		"session_shared", a.SessionShared,
 		"slot", a.Slot,
 		"speed", a.Speed)
+}
+
+// Capture writes one installed world, its body base64 in a JSON string
+func (vlogSink) Capture(c JournalCapture) {
+	vlog.Journal(SubJournalCapture,
+		"jseq", c.JSeq,
+		"jrun", c.Run,
+		"jtick", c.Tick,
+		"boundary", c.Boundary,
+		"participant", uint64(c.Participant),
+		"authority", uint64(c.Authority),
+		"body", base64.StdEncoding.EncodeToString(c.Body))
 }

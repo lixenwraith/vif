@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 177
+const EventTypeCount = 179
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -33,6 +33,7 @@ func InitRegistry() {
 	RegisterType("EventParticipantDeparted", EventParticipantDeparted, &ParticipantDepartedPayload{})
 	RegisterType("EventPlayoutLead", EventPlayoutLead, &PlayoutLeadPayload{})
 	RegisterType("EventCursorStateSync", EventCursorStateSync, &CursorStatePayload{})
+	RegisterType("EventSessionPredicting", EventSessionPredicting, &SessionPredictingPayload{})
 	RegisterType("EventGameResetRequest", EventGameResetRequest, &GameResetPayload{})
 	RegisterType("EventMetaTelemetryRequest", EventMetaTelemetryRequest, nil)
 	RegisterType("EventMetaDebugRequest", EventMetaDebugRequest, nil)
@@ -116,6 +117,7 @@ func InitRegistry() {
 	RegisterType("EventCursorDespawned", EventCursorDespawned, &CursorDespawnedPayload{})
 	RegisterType("EventCursorMoveRequest", EventCursorMoveRequest, &CursorMoveRequestPayload{})
 	RegisterType("EventCursorMoved", EventCursorMoved, &CursorMovedPayload{})
+	RegisterType("EventCursorPredicted", EventCursorPredicted, &CursorMoveRequestPayload{})
 	RegisterType("EventCursorDefeatState", EventCursorDefeatState, &CursorDefeatStatePayload{})
 	RegisterType("EventCursorSetLocalRequest", EventCursorSetLocalRequest, &CursorSetLocalPayload{})
 	RegisterType("EventCursorLocalChanged", EventCursorLocalChanged, &CursorSetLocalPayload{})
@@ -216,6 +218,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventParticipantDeparted:             ClassBus,
 	EventPlayoutLead:                     ClassLocal,
 	EventCursorStateSync:                 ClassLocal,
+	EventSessionPredicting:               ClassLocal,
 	EventGameResetRequest:                ClassBus,
 	EventMetaTelemetryRequest:            ClassLocal,
 	EventMetaDebugRequest:                ClassLocal,
@@ -299,6 +302,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventCursorDespawned:                 ClassShared,
 	EventCursorMoveRequest:               ClassBus,
 	EventCursorMoved:                     ClassShared,
+	EventCursorPredicted:                 ClassLocal,
 	EventCursorDefeatState:               ClassBus,
 	EventCursorSetLocalRequest:           ClassLocal,
 	EventCursorLocalChanged:              ClassLocal,

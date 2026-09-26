@@ -7,6 +7,7 @@ package journal
 
 import (
 	"bufio"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -16,11 +17,12 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 )
 
-// Set is one parsed journal: its anchors in emission order, and its records in
-// jseq order with duplicates from overlapping files removed
+// Set is one parsed journal: its anchors in emission order, its records in jseq
+// order with duplicates from overlapping files removed, and the worlds it wrote
 type Set struct {
-	Anchors []event.JournalAnchor
-	Records []event.JournalRecord
+	Anchors  []event.JournalAnchor
+	Records  []event.JournalRecord
+	Captures []event.JournalCapture
 }
 
 // line is the envelope every vlog record shares; non-journal lines carry no sub
@@ -40,6 +42,16 @@ type recordFields struct {
 	Run       uint64 `json:"jrun"`
 	Tick      uint64 `json:"jtick"`
 	Boundary  uint64 `json:"boundary"`
+}
+
+type captureFields struct {
+	JSeq        uint64 `json:"jseq"`
+	Run         uint64 `json:"jrun"`
+	Tick        uint64 `json:"jtick"`
+	Boundary    uint64 `json:"boundary"`
+	Participant uint32 `json:"participant"`
+	Authority   uint32 `json:"authority"`
+	Body        []byte `json:"body"` // base64, which encoding/json decodes into []byte
 }
 
 type anchorFields struct {
@@ -100,6 +112,9 @@ func Load(paths ...string) (Set, error) {
 	s.Records = slices.CompactFunc(s.Records, func(a, b event.JournalRecord) bool {
 		return a.JSeq == b.JSeq
 	})
+	slices.SortStableFunc(s.Captures, func(a, b event.JournalCapture) int {
+		return cmp.Compare(a.JSeq, b.JSeq)
+	})
 	return s, nil
 }
 
@@ -131,6 +146,12 @@ func (s *Set) readFile(path string) error {
 				return fmt.Errorf("%s:%d: %w", path, n, err)
 			}
 			s.Anchors = append(s.Anchors, a)
+		case event.SubJournalCapture:
+			var f captureFields
+			if err := json.Unmarshal(l.Fields, &f); err != nil {
+				return fmt.Errorf("%s:%d: %w", path, n, err)
+			}
+			s.Captures = append(s.Captures, event.JournalCapture(f))
 		}
 	}
 	return sc.Err()

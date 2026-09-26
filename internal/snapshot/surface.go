@@ -148,9 +148,9 @@ func SimDeniedKeys() []string {
 	return out
 }
 
-// SimDeniedKey is deniedSimKey plus three whole groups: a replay installs no
-// capture and applies no correction, so snapshot describes the session the run
-// was part of, and prof and proc measure this process rather than the simulation.
+// SimDeniedKey is deniedSimKey plus three whole groups: a replay runs no correction
+// exchange, so snapshot describes the session the run was part of, and prof and
+// proc measure this process rather than the simulation.
 func SimDeniedKey(key string) bool {
 	return deniedSimKey[key] || strings.HasPrefix(key, "snapshot.") ||
 		strings.HasPrefix(key, "prof.") || strings.HasPrefix(key, "proc.")

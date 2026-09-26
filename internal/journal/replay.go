@@ -15,15 +15,17 @@ type ReplayTarget interface {
 	Position() event.Stamp
 	Tick(int)
 	Settle()
-	PushRecord(event.JournalRecord, any)
+	PushRecord(event.JournalRecord, any) bool // false: applied, nothing queued
+	Install(event.JournalCapture) error
 }
 
 // ReplayStats reports what a replay consumed.
 type ReplayStats struct {
-	Records  int
-	Injected int
-	Groups   int
-	End      event.Stamp
+	Records   int
+	Injected  int
+	Groups    int
+	Installed int
+	End       event.Stamp
 }
 
 type groupKey struct{ run, tick, boundary uint64 }
@@ -46,21 +48,59 @@ func (k groupKey) before(o groupKey) bool {
 // ReplayDriver injects a record stream into a caller-driven target. Step consumes
 // one tick so a presenting loop can pace it and a harness can run it flat out.
 type ReplayDriver struct {
-	target  ReplayTarget
-	records []event.JournalRecord
-	next    int
-	cur     groupKey
-	stats   ReplayStats
+	target   ReplayTarget
+	records  []event.JournalRecord
+	captures []event.JournalCapture
+	next     int
+	nextCap  int
+	cur      groupKey
+	landed   bool // an install moved the clock past records stamped before it
+	stats    ReplayStats
 }
 
-// NewReplayDriver binds a record stream to a target. The record slice belongs to
-// the driver for its lifetime; each settle group is sorted in place by queue slot.
-func NewReplayDriver(target ReplayTarget, records []event.JournalRecord) *ReplayDriver {
-	return &ReplayDriver{target: target, records: records, stats: ReplayStats{Records: len(records)}}
+// NewReplayDriver binds a record stream and the worlds written among it to a
+// target. Both slices belong to the driver; each settle group is sorted in place
+// by queue slot, and captures must be in jseq order.
+func NewReplayDriver(target ReplayTarget, records []event.JournalRecord, captures []event.JournalCapture) *ReplayDriver {
+	return &ReplayDriver{target: target, records: records, captures: captures,
+		stats: ReplayStats{Records: len(records)}}
 }
 
-// Done reports whether every record has been injected.
-func (d *ReplayDriver) Done() bool { return d.next >= len(d.records) }
+// Done reports whether every record has been injected and every world installed.
+func (d *ReplayDriver) Done() bool {
+	return d.next >= len(d.records) && d.nextCap >= len(d.captures)
+}
+
+// dueCapture reports whether the next thing in the stream is a written world: one
+// whose place is before the next record, or any left after the last.
+func (d *ReplayDriver) dueCapture() bool {
+	return d.nextCap < len(d.captures) &&
+		(d.next >= len(d.records) || d.captures[d.nextCap].JSeq < d.records[d.next].JSeq)
+}
+
+// install ticks to where the recorded run stood when it wrote the next world, then
+// writes it; the install moves the clock, so the position is read back.
+func (d *ReplayDriver) install() (bool, error) {
+	c := d.captures[d.nextCap]
+	at := d.target.Position()
+	if at.Run != c.Run || at.Tick > c.Tick {
+		return false, fmt.Errorf("replay: capture after jseq %d was written at run %d tick %d, the replay is at run %d tick %d",
+			c.JSeq, c.Run, c.Tick, at.Run, at.Tick)
+	}
+	if at.Tick < c.Tick {
+		d.target.Tick(1)
+		return true, nil
+	}
+	if err := d.target.Install(c); err != nil {
+		return false, fmt.Errorf("replay: capture after jseq %d: %w", c.JSeq, err)
+	}
+	p := d.target.Position()
+	d.cur = groupKey{run: p.Run, tick: p.Tick, boundary: p.Boundary}
+	d.landed = true
+	d.nextCap++
+	d.stats.Installed++
+	return true, nil
+}
 
 // Stats reports what has been consumed so far, with the target's live position.
 func (d *ReplayDriver) Stats() ReplayStats {
@@ -83,11 +123,19 @@ func (d *ReplayDriver) Step() (bool, error) {
 	if d.Done() {
 		return false, nil
 	}
+	if d.dueCapture() {
+		return d.install()
+	}
 	k := keyOf(d.records[d.next])
 	if k.before(d.cur) {
-		return false, fmt.Errorf("replay: jseq %d stamped run %d tick %d boundary %d, out of order",
-			d.records[d.next].JSeq, k.run, k.tick, k.boundary)
+		if !d.landed {
+			return false, fmt.Errorf("replay: jseq %d stamped run %d tick %d boundary %d, out of order",
+				d.records[d.next].JSeq, k.run, k.tick, k.boundary)
+		}
+		// Pushed just before a write that moved the clock: it lands on that world.
+		return true, d.injectGroup(k)
 	}
+	d.landed = false
 
 	if k.run != d.cur.run {
 		if got := d.target.Position().Run; got != k.run {
@@ -105,7 +153,7 @@ func (d *ReplayDriver) Step() (bool, error) {
 		}
 	}
 
-	for !d.Done() {
+	for d.next < len(d.records) && !d.dueCapture() {
 		k = keyOf(d.records[d.next])
 		if k.run != d.cur.run || k.tick != d.cur.tick {
 			break
@@ -131,10 +179,15 @@ func (d *ReplayDriver) injectGroup(k groupKey) error {
 	j := d.next
 	for j < len(d.records) && keyOf(d.records[j]) == k {
 		j++
+		// A world written inside a settle group ends it: what follows landed on that world.
+		if d.nextCap < len(d.captures) && d.captures[d.nextCap].JSeq <= d.records[j-1].JSeq {
+			break
+		}
 	}
 	group := d.records[d.next:j]
 	sort.SliceStable(group, func(x, y int) bool { return group[x].Seq < group[y].Seq })
 
+	queued := false
 	for i := range group {
 		rec := &group[i]
 		if err := checkRecord(rec); err != nil {
@@ -144,15 +197,20 @@ func (d *ReplayDriver) injectGroup(k groupKey) error {
 		if err != nil {
 			return fmt.Errorf("replay: jseq %d %s: %w", rec.JSeq, event.GetEventName(rec.Type), err)
 		}
-		d.target.PushRecord(*rec, payload)
+		queued = d.target.PushRecord(*rec, payload) || queued
 	}
-	if len(group) > 0 {
+	// The recorded run settles only what it pushed; a settle here would dispatch
+	// events it held until its next tick.
+	if queued {
 		d.target.Settle()
 	}
 
 	d.stats.Injected += len(group)
 	d.stats.Groups++
-	d.cur, d.next = k, j
+	d.next = j
+	if !k.before(d.cur) {
+		d.cur = k
+	}
 	return nil
 }
 

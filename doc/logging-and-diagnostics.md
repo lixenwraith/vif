@@ -690,7 +690,7 @@ Only a platform with no resolvable user-state/cache location falls back to
 | `command` | Ex command line, including a typed `:region`. |
 | `network` | Remote producer. |
 | `debug` | Harness or out-of-band APIs such as `App.Region`. |
-| `session` | Roster/lifecycle observation from the session layer. |
+| `session` | Roster/lifecycle observation from the session layer, and what it settled: kill confirmations and a tick's prediction state. |
 | `device` | This machine's own output, the audio mute; never journaled. |
 
 The dispatcher does not branch on origin. The value exists for APM admission
@@ -746,8 +746,23 @@ seed, scenario name and digest, corpus fingerprint, and geometry before replay.
 The scenario is asked for by name, so a journal recorded against one that is not
 installed replays under the same `-config-dir` the run used. It refuses an
 anchor with non-zero `start_run` or `start_tick` (`StartRun`/`StartTick` in
-Go): a capture beginning mid-run needs a world snapshot that this journal
-format does not contain.
+Go): a journal beginning mid-run would need this instance's player-domain world,
+which no written world carries.
+
+### Written worlds and notes
+
+A participant writes worlds it did not simulate: the capture its join installed
+and each correction after it. Each is a `capture` record carrying `jseq` (the
+records before it), its lattice position, the local `participant`, the
+`authority` and the capture as base64 `body`; replay installs it at that place
+under that identity, so a guest's journal replays from its join. Owner syncs and
+kill confirmations are records; the authority's worlds that proved them are not.
+
+Two events are notes, journaled and applied by replay but never dispatched:
+`EventCursorPredicted`, the D-18 placement a keystroke made, and
+`EventSessionPredicting`, the prediction state a tick opened under
+(`World.LatchSession`). A replay settles only a group that queued an event, as
+the recorded run did.
 
 `app.PlayJournal` presents the replay with fixed viewer controls rather than
 the keymap. See [Runtime and concurrency](runtime.md) for playback keys,

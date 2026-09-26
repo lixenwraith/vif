@@ -62,7 +62,7 @@ func PlayJournal(roots resource.Options, muted bool, paths ...string) error {
 	if err := a.VerifyAnchor(an); err != nil {
 		return err
 	}
-	d, err := newReplayDriver(a, set.Records)
+	d, err := newReplayDriver(a, set.Records, set.Captures)
 	if err != nil {
 		return err
 	}

@@ -481,8 +481,8 @@ func TestBeginHostingRefusesASecondSession(t *testing.T) {
 // mustSocketJoiner runs the whole guest side of a join against a live host: dial,
 // identity, the start gate, the capture, the install and the catch-up. It is the
 // production sequence, assembled here because Loop owns it in a run with a
-// terminal and this harness owns its own ticks.
-func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int) (*App, *network.SocketPort) {
+// terminal and this harness owns its own ticks. configure edits the join config.
+func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int, configure ...func(*Config)) (*App, *network.SocketPort) {
 	t.Helper()
 	pending, offered := dialSession(t, addr)
 	t.Cleanup(func() { _ = pending.Close() })
@@ -490,6 +490,9 @@ func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int) (*App, *
 	joinCfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: w, Height: h}, offered)
 	if err != nil {
 		t.Fatalf("join config: %v", err)
+	}
+	for _, f := range configure {
+		f(&joinCfg)
 	}
 	if joinCfg.Seed != seed {
 		t.Fatalf("join config drew seed %#x, host runs %#x", joinCfg.Seed, seed)

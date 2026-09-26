@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // fixtureSeed pins the perturbation test so CI is reproducible
@@ -302,6 +303,116 @@ func TestReplayReproducesRecordedRuns(t *testing.T) {
 			replayAndCompare(t, script)
 		})
 	}
+}
+
+// TestAGuestJournalReplaysFromItsJoin records a guest from its join until after its
+// host has left, then replays the journal with no host: the joined world, each
+// correction written, the owner syncs and the session's end all come from records.
+func TestAGuestJournalReplaysFromItsJoin(t *testing.T) {
+	const seed, hostLeaves = 0x3017, 400
+	host := mustHeadless(t, seed, 120, 40)
+	defer host.Close()
+	tickUntilCursor(t, host)
+	host.Tick(240)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	stop := tickInBackground(host)
+	rec := journal.NewCapture()
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), seed, 120, 40, func(c *Config) {
+		c.Journal, c.JournalSink = true, rec
+	})
+	stop()
+	waitForRosterPair(t, host, guest)
+
+	want := map[event.Stamp][]string{}
+	rng := vmath.NewFastRand(3)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	for i := range hostLeaves + 300 {
+		if i == hostLeaves {
+			host.Close()
+		}
+		if rng.Intn(3) == 0 {
+			inject(t, guest, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+		}
+		if rng.Intn(5) == 0 {
+			inject(t, guest, &input.Intent{Type: input.IntentFireMain, Count: 1})
+		}
+		if i < hostLeaves {
+			if rng.Intn(3) == 0 {
+				inject(t, host, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+			}
+			host.Tick(1)
+		}
+		guest.Tick(1)
+		guest.ApplyPendingCorrections()
+		p := guest.Position()
+		want[event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(guest)
+	}
+	if guest.World().PredictsShared() {
+		t.Fatal("the guest still predicts after its host left")
+	}
+
+	// Compared only on ticks nothing was recorded on: there the live guest had not
+	// yet consumed what the replay injects after the tick.
+	busy := map[event.Stamp]bool{}
+	for _, r := range rec.Records() {
+		busy[event.Stamp{Run: r.Run, Tick: r.Tick}] = true
+	}
+	for _, c := range rec.Captures() {
+		busy[event.Stamp{Run: c.Run, Tick: c.Tick}] = true
+	}
+	cfg, err := ConfigFromAnchor(rec.Anchors()[0])
+	if err != nil {
+		t.Fatalf("config from anchor: %v", err)
+	}
+	rep, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatalf("replay app: %v", err)
+	}
+	defer rep.Close()
+	d, err := newReplayDriver(rep, rec.Records(), rec.Captures())
+	if err != nil {
+		t.Fatalf("replay driver: %v", err)
+	}
+	compared := 0
+	for {
+		more, err := d.Step()
+		if err != nil {
+			t.Fatalf("replay: %v", err)
+		}
+		if !more {
+			break
+		}
+		p := rep.Position()
+		at := event.Stamp{Run: p.Run, Tick: p.Tick}
+		w, ok := want[at]
+		if !ok || busy[at] {
+			continue
+		}
+		compared++
+		got := guestSurface(rep)
+		if i, _, _, ok := snapshot.FirstDiff(w, got); ok {
+			t.Fatalf("diverged at tick %d at line %d:\n%s\nrecords on the tick before:\n%s", p.Tick, i,
+				strings.Join(snapshot.Diff(w, got, 12), "\n"), strings.Join(recordsAt(rec.Records(), p.Run, p.Tick-1), "\n"))
+		}
+	}
+	if st := d.Stats(); st.Installed < 2 || compared < 100 {
+		t.Fatalf("replay installed %d worlds and compared %d ticks: the run exercised too little", st.Installed, compared)
+	}
+}
+
+// guestSurface is the simulation surface less what the recorded run's link did: a
+// replay has none, so its traffic and connect events are not the simulation's. The
+// session state a derivation's phase turns on is compared in their place.
+func guestSurface(a *App) []string {
+	var out []string
+	for _, l := range a.SnapshotSimulation() {
+		if !strings.Contains(l, "|msg=network") && !strings.Contains(l, "|msg=event|") && !strings.Contains(l, "|msg=event.settle|") {
+			out = append(out, l)
+		}
+	}
+	return append(out, fmt.Sprintf("predicts=%t", a.World().PredictsShared()))
 }
 
 // TestModeChangedAppliesWithoutRouter covers the applier directly, so a MetaSystem
@@ -885,7 +996,7 @@ func TestReplayLockstep(t *testing.T) {
 	if err := rep.VerifyAnchor(anchors[0]); err != nil {
 		t.Fatalf("verify anchor: %v", err)
 	}
-	d, err := newReplayDriver(rep, cap.Records())
+	d, err := newReplayDriver(rep, cap.Records(), cap.Captures())
 	if err != nil {
 		t.Fatalf("driver: %v", err)
 	}

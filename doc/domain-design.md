@@ -347,7 +347,7 @@ authoritative move the prediction did not produce clears the queue and snaps, an
 the own placements already in flight are then consumed without touching a newer
 prediction. A sweep that outruns the ring sheds its oldest cells the same way, and
 an own placement an install discards as already applied is consumed there. Replay
-reconstructs prediction from recorded Player-stamped move requests.
+reconstructs prediction from the `EventCursorPredicted` note each placement journals.
 
 ### D-19 — Every future-affecting Shared value is restorable
 

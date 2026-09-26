@@ -13,9 +13,10 @@ import (
 // record is safe because every field is a value: nothing references the pooled
 // payload the producer still owns.
 type Capture struct {
-	mu      sync.Mutex
-	records []event.JournalRecord
-	anchors []event.JournalAnchor
+	mu       sync.Mutex
+	records  []event.JournalRecord
+	anchors  []event.JournalAnchor
+	captures []event.JournalCapture
 }
 
 // NewCapture creates an empty capture sink.
@@ -34,6 +35,20 @@ func (c *Capture) Anchor(a event.JournalAnchor) {
 	c.mu.Lock()
 	c.anchors = append(c.anchors, a)
 	c.mu.Unlock()
+}
+
+// Capture appends one written world.
+func (c *Capture) Capture(w event.JournalCapture) {
+	c.mu.Lock()
+	c.captures = append(c.captures, w)
+	c.mu.Unlock()
+}
+
+// Captures returns a copy of the written worlds in emission order.
+func (c *Capture) Captures() []event.JournalCapture {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.captures)
 }
 
 // Records returns a copy of the captured records in emission order.

@@ -120,6 +120,8 @@ const (
 	EventPlayoutLead
 	// EventCursorStateSync (CursorStatePayload) [local] carries one cursor's owner-authored state to the instances that do not simulate it
 	EventCursorStateSync
+	// EventSessionPredicting (SessionPredictingPayload) [local] journals whether an authority still corrects this instance; never dispatched
+	EventSessionPredicting
 
 	// --- Meta ---
 
@@ -352,6 +354,8 @@ const (
 	EventCursorMoveRequest
 	// EventCursorMoved (CursorMovedPayload) [shared] announces an applied cursor position
 	EventCursorMoved
+	// EventCursorPredicted (CursorMoveRequestPayload) [local] journals the D-18 prediction a placement made; never dispatched
+	EventCursorPredicted
 	// EventCursorDefeatState (CursorDefeatStatePayload) [bus] carries one owner's terminal lifecycle state
 	EventCursorDefeatState
 	// EventCursorSetLocalRequest (CursorSetLocalPayload) [local] rebinds which cursor input and camera follow

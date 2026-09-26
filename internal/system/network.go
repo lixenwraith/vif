@@ -529,6 +529,7 @@ func (s *NetworkSystem) EventTypes() []event.EventType {
 		event.EventParticipantJoined,
 		event.EventParticipantDeparted,
 		event.EventPlayoutLead,
+		event.EventCursorStateSync,
 	}
 }
 
@@ -551,6 +552,10 @@ func (s *NetworkSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventPlayoutLead:
 		if p, ok := ev.Payload.(*event.PlayoutLeadPayload); ok {
 			s.adoptDelay(p.Ticks)
+		}
+	case event.EventCursorStateSync:
+		if p, ok := ev.Payload.(*event.CursorStatePayload); ok {
+			s.writeCursorState(p)
 		}
 	}
 }
@@ -2570,8 +2575,10 @@ func (s *NetworkSystem) scheduleCursorState(from uint32, body []byte) {
 	}
 }
 
-// writeDueStates writes the owner-authored syncs due by nextTick, in the order every
-// instance writes them. Caller holds the world lock.
+// writeDueStates publishes the owner-authored syncs due by nextTick, in the order
+// every instance writes them, ahead of the crossings due with them. A published sync
+// is a journal record, which is what lets a participant's run replay; the write is
+// the dispatch. Caller holds the world lock.
 func (s *NetworkSystem) writeDueStates(nextTick uint64) {
 	if len(s.states) == 0 {
 		return
@@ -2595,8 +2602,12 @@ func (s *NetworkSystem) writeDueStates(nextTick uint64) {
 		}
 		return cmp.Compare(a.payload.Seq, b.payload.Seq)
 	})
+	queue := s.world.Resources.Event.Queue
 	for _, st := range due {
-		s.writeCursorState(st.payload)
+		queue.PushReady(event.GameEvent{
+			Type: event.EventCursorStateSync, Payload: st.payload,
+			Origin: event.OriginNetwork, Domain: core.DomainPlayer,
+		})
 	}
 }
 

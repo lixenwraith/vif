@@ -79,6 +79,8 @@ type World struct {
 	// path and released from an install that already holds the update mutex.
 	predictionMu            sync.Mutex
 	predicted               []predictedDeath
+	predicting              atomic.Bool // PredictsShared, latched per tick
+	followJournal           atomic.Bool // a replay: session state and settlements are records
 	statPredictionPending   *atomic.Int64
 	statPredictionConfirmed *atomic.Int64
 	statPredictionDropped   *atomic.Int64
@@ -486,15 +488,26 @@ func (w *World) IsSessionCoordinator() bool {
 }
 
 // PredictsShared reports whether this world runs the shared domain ahead of an
-// authority that may correct it. The authority's own world is never a prediction,
-// and neither is a run with nobody to correct it: both hold the only shared world
-// there is, so what they derive from it is settled the moment they derive it.
-func (w *World) PredictsShared() bool {
-	net := w.Resources.Network
-	if net == nil || net.Port == nil || !net.Port.IsRunning() || net.Port.PeerCount() == 0 {
-		return false
+// authority that may correct it. The authority's world is never a prediction, nor
+// is a run with nobody to correct it: what either derives is settled at once.
+func (w *World) PredictsShared() bool { return w.predicting.Load() }
+
+// LatchSession opens a tick under the transport's answer to PredictsShared, so a
+// derivation's phase does not hang on when a link noticed its peer, and journals
+// a change; a replay takes it from the journal. Caller MUST hold updateMutex.
+func (w *World) LatchSession() {
+	if w.followJournal.Load() {
+		return
 	}
-	return net.Authority.Load() != net.ParticipantID
+	net := w.Resources.Network
+	p := net != nil && net.Port != nil && net.Port.IsRunning() && net.Port.PeerCount() > 0 &&
+		net.Authority.Load() != net.ParticipantID
+	if w.predicting.Swap(p) != p && w.Resources.Event.Queue != nil {
+		w.Resources.Event.Queue.Note(event.GameEvent{
+			Type: event.EventSessionPredicting, Payload: &event.SessionPredictingPayload{Predicting: p},
+			Origin: event.OriginSession, Domain: core.DomainPlayer,
+		})
+	}
 }
 
 // PushLocal emits an event that must never replicate: an owner-authored grant, or an
@@ -541,38 +554,41 @@ func (w *World) pushEvent(eventType event.EventType, payload any, origin event.O
 	w.Resources.Event.Queue.Push(ev)
 }
 
-// PushRecord republishes one journaled record without offering it to the wire.
-//
-// A record is already positioned: the journal stamps it where it was consumed, so a
-// crossing that the barrier deferred is recorded at the tick it applied at, not the
-// tick it was produced on. Offering it to the barrier again would defer it a second
-// playout lead past a position that already accounts for the first. Re-derived
-// crossings — the ones no record carries, because their producer is the simulation
-// — still go through Push and are deferred exactly as the recorded run deferred them.
-func (w *World) PushRecord(eventType event.EventType, payload any, origin event.Origin, domain core.Domain) {
+// PushRecord republishes one journaled record without offering it to the wire,
+// reporting whether it was queued. A record is stamped where it applied, so the
+// barrier deferring it again would add a second playout lead; crossings no record
+// carries are re-derived through Push and deferred as the recorded run did.
+func (w *World) PushRecord(eventType event.EventType, payload any, origin event.Origin, domain core.Domain) bool {
 	if w.Resources.Event.Queue == nil {
-		return
+		return false
 	}
-	w.predictRecordedCursorMove(eventType, payload, domain)
+	// A note is applied, never dispatched: a noted placement is a record of its
+	// own, stamped where the barrier released it a lead later.
+	switch p := payload.(type) {
+	case *event.CursorMoveRequestPayload:
+		if eventType == event.EventCursorPredicted {
+			w.predictCursorMove(p.Entity, p.X, p.Y, p.Pointer)
+			return false
+		}
+	case *event.SessionPredictingPayload:
+		w.predicting.Store(p.Predicting)
+		return false
+	}
 	w.Resources.Event.Queue.PushReady(event.GameEvent{
 		Type: eventType, Payload: payload, Origin: origin, Domain: domain,
 	})
+	return true
 }
 
-// predictRecordedCursorMove rebuilds the D-18 prediction the record's producer left
-// behind. The prediction is private state that enters no record, so a reproduction
-// has to derive it from the artifact the producer emitted — every player-domain
-// effect and view keyed to the local cursor reads it, and a replay pushing the
-// crossing without it would resolve them against a cell the run never showed.
-// Player-stamped only: a shared system re-deriving its own copy of the same type
-// predicted nothing (World.PushCursorMove is the only producer that does).
-func (w *World) predictRecordedCursorMove(eventType event.EventType, payload any, domain core.Domain) {
-	if eventType != event.EventCursorMoveRequest || domain != core.DomainPlayer {
-		return
-	}
-	if p, ok := payload.(*event.CursorMoveRequestPayload); ok {
-		w.predictCursorMove(p.Entity, p.X, p.Y, p.Pointer)
-	}
+// notePrediction journals the D-18 prediction a placement just made, at the
+// keystroke; the view and every shot from the local cursor read it before the
+// placement applies. Caller MUST hold updateMutex.
+func (w *World) notePrediction(e core.Entity, x, y int, pointer bool) {
+	w.Resources.Event.Queue.Note(event.GameEvent{
+		Type:    event.EventCursorPredicted,
+		Payload: &event.CursorMoveRequestPayload{Entity: e, X: x, Y: y, Pointer: pointer},
+		Origin:  event.Origin(w.origin.Load()), Domain: core.DomainPlayer,
+	})
 }
 
 // CreatedCount returns total entities created this session across both domains
@@ -773,7 +789,9 @@ func (w *World) CursorCell(e core.Entity) (component.PositionComponent, bool) {
 // applies it.
 // Caller MUST hold updateMutex
 func (w *World) PushCursorMove(e core.Entity, x, y int) {
-	w.predictCursorMove(e, x, y, false)
+	if w.predictCursorMove(e, x, y, false) {
+		w.notePrediction(e, x, y, false)
+	}
 	w.PushCrossing(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: e, X: x, Y: y})
 }
 
@@ -787,6 +805,7 @@ func (w *World) PushPointerMove(e core.Entity, x, y int) {
 		w.PushCrossing(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: e, X: x, Y: y, Pointer: true})
 		return
 	}
+	w.notePrediction(e, x, y, true)
 	w.Resources.Player.prediction.pointer = pendingPointer{x: x, y: y, origin: event.Origin(w.origin.Load()), set: true}
 }
 

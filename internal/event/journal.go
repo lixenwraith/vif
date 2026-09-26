@@ -126,6 +126,24 @@ type JournalAnchor struct {
 	SessionShared bool
 }
 
+// JournalCapture is a world this instance wrote rather than simulated: the one a
+// join installed and each correction after it. A replay installs it at the same
+// place, which is what lets a participant's journal replay from where it joined.
+// JSeq is the record count before it; the stamp is where the live world stood.
+type JournalCapture struct {
+	JSeq     uint64
+	Run      uint64
+	Tick     uint64
+	Boundary uint64
+
+	// Participant and Authority are this instance's session identity at the write,
+	// which a replay adopts before installing: the install binds cursors by it.
+	Participant uint32
+	Authority   uint32
+
+	Body []byte // snapshot.EncodeCapture of the world written
+}
+
 // JoinAnchor is what one participant offers another so both reproduce the same
 // session. It wraps JournalAnchor rather than restating it: replay and join verify
 // the same identity, and a field added for one is available to the other.
@@ -155,6 +173,7 @@ type AnchorLive struct {
 type JournalSink interface {
 	Record(JournalRecord)
 	Anchor(JournalAnchor)
+	Capture(JournalCapture)
 }
 
 // AnchorIntervalTicks is the tick period between anchor records, so a rotated
@@ -225,6 +244,22 @@ func (j *Journal) Anchor(st Stamp, live AnchorLive) {
 	a.SessionShared = live.SessionShared
 	a.JSeq = j.seq.Load()
 	j.sink.Anchor(a)
+}
+
+// Mark is the record count, which a capture read under the world lock places
+// itself after.
+func (j *Journal) Mark() uint64 {
+	if j == nil {
+		return 0
+	}
+	return j.seq.Load()
+}
+
+// Capture emits one written world; c.JSeq comes from Mark at the write.
+func (j *Journal) Capture(c JournalCapture) {
+	if j != nil {
+		j.sink.Capture(c)
+	}
 }
 
 // record emits one event against the producer's own copy, before the queue slot

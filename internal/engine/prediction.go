@@ -20,7 +20,7 @@ type predictedDeath struct {
 // case this exists for, not a second death.
 func (w *World) recordPrediction(et event.EventType, payload any) {
 	p, ok := payload.(*event.SpeciesKilledPayload)
-	if !ok || p == nil || et != event.EventSpeciesKilled {
+	if !ok || p == nil || et != event.EventSpeciesKilled || w.followJournal.Load() {
 		return
 	}
 	var tick uint64
@@ -79,6 +79,10 @@ func (w *World) SettlePredictedDeaths() {
 	w.settle(func(predictedDeath) (bool, bool) { return true, false })
 }
 
+// FollowJournal makes this world a replay's: the session state it predicts under
+// and the confirmations the recorded run raised arrive as records, so no ledger holds.
+func (w *World) FollowJournal() { w.followJournal.Store(true) }
+
 // ResetPredictedDeaths drops the ledger for a run that has been replaced. A reward
 // held across a reset would land in a world that never saw the death.
 func (w *World) ResetPredictedDeaths() {
@@ -119,13 +123,12 @@ func (w *World) settle(verdict func(predictedDeath) (release, drop bool)) {
 	w.confirm(release)
 }
 
-// confirm raises the proved derivations. Player domain and system origin: the
-// receiver derived this from its own authoritative world, so it neither crosses
-// nor enters the journal a replay re-derives it from.
+// confirm raises the proved derivations. Player domain, so it never crosses; session
+// origin, so it is journaled: the authoritative worlds that proved it are not.
 func (w *World) confirm(released []event.SpeciesKilledPayload) {
 	for i := range released {
 		p := released[i]
-		w.pushEvent(event.EventSpeciesKillConfirmed, &p, event.OriginSystem, core.DomainPlayer)
+		w.pushEvent(event.EventSpeciesKillConfirmed, &p, event.OriginSession, core.DomainPlayer)
 	}
 	if n := int64(len(released)); n > 0 && w.statPredictionConfirmed != nil {
 		w.statPredictionConfirmed.Add(n)

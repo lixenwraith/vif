@@ -1211,6 +1211,7 @@ func (s *Scheduler) processTick() {
 		wait.End()
 		defer p.BeginPhase(prof.PhaseTick).End()
 
+		s.world.LatchSession()
 		// Pointer reports since the last tick cross as one placement, settled as the
 		// input they are before the barrier opens the tick
 		if s.world.FlushPointerMove() {

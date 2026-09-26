@@ -7,9 +7,11 @@ import (
 
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
+	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/service"
+	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
 // ConfigFromAnchor rebuilds the configuration a journal was recorded under, as a
@@ -122,14 +124,17 @@ func (a *App) VerifyAnchor(an event.JournalAnchor) error {
 
 // newReplayDriver checks App-specific policy, then hands the record timeline to
 // internal/journal. The driver itself knows only the small replayTarget contract.
-func newReplayDriver(a *App, records []event.JournalRecord) (*journal.ReplayDriver, error) {
+func newReplayDriver(a *App, records []event.JournalRecord, captures []event.JournalCapture) (*journal.ReplayDriver, error) {
 	if !a.cfg.Mode.Driven() {
 		return nil, errors.New("replay: requires a caller-driven App")
 	}
 	if a.cfg.Journal {
 		return nil, errors.New("replay: journaling a replay records a run that never happened")
 	}
-	return journal.NewReplayDriver(replayTarget{a: a}, records), nil
+	// The recorded run's session and the authority's worlds that settled its
+	// predictions are not here; what they decided is in the records.
+	a.world.RunSafe(func() { a.world.FollowJournal() })
+	return journal.NewReplayDriver(replayTarget{a: a}, records, captures), nil
 }
 
 type replayTarget struct{ a *App }
@@ -137,14 +142,47 @@ type replayTarget struct{ a *App }
 func (t replayTarget) Position() event.Stamp { return t.a.Position() }
 func (t replayTarget) Tick(n int)            { t.a.Tick(n) }
 func (t replayTarget) Settle()               { t.a.Settle() }
-func (t replayTarget) PushRecord(rec event.JournalRecord, payload any) {
-	t.a.world.PushRecord(rec.Type, payload, rec.Origin, rec.Domain)
+func (t replayTarget) PushRecord(rec event.JournalRecord, payload any) bool {
+	return t.a.world.PushRecord(rec.Type, payload, rec.Origin, rec.Domain)
 }
+
+// Install writes a world the recorded run wrote, as the participant it wrote it as:
+// identity first, because the write binds cursors by it.
+func (t replayTarget) Install(c event.JournalCapture) error {
+	cap, err := snapshot.DecodeCapture(c.Body)
+	if err != nil {
+		return err
+	}
+	a := t.a
+	a.world.RunSafe(func() {
+		r := a.world.Resources.Network
+		if r == nil || r.ParticipantID != c.Participant {
+			a.attachTransportLocked(replayPort{id: c.Participant})
+			r = a.world.Resources.Network
+		}
+		r.Authority.Store(c.Authority)
+		r.Term.Store(uint64(cap.Header.Term))
+	})
+	_, err = a.writeShared(cap, true, true)
+	return err
+}
+
+// replayPort stands for the session a recorded participant was in: running and
+// peered, so the replay predicts and refuses what the live run did, and silent.
+type replayPort struct{ id uint32 }
+
+func (replayPort) Send(uint32, uint8, []byte) bool       { return true }
+func (replayPort) Broadcast(uint8, []byte)               {}
+func (replayPort) BroadcastExcept(uint32, uint8, []byte) {}
+func (replayPort) PeerCount() int                        { return 1 }
+func (replayPort) IsRunning() bool                       { return true }
+func (replayPort) Drain([]network.Inbound) int           { return 0 }
+func (p replayPort) ParticipantID() uint32               { return p.id }
 
 // Replay consumes an entire record stream. The caller runs any trailing ticks the
 // last record misses.
 func (a *App) Replay(records []event.JournalRecord) (journal.ReplayStats, error) {
-	d, err := newReplayDriver(a, records)
+	d, err := newReplayDriver(a, records, nil)
 	if err != nil {
 		return journal.ReplayStats{Records: len(records)}, err
 	}

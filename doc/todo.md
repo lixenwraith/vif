@@ -181,16 +181,6 @@ commit: 44% of install CPU in the tower region. A route graph is a function of i
 endpoints and the passability grid; keeping one needs the grid generation it was
 built at, because `refreshRouteGraphs` also rebuilds between installs.
 
-### Refuse or reproduce a guest journal that spans a join
-
-- Priority: P2
-- Affected files: `internal/app/join.go`, `internal/event/journal.go`
-
-A journal opened before a join keeps its tick-zero anchor after the capture is
-installed, so `-replay` accepts it and replays the solo world the guest left at
-the join under records from the session's. Re-anchoring at the install tick makes
-replay refuse it as opened mid-run; recording the capture would make it replay.
-
 ## Combat
 
 ### Let mounted weapons strike more than cursors

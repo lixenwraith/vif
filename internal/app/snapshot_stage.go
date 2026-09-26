@@ -7,6 +7,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/vlog"
@@ -93,13 +94,20 @@ func (s *StagedInstall) Commit() error {
 		return errors.New("staged install already discarded")
 	}
 	var (
-		err    error
-		behind uint64
+		err       error
+		behind    uint64
+		projected snapshot.SharedCapture
+		place     event.Stamp
+		mark      uint64
 	)
 	started := time.Now() // [wall] telemetry only
 	live, staging, header := s.live, s.staging, s.capture.Header
+	journal := live.world.Resources.Event.Queue.Journal()
 
 	live.world.RunSafe(func() {
+		// Placed before the settlement below: its confirmations dispatch after the write.
+		place, mark = live.Position(), journal.Mark()
+
 		// The ledger is settled against the authority's world as installed, before
 		// the projection re-derives this instance's own predictions over it.
 		live.confirmPredictionsLocked(header.Tick, staging)
@@ -120,7 +128,6 @@ func (s *StagedInstall) Commit() error {
 
 		// Unsealed: the header is replaced below and nothing verifies the body, so
 		// an integrity hash here would only lengthen the live lock.
-		var projected snapshot.SharedCapture
 		staging.world.RunSafe(func() { projected, err = staging.captureSharedLocked() })
 		if err == nil {
 			// The authority's identity and fences, at the live tick: what the barrier
@@ -145,6 +152,9 @@ func (s *StagedInstall) Commit() error {
 			"tick", header.Tick, "error", err.Error())
 		return fmt.Errorf("commit a staged capture: %w", err)
 	}
+	if journal != nil {
+		live.journalWritten(journal, place, mark, projected)
+	}
 	live.telemetry.StageUS.Store(s.stageDur.Microseconds())
 	live.telemetry.CommitUS.Store(s.commitDur.Microseconds())
 	vlog.Info("app", "msg", "capture installed",
@@ -154,6 +164,27 @@ func (s *StagedInstall) Commit() error {
 		"correction_entities", s.difference.Entities,
 		"correction_cells", s.difference.CellShift)
 	return nil
+}
+
+// journalWritten records a world this instance wrote, so a replay writes it at the
+// same place as the same participant. A join writes before its transport attaches,
+// so the identity then is the one the offer assigned.
+func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, cap snapshot.SharedCapture) {
+	body, err := snapshot.EncodeCapture(cap)
+	if err != nil {
+		vlog.Warn("app", "msg", "journal capture not recorded", "tick", cap.Header.Tick, "error", err.Error())
+		return
+	}
+	participant := a.localParticipant()
+	if participant == 0 {
+		a.sessionMu.Lock()
+		participant = uint32(a.sessionOffer.Assigned)
+		a.sessionMu.Unlock()
+	}
+	j.Capture(event.JournalCapture{
+		JSeq: mark, Run: at.Run, Tick: at.Tick, Boundary: at.Boundary,
+		Participant: participant, Authority: cap.Header.Authority, Body: body,
+	})
 }
 
 // prepareProjectionLocked makes the staging world this instance's predictor: it

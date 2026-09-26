@@ -147,6 +147,11 @@ type PlayoutLeadPayload struct {
 	Ticks uint64 `toml:"ticks"`
 }
 
+// SessionPredictingPayload is the prediction state a tick opened under.
+type SessionPredictingPayload struct {
+	Predicting bool `toml:"predicting"`
+}
+
 // NetworkDisconnectPayload signals peer disconnection
 type NetworkDisconnectPayload struct {
 	PeerID uint32 `toml:"peer_id"`

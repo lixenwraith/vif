@@ -49,6 +49,18 @@ func (eq *EventQueue) Push(ev GameEvent) {
 // offering it to the wire again. The original origin is preserved for replay.
 func (eq *EventQueue) PushReady(ev GameEvent) { eq.publish(ev) }
 
+// Note journals an event that is never dispatched, at the slot the next publish
+// takes, so a replay orders it before that event.
+func (eq *EventQueue) Note(ev GameEvent) {
+	if !ev.Origin.Journaled() {
+		return
+	}
+	if j := eq.journal.Load(); j != nil {
+		ev.Seq = eq.tail.Load()
+		j.record(&ev, *eq.stamp.Load())
+	}
+}
+
 // publish journals and enqueues one event after any wire deferral decision.
 func (eq *EventQueue) publish(event GameEvent) {
 	for {
