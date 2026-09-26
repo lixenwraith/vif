@@ -11,7 +11,7 @@ func TestParseConfigUsesFleetDefaults(t *testing.T) {
 	cfg, err := parseConfig([]string{
 		"-image", "docker.io/library/vif:test",
 		"-join-host", "play.example.com",
-		"-page-base", "https://play.example.com/projects/vi-fighter/session/",
+		"-page-base", "https://play.example.com/projects/vif/session/",
 		"-log-stream-url", "http://127.0.0.1:8081/stream",
 	}, io.Discard)
 	if err != nil {
@@ -111,7 +111,7 @@ func TestAnUnsetUnitVariableKeepsTheDefault(t *testing.T) {
 	required := []string{
 		"-image", "docker.io/library/vif:test",
 		"-join-host", "play.example.com",
-		"-page-base", "https://play.example.com/projects/vi-fighter/session/",
+		"-page-base", "https://play.example.com/projects/vif/session/",
 		"-log-stream-url", "http://127.0.0.1:8081/stream",
 	}
 	unset := func(extra ...string) []string { return append(slices.Clone(required), extra...) }

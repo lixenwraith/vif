@@ -51,7 +51,7 @@ hands a player three opaque strings and nothing may rebuild one from a port:
 
 | String | What it is | Who reads it |
 |---|---|---|
-| `https://<site-host>/projects/vi-fighter/session/<id>/` | The shareable page. | A browser. |
+| `https://<site-host>/projects/vif/session/<id>/` | The shareable page. | A browser. |
 | `<site-host>:31703` | Raw framed TCP straight to the session's forwarded port. | `vif -join`. |
 | `wss://<site-host>/vif/ws/<session>` | The browser route, through the site and the allocator to the pod's bridge. | The WASM build. |
 

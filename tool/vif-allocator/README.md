@@ -51,7 +51,7 @@ One session row has this shape:
 {
   "id": "3c3a8eec0cbb6f17",
   "port": 31700,
-  "page_url": "https://play.example.com/projects/vi-fighter/session/31700/",
+  "page_url": "https://play.example.com/projects/vif/session/31700/",
   "join_target": "play.example.com:31700",
   "ws_url": "wss://play.example.com/vif/ws/3c3a8eec0cbb6f17",
   "created_at": "2026-09-11T12:00:00Z",

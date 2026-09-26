@@ -35,9 +35,9 @@ It is the contract, not a suggestion.
 
 - Implement what was asked. Do not add tables, indirection, telemetry, tests or
   abstraction that nothing asked for.
-  Exception: a task that explicitly invites obvious additions ("add any obvious
-  options") gets them, each named in the PR body; ask before any that is not obvious.
-- One mechanism per problem. Two mechanisms doing one job is a bug.
+  Exception: a task that explicitly invites obvious or explicit additions 
+  gets them, each named in the PR body; ask before any that is not obvious.
+- One mechanism per problem. Two mechanisms doing one job is a bug or refactor opportunity.
 - Delete before adding. If a change is net-positive lines for a fix, justify it.
 - Reverting an existing API to "improve" it is not a fix. Leave working code alone.
 - Per-kind data lives in one table indexed by its kind (`component.WeaponSpecs`, the
@@ -49,24 +49,26 @@ It is the contract, not a suggestion.
 - Test comments follow the 5-line limit.
 - Do not pin lists that a human has to hand-maintain unless the pin prevents a
   real regression.
-- Collapse the tests: if a complex test covers a simple test scope, delete existing simple test or do not add the simple test. Do not add tests for obvious and simple functionalities that are unlikely to fail.
+- Collapse the tests: if a complex test covers a simple test scope, delete existing simple test or do not add the simple test. Do not add tests for obvious and simple functionalities that are unlikely to fail or are repeatedly tested in other test cases.
 
 ## Docs and commits
 
 - `doc/` is already long. Condense when you touch it; do not append unless new concept or scope is being added.
-- A gap you are deferring goes in `doc/todo.md` as one line, not a comment.
+- A gap you are deferring goes in `doc/todo.md` as an additional info to the existing todo items,
+  of a new concise todo section (follow existing pattern and avoid verbosity).
 - PR bodies: what changed, why, how it was verified.
 - One task, one branch, one PR. Divide the work into commits on that branch; do not
-  split it across stacked PRs.
+  split it across stacked PRs or multiple branches.
+- In continuing work, if the previous commits or PR is merged with main, create a new branch and commit under it.
 
 ## Gates
 
 `go build ./...`, `gofmt -l` on changed files, and `go test` on the packages the
 change touches. Run `go generate ./internal/event ./internal/manifest` only when
 an event or manifest definition changed.
-- Do not run the full `go test ./...`, `go vet ./...` or `test/scenario.sh all`
+- Do not run the full `go test ./...`, `go vet ./...` or `script/test.sh all`
   sweeps; they cost more time than they catch. The user runs them.
-- Do not run `-race` tests, they take a long time and the user verifies them.
+- Do not run `-race` tests unless investigating a known/suspected race issue.
 
 ## Deployment facts
 
@@ -75,8 +77,9 @@ Settled. Do not check, flag, or ask about any of these again.
 - The node is Arch Linux running **K3s v1.34**. Every Kubernetes feature this repo
   uses, restartable init containers included, is available. Never add, suggest or
   ask for a version check.
-- websocat 1.x is installed on the node from the AUR;
+- websocat 1.4.1 is installed on the node from the AUR;
   `deploy/guest/update-vif-ws-bridge.sh` packages it as the sidecar image.
+  It does not have NoDelay, pay attention to workarounds.
 - The site is `https://lixen.com`. The allocator's settings are
   `deploy/guest/vif-allocator.env`; the node's copy is never edited by hand.
 - A deploy is `git pull && ./deploy/update.sh` on the node (`--diff` previews).

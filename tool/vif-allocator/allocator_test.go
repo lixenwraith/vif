@@ -203,7 +203,7 @@ func testAllocatorConfig(t *testing.T) allocatorConfig {
 			Drain:     "20s",
 		},
 		JoinHost:       "play.example.com",
-		PageBase:       "https://play.example.com/projects/vi-fighter/session/",
+		PageBase:       "https://play.example.com/projects/vif/session/",
 		PortFirst:      31700,
 		PortLast:       31709,
 		PlayersMax:     8,
@@ -232,7 +232,7 @@ func TestCreateSessionReservesPortAndOwnsService(t *testing.T) {
 		t.Fatalf("unexpected session: %+v", created)
 	}
 	if created.JoinTarget != "play.example.com:31701" ||
-		created.PageURL != "https://play.example.com/projects/vi-fighter/session/31701/" {
+		created.PageURL != "https://play.example.com/projects/vif/session/31701/" {
 		t.Fatalf("unexpected links: %+v", created)
 	}
 	if len(kube.svcObjects) != 1 {

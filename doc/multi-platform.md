@@ -243,7 +243,7 @@ window.VIF_ARGS = ['-d', '-seed=42'];
 ```
 
 ```text
-https://<site>/projects/vi-fighter/wasm/?arg=-d&arg=-seed%3D42
+https://<site>/projects/vif/wasm/?arg=-d&arg=-seed%3D42
 ```
 
 The launcher accepts at most 64 arguments of at most 1,024 characters each.
