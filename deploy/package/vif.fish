@@ -1,10 +1,10 @@
 # Generated from cmd/vif/usage.go by TestGeneratedFilesAreTheHelpTable; do not edit.
 complete -c vif -f
-complete -c vif -o host -x -d 'Bind and play a session, e.g. :7777'
+complete -c vif -o host -x -d 'Play at once and open the game to participants, e.g. :7777'
 complete -c vif -o serve -x -d 'Bind a headless session with no local cursor'
 complete -c vif -o join -x -d 'Join a session at host:port, at the vif://host:port/name a link carries, or at a wss:// route'
 complete -c vif -o name -x -d 'Name this host answers to, so one address can serve several sessions'
-complete -c vif -o players -x -d 'Roster ceiling including self, 2..16; unset holds the whole roster and starts on the first guest'
+complete -c vif -o players -x -d 'Roster ceiling including self, 2..16; unset holds the whole roster'
 complete -c vif -o authority -x -a 'host migrate' -d 'Where authorship goes when the authoring participant leaves; default host with -serve, migrate otherwise'
 complete -c vif -o slow-window -x -d 'Window a participant\'s lateness is judged over; host only, 0 never evicts (default 20s)'
 complete -c vif -o slow-late -x -d 'Evict at this many late epochs per second over the window; 0 ignores lateness (default 5)'

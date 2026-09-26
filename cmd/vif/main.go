@@ -426,9 +426,7 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.DurationVar(&f.drain, "drain", 0,
 		"With -serve, how long a termination signal waits for the roster to empty before exiting anyway; 0 exits at once")
 	fs.IntVar(&f.players, "players", 0, fmt.Sprintf(
-		"Ceiling on the roster, itself included (2..%d; default the whole roster). "+
-			"With -host it also sizes the startup lobby, which then waits for exactly that "+
-			"many; unset, a host starts on its first guest and admits the rest as they arrive",
+		"Ceiling on the roster, itself included (2..%d; default the whole roster)",
 		parameter.MaxPlayers))
 	fs.StringVar(&f.listen, "listen", "", fmt.Sprintf(
 		"With -join in a %q session, the address this participant is dialled back on. "+
@@ -450,13 +448,11 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 		authorityMigrate, authorityHost, authorityHost, authorityMigrate))
 }
 
-// authorityMigrate and authorityHost are the two -authority words. They name the
-// question the flag answers — where authorship lives when the participant holding
-// it goes — rather than a mechanism, because the mechanism is the part that may
-// change.
+// authorityMigrate and authorityHost are the two -authority words, the ones
+// :host takes.
 const (
-	authorityMigrate = "migrate"
-	authorityHost    = "host"
+	authorityMigrate = app.AuthorityMigrate
+	authorityHost    = app.AuthorityHost
 )
 
 func (f sessionFlags) validateInvocation(schema, check bool, replay string) error {

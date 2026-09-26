@@ -516,6 +516,31 @@ func TestBeginHostingRefusesASecondSession(t *testing.T) {
 	}
 }
 
+// TestHostCarriesItsAuthorityPolicy: the word :host is given is the policy every
+// offer it makes names, and a word that is neither is refused before binding.
+func TestHostCarriesItsAuthorityPolicy(t *testing.T) {
+	a := mustHeadless(t, 0x3019, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+
+	var err error
+	a.World().RunSafe(func() { err = a.beginHostingLocked("127.0.0.1:0", "leader") })
+	if err == nil {
+		t.Fatal("an unknown authority policy was accepted")
+	}
+	a.World().RunSafe(func() { err = a.beginHostingLocked("127.0.0.1:0", AuthorityHost) })
+	if err != nil {
+		t.Fatalf("begin hosting: %v", err)
+	}
+	stop := tickInBackground(a)
+	defer stop()
+	pending, offer := dialSession(t, a.HostAddr())
+	defer pending.Close()
+	if !offer.FixedAuthority {
+		t.Fatal("a host opened with the host policy offered a migrating session")
+	}
+}
+
 // mustSocketJoiner runs the whole guest side of a join against a live host: dial,
 // identity, the start gate, the capture, the install and the catch-up. It is the
 // production sequence, assembled here because Loop owns it in a run with a

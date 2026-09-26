@@ -360,8 +360,8 @@ cross-build. The exact profile and browser extension strategy are in
 A trusted-peer TCP game of up to `parameter.MaxPlayers` participants is exposed
 through `-host`, `-join`, `-serve` and `-players`. The join handshake resolves the
 host anchor before the joining world is constructed, the roster every instance
-builds from arrives with the start gate, every scheduler stays at tick zero until
-the lobby closes on its quorum — its first guest, or the party `-players` named —
+builds from arrives with the start gate, a server's scheduler stays at tick zero
+until its lobby's first guest while an interactive host plays from its first tick,
 and the manifest-registered `NetworkSystem` drains framed input only at
 the simulation's poll boundary. Trusted-peer is a statement about authentication
 and nothing else: a dial is budgeted per address, the handshake is bounded and off

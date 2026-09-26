@@ -209,16 +209,12 @@ that ends a process must not silently do nothing.
 `-serve` is a host of its own and does not combine with `-host` or `-join`.
 `-host` and `-join` are mutually exclusive and available on interactive play or
 the authored headless `-script` path; combining either with `-check`, `-schema`,
-or `-replay` is an error. The host holds tick zero until every requested
-participant passes anchor, roster and start/ready checks. The joiner dials before
-constructing its `App`, so the anchor seed is installed before RNG/content
-initialization.
-
-`-host` is not the only way in. `:host <addr>` opens a run that is **already
+or `-replay` is an error. `-host` plays at once and opens its port once the clock
+runs; `:host <addr> [host|migrate]` does the same on a run that is **already
 playing**, at whatever tick it has reached — same acceptor, same identity
-allocation, same capture. The flag is the right shape when every participant is
-present before the run starts; the command is the right shape for everything else,
-including reconnect. `:join <target>` is its other half: a solo run, or one its
+allocation, same capture. The joiner dials before constructing its `App`, so the
+anchor seed is installed before RNG/content initialization. `:join <target>` is
+the other half: a solo run, or one its
 session left alone, dials target while it plays on and rebuilds itself joined once
 admitted. `:session` reports what a run is part of.
 
@@ -347,9 +343,7 @@ in [Runtime](runtime.md) §1.2. This is what `deploy/` runs; see
 
 `-players` is a ceiling on every host shape and unset means the whole roster: the
 session starts on its first guest and takes the rest through the mid-run gate, so
-the example above holds at most two guests but plays as soon as one arrives. On an
-interactive `-host` an explicit value additionally sizes the startup lobby, which
-then waits for exactly that many — a party that says how big it is starts together.
+the example above holds at most two guests but plays as soon as one arrives.
 A dialling host is admitted at most `parameter.NetworkAdmitBurst`
 times per `NetworkAdmitWindow`, because the admission that follows a handshake
 reads and sends a whole world and a peer cycling through it would otherwise spend

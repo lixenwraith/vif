@@ -144,18 +144,16 @@ start/ready gate. Two flags activate the shared composition path:
 
 | Entry point | Behavior |
 |---|---|
-| `-host <bind-address>` | Build the host App, start a listener, show or log the lobby, and hold the scheduler at tick zero until the requested peers are ready. |
+| `-host <bind-address>` | Play at once and open the listener when the clock starts, exactly as `:host` does. A bind that fails leaves the game playing solo. |
 | `-join <host:port>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. Also accepts `[vif://]host:port/name`, which is the link shape a deployment hands a player. |
 | `-name <name>` | With `-host` or `-serve`, the name this session answers to, so one address can serve several. A host that sets one refuses a dial that names nothing, so it is taken with a front door that routes on the name or not at all. |
-| `:host <addr>` | Open a run that is **already playing**. The port is created, started and attached; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick. |
+| `:host <addr> [host\|migrate]` | Open a run that is **already playing**, under the authority policy named. The port is created, started and attached; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick. |
 | `:session` | Report the role, address, participant identity, its cursor slot, peer count and tick. |
 
-The flags and the command reach the same place. `-host` freezes tick zero for a
-fixed lobby, which is the right shape when every participant is present before the
-run starts; `:host` opens the same acceptor on a run that is hundreds of ticks in.
-Both hand a joiner the same thing: the closed roster, then the world that roster
-names, as a chunked `MsgStateSnapshot`. A host can be canceled in the lobby with
-`Ctrl-C`/`Ctrl-Q`. After a connected peer leaves, the remote cursor is removed and
+`-host` and `:host` are one path: the host plays from its first tick and a joiner
+takes the roster, then the world it names, as a chunked `MsgStateSnapshot` from
+the mid-run gate. Only `-serve`, which has nobody to play, holds tick zero in a
+lobby until its first guest. After a connected peer leaves, the remote cursor is removed and
 the survivor continues; the listener stays active and the same participant may
 dial again, which is the reconnect path and is not a separate mechanism.
 
@@ -835,9 +833,9 @@ guest takes the term where the session allows it and the map confirms the guest,
 and otherwise says that it is continuing locally, shows `Host lost` and keeps
 ticking at `Net: down` — `:session` then names the term it still holds and that it
 is a local fork. Restarting the host and rejoining is a *new* session, not a merge: an
-old fork left running would refuse its artifacts and say so. Add `-players <n>` to a
-startup host for a larger closed lobby, or to a solo launch as the cap a later
-`:host` inherits; without a solo cap, later hosting uses `MaxPlayers`. Bind the
+old fork left running would refuse its artifacts and say so. `-players <n>` caps
+the roster a host admits, `-host` or a later `:host` alike; unset, it is
+`MaxPlayers`. Bind the
 host to `:7777` for a LAN. Internet routing uses the same TCP
 path but is not safe for untrusted peers until authentication and TLS
 configuration are exposed.

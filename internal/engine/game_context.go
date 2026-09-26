@@ -43,9 +43,10 @@ type NavigationDebugState struct {
 // it back. That is not hypothetical: it is what `:host` did the first time it was
 // wired through a script.
 type SessionController interface {
-	// BeginHosting opens this running instance to participants at addr. It returns
-	// an error rather than reporting one, because the operator typed the address.
-	BeginHosting(addr string) error
+	// BeginHosting opens this running instance to participants at addr, under the
+	// authority policy named ("" keeps the run's own). It returns an error rather
+	// than reporting one, because the operator typed both.
+	BeginHosting(addr, authority string) error
 	// Join replaces this solo run with one joined to the session at target, taking
 	// the forms -join does. A target this build cannot dial is refused here.
 	Join(target string) error

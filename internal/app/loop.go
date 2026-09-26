@@ -30,6 +30,9 @@ func Run(cfg Config) error {
 	if cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode is caller-driven; Run owns the frame loop", cfg.Mode)
 	}
+	// A host with a player plays from its first tick and opens its door once the
+	// clock runs, as :host does; only a run with nobody to play waits in a lobby.
+	cfg.HostAddress, cfg.resumeHost = "", cfg.HostAddress
 	rejoin := false
 	var solo *Config // what a :join that fails after its dial plays on as
 	for {
@@ -140,24 +143,16 @@ func (a *App) Loop() (*restartRequest, error) {
 	if a.cfg.notice != "" {
 		a.ctx.SetStatusMessage(a.cfg.notice, parameter.StatusMessageMaxDuration, true)
 	}
-	if a.cfg.HostAddress != "" {
-		if err := a.startHostSession(sigChan); err != nil {
-			return nil, err
-		}
-	}
-	if a.cfg.HostAddress != "" || a.cfg.JoinAddress != "" {
+	if a.cfg.JoinAddress != "" {
 		a.activateNetworkSession()
 		if err := a.resumeJoinedSession(); err != nil {
 			return nil, err
 		}
-		if a.cfg.JoinAddress != "" {
-			// A guest applies corrections between two ticks, and nothing on this
-			// side calls Tick: the scheduler owns the tick loop, so the apply loop
-			// needs a goroutine of its own. World.RunSafe is what makes "between
-			// two ticks" true by construction — a tick runs entirely inside one
-			// acquisition of the update mutex.
-			a.corrections.StartCorrector()
-		}
+		// A guest applies corrections between two ticks, and nothing on this side
+		// calls Tick: the scheduler owns the tick loop, so the apply loop needs a
+		// goroutine of its own. A tick runs inside one acquisition of the update
+		// mutex, which is what makes World.RunSafe "between two ticks".
+		a.corrections.StartCorrector()
 		// Paused directly during construction, without emitting an operator event:
 		// the start gate is the authority that releases tick-zero game time.
 		a.ctx.TimeCtl.SetPaused(false)
@@ -172,12 +167,13 @@ func (a *App) Loop() (*restartRequest, error) {
 	// what a run that opens a session later with :host needs even when it never had
 	// a lobby of its own.
 	a.openMidRunJoins()
-	// A coordinator rebuilt by a scenario change reopens its door here, after the
-	// clock: its guests are redialling into the mid-run gate, which reads a capture
-	// a playout lead ahead of a tick that has to be running.
+	// After the clock: the mid-run gate reads a capture a playout lead ahead of a
+	// tick that has to be running. A door that cannot open costs the session, not
+	// the game.
 	if a.cfg.resumeHost != "" {
 		if err := a.BeginHosting(a.cfg.resumeHost); err != nil {
-			return nil, fmt.Errorf("resume hosting on %s: %w", a.cfg.resumeHost, err)
+			vlog.Warn("app", "msg", "hosting not opened; playing solo", "address", a.cfg.resumeHost, "error", err.Error())
+			a.ctx.SetStatusMessage("Host: "+err.Error()+"; playing solo", parameter.StatusMessageMaxDuration, true)
 		}
 	}
 

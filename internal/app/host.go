@@ -24,7 +24,9 @@ import (
 // instance at the moment the command fired.
 type sessionControl struct{ a *App }
 
-func (c sessionControl) BeginHosting(addr string) error { return c.a.beginHostingLocked(addr) }
+func (c sessionControl) BeginHosting(addr, authority string) error {
+	return c.a.beginHostingLocked(addr, authority)
+}
 func (c sessionControl) Join(target string) error       { return c.a.joinLocked(target) }
 func (c sessionControl) SessionSummary() string         { return c.a.sessionSummaryLocked() }
 
@@ -141,11 +143,18 @@ func (a *App) joinLocked(target string) error {
 	return nil
 }
 
+// The authority policies a host names: what losing the authoring participant
+// does. Host ends the session there; migrate hands it to the next survivor.
+const (
+	AuthorityHost    = "host"
+	AuthorityMigrate = "migrate"
+)
+
 // BeginHosting opens a running instance to participants, for a caller that holds
 // no lock. The operator command path reaches beginHostingLocked instead.
 func (a *App) BeginHosting(addr string) error {
 	var err error
-	a.world.RunSafe(func() { err = a.beginHostingLocked(addr) })
+	a.world.RunSafe(func() { err = a.beginHostingLocked(addr, "") })
 	return err
 }
 
@@ -154,7 +163,7 @@ func (a *App) BeginHosting(addr string) error {
 // transport, which this App then owns for the rest of the run. Binding under the
 // world lock costs a tick, bounded by one listen(2) — the same deliberate operator
 // cost `:log on` pays. Caller MUST hold updateMutex.
-func (a *App) beginHostingLocked(addr string) error {
+func (a *App) beginHostingLocked(addr, authority string) error {
 	if !buildHasSocketNetwork {
 		return errors.New("host: a browser build can join a session but not host one")
 	}
@@ -173,6 +182,14 @@ func (a *App) beginHostingLocked(addr string) error {
 
 	if _, _, err := net.SplitHostPort(addr); err != nil {
 		return fmt.Errorf("host %q: %w", addr, err)
+	}
+	fixed := a.cfg.FixedAuthority
+	switch authority {
+	case "":
+	case AuthorityHost, AuthorityMigrate:
+		a.cfg.FixedAuthority = authority == AuthorityHost
+	default:
+		return fmt.Errorf("host: authority %q is not %q or %q", authority, AuthorityHost, AuthorityMigrate)
 	}
 
 	// The address is recorded before the listener exists, so every later reader —
@@ -206,7 +223,7 @@ func (a *App) beginHostingLocked(addr string) error {
 	// assigns, which is what lets a later handoff move it.
 	a.openAuthorityLocked(network.SessionOffer{
 		Anchor: a.joinAnchorLocked(), Host: hostParticipantID, Assigned: hostParticipantID,
-		Term: network.FirstTerm, Roster: roster,
+		Term: network.FirstTerm, Roster: roster, FixedAuthority: a.cfg.FixedAuthority,
 	}, hostParticipantID)
 
 	// Attaching latches the world as shared (D-14) and installs the departure and
@@ -220,7 +237,7 @@ func (a *App) beginHostingLocked(addr string) error {
 		a.midRunPort, a.sessionRoster = nil, nil
 		a.sessionMu.Unlock()
 		a.lateJoins.Store(false)
-		a.cfg.HostAddress = ""
+		a.cfg.HostAddress, a.cfg.FixedAuthority = "", fixed
 		a.world.Resources.Network = nil
 		return fmt.Errorf("host %s: %w", addr, err)
 	}

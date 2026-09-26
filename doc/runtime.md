@@ -51,9 +51,9 @@ less than the flag names suggest:
 
 | Flag | Binds a port | Local cursor | Terminal | Startup lobby | Default `-authority` |
 |---|---:|---:|---:|---|---|
-| `-host <addr>` | yes | yes | yes | waits for `-players`, or for its first guest when unset | `migrate` |
-| `-serve <addr>` | yes | no | no | always its first guest | `host` |
-| `:host <addr>` | yes | yes | yes | none — the session opens at the tick it is running | `migrate` |
+| `-host <addr>` | yes | yes | yes | none — plays from its first tick, opens once its clock runs | `migrate` |
+| `-serve <addr>` | yes | no | no | its first guest: nobody plays until one arrives | `host` |
+| `:host <addr> [host\|migrate]` | yes | yes | yes | none — the session opens at the tick it is running | the word given, else the run's |
 | `-join <addr>` | in a migrate session, one of its own | yes | yes | waits for the host's start gate | adopted from the offer |
 
 The guest's port is what makes migration mean anything: it is dialled back once to
@@ -127,16 +127,9 @@ order identical to an ordinary host's.
 `-players <n>` is a ceiling on the roster and only a ceiling, on every host shape;
 unset means the whole roster. A server's ceiling counts *guests*, because the
 server is not one of them; an interactive host's counts one fewer, because it holds
-a cursor itself. Its lobby's quorum is one either way unless the flag was given, so
-a host starts on its first guest and admits the rest through the mid-run gate as
-they arrive.
-
-An explicit value on an interactive `-host` carries a second meaning, and it is the
-one the zero value drops: a party that says how big it is starts together, so there
-the ceiling and the number the gate waits for are one value. A server never has
-that meaning — nobody is watching its lobby to decide it is full, and waiting on a
-number would make a pod's readiness a function of how many people happened to want
-to play.
+a cursor itself. A lobby exists only where nobody plays: a server starts on its
+first guest, an interactive host on its own first tick, and every later guest
+arrives through the mid-run gate. `-host` is `:host` given at startup.
 
 `-size WxH` gives a server the terminal-equivalent geometry it has no terminal to
 derive, which is what every joiner adopts as the D-14 map latch.

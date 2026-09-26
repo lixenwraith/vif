@@ -32,12 +32,12 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 	return []flagSection{{
 		title: "Session",
 		lines: []flagLine{
-			{names: []string{"host"}, arg: "<addr>", hint: "Bind and play a session, e.g. :7777"},
+			{names: []string{"host"}, arg: "<addr>", hint: "Play at once and open the game to participants, e.g. :7777"},
 			{names: []string{"serve"}, arg: "<addr>", hint: "Bind a headless session with no local cursor"},
 			{names: []string{"join"}, arg: "<addr>", hint: "Join a session at host:port, at the vif://host:port/name a link carries, or at a wss:// route"},
 			{names: []string{"name"}, arg: "<name>", hint: "Name this host answers to, so one address can serve several sessions"},
 			{names: []string{"players"}, arg: "<n>", hint: fmt.Sprintf(
-				"Roster ceiling including self, 2..%d; unset holds the whole roster and starts on the first guest",
+				"Roster ceiling including self, 2..%d; unset holds the whole roster",
 				parameter.MaxPlayers)},
 			{names: []string{"authority"}, arg: "host|migrate",
 				hint: "Where authorship goes when the authoring participant leaves; default host with -serve, migrate otherwise"},

@@ -796,11 +796,15 @@ func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 		setCommandError(ctx, "This runtime has no session transport")
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
-	if len(args) != 1 {
-		setCommandError(ctx, "Usage: :host <addr>  (e.g. :host :7777)")
+	if len(args) != 1 && len(args) != 2 {
+		setCommandError(ctx, "Usage: :host <addr> [host|migrate]  (e.g. :host :7777 migrate)")
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
-	if err := ctx.SessionCtl.BeginHosting(args[0]); err != nil {
+	authority := ""
+	if len(args) == 2 {
+		authority = args[1]
+	}
+	if err := ctx.SessionCtl.BeginHosting(args[0], authority); err != nil {
 		setCommandError(ctx, "Host: "+err.Error())
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
