@@ -205,13 +205,14 @@ A correction may describe a host tick behind the guest's present, and a world is
 never written at a tick the receiver has run. The capture is resolved into the
 staging world, which is then made this instance's predictor — it drives no cursor,
 holds this instance's owner-authored cursor values, and defers by the session's
-lead under the session's authority — and simulated forward to the live tick. What
-is written into the live world is that projection, at the tick the live world is
-on. Everything the projection re-derives as the live world already has it diffs to
-nothing, so a transition the guest has already made is neither torn down nor
-rebuilt, and the clock never moves backwards. `snapshot.projected_ticks` is the
-distance; a capture level with the clock projects zero ticks and still takes the
-open epoch, which is where a late-arriving record lives.
+lead under the session's authority — and simulated forward to the live tick. The
+live world is moved onto that projection at the tick it is on, so a transition the
+guest has already made is neither torn down nor rebuilt, and the clock never moves
+backwards. A projection the live world already equals on the compared surface and
+in every other part is taken as a hash-only answer is: only the clock and the
+barrier are written. `snapshot.projected_ticks` is the distance; a capture level
+with the clock projects zero ticks and still takes the open epoch, which is where a
+late-arriving record lives.
 
 The projection is fed what the capture does not contain and this instance applied
 after it: its own ordinary crossings past the capture's fence for its source, the
@@ -328,8 +329,8 @@ each direct peer according to that link's cadence:
    half the convergence floor the keyframe cadence sends none.
 4. Otherwise the receiver asks for the section summaries, compares page hashes only
    in differing sections, and the authority returns the pages that differ.
-5. Validate every page hash, reconstruct the authority root, reconcile through a
-   reusable staging world, and commit between ticks.
+5. Validate every page hash, reconstruct the authority root, stage the result and
+   commit it between ticks. A set is one baseline, applied whole or not at all.
 6. Refuse stale, foreign, malformed, or unverifiable repairs and recover at the
    next compressed keyframe.
 
@@ -581,8 +582,9 @@ Representative measurements at the storm high-water fixture are:
 | Index and hash outside lock | about 2 ms |
 
 The tower region at 239x64 (about 6,000 shared entities, mostly maze walls) is
-heavier: a compressed keyframe is 64-95 KB, a capture read 1.6 ms, an index 12 ms,
-and an install about 35 ms staged and 30 ms committed.
+heavier: a compressed keyframe is 64-95 KB, a capture read 1.5 ms, an index 14 ms,
+and an install that moves nothing about 8 ms staged and 6 ms committed; a repair
+adds about 1.3 ms of projection a tick behind the clock.
 
 With one keyframe per ten corrections, a converged storm session is about
 14.2 KiB/s at 5 Hz or 5.7 KiB/s at 2 Hz. These are observations, not wall-time

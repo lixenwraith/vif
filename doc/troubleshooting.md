@@ -397,7 +397,7 @@ wall, so a pushed kinetic entity walked back in. It now moves both, and loot pus
 itself out of a wall a correction installed under it. In the browser build in the
 tower region, navigation is about 3% of the thread; answering manifests and
 applying corrections is about half of it. §11 removed most of the repairs and
-installs, §13 the duplicated hashing; whole-world installs remain (`doc/todo.md`).
+installs, §13 the duplicated hashing, §14 most of what an install costs.
 
 Once, in the tower region, a browser guest kept the previous region's glyphs, or
 kept the glyph system running although the region disables it. It did not recur
@@ -467,8 +467,33 @@ the tower at 239x64 and opens with `:host`, and a scripted guest over TCP:
   1,200 ticks, and a commit from 34 to 27 ms.
 
 The static wall section is 42% of an index there. A write counter per store would
-skip it, but `Position.buildWallGrid` walks walls by pointer each flow-field
-derivation, and a missed bump would prove convergence falsely, which suppresses
-the keyframe floor; it was dropped. The networkless soak did not fail in 2,400
-loaded runs and six whole-package runs and is no longer tracked; its failure
-prints the first differing line, which is what would reopen it.
+skip it, but walls are walked by pointer each flow-field derivation, and a missed
+bump would prove convergence falsely and suppress the keyframe floor; it was
+dropped. The networkless soak did not fail in 2,400 loaded runs and is no longer
+tracked; its failure prints the first differing line, which would reopen it.
+
+## 14. Ninth round (2026-09-26, installs that move nothing)
+
+In-process at 239x64 in the tower region, a guest four ticks behind the host took 18
+whole installs in 1,200 ticks and 15 moved nothing, each about 30 ms staged and
+24 ms committed. None of the cost depended on what the correction carried:
+
+- **Navigation derived twice per install.** `NavigationSystem.LoadShared` rebuilt
+  passability, every flow field and every route graph in the staging world and
+  again in the live write: 60% of both. Each field and route graph is now stamped
+  with a generation that moves whenever the wall grid or passability does, and an
+  install keeps what it holds from the same inputs on the same generation
+  (`TestAnInstallKeepsNavigationOnlyOverUnmovedWalls`).
+- **A proved capture hashed again.** Staging re-checked the integrity hash
+  (10.8 ms) of what the protocol had proved: a delta as it is rebuilt, a repair by
+  the root — and the repair had sealed itself only to pass that check. A keyframe
+  is now proved as it is resolved, before it becomes the baseline.
+- **Writing what did not move.** The commit rewrote every store, stream, carrier,
+  the FSM and status. A projection the live world already equals on the compared
+  surface and in every other part now writes the clock and the barrier alone, as a
+  hash-only answer does (`TestACorrectionThatMovesNothingWritesNothing`).
+
+An install that moves nothing now costs about 8 ms staged and 6 ms committed, a
+repair 8 ms staged with its commit bound by projection (`doc/todo.md`). Adopting a
+body whose root equals this instance's world at that tick, as proposed, would
+index that world first — 14 ms, more than the install it saves — and was not built.

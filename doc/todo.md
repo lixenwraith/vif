@@ -157,19 +157,15 @@ operator's.
 Diagnoses and what each item follows from are in
 [Troubleshooting](troubleshooting.md).
 
-### Write only what a correction changed
+### Project a correction outside the live lock
 
-- Priority: P1
-- Affected files: `internal/app/snapshot_stage.go`, `internal/converge/selective.go`
+- Priority: P2
+- Affected files: `internal/app/snapshot_stage.go`
 
-Every correction a guest takes, a two-page repair included, stages the whole
-capture and projects and writes the whole world under the live lock: about 35 ms
-and 30 ms at 239x64 in the tower region, 50 ms and 60-104 ms in a 9,300-entity
-session. Most move nothing: 27 of 31 there, 38 of 55 in that session, 18 of 24 in
-the 260926-041131 guest. A repair
-could splice its pages into the capture the live world already matches, and a body
-whose index root equals this instance's at that tick could be adopted as a
-hash-only answer is.
+A correction behind the clock is simulated to the present under the live lock,
+about 1.3 ms a tick at 239x64 in the tower region: a repair at a four-tick lead
+projects 16 ticks and commits in 20-40 ms. The suffix could be read under the lock,
+the projection run outside it to the tick read, and only later ticks run inside.
 
 ### Add a UDP transport
 
@@ -184,17 +180,6 @@ set from the tick rather than TCP's minimum RTO, and the compressor reset per
 window or moved to per-message deflate. Its gain is recovery in tens of
 milliseconds and no connection-wide stall on one lost segment; measure it against
 TCP under the `netem` stages at 1-10% loss before changing the default.
-
-### Keep route graphs across an install that moved no wall
-
-- Priority: P2
-- Affected files: `internal/system/navigation.go`
-
-`NavigationSystem.LoadShared` rebuilds passability, every flow field and every
-gateway route graph on each install, in the staging world and again in the live
-commit: 44% of install CPU in the tower region. A route graph is a function of its
-endpoints and the passability grid; keeping one needs the grid generation it was
-built at, because `refreshRouteGraphs` also rebuilds between installs.
 
 ## Combat
 

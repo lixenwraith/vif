@@ -323,7 +323,8 @@ each produce their own swarm request.
 A cached Shared derivation with a recompute throttle carries both its inputs and
 its phase. Dirty history changes the age of the value consumers read. Navigation
 therefore snapshots recompute counters, last targets, and gateway route rebuild
-budget, then re-derives fields and graphs during install from the captured inputs.
+budget, then re-derives fields and graphs during install from the captured inputs,
+keeping any it holds from the same inputs on a wall grid that has not moved since.
 
 Local view changes do not mark Shared navigation dirty.
 
@@ -438,7 +439,8 @@ against the same boundary.
 The host publishes an authoritative `SharedCapture` on a cadence. JSON remains the
 schema and integrity surface; a bounded versioned deflate envelope precedes
 chunking. A guest resolves into a reusable staging world and commits between
-ticks.
+ticks; a body is proved by its integrity hash as it is resolved and a repair by the
+root, so neither is hashed again to stage.
 
 A correction exchange is selective:
 
@@ -462,7 +464,8 @@ An install never moves the clock backwards. A capture behind it is projected: th
 staging world takes the capture, this instance's owner-authored values, its own
 encoded ordinary crossings past the capture's fence for its source and the applied
 barrier-bound artifacts due after the capture's tick, simulates to the live tick,
-and the projection is what the live world is reconciled to. A hole in the retained
+and the projection is what the live world is reconciled to — clock and barrier
+alone when the two are already equal. A hole in the retained
 suffix makes it unavailable and selects authority-only recovery. A capture ahead of
 the clock waits for its tick inside the lead, newest wins, and one further ahead is
 adopted at its own tick as the jump it is (multi-player.md §3.3, §4.1).
