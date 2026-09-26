@@ -20,9 +20,10 @@ type vlogSink struct{}
 func VlogSink() JournalSink { return vlogSink{} }
 
 // Record writes one event record; every argument is an immutable value, as
-// vlog formats asynchronously on its own goroutine
+// vlog formats asynchronously on its own goroutine. encode_err is written only
+// when set: it is empty on all but a broken record.
 func (vlogSink) Record(r JournalRecord) {
-	vlog.Journal(SubJournalRecord,
+	kv := []any{
 		"jseq", r.JSeq,
 		"seq", r.Seq,
 		"jrun", r.Run,
@@ -32,7 +33,11 @@ func (vlogSink) Record(r JournalRecord) {
 		"domain", r.Domain.String(),
 		"ev", GetEventName(r.Type),
 		"payload", r.Payload,
-		"encode_err", r.EncodeErr)
+	}
+	if r.EncodeErr != "" {
+		kv = append(kv, "encode_err", r.EncodeErr)
+	}
+	vlog.Journal(SubJournalRecord, kv...)
 }
 
 // Anchor writes one header record

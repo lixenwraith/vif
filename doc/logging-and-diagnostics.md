@@ -724,7 +724,7 @@ Journal record fields are:
 | `jrun`, `jtick`, `boundary` | Replay lattice position. |
 | `origin`, `ev` | Producer class and registered event name. |
 | `payload` | TOML text encoded from the registered payload prototype. |
-| `encode_err` | Why a payload could not be captured; replay refuses that record. |
+| `encode_err` | Why a payload could not be captured, absent otherwise; replay refuses that record. |
 
 An anchor is emitted when capture opens, after reset, and every 600 ticks so a
 rotated file soon receives a self-description. It carries:
@@ -754,9 +754,13 @@ which no written world carries.
 A participant writes worlds it did not simulate: the capture its join installed
 and each correction after it. Each is a `capture` record carrying `jseq` (the
 records before it), its lattice position, the local `participant`, the
-`authority` and the capture as base64 `body`; replay installs it at that place
-under that identity, so a guest's journal replays from its join. Owner syncs and
-kill confirmations are records; the authority's worlds that proved them are not.
+`authority` and, as base64 `body`, a `snapshot.WrittenDelta`: what the write
+changed against the world held just before it, sealed with the written world's
+integrity hash. Replay rebuilds it from its own world at that place, refuses a
+rebuild whose hash differs (it diverged before the write) and installs it under
+that identity, so a guest's journal replays from its join. A correction that
+changed nothing costs a few hundred bytes. Owner syncs and kill confirmations are
+records; the authority's worlds that proved them are not.
 
 Two events are notes, journaled and applied by replay but never dispatched:
 `EventCursorPredicted`, the D-18 placement a keystroke made, and

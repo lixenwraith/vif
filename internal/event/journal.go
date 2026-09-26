@@ -8,43 +8,10 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 )
 
-// JournalSchema is the record layout version; bump on any field change.
-//
-// 7: Domain became meaningful. It was populated from the ambient domain, which
-// defaults to shared, so pre-7 records read "shared" wherever nothing stamped —
-// death batches, combat hits and operator input among them. Replication filters
-// on it (see Replicated), so a 6 and a 7 journal are not comparable.
-//
-// 8: The anchor gained the D-14 map latch (map_w, map_h, crop_on_resize). Records
-// are unchanged, so a 7 journal replays identically; the bump is what lets a join
-// handshake reject an anchor whose latch fields are absent rather than zero.
-//
-// 9: Nugget became a player-domain personal mechanic. Its event family moved from
-// the replicated set to Local, and a jump now records the resulting cursor crossing.
-//
-// 10: Explosion combat and presentation use separate payload families. Cursor
-// creation carries its arming template, and drain fusion carries its causal cursor.
-//
-// 11: The anchor gained SessionShared. D-14 admits a terminal-derived crop only
-// while the world is this instance's alone, and that condition has to reproduce:
-// a replay or a catch-up holds no transport, so deriving it from one made the
-// reproduction crop where the run it reproduces did not.
-//
-// 12: Combat payloads carry the crossing identity that seeds their knockback, so
-// the impulse follows the artifact rather than a shared stream position two
-// instances consume at different ticks.
-//
-// 13: The anchor names the scenario instead of the path it resolved to, and
-// carries its digest. A path is the same simulation on one machine and nothing on
-// another, so it could neither refuse an edited scenario nor admit an identical
-// one installed elsewhere.
-//
-// 14: EventPlayoutLead is a local record of the lead this instance stamps its own
-// crossings with, not a barrier-bound session value the authority published.
-//
-// 15: The row gutter narrowed to one column, so the terminal an anchor names is a
-// viewport two columns wider, and a script reading viewport_width reads another value.
-const JournalSchema = 15
+// JournalSchema is the record layout version; bump on any field change, or on a
+// change to what an unchanged field means. A join refuses a peer on another one,
+// since the anchor it offers is the journal's. Each bump's reason is its commit.
+const JournalSchema = 16
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.
@@ -141,7 +108,7 @@ type JournalCapture struct {
 	Participant uint32
 	Authority   uint32
 
-	Body []byte // snapshot.EncodeCapture of the world written
+	Body []byte // snapshot.WrittenDelta: the world written, against the one before it
 }
 
 // JoinAnchor is what one participant offers another so both reproduce the same

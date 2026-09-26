@@ -97,6 +97,7 @@ func (s *StagedInstall) Commit() error {
 		err       error
 		behind    uint64
 		projected snapshot.SharedCapture
+		before    snapshot.SharedCapture
 		place     event.Stamp
 		mark      uint64
 	)
@@ -135,6 +136,12 @@ func (s *StagedInstall) Commit() error {
 			// world to where this instance stands.
 			projected.Header = header
 			projected.Header.Tick = tick
+			if journal != nil {
+				// The journal carries what the write changes, against this.
+				before, err = live.captureSharedLocked()
+			}
+		}
+		if err == nil {
 			s.difference, err = live.writeSharedLocked(projected, true, true)
 		}
 		if err == nil {
@@ -153,7 +160,7 @@ func (s *StagedInstall) Commit() error {
 		return fmt.Errorf("commit a staged capture: %w", err)
 	}
 	if journal != nil {
-		live.journalWritten(journal, place, mark, projected)
+		live.journalWritten(journal, place, mark, before, projected)
 	}
 	live.telemetry.StageUS.Store(s.stageDur.Microseconds())
 	live.telemetry.CommitUS.Store(s.commitDur.Microseconds())
@@ -166,11 +173,16 @@ func (s *StagedInstall) Commit() error {
 	return nil
 }
 
-// journalWritten records a world this instance wrote, so a replay writes it at the
-// same place as the same participant. A join writes before its transport attaches,
-// so the identity then is the one the offer assigned.
-func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, cap snapshot.SharedCapture) {
-	body, err := snapshot.EncodeCapture(cap)
+// journalWritten records a world this instance wrote, as what it changed, so a
+// replay holding the same world writes it at the same place as the same
+// participant. A join writes before its transport attaches, so the identity then
+// is the one the offer assigned.
+func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, before, cap snapshot.SharedCapture) {
+	d, err := snapshot.DiffWritten(before, cap)
+	var body []byte
+	if err == nil {
+		body, err = snapshot.EncodeJSON(d)
+	}
 	if err != nil {
 		vlog.Warn("app", "msg", "journal capture not recorded", "tick", cap.Header.Tick, "error", err.Error())
 		return

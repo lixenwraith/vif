@@ -146,15 +146,24 @@ func (t replayTarget) PushRecord(rec event.JournalRecord, payload any) bool {
 	return t.a.world.PushRecord(rec.Type, payload, rec.Origin, rec.Domain)
 }
 
-// Install writes a world the recorded run wrote, as the participant it wrote it as:
-// identity first, because the write binds cursors by it.
+// Install writes a world the recorded run wrote, rebuilt from the one this replay
+// holds, as the participant it wrote it as: identity first, because the write
+// binds cursors by it.
 func (t replayTarget) Install(c event.JournalCapture) error {
-	cap, err := snapshot.DecodeCapture(c.Body)
-	if err != nil {
+	var d snapshot.WrittenDelta
+	if err := snapshot.DecodeJSON(c.Body, &d); err != nil {
 		return err
 	}
 	a := t.a
+	var err error
 	a.world.RunSafe(func() {
+		var before, cap snapshot.SharedCapture
+		if before, err = a.captureSharedLocked(); err == nil {
+			cap, err = snapshot.ApplyWritten(before, d)
+		}
+		if err != nil {
+			return
+		}
 		r := a.world.Resources.Network
 		if r == nil || r.ParticipantID != c.Participant {
 			a.attachTransportLocked(replayPort{id: c.Participant})
@@ -162,8 +171,8 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 		}
 		r.Authority.Store(c.Authority)
 		r.Term.Store(uint64(cap.Header.Term))
+		_, err = a.writeSharedLocked(cap, true, true)
 	})
-	_, err = a.writeShared(cap, true, true)
 	return err
 }
 

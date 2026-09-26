@@ -1,31 +1,11 @@
-// Package app: a capture expressed against another capture.
-//
-// Phase 3 put a whole world on the wire because a join needs a whole world. A
-// correction does not: a guest already holds one, and what it is missing is the
-// difference between the world it predicted and the world the host actually has.
-//
-// The measurement is what forced this rather than a preference for it. The storm
-// high water is 176 KiB of schema per capture: before the wire codec, full captures
-// were 859 KiB/s at 5 Hz. Exact deltas remove unchanged schema and the bounded
-// deflate envelope then reduces both shapes; they solve different parts of the cost.
-//
-// A correction is therefore one of two things and says which: a keyframe, which
-// is a whole capture and is self-sufficient, or a delta, which names the
-// keyframe it was computed against and is worthless without it. A receiver holding a
-// different baseline drops a delta rather than guessing, and waits for the next
-// keyframe; that is a bounded wait by construction, because the host takes one every
-// SnapshotKeyframeCorrections corrections.
-//
-// The proof that a delta is lossless is not a comparison — it is the capture's own
-// integrity hash. Reconstruct, re-hash, and the header's field either matches or the
-// correction is refused. A delta that produced a world merely *equivalent* to the
-// sender's — the same entities in a different store order, say — passes every value
-// check and fails that hash, which is why the delta carries entity order at all.
 package snapshot
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"reflect"
+	"slices"
 
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/fsm"
@@ -147,4 +127,109 @@ func DecodeCorrection(b []byte) (CorrectionKind, SharedCapture, SharedCaptureDel
 	default:
 		return 0, SharedCapture{}, SharedCaptureDelta{}, errors.New("correction carries neither shape")
 	}
+}
+
+// WrittenDelta is a capture this instance wrote, against the capture it held just
+// before the write: what a journal carries, since a replay holds that same world
+// at that place. A part the write left as it was is not carried; Changed names
+// which whole parts are, and Systems holds only the records that moved.
+type WrittenDelta struct {
+	Header  CaptureHeader           `json:"header"`
+	World   engine.SharedWorldDelta `json:"world"`
+	Changed WrittenParts            `json:"changed,omitempty"`
+	Streams []engine.StreamState    `json:"streams,omitempty"`
+	Systems []SystemStateRecord     `json:"systems,omitempty"`
+	Status  StatusState             `json:"status,omitzero"`
+	FSM     fsm.MachineState        `json:"fsm,omitzero"`
+}
+
+// WrittenParts flags the whole parts a WrittenDelta carries.
+type WrittenParts uint8
+
+const (
+	writtenStreams WrittenParts = 1 << iota
+	writtenStatus
+	writtenFSM
+	writtenSystemSet // the record list itself changed, so Systems is all of it
+)
+
+// DiffWritten expresses written against before, sealing written's integrity so a
+// rebuild can be proved rather than trusted.
+func DiffWritten(before, written SharedCapture) (WrittenDelta, error) {
+	sum, err := Integrity(written)
+	if err != nil {
+		return WrittenDelta{}, err
+	}
+	d := WrittenDelta{Header: written.Header, World: engine.DiffSharedWorld(before.World, written.World)}
+	d.Header.Integrity = sum
+	if !reflect.DeepEqual(before.Streams, written.Streams) {
+		d.Changed |= writtenStreams
+		d.Streams = written.Streams
+	}
+	if !reflect.DeepEqual(before.Status, written.Status) {
+		d.Changed |= writtenStatus
+		d.Status = written.Status
+	}
+	if !reflect.DeepEqual(before.FSM, written.FSM) {
+		d.Changed |= writtenFSM
+		d.FSM = written.FSM
+	}
+	if !sameSystemSet(before.Systems, written.Systems) {
+		d.Changed |= writtenSystemSet
+		d.Systems = written.Systems
+		return d, nil
+	}
+	for i, r := range written.Systems {
+		if !bytes.Equal(r.Data, before.Systems[i].Data) {
+			d.Systems = append(d.Systems, r)
+		}
+	}
+	return d, nil
+}
+
+// ApplyWritten rebuilds what a WrittenDelta describes from the capture held before
+// the write. A rebuild whose integrity does not match means the world it started
+// from was not the one the recorded run held: the replay diverged before here.
+func ApplyWritten(before SharedCapture, d WrittenDelta) (SharedCapture, error) {
+	out := SharedCapture{
+		Header:  d.Header,
+		World:   engine.ApplySharedWorldDelta(before.World, d.World),
+		Streams: before.Streams,
+		Systems: before.Systems,
+		Status:  before.Status,
+		FSM:     before.FSM,
+	}
+	if d.Changed&writtenStreams != 0 {
+		out.Streams = d.Streams
+	}
+	if d.Changed&writtenStatus != 0 {
+		out.Status = d.Status
+	}
+	if d.Changed&writtenFSM != 0 {
+		out.FSM = d.FSM
+	}
+	if d.Changed&writtenSystemSet != 0 {
+		out.Systems = d.Systems
+	} else if len(d.Systems) > 0 {
+		out.Systems = slices.Clone(before.Systems)
+		for _, r := range d.Systems {
+			i := slices.IndexFunc(out.Systems, func(s SystemStateRecord) bool { return s.System == r.System })
+			if i < 0 {
+				return SharedCapture{}, fmt.Errorf("written world names system %q the world before it lacks", r.System)
+			}
+			out.Systems[i] = r
+		}
+	}
+	sum, err := Integrity(out)
+	if err != nil {
+		return SharedCapture{}, err
+	}
+	if sum != d.Header.Integrity {
+		return SharedCapture{}, errors.New("the rebuilt world is not the one written: the world before it differed")
+	}
+	return out, nil
+}
+
+func sameSystemSet(a, b []SystemStateRecord) bool {
+	return slices.EqualFunc(a, b, func(x, y SystemStateRecord) bool { return x.System == y.System })
 }
