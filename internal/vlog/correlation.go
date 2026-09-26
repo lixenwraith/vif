@@ -1,6 +1,9 @@
 package vlog
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+	"time"
+)
 
 // Correlation owns the run and tick stamp for one runtime.
 type Correlation struct {
@@ -29,3 +32,9 @@ var defaultCorrelation = NewCorrelation()
 
 // DefaultCorrelation is the process logger's stamp owner.
 func DefaultCorrelation() *Correlation { return defaultCorrelation }
+
+// fileTimeFormat is the time part every output file of a run is named with.
+const fileTimeFormat = "060102-150405"
+
+// FileStamp is now in fileTimeFormat, for an output named beside the logs.
+func FileStamp() string { return time.Now().Format(fileTimeFormat) }

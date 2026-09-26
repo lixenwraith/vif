@@ -15,19 +15,17 @@ import (
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
-	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // panStep is the cells a pan key shifts the presented game area
 const panStep = 4
 
-// PlayJournal replays a recorded run on the terminal. Several paths reassemble a
-// rotated set. The anchor names the scenario; roots says where to look for it, so
-// a journal recorded against a scenario that is not installed replays under the
-// same -config-dir the run used. The journal carries no mute state: muted is the
-// viewer's, as -mute is the player's.
-func PlayJournal(roots resource.Options, muted bool, paths ...string) error {
+// PlayJournal replays a recorded run on the terminal; several paths reassemble a
+// rotated set. The anchor decides everything simulated; viewer supplies what is the
+// watcher's: where the scenario it names is found, as the run's -config-dir did,
+// and the speakers, colour and music recording.
+func PlayJournal(viewer Config, paths ...string) error {
 	event.EnsureRegistry()
 
 	set, err := journal.Load(paths...)
@@ -46,8 +44,9 @@ func PlayJournal(roots resource.Options, muted bool, paths ...string) error {
 	if err != nil {
 		return err
 	}
-	cfg.Resources.Dir = roots.Dir
-	cfg.AudioMuted = muted
+	cfg.Resources.Dir = viewer.Resources.Dir
+	cfg.AudioMuted, cfg.AudioBackend, cfg.AudioBuffer = viewer.AudioMuted, viewer.AudioBackend, viewer.AudioBuffer
+	cfg.MusicWAV, cfg.ColorMode, cfg.ColorModeSet = viewer.MusicWAV, viewer.ColorMode, viewer.ColorModeSet
 	a, err := NewReplay(cfg)
 	if err != nil {
 		return err
@@ -62,6 +61,7 @@ func PlayJournal(roots resource.Options, muted bool, paths ...string) error {
 	if err := a.VerifyAnchor(an); err != nil {
 		return err
 	}
+	a.recordMusic()
 	d, err := newReplayDriver(a, set.Records, set.Captures)
 	if err != nil {
 		return err
@@ -224,7 +224,7 @@ func (p *player) advance(elapsed time.Duration) {
 			p.step--
 		}
 		if stepped {
-			p.a.holdMixer(true) // a recorded unpause inside the step released it
+			p.holdMixer() // a recorded unpause inside the step released it
 		}
 		return
 	}
@@ -257,6 +257,7 @@ func (p *player) tickOnce() bool {
 	}
 	if !more {
 		p.done = true
+		p.holdMixer()
 		p.report()
 		return false
 	}
@@ -338,10 +339,10 @@ func (p *player) control(r rune) {
 	case ' ':
 		p.paused = !p.paused
 		p.budget = 0
-		p.a.holdMixer(p.paused)
+		p.holdMixer()
 	case '.':
 		p.paused, p.step = true, p.step+1
-		p.a.holdMixer(true)
+		p.holdMixer()
 	case '+', '=':
 		p.scale = engine.ScaleStep(p.scale, 1)
 	case '-', '_':
@@ -397,9 +398,13 @@ func (p *player) command(intent *input.Intent) bool {
 		}
 	})
 	a.Settle()
-	a.holdMixer(p.paused)
+	p.holdMixer()
 	return true
 }
+
+// holdMixer fades the mixer out while the viewer pauses or steps and once the
+// stream has ended, whatever the recording's own pause says.
+func (p *player) holdMixer() { p.a.holdMixer(p.paused || p.done) }
 
 // route applies one viewer intent through the game's router and settles it at
 // once, since nothing else dispatches between a replay's ticks. The viewer is

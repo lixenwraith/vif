@@ -3,11 +3,14 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/service"
+	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 const buildHasAudio = true
@@ -35,6 +38,26 @@ func (a *App) reportAudioSpec() {
 	first, _, _ := strings.Cut(r.Engine.SpecError().Error(), "\n")
 	a.ctx.SetStatusMessage("Audio config: "+first+" (built-in used; -check lists all)",
 		parameter.StatusMessageMaxDuration, false)
+}
+
+// recordMusic starts the MusicWAV recording once the mixer runs. A failure costs
+// the recording, not the run, so it is reported rather than returned.
+func (a *App) recordMusic() {
+	r := a.world.Resources.Audio
+	if a.cfg.MusicWAV == "" || r == nil || r.Engine == nil {
+		return
+	}
+	path := filepath.Join(a.cfg.MusicWAV, "vif-mus-"+vlog.FileStamp()+".wav")
+	err := os.MkdirAll(a.cfg.MusicWAV, 0o755)
+	if err == nil {
+		err = r.Engine.RecordMusic(path)
+	}
+	if err != nil {
+		vlog.Warn("app", "msg", "music not recorded", "path", path, "error", err.Error())
+		a.ctx.SetStatusMessage("Music not recorded: "+err.Error(), parameter.StatusMessageMaxDuration, false)
+		return
+	}
+	vlog.Info("app", "msg", "music recording", "path", path)
 }
 
 // holdMixer pauses the mixer with a replay viewer's pause, which stops ticks but not

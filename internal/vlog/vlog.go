@@ -31,10 +31,9 @@ const (
 
 // File naming: one JSON object per line, not a JSON document
 const (
-	filePrefix     = "vif-log-"
-	snapPrefix     = "vif-snap-"
-	fileTimeFormat = "060102-150405"
-	fileExtension  = "jsonl"
+	filePrefix    = "vif-log-"
+	snapPrefix    = "vif-snap-"
+	fileExtension = "jsonl"
 )
 
 // journalPrefix names the replay journal file

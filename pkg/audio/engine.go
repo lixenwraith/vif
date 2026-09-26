@@ -76,6 +76,7 @@ type AudioEngine struct {
 	procExit chan struct{} // closed on active backend exit; nil for OSS
 
 	stderrTail *tailBuffer
+	musicWAV   *wavSink // RecordMusic's file, closed by Stop
 
 	running     atomic.Bool
 	paused      atomic.Bool
@@ -343,6 +344,9 @@ func (ae *AudioEngine) Stop() {
 	if ae.sink != nil {
 		ae.sink.Close()
 	}
+	if ae.musicWAV != nil {
+		ae.musicWAV.Close()
+	}
 	if ae.cmd != nil && ae.cmd.Process != nil {
 		ae.cmd.Process.Kill()
 	}
@@ -359,6 +363,36 @@ func (ae *AudioEngine) Stop() {
 // and ResetRegistries or a fresh Start would race it.
 func (ae *AudioEngine) Stopped() bool {
 	return ae.mixer == nil || ae.mixer.Wait(0)
+}
+
+// FadeOut fades the whole mix to silence as a pause does and waits it out, so a
+// run that ends does not cut its sound off mid-note. Stop follows it.
+func (ae *AudioEngine) FadeOut() {
+	ae.SetPaused(true)
+	if ae.IsEnabled() && ae.mixer != nil {
+		time.Sleep(AudioPauseFade + ae.buffer)
+	}
+}
+
+// RecordMusic writes the music bus alone, as it plays, to a WAV file at path;
+// effects, mutes and pauses are not in it. Stop closes the file.
+func (ae *AudioEngine) RecordMusic(path string) error {
+	if ae.mixer == nil {
+		return errors.New("music recording needs a running mixer; -ab null runs one without a device")
+	}
+	w, err := newWAVSink(path)
+	if err != nil {
+		return err
+	}
+	ae.beMu.Lock()
+	prev := ae.musicWAV
+	ae.musicWAV = w
+	ae.beMu.Unlock()
+	ae.mixer.Send(audioCmd{op: cmdMusicTap, w: w})
+	if prev != nil {
+		prev.Close() // a write racing the swap is discarded by the closed sink
+	}
+	return nil
 }
 
 // SetPaused toggles the paused state (music frozen + effects gated)

@@ -23,6 +23,7 @@ type Settings struct {
 		Root     string `toml:"root"`
 		Log      string `toml:"log"`
 		Journal  string `toml:"journal"`
+		Music    string `toml:"music"`
 		Scenario string `toml:"scenario"`
 		Content  string `toml:"content"`
 		Keymap   string `toml:"keymap"`
@@ -51,7 +52,7 @@ func LoadSettings(override string) (Settings, string, error) {
 		return Settings{}, "", fmt.Errorf("%s: %w", path, err)
 	}
 	dir, p := filepath.Dir(path), &s.Paths
-	for _, v := range []*string{&p.Root, &p.Log, &p.Journal, &p.Content, &p.Keymap} {
+	for _, v := range []*string{&p.Root, &p.Log, &p.Journal, &p.Music, &p.Content, &p.Keymap} {
 		*v = settingsPath(dir, *v)
 	}
 	// A bare scenario is a name the roots resolve, not a file beside this one.

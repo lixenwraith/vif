@@ -103,6 +103,8 @@ type Config struct {
 
 	// AudioMuted is the initial effect mute state
 	AudioMuted bool
+	// MusicWAV is the directory the music is recorded to as a WAV file; "" records none.
+	MusicWAV string
 
 	// AudioBuffer is the mixer period; zero is the audio package's default
 	AudioBuffer time.Duration

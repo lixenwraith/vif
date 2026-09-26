@@ -309,6 +309,53 @@ func TestWAVBackendCapture(t *testing.T) {
 	}
 }
 
+// TestMusicRecordingIsTheMusicAlone: effects never reach the recording, and it
+// grows only while the sequencer plays.
+func TestMusicRecordingIsTheMusicAlone(t *testing.T) {
+	t.Cleanup(ResetRegistries)
+	ResetRegistries()
+
+	cfg := DefaultAudioConfig()
+	cfg.Enabled = true
+	cfg.BaseSounds = testBank()
+	cfg.BasePatterns = testPatterns()
+	cfg.ForceBackend = BackendNameNull
+	ae, err := NewAudioEngine(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ae.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	dir := t.TempDir()
+	silent, played := filepath.Join(dir, "silent.wav"), filepath.Join(dir, "played.wav")
+	pcm := func(path string) int {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(data) - wavHeaderSize
+	}
+
+	if err := ae.RecordMusic(silent); err != nil {
+		t.Fatal(err)
+	}
+	ae.Play(ae.SoundID("coin"))
+	time.Sleep(3 * AudioBufferDuration)
+	if err := ae.RecordMusic(played); err != nil { // closes silent.wav
+		t.Fatal(err)
+	}
+	if n := pcm(silent); n != 0 {
+		t.Fatalf("an effect with no music playing recorded %d bytes", n)
+	}
+	ae.StartMusic()
+	time.Sleep(3 * AudioBufferDuration)
+	ae.Stop()
+	if pcm(played) == 0 {
+		t.Fatal("playing music recorded nothing")
+	}
+}
+
 func TestWriteWAVFraming(t *testing.T) {
 	buf, err := RenderPreview(&SoundDef{
 		Name:     "test_tone",

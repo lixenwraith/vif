@@ -8,10 +8,11 @@
 # A configuration root searched before the user root, as -config-dir names one.
 # The vif.toml inside it is not read.
 root = ""
-# Where -l writes session logs and -j writes replay journals; the flags still
-# turn the streams on. Default $XDG_STATE_HOME/vif/log and .../journal.
+# Where -l writes session logs, -j replay journals and -mw the music as WAV; the
+# flags still turn each on. Default $XDG_STATE_HOME/vif/log, .../journal, .../music.
 log = ""
 journal = ""
+music = ""
 # What -s, -f and -k name: a scenario name or path, a content directory or
 # file, a keymap file.
 scenario = ""

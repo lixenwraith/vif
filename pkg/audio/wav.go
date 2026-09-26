@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"bufio"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -57,6 +58,7 @@ func writeWAVHeader(w io.Writer, n uint32) error {
 // lock per 50ms tick.
 type wavSink struct {
 	f      *os.File
+	w      *bufio.Writer // a disk stall must not reach the mix goroutine each period
 	mu     sync.Mutex
 	n      uint64 // PCM bytes written
 	closed bool
@@ -71,8 +73,11 @@ func newWAVSink(path string) (*wavSink, error) {
 		f.Close()
 		return nil, err
 	}
-	return &wavSink{f: f}, nil
+	return &wavSink{f: f, w: bufio.NewWriterSize(f, wavBufferBytes)}, nil
 }
+
+// wavBufferBytes is about 1.5 s of audio between file writes.
+const wavBufferBytes = 256 << 10
 
 // Write runs on the mix goroutine. A write after Close reports success and
 // discards: a closed sink is one the engine deliberately detached, and
@@ -85,7 +90,7 @@ func (s *wavSink) Write(p []byte) (int, error) {
 	if s.closed {
 		return len(p), nil
 	}
-	n, err := s.f.Write(p)
+	n, err := s.w.Write(p)
 	s.n += uint64(n)
 	return n, err
 }
@@ -99,6 +104,7 @@ func (s *wavSink) Close() error {
 		return nil
 	}
 	s.closed = true
+	_ = s.w.Flush()
 	n := min(s.n, math.MaxUint32-wavHeaderSize)
 	if _, err := s.f.Seek(0, io.SeekStart); err == nil {
 		writeWAVHeader(s.f, uint32(n))

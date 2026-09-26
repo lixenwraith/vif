@@ -42,6 +42,7 @@ _arguments \
   '-log-session-id[Attach a session ID to every application log record; implies -l]:id: ' \
   '-log-stdout[Write the log to stdout as JSON instead of to a file; implies -l]' \
   '(-j -journal)'{-j,-journal}'[Record a replay journal; DIR overrides $XDG_STATE_HOME/vif/journal]' \
+  '(-mw -music-wav)'{-mw,-music-wav}'[Record the music alone, as it plays, to a WAV file; DIR overrides $XDG_STATE_HOME/vif/music]' \
   '-dev[Capture runtime stderr to a file; on by default for -race builds]' \
   '(-h -help)'{-h,-help}'[Print this and exit]' \
   '-version[Print the module version and commit a package should report]'

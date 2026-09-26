@@ -33,6 +33,7 @@ type MusicSystem struct {
 	tier       audio.Intensity
 	manualTier bool
 	arranged   bool // first auto-arrangement applied; slots start silent otherwise
+	stopped    bool // the run stopped its music, so an unmute does not start it
 
 	// What the sequencer sounds, for the telemetry HUD's music card; a slot's name is
 	// looked up only when its pattern changes
@@ -73,6 +74,7 @@ func (s *MusicSystem) Init() {
 	s.tier = audio.IntensityCalm
 	s.manualTier = false
 	s.arranged = false
+	s.stopped = false
 	s.enabled = true
 	s.statGroup.Store("")
 	s.statTier.Store("")
@@ -155,8 +157,11 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
+	// A muted engine is sent only what outlasts the mute; an unmute starts from here.
+	muted := s.player.IsMusicMuted()
 	switch ev.Type {
 	case event.EventMusicStart:
+		s.stopped = false
 		if p, ok := ev.Payload.(*event.MusicStartPayload); ok && p != nil {
 			if p.BPM > 0 {
 				s.player.SetMusicBPM(p.BPM)
@@ -168,7 +173,9 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 				s.tier = p.Intensity
 				s.manualTier = true
 			}
-			s.startMusic()
+			if !muted {
+				s.startMusic()
+			}
 			// explicit slots applied after the tier, not before
 			if p.BeatPattern != audio.PatternSilence {
 				s.player.SetPattern(slotRhythm, p.BeatPattern, 0, false)
@@ -180,9 +187,12 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 			}
 			return
 		}
-		s.startMusic()
+		if !muted {
+			s.startMusic()
+		}
 
 	case event.EventMusicStop:
+		s.stopped = true
 		s.player.StopMusic()
 
 	case event.EventBeatPatternRequest:
@@ -201,7 +211,7 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventMelodyNoteRequest:
-		if payload, ok := ev.Payload.(*event.MelodyNoteRequestPayload); ok {
+		if payload, ok := ev.Payload.(*event.MelodyNoteRequestPayload); ok && !muted {
 			duration := int(payload.Duration.Seconds() * float64(audio.AudioSampleRate))
 			if duration == 0 {
 				duration = audio.SamplesPerStep(audio.DefaultBPM) * 2
@@ -261,7 +271,7 @@ func (s *MusicSystem) applyMusicAudible(audible bool) {
 		return
 	}
 	s.player.SetMusicMuted(!audible)
-	if audible {
+	if audible && !s.stopped {
 		s.startMusic()
 	}
 	s.publish() // a pause stops Update, not the mute key

@@ -106,6 +106,7 @@ func (s *AudioService) Start() error {
 
 func (s *AudioService) Stop() error {
 	if s.audioEngine != nil {
+		s.audioEngine.FadeOut()
 		s.audioEngine.Stop()
 	}
 	return nil

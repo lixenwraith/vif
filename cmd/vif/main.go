@@ -61,6 +61,7 @@ var (
 	flagLogs         = newLogFlags()
 	flagSession      sessionFlags
 	flagJournal      = newSetFlag(true, parseOutputDirFlag)
+	flagMusicWAV     = newSetFlag(true, parseOutputDirFlag)
 	flagDev          = newSetFlag(true, parseBoolFlag)
 
 	// settings is vif.toml as the roots of -config-dir resolved it.
@@ -78,6 +79,9 @@ func init() {
 	journalHint := "Record a replay journal; -j=DIR overrides the user-state directory"
 	flag.Var(&flagJournal, "j", journalHint)
 	flag.Var(&flagJournal, "journal", journalHint)
+	musicHint := "Record the music as WAV; -mw=DIR overrides the user-state directory"
+	flag.Var(&flagMusicWAV, "mw", musicHint)
+	flag.Var(&flagMusicWAV, "music-wav", musicHint)
 	flag.Var(&flagDev, "dev", "Capture runtime stderr to a file; -dev=false disables")
 
 	// The `flag` package writes its own usage to stderr and exits non-zero, which
@@ -120,7 +124,7 @@ func main() {
 		fmt.Println("settings ok:", cmp.Or(settingsPath, "embedded default"))
 		err = resource.Check(buildConfig().Resources, os.Stdout)
 	case *flagReplay != "":
-		err = app.PlayJournal(flagConfig.options(), *flagMute, *flagReplay)
+		err = app.PlayJournal(buildConfig(), *flagReplay)
 	case *flagScript != "":
 		cfg := buildConfig()
 		if *flagWatch {
@@ -281,6 +285,7 @@ func buildConfig() app.Config {
 	}
 
 	cfg.AudioMuted = *flagMute
+	cfg.MusicWAV = musicWAVDir()
 	cfg.AudioBuffer = time.Duration(settings.Audio.BufferMs) * time.Millisecond
 
 	switch *flagColor {
@@ -292,6 +297,14 @@ func buildConfig() app.Config {
 	// colourAuto leaves ColorModeSet false, which is the terminal deciding.
 
 	return cfg
+}
+
+// musicWAVDir is where -mw records the music, "" when it was not asked for.
+func musicWAVDir() string {
+	if !flagMusicWAV.set {
+		return ""
+	}
+	return cmp.Or(flagMusicWAV.value, paths.DefaultMusicDir())
 }
 
 // applySettings makes vif.toml the default of each path flag it names: a flag given
@@ -308,6 +321,7 @@ func applySettings(s paths.Settings) {
 	fill(&flagConfig.keymap, p.Keymap)
 	fill(&flagLogs.dir.value, p.Log)
 	fill(&flagJournal.value, p.Journal)
+	fill(&flagMusicWAV.value, p.Music)
 	if !flagConfig.embedded {
 		fill(&flagConfig.scenario, p.Scenario)
 		fill(&flagConfig.content, p.Content)

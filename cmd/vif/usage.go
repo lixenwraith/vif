@@ -28,7 +28,7 @@ type flagSection struct {
 // helpSections is the whole of the help and the manual, one line per flag with every
 // form on it, in the order somebody looking for a flag would look. The log and
 // journal defaults are parameters: the help prints resolved paths, the manual XDG.
-func helpSections(logDir, journalDir string) []flagSection {
+func helpSections(logDir, journalDir, musicDir string) []flagSection {
 	return []flagSection{{
 		title: "Session",
 		lines: []flagLine{
@@ -97,6 +97,7 @@ func helpSections(logDir, journalDir string) []flagSection {
 			{names: []string{"log-session-id"}, arg: "<id>", hint: "Attach a session ID to every application log record; implies -l"},
 			{names: []string{"log-stdout"}, hint: "Write the log to stdout as JSON instead of to a file; implies -l"},
 			{names: []string{"j", "journal"}, arg: "[=DIR]", hint: "Record a replay journal; DIR overrides " + journalDir},
+			{names: []string{"mw", "music-wav"}, arg: "[=DIR]", hint: "Record the music alone, as it plays, to a WAV file; DIR overrides " + musicDir},
 			{names: []string{"dev"}, arg: "[=false]", hint: "Capture runtime stderr to a file; on by default for -race builds"},
 		},
 	}, {
@@ -140,7 +141,7 @@ const summary = "a modal-motion arcade game"
 func writeUsage(w io.Writer) {
 	fmt.Fprint(w, "vif — "+summary+"\n\nUsage:\n  vif [flags]\n")
 
-	sections := helpSections(paths.DefaultLogDir(), paths.DefaultJournalDir())
+	sections := helpSections(paths.DefaultLogDir(), paths.DefaultJournalDir(), paths.DefaultMusicDir())
 	width := 0
 	for _, section := range sections {
 		for _, line := range section.lines {
@@ -195,7 +196,7 @@ const generatedBy = "Generated from cmd/vif/usage.go by TestGeneratedFilesAreThe
 // state directories rather than the generating user's home.
 func portableSections() []flagSection {
 	dir := "$XDG_STATE_HOME/" + paths.AppDirName + "/"
-	return helpSections(dir+paths.LogDirName, dir+paths.JournalDirName)
+	return helpSections(dir+paths.LogDirName, dir+paths.JournalDirName, dir+paths.MusicDirName)
 }
 
 // writeManual renders doc/vif.6.
@@ -244,7 +245,7 @@ User configuration root, normally
 .TP
 .I vif.toml
 Settings at the top of a configuration root: another root, the log, journal,
-scenario, content and keymap paths, and the audio mixer buffer.
+music, scenario, content and keymap paths, and the audio mixer buffer.
 .TP
 .I $XDG_CONFIG_DIRS/vif
 System configuration roots, normally

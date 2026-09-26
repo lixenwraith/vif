@@ -106,8 +106,8 @@ binary. That is deliberate: a native guest running `-d` has to be able to join o
 and its content identity is `embedded`.
 
 `vif.toml` at the top of a root holds what a flag would otherwise say on every run:
-`[paths]` names another root (`root`, read as `-config-dir` is), the log and
-journal directories, and the scenario, content and keymap `-s`, `-f` and `-k`
+`[paths]` names another root (`root`, read as `-config-dir` is), the log,
+journal and music directories, and the scenario, content and keymap `-s`, `-f` and `-k`
 take; `[audio] buffer_ms` sets the mixer period. It is found like any resource,
 from `-config-dir` down to the system roots; the first file wins whole, a key it
 omits keeps the embedded default, and the `vif.toml` inside its own `root` is not
@@ -139,13 +139,14 @@ the streams separate:
 |---|---|---|
 | Session logs, snapshots, recorder files, runtime stderr capture, profiles and traces | `$XDG_STATE_HOME/vif/log/` | `-l=DIR`, `paths.log` |
 | Replay journals | `$XDG_STATE_HOME/vif/journal/` | `-j=DIR`, `paths.journal` |
+| Music recordings | `$XDG_STATE_HOME/vif/music/` | `-mw=DIR`, `paths.music` |
 
 On platforms without an XDG state root, the platform user-cache directory is
 used. Only when no user location can be resolved does either stream fall back to
 `./log/`. `/var/log` is never assumed.
 
-Bare `-l` and `-j` enable their streams at the defaults. Because both are Go
-boolean-style flags, a directory must use the equals form.
+Bare `-l`, `-j` and `-mw` enable their streams at the defaults. Because they are
+Go boolean-style flags, a directory must use the equals form.
 
 ## 6. Package ownership and WASM
 

@@ -280,7 +280,7 @@ func TestHelpListsEveryFlag(t *testing.T) {
 	}
 
 	documented := map[string]bool{}
-	for _, section := range helpSections("", "") {
+	for _, section := range helpSections("", "", "") {
 		if section.title == "" {
 			t.Error("a help section has no heading")
 		}
@@ -346,7 +346,7 @@ func TestHelpRendersOneLinePerFlag(t *testing.T) {
 	writeUsage(&out)
 	text := out.String()
 
-	for _, section := range helpSections("", "") {
+	for _, section := range helpSections("", "", "") {
 		for _, line := range section.lines {
 			want := line.render()
 			n := strings.Count(text, "  "+want+" ")

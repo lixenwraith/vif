@@ -35,10 +35,10 @@ build, `ModePlay`, `ModeReplay` and `ModeScript` register the audio service;
 implementation. Lightweight null systems still consume local audio events and
 publish audio as unavailable, preserving telemetry and system controls. Event
 payloads retain compatible identifiers through the small `pkg/audio/model`
-package. Replay rebuilds simulation from recorded events,
-including sound requests, and starts playback unmuted
-because the journal anchor has no original mute-state field. The viewer's
-pause holds the mixer, as the game's pause does.
+package. Replay rebuilds simulation from recorded events, including sound
+requests; the journal carries no mute state, so `-mute`, `-ab` and `-mw` are the
+viewer's. The viewer's pause holds the mixer, as the game's pause does, and so
+does the end of the stream: its sound fades and stays faded.
 
 ## 2. Stream contract
 
@@ -84,6 +84,11 @@ backends are useful in automation:
 
 - `-ab null` runs the full mixer and discards samples;
 - `-ab wav:path/to/out.wav` captures the live stream into a finalized WAV file.
+
+`-mw[=DIR]` (`-music-wav`, `paths.music`) records the music bus alone, before
+ducking, to `vif-mus-<stamp>.wav` beside the logs: what plays, so a muted or
+paused stretch adds nothing. It needs a running mixer; `-ab null -mw` records
+on a machine with no device.
 
 If no backend survives, the service degrades to a valid silent engine. Gameplay
 continues, sound requests become no-ops with rejection telemetry, and absence
@@ -165,9 +170,11 @@ by default, and `-mute=false` starts with sound; system and config events can
 change channels independently.
 
 Pause is a device/output state, not merely a gameplay-system toggle. It applies
-even if `AudioSystem` is disabled and ramps the master gain over 250 ms to avoid
-clicks. Music sequencing is frozen under mute/pause policy where appropriate;
-the exact player state is retained for resume.
+even if `AudioSystem` is disabled and ramps the master gain over 250 ms; music
+plays out the ramp, then freezes with its position kept for resume. A run that
+ends fades the same way before the engine stops. Muted, `MusicSystem` sends only
+what outlasts the mute (patterns, tempo): a start or a note waits for the unmute,
+and an unmute does not restart music the run stopped.
 
 Disabling the audio gameplay system silences new gameplay sound behavior but
 does not detach the service or lose the user's channel choices.

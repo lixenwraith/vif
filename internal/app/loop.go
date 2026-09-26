@@ -136,6 +136,7 @@ func (a *App) Loop() (*restartRequest, error) {
 		return nil, err
 	}
 	a.reportAudioSpec()
+	a.recordMusic()
 	if a.cfg.notice != "" {
 		a.ctx.SetStatusMessage(a.cfg.notice, parameter.StatusMessageMaxDuration, true)
 	}

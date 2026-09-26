@@ -26,6 +26,7 @@ const (
 	cmdReloadPattern // re-resolve slots pointing at a replaced pattern
 	cmdPlayBuffer    // audition a caller-rendered buffer, unregistered
 	cmdAutoFill
+	cmdMusicTap // w receives the music bus alone, as it plays; nil detaches
 )
 
 // audioCmd is the unified control/play message consumed by the mixer goroutine

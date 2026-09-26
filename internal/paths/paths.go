@@ -22,6 +22,7 @@ const (
 	ImageDirName     = "image"
 	LogDirName       = "log"
 	JournalDirName   = "journal"
+	MusicDirName     = "music"
 
 	ScenarioFile     = "scenario.toml"
 	KeymapConfigFile = "keymap.toml"
@@ -133,6 +134,9 @@ func DefaultLogDir() string { return stateDir(LogDirName) }
 // DefaultJournalDir returns the writable replay-journal directory. Journals
 // are kept apart from diagnostic logs when a platform state root is available.
 func DefaultJournalDir() string { return stateDir(JournalDirName) }
+
+// DefaultMusicDir returns where a recorded run's music is written, beside its logs.
+func DefaultMusicDir() string { return stateDir(MusicDirName) }
 
 func stateDir(kind string) string {
 	if ExternalFiles() {

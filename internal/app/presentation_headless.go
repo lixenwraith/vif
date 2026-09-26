@@ -9,7 +9,6 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/journal"
-	"github.com/lixenwraith/vif/internal/resource"
 )
 
 type presentationState struct{}
@@ -47,7 +46,7 @@ func Run(Config) error {
 	return fmt.Errorf("interactive play is unavailable in a vif_headless build; use -serve")
 }
 
-func PlayJournal(resource.Options, bool, ...string) error {
+func PlayJournal(Config, ...string) error {
 	return fmt.Errorf("journal presentation is unavailable in a vif_headless build")
 }
 

@@ -150,6 +150,9 @@ Write the log to stdout as JSON instead of to a file; implies \-l
 .B \-j, \-journal[=DIR]
 Record a replay journal; DIR overrides $XDG_STATE_HOME/vif/journal
 .TP
+.B \-mw, \-music\-wav[=DIR]
+Record the music alone, as it plays, to a WAV file; DIR overrides $XDG_STATE_HOME/vif/music
+.TP
 .B \-dev[=false]
 Capture runtime stderr to a file; on by default for \-race builds
 .SS Help
@@ -175,7 +178,7 @@ User configuration root, normally
 .TP
 .I vif.toml
 Settings at the top of a configuration root: another root, the log, journal,
-scenario, content and keymap paths, and the audio mixer buffer.
+music, scenario, content and keymap paths, and the audio mixer buffer.
 .TP
 .I $XDG_CONFIG_DIRS/vif
 System configuration roots, normally

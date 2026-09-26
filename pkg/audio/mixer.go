@@ -48,10 +48,12 @@ type Mixer struct {
 	lastPlay []time.Time
 	rapidVol []float64
 
-	pauseGain float64
-	duckGain  float64
-	musicBuf  []float64
-	sfxBuf    []float64
+	pauseGain  float64
+	duckGain   float64
+	musicBuf   []float64
+	sfxBuf     []float64
+	musicTap   io.Writer
+	musicBytes []byte
 }
 
 // NewMixer creates a mixer writing to out
@@ -166,6 +168,7 @@ func (m *Mixer) loop() {
 	n := bufferFrames(m.period)
 	m.musicBuf = make([]float64, n)
 	m.sfxBuf = make([]float64, n)
+	m.musicBytes = make([]byte, n*AudioBytesPerFrame)
 	mixBuf := make([]float64, n)
 	outBytes := make([]byte, n*AudioBytesPerFrame)
 
@@ -240,6 +243,8 @@ func (m *Mixer) apply(c audioCmd) {
 		m.startBuffer(c.buf, c.f1)
 	case cmdAutoFill:
 		m.sequencer.autoFill = c.b
+	case cmdMusicTap:
+		m.musicTap = c.w
 	}
 }
 
@@ -289,9 +294,13 @@ func (m *Mixer) renderTick(mixBuf []float64, outBytes []byte, n int, pauseStep, 
 	clear(m.musicBuf)
 	clear(m.sfxBuf)
 
-	// Music freezes under pause: sequencer position holds for aligned resume
-	if !isPaused && !m.musicMuted.Load() && m.sequencer.IsRunning() {
+	// Music plays out the pause fade, then freezes: position holds for an aligned resume
+	if (!isPaused || m.pauseGain > 0) && !m.musicMuted.Load() && m.sequencer.IsRunning() {
 		m.sequencer.Generate(m.musicBuf)
+		if m.musicTap != nil {
+			floatToBytes(m.musicBuf, m.musicBytes)
+			_, _ = m.musicTap.Write(m.musicBytes) // a failed tap costs the recording, not playback
+		}
 	}
 
 	// SFX tails always render; pause gain fades them out

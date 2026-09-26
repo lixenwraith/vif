@@ -41,6 +41,7 @@ complete -c vif -o lr -o log-recorder -x -d 'Flight recorder depth in game ticks
 complete -c vif -o log-session-id -x -d 'Attach a session ID to every application log record; implies -l'
 complete -c vif -o log-stdout -d 'Write the log to stdout as JSON instead of to a file; implies -l'
 complete -c vif -o j -o journal -d 'Record a replay journal; DIR overrides $XDG_STATE_HOME/vif/journal'
+complete -c vif -o mw -o music-wav -d 'Record the music alone, as it plays, to a WAV file; DIR overrides $XDG_STATE_HOME/vif/music'
 complete -c vif -o dev -d 'Capture runtime stderr to a file; on by default for -race builds'
 complete -c vif -o h -o help -d 'Print this and exit'
 complete -c vif -o version -d 'Print the module version and commit a package should report'
