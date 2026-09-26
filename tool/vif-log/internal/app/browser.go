@@ -49,15 +49,18 @@ func (b *browser) load(dir string) {
 
 	rows := make([]fileRow, 0, len(des))
 	for _, de := range des {
-		if strings.HasPrefix(de.Name(), ".") {
-			continue
-		}
-		fi, err := de.Info()
+		// Stat follows a link, so a linked directory is entered rather than opened.
+		fi, err := os.Stat(filepath.Join(dir, de.Name()))
 		if err != nil {
 			continue
 		}
+		// Hidden files stay hidden; hidden directories are where the logs live
+		// (~/.local/state/vif/log).
+		if !fi.IsDir() && strings.HasPrefix(de.Name(), ".") {
+			continue
+		}
 		rows = append(rows, fileRow{
-			name: de.Name(), dir: de.IsDir(), size: fi.Size(), mtime: fi.ModTime(),
+			name: de.Name(), dir: fi.IsDir(), size: fi.Size(), mtime: fi.ModTime(),
 		})
 	}
 	slices.SortFunc(rows, func(x, y fileRow) int {
