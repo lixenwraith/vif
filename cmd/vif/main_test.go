@@ -219,16 +219,29 @@ func TestSessionFlags(t *testing.T) {
 	}
 }
 
-func TestAJoinTargetCarriesTheSessionName(t *testing.T) {
-	for _, tc := range []struct{ target, addr, name string }{
-		{"host.example:7777", "host.example:7777", ""},
-		{"vif://host.example:7777/7f3c1a", "host.example:7777", "7f3c1a"},
-		{"host.example:7777/7f3c1a", "host.example:7777", "7f3c1a"},
-		{"wss://site.example/vif/ws/7f3c1a", "wss://site.example/vif/ws/7f3c1a", ""},
+// TestAnAddressNamesItsSchemeAndSession pins the one address grammar every flag
+// and command reads: the scheme picks the transport, tcp when none is given.
+func TestAnAddressNamesItsSchemeAndSession(t *testing.T) {
+	for _, tc := range []struct {
+		target string
+		scheme network.Scheme
+		addr   string
+		name   string
+	}{
+		{"host.example:7777", network.SchemeTCP, "host.example:7777", ""},
+		{"tcp://host.example:7777", network.SchemeTCP, "host.example:7777", ""},
+		{"vif://host.example:7777/7f3c1a", network.SchemeTCP, "host.example:7777", "7f3c1a"},
+		{"host.example:7777/7f3c1a", network.SchemeTCP, "host.example:7777", "7f3c1a"},
+		{"wss://site.example/vif/ws/7f3c1a", network.SchemeWebSocket, "wss://site.example/vif/ws/7f3c1a", ""},
 	} {
-		addr, name := network.ParseJoinTarget(tc.target, "")
-		if addr != tc.addr || name != tc.name {
-			t.Errorf("ParseJoinTarget(%q) = %q %q, want %q %q", tc.target, addr, name, tc.addr, tc.name)
+		e, err := network.ParseEndpoint(tc.target)
+		if err != nil || e.Scheme != tc.scheme || e.Addr != tc.addr || e.Name != tc.name {
+			t.Errorf("ParseEndpoint(%q) = %+v, %v; want %s %q %q", tc.target, e, err, tc.scheme, tc.addr, tc.name)
+		}
+	}
+	for _, f := range []sessionFlags{{join: "udp://host.example:7777"}, {host: "wss://site.example/vif/ws"}, {host: "host.example"}} {
+		if err := f.validateInvocation(false, false, ""); err == nil {
+			t.Errorf("%+v was accepted", f)
 		}
 	}
 	if err := (sessionFlags{join: "host.example:7777/7f_3c"}).validateInvocation(false, false, ""); err == nil {

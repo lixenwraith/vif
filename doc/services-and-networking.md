@@ -145,10 +145,17 @@ start/ready gate. Two flags activate the shared composition path:
 | Entry point | Behavior |
 |---|---|
 | `-host <bind-address>` | Play at once and open the listener when the clock starts, exactly as `:host` does. A bind that fails leaves the game playing solo. |
-| `-join <host:port>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. Also accepts `[vif://]host:port/name`, which is the link shape a deployment hands a player. |
+| `-join <addr>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. |
 | `-name <name>` | With `-host` or `-serve`, the name this session answers to, so one address can serve several. A host that sets one refuses a dial that names nothing, so it is taken with a front door that routes on the name or not at all. |
 | `:host <addr> [host\|migrate]` | Open a run that is **already playing**, under the authority policy named. The port is created, started and attached; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick. |
 | `:session` | Report the role, address, participant identity, its cursor slot, peer count and tick. |
+
+Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
+`[tcp://|vif://]host:port[/name]`, the name routing to one of several sessions on
+an address, or a `ws(s)://` route a browser joins by. The scheme picks the
+transport and tcp is the default; a bound address (`-host`, `-serve`, `-listen`,
+`:host`) is tcp only, since the WebSocket route is the deployment's bridge in front
+of it, and `udp://` is refused until it exists (see [TODO](todo.md)).
 
 `-host` and `:host` are one path: the host plays from its first tick and a joiner
 takes the roster, then the world it names, as a chunked `MsgStateSnapshot` from

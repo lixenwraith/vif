@@ -265,10 +265,14 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 
 // joining is this configuration pointed at the session a :join names, as -join
 // would have built it. -players goes: it caps a roster this run no longer hosts.
-func (c Config) joining(target string) Config {
+func (c Config) joining(target string) (Config, error) {
+	e, err := network.ParseEndpoint(target)
+	if err != nil {
+		return c, err
+	}
 	c.HostAddress, c.Participants = "", 0
-	c.JoinAddress, c.SessionName = network.ParseJoinTarget(target, "")
-	return c
+	c.JoinAddress, c.SessionName = e.Addr, e.Name
+	return c, nil
 }
 
 // Normalize fills unset fields that carry a defined default
@@ -297,11 +301,27 @@ func (c Config) Validate() error {
 	}
 	// A browser joins over the session's WebSocket route and nothing else: it has
 	// no socket to dial a host:port with, and no listener to host or serve from.
+	var join network.Endpoint
+	if c.JoinAddress != "" {
+		var err error
+		if join, err = network.ParseEndpoint(c.JoinAddress); err != nil {
+			return err
+		}
+	}
+	if c.HostAddress != "" {
+		host, err := network.ParseEndpoint(c.HostAddress)
+		if err == nil {
+			err = host.Listenable()
+		}
+		if err != nil {
+			return err
+		}
+	}
 	if !buildHasSocketNetwork {
 		switch {
 		case c.HostAddress != "":
 			return errors.New("a browser build can join a session but not host one")
-		case c.JoinAddress != "" && !network.IsWebSocketTarget(c.JoinAddress):
+		case c.JoinAddress != "" && join.Scheme != network.SchemeWebSocket:
 			return errors.New("a browser cannot dial host:port; join with the session's wss:// link")
 		}
 	}

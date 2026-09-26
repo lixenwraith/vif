@@ -2,9 +2,9 @@ package main
 
 import (
 	"cmp"
+	"errors"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -255,19 +255,21 @@ func buildConfig() app.Config {
 		TimeScaleSpec: *flagSpeed,
 		Seed:          *flagSeed,
 		Journal:       flagJournal.set,
-		HostAddress:   flagSession.host,
 		SessionName:   flagSession.name,
 		Participants:  flagSession.players,
-		ListenAddress: flagSession.listen,
 		NoAdvertise:   flagSession.noAdvertise,
 	}
 
 	// Validated in validateInvocation; a link's name overrides nothing, because a
 	// joiner has no -name of its own.
-	cfg.JoinAddress, cfg.SessionName = network.ParseJoinTarget(flagSession.join, cfg.SessionName)
+	if flagSession.join != "" {
+		join := endpoint(flagSession.join)
+		cfg.JoinAddress, cfg.SessionName = join.Addr, cmp.Or(join.Name, cfg.SessionName)
+	}
+	cfg.HostAddress, cfg.ListenAddress = endpoint(flagSession.host).Addr, endpoint(flagSession.listen).Addr
 
 	if flagSession.serve != "" {
-		cfg.HostAddress = flagSession.serve
+		cfg.HostAddress = endpoint(flagSession.serve).Addr
 		cfg.ProbeAddress = flagSession.probe
 		cfg.Lifetime = flagSession.lifetime()
 	}
@@ -414,7 +416,7 @@ func (f sessionFlags) lifetime() lifecycle.Policy {
 
 func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.host, "host", "", "Host a session on bind address, e.g. :7777")
-	fs.StringVar(&f.join, "join", "", "Join a session at host:port, at the vif://host:port/name a link carries, or at the wss:// route a browser build is given")
+	fs.StringVar(&f.join, "join", "", "Join a session at [tcp://|vif://]host:port[/name] or at the wss:// route a browser build is given; tcp when no scheme is given")
 	fs.StringVar(&f.name, "name", "", "Name this host answers to, so one address can serve several sessions")
 	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player, e.g. :7777")
 	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
@@ -473,9 +475,25 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	if f.name != "" && (f.join != "" || (f.host == "" && f.serve == "")) {
 		return fmt.Errorf("-name is what a host answers to; a joiner names the session in its -join target")
 	}
-	if _, name := network.ParseJoinTarget(f.join, f.name); name != "" {
-		if err := validSessionName(name); err != nil {
-			return err
+	for _, a := range []struct {
+		flag, target string
+		binds        bool
+	}{{"-join", f.join, false}, {"-host", f.host, true}, {"-serve", f.serve, true}, {"-listen", f.listen, true}} {
+		if a.target == "" {
+			continue
+		}
+		e, err := network.ParseEndpoint(a.target)
+		switch {
+		case err != nil:
+		case a.binds && e.Name != "":
+			err = errors.New("a bound address names no session; a host answers to -name")
+		case a.binds:
+			err = e.Listenable()
+		case e.Name != "":
+			err = validSessionName(e.Name)
+		}
+		if err != nil {
+			return fmt.Errorf("%s: %w", a.flag, err)
 		}
 	}
 	if (f.listen != "" || f.noAdvertise) && f.join == "" {
@@ -483,11 +501,6 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	}
 	if f.listen != "" && f.noAdvertise {
 		return fmt.Errorf("-listen names an address to publish and -no-advertise refuses to publish one")
-	}
-	if f.listen != "" {
-		if _, _, err := net.SplitHostPort(f.listen); err != nil {
-			return fmt.Errorf("-listen %q is not an address: %w", f.listen, err)
-		}
 	}
 	if f.serve != "" && (f.host != "" || f.join != "") {
 		return fmt.Errorf("-serve is a host of its own; it does not combine with -host or -join")
@@ -507,6 +520,12 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		}
 	}
 	return nil
+}
+
+// endpoint is a target validateInvocation has already parsed; "" is the zero value.
+func endpoint(target string) network.Endpoint {
+	e, _ := network.ParseEndpoint(target)
+	return e
 }
 
 // validSessionName holds a name to what a URL path, a Kubernetes object name and a

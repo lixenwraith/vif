@@ -9,7 +9,6 @@ import (
 	"io"
 	"net"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -438,43 +437,18 @@ func (pm *PeerManager) Close() {
 	pm.peers = make(map[PeerID]*Peer)
 }
 
-// IsWebSocketTarget reports whether a join target is the browser session route
-// rather than the host:port a native client dials. The two reach the same session
-// and the same protocol; only the bytes' path to it differs.
-func IsWebSocketTarget(target string) bool {
-	return strings.HasPrefix(target, "ws://") || strings.HasPrefix(target, "wss://")
-}
-
-// joinScheme prefixes the link a player is handed, so one string is both a thing
-// to click and a thing to paste after -join.
-const joinScheme = "vif://"
-
-// ParseJoinTarget splits a join target into the address to dial and the session
-// named on it: host:port, or [vif://]host:port/name where one address serves
-// several. The name a target carries wins over the fallback. A browser route is
-// dialled whole: its path is the front door's, not a session name.
-func ParseJoinTarget(target, fallback string) (addr, name string) {
-	if IsWebSocketTarget(target) {
-		return target, fallback
+// dial connects to a target by the transport it names, TLS over TCP when configured.
+func dial(target string, cfg *Config) (net.Conn, error) {
+	e, err := ParseEndpoint(target)
+	if err != nil {
+		return nil, err
 	}
-	addr, name = strings.TrimPrefix(target, joinScheme), fallback
-	if a, n, ok := strings.Cut(addr, "/"); ok {
-		addr, name = a, n
+	if e.Scheme == SchemeWebSocket {
+		return dialWebSocket(e.Addr, cfg.ConnectTimeout)
 	}
-	return addr, name
-}
-
-// dial establishes a connection with optional TLS
-func dial(addr string, cfg *Config) (net.Conn, error) {
-	if IsWebSocketTarget(addr) {
-		return dialWebSocket(addr, cfg.ConnectTimeout)
-	}
-	dialer := &net.Dialer{
-		Timeout: cfg.ConnectTimeout,
-	}
-
+	dialer := &net.Dialer{Timeout: cfg.ConnectTimeout}
 	if cfg.TLS != nil {
-		return tls.DialWithDialer(dialer, "tcp", addr, cfg.TLS)
+		return tls.DialWithDialer(dialer, "tcp", e.Addr, cfg.TLS)
 	}
-	return dialer.Dial("tcp", addr)
+	return dialer.Dial("tcp", e.Addr)
 }

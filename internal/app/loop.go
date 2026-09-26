@@ -65,7 +65,10 @@ func Run(cfg Config) error {
 			prev := cfg
 			prev.JoinAddress, prev.SessionName = "", ""
 			solo = &prev
-			cfg = cfg.joining(next.Join)
+			if cfg, err = cfg.joining(next.Join); err != nil {
+				cfg, solo = prev, nil // validated when latched; a solo run is what is left
+				cfg.notice = "Join failed: " + err.Error()
+			}
 		default:
 			// Not following anyone: a run that led its session, and one that
 			// inherited it and has nobody left, both start over on their own.

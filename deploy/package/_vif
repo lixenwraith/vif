@@ -3,7 +3,7 @@
 _arguments \
   '-host[Play at once and open the game to participants, e.g. :7777]:addr: ' \
   '-serve[Bind a headless session with no local cursor]:addr: ' \
-  '-join[Join a session at host:port, at the vif://host:port/name a link carries, or at a wss:// route]:addr: ' \
+  '-join[Join a session at \[tcp://|vif://\]host:port\[/name\] or a wss:// route; tcp when no scheme is given]:addr: ' \
   '-name[Name this host answers to, so one address can serve several sessions]:name: ' \
   '-players[Roster ceiling including self, 2..16; unset holds the whole roster]:n: ' \
   '-authority[Where authorship goes when the authoring participant leaves; default host with -serve, migrate otherwise]:value:(host migrate)' \

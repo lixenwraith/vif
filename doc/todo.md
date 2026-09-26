@@ -165,10 +165,25 @@ Diagnoses and what each item follows from are in
 Every correction a guest takes, a two-page repair included, stages the whole
 capture and projects and writes the whole world under the live lock: about 35 ms
 and 30 ms at 239x64 in the tower region, 50 ms and 60-104 ms in a 9,300-entity
-session. Most move nothing: 27 of 31 there, 38 of 55 in that session. A repair
+session. Most move nothing: 27 of 31 there, 38 of 55 in that session, 18 of 24 in
+the 260926-041131 guest. A repair
 could splice its pages into the capture the live world already matches, and a body
 whose index root equals this instance's at that tick could be adopted as a
 hash-only answer is.
+
+### Add a UDP transport
+
+- Priority: P2
+- Affected files: `internal/network/endpoint.go`, `internal/network/connection.go`, `internal/app/netem_test.go`
+
+`udp://` parses and is refused. Everything above the dial assumes an ordered,
+reliable byte stream: the flate stream spans messages, and handshakes, captures and
+crossings rely on arrival order. UDP therefore means a reliable ordered stream over
+datagrams presented as a `net.Conn` to `Peer`: selective acks, a retransmit timer
+set from the tick rather than TCP's minimum RTO, and the compressor reset per
+window or moved to per-message deflate. Its gain is recovery in tens of
+milliseconds and no connection-wide stall on one lost segment; measure it against
+TCP under the `netem` stages at 1-10% loss before changing the default.
 
 ### Keep route graphs across an install that moved no wall
 

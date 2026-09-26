@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"slices"
 	"time"
 
@@ -115,14 +114,12 @@ func (a *App) joinLocked(target string) error {
 	if port := a.sessionTransportLocked(); a.cfg.HostAddress != "" || (port != nil && port.PeerCount() > 0) {
 		return errors.New("this run is already in a session")
 	}
-	next := a.cfg.joining(target)
-	if err := next.Validate(); err != nil {
-		return err
+	next, err := a.cfg.joining(target)
+	if err == nil {
+		err = next.Validate()
 	}
-	if !network.IsWebSocketTarget(next.JoinAddress) {
-		if _, _, err := net.SplitHostPort(next.JoinAddress); err != nil {
-			return fmt.Errorf("%q: %w", target, err)
-		}
+	if err != nil {
+		return err
 	}
 	if !a.dialling.CompareAndSwap(false, true) {
 		return errors.New("a join is already being dialled")
@@ -180,9 +177,14 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	}
 	a.sessionMu.Unlock()
 
-	if _, _, err := net.SplitHostPort(addr); err != nil {
-		return fmt.Errorf("host %q: %w", addr, err)
+	e, err := network.ParseEndpoint(addr)
+	if err == nil {
+		err = e.Listenable()
 	}
+	if err != nil {
+		return fmt.Errorf("host: %w", err)
+	}
+	addr = e.Addr
 	fixed := a.cfg.FixedAuthority
 	switch authority {
 	case "":

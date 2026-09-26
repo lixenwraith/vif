@@ -254,8 +254,8 @@ does not make that file exist in the browser filesystem.
 
 The page passes `-join=wss://<site>/vif/ws/<session>` through this bridge; typing
 `:join <that link>` in a running solo game does the same without a reload. A
-`ws://` or `wss://` target is dialled whole, and the `host:port` and
-`[vif://]host:port/name` forms are parsed as they were.
+`ws://` or `wss://` target is dialled whole; every other form a native build takes
+is refused here (see the address grammar in [Services](services-and-networking.md)).
 
 A browser has no terminal to print an exit error to, so the launcher keeps the
 tail of stderr and, once the program exits, shows its last line (or the crash

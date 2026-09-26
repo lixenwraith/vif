@@ -34,7 +34,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 		lines: []flagLine{
 			{names: []string{"host"}, arg: "<addr>", hint: "Play at once and open the game to participants, e.g. :7777"},
 			{names: []string{"serve"}, arg: "<addr>", hint: "Bind a headless session with no local cursor"},
-			{names: []string{"join"}, arg: "<addr>", hint: "Join a session at host:port, at the vif://host:port/name a link carries, or at a wss:// route"},
+			{names: []string{"join"}, arg: "<addr>", hint: "Join a session at [tcp://|vif://]host:port[/name] or a wss:// route; tcp when no scheme is given"},
 			{names: []string{"name"}, arg: "<name>", hint: "Name this host answers to, so one address can serve several sessions"},
 			{names: []string{"players"}, arg: "<n>", hint: fmt.Sprintf(
 				"Roster ceiling including self, 2..%d; unset holds the whole roster",

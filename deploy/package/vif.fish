@@ -2,7 +2,7 @@
 complete -c vif -f
 complete -c vif -o host -x -d 'Play at once and open the game to participants, e.g. :7777'
 complete -c vif -o serve -x -d 'Bind a headless session with no local cursor'
-complete -c vif -o join -x -d 'Join a session at host:port, at the vif://host:port/name a link carries, or at a wss:// route'
+complete -c vif -o join -x -d 'Join a session at [tcp://|vif://]host:port[/name] or a wss:// route; tcp when no scheme is given'
 complete -c vif -o name -x -d 'Name this host answers to, so one address can serve several sessions'
 complete -c vif -o players -x -d 'Roster ceiling including self, 2..16; unset holds the whole roster'
 complete -c vif -o authority -x -a 'host migrate' -d 'Where authorship goes when the authoring participant leaves; default host with -serve, migrate otherwise'
