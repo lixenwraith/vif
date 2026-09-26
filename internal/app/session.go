@@ -27,6 +27,10 @@ const hostParticipantID network.PeerID = 1
 
 var errSessionCanceled = errors.New("network session canceled")
 
+// errSessionSignalled is a cancel the process was told to make: it quits even a
+// run that a failed :join would otherwise replace with a solo one.
+var errSessionSignalled = fmt.Errorf("%w by a signal", errSessionCanceled)
+
 // ErrSessionHandoff refuses a join that arrived while the session was electing a
 // new authority. It is distinguishable on purpose: a joiner may retry against the
 // authority that emerges, and half-admitting it into a term that is about to end
@@ -282,25 +286,60 @@ func (a *App) hostSlot() uint8 {
 	return 0
 }
 
-// newJoiningApp receives the host anchor, adopts it, then constructs the App.
+// newJoiningApp builds the App on a dial the host accepted: the one Config carries
+// from a :join, or one made now.
 func newJoiningApp(cfg Config) (*App, error) {
+	d := cfg.dialled
+	if d == nil {
+		var err error
+		if d, err = dialJoin(cfg); err != nil {
+			return nil, err
+		}
+	}
+	return d.open()
+}
+
+// joinDial is a session the host has admitted this instance to and whose scenario
+// it holds: everything a host can refuse, settled before anything is built on it.
+type joinDial struct {
+	cfg     Config
+	pending *network.PendingJoin
+	offer   network.SessionOffer
+}
+
+// dialJoin dials cfg's session and adopts its offer and scenario. A peer running a
+// different protocol or simulation is refused here, before it has built a world.
+func dialJoin(cfg Config) (*joinDial, error) {
 	netCfg := network.DebugConfig(network.RolePeer, cfg.JoinAddress)
 	netCfg.OnError = logSessionError
-	// Before the world: a peer running a different protocol or a different
-	// simulation is refused by the dial rather than after it has built one.
 	netCfg.Identity = buildIdentity()
 	netCfg.SessionName = cfg.SessionName
 	pending, offer, err := network.DialSession(cfg.JoinAddress, netCfg)
 	if err != nil {
 		return nil, fmt.Errorf("join %s: %w", cfg.JoinAddress, err)
 	}
-	reject := func(cause error) (*App, error) {
-		_ = pending.Complete(cause, network.JoinerReport{})
-		_ = pending.Close()
-		return nil, cause
-	}
-
+	d := &joinDial{pending: pending, offer: offer}
 	cfg.networkConfig = pending.TransportConfig()
+	if cfg, err = ConfigForJoin(cfg, offer); err == nil {
+		err = resolveJoinScenario(&cfg, pending, offer)
+	}
+	if err != nil {
+		d.abandon(err)
+		return nil, err
+	}
+	d.cfg = cfg
+	return d, nil
+}
+
+// abandon refuses the offer, which releases the identity the host assigned.
+func (d *joinDial) abandon(cause error) {
+	_ = d.pending.Complete(cause, network.JoinerReport{})
+	_ = d.pending.Close()
+}
+
+// open constructs the joining App and replies to the host.
+func (d *joinDial) open() (*App, error) {
+	cfg, pending, offer := d.cfg, d.pending, d.offer
 
 	// Bound before the reply that declares it, and only for a session whose
 	// authorship can move: where it cannot, a guest's port is for nothing. What is
@@ -313,11 +352,6 @@ func newJoiningApp(cfg Config) (*App, error) {
 	if !offer.FixedAuthority && !cfg.NoAdvertise && buildHasSocketNetwork {
 		listener, declared = converge.BindAdvertised(cfg.ListenAddress, cfg.JoinAddress, cfg.networkConfig)
 	}
-	closeListener := func() {
-		if listener != nil {
-			_ = listener.Close()
-		}
-	}
 	if listener != nil {
 		// Installed before New, because New is what builds the port that serves
 		// this listener. The gate holds the App rather than closing over it for the
@@ -329,20 +363,13 @@ func newJoiningApp(cfg Config) (*App, error) {
 			Admit:    gate.Admit,
 		}, cfg.networkConfig.ConnectTimeout)
 	}
-
-	cfg, err = ConfigForJoin(cfg, offer)
-	if err != nil {
-		closeListener()
-		return reject(err)
-	}
-	if err := resolveJoinScenario(&cfg, pending, offer); err != nil {
-		closeListener()
-		return reject(err)
-	}
 	a, err := New(cfg)
 	if err != nil {
-		closeListener()
-		return reject(err)
+		if listener != nil {
+			_ = listener.Close()
+		}
+		d.abandon(err)
+		return nil, err
 	}
 	gate.Bind(a.reach)
 	a.reach.AdoptListener(listener, declared)
@@ -820,10 +847,10 @@ func (a *App) awaitStartGate(signals <-chan os.Signal) (network.SessionOffer, er
 		offer, err := a.pendingJoin.WaitStart()
 		done <- gate{offer, err}
 	}()
-	cancel := func() (network.SessionOffer, error) {
+	cancel := func(why error) (network.SessionOffer, error) {
 		_ = a.pendingJoin.Close()
 		<-done
-		return network.SessionOffer{}, errSessionCanceled
+		return network.SessionOffer{}, why
 	}
 
 	for {
@@ -834,10 +861,10 @@ func (a *App) awaitStartGate(signals <-chan os.Signal) (network.SessionOffer, er
 			}
 			return g.offer, nil
 		case <-signals:
-			return cancel()
+			return cancel(errSessionSignalled)
 		case ev := <-a.lobbyEvents():
 			if a.lobbyEventCancels(ev) {
-				return cancel()
+				return cancel(errSessionCanceled)
 			}
 		}
 	}

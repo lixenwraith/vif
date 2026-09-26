@@ -47,11 +47,12 @@ type restartRequest struct {
 
 	// Rejoin says the next run follows this session rather than leads it, and Join
 	// where to dial when the command line's address is not where the session is
-	// now — succession moves the door. Join alone is a :join target, dialled once as
-	// -join is. With neither the next run is solo, which is what an authority with
-	// an empty roster has actually become.
-	Rejoin bool
-	Join   string
+	// now — succession moves the door. Join alone is a :join target, which dialled
+	// holds already admitted. With neither the next run is solo, which is what an
+	// authority with an empty roster has actually become.
+	Rejoin  bool
+	Join    string
+	dialled *joinDial
 }
 
 // App owns the wired runtime: services, world, input, scheduler, and the selected
@@ -71,6 +72,7 @@ type App struct {
 	// command surface or by the authority's notice on the tick goroutine, and read
 	// by Loop between two waits. Nil means this run ends when the player quits.
 	restart      atomic.Pointer[restartRequest]
+	dialling     atomic.Bool // a :join is being dialled while this run plays on
 	inputMachine *input.Machine
 	router       *mode.Router
 	recorder     *journal.Recorder

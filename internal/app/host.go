@@ -103,10 +103,9 @@ func (a *App) receiveSessionRestart(from uint32, addr string) {
 	}
 }
 
-// joinLocked latches the restart that replaces this run with one joined to target.
-// The next configuration is validated now, while the operator can read why it was
-// refused; the dial happens after teardown, exactly as -join's does. A run left
-// alone by its session may join another. Caller MUST hold updateMutex.
+// joinLocked dials target while this run plays on, and replaces the run only once
+// the host has admitted it: a refusal leaves the game as it was. A run left alone
+// by its session may join another. Caller MUST hold updateMutex.
 func (a *App) joinLocked(target string) error {
 	if a.cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode has no restart loop", a.cfg.Mode)
@@ -123,8 +122,22 @@ func (a *App) joinLocked(target string) error {
 			return fmt.Errorf("%q: %w", target, err)
 		}
 	}
-	a.restart.Store(&restartRequest{Join: target})
+	if !a.dialling.CompareAndSwap(false, true) {
+		return errors.New("a join is already being dialled")
+	}
+	a.ctx.SetStatusMessage("Joining "+target+"...", 0, true)
 	vlog.Info("app", "msg", "join requested", "target", target)
+	core.Go(func() {
+		defer a.dialling.Store(false)
+		d, err := dialJoin(next)
+		switch {
+		case err != nil:
+			vlog.Warn("app", "msg", "join failed; playing on", "target", target, "error", err.Error())
+			a.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusMessageMaxDuration, true)
+		case !a.restart.CompareAndSwap(nil, &restartRequest{Join: target, dialled: d}):
+			d.abandon(errors.New("the run that dialled is being replaced"))
+		}
+	})
 	return nil
 }
 

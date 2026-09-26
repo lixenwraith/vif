@@ -31,11 +31,22 @@ func Run(cfg Config) error {
 		return fmt.Errorf("%s mode is caller-driven; Run owns the frame loop", cfg.Mode)
 	}
 	rejoin := false
+	var solo *Config // what a :join that fails after its dial plays on as
 	for {
 		next, err := runScenario(cfg, rejoin)
-		if err != nil || next == nil {
+		if err != nil && solo != nil && !errors.Is(err, errSessionSignalled) {
+			vlog.Warn("app", "msg", "join failed; playing solo", "join", cfg.JoinAddress, "error", err.Error())
+			cfg, solo = *solo, nil
+			cfg.notice = "Join failed: " + err.Error()
+			continue
+		}
+		if err != nil && !errors.Is(err, errSessionCanceled) {
 			return err
 		}
+		if next == nil {
+			return nil
+		}
+		solo, cfg.notice, cfg.dialled = nil, "", nil
 		if next.Scenario != "" {
 			cfg.Resources.Scenario, cfg.Resources.Embedded = next.Scenario, false
 		}
@@ -48,13 +59,16 @@ func Run(cfg Config) error {
 				cfg.JoinAddress = next.Join
 			}
 		case next.Join != "":
+			prev := cfg
+			prev.JoinAddress, prev.SessionName = "", ""
+			solo = &prev
 			cfg = cfg.joining(next.Join)
 		default:
 			// Not following anyone: a run that led its session, and one that
 			// inherited it and has nobody left, both start over on their own.
 			cfg.JoinAddress = ""
 		}
-		rejoin = next.Rejoin
+		rejoin, cfg.dialled = next.Rejoin, next.dialled
 		vlog.Info("app", "msg", "run restarting", "scenario", cfg.Resources.Scenario,
 			"host", next.Host, "join", cfg.JoinAddress, "rejoin", rejoin)
 	}
@@ -115,9 +129,6 @@ func (a *App) Loop() (*restartRequest, error) {
 			return nil, err
 		}
 		if err := a.startJoinSession(sigChan); err != nil {
-			if errors.Is(err, errSessionCanceled) {
-				return nil, nil
-			}
 			return nil, err
 		}
 	}
@@ -125,11 +136,11 @@ func (a *App) Loop() (*restartRequest, error) {
 		return nil, err
 	}
 	a.reportAudioSpec()
+	if a.cfg.notice != "" {
+		a.ctx.SetStatusMessage(a.cfg.notice, parameter.StatusMessageMaxDuration, true)
+	}
 	if a.cfg.HostAddress != "" {
 		if err := a.startHostSession(sigChan); err != nil {
-			if errors.Is(err, errSessionCanceled) {
-				return nil, nil
-			}
 			return nil, err
 		}
 	}

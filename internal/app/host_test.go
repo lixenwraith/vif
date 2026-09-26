@@ -414,6 +414,44 @@ func TestScenarioChangeNeedsARestartLoop(t *testing.T) {
 	}
 }
 
+// TestARefusedJoinLeavesTheRunPlaying pins that :join dials while the run plays on:
+// a host that refuses it leaves the game as it was rather than ending it.
+func TestARefusedJoinLeavesTheRunPlaying(t *testing.T) {
+	t.Parallel()
+	host, err := NewHeadless(Config{Seed: 0x3021, Width: 120, Height: 40, SessionName: "this",
+		Resources: resource.Options{Embedded: true}})
+	if err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	defer host.Close()
+	tickUntilCursor(t, host)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	a := mustHeadless(t, 0x3022, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	a.cfg.Mode = ModePlay // joinLocked serves Run's loop; the rule is its dial
+
+	a.World().RunSafe(func() { err = a.joinLocked(host.HostAddr() + "/that") })
+	if err != nil {
+		t.Fatalf("join refused before dialling: %v", err)
+	}
+	deadline := time.Now().Add(socketWait) // [wall] a link bound
+	for a.dialling.Load() {
+		if time.Now().After(deadline) {
+			t.Fatal("the dial never finished")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if req := a.restart.Load(); req != nil {
+		t.Fatalf("a refused join replaced the run: %+v", req)
+	}
+	if got := a.Context().GetStatusMessage(); !strings.Contains(got, "Join failed") {
+		t.Fatalf("status bar says %q; want the refusal", got)
+	}
+}
+
 // TestOnlyTheHostChangesALiveSessionsScenario pins who may do it. A scenario
 // change rebuilds every participant, so a guest that could ask for one could empty
 // somebody else's session.

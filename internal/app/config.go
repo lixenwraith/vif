@@ -217,6 +217,11 @@ type Config struct {
 	// transport detail private leaves Config's public session surface role-neutral.
 	networkConfig *network.Config
 
+	// dialled is a :join the host already admitted, dialled while the run it
+	// replaces played on; notice is what that run's failure tells the next one.
+	dialled *joinDial
+	notice  string
+
 	// scriptedSession admits headless network I/O only through RunScript, which
 	// performs the startup gate and owns wall pacing.
 	scriptedSession bool
