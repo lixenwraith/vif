@@ -15,10 +15,12 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// targetGroupNav holds per-group flow fields and entity buffers
+// targetGroupNav holds per-group flow fields and the grid generation each was last
+// computed on; zero is none, since the generation starts at one
 type targetGroupNav struct {
-	pointFlowCache     *navigation.FlowFieldCache // For point entities (1×1)
-	compositeFlowCache *navigation.FlowFieldCache // For composite entities (footprint-aware)
+	pointFlowCache       *navigation.FlowFieldCache // For point entities (1×1)
+	compositeFlowCache   *navigation.FlowFieldCache // For composite entities (footprint-aware)
+	pointAt, compositeAt uint64
 }
 
 // NavigationSystem resolves target groups, maintains per-group point and composite
@@ -32,6 +34,13 @@ type NavigationSystem struct {
 	// Composite passability grid (shared, recomputed on wall changes)
 	compositePassability *navigation.CompositePassability
 	walls                []bool // the WallTest grid a derivation reads
+
+	// grid is the generation of the wall grid and the passability derived from it:
+	// it moves whenever either changes, so a field or route graph stamped with it
+	// when computed is exactly what recomputing it now would give. seenWalls is the
+	// wall grid it last moved for.
+	grid      uint64
+	seenWalls []bool
 
 	// Per-tick resolved target snapshot; avoids per-entity TargetResource locking
 	targets [component.MaxTargetGroups]engine.TargetGroupState
@@ -51,6 +60,7 @@ func NewNavigationSystem(world *engine.World) engine.System {
 	s := &NavigationSystem{
 		world:  world,
 		groups: make(map[uint8]*targetGroupNav),
+		grid:   1,
 	}
 
 	s.statEntities = world.Resources.Status.Ints.Get("nav.entities")
@@ -76,14 +86,7 @@ func (s *NavigationSystem) Init() {
 
 	config := s.world.Resources.Config
 	if config.MapWidth > 0 && config.MapHeight > 0 {
-		// Initialize composite passability
-		s.compositePassability = navigation.NewCompositePassability(
-			config.MapWidth, config.MapHeight,
-			parameter.EyeWidth, parameter.EyeHeight,
-			parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
-		)
-		s.recomputeCompositePassability()
-
+		s.resizePassability(config.MapWidth, config.MapHeight)
 		for _, g := range s.groups {
 			g.pointFlowCache.Resize(config.MapWidth, config.MapHeight)
 			g.compositeFlowCache.Resize(config.MapWidth, config.MapHeight)
@@ -154,19 +157,7 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventLevelSetup:
 		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
-			if s.compositePassability == nil {
-				s.compositePassability = navigation.NewCompositePassability(
-					payload.Width, payload.Height,
-					parameter.EyeWidth, parameter.EyeHeight,
-					parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
-				)
-				if dbg := s.world.Resources.NavigationDebug; dbg != nil {
-					dbg.CompositePassability = s.compositePassability
-				}
-			}
-
-			s.compositePassability.Resize(payload.Width, payload.Height)
-			s.recomputeCompositePassability()
+			s.resizePassability(payload.Width, payload.Height)
 			for _, g := range s.groups {
 				g.pointFlowCache.Resize(payload.Width, payload.Height)
 				g.compositeFlowCache.Resize(payload.Width, payload.Height)
@@ -256,14 +247,48 @@ func (s *NavigationSystem) recomputeCompositePassabilityROI(wallX, wallY, wallW,
 	isWall := func(x, y int) bool {
 		return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic)
 	}
-	s.compositePassability.ComputeROI(isWall, minX, minY, maxX, maxY)
+	if s.compositePassability.ComputeROI(isWall, minX, minY, maxX, maxY) {
+		s.grid++
+	}
 }
 
-func (s *NavigationSystem) recomputeCompositePassability() {
+// resizePassability sizes the composite passability grid to the map, creating it
+// the first time, and derives it from the walls.
+func (s *NavigationSystem) resizePassability(width, height int) {
 	if s.compositePassability == nil {
-		return
+		s.compositePassability = navigation.NewCompositePassability(
+			width, height,
+			parameter.EyeWidth, parameter.EyeHeight,
+			parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
+		)
+		if dbg := s.world.Resources.NavigationDebug; dbg != nil {
+			dbg.CompositePassability = s.compositePassability
+		}
+	} else {
+		s.compositePassability.Resize(width, height)
 	}
-	s.compositePassability.Compute(s.world.Positions.WallTest(component.WallBlockKinetic, &s.walls))
+	s.grid++
+	s.recomputeCompositePassability()
+}
+
+// recomputeCompositePassability derives the passability grid from the walls as they
+// stand and returns the wall test it read them through.
+func (s *NavigationSystem) recomputeCompositePassability() navigation.WallChecker {
+	isWall := s.world.Positions.WallTest(component.WallBlockKinetic, &s.walls)
+	isWall(-1, -1) // the first call builds the grid
+	s.noteWalls()
+	if s.compositePassability != nil && s.compositePassability.Compute(isWall) {
+		s.grid++
+	}
+	return isWall
+}
+
+// noteWalls moves grid when the wall grid last built differs from the one before.
+func (s *NavigationSystem) noteWalls() {
+	if !slices.Equal(s.walls, s.seenWalls) {
+		s.seenWalls = append(s.seenWalls[:0], s.walls...)
+		s.grid++
+	}
 }
 
 func (s *NavigationSystem) Update() {
@@ -276,8 +301,7 @@ func (s *NavigationSystem) Update() {
 	// Handle map resize: one passability rebuild, then per-group caches
 	if s.compositePassability != nil &&
 		(config.MapWidth != s.compositePassability.Width || config.MapHeight != s.compositePassability.Height) {
-		s.compositePassability.Resize(config.MapWidth, config.MapHeight)
-		s.recomputeCompositePassability()
+		s.resizePassability(config.MapWidth, config.MapHeight)
 	}
 	for _, g := range s.groups {
 		if config.MapWidth != g.pointFlowCache.Field.Width || config.MapHeight != g.pointFlowCache.Field.Height {
@@ -377,12 +401,15 @@ func (s *NavigationSystem) Update() {
 		}
 		targetsSlice := targetsBuffer[:groupState.Count]
 
-		if recomputed := g.pointFlowCache.Update(targetsSlice, isBlockedPoint); recomputed {
+		if g.pointFlowCache.Update(targetsSlice, isBlockedPoint) {
 			totalRecomputes++
+			s.noteWalls()
+			g.pointAt = s.grid
 		}
 
-		if recomputed := g.compositeFlowCache.Update(targetsSlice, isBlockedComposite); recomputed {
+		if g.compositeFlowCache.Update(targetsSlice, isBlockedComposite) {
 			totalRecomputes++
+			g.compositeAt = s.grid
 		}
 	}
 	s.statRecomputes.Store(totalRecomputes)
@@ -773,15 +800,7 @@ func (s *NavigationSystem) handleRouteGraphRequest(payload *event.RouteGraphRequ
 		return
 	}
 
-	config := s.world.Resources.Config
-	rg := navigation.ComputeRouteGraph(
-		payload.SourceX, payload.SourceY,
-		targetX, targetY,
-		config.MapWidth, config.MapHeight,
-		parameter.EyeWidth, parameter.EyeHeight,
-		parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
-		s.compositePassability.IsBlocked,
-	)
+	rg := s.computeRouteGraph(payload.SourceX, payload.SourceY, targetX, targetY)
 	replacing := s.world.Resources.RouteGraph.Get(payload.RouteGraphID) != nil
 	if rg == nil {
 		// Unreachable target: drop the stale graph rather than leave it authoritative
@@ -802,6 +821,23 @@ func (s *NavigationSystem) handleRouteGraphRequest(payload *event.RouteGraphRequ
 		RouteGraphID: payload.RouteGraphID,
 		RouteCount:   len(rg.Routes),
 	})
+}
+
+// computeRouteGraph routes source to target over the composite passability and
+// stamps the graph with the grid generation it read.
+func (s *NavigationSystem) computeRouteGraph(sourceX, sourceY, targetX, targetY int) *navigation.RouteGraph {
+	config := s.world.Resources.Config
+	rg := navigation.ComputeRouteGraph(
+		sourceX, sourceY, targetX, targetY,
+		config.MapWidth, config.MapHeight,
+		parameter.EyeWidth, parameter.EyeHeight,
+		parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
+		s.compositePassability.IsBlocked,
+	)
+	if rg != nil {
+		rg.Grid = s.grid
+	}
+	return rg
 }
 
 // resolveTargetPosition returns the position for a target group
@@ -830,26 +866,17 @@ func (s *NavigationSystem) resolveTargetPosition(groupID uint8) (int, int, bool)
 	return 0, 0, false
 }
 
-// navSnapshot is the navigation system's D-17 derivation phase. The flow fields,
-// the composite passability grid and the route graph are all recomputed at
-// install, so none of them travels; what does travel is *where in the throttle
-// cycle* the capture stood, because two instances that recompute on different
-// ticks produce different routes for anything spawned in between.
-//
-// LastTargets travels with the phase for the same reason: the dirty-distance test
-// compares this tick's targets against it, so a cache installed without it
-// recomputes on a different tick than the run it reproduces.
+// navSnapshot is the navigation system's D-17 derivation phase: where in the
+// throttle cycle the capture stood, and the targets and cells each field and route
+// graph was computed for. The fields, passability and graphs are re-derived at
+// install rather than carried; instances recomputing on different ticks, or for
+// different cells, steer differently.
 type navSnapshot struct {
 	RouteRebuildTicks int             `json:"route_rebuild_ticks"`
 	Groups            []navGroupPhase `json:"groups"`
 
-	// Routes names the gateway route graphs this world holds and the two cells each
-	// was computed between. The graphs themselves are derived and do not travel;
-	// their *inputs* have to, for the same reason LastTargets does. A receiver that
-	// re-derived them from its own current targets would hold graphs aimed at cells
-	// the sender's were not, and one that did not derive them at all would keep the
-	// graphs it had built for a world it no longer has — including graphs for
-	// gateways the sender has none for, which is what an entity then steers by.
+	// Routes names each gateway route graph held and the cells it was computed
+	// between, so a receiver derives the sender's graphs rather than keeping its own.
 	Routes []navRouteGraph `json:"routes,omitempty"`
 }
 
@@ -942,39 +969,35 @@ func (s *NavigationSystem) saveRouteGraphs() []navRouteGraph {
 	return out
 }
 
-// deriveRouteGraphs rebuilds every gateway route graph the capture named, from the
-// cells it named, and drops everything else.
-//
-// Clearing first is the load-bearing half. A graph is derived state, so no capture
-// carries one — but "derived" only means "not transferred" if something derives it,
-// and until this existed the install left the receiver holding whatever graphs its
-// own run had built: for gateways the sender does not have, aimed at cells the
-// sender's graphs are not, with route indices the installed NavigationComponents
-// name. That is the same defect the composite passability grid had, one layer up.
-//
-// Nothing is emitted. handleRouteGraphRequest announces a computed graph so the rest
-// of the session can react to it; an install is not an event in the run, and a
-// receiver that announced four of them would have a settle group the sender never
-// had.
+// deriveRouteGraphs holds exactly the gateway route graphs the capture named, between
+// the cells it named, and drops every other: a receiver's own graphs may be for
+// gateways or cells the sender's are not, with route indices the installed entities
+// name. A held graph stamped on this grid for those cells is kept, since recomputing
+// it would give the same routes. Nothing is emitted; an install is not a run event.
 func (s *NavigationSystem) deriveRouteGraphs(routes []navRouteGraph) {
-	if s.world.Resources.RouteGraph == nil || s.compositePassability == nil {
+	graphs := s.world.Resources.RouteGraph
+	if graphs == nil || s.compositePassability == nil {
 		return
 	}
-	s.world.Resources.RouteGraph.Clear()
-	config := s.world.Resources.Config
+	held := make(map[uint32]*navigation.RouteGraph, len(routes))
+	for _, r := range routes {
+		if rg := graphs.Get(r.GraphID); rg != nil && rg.Grid == s.grid &&
+			rg.SourceX == r.SourceX && rg.SourceY == r.SourceY &&
+			rg.TargetX == r.TargetX && rg.TargetY == r.TargetY {
+			held[r.GraphID] = rg
+		}
+	}
+	graphs.Clear()
 	live := make(map[uint32]struct{}, len(routes))
 	for _, r := range routes {
-		rg := navigation.ComputeRouteGraph(
-			r.SourceX, r.SourceY, r.TargetX, r.TargetY,
-			config.MapWidth, config.MapHeight,
-			parameter.EyeWidth, parameter.EyeHeight,
-			parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
-			s.compositePassability.IsBlocked,
-		)
+		rg, ok := held[r.GraphID]
+		if !ok {
+			rg = s.computeRouteGraph(r.SourceX, r.SourceY, r.TargetX, r.TargetY)
+		}
 		if rg == nil {
 			continue
 		}
-		s.world.Resources.RouteGraph.Set(r.GraphID, rg)
+		graphs.Set(r.GraphID, rg)
 		live[r.GraphID] = struct{}{}
 	}
 	// An entity whose graph did not come back has to stop naming it, or it steers by
@@ -991,26 +1014,11 @@ func (s *NavigationSystem) deriveRouteGraphs(routes []navRouteGraph) {
 	})
 }
 
-// LoadShared restores the recompute phase and derives, here and now, the state the
-// capture deliberately does not carry.
-//
-// Leaving the derivation to the next tick does not work, and the way it fails is
-// the reason this is written out. A cache holding a restored phase but no field
-// takes Update's !Field.Valid branch, which computes from *this* tick's targets
-// rather than the ones the phase belongs to, and then sets TicksSinceCompute to
-// zero and clears PendingUpdate — so the first tick after an install destroys the
-// phase the carrier exists to preserve, and the two instances recompute on
-// different ticks from then on. That is a divergence in flow direction, which is
-// kinetics, which is what the whole D-17 argument is about.
-//
-// So the field is derived from the targets the phase belongs to, the throttle
-// counters are left exactly as the capture set them, and the composite passability
-// grid — derived from the walls the install just replaced — is rebuilt in the same
-// breath. The gateway route graphs are the third of the same kind and were the one
-// this missed: they are derived, so none travels, but nothing derived them either,
-// so a receiver kept the ones its own run had built while the installed entities
-// named route indices into the sender's. Nothing here is carried; all of it is
-// re-derived, which is the D-19 clause this system sits under.
+// LoadShared restores the recompute phase and derives now what the capture does not
+// carry: passability from the installed walls, each computed field from the targets
+// its phase belongs to, and the route graphs. Left to the next tick, Update would
+// compute from this tick's targets and reset the phase (D-17). A field or graph
+// already computed from the same inputs on this grid is kept rather than recomputed.
 func (s *NavigationSystem) LoadShared(data []byte) error {
 	var snap navSnapshot
 	if err := json.Unmarshal(data, &snap); err != nil {
@@ -1018,32 +1026,40 @@ func (s *NavigationSystem) LoadShared(data []byte) error {
 	}
 	s.routeRebuildTicks = snap.RouteRebuildTicks
 
-	// The walls are the installed ones now, so the grid every composite path is
-	// tested against has to be rebuilt before any field is derived from it.
-	s.recomputeCompositePassability()
-	isBlockedPoint := s.world.Positions.WallTest(component.WallBlockKinetic, &s.walls)
+	isBlockedPoint := s.recomputeCompositePassability()
 	isBlockedComposite := s.compositePassability.IsBlocked
-
 	for _, phase := range snap.Groups {
 		g := s.getOrCreateGroup(phase.GroupID)
 		if g == nil {
 			continue
 		}
-		if c := g.pointFlowCache; c != nil {
-			c.TicksSinceCompute, c.PendingUpdate = phase.PointTicks, phase.PointPending
-			c.LastTargets = append(c.LastTargets[:0], phase.PointLastTargets...)
-			if phase.PointComputed {
-				c.Rebuild(isBlockedPoint)
-			}
-		}
-		if c := g.compositeFlowCache; c != nil {
-			c.TicksSinceCompute, c.PendingUpdate = phase.CompositeTicks, phase.CompositePending
-			c.LastTargets = append(c.LastTargets[:0], phase.CompositeLastTargets...)
-			if phase.CompositeComputed {
-				c.Rebuild(isBlockedComposite)
-			}
-		}
+		g.pointAt = s.restoreField(g.pointFlowCache, g.pointAt, isBlockedPoint,
+			phase.PointTicks, phase.PointPending, phase.PointComputed, phase.PointLastTargets)
+		g.compositeAt = s.restoreField(g.compositeFlowCache, g.compositeAt, isBlockedComposite,
+			phase.CompositeTicks, phase.CompositePending, phase.CompositeComputed, phase.CompositeLastTargets)
 	}
 	s.deriveRouteGraphs(snap.Routes)
 	return nil
+}
+
+// restoreField sets one cache to a captured phase and returns the generation its
+// field now stands at. The field is rebuilt from the phase's targets unless the one
+// held was computed from them on this grid; a phase with no field clears the stamp,
+// since the targets it leaves are no longer the field's.
+func (s *NavigationSystem) restoreField(c *navigation.FlowFieldCache, at uint64, isBlocked navigation.WallChecker,
+	ticks int, pending, computed bool, targets []vmath.Point) uint64 {
+	if c == nil {
+		return 0
+	}
+	held := at == s.grid && c.Field.Valid && slices.Equal(c.LastTargets, targets)
+	c.TicksSinceCompute, c.PendingUpdate = ticks, pending
+	c.LastTargets = append(c.LastTargets[:0], targets...)
+	switch {
+	case !computed:
+		return 0
+	case held:
+		return at
+	}
+	c.Rebuild(isBlocked)
+	return s.grid
 }

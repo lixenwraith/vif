@@ -53,6 +53,8 @@ type RouteGraph struct {
 
 	FootprintW, FootprintH int // Entity footprint used for passability
 	HeaderOffX, HeaderOffY int
+
+	Grid uint64 // Caller's generation of the passability the routes were computed on
 }
 
 // routeCellPenalty per prior-corridor cell; a ~100-cell prior path accrues

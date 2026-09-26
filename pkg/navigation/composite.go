@@ -39,14 +39,10 @@ func (p *CompositePassability) Resize(width, height int) {
 	p.Height = height
 }
 
-// Compute rebuilds passability grid from wall state
+// Compute rebuilds passability grid from wall state and reports whether any cell changed
 // isWall: returns true if cell blocks composite movement
-func (p *CompositePassability) Compute(isWall WallChecker) {
-	for y := range p.Height {
-		for x := range p.Width {
-			p.Valid[y*p.Width+x] = p.canOccupy(x, y, isWall)
-		}
-	}
+func (p *CompositePassability) Compute(isWall WallChecker) bool {
+	return p.ComputeROI(isWall, 0, 0, p.Width-1, p.Height-1)
 }
 
 // canOccupy checks if composite footprint fits at header position (x,y)
@@ -90,19 +86,24 @@ func (p *CompositePassability) IsValid(x, y int) bool {
 }
 
 // ComputeROI rebuilds passability for header positions within [minX,maxX] × [minY,maxY]
-// Bounds are clamped to grid dimensions. Footprint checks extend beyond ROI into the full map
-// via isWall callback — only the iteration bounds are clamped
-func (p *CompositePassability) ComputeROI(isWall WallChecker, minX, minY, maxX, maxY int) {
+// and reports whether any cell changed. Bounds are clamped to grid dimensions; footprint
+// checks extend beyond ROI into the full map via isWall — only the iteration is clamped
+func (p *CompositePassability) ComputeROI(isWall WallChecker, minX, minY, maxX, maxY int) bool {
 	minX = max(0, minX)
 	minY = max(0, minY)
 	maxX = min(p.Width-1, maxX)
 	maxY = min(p.Height-1, maxY)
 
+	changed := false
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {
-			p.Valid[y*p.Width+x] = p.canOccupy(x, y, isWall)
+			i := y*p.Width + x
+			if v := p.canOccupy(x, y, isWall); v != p.Valid[i] {
+				p.Valid[i], changed = v, true
+			}
 		}
 	}
+	return changed
 }
 
 // --- DEBUG ---

@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	"github.com/lixenwraith/vif/pkg/navigation"
 )
 
 // D-17 throttles the flow-field recompute, and which ticks it fires on decides how
@@ -268,6 +270,103 @@ func TestTheGatewayWorldKeepsItsRebuildScheduleAndGeneticStream(t *testing.T) {
 	t.Logf("route graphs came apart %d ticks after the install", diverged)
 }
 
+// TestAnInstallKeepsNavigationOnlyOverUnmovedWalls: a flow field and a route graph
+// are functions of their targets or cells and of the wall grid, so an install over
+// the walls they were computed on keeps them, one over moved walls derives them
+// again, and the two agree.
+func TestAnInstallKeepsNavigationOnlyOverUnmovedWalls(t *testing.T) {
+	t.Parallel()
+	origin, cap := navRouteOrigin(t)
+	defer origin.Close()
+	type derived struct {
+		graphs map[uint32]*navigation.RouteGraph
+		gens   [2]uint32
+		fields [2][]int
+	}
+	read := func() (d derived) {
+		d.graphs = routeGraphs(origin)
+		origin.World().RunSafe(func() {
+			w, dbg := origin.World(), origin.World().Resources.NavigationDebug
+			for i, c := range []*navigation.FlowFieldCache{dbg.Flow, dbg.CompositeFlow} {
+				if !c.Field.Valid {
+					t.Fatal("a cursor flow field is not computed; there is nothing to keep")
+				}
+				d.gens[i] = c.Field.CurrentGen
+				for y := range w.Resources.Config.MapHeight {
+					for x := range w.Resources.Config.MapWidth {
+						d.fields[i] = append(d.fields[i], c.Field.GetDistance(x, y))
+					}
+				}
+			}
+		})
+		return d
+	}
+	install := func(c snapshot.SharedCapture) (before, after derived) {
+		t.Helper()
+		before = read()
+		if err := origin.InstallShared(c); err != nil {
+			t.Fatalf("install: %v", err)
+		}
+		return before, read()
+	}
+
+	before, kept := install(cap)
+	if len(before.graphs) == 0 {
+		t.Fatal("no gateway holds a route graph; there is nothing to keep")
+	}
+	if before.gens != kept.gens {
+		t.Fatal("a flow field was recomputed over walls that did not move")
+	}
+	for id, rg := range kept.graphs {
+		if before.graphs[id] != rg {
+			t.Fatalf("route graph %d was recomputed over walls that did not move", id)
+		}
+	}
+
+	origin.World().RunSafe(func() {
+		w := origin.World()
+		for _, e := range w.Components.Wall.Entities() {
+			if wall, _ := w.Components.Wall.GetComponent(e); e.Domain() == core.DomainShared &&
+				wall.BlockMask&component.WallBlockKinetic != 0 {
+				w.DestroyEntity(e)
+				return
+			}
+		}
+	})
+	install(mustRoundTrip(t, origin))
+	before, again := install(cap)
+	if before.gens[0] == again.gens[0] || before.gens[1] == again.gens[1] {
+		t.Fatal("a flow field was kept over walls that moved")
+	}
+	for id, rg := range again.graphs {
+		if before.graphs[id] == rg {
+			t.Fatalf("route graph %d was kept over walls that moved", id)
+		}
+	}
+	if !slices.Equal(kept.fields[0], again.fields[0]) || !slices.Equal(kept.fields[1], again.fields[1]) {
+		t.Fatal("a derived flow field differs from the kept one")
+	}
+	if want, got := routeGraphSignature(origin), signatureOf(kept.graphs); want != got {
+		t.Fatalf("a derived route graph differs from the kept one\n  kept:    %s\n  derived: %s", got, want)
+	}
+}
+
+// routeGraphs is every gateway route graph a world holds, by graph ID.
+func routeGraphs(a *App) map[uint32]*navigation.RouteGraph {
+	out := make(map[uint32]*navigation.RouteGraph)
+	a.World().RunSafe(func() {
+		w := a.World()
+		for _, e := range w.Components.Gateway.Entities() {
+			if gw, ok := w.Components.Gateway.GetPtr(e); ok && gw.RouteDistID != 0 {
+				if rg := w.Resources.RouteGraph.Get(gw.RouteDistID); rg != nil {
+					out[gw.RouteDistID] = rg
+				}
+			}
+		}
+	})
+	return out
+}
+
 // genotypeSignature renders the captured shared genotype store. It excludes
 // adaptation telemetry deliberately: this is the genetic stream's contract, and the
 // route-learning carrier is compared through routeGraphSignature instead.
@@ -289,27 +388,19 @@ func genotypeSignature(a *App) (string, uint64) {
 }
 
 // routeGraphSignature renders every gateway's route graph: the cell it was computed
-// to reach and the number of routes it produced, in gateway order.
-func routeGraphSignature(a *App) string {
+// to reach and each route's length and waypoints, in graph ID order.
+func routeGraphSignature(a *App) string { return signatureOf(routeGraphs(a)) }
+
+func signatureOf(graphs map[uint32]*navigation.RouteGraph) string {
 	var b strings.Builder
-	a.World().RunSafe(func() {
-		w := a.World()
-		ids := make([]uint32, 0, 8)
-		for _, e := range w.Components.Gateway.Entities() {
-			if gw, ok := w.Components.Gateway.GetPtr(e); ok && gw.RouteDistID != 0 {
-				ids = append(ids, gw.RouteDistID)
-			}
+	for _, id := range slices.Sorted(maps.Keys(graphs)) {
+		rg := graphs[id]
+		fmt.Fprintf(&b, "%d:(%d,%d):", id, rg.TargetX, rg.TargetY)
+		for _, r := range rg.Routes {
+			fmt.Fprintf(&b, "%d%v", r.TotalDistance, r.Waypoints)
 		}
-		slices.Sort(ids)
-		for _, id := range ids {
-			rg := w.Resources.RouteGraph.Get(id)
-			if rg == nil {
-				fmt.Fprintf(&b, "%d:none ", id)
-				continue
-			}
-			fmt.Fprintf(&b, "%d:(%d,%d):%d ", id, rg.TargetX, rg.TargetY, len(rg.Routes))
-		}
-	})
+		b.WriteByte(' ')
+	}
 	return b.String()
 }
 
