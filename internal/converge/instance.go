@@ -41,9 +41,8 @@ type Instance interface {
 	// header describes this session without the body a full verification hashes.
 	CaptureShared() (snapshot.SharedCapture, error)
 	// CaptureSharedLocked is the read without its seal, for TickClosed, which runs
-	// under the world lock; SealCapture pins and hashes it outside the lock.
+	// under the world lock; a comparison needs no integrity hash, only the index.
 	CaptureSharedLocked() (snapshot.SharedCapture, error)
-	SealCapture(*snapshot.SharedCapture) error
 	InstallCapture(snapshot.SharedCapture) (engine.WorldDifference, error)
 	AdoptAuthority(snapshot.CaptureHeader)
 	VerifyCaptureIdentity(snapshot.CaptureHeader) error

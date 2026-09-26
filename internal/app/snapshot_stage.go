@@ -118,8 +118,10 @@ func (s *StagedInstall) Commit() error {
 		// queue published at once, a record the authority received late — is due now.
 		staging.receiveDue(tick + 1)
 
+		// Unsealed: the header is replaced below and nothing verifies the body, so
+		// an integrity hash here would only lengthen the live lock.
 		var projected snapshot.SharedCapture
-		projected, err = staging.CaptureShared()
+		staging.world.RunSafe(func() { projected, err = staging.captureSharedLocked() })
 		if err == nil {
 			// The authority's identity and fences, at the live tick: what the barrier
 			// prunes by is what the host applied, and the projection has moved the

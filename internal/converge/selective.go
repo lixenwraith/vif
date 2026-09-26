@@ -231,10 +231,11 @@ func (c *Corrections) retentionEvidence() (uint64, int) {
 // whole, so it can answer for the authority afterwards. A successor proves its world
 // is as new as the last artifact the old authority published; a relay answers for a
 // participant behind it. Both work because the capture is the authority's byte for
-// byte, so an index over it carries the authority's root.
+// byte, so an index over it carries the authority's root. A tick already held is
+// not indexed again: a keyframe is retained as the baseline and again on commit.
 func (c *Corrections) retainInstalled(cap snapshot.SharedCapture) {
-	if cap.Header.Term == 0 {
-		return // not an authoritative artifact: nothing to answer for
+	if cap.Header.Term == 0 || c.holdsRetention(cap.Header.Tick) {
+		return // not an authoritative artifact, or already answered for
 	}
 	index, err := snapshot.BuildManifest(cap, cap.Header.Authority)
 	if err != nil {
@@ -576,8 +577,7 @@ func (c *Corrections) worldAt(tick uint64) (snapshot.SharedCapture, error) {
 	c.selective.at = kept
 	c.selectiveMu.Unlock()
 	if found {
-		err := c.inst.SealCapture(&at)
-		return at, err
+		return at, nil
 	}
 	c.tel.ManifestsOffTick.Add(1)
 	return c.inst.CaptureShared()
@@ -697,7 +697,7 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		c.proved(want.Header.Tick)
 		mine.Header = want.Header
 		if at := c.inst.Position(); at.Run == want.Header.Run && at.Tick <= want.Header.Tick {
-			c.adoptAuthority(mine)
+			c.adoptAuthority(mine, index)
 		}
 		c.selectiveMu.Lock()
 		c.selective.awaiting = nil
@@ -715,8 +715,9 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 }
 
 // adoptAuthority takes a capture this instance's own world already equals: fences,
-// ledger and retention move, and no store is written.
-func (c *Corrections) adoptAuthority(cap snapshot.SharedCapture) {
+// ledger and retention move, and no store is written. The index that proved the
+// root is retained under the authority's header rather than built again.
+func (c *Corrections) adoptAuthority(cap snapshot.SharedCapture, index *snapshot.Manifest) {
 	c.installedMu.Lock()
 	stale := c.lastInstalled > 0 && cap.Header.Tick <= c.lastInstalled
 	if !stale {
@@ -728,10 +729,8 @@ func (c *Corrections) adoptAuthority(cap snapshot.SharedCapture) {
 		return
 	}
 	c.inst.AdoptAuthority(cap.Header)
-	if integrity, err := snapshot.Integrity(cap); err == nil {
-		cap.Header.Integrity = integrity
-		c.retainInstalled(cap)
-	}
+	index.Adopt(cap.Header)
+	c.retain(cap, index, false)
 	c.tel.Applied.Add(1)
 	c.tel.CorrectionTick.Store(int64(cap.Header.Tick))
 }
@@ -801,6 +800,9 @@ func (c *Corrections) applyRepair(body []byte) {
 		return
 	}
 
+	// The rebuilt index reproduced the authority's root, so it is retained as is
+	// and the commit does not index the same capture again.
+	c.retain(repaired, index, false)
 	if err := c.install(repaired); err != nil {
 		vlog.Warn("app", "msg", "repair not installed",
 			"tick", repaired.Header.Tick, "error", err.Error())

@@ -71,7 +71,6 @@ func (i instance) CaptureShared() (snapshot.SharedCapture, error) { return i.a.C
 func (i instance) CaptureSharedLocked() (snapshot.SharedCapture, error) {
 	return i.a.captureSharedLocked()
 }
-func (i instance) SealCapture(cap *snapshot.SharedCapture) error { return i.a.sealCapture(cap) }
 
 // InstallCapture resolves a capture against the staging world, projects it to this
 // instance's tick and commits it between two ticks, reporting how far this instance

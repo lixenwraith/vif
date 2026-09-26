@@ -1333,10 +1333,23 @@ func TestATowerGuestAnswersHashOnly(t *testing.T) {
 		transportOf(t, a).SetShape(network.LinkShape{LatencyTicks: lead})
 		injectExCommand(t, a, "god")
 	}
-	host.Region(event.RegionSpawn, "tower", "TowerSetup")
-	host.Settle()
+	// A live session refuses an operator's region change, so both instances take it
+	// at one tick, as a shared FSM re-derives it.
+	for _, a := range apps {
+		a.World().RunSafe(func() {
+			a.World().PushEventDomain(event.EventFSMRegionRequest,
+				&event.FSMRegionPayload{Op: event.RegionSpawn, Region: "tower", State: "TowerSetup"},
+				core.DomainShared)
+		})
+		a.Settle()
+	}
 	for range 120 {
 		tickAll(apps)
+	}
+	var state string
+	guest.World().RunSafe(func() { state = guest.World().Resources.Status.Strings.Get("fsm.tower.state").Load() })
+	if state == "" || state == "-" {
+		t.Fatal("the tower region never started")
 	}
 	// The guest trails the authority by the link, which is where pacing holds it.
 	for range lead {

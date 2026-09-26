@@ -544,6 +544,13 @@ func (m *Manifest) sectionRowsFor(cap SharedCapture, ids []string) (map[string][
 	return out, nil
 }
 
+// Adopt rebinds the index to the header of a world it already describes: the root
+// absorbs only session identity, which a proved-equal root already shares.
+func (m *Manifest) Adopt(h CaptureHeader) {
+	m.summary.Header = h
+	m.summary.Root = manifestRoot(h, m.authority, m.summary.Sections)
+}
+
 // Root returns the manifest's root hash.
 func (m *Manifest) Root() uint64 { return m.summary.Root }
 
