@@ -27,8 +27,8 @@ type sessionControl struct{ a *App }
 func (c sessionControl) BeginHosting(addr, authority string) error {
 	return c.a.beginHostingLocked(addr, authority)
 }
-func (c sessionControl) Join(target string) error       { return c.a.joinLocked(target) }
-func (c sessionControl) SessionSummary() string         { return c.a.sessionSummaryLocked() }
+func (c sessionControl) Join(target string) error { return c.a.joinLocked(target) }
+func (c sessionControl) SessionSummary() string   { return c.a.sessionSummaryLocked() }
 
 func (c sessionControl) ChangeScenario(name string) (bool, error) {
 	return c.a.changeScenarioLocked(name)
