@@ -152,47 +152,44 @@ behind an explicit opt-in would keep it, and needs a trust decision first: the
 bytes came from a peer, and nothing about a plaintext link says they are the
 operator's.
 
-## Audio
-
-### Make the mixer buffer configurable
-
-- Priority: P3
-- Affected files: `pkg/audio/params.go`
-- Prerequisite: define a construction-time option and recompute dependent buffer
-  sizes before the mixer or backend starts
-
-Replace the compile-time 50 ms mixer buffer with a construction-time setting.
-
 ## Multiplayer
 
 Diagnoses and what each item follows from are in
 [Troubleshooting](troubleshooting.md).
 
-### Hash only what changed when a guest answers a manifest
+### Write only what a correction changed
+
+- Priority: P1
+- Affected files: `internal/app/snapshot_stage.go`, `internal/converge/selective.go`
+
+Every correction a guest takes, a two-page repair included, stages the whole
+capture and projects and writes the whole world under the live lock: about 35 ms
+and 30 ms at 239x64 in the tower region, 50 ms and 60-104 ms in a 9,300-entity
+session. Most move nothing: 27 of 31 there, 38 of 55 in that session. A repair
+could splice its pages into the capture the live world already matches, and a body
+whose index root equals this instance's at that tick could be adopted as a
+hash-only answer is.
+
+### Keep route graphs across an install that moved no wall
 
 - Priority: P2
-- Affected files: `internal/snapshot/manifest.go`, `internal/engine/store.go`
-- Prerequisite: none
+- Affected files: `internal/system/navigation.go`
 
-Answering a manifest captures and hashes the whole shared world, maze walls
-included, which in the browser build in the tower region is most of what a guest
-spends now that the answer is almost always hash-only. A write counter per store
-would let a section keep its last hash while nothing wrote to it.
+`NavigationSystem.LoadShared` rebuilds passability, every flow field and every
+gateway route graph on each install, in the staging world and again in the live
+commit: 44% of install CPU in the tower region. A route graph is a function of its
+endpoints and the passability grid; keeping one needs the grid generation it was
+built at, because `refreshRouteGraphs` also rebuilds between installs.
 
-### Find what makes a networkless soak load-sensitive
+### Refuse or reproduce a guest journal that spans a join
 
-- Priority: P3
-- Affected files: `internal/app/soak_test.go`
-- Prerequisite: a failing seed
+- Priority: P2
+- Affected files: `internal/app/join.go`, `internal/event/journal.go`
 
-`TestSoakAppsAreIndependent` failed twice in nine loaded suite runs with two worlds
-of one seed differing in their position digest. Not reproduced since in 48 loaded
-runs and four whole-package runs, and ruled out by review: every pooled payload has
-one handler that reads nothing after releasing it, the GA refills deterministically,
-no simulation path reads the wall clock, and no package state a world reads changes
-at run time. A failing seed is what would reopen it. A shared-world parity diff
-(entities created 13 against 12) failed once in a loaded whole-package run too, and
-passed in 25 isolated runs of the tests that print it.
+A journal opened before a join keeps its tick-zero anchor after the capture is
+installed, so `-replay` accepts it and replays the solo world the guest left at
+the join under records from the session's. Re-anchoring at the install tick makes
+replay refuse it as opened mid-run; recording the capture would make it replay.
 
 ## Combat
 

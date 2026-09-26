@@ -579,6 +579,10 @@ Representative measurements at the storm high-water fixture are:
 | Capture read under lock | about 1 ms |
 | Index and hash outside lock | about 2 ms |
 
+The tower region at 239x64 (about 6,000 shared entities, mostly maze walls) is
+heavier: a compressed keyframe is 64-95 KB, a capture read 1.6 ms, an index 12 ms,
+and an install about 35 ms staged and 30 ms committed.
+
 With one keyframe per ten corrections, a converged storm session is about
 14.2 KiB/s at 5 Hz or 5.7 KiB/s at 2 Hz. These are observations, not wall-time
 acceptance thresholds. Correctness, bounded allocation, and meaningful byte

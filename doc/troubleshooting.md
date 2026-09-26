@@ -397,7 +397,7 @@ wall, so a pushed kinetic entity walked back in. It now moves both, and loot pus
 itself out of a wall a correction installed under it. In the browser build in the
 tower region, navigation is about 3% of the thread; answering manifests and
 applying corrections is about half of it. §11 removed most of the repairs and
-installs; the capture and hash every answer takes remain (`doc/todo.md`).
+installs, §13 the duplicated hashing; whole-world installs remain (`doc/todo.md`).
 
 Once, in the tower region, a browser guest kept the previous region's glyphs, or
 kept the glyph system running although the region disables it. It did not recur
@@ -425,7 +425,8 @@ causes, fixed in order; the fraction is the guest's manifests answered hash-only
   `effects.grayout_active` are `TransientSystem`'s, scoped to one cursor.
 
 With all four, 599 of 599 at zero latency and 593 of 595 at three ticks
-(`TestATowerGuestAnswersHashOnly` holds 95% at two).
+(`TestATowerGuestAnswersHashOnly` holds 95% at two; until §13 it asked for the
+region after the session was live, which is refused, and never left the main map).
 
 ## 12. Seventh round (2026-09-24, one terminal guest at 100 ms)
 
@@ -442,3 +443,32 @@ first and drops the holder's ordinary crossings still scheduled or retained
 The engaged-set kill credit of the previous change is reverted. It credited one of
 the cursors that had hit the target within a second, picked by the target's id,
 rather than the one that killed it; `LastDamagedBy` names the killer again.
+
+## 13. Eighth round (2026-09-26, a guest joining a 9,300-entity tower region)
+
+A guest on the host's machine joined at tick 7,408. In 368 ticks it answered 9 of
+69 manifests hash-only and installed 55 whole worlds, 38 of them moving nothing;
+each commit held the live lock 60-104 ms, about a fifth of the session, and the
+frame rate fell to 28 during the join. Reproduced with a scripted host that enters
+the tower at 239x64 and opens with `:host`, and a scripted guest over TCP:
+
+- **A phantom backlog.** The gate answered one probe before the capture, and the
+  port that took over after it counted from zero, passing the gate's count before
+  the next echo; the host's origin predated the capture, so the capture (125 KB)
+  stood as backlog for the session. A tower keyframe is 64-95 KB compressed, and a
+  backlog of 48 KiB reads as saturation: the host throttled a loopback link to a
+  keyframe every 60 ticks and stopped indexing. The joiner's ready now rebases the
+  meter, and a backlog counts once it stands across two echoes: in one run 37
+  publications became 204, and 23 hash-only answers 149 of 167.
+- **Hashing twice.** A hash-only answer sealed the capture, indexed it, then sealed
+  and indexed it again to retain it; a keyframe and a repair were indexed twice, and
+  the projection was sealed under the live lock and its header thrown away. Guest
+  correction time in the in-process tower session fell from 4.6 s to 2.9 s per
+  1,200 ticks, and a commit from 34 to 27 ms.
+
+The static wall section is 42% of an index there. A write counter per store would
+skip it, but `Position.buildWallGrid` walks walls by pointer each flow-field
+derivation, and a missed bump would prove convergence falsely, which suppresses
+the keyframe floor; it was dropped. The networkless soak did not fail in 2,400
+loaded runs and six whole-package runs and is no longer tracked; its failure
+prints the first differing line, which is what would reopen it.
