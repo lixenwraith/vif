@@ -92,6 +92,29 @@ func TestTheMeterTurnsTwoEchoesIntoADeliveryRate(t *testing.T) {
 	}
 }
 
+// TestAJoinersReadyRestartsTheBacklogOrigin: the gate answers a probe before the
+// capture, and the port that takes over after it counts from zero, so without the
+// origin the ready sets the capture would stand as backlog for the whole session.
+func TestAJoinersReadyRestartsTheBacklogOrigin(t *testing.T) {
+	m := newLinkMeter()
+	at := time.Unix(0, 0)
+	echo := func(delivered, sent uint64) {
+		seq := m.nextProbe()
+		at = at.Add(parameter.NetworkProbeInterval)
+		m.observe(at, at.Add(-5*time.Millisecond), seq, delivered, sent, LinkReport{})
+	}
+	echo(24, 68)
+	const capture = 125_000
+	m.rebase()
+	for i := range 10 {
+		n := uint64(i+1) * 5_000
+		echo(n, 68+capture+n)
+	}
+	if m.link.Metrics().Saturated {
+		t.Fatal("the join capture stood as backlog after the joiner's ready")
+	}
+}
+
 // TestTheMeshMeasuresARoundTripOnItsOwnClock is the deterministic half of the
 // measurement: a mesh has no wall time, so its round trip is counted in ticks and
 // the same ticks give the same answer on every machine.

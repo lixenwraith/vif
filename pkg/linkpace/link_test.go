@@ -92,6 +92,15 @@ func TestLinkReportsSaturationOnlyWhenTheLinkWasTheLimit(t *testing.T) {
 		t.Fatal("64 KiB standing in the queue was not read as saturation")
 	}
 
+	burst := NewLink(cfg)
+	for range 10 {
+		burst.Observe(Sample{RTT: 20 * time.Millisecond, Delivered: 4096, Elapsed: time.Second})
+	}
+	burst.Observe(Sample{RTT: 20 * time.Millisecond, Delivered: 4096, Elapsed: time.Second, Backlog: 64 << 10})
+	if m := burst.Metrics(); m.Saturated {
+		t.Fatal("one echo behind a 64 KiB burst was read as the link's limit")
+	}
+
 	inflated := NewLink(cfg)
 	for range 10 {
 		inflated.Observe(Sample{RTT: 20 * time.Millisecond, Delivered: 4096, Elapsed: time.Second})

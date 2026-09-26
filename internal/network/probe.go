@@ -145,12 +145,9 @@ type linkMeter struct {
 
 	// The two cumulative counters have no shared origin: this end starts counting
 	// when it accepted the stream, the far end when its port took the stream over,
-	// and a mid-run join means those are different moments separated by a whole
-	// capture. Only their *differences* mean anything, so the first sample after
-	// either counter restarts establishes an origin and the ones after it measure
-	// growth from there. Without this a join would leave a standing backlog the
-	// size of the world it installed, and the link would read as permanently
-	// saturated for the rest of the session.
+	// and a join puts a whole capture between those moments. Only differences mean
+	// anything, so the first sample after a restart sets the origin; the joiner's
+	// ready is one (rebase), since its counter may pass the gate's before an echo.
 	baseSent      uint64
 	baseDelivered uint64
 	haveBase      bool
@@ -159,6 +156,9 @@ type linkMeter struct {
 func newLinkMeter() *linkMeter {
 	return &linkMeter{link: linkpace.NewLink(linkpace.LinkConfig{})}
 }
+
+// rebase discards the origin, so the next echo sets it again.
+func (m *linkMeter) rebase() { m.haveBase, m.haveDelivered = false, false }
 
 // probeLostAfter is how many probes may go out after the last one answered before
 // each further one is charged as lost.

@@ -396,8 +396,10 @@ has to enter the world for the cadence to exist.
 The probe's own timestamp comes back untouched, so the round trip is computed
 against the clock that started it and neither end has to agree with the other
 about what time it is. `InBytes` is what the answering end has received on this
-link, which turns two consecutive echoes into a delivery rate and one echo into a
-backlog — the difference between a fast link and an idle sender. The `LinkReport`
+link, which turns two consecutive echoes into a delivery rate and a backlog — the
+difference between a fast link and an idle sender. A backlog is saturation only
+once it stands across two echoes: one can land just behind a keyframe larger than
+the threshold, which a fast link has drained by the next. The `LinkReport`
 is the only game state that travels here, it is opaque to the transport, and every
 field in it is a scheduling hint: a host may publish to that participant sooner
 because of one, and a wrong or stale one costs a correction sent early and nothing
@@ -408,7 +410,9 @@ refused. A host admits a participant before it reads the world for it (D-22), so
 the stream is a peer — and therefore probed — while the gate is still reading;
 ignoring the probe would score the whole transfer as loss on the link it is
 measuring, which is exactly backwards, since the transfer is the busiest that link
-will ever be.
+will ever be. The gate counts what it reads and the port that takes over counts
+from zero, so the joiner's `MsgReady` rebases the host's meter; otherwise the
+capture stands as backlog for the whole session.
 
 `MsgStateSnapshot` (0x26, the code the retired replay-based join reserved) carries
 one chunk of a shared-world capture. It is the only message whose size is a

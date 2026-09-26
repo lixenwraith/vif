@@ -150,6 +150,7 @@ type Link struct {
 
 	throughput float64
 	saturated  bool
+	backlogged bool // the previous sample's backlog was past BacklogBytes
 
 	loss float64
 
@@ -219,7 +220,12 @@ func (l *Link) Observe(s Sample) {
 			l.throughput += l.cfg.Smoothing * (rate - l.throughput)
 		}
 	}
-	l.saturated = s.Backlog >= l.cfg.BacklogBytes || l.inflated(s.RTT)
+	// A backlog counts once it stands across two echoes: one sample can land just
+	// after the sender queued a burst larger than the threshold, a whole keyframe,
+	// which a fast link drains long before the next.
+	backlogged := s.Backlog >= l.cfg.BacklogBytes
+	l.saturated = (backlogged && l.backlogged) || l.inflated(s.RTT)
+	l.backlogged = backlogged
 
 	l.loss += l.cfg.Smoothing * (0 - l.loss)
 	l.lagTicks, l.magnitude = s.LagTicks, s.Magnitude
