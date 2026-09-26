@@ -76,7 +76,7 @@ func (i instance) CaptureSharedLocked() (snapshot.SharedCapture, error) {
 // instance's tick and commits it between two ticks, reporting how far this instance
 // had drifted from the projection.
 func (i instance) InstallCapture(cap snapshot.SharedCapture) (engine.WorldDifference, error) {
-	staged, err := i.a.StageShared(cap)
+	staged, err := i.a.stageProved(cap)
 	if err != nil {
 		return engine.WorldDifference{}, err
 	}

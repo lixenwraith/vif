@@ -1,39 +1,3 @@
-// Package app: repairing what differs instead of sending what is.
-//
-// The manifest says where two instances disagree. This file is what they do about
-// it: a request naming the pages a receiver could not reproduce, a shard set
-// carrying exactly those pages, and an apply that splices them into the receiver's
-// own capture and then proves the result is the sender's.
-//
-// The proof is layered on purpose, because the two layers answer different
-// questions.
-//
-//   - A shard carries the page hash its rows reproduce. Recomputing it on
-//     arrival says the rows are the ones the sender hashed, in the order it hashed
-//     them. That is an integrity statement about one page and nothing more: it
-//     catches corruption, truncation, reordering and a page delivered under
-//     another page's identity.
-//
-//   - The root is the end-to-end statement. After every shard in one set is
-//     applied, the receiver re-indexes the sections it touched and recomputes the
-//     root; it must equal the root the set declares. A repair that produced
-//     something merely plausible fails here, and nothing is installed.
-//
-// Between the two sits the rule that makes a partial repair safe: **one set, one
-// baseline, all or nothing.** A shard set carries its own header, root and section
-// summaries, so it is validated without reference to any earlier message and can
-// never be combined with one. A newer set supersedes an older incomplete one by
-// replacing it; there is no path that merges two. Requirement 6's "one logical
-// object assembled from different baselines" is not defended against at apply time
-// — it is unreachable, because a set is the only unit that is ever applied and it
-// has exactly one baseline.
-//
-// What a receiver does when it cannot repair is always the same: it asks for a
-// keyframe. Missing retention on the sender, a proof failure, a mismatch too wide
-// to be worth shards, an unknown version, a root that did not verify — every one
-// of them ends at a whole compressed capture, which is self-sufficient and which
-// the host publishes on its own schedule anyway. That is the bounded fallback, and
-// it is why none of the refusals here need a repair path of their own.
 package snapshot
 
 import (
@@ -48,25 +12,19 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// SectionRequest is one section's page hashes as the requester computed them,
-// under the partition the manifest declared.
-//
-// Sending the receiver's hashes rather than asking for the sender's is what makes
-// the descent one round trip instead of two: the sender already holds its own, so
-// the comparison happens where the content is and only the mismatches travel back.
+// SectionRequest is one section's page hashes as the requester computed them, under
+// the partition the manifest declared. Sending the receiver's hashes makes the
+// descent one round trip: the sender compares where the content is.
 type SectionRequest struct {
 	ID    string   `json:"id"`
 	Pages uint32   `json:"p"`
 	Hash  []uint64 `json:"h"`
 }
 
-// CorrectionRequest is a receiver's answer to one manifest.
-//
-// Every manifest is answered, including the ones that need nothing: the ack is
-// what tells the host this peer is in the selective protocol at all, and a peer
-// that stops answering falls back to whole bodies (see
-// SnapshotManifestSilenceCorrections). Root is the receiver's own, so a host can
-// record convergence from the message rather than infer it from an absence.
+// CorrectionRequest is a receiver's answer to one manifest. Every manifest is
+// answered, the converged ones included: the ack keeps the peer in the selective
+// protocol (SnapshotManifestSilenceCorrections), and Root, the receiver's own, lets
+// the host record convergence from the message rather than from an absence.
 type CorrectionRequest struct {
 	Version int                   `json:"version"`
 	Schema  int                   `json:"schema"`
@@ -101,15 +59,10 @@ func (r CorrectionRequest) Converged() bool {
 	return !r.Keyframe && !r.Index && len(r.Sections) == 0
 }
 
-// CorrectionShard is one repaired page.
-//
-// Rows is the page's whole content rather than a difference within it, and that is
-// deliberate: a page is already bounded, so its content is bounded, and a
-// difference-within-a-difference would need a baseline of its own — which is the
-// mixed-baseline failure this design is built to make unreachable. An empty Rows
-// is meaningful and common: it says the authority holds nothing in this page, and
-// a receiver that only overwrote what arrived would keep what the authority
-// dropped.
+// CorrectionShard is one repaired page. Rows is the page's whole content, bounded
+// with the page, not a difference that would need a baseline of its own; an empty
+// Rows says the authority holds nothing there, which an overwrite of only what
+// arrived would miss.
 type CorrectionShard struct {
 	Section string        `json:"s"`
 	Page    uint32        `json:"p"`
@@ -118,23 +71,19 @@ type CorrectionShard struct {
 	Rows    []ManifestRow `json:"r,omitempty"`
 }
 
-// CorrectionShardSet is one atomic repair.
-//
-// It repeats the manifest's header, root and section summaries so that it can be
-// validated on its own — a receiver that lost the manifest it answers still has
-// everything the apply needs, and a set can never be read against the wrong one.
+// CorrectionShardSet is one atomic repair: one set, one baseline, all or nothing.
+// It repeats the manifest's header, root and section summaries, so it is validated
+// on its own and can never be read against, or merged with, another; a newer set
+// replaces an older one, and every refusal ends at the keyframe fallback.
 type CorrectionShardSet struct {
 	Version int           `json:"version"`
 	Schema  int           `json:"schema"`
 	Header  CaptureHeader `json:"header"`
 	Root    uint64        `json:"root"`
 
-	// Authority is the participant whose world these pages describe, and Served
-	// the peer that produced the answer. They differ exactly when a relay answered
-	// for the authority, which is the only thing about a relayed repair a receiver
-	// treats differently: the proof is the authority's either way, so nothing about
-	// validation changes, and what Served buys is that the bytes are priced against
-	// the edge that carried them.
+	// Authority is the participant whose world these pages describe, and Served the
+	// peer that produced the answer; they differ when a relay answered. The proof is
+	// the authority's either way, and Served prices the bytes on the edge they took.
 	Authority uint32 `json:"authority"`
 	Served    uint32 `json:"served,omitempty"`
 
@@ -142,15 +91,10 @@ type CorrectionShardSet struct {
 	Shards   []CorrectionShard `json:"shards"`
 }
 
-// CorrectionUnserved is the answer a retention holder gives to a request it
-// cannot produce pages for: it dropped the manifest the request names, or its own
-// world never agreed with the authority's at that tick.
-//
-// It is a message rather than a silence because silence costs the receiver a
-// whole cadence waiting for a repair that is not coming, and it is not a body
-// because a body from a different baseline is exactly what the supersession rules
-// make unreachable. The receiver degrades: it asks the authority instead, and
-// failing that, for a keyframe.
+// CorrectionUnserved answers a request a retention holder cannot produce pages for.
+// A silence would cost the receiver a cadence waiting, and a body from another
+// baseline is what supersession makes unreachable, so the receiver is told and
+// asks the authority instead, and failing that for a keyframe.
 type CorrectionUnserved struct {
 	Version int                   `json:"version"`
 	Tick    uint64                `json:"tick"`
@@ -209,19 +153,10 @@ func DecodeShardSet(b []byte) (CorrectionShardSet, error) {
 
 // === receiver: the descent ===
 
-// CompareRequest is what a receiver answers a manifest with.
-//
-// The descent is two levels and stops at the first that agrees. Roots equal ends
-// it immediately with an empty request, which is the healthy case: one hash
-// comparison and no page work at all. Otherwise the section hashes decide which
-// sections to descend into, and only those sections' page hashes are computed and
-// sent — so a manifest carrying fifty-eight sections costs a page vector for the
-// two that actually differ. That is requirement 4's "avoid an all-page hash list
-// on every healthy correction".
-//
-// Sections the receiver does not know are reported as fully mismatching, which is
-// the only honest answer: it cannot produce a page hash for content it has no
-// section for, and the sender will send the whole section's pages.
+// CompareRequest is what a receiver answers a manifest with. The descent stops at
+// the first level that agrees: equal roots end it with an empty request, otherwise
+// only the differing sections' page hashes are sent. A section the receiver does
+// not know is reported wholly mismatching, since it has no page hash to offer.
 func CompareRequest(mine *Manifest, want CorrectionManifest) (CorrectionRequest, int, int) {
 	req := CorrectionRequest{
 		Version: ManifestVersion,
@@ -262,14 +197,10 @@ func CompareRequest(mine *Manifest, want CorrectionManifest) (CorrectionRequest,
 
 // === sender: building the repair ===
 
-// BuildShardSet answers one request from the manifest and capture the sender
-// retained for the tick the request names.
-//
-// A set that would exceed SnapshotShardBytesMax is not built: past that width a
-// keyframe is both smaller and stronger, so the caller is told to send one
-// instead. The bound is checked against the encoded body rather than estimated,
-// because what it is protecting is a transport frame and an allocation, and both
-// are counted in bytes that were actually produced.
+// BuildShardSet answers one request from the manifest the sender retained for the
+// tick it names. A set past SnapshotShardBytesMax, checked on the encoded bytes a
+// frame and an allocation are counted in, is not built: a keyframe is then both
+// smaller and stronger.
 func BuildShardSet(mine *Manifest, req CorrectionRequest) (CorrectionShardSet, int, error) {
 	set := CorrectionShardSet{
 		Version:   ManifestVersion,
@@ -323,23 +254,10 @@ type ShardRepair struct {
 	Sections int
 }
 
-// ValidateShardSet refuses a set before anything is spliced.
-//
-// Every refusal here is atomic by construction: the checks run over the decoded
-// set and the receiver's capture is not touched until all of them have passed.
-// What is refused, and why each one has to be:
-//
-//   - an unknown manifest version or capture schema, because the partition and the
-//     hash construction are what the two sides are agreeing on;
-//   - a stale or foreign baseline — a different run, session or tick from the
-//     manifest being answered — because a page is only meaningful against the
-//     state its root describes;
-//   - two shards naming one page with different content, because a receiver that
-//     took either would install one of two worlds and could not say which;
-//   - a page outside the partition its section declares, or a partition that
-//     disagrees with the set's own section summary, because both make the page
-//     identity ambiguous;
-//   - a page whose rows do not reproduce its declared hash, which is the proof.
+// ValidateShardSet refuses a set before anything is spliced: an unknown version or
+// schema, a baseline from another run, session or tick than the manifest answered,
+// two shards for one page, a page outside its declared partition, or rows that do
+// not reproduce their page hash. Nothing is touched until every check has passed.
 func ValidateShardSet(set CorrectionShardSet, tick uint64, authority uint32, root uint64, an CaptureHeader) error {
 	switch {
 	case set.Version != ManifestVersion:
@@ -352,22 +270,16 @@ func ValidateShardSet(set CorrectionShardSet, tick uint64, authority uint32, roo
 		return errors.New("shard set describes another run")
 	case set.Header.Term != an.Term || set.Header.Authority != an.Authority ||
 		!set.Header.Crossings.Equal(an.Crossings):
-		// The root intentionally excludes tick-local transport metadata so a
-		// predictor can compare its world with the authority's. The authority and
-		// crossing fence must nevertheless match the manifest: they decide which
-		// queued events a receiver drops. Integrity may differ on a relay because
-		// an equal state can have another dense-store order and recomputed capture
-		// hash while producing the same canonical manifest root.
+		// The root leaves out tick-local metadata, but the authority and crossing
+		// fence decide which queued events a receiver drops, so they must match the
+		// manifest. Integrity may differ: a relay's equal world has its own store order.
 		return errors.New("shard set authority header differs from the manifest it answers")
 	case set.Authority != authority:
 		return errors.New("shard set names another authority than the manifest it answers")
 	case set.Root != root:
-		// The binding a relayed answer rests on. A relay serves pages it did not
-		// author, so what makes its answer sound is that the root it declares is
-		// the *authority's* — the one the receiver was sent in the manifest — and
-		// that the repaired capture then reproduces it. A relay that substitutes,
-		// truncates or corrupts a page fails one of the two, exactly as a corrupt
-		// wire does.
+		// What a relayed answer rests on: the declared root is the authority's, and
+		// the repaired capture must reproduce it, so a substituted or corrupted page
+		// fails here exactly as a corrupt wire does.
 		return errors.New("shard set declares a root the manifest it answers does not")
 	case len(set.Sections) == 0:
 		return errors.New("shard set carries no section summary")
@@ -421,15 +333,10 @@ func ValidateShardSet(set CorrectionShardSet, tick uint64, authority uint32, roo
 }
 
 // ApplyShardSet splices a validated set into the receiver's own capture and proves
-// the result.
-//
-// mine is modified in place and is the receiver's to discard on failure; nothing
-// touches the live world here. The header is adopted whole — the tick, the run and
-// the map bounds are the authority's and an install needs them — and the integrity
-// field is recomputed rather than copied, because the reconstruction is a *world*
-// equal to the sender's rather than a byte-for-byte copy of its capture: the two
-// hold their stores in whatever order their own histories left. The root is what
-// proves the equality, and the root is order-independent by construction.
+// the result by the root, which is order-independent. mine is modified in place and
+// is the receiver's to discard on failure. The header is the authority's, less its
+// integrity: the reconstruction is a world equal to the sender's rather than a copy
+// of its capture's bytes, so no capture hash describes it and none is computed.
 func ApplyShardSet(mine *SharedCapture, index *Manifest, set CorrectionShardSet) (ShardRepair, error) {
 	var rep ShardRepair
 	touched := make(map[string]bool, len(set.Shards))
@@ -448,11 +355,7 @@ func ApplyShardSet(mine *SharedCapture, index *Manifest, set CorrectionShardSet)
 	rep.Sections = len(touched)
 
 	mine.Header = set.Header
-	integrity, err := Integrity(*mine)
-	if err != nil {
-		return ShardRepair{}, err
-	}
-	mine.Header.Integrity = integrity
+	mine.Header.Integrity = 0
 
 	ids := make([]string, 0, len(touched))
 	for id := range touched {

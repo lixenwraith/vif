@@ -75,3 +75,21 @@ func TestASecondWaitingCorrectionTakesTheStep(t *testing.T) {
 		t.Fatalf("the step left the clock at tick %d, want the newer authority's %d", got, far)
 	}
 }
+
+// TestATamperedKeyframeInstallsNothing: an install stages what the protocol has
+// proved without hashing it again, so a whole body is proved as it is resolved, and
+// one whose integrity does not match is refused before it becomes the baseline.
+func TestATamperedKeyframeInstallsNothing(t *testing.T) {
+	t.Parallel()
+	guest := receiver(t)
+	tampered := capture(1, 0)
+	tampered.World.Positions[0].Value.X++
+
+	deliverBody(t, guest, tampered)
+	if n := guest.world.installs(); n != 0 {
+		t.Fatalf("a keyframe that fails its integrity hash installed %d times", n)
+	}
+	if _, ok := guest.c.baselineCapture(); ok {
+		t.Fatal("a keyframe that fails its integrity hash became the baseline deltas name")
+	}
+}

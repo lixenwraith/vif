@@ -1,26 +1,3 @@
-// Package engine: the shared world expressed against another one.
-//
-// A capture describes the whole shared world, which is the right shape for a join
-// and the wrong one for a correction. §8's measurement is what says so: at the
-// storm high water the schema is 176 KiB, which was 859 KiB/s at 5 Hz before the
-// wire codec. Compression reduces transport repetition; a delta separately avoids
-// computing and carrying unchanged logical state. Between two captures 200 ms
-// apart most of that is unchanged: walls do not move, a gold
-// sequence's members do not move, and a swarm's genotype does not change while its
-// position does.
-//
-// So a correction carries the difference. The diff is per store and per entity,
-// because that is the granularity the stores themselves have, and it is *exact*:
-// applying a delta to the baseline it was computed against reproduces the next
-// capture byte for byte, entity order included, which is what lets the receiver
-// re-check the capture's own integrity hash after reconstructing it. A delta that
-// reconstructed something merely equivalent would pass every value comparison and
-// fail that hash, and the hash is the only end-to-end statement a receiver has.
-//
-// The same comparison answers a second question the transport does not ask.
-// Requirement 4 wants the correction *magnitude* as telemetry rather than as an
-// error, and the magnitude is exactly the difference between the world a guest
-// predicted and the world the host is sending it. One mechanism, two readers.
 package engine
 
 import (
@@ -30,20 +7,11 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 )
 
-// StoreDelta is one component store's difference against a baseline.
-//
-// Changed carries the entries whose value differs from the baseline's, and the
-// entries the baseline does not have at all — a receiver cannot tell those apart
-// and does not need to. Removed names the entities the baseline holds and this
-// store no longer does.
-//
-// Order is the exact entity sequence the store must end up in, and it is present
-// only when the sequence cannot be derived. The stores are dense with swap-back
-// removal, so removing an entity moves whichever one was last into its place: a
-// receiver replaying removals in baseline order would end up with the same *set*
-// in a different order, and a capture is compared and hashed as bytes. When the
-// derived order is already right — which is every delta that removes nothing —
-// this field is absent and costs nothing.
+// StoreDelta is one component store's exact difference against a baseline: Changed
+// holds new and differing entries, Removed the entities gone. Order is the entity
+// sequence the store must end in, present only when swap-back removal makes it
+// underivable, so a reconstruction reproduces the capture byte for byte and its
+// integrity hash can be re-checked.
 type StoreDelta[T any] struct {
 	Changed []StoreEntry[T] `json:"c,omitempty"`
 	Removed []core.Entity   `json:"r,omitempty"`
@@ -59,15 +27,10 @@ func (d StoreDelta[T]) Empty() bool {
 // correction magnitude is reported in.
 func (d StoreDelta[T]) Entries() int { return len(d.Changed) + len(d.Removed) }
 
-// snapshotDetacher is a component that owns storage a capture must not share
-// with the live world. Two shared components do — a composite header's member
-// table and a genotype's gene vector — and both are written in place through
-// Store.GetPtr, so a capture holding the live backing array is not a reading of
-// one instant: it changes under whoever retained it.
-//
-// The interface is on the component rather than a list here for the same reason
-// the capture is generated: a component that grows a slice has to be detached
-// without anyone remembering to add it to a list somewhere else.
+// snapshotDetacher is a component owning storage a capture must not share with the
+// live world: one written in place through Store.GetPtr would change under whoever
+// retained the capture. It is an interface on the component rather than a list, so
+// a component that grows a slice is detached without anyone remembering to add it.
 type snapshotDetacher[T any] interface{ DetachSnapshot() T }
 
 // DetachSnapshotValue returns a component value that shares no storage with the
@@ -80,16 +43,9 @@ func DetachSnapshotValue[T any](v T) T {
 	return v
 }
 
-// diffStore computes one store's delta against a baseline.
-//
-// Values are compared with reflect.DeepEqual rather than with ==, and that is a
-// deliberate cost rather than an oversight: three of the shared components carry a
-// slice (a snake's segments, a genotype's genes, a composite header's member
-// table), so the `comparable` constraint is not available for the set as a whole,
-// and a per-component declaration of which ones need a deep compare is a thing
-// that can drift from the components. DeepEqual is total over all of them. The
-// diff runs on the capture pump's goroutine, outside the world lock, so what it
-// costs is not a tick's to pay.
+// diffStore computes one store's delta against a baseline. Values compare with
+// reflect.DeepEqual: three shared components carry a slice, so == is not available
+// to the set, and a per-component list of which need a deep compare would drift.
 func diffStore[T any](base, next []StoreEntry[T]) StoreDelta[T] {
 	var d StoreDelta[T]
 
@@ -210,13 +166,21 @@ func applyStore[T any](base []StoreEntry[T], d StoreDelta[T]) []StoreEntry[T] {
 
 // countStoreDifference reports how many entries differ between two readings of one
 // store and records the entities behind them, which is the correction magnitude's
-// unit and its entity count.
+// unit and its entity count. Two readings of one world mostly hold a store in one
+// order, so their common prefix is compared in place and only the rest is indexed.
 func countStoreDifference[T any](a, b []StoreEntry[T], touched map[core.Entity]struct{}) int {
+	n, k := 0, 0
+	for ; k < len(a) && k < len(b) && a[k].Entity == b[k].Entity; k++ {
+		if !reflect.DeepEqual(a[k].Value, b[k].Value) {
+			n++
+			touched[b[k].Entity] = struct{}{}
+		}
+	}
+	a, b = a[k:], b[k:]
 	index := make(map[core.Entity]int, len(a))
 	for i, en := range a {
 		index[en.Entity] = i
 	}
-	n := 0
 	seen := make(map[core.Entity]struct{}, len(b))
 	for _, en := range b {
 		seen[en.Entity] = struct{}{}
@@ -235,14 +199,10 @@ func countStoreDifference[T any](a, b []StoreEntry[T], touched map[core.Entity]s
 	return n
 }
 
-// WorldDifference is how far apart two readings of the shared world are.
-//
-// It is the number Phase 4's requirement 6 puts where DESYNC used to be. A guest
-// predicts between corrections, so a difference is the expected condition rather
-// than a fault; what matters is its size and whether it stays bounded. Entries
-// counts every component cell that disagrees, Entities the distinct shared
-// entities behind them, and CellShift the largest distance a shared placement
-// moves — the one a player would actually see.
+// WorldDifference is how far apart two readings of the shared world are: on a guest,
+// the correction magnitude, which is telemetry rather than a fault. Entries counts
+// every disagreeing component cell, Entities the shared entities behind them, and
+// CellShift the largest distance a shared placement moves.
 type WorldDifference struct {
 	Entries   int
 	Entities  int

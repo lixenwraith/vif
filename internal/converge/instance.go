@@ -34,11 +34,11 @@ type Instance interface {
 	Transport() engine.NetworkPort
 	DrainOffTick()
 
-	// InstallCapture projects a capture to this instance's own tick — the clock
-	// never moves backwards — writes the projection, and reports how far the live
-	// world had drifted from it. AdoptAuthority takes a header whose world this
-	// instance provably holds already. VerifyCaptureIdentity answers whether a
-	// header describes this session without the body a full verification hashes.
+	// InstallCapture projects a capture this protocol has proved — by its integrity
+	// hash or by the authority's root — to this instance's own tick, writes the
+	// projection, and reports how far the live world had drifted from it.
+	// AdoptAuthority takes a header whose world this instance provably holds already.
+	// VerifyCaptureIdentity answers whether a header describes this session.
 	CaptureShared() (snapshot.SharedCapture, error)
 	// CaptureSharedLocked is the read without its seal, for TickClosed, which runs
 	// under the world lock; a comparison needs no integrity hash, only the index.

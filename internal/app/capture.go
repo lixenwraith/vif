@@ -241,27 +241,45 @@ func (a *App) reconcileShared(cap snapshot.SharedCapture) (engine.WorldDifferenc
 	return a.writeShared(cap, true, true)
 }
 
-// writeShared is the one install, with the store pass chosen by the caller.
-// Everything outside that pass is identical and has to be: the roster rebind, the
-// tick and record rebase, the streams, every carrier, the FSM and the compared
-// surface are what make the world the sender's.
+// writeShared is writeSharedLocked under the world lock, reconciling against the
+// world as it is read there or replacing it wholesale.
 func (a *App) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal bool) (engine.WorldDifference, error) {
 	var (
 		err  error
 		diff engine.WorldDifference
 	)
-	a.world.RunSafe(func() { diff, err = a.writeSharedLocked(cap, reconcile, reconcileLocal) })
+	a.world.RunSafe(func() {
+		var held *snapshot.SharedCapture
+		if reconcile {
+			var cur snapshot.SharedCapture
+			if cur, err = a.captureSharedLocked(); err != nil {
+				return
+			}
+			held = &cur
+		}
+		diff, err = a.writeSharedLocked(cap, held, reconcileLocal)
+	})
 	return diff, err
 }
 
-// writeSharedLocked is writeShared under the caller's lock.
-func (a *App) writeSharedLocked(cap snapshot.SharedCapture, reconcile, reconcileLocal bool) (diff engine.WorldDifference, err error) {
+// writeSharedLocked is the one install. With held, the live world as read under this
+// lock, it moves the stores onto cap and reports how far they stood from it; a world
+// that already equals cap on the compared surface and in every other part is written
+// as a hash-only answer is, clock and barrier alone. Without held it replaces them.
+// Everything else is identical and has to be: that is what makes the world the sender's.
+func (a *App) writeSharedLocked(cap snapshot.SharedCapture, held *snapshot.SharedCapture, reconcileLocal bool) (diff engine.WorldDifference, err error) {
+	if held != nil {
+		diff = engine.SharedWorldDifference(held.World.WithoutLocalCursorState(), cap.World.WithoutLocalCursorState())
+		if diff.Entries == 0 && snapshot.HoldsBesideWorld(*held, cap) {
+			a.adoptClockLocked(cap.Header)
+			a.adoptSnapshotBarrierLocked(cap.Header)
+			return diff, nil
+		}
+	}
 	func() {
 		// Dry run first: a carrier that rejects its record must do so before the
-		// stores are touched. A staging pass cannot answer the second question — a
-		// carrier that refuses because of state the *live* world holds is invisible
-		// to a world that has never been in that state — so the live carrier is
-		// asked here, which is what keeps the refusal atomic.
+		// stores are touched. Only the live carrier can refuse because of state the
+		// live world holds, which a staging pass never has.
 		savers := a.sharedStateSaversLocked()
 		for _, rec := range cap.Systems {
 			saver, ok := savers[rec.System]
@@ -277,48 +295,16 @@ func (a *App) writeSharedLocked(cap snapshot.SharedCapture, reconcile, reconcile
 			}
 		}
 
-		// The roster and every cursor's control assignment are read before the
-		// stores are replaced, because both are re-derived from this instance's own
-		// position afterwards rather than adopted (D-13).
+		// The roster and every cursor's control assignment are re-derived from this
+		// instance's own position after the stores are written, not adopted (D-13).
 		local := a.world.CaptureCursorControl()
-
-		if reconcile {
-			// The measurement and the write are one pass over the same stores.
-			diff = engine.SharedWorldDifference(a.world.CaptureSharedWorld().WithoutLocalCursorState(),
-				cap.World.WithoutLocalCursorState())
+		if held != nil {
 			a.world.ReconcileSharedWorld(cap.World)
 		} else {
 			a.world.InstallSharedWorld(cap.World)
 		}
 		a.world.RebindCursorRoster(local)
-
-		// The tick is shared identity. Adopting it also adopts the simulation
-		// clock, because engine.SimTime derives the instant from the tick — which
-		// is what lets an installed world resolve its stored deadlines on the same
-		// ticks the run it came from will.
-		a.world.Resources.Game.State.SetGameTicks(cap.Header.Tick)
-
-		// The record position is the same identity seen from the event queue. Every
-		// crossing's apply tick is computed from it, so an installed world stamping
-		// its own tick zero would schedule the session's next artifact into a past
-		// the barrier has already refused.
-		a.world.Resources.Event.Queue.RebaseStamp(cap.Header.Run, cap.Header.Tick)
-		a.world.Resources.Status.Correlation().SetRun(cap.Header.Run)
-		a.world.Resources.Status.Correlation().SetTick(cap.Header.Tick)
-
-		// Telemetry the scheduler publishes from the tick alone is republished
-		// with it, so the installed world reports the instant it is at rather than
-		// the one this instance had reached. Anything derived from more than the
-		// tick is left to the next tick to recompute, which is where an installed
-		// participant enters the session.
-		reg := a.world.Resources.Status
-		reg.Ints.Get("engine.ticks").Store(int64(cap.Header.Tick))
-		reg.Ints.Get("time.game_elapsed_ms").Store(
-			engine.SimTime(cap.Header.Tick, cap.Header.TickInterval).Sub(engine.SimEpoch).Milliseconds())
-		a.world.Resources.Time.Update(
-			engine.SimTime(cap.Header.Tick, cap.Header.TickInterval),
-			a.world.Resources.Time.RealTime,
-			cap.Header.TickInterval)
+		a.adoptClockLocked(cap.Header)
 
 		if unknown := a.world.Resources.Rand.LoadStreams(core.DomainShared, cap.Streams); len(unknown) > 0 {
 			err = fmt.Errorf("capture names RNG streams this build does not issue: %v", unknown)
@@ -344,6 +330,25 @@ func (a *App) writeSharedLocked(cap snapshot.SharedCapture, reconcile, reconcile
 		a.installStatusLocked(cap.Status)
 	}()
 	return diff, err
+}
+
+// adoptClockLocked moves the simulation clock, the event queue's record position and
+// what the scheduler publishes from the tick alone to the header's tick; a crossing
+// stamped from a stale position would be scheduled into a past the barrier refuses.
+// Anything derived from more than the tick is recomputed by the next tick.
+func (a *App) adoptClockLocked(h snapshot.CaptureHeader) {
+	a.world.Resources.Game.State.SetGameTicks(h.Tick)
+	a.world.Resources.Event.Queue.RebaseStamp(h.Run, h.Tick)
+	a.world.Resources.Status.Correlation().SetRun(h.Run)
+	a.world.Resources.Status.Correlation().SetTick(h.Tick)
+	reg := a.world.Resources.Status
+	reg.Ints.Get("engine.ticks").Store(int64(h.Tick))
+	reg.Ints.Get("time.game_elapsed_ms").Store(
+		engine.SimTime(h.Tick, h.TickInterval).Sub(engine.SimEpoch).Milliseconds())
+	a.world.Resources.Time.Update(
+		engine.SimTime(h.Tick, h.TickInterval),
+		a.world.Resources.Time.RealTime,
+		h.TickInterval)
 }
 
 // adoptSnapshotBarrierLocked tells the crossing barrier which world it now holds:
@@ -381,11 +386,9 @@ func (a *App) verifyCaptureIdentity(h snapshot.CaptureHeader) error {
 }
 
 // VerifyCapture reports whether this instance can install a capture: whether it is
-// intact, and whether it describes the same session. The set is
-// sessionAnchorFields', the same one the join handshake uses, so the two cannot
-// reach opposite verdicts about one peer. The corpus the header records is
-// provenance, not a condition: a shared capture carries no glyphs to disagree
-// about, since those are player domain.
+// intact, and whether it describes the same session by sessionAnchorFields, the set
+// the join handshake uses, so the two cannot disagree about one peer. The corpus is
+// provenance, not a condition: a shared capture carries no player-domain glyphs.
 func (a *App) VerifyCapture(cap snapshot.SharedCapture) error {
 	if cap.Header.Schema != snapshot.Schema {
 		return fmt.Errorf("capture schema %d, this build reads %d",

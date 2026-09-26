@@ -41,8 +41,18 @@ type StagedInstall struct {
 // asks whether this build can load the capture, which is what the second world is
 // for.
 func (a *App) StageShared(cap snapshot.SharedCapture) (*StagedInstall, error) {
-	started := time.Now() // [wall] telemetry only; the install carries no instant
 	if err := a.VerifyCapture(cap); err != nil {
+		return nil, err
+	}
+	return a.stageProved(cap)
+}
+
+// stageProved is StageShared for a capture the correction protocol has proved: a
+// body's integrity is checked as it is resolved and a repair reproduces the
+// authority's root, so hashing it again would prove nothing new.
+func (a *App) stageProved(cap snapshot.SharedCapture) (*StagedInstall, error) {
+	started := time.Now() // [wall] telemetry only; the install carries no instant
+	if err := a.verifyCaptureIdentity(cap.Header); err != nil {
 		return nil, err
 	}
 
@@ -80,12 +90,10 @@ func (s *StagedInstall) Capture() snapshot.SharedCapture { return s.capture }
 // it against the live one before the swap. It is invalid after Commit or Discard.
 func (s *StagedInstall) StagingWorld() *App { return s.staging }
 
-// Commit projects the staged capture to the live tick and writes the projection:
-// the staging world takes the authority's world, this instance's owner-authored
-// values and what it applied after the capture, and simulates to the present, so
-// a transition already made is neither torn down nor rebuilt and the clock never
-// moves backwards (multi-player.md §3.3). The live lock is held throughout: a tick
-// landing between the projection and the write would be overwritten.
+// Commit projects the staged capture to the live tick — the authority's world, this
+// instance's owner-authored values and what it applied since, simulated to the
+// present — and writes what the projection moves (multi-player.md §3.3). The live
+// lock is held throughout: a tick landing between projection and write would be lost.
 func (s *StagedInstall) Commit() error {
 	switch {
 	case s.committed:
@@ -136,13 +144,11 @@ func (s *StagedInstall) Commit() error {
 			// world to where this instance stands.
 			projected.Header = header
 			projected.Header.Tick = tick
-			if journal != nil {
-				// The journal carries what the write changes, against this.
-				before, err = live.captureSharedLocked()
-			}
+			// What the write moves is measured, and journaled, against this.
+			before, err = live.captureSharedLocked()
 		}
 		if err == nil {
-			s.difference, err = live.writeSharedLocked(projected, true, true)
+			s.difference, err = live.writeSharedLocked(projected, &before, true)
 		}
 		if err == nil {
 			m := live.telemetry
@@ -304,21 +310,11 @@ func (s *StagedInstall) release() { s.staging = nil }
 // seed, the scenario and the corpus. The map latch and the session come from the
 // capture: a world on other bounds or another session's roots answers another question.
 func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
-	// Project only the inputs that can change the simulated world. Starting from
-	// the live Config and subtracting known I/O options is brittle: a newly added
-	// local option can otherwise reach NewHeadless and either alter staging or be
-	// rejected as unused. That is how an explicit guest colour mode used to abort
-	// join and every later correction; audio overrides had the same latent path.
-	//
-	// Dir remains part of the simulation resource set because corpus discovery and
-	// files referenced by the FSM resolve through it. Keymap, music and sounds
-	// belong to the live instance's input and audio services.
-	//
-	// The scenario is handed over rather than re-resolved: this instance has one
-	// loaded, it is what the capture was produced against, and a root that has
-	// changed underneath a running session must not make the staging world answer a
-	// different question. It also covers a scenario that came from the coordinator
-	// and exists nowhere on this host.
+	// Only inputs that can change the simulated world are projected: subtracting I/O
+	// options from the live Config lets a new local option reach NewHeadless. Dir
+	// stays, since the corpus and FSM files resolve through it. The scenario is
+	// handed over, not re-resolved: it is what the capture was produced against,
+	// and it may have come from the coordinator and exist nowhere on this host.
 	staged := a.scenario
 	cfg := Config{
 		Mode: ModeHeadless,

@@ -11,13 +11,10 @@ import (
 	"github.com/lixenwraith/vif/internal/fsm"
 )
 
-// SharedCaptureDelta is one capture expressed against a baseline capture.
-//
-// Only the world half is differenced, and that is where the measurement said the
-// bytes are: 52 component stores against 24 stream positions, 5 system records, two
-// FSM regions and a status surface. The rest is carried whole, which costs a
-// constant few kilobytes and removes a whole class of partial-state bug — a stream
-// position or an FSM region that a delta decided had not changed and had.
+// SharedCaptureDelta is one capture expressed against a baseline capture. Only the
+// component stores are differenced, which is where the bytes are; streams, system
+// records, the FSM and status travel whole, a constant few kilobytes that rule out
+// a part a delta wrongly judged unchanged.
 type SharedCaptureDelta struct {
 	// Header is the *next* capture's header, carried whole. Its Integrity field is
 	// what the receiver checks the reconstruction against, so it is the one field
@@ -51,13 +48,10 @@ func DiffCapture(base, next SharedCapture) SharedCaptureDelta {
 	}
 }
 
-// ApplyCaptureDelta reconstructs the capture a delta describes.
-//
-// The baseline must be the keyframe the delta names — a receiver that lost one and
-// applied a delta to the wrong world would produce a capture that installs cleanly
-// and describes a world nobody has. Both checks are here rather than at the call
-// site: the tick says the caller has the right baseline, and the integrity hash
-// says the reconstruction is byte-for-byte what the sender held.
+// ApplyCaptureDelta reconstructs the capture a delta describes. The tick says the
+// caller holds the keyframe the delta names, and the integrity hash that the
+// reconstruction is byte for byte what the sender held; without both, a delta on
+// the wrong baseline would install cleanly as a world nobody has.
 func ApplyCaptureDelta(base SharedCapture, d SharedCaptureDelta) (SharedCapture, error) {
 	if base.Header.Tick != d.BaselineTick {
 		return SharedCapture{}, fmt.Errorf(
@@ -160,8 +154,27 @@ func DiffWritten(before, written SharedCapture) (WrittenDelta, error) {
 	if err != nil {
 		return WrittenDelta{}, err
 	}
-	d := WrittenDelta{Header: written.Header, World: engine.DiffSharedWorld(before.World, written.World)}
+	d := diffParts(before, written)
+	d.Header, d.World = written.Header, engine.DiffSharedWorld(before.World, written.World)
 	d.Header.Integrity = sum
+	return d, nil
+}
+
+// HoldsBesideWorld reports whether before already holds all written carries outside
+// its component stores: the clock, the allocator, the streams, every carrier's
+// record, the FSM and the status surface.
+func HoldsBesideWorld(before, written SharedCapture) bool {
+	d := diffParts(before, written)
+	b, w := before.World, written.World
+	return d.Changed == 0 && len(d.Systems) == 0 &&
+		before.Header.Run == written.Header.Run && before.Header.Tick == written.Header.Tick &&
+		b.NextEntity == w.NextEntity && b.Created == w.Created && b.Destroyed == w.Destroyed
+}
+
+// diffParts is a WrittenDelta's parts beside the world: the whole ones that changed,
+// and the system records that moved.
+func diffParts(before, written SharedCapture) WrittenDelta {
+	var d WrittenDelta
 	if !reflect.DeepEqual(before.Streams, written.Streams) {
 		d.Changed |= writtenStreams
 		d.Streams = written.Streams
@@ -177,14 +190,14 @@ func DiffWritten(before, written SharedCapture) (WrittenDelta, error) {
 	if !sameSystemSet(before.Systems, written.Systems) {
 		d.Changed |= writtenSystemSet
 		d.Systems = written.Systems
-		return d, nil
+		return d
 	}
 	for i, r := range written.Systems {
 		if !bytes.Equal(r.Data, before.Systems[i].Data) {
 			d.Systems = append(d.Systems, r)
 		}
 	}
-	return d, nil
+	return d
 }
 
 // ApplyWritten rebuilds what a WrittenDelta describes from the capture held before

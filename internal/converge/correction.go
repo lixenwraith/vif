@@ -887,10 +887,10 @@ func (c *Corrections) Apply() {
 // rather than one tick later.
 func (c *Corrections) drainTransport() { c.inst.DrainOffTick() }
 
-// resolve turns one correction body into a whole capture, reconstructing a delta
-// against the baseline this instance holds. Reconstruction re-checks the capture's
-// own integrity hash, so a delta applied to the wrong baseline is refused rather
-// than installed as a world nobody has.
+// resolve turns one correction body into a whole capture proved by its own integrity
+// hash, reconstructing a delta against the baseline this instance holds, so a corrupt
+// keyframe or a delta applied to the wrong baseline is refused rather than installed
+// as a world nobody has.
 func (c *Corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
 	kind, full, delta, err := snapshot.DecodeCorrection(body)
 	if err != nil {
@@ -909,6 +909,9 @@ func (c *Corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
 		return snapshot.SharedCapture{}, errors.New("correction carries a term this instance does not hold")
 	}
 	if kind == snapshot.CorrectionKeyframe {
+		if sum, err := snapshot.Integrity(full); err != nil || sum != full.Header.Integrity {
+			return snapshot.SharedCapture{}, errors.New("correction keyframe does not match its integrity hash")
+		}
 		c.SetBaseline(full)
 		return full, nil
 	}

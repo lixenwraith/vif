@@ -171,7 +171,7 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 		}
 		r.Authority.Store(c.Authority)
 		r.Term.Store(uint64(cap.Header.Term))
-		_, err = a.writeSharedLocked(cap, true, true)
+		_, err = a.writeSharedLocked(cap, &before, true)
 	})
 	return err
 }

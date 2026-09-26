@@ -1381,6 +1381,46 @@ func TestATowerGuestAnswersHashOnly(t *testing.T) {
 	}
 }
 
+// TestACorrectionThatMovesNothingWritesNothing: a correction the live world already
+// equals on the compared surface is taken as a hash-only answer is, so the mirror of
+// a cursor another participant owns keeps what its owner's sync last wrote there.
+func TestACorrectionThatMovesNothingWritesNothing(t *testing.T) {
+	t.Parallel()
+	host, apps := liveInstance(t, 0x0A12)
+	guest := apps[1]
+
+	var mirror core.Entity
+	var want int64
+	guest.World().RunSafe(func() {
+		w := guest.World()
+		mirror = w.Resources.Player.Slot(0)
+		if e, ok := w.Components.Energy.GetPtr(mirror); ok {
+			e.Current += 1234
+			want = e.Current
+		}
+	})
+	if want == 0 {
+		t.Fatal("the host's cursor carries no energy mirror on the guest")
+	}
+	applied := statOf(guest, "snapshot.corrections_applied")
+	deliverCorrectionNow(t, host, apps[1:], func() { tickAll(apps) })
+	if statOf(guest, "snapshot.corrections_applied") == applied || statOf(guest, "snapshot.corrections_hash_only") > 0 {
+		t.Fatal("the guest installed no whole correction; nothing was asked of the write")
+	}
+	if n := statOf(guest, "snapshot.correction_entries"); n != 0 {
+		t.Fatalf("the correction moved %d entries; the world was meant to equal it", n)
+	}
+	var got int64
+	guest.World().RunSafe(func() {
+		if e, ok := guest.World().Components.Energy.GetComponent(mirror); ok {
+			got = e.Current
+		}
+	})
+	if got != want {
+		t.Fatalf("the mirror reads %d after a correction that moved nothing, its owner's sync wrote %d", got, want)
+	}
+}
+
 // TestAnInstallMeasuresNoLocalCursorState: every instance re-derives its cursors'
 // control and keeps the owner-authored cells the sync stream carries, so a
 // correction measures the shared state it moved and nothing of those.
