@@ -7,6 +7,7 @@ package prof
 import (
 	"context"
 	"fmt"
+	"runtime/metrics"
 	"runtime/pprof"
 	"runtime/trace"
 	"sort"
@@ -69,26 +70,38 @@ var phases = [phaseCount]struct {
 
 // Timer accumulates one module's calls within the open window
 type Timer struct {
-	label  string          // "<kind> <name>"
-	leaf   bool            // ranked, and labels CPU samples while a capture runs
-	labels context.Context // pprof labels applied while a CPU capture runs
-	region *trace.Region   // open while an execution trace runs; one goroutine at a time
+	label  string            // "<kind> <name>"
+	leaf   bool              // ranked, and labels CPU samples while a capture runs
+	labels context.Context   // pprof labels applied while a CPU capture runs
+	region *trace.Region     // open while an execution trace runs; one goroutine at a time
+	heap   [1]metrics.Sample // the process's allocation counter, read around a leaf call
 
-	ns, calls, max atomic.Int64
+	ns, calls, max, bytes atomic.Int64
 }
 
 func newTimer(kind Kind, name string, leaf bool) *Timer {
-	return &Timer{
+	t := &Timer{
 		label:  kindLabel[kind] + " " + name,
 		leaf:   leaf,
 		labels: pprof.WithLabels(context.Background(), pprof.Labels("kind", kindLabel[kind], "module", name)),
 	}
+	t.heap[0].Name = "/gc/heap/allocs:bytes"
+	return t
+}
+
+// allocated reads the process-wide allocation counter. It advances a span of
+// small objects at a time and counts every goroutine, so per-call deltas only
+// estimate a module's allocation; about 400 ns, paid only while profiling.
+func (t *Timer) allocated() uint64 {
+	metrics.Read(t.heap[:])
+	return t.heap[0].Value.Uint64()
 }
 
 // Span is one timed call in flight; the zero Span is a call nobody measures
 type Span struct {
 	t     *Timer
 	start int64
+	heap  uint64 // allocation counter at Begin; zero when allocation is not read
 }
 
 // End closes the call and folds it into its timer
@@ -98,6 +111,9 @@ func (s Span) End() {
 	}
 	d := now() - s.start
 	t := s.t
+	if s.heap != 0 {
+		t.bytes.Add(int64(t.allocated() - s.heap))
+	}
 	t.ns.Add(d)
 	t.calls.Add(1)
 	for m := t.max.Load(); d > m && !t.max.CompareAndSwap(m, d); m = t.max.Load() {
@@ -118,14 +134,21 @@ func now() int64 { return max(int64(time.Since(epoch)), 1) }
 
 // ModuleStat is one leaf timer's cost over a closed window
 type ModuleStat struct {
-	Label    string
-	Share    float64 // percent of the window's wall time
-	Avg, Max time.Duration
-	PerSec   float64
+	Label       string
+	Share       float64 // percent of the window's wall time
+	Avg, Max    time.Duration
+	PerSec      float64
+	AllocPerSec float64 // bytes, estimated
 }
 
 func (m ModuleStat) String() string {
 	return m.Label + " " + formatDur(m.Avg) + " " + strconv.FormatFloat(m.Share, 'f', 1, 64) + "%"
+}
+
+// Detail is the report's line for the module
+func (m ModuleStat) Detail() string {
+	return fmt.Sprintf("%.1f%%  avg %s  max %s  %.0f/s  ~%.1f KiB/s alloc",
+		m.Share, formatDur(m.Avg), formatDur(m.Max), m.PerSec, m.AllocPerSec/1024)
 }
 
 // Profiler times one world's modules and publishes into its status registry
@@ -194,7 +217,11 @@ func (p *Profiler) Begin(t *Timer) Span {
 	if trace.IsEnabled() {
 		t.region = trace.StartRegion(context.Background(), t.label)
 	}
-	return Span{t: t, start: now()}
+	var heap uint64
+	if t.leaf && p.on.Load() {
+		heap = t.allocated()
+	}
+	return Span{t: t, start: now(), heap: heap}
 }
 
 // BeginPhase opens a timed engine phase
@@ -296,19 +323,21 @@ func (p *Profiler) Report() []ModuleStat {
 }
 
 // window is one timer's drained accumulation
-type window struct{ ns, calls, max int64 }
+type window struct{ ns, calls, max, bytes int64 }
 
 func (t *Timer) drain() window {
-	return window{ns: t.ns.Swap(0), calls: t.calls.Swap(0), max: t.max.Swap(0)}
+	return window{ns: t.ns.Swap(0), calls: t.calls.Swap(0), max: t.max.Swap(0), bytes: t.bytes.Swap(0)}
 }
 
 func (w window) stat(label string, span int64) ModuleStat {
+	perSec := float64(time.Second) / float64(span)
 	return ModuleStat{
-		Label:  label,
-		Share:  float64(w.ns) * 100 / float64(span),
-		Avg:    time.Duration(w.ns / w.calls),
-		Max:    time.Duration(w.max),
-		PerSec: float64(w.calls) * float64(time.Second) / float64(span),
+		Label:       label,
+		Share:       float64(w.ns) * 100 / float64(span),
+		Avg:         time.Duration(w.ns / w.calls),
+		Max:         time.Duration(w.max),
+		PerSec:      float64(w.calls) * perSec,
+		AllocPerSec: float64(w.bytes) * perSec,
 	}
 }
 

@@ -15,11 +15,15 @@ import (
 // samples kind=<sys|evt|draw|core> module=<name>, which pprof -tagfocus selects
 var labelling atomic.Bool
 
+// mutexing is set while a mutex capture samples contention
+var mutexing atomic.Bool
+
 // Capture kinds, each a file prefix and extension in the diagnostics directory
 var (
 	captureCPU   = [2]string{"vif-cpu-", ".pprof"}
 	captureHeap  = [2]string{"vif-heap-", ".pprof"}
 	captureTrace = [2]string{"vif-trace-", ".out"}
+	captureMutex = [2]string{"vif-mutex-", ".pprof"}
 )
 
 // StartCPU profiles the next d into dir; done reports the file once it closes
@@ -55,6 +59,28 @@ func StartTrace(dir string, d time.Duration, done func(path string, err error)) 
 	time.AfterFunc(d, func() {
 		trace.Stop()
 		done(path, f.Close())
+	})
+	return path, nil
+}
+
+// StartMutex samples every lock contention for the next d, then writes the
+// mutex profile: time others waited, by the stack that released the lock. Off,
+// the runtime skips sampling; the profile accumulates over a process's captures.
+func StartMutex(dir string, d time.Duration, done func(path string, err error)) (string, error) {
+	if !mutexing.CompareAndSwap(false, true) {
+		return "", errors.New("a mutex capture is already running")
+	}
+	f, path, err := create(dir, captureMutex)
+	if err != nil {
+		mutexing.Store(false)
+		return "", err
+	}
+	runtime.SetMutexProfileFraction(1)
+	time.AfterFunc(d, func() {
+		runtime.SetMutexProfileFraction(0)
+		err := pprof.Lookup("mutex").WriteTo(f, 0)
+		mutexing.Store(false)
+		done(path, errors.Join(err, f.Close()))
 	})
 	return path, nil
 }

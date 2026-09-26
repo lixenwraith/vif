@@ -267,7 +267,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:log rec [ticks\|flush\|fsm [on\|off]]` | Configure, request, or transition-trigger the flight recorder. |
 | `:telemetry [save\|hud\|unpin]`, `:t` | Open the telemetry overlay; `save` writes a point-in-time status snapshot, `unpin` clears pins. |
 | `:hud [on\|off]` | Toggle or set the pinned-card HUD; `:t hud` is the same. |
-| `:debug`, `:d [prof [on\|off]\|cpu [s]\|heap\|trace [s]]` | Open the profiler report, toggle the profiler, or write a CPU profile, heap profile or execution trace; see [Logging and diagnostics](logging-and-diagnostics.md) §11. |
+| `:debug`, `:d [prof [on\|off]\|cpu [s]\|heap\|mutex [s]\|trace [s]]` | Open the profiler report, toggle the profiler, or write a CPU, heap or mutex profile or an execution trace; see [Logging and diagnostics](logging-and-diagnostics.md) §11. |
 | `:emit <EventName> [{ TOML payload }]` | Construct and publish a registered event for testing. |
 | `:energy <value>`, `:heat <0-100>`, `:boost` | Directly manipulate player state for development. |
 | `:god`, `:demon` | Apply high positive/negative energy test states. |

@@ -791,7 +791,8 @@ removed. `-dev` defaults **on** for race builds and is disabled with
 `:d prof` times every system `Update`, every system's event handlers, every
 renderer and the engine phases around them, and samples the process, once per
 `ProfWindow` (1 s) of running game. Off, a timed call costs one atomic load; on,
-about 90 ns. A window closes on a tick and never spans a pause. It publishes into
+about 90 ns, plus two ~400 ns reads of the allocation counter around a leaf. A
+window closes on a tick and never spans a pause. It publishes into
 activity-gated registry groups, so their cards exist only while it runs and reach
 the HUD, snapshots, the recorder, `vif-log` and `/metrics` like other telemetry:
 
@@ -802,8 +803,10 @@ the HUD, snapshots, the recorder, `vif-log` and `/metrics` like other telemetry:
 | `proc` | CPU user/sys percent of one core, peak RSS, Go-mapped and live-heap MiB, allocation MiB/s and objects/s, GC cycles/s, goroutines, block reads and writes/s, voluntary and involuntary context switches/s; the operating-system counters read zero off unix |
 
 Starting it pins `prof` and `prof.top`; `:d` opens the whole report, every
-module ranked by share with its mean, max and calls per second. The groups
-measure the process: a reset does not clear them and no comparison reads them.
+module ranked by share with its mean, max, calls per second and allocation rate.
+That rate is an estimate: the counter it reads is process-wide and advances a
+span of small objects at a time. The groups measure the process: a reset does
+not clear them and no comparison reads them.
 
 Captures land in the log directory, also in a `novlog` build, and run whether
 or not the profiler is on:
@@ -812,6 +815,7 @@ or not the profiler is on:
 |---|---|---|
 | `:d cpu [s]` | `vif-cpu-<time>.pprof`; 10 s default, 5 min cap | `go tool pprof`; samples carry `kind` and `module` labels, so `-tagfocus module=drain` isolates one |
 | `:d heap` | `vif-heap-<time>.pprof`, after a GC | `go tool pprof -sample_index=alloc_space` for allocation sites, `inuse_space` for retention |
+| `:d mutex [s]` | `vif-mutex-<time>.pprof`; every contention sampled only while it runs | `go tool pprof`; wait time by the stack that held the lock. Cumulative over a process's captures, so `-base` an earlier one to isolate a later one |
 | `:d trace [s]` | `vif-trace-<time>.out` | `go tool trace`; every timed call is a region named `<kind> <name>` |
 
 ## 12. Control surface
@@ -883,7 +887,7 @@ use their independently configured journal directory.
 | `:log rec fsm [on\|off]` | Toggle the FSM transition trigger |
 | `:t save` | Write a standalone snapshot (§7) |
 | `:d`, `:d prof [on\|off]` | Profiler report; start or stop the profiler (§11) |
-| `:d cpu [s]`, `:d heap`, `:d trace [s]` | Write a CPU profile, heap profile or execution trace (§11) |
+| `:d cpu [s]`, `:d heap`, `:d mutex [s]`, `:d trace [s]` | Write a CPU, heap or mutex profile, or an execution trace (§11) |
 | `:content` | Corpus telemetry in the status bar |
 
 `:log` reports `log <path> | level <L> | scope <S> | stat <N> | rec <M>`.

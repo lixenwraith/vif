@@ -180,10 +180,11 @@ var topics = []topicDef{
 	{
 		Key: "debug", Title: "DEBUG COMMANDS",
 		Entries: []entryDef{
-			{Keys: ":d  :debug", Desc: "Profiler report: phases, process, and every timed module ranked by its share of the last second of play"},
+			{Keys: ":d  :debug", Desc: "Profiler report: phases, process, and every timed module ranked by its share of the last second of play, with an allocation estimate"},
 			{Keys: ":d prof [on|off]", Desc: "Time every system, event handler, renderer and engine phase, and sample CPU, memory, GC and I/O; starting pins the prof cards to the HUD"},
 			{Keys: ":d cpu [s]", Desc: "CPU profile for s seconds, default 10, to vif-cpu-<time>.pprof; samples carry kind and module labels for pprof -tagfocus"},
 			{Keys: ":d heap", Desc: "Heap profile to vif-heap-<time>.pprof: live and allocated space by call site"},
+			{Keys: ":d mutex [s]", Desc: "Mutex profile for s seconds, default 10, to vif-mutex-<time>.pprof: lock wait time by the holder's stack"},
 			{Keys: ":d trace [s]", Desc: "Execution trace for s seconds to vif-trace-<time>.out with a region per timed module, for go tool trace"},
 			{Keys: ":speed [rate]  :sp [rate]", Desc: "Solo simulation rate: 1/8 1/4 1/2 1 2 4 8, or + - reset; unavailable live"},
 			{Keys: ":step [n]  :st [n]", Desc: "Solo pause and advance n settled game ticks; unavailable live"},

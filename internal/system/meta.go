@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/component"
@@ -585,8 +584,7 @@ func (s *MetaSystem) handleDebugRequest() {
 	report := p.Report()
 	modules := make([]core.CardEntry, 0, len(report))
 	for _, m := range report {
-		modules = append(modules, core.CardEntry{Key: m.Label, Value: fmt.Sprintf(
-			"%.1f%%  avg %v  max %v  %.0f/s", m.Share, m.Avg.Round(time.Microsecond), m.Max.Round(time.Microsecond), m.PerSec)})
+		modules = append(modules, core.CardEntry{Key: m.Label, Value: m.Detail()})
 	}
 	if len(modules) == 0 {
 		modules = append(modules, core.CardEntry{Key: "collecting", Value: "the first window closes after a second of play"})

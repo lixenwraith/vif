@@ -676,11 +676,14 @@ func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true, KeepPaused: true}
 	}
 
-	switch kind := strings.ToLower(args[0]); kind {
+	kind := strings.ToLower(args[0])
+	if _, ok := timedCaptures[kind]; ok {
+		handleCaptureCommand(ctx, kind, args[1:])
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	switch kind {
 	case "p", "prof":
 		handleProfCommand(ctx, args[1:])
-	case "cpu", "trace":
-		handleCaptureCommand(ctx, kind, args[1:])
 	case "heap":
 		dir := diagnosticsDir()
 		core.Go(func() {
@@ -690,7 +693,7 @@ func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 		ctx.SetStatusMessage("Writing heap profile", parameter.StatusMessageDefaultTimeout, false)
 		ctx.SetLastCommand(":d heap")
 	default:
-		setCommandError(ctx, "Usage: :debug [prof [on|off]|cpu [s]|heap|trace [s]]")
+		setCommandError(ctx, "Usage: :debug [prof [on|off]|cpu [s]|heap|mutex [s]|trace [s]]")
 	}
 	return CommandResult{Continue: true, KeepPaused: false}
 }
@@ -721,7 +724,17 @@ func handleProfCommand(ctx *engine.GameContext, args []string) {
 	ctx.SetLastCommand(":d prof " + toggleWord(on))
 }
 
-// handleCaptureCommand starts a timed CPU profile or execution trace
+// timedCaptures are the :d captures that run for a duration, by subcommand
+var timedCaptures = map[string]struct {
+	start func(dir string, d time.Duration, done func(string, error)) (string, error)
+	label string
+}{
+	"cpu":   {prof.StartCPU, "CPU profile"},
+	"trace": {prof.StartTrace, "Trace"},
+	"mutex": {prof.StartMutex, "Mutex profile"},
+}
+
+// handleCaptureCommand starts a timed capture
 func handleCaptureCommand(ctx *engine.GameContext, kind string, args []string) {
 	d := parameter.ProfCaptureDefault
 	if len(args) > 0 {
@@ -733,11 +746,9 @@ func handleCaptureCommand(ctx *engine.GameContext, kind string, args []string) {
 		d = time.Duration(secs) * time.Second
 	}
 
-	start, label := prof.StartCPU, "CPU profile"
-	if kind == "trace" {
-		start, label = prof.StartTrace, "Trace"
-	}
-	path, err := start(diagnosticsDir(), d, func(path string, err error) { reportCapture(ctx, label, path, err) })
+	capture := timedCaptures[kind]
+	label := capture.label
+	path, err := capture.start(diagnosticsDir(), d, func(path string, err error) { reportCapture(ctx, label, path, err) })
 	if err != nil {
 		setCommandError(ctx, label+" failed: "+err.Error())
 		return
