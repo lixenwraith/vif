@@ -530,11 +530,13 @@ Both the already-scheduled queue and later arrivals apply the same classificatio
 ### 4.2 Mesh relay
 
 Relays forward each newly admitted source epoch except along its arrival edge.
-When the authority commits a raw guest epoch it is the copy's origin: it excludes
-the producer instead, because the incoming intermediary still needs the committed
-copy, and the hop count restarts. A per-source 64-epoch window admits out-of-order
-paths once and suppresses duplicates; the hop limit bounds forwarding. Owner-state
-relays preserve their message type and use the same committed return path.
+When the authority commits a raw guest epoch it is the copy's origin: the hop
+count restarts, and it excludes the producer instead of the arrival edge, because
+the incoming intermediary still needs the committed copy. A producer that carried
+another participant's raw artifact recently is a relay and is not excluded; any
+producer forwards its own committed copy once to its other links. A per-source
+64-epoch window admits out-of-order paths once and suppresses duplicates; the hop
+limit bounds forwarding. Owner-state syncs take the same paths.
 
 Owner-state sync uses a per-slot sequence. Correction chunks carry the authority
 term and capture tick unchanged. A relay serves selective pages only from retained

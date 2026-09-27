@@ -62,9 +62,9 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. Every host arms the same mid-run gate once its own lobby is done, so a reconnect takes one path whether the session started with `-host`, `-serve`, a script, or `:host`. |
 | Roster | Every admitted peer holds an identity, a term and a vote; a roster slot binds it to a cursor and makes it a participant. The coordinator of a dedicated host holds no slot, so it is a peer and not a participant, and a session of one guest has one participant in a roster of two. |
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
-| Playout lead | Per participant (§3.5): a guest's own round trip to the authority plus a jitter allowance and a relay tick, less how late the authority's epochs land on it; the authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
+| Playout lead | Per participant (§3.5): a guest's own round trip to the authority plus a jitter allowance and a relay tick, less how late the authority's epochs land on it; behind a relay, the round trip is how long its own epochs take to come back committed. The authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
 | Commit and pacing | The authority commits every guest crossing — as stamped, late at its next tick, or void past `NetworkCommitLateTicks` — and relays only the committed copy. Every guest paces its tick interval so the authority's epochs land inside its band. A participant whose own crossings stay late is evicted by policy (§3.5). |
-| Mesh and relay | Committed epochs, owner state, corrections, and authority records flood with per-source duplicate suppression; a raw epoch travels only toward the authority, and its committed copy floods back through every relay it crossed. A relay serves selective repair to the participants behind it from retained authority content, but they do not yet converge ([Todo](todo.md#converge-participants-behind-a-relay)). |
+| Mesh and relay | Committed epochs, owner state, corrections, and authority records flood with per-source duplicate suppression; a raw epoch travels only toward the authority, and its committed copy floods back through every relay it crossed. A relay serves selective repair to the participants behind it from retained authority content, and forwards its own committed copies to them; the authority keeps the keyframe floor while anyone is behind a relay, since no answer on its own links proves them current. |
 | Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is never elected (§5.3). |
 | Host loss | `-authority migrate` (default off `-serve`): **the first survivor in the succession chain** takes the next term, with no vote, because every survivor computes it from state it already holds identically. `-authority host` (default on `-serve`): nobody takes it and every survivor continues alone. |
 | Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, and tick interval, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted rather than compared — `PeerIdentity.SessionFrom` takes the coordinator's, and a scenario no local root holds arrives over the wire. The corpus is neither: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
@@ -281,7 +281,9 @@ Each participant stamps its own crossings with the lead its own link asks for, a
 nobody defers by anyone else's. A guest's lead (`ownLead`) is its round trip to the
 authority plus `NetworkBarrierJitterMargin` times its variation, plus
 `NetworkRelaySlackTicks` for the authority to relay it, less how late the
-authority's epochs already land on it; the authority's own is one tick. It rises at
+authority's epochs already land on it; the authority's own is one tick. Behind a
+relay no link measures that trip, so it is the slowest recent return of the
+guest's own committed epochs, which reach only a participant behind a relay. It rises at
 once and falls after `NetworkBarrierRenegotiateTicks` of a lower reading. Each change
 is a local, journaled `EventPlayoutLead`, so a reproduction switches on the same tick.
 
@@ -326,7 +328,9 @@ each direct peer according to that link's cadence:
 3. If the receiver produces the same root, acknowledge a hash-only correction and
    install the authority header without transferring state. That answer proves the
    receiver holds the authority's world, so while every peer has proved it within
-   half the convergence floor the keyframe cadence sends none.
+   half the convergence floor the keyframe cadence sends none. A participant behind
+   a relay proves nothing on the authority's links, so while one is present the
+   floor sends a whole world regardless.
 4. Otherwise the receiver asks for the section summaries, compares page hashes only
    in differing sections, and the authority returns the pages that differ. A repair
    wider than one frame or than the keyframe it stands in for is not sent: the peer

@@ -166,6 +166,9 @@ func TestChainRelayReachesANonAdjacentParticipant(t *testing.T) {
 	}
 }
 
+// TestGuestArtifactsReturnThroughTheirRelay: every guest's crossing and owner sync
+// reaches every other participant, a relay's own included, with no correction to
+// hide one that never arrived.
 func TestGuestArtifactsReturnThroughTheirRelay(t *testing.T) {
 	for _, topology := range []struct {
 		name  string
@@ -183,33 +186,37 @@ func TestGuestArtifactsReturnThroughTheirRelay(t *testing.T) {
 			for range 8 {
 				tickAll(apps)
 			}
-			owner, cursor := apps[len(apps)-1], local[len(local)-1]
-			want := cursorPosition(owner, cursor)
-			want.X += 3
-			owner.Context().PushCrossing(event.EventCursorMoveRequest,
-				&event.CursorMoveRequestPayload{Entity: cursor, X: want.X, Y: want.Y})
-			owner.Settle()
-			owner.World().RunSafe(func() {
-				shield, ok := owner.World().Components.Shield.GetPtr(cursor)
-				if !ok {
-					t.Fatal("owner has no shield")
-				}
-				shield.RadiusX = 77.25
-			})
-			// No corrections run: every mirror must receive the committed artifacts.
+			want := make([]component.PositionComponent, len(apps))
+			for i := 1; i < len(apps); i++ {
+				owner, cursor := apps[i], local[i]
+				want[i] = cursorPosition(owner, cursor)
+				want[i].X += 3
+				owner.Context().PushCrossing(event.EventCursorMoveRequest,
+					&event.CursorMoveRequestPayload{Entity: cursor, X: want[i].X, Y: want[i].Y})
+				owner.Settle()
+				owner.World().RunSafe(func() {
+					shield, ok := owner.World().Components.Shield.GetPtr(cursor)
+					if !ok {
+						t.Fatal("owner has no shield")
+					}
+					shield.RadiusX = 70 + float64(i)
+				})
+			}
 			for range 24 {
 				tickAll(apps)
 			}
 			for i, a := range apps {
-				if got := cursorPosition(a, cursor); got != want {
-					t.Errorf("participant %d cursor = %+v, want %+v", i+1, got, want)
-				}
-				a.World().RunSafe(func() {
-					shield, ok := a.World().Components.Shield.GetComponent(cursor)
-					if !ok || shield.RadiusX != 77.25 {
-						t.Errorf("participant %d shield radius = %g, want 77.25", i+1, shield.RadiusX)
+				for j := 1; j < len(apps); j++ {
+					if got := cursorPosition(a, local[j]); got != want[j] {
+						t.Errorf("participant %d sees %d's cursor at %+v, want %+v", i+1, j+1, got, want[j])
 					}
-				})
+					a.World().RunSafe(func() {
+						shield, ok := a.World().Components.Shield.GetComponent(local[j])
+						if !ok || shield.RadiusX != 70+float64(j) {
+							t.Errorf("participant %d sees %d's shield radius %g, want %g", i+1, j+1, shield.RadiusX, 70+float64(j))
+						}
+					})
+				}
 			}
 		})
 	}
