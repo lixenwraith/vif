@@ -157,15 +157,29 @@ operator's.
 Diagnoses and what each item follows from are in
 [Troubleshooting](troubleshooting.md).
 
-### Validate delayed relay convergence
+### Converge participants behind a relay
 
 - Priority: P1
-- Affected files: `internal/app/netem_test.go`, `internal/converge`
+- Affected files: `internal/system/network.go`, `internal/converge/relay.go`,
+  `internal/converge/correction.go`, `internal/converge/selective.go`
 
-Owner-state message typing and committed return paths are fixed, with leaf-origin
-coverage in stars, chains, branches and cycles. Repeat the audit's delayed relay
-scenario to identify any remaining cause of its low hash-only rate; the routing
-regression proves delivery, not the full ≥95% convergence target.
+In a tree of four (1–2, 2–3, 2–4) at four-tick links, paced one path behind the
+authority, participant 2 answers 96% of manifests hash-only and 3 and 4 none. Causes:
+
+- `ownLead` measures the link to the authority, which a leaf lacks, so its lead is
+  the default 3 ticks against 11 on a direct guest and nearly every crossing it
+  makes commits late (385 in 400 ticks).
+- A repair too wide to relay sets a leaf's `wantKeyframe`; a relay refuses every
+  keyframe request, and only a whole world clears the latch.
+- `allProvedLocked` and `canAnswerEveryParticipantLocked` read direct peers only, so
+  the relay's own proofs can suppress the floor and the flood behind it.
+
+Shipped sessions are stars, so no player meets this yet. Undecided is what a relay
+owes its leaves: forward the authority's exchange to them as if direct, or serve
+their corrections itself from worlds it has proved, with keyframes a leaf verifies
+against the authority's root and one proof per subtree upstream. The authority stays
+the only commit point either way. Keeping the floor for every participant no direct
+proof covers is the stopgap under both.
 
 ### Reduce exact snapshot and navigation costs at the map limit
 
@@ -173,26 +187,47 @@ regression proves delivery, not the full ≥95% convergence target.
 - Affected files: `internal/snapshot`, `internal/app/capture.go`,
   `internal/engine/snapshot_delta.go`, `internal/gen-manifest`, `pkg/navigation`
 
-Exact wall-section reuse and baseline correction-body reuse are implemented and
-measured in the [audit](multiplayer-scaling.md). Next reduce integrity/capture
-work, generate equivalent typed comparisons, and measure further immutable
-sharing and navigation/storage savings. Preserve pointer/slice mutation handling,
-membership, ordering, normalization, directions, distances and phase; per-store
-write counters remain rejected. Peer-cadence coalescing, capacity estimation,
-diagnostic rates and encoding changes need separate review. Validate isolated-host
-RSS, actual browser performance and real links before claiming the fleet envelope.
+At td with 16 players the host spends about 1.2 of its 1.4 CPU-s/s on protocol and
+an instance averages about 250 MiB of heap, against the pod's 500m and 160 MiB
+(multi-player §6). Per round the seal (about 65 ms) now costs twice the index, whose
+remainder is mostly the static wall positions. Each step below must stay exact:
+
+- Reuse the wall store's own encoding in `Integrity` and the capture encoders, under
+  the builder's owned-value comparison: each seal and keyframe re-encodes every wall.
+- Reuse the row encodings of unchanged entries in every store. That also replaces
+  the wall special case in `ManifestBuilder` with a table indexed by store.
+- Generate typed comparisons for `DiffCapture` and `countStoreDifference`, which
+  call `reflect.DeepEqual` per entry.
+- Measure navigation's share again, then exact storage and loop work in
+  `FlowField.Compute` with identical directions, distances and throttle phase.
+
+Per-store write counters stay rejected: a cache compares values it owns.
+
+### Decide the authority's fan-out and publication cadence
+
+- Priority: P2
+- Affected files: `internal/system/network.go`, `internal/converge/correction.go`
+
+A star's authority relays every participant's epochs and owner syncs to every other:
+at 16 players 4,444 epochs and 736 syncs a second, 1.4 MB/s framed on the tower map
+and 2.8 MB/s on td before deflate. Rounds follow the union of peer deadlines, 7.2 a
+second at td, and whole bodies add 2.2 MB/s there. Candidates, each a message-set or
+cadence change: one bundle per guest per tick carrying every source's committed
+frames with their epoch markers, which pacing and fences read; owner syncs as deltas;
+and rounds aligned across peers.
 
 ### Project a correction outside the live lock
 
 - Priority: P2
 - Affected files: `internal/app/snapshot_stage.go`
 
-At 500×250, the audit's 16-tick projection costs 49 ms, plus 75 ms of capture and
-comparison/write under the lock. Reduce those costs first. Any out-of-lock or
-incremental design must preserve §3.3: fence membership, exclusion of pending
-barrier crossings, ledger settlement before projection, journal place/mark, and
-no live tick between final projection and write. Validate the frozen inputs and
-bound the final tail or retry. WASM gains scheduling time, not parallel CPU.
+At td an install that projects nothing already holds the live lock 40–70 ms for the
+capture pair, comparison and write, and each projected tick adds up to a simulation
+tick, so a repair 16 ticks behind holds it past 100 ms. Reduce the O(E) part first.
+Any out-of-lock or incremental design must keep §3.3: fence membership, pending
+barrier crossings not fed, the ledger settled before projection, the journal's place
+and mark, and no live tick between the final projection and the write. WASM gains
+scheduling time, not parallel CPU.
 
 ### Add a UDP transport
 

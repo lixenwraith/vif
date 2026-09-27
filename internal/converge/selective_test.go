@@ -6,13 +6,16 @@ package converge
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
-func TestFallbackBytesFollowTheirBaseline(t *testing.T) {
+// TestBaselineBytesFollowTheirBaseline: the fallback and join bodies a baseline is
+// served in encode that baseline, never one it replaced.
+func TestBaselineBytesFollowTheirBaseline(t *testing.T) {
 	host, guest := exchange(t)
 	check := func() {
 		t.Helper()
@@ -37,6 +40,11 @@ func TestFallbackBytesFollowTheirBaseline(t *testing.T) {
 			if err != nil || !done || !bytes.Equal(got, want) {
 				t.Fatalf("fallback differs from its current baseline: complete=%t err=%v", done, err)
 			}
+		}
+		join, tick, err := host.c.KeyframeAt(host.c.baseline.Header.Tick, time.Now())
+		want, wantErr := snapshot.EncodeCapture(host.c.baseline)
+		if err != nil || wantErr != nil || tick != host.c.baseline.Header.Tick || !bytes.Equal(join, want) {
+			t.Fatalf("join body differs from its current baseline: err=%v", err)
 		}
 	}
 	check()

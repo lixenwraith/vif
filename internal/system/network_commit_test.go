@@ -12,16 +12,19 @@ import (
 	"github.com/lixenwraith/vif/pkg/linkpace"
 )
 
-// linkedPort is a transport that sends nothing and names its links and their
-// measurements, which is all the commit and the lead read from one.
+// linkedPort names its links and their measurements, which is all the commit and
+// the lead read from one, and keeps what it floods.
 type linkedPort struct {
-	peers []uint32
-	rtt   time.Duration
+	peers   []uint32
+	rtt     time.Duration
+	flooded [][]byte
 }
 
-func (p *linkedPort) Send(uint32, uint8, []byte) bool              { return true }
-func (p *linkedPort) Broadcast(uint8, []byte)                      {}
-func (p *linkedPort) BroadcastExcept(uint32, uint8, []byte)        {}
+func (p *linkedPort) Send(uint32, uint8, []byte) bool { return true }
+func (p *linkedPort) Broadcast(uint8, []byte)         {}
+func (p *linkedPort) BroadcastExcept(_ uint32, _ uint8, b []byte) {
+	p.flooded = append(p.flooded, b)
+}
 func (p *linkedPort) PeerCount() int                               { return len(p.peers) }
 func (p *linkedPort) IsRunning() bool                              { return true }
 func (p *linkedPort) Drain([]network.Inbound) int                  { return 0 }
@@ -90,6 +93,32 @@ func TestTheAuthorityChoosesTheTickALateCrossingApplies(t *testing.T) {
 	s.applyDue(101)
 	if fence := s.AppliedCrossingFences().Seq(2); fence != 3 {
 		t.Fatalf("participant 2's fence is %d after the void crossing, want 3", fence)
+	}
+}
+
+// TestACommittedCopyRestartsItsHopCount: the authority originates the copy it
+// commits, so a raw path that spent most of the hop limit cannot strand it on the
+// way back to the relays behind it.
+func TestACommittedCopyRestartsItsHopCount(t *testing.T) {
+	t.Parallel()
+	port := &linkedPort{peers: []uint32{2}}
+	s := sessionSystem(t, 1, 100, port)
+	body, err := event.EncodeWireBatch(event.WireBatch{
+		Source: 3, ProducedTick: 100, Hops: parameter.NetworkRelayHopLimit - 1,
+		Frames: []event.ScheduledWireFrame{{ApplyTick: 104, Frame: event.WireFrame{
+			Event: "EventGoldJumpRequest", Domain: "shared", Seq: 1,
+		}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.scheduleCrossings(2, body)
+	if len(port.flooded) != 1 {
+		t.Fatalf("the authority flooded %d copies, want the committed one", len(port.flooded))
+	}
+	got, err := event.DecodeWireBatch(port.flooded[0])
+	if err != nil || !got.Committed || got.Hops != 1 {
+		t.Fatalf("committed copy leaves with %d hops (committed %t, err %v), want 1", got.Hops, got.Committed, err)
 	}
 }
 

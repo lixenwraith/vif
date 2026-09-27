@@ -227,8 +227,10 @@ func (c *Corrections) retentionEvidence() (uint64, int) {
 	return newest, len(c.selective.retained)
 }
 
-// Retain an installed authority index for relay and succession proofs.
-// Baseline retention and commit share the same tick, so index it only once.
+// retainInstalled indexes a capture installed whole, so this instance can answer
+// for the authority: a successor proves its world current and a relay serves those
+// behind it. The capture is the authority's byte for byte, so the index carries the
+// authority's root. A keyframe retained as baseline and again on commit is indexed once.
 func (c *Corrections) retainInstalled(cap snapshot.SharedCapture) {
 	if cap.Header.Term == 0 || c.holdsRetention(cap.Header.Tick) {
 		return // not an authoritative artifact, or already answered for
