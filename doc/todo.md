@@ -157,15 +157,45 @@ operator's.
 Diagnoses and what each item follows from are in
 [Troubleshooting](troubleshooting.md).
 
+### Verify relayed owner state and committed return paths
+
+- Priority: P1
+- Affected files: `internal/system/network.go`, `internal/app/mesh_test.go`
+
+The [scaling audit](multiplayer-scaling.md) measured 0–1% hash-only answers in a
+four-participant relay tree. Verify two leads before changing code: owner-state
+forwarding calls `relayRaw`, which sends `MsgEvent`; authority commitment excludes
+the incoming relay edge, which may have other participants behind it. Test a
+leaf-origin crossing and successive owner-state changes without whole-body
+corrections masking delivery. Existing host-origin relay coverage is insufficient.
+
+### Reduce exact snapshot and navigation costs at the map limit
+
+- Priority: P1
+- Affected files: `internal/snapshot`, `internal/app/capture.go`,
+  `internal/engine/snapshot_delta.go`, `internal/gen-manifest`, `pkg/navigation`
+
+The audit and baseline data are committed; implementation and budgets await
+review. Start with detached-value comparisons and immutable canonical-section
+reuse, then typed comparisons and duplicate correction encodings. Cover pointer
+and slice mutations, membership, order, normalization and retained aliases;
+per-store counters remain rejected. Measure exact navigation/storage changes with
+identical directions, distances and phase. Separately review peer-cadence
+coalescing, propagation-aware capacity estimates, diagnostics and encoding changes.
+Repeat native, WASM, isolated-host memory and real-link checks before claiming the
+500m CPU / 192 MiB fleet envelope is met.
+
 ### Project a correction outside the live lock
 
 - Priority: P2
 - Affected files: `internal/app/snapshot_stage.go`
 
-A correction behind the clock is simulated to the present under the live lock,
-about 1.3 ms a tick at 239x64 in the tower region: a repair at a four-tick lead
-projects 16 ticks and commits in 20-40 ms. The suffix could be read under the lock,
-the projection run outside it to the tick read, and only later ticks run inside.
+At 500×250, the audit's 16-tick projection costs 49 ms, plus 75 ms of capture and
+comparison/write under the lock. Reduce those costs first. Any out-of-lock or
+incremental design must preserve §3.3: fence membership, exclusion of pending
+barrier crossings, ledger settlement before projection, journal place/mark, and
+no live tick between final projection and write. Validate the frozen inputs and
+bound the final tail or retry. WASM gains scheduling time, not parallel CPU.
 
 ### Add a UDP transport
 
