@@ -227,17 +227,13 @@ func (c *Corrections) retentionEvidence() (uint64, int) {
 	return newest, len(c.selective.retained)
 }
 
-// retainInstalled records the index over a capture this instance just installed
-// whole, so it can answer for the authority afterwards. A successor proves its world
-// is as new as the last artifact the old authority published; a relay answers for a
-// participant behind it. Both work because the capture is the authority's byte for
-// byte, so an index over it carries the authority's root. A tick already held is
-// not indexed again: a keyframe is retained as the baseline and again on commit.
+// Retain an installed authority index for relay and succession proofs.
+// Baseline retention and commit share the same tick, so index it only once.
 func (c *Corrections) retainInstalled(cap snapshot.SharedCapture) {
 	if cap.Header.Term == 0 || c.holdsRetention(cap.Header.Tick) {
 		return // not an authoritative artifact, or already answered for
 	}
-	index, err := snapshot.BuildManifest(cap, cap.Header.Authority)
+	index, err := c.manifest.Build(cap, cap.Header.Authority)
 	if err != nil {
 		return
 	}
@@ -431,7 +427,17 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 			return
 		}
 	}
-	cap := c.baseline
+	cap, body := c.baseline, c.keyCorrection
+	if body == nil {
+		var err error
+		body, err = snapshot.EncodeCorrection(cap)
+		if err != nil {
+			c.publishMu.Unlock()
+			vlog.Warn("app", "msg", "keyframe fallback encode", "error", err.Error())
+			return
+		}
+		c.keyCorrection = body
+	}
 	// The peer is being served a whole world, so its standing in the selective
 	// exchange starts again from the state it is about to hold.
 	if p := c.peers[id]; p != nil {
@@ -439,11 +445,6 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 	}
 	c.publishMu.Unlock()
 
-	body, err := snapshot.EncodeCorrection(cap)
-	if err != nil {
-		vlog.Warn("app", "msg", "keyframe fallback encode", "error", err.Error())
-		return
-	}
 	chunks, err := network.EncodeSnapshotChunks(cap.Header.Tick, body)
 	if err != nil {
 		vlog.Warn("app", "msg", "keyframe fallback chunk", "error", err.Error())
@@ -668,7 +669,7 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		// Compared under the authority's term, so a capture stamped just before a
 		// handoff was adopted does not differ from the index for that reason alone.
 		mine.Header.Term = want.Header.Term
-		if index, err = snapshot.BuildManifest(mine, want.Authority); err != nil {
+		if index, err = c.manifest.Build(mine, want.Authority); err != nil {
 			vlog.Warn("app", "msg", "manifest comparison index", "error", err.Error())
 			return 0
 		}

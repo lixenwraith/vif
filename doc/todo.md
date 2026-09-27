@@ -157,17 +157,15 @@ operator's.
 Diagnoses and what each item follows from are in
 [Troubleshooting](troubleshooting.md).
 
-### Verify relayed owner state and committed return paths
+### Validate delayed relay convergence
 
 - Priority: P1
-- Affected files: `internal/system/network.go`, `internal/app/mesh_test.go`
+- Affected files: `internal/app/netem_test.go`, `internal/converge`
 
-The [scaling audit](multiplayer-scaling.md) measured 0–1% hash-only answers in a
-four-participant relay tree. Verify two leads before changing code: owner-state
-forwarding calls `relayRaw`, which sends `MsgEvent`; authority commitment excludes
-the incoming relay edge, which may have other participants behind it. Test a
-leaf-origin crossing and successive owner-state changes without whole-body
-corrections masking delivery. Existing host-origin relay coverage is insufficient.
+Owner-state message typing and committed return paths are fixed, with leaf-origin
+coverage in stars, chains, branches and cycles. Repeat the audit's delayed relay
+scenario to identify any remaining cause of its low hash-only rate; the routing
+regression proves delivery, not the full ≥95% convergence target.
 
 ### Reduce exact snapshot and navigation costs at the map limit
 
@@ -175,15 +173,14 @@ corrections masking delivery. Existing host-origin relay coverage is insufficien
 - Affected files: `internal/snapshot`, `internal/app/capture.go`,
   `internal/engine/snapshot_delta.go`, `internal/gen-manifest`, `pkg/navigation`
 
-The audit and baseline data are committed; implementation and budgets await
-review. Start with detached-value comparisons and immutable canonical-section
-reuse, then typed comparisons and duplicate correction encodings. Cover pointer
-and slice mutations, membership, order, normalization and retained aliases;
-per-store counters remain rejected. Measure exact navigation/storage changes with
-identical directions, distances and phase. Separately review peer-cadence
-coalescing, propagation-aware capacity estimates, diagnostics and encoding changes.
-Repeat native, WASM, isolated-host memory and real-link checks before claiming the
-500m CPU / 192 MiB fleet envelope is met.
+Exact wall-section reuse and baseline correction-body reuse are implemented and
+measured in the [audit](multiplayer-scaling.md). Next reduce integrity/capture
+work, generate equivalent typed comparisons, and measure further immutable
+sharing and navigation/storage savings. Preserve pointer/slice mutation handling,
+membership, ordering, normalization, directions, distances and phase; per-store
+write counters remain rejected. Peer-cadence coalescing, capacity estimation,
+diagnostic rates and encoding changes need separate review. Validate isolated-host
+RSS, actual browser performance and real links before claiming the fleet envelope.
 
 ### Project a correction outside the live lock
 

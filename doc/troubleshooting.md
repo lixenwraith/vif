@@ -498,38 +498,31 @@ repair 8 ms staged with its commit bound by projection (`doc/todo.md`). Adopting
 body whose root equals this instance's world at that tick, as proposed, would
 index that world first — 14 ms, more than the install it saves — and was not built.
 
-## 15. Tenth round (2026-09-26–27, multiplayer scaling audit)
+## 15. Tenth round (2026-09-26–27, multiplayer scaling)
 
-The [audit](multiplayer-scaling.md) and [measurement data](multiplayer-scaling-data.json)
-preserve the `2d8c5b6` baseline before optimization. Three 600-tick runs cover each
-combination of 239×64 / 500×250 and 2 / 4 / 8 / 16 playing participants, with
-four-tick mesh latency and deterministic movement/firing. Additional samples
-cover a relay tree, a cursorless host with 16 guests, projection phases and local
-compressed TCP. This checkpoint changes documentation and evidence only.
+The [audit](multiplayer-scaling.md) and [data](multiplayer-scaling-data.json)
+preserve the original 24-run baseline and the implementation comparisons.
+Manifest construction consumed about half the sampled CPU; navigation about 18%.
+Publication cadence, integrity sealing, correction projection, quadratic relay
+traffic and per-instance memory remain substantial costs.
 
-- **Manifest work remains dominant.** About half the combined native CPU builds
-  indexes, even when most answers are hash-only. At the map limit one index costs
-  about 82 ms and allocates 47 MB. Comparing detached wall values costs 0.15 ms
-  against 33 ms to encode them; exact immutable reuse is the first candidate.
-- **Publication is not fixed at 5 Hz.** The union of peer deadlines produced
-  8.53 rounds/s at 16 participants. Every round still captures, seals and indexes
-  when no correction body is owed. Delayed unconstrained links also produced
-  saturation samples; changes to that estimator or cadence require review.
-- **Projection is only part of the lock hold.** At 500×250, a zero-tick commit
-  still spends about 31 ms capturing and comparing. A controlled 16-tick case
-  adds 49 ms of projection to 75 ms of capture/comparison/write. Moving the replay
-  loop alone cannot meet a short lock budget.
-- **Traffic and memory need separate budgets.** The 16-participant host sends
-  3.79 MB/s before stream compression, mostly quadratic epoch/owner-state relays
-  and recovery bodies. The combined post-GC heap is about 4,444 MiB across 16 live
-  and 15 staging worlds, dominated by flow fields, spatial grids and retained
-  manifest allocations; this is not a per-host memory measurement.
-- **Relay convergence needs investigation.** The four-participant tree answered
-  only 0–1% of manifests hash-only. Wrong message kind during owner-state relay
-  and exclusion of the raw-arrival edge after authority commitment are code-level
-  leads, not verified fixes. Targeted counterexamples remain to run.
+Three changes close the first implementation pass:
 
-The original tower hash-only test passed. No full test/vet sweep or race run was
-performed. The user requested a durable commit and verification checkpoint before
-continuing; exact optimizations, proposed budgets and architectural decisions
-remain listed in [Todo](todo.md#multiplayer).
+- **Relay delivery.** Raw owner-state messages retain their message kind. When
+  committing a guest artifact, the authority returns it to intermediaries that
+  have only seen the raw copy. A regression fails before the fixes and passes
+  for stars, chains, branches and cycles without correction-based repair.
+- **Exact wall reuse.** A manifest builder compares an owned copy of every wall
+  entry before sharing the immutable canonical section. Pointer mutation and
+  retained aliases are tested. Large-map warm manifest builds fell from 77.89 to
+  22.76 ms, with allocations falling from 46.51 to 24.22 MB.
+- **Fallback encoding.** All recipients reuse the current baseline's correction
+  envelope. Its lifetime follows publication, refresh, restart and succession.
+  Sixteen large-wall-baseline responses fell from 545.88 to 34.83 ms.
+
+The short two-participant live comparison reduced combined CPU by 24% on the
+small map and 18% on the large map, with unchanged hash-only counts. It measures
+wall reuse with the other fixes held constant; it does not certify the full
+16-participant fleet, browser or delayed-relay budgets. The audit states durations,
+repetitions and remaining work. No wire/schema, hashed-surface or cadence change
+is included. [Todo](todo.md#multiplayer) tracks the open costs and validation.
