@@ -302,6 +302,8 @@ func (c *Corrections) publishRound(force bool) error {
 	c.forgetRestartedRunLocked()
 	tick := c.inst.Position().Tick
 	keyframe := (!c.haveKey || tick >= c.lastKeyTick+c.keyPeriod) && !c.allProvedLocked(ids, tick)
+	// No answer on these links proves a participant behind a relay: it keeps the floor.
+	keyframe = keyframe || c.behindRelay(ids) && tick >= c.lastKeyTick+c.bounds.FloorKeyframeTicks
 	due := c.dueLocked(ids, tick, force, keyframe)
 	if len(due) == 0 {
 		c.publishPlanTelemetryLocked(ids)
