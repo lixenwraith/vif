@@ -155,7 +155,7 @@ Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
 an address, or a `ws(s)://` route a browser joins by. The scheme picks the
 transport and tcp is the default; a bound address (`-host`, `-serve`, `-listen`,
 `:host`) is tcp only, since the WebSocket route is the deployment's bridge in front
-of it, and `udp://` is refused until it exists (see [TODO](todo.md)).
+of it, and any other scheme is refused (§7.3).
 
 `-host` and `:host` are one path: the host plays from its first tick and a joiner
 takes the roster, then the world it names, as a chunked `MsgStateSnapshot` from
@@ -334,6 +334,26 @@ The limiter's own table is bounded by `NetworkAdmitTracked` and swept when an
 unseen host arrives. Past that ceiling it fails closed: a completed TCP handshake
 proves the source address, so a table that wide is many real hosts at once rather
 than one forging them.
+
+### 7.3 Why a byte stream, and not UDP or ICMP
+
+Everything above the dial assumes one reliable, ordered stream per link: deflate
+spans messages, and handshakes, chunked captures and crossings rely on arrival
+order. UDP would mean rebuilding that stream (acknowledgement, retransmission,
+ordering, congestion control, compression per window) as a QUIC in miniature or a
+non-stdlib QUIC, to buy loss recovery faster than TCP's retransmit timeout, which
+corrections already absorb, and hole punching between NATed peers, which also needs
+a rendezvous and, for a browser, WebRTC. For reach it is backwards: restrictive
+networks block UDP before TCP, and what nearly all of them pass is TLS on 443, which
+the site's WebSocket front door serves; a native client needs only a `wss://` dialer.
+
+ICMP echo can carry bytes, as covert tunnels show, but it is a worse datagram: raw
+sockets need root or `CAP_NET_RAW`, which the fleet pod drops and a browser never
+has; with no ports, sessions ride echo identifiers that NATs rewrite and expire in
+seconds; only a request can be answered, so a client must poll to receive; kernels
+reply to echoes themselves, routers rate-limit ICMP, many firewalls drop it or its
+payload, and none of it crosses an HTTP proxy. It keeps every UDP cost and adds
+polling, for networks deliberately closed to everything else.
 
 ## 8. Wire frame and session messages
 

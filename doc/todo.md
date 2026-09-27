@@ -245,19 +245,16 @@ barrier crossings not fed, the ledger settled before projection, the journal's p
 and mark, and no live tick between the final projection and the write. WASM gains
 scheduling time, not parallel CPU.
 
-### Add a UDP transport
+### Join over wss:// from a native client
 
-- Priority: P2
-- Affected files: `internal/network/endpoint.go`, `internal/network/connection.go`, `internal/app/netem_test.go`
+- Priority: P3
+- Affected files: `internal/network/websocket_other.go`, `internal/network/connection.go`
 
-`udp://` parses and is refused. Everything above the dial assumes an ordered,
-reliable byte stream: the flate stream spans messages, and handshakes, captures and
-crossings rely on arrival order. UDP therefore means a reliable ordered stream over
-datagrams presented as a `net.Conn` to `Peer`: selective acks, a retransmit timer
-set from the tick rather than TCP's minimum RTO, and the compressor reset per
-window or moved to per-message deflate. Its gain is recovery in tens of
-milliseconds and no connection-wide stall on one lost segment; measure it against
-TCP under the `netem` stages at 1-10% loss before changing the default.
+A native client dials only the session's TCP port, so a network that blocks it has
+no way in, though the site's front door carries browser guests over TLS on 443. A
+native RFC 6455 client behind `dialWebSocket`, on stdlib TLS and an HTTP upgrade, gives
+every client the most permitted path; [Services and networking](services-and-networking.md)
+§7.3 says why not UDP.
 
 ## Combat
 
