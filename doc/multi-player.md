@@ -64,7 +64,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
 | Playout lead | Per participant (§3.5): a guest's own round trip to the authority plus a jitter allowance and a relay tick, less how late the authority's epochs land on it; the authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
 | Commit and pacing | The authority commits every guest crossing — as stamped, late at its next tick, or void past `NetworkCommitLateTicks` — and relays only the committed copy. Every guest paces its tick interval so the authority's epochs land inside its band. A participant whose own crossings stay late is evicted by policy (§3.5). |
-| Mesh and relay | Committed epochs, owner state, corrections, and authority records flood with per-source duplicate suppression; a raw epoch travels only toward the authority. A relay with retained authority content keeps selective repair available to participants behind it. |
+| Mesh and relay | Committed epochs, owner state, corrections, and authority records flood with per-source duplicate suppression; a raw epoch travels only toward the authority, and its committed copy floods back through every relay it crossed. A relay serves selective repair to the participants behind it from retained authority content, but they do not yet converge ([Todo](todo.md#converge-participants-behind-a-relay)). |
 | Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is never elected (§5.3). |
 | Host loss | `-authority migrate` (default off `-serve`): **the first survivor in the succession chain** takes the next term, with no vote, because every survivor computes it from state it already holds identically. `-authority host` (default on `-serve`): nobody takes it and every survivor continues alone. |
 | Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, and tick interval, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted rather than compared — `PeerIdentity.SessionFrom` takes the coordinator's, and a scenario no local root holds arrives over the wire. The corpus is neither: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
@@ -328,7 +328,9 @@ each direct peer according to that link's cadence:
    receiver holds the authority's world, so while every peer has proved it within
    half the convergence floor the keyframe cadence sends none.
 4. Otherwise the receiver asks for the section summaries, compares page hashes only
-   in differing sections, and the authority returns the pages that differ.
+   in differing sections, and the authority returns the pages that differ. A repair
+   wider than one frame or than the keyframe it stands in for is not sent: the peer
+   gets the keyframe, and whole bodies for a few publications.
 5. Validate every page hash, reconstruct the authority root, stage the result and
    commit it between ticks. A set is one baseline, applied whole or not at all.
 6. Refuse stale, foreign, malformed, or unverifiable repairs and recover at the
@@ -568,36 +570,53 @@ handoff.
 
 ## 6. Current operating point
 
-The [scaling audit](multiplayer-scaling.md) pins the `2d8c5b6` baseline, workload,
-repetitions and limitations; its [data](multiplayer-scaling-data.json) is retained
-for comparison. Native medians at 16 playing participants are:
+Measured on the in-process mesh at `GOMAXPROCS=1` (a 2.1 GHz Xeon container), in the
+shape of `TestATowerGuestAnswersHashOnly`: a star with four-tick links, the authority
+playing, every participant moving one tick in three and firing one in six, 300 ticks
+after 120 of warm-up. Rates are per simulated second; host and guest figures time
+their own calls in one shared process, so garbage collection falls on whoever
+allocates. Absolute values move with the machine and the scenario; the shape is what
+to plan by. Tower is the 239×64 tower region, td the 500×250 `td` scenario.
 
-| Baseline measurement | Tower, 239×64 | td, 500×250 |
-|---|---:|---:|
-| Host work, estimated CPU-ms/s | 129 | 1,716 |
-| Mean guest work, estimated CPU-ms/s | 92 | 660 |
-| Simulation tick mean, host / guest | 1.78 / 1.86 ms | 9.26 / 10.62 ms |
-| Frozen capture read under lock | 0.99 ms | 6.04 ms |
-| Frozen integrity / manifest construction | 6.03 / 9.72 ms | 52.28 / 82.02 ms |
-| Compressed full correction | 87 kB | 526 kB |
-| Host framed egress, before stream compression | 1.68 MB/s | 3.79 MB/s |
+| Players | Tower, 2 | Tower, 16 | td, 2 | td, 16 |
+|---|---:|---:|---:|---:|
+| Host CPU-ms/s: simulation + protocol | 18 + 77 | 38 + 121 | 146 + 267 | 188 + 1,181 |
+| Mean guest CPU-ms/s: simulation + protocol | 23 + 32 | 43 + 60 | 159 + 251 | 219 + 312 |
+| Simulation tick mean, host / guest | 0.9 / 1.2 ms | 1.9 / 2.1 ms | 7.3 / 7.9 ms | 9.4 / 10.9 ms |
+| Publication rounds a second | 4.5 | 4.6 | 1.5 | 7.2 |
+| Manifests answered hash-only | 94% | 94% | 78% | 95% |
+| Host egress, framed before deflate | 20 kB/s | 1.64 MB/s | 0.28 MB/s | 5.05 MB/s |
+| … of it epochs and owner syncs | 5 kB/s | 1.39 MB/s | 11 kB/s | 2.82 MB/s |
+| … of it correction bodies and repairs | 11 kB/s | 0.17 MB/s | 0.27 MB/s | 2.18 MB/s |
+| Heap in use per instance | 70 MiB | 90 MiB | 210 MiB | 250 MiB |
 
-All rates use simulated seconds. The matrix shares one native process and GC;
-host/guest CPU attribution is estimated from sequential timings. These are neither
-browser timings nor isolated fleet-pod measurements. A separate cursorless-host
-sample with 16 guests estimated 1,365 CPU-ms/s and 4.20 MB/s framed host egress.
+Per round the host captures under the world lock (about 1.2 ms tower, 14 ms td),
+seals the capture (9 / 65 ms) and indexes it (4.5 / 30 ms with the wall section
+reused). A keyframe is 80 / 516 kB compressed and 9 / 65 ms to encode. An install that
+projects nothing holds the live lock 7–10 / 40–70 ms, and each projected tick adds up
+to a simulation tick. Sealing, indexing and encoding run outside the lock, but on the
+one thread a browser guest has.
 
-The implementation now reuses exactly equal wall sections and each baseline's
-encoded correction body. In matched two-participant follow-up runs, wall reuse
-reduced combined native CPU by 24% small / 18% large. Warm manifest construction
-fell to 3.37 / 22.76 ms; these are short follow-up samples, not replacements for
-the original 16-participant matrix above. The audit records their limits.
+Per simulated second the host costs 20·T_sim + R·(capture + seal + index) plus the
+whole bodies it serves, R being the union of its peers' due ticks rather than a fixed
+5 Hz; a guest costs 20·T_sim + A·(capture + index) + installs·(stage + projection +
+compare and write), A being the manifests it answers. A star's authority relays every
+participant's epochs and owner syncs to every other, (N−1)² of each: at 16 players
+4,444 epochs (190 B tower, 510 B td) and 736 syncs (760 B) a second.
 
-Capture, simulation and correction projection/comparison hold the world lock.
-Sealing, indexing and wire encoding run outside it, but still consume the browser
-worker's CPU. Peer deadlines can produce more publication rounds than nominal
-5 Hz. Proposed acceptance budgets in the audit await approval; they are not
-current guarantees.
+What that means for scaling:
+
+- **Protocol, not simulation, bounds the map limit.** At td with 16 players the host
+  needs about 1.4 cores, 86% of it protocol: rounds of capture, seal and index cost
+  about 100 ms each, 0.7 CPU-s/s at 7.2 rounds, and whole bodies most of the rest. The
+  seal now costs twice the index. The fleet pod's 500m CPU and 160 MiB `GOMEMLIMIT`
+  hold the tower map at 16 players and not td.
+- **A td guest costs 0.4–0.5 CPU-s/s natively,** which a browser's single WASM thread
+  cannot hold; the tower map costs a guest about 0.1.
+- **Bandwidth is quadratic before it is anything else.** Epoch and owner-sync fan-out
+  is 85% of the tower host's egress at 16 players; at td whole bodies come close.
+- **The live lock is held by the O(E) capture and comparison** before any projection,
+  so shrinking them comes before moving projection out of the lock.
 
 ## 7. Diagnostics and operations
 

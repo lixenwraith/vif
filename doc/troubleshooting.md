@@ -500,29 +500,30 @@ index that world first — 14 ms, more than the install it saves — and was not
 
 ## 15. Tenth round (2026-09-26–27, multiplayer scaling)
 
-The [audit](multiplayer-scaling.md) and [data](multiplayer-scaling-data.json)
-preserve the original 24-run baseline and the implementation comparisons.
-Manifest construction consumed about half the sampled CPU; navigation about 18%.
-Publication cadence, integrity sealing, correction projection, quadratic relay
-traffic and per-instance memory remain substantial costs.
+An audit of `2d8c5b6` at two to sixteen players, on the tower region and on td, found
+manifest construction the largest cost even with nearly every answer hash-only.
+Three changes followed; a second audit checked them against the code, re-measured
+the operating point (multi-player §6) and fixed what it found.
 
-Three changes close the first implementation pass:
+- **Relay delivery.** A relayed owner-state sync went out as an epoch, which the
+  authority could admit into the epoch window in place of a real epoch of the same
+  produced tick. The committed copy of a relayed crossing skipped the link its raw
+  copy arrived on, so the relay and everyone behind it never saw it. Both are fixed,
+  and the committed copy now restarts its hop count at the authority.
+  `TestGuestArtifactsReturnThroughTheirRelay` fails on the old code for chains,
+  branches and cycles.
+- **Exact wall reuse.** A manifest builder shares the canonical wall section while an
+  owned copy of every wall entry compares equal, and a reflect guard refuses a wall
+  field whose `==` could disagree with its JSON. Warm builds fell from about 10 to
+  4 ms on the tower map and from about 120 to 30 ms on td, and combined CPU by about
+  a quarter and a sixth, with identical roots and hash-only counts.
+- **Body reuse.** A baseline keeps its correction envelope for every fallback
+  recipient. Its join body now follows the same rule, which a successor's baseline
+  had broken by keeping its predecessor's.
 
-- **Relay delivery.** Raw owner-state messages retain their message kind. When
-  committing a guest artifact, the authority returns it to intermediaries that
-  have only seen the raw copy. A regression fails before the fixes and passes
-  for stars, chains, branches and cycles without correction-based repair.
-- **Exact wall reuse.** A manifest builder compares an owned copy of every wall
-  entry before sharing the immutable canonical section. Pointer mutation and
-  retained aliases are tested. Large-map warm manifest builds fell from 77.89 to
-  22.76 ms, with allocations falling from 46.51 to 24.22 MB.
-- **Fallback encoding.** All recipients reuse the current baseline's correction
-  envelope. Its lifetime follows publication, refresh, restart and succession.
-  Sixteen large-wall-baseline responses fell from 545.88 to 34.83 ms.
-
-The short two-participant live comparison reduced combined CPU by 24% on the
-small map and 18% on the large map, with unchanged hash-only counts. It measures
-wall reuse with the other fixes held constant; it does not certify the full
-16-participant fleet, browser or delayed-relay budgets. The audit states durations,
-repetitions and remaining work. No wire/schema, hashed-surface or cadence change
-is included. [Todo](todo.md#multiplayer) tracks the open costs and validation.
+Participants behind a relay still do not converge. In a tree of four (1–2, 2–3, 2–4)
+at four-tick links, with each paced one path behind the authority, participant 2
+answered 96% of manifests hash-only and participants 3 and 4 none. Three causes
+compound, recorded in [Todo](todo.md#converge-participants-behind-a-relay): the
+leaves' lead falls back to the default, a relay refuses the keyframe a wide repair
+makes a leaf ask for, and the authority counts only direct peers' proofs.
