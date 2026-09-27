@@ -157,30 +157,6 @@ operator's.
 Diagnoses and what each item follows from are in
 [Troubleshooting](troubleshooting.md).
 
-### Converge participants behind a relay
-
-- Priority: P1
-- Affected files: `internal/system/network.go`, `internal/converge/relay.go`,
-  `internal/converge/correction.go`, `internal/converge/selective.go`
-
-In a tree of four (1–2, 2–3, 2–4) at four-tick links, paced one path behind the
-authority, participant 2 answers 96% of manifests hash-only and 3 and 4 none. Causes:
-
-- `ownLead` measures the link to the authority, which a leaf lacks, so its lead is
-  the default 3 ticks against 11 on a direct guest and nearly every crossing it
-  makes commits late (385 in 400 ticks).
-- A repair too wide to relay sets a leaf's `wantKeyframe`; a relay refuses every
-  keyframe request, and only a whole world clears the latch.
-- `allProvedLocked` and `canAnswerEveryParticipantLocked` read direct peers only, so
-  the relay's own proofs can suppress the floor and the flood behind it.
-
-Shipped sessions are stars, so no player meets this yet. Undecided is what a relay
-owes its leaves: forward the authority's exchange to them as if direct, or serve
-their corrections itself from worlds it has proved, with keyframes a leaf verifies
-against the authority's root and one proof per subtree upstream. The authority stays
-the only commit point either way. Keeping the floor for every participant no direct
-proof covers is the stopgap under both.
-
 ### Reduce exact snapshot and navigation costs at the map limit
 
 - Priority: P1
@@ -203,6 +179,44 @@ remainder is mostly the static wall positions. Each step below must stay exact:
 
 Per-store write counters stay rejected: a cache compares values it owns.
 
+### Delegate convergence to relays
+
+- Priority: P2
+- Affected files: `internal/converge/relay.go`, `internal/converge/selective.go`,
+  `internal/converge/correction.go`, `internal/system/network.go`, `internal/network`
+
+Goal: a player who cannot reach the host joins through another player, and a player
+who relays lends the session uplink and CPU without becoming its host, though it
+stays a succession candidate; later the site could place a joiner behind a relay,
+or on one that becomes its host, after the first coordination. The host commits
+alone, so this is not a merge: a relay that committed crossings or sent up a
+merged world would give one crossing two apply ticks and let a peer write the
+canonical world. The relay owns its subtree's convergence instead:
+
+- Serve leaves manifests and repairs from retention, as now, and whole worlds from
+  its own proved worlds; a leaf proves one by the host's root, since dense order and
+  so integrity differ.
+- Send one subtree proof upstream, each leaf's newest proved tick in `Relayed`, so
+  the host's floor, flood and cadence count subtrees, and bundle the leaves' raw
+  epochs per tick. Advertise its own path to the host, from which a leaf's lead follows.
+- The host accepts a leaf's traffic only through its relay, budgets each link's
+  ingress into the eviction policy, and a starved or lost leaf re-parents to the
+  host or another relay. A bad relay can then stall only its own subtree.
+- Relays are native, with a declared port like a succession candidate; a browser
+  has one thread and no listener. Reaching a relay behind NAT without a forwarded
+  port needs hole punching through the coordinator, and WebRTC for a browser leaf,
+  which this item does not include.
+
+Expected: leaves converge like direct guests without the stopgap's whole world per
+floor window through every link, which then goes with the lead sampled from returned
+commits. The host's correction work and fan-out follow its direct links: sixteen
+players as four relays of three cut its epoch fan-out from (N−1)² to about 4N copies
+a tick, while each relay pays its leaves' share. About 800–1,000 lines with tests;
+high complexity: two-hop staleness, root verification of a relay's world, a new
+request field and keyframe marker behind a `ManifestVersion` bump, re-parenting, and
+relayed topologies under link shapes. §4.2 of domain-design and multi-player §2, §4
+and §5 change with it.
+
 ### Decide the authority's fan-out and publication cadence
 
 - Priority: P2
@@ -211,10 +225,12 @@ Per-store write counters stay rejected: a cache compares values it owns.
 A star's authority relays every participant's epochs and owner syncs to every other:
 at 16 players 4,444 epochs and 736 syncs a second, 1.4 MB/s framed on the tower map
 and 2.8 MB/s on td before deflate. Rounds follow the union of peer deadlines, 7.2 a
-second at td, and whole bodies add 2.2 MB/s there. Candidates, each a message-set or
-cadence change: one bundle per guest per tick carrying every source's committed
-frames with their epoch markers, which pacing and fences read; owner syncs as deltas;
-and rounds aligned across peers.
+second at td, and whole bodies add 2.2 MB/s there; while anyone is behind a relay the
+floor adds one per window through every link. Candidates, each a message-set or
+cadence change that cuts constants where delegated relays move the quadratic term
+off the host: one bundle per guest per tick carrying every source's committed frames
+with their epoch markers, which pacing and fences read; owner syncs as deltas; and
+rounds aligned across peers.
 
 ### Project a correction outside the live lock
 
