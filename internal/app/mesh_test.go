@@ -166,6 +166,55 @@ func TestChainRelayReachesANonAdjacentParticipant(t *testing.T) {
 	}
 }
 
+func TestGuestArtifactsReturnThroughTheirRelay(t *testing.T) {
+	for _, topology := range []struct {
+		name  string
+		n     int
+		links [][2]int
+	}{
+		{"star", 3, [][2]int{{1, 2}, {1, 3}}},
+		{"chain", 3, [][2]int{{1, 2}, {2, 3}}},
+		{"branches", 5, [][2]int{{1, 2}, {2, 3}, {3, 4}, {3, 5}}},
+		{"cycle", 5, [][2]int{{1, 2}, {2, 3}, {3, 4}, {4, 2}, {3, 5}}},
+	} {
+		t.Run(topology.name, func(t *testing.T) {
+			apps := meshSession(t, 0x5EEDBEEF, topology.n, topology.links)
+			local := localCursors(t, apps)
+			for range 8 {
+				tickAll(apps)
+			}
+			owner, cursor := apps[len(apps)-1], local[len(local)-1]
+			want := cursorPosition(owner, cursor)
+			want.X += 3
+			owner.Context().PushCrossing(event.EventCursorMoveRequest,
+				&event.CursorMoveRequestPayload{Entity: cursor, X: want.X, Y: want.Y})
+			owner.Settle()
+			owner.World().RunSafe(func() {
+				shield, ok := owner.World().Components.Shield.GetPtr(cursor)
+				if !ok {
+					t.Fatal("owner has no shield")
+				}
+				shield.RadiusX = 77.25
+			})
+			// No corrections run: every mirror must receive the committed artifacts.
+			for range 24 {
+				tickAll(apps)
+			}
+			for i, a := range apps {
+				if got := cursorPosition(a, cursor); got != want {
+					t.Errorf("participant %d cursor = %+v, want %+v", i+1, got, want)
+				}
+				a.World().RunSafe(func() {
+					shield, ok := a.World().Components.Shield.GetComponent(cursor)
+					if !ok || shield.RadiusX != 77.25 {
+						t.Errorf("participant %d shield radius = %g, want 77.25", i+1, shield.RadiusX)
+					}
+				})
+			}
+		})
+	}
+}
+
 // TestMeshPropagatesEveryParticipantToEveryOther drives the branching topology a
 // chain cannot express: 1—2, 2—3, 3—4 and 3—5. Participants 1, 4 and 5 share no
 // link with each other, so every pair's agreement is relayed agreement.
