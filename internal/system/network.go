@@ -179,6 +179,17 @@ type NetworkSystem struct {
 	paceLatest  int64
 	paceKnown   bool
 
+	// pathSamples holds the newest round trips, in ticks, of this instance's own
+	// epochs returned committed, pathCount how many are live and pathEpoch the newest
+	// sampled; see observeOwnCommit.
+	pathSamples [parameter.NetworkPaceWindow]int64
+	pathCount   int
+	pathEpoch   uint64
+
+	// relayingAt is, per link, the tick another participant's raw artifact last
+	// reached this authority through it; see relaysFor.
+	relayingAt [participantSlots]uint64
+
 	// leadLowSince and leadPushed are driveOwnLead's hysteresis: when a lower
 	// target first held, and the change already pushed and not yet dispatched.
 	leadLowSince  uint64
@@ -428,6 +439,8 @@ func (s *NetworkSystem) Init() {
 	s.lastLostIn, s.lastLostOut = 0, 0
 	s.barrierActive.Store(false)
 	s.paceCount, s.paceLatest, s.paceKnown = 0, 0, false
+	s.pathCount, s.pathEpoch = 0, 0
+	s.relayingAt = [participantSlots]uint64{}
 	s.leadLowSince, s.leadPushed = 0, 0
 	s.digestHistory = [parameter.NetworkEpochWindow]stateDigest{}
 	s.pendingDigest = [participantSlots]stateDigest{}
@@ -1805,7 +1818,12 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	committing := raw && local == authority
 	switch {
 	case batch.Source == local:
-		return // this instance's own epoch, back round a cycle
+		// Committed back through a relay, or round a cycle: those behind this
+		// instance need it once, and it measures the path to the authority.
+		if batch.Committed && s.observeOwnCommit(batch.ProducedTick) {
+			s.relayBatch(from, network.MsgEvent, batch)
+		}
+		return
 	case committing && batch.Source != from && s.linked(batch.Source):
 		// A raw epoch from a producer on a link of its own arrives on that link. A
 		// relayed copy of one already admitted is a duplicate; any other is claimed.
@@ -1826,6 +1844,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 		}
 		return
 	}
+	s.noteRelaying(from, batch.Source, committing)
 
 	// The forward window, applied before the epoch window rather than after it. An
 	// epoch from beyond the horizon is refused without being admitted, so it
@@ -1932,14 +1951,35 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 }
 
 // relayCommitted floods a committed copy onward. The authority that commits one is
-// its origin: the hop count restarts, and only the producer is excluded, because a
-// relay the raw copy crossed still needs the committed one.
+// its origin: the hop count restarts, and a relay the raw copy crossed still needs
+// it, so only the producer is excluded — unless it relays too, when those behind it
+// need the copy and it forwards its own.
 func (s *NetworkSystem) relayCommitted(from uint32, committing bool, kind network.MessageType, batch event.WireBatch) {
 	batch.Committed = true
 	if committing {
 		from, batch.Hops = batch.Source, 0
+		if s.relaysFor(from) {
+			from = 0
+		}
 	}
 	s.relayBatch(from, kind, batch)
+}
+
+// noteRelaying records that the authority received another participant's raw
+// artifact through from, which makes from a relay.
+func (s *NetworkSystem) noteRelaying(from, source uint32, committing bool) {
+	if committing && from != source && int(from) < len(s.relayingAt) {
+		s.relayingAt[from] = s.localTick()
+	}
+}
+
+// relaysFor reports whether id carried another participant's raw artifact to this
+// authority within the epoch window.
+func (s *NetworkSystem) relaysFor(id uint32) bool {
+	if int(id) >= len(s.relayingAt) || s.relayingAt[id] == 0 {
+		return false
+	}
+	return s.localTick() <= s.relayingAt[id]+parameter.NetworkEpochWindow
 }
 
 // relayRaw passes a raw epoch on toward the authority: straight to it when this
@@ -2035,7 +2075,8 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 
 // ownLead is the round trip to the authority plus its jitter margin, a tick for
 // the authority to relay it, less how late the authority's epochs already land
-// here. The authority's own crossings wait only for their tick to close.
+// here. Behind a relay no link measures that trip, so it is the slowest recent
+// return of this instance's own committed epochs. The authority waits one tick.
 func (s *NetworkSystem) ownLead(p engine.NetworkPort) (uint64, bool) {
 	authority := s.authorityParticipant()
 	if s.participantID() == authority {
@@ -2045,14 +2086,33 @@ func (s *NetworkSystem) ownLead(p engine.NetworkPort) (uint64, bool) {
 	if !ok {
 		return 0, false
 	}
-	m := link.LinkMetric(authority)
-	if !m.Ready || m.RTT <= 0 || !s.paceKnown {
+	var trip int64
+	switch m := link.LinkMetric(authority); {
+	case !s.paceKnown:
+		return parameter.NetworkBarrierDelayTicks, true
+	case m.Ready && m.RTT > 0:
+		d := m.RTT + parameter.NetworkBarrierJitterMargin*m.Jitter
+		trip = int64((d + parameter.GameUpdateInterval - 1) / parameter.GameUpdateInterval)
+	case s.pathCount > 0:
+		trip = slices.Max(s.pathSamples[:min(s.pathCount, len(s.pathSamples))])
+	default:
 		return parameter.NetworkBarrierDelayTicks, true
 	}
-	trip := m.RTT + parameter.NetworkBarrierJitterMargin*m.Jitter
-	ticks := int64((trip+parameter.GameUpdateInterval-1)/parameter.GameUpdateInterval) +
-		parameter.NetworkRelaySlackTicks - s.paceLatest
+	ticks := trip + parameter.NetworkRelaySlackTicks - s.paceLatest
 	return uint64(min(max(ticks, parameter.NetworkBarrierMinDelayTicks), parameter.NetworkBarrierMaxDelayTicks)), true
+}
+
+// observeOwnCommit samples how long an own epoch took to come back committed. Only
+// a participant behind a relay sees that: the authority excludes a producer it is
+// linked to. A later copy of a sampled epoch took a longer path and is ignored.
+func (s *NetworkSystem) observeOwnCommit(produced uint64) bool {
+	if produced <= s.pathEpoch {
+		return false
+	}
+	s.pathEpoch = produced
+	s.pathSamples[s.pathCount%len(s.pathSamples)] = int64(s.localTick()) - int64(produced)
+	s.pathCount++
+	return true
 }
 
 // chooseLead raises at once and lowers only after the lower target has held for
@@ -2355,13 +2415,15 @@ func (s *NetworkSystem) scheduleCursorState(from uint32, body []byte) {
 	local, authority := s.participantID(), s.authorityParticipant()
 	raw := !batch.Committed && batch.Source != authority
 	committing := raw && local == authority
+	own := batch.Source == local
 	switch {
-	case batch.Source == local:
+	case own && !batch.Committed:
 		return
 	case committing && batch.Source != from && s.linked(batch.Source):
 		s.statForged.Add(1)
 		return
 	}
+	s.noteRelaying(from, batch.Source, committing)
 	fresh := batch.Frames[:0]
 	for _, f := range batch.Frames {
 		et, payload, _, err := f.Frame.Decode()
@@ -2382,7 +2444,7 @@ func (s *NetworkSystem) scheduleCursorState(from uint32, body []byte) {
 		if committing {
 			f.ApplyTick = s.localTick() + 1
 		}
-		if !raw || committing {
+		if (!raw || committing) && !own { // an own sync is only forwarded
 			s.states = append(s.states, pendingState{applyTick: f.ApplyTick, source: batch.Source, payload: p})
 		}
 		fresh = append(fresh, f)

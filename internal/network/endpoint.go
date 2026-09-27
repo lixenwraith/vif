@@ -10,17 +10,16 @@ import (
 
 // Scheme is how a session's bytes travel. TCP carries native play at both ends;
 // a WebSocket route is a browser's way to the same session, served by the
-// deployment's bridge to the TCP port. UDP is named so an address can say it.
+// deployment's bridge to the TCP port.
 type Scheme uint8
 
 const (
 	SchemeTCP Scheme = iota
 	SchemeWebSocket
-	SchemeUDP
 )
 
 func (t Scheme) String() string {
-	return [...]string{SchemeTCP: "tcp", SchemeWebSocket: "ws", SchemeUDP: "udp"}[t]
+	return [...]string{SchemeTCP: "tcp", SchemeWebSocket: "ws"}[t]
 }
 
 // Endpoint is a session address: how it is reached, where, and the session named
@@ -36,7 +35,8 @@ type Endpoint struct {
 const linkScheme = "vif://"
 
 // ParseEndpoint reads [tcp://|vif://]host:port[/name] or a ws(s):// URL, whose path
-// is the front door's rather than a session name. A bare host:port is TCP.
+// is the front door's rather than a session name. A bare host:port is TCP, and any
+// other scheme is refused rather than read as a host.
 func ParseEndpoint(target string) (Endpoint, error) {
 	if strings.HasPrefix(target, "ws://") || strings.HasPrefix(target, "wss://") {
 		if _, err := url.Parse(target); err != nil {
@@ -45,13 +45,11 @@ func ParseEndpoint(target string) (Endpoint, error) {
 		return Endpoint{Scheme: SchemeWebSocket, Addr: target}, nil
 	}
 	e, rest := Endpoint{Scheme: SchemeTCP}, target
-	switch {
-	case strings.HasPrefix(rest, "udp://"):
-		return Endpoint{}, fmt.Errorf("%q: udp is not available yet; tcp is the default", target)
-	case strings.HasPrefix(rest, "tcp://"):
-		rest = strings.TrimPrefix(rest, "tcp://")
-	default:
-		rest = strings.TrimPrefix(rest, linkScheme)
+	if scheme, after, ok := strings.Cut(rest, "://"); ok {
+		if scheme+"://" != linkScheme && scheme != "tcp" {
+			return Endpoint{}, fmt.Errorf("%q: unknown scheme %q; use tcp, vif or ws(s)", target, scheme)
+		}
+		rest = after
 	}
 	e.Addr, e.Name, _ = strings.Cut(rest, "/")
 	if _, _, err := net.SplitHostPort(e.Addr); err != nil {

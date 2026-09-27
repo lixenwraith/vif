@@ -521,9 +521,18 @@ the operating point (multi-player §6) and fixed what it found.
   recipient. Its join body now follows the same rule, which a successor's baseline
   had broken by keeping its predecessor's.
 
-Participants behind a relay still do not converge. In a tree of four (1–2, 2–3, 2–4)
-at four-tick links, with each paced one path behind the authority, participant 2
-answered 96% of manifests hash-only and participants 3 and 4 none. Three causes
-compound, recorded in [Todo](todo.md#converge-participants-behind-a-relay): the
-leaves' lead falls back to the default, a relay refuses the keyframe a wide repair
-makes a leaf ask for, and the authority counts only direct peers' proofs.
+Participants behind a relay still did not converge. In a tree of four (1–2, 2–3,
+2–4) at four-tick links, each paced one path behind the authority, participant 2
+answered 96% of manifests hash-only and participants 3 and 4 none. Four causes
+compounded. The leaves' lead fell back to the default, having no link to measure,
+so the authority committed 385 of their crossings late in 400 ticks. A relay
+refuses the keyframe a wide repair makes a leaf ask for, and the authority counted
+only direct peers' proofs, so nothing sent one. And the relay's own crossings never
+reached its leaves: the authority excluded the producer, which was their only path,
+and the producer dropped its own committed copy. The stopgap measures a leaf's lead
+from its own epochs returning committed, keeps the floor while anyone is behind a
+relay, keeps a relaying producer among the committed copy's recipients and has
+producers forward their own. Leaves then answered 95% hash-only with late commits
+at the star's rate, at the cost of a whole world per floor window through every
+link. The delegated relay in [Todo](todo.md#delegate-convergence-to-relays) is the
+intended shape.

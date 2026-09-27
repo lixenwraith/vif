@@ -91,14 +91,10 @@ func (c *Corrections) relayedParticipants() []uint32 {
 // Otherwise the session keeps the whole-body flood, and says why.
 // Caller MUST hold publishMu.
 func (c *Corrections) canAnswerEveryParticipantLocked(ids []uint32) bool {
-	roster := c.inst.RosterSize()
-	if roster == 0 {
-		return true // no roster yet: nobody is behind a relay
-	}
-	reachable := len(ids) + 1
-	if roster <= reachable {
+	if !c.behindRelay(ids) {
 		return true
 	}
+	roster := c.inst.RosterSize()
 	covered := make(map[uint32]struct{}, roster)
 	for _, id := range ids {
 		covered[id] = struct{}{}
@@ -121,6 +117,12 @@ func (c *Corrections) canAnswerEveryParticipantLocked(ids []uint32) bool {
 			"roster", roster, "direct", len(ids), "answerable", len(covered))
 	}
 	return false
+}
+
+// behindRelay reports whether the roster holds a participant this instance has no
+// link to, given its links ids. A roster not yet closed holds none.
+func (c *Corrections) behindRelay(ids []uint32) bool {
+	return c.inst.RosterSize() > len(ids)+1
 }
 
 // serveRelayed answers one request from this instance's retention rather than from a

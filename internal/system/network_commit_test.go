@@ -179,7 +179,8 @@ func TestAGuestPacesIntoItsBand(t *testing.T) {
 
 // TestAGuestStampsWithItsOwnRoundTrip: the lead is this guest's round trip to the
 // authority plus the relay tick, less how late the authority's epochs land; the
-// authority's own is a tick, and an unmeasured link keeps the default.
+// authority's own is a tick, and an unmeasured link keeps the default. Behind a
+// relay the trip is how long this guest's own epochs took to come back committed.
 func TestAGuestStampsWithItsOwnRoundTrip(t *testing.T) {
 	t.Parallel()
 	port := &linkedPort{peers: []uint32{1}}
@@ -196,6 +197,19 @@ func TestAGuestStampsWithItsOwnRoundTrip(t *testing.T) {
 	authority := sessionSystem(t, 1, 100, port)
 	if got, _ := authority.ownLead(port); got != parameter.NetworkBarrierMinDelayTicks {
 		t.Fatalf("the authority's own lead is %d, want %d", got, parameter.NetworkBarrierMinDelayTicks)
+	}
+
+	behind := &linkedPort{peers: []uint32{2}}
+	leaf := sessionSystem(t, 3, 100, behind)
+	leaf.paceLatest, leaf.paceKnown = -1, true
+	body, err := event.EncodeWireBatch(event.WireBatch{Source: 3, ProducedTick: 88, Committed: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf.scheduleCrossings(2, body)
+	want = uint64(12 + parameter.NetworkRelaySlackTicks + 1)
+	if got, _ := leaf.ownLead(behind); got != want {
+		t.Fatalf("lead behind a relay, own epochs back in 12 ticks = %d, want %d", got, want)
 	}
 }
 

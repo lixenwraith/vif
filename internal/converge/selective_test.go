@@ -252,28 +252,44 @@ func TestAWidenedPeerIsServedForItsWholeWindow(t *testing.T) {
 
 // TestAPeerThatProvedTheWorldIsNotSentAKeyframe: a hash-only answer meets the
 // convergence floor as a keyframe would, so the keyframe period passing sends none.
+// A participant behind a relay proves nothing on the host's links and keeps the floor.
 func TestAPeerThatProvedTheWorldIsNotSentAKeyframe(t *testing.T) {
 	t.Parallel()
-	host, guest := exchange(t)
-	host.c.publishMu.Lock()
-	keyTick := host.c.lastKeyTick
-	host.c.publishMu.Unlock()
-
-	for range parameter.SnapshotFloorKeyframeTicks + parameter.SnapshotCorrectionTicks {
-		host.world.advance(1)
-		guest.world.advance(1)
-		if err := host.c.Publish(); err != nil {
-			t.Fatalf("publish: %v", err)
+	for _, relayed := range []bool{false, true} {
+		n, links := 2, [][2]int{{1, 2}}
+		if relayed {
+			n, links = 3, [][2]int{{1, 2}, {2, 3}}
 		}
-		deliver([]*run{guest, host}, 1)
-	}
-	host.c.publishMu.Lock()
-	sent := host.c.lastKeyTick
-	host.c.publishMu.Unlock()
-	if sent != keyTick {
-		t.Fatalf("the host sent a keyframe at %d to a peer that answered hash-only", sent)
-	}
-	if guest.stat("snapshot.corrections_hash_only") == 0 {
-		t.Fatal("the guest never proved it held the host's world")
+		runs := session(t, n, links)
+		host, guest := runs[0], runs[1]
+		if err := host.c.PublishDue(); err != nil {
+			t.Fatalf("keyframe: %v", err)
+		}
+		deliver([]*run{guest}, 1)
+		host.c.publishMu.Lock()
+		keyTick := host.c.lastKeyTick
+		host.c.publishMu.Unlock()
+
+		for range parameter.SnapshotFloorKeyframeTicks + parameter.SnapshotCorrectionTicks {
+			host.world.advance(1)
+			guest.world.advance(1)
+			if err := host.c.Publish(); err != nil {
+				t.Fatalf("publish: %v", err)
+			}
+			deliver([]*run{guest, host}, 1)
+		}
+		host.c.publishMu.Lock()
+		sent := host.c.lastKeyTick
+		host.c.publishMu.Unlock()
+		want := keyTick
+		if relayed {
+			want += parameter.SnapshotFloorKeyframeTicks
+		}
+		if sent != want {
+			t.Fatalf("relayed=%t: the host's last keyframe is at %d, want %d", relayed, sent, want)
+		}
+		if guest.stat("snapshot.corrections_hash_only") == 0 {
+			t.Fatalf("relayed=%t: the guest never proved it held the host's world", relayed)
+		}
 	}
 }

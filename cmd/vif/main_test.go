@@ -239,7 +239,7 @@ func TestAnAddressNamesItsSchemeAndSession(t *testing.T) {
 			t.Errorf("ParseEndpoint(%q) = %+v, %v; want %s %q %q", tc.target, e, err, tc.scheme, tc.addr, tc.name)
 		}
 	}
-	for _, f := range []sessionFlags{{join: "udp://host.example:7777"}, {host: "wss://site.example/vif/ws"}, {host: "host.example"}} {
+	for _, f := range []sessionFlags{{join: "http://host.example:7777"}, {host: "wss://site.example/vif/ws"}, {host: "host.example"}} {
 		if err := f.validateInvocation(false, false, ""); err == nil {
 			t.Errorf("%+v was accepted", f)
 		}
