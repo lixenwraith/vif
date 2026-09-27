@@ -38,6 +38,7 @@ func boundsBatch(t *testing.T, source uint32, produced, applyTick uint64, n, pad
 
 func boundsSystem(t *testing.T) *NetworkSystem {
 	t.Helper()
+	event.EnsureRegistry() // payload frames need prototypes whichever test runs first
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	s := NewNetworkSystem(w).(*NetworkSystem)
