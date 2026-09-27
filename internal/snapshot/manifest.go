@@ -50,8 +50,9 @@ const (
 // each instance re-derives rather than adopts.
 const cursorStoreName = "cursor"
 
-// Cursor control is derived from local ownership at install, so hashing it
-// would create permanent disagreement between otherwise equal worlds.
+// normaliseStoreValue zeroes cursor Control for hashing and repair alike: every
+// install re-derives it from local ownership, so hashing it would leave equal worlds
+// disagreeing forever, falling back to keyframes over a field neither holds wrong.
 func normaliseStoreValue(store string, raw json.RawMessage) (json.RawMessage, error) {
 	if store != cursorStoreName {
 		return raw, nil
