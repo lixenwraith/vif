@@ -2395,5 +2395,431 @@
     "relay-239-4.log": "5a569a3f4b5e370b27db3af71fe49585df446b502fe6ffd1bf186d15b4a13335",
     "relay-500-4.log": "144a3aa6bd2f368c741dcb7db8b8eeb460a75b24aea1905688b1fa3bbb656ca0",
     "signals-500.log": "9c490243cc2fc77bce544c3e40efcdd8fa0fb1729dcc7ec38d2783e9d4d9174d"
+  },
+  "implementation_followup": {
+    "base_revision": "2942aef4af8f3faa82cb7ce98f0c9f0983fdf651",
+    "branch": "codex/multiplayer-scaling-fixes",
+    "methodology": {
+      "go": "1.27.1 linux/amd64",
+      "gomaxprocs": 1,
+      "manifest": "Frozen real 2-participant captures after the original 120-tick warmup; five builds per sample, three repetitions; compare full builder with warmed exact wall reuse. Roots match.",
+      "fallback": "Synthetic 5305/50190-wall baseline; 16 successful fallback responses including one initial encoding with reuse enabled; three repetitions. Re-encoding baseline clears the reusable correction body before each response. Guest queue drained between repetitions.",
+      "live": "Original deterministic audit workload with 2 participants; 120 warmup + 120 measured ticks (6 simulated seconds), three paired repetitions per map. Both binaries have the relay fixes and fallback-body reuse; only wall-manifest reuse differs. Combined process CPU; no rendering or real sockets.",
+      "limits": "Short native samples do not certify 16 participants, long-run convergence, browser performance, compressed uplink or fleet CPU/RSS budgets."
+    },
+    "manifest_samples": [
+      {
+        "map": 239,
+        "walls": 5305,
+        "repetition": 0,
+        "reuse": false,
+        "ms_per_operation": 9.545,
+        "bytes_per_operation": 5106484,
+        "root": "8471173288626302948"
+      },
+      {
+        "map": 239,
+        "walls": 5305,
+        "repetition": 0,
+        "reuse": true,
+        "ms_per_operation": 3.195,
+        "bytes_per_operation": 3087688,
+        "root": "8471173288626302948"
+      },
+      {
+        "map": 239,
+        "walls": 5305,
+        "repetition": 1,
+        "reuse": false,
+        "ms_per_operation": 8.649,
+        "bytes_per_operation": 5106420,
+        "root": "8471173288626302948"
+      },
+      {
+        "map": 239,
+        "walls": 5305,
+        "repetition": 1,
+        "reuse": true,
+        "ms_per_operation": 3.604,
+        "bytes_per_operation": 3087697,
+        "root": "8471173288626302948"
+      },
+      {
+        "map": 239,
+        "walls": 5305,
+        "repetition": 2,
+        "reuse": false,
+        "ms_per_operation": 9.083,
+        "bytes_per_operation": 5106392,
+        "root": "8471173288626302948"
+      },
+      {
+        "map": 239,
+        "walls": 5305,
+        "repetition": 2,
+        "reuse": true,
+        "ms_per_operation": 3.371,
+        "bytes_per_operation": 3087697,
+        "root": "8471173288626302948"
+      },
+      {
+        "map": 500,
+        "walls": 50190,
+        "repetition": 0,
+        "reuse": false,
+        "ms_per_operation": 74.045,
+        "bytes_per_operation": 46506022,
+        "root": "16010583919597896204"
+      },
+      {
+        "map": 500,
+        "walls": 50190,
+        "repetition": 0,
+        "reuse": true,
+        "ms_per_operation": 22.16,
+        "bytes_per_operation": 24224830,
+        "root": "16010583919597896204"
+      },
+      {
+        "map": 500,
+        "walls": 50190,
+        "repetition": 1,
+        "reuse": false,
+        "ms_per_operation": 77.887,
+        "bytes_per_operation": 46505995,
+        "root": "16010583919597896204"
+      },
+      {
+        "map": 500,
+        "walls": 50190,
+        "repetition": 1,
+        "reuse": true,
+        "ms_per_operation": 22.755,
+        "bytes_per_operation": 24224763,
+        "root": "16010583919597896204"
+      },
+      {
+        "map": 500,
+        "walls": 50190,
+        "repetition": 2,
+        "reuse": false,
+        "ms_per_operation": 80.084,
+        "bytes_per_operation": 46505995,
+        "root": "16010583919597896204"
+      },
+      {
+        "map": 500,
+        "walls": 50190,
+        "repetition": 2,
+        "reuse": true,
+        "ms_per_operation": 25.351,
+        "bytes_per_operation": 24224772,
+        "root": "16010583919597896204"
+      }
+    ],
+    "fallback_samples": [
+      {
+        "walls": 5305,
+        "repetition": 0,
+        "reuse": false,
+        "ms_for_16_responses": 60.405,
+        "allocated_bytes": 18127712
+      },
+      {
+        "walls": 5305,
+        "repetition": 1,
+        "reuse": false,
+        "ms_for_16_responses": 65.988,
+        "allocated_bytes": 18123176
+      },
+      {
+        "walls": 5305,
+        "repetition": 2,
+        "reuse": false,
+        "ms_for_16_responses": 73.303,
+        "allocated_bytes": 18122896
+      },
+      {
+        "walls": 5305,
+        "repetition": 0,
+        "reuse": true,
+        "ms_for_16_responses": 3.357,
+        "allocated_bytes": 1750376
+      },
+      {
+        "walls": 5305,
+        "repetition": 1,
+        "reuse": true,
+        "ms_for_16_responses": 3.77,
+        "allocated_bytes": 1750376
+      },
+      {
+        "walls": 5305,
+        "repetition": 2,
+        "reuse": true,
+        "ms_for_16_responses": 3.468,
+        "allocated_bytes": 1750376
+      },
+      {
+        "walls": 50190,
+        "repetition": 0,
+        "reuse": false,
+        "ms_for_16_responses": 556.446,
+        "allocated_bytes": 170070200
+      },
+      {
+        "walls": 50190,
+        "repetition": 1,
+        "reuse": false,
+        "ms_for_16_responses": 545.673,
+        "allocated_bytes": 169251952
+      },
+      {
+        "walls": 50190,
+        "repetition": 2,
+        "reuse": false,
+        "ms_for_16_responses": 545.884,
+        "allocated_bytes": 169251952
+      },
+      {
+        "walls": 50190,
+        "repetition": 0,
+        "reuse": true,
+        "ms_for_16_responses": 37.761,
+        "allocated_bytes": 15744744
+      },
+      {
+        "walls": 50190,
+        "repetition": 1,
+        "reuse": true,
+        "ms_for_16_responses": 34.826,
+        "allocated_bytes": 16558432
+      },
+      {
+        "walls": 50190,
+        "repetition": 2,
+        "reuse": true,
+        "ms_for_16_responses": 34.204,
+        "allocated_bytes": 16558432
+      }
+    ],
+    "live_samples": [
+      {
+        "mode": "before",
+        "repetition": 0,
+        "alloc_bytes": 620295976,
+        "allocs": 5747083,
+        "cpu_ms": 1055.79,
+        "gc": 5,
+        "heap_bytes": 276916016,
+        "kind": "run",
+        "map": 239,
+        "n": 2,
+        "ticks": 120,
+        "topology": "star",
+        "wall_ms": 1053,
+        "guest_hash_only": 18,
+        "guest_manifests": 22
+      },
+      {
+        "mode": "after",
+        "repetition": 0,
+        "alloc_bytes": 533644600,
+        "allocs": 4122408,
+        "cpu_ms": 843.617,
+        "gc": 5,
+        "heap_bytes": 273708744,
+        "kind": "run",
+        "map": 239,
+        "n": 2,
+        "ticks": 120,
+        "topology": "star",
+        "wall_ms": 842,
+        "guest_hash_only": 18,
+        "guest_manifests": 22
+      },
+      {
+        "mode": "before",
+        "repetition": 1,
+        "alloc_bytes": 620276920,
+        "allocs": 5747080,
+        "cpu_ms": 1112.673,
+        "gc": 5,
+        "heap_bytes": 284179184,
+        "kind": "run",
+        "map": 239,
+        "n": 2,
+        "ticks": 120,
+        "topology": "star",
+        "wall_ms": 1110,
+        "guest_hash_only": 18,
+        "guest_manifests": 22
+      },
+      {
+        "mode": "after",
+        "repetition": 1,
+        "alloc_bytes": 533662416,
+        "allocs": 4122407,
+        "cpu_ms": 799.603,
+        "gc": 4,
+        "heap_bytes": 268467160,
+        "kind": "run",
+        "map": 239,
+        "n": 2,
+        "ticks": 120,
+        "topology": "star",
+        "wall_ms": 797,
+        "guest_hash_only": 18,
+        "guest_manifests": 22
+      },
+      {
+        "mode": "before",
+        "repetition": 2,
+        "alloc_bytes": 620278984,
+        "allocs": 5747079,
+        "cpu_ms": 1144.722,
+        "gc": 5,
+        "heap_bytes": 277105136,
+        "kind": "run",
+        "map": 239,
+        "n": 2,
+        "ticks": 120,
+        "topology": "star",
+        "wall_ms": 1143,
+        "guest_hash_only": 18,
+        "guest_manifests": 22
+      },
+      {
+        "mode": "after",
+        "repetition": 2,
+        "alloc_bytes": 533644184,
+        "allocs": 4122408,
+        "cpu_ms": 856.795,
+        "gc": 5,
+        "heap_bytes": 267317960,
+        "kind": "run",
+        "map": 239,
+        "n": 2,
+        "ticks": 120,
+        "topology": "star",
+        "wall_ms": 854,
+        "guest_hash_only": 18,
+        "guest_manifests": 22
+      },
+      {
+        "mode": "before",
+        "repetition": 0,
+        "alloc_bytes": 3054231816,
+        "allocs": 18823562,
+        "cpu_ms": 5964.371,
+        "gc": 8,
+        "heap_bytes": 908178016,
+        "kind": "run",
+        "map": 500,
+        "n": 2,
+        "ticks": 120,
+        "topology": "star",
+        "wall_ms": 5947,
+        "guest_hash_only": 6,
+        "guest_manifests": 10
+      },
+      {
+        "mode": "after",
+        "repetition": 0,
+        "alloc_bytes": 2587989752,
+        "allocs": 11426665,
+        "cpu_ms": 4670.391,
+        "gc": 8,
+        "heap_bytes": 819021712,
+        "kind": "run",
+        "map": 500,
+        "n": 2,
+        "ticks": 120,
+        "topology": "star",
+        "wall_ms": 4659,
+        "guest_hash_only": 6,
+        "guest_manifests": 10
+      },
+      {
+        "mode": "before",
+        "repetition": 1,
+        "alloc_bytes": 3054121240,
+        "allocs": 18823553,
+        "cpu_ms": 5966.867,
+        "gc": 8,
+        "heap_bytes": 923096016,
+        "kind": "run",
+        "map": 500,
+        "n": 2,
+        "ticks": 120,
+        "topology": "star",
+        "wall_ms": 5952,
+        "guest_hash_only": 6,
+        "guest_manifests": 10
+      },
+      {
+        "mode": "after",
+        "repetition": 1,
+        "alloc_bytes": 2587693896,
+        "allocs": 11426631,
+        "cpu_ms": 4872.814,
+        "gc": 8,
+        "heap_bytes": 815263208,
+        "kind": "run",
+        "map": 500,
+        "n": 2,
+        "ticks": 120,
+        "topology": "star",
+        "wall_ms": 4858,
+        "guest_hash_only": 6,
+        "guest_manifests": 10
+      },
+      {
+        "mode": "before",
+        "repetition": 2,
+        "alloc_bytes": 3054416840,
+        "allocs": 18823577,
+        "cpu_ms": 6156.737,
+        "gc": 8,
+        "heap_bytes": 900900448,
+        "kind": "run",
+        "map": 500,
+        "n": 2,
+        "ticks": 120,
+        "topology": "star",
+        "wall_ms": 6131,
+        "guest_hash_only": 6,
+        "guest_manifests": 10
+      },
+      {
+        "mode": "after",
+        "repetition": 2,
+        "alloc_bytes": 2588247976,
+        "allocs": 11426693,
+        "cpu_ms": 4877.905,
+        "gc": 8,
+        "heap_bytes": 822991800,
+        "kind": "run",
+        "map": 500,
+        "n": 2,
+        "ticks": 120,
+        "topology": "star",
+        "wall_ms": 4865,
+        "guest_hash_only": 6,
+        "guest_manifests": 10
+      }
+    ],
+    "verification": {
+      "package_tests": "go test ./internal/system ./internal/app ./internal/converge ./internal/snapshot -count=1 -timeout=5m",
+      "native_build": "go build ./...",
+      "wasm_build": "GOOS=js GOARCH=wasm go build ./cmd/...",
+      "result": "passed",
+      "negative_controls": [
+        "wall equality omitted: test fails",
+        "owned wall comparison replaced with capture alias: test fails",
+        "fresh baseline invalidation omitted: test fails",
+        "succession invalidation omitted: test fails"
+      ]
+    }
   }
 }

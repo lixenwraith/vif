@@ -4,11 +4,62 @@
 package converge
 
 import (
+	"bytes"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
 )
+
+func TestFallbackBytesFollowTheirBaseline(t *testing.T) {
+	host, guest := exchange(t)
+	check := func() {
+		t.Helper()
+		for range 2 {
+			host.c.sendKeyframeTo(host.world.port, 2, host.world.Position().Tick)
+			var assembly network.SnapshotAssembly
+			in := make([]network.Inbound, 64)
+			n := guest.world.port.(*network.MeshPort).Drain(in)
+			done := false
+			for _, frame := range in[:n] {
+				if frame.Msg == nil || frame.Msg.Type != network.MsgStateCorrection {
+					continue
+				}
+				var err error
+				done, err = assembly.Add(frame.Msg.Payload)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, got := assembly.Result()
+			want, err := snapshot.EncodeCorrection(host.c.baseline)
+			if err != nil || !done || !bytes.Equal(got, want) {
+				t.Fatalf("fallback differs from its current baseline: complete=%t err=%v", done, err)
+			}
+		}
+	}
+	check()
+	host.world.advance(4)
+	check() // A fallback refreshes a baseline that is too old.
+	host.world.advance(parameter.SnapshotFloorKeyframeTicks)
+	if err := host.c.Publish(); err != nil {
+		t.Fatal(err)
+	}
+	deliver([]*run{guest}, 1)
+	check() // A scheduled keyframe also replaces the reusable body.
+
+	cap := capture(1, 7)
+	cap.Header.Run++
+	host.world.setWorld(seal(cap))
+	host.world.stamp.Run = cap.Header.Run
+	check() // The restarted run can reuse a tick, but never its old bytes.
+
+	cap.Header.Term++
+	host.c.installed, host.c.haveBase = seal(cap), true
+	host.c.BecomeAuthority(network.HandoffRecord{Term: cap.Header.Term})
+	check() // Succession replaces the baseline even at the same tick.
+}
 
 // exchange is a host and a guest on one link, the guest holding the host's world
 // because the first publication is always the keyframe every later delta names.
