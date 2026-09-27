@@ -33,7 +33,8 @@ type Corrections struct {
 	// publishMu serialises every world read a capture makes, so a join re-uses a
 	// keyframe fresh enough and two joins arriving together share one read. It also
 	// owns the per-peer schedule, so a peer's plan and the capture it is planned
-	// against cannot be read a decision apart.
+	// against cannot be read a decision apart. Both encodings of the baseline are
+	// replaced with it; a nil one is encoded on first use.
 	publishMu     sync.Mutex
 	baseline      snapshot.SharedCapture // last keyframe published; every delta names its tick
 	keyBody       []byte                 // that keyframe as a bare capture, which is what a join sends
@@ -699,9 +700,13 @@ func (c *Corrections) KeyframeAt(minTick uint64, deadline time.Time) ([]byte, ui
 		c.publishMu.Lock()
 		c.forgetRestartedRunLocked()
 		if c.haveKey && c.baseline.Header.Tick >= minTick {
+			var err error
+			if c.keyBody == nil {
+				c.keyBody, err = snapshot.EncodeCapture(c.baseline)
+			}
 			body, tick := c.keyBody, c.baseline.Header.Tick
 			c.publishMu.Unlock()
-			return body, tick, nil
+			return body, tick, err
 		}
 		if c.inst.Position().Tick >= minTick {
 			body, tick, err := c.takeKeyframe()
