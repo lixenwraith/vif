@@ -1907,11 +1907,18 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	}
 	// A void frame applies nowhere else, so it is not relayed; its fence closes here.
 	batch.Frames = slices.DeleteFunc(batch.Frames, func(f event.ScheduledWireFrame) bool { return f.Frame.Event == "" })
+	s.relayCommitted(from, committing, network.MsgEvent, batch)
+}
+
+// relayCommitted floods a committed copy onward. The authority that commits one is
+// its origin: the hop count restarts, and only the producer is excluded, because a
+// relay the raw copy crossed still needs the committed one.
+func (s *NetworkSystem) relayCommitted(from uint32, committing bool, kind network.MessageType, batch event.WireBatch) {
 	batch.Committed = true
 	if committing {
-		from = batch.Source // An intermediary still needs the committed copy.
+		from, batch.Hops = batch.Source, 0
 	}
-	s.relayBatch(from, network.MsgEvent, batch)
+	s.relayBatch(from, kind, batch)
 }
 
 // relayRaw passes a raw epoch on toward the authority: straight to it when this
@@ -2367,11 +2374,7 @@ func (s *NetworkSystem) scheduleCursorState(from uint32, body []byte) {
 		s.relayRaw(from, authority, network.MsgStateSync, batch)
 		return
 	}
-	batch.Committed = true
-	if committing {
-		from = batch.Source
-	}
-	s.relayBatch(from, network.MsgStateSync, batch)
+	s.relayCommitted(from, committing, network.MsgStateSync, batch)
 }
 
 // writeDueStates publishes the owner-authored syncs due by nextTick, in the order
