@@ -1,0 +1,2399 @@
+{
+  "methodology": {
+    "revision": "2d8c5b65577036f485625da01eae1f3216aaf5ed",
+    "go": "go version go1.27.1 linux/amd64",
+    "benchmark_gomaxprocs": 1,
+    "benchmark_gomemlimit": "6500MiB",
+    "measured_ticks": 600,
+    "warmup_ticks": 120,
+    "tick_rate_hz": 20,
+    "latency_ticks_each_direction": 4,
+    "loss_every": 0,
+    "bytes_per_tick": 0,
+    "seed": 28900,
+    "input_seed": 7,
+    "rendering": false,
+    "journal": false,
+    "periodic_logs": false,
+    "matrix_repetitions": 3,
+    "cpu_model": "AMD EPYC 9V74",
+    "scope": "audit checkpoint; production code unchanged",
+    "hash_percent_denominator": "received manifests",
+    "attribution": "wall-timed sequential host/guest work; process CPU from getrusage",
+    "traffic": "application framing before connection streaming deflate",
+    "count_units": "projected_ticks and nav_recomputes have count values despite *_us field labels in raw logs; ignore total_ms on these counters"
+  },
+  "matrix_medians": [
+    {
+      "map": 239,
+      "n": 2,
+      "seconds": 30.0,
+      "host_ms_per_s": 122.604,
+      "guest_ms_per_s": 90.549,
+      "host_tick_ms": 1.169,
+      "host_tick_p95_ms": 3.096,
+      "guest_tick_ms": 1.511,
+      "guest_tick_p95_ms": 3.858,
+      "host_framed_kB_s": 13.83,
+      "guest_framed_kB_s": 8.963,
+      "alloc_MB_s": 112.756,
+      "heap_MB": 293.826,
+      "process_cpu_ms_s": 214.184,
+      "hash_pct": 97.183,
+      "host_rounds": 142,
+      "keyframes": 1,
+      "loss": 0,
+      "repetitions": 3
+    },
+    {
+      "map": 239,
+      "n": 4,
+      "seconds": 30.0,
+      "host_ms_per_s": 168.972,
+      "guest_ms_per_s": 93.399,
+      "host_tick_ms": 1.394,
+      "host_tick_p95_ms": 3.228,
+      "guest_tick_ms": 1.702,
+      "guest_tick_p95_ms": 4.105,
+      "host_framed_kB_s": 96.927,
+      "guest_framed_kB_s": 8.332,
+      "alloc_MB_s": 225.314,
+      "heap_MB": 678.211,
+      "process_cpu_ms_s": 439.541,
+      "hash_pct": 97.183,
+      "host_rounds": 207,
+      "keyframes": 1,
+      "loss": 0,
+      "repetitions": 3
+    },
+    {
+      "map": 239,
+      "n": 8,
+      "seconds": 30.0,
+      "host_ms_per_s": 134.811,
+      "guest_ms_per_s": 88.207,
+      "host_tick_ms": 1.455,
+      "host_tick_p95_ms": 3.3,
+      "guest_tick_ms": 1.682,
+      "guest_tick_p95_ms": 3.883,
+      "host_framed_kB_s": 403.784,
+      "guest_framed_kB_s": 7.849,
+      "alloc_MB_s": 361.603,
+      "heap_MB": 1394.692,
+      "process_cpu_ms_s": 754.242,
+      "hash_pct": 97.197,
+      "host_rounds": 163,
+      "keyframes": 1,
+      "loss": 0,
+      "repetitions": 3
+    },
+    {
+      "map": 239,
+      "n": 16,
+      "seconds": 30.0,
+      "host_ms_per_s": 128.635,
+      "guest_ms_per_s": 91.773,
+      "host_tick_ms": 1.778,
+      "host_tick_p95_ms": 3.572,
+      "guest_tick_ms": 1.863,
+      "guest_tick_p95_ms": 4.113,
+      "host_framed_kB_s": 1677.3,
+      "guest_framed_kB_s": 7.926,
+      "alloc_MB_s": 681.458,
+      "heap_MB": 2959.687,
+      "process_cpu_ms_s": 1509.569,
+      "hash_pct": 97.225,
+      "host_rounds": 146,
+      "keyframes": 1,
+      "loss": 0,
+      "repetitions": 3
+    },
+    {
+      "map": 500,
+      "n": 2,
+      "seconds": 30.0,
+      "host_ms_per_s": 445.88,
+      "guest_ms_per_s": 429.723,
+      "host_tick_ms": 6.768,
+      "host_tick_p95_ms": 20.61,
+      "guest_tick_ms": 7.381,
+      "guest_tick_p95_ms": 22.746,
+      "host_framed_kB_s": 284.963,
+      "guest_framed_kB_s": 11.511,
+      "alloc_MB_s": 425.562,
+      "heap_MB": 1010.651,
+      "process_cpu_ms_s": 875.638,
+      "hash_pct": 88.235,
+      "host_rounds": 46,
+      "keyframes": 15,
+      "loss": 0,
+      "repetitions": 3
+    },
+    {
+      "map": 500,
+      "n": 4,
+      "seconds": 30.0,
+      "host_ms_per_s": 1294.023,
+      "guest_ms_per_s": 662.991,
+      "host_tick_ms": 7.821,
+      "host_tick_p95_ms": 21.607,
+      "guest_tick_ms": 9.734,
+      "guest_tick_p95_ms": 27.39,
+      "host_framed_kB_s": 262.371,
+      "guest_framed_kB_s": 13.681,
+      "alloc_MB_s": 1992.765,
+      "heap_MB": 2107.486,
+      "process_cpu_ms_s": 3286.145,
+      "hash_pct": 97.391,
+      "host_rounds": 214,
+      "keyframes": 2,
+      "loss": 0,
+      "repetitions": 3
+    },
+    {
+      "map": 500,
+      "n": 8,
+      "seconds": 30.0,
+      "host_ms_per_s": 1465.635,
+      "guest_ms_per_s": 622.573,
+      "host_tick_ms": 8.8,
+      "host_tick_p95_ms": 21.879,
+      "guest_tick_ms": 10.408,
+      "guest_tick_p95_ms": 27.674,
+      "host_framed_kB_s": 1228.897,
+      "guest_framed_kB_s": 13.946,
+      "alloc_MB_s": 3255.709,
+      "heap_MB": 4581.134,
+      "process_cpu_ms_s": 5841.09,
+      "hash_pct": 90.83,
+      "host_rounds": 244,
+      "keyframes": 4,
+      "loss": 0,
+      "repetitions": 3
+    },
+    {
+      "map": 500,
+      "n": 16,
+      "seconds": 30.0,
+      "host_ms_per_s": 1715.931,
+      "guest_ms_per_s": 660.177,
+      "host_tick_ms": 9.262,
+      "host_tick_p95_ms": 23.383,
+      "guest_tick_ms": 10.622,
+      "guest_tick_p95_ms": 29.104,
+      "host_framed_kB_s": 3792.664,
+      "guest_framed_kB_s": 11.589,
+      "alloc_MB_s": 5605.691,
+      "heap_MB": 6288.646,
+      "process_cpu_ms_s": 11605.857,
+      "hash_pct": 96.349,
+      "host_rounds": 256,
+      "keyframes": 5,
+      "loss": 0,
+      "repetitions": 3
+    }
+  ],
+  "matrix_runs": [
+    {
+      "source": "239-2-1.log",
+      "measurement": {
+        "alloc_bytes": 3383888336,
+        "allocs": 31062846,
+        "cpu_ms": 6425.524,
+        "gc": 24,
+        "heap_bytes": 297656608,
+        "kind": "run",
+        "map": 239,
+        "n": 2,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 6410
+      }
+    },
+    {
+      "source": "239-2-2.log",
+      "measurement": {
+        "alloc_bytes": 3382670552,
+        "allocs": 31062793,
+        "cpu_ms": 6468.817,
+        "gc": 24,
+        "heap_bytes": 293826024,
+        "kind": "run",
+        "map": 239,
+        "n": 2,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 6446
+      }
+    },
+    {
+      "source": "239-2-3.log",
+      "measurement": {
+        "alloc_bytes": 3382651904,
+        "allocs": 31062789,
+        "cpu_ms": 5985.751,
+        "gc": 25,
+        "heap_bytes": 288363984,
+        "kind": "run",
+        "map": 239,
+        "n": 2,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 5970
+      }
+    },
+    {
+      "source": "239-4-1.log",
+      "measurement": {
+        "alloc_bytes": 6760612456,
+        "allocs": 71359565,
+        "cpu_ms": 13186.226,
+        "gc": 21,
+        "heap_bytes": 678210824,
+        "kind": "run",
+        "map": 239,
+        "n": 4,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 13578
+      }
+    },
+    {
+      "source": "239-4-2.log",
+      "measurement": {
+        "alloc_bytes": 6759415840,
+        "allocs": 71359515,
+        "cpu_ms": 13515.895,
+        "gc": 21,
+        "heap_bytes": 679524152,
+        "kind": "run",
+        "map": 239,
+        "n": 4,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 13480
+      }
+    },
+    {
+      "source": "239-4-3.log",
+      "measurement": {
+        "alloc_bytes": 6759417736,
+        "allocs": 71359520,
+        "cpu_ms": 12947.004,
+        "gc": 22,
+        "heap_bytes": 655102464,
+        "kind": "run",
+        "map": 239,
+        "n": 4,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 12913
+      }
+    },
+    {
+      "source": "239-8-1.log",
+      "measurement": {
+        "alloc_bytes": 10849230504,
+        "allocs": 133846347,
+        "cpu_ms": 22964.867,
+        "gc": 16,
+        "heap_bytes": 1385824128,
+        "kind": "run",
+        "map": 239,
+        "n": 8,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 22890
+      }
+    },
+    {
+      "source": "239-8-2.log",
+      "measurement": {
+        "alloc_bytes": 10848090720,
+        "allocs": 133846306,
+        "cpu_ms": 22627.272,
+        "gc": 16,
+        "heap_bytes": 1394692480,
+        "kind": "run",
+        "map": 239,
+        "n": 8,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 22575
+      }
+    },
+    {
+      "source": "239-8-3.log",
+      "measurement": {
+        "alloc_bytes": 10848014752,
+        "allocs": 133846291,
+        "cpu_ms": 22280.517,
+        "gc": 16,
+        "heap_bytes": 1409343624,
+        "kind": "run",
+        "map": 239,
+        "n": 8,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 22229
+      }
+    },
+    {
+      "source": "239-16-1.log",
+      "measurement": {
+        "alloc_bytes": 20445481432,
+        "allocs": 270044136,
+        "cpu_ms": 46567.429,
+        "gc": 16,
+        "heap_bytes": 3008503536,
+        "kind": "run",
+        "map": 239,
+        "n": 16,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 46432
+      }
+    },
+    {
+      "source": "239-16-2.log",
+      "measurement": {
+        "alloc_bytes": 20443747512,
+        "allocs": 270043991,
+        "cpu_ms": 45223.94,
+        "gc": 15,
+        "heap_bytes": 2959686848,
+        "kind": "run",
+        "map": 239,
+        "n": 16,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 45108
+      }
+    },
+    {
+      "source": "239-16-3.log",
+      "measurement": {
+        "alloc_bytes": 20443673624,
+        "allocs": 270043986,
+        "cpu_ms": 45287.083,
+        "gc": 15,
+        "heap_bytes": 2839553400,
+        "kind": "run",
+        "map": 239,
+        "n": 16,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 45174
+      }
+    },
+    {
+      "source": "500-2-1.log",
+      "measurement": {
+        "alloc_bytes": 12767652200,
+        "allocs": 79638380,
+        "cpu_ms": 27813.761,
+        "gc": 27,
+        "heap_bytes": 1055485928,
+        "kind": "run",
+        "map": 500,
+        "n": 2,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 27880
+      }
+    },
+    {
+      "source": "500-2-2.log",
+      "measurement": {
+        "alloc_bytes": 12766860576,
+        "allocs": 79638353,
+        "cpu_ms": 26269.126,
+        "gc": 27,
+        "heap_bytes": 1010650584,
+        "kind": "run",
+        "map": 500,
+        "n": 2,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 26220
+      }
+    },
+    {
+      "source": "500-2-3.log",
+      "measurement": {
+        "alloc_bytes": 12766491496,
+        "allocs": 79638321,
+        "cpu_ms": 25981.972,
+        "gc": 27,
+        "heap_bytes": 1003227728,
+        "kind": "run",
+        "map": 500,
+        "n": 2,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 25921
+      }
+    },
+    {
+      "source": "500-4-1.log",
+      "measurement": {
+        "alloc_bytes": 59784783984,
+        "allocs": 537767383,
+        "cpu_ms": 98584.34,
+        "gc": 57,
+        "heap_bytes": 2107485672,
+        "kind": "run",
+        "map": 500,
+        "n": 4,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 98289
+      }
+    },
+    {
+      "source": "500-4-2.log",
+      "measurement": {
+        "alloc_bytes": 59782457176,
+        "allocs": 537767200,
+        "cpu_ms": 98373.276,
+        "gc": 58,
+        "heap_bytes": 2243414856,
+        "kind": "run",
+        "map": 500,
+        "n": 4,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 98096
+      }
+    },
+    {
+      "source": "500-4-3.log",
+      "measurement": {
+        "alloc_bytes": 59782964456,
+        "allocs": 537767244,
+        "cpu_ms": 99545.141,
+        "gc": 57,
+        "heap_bytes": 2076580288,
+        "kind": "run",
+        "map": 500,
+        "n": 4,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 99270
+      }
+    },
+    {
+      "source": "500-8-1.log",
+      "measurement": {
+        "alloc_bytes": 97674497344,
+        "allocs": 927431725,
+        "cpu_ms": 175232.711,
+        "gc": 44,
+        "heap_bytes": 4581134128,
+        "kind": "run",
+        "map": 500,
+        "n": 8,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 174723
+      }
+    },
+    {
+      "source": "500-8-2.log",
+      "measurement": {
+        "alloc_bytes": 97671185048,
+        "allocs": 927431412,
+        "cpu_ms": 173778.658,
+        "gc": 44,
+        "heap_bytes": 4623405440,
+        "kind": "run",
+        "map": 500,
+        "n": 8,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 173359
+      }
+    },
+    {
+      "source": "500-8-3.log",
+      "measurement": {
+        "alloc_bytes": 97671278168,
+        "allocs": 927431424,
+        "cpu_ms": 179358.915,
+        "gc": 44,
+        "heap_bytes": 4328452704,
+        "kind": "run",
+        "map": 500,
+        "n": 8,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 178884
+      }
+    },
+    {
+      "source": "500-16-1.log",
+      "measurement": {
+        "alloc_bytes": 168173921088,
+        "allocs": 1681060758,
+        "cpu_ms": 347644.945,
+        "gc": 106,
+        "heap_bytes": 6288645840,
+        "kind": "run",
+        "map": 500,
+        "n": 16,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 348282
+      }
+    },
+    {
+      "source": "500-16-2.log",
+      "measurement": {
+        "alloc_bytes": 168170717984,
+        "allocs": 1681060392,
+        "cpu_ms": 351431.61,
+        "gc": 106,
+        "heap_bytes": 6186150616,
+        "kind": "run",
+        "map": 500,
+        "n": 16,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 350601
+      }
+    },
+    {
+      "source": "500-16-3.log",
+      "measurement": {
+        "alloc_bytes": 168167285048,
+        "allocs": 1681060121,
+        "cpu_ms": 348175.706,
+        "gc": 105,
+        "heap_bytes": 6363842544,
+        "kind": "run",
+        "map": 500,
+        "n": 16,
+        "ticks": 600,
+        "topology": "star",
+        "wall_ms": 347340
+      }
+    }
+  ],
+  "frozen_microbenchmarks": {
+    "239-2": [
+      {
+        "allocs_per_op": 7522,
+        "bytes_per_op": 1872120,
+        "kind": "micro",
+        "name": "capture_locked",
+        "time": {
+          "max_us": 1300.828,
+          "mean_us": 995.1954000000001,
+          "p50_us": 907.656,
+          "p95_us": 1004.459,
+          "total_ms": 4.975977
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 1371688,
+        "kind": "micro",
+        "name": "seal",
+        "time": {
+          "max_us": 8809.06,
+          "mean_us": 7418.5358,
+          "p50_us": 7298.571,
+          "p95_us": 8239.971,
+          "total_ms": 37.092679
+        }
+      },
+      {
+        "allocs_per_op": 104321,
+        "bytes_per_op": 5707476,
+        "kind": "micro",
+        "name": "manifest",
+        "time": {
+          "max_us": 10822.936,
+          "mean_us": 10178.5572,
+          "p50_us": 10211.42,
+          "p95_us": 10703.009,
+          "total_ms": 50.892786
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 1371688,
+        "kind": "micro",
+        "name": "json_capture",
+        "time": {
+          "max_us": 5260.029,
+          "mean_us": 4991.749,
+          "p50_us": 4925.362,
+          "p95_us": 5142.054,
+          "total_ms": 24.958745
+        }
+      },
+      {
+        "allocs_per_op": 7,
+        "bytes_per_op": 1714068,
+        "kind": "micro",
+        "name": "encode_correction",
+        "time": {
+          "max_us": 7418.399,
+          "mean_us": 6861.7656,
+          "p50_us": 6722.226,
+          "p95_us": 7365.651,
+          "total_ms": 34.308828
+        }
+      },
+      {
+        "allocs_per_op": 6,
+        "bytes_per_op": 1715828,
+        "kind": "micro",
+        "name": "encode_join",
+        "time": {
+          "max_us": 6650.41,
+          "mean_us": 6417.356400000001,
+          "p50_us": 6480.859,
+          "p95_us": 6530.272,
+          "total_ms": 32.086782
+        }
+      },
+      {
+        "allocs_per_op": 26863,
+        "bytes_per_op": 1885820,
+        "kind": "micro",
+        "name": "diff_same",
+        "time": {
+          "max_us": 3210.29,
+          "mean_us": 3024.8808,
+          "p50_us": 3021.199,
+          "p95_us": 3033.558,
+          "total_ms": 15.124404
+        }
+      },
+      {
+        "allocs_per_op": 26872,
+        "bytes_per_op": 3257896,
+        "kind": "micro",
+        "name": "diff_written_same",
+        "time": {
+          "max_us": 10179.873,
+          "mean_us": 9790.8722,
+          "p50_us": 9827.811,
+          "p95_us": 9912.677,
+          "total_ms": 48.954361
+        }
+      },
+      {
+        "allocs_per_op": 26652,
+        "bytes_per_op": 888948,
+        "kind": "micro",
+        "name": "compare_world_same",
+        "time": {
+          "max_us": 2669.948,
+          "mean_us": 2237.7434,
+          "p50_us": 2159.091,
+          "p95_us": 2241.363,
+          "total_ms": 11.188717
+        }
+      },
+      {
+        "allocs_per_op": 609,
+        "bytes_per_op": 106412,
+        "kind": "micro",
+        "name": "digest_locked",
+        "time": {
+          "max_us": 741.489,
+          "mean_us": 478.57559999999995,
+          "p50_us": 411.7,
+          "p95_us": 418.451,
+          "total_ms": 2.392878
+        }
+      },
+      {
+        "join_bytes": 88742,
+        "json_bytes": 1365873,
+        "keyframe_bytes": 88668,
+        "kind": "capture",
+        "map_h": 64,
+        "map_w": 239,
+        "positions": 6281,
+        "tick": 724,
+        "walls": 5305
+      },
+      {
+        "allocs_per_op": 7884,
+        "bytes_per_op": 408793,
+        "kind": "micro",
+        "name": "stage_proved",
+        "time": {
+          "max_us": 5518.091,
+          "mean_us": 4652.548,
+          "p50_us": 4879.745,
+          "p95_us": 4989.949,
+          "total_ms": 23.26274
+        }
+      }
+    ],
+    "239-4": [
+      {
+        "allocs_per_op": 7538,
+        "bytes_per_op": 1874433,
+        "kind": "micro",
+        "name": "capture_locked",
+        "time": {
+          "max_us": 1443.76,
+          "mean_us": 1024.5448000000001,
+          "p50_us": 947.104,
+          "p95_us": 990.068,
+          "total_ms": 5.122724
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 1379880,
+        "kind": "micro",
+        "name": "seal",
+        "time": {
+          "max_us": 9169.415,
+          "mean_us": 7168.947,
+          "p50_us": 6650.53,
+          "p95_us": 7081.519,
+          "total_ms": 35.844735
+        }
+      },
+      {
+        "allocs_per_op": 104889,
+        "bytes_per_op": 5702708,
+        "kind": "micro",
+        "name": "manifest",
+        "time": {
+          "max_us": 11503.185,
+          "mean_us": 10450.6504,
+          "p50_us": 9940.678,
+          "p95_us": 11201.117,
+          "total_ms": 52.253252
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 1379880,
+        "kind": "micro",
+        "name": "json_capture",
+        "time": {
+          "max_us": 6619.624,
+          "mean_us": 5363.7342,
+          "p50_us": 5007.254,
+          "p95_us": 5814.14,
+          "total_ms": 26.818671
+        }
+      },
+      {
+        "allocs_per_op": 7,
+        "bytes_per_op": 1722260,
+        "kind": "micro",
+        "name": "encode_correction",
+        "time": {
+          "max_us": 8257.072,
+          "mean_us": 7386.7118,
+          "p50_us": 7159.925,
+          "p95_us": 8060.05,
+          "total_ms": 36.933559
+        }
+      },
+      {
+        "allocs_per_op": 6,
+        "bytes_per_op": 1724020,
+        "kind": "micro",
+        "name": "encode_join",
+        "time": {
+          "max_us": 8883.191,
+          "mean_us": 7573.534799999999,
+          "p50_us": 7215.938,
+          "p95_us": 8240.138,
+          "total_ms": 37.867674
+        }
+      },
+      {
+        "allocs_per_op": 26991,
+        "bytes_per_op": 1884796,
+        "kind": "micro",
+        "name": "diff_same",
+        "time": {
+          "max_us": 3982.534,
+          "mean_us": 3215.1928,
+          "p50_us": 3026.367,
+          "p95_us": 3139.886,
+          "total_ms": 16.075964
+        }
+      },
+      {
+        "allocs_per_op": 27000,
+        "bytes_per_op": 3265064,
+        "kind": "micro",
+        "name": "diff_written_same",
+        "time": {
+          "max_us": 10536.722,
+          "mean_us": 9956.8242,
+          "p50_us": 9925.065,
+          "p95_us": 10271.579,
+          "total_ms": 49.784121
+        }
+      },
+      {
+        "allocs_per_op": 26748,
+        "bytes_per_op": 891316,
+        "kind": "micro",
+        "name": "compare_world_same",
+        "time": {
+          "max_us": 2158.78,
+          "mean_us": 2007.6884,
+          "p50_us": 1999.774,
+          "p95_us": 2009.75,
+          "total_ms": 10.038442
+        }
+      },
+      {
+        "allocs_per_op": 616,
+        "bytes_per_op": 107564,
+        "kind": "micro",
+        "name": "digest_locked",
+        "time": {
+          "max_us": 720.188,
+          "mean_us": 516.2672,
+          "p50_us": 478.639,
+          "p95_us": 540.311,
+          "total_ms": 2.581336
+        }
+      },
+      {
+        "join_bytes": 90591,
+        "json_bytes": 1370167,
+        "keyframe_bytes": 90629,
+        "kind": "capture",
+        "map_h": 64,
+        "map_w": 239,
+        "positions": 6309,
+        "tick": 724,
+        "walls": 5305
+      },
+      {
+        "allocs_per_op": 7822,
+        "bytes_per_op": 413302,
+        "kind": "micro",
+        "name": "stage_proved",
+        "time": {
+          "max_us": 4768.33,
+          "mean_us": 4352.3332,
+          "p50_us": 4567.803,
+          "p95_us": 4697.655,
+          "total_ms": 21.761666
+        }
+      }
+    ],
+    "239-8": [
+      {
+        "allocs_per_op": 7470,
+        "bytes_per_op": 1866880,
+        "kind": "micro",
+        "name": "capture_locked",
+        "time": {
+          "max_us": 1379.766,
+          "mean_us": 942.838,
+          "p50_us": 822.099,
+          "p95_us": 893.034,
+          "total_ms": 4.71419
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 1363496,
+        "kind": "micro",
+        "name": "seal",
+        "time": {
+          "max_us": 7195.208,
+          "mean_us": 6416.211,
+          "p50_us": 6227.604,
+          "p95_us": 6269.816,
+          "total_ms": 32.081055
+        }
+      },
+      {
+        "allocs_per_op": 102881,
+        "bytes_per_op": 5671820,
+        "kind": "micro",
+        "name": "manifest",
+        "time": {
+          "max_us": 10342.964,
+          "mean_us": 9604.9344,
+          "p50_us": 9380.958,
+          "p95_us": 9578.461,
+          "total_ms": 48.024672
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 1363496,
+        "kind": "micro",
+        "name": "json_capture",
+        "time": {
+          "max_us": 5708.023,
+          "mean_us": 4942.7884,
+          "p50_us": 4782.03,
+          "p95_us": 4813.717,
+          "total_ms": 24.713942
+        }
+      },
+      {
+        "allocs_per_op": 7,
+        "bytes_per_op": 1705876,
+        "kind": "micro",
+        "name": "encode_correction",
+        "time": {
+          "max_us": 7451.989,
+          "mean_us": 6682.2452,
+          "p50_us": 6473.858,
+          "p95_us": 6701.215,
+          "total_ms": 33.411226
+        }
+      },
+      {
+        "allocs_per_op": 6,
+        "bytes_per_op": 1707636,
+        "kind": "micro",
+        "name": "encode_join",
+        "time": {
+          "max_us": 7956.386,
+          "mean_us": 6686.683599999999,
+          "p50_us": 6443.493,
+          "p95_us": 6450.464,
+          "total_ms": 33.433418
+        }
+      },
+      {
+        "allocs_per_op": 26669,
+        "bytes_per_op": 1878236,
+        "kind": "micro",
+        "name": "diff_same",
+        "time": {
+          "max_us": 3968.334,
+          "mean_us": 3154.9338,
+          "p50_us": 2913.91,
+          "p95_us": 3091.053,
+          "total_ms": 15.774669
+        }
+      },
+      {
+        "allocs_per_op": 26678,
+        "bytes_per_op": 3242120,
+        "kind": "micro",
+        "name": "diff_written_same",
+        "time": {
+          "max_us": 10799.051,
+          "mean_us": 9613.3574,
+          "p50_us": 9276.303,
+          "p95_us": 9681.625,
+          "total_ms": 48.066787
+        }
+      },
+      {
+        "allocs_per_op": 26354,
+        "bytes_per_op": 885716,
+        "kind": "micro",
+        "name": "compare_world_same",
+        "time": {
+          "max_us": 2053.875,
+          "mean_us": 2015.7448,
+          "p50_us": 2007.697,
+          "p95_us": 2048.808,
+          "total_ms": 10.078724
+        }
+      },
+      {
+        "allocs_per_op": 635,
+        "bytes_per_op": 110396,
+        "kind": "micro",
+        "name": "digest_locked",
+        "time": {
+          "max_us": 713.548,
+          "mean_us": 476.04179999999997,
+          "p50_us": 421.766,
+          "p95_us": 440.463,
+          "total_ms": 2.380209
+        }
+      },
+      {
+        "join_bytes": 89016,
+        "json_bytes": 1357116,
+        "keyframe_bytes": 89212,
+        "kind": "capture",
+        "map_h": 64,
+        "map_w": 239,
+        "positions": 6229,
+        "tick": 724,
+        "walls": 5305
+      },
+      {
+        "allocs_per_op": 7797,
+        "bytes_per_op": 415160,
+        "kind": "micro",
+        "name": "stage_proved",
+        "time": {
+          "max_us": 4587.411,
+          "mean_us": 3972.6474,
+          "p50_us": 3784.5,
+          "p95_us": 4356.138,
+          "total_ms": 19.863237
+        }
+      }
+    ],
+    "239-16": [
+      {
+        "allocs_per_op": 7246,
+        "bytes_per_op": 1827193,
+        "kind": "micro",
+        "name": "capture_locked",
+        "time": {
+          "max_us": 1641.825,
+          "mean_us": 1104.614,
+          "p50_us": 987.524,
+          "p95_us": 1112.82,
+          "total_ms": 5.52307
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 1330728,
+        "kind": "micro",
+        "name": "seal",
+        "time": {
+          "max_us": 6999.028,
+          "mean_us": 6230.3697999999995,
+          "p50_us": 6031.793,
+          "p95_us": 6145.432,
+          "total_ms": 31.151849
+        }
+      },
+      {
+        "allocs_per_op": 99651,
+        "bytes_per_op": 5536232,
+        "kind": "micro",
+        "name": "manifest",
+        "time": {
+          "max_us": 10462.703,
+          "mean_us": 9709.6246,
+          "p50_us": 9717.609,
+          "p95_us": 9764.638,
+          "total_ms": 48.548123
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 1330728,
+        "kind": "micro",
+        "name": "json_capture",
+        "time": {
+          "max_us": 5483.761,
+          "mean_us": 4940.0326,
+          "p50_us": 4749.823,
+          "p95_us": 5246.239,
+          "total_ms": 24.700163
+        }
+      },
+      {
+        "allocs_per_op": 7,
+        "bytes_per_op": 1664916,
+        "kind": "micro",
+        "name": "encode_correction",
+        "time": {
+          "max_us": 7141.849,
+          "mean_us": 6407.1878,
+          "p50_us": 6233.021,
+          "p95_us": 6382.003,
+          "total_ms": 32.035939
+        }
+      },
+      {
+        "allocs_per_op": 6,
+        "bytes_per_op": 1666676,
+        "kind": "micro",
+        "name": "encode_join",
+        "time": {
+          "max_us": 7386.852,
+          "mean_us": 6523.939,
+          "p50_us": 6345.879,
+          "p95_us": 6564.624,
+          "total_ms": 32.619695
+        }
+      },
+      {
+        "allocs_per_op": 26069,
+        "bytes_per_op": 1741492,
+        "kind": "micro",
+        "name": "diff_same",
+        "time": {
+          "max_us": 4160.97,
+          "mean_us": 3329.3324,
+          "p50_us": 3038.415,
+          "p95_us": 3558.256,
+          "total_ms": 16.646662
+        }
+      },
+      {
+        "allocs_per_op": 26078,
+        "bytes_per_op": 3072608,
+        "kind": "micro",
+        "name": "diff_written_same",
+        "time": {
+          "max_us": 10271.55,
+          "mean_us": 9507.899599999999,
+          "p50_us": 9251.608,
+          "p95_us": 9696.537,
+          "total_ms": 47.539498
+        }
+      },
+      {
+        "allocs_per_op": 25582,
+        "bytes_per_op": 847396,
+        "kind": "micro",
+        "name": "compare_world_same",
+        "time": {
+          "max_us": 2128.006,
+          "mean_us": 2030.4324,
+          "p50_us": 2013.575,
+          "p95_us": 2074.586,
+          "total_ms": 10.152162
+        }
+      },
+      {
+        "allocs_per_op": 666,
+        "bytes_per_op": 115222,
+        "kind": "micro",
+        "name": "digest_locked",
+        "time": {
+          "max_us": 785.134,
+          "mean_us": 489.98240000000004,
+          "p50_us": 427.463,
+          "p95_us": 437.429,
+          "total_ms": 2.449912
+        }
+      },
+      {
+        "join_bytes": 86592,
+        "json_bytes": 1321798,
+        "keyframe_bytes": 86706,
+        "kind": "capture",
+        "map_h": 64,
+        "map_w": 239,
+        "positions": 6122,
+        "tick": 724,
+        "walls": 5305
+      },
+      {
+        "allocs_per_op": 7604,
+        "bytes_per_op": 385228,
+        "kind": "micro",
+        "name": "stage_proved",
+        "time": {
+          "max_us": 5391.424,
+          "mean_us": 4481.583,
+          "p50_us": 4081.792,
+          "p95_us": 4954.947,
+          "total_ms": 22.407915
+        }
+      }
+    ],
+    "500-2": [
+      {
+        "allocs_per_op": 53241,
+        "bytes_per_op": 16783809,
+        "kind": "micro",
+        "name": "capture_locked",
+        "time": {
+          "max_us": 7112.655,
+          "mean_us": 6034.843400000001,
+          "p50_us": 5725.239,
+          "p95_us": 6527.618,
+          "total_ms": 30.174217
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 10587688,
+        "kind": "micro",
+        "name": "seal",
+        "time": {
+          "max_us": 57992.471,
+          "mean_us": 54298.675,
+          "p50_us": 53980.684,
+          "p95_us": 56573.007,
+          "total_ms": 271.493375
+        }
+      },
+      {
+        "allocs_per_op": 743136,
+        "bytes_per_op": 47273964,
+        "kind": "micro",
+        "name": "manifest",
+        "time": {
+          "max_us": 107822.841,
+          "mean_us": 88697.5098,
+          "p50_us": 85563.85,
+          "p95_us": 86820.864,
+          "total_ms": 443.487549
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 10587688,
+        "kind": "micro",
+        "name": "json_capture",
+        "time": {
+          "max_us": 41138.474,
+          "mean_us": 39323.3182,
+          "p50_us": 38613.28,
+          "p95_us": 40963.363,
+          "total_ms": 196.616591
+        }
+      },
+      {
+        "allocs_per_op": 7,
+        "bytes_per_op": 13232020,
+        "kind": "micro",
+        "name": "encode_correction",
+        "time": {
+          "max_us": 54276.001,
+          "mean_us": 51011.149600000004,
+          "p50_us": 49841.226,
+          "p95_us": 52601.514,
+          "total_ms": 255.055748
+        }
+      },
+      {
+        "allocs_per_op": 6,
+        "bytes_per_op": 13233780,
+        "kind": "micro",
+        "name": "encode_join",
+        "time": {
+          "max_us": 57313.115,
+          "mean_us": 52313.402200000004,
+          "p50_us": 52005.149,
+          "p95_us": 52879.731,
+          "total_ms": 261.567011
+        }
+      },
+      {
+        "allocs_per_op": 209002,
+        "bytes_per_op": 12525484,
+        "kind": "micro",
+        "name": "diff_same",
+        "time": {
+          "max_us": 42622.113,
+          "mean_us": 36280.2142,
+          "p50_us": 36291.487,
+          "p95_us": 39634.373,
+          "total_ms": 181.401071
+        }
+      },
+      {
+        "allocs_per_op": 209011,
+        "bytes_per_op": 23113560,
+        "kind": "micro",
+        "name": "diff_written_same",
+        "time": {
+          "max_us": 100019.542,
+          "mean_us": 88185.25020000001,
+          "p50_us": 85790.286,
+          "p95_us": 86414.16,
+          "total_ms": 440.926251
+        }
+      },
+      {
+        "allocs_per_op": 208229,
+        "bytes_per_op": 6166337,
+        "kind": "micro",
+        "name": "compare_world_same",
+        "time": {
+          "max_us": 28849.432,
+          "mean_us": 22384.8062,
+          "p50_us": 21216.061,
+          "p95_us": 24521.531,
+          "total_ms": 111.924031
+        }
+      },
+      {
+        "allocs_per_op": 629,
+        "bytes_per_op": 477558,
+        "kind": "micro",
+        "name": "digest_locked",
+        "time": {
+          "max_us": 4423.518,
+          "mean_us": 3585.4056,
+          "p50_us": 3467.091,
+          "p95_us": 4192.365,
+          "total_ms": 17.927028
+        }
+      },
+      {
+        "join_bytes": 527650,
+        "json_bytes": 10579902,
+        "keyframe_bytes": 528000,
+        "kind": "capture",
+        "map_h": 250,
+        "map_w": 500,
+        "positions": 51327,
+        "tick": 724,
+        "walls": 50190
+      },
+      {
+        "allocs_per_op": 53529,
+        "bytes_per_op": 2016148,
+        "kind": "micro",
+        "name": "stage_proved",
+        "time": {
+          "max_us": 56273.952,
+          "mean_us": 49322.0792,
+          "p50_us": 48647.116,
+          "p95_us": 55993.864,
+          "total_ms": 246.610396
+        }
+      }
+    ],
+    "500-4": [
+      {
+        "allocs_per_op": 53223,
+        "bytes_per_op": 16784249,
+        "kind": "micro",
+        "name": "capture_locked",
+        "time": {
+          "max_us": 7161.438,
+          "mean_us": 5804.750400000001,
+          "p50_us": 5323.122,
+          "p95_us": 6328.343,
+          "total_ms": 29.023752
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 10579496,
+        "kind": "micro",
+        "name": "seal",
+        "time": {
+          "max_us": 52946.951,
+          "mean_us": 51387.8168,
+          "p50_us": 51918.165,
+          "p95_us": 52695.748,
+          "total_ms": 256.939084
+        }
+      },
+      {
+        "allocs_per_op": 742727,
+        "bytes_per_op": 47257332,
+        "kind": "micro",
+        "name": "manifest",
+        "time": {
+          "max_us": 81045.16,
+          "mean_us": 76884.7798,
+          "p50_us": 75916.777,
+          "p95_us": 77442.829,
+          "total_ms": 384.423899
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 10579496,
+        "kind": "micro",
+        "name": "json_capture",
+        "time": {
+          "max_us": 43076.496,
+          "mean_us": 40508.1442,
+          "p50_us": 40526.966,
+          "p95_us": 40801.013,
+          "total_ms": 202.540721
+        }
+      },
+      {
+        "allocs_per_op": 7,
+        "bytes_per_op": 13223828,
+        "kind": "micro",
+        "name": "encode_correction",
+        "time": {
+          "max_us": 48573.216,
+          "mean_us": 47364.481799999994,
+          "p50_us": 47185.048,
+          "p95_us": 47500.155,
+          "total_ms": 236.822409
+        }
+      },
+      {
+        "allocs_per_op": 6,
+        "bytes_per_op": 13225588,
+        "kind": "micro",
+        "name": "encode_join",
+        "time": {
+          "max_us": 49541.301,
+          "mean_us": 48406.647,
+          "p50_us": 48322.995,
+          "p95_us": 48349.024,
+          "total_ms": 242.033235
+        }
+      },
+      {
+        "allocs_per_op": 208920,
+        "bytes_per_op": 12525548,
+        "kind": "micro",
+        "name": "diff_same",
+        "time": {
+          "max_us": 27721.02,
+          "mean_us": 27076.320399999997,
+          "p50_us": 26907.194,
+          "p95_us": 27463.358,
+          "total_ms": 135.381602
+        }
+      },
+      {
+        "allocs_per_op": 208932,
+        "bytes_per_op": 23128280,
+        "kind": "micro",
+        "name": "diff_written_same",
+        "time": {
+          "max_us": 98522.242,
+          "mean_us": 87892.454,
+          "p50_us": 87600.419,
+          "p95_us": 90419.138,
+          "total_ms": 439.46227
+        }
+      },
+      {
+        "allocs_per_op": 208112,
+        "bytes_per_op": 6150916,
+        "kind": "micro",
+        "name": "compare_world_same",
+        "time": {
+          "max_us": 18385.178,
+          "mean_us": 17532.748600000003,
+          "p50_us": 17509.71,
+          "p95_us": 17709.928,
+          "total_ms": 87.663743
+        }
+      },
+      {
+        "allocs_per_op": 636,
+        "bytes_per_op": 478950,
+        "kind": "micro",
+        "name": "digest_locked",
+        "time": {
+          "max_us": 4196.982,
+          "mean_us": 2933.7936,
+          "p50_us": 2690.268,
+          "p95_us": 2728.715,
+          "total_ms": 14.668968
+        }
+      },
+      {
+        "join_bytes": 528795,
+        "json_bytes": 10573978,
+        "keyframe_bytes": 528289,
+        "kind": "capture",
+        "map_h": 250,
+        "map_w": 500,
+        "positions": 51317,
+        "tick": 724,
+        "walls": 50190
+      },
+      {
+        "allocs_per_op": 53539,
+        "bytes_per_op": 2368425,
+        "kind": "micro",
+        "name": "stage_proved",
+        "time": {
+          "max_us": 40566.856,
+          "mean_us": 35753.5956,
+          "p50_us": 34426.873,
+          "p95_us": 35683.996,
+          "total_ms": 178.767978
+        }
+      }
+    ],
+    "500-8": [
+      {
+        "allocs_per_op": 52884,
+        "bytes_per_op": 16724232,
+        "kind": "micro",
+        "name": "capture_locked",
+        "time": {
+          "max_us": 9319.325,
+          "mean_us": 7135.5648,
+          "p50_us": 7101.561,
+          "p95_us": 8111.991,
+          "total_ms": 35.677824
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 10530344,
+        "kind": "micro",
+        "name": "seal",
+        "time": {
+          "max_us": 53197.845,
+          "mean_us": 51188.7558,
+          "p50_us": 50329.653,
+          "p95_us": 52861.605,
+          "total_ms": 255.943779
+        }
+      },
+      {
+        "allocs_per_op": 738386,
+        "bytes_per_op": 47013198,
+        "kind": "micro",
+        "name": "manifest",
+        "time": {
+          "max_us": 83562.927,
+          "mean_us": 80491.4062,
+          "p50_us": 81163.042,
+          "p95_us": 82644.824,
+          "total_ms": 402.457031
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 10530344,
+        "kind": "micro",
+        "name": "json_capture",
+        "time": {
+          "max_us": 43972.619,
+          "mean_us": 41121.944200000005,
+          "p50_us": 40836.21,
+          "p95_us": 41187.822,
+          "total_ms": 205.609721
+        }
+      },
+      {
+        "allocs_per_op": 7,
+        "bytes_per_op": 13166484,
+        "kind": "micro",
+        "name": "encode_correction",
+        "time": {
+          "max_us": 50021.536,
+          "mean_us": 48720.012200000005,
+          "p50_us": 48544.091,
+          "p95_us": 49630.454,
+          "total_ms": 243.600061
+        }
+      },
+      {
+        "allocs_per_op": 6,
+        "bytes_per_op": 13168244,
+        "kind": "micro",
+        "name": "encode_join",
+        "time": {
+          "max_us": 68099.063,
+          "mean_us": 53505.2264,
+          "p50_us": 50479.121,
+          "p95_us": 52273.391,
+          "total_ms": 267.526132
+        }
+      },
+      {
+        "allocs_per_op": 207996,
+        "bytes_per_op": 12472252,
+        "kind": "micro",
+        "name": "diff_same",
+        "time": {
+          "max_us": 29987.922,
+          "mean_us": 28749.590600000003,
+          "p50_us": 28353.634,
+          "p95_us": 29257.638,
+          "total_ms": 143.747953
+        }
+      },
+      {
+        "allocs_per_op": 208005,
+        "bytes_per_op": 23002984,
+        "kind": "micro",
+        "name": "diff_written_same",
+        "time": {
+          "max_us": 86271.29,
+          "mean_us": 81504.40879999999,
+          "p50_us": 80864.569,
+          "p95_us": 82151.68,
+          "total_ms": 407.522044
+        }
+      },
+      {
+        "allocs_per_op": 207120,
+        "bytes_per_op": 6100148,
+        "kind": "micro",
+        "name": "compare_world_same",
+        "time": {
+          "max_us": 17493.295,
+          "mean_us": 17080.52,
+          "p50_us": 17175.866,
+          "p95_us": 17433.758,
+          "total_ms": 85.4026
+        }
+      },
+      {
+        "allocs_per_op": 658,
+        "bytes_per_op": 480588,
+        "kind": "micro",
+        "name": "digest_locked",
+        "time": {
+          "max_us": 4350.189,
+          "mean_us": 3086.0552000000002,
+          "p50_us": 2785.43,
+          "p95_us": 2880.44,
+          "total_ms": 15.430276
+        }
+      },
+      {
+        "join_bytes": 523713,
+        "json_bytes": 10519050,
+        "keyframe_bytes": 523447,
+        "kind": "capture",
+        "map_h": 250,
+        "map_w": 500,
+        "positions": 51173,
+        "tick": 724,
+        "walls": 50190
+      },
+      {
+        "allocs_per_op": 53194,
+        "bytes_per_op": 2179457,
+        "kind": "micro",
+        "name": "stage_proved",
+        "time": {
+          "max_us": 40854.083,
+          "mean_us": 34991.7224,
+          "p50_us": 32751.388,
+          "p95_us": 36587.987,
+          "total_ms": 174.958612
+        }
+      }
+    ],
+    "500-16": [
+      {
+        "allocs_per_op": 53036,
+        "bytes_per_op": 16765753,
+        "kind": "micro",
+        "name": "capture_locked",
+        "time": {
+          "max_us": 9474.054,
+          "mean_us": 6776.5076,
+          "p50_us": 6040.825,
+          "p95_us": 7046.95,
+          "total_ms": 33.882538
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 10546728,
+        "kind": "micro",
+        "name": "seal",
+        "time": {
+          "max_us": 54065.309,
+          "mean_us": 52944.195,
+          "p50_us": 52276.997,
+          "p95_us": 53893.971,
+          "total_ms": 264.720975
+        }
+      },
+      {
+        "allocs_per_op": 739782,
+        "bytes_per_op": 47109148,
+        "kind": "micro",
+        "name": "manifest",
+        "time": {
+          "max_us": 83630.121,
+          "mean_us": 81369.7774,
+          "p50_us": 82019.125,
+          "p95_us": 82256.622,
+          "total_ms": 406.848887
+        }
+      },
+      {
+        "allocs_per_op": 3,
+        "bytes_per_op": 10546728,
+        "kind": "micro",
+        "name": "json_capture",
+        "time": {
+          "max_us": 46296.046,
+          "mean_us": 43747.168,
+          "p50_us": 45348.44,
+          "p95_us": 45804.953,
+          "total_ms": 218.73584
+        }
+      },
+      {
+        "allocs_per_op": 7,
+        "bytes_per_op": 13182868,
+        "kind": "micro",
+        "name": "encode_correction",
+        "time": {
+          "max_us": 52008.703,
+          "mean_us": 48595.4246,
+          "p50_us": 47627.717,
+          "p95_us": 49847.037,
+          "total_ms": 242.977123
+        }
+      },
+      {
+        "allocs_per_op": 6,
+        "bytes_per_op": 13184628,
+        "kind": "micro",
+        "name": "encode_join",
+        "time": {
+          "max_us": 52343.336,
+          "mean_us": 49585.069200000005,
+          "p50_us": 48814.563,
+          "p95_us": 49796.351,
+          "total_ms": 247.925346
+        }
+      },
+      {
+        "allocs_per_op": 208431,
+        "bytes_per_op": 12509492,
+        "kind": "micro",
+        "name": "diff_same",
+        "time": {
+          "max_us": 33372.864,
+          "mean_us": 29641.4188,
+          "p50_us": 29172.121,
+          "p95_us": 29640.545,
+          "total_ms": 148.207094
+        }
+      },
+      {
+        "allocs_per_op": 208440,
+        "bytes_per_op": 23056608,
+        "kind": "micro",
+        "name": "diff_written_same",
+        "time": {
+          "max_us": 81910.722,
+          "mean_us": 78834.809,
+          "p50_us": 78602.251,
+          "p95_us": 79225.79,
+          "total_ms": 394.174045
+        }
+      },
+      {
+        "allocs_per_op": 207370,
+        "bytes_per_op": 6113588,
+        "kind": "micro",
+        "name": "compare_world_same",
+        "time": {
+          "max_us": 18710.981,
+          "mean_us": 17519.497,
+          "p50_us": 17294.187,
+          "p95_us": 17401.019,
+          "total_ms": 87.597485
+        }
+      },
+      {
+        "allocs_per_op": 690,
+        "bytes_per_op": 486284,
+        "kind": "micro",
+        "name": "digest_locked",
+        "time": {
+          "max_us": 3917.458,
+          "mean_us": 2920.2767999999996,
+          "p50_us": 2669.249,
+          "p95_us": 2801.578,
+          "total_ms": 14.601384
+        }
+      },
+      {
+        "join_bytes": 525794,
+        "json_bytes": 10538398,
+        "keyframe_bytes": 525877,
+        "kind": "capture",
+        "map_h": 250,
+        "map_w": 500,
+        "positions": 51224,
+        "tick": 724,
+        "walls": 50190
+      },
+      {
+        "allocs_per_op": 53325,
+        "bytes_per_op": 2120022,
+        "kind": "micro",
+        "name": "stage_proved",
+        "time": {
+          "max_us": 40771.454,
+          "mean_us": 35301.044,
+          "p50_us": 34687.324,
+          "p95_us": 35153.826,
+          "total_ms": 176.50522
+        }
+      }
+    ]
+  },
+  "projection_phases": {
+    "239": [
+      {
+        "allocs_per_op": 15931,
+        "bytes_per_op": 1697128,
+        "kind": "micro",
+        "name": "wall_encode",
+        "time": {
+          "max_us": 3350.784,
+          "mean_us": 3285.277,
+          "p50_us": 3260.527,
+          "p95_us": 3326.667,
+          "total_ms": 16.426385
+        }
+      },
+      {
+        "allocs_per_op": 0,
+        "bytes_per_op": 12,
+        "kind": "micro",
+        "name": "wall_compare_exact",
+        "time": {
+          "max_us": 18.137,
+          "mean_us": 16.2544,
+          "p50_us": 15.784,
+          "p95_us": 15.814,
+          "total_ms": 0.081272
+        }
+      },
+      {
+        "diff": {
+          "Entries": 0,
+          "Entities": 0,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 0,
+        "repeat": 0,
+        "time": {
+          "capture_pair_us": 1768.472,
+          "compare_write_us": 1964.267,
+          "ledger_prepare_feed_us": 7.852,
+          "project_us": 22.083,
+          "stage_us": 4150
+        }
+      },
+      {
+        "diff": {
+          "Entries": 0,
+          "Entities": 0,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 0,
+        "repeat": 1,
+        "time": {
+          "capture_pair_us": 1674.65,
+          "compare_write_us": 1958.398,
+          "ledger_prepare_feed_us": 6.57,
+          "project_us": 11.928,
+          "stage_us": 4876
+        }
+      },
+      {
+        "diff": {
+          "Entries": 0,
+          "Entities": 0,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 0,
+        "repeat": 2,
+        "time": {
+          "capture_pair_us": 1667.14,
+          "compare_write_us": 3454.33,
+          "ledger_prepare_feed_us": 21.492,
+          "project_us": 10.265,
+          "stage_us": 3573
+        }
+      },
+      {
+        "diff": {
+          "Entries": 0,
+          "Entities": 0,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 4,
+        "repeat": 0,
+        "time": {
+          "capture_pair_us": 1663.214,
+          "compare_write_us": 1957.887,
+          "ledger_prepare_feed_us": 5.528,
+          "project_us": 688.326,
+          "stage_us": 3497
+        }
+      },
+      {
+        "diff": {
+          "Entries": 0,
+          "Entities": 0,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 4,
+        "repeat": 1,
+        "time": {
+          "capture_pair_us": 1614.75,
+          "compare_write_us": 2271.639,
+          "ledger_prepare_feed_us": 5.298,
+          "project_us": 772.754,
+          "stage_us": 3464
+        }
+      },
+      {
+        "diff": {
+          "Entries": 0,
+          "Entities": 0,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 4,
+        "repeat": 2,
+        "time": {
+          "capture_pair_us": 1553.238,
+          "compare_write_us": 2307.683,
+          "ledger_prepare_feed_us": 6.159,
+          "project_us": 761.736,
+          "stage_us": 3428
+        }
+      },
+      {
+        "diff": {
+          "Entries": 0,
+          "Entities": 0,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 16,
+        "repeat": 0,
+        "time": {
+          "capture_pair_us": 1996.526,
+          "compare_write_us": 2291.91,
+          "ledger_prepare_feed_us": 6.15,
+          "project_us": 2917.221,
+          "stage_us": 3600
+        }
+      },
+      {
+        "diff": {
+          "Entries": 19,
+          "Entities": 16,
+          "CellShift": 1
+        },
+        "kind": "projection_phases",
+        "lag": 16,
+        "repeat": 1,
+        "time": {
+          "capture_pair_us": 1711.887,
+          "compare_write_us": 4384.941,
+          "ledger_prepare_feed_us": 7.311,
+          "project_us": 2555.957,
+          "stage_us": 3591
+        }
+      },
+      {
+        "diff": {
+          "Entries": 19,
+          "Entities": 16,
+          "CellShift": 1
+        },
+        "kind": "projection_phases",
+        "lag": 16,
+        "repeat": 2,
+        "time": {
+          "capture_pair_us": 1695.382,
+          "compare_write_us": 4328.265,
+          "ledger_prepare_feed_us": 8.643,
+          "project_us": 2521.476,
+          "stage_us": 3581
+        }
+      },
+      {
+        "diff": {
+          "Entries": 0,
+          "Entities": 0,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 32,
+        "repeat": 0,
+        "time": {
+          "capture_pair_us": 1703.625,
+          "compare_write_us": 4372.823,
+          "ledger_prepare_feed_us": 11.046,
+          "project_us": 4862.949,
+          "stage_us": 3742
+        }
+      },
+      {
+        "diff": {
+          "Entries": 54,
+          "Entities": 16,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 32,
+        "repeat": 1,
+        "time": {
+          "capture_pair_us": 1787.17,
+          "compare_write_us": 4332.943,
+          "ledger_prepare_feed_us": 10.546,
+          "project_us": 4810.521,
+          "stage_us": 3514
+        }
+      },
+      {
+        "diff": {
+          "Entries": 54,
+          "Entities": 16,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 32,
+        "repeat": 2,
+        "time": {
+          "capture_pair_us": 1693.559,
+          "compare_write_us": 4389.558,
+          "ledger_prepare_feed_us": 10.145,
+          "project_us": 5035.049,
+          "stage_us": 3638
+        }
+      }
+    ],
+    "500": [
+      {
+        "allocs_per_op": 150596,
+        "bytes_per_op": 19204424,
+        "kind": "micro",
+        "name": "wall_encode",
+        "time": {
+          "max_us": 34645.953,
+          "mean_us": 33468.9628,
+          "p50_us": 33474.95,
+          "p95_us": 34475.476,
+          "total_ms": 167.344814
+        }
+      },
+      {
+        "allocs_per_op": 0,
+        "bytes_per_op": 12,
+        "kind": "micro",
+        "name": "wall_compare_exact",
+        "time": {
+          "max_us": 190.767,
+          "mean_us": 160.3174,
+          "p50_us": 152.59,
+          "p95_us": 153.101,
+          "total_ms": 0.801587
+        }
+      },
+      {
+        "diff": {
+          "Entries": 0,
+          "Entities": 0,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 0,
+        "repeat": 0,
+        "time": {
+          "capture_pair_us": 14318.919,
+          "compare_write_us": 17000.757,
+          "ledger_prepare_feed_us": 14.091,
+          "project_us": 29.394,
+          "stage_us": 39068
+        }
+      },
+      {
+        "diff": {
+          "Entries": 0,
+          "Entities": 0,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 0,
+        "repeat": 1,
+        "time": {
+          "capture_pair_us": 14213.23,
+          "compare_write_us": 17442.822,
+          "ledger_prepare_feed_us": 12.769,
+          "project_us": 27.071,
+          "stage_us": 39108
+        }
+      },
+      {
+        "diff": {
+          "Entries": 0,
+          "Entities": 0,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 0,
+        "repeat": 2,
+        "time": {
+          "capture_pair_us": 14371.978,
+          "compare_write_us": 16747.485,
+          "ledger_prepare_feed_us": 12.489,
+          "project_us": 27.621,
+          "stage_us": 39124
+        }
+      },
+      {
+        "diff": {
+          "Entries": 54,
+          "Entities": 16,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 4,
+        "repeat": 0,
+        "time": {
+          "capture_pair_us": 14029.889,
+          "compare_write_us": 35084.011,
+          "ledger_prepare_feed_us": 17.567,
+          "project_us": 1182.451,
+          "stage_us": 37838
+        }
+      },
+      {
+        "diff": {
+          "Entries": 0,
+          "Entities": 0,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 4,
+        "repeat": 1,
+        "time": {
+          "capture_pair_us": 15601.595,
+          "compare_write_us": 41496.053,
+          "ledger_prepare_feed_us": 18.818,
+          "project_us": 1207.888,
+          "stage_us": 40180
+        }
+      },
+      {
+        "diff": {
+          "Entries": 0,
+          "Entities": 0,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 4,
+        "repeat": 2,
+        "time": {
+          "capture_pair_us": 14765.156,
+          "compare_write_us": 35698.385,
+          "ledger_prepare_feed_us": 22.143,
+          "project_us": 1128.659,
+          "stage_us": 39109
+        }
+      },
+      {
+        "diff": {
+          "Entries": 0,
+          "Entities": 0,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 16,
+        "repeat": 0,
+        "time": {
+          "capture_pair_us": 17215.864,
+          "compare_write_us": 20678.466,
+          "ledger_prepare_feed_us": 36.325,
+          "project_us": 52142.439,
+          "stage_us": 40067
+        }
+      },
+      {
+        "diff": {
+          "Entries": 57,
+          "Entities": 57,
+          "CellShift": 24
+        },
+        "kind": "projection_phases",
+        "lag": 16,
+        "repeat": 1,
+        "time": {
+          "capture_pair_us": 17019.629,
+          "compare_write_us": 58229.551,
+          "ledger_prepare_feed_us": 31.568,
+          "project_us": 49025.387,
+          "stage_us": 54448
+        }
+      },
+      {
+        "diff": {
+          "Entries": 57,
+          "Entities": 57,
+          "CellShift": 24
+        },
+        "kind": "projection_phases",
+        "lag": 16,
+        "repeat": 2,
+        "time": {
+          "capture_pair_us": 21843.39,
+          "compare_write_us": 81277.734,
+          "ledger_prepare_feed_us": 36.114,
+          "project_us": 47260.56,
+          "stage_us": 50058
+        }
+      },
+      {
+        "diff": {
+          "Entries": 56,
+          "Entities": 56,
+          "CellShift": 0
+        },
+        "kind": "projection_phases",
+        "lag": 32,
+        "repeat": 0,
+        "time": {
+          "capture_pair_us": 22320.648,
+          "compare_write_us": 36593.243,
+          "ledger_prepare_feed_us": 44.878,
+          "project_us": 118175.856,
+          "stage_us": 51253
+        }
+      },
+      {
+        "diff": {
+          "Entries": 57,
+          "Entities": 57,
+          "CellShift": 49
+        },
+        "kind": "projection_phases",
+        "lag": 32,
+        "repeat": 1,
+        "time": {
+          "capture_pair_us": 19138.369,
+          "compare_write_us": 52247.436,
+          "ledger_prepare_feed_us": 37.166,
+          "project_us": 113632.799,
+          "stage_us": 50466
+        }
+      },
+      {
+        "diff": {
+          "Entries": 57,
+          "Entities": 57,
+          "CellShift": 49
+        },
+        "kind": "projection_phases",
+        "lag": 32,
+        "repeat": 2,
+        "time": {
+          "capture_pair_us": 20466.067,
+          "compare_write_us": 51953.995,
+          "ledger_prepare_feed_us": 36.235,
+          "project_us": 118391.902,
+          "stage_us": 52777
+        }
+      }
+    ]
+  },
+  "relay_samples": [
+    {
+      "name": "relay-239-4",
+      "simulated_seconds": 20.0,
+      "host_cpu_estimate_ms_s": 110.97879284999999,
+      "guest_cpu_estimate_mean_ms_s": 71.33591100000001,
+      "egress_kB_s_by_participant": [
+        64.1648,
+        145.21255,
+        7.21535,
+        6.7703999999999995
+      ],
+      "hash_only_percent": 0.9803921568627451,
+      "combined_alloc_MB_s": 175.0590616
+    },
+    {
+      "name": "relay-500-4",
+      "simulated_seconds": 20.0,
+      "host_cpu_estimate_ms_s": 698.48464235,
+      "guest_cpu_estimate_mean_ms_s": 559.0668499166667,
+      "egress_kB_s_by_participant": [
+        362.5446,
+        708.02785,
+        16.563,
+        10.9586
+      ],
+      "hash_only_percent": 0.0,
+      "combined_alloc_MB_s": 1224.4735116
+    }
+  ],
+  "dedicated_sample": {
+    "name": "dedicated-500-17",
+    "simulated_seconds": 20.0,
+    "host_cpu_estimate_ms_s": 1365.0172347,
+    "guest_cpu_estimate_mean_ms_s": 637.08393173125,
+    "egress_kB_s_by_participant": [
+      4204.402,
+      11.158100000000001,
+      14.68235,
+      14.1142,
+      14.04365,
+      11.80165,
+      15.1725,
+      10.84435,
+      11.333350000000001,
+      9.442200000000001,
+      11.10555,
+      14.3672,
+      13.1727,
+      12.3554,
+      14.81865,
+      9.79235,
+      12.06275
+    ],
+    "hash_only_percent": 97.00093720712277,
+    "combined_alloc_MB_s": 5188.88226
+  },
+  "tcp_sample": {
+    "window_seconds": 25.042,
+    "bytes_per_second": {
+      "host_to_guest": 225738.359555946,
+      "guest_to_host": 1264.8350770705215
+    },
+    "guests": 1,
+    "map": "500x250",
+    "scope": "localhost compressed TCP stream; recovery included; process memory/CPU not reliable"
+  },
+  "evidence_sha256": {
+    "239-16-1.log": "c75609378384dec63b934abf37bbd34d058b0a41c93088cc5de290d95fbedf4f",
+    "239-16-2.log": "5ab15401dfa5f9a45eae3d945a02051df5c0ed06c7479bc97101f86e333cd03f",
+    "239-16-3.log": "ff714972a2abb9d654ab17b58c01c5ab6a7776014c0fdb6ad3aee79ef083722b",
+    "239-2-1.log": "225f88a6dbd0602499846678a2f1bedd0188bf5f7d09f89f840c4d447353e3a0",
+    "239-2-2.log": "5e9e328f042c73f6977b427cc894bc42b3786ebe19387126d397ad693389f0d8",
+    "239-2-3.log": "e7c0ef30f0a5d2257e69137d2e6cb2fa3387f1776b8dbb2e8b0f6f523a327cca",
+    "239-4-1.log": "b140677fabfb0931dc8cb0703bc5ad3634b55d9c00957161a51e98d6694fd072",
+    "239-4-2.log": "ce10aa09396b90223c11257f2fcd9b65891bc710f83239bcc7a8fe2b0a368e06",
+    "239-4-3.log": "327d3a4d4d7102e325029ace28bb17fd5322cf3f88d8b5823c5fe2c21e5110e5",
+    "239-8-1.log": "dc87069da8a1c65fe3e797b34e5ddaa9e593cded3c690f3cea60c55db4f56351",
+    "239-8-2.log": "c402119e0ac2ab4411d860ce112ea9ce45bf233509a42b6f0552278bb608bed8",
+    "239-8-3.log": "ec773c08bedc2dafa8c9284c78b85a88c85931f6683cdd38f270f583a9d975b7",
+    "500-16-1.log": "88df82f5555fc75194a75c64f8bc9677b5e4bda908d5cbdfd9d35cf947fb8614",
+    "500-16-2.log": "80864c4109c45d74be3a85cfc604bf9d2369bb462a0cb6575cb278fa99a68c15",
+    "500-16-3.log": "88f3f1e9509c73267c1679bd00c706b90b7b58d833a2205fe1bfb493ec2a381f",
+    "500-2-1.log": "c40991e7ac3ce5b86c1b19f5b1d8404981c8405e4cff2c6a5c53541085e3c8b3",
+    "500-2-2.log": "ea6789c1b06682e68409a939390b508cd75cf8c47830fb6a8ae303dc37782dcb",
+    "500-2-3.log": "f4e4fb518f912c6a7c9eb3efe50ffe827728e026ba96cda16b9a95c5fde5eae3",
+    "500-4-1.log": "0948245b243dfc932f360726923f64aeba26afff206d526ffdb6b9767ea19308",
+    "500-4-2.log": "7a578a3cb2f2ef5db5f440efa323aa2f175a1348fc915dfdb8acadf381a7fbd0",
+    "500-4-3.log": "0fe748424faaefc1c33f8e22be67a321efe9f754d7285de954a5ac94761feed8",
+    "500-8-1.log": "3f6ad3945ead02c6247eb884ae02a66edd9e751a53623aad7b49d2de3b7b5991",
+    "500-8-2.log": "32b9a6a653963b8592cc4e5fe550b22dd41d0fc17556405f5a3e97c69b4a8b00",
+    "500-8-3.log": "7a0ae90276cc93ea82cd1ceb152763bac57662ed13b1e99253da46ad40d87176",
+    "dedicated-500-17.log": "73a885753816dcb1b311c1a0c9fdc0660de0e3bcd0971232c20ac7a6f7eb5ae9",
+    "detail-239.log": "0e22aba1f19042dcc3869a395150caf5a14a8c028d463eaf125b7dbbec56d69a",
+    "detail-500.log": "a1760068f52415df04834fae98e232088bc8090fe33a99a13a683ea015c36578",
+    "pilot-239-2.log": "ff5495ff4490a1ef237bf054e5a847a42a468434347ed6746b86f54d75371e3c",
+    "pilot-500-2.log": "a184080a73e111f04a49e8200eda6097ff90a2ec40cf3f5a606cb32f1eee0405",
+    "relay-239-4.log": "5a569a3f4b5e370b27db3af71fe49585df446b502fe6ffd1bf186d15b4a13335",
+    "relay-500-4.log": "144a3aa6bd2f368c741dcb7db8b8eeb460a75b24aea1905688b1fa3bbb656ca0",
+    "signals-500.log": "9c490243cc2fc77bce544c3e40efcdd8fa0fb1729dcc7ec38d2783e9d4d9174d"
+  }
+}

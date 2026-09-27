@@ -568,32 +568,30 @@ handoff.
 
 ## 6. Current operating point
 
-Representative measurements at the storm high-water fixture are:
+The [scaling audit](multiplayer-scaling.md) pins the `2d8c5b6` baseline, workload,
+repetitions and limitations; its [data](multiplayer-scaling-data.json) is retained
+for comparison. Native medians at 16 playing participants are:
 
-| Measurement | Current value |
-|---|---:|
-| Plain JSON capture | about 172 KiB |
-| Compressed keyframe | about 15.4 KiB |
-| Compressed delta one cadence later | about 7.1 KiB |
-| Manifest over 58 sections | about 1.4 KiB |
-| Converged exchange | about 1.5 KiB |
-| One repaired page | under 0.3 KiB |
-| Capture read under lock | about 1 ms |
-| Index and hash outside lock | about 2 ms |
+| Measurement | Tower, 239×64 | td, 500×250 |
+|---|---:|---:|
+| Host work, estimated CPU-ms/s | 129 | 1,716 |
+| Mean guest work, estimated CPU-ms/s | 92 | 660 |
+| Simulation tick mean, host / guest | 1.78 / 1.86 ms | 9.26 / 10.62 ms |
+| Frozen capture read under lock | 0.99 ms | 6.04 ms |
+| Frozen integrity / manifest construction | 6.03 / 9.72 ms | 52.28 / 82.02 ms |
+| Compressed full correction | 87 kB | 526 kB |
+| Host framed egress, before stream compression | 1.68 MB/s | 3.79 MB/s |
 
-The tower region at 239x64 (about 6,000 shared entities, mostly maze walls) is
-heavier: a compressed keyframe is 64-95 KB, a capture read 1.5 ms, an index 14 ms,
-and an install that moves nothing about 8 ms staged and 6 ms committed; a repair
-adds about 1.3 ms of projection a tick behind the clock.
+All rates use simulated seconds. The matrix shares one native process and GC;
+host/guest CPU attribution is estimated from sequential timings. These are neither
+browser timings nor isolated fleet-pod measurements. A separate cursorless-host
+sample with 16 guests estimated 1,365 CPU-ms/s and 4.20 MB/s framed host egress.
 
-With one keyframe per ten corrections, a converged storm session is about
-14.2 KiB/s at 5 Hz or 5.7 KiB/s at 2 Hz. These are observations, not wall-time
-acceptance thresholds. Correctness, bounded allocation, and meaningful byte
-reduction are the enforced properties.
-
-Capture remains a bounded world-lock read. Indexing, page marshalling, hashing,
-diffing, proof work, and compression run after the lock is released. A selective
-repair is abandoned when it would be wider than the keyframe it replaces.
+Capture, simulation and correction projection/comparison hold the world lock.
+Sealing, indexing and wire encoding run outside it, but still consume the browser
+worker's CPU. Peer deadlines can produce more publication rounds than nominal
+5 Hz. Proposed acceptance budgets in the audit await approval; they are not
+current guarantees.
 
 ## 7. Diagnostics and operations
 
