@@ -529,9 +529,12 @@ Both the already-scheduled queue and later arrivals apply the same classificatio
 
 ### 4.2 Mesh relay
 
-Every node forwards a newly admitted source epoch to each neighbour except the
-arrival edge. A per-source 64-epoch window admits out-of-order paths once and
-suppresses duplicates. The hop limit is a backstop, not the termination rule.
+Relays forward each newly admitted source epoch except along its arrival edge.
+When the authority commits a raw guest epoch, it excludes the producer instead:
+the incoming intermediary still needs the committed copy. A per-source 64-epoch
+window admits out-of-order paths once and suppresses duplicates; the hop limit
+bounds forwarding. Owner-state relays preserve their message type and use the
+same committed return path.
 
 Owner-state sync uses a per-slot sequence. Correction chunks carry the authority
 term and capture tick unchanged. A relay serves selective pages only from retained

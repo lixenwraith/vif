@@ -21,12 +21,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/linkpace"
 )
 
-// NetworkSystem is the only crossing between this instance and its peers, in both
-// directions. Outbound it is the event queue's wire sink (D-3 artifacts, D-10
-// classes) plus a periodic owner-authored state sync (D-13). Inbound it replays a
-// peer's crossings in the domain their producer stamped, and it is the sole writer
-// of a remote cursor's owner-authored components — which is what makes a
-// transported value the single authority for that cell.
+// NetworkSystem carries shared crossings and owner-state syncs between peers.
+// It is the sole writer of remote owner-authored components (D-13).
 type NetworkSystem struct {
 	world *engine.World
 
@@ -60,21 +56,14 @@ type NetworkSystem struct {
 	encodeErr     int64
 	barrierActive atomic.Bool
 
-	// appliedPeerSeq is the highest ordinary sequence this instance has applied from
-	// each remote source, and the receive-side half of the fence a capture carries.
-	// The local source's half is appliedCrossSeq above, which is a contiguous prefix
-	// because local dispatch can complete out of order; this one is a maximum,
-	// because a link delivers one source's frames in order and a frame this instance
-	// refused is one it will never see again — so the highest it applied is the
-	// honest statement of what it has dealt with.
+	// appliedPeerSeq is each remote source's highest applied sequence. Unlike the
+	// local contiguous prefix, a remote fence advances past refused frames because
+	// they will not arrive again; relay reordering is repaired by correction.
 	appliedPeerSeq [participantSlots]uint64
 
-	// snapshotFloor is the tick of the last world this instance installed, and
-	// snapshotFences what that world contained from each participant. For a
-	// barrier-bound frame ApplyTick decides membership — the tick is exact. For an
-	// ordinary crossing the authority may have applied late, so a world can miss one
-	// whose ApplyTick is already past; the sequence answers.
-	// Zero on an instance that never installed a capture.
+	// snapshotFloor and snapshotFences describe the last installed world.
+	// Barrier-bound membership uses ApplyTick; ordinary crossings use source
+	// sequence because the authority may have applied them late.
 	snapshotFloor     uint64
 	snapshotAuthority uint32
 	snapshotFences    network.CrossingFences
@@ -166,15 +155,9 @@ type NetworkSystem struct {
 	// chunk once per path instead, which is a cycle the mesh closes.
 	snapshot network.SnapshotAssembly
 
-	// suffix is the bounded ring of this instance's own ordinary crossings, kept so
-	// a projection over a capture that predates them can re-apply them at their
-	// ticks. Barrier-bound artifacts are absent: they decide what the world *is*,
-	// and are retained separately in applied once they apply.
-	//
-	// lostSeq is the newest source-local sequence retention has dropped. A replay is
-	// offered only when it lies at or before the correction's fence, because a
-	// suffix missing one of its records is not a shorter suffix — it is a different
-	// history, and this never guesses at one.
+	// suffix retains ordinary crossings for projection; barrier-bound artifacts
+	// are retained in applied instead. lostSeq marks the newest evicted sequence:
+	// a suffix with a gap beyond the correction fence must never be replayed.
 	suffix        []localCrossing
 	suffixBytes   int
 	lostSeq       uint64
@@ -215,14 +198,8 @@ type NetworkSystem struct {
 	enabled bool
 }
 
-// localCrossing is one of this instance's own crossings, retained in the wire
-// representation it was already encoded into.
-//
-// Reusing event.ScheduledWireFrame is the point rather than an economy: the frame
-// is what the host will apply, the journal writes the same payload text, and a
-// replay that decoded a second representation could differ from both. The apply
-// tick beside it is the session's agreed instant for the artifact, which is what
-// decides whether a correction already contains it.
+// localCrossing retains the wire representation so projection, authority
+// application and journaling use identical payloads and apply ticks.
 type localCrossing struct {
 	frame event.ScheduledWireFrame
 
@@ -271,19 +248,9 @@ type stateDigest struct {
 	Valid bool `json:"-"`
 }
 
-// epochWindow is one source's replay filter: the newest production epoch admitted
-// from it, plus a bitmap of the epochs immediately before that one.
-//
-// A single stream delivers a source's epochs in order, and a high-water mark is
-// enough for it. A mesh does not: the same epoch reaches a node by several paths,
-// and epochs from one source can arrive out of order because the paths differ in
-// length. Against a high-water mark an out-of-order epoch is indistinguishable from
-// a duplicate, so it would be discarded without ever being applied — a silent
-// divergence exactly where the relay is supposed to prevent one.
-//
-// The window admits each epoch once and no more, in any arrival order, as long as
-// it is within NetworkEpochWindow of the newest. Beyond that it is refused: an
-// artifact that far behind has already missed its apply tick.
+// epochWindow admits each source epoch once within NetworkEpochWindow.
+// A bitmap preserves out-of-order arrivals over unequal mesh paths; a single
+// high-water mark would silently discard them as duplicates.
 type epochWindow struct {
 	high uint64 // newest ProducedTick admitted; zero means nothing yet
 	seen uint64 // bit i set: epoch high-1-i was admitted
@@ -790,15 +757,8 @@ func (s *NetworkSystem) closeAppliedCrossingLocked(sequence uint64) {
 	}
 }
 
-// noteAppliedFrom advances one remote source's applied boundary.
-//
-// A maximum rather than a contiguous prefix. Within one link a source's frames
-// arrive in order, so the highest applied is the whole of what arrived; a frame this
-// instance refused for a full queue is one it will never see again, and stalling the
-// fence on it would make that producer replay a growing suffix at every correction
-// for the rest of the session. The cost of the maximum is the opposite and much
-// smaller: a frame that overtakes a lower one across a relay leaves the lower one
-// looking contained for one cadence, which the next correction repairs.
+// Remote fences use a maximum so a refused frame cannot stall replay forever.
+// A lower frame overtaken across a relay is recovered by the next correction.
 func (s *NetworkSystem) noteAppliedFrom(source uint32, seq uint64) {
 	if seq == 0 || source == 0 || int(source) >= len(s.appliedPeerSeq) {
 		return
@@ -810,13 +770,8 @@ func (s *NetworkSystem) noteAppliedFrom(source uint32, seq uint64) {
 	s.mu.Unlock()
 }
 
-// AppliedCrossingFences returns, for every participant, the sequence through which
-// a capture of the current world contains that participant's ordinary crossings.
-//
-// The local entry is the contiguous prefix its own dispatchers have completed; the
-// rest are the highest this instance has applied. It is read under the world lock by
-// CaptureShared, so no completed dispatcher and no applied peer frame can move the
-// world without moving its fence with it.
+// AppliedCrossingFences reads the local contiguous prefix and remote maxima
+// under the world lock, so world changes and their containment evidence agree.
 func (s *NetworkSystem) AppliedCrossingFences() network.CrossingFences {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -850,21 +805,8 @@ func barrierBound(et event.EventType) bool {
 	}
 }
 
-// retainLocked adds one of this instance's own crossings to the replay suffix,
-// dropping the oldest whenever any of the three bounds is exceeded.
-//
-// All three bounds are needed and each answers a different failure. The tick span
-// keeps the suffix inside the window a correction can rebase onto — past the
-// convergence floor a whole world has arrived and there is nothing older to
-// preserve. The record count bounds a participant producing faster than the
-// cadence. The byte bound is what stops a pathological payload from turning a
-// bounded ring into an unbounded buffer.
-//
-// A dropped record raises lostSeq rather than merely shortening the ring, because a
-// suffix with a hole is not a shorter suffix — it is a different history.
-// LocalReplaySuffix refuses to offer one.
-//
-// Caller MUST hold mu.
+// Bound retention by ticks, records and bytes; lostSeq prevents replaying a
+// suffix with a gap beyond the correction fence. Caller holds mu.
 func (s *NetworkSystem) retainLocked(frame event.WireFrame, produced, applyTick uint64, origin event.Origin) {
 	rec := localCrossing{
 		frame:    event.ScheduledWireFrame{Frame: frame, ApplyTick: applyTick},
@@ -962,19 +904,9 @@ func (s *NetworkSystem) ScheduleReplay(frames []event.ScheduledWireFrame, source
 	}
 }
 
-// LocalReplaySuffix returns this instance's own crossings that the installed world
-// does not contain, in session application order.
-//
-// The boundary is the capture's fence for this source, not its tick. A copy whose
-// apply tick is already past can still be missing from a capture read before it
-// reached the authority; judging by tick discarded exactly those, which is how a
-// guest's own action came to vanish for one cadence whenever its link missed the
-// lead. Production ticks bound the retained window; they do not decide membership.
-//
-// ok is false when retention has dropped a record the suffix would need. The
-// caller then installs the authority alone and reports that replay was skipped;
-// there is no partial answer, because a partial replay is a guess about what the
-// participant did.
+// LocalReplaySuffix selects ordinary crossings by the capture's source fence,
+// not its tick: a late crossing can be absent from a newer capture.
+// If retention lost a needed record, refuse the whole suffix.
 func (s *NetworkSystem) LocalReplaySuffix(fence uint64) ([]event.ScheduledWireFrame, []event.Origin, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1042,21 +974,10 @@ func (s *NetworkSystem) refreshLink(p engine.NetworkPort) bool {
 	return active
 }
 
-// AdoptSnapshot rebases the barrier onto a world this instance just installed.
-//
-// Three clocks move here, but only two may move backwards. The world and its
-// scheduled artifacts rebase to the installed tick. This source's production
-// epoch does not: peers use it as a monotonic replay key and would reject a new
-// batch sent under an epoch they admitted before the correction. A rewound source
-// therefore keeps its next unsent epoch and buffers new crossings until the world
-// catches it. Barrier-bound artifacts already due at or before the installed tick
-// are dropped, because every instance applies one at the same tick. Ordinary
-// crossings are dropped by their source's sequence fence instead: an apply tick
-// says when a copy was scheduled to run, and the fence says what the captured world
-// actually contains. Both boundaries are remembered so an artifact still in flight
-// is classified the same way when it arrives.
-//
-// Caller MUST hold updateMutex: it runs inside the install.
+// AdoptSnapshot rebases scheduled state while keeping production epochs
+// monotonic for peer duplicate filters. Barrier-bound artifacts use the tick
+// floor; ordinary artifacts use source fences. Both also classify late arrivals.
+// Caller holds updateMutex.
 func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences network.CrossingFences) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1163,21 +1084,9 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 	}
 }
 
-// snapshotContainsLocked reports whether the last installed capture already
-// contains an artifact, and whether a sequence fence (rather than the tick floor)
-// proved it.
-//
-// Ordinary crossings are decided by their source's fence, whoever produced them. A
-// frame the capturing instance had not applied is absent even when scheduler delay
-// or a slow link made its nominal ApplyTick old, and a frame it had applied is
-// present even when the receive-side ApplyTick is still in the future. Barrier-bound
-// frames keep the agreed ApplyTick: every instance applies one at the same tick, so
-// the tick is the exact answer for them.
-//
-// A capture that named no fence for a source claims nothing about it, so nothing is
-// contained and the artifact is kept. That is the conservative direction — a
-// duplicate is repaired by the next correction, a discarded action is not.
-// Caller MUST hold mu.
+// snapshotContainsLocked uses source fences for ordinary crossings and the
+// tick floor for barrier-bound artifacts, whose apply tick is exact.
+// The second result identifies containment proved by sequence. Caller holds mu.
 func (s *NetworkSystem) snapshotContainsLocked(a barrierArtifact) (contained, bySequence bool) {
 	if et, ok := event.GetEventType(a.frame.Event); ok && !barrierBound(et) {
 		if fence := s.snapshotFences.Seq(network.PeerID(a.source)); fence != 0 {
@@ -1192,15 +1101,8 @@ func (s *NetworkSystem) snapshotContainsLocked(a barrierArtifact) (contained, by
 	return a.applyTick <= s.snapshotFloor, false
 }
 
-// DrainPeers translates whatever the transport is holding without advancing a tick.
-//
-// It exists for the join, which has to know the tick the session has reached before
-// it decides how many ticks to run. Receive answers that question only as part of a
-// tick, and a tick is the thing being decided; this is the same drain with the
-// applying half left out, so an artifact is scheduled at the tick it names and
-// nothing is applied early.
-//
-// Caller MUST hold updateMutex.
+// DrainPeers drains inbound frames without advancing simulation, so joins and
+// correction work can receive data while the normal tick driver is paused.
 func (s *NetworkSystem) DrainPeers() {
 	p := s.port()
 	if p == nil || !s.enabled {
@@ -1305,20 +1207,8 @@ func (s *NetworkSystem) Flush(completedTick uint64) {
 	}
 }
 
-// publishLinkMeasurement is both halves of this system's part in the round trip,
-// and neither of them is a decision.
-//
-// Outbound it hands the transport the report a probing peer will be echoed: the
-// tick this instance stands on, how far behind it believes it is, how much the
-// last correction had to move it, and where its cursor is. Every one of those is
-// a scheduling hint — a host may publish to this participant sooner because of
-// them — and a wrong or stale one can cost a correction sent early and nothing
-// else. Inbound it copies the transport's own estimate into telemetry.
-//
-// What it deliberately does not do is read a measurement back into the world.
-// Network timing may pace a transport and may not enter shared simulation state,
-// an RNG stream, a replay or a game decision, and the way that is kept true is
-// that this is the only seam between the two and it only ever copies.
+// publishLinkMeasurement supplies the transport with simulation progress and
+// reads its link measurements for cadence and diagnostics.
 func (s *NetworkSystem) publishLinkMeasurement(p engine.NetworkPort, completedTick uint64) {
 	link, ok := p.(engine.LinkMeasuringPort)
 	if !ok || !s.enabled || !p.IsRunning() {
@@ -1454,20 +1344,8 @@ func (s *NetworkSystem) forgetDigestPeer(peer uint32) {
 	s.pendingDigest[peer] = stateDigest{}
 }
 
-// noticeDeparture reacts to a lost link. It deliberately does not despawn anything:
-// only a direct neighbour sees a disconnect, and it sees it at a moment of its own
-// transport's choosing, so acting here would remove a shared cursor at a different
-// tick on every instance — and not at all on instances that never linked to the
-// departing participant.
-//
-// Instead exactly one instance turns the observation into a crossing. The
-// coordinator is that instance: it is the only participant every topology this
-// session can build guarantees a path to, and one producer is what gives the
-// departure a single apply tick. A neighbour that is not the coordinator floods a
-// notice instead, deduped by departing participant like any other artifact.
-//
-// The identity release is separate and stays local: which identities the lobby may
-// hand out again is this instance's own bookkeeping, not shared state.
+// A lost link is not proof of a departed participant in a mesh. The session
+// layer decides membership and authority succession before any cursor despawns.
 func (s *NetworkSystem) noticeDeparture(peerID uint32) {
 	if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
 		r.OnDeparture(peerID)
@@ -1527,14 +1405,8 @@ func (s *NetworkSystem) crossSession(t event.EventType, payload any) {
 	s.world.PushEventFull(t, payload, event.OriginSession, core.DomainPlayer)
 }
 
-// isCoordinator reports whether this instance is the one currently authoring the
-// Shared world.
-//
-// It used to be "does this instance own the session's first identity", because
-// that is the identity the handshake assigns to the host and the host authored
-// for the life of the session. A handoff moves authorship, so the question moves
-// with it: the roster artifacts only one producer may raise follow the authority,
-// not the participant that opened the session.
+// Coordinator-only artifacts are accepted from the current authority, including
+// a successor after handoff.
 func (s *NetworkSystem) isCoordinator() bool {
 	s.mu.Lock()
 	local := s.localSource
@@ -1638,17 +1510,8 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) {
 	}
 }
 
-// receiveCorrection reassembles one authoritative correction and hands the body to
-// the session layer.
-//
-// Nothing here decodes or installs it. This runs inside the tick that drained the
-// chunk, under the world lock a correction's install needs for itself, and a
-// correction is hundreds of kilobytes of JSON — so what happens here is a copy into
-// a queue and nothing else.
-//
-// A malformed transfer resets the assembly rather than poisoning it: the host sends
-// a whole correction every SnapshotKeyframeCorrections and each one is
-// self-sufficient, so the recovery from a broken transfer is to wait for the next.
+// receiveCorrection queues complete authoritative bodies for installation
+// between ticks; transport draining must not recursively acquire the world lock.
 func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
 	if from == 0 || int(from) >= participantSlots {
 		s.statDrop.Add(1)
@@ -1688,18 +1551,7 @@ func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
 	}
 }
 
-// receiveSelective hands one selective-correction frame to the session layer: a
-// manifest, a receiver's answer to one, the repair that answers that, or the
-// refusal a retention holder gives when it cannot produce one.
-//
-// None of the four is relayed *here*, and that is deliberate rather than an
-// omission. The transport's flood forwards what it admitted, which is the right
-// rule for an artifact everyone needs and the wrong one for an exchange: a request
-// or a repair forwarded to a peer that did not ask would deliver a page vector it
-// holds no retention for. Forwarding a manifest is a decision about retention —
-// only a participant that can answer for the tick it names may pass the question
-// on — so it is made in the session layer, which is what holds the ring. See
-// corrections.forwardManifest and corrections.canAnswerEveryParticipant.
+// Selective frames are queued for hashing and repair outside the world lock.
 func (s *NetworkSystem) receiveSelective(kind network.MessageType, from uint32, body []byte) {
 	if from == 0 {
 		s.statDrop.Add(1)
@@ -1710,14 +1562,7 @@ func (s *NetworkSystem) receiveSelective(kind network.MessageType, from uint32, 
 	}
 }
 
-// receiveAuthority hands one succession frame to the session layer.
-//
-// Unlike the selective exchange these are flooded rather than unicast, and the
-// flood is the point: a survivor two links from the lost authority learns of the
-// loss from the reports that cross it, because the departure crossing that used
-// to carry that news is produced by the authority — the thing that is gone. The
-// session layer decides what to relay onward, because it is what deduplicates by
-// term and participant.
+// Succession frames are queued for authority decisions outside the world lock.
 func (s *NetworkSystem) receiveAuthority(kind network.MessageType, from uint32, body []byte) {
 	if from == 0 {
 		s.statDrop.Add(1)
@@ -1774,13 +1619,8 @@ func (s *NetworkSystem) publishTransportLoss(p engine.NetworkPort) {
 	s.lastLostIn, s.lastLostOut = in, out
 }
 
-// flushCrossings advances the epoch under the producer lock, then sends its marker.
-//
-// completedTick can stand behind productionEpoch after an install moved the epoch
-// forward. Epochs up to that high-water mark were already sent, so sending them
-// again would make the receiver's duplicate filter discard any new frames they
-// carry. The frames stay pending until the world reaches the next unsent epoch;
-// they were stamped for it by Cross and leave together under its one marker.
+// Freeze the epoch under the producer lock before sending so concurrent
+// crossings belong wholly to one production marker.
 func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint64, active bool) {
 	s.mu.Lock()
 	dropped := s.encodeErr
@@ -1836,13 +1676,8 @@ func (s *NetworkSystem) sendStateDigest(p engine.NetworkPort, completedTick uint
 	if r == nil || r.SharedDigest == nil {
 		return
 	}
-	// No breakdown on the wire. Detail used to be requested as soon as a sample
-	// disagreed, because a disagreement was a fault worth naming record by record.
-	// Under an authority a guest disagrees with the host between every pair of
-	// corrections by design, so asking for detail would mean sending a map of
-	// per-record hashes with every digest for the whole session — bandwidth spent
-	// describing the condition this phase exists to make ordinary. The App-side
-	// breakdown stays, for the tests and the tools that compare two runs offline.
+	// Digests are diagnostic: normal prediction differences do not justify sending
+	// per-record hashes. Detailed comparisons remain available to offline tools.
 	digest := r.SharedDigest(false)
 	sample := stateDigest{
 		Run:       s.world.Resources.Event.Queue.Stamp().Run,
@@ -1898,18 +1733,8 @@ func (s *NetworkSystem) recordStateDigest(local stateDigest) {
 	}
 }
 
-// compareStateDigest folds one peer's sample against this instance's own at the
-// same tick, and records the difference as a *gauge* rather than as a verdict.
-//
-// This is where D-11's live contract lands in the runtime. A guest predicts between
-// corrections, so it may differ from the host. The counter and part name cheaply
-// describe where two instances stand apart; authority corrections, not a terminal
-// verdict, close it.
-//
-// What replaced it is two numbers with better claims: the correction magnitude,
-// which says how far apart the two actually were at the moment the authority
-// arrived, and the staleness, which says whether this instance is far enough behind
-// that its own artifacts are reaching the host late.
+// Digest disagreement is a gauge under D-11, not a failure verdict: guests
+// predict between authoritative corrections.
 func (s *NetworkSystem) compareStateDigest(peer uint32, local, remote stateDigest) {
 	if local.Hash == remote.Hash {
 		return
@@ -1976,7 +1801,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 		s.mu.Unlock()
 		s.statUncommitted.Add(1)
 		if fresh {
-			s.relayRaw(from, authority, batch)
+			s.relayRaw(from, authority, network.MsgEvent, batch)
 		}
 		return
 	}
@@ -2083,20 +1908,23 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	// A void frame applies nowhere else, so it is not relayed; its fence closes here.
 	batch.Frames = slices.DeleteFunc(batch.Frames, func(f event.ScheduledWireFrame) bool { return f.Frame.Event == "" })
 	batch.Committed = true
-	s.relayBatch(from, batch)
+	if committing {
+		from = batch.Source // An intermediary still needs the committed copy.
+	}
+	s.relayBatch(from, network.MsgEvent, batch)
 }
 
 // relayRaw passes a raw epoch on toward the authority: straight to it when this
 // instance has a link to it, else onward through the mesh.
-func (s *NetworkSystem) relayRaw(from, authority uint32, batch event.WireBatch) {
+func (s *NetworkSystem) relayRaw(from, authority uint32, kind network.MessageType, batch event.WireBatch) {
 	p := s.port()
 	if p == nil || !s.linked(authority) {
-		s.relayBatch(from, batch)
+		s.relayBatch(from, kind, batch)
 		return
 	}
 	batch.Hops++
 	if body, err := event.EncodeWireBatch(batch); err == nil && batch.Hops < parameter.NetworkRelayHopLimit {
-		p.Send(authority, uint8(network.MsgEvent), body)
+		p.Send(authority, uint8(kind), body)
 	}
 }
 
@@ -2217,7 +2045,7 @@ func chooseLead(current, target, tick, lowSince uint64) (next, nextLowSince uint
 // relayBatch forwards one admitted epoch onward, unchanged apart from the hop count.
 // Source, ProducedTick and every frame's ApplyTick and sequence are what make the
 // artifact identical on every instance, so a relay must not restamp any of them.
-func (s *NetworkSystem) relayBatch(from uint32, batch event.WireBatch) {
+func (s *NetworkSystem) relayBatch(from uint32, kind network.MessageType, batch event.WireBatch) {
 	p := s.port()
 	if p == nil || !p.IsRunning() || p.PeerCount() == 0 {
 		return
@@ -2235,9 +2063,7 @@ func (s *NetworkSystem) relayBatch(from uint32, batch event.WireBatch) {
 		vlog.Warn("app", "msg", "network relay encode", "error", err.Error())
 		return
 	}
-	// Excluding the arriving link is traffic economy, not correctness: that peer
-	// admitted the epoch before sending it and would recognise its own copy.
-	p.BroadcastExcept(from, uint8(network.MsgEvent), body)
+	p.BroadcastExcept(from, uint8(kind), body)
 	s.statRelayed.Add(1)
 }
 
@@ -2324,23 +2150,9 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 	s.statRecv.Add(int64(peer))
 }
 
-// admissibleFromSource is the host's validation, and it is deliberately narrow.
-//
-// Requirement 2 makes the host the authority over what happens, and most of that is
-// structural: it applies the artifacts it receives in its own order and its
-// resulting world is what ships, so a guest cannot make the session believe
-// something by producing an artifact — it can only make the session believe it for
-// as long as the next correction takes to arrive. What that argument does *not*
-// cover is the roster, because a roster crossing does not describe a shared outcome,
-// it creates or destroys a shared entity: an arrival spawns a cursor at one agreed
-// tick on every instance and a departure despawns one, and both are produced by the
-// coordinator alone precisely so that there is one apply tick for them. An artifact
-// of either kind arriving from anyone else is refused.
-//
-// Everything past this — a guest attributing a crossing to another participant's
-// cursor, a peer replaying an artifact it never produced — is an *authentication*
-// question rather than an authority one. Sessions remain limited to trusted peers
-// until authentication is implemented.
+// Only the coordinator may author roster changes, which create or destroy
+// shared identities. Other source authentication requires authenticated peers;
+// these sessions trust their participants.
 func (s *NetworkSystem) admissibleFromSource(et event.EventType, source uint32) bool {
 	switch et {
 	case event.EventParticipantJoined, event.EventParticipantDeparted:
@@ -2401,19 +2213,8 @@ func (s *NetworkSystem) publishBarrierTelemetry(nextTick uint64, p engine.Networ
 	}
 }
 
-// publishStaleness reports how far behind the session this instance stands on
-// every tick.
-//
-// resumeJoinedSession closes the gap a transfer opens and refuses a join it cannot
-// close — and then nothing looked at it for the rest of the run, so a participant
-// whose machine fell behind mid-session produced artifacts that reached the host
-// after the ticks they named and had no way to know. The number is the same one:
-// the newest tick any peer has been seen closing, minus this instance's own. Past
-// the playout lead this participant's own crossings are landing late on the host,
-// which is exactly when a player should be told the link is the problem.
-//
-// It is a gauge and not a gate. A guest that falls behind is corrected like any
-// other guest; what changes is that it can say so.
+// Staleness compares the newest observed peer tick with the local tick.
+// It warns when this participant may miss the playout lead; it does not gate play.
 func (s *NetworkSystem) publishStaleness(nextTick uint64) {
 	newest := s.NewestPeerEpoch()
 	lag := uint64(0)
@@ -2563,16 +2364,14 @@ func (s *NetworkSystem) scheduleCursorState(from uint32, body []byte) {
 	}
 	batch.Frames = fresh
 	if raw && !committing {
-		s.relayRaw(from, authority, batch)
+		s.relayRaw(from, authority, network.MsgStateSync, batch)
 		return
 	}
 	batch.Committed = true
-	if out, err := event.EncodeWireBatch(batch); err == nil {
-		if p := s.port(); p != nil && p.IsRunning() && p.PeerCount() > 0 {
-			p.BroadcastExcept(from, uint8(network.MsgStateSync), out)
-			s.statRelayed.Add(1)
-		}
+	if committing {
+		from = batch.Source
 	}
+	s.relayBatch(from, network.MsgStateSync, batch)
 }
 
 // writeDueStates publishes the owner-authored syncs due by nextTick, in the order
