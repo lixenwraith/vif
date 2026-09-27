@@ -77,7 +77,7 @@ func (c *Corrections) BecomeAuthority(rec network.HandoffRecord) {
 	c.installedMu.Lock()
 	if c.haveBase {
 		c.baseline, c.haveKey, c.lastKeyTick = c.installed, true, c.installed.Header.Tick
-		c.keyCorrection = nil
+		c.keyBody, c.keyCorrection = nil, nil
 	}
 	c.installedMu.Unlock()
 	clear(c.peers)

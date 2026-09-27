@@ -133,6 +133,7 @@ type Manifest struct {
 
 // ManifestBuilder reuses the wall section only after comparing every detached value.
 // Its owned copy detects pointer writes without relying on store write counters.
+// The pair is replaced, never mutated, so builds share it and run unserialised.
 type ManifestBuilder struct {
 	mu    sync.Mutex
 	walls []engine.StoreEntry[component.WallComponent]
@@ -141,15 +142,17 @@ type ManifestBuilder struct {
 
 func (b *ManifestBuilder) Build(cap SharedCapture, authority uint32) (*Manifest, error) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	var wall *section
-	if slices.Equal(b.walls, cap.World.Wall) {
-		wall = b.wall
+	walls, wall := b.walls, b.wall
+	b.mu.Unlock()
+	if wall != nil && !slices.Equal(walls, cap.World.Wall) {
+		wall = nil
 	}
 	m, err := buildManifest(cap, authority, wall)
 	if err == nil && wall == nil {
-		b.walls = slices.Clone(cap.World.Wall)
-		b.wall = m.sections[StoreSectionPrefix+"wall"]
+		walls = slices.Clone(cap.World.Wall)
+		b.mu.Lock()
+		b.walls, b.wall = walls, m.sections[StoreSectionPrefix+"wall"]
+		b.mu.Unlock()
 	}
 	return m, err
 }
