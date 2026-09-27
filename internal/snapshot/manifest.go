@@ -1,55 +1,3 @@
-// Package app: the capture, seen as content rather than as bytes.
-//
-// Phase 5 left the correction stream carrying a whole body every cadence — a
-// keyframe or the exact difference from the last one — and the measurement said
-// what that costs: about 40 KiB/s at the storm high water. The cost is paid
-// whether or not the receiver already agrees, and a deterministic guest usually
-// does: it is running the same simulation from the same state, so between two
-// corrections it diverges only where an input differed.
-//
-// A manifest is that observation made checkable. It is a deterministic, versioned
-// index over the same capture the correction path already builds, partitioned into
-// sections (one per component store, plus the capture's scalars, RNG streams,
-// declared system state, compared status surface and shared FSM) and each section
-// into bounded pages. Every page has a hash, every section a hash over its
-// pages, and the manifest a root over its sections. Two instances that hold equal
-// state produce an equal root; two that do not can find where they differ by
-// descending, and repair exactly the pages that mismatch.
-//
-// Four properties are what make the index usable as evidence rather than as a
-// hint, and each of them is a constraint on how the hashes are computed:
-//
-//   - Order independence where order is not state. A reconciled world keeps
-//     its own dense store order (see ReconcileSharedWorld), so two instances
-//     holding identical state hold it in different slots. A page is therefore
-//     read in entity-ascending order, which neither instance chose, and page
-//     membership is a function of the entity rather than of a position in a
-//     slice. What order *does* commit to is the shard: a shard's rows must arrive
-//     in that same canonical order or its hash does not reproduce, which is what
-//     stops reordered data from passing the proof.
-//
-//   - Domain separation. Page, section and root hashes are seeded with
-//     distinct prefixes and each level absorbs its own identity, so a page hash
-//     can never be mistaken for a section hash, and a page's content hashed under
-//     another page's identity does not match.
-//
-//   - Version and baseline in the root. The root absorbs the manifest
-//     version, the capture schema, and the run/session/seed identity. A root
-//     computed by another build, another run or another session cannot compare
-//     equal to this one, so "the roots match" cannot be reached by two instances
-//     that are not in the same session at all.
-//
-//   - The owner-authored set is outside the hashed surface. Energy, heat,
-//     shield, boost, weapon, combat, view, ping and pulse on a *cursor* have
-//     exactly one author (D-13) and a receiver keeps its own over the sender's
-//     mirror, so those cells disagree permanently and by design. A manifest that
-//     hashed them would carry a root disagreement no shard could ever close, and
-//     the protocol would fall back to a keyframe forever. They are excluded from
-//     the index, from every shard, and from selective apply. A capture still
-//     carries them, because a joiner has to materialise a cursor it has never
-//     held — that is the install's business, not the index's.
-//
-// Player-domain state needs no rule here: a capture has never contained any.
 package snapshot
 
 import (
@@ -59,6 +7,7 @@ import (
 	"hash/fnv"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -101,22 +50,8 @@ const (
 // each instance re-derives rather than adopts.
 const cursorStoreName = "cursor"
 
-// normaliseStoreValue drops the cells of a component the receiver re-derives at
-// install rather than adopting from the sender.
-//
-// There is exactly one, and it is the cursor's Control. A capture carries the
-// sender's answer to "which of these cursors do I drive" — its own is ControlHuman
-// and everyone else's ControlRemote — and rebindCursorRosterLocked replaces it on
-// every install with this instance's own answer, derived from the participant
-// identity the handshake assigned (D-13). Two instances of one session therefore
-// hold *deliberately* different values in that field for the life of the session.
-//
-// A manifest that hashed it would carry a root disagreement that no shard could
-// close: the repair would write the sender's answer, the install would immediately
-// re-derive the receiver's, and the next manifest would find the same
-// disagreement — an endless keyframe fallback over a field neither instance is
-// wrong about. So the field is zeroed for hashing and for repair alike, and the
-// install puts the right value back exactly as it always has.
+// Cursor control is derived from local ownership at install, so hashing it
+// would create permanent disagreement between otherwise equal worlds.
 func normaliseStoreValue(store string, raw json.RawMessage) (json.RawMessage, error) {
 	if store != cursorStoreName {
 		return raw, nil
@@ -139,25 +74,16 @@ var ownerAuthoredStores = map[string]bool{
 	"weapon": true, "combat": true, "cursorview": true, "ping": true,
 }
 
-// ManifestRow is one indexed cell in its canonical form.
-//
-// Exactly one of the two identities is used per section: component store sections
-// key by entity, everything else by name. Sorting is by (Name, Entity), which for
-// a store section is entity-ascending and for the rest is name-ascending — in both
-// cases an order neither instance's insertion history chose.
+// ManifestRow keys component rows by entity and other rows by name.
+// Canonical ordering is independent of dense store order.
 type ManifestRow struct {
 	Name   string          `json:"n,omitempty"`
 	Entity core.Entity     `json:"e,omitempty"`
 	Value  json.RawMessage `json:"v"`
 }
 
-// SectionSummary is one section as the root sees it: its hash, and how the
-// receiver must re-partition it to compare page by page.
-//
-// Pages travels because the partition has to be the sender's. A receiver that
-// derived a page count from its own row count would bucket the same entity
-// differently the moment the two disagreed about how many rows there are, which is
-// exactly the condition the descent exists to diagnose.
+// SectionSummary carries the sender's page count so a receiver with different
+// row membership can reproduce the sender's partition.
 type SectionSummary struct {
 	ID    string `json:"id"`
 	Hash  uint64 `json:"h"`
@@ -165,29 +91,15 @@ type SectionSummary struct {
 	Rows  uint32 `json:"r"`
 }
 
-// CorrectionManifest is the compact summary a correction leads with.
-//
-// It carries no state. What it carries is the capture's header — which is what an
-// install adopts and is a few hundred bytes — the root, and one summary per
-// section. At the storm high water that is well under a kilobyte compressed,
-// against about 7 KiB for the delta it replaces when the receiver already agrees.
+// CorrectionManifest carries a header and hashes; receivers request rows only
+// when the comparison differs.
 type CorrectionManifest struct {
 	Version int           `json:"version"`
 	Header  CaptureHeader `json:"header"`
 	Root    uint64        `json:"root"`
 
-	// Authority names the participant whose world this index describes. It is what
-	// makes the D-13 exclusion symmetric: both sides hash a cursor's owner-authored
-	// cells exactly when that cursor belongs to the authority, so the cells a
-	// receiver would adopt are compared and repaired, and the cells it authors —
-	// which no install will ever take from the sender — are outside the hashed
-	// surface on both sides at once. Hashing all of them would leave a root
-	// disagreement no shard could close; hashing none of them would stop a mirror
-	// of the authority's own cursor from ever being corrected.
-	// The authority generation this index was produced under is not repeated here:
-	// it is in Header, which every authoritative artifact carries and which the
-	// root absorbs, so a manifest from another term cannot compare equal to this
-	// one. Two places to read one fact is how the two stop agreeing.
+	// Authority identifies the publisher; Header carries its authority term.
+	// Owner-authored cursor cells are excluded for all participants (D-13).
 	Authority uint32 `json:"authority"`
 
 	// Sections is every section, or none: a publication leads with the root alone,
@@ -219,13 +131,35 @@ type Manifest struct {
 	authority uint32
 }
 
-// BuildManifest indexes one capture.
-//
-// Nothing here reads the world: the capture is already taken, so this runs on the
-// correction goroutine and never under the world lock. That is the whole of
-// requirement 8's outside-the-lock half — the bounded read stays where it was, and
-// the partitioning, marshalling and hashing are charged to the publisher.
+// ManifestBuilder reuses the wall section only after comparing every detached value.
+// Its owned copy detects pointer writes without relying on store write counters.
+type ManifestBuilder struct {
+	mu    sync.Mutex
+	walls []engine.StoreEntry[component.WallComponent]
+	wall  *section
+}
+
+func (b *ManifestBuilder) Build(cap SharedCapture, authority uint32) (*Manifest, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	var wall *section
+	if slices.Equal(b.walls, cap.World.Wall) {
+		wall = b.wall
+	}
+	m, err := buildManifest(cap, authority, wall)
+	if err == nil && wall == nil {
+		b.walls = slices.Clone(cap.World.Wall)
+		b.wall = m.sections[StoreSectionPrefix+"wall"]
+	}
+	return m, err
+}
+
+// BuildManifest indexes a detached capture outside the world lock.
 func BuildManifest(cap SharedCapture, authority uint32) (*Manifest, error) {
+	return buildManifest(cap, authority, nil)
+}
+
+func buildManifest(cap SharedCapture, authority uint32, wall *section) (*Manifest, error) {
 	cursors := ownerAuthoredCursors(cap)
 	m := &Manifest{
 		summary: CorrectionManifest{
@@ -238,10 +172,9 @@ func BuildManifest(cap SharedCapture, authority uint32) (*Manifest, error) {
 		index:     make(map[string]int, engine.SharedWorldStoreCount+5),
 	}
 
-	add := func(id string, rows []ManifestRow) {
-		sec := newSection(id, rows)
-		m.sections[id] = sec
-		m.index[id] = len(m.summary.Sections)
+	add := func(sec *section) {
+		m.sections[sec.ID] = sec
+		m.index[sec.ID] = len(m.summary.Sections)
 		m.summary.Sections = append(m.summary.Sections, sec.SectionSummary)
 	}
 
@@ -249,11 +182,15 @@ func BuildManifest(cap SharedCapture, authority uint32) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
-	add(SectionMeta, meta)
+	add(newSection(SectionMeta, meta))
 
 	var scratch []engine.StoreRow
 	for i := range engine.SharedWorldStoreCount {
 		name := engine.SharedWorldStoreNames[i]
+		if name == "wall" && wall != nil {
+			add(wall)
+			continue
+		}
 		scratch = scratch[:0]
 		scratch, err = engine.SharedWorldStoreRows(&cap.World, i, scratch)
 		if err != nil {
@@ -263,28 +200,28 @@ func BuildManifest(cap SharedCapture, authority uint32) (*Manifest, error) {
 		if err != nil {
 			return nil, fmt.Errorf("manifest %s: %w", name, err)
 		}
-		add(StoreSectionPrefix+name, rows)
+		add(newSection(StoreSectionPrefix+name, rows))
 	}
 
 	if rows, err := streamRows(cap); err != nil {
 		return nil, err
 	} else {
-		add(SectionStreams, rows)
+		add(newSection(SectionStreams, rows))
 	}
 	if rows, err := systemRows(cap); err != nil {
 		return nil, err
 	} else {
-		add(SectionSystems, rows)
+		add(newSection(SectionSystems, rows))
 	}
 	if rows, err := statusRows(cap); err != nil {
 		return nil, err
 	} else {
-		add(SectionStatus, rows)
+		add(newSection(SectionStatus, rows))
 	}
 	if rows, err := fsmRows(cap); err != nil {
 		return nil, err
 	} else {
-		add(SectionFSM, rows)
+		add(newSection(SectionFSM, rows))
 	}
 
 	m.summary.Root = manifestRoot(cap.Header, authority, m.summary.Sections)
@@ -426,16 +363,8 @@ func sectionHash(section string, pages []uint64) uint64 {
 	return h.Sum64()
 }
 
-// manifestRoot commits to the session the index belongs to and to every section.
-//
-// The tick is deliberately absent. Two instances compare roots to answer "do we
-// hold the same state", and a guest is by construction a prediction ahead of the
-// authority: including the tick would make every comparison fail for a reason that
-// is not a disagreement about the world. What *is* absorbed is the identity a
-// disagreement would otherwise be silent about — the manifest version, the capture
-// schema, the run, session and seed, and the authority term — so two instances
-// that are not in the same session, or not in the same generation of it, cannot
-// reach an equal root.
+// The root includes identity and section hashes, but excludes tick-local
+// metadata so equal worlds can agree across capture ticks.
 func manifestRoot(h CaptureHeader, authority uint32, sections []SectionSummary) uint64 {
 	w := fnv.New64a()
 	_, _ = w.Write([]byte(hashDomainRoot))
@@ -459,13 +388,8 @@ func manifestRoot(h CaptureHeader, authority uint32, sections []SectionSummary) 
 	return w.Sum64()
 }
 
-// rebuild re-indexes the named sections against a capture that has changed under
-// them, and recomputes the root.
-//
-// It exists so a receiver can verify a repair without paying for a second whole
-// index: a shard set touches a handful of sections, and the rest of the capture is
-// bit-for-bit what it already hashed. The sections' slots in the summary are
-// preserved, because the root absorbs them in order.
+// Rebuild only repaired sections; unchanged sections retain their immutable
+// rows and hashes. Preserve summary order because the root absorbs it.
 func (m *Manifest) rebuild(cap SharedCapture, ids []string) error {
 	rows, err := m.sectionRowsFor(cap, ids)
 	if err != nil {
@@ -582,13 +506,8 @@ func (m *Manifest) SectionRows(id string) ([]ManifestRow, bool) {
 	return s.rows, true
 }
 
-// repartition rebuilds one section's page hashes under a page count the sender
-// declared rather than the one this side would have chosen.
-//
-// This is the descent's first step on the receiving side. Without it a receiver
-// whose row count differs — which is the ordinary case when something diverged —
-// would bucket every row differently and report every page as mismatching, which
-// is a true statement that identifies nothing.
+// Use the sender's partition when row counts differ, so descent identifies
+// different content instead of differences caused only by page counts.
 func (m *Manifest) repartition(id string, pages uint32) ([]uint64, bool) {
 	sec, ok := m.sections[id]
 	if !ok {

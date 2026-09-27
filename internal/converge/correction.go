@@ -21,8 +21,9 @@ import (
 // a guest, not both, so the two field sets are never both live; one object makes
 // "this run is in a session" one lifetime rather than two that can disagree.
 type Corrections struct {
-	inst Instance
-	tel  snapshot.Telemetry
+	inst     Instance
+	tel      snapshot.Telemetry
+	manifest snapshot.ManifestBuilder
 
 	// authority is the term gate and the succession. It decides whether an
 	// artifact may be acted on and whether this instance is the one publishing;
@@ -33,11 +34,12 @@ type Corrections struct {
 	// keyframe fresh enough and two joins arriving together share one read. It also
 	// owns the per-peer schedule, so a peer's plan and the capture it is planned
 	// against cannot be read a decision apart.
-	publishMu   sync.Mutex
-	baseline    snapshot.SharedCapture // last keyframe published; every delta names its tick
-	keyBody     []byte                 // that keyframe as a bare capture, which is what a join sends
-	haveKey     bool
-	lastKeyTick uint64 // the tick that keyframe describes
+	publishMu     sync.Mutex
+	baseline      snapshot.SharedCapture // last keyframe published; every delta names its tick
+	keyBody       []byte                 // that keyframe as a bare capture, which is what a join sends
+	keyCorrection []byte                 // the same baseline in the correction envelope
+	haveKey       bool
+	lastKeyTick   uint64 // the tick that keyframe describes
 
 	// sizes is the measured wire cost of each shape. At the storm high water a
 	// keyframe is ~15.4 KiB against ~7.1 KiB for a delta, far enough apart that one
@@ -313,7 +315,7 @@ func (c *Corrections) publishRound(force bool) error {
 	// One index per publication, whether or not it leads the correction. A keyframe
 	// does not carry it, but retention answers a request naming that tick and is this
 	// instance's evidence that its world is current if it is ever elected.
-	index, err := snapshot.BuildManifest(cap, c.inst.LocalParticipant())
+	index, err := c.manifest.Build(cap, c.inst.LocalParticipant())
 	if err != nil {
 		return fmt.Errorf("correction manifest: %w", err)
 	}
@@ -460,6 +462,7 @@ func (c *Corrections) recordPublicationLocked(
 	}
 	if keyframe {
 		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, joinBody, true, cap.Header.Tick
+		c.keyCorrection = body
 	}
 	m := c.tel
 	m.EncodeUS.Store(took.Microseconds())
@@ -683,6 +686,7 @@ func (c *Corrections) forgetRestartedRunLocked() {
 	vlog.Info("app", "msg", "keyframe dropped across a restart",
 		"baseline_run", c.baseline.Header.Run, "run", c.inst.Position().Run)
 	c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = snapshot.SharedCapture{}, nil, false, 0
+	c.keyCorrection = nil
 }
 
 // KeyframeAt returns a keyframe describing the world at or after minTick, taking
@@ -734,6 +738,7 @@ func (c *Corrections) takeKeyframe() ([]byte, uint64, error) {
 		return nil, 0, fmt.Errorf("capture encode: %w", err)
 	}
 	c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, body, true, cap.Header.Tick
+	c.keyCorrection = nil
 	c.recordSizeLocked(true, len(body))
 	c.tel.Bytes.Store(int64(len(body)))
 	c.tel.Keyframes.Add(1)

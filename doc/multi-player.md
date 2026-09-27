@@ -572,7 +572,7 @@ The [scaling audit](multiplayer-scaling.md) pins the `2d8c5b6` baseline, workloa
 repetitions and limitations; its [data](multiplayer-scaling-data.json) is retained
 for comparison. Native medians at 16 playing participants are:
 
-| Measurement | Tower, 239×64 | td, 500×250 |
+| Baseline measurement | Tower, 239×64 | td, 500×250 |
 |---|---:|---:|
 | Host work, estimated CPU-ms/s | 129 | 1,716 |
 | Mean guest work, estimated CPU-ms/s | 92 | 660 |
@@ -586,6 +586,12 @@ All rates use simulated seconds. The matrix shares one native process and GC;
 host/guest CPU attribution is estimated from sequential timings. These are neither
 browser timings nor isolated fleet-pod measurements. A separate cursorless-host
 sample with 16 guests estimated 1,365 CPU-ms/s and 4.20 MB/s framed host egress.
+
+The implementation now reuses exactly equal wall sections and each baseline's
+encoded correction body. In matched two-participant follow-up runs, wall reuse
+reduced combined native CPU by 24% small / 18% large. Warm manifest construction
+fell to 3.37 / 22.76 ms; these are short follow-up samples, not replacements for
+the original 16-participant matrix above. The audit records their limits.
 
 Capture, simulation and correction projection/comparison hold the world lock.
 Sealing, indexing and wire encoding run outside it, but still consume the browser
