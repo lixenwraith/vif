@@ -1,15 +1,16 @@
 # vif-allocator
 
-`vif-allocator` is the narrow HTTP boundary between the vif website and
-the `vif` namespace. Kubernetes still schedules, isolates, limits, terminates and
-garbage-collects every session. The allocator only performs the fixed transaction
-that Kubernetes has no anonymous endpoint for:
+`vif-allocator` is the narrow boundary between the vif website and the `vif`
+namespace, and the proxy on two of a session's three routes. Kubernetes still
+schedules, isolates, limits, terminates and garbage-collects every session. The
+allocator only performs the fixed transaction that Kubernetes has no anonymous
+endpoint for:
 
 1. reserve a free NodePort from 31700–31709;
-2. create one non-retryable Job;
+2. create one non-retryable Job, whose pod answers to the session's identifier;
 3. read its UID and create the owner-referenced Service;
 4. wait for a ready EndpointSlice and `live=true ready=true` from `/health`;
-5. return the page URL, raw-TCP join target and health-derived state.
+5. return the session's join targets and health-derived state.
 
 Each Job mounts the node-affine `vif-fleet-logs` PVC only in its session
 container. The game writes `/var/log/vif-fleet/<session-id>.jsonl` and tags every
@@ -51,8 +52,8 @@ One session row has this shape:
 {
   "id": "3c3a8eec0cbb6f17",
   "port": 31700,
-  "page_url": "https://play.example.com/projects/vif/session/31700/",
-  "join_target": "play.example.com:31700",
+  "join_target": "vif://play.example.com:7777/3c3a8eec0cbb6f17",
+  "direct_target": "vif://play.example.com:31700/3c3a8eec0cbb6f17",
   "ws_url": "wss://play.example.com/vif/ws/3c3a8eec0cbb6f17",
   "created_at": "2026-09-11T12:00:00Z",
   "routable": true,
@@ -77,11 +78,12 @@ hand an anonymous caller a sixteen-player world or the fleet's shared log rate, 
 both open only as far as an operator sets them. A value outside them is refused with
 `400 invalid_request` naming the bound, never clamped.
 
-`id` is the session's stable public identifier. `page_url`, `join_target` and
-`ws_url` are opaque strings this allocator produces: no caller may rebuild any of
-them from `port`, because path-routed sessions key them on the identifier instead.
-`ws_url` is absent where the deployment publishes no browser route, which is what a
-page keyed on it reads as "this fleet is for native clients".
+`id` is the session's stable public identifier and the name its pod answers to.
+`join_target`, `direct_target` and `ws_url` are opaque strings this allocator
+produces, and no caller may rebuild one from `port`: `join_target` is the front
+door below, `direct_target` the session's own NodePort. `ws_url` is absent where the
+deployment publishes no browser route, which is what a page keyed on it reads as
+"this fleet is for native clients".
 
 `-web-origin` is one origin, not a list, and `ws_url` is built from it. A site
 answering several hostnames must therefore canonicalize: a page loaded from another
@@ -91,8 +93,8 @@ than offer a broken one.
 
 The browser route validates before it upgrades — method, identifier syntax,
 `Origin` against `-web-origin`, the session's liveness and readiness in reconciled
-Kubernetes state, and `-web-max` concurrent connections for that session — and then
-reverse-proxies the upgrade to the pod's bridge sidecar with
+Kubernetes state, and `-route-max` connections for that session, counted with the
+front door's — and then reverse-proxies the upgrade to the pod's bridge sidecar with
 `net/http/httputil.ReverseProxy`. It never translates a frame and never accepts an
 upstream a caller named: the identifier is a routing key looked up in Kubernetes,
 not an address supplied. Why the WebSocket lives in a sidecar rather than here or
@@ -109,3 +111,14 @@ loopback IP, explicit port, exact `/stream` path, and no credentials, query, or
 fragment. The production unit orders after and wants LogWisp for normal startup,
 but it does not require or execute it. Allocation, state, health, and readiness
 therefore remain independent while a missing stream produces only the stable 503.
+
+## Front door
+
+`-route-listen` (`:7777`) is one TCP port for every session. A dialer's first frame
+names the session; the allocator resolves it as the browser route does, dials the
+pod's game port, replays the name and copies bytes both ways until each side has
+closed. It refuses before any dial, in a join reply the dialer prints: a first frame
+that is not a route, an identifier that is not 16 hex, a dialling address past the
+game's own budget of six joins a minute, a session unknown, unready or full, and one
+holding `-route-max` connections over both routes. Logs name the session, never the
+dialler.

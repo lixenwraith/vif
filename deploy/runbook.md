@@ -13,12 +13,13 @@ git pull
 ./deploy/update.sh wad bridge  # only the named components
 ```
 
-Components are `objects` (namespace, quota, policy, Role), `wad`, `bridge`,
-`image`, `allocator` and `logwisp`. A current one is skipped. Installed lines print
-green and incoming ones red; a file the update removes prints as `deleted <path>`.
-`image`, `allocator` and `logwisp` need an empty fleet and refuse otherwise, naming
-the components that do not; `wad` and `bridge` never interrupt a match, since a
-running pod keeps what it started with. Each component keeps one `.previous` set,
+Components are `filter` (the node's `inet vif` table), `objects` (namespace,
+quota, policy, Role), `wad`, `bridge`, `image`, `allocator` and `logwisp`. A current
+one is skipped. Installed lines print green and incoming ones red; a file the update
+removes prints as `deleted <path>`. `image`, `allocator` and `logwisp` need an empty
+fleet and refuse otherwise, naming the components that do not; `filter`, `wad` and
+`bridge` never interrupt a match, since established connections and running pods
+keep what they started with. Each component keeps one `.previous` set,
 and [`guest/README.md`](guest/README.md) restores it. Settings for the allocator are
 [`guest/vif-allocator.env`](guest/vif-allocator.env), committed here and never
 edited on the node.
@@ -73,7 +74,7 @@ verdict — so read the session's JSONL before running it, not after:
 ## Ask for a session
 
 The path a player takes, from the node. It prints the identity on stdout and the
-join target and page beside it, so a shell can capture one and a person can read
+join and direct targets beside it, so a shell can capture one and a person can read
 the other:
 
 ```sh
@@ -144,7 +145,8 @@ sudo journalctl \
 
 The accepted socket's address is recorded on the node and dropped from the
 published stream, so this answers "where did that player come from" and the SSE
-never can:
+never can. Only a direct join names the player: one through the front door is
+recorded at the node's address, and a browser at the pod's loopback.
 
 ```sh
 sudo jq -c 'select(.sub == "admit")' '/var/log/vif-fleet/<session-id>.jsonl'

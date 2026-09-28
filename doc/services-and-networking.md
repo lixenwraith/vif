@@ -152,10 +152,10 @@ start/ready gate. Two flags activate the shared composition path:
 
 Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
 `[tcp://|vif://]host:port[/name]`, the name routing to one of several sessions on
-an address, or a `ws(s)://` route a browser joins by. The scheme picks the
-transport and tcp is the default; a bound address (`-host`, `-serve`, `-listen`,
-`:host`) is tcp only, since the WebSocket route is the deployment's bridge in front
-of it, and any other scheme is refused (§7.3).
+an address, or a `ws(s)://` route a browser joins by, whose last path segment is
+the name. The scheme picks the transport and tcp is the default; a bound address
+(`-host`, `-serve`, `-listen`, `:host`) is tcp only, since the WebSocket route is
+the deployment's bridge in front of it, and any other scheme is refused (§7.3).
 
 `-host` and `:host` are one path: the host plays from its first tick and a joiner
 takes the roster, then the world it names, as a chunked `MsgStateSnapshot` from
@@ -345,7 +345,7 @@ non-stdlib QUIC, to buy loss recovery faster than TCP's retransmit timeout, whic
 corrections already absorb, and hole punching between NATed peers, which also needs
 a rendezvous and, for a browser, WebRTC. For reach it is backwards: restrictive
 networks block UDP before TCP, and what nearly all of them pass is TLS on 443, which
-the site's WebSocket front door serves; a native client needs only a `wss://` dialer.
+the site's WebSocket route serves; a native client needs only a `wss://` dialer.
 
 ICMP echo can carry bytes, as covert tunnels show, but it is a worse datagram: raw
 sockets need root or `CAP_NET_RAW`, which the fleet pod drops and a browser never
@@ -383,12 +383,14 @@ Control messages carry heartbeat, join offer/reply, start/ready gates and
 disconnect notices. `MsgSessionRoute` (0x05) is the exception to the coordinator
 speaking first: a dialer that was given a session name sends it as one frame before
 it reads, so a front door can place the connection on an address serving several
-sessions and the session it reaches can refuse a name that is not its own. A host
-started without `-name` expects no such frame, which is every interactive run. A join refused before an identity is allocated — a dial that
-landed while the session was electing a new authority — is answered with a
-`MsgJoinReply` carrying the reason rather than by closing the stream, so the dialer
-can tell "retry against the new authority" from a connection that ended for no
-stated reason (`network.IsHandoffRefusal`). Gameplay uses `MsgEvent` for a closed crossing
+sessions and the session it reaches can refuse a name that is not its own; the
+fleet's allocator is one ([fleet §9](kubernetes-fleet.md#9-the-session-routes)). A
+host started without `-name` expects no such frame, which is every interactive run.
+A join refused before an identity is allocated — a dial that landed while the
+session was electing a new authority — is answered with a `MsgJoinReply` carrying
+the reason rather than by closing the stream, so the dialer can tell "retry against
+the new authority" from a connection that ended for no stated reason
+(`network.IsHandoffRefusal`). Gameplay uses `MsgEvent` for a closed crossing
 epoch, `MsgStateSync` for one owner-authored cursor snapshot, and
 `MsgStateDigest` for the periodic shared-world parity probe. Authority travels as
 `MsgStateSnapshot`/`MsgStateCorrection` chunks and, in the steady state, as the
