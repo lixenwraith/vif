@@ -137,7 +137,7 @@ func TestTheRoundTripIsMeasuredEndToEnd(t *testing.T) {
 // it stays bounded — a magnitude that climbs is divergence, not degradation.
 func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 	t.Parallel()
-	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{LatencyTicks: 2, BytesPerTick: 300})
+	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{LatencyTicks: 2, BytesPerTick: 200})
 
 	var early, late int64
 	for round := range 2 {
@@ -165,7 +165,7 @@ func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 	}
 	peer := report.Peers[0]
 	if !peer.Saturated {
-		t.Fatalf("a 300-byte-per-tick link was never read as the limit: %+v", peer)
+		t.Fatalf("a 200-byte-per-tick link was never read as the limit: %+v", peer)
 	}
 	if !report.Constrained {
 		t.Fatalf("a saturated link was not reported as constrained: %+v", peer)

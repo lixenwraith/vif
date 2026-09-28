@@ -1320,17 +1320,15 @@ func TestACorrectionDoesNotStallTheOwnerStateSync(t *testing.T) {
 	}
 }
 
-// TestATowerGuestAnswersHashOnly: in the tower region both participants fight, so
-// owner-authored cursor state moves every tick, snakes rewrite their segments in
-// place and overlays toggle. None of it may reach the compared world, or a guest
-// there repairs nearly every manifest instead of proving the authority's world.
-func TestATowerGuestAnswersHashOnly(t *testing.T) {
-	t.Parallel()
-	apps := meshSessionOf(t, towerScenario(t, 0x70E4), 2, [][2]int{{1, 2}})
-	host, guest := apps[0], apps[1]
-	const lead = 2
+// towerFight puts a host and a guest in the tower region over one link, shaped as
+// shape into the guest; fight drives both through ticks of random motion and fire.
+func towerFight(t *testing.T, cfg Config, shape network.LinkShape) (host, guest *App, fight func(ticks int)) {
+	t.Helper()
+	apps := meshSessionOf(t, cfg, 2, [][2]int{{1, 2}})
+	host, guest = apps[0], apps[1]
+	transportOf(t, host).SetShape(network.LinkShape{LatencyTicks: shape.LatencyTicks})
+	transportOf(t, guest).SetShape(shape)
 	for _, a := range apps {
-		transportOf(t, a).SetShape(network.LinkShape{LatencyTicks: lead})
 		injectExCommand(t, a, "god")
 	}
 	// A live session refuses an operator's region change, so both instances take it
@@ -1352,32 +1350,67 @@ func TestATowerGuestAnswersHashOnly(t *testing.T) {
 		t.Fatal("the tower region never started")
 	}
 	// The guest trails the authority by the link, which is where pacing holds it.
-	for range lead {
+	for range shape.LatencyTicks {
 		host.Tick(1)
 		_ = host.corrections.PublishDue()
 	}
 
 	rng := vmath.NewFastRand(7)
 	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
-	for range 1200 {
-		for _, a := range apps {
-			if rng.Intn(3) == 0 {
-				inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+	return host, guest, func(ticks int) {
+		for range ticks {
+			for _, a := range apps {
+				if rng.Intn(3) == 0 {
+					inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+				}
+				if rng.Intn(6) == 0 {
+					inject(t, a, &input.Intent{Type: input.IntentFireMain, Count: 1})
+				}
 			}
-			if rng.Intn(6) == 0 {
-				inject(t, a, &input.Intent{Type: input.IntentFireMain, Count: 1})
-			}
+			host.Tick(1)
+			_ = host.corrections.PublishDue()
+			guest.Tick(1)
+			guest.ApplyPendingCorrections()
 		}
-		host.Tick(1)
-		_ = host.corrections.PublishDue()
-		guest.Tick(1)
-		guest.ApplyPendingCorrections()
 	}
+}
 
+// TestATowerGuestAnswersHashOnly: in the tower region both participants fight, so
+// owner-authored cursor state moves every tick, snakes rewrite their segments in
+// place and overlays toggle. None of it may reach the compared world, or a guest
+// there repairs nearly every manifest instead of proving the authority's world.
+func TestATowerGuestAnswersHashOnly(t *testing.T) {
+	t.Parallel()
+	_, guest, fight := towerFight(t, towerScenario(t, 0x70E4), network.LinkShape{LatencyTicks: 2})
+	fight(1200)
 	manifests := statOf(guest, "snapshot.manifests_received")
 	hashOnly := statOf(guest, "snapshot.corrections_hash_only")
 	if manifests == 0 || hashOnly*100 < manifests*95 {
 		t.Fatalf("the guest answered %d of %d manifests hash-only, want 95%%", hashOnly, manifests)
+	}
+}
+
+// TestASlowLinkCarriesTheTowerWithoutAStandingQueue: a link slower than the tower's
+// whole world a second still converges its guest on proofs, and the host queues
+// no body behind another, so the round trip stays the link's own. Unpaced, the
+// queue grew until the guest's crossings voided and it was evicted.
+func TestASlowLinkCarriesTheTowerWithoutAStandingQueue(t *testing.T) {
+	t.Parallel()
+	// A wide terminal's map, whose tower world is about 40 KB whole.
+	cfg := towerScenario(t, 0x70E4)
+	cfg.Width, cfg.Height, cfg.MapWidth, cfg.MapHeight = 239, 66, 239, 64
+	host, guest, fight := towerFight(t, cfg, network.LinkShape{LatencyTicks: 3, BytesPerTick: 1000})
+	fight(300)
+	manifests := statOf(guest, "snapshot.manifests_received")
+	hashOnly := statOf(guest, "snapshot.corrections_hash_only")
+	fight(300)
+	manifests = statOf(guest, "snapshot.manifests_received") - manifests
+	hashOnly = statOf(guest, "snapshot.corrections_hash_only") - hashOnly
+	if manifests == 0 || hashOnly*100 < manifests*90 {
+		t.Fatalf("the guest answered %d of %d manifests hash-only once settled, want 90%%", hashOnly, manifests)
+	}
+	if rtt := transportOf(t, host).LinkMetric(2).RTT; rtt > time.Second {
+		t.Fatalf("the host's round trip to the guest reads %s; a queue stands on the link", rtt)
 	}
 }
 
