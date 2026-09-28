@@ -184,7 +184,7 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statNet:       statusReg.Strings.Get("network.state"),
 		statStale:     statusReg.Bools.Get("network.stale"),
 		statLag:       statusReg.Ints.Get("network.lag_ticks"),
-		statRTT:       statusReg.Ints.Get("network.link_rtt_us"),
+		statRTT:       statusReg.Ints.Get("network.link_rtt_ms"),
 		statLoss:      statusReg.Ints.Get("network.link_loss_pct"),
 		statHostLost:  statusReg.Bools.Get("network.host_lost"),
 		statMigrating: statusReg.Bools.Get("network.migrating"),
@@ -568,8 +568,8 @@ const (
 	severityFailing
 )
 
-func latencySeverity(us int64) int {
-	switch rtt := time.Duration(us) * time.Microsecond; {
+func latencySeverity(ms int64) int {
+	switch rtt := time.Duration(ms) * time.Millisecond; {
 	case rtt >= parameter.StatusNetLatencyBad:
 		return severityFailing
 	case rtt >= parameter.StatusNetLatencyWarn:
