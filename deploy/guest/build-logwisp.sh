@@ -74,7 +74,8 @@ cleanup() {
 		if [ -n "$container" ]; then
 			sudo docker rm -f "$container" >/dev/null 2>&1 || cleanup_status=$?
 		fi
-		sudo docker image rm "$image" >/dev/null 2>&1 || cleanup_status=$?
+		# Everything, not just the image: --pull leaves each earlier base behind.
+		sudo docker system prune --all --force >/dev/null 2>&1 || cleanup_status=$?
 	fi
 	if [ "$worktree_added" = true ]; then
 		git -C "$source_repository" worktree remove --force "$build_source" \
