@@ -2,13 +2,13 @@
 # Bring the node to this checkout's HEAD. Each component that differs is shown as a
 # diff (installed -, incoming +) and then updated, in dependency order; a current
 # one is skipped. --diff shows and changes nothing, and exits 1 if anything differs.
-# Usage: deploy/update.sh [--diff] [objects wad bridge image allocator logwisp]
+# Usage: deploy/update.sh [--diff] [filter objects wad bridge image allocator logwisp]
 set -eu
 
 deploy=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$deploy/.." && pwd)
 guest=$deploy/guest
-all="objects wad bridge image allocator logwisp"
+all="filter objects wad bridge image allocator logwisp"
 wad_root=${VIF_WAD_ROOT:-/var/db/vif/wad}
 
 diff_only=false
@@ -17,7 +17,7 @@ for arg in "$@"; do
 	case $arg in
 		-h|--help) sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 		--diff) diff_only=true ;;
-		objects|wad|bridge|image|allocator|logwisp) selected="$selected $arg" ;;
+		filter|objects|wad|bridge|image|allocator|logwisp) selected="$selected $arg" ;;
 		*) echo "usage: $0 [--diff] [$all]" >&2; exit 2 ;;
 	esac
 done
@@ -56,6 +56,11 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/vif-update.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT HUP INT TERM
 
 # --- what each component differs by: 0 current, 1 pending -----------------------
+
+check_filter() {
+	sudo_copy /etc/nftables.conf "$work/nftables.conf"
+	show nftables.conf "$work/nftables.conf" "$guest/nftables.conf"
+}
 
 check_objects() {
 	status=0
@@ -155,6 +160,12 @@ check_logwisp() {
 
 # --- how each is brought to HEAD ------------------------------------------------
 
+# nft -f, not a unit restart: the file replaces table inet vif alone, in one
+# transaction, whatever the distribution's unit does on stop.
+apply_filter() {
+	sudo install -m 0644 "$guest/nftables.conf" /etc/nftables.conf
+	sudo nft -f /etc/nftables.conf
+}
 apply_objects() {
 	for name in 00-namespace 10-quota 20-networkpolicy 40-allocator-rbac; do
 		kube apply -f "$repo_root/deploy/k3s/$name.yaml"
@@ -200,7 +211,7 @@ case "$pending" in
 	*image*|*allocator*|*logwisp*)
 		"$deploy/k3s/session.sh" blockers ||
 			die "empty the fleet first (./deploy/k3s/session.sh drain), or update only:$(
-				for c in $pending; do case $c in objects|wad|bridge) printf ' %s' "$c" ;; esac; done)"
+				for c in $pending; do case $c in filter|objects|wad|bridge) printf ' %s' "$c" ;; esac; done)"
 		;;
 esac
 

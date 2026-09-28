@@ -218,9 +218,10 @@ serve)
 
 serve-fleet)
 	need_bin
+	session=${SESSION:-0123456789abcdef}
 	note "ends 90s after start if nobody joins, or 90s after the last guest leaves"
-	note "join it with: $BIN -join $HOST:$PORT"
-	exec "$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" \
+	note "join it with: $BIN -join vif://$HOST:$PORT/$session"
+	exec "$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -name "$session" \
 		-d -size 120x40 -log-stdout -lv info -authority host \
 		-players "${PLAYERS:-4}" -first-join 90s -empty 90s -drain 20s
 	;;
@@ -553,7 +554,7 @@ fleet)
 	rendered=$(SCENARIO=td LOG_LEVEL=debug PLAYERS=4 \
 		./deploy/k3s/render-session.sh fleetcheck 31700 vif:dev 4 120x40)
 	for want in \
-		'"-config-dir"' '"-s"' '"td"' '"debug"' \
+		'"-name"' '"-config-dir"' '"-s"' '"td"' '"debug"' \
 		'claimName: vif-fleet-wad' 'subPath: scenario' 'subPath: image' \
 		'name: vif-session-env'
 	do
