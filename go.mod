@@ -4,9 +4,9 @@ go 1.27.1
 
 require (
 	github.com/lixenwraith/color v0.0.0-20260719094342-615e11bc7897
-	github.com/lixenwraith/log v0.1.1-0.20260801124634-5aa4912a4539
+	github.com/lixenwraith/log v0.1.1-0.20260926182514-9ad925351aa1
 	github.com/lixenwraith/terminal v0.0.0-20260908235814-ea9a20c5de2d
-	github.com/lixenwraith/toml v0.0.0-20260713064549-c8e23ff85928
+	github.com/lixenwraith/toml v0.0.0-20260928180512-b59d068ff6a4
 )
 
 require (
