@@ -27,20 +27,24 @@ func TestEchoCarriesTheProbeBackUntouched(t *testing.T) {
 	probe := encodeProbe(9, sent)
 	report := LinkReport{Tick: 500, LagTicks: 2, Magnitude: 4, CursorX: 11, CursorY: 12, HasCursor: true}
 
-	seq, back, in, got, ok := decodeEcho(encodeEcho(probe, 8192, report))
+	echo := encodeEcho(probe, 8192, report, 750*time.Millisecond)
+	seq, back, in, answered, got, ok := decodeEcho(echo)
 	if !ok {
 		t.Fatal("a well-formed echo did not decode")
 	}
 	if seq != 9 || !back.Equal(sent) {
 		t.Fatalf("echo returned seq %d at %s, want 9 at %s", seq, back, sent)
 	}
-	if in != 8192 || got != report {
-		t.Fatalf("echo carried %d bytes and %+v", in, got)
+	if in != 8192 || got != report || answered != 750*time.Millisecond {
+		t.Fatalf("echo carried %d bytes answered at %s and %+v", in, answered, got)
 	}
-	if encodeEcho(probe[:4], 0, report) != nil {
+	if _, _, _, answered, _, ok := decodeEcho(echo[:echoPayload]); !ok || answered != 0 {
+		t.Fatalf("an echo from a peer that sends no answer time read %s (ok=%v)", answered, ok)
+	}
+	if encodeEcho(probe[:4], 0, report, 0) != nil {
 		t.Fatal("a truncated probe produced an echo")
 	}
-	if _, _, _, _, ok := decodeEcho(probe); ok {
+	if _, _, _, _, _, ok := decodeEcho(probe); ok {
 		t.Fatal("a bare probe decoded as an echo")
 	}
 }
@@ -55,7 +59,7 @@ func TestOnlyAProbeThatStopsComingBackIsLost(t *testing.T) {
 	for i := range 20 {
 		m.nextProbe()
 		if i > 1 {
-			m.observe(now, now.Add(-late), uint32(i-1), 0, 0, LinkReport{})
+			m.observe(now, now.Add(-late), uint32(i-1), 0, 0, 0, LinkReport{})
 		}
 		now = now.Add(parameter.NetworkProbeInterval)
 	}
@@ -77,7 +81,7 @@ func TestTheMeterTurnsTwoEchoesIntoADeliveryRate(t *testing.T) {
 	step := func(delivered, sent uint64) {
 		seq := m.nextProbe()
 		at = at.Add(time.Second)
-		m.observe(at, at.Add(-30*time.Millisecond), seq, delivered, sent, LinkReport{})
+		m.observe(at, at.Add(-30*time.Millisecond), seq, delivered, sent, 0, LinkReport{})
 	}
 	step(0, 0)
 	for i := range 10 {
@@ -92,6 +96,29 @@ func TestTheMeterTurnsTwoEchoesIntoADeliveryRate(t *testing.T) {
 	}
 }
 
+// TestTheDeliveryRateIsTimedWhereTheBytesArrived: echoes a stalled return path
+// hands back together were answered a probe interval apart, so the rate they
+// report is the one the link carried, not one divided by microseconds.
+func TestTheDeliveryRateIsTimedWhereTheBytesArrived(t *testing.T) {
+	m := newLinkMeter()
+	at, answered, delivered := time.Unix(0, 0), time.Duration(0), uint64(0)
+	echo := func(gap time.Duration) {
+		at, answered, delivered = at.Add(gap), answered+parameter.NetworkProbeInterval, delivered+5_000
+		m.observe(at, at.Add(-30*time.Millisecond), m.nextProbe(), delivered, delivered, answered, LinkReport{})
+	}
+	for range 10 {
+		echo(parameter.NetworkProbeInterval)
+	}
+	echo(time.Second)
+	for range 4 {
+		echo(time.Microsecond)
+	}
+	echo(parameter.NetworkProbeInterval)
+	if got := m.link.Metrics().Throughput; got < 20_000 || got > 30_000 {
+		t.Fatalf("25 KB per second answered a probe interval apart measured %.0f B/s", got)
+	}
+}
+
 // TestAJoinersReadyRestartsTheBacklogOrigin: the gate answers a probe before the
 // capture, and the port that takes over after it counts from zero, so without the
 // origin the ready sets the capture would stand as backlog for the whole session.
@@ -101,7 +128,7 @@ func TestAJoinersReadyRestartsTheBacklogOrigin(t *testing.T) {
 	echo := func(delivered, sent uint64) {
 		seq := m.nextProbe()
 		at = at.Add(parameter.NetworkProbeInterval)
-		m.observe(at, at.Add(-5*time.Millisecond), seq, delivered, sent, LinkReport{})
+		m.observe(at, at.Add(-5*time.Millisecond), seq, delivered, sent, 0, LinkReport{})
 	}
 	echo(24, 68)
 	const capture = 125_000

@@ -197,12 +197,18 @@ func (p *SocketPort) SetLinkReport(r LinkReport) { p.report.Store(&r) }
 // LinkMetric returns one peer's link estimate. The zero value is an unmeasured
 // link, which a controller reads as "no evidence" rather than as a slow link.
 func (p *SocketPort) LinkMetric(peer uint32) linkpace.Metrics {
+	_, out, live := p.transport.Bytes(PeerID(peer))
 	p.meterMu.Lock()
 	defer p.meterMu.Unlock()
-	if m, ok := p.meters[PeerID(peer)]; ok {
-		return m.link.Metrics()
+	m, ok := p.meters[PeerID(peer)]
+	if !ok {
+		return linkpace.Metrics{}
 	}
-	return linkpace.Metrics{}
+	metrics := m.link.Metrics()
+	if live {
+		metrics.Backlog = m.backlog(out)
+	}
+	return metrics
 }
 
 // ObserveTransfer folds a completed bulk transfer into one link's estimate.
@@ -285,14 +291,14 @@ func (p *SocketPort) answerProbe(id PeerID, payload []byte) {
 	if r := p.report.Load(); r != nil {
 		report = *r
 	}
-	if echo := encodeEcho(payload, in, report); echo != nil {
+	if echo := encodeEcho(payload, in, report, time.Since(probeEpoch)); echo != nil {
 		p.transport.Send(id, NewMessage(MsgLinkEcho, echo))
 	}
 }
 
 // observeEcho folds one answered probe into that link's estimate.
 func (p *SocketPort) observeEcho(id PeerID, payload []byte) {
-	seq, sent, delivered, report, ok := decodeEcho(payload)
+	seq, sent, delivered, answered, report, ok := decodeEcho(payload)
 	if !ok {
 		return
 	}
@@ -301,7 +307,7 @@ func (p *SocketPort) observeEcho(id PeerID, payload []byte) {
 		return
 	}
 	p.meterMu.Lock()
-	p.meterLocked(id).observe(time.Now(), sent, seq, delivered, out, report) // [wall]
+	p.meterLocked(id).observe(time.Now(), sent, seq, delivered, out, answered, report) // [wall]
 	p.meterMu.Unlock()
 }
 
