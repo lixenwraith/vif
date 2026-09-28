@@ -105,10 +105,10 @@ spec:
             requests: {cpu: 50m, memory: 64Mi}
             limits: {cpu: 500m, memory: 192Mi}
         - name: ws-bridge
-          # The browser's half of the fleet, and the only thing in it that speaks
-          # WebSocket. One upgraded connection becomes one loopback connection to
-          # the game, so the session keeps the framed TCP protocol it already
-          # serves natives and this repository carries no WebSocket implementation.
+          # The browser's half of the fleet while the allocator proxies to it
+          # (-ws-bridge-image): one upgraded connection becomes one loopback
+          # connection to the game, which keeps its framed TCP protocol. An
+          # allocator that terminates the route itself renders the pod without it.
           #
           # A restartable init container, not an ordinary one: with restartPolicy
           # Never and backoffLimit 0, a container that exited non-zero would be a

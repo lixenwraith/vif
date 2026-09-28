@@ -61,8 +61,8 @@ location = /vif/api/logs {
 
 # The browser session route. Nginx terminates TLS and forwards the Upgrade; it
 # does not translate WebSocket frames. The allocator validates the session, the
-# Origin and the fleet's ceilings, then proxies the upgraded connection to the
-# bridge sidecar in that session's pod, which is what speaks WebSocket.
+# Origin and the fleet's ceilings, then speaks WebSocket itself or proxies the
+# upgrade to the bridge sidecar in that session's pod, as it is configured.
 #
 # Origin is forwarded unchanged, because it is the whole of same-origin here and
 # the allocator compares it against its -web-origin. Do not set it.

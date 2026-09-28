@@ -10,35 +10,33 @@ and P3 is an idea.
 
 ## Browser sessions and mobile
 
-### Speak WebSocket in vif and vif-allocator
+### Retire the websocat sidecar
 
 - Priority: P1, next
-- Affected files: `internal/network/websocket_other.go`, `internal/network/connection.go`,
-  `tool/vif-allocator/ws_proxy.go`, `tool/vif-allocator/manifest.go`,
-  `deploy/k3s/30-session.yaml`, `deploy/guest/update-vif-ws-bridge.sh`
-- Prerequisite: none. websocat stays deployed and documented until the replacement
-  passes its automated tests and a field test
+- Affected files: `tool/vif-allocator/ws_proxy.go`, `tool/vif-allocator/config.go`,
+  `tool/vif-allocator/manifest.go`, `deploy/k3s/30-session.yaml`,
+  `deploy/guest/update-vif-ws-bridge.sh`, `deploy/guest/build-websocat.sh`,
+  `deploy/update.sh`
+- Prerequisite: the field test below passes on the allocator's own termination
 
-A native client cannot use a session's `ws_url` (`dialWebSocket` refuses outside the
-browser build), so a network that blocks 7777 leaves a terminal no way in; and the
-websocat 1.x bridge never sets `TCP_NODELAY`, so about 0.5% of browser frames wait
-40–80 ms on a delayed ACK. Decided: one minimal RFC 6455 implementation on the
-standard library, shared by the game and the allocator, with `TCP_NODELAY` on every
-socket. Fleet §8 and §9 and multi-platform §5 change when it lands.
+`pkg/websocket` speaks WebSocket in `vif -join` and in the allocator, which
+terminates the browser route when `-ws-bridge-image` is unset. Field test, in order:
+`vif -join wss://<site>/vif/ws/<id>` from off-site through websocat; then, with
+`VIF_ALLOCATOR_WS_BRIDGE_IMAGE` removed (runbook, "Switch the browser route's
+WebSocket end"), the same join, a browser playing, no 40–80 ms delayed-ACK tail, and
+fleet W1's checks. Then delete the proxy path, `-ws-bridge-image`, the sidecar
+template and its updater, the `bridge` component and the 7779 notes.
 
-- Scope: the version-13 upgrade as client and server, binary messages, ping/pong and
-  the close handshake with a deadline. No extensions, subprotocols or text data.
-- Hardening: masking enforced by role, reserved bits and unknown opcodes refused,
-  control frames at most 125 bytes and never fragmented, a message length checked
-  against the game's largest frame before it is read, bounded handshake headers and
-  deadlines. Fuzz the frame reader and the handshake parser.
-- Placement, to settle first: the allocator terminates the browser's socket and
-  splices raw TCP to the pod as the front door does, so the sidecar, its image and
-  7779 go; and `vif -serve` may accept it too, so one binary serves browsers without
-  a fleet.
-- Rollout: the new path beside websocat behind a flag, [Deploying the session
-  fleet](kube-docker-deploy.md) §13 and fleet W1's checks run on it from the field,
-  then the sidecar and its updater retire.
+### Serve WebSocket from vif itself
+
+- Priority: P2
+- Affected files: `cmd/vif`, `internal/app/host.go`, `internal/network`
+
+`vif -serve`/`-host` binds TCP only, so a browser reaches a session only through a
+fleet. A flag of its own would serve the route from one binary, on a LAN or in a
+test, with `pkg/websocket`'s `Check` and `Upgrade` feeding the accept loop. Decide
+its origin policy, and whether it serves `wss` with its own certificate, which a
+page served over `https` requires.
 
 ### Key the browser route's admission in the allocator
 

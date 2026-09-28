@@ -224,12 +224,13 @@ deletes images no pod uses once the disk passes 85%, and between matches none do
 
 ### 8.1 The browser bridge image
 
-The browser route needs websocat as a sidecar image in every session pod: it is the
-one process that speaks WebSocket, turning each upgraded connection into a loopback
-TCP connection to the game. `./deploy/update.sh bridge` packages the websocat on
-`PATH` (Arch: AUR) or, when there is none, builds the pinned GitHub release with
-`deploy/guest/build-websocat.sh`, and imports it pinned like the session image. No
-Docker, no drain.
+Only while `VIF_ALLOCATOR_WS_BRIDGE_IMAGE` is set: the allocator then proxies the
+browser route to websocat, a sidecar in every session pod that turns each upgraded
+connection into a loopback TCP connection to the game; unset, the allocator speaks
+WebSocket itself and this step packages nothing. `./deploy/update.sh bridge`
+packages the websocat on `PATH` (Arch: AUR) or, when there is none, builds the
+pinned GitHub release with `deploy/guest/build-websocat.sh`, and imports it pinned
+like the session image. No Docker, no drain.
 
 ## 9. The fleet objects and the shared volumes
 
@@ -289,7 +290,7 @@ the symptoms of a queue below the burst or a pin older than the rotation fix.
 ## 11. The allocator
 
 [`tool/vif-allocator`](../tool/vif-allocator/README.md) is the narrow HTTP boundary
-between the site and the `vif` namespace, and the browser route's WebSocket proxy.
+between the site and the `vif` namespace, and the browser route's WebSocket end.
 Its settings are [`deploy/guest/vif-allocator.env`](../deploy/guest/vif-allocator.env):
 edit them there, never on the node. First install, after §9 applied its Role:
 
@@ -374,7 +375,11 @@ code -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
      -H 'Origin: https://elsewhere.example' "$ws"                    # 403
 code -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Origin: https://<site-host>' \
      -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: AAAAAAAAAAAAAAAAAAAAAA==' "$ws"   # 101
+bin/vif -join 'wss://<site-host>/vif/ws/<session-id>'                # guests>=3, on the second machine
 ```
+
+The 101 and the join hold whichever end `VIF_ALLOCATOR_WS_BRIDGE_IMAGE` selects;
+the join is also the way in from a network that blocks 7777.
 
 Then prove the policy is enforced and the node is exempt from it, with the session
 still live:
@@ -389,8 +394,9 @@ sudo kubectl -n default run np-probe --rm -i --restart=Never --image=busybox --q
   --command -- sh -c "for p in 7777 7778 7779; do nc -zw2 $POD_IP \$p && echo \$p open || echo \$p refused; done" </dev/null
 ```
 
-Expect both node lines, then `7777 open`, `7778 refused`, `7779 refused`. All open
-means NetworkPolicy is not enforced; a node line failing means node traffic is not
+Expect both node lines, then `7777 open`, `7778 refused`, `7779 refused`; without a
+bridge image nothing listens on 7779, so its node line is absent. All open means
+NetworkPolicy is not enforced; a 7777 node line failing means node traffic is not
 exempt, and `20-networkpolicy.yaml` names the `ipBlock` fix.
 
 Quit the client, read the session's file before it goes, then delete:

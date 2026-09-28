@@ -71,6 +71,21 @@ verdict — so read the session's JSONL before running it, not after:
 ./deploy/k3s/session.sh delete '<session-id>'
 ```
 
+## Switch the browser route's WebSocket end
+
+`VIF_ALLOCATOR_WS_BRIDGE_IMAGE` in [`guest/vif-allocator.env`](guest/vif-allocator.env)
+selects it. Set, each session pod carries the websocat sidecar and the allocator
+proxies the upgrade to it; removed, the allocator answers the upgrade itself and
+splices to the game port, and pods carry no sidecar. Commit the line, then:
+
+```sh
+./deploy/k3s/session.sh drain
+./deploy/update.sh allocator
+```
+
+Rolling back is restoring the line the same way. The bridge image stays pinned in
+K3s while unused, so the way back rebuilds nothing.
+
 ## Ask for a session
 
 The path a player takes, from the node. It prints the identity on stdout and the
