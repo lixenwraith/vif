@@ -113,12 +113,15 @@ check_image() {
 	tag=${installed##*:}
 	incoming=vif:$(git_ rev-parse --short=8 HEAD)
 	if [ -n "$tag" ] && git_ rev-parse -q --verify "$tag^{commit}" >/dev/null; then
-		if git_ diff --quiet "$tag" HEAD -- cmd internal pkg go.mod go.sum deploy/docker/Dockerfile &&
-			sudo k3s crictl inspecti "$installed" >/dev/null 2>&1; then
+		changed=$(git_ diff --shortstat "$tag" HEAD -- \
+			cmd internal pkg go.mod go.sum deploy/docker/Dockerfile)
+		# Pinned as well as present: the kubelet deletes an unpinned image once the
+		# disk passes 85% while no pod uses it, as between matches none does.
+		if [ -z "$changed" ] && sudo k3s crictl inspecti -o json "$installed" 2>/dev/null |
+			jq -e .status.pinned >/dev/null 2>&1; then
 			return 0
 		fi
-		echo "$installed -> $incoming:$(git_ diff --shortstat "$tag" HEAD -- \
-			cmd internal pkg go.mod go.sum deploy/docker/Dockerfile)"
+		echo "$installed -> $incoming:${changed:- the installed image is missing or unpinned}"
 		return 1
 	fi
 	echo "${installed:-no session image} -> $incoming"

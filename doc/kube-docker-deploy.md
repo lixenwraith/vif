@@ -217,8 +217,9 @@ older than the match ceiling.
 
 It builds the `vif_headless` profile once with Docker, refuses an image without the
 `headless` OCI label, runs its own `-check` as UID 65532 read-only with no network,
-imports it into K3s, records it as `VIF_ALLOCATOR_IMAGE`, removes older tags, and
-restores the Docker baseline. Later runs rebuild only when `cmd`, `internal`,
+imports it into K3s pinned, records it as `VIF_ALLOCATOR_IMAGE`, removes older tags
+and the build cache, and restores the Docker baseline. Pinned, because the kubelet
+deletes images no pod uses once the disk passes 85%, and between matches none does. Later runs rebuild only when `cmd`, `internal`,
 `pkg`, `go.mod`, `go.sum` or the Dockerfile changed since the installed tag.
 
 ### 8.1 The browser bridge image
@@ -227,7 +228,8 @@ The browser route needs websocat as a sidecar image in every session pod: it is 
 one process that speaks WebSocket, turning each upgraded connection into a loopback
 TCP connection to the game. `./deploy/update.sh bridge` packages the websocat on
 `PATH` (Arch: AUR) or, when there is none, builds the pinned GitHub release with
-`deploy/guest/build-websocat.sh`. No Docker, no drain.
+`deploy/guest/build-websocat.sh`, and imports it pinned like the session image. No
+Docker, no drain.
 
 ## 9. The fleet objects and the shared volumes
 
@@ -622,7 +624,7 @@ Each row below was a dead end in the proof-of-concept run when it was not known:
 | Traffic is visible on `cni0`. | It reached the pod side of routing. A moving `KUBE-POD-FW-*` counter proves the NetworkPolicy path ran. |
 | A finished session first refuses and later times out. | While its Service exists with no endpoint, kube-proxy rejects; after Job TTL garbage-collects the Service, the node filter drops an unassigned port. |
 | A pod shows `0/2` and never becomes Ready. | A pod is Ready only when every container is. A healthy session beside a second container in `ImagePullBackOff` reads as not Ready. |
-| A create answers `504 session_not_ready` and the pod never leaves `Init`. | A sidecar that cannot start holds the containers after it. `kubectl -n vif describe pod` names the bridge image it could not pull: run `update-vif-ws-bridge.sh`. |
+| A create answers `504 session_not_ready` and the pod never leaves `Init`. | A sidecar that cannot start holds the containers after it. `kubectl -n vif describe pod` names the image it could not pull, usually one the kubelet deleted at 85% disk before it was pinned: `./deploy/update.sh` imports it again, pinned. |
 | The browser route answers `503 session_unreachable` while `vif -join` works. | The allocator reached the pod's `/health` and not its 7779. The bridge is the difference: read its container's state, then test `$POD_IP/7779` above. A refusal there with a running bridge is the policy case `20-networkpolicy.yaml` names. |
 | The handshake answers `400` with no `Upgrade` reaching the allocator. | An edge that dropped the hop-by-hop headers. The `map` must be in the `http` context and both headers set in the location (§12). |
 | A browser session ends after about thirty seconds of a full lobby. | A stream-layer `proxy_timeout` shorter than the game's ten-second heartbeat, or an idle-connection bound below it somewhere on the TLS path (§12). |
