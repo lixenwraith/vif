@@ -40,10 +40,16 @@ type condition struct {
 
 type job struct {
 	Metadata objectMeta `json:"metadata"`
+	Spec     jobSpec    `json:"spec"`
 	Status   jobStatus  `json:"status"`
 }
 
+type jobSpec struct {
+	ActiveDeadlineSeconds int64 `json:"activeDeadlineSeconds,omitempty"`
+}
+
 type jobStatus struct {
+	StartTime      string      `json:"startTime,omitempty"`
 	Active         int         `json:"active,omitempty"`
 	Succeeded      int         `json:"succeeded,omitempty"`
 	Failed         int         `json:"failed,omitempty"`

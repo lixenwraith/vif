@@ -70,6 +70,10 @@ One session row has this shape:
 }
 ```
 
+`state` is the pod's `/health` body, except that `expires_in` is the sooner of the
+game's countdown and the Job's `activeDeadlineSeconds`. An occupied game runs no
+countdown, so the Job's deadline is what it reports.
+
 `limits` names what this deployment will accept — `players_max` and the allowed
 `log_levels`, most verbose first — so a caller offers only choices that would be
 granted rather than discovering them by refusal. `-players-max` defaults to

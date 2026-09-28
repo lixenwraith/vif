@@ -356,7 +356,7 @@ func (a *allocator) listSessions(ctx context.Context) ([]session, error) {
 		id          string
 		serviceName string
 		port        int
-		createdAt   string
+		job         job
 		pods        []pod
 	}
 	var candidates []candidate
@@ -380,7 +380,7 @@ func (a *allocator) listSessions(ctx context.Context) ([]session, error) {
 			id:          id,
 			serviceName: service.Metadata.Name,
 			port:        port,
-			createdAt:   item.Metadata.CreationTimestamp,
+			job:         item,
 			pods:        podsByID[id],
 		})
 	}
@@ -408,11 +408,12 @@ func (a *allocator) listSessions(ctx context.Context) ([]session, error) {
 				cancel()
 				if probeErr == nil {
 					state = observed
+					state.ExpiresIn = expiresIn(observed.ExpiresIn, item.job, time.Now())
 					break
 				}
 				state.Reason = "health unavailable: " + probeErr.Error()
 			}
-			result[i] = a.sessionRecord(item.id, item.port, item.createdAt, routable, state)
+			result[i] = a.sessionRecord(item.id, item.port, item.job.Metadata.CreationTimestamp, routable, state)
 		}()
 	}
 	wg.Wait()
@@ -604,6 +605,20 @@ func (a *allocator) sessionRecord(id string, port int, createdAt string, routabl
 		Routable:     routable,
 		State:        state,
 	}
+}
+
+// expiresIn is the sooner of the game's countdown and the Job's wall-clock deadline:
+// an occupied game reports none, and activeDeadlineSeconds still ends it.
+func expiresIn(reported string, item job, now time.Time) string {
+	start, err := time.Parse(time.RFC3339, item.Status.StartTime)
+	if err != nil || item.Spec.ActiveDeadlineSeconds <= 0 {
+		return reported
+	}
+	left := max(start.Add(time.Duration(item.Spec.ActiveDeadlineSeconds)*time.Second).Sub(now), 0)
+	if game, err := time.ParseDuration(reported); err == nil && game <= left {
+		return reported
+	}
+	return left.Round(time.Second).String()
 }
 
 // webSocketURL is derived from the origin the route accepts rather than configured
