@@ -214,10 +214,11 @@ same-origin socket. Ordinary CORS headers are not a substitute for the `Origin`
 check. Browser admission credentials are a later control-plane feature and should
 be short-lived and session-scoped when introduced.
 
-The raw TCP NodePort path is unchanged and is what native clients use. The
-allocator has outgrown pure allocation now that it owns routing and admission; keep
-those duties behind explicit interfaces so the process can be renamed or split
-without moving Kubernetes lifecycle code into the game.
+Native clients keep raw TCP, through the allocator's front door or the session's
+own NodePort ([fleet §9](kubernetes-fleet.md#9-the-session-routes)). The allocator
+has outgrown pure allocation now that it owns routing and admission; keep those
+duties behind explicit interfaces so the process can be renamed or split without
+moving Kubernetes lifecycle code into the game.
 
 ## 6. Browser launch arguments
 
@@ -254,8 +255,9 @@ does not make that file exist in the browser filesystem.
 
 The page passes `-join=wss://<site>/vif/ws/<session>` through this bridge; typing
 `:join <that link>` in a running solo game does the same without a reload. A
-`ws://` or `wss://` target is dialled whole; every other form a native build takes
-is refused here (see the address grammar in [Services](services-and-networking.md)).
+`ws://` or `wss://` target is dialled whole, and its last path segment is the name
+sent first, as a `vif://` link's is; every other form a native build takes is
+refused here (see the address grammar in [Services](services-and-networking.md)).
 
 A browser has no terminal to print an exit error to, so the launcher keeps the
 tail of stderr and, once the program exits, shows its last line (or the crash

@@ -19,7 +19,7 @@ back one out.
 | `k3s.service.d/10-vif-fleet-logs.conf` | `/etc/systemd/system/k3s.service.d/` | root 0644 | the mount unit; makes K3s require and start after it |
 | `vif-fleet-log-cleanup.py` | `/usr/local/libexec/` | root 0644 | `python3`; refuses a non-tmpfs path |
 | `vif-fleet-log-cleanup.service` / `.timer` | `/etc/systemd/system/` | root 0644 | runs the cleanup as `vif-fleet` once per minute |
-| `nftables.conf` | `/etc/nftables.conf` | root 0644 | the include below; owns one `inet vif` table and never flushes the ruleset |
+| `nftables.conf` | `/etc/nftables.conf` | root 0644 | the include below; owns one `inet vif` table, admits the front door's 7777, never flushes the ruleset; `update.sh filter` installs and loads it |
 | `vif-operator.nft.example` | `/etc/nftables.d/vif-operator.nft` | root 0644 | site values: the one address allowed to reach the node, and its ports |
 | `logwisp.sysusers` | `/etc/sysusers.d/` | root 0644 | creates the locked `logwisp` identity; tmpfs read access comes from the `vif-fleet` supplementary group alone |
 | `logwisp.service` | `/etc/systemd/system/` | root 0644 | read-only view of the fleet tmpfs, inaccessible K3s and allocator credential paths, no dependency on games or the allocator |

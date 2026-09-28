@@ -39,7 +39,9 @@ flowchart TD
     Alloc -->|"Job + Service"| API["K3s API"]
     API --> Pod["vif -serve pod"]
     Alloc -->|"health, and the upgraded socket"| Bridge["ws-bridge sidecar"] -->|"127.0.0.1:7777"| Pod
-    Term["Player's vif -join"] -->|"raw TCP, no nginx"| PF["host pf rdr"] --> NP["NodePort"] --> Pod
+    Term["Player's vif -join"] -->|"raw TCP, no nginx"| PF["host pf rdr"]
+    PF -->|"7777"| Alloc -->|"route frame, then bytes"| Pod
+    PF -->|"NodePort"| NP["NodePort"] --> Pod
     Pod -->|"JSONL through PVC"| Log["Capped tmpfs"]
     Log -->|"read-only files"| Wisp["LogWisp, loopback only"]
     Wisp -->|"SSE bytes"| Alloc
@@ -47,17 +49,18 @@ flowchart TD
 
 The native game transport is raw framed TCP, not HTTP, so it never enters nginx. A
 session is a thing that ends, so it is a Job, not a Deployment. The allocator
-hands a player three opaque strings and nothing may rebuild one from a port:
+hands a player three opaque strings, each naming the session, and nothing may
+rebuild one from a port:
 
 | String | What it is | Who reads it |
 |---|---|---|
-| `https://<site-host>/projects/vif/session/<id>/` | The shareable page. | A browser. |
-| `<site-host>:31703` | Raw framed TCP straight to the session's forwarded port. | `vif -join`. |
-| `wss://<site-host>/vif/ws/<session>` | The browser route, through the site and the allocator to the pod's bridge. | The WASM build. |
+| `vif://<site-host>:7777/<id>` | `join_target`: the allocator's front door, one address for every session. | `vif -join`. |
+| `vif://<site-host>:31703/<id>` | `direct_target`: the session's own forwarded NodePort. | `vif -join`. |
+| `wss://<site-host>/vif/ws/<id>` | `ws_url`: the browser route, through the site and the allocator to the pod's bridge. | The WASM build. |
 
-The coordinator speaks first and a plaintext game connection names no session, so
-the destination port is the whole of the native routing: ten NodePorts for ten
-sessions, and the deployed session sets no `-name`.
+Every route sends the name before the handshake, and the pod runs `-name <id>`, so a
+link that names another session is refused rather than seated in it
+([the fleet plan §9](kubernetes-fleet.md#9-the-session-routes)).
 
 ## 2. The public edge
 
@@ -65,8 +68,8 @@ Site configuration, kept outside this repository. What it must provide:
 
 | Requirement | Why |
 |---|---|
-| Forward TCP 31700–31709, and only those, to the node | The whole player-facing native surface. 7778, 8081 and 6443 are unauthenticated operational data and never leave the node. |
-| Do not rewrite the source address | Services use `externalTrafficPolicy: Local` and the session's admission limiter keys on the dialling address. |
+| Forward TCP 7777 and 31700–31709, and only those, to the node | The whole player-facing native surface: the front door and each session's direct port. 7778, 8081 and 6443 are unauthenticated operational data and never leave the node. |
+| Do not rewrite the source address | Services use `externalTrafficPolicy: Local`, and the front door and the session key their admission budgets on the dialling address. |
 | Keep established TCP mappings for hours | A session holds one long-lived connection per player and heartbeats every ten seconds. |
 | Admit the site host to the node's 9080 | The allocator's API and browser route, reached only through the site's nginx (§12). |
 
@@ -174,8 +177,9 @@ sudo systemctl stop nft-rollback.timer     # from the second connection
 `sudo nft list ruleset | grep '^table'` must show `inet vif` and the tables K3s
 installed, and no `inet filter`: stock Arch can ship one with a `forward` hook and
 `policy drop`, which blackholes NodePort traffic while everything else keeps
-working. Treat an Arch `/etc/nftables.conf.pacnew` as hostile. §11 adds 9080 to
-`operator_ports`.
+working. Treat an Arch `/etc/nftables.conf.pacnew` as hostile. The table admits the
+front door's 7777 from anywhere; §11 adds 9080 to `operator_ports`. Later changes to
+the file ship with `./deploy/update.sh filter`.
 
 ## 7. The node's log tmpfs
 
@@ -320,7 +324,7 @@ kubeconfig. Open 9080 to the site host only, in `/etc/nftables.d/vif-operator.nf
 There is deliberately no public delete endpoint: an anonymous caller must not end
 somebody else's match.
 
-## 12. The site's front door
+## 12. The site's edge
 
 Site configuration, kept outside this repository.
 [`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example) is the
@@ -346,6 +350,15 @@ curl -fsS http://127.0.0.1:9080/readyz && ./deploy/k3s/session.sh blockers &&
   SESSION_ID=$(./deploy/k3s/session.sh allocate)
 bin/vif -join '<join target>'                    # on the second machine, at once
 ./deploy/k3s/session.sh state "$SESSION_ID"     # phase=occupied, guests>=1
+```
+
+From a third terminal on that machine, the direct target seats a second guest, and
+the front door refuses what it must before dialling a pod:
+
+```sh
+bin/vif -join '<direct target>'                           # guests>=2
+bin/vif -join 'vif://<site-host>:7777/0000000000000000'     # no such session
+bin/vif -join 'vif://<site-host>:<its port>/0000000000000000' # not serving the session that was dialled
 ```
 
 Where the browser route is published, check it in the same window, from off the
@@ -388,7 +401,8 @@ sudo jq -s -e --arg id "$SESSION_ID" 'map(select(.sub != null)) | length > 0 and
 ```
 
 If it fails, separate the allocator from the workload: `session.sh create` renders
-the same template without the allocator.
+the same template without the allocator, and the pod answers to the name it was
+given, on its NodePort only (`bin/vif -join 'vif://<site-host>:31700/s1'`).
 
 ```sh
 FIRST_JOIN=20m EMPTY_GRACE=20m ./deploy/k3s/session.sh create s1 31700 \
@@ -429,7 +443,7 @@ session and names why:
 `reason` is `no guest connected within …`, `roster empty for …`, `drained`,
 `drain deadline … reached holding N guest(s)`, or an operator's cause. Sessions
 expiring with `no guest connected` far more often than players report failed joins
-is a broken path between the page and the forwarded range; start at the
+is a broken path between the page and the forwarded ports; start at the
 EndpointSlice and walk outward with §16. Open work is the fleet plan's
 [work list](kubernetes-fleet.md#3-work-list).
 
@@ -493,7 +507,7 @@ test "$(sudo kubectl auth can-i get pods --subresource=log \
 
 A live session's Job must carry exactly the shape the template describes — one
 container, no token, no `hostPath`, no `-log-stdout`, the PVC mounted only in the
-game container, and its own session id on the command line:
+game container, and its own session id on the command line as its log tag and name:
 
 ```sh
 sudo kubectl -n vif get job "vif-session-$SESSION_ID" -o json |
@@ -504,6 +518,7 @@ sudo kubectl -n vif get job "vif-session-$SESSION_ID" -o json |
     ($pod.containers[0].name == "session") and
     ($pod.containers[0].args | index("-l=/var/log/vif-fleet") != null) and
     ($pod.containers[0].args | index("-log-session-id=" + $id) != null) and
+    ($pod.containers[0].args | .[index("-name") + 1] == $id) and
     ($pod.containers[0].args | index("-log-stdout") == null) and
     any($pod.containers[0].volumeMounts[]?;
       .name == "fleet-logs" and .mountPath == "/var/log/vif-fleet") and
@@ -570,10 +585,14 @@ bash -c "</dev/tcp/$POD_IP/7779"          # the bridge, which no policy admits
 bash -c "</dev/tcp/$CLUSTER_IP/7777"      # Service DNAT
 bash -c "</dev/tcp/127.0.0.1/31700"       # local NodePort
 bash -c "</dev/tcp/192.0.2.20/31700"      # node address and NodePort
+bash -c "</dev/tcp/192.0.2.20/7777"       # the front door and the node filter
 ```
 
-From the FreeBSD host, test `192.0.2.20:31700`. Test the public address only from
-an off-box machine (§2).
+From the FreeBSD host, test `192.0.2.20:31700` and `192.0.2.20:7777`. Test the
+public address only from an off-box machine (§2). A join through 7777 that times out
+while the direct target works is the host's forward, or a node filter older than
+its rule (`./deploy/update.sh --diff filter`); a refusal in words is the front door
+answering, and [the fleet plan §9](kubernetes-fleet.md#9-the-session-routes) names each.
 
 When a step does not answer, take counter snapshots immediately before and after
 **exactly one** connection attempt. The last rule whose counter moves names the
