@@ -87,20 +87,23 @@ printf '%s' '{"imageLayoutVersion":"1.0.0"}' >"$layout/oci-layout"
 printf '%s' "{\"schemaVersion\":2,\"manifests\":[{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"digest\":\"sha256:$manifest_digest\",\"size\":$manifest_size,\"platform\":{\"architecture\":\"$arch\",\"os\":\"linux\"},\"annotations\":{\"io.containerd.image.name\":\"$ref\",\"org.opencontainers.image.ref.name\":\"${ref##*:}\"}}]}" >"$layout/index.json"
 tar -C "$layout" -cf "$work/image.tar" oci-layout index.json blobs
 
-# The layout is deterministic, so an unchanged websocat is an unchanged digest.
-imported=$(sudo k3s ctr -n k8s.io images ls | awk -v ref="$ref" '$1 == ref { print $3 }')
+# The layout is deterministic, so an unchanged websocat is an unchanged digest. An
+# unpinned copy is not current: see update-vif-image.sh.
+imported=$(sudo k3s ctr -n k8s.io images ls | awk -v ref="$ref" \
+	'$1 == ref && /io[.]cri-containerd[.]pinned=pinned/ { print $3 }')
 if [ "$imported" = "sha256:$manifest_digest" ]; then
 	[ "$diff_only" = true ] || echo "current: $ref ($version)"
 	exit 0
 fi
 if [ "$diff_only" = true ]; then
-	echo "$ref: ${imported:-not imported} -> sha256:$manifest_digest ($version from $source_bin)"
+	echo "$ref: ${imported:-missing or unpinned} -> sha256:$manifest_digest ($version from $source_bin)"
 	exit 1
 fi
 
 echo "importing $ref ($version, $(echo "$libs" | grep -c . || true) linked libraries)"
 sudo k3s ctr -n k8s.io images import "$work/image.tar"
 sudo k3s crictl inspecti "$ref" >/dev/null
+sudo k3s ctr -n k8s.io images label "$ref" io.cri-containerd.pinned=pinned >/dev/null
 
 # The pod's identity and read-only root: a missing library or a mode the pod user
 # cannot execute fails here rather than in the first browser join.

@@ -118,6 +118,9 @@ echo "importing $runtime_image into K3s containerd"
 docker save --output "$archive" "$local_image"
 sudo k3s ctr -n k8s.io images import "$archive"
 sudo k3s crictl inspecti "$runtime_image" >/dev/null
+# Pinned, because nothing here can pull it back: the kubelet deletes unused images
+# once the disk passes 85%, and between matches no pod uses this one.
+sudo k3s ctr -n k8s.io images label "$runtime_image" io.cri-containerd.pinned=pinned >/dev/null
 
 if sudo test -f "$allocator_env"; then
 	sudo cat "$allocator_env" >"$env_copy"
@@ -144,5 +147,7 @@ for old_image in $old_docker_images; do
 	echo "removing old Docker image $old_image"
 	docker image rm "$old_image"
 done
+# The build cache is most of what a build leaves on disk, and no later build needs it.
+docker builder prune --all --force >/dev/null
 
 echo "ready: VIF_ALLOCATOR_IMAGE=$runtime_image revision=$revision"
