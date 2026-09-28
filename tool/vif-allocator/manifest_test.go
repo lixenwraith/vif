@@ -27,6 +27,7 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 		`"image":"docker.io/library/vif:revision"`,
 		`"backoffLimit":0`,
 		`"ttlSecondsAfterFinished":120`,
+		`"-name","abc123"`,
 		`"-l=/var/log/vif-fleet","-log-session-id=abc123"`,
 		`{"mountPath":"/var/log/vif-fleet","name":"fleet-logs"}`,
 		`{"mountPath":"/wad/scenario","name":"fleet-wad","readOnly":true,"subPath":"scenario"}`,

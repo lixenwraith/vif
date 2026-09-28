@@ -48,13 +48,13 @@ type apiErrorResponse struct {
 	Message string `json:"message"`
 }
 
-func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL *url.URL, web allocatorConfig) *apiServer {
+func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL *url.URL, web allocatorConfig, held *holds) *apiServer {
 	server := &apiServer{allocator: allocator, log: logger, mux: http.NewServeMux()}
 	if logStreamURL != nil {
 		server.logProxy = newLogStreamProxy(logStreamURL, logger)
 	}
 	if web.WebOrigin != "" {
-		server.ws = newWSRouter(web.WebOrigin, web.WebMaxPerSession, logger)
+		server.ws = newWSRouter(web.WebOrigin, held, logger)
 	}
 	server.mux.HandleFunc("/healthz", server.handleHealth)
 	server.mux.HandleFunc("/readyz", server.handleReady)

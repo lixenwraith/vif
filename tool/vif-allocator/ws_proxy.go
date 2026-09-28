@@ -27,8 +27,8 @@ const (
 )
 
 // A session identifier is 16 hex characters. Matching here rather than trusting the
-// front door keeps the route refusable on its own.
-var wsSessionPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
+// site keeps each route refusable on its own, and keeps it out of a label selector.
+var sessionIDPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
 type upstreamKey struct{}
 
@@ -37,14 +37,11 @@ type upstreamKey struct{}
 // between two connections that have already agreed on what they are.
 type wsRouter struct {
 	origin string
-	max    int
+	holds  *holds
 	proxy  *httputil.ReverseProxy
-
-	mu    sync.Mutex
-	holds map[string]int
 }
 
-func newWSRouter(origin string, max int, logger *slog.Logger) *wsRouter {
+func newWSRouter(origin string, held *holds, logger *slog.Logger) *wsRouter {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
 	transport.DisableCompression = true
@@ -55,7 +52,7 @@ func newWSRouter(origin string, max int, logger *slog.Logger) *wsRouter {
 	transport.DialContext = (&net.Dialer{Timeout: 2 * time.Second}).DialContext
 	transport.ResponseHeaderTimeout = wsHandshakeTimeout
 
-	router := &wsRouter{origin: origin, max: max, holds: make(map[string]int)}
+	router := &wsRouter{origin: origin, holds: held}
 	router.proxy = &httputil.ReverseProxy{
 		Rewrite: func(request *httputil.ProxyRequest) {
 			upstream, _ := request.In.Context().Value(upstreamKey{}).(*url.URL)
@@ -81,24 +78,33 @@ func newWSRouter(origin string, max int, logger *slog.Logger) *wsRouter {
 	return router
 }
 
-// hold bounds the browser connections one session may carry. The game's own
-// per-address admission limiter cannot do this here: every browser player reaches
-// the pod from the same loopback address, so the per-player bound is this one.
-func (r *wsRouter) hold(id string) (func(), bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.holds[id] >= r.max {
+// holds bounds the connections one session carries through this allocator, over
+// the front door and the browser route alike. The pod's per-address limiter cannot:
+// every proxied participant reaches it from the node or from its own loopback.
+type holds struct {
+	max int
+
+	mu sync.Mutex
+	n  map[string]int
+}
+
+func newHolds(max int) *holds { return &holds{max: max, n: make(map[string]int)} }
+
+func (h *holds) hold(id string) (func(), bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.n[id] >= h.max {
 		return nil, false
 	}
-	r.holds[id]++
+	h.n[id]++
 	return func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		if r.holds[id] <= 1 {
-			delete(r.holds, id)
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if h.n[id] <= 1 {
+			delete(h.n, id)
 			return
 		}
-		r.holds[id]--
+		h.n[id]--
 	}, true
 }
 
@@ -116,7 +122,7 @@ func (s *apiServer) handleSessionSocket(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	id := strings.TrimPrefix(r.URL.Path, wsRoutePrefix)
-	if !wsSessionPattern.MatchString(id) {
+	if !sessionIDPattern.MatchString(id) {
 		writeAPIError(w, http.StatusNotFound, "unknown_session", "No such session")
 		return
 	}
@@ -141,11 +147,11 @@ func (s *apiServer) handleSessionSocket(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	release, ok := s.ws.hold(id)
+	release, ok := s.ws.holds.hold(id)
 	if !ok {
 		w.Header().Set("Retry-After", "5")
 		writeAPIError(w, http.StatusServiceUnavailable, "session_busy",
-			"This session is carrying as many browser players as it accepts")
+			"This session is carrying as many connections as it accepts")
 		return
 	}
 	defer release()

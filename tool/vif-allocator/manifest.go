@@ -136,6 +136,9 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 							"args": []string{
 								"-serve", ":7777",
 								"-probe", ":7778",
+								// The name both routes carry, so neither can seat a
+								// player whose link named another session.
+								"-name", id,
 								"-authority", "host",
 								"-l=/var/log/vif-fleet",
 								"-log-session-id=" + id,

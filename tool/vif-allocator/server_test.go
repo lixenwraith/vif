@@ -40,14 +40,14 @@ func (f *fakeSessionAllocator) routeSession(context.Context, string) (string, er
 }
 
 func testServer(allocator sessionAllocator) *apiServer {
-	return newAPIServer(allocator, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, allocatorConfig{})
+	return newAPIServer(allocator, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, allocatorConfig{}, nil)
 }
 
 // testWebServer publishes the browser route, which an ordinary test server does
 // not: the two halves of the fleet are refusable independently.
 func testWebServer(allocator sessionAllocator) *apiServer {
 	return newAPIServer(allocator, slog.New(slog.NewTextHandler(io.Discard, nil)), nil,
-		allocatorConfig{WebOrigin: "https://site.example", WebMaxPerSession: 2})
+		allocatorConfig{WebOrigin: "https://site.example"}, newHolds(2))
 }
 
 func TestPostSession(t *testing.T) {
