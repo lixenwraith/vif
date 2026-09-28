@@ -57,7 +57,8 @@ func run(args []string, logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("parse log stream URL: %w", err)
 	}
-	handler := newAPIServer(controller, logger, logStreamURL, cfg.Allocator)
+	held := newHolds(cfg.Allocator.RouteMax)
+	handler := newAPIServer(controller, logger, logStreamURL, cfg.Allocator, held)
 	server := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           handler,
@@ -76,17 +77,25 @@ func run(args []string, logger *slog.Logger) error {
 	}
 
 	// Bound here rather than inside Serve, so a port already taken is an error this
-	// returns and so readiness can be announced once the socket exists.
+	// returns and so readiness can be announced once both sockets exist.
 	listener, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", cfg.Listen, err)
 	}
+	routeListener, err := net.Listen("tcp", cfg.RouteListen)
+	if err != nil {
+		_ = listener.Close()
+		return fmt.Errorf("listen on %s: %w", cfg.RouteListen, err)
+	}
+	defer routeListener.Close()
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("allocator listening", "address", cfg.Listen, "image", cfg.Allocator.Workload.Image)
+		logger.Info("allocator listening", "address", cfg.Listen, "route", cfg.RouteListen,
+			"image", cfg.Allocator.Workload.Image)
 		errCh <- server.Serve(listener)
 	}()
+	go newTCPRouter(controller, held, logger).serve(routeListener)
 	notifyReady(logger)
 
 	select {
@@ -96,6 +105,7 @@ func run(args []string, logger *slog.Logger) error {
 		}
 		return nil
 	case <-ctx.Done():
+		_ = routeListener.Close()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {

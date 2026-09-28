@@ -26,6 +26,7 @@ func proxyTestServer(t *testing.T, target string) *apiServer {
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		parsed,
 		allocatorConfig{},
+		nil,
 	)
 }
 

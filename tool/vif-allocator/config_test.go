@@ -11,13 +11,13 @@ func TestParseConfigUsesFleetDefaults(t *testing.T) {
 	cfg, err := parseConfig([]string{
 		"-image", "docker.io/library/vif:test",
 		"-join-host", "play.example.com",
-		"-page-base", "https://play.example.com/projects/vif/session/",
 		"-log-stream-url", "http://127.0.0.1:8081/stream",
 	}, io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Listen != ":9080" || cfg.KubeAPI != "https://127.0.0.1:6443" {
+	if cfg.Listen != ":9080" || cfg.KubeAPI != "https://127.0.0.1:6443" ||
+		cfg.RouteListen != ":7777" || cfg.Allocator.RoutePort != 7777 {
 		t.Fatalf("unexpected listener configuration: %+v", cfg)
 	}
 	if cfg.Allocator.PortFirst != 31700 || cfg.Allocator.PortLast != 31709 {
@@ -35,10 +35,9 @@ func TestParseConfigUsesFleetDefaults(t *testing.T) {
 
 func TestParseConfigRequiresFixedSiteValues(t *testing.T) {
 	for _, args := range [][]string{
-		{"-join-host", "play.example.com", "-page-base", "https://play.example.com/session/", "-log-stream-url", "http://127.0.0.1:8081/stream"},
-		{"-image", "vif:test", "-page-base", "https://play.example.com/session/", "-log-stream-url", "http://127.0.0.1:8081/stream"},
-		{"-image", "vif:test", "-join-host", "play.example.com", "-log-stream-url", "http://127.0.0.1:8081/stream"},
-		{"-image", "vif:test", "-join-host", "play.example.com", "-page-base", "https://play.example.com/session/"},
+		{"-join-host", "play.example.com", "-log-stream-url", "http://127.0.0.1:8081/stream"},
+		{"-image", "vif:test", "-log-stream-url", "http://127.0.0.1:8081/stream"},
+		{"-image", "vif:test", "-join-host", "play.example.com"},
 	} {
 		if _, err := parseConfig(args, io.Discard); err == nil {
 			t.Fatalf("parseConfig(%q) succeeded", args)
@@ -50,7 +49,6 @@ func TestParseConfigRejectsUnsafeLogStreamURL(t *testing.T) {
 	base := []string{
 		"-image", "docker.io/library/vif:test",
 		"-join-host", "play.example.com",
-		"-page-base", "https://play.example.com/session/",
 	}
 	for _, target := range []string{
 		"https://127.0.0.1:8081/stream",
@@ -75,7 +73,6 @@ func TestRequestBoundsFailClosed(t *testing.T) {
 	base := []string{
 		"-image", "docker.io/library/vif:test",
 		"-join-host", "play.example.com",
-		"-page-base", "https://play.example.com/session/",
 		"-log-stream-url", "http://127.0.0.1:8081/stream",
 	}
 	cfg, err := parseConfig(base, io.Discard)
@@ -111,7 +108,6 @@ func TestAnUnsetUnitVariableKeepsTheDefault(t *testing.T) {
 	required := []string{
 		"-image", "docker.io/library/vif:test",
 		"-join-host", "play.example.com",
-		"-page-base", "https://play.example.com/projects/vif/session/",
 		"-log-stream-url", "http://127.0.0.1:8081/stream",
 	}
 	unset := func(extra ...string) []string { return append(slices.Clone(required), extra...) }
@@ -120,14 +116,16 @@ func TestAnUnsetUnitVariableKeepsTheDefault(t *testing.T) {
 		unset(),
 		unset("-scenario", "", "-wad", ""),
 		unset("-scenario=", "-wad="),
-		unset("-listen", "", "-players-max", "", "-log-level-min", "", "-scenario", "", "-wad", ""),
+		unset("-listen", "", "-route-listen", "", "-route-max", "", "-players-max", "",
+			"-log-level-min", "", "-scenario", "", "-wad", ""),
 	} {
 		cfg, err := parseConfig(args, io.Discard)
 		if err != nil {
 			t.Fatalf("%v: %v", args, err)
 		}
 		if cfg.Allocator.WadDir != defaultWadDir || cfg.Allocator.Workload.Scenario != "main" ||
-			cfg.Listen != ":9080" || cfg.Allocator.PlayersMax != cfg.Allocator.Workload.Players {
+			cfg.Listen != ":9080" || cfg.Allocator.RoutePort != 7777 || cfg.Allocator.RouteMax != 8 ||
+			cfg.Allocator.PlayersMax != cfg.Allocator.Workload.Players {
 			t.Errorf("%v: an empty variable overrode a default: %+v", args, cfg.Allocator)
 		}
 	}
@@ -140,7 +138,7 @@ func TestAnUnsetUnitVariableKeepsTheDefault(t *testing.T) {
 		t.Error("a relative volume was accepted")
 	}
 	if _, err := parseConfig([]string{"-image", "", "-join-host", "h",
-		"-page-base", "https://h/p/", "-log-stream-url", "http://127.0.0.1:8081/stream"},
+		"-log-stream-url", "http://127.0.0.1:8081/stream"},
 		io.Discard); err == nil {
 		t.Error("an empty required flag was accepted")
 	}
@@ -150,7 +148,6 @@ func TestTheBrowserRouteAndItsBridgeAreOneSwitch(t *testing.T) {
 	base := []string{
 		"-image", "vif:test",
 		"-join-host", "play.example.com",
-		"-page-base", "https://play.example.com/session/",
 		"-log-stream-url", "http://127.0.0.1:8081/stream",
 	}
 	for _, half := range [][]string{

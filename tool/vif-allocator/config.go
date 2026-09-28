@@ -34,6 +34,7 @@ var sessionLogLevels = []string{"trace", "debug", "info", "warn", "error"}
 
 type runtimeConfig struct {
 	Listen         string
+	RouteListen    string
 	KubeAPI        string
 	KubeCAFile     string
 	KubeTokenFile  string
@@ -52,6 +53,8 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	set := flag.NewFlagSet("vif-allocator", flag.ContinueOnError)
 	set.SetOutput(output)
 	set.StringVar(&cfg.Listen, "listen", ":9080", "allocator HTTP listen address")
+	set.StringVar(&cfg.RouteListen, "route-listen", ":7777",
+		"native front door: one TCP port for every session, whose port join_target names")
 	set.StringVar(&cfg.KubeAPI, "kube-api", "https://127.0.0.1:6443", "Kubernetes API URL")
 	set.StringVar(&cfg.KubeCAFile, "kube-ca", "/etc/vif-allocator/server-ca.crt", "Kubernetes CA certificate")
 	set.StringVar(&cfg.KubeTokenFile, "kube-token", "/etc/vif-allocator/token", "rotated ServiceAccount token file")
@@ -77,9 +80,8 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 		"site origin allowed to open a browser session, e.g. https://example.com; empty publishes no WebSocket route")
 	set.StringVar(&cfg.Allocator.Workload.BridgeImage, "ws-bridge-image", "",
 		"WebSocket bridge sidecar image; required with -web-origin")
-	set.IntVar(&cfg.Allocator.WebMaxPerSession, "web-max", 8,
-		"concurrent browser connections one session may hold")
-	set.StringVar(&cfg.Allocator.PageBase, "page-base", "", "absolute session page base URL (required)")
+	set.IntVar(&cfg.Allocator.RouteMax, "route-max", 8,
+		"concurrent connections one session may hold through the front door and the browser route together")
 	set.IntVar(&cfg.Allocator.PortFirst, "port-first", 31700, "first allocatable NodePort")
 	set.IntVar(&cfg.Allocator.PortLast, "port-last", 31709, "last allocatable NodePort")
 	set.DurationVar(&cfg.Allocator.ReadyTimeout, "ready-timeout", 75*time.Second, "session readiness deadline")
@@ -97,6 +99,9 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	cfg.Allocator.Workload.Drain = drain
 	if cfg.Allocator.PlayersMax == 0 {
 		cfg.Allocator.PlayersMax = cfg.Allocator.Workload.Players
+	}
+	if _, port, err := net.SplitHostPort(cfg.RouteListen); err == nil {
+		cfg.Allocator.RoutePort, _ = strconv.Atoi(port)
 	}
 	floor := slices.Index(sessionLogLevels, logLevelMin)
 	if floor < 0 {
@@ -132,6 +137,12 @@ func dropEmptyFlags(args []string) []string {
 func validateConfig(cfg runtimeConfig) error {
 	if _, _, err := net.SplitHostPort(cfg.Listen); err != nil {
 		return fmt.Errorf("invalid -listen: %w", err)
+	}
+	if port := cfg.Allocator.RoutePort; port < 1 || port > 65535 {
+		return fmt.Errorf("-route-listen %q must name a port, e.g. :7777", cfg.RouteListen)
+	}
+	if cfg.Allocator.RouteMax < 1 || cfg.Allocator.RouteMax > 16 {
+		return fmt.Errorf("-route-max must be between 1 and 16")
 	}
 	if !dnsLabelPattern.MatchString(cfg.Allocator.Workload.Namespace) {
 		return fmt.Errorf("invalid -namespace %q", cfg.Allocator.Workload.Namespace)
@@ -181,10 +192,6 @@ func validateConfig(cfg runtimeConfig) error {
 	if err := validateWebRoute(cfg.Allocator); err != nil {
 		return err
 	}
-	pageBase, err := url.Parse(cfg.Allocator.PageBase)
-	if err != nil || pageBase.Host == "" || (pageBase.Scheme != "https" && pageBase.Scheme != "http") {
-		return fmt.Errorf("-page-base must be an absolute http or https URL")
-	}
 	if cfg.Allocator.PortFirst < 1 || cfg.Allocator.PortLast > 65535 || cfg.Allocator.PortFirst > cfg.Allocator.PortLast {
 		return fmt.Errorf("invalid NodePort range %d-%d", cfg.Allocator.PortFirst, cfg.Allocator.PortLast)
 	}
@@ -222,9 +229,6 @@ func validateWebRoute(cfg allocatorConfig) error {
 	}
 	if origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" || origin.User != nil {
 		return fmt.Errorf("-web-origin must be a bare scheme://host[:port] origin")
-	}
-	if cfg.WebMaxPerSession < 1 || cfg.WebMaxPerSession > 16 {
-		return fmt.Errorf("-web-max must be between 1 and 16")
 	}
 	return nil
 }
