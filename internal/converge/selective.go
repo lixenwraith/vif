@@ -103,6 +103,21 @@ type selectiveState struct {
 
 // === host: publishing the index ===
 
+// silenceLimit is how many unanswered manifests make a peer silent: the ones its
+// round trip and the backlog queued ahead of them keep in flight, plus
+// SnapshotManifestSilenceCorrections.
+func silenceLimit(p *peerPublisher) int {
+	m, inFlight := p.metrics, 0
+	trip := m.RTT
+	if m.Throughput > 0 {
+		trip += time.Duration(float64(m.Backlog) / m.Throughput * float64(time.Second))
+	}
+	if cadence := time.Duration(p.plan.CadenceTicks) * parameter.GameUpdateInterval; cadence > 0 {
+		inFlight = int(trip / cadence)
+	}
+	return parameter.SnapshotManifestSilenceCorrections + inFlight
+}
+
 // publishManifest sends the index for one capture to the peers in the selective
 // protocol and returns the due peers it did not reach — the ones the caller owes a
 // whole body, because the index alone would leave them holding nothing they can act
@@ -149,7 +164,7 @@ func (c *Corrections) publishManifest(port engine.NetworkPort, index *snapshot.M
 		case p.wide > 0:
 			// Diverged too widely to repair last time; owed a body instead.
 			p.wide--
-		case p.silence >= parameter.SnapshotManifestSilenceCorrections:
+		case p.silence >= silenceLimit(p):
 			// Answering nothing; the index cannot reach it.
 		case !port.Send(id, uint8(network.MsgStateManifest), b):
 			p.refused++
@@ -288,11 +303,6 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		m.ShardsRefused.Add(1)
 		return
 	}
-	if req.Index && c.sendIndex(port, pending.from, req.Tick) {
-		return
-	}
-	// An index this instance no longer retains is answered as a whole world.
-	req.Keyframe = req.Keyframe || req.Index
 	c.publishMu.Lock()
 	p := c.peers[pending.from]
 	if p != nil {
@@ -317,13 +327,26 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	authored := ok && held.authored
 	c.publishMu.Unlock()
 
+	// A tick this authority has let go of was superseded by an index already sent
+	// to the peer; only a peer that asks for a whole world is sent one.
+	if !ok && c.authority.isAuthority() {
+		if req.Keyframe {
+			c.sendKeyframeTo(port, pending.from, req.Tick)
+		}
+		return
+	}
+	// A descent into a link still draining starts again from a later index.
+	if req.Index && !req.Keyframe && (c.busy(port, pending.from) || c.sendIndex(port, pending.from, req.Tick)) {
+		return
+	}
+
 	// A request this instance did not author the answer to is a relayed one. It is
 	// served from retention if that retention holds the tick, and refused in words
 	// if it does not — never with a body from a different baseline, and never by
 	// forwarding the request onward, which would be the routing layer this protocol
 	// deliberately does not have.
 	if !authored {
-		if req.Keyframe {
+		if req.Keyframe || req.Index {
 			c.sendUnserved(port, pending.from, req, "a relay cannot author a whole world")
 			return
 		}
@@ -334,9 +357,10 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		return
 	}
 
+	// An index that could not be sent is answered as a whole world.
 	c.publishMu.Lock()
 	held, ok = c.retainedAtLocked(req.Tick)
-	if !ok || req.Keyframe {
+	if !ok || req.Keyframe || req.Index {
 		c.publishMu.Unlock()
 		c.sendKeyframeTo(port, pending.from, req.Tick)
 		return
@@ -353,6 +377,9 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	}
 
 	body, err := snapshot.EncodeShardSet(set)
+	if err == nil && c.busy(port, pending.from) {
+		return // superseded by the next index before the link could deliver it
+	}
 	if err != nil || !c.repairIsWorthSending(len(body)) {
 		// A repair this wide is not repairing anything: past the frame bound it does
 		// not fit, and past the measured keyframe size the whole world is smaller.
@@ -401,6 +428,13 @@ func (c *Corrections) repairIsWorthSending(bytes int) bool {
 	return keyframe == 0 || int64(bytes) < keyframe
 }
 
+// busy is busyLocked for a caller that holds no lock.
+func (c *Corrections) busy(port engine.NetworkPort, id uint32) bool {
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+	return c.busyLocked(port, id)
+}
+
 // countRequestedPages is how many pages a request put in play, which is the unit
 // the shard counters are reported in.
 func countRequestedPages(req snapshot.CorrectionRequest) int {
@@ -421,6 +455,10 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 		return
 	}
 	c.publishMu.Lock()
+	if c.busyLocked(port, id) {
+		c.publishMu.Unlock()
+		return // asked again with the next index once the link drains
+	}
 	c.forgetRestartedRunLocked()
 	if !c.haveKey || c.baseline.Header.Tick < minTick {
 		if _, _, err := c.takeKeyframe(); err != nil {
@@ -442,17 +480,14 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 	}
 	// The peer is being served a whole world, so its standing in the selective
 	// exchange starts again from the state it is about to hold.
-	if p := c.peers[id]; p != nil {
-		p.silence = 0
+	chunks, err := network.EncodeSnapshotChunksOf(cap.Header.Tick, body, parameter.SnapshotCorrectionChunkBytes)
+	if p := c.peerLocked(id); p != nil && err == nil {
+		p.silence, p.outbox = 0, chunks
 	}
+	c.releaseLocked(port)
 	c.publishMu.Unlock()
-
-	chunks, err := network.EncodeSnapshotChunks(cap.Header.Tick, body)
 	if err != nil {
 		vlog.Warn("app", "msg", "keyframe fallback chunk", "error", err.Error())
-		return
-	}
-	if !c.sendTo(port, id, chunks) {
 		return
 	}
 	// Counted where every other correction body is: a fallback is not free, and a

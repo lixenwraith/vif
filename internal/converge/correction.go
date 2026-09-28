@@ -170,6 +170,20 @@ type peerPublisher struct {
 	// It is a property of how far this participant's prediction has drifted rather
 	// than of its link, so it decays on its own and the index is tried again.
 	wide int
+
+	// capacity is the delivery rate this link showed while it was the limit, which an
+	// idle link's rate understates: what a whole body would drain at.
+	capacity float64
+
+	// outbox is the unsent tail of the body this peer is owed. Its link takes no
+	// other body until it drains, and then takes the newest.
+	outbox [][]byte
+}
+
+// drains reports whether this peer's link delivers size bytes within
+// SnapshotKeyframeDrain, or has never been measured under a queue.
+func (p *peerPublisher) drains(size int64) bool {
+	return p.capacity <= 0 || float64(size) <= p.capacity*parameter.SnapshotKeyframeDrain.Seconds()
 }
 
 // newCorrections builds the correction half of a session. It starts nothing: a
@@ -298,13 +312,25 @@ func (c *Corrections) publishRound(force bool) error {
 		return nil
 	}
 	c.decideLocked(ids, link)
+	c.releaseLocked(port)
 
 	c.forgetRestartedRunLocked()
 	tick := c.inst.Position().Tick
 	keyframe := (!c.haveKey || tick >= c.lastKeyTick+c.keyPeriod) && !c.allProvedLocked(ids, tick)
 	// No answer on these links proves a participant behind a relay: it keeps the floor.
 	keyframe = keyframe || c.behindRelay(ids) && tick >= c.lastKeyTick+c.bounds.FloorKeyframeTicks
+	// A link still delivering an earlier body takes no new one, and the round that
+	// finds it drained sends the newest. A keyframe the link could not deliver within
+	// SnapshotKeyframeDrain is not sent on schedule: the index and its pages lead it,
+	// and a whole world goes on request. A keyframe no due link takes waits.
+	keySize := c.sizesLocked().Keyframe
+	takes := func(id uint32, keyframe bool) bool {
+		return !c.busyLocked(port, id) && (!keyframe || c.peers[id].drains(keySize))
+	}
 	due := c.dueLocked(ids, tick, force, keyframe)
+	if keyframe && !slices.ContainsFunc(due, func(id uint32) bool { return takes(id, true) }) {
+		keyframe, due = false, c.dueLocked(ids, tick, force, false)
+	}
 	if len(due) == 0 {
 		c.publishPlanTelemetryLocked(ids)
 		return nil
@@ -346,13 +372,14 @@ func (c *Corrections) publishRound(force bool) error {
 		}
 	}
 
+	bodyPeers = slices.DeleteFunc(slices.Clone(bodyPeers), func(id uint32) bool { return !takes(id, keyframe) })
 	body, joinBody, encodeDur, err := c.encodeBodyLocked(cap, keyframe, keyframe || len(bodyPeers) > 0)
 	if err != nil {
 		return err
 	}
 	var chunks [][]byte
 	if len(body) > 0 {
-		if chunks, err = network.EncodeSnapshotChunks(cap.Header.Tick, body); err != nil {
+		if chunks, err = network.EncodeSnapshotChunksOf(cap.Header.Tick, body, parameter.SnapshotCorrectionChunkBytes); err != nil {
 			return fmt.Errorf("correction chunk: %w", err)
 		}
 	}
@@ -368,15 +395,13 @@ func (c *Corrections) publishRound(force bool) error {
 	for _, id := range due {
 		p := c.peers[id]
 		if slices.Contains(bodyPeers, id) && len(chunks) > 0 {
-			if !c.sendTo(port, id, chunks) {
-				p.refused++
-				continue
-			}
+			p.outbox = slices.Clone(chunks)
 			sent++
 		}
 		p.sent++
 		p.nextTick = tick + p.plan.CadenceTicks
 	}
+	c.releaseLocked(port)
 
 	c.recordPublicationLocked(cap, keyframe, body, joinBody, encodeDur, sent)
 	if keyframe {
@@ -477,17 +502,46 @@ func (c *Corrections) recordPublicationLocked(
 	}
 }
 
-// sendTo delivers one correction's chunks to one participant, reporting whether
-// the whole of it was taken. A refused chunk ends that peer's transfer rather than
-// continuing into a body that can only reassemble truncated; the next correction
+// bulkHeld reports whether id's link holds more undelivered bytes than it drains
+// within SnapshotBulkQueue past its round trip, floored by SnapshotBulkQueueBytes.
+// Bulk queued behind them delays every epoch after it.
+func bulkHeld(port engine.NetworkPort, id uint32) bool {
+	link, ok := port.(engine.LinkMeasuringPort)
+	if !ok {
+		return false
+	}
+	m := link.LinkMetric(id)
+	limit := float64(parameter.SnapshotBulkQueueBytes)
+	if m.Ready {
+		window := m.MinRTT + parameter.NetworkProbeInterval + parameter.SnapshotBulkQueue
+		limit = max(limit, m.Throughput*window.Seconds())
+	}
+	return float64(m.Backlog) > limit
+}
+
+// busyLocked reports whether id's link is still delivering a body or a backlog.
+// Caller MUST hold publishMu.
+func (c *Corrections) busyLocked(port engine.NetworkPort, id uint32) bool {
+	p := c.peers[id]
+	return p != nil && len(p.outbox) > 0 || bulkHeld(port, id)
+}
+
+// releaseLocked sends every peer as much of its owed body as its link takes now, a
+// chunk at a time while no backlog stands. A refused chunk ends that transfer rather
+// than continuing into a body that can only reassemble truncated; the next correction
 // is self-sufficient, so the refusal is counted and the peer moves on.
-func (c *Corrections) sendTo(port engine.NetworkPort, id uint32, chunks [][]byte) bool {
-	for _, chunk := range chunks {
-		if !port.Send(id, uint8(network.MsgStateCorrection), chunk) {
-			return false
+// Caller MUST hold publishMu.
+func (c *Corrections) releaseLocked(port engine.NetworkPort) {
+	for id, p := range c.peers {
+		for len(p.outbox) > 0 && !bulkHeld(port, id) {
+			if !port.Send(id, uint8(network.MsgStateCorrection), p.outbox[0]) {
+				p.outbox = nil
+				p.refused++
+				break
+			}
+			p.outbox = p.outbox[1:]
 		}
 	}
-	return true
 }
 
 // peerIDs is the participants this instance sends corrections to directly, and
@@ -515,24 +569,18 @@ func (c *Corrections) decideLocked(ids []uint32, link engine.LinkMeasuringPort) 
 	base, keyPeriod, breached := uint64(0), uint64(0), false
 
 	for _, id := range ids {
-		p, ok := c.peers[id]
-		if !ok {
-			ctrl, err := linkpace.NewController(c.bounds)
-			if err != nil {
-				// The envelope is a build constant; a controller that will not
-				// build is a programming error rather than a link condition, and
-				// the session keeps its nominal cadence rather than stopping.
-				vlog.Error("app", "msg", "cadence bounds refused", "error", err.Error())
-				return
-			}
-			p = &peerPublisher{ctrl: ctrl, plan: ctrl.Plan()}
-			c.peers[id] = p
+		p := c.peerLocked(id)
+		if p == nil {
+			return
 		}
 		var m linkpace.Metrics
 		if link != nil {
 			m = link.LinkMetric(id)
 		}
 		p.metrics = m
+		if m.Saturated && m.Throughput > 0 {
+			p.capacity = m.Throughput
+		}
 		// The magnitude comes back on the peer's own echo: it is how far *that*
 		// participant's prediction had drifted when the last correction reached
 		// it. What is fed to the controller is the rise rather than the level —
@@ -547,6 +595,9 @@ func (c *Corrections) decideLocked(ids []uint32, link engine.LinkMeasuringPort) 
 			}
 		}
 		p.plan = p.ctrl.Update(m, sizes, p.demand)
+		p.plan.Constrained = p.plan.Constrained || !p.drains(sizes.Keyframe)
+		// A long round trip spaces this peer's indexes, so each descent stays retained.
+		p.plan.CadenceTicks = max(p.plan.CadenceTicks, min(answerSpacing(m.RTT), c.bounds.MaxCadenceTicks))
 
 		if base == 0 || p.plan.CadenceTicks < base {
 			base = p.plan.CadenceTicks
@@ -563,6 +614,33 @@ func (c *Corrections) decideLocked(ids []uint32, link engine.LinkMeasuringPort) 
 		keyPeriod = c.bounds.FloorKeyframeTicks
 	}
 	c.base, c.keyPeriod, c.breached = base, keyPeriod, breached
+}
+
+// answerSpacing is the fewest ticks between two indexes to one peer that keeps the
+// tick its page request names retained: a descent crosses the link twice, and the
+// ring spans SnapshotManifestRetention-1 of this peer's publications.
+func answerSpacing(rtt time.Duration) uint64 {
+	trip := uint64((rtt + parameter.GameUpdateInterval - 1) / parameter.GameUpdateInterval)
+	return (2*trip + parameter.SnapshotManifestRetention - 2) / (parameter.SnapshotManifestRetention - 1)
+}
+
+// peerLocked is id's schedule, started at the nominal point on first use; nil only
+// when the cadence bounds refuse a controller. Caller MUST hold publishMu.
+func (c *Corrections) peerLocked(id uint32) *peerPublisher {
+	if p, ok := c.peers[id]; ok {
+		return p
+	}
+	ctrl, err := linkpace.NewController(c.bounds)
+	if err != nil {
+		// The envelope is a build constant; a controller that will not build is a
+		// programming error rather than a link condition, and the session keeps its
+		// nominal cadence rather than stopping.
+		vlog.Error("app", "msg", "cadence bounds refused", "error", err.Error())
+		return nil
+	}
+	p := &peerPublisher{ctrl: ctrl, plan: ctrl.Plan()}
+	c.peers[id] = p
+	return p
 }
 
 // dueLocked returns the peers to serve, in priority order: highest demand first,

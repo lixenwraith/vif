@@ -54,17 +54,23 @@ const snapshotReserve = 64 << 10
 
 // EncodeSnapshotChunks splits an encoded capture into wire frames.
 func EncodeSnapshotChunks(tick uint64, body []byte) ([][]byte, error) {
+	return EncodeSnapshotChunksOf(tick, body, SnapshotChunkBody)
+}
+
+// EncodeSnapshotChunksOf splits body into frames carrying at most size bytes of it.
+func EncodeSnapshotChunksOf(tick uint64, body []byte, size int) ([][]byte, error) {
 	if len(body) == 0 {
 		return nil, errors.New("snapshot: empty body")
 	}
 	if len(body) > MaxSnapshotBytes {
 		return nil, fmt.Errorf("snapshot: %d bytes exceeds the %d-byte ceiling", len(body), MaxSnapshotBytes)
 	}
-	count := (len(body) + SnapshotChunkBody - 1) / SnapshotChunkBody
+	size = min(max(size, 1), SnapshotChunkBody)
+	count := (len(body) + size - 1) / size
 	out := make([][]byte, 0, count)
 	for i := range count {
-		lo := i * SnapshotChunkBody
-		hi := min(lo+SnapshotChunkBody, len(body))
+		lo := i * size
+		hi := min(lo+size, len(body))
 		frame := make([]byte, SnapshotChunkHeader+hi-lo)
 		binary.BigEndian.PutUint64(frame[0:8], tick)
 		binary.BigEndian.PutUint32(frame[8:12], uint32(i))

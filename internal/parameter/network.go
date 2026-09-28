@@ -275,6 +275,23 @@ const (
 	// are not in the controller's cost model.
 	SnapshotLinkUtilisation = 0.75
 
+	// SnapshotBulkQueue is how long a link's undelivered bytes may take to drain,
+	// past the round trip and probe interval every backlog reading includes, before
+	// no further correction chunk joins them. SnapshotBulkQueueBytes floors it, and
+	// is the whole allowance while the link's rate is unmeasured.
+	SnapshotBulkQueue      = 100 * time.Millisecond
+	SnapshotBulkQueueBytes = 8 << 10
+
+	// SnapshotKeyframeDrain is the longest a link may take to deliver a whole world
+	// sent on schedule. A slower one meets the floor with proofs and takes a whole
+	// world on request, and its operating point is reported constrained.
+	SnapshotKeyframeDrain = 500 * time.Millisecond
+
+	// SnapshotCorrectionChunkBytes is how much of a correction body one frame
+	// carries mid-session. A body is released a chunk at a time as its link drains,
+	// so an epoch behind it waits for one chunk rather than for a whole world.
+	SnapshotCorrectionChunkBytes = 4 << 10
+
 	// SnapshotCadenceRecoverTicks and SnapshotCadenceRecoverKeyframe bound how
 	// fast the operating point may move back toward nominal. Degradation is
 	// immediate — a link that has narrowed has already narrowed — and recovery is
@@ -341,10 +358,9 @@ const (
 	SnapshotManifestMaxPages = 64
 
 	// SnapshotManifestRetention is how many recent captures and manifests a host
-	// keeps so it can answer a request naming an earlier one. A guest answers the
-	// manifest it last received, so the retention only has to cover the round trip
-	// plus the queue; past it the host answers with a keyframe instead, which is
-	// the bounded fallback the whole protocol is allowed to reach.
+	// keeps so it can answer a request naming an earlier one. A peer's indexes are
+	// spaced so its descent, two round trips, stays inside them; a request naming a
+	// tick let go was overtaken by a later index and is not answered.
 	SnapshotManifestRetention = 4
 
 	// SnapshotShardBytesMax bounds one repair. A shard set larger than this is not
@@ -354,16 +370,11 @@ const (
 	// transport frame.
 	SnapshotShardBytesMax = 48 << 10
 
-	// SnapshotManifestSilenceCorrections is how many manifests a peer may leave
-	// unanswered before the host stops assuming it is in the selective protocol
-	// and sends it whole bodies again.
-	//
-	// A guest answers every manifest — with a request or with the ack that records
-	// convergence — so silence means the answer cannot get back: a peer reached
-	// only by relay, or one whose uplink has failed while its downlink has not.
-	// Neither can be repaired selectively, and both are still owed an authority,
-	// so the host falls back to the Phase 5 stream for them. Three is one nominal
-	// round trip plus a lost answer.
+	// SnapshotManifestSilenceCorrections is how many manifests, beyond those its
+	// round trip and backlog hold in flight, a peer may leave unanswered before it
+	// is sent whole bodies again. Every manifest is answered, so silence means the
+	// answer cannot get back — a peer reached only by relay, or an uplink that
+	// failed — and neither is repaired selectively.
 	SnapshotManifestSilenceCorrections = 3
 
 	// SnapshotReplayTicks, SnapshotReplayRecords and SnapshotReplayBytes bound the
