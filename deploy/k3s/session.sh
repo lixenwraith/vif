@@ -212,7 +212,7 @@ case "$command" in
 		# The identity on stdout so a caller can capture it, everything a person
 		# needs to type on stderr beside it.
 		printf '%s' "$answer" |
-			jq -er '"session=\(.id) join=\(.join_target) page=\(.page_url)" +
+			jq -er '"session=\(.id) join=\(.join_target) direct=\(.direct_target)" +
 				(if .ws_url then " ws=\(.ws_url)" else "" end)' >&2
 		printf '%s' "$answer" | jq -er '.id | strings | select(length > 0)'
 		;;
