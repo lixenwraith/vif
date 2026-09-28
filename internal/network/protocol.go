@@ -3,6 +3,7 @@ package network
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -218,12 +219,20 @@ func writeFull(w io.Writer, p []byte) error {
 
 // Decode reads a message from a reader
 func Decode(r io.Reader) (*Message, error) {
+	return decode(r, MaxPayloadSize)
+}
+
+// decode refuses a payload longer than limit before reading any of it.
+func decode(r io.Reader, limit int) (*Message, error) {
 	header := make([]byte, HeaderSize)
 	if _, err := io.ReadFull(r, header); err != nil {
 		return nil, err
 	}
 
 	payloadLen := binary.BigEndian.Uint16(header[10:12])
+	if int(payloadLen) > limit {
+		return nil, fmt.Errorf("message %#x: a %d-byte payload exceeds %d", header[0], payloadLen, limit)
+	}
 
 	m := &Message{
 		Type:  MessageType(header[0]),

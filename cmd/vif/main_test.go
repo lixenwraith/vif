@@ -232,7 +232,8 @@ func TestAnAddressNamesItsSchemeAndSession(t *testing.T) {
 		{"tcp://host.example:7777", network.SchemeTCP, "host.example:7777", ""},
 		{"vif://host.example:7777/7f3c1a", network.SchemeTCP, "host.example:7777", "7f3c1a"},
 		{"host.example:7777/7f3c1a", network.SchemeTCP, "host.example:7777", "7f3c1a"},
-		{"wss://site.example/vif/ws/7f3c1a", network.SchemeWebSocket, "wss://site.example/vif/ws/7f3c1a", ""},
+		{"wss://site.example/vif/ws/7f3c1a", network.SchemeWebSocket, "wss://site.example/vif/ws/7f3c1a", "7f3c1a"},
+		{"ws://127.0.0.1:7779/", network.SchemeWebSocket, "ws://127.0.0.1:7779/", ""},
 	} {
 		e, err := network.ParseEndpoint(tc.target)
 		if err != nil || e.Scheme != tc.scheme || e.Addr != tc.addr || e.Name != tc.name {
