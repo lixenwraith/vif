@@ -32,10 +32,15 @@ import (
 const probePayload = 12
 
 // echoPayload is the probe's bytes returned verbatim, followed by
-// [InBytes:8][LinkReport]. InBytes is what the far end has received on this link,
-// which is what turns two echoes into a delivery rate and one echo into a
-// backlog.
+// [InBytes:8][LinkReport], then [Answered:8] from a peer that sends it. InBytes is
+// what the far end has received on this link, which turns two echoes into a
+// delivery rate and one echo into a backlog; Answered is its own clock when it
+// read the probe, which times that rate where the bytes arrived.
 const echoPayload = probePayload + 8 + linkReportSize
+
+// probeEpoch is the origin an answer is timed from; only differences between
+// two answers from one instance are ever read.
+var probeEpoch = time.Now()
 
 // linkReportSize is [Tick:8][LagTicks:4][Magnitude:4][CursorX:4][CursorY:4][Flags:1].
 const linkReportSize = 25
@@ -107,40 +112,47 @@ func encodeProbe(seq uint32, sent time.Time) []byte {
 }
 
 // encodeEcho answers a probe: its bytes untouched, then what this instance has
-// received on the link and what it has to say about its own picture.
-func encodeEcho(probe []byte, inBytes uint64, report LinkReport) []byte {
+// received on the link, what it has to say about its own picture, and when.
+func encodeEcho(probe []byte, inBytes uint64, report LinkReport, answered time.Duration) []byte {
 	if len(probe) < probePayload {
 		return nil
 	}
-	b := make([]byte, 0, echoPayload)
+	b := make([]byte, 0, echoPayload+8)
 	b = append(b, probe[:probePayload]...)
 	b = binary.BigEndian.AppendUint64(b, inBytes)
-	return append(b, report.encode()...)
+	b = append(b, report.encode()...)
+	return binary.BigEndian.AppendUint64(b, uint64(answered))
 }
 
-// decodeEcho reads an answered probe.
-func decodeEcho(b []byte) (seq uint32, sent time.Time, inBytes uint64, report LinkReport, ok bool) {
+// decodeEcho reads an answered probe; answered is zero from a peer that sends none.
+func decodeEcho(b []byte) (seq uint32, sent time.Time, inBytes uint64, answered time.Duration, report LinkReport, ok bool) {
 	if len(b) < echoPayload {
-		return 0, time.Time{}, 0, LinkReport{}, false
+		return 0, time.Time{}, 0, 0, LinkReport{}, false
 	}
 	seq = binary.BigEndian.Uint32(b[0:4])
 	sent = time.Unix(0, int64(binary.BigEndian.Uint64(b[4:12])))
 	inBytes = binary.BigEndian.Uint64(b[12:20])
+	if len(b) >= echoPayload+8 {
+		answered = time.Duration(binary.BigEndian.Uint64(b[echoPayload:]))
+	}
 	report, ok = decodeLinkReport(b[20:])
-	return seq, sent, inBytes, report, ok
+	return seq, sent, inBytes, answered, report, ok
 }
 
 // linkMeter is one peer's measurement state: the estimate itself, the probe
-// sequence, and the two cumulative byte counters two consecutive echoes are
-// turned into a delivery rate by.
+// sequence, and the two cumulative byte counters echoes are turned into a delivery
+// rate and a backlog by.
 type linkMeter struct {
 	link *linkpace.Link
 
 	seq    uint32 // last probe sent
 	echoed uint32 // last probe answered
 
+	// lastDelivered is the newest count, which the backlog reads; the rate is
+	// measured from rateDelivered at rateAt, at least rateWindow earlier.
 	lastDelivered uint64
-	lastEchoAt    time.Time
+	rateDelivered uint64
+	rateAt        time.Duration
 	haveDelivered bool
 
 	// The two cumulative counters have no shared origin: this end starts counting
@@ -159,6 +171,10 @@ func newLinkMeter() *linkMeter {
 
 // rebase discards the origin, so the next echo sets it again.
 func (m *linkMeter) rebase() { m.haveBase, m.haveDelivered = false, false }
+
+// rateWindow is the shortest span a delivery rate is measured over: reads the far
+// end's scheduler bunched together would otherwise divide by microseconds.
+const rateWindow = parameter.NetworkProbeInterval / 2
 
 // probeLostAfter is how many probes may go out after the last one answered before
 // each further one is charged as lost.
@@ -179,13 +195,19 @@ func (m *linkMeter) nextProbe() uint32 {
 //
 // sentBytes is what this instance has queued for that peer, and delivered is
 // what the peer says it has received; the difference is the backlog, which is
-// what separates "the link is fast" from "the sender was idle".
-func (m *linkMeter) observe(now, sent time.Time, seq uint32, delivered uint64, sentBytes uint64, report LinkReport) {
+// what separates "the link is fast" from "the sender was idle". The rate is timed
+// on the peer's answers, since echoes a stalled return path releases together
+// arrive microseconds apart; a peer that sends no answer time is timed on arrival.
+func (m *linkMeter) observe(now, sent time.Time, seq uint32, delivered, sentBytes uint64, answered time.Duration, report LinkReport) {
 	sample := linkpace.Sample{
 		RTT:       now.Sub(sent),
 		LagTicks:  uint64(report.LagTicks),
 		Magnitude: int(report.Magnitude),
 		Interest:  report.interest(),
+	}
+	at := answered
+	if at <= 0 {
+		at = time.Duration(now.UnixNano())
 	}
 	rebase := !m.haveBase || delivered < m.baseDelivered || sentBytes < m.baseSent ||
 		delivered < m.lastDelivered
@@ -195,12 +217,24 @@ func (m *linkMeter) observe(now, sent time.Time, seq uint32, delivered uint64, s
 		if offered, arrived := sentBytes-m.baseSent, delivered-m.baseDelivered; offered > arrived {
 			sample.Backlog = int64(offered - arrived)
 		}
-		if m.haveDelivered && now.After(m.lastEchoAt) {
-			sample.Delivered = int64(delivered - m.lastDelivered)
-			sample.Elapsed = now.Sub(m.lastEchoAt)
+		if elapsed := at - m.rateAt; m.haveDelivered && elapsed >= rateWindow {
+			sample.Delivered, sample.Elapsed = int64(delivered-m.rateDelivered), elapsed
+			m.rateDelivered, m.rateAt = delivered, at
 		}
 	}
-	m.lastDelivered, m.lastEchoAt, m.haveDelivered = delivered, now, true
+	if rebase || !m.haveDelivered {
+		m.rateDelivered, m.rateAt = delivered, at
+	}
+	m.lastDelivered, m.haveDelivered = delivered, true
 	m.echoed = max(m.echoed, seq)
 	m.link.Observe(sample)
+}
+
+// backlog is what sent, this end's count for the peer now, holds beyond what the
+// peer had received at its latest echo. Zero until an echo has set the origin.
+func (m *linkMeter) backlog(sent uint64) int64 {
+	if !m.haveBase || sent < m.baseSent {
+		return 0
+	}
+	return max(int64(sent-m.baseSent)-int64(m.lastDelivered-m.baseDelivered), 0)
 }

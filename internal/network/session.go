@@ -532,7 +532,7 @@ func (p *PendingJoin) hold(msg *Message) bool {
 // write is not the join's problem: the probe is a measurement and losing one
 // costs an estimate, where raising it here would fail a join over telemetry.
 func (p *PendingJoin) answerProbe(msg *Message) {
-	echo := encodeEcho(msg.Payload, p.gateBytes, LinkReport{})
+	echo := encodeEcho(msg.Payload, p.gateBytes, LinkReport{}, time.Since(probeEpoch))
 	if echo == nil {
 		return
 	}
