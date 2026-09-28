@@ -437,9 +437,6 @@ func (pm *PeerManager) Close() {
 	pm.peers = make(map[PeerID]*Peer)
 }
 
-// webSocketDialer is dialWebSocket, held so a native test can stand in for a browser.
-var webSocketDialer = dialWebSocket
-
 // dial connects to a target by the transport it names, TLS over TCP when configured.
 func dial(target string, cfg *Config) (net.Conn, error) {
 	e, err := ParseEndpoint(target)
@@ -447,7 +444,7 @@ func dial(target string, cfg *Config) (net.Conn, error) {
 		return nil, err
 	}
 	if e.Scheme == SchemeWebSocket {
-		return webSocketDialer(e.Addr, cfg.ConnectTimeout)
+		return dialWebSocket(e.Addr, cfg.ConnectTimeout)
 	}
 	dialer := &net.Dialer{Timeout: cfg.ConnectTimeout}
 	if cfg.TLS != nil {
