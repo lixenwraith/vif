@@ -314,6 +314,13 @@ func milliseconds(d time.Duration) int64 {
 	return int64(math.Round(float64(d) / float64(time.Millisecond)))
 }
 
-// RTTMillis and JitterMillis are the telemetry forms of the two timings.
-func (m Metrics) RTTMillis() int64    { return milliseconds(m.RTT) }
+// RTTMillis and JitterMillis are the telemetry forms of the two timings. A measured
+// round trip is at least 1: a loopback link would otherwise read as unmeasured.
+func (m Metrics) RTTMillis() int64 {
+	if m.RTT <= 0 {
+		return 0
+	}
+	return max(1, milliseconds(m.RTT))
+}
+
 func (m Metrics) JitterMillis() int64 { return milliseconds(m.Jitter) }

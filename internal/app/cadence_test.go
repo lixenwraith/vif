@@ -190,7 +190,7 @@ func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 		"snapshot.cadence_keyframe_period_ticks",
 		"snapshot.cadence_uplink_bps",
 		"snapshot.cadence_floor_bps",
-		"network.link_rtt_us",
+		"network.link_rtt_ms",
 		"network.link_bps",
 	} {
 		if statOf(host, key) <= 0 {
@@ -199,7 +199,7 @@ func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 	}
 	// Jitter and loss are legitimately zero on a link that has neither, so they
 	// are asserted to exist rather than to be non-zero.
-	for _, key := range []string{"network.link_rtt_ms", "network.link_jitter_ms", "network.link_loss_pct"} {
+	for _, key := range []string{"network.link_jitter_ms", "network.link_loss_pct"} {
 		if statOf(host, key) < 0 {
 			t.Errorf("%s reads %d", key, statOf(host, key))
 		}

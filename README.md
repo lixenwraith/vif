@@ -43,6 +43,12 @@ configuration, audio policy, and reusable simulation libraries.
   artifacts to participants a producer never linked to, roster changes that land
   on one agreed tick, selective authoritative correction with bounded keyframe
   fallback, and clean continuation after a peer disconnects.
+- Named sessions: a host answers to one name, so a single address can front many
+  and a stale link is refused rather than seated. A browser build joins the same
+  session over WebSocket, speaking the same protocol.
+- A dedicated-server fleet on K3s: one container per session, created on request
+  and gone once its last player leaves, reached by name at one address, at its own
+  port, or from a browser.
 
 Interactive play is not advertised as globally bit-for-bit deterministic:
 simulation math uses `float64`, which is not a cross-platform lockstep
@@ -70,13 +76,21 @@ Audio starts muted; press `Ctrl-S` to cycle audio channels or launch with
 `-mute=false`. Run `./bin/vif -h` for all flags — it prints to stdout, so it pipes
 into `grep` without redirecting stderr.
 
-Primary native targets are Linux and FreeBSD. The repository also contains a
-constrained xterm.js/WASM build and an experimental Windows cross-build. The
-WASM client is currently solo: browser JavaScript cannot open the framed TCP
-socket used by native sessions. See the
-[build and platform analysis](doc/multi-platform.md) for the chosen native
-WebSocket path, browser arguments, external assets, and the future renderer
-boundary.
+Primary native targets are Linux and FreeBSD. The repository also contains an
+xterm.js/WASM build, which plays solo or joins a session over its `wss://` route,
+and an experimental Windows cross-build. See the
+[build and platform analysis](doc/multi-platform.md) for browser networking,
+launch arguments, external assets, and the future renderer boundary.
+
+## Play online
+
+A public fleet runs at [lixen.com/vif](https://lixen.com/vif), which has the
+details of what is deployed. Ask it for a session, then join from a terminal with
+the link it gives, or open the session in the browser:
+
+```bash
+./bin/vif -join vif://lixen.com:7777/<session>
+```
 
 ## Configuration and tools
 
@@ -97,7 +111,11 @@ boundary.
 - `-script <file>` runs a bounded authored TOML input/event schedule headlessly;
   it can be combined with `-host` or `-join` for repeatable two-process runs.
 - `-host <bind-address>` hosts a session and `-players <n>` sets the lobby size;
-  `-join <host:port>` joins it and adopts the host's seed/config/content identity.
+  `-join <addr>` joins one and adopts the host's seed/config/content identity,
+  where `<addr>` is `host:port`, a `vif://host:port/<name>` link, or a browser
+  build's `wss://` route.
+- `-name <name>` makes a host answer to that name only, so one address can serve
+  several sessions.
 - `-authority host|migrate` decides where authorship goes when the participant
   holding it leaves — default `host` with `-serve`, `migrate` otherwise. In a
   migrate session every guest also binds a port so the session can reach it after a
@@ -145,13 +163,14 @@ For an automatic headless pair, `./script/test.sh pair` runs both scripted sides
 in one command. For a host nobody sits at, `./bin/vif -serve :7777 -size 120x40`
 waits for its first guest and then runs the session on its own.
 
-`deploy/` holds the container image and the K3s objects that run one such session
-per player request: a `scratch` image of the static `vif_headless` non-root binary,
-a namespace capped at ten concurrent sessions, default-deny network policy, a
-per-session Job and Service, and one node log reader behind the allocator. The
-image is built by `make image`; the installation and operating procedure is
-[doc/kube-docker-deploy.md](doc/kube-docker-deploy.md) and the design and work list
-behind it is [doc/kubernetes-fleet.md](doc/kubernetes-fleet.md).
+`deploy/` holds what runs the public fleet: a `scratch` image of the static
+`vif_headless` non-root binary (`make image`), K3s objects for one Job per session
+under a ten-session quota and default-deny policy, and `vif-allocator`, which
+creates sessions on request and routes joins to them — by name on one port, at
+each session's own port, or over the browser's WebSocket route.
+[lixen.com/vif](https://lixen.com/vif) is the running deployment;
+[doc/kube-docker-deploy.md](doc/kube-docker-deploy.md) installs one and
+[doc/kubernetes-fleet.md](doc/kubernetes-fleet.md) is the design and work list.
 No final release exists yet. The nightly workflow publishes development builds,
 not releases: Linux, FreeBSD, browser, headless server and experimental Windows
 archives plus the headless container image; see [doc/packaging.md](doc/packaging.md).

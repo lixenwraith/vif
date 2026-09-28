@@ -361,7 +361,7 @@ func (a *App) sessionSummaryLocked() string {
 		"; cadence %d ticks, keyframe %d ticks, link %s ±%dms, %d%% loss, %sB/s, uplink %sB/s, floor %sB/s, %s",
 		cadence,
 		reg.Ints.Get("snapshot.cadence_keyframe_period_ticks").Load(),
-		status.FormatLatency(reg.Ints.Get("network.link_rtt_us").Load()),
+		status.FormatLatency(reg.Ints.Get("network.link_rtt_ms").Load()),
 		reg.Ints.Get("network.link_jitter_ms").Load(),
 		reg.Ints.Get("network.link_loss_pct").Load(),
 		status.FormatCount(reg.Ints.Get("network.link_bps").Load()),

@@ -695,7 +695,7 @@ them, how many requests it had to refuse, and the bytes it forwarded and served.
 Those bytes are priced into *this* participant's link plan, never the authority's.
 
 Four measurements reach the status bar, as one badge rather than four items.
-`network.link_rtt_us` is the round trip to the worst peer, which the badge always
+`network.link_rtt_ms` is the round trip to the worst peer, which the badge always
 draws and colours by `StatusNetLatencyWarn`/`Bad`: it is the number a player
 already reads in every other networked game, and the one they can act on without
 knowing what a cadence is. `network.lag_ticks` is how far behind the newest tick
