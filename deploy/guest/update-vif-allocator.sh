@@ -136,6 +136,11 @@ if [ -n "$bridge_image" ]; then
 	curl --connect-timeout 2 --max-time 5 -sS \
 		http://127.0.0.1:9080/vif/ws/0000000000000000 | grep -q not_an_upgrade
 fi
+# The front door looks up a name no session holds and says so in a join reply.
+route_port=$(sed -n 's/^VIF_ALLOCATOR_ROUTE_LISTEN=.*:\([0-9]*\)$/\1/p' "$source_env")
+bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$1" &&
+	printf "\005\000\000\000\000\000\000\000\000\000\000\020%s" 0000000000000000 >&3 &&
+	timeout 5 cat <&3' _ "${route_port:-7777}" | grep -aq 'no such session'
 
 rollback_required=false
 allocator_stopped=false

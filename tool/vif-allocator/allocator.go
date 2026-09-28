@@ -32,7 +32,7 @@ var (
 type allocatorConfig struct {
 	Workload   workloadConfig
 	JoinHost   string
-	PageBase   string
+	RoutePort  int
 	PortFirst  int
 	PortLast   int
 	PlayersMax int
@@ -42,8 +42,10 @@ type allocatorConfig struct {
 	// WebOrigin is the one origin the browser route answers, and publishing it is
 	// what turns that route on. The sidecar that serves it is Workload.BridgeImage;
 	// see doc/kubernetes-fleet.md §9.
-	WebOrigin        string
-	WebMaxPerSession int
+	WebOrigin string
+	// RouteMax bounds one session's connections through the front door and the
+	// browser route together; see holds.
+	RouteMax int
 
 	ReadyTimeout   time.Duration
 	PollInterval   time.Duration
@@ -69,10 +71,12 @@ type fleetLimits struct {
 }
 
 type session struct {
-	ID         string `json:"id"`
-	Port       int    `json:"port"`
-	PageURL    string `json:"page_url"`
-	JoinTarget string `json:"join_target"`
+	ID   string `json:"id"`
+	Port int    `json:"port"`
+	// JoinTarget is the front door, one address for every session; DirectTarget is
+	// this session's own NodePort. Both carry the name the pod answers to.
+	JoinTarget   string `json:"join_target"`
+	DirectTarget string `json:"direct_target"`
 	// WebSocketURL is the same session reached from a browser. Absent where the
 	// deployment publishes no browser route, which is what a page keyed on it reads
 	// as "this fleet is for native clients".
@@ -587,12 +591,14 @@ func (a *allocator) cleanup(created createdObjects) error {
 }
 
 func (a *allocator) sessionRecord(id string, port int, createdAt string, routable bool, state sessionHealth) session {
-	pageBase := strings.TrimRight(a.cfg.PageBase, "/")
+	link := func(port int) string {
+		return "vif://" + net.JoinHostPort(a.cfg.JoinHost, strconv.Itoa(port)) + "/" + id
+	}
 	return session{
 		ID:           id,
 		Port:         port,
-		PageURL:      pageBase + "/" + strconv.Itoa(port) + "/",
-		JoinTarget:   net.JoinHostPort(a.cfg.JoinHost, strconv.Itoa(port)),
+		JoinTarget:   link(a.cfg.RoutePort),
+		DirectTarget: link(port),
 		WebSocketURL: a.webSocketURL(id),
 		CreatedAt:    createdAt,
 		Routable:     routable,

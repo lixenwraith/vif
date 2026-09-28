@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"slices"
 	"sync"
@@ -220,7 +221,7 @@ type Coordinator struct {
 
 // MaxSessionName is the longest name a session may answer to. A name is a short
 // link component, and the bound is what a caller validates one against before it
-// reaches a host or a link; the comparison here refuses anything longer anyway.
+// reaches a host or a link; ReadSessionRoute refuses a longer one unread.
 const MaxSessionName = 64
 
 // HostAcceptor returns a pre-world handshake for Transport's accept loop. Each
@@ -232,7 +233,7 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 			// Before Admit, because a link that named another session costs the
 			// budget Admit holds for the players of this one.
 			if err = readSessionName(conn, c.Name, timeout); err != nil {
-				refuseJoin(conn, err, timeout)
+				RefuseJoin(conn, err, timeout)
 				return 0, err
 			}
 		}
@@ -242,7 +243,7 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 				// can read why it was turned away can back off, where one that only
 				// sees the stream end retries immediately and makes the condition
 				// the refusal exists to stop.
-				refuseJoin(conn, err, timeout)
+				RefuseJoin(conn, err, timeout)
 				return 0, err
 			}
 		}
@@ -252,7 +253,7 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 			// difference between "retry against the new authority" and a stream
 			// that ended for no stated reason, and a succession is exactly the
 			// case where the two need telling apart.
-			refuseJoin(conn, err, timeout)
+			RefuseJoin(conn, err, timeout)
 			return 0, err
 		}
 		defer func() {
@@ -312,7 +313,7 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 		// An offer that names no identity — a harness, a test fixture — verifies
 		// nothing, and a peer answering one is not asked for anything either.
 		if err = o.Identity.Verify(reply.Identity); err != nil {
-			refuseJoin(conn, err, timeout)
+			RefuseJoin(conn, err, timeout)
 			return 0, err
 		}
 		if c.Report != nil {
@@ -341,12 +342,12 @@ func refusalFrom(msg *Message) error {
 func serveScenario(conn net.Conn, c Coordinator, digest string, timeout time.Duration) error {
 	if c.Scenario == nil {
 		err := errors.New("this coordinator does not serve its scenario")
-		refuseJoin(conn, err, timeout)
+		RefuseJoin(conn, err, timeout)
 		return err
 	}
 	body, err := c.Scenario(digest)
 	if err != nil {
-		refuseJoin(conn, err, timeout)
+		RefuseJoin(conn, err, timeout)
 		return err
 	}
 	chunks, err := EncodeSnapshotChunks(0, body)
@@ -372,23 +373,33 @@ func readSessionName(conn net.Conn, name string, timeout time.Duration) error {
 		_ = conn.SetReadDeadline(time.Now().Add(timeout))
 		defer conn.SetReadDeadline(time.Time{})
 	}
-	msg, err := Decode(conn)
+	got, err := ReadSessionRoute(conn)
 	if err != nil {
 		return err
 	}
-	if msg.Type != MsgSessionRoute {
-		return fmt.Errorf("join handshake: got message %#x, want a session name", msg.Type)
-	}
-	if string(msg.Payload) != name {
+	if got != name {
 		return errors.New("this address is not serving the session that was dialled")
 	}
 	return nil
 }
 
-// refuseJoin writes one pre-offer rejection. A failure to write it is not worth
-// reporting: the connection is being closed either way, and the joiner falls back
-// to reading the stream's end.
-func refuseJoin(conn net.Conn, cause error, timeout time.Duration) {
+// ReadSessionRoute reads the frame a dialer sends before it reads and returns the
+// name it carries. A named host checks it; a front door places the connection on it.
+func ReadSessionRoute(r io.Reader) (string, error) {
+	msg, err := decode(r, MaxSessionName)
+	if err != nil {
+		return "", err
+	}
+	if msg.Type != MsgSessionRoute {
+		return "", fmt.Errorf("join handshake: got message %#x, want a session name", msg.Type)
+	}
+	return string(msg.Payload), nil
+}
+
+// RefuseJoin writes one pre-offer rejection, which the dialer reads as its reason.
+// A failure to write it is not worth reporting: the connection is being closed
+// either way, and the joiner falls back to reading the stream's end.
+func RefuseJoin(conn net.Conn, cause error, timeout time.Duration) {
 	body, err := json.Marshal(sessionReply{Error: cause.Error()})
 	if err != nil {
 		return

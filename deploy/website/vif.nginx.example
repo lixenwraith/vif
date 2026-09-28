@@ -87,7 +87,7 @@ location ~ "^/vif/ws/[0-9a-f]{16}$" {
     # The per-player bound the game cannot apply here: every browser reaches the
     # pod from one loopback address, so its admission limiter sees one player.
     # Four is a household behind one address — raise it behind carrier NAT. This
-    # and the allocator's -web-max are the whole of the bound, so both are numbers
+    # and the allocator's -route-max are the whole of the bound, so both are numbers
     # somebody should choose rather than inherit.
     limit_conn vif_ws_conn 4;
     limit_req zone=vif_ws_req burst=4 nodelay;

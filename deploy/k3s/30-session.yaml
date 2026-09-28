@@ -7,7 +7,7 @@
 #   ${SESSION_ID}      a short, unique, DNS-safe session name (e.g. 7f3c1a)
 #   ${IMAGE}           the image, pinned by digest in anything but a lab
 #   ${WS_BRIDGE_IMAGE} the WebSocket bridge sidecar image, also pinned
-#   ${GAME_NODEPORT}   the node port this session is reachable on (31700-31709)
+#   ${GAME_NODEPORT}   the node port this session is directly reachable on (31700-31709)
 #   ${JOB_UID}         the created Job UID used to own the Service
 #   ${PLAYERS}         the guest ceiling for this session (1-16)
 #   ${MAP_SIZE}        the shared map geometry, WxH (e.g. 120x40)
@@ -139,11 +139,12 @@ spec:
             - ":7777"
             - "-probe"
             - ":7778"
-            # No -name: a session is reached by its own port, so a player's link
-            # names nothing and a pod that demanded a name would refuse every dial.
-            # A browser is routed by the allocator and arrives here on loopback
-            # through the sidecar above; see doc/kubernetes-fleet.md §9.
-            #
+            # The name every route carries: the allocator's front door places a
+            # player by it, and this session refuses a link that named another, so
+            # a reused NodePort or a stale link is a refusal rather than a seat in a
+            # stranger's match. See doc/kubernetes-fleet.md §9.
+            - "-name"
+            - "${SESSION_ID}"
             # Stated rather than inherited from the -serve default: losing this pod
             # ends the match. The Job never replaces its in-memory world, and guests
             # must not elect a private continuation that looks like the old session.

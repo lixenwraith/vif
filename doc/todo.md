@@ -22,30 +22,20 @@ about 40 µs a round trip, except that websocat 1.x never sets `TCP_NODELAY`: ab
 0.5% of browser-to-game frames wait 40–80 ms on a delayed ACK. A bridge that sets it
 removes that.
 
-### Restore a per-player bound for browser participants
+### Restore a per-player bound for proxied participants
 
 - Priority: P1
-- Affected files: `tool/vif-allocator`, `deploy/website/vif.nginx.example`
+- Affected files: `tool/vif-allocator`, `deploy/website/vif.nginx.example`,
+  `internal/network`
 - Prerequisite: the browser path is carrying real players
 
-Every browser participant reaches the session pod from `127.0.0.1`, so
-`network.AdmissionLimiter` gives the whole browser population one budget instead of
-one each. The edge's `limit_conn`/`limit_req` and the allocator's per-session
-ceiling stand in for it today. Decide whether that is the answer or whether the
-allocator should carry a per-address bound of its own, which means deciding whether
-it may trust a forwarded address at all.
-
-### Decide what `page_url` names
-
-- Priority: P1
-- Affected files: `tool/vif-allocator/allocator.go`, the site
-
-`page_url` is `-page-base` with the session's NodePort appended, and no deployment
-has built the page it names: the reference site has no `session/` tree, so the link
-the fleet page renders falls through that server's `try_files` and answers the
-homepage with 200. Either build one page that reads its own identifier from the
-URL, or drop the field and let `join_target` and `ws_url` be the whole of what a
-session publishes.
+The pod sees every browser at `127.0.0.1` and every front-door player at the node,
+so `network.AdmissionLimiter` gives each proxied route one budget per session. The
+front door keys that budget on the real address before it dials, the browser route
+leans on the edge's `limit_conn`/`limit_req`, and `-route-max` bounds both. Decide
+whether that is the answer, or have the front door hand the pod the address as
+PROXY v2 — on a listener of its own, since 7777 also takes Internet traffic through
+the NodePort — which also restores the `admit` record for those players.
 
 ### Add browser admission authentication
 
@@ -261,11 +251,24 @@ too. Repairs at 20 kB/s have so far been a few kilobytes.
 - Priority: P3
 - Affected files: `internal/network/websocket_other.go`, `internal/network/connection.go`
 
-A native client dials only the session's TCP port, so a network that blocks it has
-no way in, though the site's front door carries browser guests over TLS on 443. A
-native RFC 6455 client behind `dialWebSocket`, on stdlib TLS and an HTTP upgrade, gives
-every client the most permitted path; [Services and networking](services-and-networking.md)
-§7.3 says why not UDP.
+A native client dials the front door's 7777 or a session's NodePort, so a network
+that blocks both has no way in, though the site's edge carries browser guests over
+TLS on 443. A minimal RFC 6455 client behind `dialWebSocket` — the terminal app's
+WebSocket modem, on stdlib TLS and an HTTP upgrade — gives every client the most
+permitted path, on the `ws_url` a session already publishes, name included; it is
+the fallback beside raw TCP, not a replacement. [Services and
+networking](services-and-networking.md) §7.3 says why not UDP.
+
+### Request a session from the terminal
+
+- Priority: P2
+- Affected files: `cmd/vif`, `internal/app`, `tool/vif-allocator`
+
+A player gets a session only from the site's page. `POST /vif/api/sessions`
+already answers any client through the site's edge, so the missing half is a game
+command that asks for one and joins the `join_target` it returns. The other shape is
+the front door creating a session for a route frame that names none, which needs a
+per-address creation budget of its own first.
 
 ## Combat
 
