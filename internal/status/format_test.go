@@ -30,18 +30,18 @@ func TestFormatCountKeepsDisplayWidthBounded(t *testing.T) {
 // from the session badge: a link is milliseconds until it is seconds.
 func TestFormatLatencyChangesUnitRatherThanWidth(t *testing.T) {
 	tests := []struct {
-		us   int64
+		ms   int64
 		want string
 	}{
 		{0, "--"},
-		{300, "0.3ms"},
-		{42_000, "42ms"},
-		{999_499, "999ms"},
-		{1_500_000, "1.5s"},
+		{1, "1ms"},
+		{42, "42ms"},
+		{999, "999ms"},
+		{1500, "1.5s"},
 	}
 	for _, tt := range tests {
-		if got := FormatLatency(tt.us); got != tt.want {
-			t.Errorf("FormatLatency(%d) = %q, want %q", tt.us, got, tt.want)
+		if got := FormatLatency(tt.ms); got != tt.want {
+			t.Errorf("FormatLatency(%d) = %q, want %q", tt.ms, got, tt.want)
 		}
 	}
 }

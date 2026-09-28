@@ -60,17 +60,15 @@ func FormatCount(v int64) string {
 	return strconv.FormatFloat(f, 'f', prec, 64) + suffix
 }
 
-// FormatLatency renders a round trip in five columns at most: a sub-millisecond
-// link in tenths, a working one in whole milliseconds, a failing one in seconds.
-func FormatLatency(us int64) string {
+// FormatLatency renders a round trip in milliseconds in five columns at most: a
+// working link in whole milliseconds, a failing one in seconds.
+func FormatLatency(ms int64) string {
 	switch {
-	case us <= 0:
+	case ms <= 0:
 		return "--"
-	case us < 1000:
-		return strconv.FormatFloat(float64(us)/1000, 'f', 1, 64) + "ms"
-	case us < 1_000_000:
-		return strconv.FormatInt((us+500)/1000, 10) + "ms"
+	case ms < 1000:
+		return strconv.FormatInt(ms, 10) + "ms"
 	default:
-		return strconv.FormatFloat(float64(us)/1e6, 'f', 1, 64) + "s"
+		return strconv.FormatFloat(float64(ms)/1000, 'f', 1, 64) + "s"
 	}
 }

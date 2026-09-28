@@ -54,7 +54,7 @@ func TestStatusBarNetworkBadgeIsOneCellChosenBySeverity(t *testing.T) {
 		t.Fatalf("unmeasured item = %#v, %t", item, ok)
 	}
 
-	r.statRTT.Store(42_000)
+	r.statRTT.Store(42)
 	if item, ok := r.networkBadge(); !ok || item.text != " 2P 42ms " || item.bg != visual.RgbNetGoodBg {
 		t.Fatalf("converged item = %#v, %t", item, ok)
 	}
@@ -99,12 +99,12 @@ func TestStatusBarBadgeColoursAnUnqualifiedLinkByItsRoundTrip(t *testing.T) {
 	r, _ := newStatusBar(t)
 	r.statNet.Store("connected")
 
-	r.statRTT.Store(int64(parameter.StatusNetLatencyWarn / time.Microsecond))
+	r.statRTT.Store(int64(parameter.StatusNetLatencyWarn / time.Millisecond))
 	if item, _ := r.networkBadge(); item.bg != visual.RgbNetWarnBg {
 		t.Fatalf("a %s link renders %#v", parameter.StatusNetLatencyWarn, item)
 	}
 
-	r.statRTT.Store(int64(parameter.StatusNetLatencyBad / time.Microsecond))
+	r.statRTT.Store(int64(parameter.StatusNetLatencyBad / time.Millisecond))
 	if item, _ := r.networkBadge(); item.bg != visual.RgbNetBadBg {
 		t.Fatalf("a %s link renders %#v", parameter.StatusNetLatencyBad, item)
 	}
@@ -148,7 +148,7 @@ func TestStatusBarNetworkCellHoldsItsWidth(t *testing.T) {
 	r, clock := newStatusBar(t)
 	r.statNet.Store("connected")
 	seatPlayers(r, 2)
-	r.statRTT.Store(42_000)
+	r.statRTT.Store(42)
 	first, _ := r.networkItem()
 
 	r.statStale.Store(true)
