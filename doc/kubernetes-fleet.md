@@ -70,8 +70,7 @@ it does not move an in-memory session into an unrelated pod.
 |---|---|---|---|
 | G | next | **Hand off a deployment a stranger can install.** The documentation reduction is done: the procedure, this plan, the artifact indexes and the runbook describe the deployed design rather than the batches that produced it. | Both rehearsals below reach a first session with no undocumented step, and every resource value in `deploy/k3s/30-session.yaml` cites a number from H3. |
 | G1 | next | **Rehearse from bare Arch Linux and from bare Ubuntu.** Record package and service differences, and fix every command that assumes the production node. | A second node reaches [§13 of the procedure](kube-docker-deploy.md#13-first-session) without a step its operator had to invent. |
-| W1 | partly done | **Commission the browser path.** A browser has joined a live session through the site and played beside a terminal guest. | A browser drops and rejoins, survives a suspended tab, and the session ends on its own grace with no operator step invented on the way. |
-| R | partly done | **Route sessions by name on one address.** The allocator's front door on 7777 places a native join by its route frame, and every pod answers to its name, so the NodePort each session keeps is a direct route that refuses a stale link (§9). Live: an off-site join through 7777 and a browser have each reached a session. | A join through the session's NodePort reaches the same session, and a stale, unknown or full session is refused before any pod is dialled ([§13](kube-docker-deploy.md#13-first-session)). |
+| W1 | partly done | **Commission the browser path.** A browser has played beside a terminal guest, and a closed tab reopened on the same link rejoined with a fresh player state. | A tab hidden or suspended for five minutes costs the other players nothing and resumes or rejoins on return, and a session whose last guest was a browser ends on its own grace. |
 | H3 | next | **Measure a full roster.** Nine sessions driven by headless joiners for the fleet-level readings — CPU, memory, tmpfs, log rate, rotations — plus one real four-player session over real links, through a tower and a storm and on `wad/scenario/td`, for the hour that tick slips and correction magnitude need. Include the bridge sidecar, whose envelope is an estimate. | Requests and limits in `30-session.yaml`, and the quota totals, come from the four-player measurement rather than from single-guest history and estimates. |
 | H1 | partly done | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do has to be bounded. The two startup holes are closed: the tick-zero gate is bounded by one world install, a peer that leaves or goes silent costs the lobby rather than the session, and a confirmation is keyed to the link it arrived on. | Remaining: a handshake fuzz target for malformed, oversized, replayed and half-open cases, which `internal/network` has no equivalent of. |
 | H16 | partly done | **Automate image delivery.** Nightly CI publishes the final headless Dockerfile to GHCR under moving and commit-addressed tags; `deploy/guest/update-vif-image.sh` still provides the checked local build/import boundary. | Choose the node's registry/promotion policy, authenticate pulls without a long-lived off-node deployment credential, and move new sessions to a verified digest while existing matches finish. |
@@ -94,6 +93,7 @@ repeating its original gate.
 | F, the allocator byte proxy | `/vif/api/logs` carries LogWisp's SSE bytes unchanged and answers a stable `503 log_stream_unavailable` when LogWisp is down, while allocation, probes and an occupied game continue. |
 | H15, the public API edge | The site publishes exactly the two routes over TLS; a browser reads a joined session's rows live over a same-origin `EventSource`; the probe paths return the site's 404. The site's fleet page builds its session controls from the allocator's advertised `limits`. |
 | H11, source-address preservation | An off-box join names the client's own public address, so `externalTrafficPolicy: Local` plus `pf rdr` reaches the pod with it and the per-address admission limiter is per player rather than one budget for the fleet; the front door keys the same budget on that address before it dials, and the pod then sees the node. The record is emitted under an `admit` sub that LogWisp excludes from the published stream; it was absent from both the loopback stream (212 records carried) and the published route (111 carried). |
+| R, routing by name | One front door on 7777 places a native join by its route frame, and every pod answers to its name (§9). Off-site, the front door, a session's NodePort and the browser route each reached a session; an unknown name, a stale link and a full session were each refused. |
 | H12, the occupied lifecycle | The empty grace ends a session nobody returned to on `roster empty for 1m30s`; a guest returning inside that grace is readmitted into the slot its departure released, on the same match clock; a termination holds the match for `drain deadline 20s reached holding 1 guest(s)` with the tick still advancing; a full session answers the next dial `session is full at N participant(s)`. |
 
 ### Dropped, with the reason
@@ -302,10 +302,13 @@ What a cluster has not yet been asked:
   into a session nobody is in.
 - **One address for every session, and a NodePort per session beside it.** The
   front door places a join by its name, so every link has one shape and a stale one
-  is refused; the ten-port pool stays a fact the API server enforces and the
-  firewall forwards, as each session's direct route and the fleet's concurrency bound.
+  is refused. The ten-port pool stays each session's direct route and the fleet's
+  concurrency bound; the page advertises only the front door and the browser route,
+  so a deployment need not expose the direct one.
 - **The front door is the allocator's, and reads one frame.** Placing a join needs
   the lookup the browser route already makes; past the route frame it copies bytes.
+- **Admission is the allocator's.** Per-player budgets and rate limits for every
+  proxied route live where the player's address is still known, never at the pod.
 - **A thin allocator, not a second scheduler.** It exposes only the fixed session
   transaction on `/vif/api/`; K3s still schedules, admits, limits, terminates and
   garbage-collects every workload.
@@ -323,8 +326,9 @@ What a cluster has not yet been asked:
 - **The host is the authority over identity.** A joiner reports; the coordinator
   decides.
 - **No authentication, and hardening first.** See §4.
-- **Kubernetes speaks WebSocket; the game does not.** A bridge sidecar per session,
-  not a library in `vif` and not a translator shared by the fleet. See §9.
+- **Kubernetes speaks WebSocket for now; the game does not.** A bridge sidecar per
+  session (§9), until the decided replacement — a hardened standard-library
+  implementation in `vif` and the allocator — is field tested ([`doc/todo.md`](todo.md)).
 - **Drain waits for the roster with a deadline.** No participant migration: there is
   nowhere to migrate a match that lives in one process's memory.
 - **Dedicated lobby:** quorum is one, `-players` is capacity.
@@ -364,8 +368,8 @@ connection to the game. The page wraps its own `WebSocket` as a `net.Conn` and
 sends the route's last path segment as the name, so the protocol, bounds and
 handshake are a native client's.
 
-**Why the translation is in the pod.** The game must not gain a WebSocket
-implementation: the standard library has none, `golang.org/x/net/websocket` is
+**Why the translation is in the pod.** The game carries no WebSocket
+implementation yet: the standard library has none, `golang.org/x/net/websocket` is
 deprecated, and the maintained packages would be a network-facing dependency on the
 path every player takes. The bridge is a *restartable init container*: it starts
 after the config check and before the game, restarts on its own, and its exit is
@@ -374,11 +378,11 @@ not the pod's, so not the end of a match in a `backoffLimit: 0` Job.
 
 **What it costs and leaves alone.** The game sees every browser at `127.0.0.1`, so
 `NetworkAdmitBurst` is one budget for all of them (§4); `-route-max` and the edge's
-`limit_conn`/`limit_req` stand in, and [`doc/todo.md`](todo.md) carries whether that
-is the answer. The sidecar adds 25m/16Mi requested and 100m/32Mi limited per pod
-(§6), an estimate until H3. 7779 is named by no Service and gains no NetworkPolicy
-allowance: the default deny keeps every pod off it, and the node reaches it the way
-it reaches `/health`. The nginx block is in
+`limit_conn`/`limit_req` stand in until the allocator keys that budget itself
+([`doc/todo.md`](todo.md)). The sidecar adds 25m/16Mi requested and 100m/32Mi
+limited per pod (§6), an estimate until H3. 7779 is named by no Service and gains no
+NetworkPolicy allowance: the default deny keeps every pod off it, and the node
+reaches it the way it reaches `/health`. The nginx block is in
 [`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example).
 
 ## 10. Acceptance and rollback boundary

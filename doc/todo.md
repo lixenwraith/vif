@@ -10,39 +10,54 @@ and P3 is an idea.
 
 ## Browser sessions and mobile
 
-### Exercise the browser path's edges
+### Speak WebSocket in vif and vif-allocator
 
-- Priority: P1
-- Affected files: `internal/network/websocket_wasm.go`, `deploy/k3s/30-session.yaml`
+- Priority: P1, next
+- Affected files: `internal/network/websocket_other.go`, `internal/network/connection.go`,
+  `tool/vif-allocator/ws_proxy.go`, `tool/vif-allocator/manifest.go`,
+  `deploy/k3s/30-session.yaml`, `deploy/guest/update-vif-ws-bridge.sh`
+- Prerequisite: none. websocat stays deployed and documented until the replacement
+  passes its automated tests and a field test
 
-A browser guest has joined and played on the deployed node. Not yet run: a dropped
-socket rejoining, a suspended tab, and expiry with a browser in the session. The
-sidecar's CPU and memory are still the estimate in `30-session.yaml`. The hop costs
-about 40 µs a round trip, except that websocat 1.x never sets `TCP_NODELAY`: about
-0.5% of browser-to-game frames wait 40–80 ms on a delayed ACK. A bridge that sets it
-removes that.
+A native client cannot use a session's `ws_url` (`dialWebSocket` refuses outside the
+browser build), so a network that blocks 7777 leaves a terminal no way in; and the
+websocat 1.x bridge never sets `TCP_NODELAY`, so about 0.5% of browser frames wait
+40–80 ms on a delayed ACK. Decided: one minimal RFC 6455 implementation on the
+standard library, shared by the game and the allocator, with `TCP_NODELAY` on every
+socket. Fleet §8 and §9 and multi-platform §5 change when it lands.
 
-### Restore a per-player bound for proxied participants
+- Scope: the version-13 upgrade as client and server, binary messages, ping/pong and
+  the close handshake with a deadline. No extensions, subprotocols or text data.
+- Hardening: masking enforced by role, reserved bits and unknown opcodes refused,
+  control frames at most 125 bytes and never fragmented, a message length checked
+  against the game's largest frame before it is read, bounded handshake headers and
+  deadlines. Fuzz the frame reader and the handshake parser.
+- Placement, to settle first: the allocator terminates the browser's socket and
+  splices raw TCP to the pod as the front door does, so the sidecar, its image and
+  7779 go; and `vif -serve` may accept it too, so one binary serves browsers without
+  a fleet.
+- Rollout: the new path beside websocat behind a flag, [Deploying the session
+  fleet](kube-docker-deploy.md) §13 and fleet W1's checks run on it from the field,
+  then the sidecar and its updater retire.
 
-- Priority: P1
-- Affected files: `tool/vif-allocator`, `deploy/website/vif.nginx.example`,
-  `internal/network`
-- Prerequisite: the browser path is carrying real players
+### Key the browser route's admission in the allocator
 
-The pod sees every browser at `127.0.0.1` and every front-door player at the node,
-so `network.AdmissionLimiter` gives each proxied route one budget per session. The
-front door keys that budget on the real address before it dials, the browser route
-leans on the edge's `limit_conn`/`limit_req`, and `-route-max` bounds both. Decide
-whether that is the answer, or have the front door hand the pod the address as
-PROXY v2 — on a listener of its own, since 7777 also takes Internet traffic through
-the NodePort — which also restores the `admit` record for those players.
+- Priority: P2
+- Affected files: `tool/vif-allocator/ws_proxy.go`
+
+Decided: per-player admission for proxied routes is the allocator's, not the pod's.
+The front door keys `network.AdmissionLimiter` on the dialer's address before it
+dials; the browser route sees only the site's edge, so it leans on the edge's
+`limit_conn`/`limit_req`. Key the same limiter on the player's address once the edge
+hands the allocator one it can trust.
 
 ### Add browser admission authentication
 
-- Priority: P1
+- Priority: P2
 - Affected files: allocator/session adapter, website, future authentication
   dependency
-- Prerequisite: the unauthenticated browser path is bounded and measured
+- Prerequisite: every route carries real play without transport faults, the
+  built-in WebSocket included; no auth layer goes in while that is being settled
 
 Issue a short-lived, session-scoped admission credential after authentication and
 consume it during the WebSocket handshake without putting it in page history or
@@ -246,19 +261,6 @@ body now waits behind one 4 KiB chunk ([Troubleshooting](troubleshooting.md) §1
 Carrying it in the correction chunk envelope through the per-peer outbox bounds that
 too. Repairs at 20 kB/s have so far been a few kilobytes.
 
-### Join over wss:// from a native client
-
-- Priority: P3
-- Affected files: `internal/network/websocket_other.go`, `internal/network/connection.go`
-
-A native client dials the front door's 7777 or a session's NodePort, so a network
-that blocks both has no way in, though the site's edge carries browser guests over
-TLS on 443. A minimal RFC 6455 client behind `dialWebSocket` — the terminal app's
-WebSocket modem, on stdlib TLS and an HTTP upgrade — gives every client the most
-permitted path, on the `ws_url` a session already publishes, name included; it is
-the fallback beside raw TCP, not a replacement. [Services and
-networking](services-and-networking.md) §7.3 says why not UDP.
-
 ### Request a session from the terminal
 
 - Priority: P2
@@ -269,6 +271,62 @@ already answers any client through the site's edge, so the missing half is a gam
 command that asks for one and joins the `join_target` it returns. The other shape is
 the front door creating a session for a route frame that names none, which needs a
 per-address creation budget of its own first.
+
+## Session membership
+
+A suggestion for the words, not a decision: a *session* is one world timeline under
+one authority — a fleet pod, a terminal host, any instance — and its participants,
+and solo play is a session of one. Commands then move participants between sessions:
+`:open`/`:close` in place of `:host`, since every instance already is its own
+session's authority; `:join`/`:leave` for a participant; `:drop` for an authority
+removing one; `:merge`/`:split` for whole sessions.
+
+### Leave a session and play on alone
+
+- Priority: P2
+- Affected files: `internal/mode/commands.go`, `internal/app/loop.go`,
+  `internal/help/topics.go`
+
+`:leave` ends this instance's part in a session on purpose and keeps its world: it
+closes its link, so the authority crosses the departure now rather than on a
+timeout, and continues as its own authority. A guest takes the local-fork path it
+takes on losing its host ([Multi-player](multi-player.md) §5.1) without the
+`Host lost` badge; an authority closes its listener first, and its guests succeed
+or fork as its `-authority` policy says.
+
+### Let an authority drop a participant
+
+- Priority: P2
+- Affected files: `internal/network`, `internal/app`, `internal/mode/commands.go`
+
+`:drop <participant>` closes that participant's link with a reason its client prints,
+and the dropped instance plays on alone as after `:leave`. A dedicated host has no
+console, so a fleet drop is a later operator route on the allocator. Keeping a dropped
+player out is a separate decision: the session name is a routing key, not an identity.
+
+### Merge two sessions
+
+- Priority: P3
+- Prerequisite: a redirect message, "rejoin at this link", which the split shares
+
+Two sessions, each under its own authority, become one by keeping one world: B's
+authority redirects its participants to A's link, they rejoin A as fresh players, and
+B's world ends — `:leave` and the drop above are the same move for one participant.
+Merging two worlds is not planned: two timelines share no state to reconcile, which
+is why a higher term from a fork is refused today.
+
+### Split a session under a second authority
+
+- Priority: P3
+- Prerequisite: the redirect message, and an authority seeded from a live world
+
+For a session that outgrows its authority — a large roster or a heavy scenario
+lagging — twelve participants under A become seven under A and five under B. B is a
+participant at first, ideally a fresh fleet pod. A hands B its current world under a
+new session identity rather than a new term, redirects the five, and the two worlds
+diverge from there. Late joiners already install a mid-run world; what is missing is
+the redirect and an authority, for a pod an allocator request, that starts from a
+transferred world instead of a scenario.
 
 ## Combat
 
