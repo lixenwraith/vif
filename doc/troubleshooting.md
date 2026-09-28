@@ -536,3 +536,40 @@ producers forward their own. Leaves then answered 95% hash-only with late commit
 at the star's rate, at the cost of a whole world per floor window through every
 link. The delegated relay in [Todo](todo.md#delegate-convergence-to-relays) is the
 intended shape.
+
+## 16. Eleventh round (2026-09-27, a terminal guest into the tower over a slow link)
+
+A remote terminal guest of a fleet host entered the tower region. The host logged
+`link cannot sustain the convergence floor` (floor 14.8 kB/s, budget 14.0), then
+evicted the guest as too slow (12.4 late epochs/s at 36.4 kB/s) and lost the link;
+the guest read a 17 s round trip, 29% loss and a 326 MB/s rate. In-process, with a
+cursorless host, one paced guest at 239x64 and the host's side shaped to 20–50 kB/s,
+the same collapse traces identically back to `2d8c5b6`: latent, not a regression.
+
+- **Nothing bounded a link's queue.** A tower keyframe is about 40 kB; the floor
+  plan sent one every 3 s with no index, so the guest could never prove the world,
+  and fallbacks and wide deltas joined them. Epochs waited behind the queue, so the
+  paced guest trailed, its crossings committed late or void, it diverged, and every
+  repair went wide into another keyframe. At 30 kB/s the queue passed 400 kB.
+- **Stale requests became whole worlds.** Four retained captures cover 0.8 s at the
+  nominal cadence; a request landing later became a keyframe, and a keyframe request
+  naming such a tick was refused as if from a relay. Manifests stuck behind the queue
+  read as silence, which sent whole bodies.
+- **The rate divided by echo arrival gaps.** Echoes a stalled path releases together
+  arrive microseconds apart, and the eviction policy read the result as proof the
+  link was fast.
+
+Bodies now leave in 4 KiB chunks while the link's backlog drains within 100 ms past
+its round trip, and a link still delivering one takes no other body, summary or
+repair; the newest follows once it drains (`TestAWholeWorldLeavesAsItsLinkDrains`).
+A link that cannot deliver a keyframe in 500 ms takes none on schedule and reports
+constrained. A request for a tick let go is superseded unless it asks for a whole
+world (`TestAStaleRequestIsSupersededUnlessItAsksForAWorld`); indexes are spaced by
+the round trip; silence allows for what the round trip and backlog hold. Echoes carry
+the answering side's clock (`TestTheDeliveryRateIsTimedWhereTheBytesArrived`).
+
+At 20, 30 and 50 kB/s the paced guest now converges 10–20 s after the tower spawns
+and then answers nearly every manifest hash-only at 4.8 kB/s, with no late commits and
+at most 11 kB queued. `TestASlowLinkCarriesTheTowerWithoutAStandingQueue` fails on
+the old code. A repair set is still one frame of up to 48 kB, and the 20-tick lead
+cap commits a 1.5 s round trip's crossings late whatever the delivery.

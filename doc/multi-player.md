@@ -359,8 +359,19 @@ match the manifest's authority term, participant, and crossing fence; this binds
 the ordering metadata used to prune queued events. Its capture integrity may
 differ on a relay whose equal canonical state has another dense-store order.
 
-Nothing acknowledges or retransmits an ordinary correction. A newer keyframe
-supersedes older state, so loss costs freshness rather than permanent correctness.
+Nothing acknowledges or retransmits a correction; the newest supersedes, so loss
+costs freshness rather than correctness. A body leaves in
+`SnapshotCorrectionChunkBytes` chunks while the link's backlog — bytes sent beyond
+what its latest echo reports received — drains within `SnapshotBulkQueue` past the
+round trip, so an epoch waits behind a chunk, not a world. A link still delivering
+one takes no other body, summary or repair, and the round that finds it drained
+sends the newest. A request naming a tick the authority has let go was overtaken by
+the index since and is not answered unless it asks for a whole world; indexes to a
+peer are spaced by its round trip, so a descent's second request finds its tick
+retained. A link that cannot deliver a keyframe within `SnapshotKeyframeDrain` takes
+none on schedule: it meets the floor with proofs, takes a whole world on request and
+reports constrained. Echoes carry the answering side's clock, and delivery rate is
+timed on it, since echoes a stalled path releases together arrive microseconds apart.
 
 ### 4.1 The playout buffer
 
