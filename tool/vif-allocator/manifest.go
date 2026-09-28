@@ -5,8 +5,8 @@ import "strconv"
 type workloadConfig struct {
 	Namespace string
 	Image     string
-	// BridgeImage is the WebSocket sidecar. Empty is a fleet that publishes no
-	// browser route, and then the pod is exactly what it was before one existed.
+	// BridgeImage is the WebSocket sidecar. Empty is a pod without one: the fleet
+	// publishes no browser route, or the allocator terminates it.
 	BridgeImage string
 	Players     int
 	LogLevel    string

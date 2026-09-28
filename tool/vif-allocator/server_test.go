@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -151,33 +153,64 @@ func TestLogEndpointIsExplicitlyDeferred(t *testing.T) {
 	}
 }
 
+// TestTheBrowserRouteRefusesEverythingButAnUpgradeFromItsOrigin: each refusal is a
+// status answered before any 101, the allocator's own handshake checks and pod dial
+// included.
 func TestTheBrowserRouteRefusesEverythingButAnUpgradeFromItsOrigin(t *testing.T) {
-	const live = "/vif/ws/0123456789abcdef"
-	upgrade := func(r *http.Request) *http.Request {
+	const live = "/vif/ws/" + routedID
+	upgrade := func(method, path string, edits ...string) *http.Request {
+		r := httptest.NewRequest(method, path, nil)
 		r.Header.Set("Upgrade", "websocket")
 		r.Header.Set("Connection", "keep-alive, Upgrade")
 		r.Header.Set("Origin", "https://site.example")
+		r.Header.Set("Sec-WebSocket-Version", "13")
+		r.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+		for i := 0; i+1 < len(edits); i += 2 {
+			r.Header.Set(edits[i], edits[i+1])
+		}
 		return r
 	}
+	closed, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, refusingPort, _ := net.SplitHostPort(closed.Addr().String())
+	_ = closed.Close()
+
 	for name, tc := range map[string]struct {
-		request *http.Request
-		want    int
+		request  *http.Request
+		routeErr error
+		held     int
+		want     int
 	}{
 		"a path that is not a session identifier": {
-			upgrade(httptest.NewRequest(http.MethodGet, "/vif/ws/0123456789ABCDEF/extra", nil)), http.StatusNotFound},
-		"an ordinary GET": {
-			httptest.NewRequest(http.MethodGet, live, nil), http.StatusBadRequest},
+			request: upgrade(http.MethodGet, "/vif/ws/0123456789ABCDEF/extra"), want: http.StatusNotFound},
+		"an ordinary GET": {request: httptest.NewRequest(http.MethodGet, live, nil), want: http.StatusBadRequest},
 		"another origin": {
-			func() *http.Request {
-				r := upgrade(httptest.NewRequest(http.MethodGet, live, nil))
-				r.Header.Set("Origin", "https://elsewhere.example")
-				return r
-			}(), http.StatusForbidden},
+			request: upgrade(http.MethodGet, live, "Origin", "https://elsewhere.example"), want: http.StatusForbidden},
 		"a method the route does not answer": {
-			upgrade(httptest.NewRequest(http.MethodPost, live, nil)), http.StatusMethodNotAllowed},
+			request: upgrade(http.MethodPost, live), want: http.StatusMethodNotAllowed},
+		"an unknown session": {
+			request: upgrade(http.MethodGet, live), routeErr: errSessionUnknown, want: http.StatusNotFound},
+		"a session not accepting players": {request: upgrade(http.MethodGet, live),
+			routeErr: fmt.Errorf("%w: occupied", errSessionRefusing), want: http.StatusConflict},
+		"a session with no reachable pod": {request: upgrade(http.MethodGet, live),
+			routeErr: errSessionUnroutable, want: http.StatusServiceUnavailable},
+		"a session at -route-max": {request: upgrade(http.MethodGet, live), held: 2,
+			want: http.StatusServiceUnavailable},
+		"another WebSocket version": {
+			request: upgrade(http.MethodGet, live, "Sec-WebSocket-Version", "8"), want: http.StatusUpgradeRequired},
+		"a key that is not 16 bytes": {
+			request: upgrade(http.MethodGet, live, "Sec-WebSocket-Key", "AAAA"), want: http.StatusBadRequest},
+		"a pod that refuses the dial": {request: upgrade(http.MethodGet, live), want: http.StatusBadGateway},
 	} {
+		server := testWebServer(&fakeSessionAllocator{podIP: "127.0.0.1", routeErr: tc.routeErr})
+		server.ws.game = refusingPort
+		for range tc.held {
+			server.ws.holds.hold(routedID)
+		}
 		response := httptest.NewRecorder()
-		testWebServer(&fakeSessionAllocator{podIP: "10.42.0.7"}).ServeHTTP(response, tc.request)
+		server.ServeHTTP(response, tc.request)
 		if response.Code != tc.want {
 			t.Errorf("%s: status = %d, want %d", name, response.Code, tc.want)
 		}
@@ -186,7 +219,7 @@ func TestTheBrowserRouteRefusesEverythingButAnUpgradeFromItsOrigin(t *testing.T)
 	// A deployment that publishes no route answers the same path with its absence
 	// rather than with a refusal a caller would retry.
 	response := httptest.NewRecorder()
-	testServer(&fakeSessionAllocator{}).ServeHTTP(response, upgrade(httptest.NewRequest(http.MethodGet, live, nil)))
+	testServer(&fakeSessionAllocator{}).ServeHTTP(response, upgrade(http.MethodGet, live))
 	if response.Code != http.StatusNotImplemented {
 		t.Errorf("unconfigured route status = %d", response.Code)
 	}

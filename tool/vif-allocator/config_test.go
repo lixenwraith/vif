@@ -144,28 +144,34 @@ func TestAnUnsetUnitVariableKeepsTheDefault(t *testing.T) {
 	}
 }
 
-func TestTheBrowserRouteAndItsBridgeAreOneSwitch(t *testing.T) {
+// TestTheBrowserRouteIsPublishedByItsOrigin: the origin alone publishes a route this
+// allocator terminates, a bridge image selects the sidecar instead, and a bridge
+// with no route to serve is refused.
+func TestTheBrowserRouteIsPublishedByItsOrigin(t *testing.T) {
 	base := []string{
 		"-image", "vif:test",
 		"-join-host", "play.example.com",
 		"-log-stream-url", "http://127.0.0.1:8081/stream",
 	}
-	for _, half := range [][]string{
-		{"-web-origin", "https://play.example.com"},
+	for _, refused := range [][]string{
 		{"-ws-bridge-image", "ws-bridge:test"},
-		{"-web-origin", "https://play.example.com/vif", "-ws-bridge-image", "ws-bridge:test"},
+		{"-web-origin", "https://play.example.com/vif"},
 	} {
-		if _, err := parseConfig(append(slices.Clone(base), half...), io.Discard); err == nil {
-			t.Errorf("parseConfig(%q) published a half-configured browser route", half)
+		if _, err := parseConfig(append(slices.Clone(base), refused...), io.Discard); err == nil {
+			t.Errorf("parseConfig(%q) published a browser route", refused)
 		}
 	}
-	cfg, err := parseConfig(append(slices.Clone(base),
-		"-web-origin", "https://play.example.com", "-ws-bridge-image", "ws-bridge:test"), io.Discard)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := (&allocator{cfg: cfg.Allocator}).webSocketURL("0123456789abcdef"); got !=
-		"wss://play.example.com/vif/ws/0123456789abcdef" {
-		t.Fatalf("webSocketURL = %q", got)
+	for _, route := range [][]string{
+		{"-web-origin", "https://play.example.com"},
+		{"-web-origin", "https://play.example.com", "-ws-bridge-image", "ws-bridge:test"},
+	} {
+		cfg, err := parseConfig(append(slices.Clone(base), route...), io.Discard)
+		if err != nil {
+			t.Fatalf("parseConfig(%q) = %v", route, err)
+		}
+		if got := (&allocator{cfg: cfg.Allocator}).webSocketURL("0123456789abcdef"); got !=
+			"wss://play.example.com/vif/ws/0123456789abcdef" {
+			t.Fatalf("parseConfig(%q): webSocketURL = %q", route, got)
+		}
 	}
 }
