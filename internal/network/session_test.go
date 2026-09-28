@@ -3,6 +3,7 @@ package network
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -179,6 +180,8 @@ func waitInbound(t *testing.T, p *SocketPort, match func(Inbound) bool) {
 	t.Fatal("timed out waiting for inbound notification")
 }
 
+// TestANamedSessionAdmitsOnlyTheDialerThatNamedIt joins as a browser does: the name
+// is the route's last path segment, sent over a stream a bridge relays unparsed.
 func TestANamedSessionAdmitsOnlyTheDialerThatNamedIt(t *testing.T) {
 	offer := testOffer()
 	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
@@ -192,16 +195,31 @@ func TestANamedSessionAdmitsOnlyTheDialerThatNamedIt(t *testing.T) {
 	if err := host.Start(); err != nil {
 		t.Fatal(err)
 	}
-
-	stale := DebugConfig(RolePeer, "")
-	stale.SessionName = "1a3c7f"
-	if _, _, err := DialSession(host.Addr().String(), stale); err == nil {
-		t.Fatal("a dial naming another session was admitted")
+	defer func(browser func(string, time.Duration) (net.Conn, error)) { webSocketDialer = browser }(webSocketDialer)
+	webSocketDialer = func(string, time.Duration) (net.Conn, error) {
+		page, bridge := net.Pipe()
+		session, err := net.Dial("tcp", host.Addr().String())
+		if err != nil {
+			return nil, err
+		}
+		go func() { _, _ = io.Copy(session, bridge); session.Close() }()
+		go func() { _, _ = io.Copy(bridge, session); bridge.Close() }()
+		return page, nil
+	}
+	join := func(route string) (*PendingJoin, SessionOffer, error) {
+		e, err := ParseEndpoint(route)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg := DebugConfig(RolePeer, "")
+		cfg.SessionName = e.Name
+		return DialSession(route, cfg)
 	}
 
-	named := DebugConfig(RolePeer, "")
-	named.SessionName = "7f3c1a"
-	pending, got, err := DialSession(host.Addr().String(), named)
+	if _, _, err := join("wss://site.example/vif/ws/1a3c7f"); err == nil {
+		t.Fatal("a dial naming another session was admitted")
+	}
+	pending, got, err := join("wss://site.example/vif/ws/7f3c1a")
 	if err != nil {
 		t.Fatalf("a dial naming this session was refused: %v", err)
 	}

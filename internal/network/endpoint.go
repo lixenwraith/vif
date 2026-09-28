@@ -34,15 +34,17 @@ type Endpoint struct {
 // click and a thing to paste after -join. It is TCP.
 const linkScheme = "vif://"
 
-// ParseEndpoint reads [tcp://|vif://]host:port[/name] or a ws(s):// URL, whose path
-// is the front door's rather than a session name. A bare host:port is TCP, and any
-// other scheme is refused rather than read as a host.
+// ParseEndpoint reads [tcp://|vif://]host:port[/name] or a ws(s):// URL, whose last
+// path segment is the name as a vif:// path is; one ending in '/' names none. A bare
+// host:port is TCP, and any other scheme is refused rather than read as a host.
 func ParseEndpoint(target string) (Endpoint, error) {
 	if strings.HasPrefix(target, "ws://") || strings.HasPrefix(target, "wss://") {
-		if _, err := url.Parse(target); err != nil {
+		u, err := url.Parse(target)
+		if err != nil {
 			return Endpoint{}, err
 		}
-		return Endpoint{Scheme: SchemeWebSocket, Addr: target}, nil
+		name := u.Path[strings.LastIndex(u.Path, "/")+1:]
+		return Endpoint{Scheme: SchemeWebSocket, Addr: target, Name: name}, nil
 	}
 	e, rest := Endpoint{Scheme: SchemeTCP}, target
 	if scheme, after, ok := strings.Cut(rest, "://"); ok {
