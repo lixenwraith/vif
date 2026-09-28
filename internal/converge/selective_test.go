@@ -8,9 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // TestBaselineBytesFollowTheirBaseline: the fallback and join bodies a baseline is
@@ -67,6 +71,53 @@ func TestBaselineBytesFollowTheirBaseline(t *testing.T) {
 	host.c.installed, host.c.haveBase = seal(cap), true
 	host.c.BecomeAuthority(network.HandoffRecord{Term: cap.Header.Term})
 	check() // Succession replaces the baseline even at the same tick.
+}
+
+// TestAWholeWorldLeavesAsItsLinkDrains: a body owed a peer goes out a chunk at a
+// time while no backlog stands, so what waits ahead of the next epoch is a chunk
+// rather than the world, and the rest follows as the link delivers it.
+func TestAWholeWorldLeavesAsItsLinkDrains(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	mesh.Shape(1, 2, network.LinkShape{BytesPerTick: 2000})
+	runs := []*run{newRun(t, 1, mesh.Node(1), roster(2)), newRun(t, 2, mesh.Node(2), roster(2))}
+	host, guest := runs[0], runs[1]
+	for _, r := range runs {
+		r.open(1, nil, false)
+	}
+	// A world that compresses poorly, so its keyframe spans many chunks.
+	cap := capture(1, 0)
+	rng := vmath.NewFastRand(3)
+	for i := range 6000 {
+		cap.World.Positions = append(cap.World.Positions, engine.StoreEntry[component.PositionComponent]{
+			Entity: core.Entity(captureRows + i + 1),
+			Value:  component.PositionComponent{X: rng.Intn(1 << 15), Y: rng.Intn(1 << 15)},
+		})
+	}
+	cap.World.NextEntity = uint64(captureRows + 6000 + 1)
+	host.world.setWorld(seal(cap))
+	for range 8 {
+		deliver(runs, 1) // probes give the link the origin a backlog is read against
+	}
+
+	host.c.sendKeyframeTo(host.world.port, 2, host.world.Position().Tick)
+	host.c.publishMu.Lock()
+	left, total := len(host.c.peers[2].outbox), len(host.c.keyCorrection)
+	host.c.publishMu.Unlock()
+	if total < 8*parameter.SnapshotCorrectionChunkBytes || left == 0 {
+		t.Fatalf("a %d-byte world left %d chunks behind on a slow link; want it paced", total, left)
+	}
+	for range 400 {
+		if guest.world.installs() > 0 {
+			return
+		}
+		if err := host.c.PublishDue(); err != nil {
+			t.Fatal(err)
+		}
+		deliver(runs, 1)
+	}
+	t.Fatal("the rest of the world never followed its first chunks")
 }
 
 // exchange is a host and a guest on one link, the guest holding the host's world
@@ -247,6 +298,45 @@ func TestAWidenedPeerIsServedForItsWholeWindow(t *testing.T) {
 	}
 	if host.stat("snapshot.manifests_sent") <= manifests {
 		t.Fatal("the peer never returned to the selective exchange")
+	}
+}
+
+// TestAStaleRequestIsSupersededUnlessItAsksForAWorld: a request naming a tick the
+// authority has let go of was overtaken by the indexes sent since, so it costs the
+// peer no whole world; one that asks for a whole world gets it, whatever it names.
+func TestAStaleRequestIsSupersededUnlessItAsksForAWorld(t *testing.T) {
+	t.Parallel()
+	host, guest := exchange(t)
+	diverge(guest, 9)
+	stale := func(world bool) {
+		t.Helper()
+		guest.c.selectiveMu.Lock()
+		guest.c.selective.wantKeyframe = world
+		guest.c.selectiveMu.Unlock()
+		host.world.advance(1)
+		guest.world.advance(1)
+		if err := host.c.Publish(); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+		deliver([]*run{guest}, 1)
+		for range parameter.SnapshotManifestRetention {
+			host.world.advance(1)
+			if err := host.c.Publish(); err != nil {
+				t.Fatalf("publish: %v", err)
+			}
+		}
+		deliver([]*run{host}, 1)
+		deliver([]*run{guest}, 1)
+	}
+
+	stale(false)
+	if guest.c.Selective().Keyframe {
+		t.Fatal("a superseded request left the guest waiting for a whole world")
+	}
+	installs := guest.world.installs()
+	stale(true)
+	if guest.world.installs() == installs {
+		t.Fatal("a guest that asked for a whole world was refused one for naming a tick let go")
 	}
 }
 

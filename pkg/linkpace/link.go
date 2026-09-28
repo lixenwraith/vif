@@ -77,6 +77,11 @@ type Metrics struct {
 	// Throughput is the observed delivery rate in bytes per second.
 	Throughput float64
 
+	// Backlog is what the sender has queued for the peer beyond what the peer had
+	// received at its latest echo, in bytes. The transport that owns both counters
+	// fills it when the estimate is read; Link never does.
+	Backlog int64
+
 	// Saturated reports that the link, rather than the sender, was the limit
 	// while Throughput was measured — by a standing backlog or by a round trip
 	// inflated well past its own baseline.

@@ -184,10 +184,13 @@ func (p *MeshPort) SetLinkReport(r LinkReport) {
 func (p *MeshPort) LinkMetric(peer uint32) linkpace.Metrics {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if m, ok := p.meters[PeerID(peer)]; ok {
-		return m.link.Metrics()
+	m, ok := p.meters[PeerID(peer)]
+	if !ok {
+		return linkpace.Metrics{}
 	}
-	return linkpace.Metrics{}
+	metrics := m.link.Metrics()
+	metrics.Backlog = m.backlog(p.outBytes[PeerID(peer)])
+	return metrics
 }
 
 // ObserveTransfer folds a completed bulk transfer into one link's estimate, the
@@ -252,7 +255,10 @@ func (p *MeshPort) deliver(in Inbound) {
 	if in.Kind == InboundMessage && p.shape.LossEvery > 0 {
 		p.arrivals++
 		if p.arrivals%p.shape.LossEvery == 0 {
-			return // the frame the shape swallowed; nothing repairs one
+			// Counted as arrived: the link carried it and the shape swallowed it, so
+			// the sender's meter reads no queue from a frame that will never come.
+			p.inBytes[in.Peer] += uint64(bytes)
+			return // nothing repairs one
 		}
 	}
 	p.queue = append(p.queue, meshFrame{
@@ -464,19 +470,19 @@ func (p *MeshPort) answerLocally(in Inbound) bool {
 	case MsgLinkProbe:
 		p.mu.Lock()
 		peer, ok := p.links[in.Peer]
-		echo := encodeEcho(in.Msg.Payload, p.inBytes[in.Peer], p.report)
+		echo := encodeEcho(in.Msg.Payload, p.inBytes[in.Peer], p.report, time.Duration(p.nowLocked().UnixNano()))
 		p.mu.Unlock()
 		if ok && echo != nil {
 			p.deliverTo(peer, uint8(MsgLinkEcho), echo)
 		}
 		return true
 	case MsgLinkEcho:
-		seq, sent, delivered, report, ok := decodeEcho(in.Msg.Payload)
+		seq, sent, delivered, answered, report, ok := decodeEcho(in.Msg.Payload)
 		if !ok {
 			return true
 		}
 		p.mu.Lock()
-		p.meterLocked(in.Peer).observe(p.nowLocked(), sent, seq, delivered, p.outBytes[in.Peer], report)
+		p.meterLocked(in.Peer).observe(p.nowLocked(), sent, seq, delivered, p.outBytes[in.Peer], answered, report)
 		p.mu.Unlock()
 		return true
 	}
