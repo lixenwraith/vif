@@ -364,6 +364,22 @@ func TestReadyAddressesStayScopedToTheirService(t *testing.T) {
 	}
 }
 
+// An occupied game reports no countdown, so the page's clock is the Job's deadline;
+// a game countdown that ends sooner still wins. Decoded as the API sends a Job.
+func TestASessionExpiresOnTheSoonerOfItsCountdownAndItsJobDeadline(t *testing.T) {
+	var item job
+	body := `{"spec":{"activeDeadlineSeconds":14400},"status":{"startTime":"2026-09-11T12:00:00Z"}}`
+	if err := json.Unmarshal([]byte(body), &item); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 11, 15, 0, 0, 0, time.UTC)
+	for reported, want := range map[string]string{"": "1h0m0s", "1m30s": "1m30s", "2h0m0s": "1h0m0s"} {
+		if got := expiresIn(reported, item, now); got != want {
+			t.Errorf("game reported %q: expires_in %q, want %q", reported, got, want)
+		}
+	}
+}
+
 // TestARequestedRosterAndLevelReachTheJob is the point of accepting them: a choice
 // the pod did not run would make the page's controls decoration.
 func TestARequestedRosterLevelAndScenarioReachTheJob(t *testing.T) {
