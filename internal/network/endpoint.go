@@ -8,9 +8,9 @@ import (
 	"strings"
 )
 
-// Scheme is how a session's bytes travel. TCP carries native play at both ends;
-// a WebSocket route is a browser's way to the same session, served by the
-// deployment's bridge to the TCP port.
+// Scheme is how a session's bytes travel. TCP carries native play at both ends; a
+// WebSocket route reaches the same session through the deployment, from a browser
+// or from a network that blocks the TCP port.
 type Scheme uint8
 
 const (

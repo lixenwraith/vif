@@ -5,11 +5,15 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/websocket"
 )
 
 func testOffer() SessionOffer {
@@ -180,8 +184,9 @@ func waitInbound(t *testing.T, p *SocketPort, match func(Inbound) bool) {
 	t.Fatal("timed out waiting for inbound notification")
 }
 
-// TestANamedSessionAdmitsOnlyTheDialerThatNamedIt joins as a browser does: the name
-// is the route's last path segment, sent over a stream a bridge relays unparsed.
+// TestANamedSessionAdmitsOnlyTheDialerThatNamedIt joins over a WebSocket route as
+// the native client does: the name is the route's last path segment, sent over a
+// stream a bridge relays unparsed.
 func TestANamedSessionAdmitsOnlyTheDialerThatNamedIt(t *testing.T) {
 	offer := testOffer()
 	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
@@ -195,18 +200,29 @@ func TestANamedSessionAdmitsOnlyTheDialerThatNamedIt(t *testing.T) {
 	if err := host.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer func(browser func(string, time.Duration) (net.Conn, error)) { webSocketDialer = browser }(webSocketDialer)
-	webSocketDialer = func(string, time.Duration) (net.Conn, error) {
-		page, bridge := net.Pipe()
+	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handshake, err := websocket.Check(w, r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		session, err := net.Dial("tcp", host.Addr().String())
 		if err != nil {
-			return nil, err
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
 		}
-		go func() { _, _ = io.Copy(session, bridge); session.Close() }()
-		go func() { _, _ = io.Copy(bridge, session); bridge.Close() }()
-		return page, nil
-	}
-	join := func(route string) (*PendingJoin, SessionOffer, error) {
+		page, err := handshake.Upgrade(w)
+		if err != nil {
+			session.Close()
+			return
+		}
+		go func() { _, _ = io.Copy(session, page); session.Close() }()
+		_, _ = io.Copy(page, session)
+		page.Close()
+	}))
+	defer bridge.Close()
+	join := func(name string) (*PendingJoin, SessionOffer, error) {
+		route := "ws" + strings.TrimPrefix(bridge.URL, "http") + "/vif/ws/" + name
 		e, err := ParseEndpoint(route)
 		if err != nil {
 			t.Fatal(err)
@@ -216,10 +232,10 @@ func TestANamedSessionAdmitsOnlyTheDialerThatNamedIt(t *testing.T) {
 		return DialSession(route, cfg)
 	}
 
-	if _, _, err := join("wss://site.example/vif/ws/1a3c7f"); err == nil {
+	if _, _, err := join("1a3c7f"); err == nil {
 		t.Fatal("a dial naming another session was admitted")
 	}
-	pending, got, err := join("wss://site.example/vif/ws/7f3c1a")
+	pending, got, err := join("7f3c1a")
 	if err != nil {
 		t.Fatalf("a dial naming this session was refused: %v", err)
 	}

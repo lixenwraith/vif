@@ -132,7 +132,7 @@ sudo cmp -s "$source_unit" "$installed_unit"
 sudo cmp -s "$repo_root/bin/vif-allocator" "$binary"
 sudo cat "$installed_env" | cmp -s "$stage_root/allocator.env.next" -
 # A published browser route answers a plain GET with not_an_upgrade, not 501.
-if [ -n "$bridge_image" ]; then
+if [ -n "$(sed -n 's/^VIF_ALLOCATOR_WEB_ORIGIN=//p' "$source_env")" ]; then
 	curl --connect-timeout 2 --max-time 5 -sS \
 		http://127.0.0.1:9080/vif/ws/0000000000000000 | grep -q not_an_upgrade
 fi

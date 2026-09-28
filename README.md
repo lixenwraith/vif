@@ -44,8 +44,9 @@ configuration, audio policy, and reusable simulation libraries.
   on one agreed tick, selective authoritative correction with bounded keyframe
   fallback, and clean continuation after a peer disconnects.
 - Named sessions: a host answers to one name, so a single address can front many
-  and a stale link is refused rather than seated. A browser build joins the same
-  session over WebSocket, speaking the same protocol.
+  and a stale link is refused rather than seated. A browser build, or a terminal
+  whose network blocks the game port, joins the same session over WebSocket,
+  speaking the same protocol.
 - A dedicated-server fleet on K3s: one container per session, created on request
   and gone once its last player leaves, reached by name at one address, at its own
   port, or from a browser.
@@ -112,8 +113,8 @@ the link it gives, or open the session in the browser:
   it can be combined with `-host` or `-join` for repeatable two-process runs.
 - `-host <bind-address>` hosts a session and `-players <n>` sets the lobby size;
   `-join <addr>` joins one and adopts the host's seed/config/content identity,
-  where `<addr>` is `host:port`, a `vif://host:port/<name>` link, or a browser
-  build's `wss://` route.
+  where `<addr>` is `host:port`, a `vif://host:port/<name>` link, or a session's
+  `wss://` route.
 - `-name <name>` makes a host answer to that name only, so one address can serve
   several sessions.
 - `-authority host|migrate` decides where authorship goes when the participant
@@ -167,7 +168,7 @@ waits for its first guest and then runs the session on its own.
 `vif_headless` non-root binary (`make image`), K3s objects for one Job per session
 under a ten-session quota and default-deny policy, and `vif-allocator`, which
 creates sessions on request and routes joins to them — by name on one port, at
-each session's own port, or over the browser's WebSocket route.
+each session's own port, or over its WebSocket route.
 [lixen.com/vif](https://lixen.com/vif) is the running deployment;
 [doc/kube-docker-deploy.md](doc/kube-docker-deploy.md) installs one and
 [doc/kubernetes-fleet.md](doc/kubernetes-fleet.md) is the design and work list.

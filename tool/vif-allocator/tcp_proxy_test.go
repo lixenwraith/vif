@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/websocket"
 )
 
 const routedID = "0123456789abcdef"
@@ -65,6 +67,37 @@ func startFrontDoor(t *testing.T, sessions sessionAllocator, held *holds, pod *t
 	_, router.game, _ = net.SplitHostPort(pod.addr)
 	go router.serve(listener)
 	return listener.Addr().String()
+}
+
+// startBrowserRoute serves a browser route this allocator terminates, whose every
+// session resolves to pod, and returns its ws:// prefix. The origin it answers is
+// its own URL's, the one a native client sends.
+func startBrowserRoute(t *testing.T, sessions sessionAllocator, held *holds, pod *testPod) string {
+	t.Helper()
+	server := httptest.NewUnstartedServer(nil)
+	api := newAPIServer(sessions, slog.New(slog.NewTextHandler(io.Discard, nil)), nil,
+		allocatorConfig{WebOrigin: "http://" + server.Listener.Addr().String()}, held)
+	_, api.ws.game, _ = net.SplitHostPort(pod.addr)
+	server.Config.Handler = api
+	server.Start()
+	t.Cleanup(server.Close)
+	return "ws://" + server.Listener.Addr().String() + wsRoutePrefix
+}
+
+// released waits for held to carry nothing, as it does once every splice has ended.
+func released(t *testing.T, held *holds) {
+	t.Helper()
+	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		held.mu.Lock()
+		n := len(held.n)
+		held.mu.Unlock()
+		if n == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("a closed connection kept its session's slot")
+		}
+	}
 }
 
 // join dials as vif -join vif://<addr>/<id> does and returns why it was refused.
@@ -147,24 +180,69 @@ func TestTheFrontDoorReplaysTheNameAndSplicesBothWays(t *testing.T) {
 	}
 }
 
+// TestTheBrowserRouteSplicesTheSocketToThePod: the pod reads the name the browser
+// sent inside the socket rather than one the allocator wrote, bytes pass both ways,
+// and the allocator answers the browser's close.
+func TestTheBrowserRouteSplicesTheSocketToThePod(t *testing.T) {
+	pod := startPod(t)
+	route := startBrowserRoute(t, &fakeSessionAllocator{podIP: "127.0.0.1"}, newHolds(1), pod)
+	conn, err := websocket.Dial(t.Context(), route+routedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := network.NewMessage(network.MsgSessionRoute, []byte("named-inside")).Encode(conn); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Write([]byte("ping")); err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	echoed := make([]byte, 4)
+	if _, err := io.ReadFull(conn, echoed); err != nil || string(echoed) != "ping" {
+		t.Fatalf("read back %q, %v", echoed, err)
+	}
+	if got := <-pod.names; got != "named-inside" {
+		t.Fatalf("the pod was sent %q, want the browser's own frame", got)
+	}
+	start := time.Now()
+	if err := conn.Close(); err != nil || time.Since(start) > time.Second {
+		t.Fatalf("Close = %v after %s; the allocator did not answer the close", err, time.Since(start))
+	}
+}
+
+// TestANativeDialReadsTheBrowserRoutesRefusal: a refusal before the upgrade reaches
+// vif -join as the allocator's message, as the front door's join reply does.
+func TestANativeDialReadsTheBrowserRoutesRefusal(t *testing.T) {
+	route := startBrowserRoute(t, &fakeSessionAllocator{routeErr: errSessionUnknown}, newHolds(1), startPod(t))
+	if err := join(route+routedID, routedID); err == nil || err.Error() != "No such session" {
+		t.Fatalf("a refused dial returned %v", err)
+	}
+}
+
 // TestTheSessionCeilingSpansBothRoutes: a browser holding the session's one slot
-// refuses a native dial before any pod is dialled, and releasing it admits the next.
+// refuses a native dial before any pod is dialled, and its close admits the next.
 func TestTheSessionCeilingSpansBothRoutes(t *testing.T) {
 	pod := startPod(t)
 	held := newHolds(1)
-	addr := startFrontDoor(t, &fakeSessionAllocator{podIP: "127.0.0.1"}, held, pod)
-	release, ok := held.hold(routedID)
-	if !ok {
-		t.Fatal("an empty session refused its first connection")
+	sessions := &fakeSessionAllocator{podIP: "127.0.0.1"}
+	addr := startFrontDoor(t, sessions, held, pod)
+	browser, err := websocket.Dial(t.Context(), startBrowserRoute(t, sessions, held, pod)+routedID)
+	if err != nil {
+		t.Fatal(err)
 	}
+	if err := network.NewMessage(network.MsgSessionRoute, []byte(routedID)).Encode(browser); err != nil {
+		t.Fatal(err)
+	}
+	<-pod.names
 	if err := join(addr, routedID); err == nil || !strings.Contains(err.Error(), "as many connections") {
 		t.Fatalf("a dial past the ceiling returned %v", err)
 	}
-	if n := pod.accepted.Load(); n != 0 {
-		t.Fatalf("a dial past the ceiling reached the pod %d time(s)", n)
+	if n := pod.accepted.Load(); n != 1 {
+		t.Fatalf("the pod was dialled %d time(s), want the browser's alone", n)
 	}
 
-	release()
+	_ = browser.Close()
+	released(t, held)
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		t.Fatal(err)

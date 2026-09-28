@@ -416,7 +416,7 @@ func (f sessionFlags) lifetime() lifecycle.Policy {
 
 func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.host, "host", "", "Host a session on bind address, e.g. :7777")
-	fs.StringVar(&f.join, "join", "", "Join a session at [tcp://|vif://]host:port[/name] or at the wss:// route a browser build is given; tcp when no scheme is given")
+	fs.StringVar(&f.join, "join", "", "Join a session at [tcp://|vif://]host:port[/name] or a wss:// route; tcp when no scheme is given")
 	fs.StringVar(&f.name, "name", "", "Name this host answers to, so one address can serve several sessions")
 	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player, e.g. :7777")
 	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")

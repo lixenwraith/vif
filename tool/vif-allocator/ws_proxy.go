@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lixenwraith/vif/pkg/websocket"
 )
 
 const (
@@ -32,16 +34,21 @@ var sessionIDPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
 type upstreamKey struct{}
 
-// wsRouter proxies one browser connection to the session it names. It terminates
-// nothing: the sidecar in the pod owns the WebSocket, and these bytes are copied
-// between two connections that have already agreed on what they are.
+// wsRouter carries one browser connection to the session it names. Without a bridge
+// it terminates the WebSocket and splices its payload to the pod's game port, as
+// the front door does; with one it proxies the upgrade to the pod's sidecar.
 type wsRouter struct {
 	origin string
 	holds  *holds
-	proxy  *httputil.ReverseProxy
+	proxy  *httputil.ReverseProxy // nil: this allocator terminates the socket
+	game   string                 // the pod port dialled; a test points it at a stand-in
 }
 
-func newWSRouter(origin string, held *holds, logger *slog.Logger) *wsRouter {
+func newWSRouter(origin string, bridge bool, held *holds, logger *slog.Logger) *wsRouter {
+	router := &wsRouter{origin: origin, holds: held, game: gamePort}
+	if !bridge {
+		return router
+	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
 	transport.DisableCompression = true
@@ -52,7 +59,6 @@ func newWSRouter(origin string, held *holds, logger *slog.Logger) *wsRouter {
 	transport.DialContext = (&net.Dialer{Timeout: 2 * time.Second}).DialContext
 	transport.ResponseHeaderTimeout = wsHandshakeTimeout
 
-	router := &wsRouter{origin: origin, holds: held}
 	router.proxy = &httputil.ReverseProxy{
 		Rewrite: func(request *httputil.ProxyRequest) {
 			upstream, _ := request.In.Context().Value(upstreamKey{}).(*url.URL)
@@ -126,7 +132,7 @@ func (s *apiServer) handleSessionSocket(w http.ResponseWriter, r *http.Request) 
 		writeAPIError(w, http.StatusNotFound, "unknown_session", "No such session")
 		return
 	}
-	if !isUpgradeRequest(r) {
+	if !websocket.IsUpgrade(r) {
 		writeAPIError(w, http.StatusBadRequest, "not_an_upgrade",
 			"This route answers a WebSocket upgrade and nothing else")
 		return
@@ -155,6 +161,10 @@ func (s *apiServer) handleSessionSocket(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer release()
+	if s.ws.proxy == nil {
+		s.terminateSessionSocket(w, r, id, podIP)
+		return
+	}
 
 	// The server's finite request deadlines belong to the finite API. They are set
 	// on the connection this is about to hijack, so a match would end at whichever
@@ -166,6 +176,33 @@ func (s *apiServer) handleSessionSocket(w http.ResponseWriter, r *http.Request) 
 	upstream := &url.URL{Scheme: "http", Host: net.JoinHostPort(podIP, wsBridgePort)}
 	s.log.Info("session socket opened", "session", id)
 	s.ws.proxy.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), upstreamKey{}, upstream)))
+}
+
+// terminateSessionSocket answers the upgrade here and splices it to the pod, which
+// reads the browser's own route frame and refuses a name not its own. The pod is
+// dialled before the 101, so an unreachable one is refused as the proxy refused it.
+func (s *apiServer) terminateSessionSocket(w http.ResponseWriter, r *http.Request, id, podIP string) {
+	handshake, err := websocket.Check(w, r)
+	if err != nil {
+		refused := err.(*websocket.RequestError)
+		writeAPIError(w, refused.Status, "bad_handshake", capitalize(refused.Reason))
+		return
+	}
+	upstream, err := net.DialTimeout("tcp", net.JoinHostPort(podIP, s.ws.game), routeTimeout)
+	if err != nil {
+		s.log.Warn("session socket dial failed", "session", id, "error", err)
+		writeAPIError(w, http.StatusBadGateway, "session_unreachable",
+			"The session did not accept the connection")
+		return
+	}
+	client, err := handshake.Upgrade(w)
+	if err != nil {
+		_ = upstream.Close()
+		s.log.Warn("session socket upgrade failed", "session", id, "error", err)
+		return
+	}
+	s.log.Info("session socket opened", "session", id)
+	splice(client, upstream)
 }
 
 func (s *apiServer) writeRouteError(w http.ResponseWriter, id string, err error) {
@@ -183,18 +220,4 @@ func (s *apiServer) writeRouteError(w http.ResponseWriter, id string, err error)
 		s.log.Error("route session", "session", id, "error", err)
 		writeAPIError(w, http.StatusBadGateway, "kubernetes_error", "Could not resolve the session")
 	}
-}
-
-// isUpgradeRequest reads the two hop-by-hop headers that make a request an
-// upgrade. Connection is a comma list, so a token match is the only correct read.
-func isUpgradeRequest(r *http.Request) bool {
-	if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
-		return false
-	}
-	for _, token := range strings.Split(r.Header.Get("Connection"), ",") {
-		if strings.EqualFold(strings.TrimSpace(token), "upgrade") {
-			return true
-		}
-	}
-	return false
 }
