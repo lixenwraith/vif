@@ -3,6 +3,7 @@
 # K3s as VIF_ALLOCATOR_WS_BRIDGE_IMAGE, with no Docker. The binary is the one on
 # PATH, else the pinned GitHub release build-websocat.sh builds into bin/. An image
 # already current is left alone; --diff only says whether it is, exiting 1 if not.
+# An env naming no image has the allocator terminate the route: nothing to package.
 # Usage: update-vif-ws-bridge.sh [--diff] [websocat]
 set -eu
 
@@ -10,13 +11,16 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 diff_only=false
 case ${1:-} in
-	-h|--help) sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	-h|--help) sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 	--diff) diff_only=true; shift ;;
 esac
 [ "$#" -le 1 ] || { echo "usage: $0 [--diff] [websocat]" >&2; exit 2; }
 
 ref=$(sed -n 's/^VIF_ALLOCATOR_WS_BRIDGE_IMAGE=//p' "$repo_root/deploy/guest/vif-allocator.env")
-[ -n "$ref" ] || { echo "$0: vif-allocator.env names no VIF_ALLOCATOR_WS_BRIDGE_IMAGE" >&2; exit 2; }
+if [ -z "$ref" ]; then
+	[ "$diff_only" = true ] || echo "no VIF_ALLOCATOR_WS_BRIDGE_IMAGE: the allocator terminates the browser route"
+	exit 0
+fi
 tag=$(sed -n 's/^tag=//p' "$script_dir/build-websocat.sh")
 built=$repo_root/bin/websocat-$tag
 source_bin=${1:-$(command -v websocat || true)}

@@ -12,9 +12,9 @@
 #   WS_BRIDGE_IMAGE=vif-ws-bridge:pinned ./render-session.sh 7f3c1a 31707
 #   JOB_UID=<uid> ./render-session.sh 7f3c1a 31707
 #
-# WS_BRIDGE_IMAGE is what a browser reaches the session through. Unset, the bridge
-# sidecar is dropped and the rendered session is the native-clients-only one, which
-# is the shape to render when the question is whether the game itself is broken.
+# WS_BRIDGE_IMAGE adds the websocat sidecar a proxying allocator reaches browsers
+# through. Unset, the pod is the game alone, as an allocator that terminates the
+# route itself runs it, and the shape to render when the game is in question.
 #
 # The one session container writes directly to the shared tmpfs-backed local PVC.
 # No allocator log follower or per-session LogWisp sidecar exists. One standalone

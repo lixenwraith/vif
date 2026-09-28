@@ -222,14 +222,14 @@ flowchart TD
 
 Host uses `tls.Listen` when a TLS config is supplied programmatically, otherwise
 `net.Listen`; peer uses the corresponding dialer. The CLI deliberately supplies
-no TLS configuration in this trusted-peer proof. `dial` is also where a browser
-diverges and stops diverging: a `ws://` or `wss://` target is opened as the page's
-own WebSocket wrapped in a `net.Conn`, and every layer above it — handshake,
-admission, fences, snapshot assembly — is the code a native client runs. A
-WebSocket message is not a frame boundary; `Decode` reassembles the stream exactly
-as it does from a socket. Every admitted stream is keyed
-by the coordinator's participant ID rather than accept order. The peer manager
-enforces the configured cap and duplicate-ID rejection.
+no TLS configuration in this trusted-peer proof. `dial` is also where a WebSocket
+route diverges and stops diverging: a `ws://` or `wss://` target is opened as the
+page's own WebSocket in a browser, or with `pkg/websocket` natively, wrapped in a
+`net.Conn`, and every layer above it — handshake, admission, fences, snapshot
+assembly — is the code a TCP client runs. A WebSocket message is not a frame
+boundary; `Decode` reassembles the stream exactly as it does from a socket. Every
+admitted stream is keyed by the coordinator's participant ID rather than accept
+order. The peer manager enforces the configured cap and duplicate-ID rejection.
 
 Each peer owns a bounded send queue, exact-frame read loop, encode/flush loop and
 close monitor. `Stop` closes the listener, then the handshakes still in flight,

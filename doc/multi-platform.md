@@ -158,7 +158,9 @@ That is why message boundaries need not be frame boundaries. `Decode` reads with
 `io.ReadFull` from a stream, so a receiver reassembles whatever chunking the path
 produced, exactly as it does from TCP. The inbound queue is bounded at
 `wsQueueMessages`: a browser offers a receiver no backpressure, so the link is
-closed rather than left growing the tab's heap.
+closed rather than left growing the tab's heap. A native build dials the same
+route with `pkg/websocket`, whose `Conn` has the same shape: a byte stream across
+messages, one frame per write, deadlines passed to the socket.
 
 The browser is refused `-host` and `-serve` before initialization, because it can
 bind nothing, and a `-join` or `:join` naming a `host:port` for the same reason. A
@@ -166,32 +168,30 @@ browser guest never advertises a port, even in a migrate session.
 
 ### Where WebSocket is spoken
 
-Not here, yet. The pod keeps its framed TCP listener, and the WebSocket half of the
-path is a bridge sidecar in the session pod that turns one upgraded connection into
-one loopback TCP connection to the game. Ordered delivery, frame bounds, queue
-bounds, closure and backpressure are unchanged, because the transport they belong to
-is unchanged. A hardened standard-library implementation in `vif` and the allocator
-is decided and replaces the sidecar once field tested; [`doc/todo.md`](todo.md)
-holds the plan, and this section changes when it lands.
+In `pkg/websocket`: one minimal RFC 6455 implementation on the standard library,
+shared by `vif`'s native client and `vif-allocator`, which terminates the browser
+route and splices raw TCP to the pod's game port as its front door does. The pod
+keeps its framed TCP listener, so ordered delivery, frame bounds, queue bounds,
+closure and backpressure are unchanged. It speaks the version-13 upgrade, binary
+data, ping, pong and close; text, extensions and subprotocols are refused, masking
+is enforced by role, and `TCP_NODELAY` is set on every socket it owns.
 
-| Option | Why not |
+| Option | Decision |
 |---|---|
-| **Chosen — a bridge sidecar in the session pod.** | Kubernetes already has the pieces: a restartable init container is a sidecar whose fault is not the pod's, and it dies with the session. The loopback hop never leaves the pod's network namespace, and the repository gains no WebSocket implementation. |
-| A WebSocket listener in `vif`, on a third-party package. | `net/http` has no WebSocket handler; `golang.org/x/net/websocket` is deprecated and says so. What is left is a third-party, network-facing dependency on the path every player takes, for something an off-the-shelf process already does. |
-| The same, hand-written. | RFC 6455 framing in this repository is the dependency objection restated as maintenance, plus new parsing surface reachable by anyone who can open the public route. |
-| Terminating WebSocket in `vif-allocator`. | Same library problem, and it would put per-player byte translation inside the one process the whole fleet depends on. |
-| The API server's `pods/portforward`, which is genuinely Kubernetes-native. | It needs a WebSocket *client* in the allocator — the same missing library — and `pods/portforward` is a shell-equivalent grant. |
-| An ingress controller. | None translates WebSocket to a raw TCP backend. Traefik and Nginx forward an upgrade to a backend that already speaks it. |
+| **Chosen — hand-written, terminated in `vif-allocator`.** | The objection was new parsing surface on the public route; the answer is a small reader whose memory is bounded whatever a length claims, fuzzed at the frame reader and both handshake parsers. The allocator already carried every browser's bytes through its proxy; it now also unmasks and frames them, and the pod's 7779 hop goes. |
+| A bridge sidecar in the session pod. | What shipped first, and selectable by `-ws-bridge-image` until the field test retires it. A restartable init container whose fault is not the pod's, but websocat 1.x never sets `TCP_NODELAY`, so about 0.5% of browser frames waited 40–80 ms on a delayed ACK. |
+| A WebSocket listener in `vif -serve`, behind the allocator's proxy. | Keeps a hop per pod. The shared codec makes it small, so it is deferred as a standalone serving flag, not refused ([`doc/todo.md`](todo.md)). |
+| A third-party package. | `net/http` has no WebSocket handler, `golang.org/x/net/websocket` is deprecated, and a maintained package is a network-facing dependency on the path every player takes. |
+| The API server's `pods/portforward`. | A shell-equivalent grant, and it needs the same client. |
+| An ingress controller. | None translates WebSocket to a raw TCP backend. |
 | WebTransport. | Its advantages do not yet justify an HTTP/3 server and ingress. |
 | A WebRTC data channel. | ICE, signalling and TURN solve a peer-to-peer problem an authoritative host does not have. |
 
-The price is stated rather than hidden: the translation the earlier plan refused
-between the allocator and the game now happens inside the pod, and the game sees
-every browser participant arriving from `127.0.0.1`. `network.AdmissionLimiter` is
-per-address, so the browser population shares one budget; the allocator's
-per-session ceiling and the edge's rate limits replace it until the allocator keys
-a per-address budget itself, which is where admission belongs
-([`doc/todo.md`](todo.md)).
+`network.AdmissionLimiter` is per address, and the pod sees terminated browsers at
+the node's address, as it sees front-door players, so they share one budget per
+session; the allocator's per-session ceiling and the edge's rate limits stand in
+until the allocator keys a per-address budget itself, which is where admission
+belongs ([`doc/todo.md`](todo.md)).
 
 ### The public route
 
@@ -199,17 +199,17 @@ a per-address budget itself, which is where admission belongs
 flowchart LR
     Browser["Browser WASM"] -->|"wss://"| Nginx["Host Nginx"]
     Nginx -->|"Upgrade"| Allocator["vif-allocator"]
-    Allocator -->|"private WS"| Bridge["ws-bridge sidecar"]
-    Bridge -->|"127.0.0.1:7777"| Pod["vif -serve"]
+    Allocator -->|"payload, TCP 7777"| Pod["vif -serve"]
+    Allocator -.->|"with -ws-bridge-image"| Bridge["ws-bridge sidecar"]
+    Bridge -.->|"127.0.0.1:7777"| Pod
 ```
 
 `wss://<site>/vif/ws/<session>`. The session identifier is a routing key, not a
 secret. Nginx terminates TLS and forwards `Upgrade` without interpreting a frame.
 The allocator checks the method, the identifier's syntax, the `Origin`, the
 session's liveness and readiness in reconciled Kubernetes state, and its own
-per-session ceiling; only then does it proxy, and it never accepts an upstream a
-caller named. `net/http/httputil.ReverseProxy` carries the upgrade, so that hop
-needs no library either.
+per-session ceiling; only then does it answer the upgrade, or proxy it to the
+sidecar, and it never accepts an upstream a caller named.
 
 For a page served over HTTPS the endpoint must be `wss://`: browsers block
 `ws://` as active mixed content. The site's `connect-src 'self'` permits the
@@ -217,11 +217,12 @@ same-origin socket. Ordinary CORS headers are not a substitute for the `Origin`
 check. Browser admission credentials are a later control-plane feature and should
 be short-lived and session-scoped when introduced.
 
-Native clients keep raw TCP, through the allocator's front door or the session's
-own NodePort ([fleet §9](kubernetes-fleet.md#9-the-session-routes)). The allocator
-has outgrown pure allocation now that it owns routing and admission; keep those
-duties behind explicit interfaces so the process can be renamed or split without
-moving Kubernetes lifecycle code into the game.
+Native clients use raw TCP, through the allocator's front door or the session's
+own NodePort ([fleet §9](kubernetes-fleet.md#9-the-session-routes)), or this
+route where a network blocks those; a native client's `Origin` is the URL's own.
+The allocator has outgrown pure allocation now that it owns routing and admission;
+keep those duties behind explicit interfaces so the process can be renamed or split
+without moving Kubernetes lifecycle code into the game.
 
 ## 6. Browser launch arguments
 
