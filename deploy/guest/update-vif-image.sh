@@ -142,12 +142,8 @@ for old_image in $old_runtime_images; do
 	sudo k3s crictl rmi "$old_image"
 done
 
-old_docker_images=$(docker image ls "$image_name" --format '{{.Repository}}:{{.Tag}}' | awk -v keep="$local_image" '$0 != keep && $0 !~ /:<none>$/')
-for old_image in $old_docker_images; do
-	echo "removing old Docker image $old_image"
-	docker image rm "$old_image"
-done
-# The build cache is most of what a build leaves on disk, and no later build needs it.
-docker builder prune --all --force >/dev/null
+# Docker only builds here: once K3s holds the image, nothing Docker kept — this
+# image, pulled bases, build cache — is used again, and all of it is disk.
+docker system prune --all --force >/dev/null
 
 echo "ready: VIF_ALLOCATOR_IMAGE=$runtime_image revision=$revision"
