@@ -245,6 +245,17 @@ barrier crossings not fed, the ledger settled before projection, the journal's p
 and mark, and no live tick between the final projection and the write. WASM gains
 scheduling time, not parallel CPU.
 
+### Pace repairs as bodies are paced
+
+- Priority: P3
+- Affected files: `internal/converge/selective.go`, `internal/snapshot/shard.go`
+
+A repair set leaves as one frame of up to `SnapshotShardBytesMax` (48 kB), so on a
+link at the tower's floor it can hold the epochs behind it for two seconds, where a
+body now waits behind one 4 KiB chunk ([Troubleshooting](troubleshooting.md) §16).
+Carrying it in the correction chunk envelope through the per-peer outbox bounds that
+too. Repairs at 20 kB/s have so far been a few kilobytes.
+
 ### Join over wss:// from a native client
 
 - Priority: P3
