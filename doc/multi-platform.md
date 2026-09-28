@@ -166,11 +166,13 @@ browser guest never advertises a port, even in a migrate session.
 
 ### Where WebSocket is spoken
 
-Not here. The pod keeps its framed TCP listener, and the WebSocket half of the path
-is a bridge sidecar in the session pod that turns one upgraded connection into one
-loopback TCP connection to the game. Ordered delivery, frame bounds, queue bounds,
-closure and backpressure are unchanged, because the transport they belong to is
-unchanged.
+Not here, yet. The pod keeps its framed TCP listener, and the WebSocket half of the
+path is a bridge sidecar in the session pod that turns one upgraded connection into
+one loopback TCP connection to the game. Ordered delivery, frame bounds, queue
+bounds, closure and backpressure are unchanged, because the transport they belong to
+is unchanged. A hardened standard-library implementation in `vif` and the allocator
+is decided and replaces the sidecar once field tested; [`doc/todo.md`](todo.md)
+holds the plan, and this section changes when it lands.
 
 | Option | Why not |
 |---|---|
@@ -187,8 +189,9 @@ The price is stated rather than hidden: the translation the earlier plan refused
 between the allocator and the game now happens inside the pod, and the game sees
 every browser participant arriving from `127.0.0.1`. `network.AdmissionLimiter` is
 per-address, so the browser population shares one budget; the allocator's
-per-session ceiling and the edge's rate limits are what replace it, and
-[`doc/todo.md`](todo.md) carries the decision about whether that is enough.
+per-session ceiling and the edge's rate limits replace it until the allocator keys
+a per-address budget itself, which is where admission belongs
+([`doc/todo.md`](todo.md)).
 
 ### The public route
 
