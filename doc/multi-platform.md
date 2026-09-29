@@ -179,7 +179,7 @@ is enforced by role, and `TCP_NODELAY` is set on every socket it owns.
 | Option | Decision |
 |---|---|
 | **Chosen — hand-written, terminated in `vif-allocator`.** | The objection was new parsing surface on the public route; the answer is a small reader whose memory is bounded whatever a length claims, fuzzed at the frame reader and both handshake parsers. The allocator already carried every browser's bytes through its proxy; it now also unmasks and frames them, and the pod's 7779 hop goes. |
-| A bridge sidecar in the session pod. | What shipped first, and selectable by `-ws-bridge-image` until the field test retires it. A restartable init container whose fault is not the pod's, but websocat 1.x never sets `TCP_NODELAY`, so about 0.5% of browser frames waited 40–80 ms on a delayed ACK. |
+| A bridge sidecar in the session pod. | What shipped first, and selectable by `-ws-bridge-image` until the field test retires it. A restartable init container whose fault is not the pod's, but websocat 1.x never sets `TCP_NODELAY`, which cost every session frame tens of milliseconds (fleet §9). |
 | A WebSocket listener in `vif -serve`, behind the allocator's proxy. | Keeps a hop per pod. The shared codec makes it small, so it is deferred as a standalone serving flag, not refused ([`doc/todo.md`](todo.md)). |
 | A third-party package. | `net/http` has no WebSocket handler, `golang.org/x/net/websocket` is deprecated, and a maintained package is a network-facing dependency on the path every player takes. |
 | The API server's `pods/portforward`. | A shell-equivalent grant, and it needs the same client. |

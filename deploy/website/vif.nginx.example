@@ -85,7 +85,7 @@ location ~ "^/vif/ws/[0-9a-f]{16}$" {
     proxy_send_timeout 3600s;
 
     # The per-player bound the game cannot apply here: every browser reaches the
-    # pod from one loopback address, so its admission limiter sees one player.
+    # pod from the node's address, so its admission limiter sees one player.
     # Four is a household behind one address — raise it behind carrier NAT. This
     # and the allocator's -route-max are the whole of the bound, so both are numbers
     # somebody should choose rather than inherit.
