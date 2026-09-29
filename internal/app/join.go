@@ -262,7 +262,7 @@ func (a *App) bindCursorOwnersLocked(participants []network.RosterEntry, local n
 		c.PeerID = uint32(p.ID)
 		c.Control = component.ControlRemote
 		if p.ID == local {
-			c.Control = component.ControlHuman
+			c.Control = component.ControlLocal
 		}
 	}
 }

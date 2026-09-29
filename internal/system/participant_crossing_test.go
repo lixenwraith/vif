@@ -55,7 +55,7 @@ func TestMetaDefeatGateRequiresEveryRosteredCursor(t *testing.T) {
 	for slot := range uint8(2) {
 		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest,
 			Payload: &event.CursorSpawnRequestPayload{Slot: slot, X: 5 + int(slot)*10, Y: 5,
-				Control: uint8(component.ControlHuman)}})
+				Control: uint8(component.ControlLocal)}})
 		entity := w.Resources.Player.Slot(slot)
 		meta.HandleEvent(event.GameEvent{Type: event.EventCursorSpawned,
 			Payload: &event.CursorSpawnedPayload{Entity: entity, Slot: slot}})

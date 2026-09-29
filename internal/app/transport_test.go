@@ -92,7 +92,7 @@ func mirrorCursors(t *testing.T, a, b *App) (localA, remoteA core.Entity) {
 	a.World().RunSafe(func() {
 		w := a.World()
 		if c, ok := w.Components.Cursor.GetPtr(w.Resources.Player.Slot(0)); ok {
-			c.Control, c.PeerID = component.ControlHuman, 1
+			c.Control, c.PeerID = component.ControlLocal, 1
 		}
 	})
 
@@ -103,7 +103,7 @@ func mirrorCursors(t *testing.T, a, b *App) (localA, remoteA core.Entity) {
 			c.Control, c.PeerID = component.ControlRemote, 1
 		}
 		if c, ok := w.Components.Cursor.GetPtr(w.Resources.Player.Slot(1)); ok {
-			c.Control, c.PeerID = component.ControlHuman, 2
+			c.Control, c.PeerID = component.ControlLocal, 2
 		}
 	})
 	b.Context().PushEventOrigin(event.EventCursorSetLocalRequest,

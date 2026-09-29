@@ -24,7 +24,7 @@ func testDrainInteractionWorld(
 	cursors.HandleEvent(event.GameEvent{
 		Type: event.EventCursorSpawnRequest,
 		Payload: &event.CursorSpawnRequestPayload{
-			X: cursorX, Y: cursorY, Slot: 0, Control: uint8(component.ControlHuman),
+			X: cursorX, Y: cursorY, Slot: 0, Control: uint8(component.ControlLocal),
 		},
 	})
 	cursor := w.Resources.Player.Slot(0)
