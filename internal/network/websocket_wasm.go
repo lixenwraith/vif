@@ -43,6 +43,10 @@ type wsConn struct {
 	releaseOnce sync.Once
 }
 
+// sessionLink is the session's WebSocket route, empty where the site publishes none:
+// a page has no socket to dial the front door with.
+func sessionLink(_, wsURL string) string { return wsURL }
+
 // listenWebSocket is refused: a page has no port to listen on.
 func listenWebSocket(string, time.Duration) (net.Listener, error) {
 	return nil, errors.New("websocket: a browser cannot listen")

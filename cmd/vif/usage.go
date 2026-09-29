@@ -34,10 +34,10 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 		lines: []flagLine{
 			{names: []string{"host"}, arg: "<addr>", hint: "Play at once and open the game to participants, e.g. :7777 or ws://:7777"},
 			{names: []string{"serve"}, arg: "<addr>", hint: "Bind a headless session with no local cursor, e.g. :7777 or ws://:7777"},
-			{names: []string{"join"}, arg: "<addr>", hint: "Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL; tcp when no scheme is given"},
+			{names: []string{"join"}, arg: "<addr>", hint: "Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given"},
 			{names: []string{"name"}, arg: "<name>", hint: "Name this host answers to, so one address can serve several sessions"},
 			{names: []string{"players"}, arg: "<n>", hint: fmt.Sprintf(
-				"Roster ceiling including self, 2..%d; unset holds the whole roster",
+				"Roster ceiling including self, 2..%d; unset holds the whole roster; with a -join site, the one requested",
 				parameter.MaxPlayers)},
 			{names: []string{"authority"}, arg: "host|migrate",
 				hint: "Where authorship goes when the authoring participant leaves; default host with -serve, migrate otherwise"},

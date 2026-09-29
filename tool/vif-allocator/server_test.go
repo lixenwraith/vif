@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/lixenwraith/vif/internal/network"
 )
 
 type fakeSessionAllocator struct {
@@ -139,6 +141,25 @@ func TestPostSessionCarriesTheChoicesItNames(t *testing.T) {
 	}
 	if backend.requested != (sessionRequest{Players: 2, LogLevel: "debug"}) {
 		t.Fatalf("the allocator was asked for %+v", backend.requested)
+	}
+}
+
+// TestATerminalIsHandedTheLinkItAskedFor holds vif's own client to this handler: a
+// created session comes back as the front door's link, and a refusal as its message.
+func TestATerminalIsHandedTheLinkItAskedFor(t *testing.T) {
+	backend := &fakeSessionAllocator{created: session{ID: "abc", JoinTarget: "vif://site.example:7777/abc"}}
+	site := httptest.NewServer(testServer(backend))
+	defer site.Close()
+	link, err := network.RequestSession(site.URL, 2, "main")
+	if err != nil || link != backend.created.JoinTarget {
+		t.Fatalf("RequestSession = %q, %v; want %q", link, err, backend.created.JoinTarget)
+	}
+	if backend.requested != (sessionRequest{Players: 2, Scenario: "main"}) {
+		t.Fatalf("the allocator was asked for %+v", backend.requested)
+	}
+	backend.createErr = errFleetFull
+	if _, err := network.RequestSession(site.URL, 0, ""); err == nil || err.Error() != "All session ports are allocated" {
+		t.Fatalf("a refusal returned %v", err)
 	}
 }
 

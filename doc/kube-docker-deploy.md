@@ -54,7 +54,7 @@ rebuild one from a port:
 
 | String | What it is | Who reads it |
 |---|---|---|
-| `vif://<site-host>:7777/<id>` | `join_target`: the allocator's front door, one address for every session. | `vif -join`. |
+| `vif://<site-host>:7777/<id>` | `join_target`: the allocator's front door, one address for every session. | `vif -join`, and `vif -join https://<site-host>`, which creates the session first. |
 | `vif://<site-host>:31703/<id>` | `direct_target`: the session's own forwarded NodePort. | `vif -join`. |
 | `wss://<site-host>/vif/ws/<id>` | `ws_url`: the browser route, through the site to the allocator, which answers the WebSocket and splices it to the pod. | The WASM build, or `vif -join` where 7777 is blocked. |
 

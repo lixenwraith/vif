@@ -114,9 +114,13 @@ func (a *App) joinLocked(target string) error {
 	if port := a.sessionTransportLocked(); a.cfg.HostAddress != "" || (port != nil && port.PeerCount() > 0) {
 		return errors.New("this run is already in a session")
 	}
-	next, err := a.cfg.joining(target)
-	if err == nil {
-		err = next.Validate()
+	// A site is asked for a session off the lock, since it answers once the pod is up.
+	site, err := network.ParseEndpoint(target)
+	next := a.cfg
+	if err == nil && site.Scheme != network.SchemeSite {
+		if next, err = a.cfg.joining(target); err == nil {
+			err = next.Validate()
+		}
 	}
 	if err != nil {
 		return err
@@ -128,12 +132,24 @@ func (a *App) joinLocked(target string) error {
 	vlog.Info("app", "msg", "join requested", "target", target)
 	core.Go(func() {
 		defer a.dialling.Store(false)
-		d, err := dialJoin(next)
+		link, err := target, error(nil)
+		if site.Scheme == network.SchemeSite {
+			if link, err = network.RequestSession(site.Addr, 0, ""); err == nil {
+				a.ctx.SetStatusMessage("Joining "+link+"...", 0, true)
+				if next, err = next.joining(link); err == nil {
+					err = next.Validate()
+				}
+			}
+		}
+		var d *joinDial
+		if err == nil {
+			d, err = dialJoin(next)
+		}
 		switch {
 		case err != nil:
 			vlog.Warn("app", "msg", "join failed; playing on", "target", target, "error", err.Error())
 			a.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusMessageMaxDuration, true)
-		case !a.restart.CompareAndSwap(nil, &restartRequest{Join: target, dialled: d}):
+		case !a.restart.CompareAndSwap(nil, &restartRequest{Join: link, dialled: d}):
 			d.abandon(errors.New("the run that dialled is being replaced"))
 		}
 	})

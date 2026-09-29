@@ -110,11 +110,15 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitFailure)
 	}
+	requested := flagConfig.scenario // what a -join site is asked for; vif.toml's is this machine's
 	applySettings(settings)
 
 	setupDiagnostics()
 
 	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, *flagWatch, flagSession)
+	if sessionErr == nil {
+		sessionErr = requestSiteSession(requested)
+	}
 	switch {
 	case sessionErr != nil:
 		err = sessionErr
@@ -143,6 +147,23 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitFailure)
 	}
+}
+
+// requestSiteSession replaces a -join naming a site with the link of a session that
+// site creates for this player, before anything is built from the flags.
+func requestSiteSession(scenario string) error {
+	site, err := network.ParseEndpoint(flagSession.join)
+	if err != nil || site.Scheme != network.SchemeSite {
+		return nil
+	}
+	fmt.Printf("requesting a session from %s\n", site.Addr)
+	link, err := network.RequestSession(site.Addr, flagSession.players, scenario)
+	if err != nil {
+		return fmt.Errorf("-join %s: %w", site.Addr, err)
+	}
+	fmt.Printf("joining %s, the link others join by\n", link)
+	flagSession.join, flagSession.players = link, 0
+	return nil
 }
 
 // setupDiagnostics installs the crash hook and session defaults unconditionally,
@@ -416,7 +437,7 @@ func (f sessionFlags) lifetime() lifecycle.Policy {
 
 func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.host, "host", "", "Host a session on a bind address, :7777 for tcp or ws://:7777 for WebSocket")
-	fs.StringVar(&f.join, "join", "", "Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL; tcp when no scheme is given")
+	fs.StringVar(&f.join, "join", "", "Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given")
 	fs.StringVar(&f.name, "name", "", "Name this host answers to, so one address can serve several sessions")
 	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player, e.g. :7777 or ws://:7777")
 	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
@@ -428,7 +449,7 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.DurationVar(&f.drain, "drain", 0,
 		"With -serve, how long a termination signal waits for the roster to empty before exiting anyway; 0 exits at once")
 	fs.IntVar(&f.players, "players", 0, fmt.Sprintf(
-		"Ceiling on the roster, itself included (2..%d; default the whole roster)",
+		"Ceiling on the roster, itself included (2..%d; default the whole roster); with a -join site, the one requested",
 		parameter.MaxPlayers))
 	fs.StringVar(&f.listen, "listen", "", fmt.Sprintf(
 		"With -join in a %q session, the address this participant is dialled back on. "+
@@ -469,8 +490,8 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		(schema || check || replay != "") {
 		return fmt.Errorf("-host, -join, -serve, -probe, -players, -authority, -listen, -no-advertise, -name and the session lifetime bounds are available only in interactive play")
 	}
-	if f.players != 0 && f.join != "" {
-		return fmt.Errorf("-players configures a host, not -join")
+	if e, err := network.ParseEndpoint(f.join); f.players != 0 && f.join != "" && err == nil && e.Scheme != network.SchemeSite {
+		return fmt.Errorf("-players configures a host, or the session a -join site creates")
 	}
 	if f.name != "" && (f.join != "" || (f.host == "" && f.serve == "")) {
 		return fmt.Errorf("-name is what a host answers to; a joiner names the session in its -join target")
