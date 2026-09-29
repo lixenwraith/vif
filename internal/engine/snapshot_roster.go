@@ -7,13 +7,9 @@ import (
 )
 
 // LocalControl is one instance's pre-install answer to "which shared cursors do I
-// simulate", by roster slot, plus the slot its input and camera follow and the
-// owner-authored state of every cursor it was authoring.
-//
-// Three things about a cursor do not travel in a capture, all of them D-13: the
-// control assignment, which names the sender rather than the receiver; the
-// slot-to-entity roster, which mirrors the cursor store and is re-derived; and the
-// owner-authored set below, which the receiver writes and the sender only mirrors.
+// simulate", by slot, plus the slot input follows and its owner-authored state.
+// None of it travels in a capture (D-13): control names the sender, the roster is
+// re-derived from the cursor store, and the receiver writes the owner-authored set.
 type LocalControl struct {
 	control [parameter.MaxPlayers]component.ControlKind
 	held    [parameter.MaxPlayers]bool
@@ -146,18 +142,10 @@ func dropOwned[T any](rows []StoreEntry[T], authored map[core.Entity]bool) []Sto
 	return out
 }
 
-// RebindCursorRoster rebuilds the roster from the installed cursor store, restores
-// this instance's own control assignment, and puts back the owner-authored state of
-// every cursor that assignment leaves it authoring.
-//
-// Slots are walked in roster order so the derivation is a function of the capture
-// rather than of insertion history. In a session the owner is the participant
-// identity the handshake assigned; outside one the assignment already held is kept,
-// which for a solo capture is the only participant there is. A cursor keeps this
-// instance's owner-authored values exactly when it held them before the write and
-// still authors the entity after it, so a joiner arriving into a slot it never held
-// adopts the host's template.
-//
+// RebindCursorRoster rebuilds the roster from the installed cursor store in slot
+// order, restores this instance's control (the handshake identity in a session, the
+// held assignment outside one) and its owner-authored state for cursors it held
+// before and still authors; a joiner in a new slot adopts the host's template.
 // Caller MUST hold updateMutex.
 func (w *World) RebindCursorRoster(prior LocalControl) {
 	roster := w.Resources.Player
@@ -185,7 +173,7 @@ func (w *World) RebindCursorRoster(prior LocalControl) {
 			case localID != 0:
 				c.Control = component.ControlRemote
 				if c.PeerID == localID {
-					c.Control = component.ControlHuman
+					c.Control = component.ControlLocal
 				}
 			case prior.held[slot]:
 				c.Control = prior.control[slot]

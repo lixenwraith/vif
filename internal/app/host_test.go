@@ -157,7 +157,7 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 	waitForRosterPair(t, host, guest)
 	alignTicks(t, host, guest)
 	assertControl(t, host, 1, component.ControlRemote)
-	assertControl(t, guest, 1, component.ControlHuman)
+	assertControl(t, guest, 1, component.ControlLocal)
 	if got := guest.localSlot(); got != 1 {
 		t.Fatalf("guest follows slot %d, want its own slot 1", got)
 	}

@@ -21,13 +21,13 @@ func testCursorWorld(t *testing.T) (*engine.World, core.Entity, core.Entity) {
 	cursors.HandleEvent(event.GameEvent{
 		Type: event.EventCursorSpawnRequest,
 		Payload: &event.CursorSpawnRequestPayload{
-			X: 5, Y: 5, Slot: 0, Control: uint8(component.ControlHuman),
+			X: 5, Y: 5, Slot: 0, Control: uint8(component.ControlLocal),
 		},
 	})
 	cursors.HandleEvent(event.GameEvent{
 		Type: event.EventCursorSpawnRequest,
 		Payload: &event.CursorSpawnRequestPayload{
-			X: 15, Y: 5, Slot: 1, Control: uint8(component.ControlBot),
+			X: 15, Y: 5, Slot: 1, Control: uint8(component.ControlLocal),
 		},
 	})
 
@@ -734,14 +734,10 @@ func TestDamageImmunityBudgetIsPerAttacker(t *testing.T) {
 	}
 }
 
-// TestKineticKnockbackComposesInEitherOrder is the same budget on the other
-// effect, and it has a second reason to exist. A crossing applies at once on its
-// producer and a playout lead later everywhere else, so two participants hitting
-// one target apply their own hit first: a shared latch let each instance keep its
-// own knockback and discard the other's, and an override let each keep whichever
-// it applied last. Both made two instances hold opposite velocities for the whole
-// window. The window is per attacker and the hits that join one add, so the pair
-// composes to one vector whichever order an instance saw them in.
+// TestKineticKnockbackComposesInEitherOrder: two hits on one target can apply in
+// opposite orders on two instances, so a latch or an override leaves them holding
+// opposite velocities. The window is per attacker and joining hits add, so the pair
+// composes to one vector in either order.
 func TestKineticKnockbackComposesInEitherOrder(t *testing.T) {
 	// Each attacker keeps its own artifact and its own impact direction whatever
 	// order it lands in, which is what the two instances disagree about.

@@ -10,16 +10,10 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// Two per-instance effects the shared FSM raises — the drain pause and the
-// grayout — now name the cursor they belong to.
-//
-// The region that raises them is shared: every instance runs the same machine and
-// enters the same state, so an effect with no owner reaches every participant.
-// That is right for a storm, which is one encounter everybody is inside, and wrong
-// for a quasar, which is fused from one cursor's drains. These pin both halves —
-// the scoped effect reaching only its owner, and the session-wide form still
-// reaching everyone — and the overlap between them, which a single boolean got
-// wrong in both directions.
+// The drain pause and the grayout are raised by a shared region but name their
+// cursor: right session-wide for a storm, wrong for a quasar fused from one cursor's
+// drains. These pin the scoped form reaching only its owner, the session-wide form
+// reaching everyone, and their overlap.
 
 // scopeWorld is one instance with two rostered cursors: slot 0 driven here, slot 1
 // simulated somewhere else. It is the smallest world in which "my cursor" and
@@ -31,7 +25,7 @@ func scopeWorld(t *testing.T) (*engine.World, core.Entity, core.Entity) {
 
 	cursors := NewCursorSystem(w).(*CursorSystem)
 	for slot, control := range map[uint8]component.ControlKind{
-		0: component.ControlHuman, 1: component.ControlRemote,
+		0: component.ControlLocal, 1: component.ControlRemote,
 	} {
 		cursors.HandleEvent(event.GameEvent{
 			Type: event.EventCursorSpawnRequest,

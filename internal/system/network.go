@@ -546,14 +546,14 @@ func (s *NetworkSystem) addParticipant(p *event.ParticipantJoinedPayload) {
 	}
 	control := component.ControlRemote
 	if p.Participant == s.participantID() {
-		control = component.ControlHuman
+		control = component.ControlLocal
 	}
 	heat, energy := s.world.Resources.Player.InitialResources()
 	s.world.PushEvent(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
 		Slot: p.Slot, Center: true, Control: uint8(control), PeerID: p.Participant,
 		Heat: heat, Energy: energy,
 	})
-	if control == component.ControlHuman {
+	if control == component.ControlLocal {
 		s.world.PushEvent(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: p.Slot})
 	}
 	s.lastSync[p.Slot], s.stateSeen[p.Slot], s.rawStateSeen[p.Slot] = 0, 0, 0
