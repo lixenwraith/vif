@@ -24,8 +24,9 @@ applies and announces placement so live input, replay, bots, and remote
 producers share the same entity-owned path.
 
 `Intent` is a data structure, not a callback. It includes intent type, motion,
-operator, special action, target mode, count, optional character, captured
-command text, and a flag identifying macro playback. This boundary makes the
+operator, special action, target mode, count, optional character, the pointer
+cell in terminal coordinates, captured command text, and a flag identifying macro
+playback. This boundary makes the
 parser testable without constructing an ECS world.
 
 ## 2. Modes
