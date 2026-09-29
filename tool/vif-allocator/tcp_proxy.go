@@ -23,6 +23,9 @@ const (
 	// Once one direction of a splice has ended the other gets this long, so a peer
 	// that vanished without a FIN does not hold its session's ceiling for minutes.
 	spliceLinger = 10 * time.Second
+	// spliceStall bounds one write, so a peer that stopped reading ends its splice
+	// rather than holding it, and its session's ceiling, while TCP retransmits.
+	spliceStall = 10 * time.Second
 )
 
 var (
@@ -140,7 +143,7 @@ func (r *tcpRouter) place(client net.Conn) (net.Conn, func()) {
 func splice(client, upstream net.Conn) {
 	done := make(chan struct{}, 2)
 	pipe := func(dst, src net.Conn) {
-		_, _ = io.Copy(dst, src)
+		_, _ = io.Copy(stallBounded{dst}, src)
 		if half, ok := dst.(interface{ CloseWrite() error }); ok {
 			_ = half.CloseWrite()
 		}
@@ -155,4 +158,12 @@ func splice(client, upstream net.Conn) {
 	<-done
 	_ = client.Close()
 	_ = upstream.Close()
+}
+
+// stallBounded renews the write deadline before each write; see spliceStall.
+type stallBounded struct{ net.Conn }
+
+func (s stallBounded) Write(p []byte) (int, error) {
+	_ = s.SetWriteDeadline(time.Now().Add(spliceStall))
+	return s.Conn.Write(p)
 }
