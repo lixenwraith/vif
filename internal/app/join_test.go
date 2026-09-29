@@ -150,10 +150,10 @@ func TestSnapshotJoinLeavesEachParticipantDrivingItsOwnCursor(t *testing.T) {
 	}
 
 	// Each participant simulates its own and only its own.
-	assertControl(t, host, 0, component.ControlHuman)
+	assertControl(t, host, 0, component.ControlLocal)
 	assertControl(t, host, 1, component.ControlRemote)
 	assertControl(t, guest, 0, component.ControlRemote)
-	assertControl(t, guest, 1, component.ControlHuman)
+	assertControl(t, guest, 1, component.ControlLocal)
 
 	if got := guest.localSlot(); got != 1 {
 		t.Fatalf("guest follows slot %d, want its own slot 1", got)

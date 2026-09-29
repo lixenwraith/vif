@@ -124,13 +124,11 @@ func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 	return r
 }
 
-// Handle processes an Intent and returns false if game should exit
-// SYNC: caller MUST hold World.updateMutex — App.handleIntent wraps this
-// in World.RunSafe. Nothing reachable from Handle may call World.RunSafe,
-// World.Lock, or Positions.Lock: the mutex is non-reentrant and would
-// deadlock. All world/component/position access below is safe by that
-// invariant. CI guard: rg 'RunSafe|World\.Lock|Positions\.Lock' mode/
-// must return zero hits.
+// Handle processes an Intent and returns false if game should exit.
+// SYNC: caller MUST hold World.updateMutex (App.handleIntent wraps this in
+// World.RunSafe); the mutex is non-reentrant, so nothing reachable from here may
+// call RunSafe, World.Lock or Positions.Lock. CI guard:
+// rg 'RunSafe|World\.Lock|Positions\.Lock' mode/ must return zero hits.
 func (r *Router) Handle(intent *input.Intent) bool {
 	if intent == nil {
 		return true
@@ -146,6 +144,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 			"scroll", intent.ScrollDir.String(),
 			"count", intent.Count,
 			"char", int32(intent.Char),
+			"x", intent.X,
+			"y", intent.Y,
 			"cmd", intent.Command,
 			"macro", intent.MacroPlayback)
 	}
@@ -1072,12 +1072,8 @@ func (r *Router) fireDue(now time.Time, last *time.Time, auto, held bool) (event
 // moveMouseCursor handles coordinate conversion, bounds check, and cursor movement
 // Returns true if cursor was moved successfully
 func (r *Router) moveMouseCursor(intent *input.Intent) bool {
-	termX := intent.Count
-	termY := int(intent.Char)
-
-	// Convert terminal coords to viewport coords
-	viewportX := termX - r.ctx.GameXOffset
-	viewportY := termY - r.ctx.GameYOffset
+	viewportX := intent.X - r.ctx.GameXOffset
+	viewportY := intent.Y - r.ctx.GameYOffset
 
 	// Viewport to map, which undoes the centring the renderer applies when the map
 	// is smaller than the viewport and rejects the margin around it. Without the

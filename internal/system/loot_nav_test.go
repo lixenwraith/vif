@@ -112,18 +112,10 @@ func flyLoot(t *testing.T, w *engine.World, lootEntity, owner core.Entity, maxTi
 	return out
 }
 
-// TestLootRoutesToItsOwnCursorNotTheNearestOne is the defect this file was written
-// for, and it needs two cursors to exist at all.
-//
-// A drop belongs to one participant. Navigation's target group zero is *every* live
-// cursor, so the flow field it maintains leads to whichever cursor is nearest and
-// the line-of-sight flag beside it is computed against that same nearest cursor —
-// while the drop homes at its owner. A drop standing beside somebody else's cursor
-// therefore read "direct path", drove straight at an owner on the far side of a
-// wall, and stayed pressed against that wall for the rest of the run: with two
-// instances open, every drop that landed near the other participant's cursor did
-// this. The route is the owner's own now, so the barrier is one the drop goes
-// around.
+// TestLootRoutesToItsOwnCursorNotTheNearestOne: navigation's target group zero is
+// every cursor, so a drop beside another participant's cursor read "direct path"
+// and pressed against a wall between it and its owner. A drop routes to its owner,
+// so the barrier is one it goes around.
 func TestLootRoutesToItsOwnCursorNotTheNearestOne(t *testing.T) {
 	w, owner, other := testCursorWorld(t) // (5,5) and (15,5)
 	wallWithGap(w, 10, 20, 24)
@@ -171,19 +163,10 @@ func TestLootWithoutLineOfSightKeepsItsOwnRoute(t *testing.T) {
 	}
 }
 
-// TestLootSettlesInsteadOfOrbitingItsOwner pins the long-standing complaint.
-//
-// Homing is a constant pull toward the owner, and nothing was removing the sideways
-// component of a drop's velocity. A constant attraction with no damping holds an
-// orbit — the radius it sustains is speed²/accel — and the only thing that ever
-// removed energy was the profile's arrival damping inside five cells. At the old
-// cruising speed of 60 cells per second that orbit radius was thirty cells, so a
-// drop knocked sideways circled its cursor, wandering off walls and the map
-// boundary, until something happened to stop it.
-//
-// The cornering brake every homing species applies is on the drop now, so a
-// sideways heading is damped at any distance. The scenario is fixed rather than
-// derived from the profile, so the numbers stay comparable when it is retuned.
+// TestLootSettlesInsteadOfOrbitingItsOwner: an undamped constant pull holds an
+// orbit of radius speed²/accel, so a drop knocked sideways circled its cursor. The
+// cornering brake damps a sideways heading at any distance. The scenario is fixed
+// rather than derived from the profile, so the numbers survive a retune.
 func TestLootSettlesInsteadOfOrbitingItsOwner(t *testing.T) {
 	w, owner := soloCursorWorld(t)
 	loot := NewLootSystem(w).(*LootSystem)
@@ -227,7 +210,7 @@ func TestLootReachesItsOwnerAcrossAMaze(t *testing.T) {
 	cursors.HandleEvent(event.GameEvent{
 		Type: event.EventCursorSpawnRequest,
 		Payload: &event.CursorSpawnRequestPayload{
-			X: 60, Y: 20, Slot: 0, Control: uint8(component.ControlHuman),
+			X: 60, Y: 20, Slot: 0, Control: uint8(component.ControlLocal),
 		},
 	})
 	owner := w.Resources.Player.Slot(0)

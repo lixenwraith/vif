@@ -1,12 +1,13 @@
 package component
 
-// ControlKind identifies the producer authorized to drive a cursor
+// ControlKind is which producer on this instance drives a cursor. A bot is its
+// own instance whose policy feeds the router, so it is ControlLocal there and
+// ControlRemote everywhere else. Values are journaled in cursor spawn payloads.
 type ControlKind uint8
 
 const (
-	ControlHuman  ControlKind = iota // Local input via the mode router
-	ControlBot                       // In-simulation bot, emits inside the tick
-	ControlRemote                    // Network peer
+	ControlLocal  ControlKind = 0 // Intents through this instance's mode router
+	ControlRemote ControlKind = 2 // Network peer
 )
 
 // CursorComponent marks an entity as a player cursor
