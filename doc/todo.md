@@ -20,12 +20,12 @@ and P3 is an idea.
 - Prerequisite: the field test below passes on the allocator's own termination
 
 `pkg/websocket` speaks WebSocket in `vif -join` and in the allocator, which
-terminates the browser route when `-ws-bridge-image` is unset. Field test, in order:
-`vif -join wss://<site>/vif/ws/<id>` from off-site through websocat; then, with
-`VIF_ALLOCATOR_WS_BRIDGE_IMAGE` removed (runbook, "Switch the browser route's
-WebSocket end"), the same join, a browser playing, no 40–80 ms delayed-ACK tail, and
-fleet W1's checks. Then delete the proxy path, `-ws-bridge-image`, the sidecar
-template and its updater, the `bridge` component and the 7779 notes.
+terminates the browser route now that `vif-allocator.env` names no bridge image.
+Through websocat a native wss join worked but ran about 50 ms slower than the front
+door (fleet §9 has the mechanism). Field test on the allocator's end: the same join
+within a millisecond of the front door, a browser playing, and fleet W1's checks.
+Then delete the proxy path, `-ws-bridge-image`, the sidecar template and its
+updater, the `bridge` component and the 7779 notes.
 
 ### Serve WebSocket from vif itself
 

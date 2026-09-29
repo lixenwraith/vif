@@ -245,9 +245,9 @@ Ten of these is roughly 30 KiB/s into the 256 MiB tmpfs, which the 8 MB rotation
 the cleanup timer carry. Do not scale the CPU and memory figures from here; H3
 measures a four-player world, which is the shape the manifest's values are for, and
 it is also what the bridge sidecar's own envelope is waiting on. The quota totals in
-`10-quota.yaml` are ten times the pod, which is now the game container plus that
-sidecar: a restartable init container counts into the pod total, where the
-config-check container counts only against its own peak.
+`10-quota.yaml` are ten times the pod with that sidecar, so they still hold while
+`-ws-bridge-image` can select it: a restartable init container counts into the pod
+total, where the config-check container counts only against its own peak.
 
 Historical baseline worth keeping: server in lobby 12.0 MB RSS; embedded game with
 one guest 61.75 MB peak; server after a guest left 40.1 MB; headless joiner with a
@@ -379,8 +379,13 @@ the pod checks it and the protocol, bounds and handshake are a native client's.
 **What each end costs.** Terminated in the allocator, the pod sees browsers at the
 node's address as it sees front-door players, and the allocator unmasks and frames
 their bytes. Through the sidecar, the game sees browsers at `127.0.0.1`, each pod
-carries 25m/16Mi requested and 100m/32Mi limited more (§6), and websocat 1.x, which
-never sets `TCP_NODELAY`, holds about 0.5% of frames 40–80 ms on a delayed ACK.
+carries 25m/16Mi requested and 100m/32Mi limited more (§6), and websocat 1.x never
+sets `TCP_NODELAY`: a frame toward the player waits for the allocator's ACK of the
+last, which rides the player's next frame or the delayed-ACK timer. Measured on
+loopback against a pod pushing every 50 ms and a client pinging every 20 ms, an echo
+took 20.7 ms through websocat, 78 µs through the allocator's own end and 72 µs
+through the front door; nginx with TLS adds about 0.3 ms to either. In the field
+the native join ran about 50 ms slower through websocat.
 Either way `NetworkAdmitBurst` is one budget per session for the proxied players
 (§4); `-route-max` and the edge's `limit_conn`/`limit_req` stand in until the
 allocator keys it itself ([`doc/todo.md`](todo.md)). 7779 is named by no Service and
