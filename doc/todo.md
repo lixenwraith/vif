@@ -19,22 +19,16 @@ define first; doing Android first would define it without a second consumer.
 ### Add bots that play as participants
 
 - Priority: P0, leading the push; not a release blocker
-- Affected files: `internal/input` and `internal/mode` (the `Intent` seam),
-  `internal/journal` (scripted input), `internal/app` roster and slots, `cmd/vif`,
-  `tool/vif-allocator`
-- Prerequisite: decide whether a bot emits `Intent` values or game events
+- Affected files: `internal/bot` (new), `internal/app`, `internal/network`,
+  `internal/converge`, `internal/mode/commands.go`, `cmd/vif`, `tool/vif-allocator`
+- Plan: [Bots](todo-bots.md)
 
-A bot is a participant whose input comes from a policy instead of a terminal: it
-holds a roster slot and a cursor, reads only what a player's instance holds, and
-is bound by the same barrier, admission and eviction. Networked, it is a headless
-`vif -join` whose policy authors its cursor as any guest does, which also
-load-tests the fleet; `-join https://<site>` gives it a session of its own, and
-bots on one machine share its address's join and creation budgets, so a load test
-raises `-client-joins` and `-client-creates` for its run. Local, a host seats bots
-in its own roster, which needs one instance to author several cursors where it
-authors one today. Stages: the policy seam and a seeded baseline policy that
-replays; networked bots; local seats; an allocator option that fills a session.
-Decide how a roster and the HUD mark one.
+A bot is its own headless instance whose policy drives its router with intents, bound
+by the same barrier, admission and eviction as a person. Several in one process join
+over in-process streams, and a guest holding them relays for them, which merges this
+item with [Delegate convergence to relays](#delegate-convergence-to-relays). The
+foundations have landed; the stages, from a seeded baseline that replays to trained
+and adapting bots and an allocator option that fills a session, are in the plan.
 
 ### Extract the renderer-neutral Android host model
 
@@ -197,31 +191,20 @@ Per-store write counters stay rejected: a cache compares values it owns.
 
 ### Delegate convergence to relays
 
-- Priority: P2
+- Priority: P2; R1–R4 lead with bots as their stages S4 and S5
 - Affected files: `internal/converge/relay.go`, `internal/converge/selective.go`,
   `internal/converge/correction.go`, `internal/system/network.go`, `internal/network`
+- Plan: [Bots](todo-bots.md) §4
 
 Goal: a player who cannot reach the host joins through another player, and a player
 who relays lends the session uplink and CPU without becoming its host, though it
-stays a succession candidate; later the site could place a joiner behind a relay,
-or on one that becomes its host, after the first coordination. The host commits
-alone, so this is not a merge: a relay that committed crossings or sent up a
-merged world would give one crossing two apply ticks and let a peer write the
-canonical world. The relay owns its subtree's convergence instead:
-
-- Serve leaves manifests and repairs from retention, as now, and whole worlds from
-  its own proved worlds; a leaf proves one by the host's root, since dense order and
-  so integrity differ.
-- Send one subtree proof upstream, each leaf's newest proved tick in `Relayed`, so
-  the host's floor, flood and cadence count subtrees, and bundle the leaves' raw
-  epochs per tick. Advertise its own path to the host, from which a leaf's lead follows.
-- The host accepts a leaf's traffic only through its relay, budgets each link's
-  ingress into the eviction policy, and a starved or lost leaf re-parents to the
-  host or another relay. A bad relay can then stall only its own subtree.
-- Relays are native, with a declared port like a succession candidate; a browser
-  has one thread and no listener. Reaching a relay behind NAT without a forwarded
-  port needs hole punching through the coordinator, and WebRTC for a browser leaf,
-  which this item does not include.
+stays a succession candidate. The host commits alone, so this is not a merge: a relay
+that committed crossings or sent up a merged world would give one crossing two apply
+ticks and let a peer write the canonical world. The relay owns its subtree's
+convergence instead, in the order the plan gives: admission through a relay with the
+join served from its own proved world, one subtree proof upstream, bundled epochs,
+ingress only through the relay, then people behind relays with re-parenting and NAT.
+A bot's in-process seat is the first leaf: no hop, shared fate, no hole punching.
 
 Expected: leaves converge like direct guests without the stopgap's whole world per
 floor window through every link, which then goes with the lead sampled from returned
