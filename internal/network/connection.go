@@ -187,7 +187,7 @@ func (p *Peer) writeLoop() {
 		}
 		// One flush per burst: a tick queues its epoch, syncs and digests together,
 		// and the linger lets the rest of them join the first in one write.
-		linger.Reset(parameter.NetworkWriteLinger)
+		linger.Reset(writeLinger)
 	batch:
 		for {
 			msg.Seq = p.OutSeq.Add(1)

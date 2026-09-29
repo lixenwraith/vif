@@ -89,8 +89,8 @@ play constructs the no-op-capable socket adapter, while an authored headless
 script constructs it only for `-host`/`-join`. A browser registers the same adapter
 for a `-join` naming the same-origin route `wss://<site>/vif/ws/<session>`, and is
 refused `-host`, `-serve` and a `host:port` target, none of which it could bind or
-dial. The route reaches a bridge sidecar in the session's pod, which is the only
-thing on the path that speaks WebSocket; native clients retain raw TCP. Replay
+dial. The allocator terminates the route and splices it to the session's game
+port; a native client may dial it too, and otherwise keeps raw TCP. Replay
 input controls playback rather than the mode router, and its terminal resize
 affects presentation rather than recorded geometry.
 

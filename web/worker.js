@@ -60,5 +60,14 @@ onmessage = function(e) {
         globalThis.xterm.rows = msg.rows;
         if (typeof globalThis.goTerminalResize === 'function') globalThis.goTerminalResize(msg.cols, msg.rows);
         break;
+    case 'visibility':
+        /* Go draws nothing while the page is hidden, so the page's timer-throttled
+           terminal gathers no backlog to replay on return. A resize of the same size
+           is what repaints the whole screen once it is seen again. */
+        globalThis.vifHidden = msg.hidden;
+        if (!msg.hidden && typeof globalThis.goTerminalResize === 'function') {
+            globalThis.goTerminalResize(globalThis.xterm.cols, globalThis.xterm.rows);
+        }
+        break;
     }
 };

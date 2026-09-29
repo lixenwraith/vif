@@ -44,7 +44,7 @@ atomically without restarting the allocator. See
 | `GET /readyz` | Verifies that the current token can reach the Kubernetes API. |
 | `GET /vif/api/logs` | Proxies the loopback LogWisp SSE response byte-for-byte. An unavailable upstream returns `503 log_stream_unavailable`. |
 | `HEAD /vif/api/logs` | `200` and the stream's headers, answered here: upstream refuses a HEAD on the stream path, and a probe should not open a stream. Only the `GET` reports upstream availability. |
-| `GET /vif/ws/<session>` | `101` and one browser participant, whose socket this allocator terminates and splices to the resolved pod's game port, or proxies to the pod's bridge sidecar where `-ws-bridge-image` is set. Published only where `-web-origin` is set. |
+| `GET /vif/ws/<session>` | `101` and one browser participant, whose socket this allocator terminates and splices to the resolved pod's game port. Published only where `-web-origin` is set. |
 
 One session row has this shape:
 
@@ -98,14 +98,12 @@ than offer a broken one.
 The browser route validates before it upgrades — method, identifier syntax,
 `Origin` against `-web-origin`, the session's liveness and readiness in reconciled
 Kubernetes state, and `-route-max` connections for that session, counted with the
-front door's. Then, with `-ws-bridge-image` unset, it checks the handshake itself
-(`426` for another version, `400` for a bad key), dials the pod's game port (`502`
-when that fails), answers the `101` with `pkg/websocket` and splices the socket's
-payload to the pod as the front door does; the pod reads the browser's own route
-frame. With `-ws-bridge-image` set, it reverse-proxies the upgrade to the pod's
-websocat sidecar instead, and each Job carries that sidecar. Either way it never
-accepts an upstream a caller named: the identifier is a routing key looked up in
-Kubernetes, not an address supplied. The decision record is in
+front door's. Then it checks the handshake itself (`426` for another version, `400`
+for a bad key), dials the pod's game port (`502` when that fails), answers the
+`101` with `pkg/websocket` and splices the socket's payload to the pod as the front
+door does; the pod reads the browser's own route frame. It never accepts an
+upstream a caller named: the identifier is a routing key looked up in Kubernetes,
+not an address supplied. The decision record is in
 [`doc/multi-platform.md`](../../doc/multi-platform.md#5-browser-networking).
 
 The allocator deliberately exposes no public delete endpoint: this API is

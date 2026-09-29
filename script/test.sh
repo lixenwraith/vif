@@ -146,7 +146,7 @@ Automated (assert, and used by `all`)
   follow            a host changes scenario and its guest rebuilds with it
   corpus            a guest reading its own content joins a host reading other
   fleet             the session template and the allocator render one workload
-  deploy            the node install, the manifests and a mounted scenario
+  deploy            the wad installer's refusal, the manifests and a mounted scenario
   lifetime          unclaimed expiry, then vacancy expiry
   drain             SIGTERM drains instead of cutting a match
   identity          a peer running a different build is refused (runs the tests)
@@ -568,7 +568,7 @@ fleet)
 deploy)
 	# What the node needs to be true before a pod can start, none of which the
 	# normal build exercises: the image's own build tag, a manifest that survives an
-	# unset variable, the installer's report, and a scenario resolving through the
+	# unset variable, the installer's refusal, and a scenario resolving through the
 	# mount layout rather than out of the binary.
 	command -v go >/dev/null 2>&1 || fail "go not found"
 	headless=$(mktemp -d)
@@ -580,41 +580,30 @@ deploy)
 	grep -Rn 'image: \${' deploy/k3s/ \
 		&& fail "an image placeholder is unquoted; an unset tag becomes a parse error"
 
-	# The installer runs on a node with no container runtime and no wad root yet,
-	# which is every node before its first install and this one after any build.
-	if sudo -n true 2>/dev/null; then
-		node=$(mktemp -d)/nested
-		VIF_WAD_ROOT=$node/wad ./deploy/guest/update-vif-wad.sh >"$headless/install" 2>&1 \
-			|| fail "the wad installer failed: $headless/install"
-		grep -q '^  ok    main$' "$headless/install" \
-			|| fail "scenarios were not validated: $headless/install"
-		# scenario.toml is three levels under the root; a listing one level short
-		# reports a correct install as an empty one.
-		for name in blank main td; do
-			grep -q "$node/wad/scenario/$name\$" "$headless/install" \
-				|| fail "the installer did not report $name: $headless/install"
-		done
-		# A scenario that does not load is refused by name, and refused before the
-		# swap: the tree already on the node is what a running match still reads.
-		bad=$(mktemp -d)/wad
-		cp -a wad "$bad"
-		printf '\n[regions.broken]\nfile = "nope.toml"\n' >>"$bad/scenario/blank/scenario.toml"
-		if VIF_WAD_ROOT=$node/wad ./deploy/guest/update-vif-wad.sh "$bad" \
-			>"$headless/bad" 2>&1
-		then
-			fail "the installer accepted a scenario that does not load"
-		fi
-		grep -q 'scenario blank does not load' "$headless/bad" \
-			|| fail "the refusal did not name the scenario: $headless/bad"
-		[ -d "$node/wad/scenario/main" ] || fail "a refused tree still replaced the node's"
-		# Only the categories the fleet serves are installed. A corpus on the node
-		# would be a category nothing mounts and no session would read.
-		[ -d "$node/wad/image" ] || fail "the installer skipped image/"
-		[ ! -d "$node/wad/content" ] || fail "the installer put a corpus on the node"
-		sudo rm -rf "$node" "$bad"
-	else
-		echo "  skip: the wad installer needs passwordless sudo"
+	# The installer refuses a scenario that does not load, by name, before it stages
+	# anything. Installing needs root; sudo here is a stub that fails, so the check
+	# never prompts and nothing privileged can run whatever the installer does.
+	stub=$(mktemp -d)
+	printf '#!/bin/sh\nexit 1\n' >"$stub/sudo"
+	chmod +x "$stub/sudo"
+	bad=$(mktemp -d)/wad
+	cp -a wad "$bad"
+	printf '\n[regions.broken]\nfile = "nope.toml"\n' >>"$bad/scenario/blank/scenario.toml"
+	node=$(mktemp -d)/wad
+	if PATH="$stub:$PATH" VIF_WAD_ROOT=$node ./deploy/guest/update-vif-wad.sh "$bad" \
+		>"$headless/bad" 2>&1
+	then
+		fail "the installer accepted a scenario that does not load"
 	fi
+	grep -q 'scenario blank does not load' "$headless/bad" \
+		|| fail "the refusal did not name the scenario: $headless/bad"
+	[ ! -e "$node" ] && [ ! -e "$node.new" ] || fail "a refused tree reached the node: $node"
+	rm -rf "$stub" "$(dirname "$bad")" "$(dirname "$node")"
+
+	# A pod has no user or system configuration root, so neither may these runs: a
+	# corpus installed on this machine would otherwise stand in for the embedded one.
+	bare=$(mktemp -d)
+	pod() { env HOME="$bare" XDG_CONFIG_HOME="$bare" XDG_CONFIG_DIRS="$bare" "$@"; }
 
 	# The pod mounts scenario/ and image/ and nothing else, so prove a scenario
 	# resolves from exactly that and names itself in the log the commissioning
@@ -622,7 +611,7 @@ deploy)
 	mount=$(mktemp -d)/wad
 	mkdir -p "$mount"
 	cp -a wad/scenario wad/image "$mount/"
-	"$headless/vif" -check -config-dir "$mount" -s main >"$headless/check" \
+	pod "$headless/vif" -check -config-dir "$mount" -s main >"$headless/check" \
 		|| fail "the init container's check does not resolve through the mount"
 	grep -q '^scenario ok' "$headless/check" || fail "no scenario off the mount"
 	# A pod reads no corpus: glyphs are player domain and a dedicated host spawns
@@ -630,7 +619,7 @@ deploy)
 	grep -q '^content ok: embedded' "$headless/check" \
 		|| fail "a session resolved a corpus off the volume: $headless/check"
 	own_ports
-	"$headless/vif" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -authority host \
+	pod "$headless/vif" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -authority host \
 		-l="$mount/log" -log-session-id=volume-check -lv=info \
 		-config-dir="$mount" -s=main -first-join=3s -empty=3s -drain=3s >/dev/null 2>&1 \
 		|| fail "the probe pod's arguments do not run"
@@ -638,8 +627,8 @@ deploy)
 		|| fail "no scenario record; the commissioning check has nothing to read"
 	grep -q '"name":"main"' "$mount/log/volume-check.jsonl" \
 		|| fail "the session did not load main off the mount"
-	rm -rf "$mount" "$headless"
-	pass "the image builds, the manifests render, and a mounted scenario loads"
+	rm -rf "$mount" "$headless" "$bare"
+	pass "the image builds, the installer refuses a broken tree, and a mounted scenario loads"
 	;;
 
 image)
