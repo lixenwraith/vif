@@ -223,10 +223,9 @@ on any path, and checks no `Origin`: it grants nothing ambient a foreign page co
 borrow. `-join ws://host:7777/<name>` joins it from a terminal or a page.
 
 `network.AdmissionLimiter` is per address, and the pod sees browsers at the node's
-address, as it sees front-door players, so they share one budget per
-session; the allocator's per-session ceiling and the edge's rate limits stand in
-until the allocator keys a per-address budget itself, which is where admission
-belongs ([`doc/todo.md`](todo.md)).
+address, as it sees front-door players, so per-player admission is the
+allocator's: one budget per address over both routes, keyed on the address the
+edge writes into `-client-address-header` ([fleet §4](kubernetes-fleet.md#4-security-posture)).
 
 ### The public route
 

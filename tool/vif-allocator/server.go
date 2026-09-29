@@ -9,11 +9,17 @@ import (
 	"io"
 	"log/slog"
 	"mime"
+	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
+
+	"github.com/lixenwraith/vif/internal/network"
 )
 
 const maxCreateBody = 1024
@@ -32,6 +38,11 @@ type apiServer struct {
 	logProxy  *httputil.ReverseProxy
 	ws        *wsRouter
 	mux       *http.ServeMux
+
+	clientHeader string
+	unattributed atomic.Bool // warned once that the edge sent no address
+	creates      *network.AdmissionLimiter
+	createRetry  string
 }
 
 type sessionsResponse struct {
@@ -48,13 +59,21 @@ type apiErrorResponse struct {
 	Message string `json:"message"`
 }
 
-func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL *url.URL, web allocatorConfig, held *holds) *apiServer {
-	server := &apiServer{allocator: allocator, log: logger, mux: http.NewServeMux()}
+func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL *url.URL, cfg allocatorConfig,
+	held *holds, joins *network.AdmissionLimiter) *apiServer {
+	server := &apiServer{allocator: allocator, log: logger, mux: http.NewServeMux(),
+		clientHeader: cfg.ClientAddressHeader}
 	if logStreamURL != nil {
 		server.logProxy = newLogStreamProxy(logStreamURL, logger)
 	}
-	if web.WebOrigin != "" {
-		server.ws = newWSRouter(web.WebOrigin, held)
+	if cfg.WebOrigin != "" {
+		server.ws = newWSRouter(cfg.WebOrigin, held, joins)
+	}
+	// A session nobody joins expires after -first-join, so this bounds how many of
+	// the fleet's unclaimed sessions one address can hold.
+	if window, err := time.ParseDuration(cfg.Workload.FirstJoin); err == nil && cfg.ClientCreates > 0 {
+		server.creates = network.NewAdmissionLimiterOf(window, cfg.ClientCreates)
+		server.createRetry = strconv.Itoa(int(window.Seconds()))
 	}
 	server.mux.HandleFunc("/healthz", server.handleHealth)
 	server.mux.HandleFunc("/readyz", server.handleReady)
@@ -126,6 +145,12 @@ func (s *apiServer) handleSessions(w http.ResponseWriter, r *http.Request) {
 				"Request body must be a JSON object naming only players, log_level and scenario")
 			return
 		}
+		if s.creates != nil && s.creates.Admit(s.clientAddr(r)) != nil {
+			w.Header().Set("Retry-After", s.createRetry)
+			writeAPIError(w, http.StatusTooManyRequests, "create_budget",
+				"This address has created as many sessions as it may for now; join one or try again later")
+			return
+		}
 		created, err := s.allocator.createSession(r.Context(), request)
 		if err != nil {
 			s.writeCreateError(w, err)
@@ -138,6 +163,25 @@ func (s *apiServer) handleSessions(w http.ResponseWriter, r *http.Request) {
 	default:
 		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
 	}
+}
+
+// clientAddr is the player's address as the edge wrote it, nil when no header is
+// configured or the request carries no single address. Nil charges no budget: keyed
+// on the edge's own address, it would be one budget for every player.
+func (s *apiServer) clientAddr(r *http.Request) net.Addr {
+	if s.clientHeader == "" {
+		return nil
+	}
+	if values := r.Header.Values(s.clientHeader); len(values) == 1 {
+		if ip, err := netip.ParseAddr(strings.TrimSpace(values[0])); err == nil {
+			return net.TCPAddrFromAddrPort(netip.AddrPortFrom(ip.Unmap(), 0))
+		}
+	}
+	if !s.unattributed.Swap(true) {
+		s.log.Warn("a request carried no client address; the edge's limits alone bound it",
+			"header", s.clientHeader)
+	}
+	return nil
 }
 
 func (s *apiServer) handleLogs(w http.ResponseWriter, r *http.Request) {

@@ -12,10 +12,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 var (
 	dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+	headerPattern   = regexp.MustCompile(`^[A-Za-z0-9][-A-Za-z0-9]*$`)
 	mapSizePattern  = regexp.MustCompile(`^[1-9][0-9]*x[1-9][0-9]*$`)
 	// A scenario name is one path element the game looks up under scenario/ on the
 	// read-only volume. Anything with a separator in it would be a caller choosing
@@ -80,6 +83,12 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 		"site origin allowed to open a browser session, e.g. https://example.com; empty publishes no WebSocket route")
 	set.IntVar(&cfg.Allocator.RouteMax, "route-max", 8,
 		"concurrent connections one session may hold through the front door and the browser route together")
+	set.StringVar(&cfg.Allocator.ClientAddressHeader, "client-address-header", "",
+		"header the site's edge overwrites with the player's address, e.g. X-Real-IP; empty budgets no address on the API or browser route")
+	set.IntVar(&cfg.Allocator.ClientJoins, "client-joins", parameter.NetworkAdmitBurst,
+		"joins one player address may make per minute, over the front door and the browser route together")
+	set.IntVar(&cfg.Allocator.ClientCreates, "client-creates", 4,
+		"sessions one player address may create per -first-join window")
 	set.IntVar(&cfg.Allocator.PortFirst, "port-first", 31700, "first allocatable NodePort")
 	set.IntVar(&cfg.Allocator.PortLast, "port-last", 31709, "last allocatable NodePort")
 	set.DurationVar(&cfg.Allocator.ReadyTimeout, "ready-timeout", 75*time.Second, "session readiness deadline")
@@ -141,6 +150,15 @@ func validateConfig(cfg runtimeConfig) error {
 	}
 	if cfg.Allocator.RouteMax < 1 || cfg.Allocator.RouteMax > 16 {
 		return fmt.Errorf("-route-max must be between 1 and 16")
+	}
+	if h := cfg.Allocator.ClientAddressHeader; h != "" && !headerPattern.MatchString(h) {
+		return fmt.Errorf("invalid -client-address-header %q", h)
+	}
+	if cfg.Allocator.ClientJoins < 1 || cfg.Allocator.ClientJoins > 64 {
+		return fmt.Errorf("-client-joins must be between 1 and 64")
+	}
+	if cfg.Allocator.ClientCreates < 1 || cfg.Allocator.ClientCreates > 16 {
+		return fmt.Errorf("-client-creates must be between 1 and 16")
 	}
 	if !dnsLabelPattern.MatchString(cfg.Allocator.Workload.Namespace) {
 		return fmt.Errorf("invalid -namespace %q", cfg.Allocator.Workload.Namespace)
