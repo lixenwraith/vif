@@ -209,18 +209,23 @@ is enforced by role, and `TCP_NODELAY` is set on every socket it owns.
 |---|---|
 | **Chosen — hand-written, terminated in `vif-allocator`.** | The objection was new parsing surface on the public route; the answer is a small reader whose memory is bounded whatever a length claims, fuzzed at the frame reader and both handshake parsers. The allocator already carries every proxied player's bytes; for a browser it also unmasks and frames them, which costs microseconds (fleet §9). |
 | A bridge process in the session pod. | An image, a container and a hop per session, and a socket whose latency this repository does not control: one without `TCP_NODELAY` holds each frame toward the player until the last is acknowledged, tens of milliseconds a frame. |
-| A WebSocket listener in `vif -serve`, behind the allocator's proxy. | Keeps a hop per pod. The shared codec makes it small, so it is deferred as a standalone serving flag, not refused ([`doc/todo.md`](todo.md)). |
+| A WebSocket listener in `vif -serve`, behind the allocator's proxy. | Keeps the allocator's hop and moves the `Origin` check into every pod. The listener exists for one binary on a LAN or in a test (below); the fleet does not use it. |
 | A third-party package. | `net/http` has no WebSocket handler, `golang.org/x/net/websocket` is deprecated, and a maintained package is a network-facing dependency on the path every player takes. |
 | The API server's `pods/portforward`. | A shell-equivalent grant, and it needs the same client. |
 | An ingress controller. | None translates WebSocket to a raw TCP backend. |
 | WebTransport. | Its advantages do not yet justify an HTTP/3 server and ingress. |
 | A WebRTC data channel. | ICE, signalling and TURN solve a peer-to-peer problem an authoritative host does not have. |
 
+`vif -host ws://:7777` or `-serve ws://:7777` serves a session over WebSocket from
+one binary, one protocol per listener. The upgrade feeds the TCP accept loop, so
+the handshake budget and per-address admission apply unchanged. It is plain `ws`
+on any path, and checks no `Origin`: it grants nothing ambient a foreign page could
+borrow. `-join ws://host:7777/<name>` joins it from a terminal or a page.
+
 `network.AdmissionLimiter` is per address, and the pod sees browsers at the node's
-address, as it sees front-door players, so they share one budget per
-session; the allocator's per-session ceiling and the edge's rate limits stand in
-until the allocator keys a per-address budget itself, which is where admission
-belongs ([`doc/todo.md`](todo.md)).
+address, as it sees front-door players, so per-player admission is the
+allocator's: one budget per address over both routes, keyed on the address the
+edge writes into `-client-address-header` ([fleet §4](kubernetes-fleet.md#4-security-posture)).
 
 ### The public route
 

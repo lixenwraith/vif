@@ -115,9 +115,10 @@ What already bounds a stranger:
 - one admission per address per `NetworkAdmitBurst` (6) in `NetworkAdmitWindow`
   (1 minute), tracked for at most 1024 addresses so the defence cannot become the
   exhaustion, and keyed on the player's own address: the pod applies it on the
-  NodePort route, which preserves that address, and the front door before its
-  lookup. At the pod, front-door arrivals and browsers share the node's address, so
-  proxied players also share a budget per session;
+  NodePort route, which preserves that address, and the allocator before its lookup
+  on both proxied routes as one budget per address (`-client-joins`), the front
+  door's from the dialler and the browser route's from `-client-address-header`. At
+  the pod, proxied players share the node's address and so a budget per session;
 - at most `MaxHandshakes` (8) handshakes in flight, each on its own goroutine with a
   `ConnectTimeout` (5 s) and a `ReadTimeout` (30 s);
 - a 16-bit frame length, bounded receive queues, and a bounded repair size, so no
@@ -138,17 +139,18 @@ What already bounds a stranger:
 - the network policy: one game port reachable, everything else denied, no egress;
 - the allocator's published surface: exactly the create/list, log-stream and
   session-socket routes and the front door, bounded by the ten-session quota, the
-  90-second first-join expiry, the advertised `limits` on what a caller may select,
-  and the edge's own rate limit. Its probe endpoints and every other path stay
-  behind the node filter, which admits only the site's edge to 9080;
+  90-second first-join expiry, `-client-creates` sessions per address in that
+  window, the advertised `limits` on what a caller may select, and the edge's rate
+  limits on the browser route; without `-client-address-header` the API and the
+  browser route charge no per-address budget. Its probe endpoints and every other
+  path stay behind the node filter, which admits only the site's edge to 9080;
 - on both proxied routes: a 16-hex identifier looked up in Kubernetes state rather
   than supplied, a refusal for a session that is not live and ready, and
   `-route-max` connections per session over the two together. The browser route
-  adds one `Origin` and the edge's per-address `limit_conn`/`limit_req`, refused
-  before the upgrade. The front door, the allocator's one Internet-facing socket,
-  reads one name-sized frame within five seconds, places at most 32 dials at once
-  and adds the per-address budget, refusing before a dial in a join reply the
-  dialer reads;
+  adds one `Origin` and the edge's `limit_conn`/`limit_req`, refused before the
+  upgrade. The front door, the allocator's one Internet-facing socket, reads one
+  name-sized frame within five seconds and places at most 32 dials at once,
+  refusing before a dial in a join reply the dialer reads;
 - `-authority host`, which is the fleet's default and what keeps that one port the
   only one. A migrate session gives every participant a listening port and publishes
   the addresses inside the session; a fleet session is its address, so it has no
@@ -355,9 +357,10 @@ allocator's (§4).
 
 **Where the browser route's layers stop.** Nginx terminates TLS and forwards the
 `Upgrade`; it never looks at a frame. `vif-allocator` checks method, identifier
-syntax, `Origin`, the session's liveness and readiness and the shared ceiling, then
-the handshake (426 for another version, 400 for a bad key), then dials `podIP:7777`
-(502 if that fails); each is a status before any 101. It answers the 101 and splices
+syntax, `Origin`, the player's join budget (429), the session's liveness and
+readiness and the shared ceiling, then the handshake (426 for another version, 400
+for a bad key), then dials `podIP:7777` (502 if that fails); each is a status
+before any 101. It answers the 101 and splices
 the socket's payload to the pod with the front door's `splice`, `TCP_NODELAY` on
 every socket, and never dials an upstream a caller named. The page wraps its own
 `WebSocket` as a `net.Conn`, and `vif -join wss://…` dials with `pkg/websocket` and
@@ -366,9 +369,8 @@ the stream, so the pod checks it and the protocol, bounds and handshake are a
 native client's.
 
 **What it costs.** The pod sees browsers at the node's address, as it sees
-front-door players, so `NetworkAdmitBurst` is one budget per session for every
-proxied player (§4); `-route-max` and the edge's `limit_conn`/`limit_req` stand in
-until the allocator keys it itself ([`doc/todo.md`](todo.md)). The allocator unmasks
+front-door players, so its budget is one per session for every proxied player and
+the allocator keys the per-player one in its place (§4). The allocator unmasks
 and frames the bytes. Measured on loopback against a pod pushing every 50 ms and a
 client pinging every 20 ms, an echo took 78 µs through the allocator's end and 72 µs
 through the front door, and nginx with TLS added about 0.3 ms; in the field a native
@@ -384,7 +386,8 @@ stands between here and there:
 - ten concurrent files have distinct names and matching self-tags;
 - the browser route refuses another origin, an unknown session, a session that is
   not ready and the connection past `-route-max`, each before the upgrade, and the
-  front door refuses the same and a dialler past its budget before any dial;
+  front door refuses the same before any dial; both refuse a player past its join
+  budget, and the API one past its creation budget;
 - session pods remain Restricted, tokenless, and free of direct `hostPath`;
 - allocator RBAC cannot read `pods/log`;
 - tmpfs is hard-capped, K3s fails closed without it, and reboot clears it;

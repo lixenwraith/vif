@@ -3,17 +3,12 @@ package network
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
-	"github.com/lixenwraith/vif/pkg/websocket"
 )
 
 func testOffer() SessionOffer {
@@ -184,12 +179,12 @@ func waitInbound(t *testing.T, p *SocketPort, match func(Inbound) bool) {
 	t.Fatal("timed out waiting for inbound notification")
 }
 
-// TestANamedSessionAdmitsOnlyTheDialerThatNamedIt joins over a WebSocket route as
-// the native client does: the name is the route's last path segment, sent over a
-// stream a bridge relays unparsed.
+// TestANamedSessionAdmitsOnlyTheDialerThatNamedIt joins a host's own ws://
+// listener as the native client does: the name is the URL's last path segment,
+// and the host answers on any path before it.
 func TestANamedSessionAdmitsOnlyTheDialerThatNamedIt(t *testing.T) {
 	offer := testOffer()
-	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
+	hostCfg := DebugConfig(RoleHost, "ws://127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.AcceptSession = HostAcceptor(Coordinator{
 		Assign: func() (SessionOffer, error) { return offer, nil },
@@ -200,29 +195,8 @@ func TestANamedSessionAdmitsOnlyTheDialerThatNamedIt(t *testing.T) {
 	if err := host.Start(); err != nil {
 		t.Fatal(err)
 	}
-	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		handshake, err := websocket.Check(w, r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		session, err := net.Dial("tcp", host.Addr().String())
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-			return
-		}
-		page, err := handshake.Upgrade(w)
-		if err != nil {
-			session.Close()
-			return
-		}
-		go func() { _, _ = io.Copy(session, page); session.Close() }()
-		_, _ = io.Copy(page, session)
-		page.Close()
-	}))
-	defer bridge.Close()
 	join := func(name string) (*PendingJoin, SessionOffer, error) {
-		route := "ws" + strings.TrimPrefix(bridge.URL, "http") + "/vif/ws/" + name
+		route := host.Addr().String() + "/vif/ws/" + name
 		e, err := ParseEndpoint(route)
 		if err != nil {
 			t.Fatal(err)

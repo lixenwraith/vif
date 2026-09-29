@@ -54,7 +54,7 @@ rebuild one from a port:
 
 | String | What it is | Who reads it |
 |---|---|---|
-| `vif://<site-host>:7777/<id>` | `join_target`: the allocator's front door, one address for every session. | `vif -join`. |
+| `vif://<site-host>:7777/<id>` | `join_target`: the allocator's front door, one address for every session. | `vif -join`, and `vif -join https://<site-host>`, which creates the session first. |
 | `vif://<site-host>:31703/<id>` | `direct_target`: the session's own forwarded NodePort. | `vif -join`. |
 | `wss://<site-host>/vif/ws/<id>` | `ws_url`: the browser route, through the site to the allocator, which answers the WebSocket and splices it to the pod. | The WASM build, or `vif -join` where 7777 is blocked. |
 
@@ -325,7 +325,10 @@ reference: the exact `/vif/api/sessions` and `/vif/api/logs` locations, the
 `$proxy_protocol_addr`, and no `/healthz` or `/readyz`. Three properties decide
 whether it works: `Upgrade` and `Connection` forwarded for the browser route,
 buffering off with an hour-long read timeout for the streams, and `Origin`
-untouched — the allocator compares it against `VIF_ALLOCATOR_WEB_ORIGIN`. The
+untouched — the allocator compares it against `VIF_ALLOCATOR_WEB_ORIGIN`. A
+fourth keys the per-player budgets: `X-Real-IP` overwritten with
+`$proxy_protocol_addr` on the API and browser locations, then named in
+`VIF_ALLOCATOR_CLIENT_ADDRESS_HEADER`; unnamed, those routes charge none. The
 page's `connect-src 'self'` is what permits the same-origin socket.
 
 The launcher is [`web/`](../web), copied to the site as it stands together with the

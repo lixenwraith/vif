@@ -234,15 +234,23 @@ func TestAnAddressNamesItsSchemeAndSession(t *testing.T) {
 		{"host.example:7777/7f3c1a", network.SchemeTCP, "host.example:7777", "7f3c1a"},
 		{"wss://site.example/vif/ws/7f3c1a", network.SchemeWebSocket, "wss://site.example/vif/ws/7f3c1a", "7f3c1a"},
 		{"ws://127.0.0.1:7779/", network.SchemeWebSocket, "ws://127.0.0.1:7779/", ""},
+		{"https://site.example/vif", network.SchemeSite, "https://site.example", ""},
 	} {
 		e, err := network.ParseEndpoint(tc.target)
 		if err != nil || e.Scheme != tc.scheme || e.Addr != tc.addr || e.Name != tc.name {
 			t.Errorf("ParseEndpoint(%q) = %+v, %v; want %s %q %q", tc.target, e, err, tc.scheme, tc.addr, tc.name)
 		}
 	}
-	for _, f := range []sessionFlags{{join: "http://host.example:7777"}, {host: "wss://site.example/vif/ws"}, {host: "host.example"}} {
+	for _, f := range []sessionFlags{{join: "ftp://host.example:21"}, {host: "wss://site.example/vif/ws"}, {host: "host.example"},
+		{host: "https://site.example"},
+		{serve: "wss://:7777"}, {host: "ws://:7777/vif/"}, {join: "host.example:7777", listen: "ws://:7778"}} {
 		if err := f.validateInvocation(false, false, ""); err == nil {
 			t.Errorf("%+v was accepted", f)
+		}
+	}
+	for _, f := range []sessionFlags{{host: "ws://:7777"}, {serve: "ws://127.0.0.1:7777/"}, {join: "https://site.example", players: 2}} {
+		if err := f.validateInvocation(false, false, ""); err != nil {
+			t.Errorf("%+v was refused: %v", f, err)
 		}
 	}
 	if err := (sessionFlags{join: "host.example:7777/7f_3c"}).validateInvocation(false, false, ""); err == nil {

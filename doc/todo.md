@@ -5,43 +5,70 @@ the smallest thing that would close it. Delete an item when it lands; this file
 is not a changelog. Source files do not carry parallel TODO comments, so a
 code-originated item names its source here.
 
-Priorities: P0 blocks a release, P1 is wanted next, P2 is convenient follow-up,
-and P3 is an idea.
+Priorities: P0 blocks a release or leads the feature development push, P1 is
+wanted next, P2 is convenient follow-up, and P3 is an idea.
 
-## Browser sessions and mobile
+## Feature development push
 
-### Find the browser guest's field latency
+Bots come before the Android host. They need no presentation refactor, build on
+the scripted and headless paths that exist, give the session stack and the fleet
+continuous real play, and make the site playable alone. A bot is also the first
+non-terminal source of semantic input, the contract the Android extraction has to
+define first; doing Android first would define it without a second consumer.
+
+### Add bots that play as participants
+
+- Priority: P0, leading the push; not a release blocker
+- Affected files: `internal/input` and `internal/mode` (the `Intent` seam),
+  `internal/journal` (scripted input), `internal/app` roster and slots, `cmd/vif`,
+  `tool/vif-allocator`
+- Prerequisite: decide whether a bot emits `Intent` values or game events
+
+A bot is a participant whose input comes from a policy instead of a terminal: it
+holds a roster slot and a cursor, reads only what a player's instance holds, and
+is bound by the same barrier, admission and eviction. Networked, it is a headless
+`vif -join` whose policy authors its cursor as any guest does, which also
+load-tests the fleet. Local, a host seats bots in its own roster, which needs one
+instance to author several cursors where it authors one today. Stages: the policy
+seam and a seeded baseline policy that replays; networked bots; local seats; an
+allocator option that fills a session. Decide how a roster and the HUD mark one.
+
+### Extract the renderer-neutral Android host model
+
+- Priority: P1, after bots
+- Affected files: terminal-shaped input/cell/color values, `internal/app`, host
+  entry points
+- Prerequisite: the bots' input seam; define the minimum visual contract
+
+Target a minimally polished Android build within one month of development time.
+Move terminal-specific visual and input values behind positive renderer/host
+adapters, add a library entry point, and keep lifecycle, simulation, networking,
+and resource providers common. Touch input maps onto the semantic input bots
+already drive, and [Multi-platform](multi-platform.md) lists the terminal-shaped
+values that remain.
+
+## Browser sessions
+
+### Serve wss from vif's own listener
+
+- Priority: P3
+- Affected files: `cmd/vif`, `internal/network/websocket_other.go`
+
+`-host`/`-serve ws://` is plain: a page served over `https` cannot open it. Taking a
+certificate and key would wrap the listener's TCP port in `tls.NewListener` and let
+`wss://host:port` bind; decide where the key lives before adding the flags.
+
+### Tighten the per-address budgets
 
 - Priority: P2
-- Affected files: `internal/app/loop.go`, `internal/converge`, `web/`
+- Affected files: `deploy/guest/vif-allocator.env`, `tool/vif-allocator`
 
-In the field a browser guest read 20–50 ms above a terminal on the same session; the
-lab reads 1–2 ms on `main` (multi-platform §5), after its writer stopped waiting on a
-clamped browser timer. What remains is the Worker's busy time on a player's machine:
-take a Performance profile of the Worker during play and size its ticks, frames and
-correction installs before choosing between them.
-
-### Serve WebSocket from vif itself
-
-- Priority: P2
-- Affected files: `cmd/vif`, `internal/app/host.go`, `internal/network`
-
-`vif -serve`/`-host` binds TCP only, so a browser reaches a session only through a
-fleet. A flag of its own would serve the route from one binary, on a LAN or in a
-test, with `pkg/websocket`'s `Check` and `Upgrade` feeding the accept loop. Decide
-its origin policy, and whether it serves `wss` with its own certificate, which a
-page served over `https` requires.
-
-### Key the browser route's admission in the allocator
-
-- Priority: P2
-- Affected files: `tool/vif-allocator/ws_proxy.go`
-
-Decided: per-player admission for proxied routes is the allocator's, not the pod's.
-The front door keys `network.AdmissionLimiter` on the dialer's address before it
-dials; the browser route sees only the site's edge, so it leans on the edge's
-`limit_conn`/`limit_req`. Key the same limiter on the player's address once the edge
-hands the allocator one it can trust.
+The allocator budgets each player address 6 joins a minute over both proxied
+routes and 4 creations per `-first-join` window, loose while one address carries
+several test clients; the target is one of each. One NAT is one address, so loosen
+joins before creations if households report refusals, and key IPv6 on its /64
+first. The API and browser route charge nothing until the edge overwrites
+`X-Real-IP` and `VIF_ALLOCATOR_CLIENT_ADDRESS_HEADER` names it.
 
 ### Add browser admission authentication
 
@@ -53,8 +80,10 @@ hands the allocator one it can trust.
 
 Issue a short-lived, session-scoped admission credential after authentication and
 consume it during the WebSocket handshake without putting it in page history or
-logs. Decide whether the expanded allocator remains the credential boundary or is
-renamed/split before adding the planned `github.com/lixenwraith/auth`
+logs. Creation takes one too: `network.RequestSession` is the terminal's side of
+`POST /vif/api/sessions`, and already shows a 401 or 403 as the allocator's
+message. Decide whether the expanded allocator remains the credential boundary or
+is renamed/split before adding the planned `github.com/lixenwraith/auth`
 Argon2-SCRAM dependency.
 
 ### Fetch a content-addressed bundle over HTTP
@@ -77,18 +106,6 @@ anticipates, and it is one provider for both the browser case and a native playe
 who would rather fetch a scenario than unpack one. What it needs before it is
 written is whose signature makes bytes trustworthy, which origins may serve them,
 and how long a fetched container is kept.
-
-### Extract the renderer-neutral Android host model
-
-- Priority: P1
-- Affected files: terminal-shaped input/cell/color values, `internal/app`, host
-  entry points
-- Prerequisite: define the minimum visual and semantic-input contract for the app
-
-Target a minimally polished Android build within one month of development time.
-Move terminal-specific visual and input values behind positive renderer/host
-adapters, add a library entry point, and keep lifecycle, simulation, networking,
-and resource providers common.
 
 ## Packaging
 
@@ -252,17 +269,6 @@ link at the tower's floor it can hold the epochs behind it for two seconds, wher
 body now waits behind one 4 KiB chunk ([Troubleshooting](troubleshooting.md) §16).
 Carrying it in the correction chunk envelope through the per-peer outbox bounds that
 too. Repairs at 20 kB/s have so far been a few kilobytes.
-
-### Request a session from the terminal
-
-- Priority: P2
-- Affected files: `cmd/vif`, `internal/app`, `tool/vif-allocator`
-
-A player gets a session only from the site's page. `POST /vif/api/sessions`
-already answers any client through the site's edge, so the missing half is a game
-command that asks for one and joins the `join_target` it returns. The other shape is
-the front door creating a session for a route frame that names none, which needs a
-per-address creation budget of its own first.
 
 ## Session membership
 

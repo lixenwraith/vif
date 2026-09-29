@@ -45,8 +45,8 @@ type tcpRouter struct {
 	placing  chan struct{}
 }
 
-func newTCPRouter(sessions sessionAllocator, held *holds, logger *slog.Logger) *tcpRouter {
-	return &tcpRouter{sessions: sessions, holds: held, admit: network.NewAdmissionLimiter(),
+func newTCPRouter(sessions sessionAllocator, held *holds, joins *network.AdmissionLimiter, logger *slog.Logger) *tcpRouter {
+	return &tcpRouter{sessions: sessions, holds: held, admit: joins,
 		log: logger, game: gamePort, placing: make(chan struct{}, routePlacing)}
 }
 
@@ -99,7 +99,8 @@ func (r *tcpRouter) place(client net.Conn) (net.Conn, func()) {
 		return refuse(errSessionUnknown)
 	}
 	// Keyed on the dialler, whose address the host forwards unchanged, and charged
-	// before the lookup: that costs the API server a list and the pod a probe.
+	// before the lookup: that costs the API server a list and the pod a probe. The
+	// browser route charges the same budget.
 	if r.admit.Admit(client.RemoteAddr()) != nil {
 		return refuse(errRouteAdmission)
 	}

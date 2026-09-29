@@ -111,10 +111,11 @@ the link it gives, or open the session in the browser:
   presents a journal on the terminal with fixed playback controls.
 - `-script <file>` runs a bounded authored TOML input/event schedule headlessly;
   it can be combined with `-host` or `-join` for repeatable two-process runs.
-- `-host <bind-address>` hosts a session and `-players <n>` sets the lobby size;
-  `-join <addr>` joins one and adopts the host's seed/config/content identity,
-  where `<addr>` is `host:port`, a `vif://host:port/<name>` link, or a session's
-  `wss://` route.
+- `-host <bind-address>` hosts a session, `ws://:7777` serving it over WebSocket
+  instead of TCP, and `-players <n>` sets the lobby size; `-join <addr>` joins one
+  and adopts the host's seed/config/content identity, where `<addr>` is
+  `host:port`, a `vif://host:port/<name>` link, a `ws(s)://` URL, or a site such
+  as `https://lixen.com`, which creates a session and hands back its link.
 - `-name <name>` makes a host answer to that name only, so one address can serve
   several sessions.
 - `-authority host|migrate` decides where authorship goes when the participant

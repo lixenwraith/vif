@@ -127,13 +127,18 @@ func (t *Transport) startServer() error {
 // listen binds one address and serves it. accept is the per-connection handshake;
 // nil selects the coordinator's session handshake.
 func (t *Transport) listen(addr string, accept func(net.Conn) (PeerID, error)) error {
+	e, err := ParseEndpoint(addr)
+	if err != nil {
+		return err
+	}
 	var ln net.Listener
-	var err error
-
-	if t.config.TLS != nil {
-		ln, err = tls.Listen("tcp", addr, t.config.TLS)
-	} else {
-		ln, err = net.Listen("tcp", addr)
+	switch {
+	case e.Scheme == SchemeWebSocket:
+		ln, err = listenWebSocket(e.Addr, t.config.ConnectTimeout)
+	case t.config.TLS != nil:
+		ln, err = tls.Listen("tcp", e.Addr, t.config.TLS)
+	default:
+		ln, err = net.Listen("tcp", e.Addr)
 	}
 	if err != nil {
 		return err

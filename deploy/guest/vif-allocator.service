@@ -26,6 +26,9 @@ ExecStart=/usr/local/bin/vif-allocator \
     -wad ${VIF_ALLOCATOR_WAD} \
     -web-origin ${VIF_ALLOCATOR_WEB_ORIGIN} \
     -route-max ${VIF_ALLOCATOR_ROUTE_MAX} \
+    -client-address-header ${VIF_ALLOCATOR_CLIENT_ADDRESS_HEADER} \
+    -client-joins ${VIF_ALLOCATOR_CLIENT_JOINS} \
+    -client-creates ${VIF_ALLOCATOR_CLIENT_CREATES} \
     -log-stream-url ${VIF_ALLOCATOR_LOG_STREAM_URL}
 Restart=on-failure
 RestartSec=3s
