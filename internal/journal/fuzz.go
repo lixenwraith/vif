@@ -342,15 +342,14 @@ func (d *FuzzDriver) actFire() bool {
 // actInputTick advances auto-fire and macro playback, which emit on their own cadence
 func (d *FuzzDriver) actInputTick() bool { return d.a.InputTick() }
 
-// actCommand runs one ex command, keystroke by keystroke so each lands in its own
-// settle group, as a live run produces
+// actCommand runs one ex command
 func (d *FuzzDriver) actCommand() bool {
-	return d.typeCommand(fuzzCommands[d.rng.Intn(len(fuzzCommands))])
+	return injectCommand(d.a.Inject, fuzzCommands[d.rng.Intn(len(fuzzCommands))])
 }
 
 // actOverlay opens an overlay and closes it, covering the paused overlay mode round trip
 func (d *FuzzDriver) actOverlay() bool {
-	if !d.typeCommand(fuzzOverlays[d.rng.Intn(len(fuzzOverlays))]) {
+	if !injectCommand(d.a.Inject, fuzzOverlays[d.rng.Intn(len(fuzzOverlays))]) {
 		return false
 	}
 	d.a.Tick(1)
@@ -401,7 +400,7 @@ func (d *FuzzDriver) actReset() bool {
 		if purge {
 			cmd = "new!"
 		}
-		return d.typeCommand(cmd)
+		return injectCommand(d.a.Inject, cmd)
 	}
 	_ = d.a.Reset(purge)
 	return true
@@ -411,17 +410,3 @@ func (d *FuzzDriver) actReset() bool {
 
 // char draws one printable character
 func (d *FuzzDriver) char() rune { return rune(fuzzChars[d.rng.Intn(len(fuzzChars))]) }
-
-// typeCommand runs one ex command as a full round trip: the mode switch pauses, the
-// confirm unpauses and executes
-func (d *FuzzDriver) typeCommand(cmd string) bool {
-	if !d.a.Inject(&input.Intent{Type: input.IntentModeSwitch, ModeTarget: input.ModeTargetCommand, Count: 1}) {
-		return false
-	}
-	for _, c := range cmd {
-		if !d.a.Inject(&input.Intent{Type: input.IntentTextChar, Char: c, Count: 1}) {
-			return false
-		}
-	}
-	return d.a.Inject(&input.Intent{Type: input.IntentTextConfirm, Count: 1})
-}
