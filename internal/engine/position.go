@@ -37,12 +37,13 @@ type Position struct {
 // NewPosition creates a new position store with spatial indexing
 // SYNC: all Position access occurs under World.updateMutex; no internal locking
 func NewPosition(w *World, bit uint64) *Position {
-	// Default grid size, will be resized by GameContext if needed
+	// The grid is sized by GameContext to the map it indexes: a ceiling-sized one
+	// costs 32 MB per world, which an instance per bot multiplies.
 	return &Position{
 		index:    make(map[core.Entity]int32, 256),
 		dense:    make([]component.PositionComponent, 0, 64),
 		entities: make([]core.Entity, 0, 64),
-		grid:     NewSpatialGrid(parameter.DefaultGridWidth, parameter.DefaultGridHeight), // Default safe size
+		grid:     NewSpatialGrid(0, 0),
 		world:    w,
 		bit:      bit,
 	}
@@ -420,16 +421,10 @@ var SpiralSearchDirs = [8][2]int{
 	{0, -1}, {-1, -1}, {-1, 0}, {-1, 1}, {0, 1}, {1, 1}, {1, 0}, {1, -1},
 }
 
-// FindFreeAreaSpiral searches outward from origin for an area free of blocking walls
-// Uses 45° spiral pattern, counter-clockwise from top
-// Returns (topLeftX, topLeftY, found) where found=false if no valid position exists
-//
-// Parameters:
-//   - originX, originY: search center (e.g., centroid)
-//   - width, height: area dimensions
-//   - anchorOffsetX, anchorOffsetY: offset from area top-left to anchor/header position
-//   - mask: wall block mask to check (0 = any wall)
-//   - maxRadius: maximum search distance in cells (0 = default 20)
+// FindFreeAreaSpiral searches outward from origin, 45° counter-clockwise from top,
+// for a width×height area free of walls matching mask (0 = any wall). The anchor
+// offset is the header's position from the area's top-left; maxRadius 0 means 20.
+// Returns the area's top-left and whether one was found.
 func (p *Position) FindFreeAreaSpiral(
 	originX, originY int,
 	width, height int,

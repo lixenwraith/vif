@@ -16,7 +16,7 @@ func TestClampMapSizeBoundsEveryShape(t *testing.T) {
 		w, h int
 	}{
 		{"ordinary", 160, 50},
-		{"at the cell ceiling", parameter.DefaultGridWidth, parameter.DefaultGridHeight},
+		{"at the cell ceiling", 500, parameter.MaxMapCells / 500},
 		{"too wide", parameter.MaxMapWidth * 4, 10},
 		{"too tall", 10, parameter.MaxMapHeight * 4},
 		{"legal axes, illegal product", parameter.MaxMapWidth, parameter.MaxMapHeight},
@@ -51,12 +51,9 @@ func TestClampMapSizeLeavesALegalMapAlone(t *testing.T) {
 	}
 }
 
-// TestTheGridSurvivesAHostileResize is the defect this bounds.
-//
-// The dimensions reach make() from a LevelSetup payload, which is replicated and
-// therefore reachable from any participant. Before the clamp, a width and height
-// whose product overflows int panicked in the allocator, and under the crash
-// handler that is the process.
+// TestTheGridSurvivesAHostileResize: the dimensions reach make() from a replicated
+// LevelSetup payload, so before the clamp a product overflowing int panicked the
+// allocator, and under the crash handler that is the process.
 func TestTheGridSurvivesAHostileResize(t *testing.T) {
 	t.Parallel()
 	g := NewSpatialGrid(80, 24)

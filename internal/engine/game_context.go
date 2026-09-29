@@ -31,17 +31,10 @@ type NavigationDebugState struct {
 	GroupID              uint8
 }
 
-// GameContext holds all game state including the ECS world
-// SessionController is what an operator command may ask of the session. Kept to
-// the two questions the command surface actually has: start hosting this run, and
-// describe what it is part of now.
-//
-// **Every method is called with the world lock already held.** The whole router
-// path runs inside App.handleIntent's critical section — mode/ must never acquire
-// the lock itself — so an implementation that took it would deadlock the instance
-// at the moment the operator pressed enter, with no tick and no signal able to get
-// it back. That is not hypothetical: it is what `:host` did the first time it was
-// wired through a script.
+// SessionController is what an operator command may ask of the session: start
+// hosting this run, and describe what it is part of now. Every method is called
+// with the world lock held — the router runs inside App.handleIntent's critical
+// section — so an implementation that took it would deadlock the instance.
 type SessionController interface {
 	// BeginHosting opens this running instance to participants at addr, under the
 	// authority policy named ("" keeps the run's own). It returns an error rather
@@ -58,6 +51,7 @@ type SessionController interface {
 	SessionSummary() string
 }
 
+// GameContext holds all game state including the ECS world
 type GameContext struct {
 	// === Immutable After Init ===
 
@@ -222,6 +216,7 @@ func newGameContext(world *World, width, height int, clock Clock, corr *vlog.Cor
 		CameraY:        0,
 		CropOnResize:   true,
 	}
+	world.Positions.ResizeGrid(viewportWidth, viewportHeight)
 
 	// 5. Time Resource (Initial state). Boot FSM actions can create deadlines
 	// before tick one, while a network lobby is paused. Seed their game clock at
@@ -352,13 +347,9 @@ func (ctx *GameContext) HandleResizeLocked() {
 	ctx.World.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
 
 	if !cropped {
-		// The map did not move, so no cursor is out of bounds and there is nothing
-		// to reconcile. Announcing a same-cell move anyway would be a shared event
-		// produced by one instance's terminal: EventCursorMoved dirties the
-		// flow-field throttle, whose phase is shared state, so the two instances
-		// would recompute their fields on different ticks and steer shared species
-		// along fields of different ages. The view still has to follow, and that is
-		// this instance's own business — the camera re-anchors directly.
+		// The map did not move, so no cursor needs reconciling. A same-cell move
+		// would be a shared event from one terminal: EventCursorMoved dirties the
+		// flow-field throttle, whose phase is shared state. The camera re-anchors.
 		ctx.World.FollowLocalCursor()
 		return
 	}
@@ -516,18 +507,10 @@ func (ctx *GameContext) SetOverlayFilterEditing(editing bool) {
 	ctx.overlayFilterEditing.Store(editing)
 }
 
-// Session state is operator-owned: it describes how the game is being observed and
-// driven, not the game itself, so it survives EventGameResetRequest.
-// The list below is its definition; anything not named is world state and is rebuilt by reset.
-//
-//	MouseFreeMode, AutoFire   input preferences
-//	TimeCtl scale             simulation rate
-//	OverlayHUD, overlay pins  telemetry overlay layout
-//
-// Logging is excluded because target, level, scope and recorder depth are process
-// configuration, and clearing them mid-session would close the log being read.
-// Pending step requests are excluded in the other direction: they name an FSM region
-// or event stream that reset destroys, so they are cancelled rather than kept.
+// Session state is operator-owned — mouse free mode, auto-fire, simulation rate,
+// overlay HUD and pins — and survives EventGameResetRequest; anything else is world
+// state. Logging is process configuration and is excluded; pending step requests
+// name what a reset destroys and are cancelled.
 
 // ResetSessionState restores every operator toggle to its startup value.
 // Called only on the purge path, never by a plain reset.

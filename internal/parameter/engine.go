@@ -24,9 +24,8 @@ const (
 	InputTickInterval = 16 * time.Millisecond
 
 	// ProbeStallInterval is how long a running scheduler may leave the tick
-	// counter unmoved before a liveness probe calls the run stalled. At the 50 ms
-	// tick it is forty ticks: far past any ordinary slip, and short enough that a
-	// wedged loop is restarted rather than left holding its participants.
+	// counter unmoved before a liveness probe calls the run stalled: forty ticks,
+	// past any ordinary slip, short enough that a wedged loop is restarted.
 	ProbeStallInterval = 2 * time.Second
 
 	// PausedPollInterval is the scheduler's wall-clock poll period while paused
@@ -38,15 +37,14 @@ const (
 	// StepRunMaxTicks is the tick budget a run-until request spends before self-disarming
 	StepRunMaxTicks = 20000
 
-	// EventLoopBackoffMax is the maximum number of intervals that failure to acquire lock is tolerated (deferred to next event tick)
+	// EventLoopBackoffMax is how many intervals a failed lock acquisition may defer
 	EventLoopBackoffMax = 2
 
 	// EventLoopIterations is the cycles event loop attempts to consume events for immediate settling
 	EventLoopIterations = 16
 
 	// StatSnapshotTicks is the game-tick period between status snapshots; 0 disables.
-	// The flight recorder holds fine-grained history, so the periodic snapshot
-	// is a coarse heartbeat: 200 = 0.1 Hz at a 50ms tick
+	// A coarse heartbeat beside the flight recorder: 0.1 Hz at a 50ms tick.
 	StatSnapshotTicks = 200
 
 	// RecorderDepthTicks is the flight-recorder ring depth in game ticks; 0 disables
@@ -75,38 +73,17 @@ const (
 	EventBufferMask = 2047
 )
 
-// MaxEntitiesPerCell set to 31 to ensure the Cell struct fits exactly into 256 bytes
-// (4 cache lines) when Entity is uint64 (8 bytes)
-// 31 * 8 (Entities) + 1 (Count) + 1 (SharedCount) + 6 (Padding) = 256 bytes
+// MaxEntitiesPerCell keeps a Cell at exactly 256 bytes, four cache lines:
+// 31 eight-byte entities, two counts and six bytes of padding.
 const MaxEntitiesPerCell = 31
 
 // ReservedPlayerPerCell caps the player half of a cell so a pile of local effects
 // can never consume the slots a shared entity needs.
 const ReservedPlayerPerCell = 12
 
-// Spatial Grid Defaults
-const (
-	// DefaultGridWidth is the default width for the spatial grid
-	DefaultGridWidth = 500
-
-	// DefaultGridHeight is the default height for the spatial grid
-	DefaultGridHeight = 250
-)
-
-// Map bounds. The grid is a dense array of Cell, so cells are what a map costs:
-// at 256 bytes each, MaxMapCells is exactly the grid NewWorld pre-allocates,
-// which is what makes a legal map one the grid never has to grow for.
-//
-// The per-axis caps sit far above any terminal a person runs and exist so an
-// extreme aspect ratio is refused on its own terms rather than by the product.
-// They are a clamp rather than a rejection because a LevelSetup payload is
-// replicated: every participant applies the same one, so a clamp reaches the
-// same bounds everywhere, where a payload one instance dropped and another
-// applied is a divergence.
-//
-// The bound exists because the dimensions reach make() from a replicated
-// payload. Without it, a width and height whose product overflows int is a
-// panic in the allocator rather than a rejected map.
+// Map bounds, a clamp rather than a rejection: LevelSetup is replicated, so every
+// participant must reach the same bounds, and the product reaches make(). A grid
+// is sized to its map at 256 bytes a cell, so the ceiling costs 32 MB per world.
 const (
 	// MaxMapWidth is the widest simulation map, in cells.
 	MaxMapWidth = 2000
@@ -115,5 +92,5 @@ const (
 	MaxMapHeight = 2000
 
 	// MaxMapCells is the most cells a map may hold, whatever its shape.
-	MaxMapCells = DefaultGridWidth * DefaultGridHeight
+	MaxMapCells = 500 * 250
 )
