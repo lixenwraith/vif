@@ -67,6 +67,7 @@ type Peer struct {
 	// Lifecycle
 	closeCh   chan struct{}
 	closeOnce sync.Once
+	done      chan struct{} // closed once the writer has flushed and closed the socket
 
 	mu sync.RWMutex
 }
@@ -80,6 +81,7 @@ func newPeer(id PeerID, conn net.Conn, cfg *Config) *Peer {
 		stream:            openFlateStream(conn, cfg.ReadBufferSize, cfg.WriteBufferSize),
 		sendCh:            make(chan *Message, cfg.SendQueueSize),
 		closeCh:           make(chan struct{}),
+		done:              make(chan struct{}),
 		readTimeout:       cfg.DisconnectTimeout,
 		writeTimeout:      cfg.WriteTimeout,
 		heartbeatInterval: cfg.HeartbeatInterval,
@@ -108,12 +110,17 @@ func (p *Peer) Send(msg *Message) bool {
 	}
 }
 
-// Close initiates graceful shutdown
+// closeFlush bounds the flush a closing link gives the frames already queued on
+// it, so a peer that stopped reading cannot hold a shutdown for a write timeout.
+const closeFlush = time.Second
+
+// Close initiates graceful shutdown: the writer sends what was queued before it,
+// then closes the socket. A notice broadcast just before a close still arrives.
 func (p *Peer) Close() {
 	p.closeOnce.Do(func() {
 		p.State.Store(uint32(StateDisconnecting))
+		_ = p.conn.SetWriteDeadline(time.Now().Add(closeFlush))
 		close(p.closeCh)
-		_ = p.conn.Close()
 	})
 }
 
@@ -148,8 +155,11 @@ func (p *Peer) readLoop(handler func(PeerID, *Message)) {
 	}
 }
 
-// writeLoop sends queued messages
+// writeLoop sends queued messages, and on close the ones still queued, and owns
+// the socket's close.
 func (p *Peer) writeLoop() {
+	defer close(p.done)
+	defer p.conn.Close()
 	defer p.Close()
 	var heartbeat <-chan time.Time
 	var ticker *time.Ticker
@@ -166,6 +176,7 @@ func (p *Peer) writeLoop() {
 		var msg *Message
 		select {
 		case <-p.closeCh:
+			p.flushQueued()
 			return
 		case msg = <-p.sendCh:
 		case <-heartbeat:
@@ -189,10 +200,29 @@ func (p *Peer) writeLoop() {
 			case <-linger.C:
 				break batch
 			case <-p.closeCh:
+				p.flushQueued()
 				return
 			}
 		}
 		if err := p.stream.Flush(); err != nil {
+			return
+		}
+	}
+}
+
+// flushQueued sends what is encoded and still queued, under closeFlush.
+func (p *Peer) flushQueued() {
+	_ = p.conn.SetWriteDeadline(time.Now().Add(closeFlush))
+	for {
+		select {
+		case msg := <-p.sendCh:
+			msg.Seq = p.OutSeq.Add(1)
+			msg.Ack = p.InSeq.Load()
+			if msg.Encode(p.stream) != nil {
+				return
+			}
+		default:
+			_ = p.stream.Flush()
 			return
 		}
 	}
@@ -426,15 +456,20 @@ func (pm *PeerManager) PeerCount() int {
 	return len(pm.peers)
 }
 
-// Close disconnects all peers
+// Close disconnects all peers and waits for their queued frames, flushed side by
+// side under closeFlush.
 func (pm *PeerManager) Close() {
 	pm.mu.Lock()
-	defer pm.mu.Unlock()
+	peers := pm.peers
+	pm.peers = make(map[PeerID]*Peer)
+	pm.mu.Unlock()
 
-	for _, peer := range pm.peers {
+	for _, peer := range peers {
 		peer.Close()
 	}
-	pm.peers = make(map[PeerID]*Peer)
+	for _, peer := range peers {
+		<-peer.done
+	}
 }
 
 // dial connects to a target by the transport it names, TLS over TCP when configured.

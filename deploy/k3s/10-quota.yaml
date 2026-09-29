@@ -7,9 +7,9 @@
 # stale state, or was asked for eleven sessions by a website nobody rate-limited.
 #
 # The compute totals are ten times one session's envelope (doc/kubernetes-fleet.md
-# §6), which since the browser path is the game container plus the WebSocket bridge
-# sidecar: a restartable init container counts into the pod total alongside the
-# ordinary ones, where the config-check container counts only against its own peak.
+# §6) with the WebSocket bridge sidecar a fallback allocator adds: a restartable init
+# container counts into the pod total alongside the ordinary ones, where the
+# config-check container counts only against its own peak.
 # They are a second ceiling on the same fact: ten sessions cannot exceed the memory
 # the node was sized for, whatever a mis-rendered manifest asks for.
 apiVersion: v1
