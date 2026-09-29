@@ -3,6 +3,7 @@ package network
 import (
 	"net"
 	"testing"
+	"time"
 )
 
 // TestBroadcastReportsRefusedFrames pins the outbound loss signal. A peer whose
@@ -34,5 +35,30 @@ func TestBroadcastReportsRefusedFrames(t *testing.T) {
 	peer.Close()
 	if refused := pm.Broadcast(NewMessage(MsgEvent, nil)); refused != 1 {
 		t.Fatalf("broadcast to a closed peer refused %d frames, want 1", refused)
+	}
+}
+
+// TestAFrameQueuedBeforeCloseStillArrives: closing a link flushes what was queued on
+// it, so a notice broadcast just before a shutdown reaches the peers it was meant for.
+func TestAFrameQueuedBeforeCloseStillArrives(t *testing.T) {
+	pm := NewPeerManager(DefaultConfig())
+	client, server := net.Pipe()
+	defer client.Close()
+	if _, err := pm.AddConnectionAs(server, 1); err != nil {
+		t.Fatal(err)
+	}
+	received := make(chan *Message, 1)
+	go func() {
+		msg, _ := Decode(openFlateStream(client, 0, 0))
+		received <- msg
+	}()
+	pm.Broadcast(NewMessage(MsgSessionRestart, []byte("host:7777")))
+	start := time.Now()
+	pm.Close()
+	if elapsed := time.Since(start); elapsed > closeFlush {
+		t.Errorf("Close took %s, past its %s flush bound", elapsed, closeFlush)
+	}
+	if msg := <-received; msg == nil || msg.Type != MsgSessionRestart {
+		t.Fatalf("the peer read %+v, want the queued restart notice", msg)
 	}
 }
