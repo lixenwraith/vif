@@ -415,10 +415,10 @@ func (f sessionFlags) lifetime() lifecycle.Policy {
 }
 
 func (f *sessionFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&f.host, "host", "", "Host a session on bind address, e.g. :7777")
-	fs.StringVar(&f.join, "join", "", "Join a session at [tcp://|vif://]host:port[/name] or a wss:// route; tcp when no scheme is given")
+	fs.StringVar(&f.host, "host", "", "Host a session on a bind address, :7777 for tcp or ws://:7777 for WebSocket")
+	fs.StringVar(&f.join, "join", "", "Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL; tcp when no scheme is given")
 	fs.StringVar(&f.name, "name", "", "Name this host answers to, so one address can serve several sessions")
-	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player, e.g. :7777")
+	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player, e.g. :7777 or ws://:7777")
 	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
 	fs.StringVar(&f.size, "size", "", "Simulated terminal size WxH for a run that has no terminal of its own")
 	fs.DurationVar(&f.firstJoin, "first-join", 0,
@@ -487,6 +487,8 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		case err != nil:
 		case a.binds && e.Name != "":
 			err = errors.New("a bound address names no session; a host answers to -name")
+		case a.binds && a.flag == "-listen" && e.Scheme == network.SchemeWebSocket:
+			err = errors.New("participants link to each other over tcp")
 		case a.binds:
 			err = e.Listenable()
 		case e.Name != "":

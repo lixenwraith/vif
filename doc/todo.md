@@ -10,16 +10,14 @@ and P3 is an idea.
 
 ## Browser sessions and mobile
 
-### Serve WebSocket from vif itself
+### Serve wss from vif's own listener
 
-- Priority: P2
-- Affected files: `cmd/vif`, `internal/app/host.go`, `internal/network`
+- Priority: P3
+- Affected files: `cmd/vif`, `internal/network/websocket_other.go`
 
-`vif -serve`/`-host` binds TCP only, so a browser reaches a session only through a
-fleet. A flag of its own would serve the route from one binary, on a LAN or in a
-test, with `pkg/websocket`'s `Check` and `Upgrade` feeding the accept loop. Decide
-its origin policy, and whether it serves `wss` with its own certificate, which a
-page served over `https` requires.
+`-host`/`-serve ws://` is plain: a page served over `https` cannot open it. Taking a
+certificate and key would wrap the listener's TCP port in `tls.NewListener` and let
+`wss://host:port` bind; decide where the key lives before adding the flags.
 
 ### Key the browser route's admission in the allocator
 

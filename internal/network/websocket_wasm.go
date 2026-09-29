@@ -24,12 +24,6 @@ var errWSOverrun = errors.New("websocket: inbound queue overrun")
 // Write is already one message the browser sends, so a linger only delays it.
 const writeLinger = 0
 
-// wsAddr names the endpoint wherever a peer address is logged or shown.
-type wsAddr string
-
-func (a wsAddr) Network() string { return "websocket" }
-func (a wsAddr) String() string  { return string(a) }
-
 // wsConn is a byte stream over one browser WebSocket. Message boundaries are not
 // protocol boundaries: Decode consumes the concatenation exactly as it does from a
 // socket, which is what lets SocketPort serve a browser guest unchanged.
@@ -47,6 +41,11 @@ type wsConn struct {
 	closed      chan struct{}
 	closeOnce   sync.Once
 	releaseOnce sync.Once
+}
+
+// listenWebSocket is refused: a page has no port to listen on.
+func listenWebSocket(string, time.Duration) (net.Listener, error) {
+	return nil, errors.New("websocket: a browser cannot listen")
 }
 
 // dialWebSocket opens the session route and returns it once the browser reports

@@ -9,8 +9,8 @@ import (
 )
 
 // Scheme is how a session's bytes travel. TCP carries native play at both ends; a
-// WebSocket route reaches the same session through the deployment, from a browser
-// or from a network that blocks the TCP port.
+// WebSocket carries the same stream for a browser or a network that blocks the TCP
+// port, from the deployment's route or a host's own ws:// listener.
 type Scheme uint8
 
 const (
@@ -60,11 +60,27 @@ func ParseEndpoint(target string) (Endpoint, error) {
 	return e, nil
 }
 
-// Listenable reports why vif cannot serve e, nil when it can: a WebSocket route is
-// the deployment's bridge in front of a TCP port, not something vif binds.
+// Listenable reports why vif cannot serve e, nil when it can. A WebSocket host is
+// plain ws on host:port and answers every path, since the session is named in-band.
 func (e Endpoint) Listenable() error {
-	if e.Scheme == SchemeWebSocket {
-		return errors.New("a WebSocket route is served by the deployment's bridge; host on tcp")
+	if e.Scheme != SchemeWebSocket {
+		return nil
 	}
-	return nil
+	u, err := url.Parse(e.Addr)
+	switch {
+	case err != nil:
+		return err
+	case u.Scheme != "ws":
+		return errors.New("vif serves plain ws; wss is a TLS edge's to terminate")
+	case strings.Trim(u.Path, "/") != "" || u.RawQuery != "" || u.User != nil:
+		return errors.New("a WebSocket host binds ws://host:port and answers on every path")
+	}
+	_, _, err = net.SplitHostPort(u.Host)
+	return err
 }
+
+// wsAddr names a WebSocket endpoint in the syntax -join reads.
+type wsAddr string
+
+func (a wsAddr) Network() string { return "websocket" }
+func (a wsAddr) String() string  { return string(a) }
