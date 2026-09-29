@@ -24,8 +24,13 @@ const writeLinger = parameter.NetworkWriteLinger
 
 // dialWebSocket opens a session route natively, for a network that blocks the TCP
 // port. A refusal before the upgrade carries the allocator's JSON error, and its
-// message is reported as a join reply's reason is.
+// message is reported as a join reply's reason is. A URL with no host is this
+// machine, as a host-less host:port is to TCP.
 func dialWebSocket(target string, timeout time.Duration) (net.Conn, error) {
+	if u, err := url.Parse(target); err == nil && u.Hostname() == "" {
+		u.Host = net.JoinHostPort("localhost", u.Port())
+		target = u.String()
+	}
 	ctx := context.Background()
 	if timeout > 0 {
 		var cancel context.CancelFunc
