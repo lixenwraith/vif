@@ -54,7 +54,7 @@ func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL 
 		server.logProxy = newLogStreamProxy(logStreamURL, logger)
 	}
 	if web.WebOrigin != "" {
-		server.ws = newWSRouter(web.WebOrigin, web.Workload.BridgeImage != "", held, logger)
+		server.ws = newWSRouter(web.WebOrigin, held)
 	}
 	server.mux.HandleFunc("/healthz", server.handleHealth)
 	server.mux.HandleFunc("/readyz", server.handleReady)

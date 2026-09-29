@@ -2,13 +2,13 @@
 # Bring the node to this checkout's HEAD. Each component that differs is shown as a
 # diff (installed -, incoming +) and then updated, in dependency order; a current
 # one is skipped. --diff shows and changes nothing, and exits 1 if anything differs.
-# Usage: deploy/update.sh [--diff] [filter objects wad bridge image allocator logwisp]
+# Usage: deploy/update.sh [--diff] [filter objects wad image allocator logwisp]
 set -eu
 
 deploy=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$deploy/.." && pwd)
 guest=$deploy/guest
-all="filter objects wad bridge image allocator logwisp"
+all="filter objects wad image allocator logwisp"
 wad_root=${VIF_WAD_ROOT:-/var/db/vif/wad}
 
 diff_only=false
@@ -17,7 +17,7 @@ for arg in "$@"; do
 	case $arg in
 		-h|--help) sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 		--diff) diff_only=true ;;
-		filter|objects|wad|bridge|image|allocator|logwisp) selected="$selected $arg" ;;
+		filter|objects|wad|image|allocator|logwisp) selected="$selected $arg" ;;
 		*) echo "usage: $0 [--diff] [$all]" >&2; exit 2 ;;
 	esac
 done
@@ -103,10 +103,6 @@ check_wad() {
 	return 1
 }
 
-check_bridge() {
-	"$guest/update-vif-ws-bridge.sh" --diff
-}
-
 check_image() {
 	sudo_copy /etc/vif-allocator/allocator.env "$work/allocator.env"
 	installed=$(sed -n 's/^VIF_ALLOCATOR_IMAGE=//p' "$work/allocator.env" | tail -n 1)
@@ -175,7 +171,6 @@ apply_objects() {
 	done
 }
 apply_wad() { "$guest/update-vif-wad.sh"; }
-apply_bridge() { "$guest/update-vif-ws-bridge.sh"; }
 apply_image() { "$guest/update-vif-image.sh"; }
 apply_allocator() { "$guest/update-vif-allocator.sh"; }
 # LogWisp's updater leaves the allocator alone, and the allocator reads its stream.
@@ -214,7 +209,7 @@ case "$pending" in
 	*image*|*allocator*|*logwisp*)
 		"$deploy/k3s/session.sh" blockers ||
 			die "empty the fleet first (./deploy/k3s/session.sh drain), or update only:$(
-				for c in $pending; do case $c in filter|objects|wad|bridge) printf ' %s' "$c" ;; esac; done)"
+				for c in $pending; do case $c in filter|objects|wad) printf ' %s' "$c" ;; esac; done)"
 		;;
 esac
 

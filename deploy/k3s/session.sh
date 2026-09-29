@@ -23,7 +23,6 @@ usage() {
 	echo "       $0 state SESSION_ID                 one line of what the fleet reports" >&2
 	echo "       $0 delete SESSION_ID                remove one session and its log files" >&2
 	echo "       $0 create SESSION_ID [GAME_NODEPORT] [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
-	echo "       WS_BRIDGE_IMAGE=<image> adds the browser bridge sidecar to a create" >&2
 	echo "                                          SCENARIO= and LOG_LEVEL= override" >&2
 	echo "       $0 list" >&2
 	echo "       $0 status" >&2

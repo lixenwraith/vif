@@ -87,10 +87,8 @@ Settled. Do not check, flag, or ask about any of these again.
 - The node is Arch Linux running K3s, at the release the deployment procedure pins.
   Every Kubernetes feature this repo uses, restartable init containers included, is
   available. Never add, suggest or ask for a version check.
-- The browser bridge is websocat 1.x, packaged as the sidecar image by
-  `deploy/guest/update-vif-ws-bridge.sh`. It never sets `TCP_NODELAY`. It stays
-  deployed and documented until the built-in WebSocket in `doc/todo.md` has passed
-  automated and field tests.
+- The browser route's WebSocket is `pkg/websocket`, terminated in the allocator and
+  spliced to the pod's game port. There is no WebSocket sidecar or bridge image.
 - The site is `https://lixen.com`. The allocator's settings are
   `deploy/guest/vif-allocator.env`; the node's copy is never edited by hand.
 - A deploy is `git pull && ./deploy/update.sh` on the node (`--diff` previews).

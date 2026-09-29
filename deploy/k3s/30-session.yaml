@@ -6,7 +6,6 @@
 #
 #   ${SESSION_ID}      a short, unique, DNS-safe session name (e.g. 7f3c1a)
 #   ${IMAGE}           the image, pinned by digest in anything but a lab
-#   ${WS_BRIDGE_IMAGE} the WebSocket bridge sidecar image, also pinned
 #   ${GAME_NODEPORT}   the node port this session is directly reachable on (31700-31709)
 #   ${JOB_UID}         the created Job UID used to own the Service
 #   ${PLAYERS}         the guest ceiling for this session (1-16)
@@ -104,32 +103,6 @@ spec:
           resources:
             requests: {cpu: 50m, memory: 64Mi}
             limits: {cpu: 500m, memory: 192Mi}
-        - name: ws-bridge
-          # The browser's half of the fleet while the allocator proxies to it
-          # (-ws-bridge-image): one upgraded connection becomes one loopback
-          # connection to the game, which keeps its framed TCP protocol. An
-          # allocator that terminates the route itself renders the pod without it.
-          #
-          # A restartable init container, not an ordinary one: with restartPolicy
-          # Never and backoffLimit 0, a container that exited non-zero would be a
-          # Failed pod and a dead match. A sidecar restarts by itself and never
-          # decides whether the pod finished.
-          image: "${WS_BRIDGE_IMAGE}"
-          imagePullPolicy: IfNotPresent
-          restartPolicy: Always
-          # The reference bridge is websocat; a substitute image must accept this
-          # vector. See doc/kube-docker-deploy.md §8.1.
-          args: ["--binary", "--exit-on-eof", "ws-l:0.0.0.0:7779", "tcp:127.0.0.1:7777"]
-          ports:
-            - name: wsgame
-              containerPort: 7779
-              protocol: TCP
-          securityContext: *container_security
-          # No volumes and no probes. It holds no state, and a TCP probe on 7779
-          # would be a half-open handshake the bridge has to log and drop.
-          resources:
-            requests: {cpu: 25m, memory: 16Mi}
-            limits: {cpu: 100m, memory: 32Mi}
       containers:
         - name: session
           image: "${IMAGE}"

@@ -91,12 +91,6 @@ trap cleanup EXIT HUP INT TERM
 
 render_env >"$stage_root/allocator.env.next"
 
-bridge_image=$(sed -n 's/^VIF_ALLOCATOR_WS_BRIDGE_IMAGE=//p' "$source_env")
-if [ -n "$bridge_image" ] && ! sudo k3s crictl inspecti "$bridge_image" >/dev/null 2>&1; then
-	echo "$0: $bridge_image is not in K3s; run deploy/guest/update-vif-ws-bridge.sh first" >&2
-	exit 1
-fi
-
 make -C "$repo_root" allocator
 [ -x "$repo_root/bin/vif-allocator" ]
 

@@ -178,8 +178,8 @@ is enforced by role, and `TCP_NODELAY` is set on every socket it owns.
 
 | Option | Decision |
 |---|---|
-| **Chosen — hand-written, terminated in `vif-allocator`.** | The objection was new parsing surface on the public route; the answer is a small reader whose memory is bounded whatever a length claims, fuzzed at the frame reader and both handshake parsers. The allocator already carried every browser's bytes through its proxy; it now also unmasks and frames them, and the pod's 7779 hop goes. |
-| A bridge sidecar in the session pod. | What shipped first, and selectable by `-ws-bridge-image` until the field test retires it. A restartable init container whose fault is not the pod's, but websocat 1.x never sets `TCP_NODELAY`, which cost every session frame tens of milliseconds (fleet §9). |
+| **Chosen — hand-written, terminated in `vif-allocator`.** | The objection was new parsing surface on the public route; the answer is a small reader whose memory is bounded whatever a length claims, fuzzed at the frame reader and both handshake parsers. The allocator already carries every proxied player's bytes; for a browser it also unmasks and frames them, which costs microseconds (fleet §9). |
+| A bridge process in the session pod. | An image, a container and a hop per session, and a socket whose latency this repository does not control: one without `TCP_NODELAY` holds each frame toward the player until the last is acknowledged, tens of milliseconds a frame. |
 | A WebSocket listener in `vif -serve`, behind the allocator's proxy. | Keeps a hop per pod. The shared codec makes it small, so it is deferred as a standalone serving flag, not refused ([`doc/todo.md`](todo.md)). |
 | A third-party package. | `net/http` has no WebSocket handler, `golang.org/x/net/websocket` is deprecated, and a maintained package is a network-facing dependency on the path every player takes. |
 | The API server's `pods/portforward`. | A shell-equivalent grant, and it needs the same client. |
@@ -187,8 +187,8 @@ is enforced by role, and `TCP_NODELAY` is set on every socket it owns.
 | WebTransport. | Its advantages do not yet justify an HTTP/3 server and ingress. |
 | A WebRTC data channel. | ICE, signalling and TURN solve a peer-to-peer problem an authoritative host does not have. |
 
-`network.AdmissionLimiter` is per address, and the pod sees terminated browsers at
-the node's address, as it sees front-door players, so they share one budget per
+`network.AdmissionLimiter` is per address, and the pod sees browsers at the node's
+address, as it sees front-door players, so they share one budget per
 session; the allocator's per-session ceiling and the edge's rate limits stand in
 until the allocator keys a per-address budget itself, which is where admission
 belongs ([`doc/todo.md`](todo.md)).
@@ -200,16 +200,14 @@ flowchart LR
     Browser["Browser WASM"] -->|"wss://"| Nginx["Host Nginx"]
     Nginx -->|"Upgrade"| Allocator["vif-allocator"]
     Allocator -->|"payload, TCP 7777"| Pod["vif -serve"]
-    Allocator -.->|"with -ws-bridge-image"| Bridge["ws-bridge sidecar"]
-    Bridge -.->|"127.0.0.1:7777"| Pod
 ```
 
 `wss://<site>/vif/ws/<session>`. The session identifier is a routing key, not a
 secret. Nginx terminates TLS and forwards `Upgrade` without interpreting a frame.
 The allocator checks the method, the identifier's syntax, the `Origin`, the
 session's liveness and readiness in reconciled Kubernetes state, and its own
-per-session ceiling; only then does it answer the upgrade, or proxy it to the
-sidecar, and it never accepts an upstream a caller named.
+per-session ceiling; only then does it answer the upgrade, and it never accepts an
+upstream a caller named.
 
 For a page served over HTTPS the endpoint must be `wss://`: browsers block
 `ws://` as active mixed content. The site's `connect-src 'self'` permits the

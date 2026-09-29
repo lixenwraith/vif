@@ -10,16 +10,16 @@ this page is what you run afterwards.
 git pull
 ./deploy/update.sh --diff      # what differs, per component; changes nothing
 ./deploy/update.sh             # the same diffs, then the updates, in order
-./deploy/update.sh wad bridge  # only the named components
+./deploy/update.sh wad image   # only the named components
 ```
 
 Components are `filter` (the node's `inet vif` table), `objects` (namespace,
-quota, policy, Role), `wad`, `bridge`, `image`, `allocator` and `logwisp`. A current
-one is skipped. Installed lines print green and incoming ones red; a file the update
+quota, policy, Role), `wad`, `image`, `allocator` and `logwisp`. A current one is
+skipped. Installed lines print green and incoming ones red; a file the update
 removes prints as `deleted <path>`. `image`, `allocator` and `logwisp` need an empty
-fleet and refuse otherwise, naming the components that do not; `filter`, `wad` and
-`bridge` never interrupt a match, since established connections and running pods
-keep what they started with. Each component keeps one `.previous` set,
+fleet and refuse otherwise, naming the components that do not; `filter` and `wad`
+never interrupt a match, since established connections and running pods keep what
+they started with. Each component keeps one `.previous` set,
 and [`guest/README.md`](guest/README.md) restores it. Settings for the allocator are
 [`guest/vif-allocator.env`](guest/vif-allocator.env), committed here and never
 edited on the node.
@@ -71,21 +71,6 @@ verdict — so read the session's JSONL before running it, not after:
 ./deploy/k3s/session.sh delete '<session-id>'
 ```
 
-## Switch the browser route's WebSocket end
-
-`VIF_ALLOCATOR_WS_BRIDGE_IMAGE` in [`guest/vif-allocator.env`](guest/vif-allocator.env)
-selects it. Set, each session pod carries the websocat sidecar and the allocator
-proxies the upgrade to it; removed, the allocator answers the upgrade itself and
-splices to the game port, and pods carry no sidecar. Commit the line, then:
-
-```sh
-./deploy/k3s/session.sh drain
-./deploy/update.sh allocator
-```
-
-Rolling back is restoring the line the same way. The bridge image stays pinned in
-K3s while unused, so the way back rebuilds nothing.
-
 ## Ask for a session
 
 The path a player takes, from the node. It prints the identity on stdout and the
@@ -109,8 +94,6 @@ Both arguments are optional and bounded by `-players-max` and `-log-level-min`;
 | `the fleet did not drain` | A pod outlived the background cascade by more than 60 seconds. | `./deploy/k3s/session.sh drain --force` |
 | `the worktree differs from HEAD` | Uncommitted changes. Updates build from HEAD, so they refuse to install something the tree does not describe; `--diff` still runs. | Commit, stash, or check out the revision you mean to deploy. |
 | `empty the fleet first … or update only: …` | `image`, `allocator` or `logwisp` differs while a fleet object exists. | `./deploy/k3s/session.sh drain`, or run only the components it names. |
-| `… is not in K3s; run deploy/guest/update-vif-ws-bridge.sh first` | The allocator would name a bridge image containerd does not hold. | `./deploy/update.sh bridge` |
-| `websocat 1.x`, `git is required`, `cargo is required` | No websocat package and no toolchain to build the pinned release. | Install websocat (AUR), or `sudo pacman -S git rust`. |
 | `pinned revision is not an ancestor of LogWisp main` | `deploy/logwisp/REVISION` names a commit that upstream `main` does not contain, usually a pull-request head a squash merge discarded. | Repin to the merged commit on `main`. |
 | `logwisp.service must be active before an update` | The updater replaces a running service and keeps one rollback set; it will not install onto a stopped one. | `sudo systemctl start logwisp.service` |
 | `the served stream bounds are not {...}` | The restarted LogWisp is not serving the queue, connection and timeout bounds in `deploy/logwisp/aggregator.toml`, so the install did not take. The previous build is already back. | Compare the message against `curl -fsS http://127.0.0.1:8081/status \| jq .server`. A pinned revision too old to carry a setting is the usual cause. |

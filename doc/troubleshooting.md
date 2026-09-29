@@ -364,7 +364,7 @@ committed to a tick like crossings, which is what closed most of that last gap.
 
 The browser guest's round trip and lag swung widely and it dropped out; the terminal
 beside it played normally. Measured with the browser build in headless Chromium,
-websocat as the pod runs it, and a 150 ms delay proxy on `main`:
+the browser route as then deployed, and a 150 ms delay proxy on `main`:
 
 - **Go shared the page's thread with xterm.** Each new glyph and colour pair is a
   rasterise and readback in xterm's WebGL atlas, about a hundred a second here; a
@@ -374,7 +374,6 @@ websocat as the pod runs it, and a 150 ms delay proxy on `main`:
 - **Loss that was latency.** A probe counted as lost when the next went out first,
   so every round trip over 200 ms read as up to half lost. It now counts once no echo
   has come back for `NetworkProbeLostAfter`.
-- **websocat without `TCP_NODELAY`.** A minor share of the jitter; see `doc/todo.md`.
 
 The session pod stayed near 7 ms of CPU per 100 ms throughout, far inside its limit.
 

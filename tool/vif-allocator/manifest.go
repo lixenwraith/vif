@@ -5,42 +5,13 @@ import "strconv"
 type workloadConfig struct {
 	Namespace string
 	Image     string
-	// BridgeImage is the WebSocket sidecar. Empty is a pod without one: the fleet
-	// publishes no browser route, or the allocator terminates it.
-	BridgeImage string
-	Players     int
-	LogLevel    string
-	MapSize     string
-	Scenario    string
-	FirstJoin   string
-	Empty       string
-	Drain       string
-}
-
-// bridgeSidecar serves the browser route from inside the pod: one WebSocket in,
-// one loopback connection to the game out, binary frames because the protocol is
-// bytes. A substitute image must accept this vector; see doc/kube-docker-deploy.md.
-//
-// It is a restartable init container rather than an ordinary one, which is what
-// keeps a bridge fault from ending a match: a Job pod whose ordinary container
-// exits non-zero is Failed, and backoffLimit 0 makes that the end of the session.
-func bridgeSidecar(image string, security map[string]any) map[string]any {
-	return map[string]any{
-		"name":            "ws-bridge",
-		"image":           image,
-		"imagePullPolicy": "IfNotPresent",
-		"restartPolicy":   "Always",
-		"args": []string{"--binary", "--exit-on-eof",
-			"ws-l:0.0.0.0:" + wsBridgePort, "tcp:127.0.0.1:7777"},
-		"ports": []any{
-			map[string]any{"name": "wsgame", "containerPort": 7779, "protocol": "TCP"},
-		},
-		"securityContext": security,
-		"resources": map[string]any{
-			"requests": map[string]string{"cpu": "25m", "memory": "16Mi"},
-			"limits":   map[string]string{"cpu": "100m", "memory": "32Mi"},
-		},
-	}
+	Players   int
+	LogLevel  string
+	MapSize   string
+	Scenario  string
+	FirstJoin string
+	Empty     string
+	Drain     string
 }
 
 // wadCategories are the resource directories a session reads from the node's
@@ -76,8 +47,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 		"seccompProfile": map[string]any{"type": "RuntimeDefault"},
 	}
 
-	// The check runs to completion first; the bridge follows it as a sidecar, so
-	// it is already serving when the game binds its own port.
+	// The check runs to completion before the game starts.
 	initContainers := []any{
 		map[string]any{
 			"name":            "config-check",
@@ -91,9 +61,6 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 				"limits":   map[string]string{"cpu": "500m", "memory": "192Mi"},
 			},
 		},
-	}
-	if cfg.BridgeImage != "" {
-		initContainers = append(initContainers, bridgeSidecar(cfg.BridgeImage, containerSecurity))
 	}
 
 	return map[string]any{

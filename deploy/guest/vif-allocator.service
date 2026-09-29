@@ -25,7 +25,6 @@ ExecStart=/usr/local/bin/vif-allocator \
     -scenario ${VIF_ALLOCATOR_SCENARIO} \
     -wad ${VIF_ALLOCATOR_WAD} \
     -web-origin ${VIF_ALLOCATOR_WEB_ORIGIN} \
-    -ws-bridge-image ${VIF_ALLOCATOR_WS_BRIDGE_IMAGE} \
     -route-max ${VIF_ALLOCATOR_ROUTE_MAX} \
     -log-stream-url ${VIF_ALLOCATOR_LOG_STREAM_URL}
 Restart=on-failure

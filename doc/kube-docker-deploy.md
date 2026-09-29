@@ -10,7 +10,7 @@ and it ends itself when nobody is in it.
 | Commission a new node | this document, §3 to §14, once |
 
 `deploy/update.sh` brings every component to the checkout's HEAD — K3s objects,
-scenario volume, bridge image, session image, allocator, LogWisp — skipping what is
+scenario volume, session image, allocator, LogWisp — skipping what is
 current and showing each change as a diff first. The design and open work behind
 the fleet are [the fleet plan](kubernetes-fleet.md); where each host artifact lands
 and how to back one out is [`deploy/guest/README.md`](../deploy/guest/README.md).
@@ -38,7 +38,7 @@ flowchart TD
     Site -->|"API + WebSocket Upgrade"| Alloc["Allocator on the node"]
     Alloc -->|"Job + Service"| API["K3s API"]
     API --> Pod["vif -serve pod"]
-    Alloc -->|"health, and the upgraded socket"| Bridge["ws-bridge sidecar"] -->|"127.0.0.1:7777"| Pod
+    Alloc -->|"health, and each socket's payload"| Pod
     Term["Player's vif -join"] -->|"raw TCP, no nginx"| PF["host pf rdr"]
     PF -->|"7777"| Alloc -->|"route frame, then bytes"| Pod
     PF -->|"NodePort"| NP["NodePort"] --> Pod
@@ -56,7 +56,7 @@ rebuild one from a port:
 |---|---|---|
 | `vif://<site-host>:7777/<id>` | `join_target`: the allocator's front door, one address for every session. | `vif -join`. |
 | `vif://<site-host>:31703/<id>` | `direct_target`: the session's own forwarded NodePort. | `vif -join`. |
-| `wss://<site-host>/vif/ws/<id>` | `ws_url`: the browser route, through the site and the allocator to the pod's bridge. | The WASM build. |
+| `wss://<site-host>/vif/ws/<id>` | `ws_url`: the browser route, through the site to the allocator, which answers the WebSocket and splices it to the pod. | The WASM build, or `vif -join` where 7777 is blocked. |
 
 Every route sends the name before the handshake, and the pod runs `-name <id>`, so a
 link that names another session is refused rather than seated in it
@@ -89,8 +89,7 @@ sudo systemctl enable --now systemd-timesyncd
 ```
 
 (Ubuntu: the same set through `apt-get`, with `golang-go`, `python3`, `iptables`,
-`conntrack` and `docker.io`.) Add `rust` only on a node with no websocat package
-(§8.1).
+`conntrack` and `docker.io`.)
 
 Swap off, and staying off — mask a zram generator's unit, not just `fstab`:
 
@@ -221,16 +220,6 @@ imports it into K3s pinned, records it as `VIF_ALLOCATOR_IMAGE`, removes older t
 empties Docker's store, and restores the Docker baseline. Pinned, because the kubelet
 deletes images no pod uses once the disk passes 85%, and between matches none does. Later runs rebuild only when `cmd`, `internal`,
 `pkg`, `go.mod`, `go.sum` or the Dockerfile changed since the installed tag.
-
-### 8.1 The browser bridge image
-
-Only while `VIF_ALLOCATOR_WS_BRIDGE_IMAGE` is set: the allocator then proxies the
-browser route to websocat, a sidecar in every session pod that turns each upgraded
-connection into a loopback TCP connection to the game; unset, the allocator speaks
-WebSocket itself and this step packages nothing. `./deploy/update.sh bridge`
-packages the websocat on `PATH` (Arch: AUR) or, when there is none, builds the
-pinned GitHub release with `deploy/guest/build-websocat.sh`, and imports it pinned
-like the session image. No Docker, no drain.
 
 ## 9. The fleet objects and the shared volumes
 
@@ -378,8 +367,7 @@ code -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Origin: https://<site-
 bin/vif -join 'wss://<site-host>/vif/ws/<session-id>'                # guests>=3, on the second machine
 ```
 
-The 101 and the join hold whichever end `VIF_ALLOCATOR_WS_BRIDGE_IMAGE` selects;
-the join is also the way in from a network that blocks 7777.
+The join is also the way in from a network that blocks 7777.
 
 Then prove the policy is enforced and the node is exempt from it, with the session
 still live:
@@ -389,14 +377,12 @@ POD_IP=$(sudo kubectl -n vif get pod -l app.kubernetes.io/component=session \
   -o jsonpath='{.items[0].status.podIP}')
 : "${POD_IP:?no session pod is running}"
 bash -c "</dev/tcp/$POD_IP/7777" && echo "node -> 7777 open"
-bash -c "</dev/tcp/$POD_IP/7779" && echo "node -> 7779 open"
 sudo kubectl -n default run np-probe --rm -i --restart=Never --image=busybox --quiet \
-  --command -- sh -c "for p in 7777 7778 7779; do nc -zw2 $POD_IP \$p && echo \$p open || echo \$p refused; done" </dev/null
+  --command -- sh -c "for p in 7777 7778; do nc -zw2 $POD_IP \$p && echo \$p open || echo \$p refused; done" </dev/null
 ```
 
-Expect both node lines, then `7777 open`, `7778 refused`, `7779 refused`; without a
-bridge image nothing listens on 7779, so its node line is absent. All open means
-NetworkPolicy is not enforced; a 7777 node line failing means node traffic is not
+Expect the node line, then `7777 open` and `7778 refused`. Both open means
+NetworkPolicy is not enforced; the node line failing means node traffic is not
 exempt, and `20-networkpolicy.yaml` names the `ipBlock` fix.
 
 Quit the client, read the session's file before it goes, then delete:
@@ -589,7 +575,6 @@ POD_IP=$(sudo kubectl -n vif get pod \
 CLUSTER_IP=$(sudo kubectl -n vif get svc "$SERVICE" -o jsonpath='{.spec.clusterIP}')
 
 bash -c "</dev/tcp/$POD_IP/7777"          # pod route and policy
-bash -c "</dev/tcp/$POD_IP/7779"          # the bridge, which no policy admits
 bash -c "</dev/tcp/$CLUSTER_IP/7777"      # Service DNAT
 bash -c "</dev/tcp/127.0.0.1/31700"       # local NodePort
 bash -c "</dev/tcp/192.0.2.20/31700"      # node address and NodePort
@@ -629,9 +614,7 @@ Each row below was a dead end in the proof-of-concept run when it was not known:
 | Forward counters move but the tuple has no conntrack entry. | The packet was accepted for forwarding and dropped by another hook before the routing decision completed. |
 | Traffic is visible on `cni0`. | It reached the pod side of routing. A moving `KUBE-POD-FW-*` counter proves the NetworkPolicy path ran. |
 | A finished session first refuses and later times out. | While its Service exists with no endpoint, kube-proxy rejects; after Job TTL garbage-collects the Service, the node filter drops an unassigned port. |
-| A pod shows `0/2` and never becomes Ready. | A pod is Ready only when every container is. A healthy session beside a second container in `ImagePullBackOff` reads as not Ready. |
-| A create answers `504 session_not_ready` and the pod never leaves `Init`. | A sidecar that cannot start holds the containers after it. `kubectl -n vif describe pod` names the image it could not pull, usually one the kubelet deleted at 85% disk before it was pinned: `./deploy/update.sh` imports it again, pinned. |
-| The browser route answers `503 session_unreachable` while `vif -join` works. | The allocator reached the pod's `/health` and not its 7779. The bridge is the difference: read its container's state, then test `$POD_IP/7779` above. A refusal there with a running bridge is the policy case `20-networkpolicy.yaml` names. |
+| A create answers `504 session_not_ready` and the pod never leaves `Init`. | The config check could not start. `kubectl -n vif describe pod` names the image it could not pull, usually one the kubelet deleted at 85% disk before it was pinned: `./deploy/update.sh` imports it again, pinned. |
 | The handshake answers `400` with no `Upgrade` reaching the allocator. | An edge that dropped the hop-by-hop headers. The `map` must be in the `http` context and both headers set in the location (§12). |
 | A browser session ends after about thirty seconds of a full lobby. | A stream-layer `proxy_timeout` shorter than the game's ten-second heartbeat, or an idle-connection bound below it somewhere on the TLS path (§12). |
 | A NodePort that answered before does not now. | `FORWARD` policy is `DROP`. Docker sets it and a stop does not restore it (§4). |
