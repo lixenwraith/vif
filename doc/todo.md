@@ -10,17 +10,6 @@ and P3 is an idea.
 
 ## Browser sessions and mobile
 
-### Find the browser guest's field latency
-
-- Priority: P2
-- Affected files: `internal/app/loop.go`, `internal/converge`, `web/`
-
-In the field a browser guest read 20–50 ms above a terminal on the same session; the
-lab reads 1–2 ms on `main` (multi-platform §5), after its writer stopped waiting on a
-clamped browser timer. What remains is the Worker's busy time on a player's machine:
-take a Performance profile of the Worker during play and size its ticks, frames and
-correction installs before choosing between them.
-
 ### Serve WebSocket from vif itself
 
 - Priority: P2
