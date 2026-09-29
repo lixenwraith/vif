@@ -265,15 +265,23 @@ func (a *App) renderContext() render.RenderContext {
 	return out
 }
 
-// frame advances one render frame; false means the player quit
+// frame advances one render frame; false means the player quit. A hidden page draws
+// nothing, so its terminal holds no backlog to replay; web/worker.js repaints it
+// whole on its return. The tick handshake below runs either way.
 func (a *App) frame() bool {
 	a.ctx.IncrementFrameNumber()
-	renderCtx := a.renderContext()
+	draw := !pageHidden()
+	var renderCtx render.RenderContext
+	if draw {
+		renderCtx = a.renderContext()
+	}
 
 	paused := a.ctx.TimeCtl.IsPaused()
 	if paused {
 		// Pause overlay still renders
-		a.orchestrator.RenderFrame(renderCtx, a.world)
+		if draw {
+			a.orchestrator.RenderFrame(renderCtx, a.world)
+		}
 		return true
 	}
 
@@ -285,7 +293,9 @@ func (a *App) frame() bool {
 	}
 
 	// All updates complete; RenderFrame locks internally for component access
-	a.orchestrator.RenderFrame(renderCtx, a.world)
+	if draw {
+		a.orchestrator.RenderFrame(renderCtx, a.world)
+	}
 
 	if !updatePending && !paused {
 		select {

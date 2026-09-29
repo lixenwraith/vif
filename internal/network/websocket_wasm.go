@@ -20,6 +20,10 @@ const wsQueueMessages = 1024
 
 var errWSOverrun = errors.New("websocket: inbound queue overrun")
 
+// writeLinger is zero here: a browser timer is clamped to 4 ms or coarser, and each
+// Write is already one message the browser sends, so a linger only delays it.
+const writeLinger = 0
+
 // wsAddr names the endpoint wherever a peer address is logged or shown.
 type wsAddr string
 
