@@ -332,6 +332,14 @@ func TestAGuestJournalReplaysFromItsJoin(t *testing.T) {
 		if i == hostLeaves {
 			host.Close()
 		}
+		if i == hostLeaves/4 {
+			// One guest crossing late at the host by construction, however fast the
+			// link: the host is two leads ahead when it is made, so the host applies it
+			// where it lands and the guest has a correction to install from the record.
+			host.Tick(2 * parameter.NetworkBarrierDelayTicks)
+			inject(t, guest, &input.Intent{Type: input.IntentFireMain, Count: 1}, intentMotion(input.MotionRight, 2))
+			guest.Tick(2 * parameter.NetworkBarrierDelayTicks)
+		}
 		if rng.Intn(3) == 0 {
 			inject(t, guest, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
 		}
