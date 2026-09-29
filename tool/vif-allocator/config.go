@@ -78,8 +78,6 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	set.StringVar(&cfg.Allocator.JoinHost, "join-host", "", "public raw-TCP host returned to players (required)")
 	set.StringVar(&cfg.Allocator.WebOrigin, "web-origin", "",
 		"site origin allowed to open a browser session, e.g. https://example.com; empty publishes no WebSocket route")
-	set.StringVar(&cfg.Allocator.Workload.BridgeImage, "ws-bridge-image", "",
-		"WebSocket bridge sidecar image the browser route is proxied to; empty terminates the route in this allocator")
 	set.IntVar(&cfg.Allocator.RouteMax, "route-max", 8,
 		"concurrent connections one session may hold through the front door and the browser route together")
 	set.IntVar(&cfg.Allocator.PortFirst, "port-first", 31700, "first allocatable NodePort")
@@ -207,18 +205,10 @@ func validateConfig(cfg runtimeConfig) error {
 	return nil
 }
 
-// validateWebRoute: -web-origin publishes the browser route, and -ws-bridge-image
-// selects who speaks WebSocket on it, the pod's sidecar when set and this allocator
-// when not. A bridge without the route is a container nothing dials.
+// validateWebRoute: -web-origin publishes the browser route, and empty publishes none.
 func validateWebRoute(cfg allocatorConfig) error {
 	if cfg.WebOrigin == "" {
-		if cfg.Workload.BridgeImage != "" {
-			return fmt.Errorf("-ws-bridge-image needs -web-origin, which is what publishes the route it serves")
-		}
 		return nil
-	}
-	if strings.ContainsAny(cfg.Workload.BridgeImage, "<>\t\r\n ") {
-		return fmt.Errorf("invalid -ws-bridge-image %q", cfg.Workload.BridgeImage)
 	}
 	origin, err := url.Parse(cfg.WebOrigin)
 	if err != nil || origin.Host == "" || (origin.Scheme != "https" && origin.Scheme != "http") {

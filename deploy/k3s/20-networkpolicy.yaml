@@ -41,19 +41,6 @@ spec:
     - ports:
         - protocol: TCP
           port: game
-# The browser bridge port has no rule, deliberately.
-#
-# 7779 is named by no Service and forwarded by no firewall, and the default deny
-# above refuses it to every pod — the namespace has no egress, so a session cannot
-# dial its neighbour's bridge either. The node's allocator reaches it by whatever
-# already carries its /health probe past a rule admitting only monitoring, and a
-# rule for 7779 could not be narrower: no selector expresses "the node", so it
-# would have to omit `from` and thereby admit every pod in the cluster.
-#
-# Prove that rather than believe it: §13 of doc/kube-docker-deploy.md is where the
-# check lives, against a live session. If node-to-pod turns out to be filtered, the
-# narrow fix is the address the node reaches pods from, which `ip route get <a
-# session pod IP>` prints as `src`, as an ipBlock on port wsgame.
 ---
 # The operator ports, from the monitoring namespace only.
 #

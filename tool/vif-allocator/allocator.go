@@ -40,8 +40,7 @@ type allocatorConfig struct {
 	WadDir     string
 
 	// WebOrigin is the one origin the browser route answers, and publishing it is
-	// what turns that route on. This allocator terminates it unless
-	// Workload.BridgeImage names a sidecar to proxy it to; see doc/kubernetes-fleet.md §9.
+	// what turns that route on; see doc/kubernetes-fleet.md §9.
 	WebOrigin string
 	// RouteMax bounds one session's connections through the front door and the
 	// browser route together; see holds.

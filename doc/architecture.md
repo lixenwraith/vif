@@ -349,7 +349,7 @@ A WASM build runs inside the bundled xterm.js page, uses embedded
 FSM/content/keymap assets without host-directory discovery, and omits audio and
 logging. It cannot open a socket, so it joins a session over the same-origin route
 `wss://<site>/vif/ws/<session>`: the page's own WebSocket wrapped as a `net.Conn`,
-carrying the protocol unchanged to a bridge sidecar in the session's pod. `-host`
+carrying the protocol unchanged through the allocator to the session's game port. `-host`
 and `-serve` are still rejected, because a browser can bind nothing. The page can
 supply ordinary arguments through `Go.argv`, but
 external `wad/` content needs an HTTP-backed resource provider rather than a file

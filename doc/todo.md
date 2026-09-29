@@ -10,23 +10,6 @@ and P3 is an idea.
 
 ## Browser sessions and mobile
 
-### Retire the websocat sidecar
-
-- Priority: P1, next
-- Affected files: `tool/vif-allocator/ws_proxy.go`, `tool/vif-allocator/config.go`,
-  `tool/vif-allocator/manifest.go`, `deploy/k3s/30-session.yaml`,
-  `deploy/guest/update-vif-ws-bridge.sh`, `deploy/guest/build-websocat.sh`,
-  `deploy/update.sh`
-- Prerequisite: the field test below passes on the allocator's own termination
-
-`pkg/websocket` speaks WebSocket in `vif -join` and in the allocator, which
-terminates the browser route now that `vif-allocator.env` names no bridge image.
-Through websocat a native wss join worked but ran about 50 ms slower than the front
-door (fleet §9 has the mechanism). Field test on the allocator's end: the same join
-within a millisecond of the front door, a browser playing, and fleet W1's checks.
-Then delete the proxy path, `-ws-bridge-image`, the sidecar template and its
-updater, the `bridge` component and the 7779 notes.
-
 ### Serve WebSocket from vif itself
 
 - Priority: P2

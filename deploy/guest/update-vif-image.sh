@@ -132,10 +132,10 @@ if sudo test -f "$allocator_env"; then
 fi
 
 # Remove named runtime references only after the new image is imported and the
-# allocator configuration is updated. Shared content still needed by the new
-# image remains in containerd's content store.
+# allocator configuration is updated, the retired WebSocket bridge's among them.
+# Shared content still needed by the new image remains in containerd's store.
 old_runtime_images=$(sudo k3s ctr -n k8s.io images list -q | awk -v keep="$runtime_image" '
-	/^docker[.]io\/library\/vif:/ && $0 != keep { print }
+	/^docker[.]io\/library\/vif(-ws-bridge)?:/ && $0 != keep { print }
 ')
 for old_image in $old_runtime_images; do
 	echo "removing old K3s image $old_image"
