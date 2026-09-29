@@ -151,7 +151,7 @@ func TestAPointerSweepCrossesOncePerTick(t *testing.T) {
 			tx = a.Context().GameXOffset + x - cfg.CameraX + ox
 			ty = a.Context().GameYOffset + y - cfg.CameraY + oy
 		})
-		a.handleIntent(&input.Intent{Type: input.IntentMouseMove, Count: tx, Char: rune(ty)})
+		a.handleIntent(&input.Intent{Type: input.IntentMouseMove, X: tx, Y: ty})
 	}
 	view := func() (pos component.PositionComponent) {
 		a.World().RunSafe(func() { pos, _ = a.World().CursorCell(cursor) })

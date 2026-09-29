@@ -105,17 +105,17 @@ func (m *Machine) processMouse(ev terminal.Event) *Intent {
 			switch ev.MouseAction {
 			case terminal.MouseActionPress:
 				return &Intent{
-					Type:  IntentMouseLeftDown,
-					Count: ev.MouseX,
-					Char:  rune(ev.MouseY),
+					Type: IntentMouseLeftDown,
+					X:    ev.MouseX,
+					Y:    ev.MouseY,
 				}
 			case terminal.MouseActionRelease:
 				return &Intent{Type: IntentMouseLeftUp}
 			case terminal.MouseActionDrag:
 				return &Intent{
-					Type:  IntentMouseDrag,
-					Count: ev.MouseX,
-					Char:  rune(ev.MouseY),
+					Type: IntentMouseDrag,
+					X:    ev.MouseX,
+					Y:    ev.MouseY,
 				}
 			}
 
@@ -131,18 +131,18 @@ func (m *Machine) processMouse(ev terminal.Event) *Intent {
 		case terminal.MouseBtnWheelUp, terminal.MouseBtnWheelDown:
 			if ev.MouseAction == terminal.MouseActionPress {
 				return &Intent{
-					Type:  IntentMouseWheelMove,
-					Count: ev.MouseX,
-					Char:  rune(ev.MouseY),
+					Type: IntentMouseWheelMove,
+					X:    ev.MouseX,
+					Y:    ev.MouseY,
 				}
 			}
 
 		case terminal.MouseBtnNone:
 			if ev.MouseAction == terminal.MouseActionMove {
 				return &Intent{
-					Type:  IntentMouseMove,
-					Count: ev.MouseX,
-					Char:  rune(ev.MouseY),
+					Type: IntentMouseMove,
+					X:    ev.MouseX,
+					Y:    ev.MouseY,
 				}
 			}
 		}
