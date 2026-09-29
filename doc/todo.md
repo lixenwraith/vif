@@ -28,10 +28,13 @@ A bot is a participant whose input comes from a policy instead of a terminal: it
 holds a roster slot and a cursor, reads only what a player's instance holds, and
 is bound by the same barrier, admission and eviction. Networked, it is a headless
 `vif -join` whose policy authors its cursor as any guest does, which also
-load-tests the fleet. Local, a host seats bots in its own roster, which needs one
-instance to author several cursors where it authors one today. Stages: the policy
-seam and a seeded baseline policy that replays; networked bots; local seats; an
-allocator option that fills a session. Decide how a roster and the HUD mark one.
+load-tests the fleet; `-join https://<site>` gives it a session of its own, and
+bots on one machine share its address's join and creation budgets, so a load test
+raises `-client-joins` and `-client-creates` for its run. Local, a host seats bots
+in its own roster, which needs one instance to author several cursors where it
+authors one today. Stages: the policy seam and a seeded baseline policy that
+replays; networked bots; local seats; an allocator option that fills a session.
+Decide how a roster and the HUD mark one.
 
 ### Extract the renderer-neutral Android host model
 
@@ -67,8 +70,7 @@ The allocator budgets each player address 6 joins a minute over both proxied
 routes and 4 creations per `-first-join` window, loose while one address carries
 several test clients; the target is one of each. One NAT is one address, so loosen
 joins before creations if households report refusals, and key IPv6 on its /64
-first. The API and browser route charge nothing until the edge overwrites
-`X-Real-IP` and `VIF_ALLOCATOR_CLIENT_ADDRESS_HEADER` names it.
+first.
 
 ### Add browser admission authentication
 
