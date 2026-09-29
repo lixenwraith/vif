@@ -427,8 +427,8 @@ func (d *ScriptDriver) execute(a compiledScriptAction) error {
 			}
 		}
 	case scriptCommand:
-		if err := d.executeCommand(a.text); err != nil {
-			return err
+		if !injectCommand(d.target.Inject, a.text) {
+			return errors.New("command quit the game")
 		}
 	case scriptEvent:
 		payload, err := DecodePayload(a.eventType, a.payload)
@@ -442,17 +442,17 @@ func (d *ScriptDriver) execute(a compiledScriptAction) error {
 	return nil
 }
 
-func (d *ScriptDriver) executeCommand(command string) error {
-	if !d.target.Inject(&input.Intent{Type: input.IntentModeSwitch, ModeTarget: input.ModeTargetCommand, Count: 1}) {
-		return errors.New("command mode quit the game")
+// injectCommand runs one ex command as a full round trip, keystroke by keystroke so
+// each settles on its own as live input does: the mode switch pauses a solo run and
+// the confirm unpauses and executes. False means an intent quit the game.
+func injectCommand(inject func(...*input.Intent) bool, command string) bool {
+	if !inject(&input.Intent{Type: input.IntentModeSwitch, ModeTarget: input.ModeTargetCommand, Count: 1}) {
+		return false
 	}
 	for _, char := range command {
-		if !d.target.Inject(&input.Intent{Type: input.IntentTextChar, Char: char, Count: 1}) {
-			return errors.New("command text quit the game")
+		if !inject(&input.Intent{Type: input.IntentTextChar, Char: char, Count: 1}) {
+			return false
 		}
 	}
-	if !d.target.Inject(&input.Intent{Type: input.IntentTextConfirm, Count: 1}) {
-		return errors.New("command confirm quit the game")
-	}
-	return nil
+	return inject(&input.Intent{Type: input.IntentTextConfirm, Count: 1})
 }
