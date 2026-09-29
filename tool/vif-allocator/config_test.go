@@ -117,7 +117,8 @@ func TestAnUnsetUnitVariableKeepsTheDefault(t *testing.T) {
 		unset("-scenario", "", "-wad", ""),
 		unset("-scenario=", "-wad="),
 		unset("-listen", "", "-route-listen", "", "-route-max", "", "-players-max", "",
-			"-log-level-min", "", "-scenario", "", "-wad", ""),
+			"-log-level-min", "", "-scenario", "", "-wad", "",
+			"-client-address-header", "", "-client-joins", "", "-client-creates", ""),
 	} {
 		cfg, err := parseConfig(args, io.Discard)
 		if err != nil {

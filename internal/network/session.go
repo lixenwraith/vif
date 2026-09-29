@@ -796,9 +796,14 @@ type admissionCount struct {
 }
 
 func NewAdmissionLimiter() *AdmissionLimiter {
+	return NewAdmissionLimiterOf(parameter.NetworkAdmitWindow, parameter.NetworkAdmitBurst)
+}
+
+// NewAdmissionLimiterOf counts burst admissions per address in each window.
+func NewAdmissionLimiterOf(window time.Duration, burst int) *AdmissionLimiter {
 	return &AdmissionLimiter{
-		window: parameter.NetworkAdmitWindow,
-		burst:  parameter.NetworkAdmitBurst,
+		window: window,
+		burst:  burst,
 		max:    parameter.NetworkAdmitTracked,
 		seen:   make(map[string]*admissionCount),
 	}

@@ -13,6 +13,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 func main() {
@@ -58,7 +61,8 @@ func run(args []string, logger *slog.Logger) error {
 		return fmt.Errorf("parse log stream URL: %w", err)
 	}
 	held := newHolds(cfg.Allocator.RouteMax)
-	handler := newAPIServer(controller, logger, logStreamURL, cfg.Allocator, held)
+	joins := network.NewAdmissionLimiterOf(parameter.NetworkAdmitWindow, cfg.Allocator.ClientJoins)
+	handler := newAPIServer(controller, logger, logStreamURL, cfg.Allocator, held, joins)
 	server := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           handler,
@@ -95,7 +99,7 @@ func run(args []string, logger *slog.Logger) error {
 			"image", cfg.Allocator.Workload.Image)
 		errCh <- server.Serve(listener)
 	}()
-	go newTCPRouter(controller, held, logger).serve(routeListener)
+	go newTCPRouter(controller, held, joins, logger).serve(routeListener)
 	notifyReady(logger)
 
 	select {

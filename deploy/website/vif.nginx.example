@@ -31,11 +31,14 @@ limit_req_zone  $proxy_protocol_addr zone=vif_ws_req:10m rate=12r/m;
 
 # --- server context, inside the site's TLS server block ---
 
-# Create and list. Finite requests, so ordinary proxy timeouts apply.
+# Create and list. Finite requests, so ordinary proxy timeouts apply. X-Real-IP is
+# overwritten with the player's address, which the allocator's -client-address-header
+# names and keys its per-address creation budget on; a client's own is discarded.
 location = /vif/api/sessions {
     proxy_pass http://vif_allocator;
     proxy_http_version 1.1;
     proxy_set_header Connection "";
+    proxy_set_header X-Real-IP $proxy_protocol_addr;
 
     proxy_connect_timeout 5s;
     proxy_read_timeout 30s;
@@ -68,8 +71,9 @@ location = /vif/api/logs {
 # the allocator compares it against its -web-origin. Do not set it.
 #
 # A proxy_set_header in a location replaces every one inherited from the server,
-# so the four below are all this route sends. That is correct here: the allocator
-# reads only Origin, which travels as an ordinary request header. `http2 on` is
+# so the three below are all this route sets. That is correct here: the allocator
+# reads Origin, which travels as an ordinary request header, and the player's
+# address, which keys the join budget it shares with the front door. `http2 on` is
 # also fine — nginx offers no RFC 8441, so a browser opens its socket on a
 # separate HTTP/1.1 connection; an empty Upgrade is where to look if it does not.
 location ~ "^/vif/ws/[0-9a-f]{16}$" {
@@ -77,6 +81,7 @@ location ~ "^/vif/ws/[0-9a-f]{16}$" {
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $vif_connection_upgrade;
+    proxy_set_header X-Real-IP $proxy_protocol_addr;
 
     proxy_buffering off;
     proxy_cache off;
@@ -84,11 +89,9 @@ location ~ "^/vif/ws/[0-9a-f]{16}$" {
     proxy_read_timeout 3600s;
     proxy_send_timeout 3600s;
 
-    # The per-player bound the game cannot apply here: every browser reaches the
-    # pod from the node's address, so its admission limiter sees one player.
-    # Four is a household behind one address — raise it behind carrier NAT. This
-    # and the allocator's -route-max are the whole of the bound, so both are numbers
-    # somebody should choose rather than inherit.
+    # Open sockets and handshake rate per player, which the allocator's join budget
+    # (dials a minute) does not bound. Four is a household behind one address —
+    # raise it behind carrier NAT.
     limit_conn vif_ws_conn 4;
     limit_req zone=vif_ws_req burst=4 nodelay;
 }

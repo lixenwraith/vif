@@ -42,14 +42,14 @@ func (f *fakeSessionAllocator) routeSession(context.Context, string) (string, er
 }
 
 func testServer(allocator sessionAllocator) *apiServer {
-	return newAPIServer(allocator, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, allocatorConfig{}, nil)
+	return newAPIServer(allocator, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, allocatorConfig{}, nil, nil)
 }
 
 // testWebServer publishes the browser route, which an ordinary test server does
 // not: the two halves of the fleet are refusable independently.
 func testWebServer(allocator sessionAllocator) *apiServer {
 	return newAPIServer(allocator, slog.New(slog.NewTextHandler(io.Discard, nil)), nil,
-		allocatorConfig{WebOrigin: "https://site.example"}, newHolds(2))
+		allocatorConfig{WebOrigin: "https://site.example"}, newHolds(2), nil)
 }
 
 func TestPostSession(t *testing.T) {
@@ -139,6 +139,35 @@ func TestPostSessionCarriesTheChoicesItNames(t *testing.T) {
 	}
 	if backend.requested != (sessionRequest{Players: 2, LogLevel: "debug"}) {
 		t.Fatalf("the allocator was asked for %+v", backend.requested)
+	}
+}
+
+// TestSessionCreationIsBudgetedPerAddress: one address holds at most its budget of
+// the fleet's unclaimed sessions, another is unaffected, and a request the edge did
+// not attribute is bounded by the edge alone.
+func TestSessionCreationIsBudgetedPerAddress(t *testing.T) {
+	api := newAPIServer(&fakeSessionAllocator{created: session{ID: "abc", Port: 31700}},
+		slog.New(slog.NewTextHandler(io.Discard, nil)), nil, allocatorConfig{
+			Workload: workloadConfig{FirstJoin: "90s"}, ClientAddressHeader: "X-Real-IP", ClientCreates: 1,
+		}, nil, nil)
+	for i, tc := range []struct {
+		player string
+		want   int
+	}{
+		{"192.0.2.1", http.StatusCreated},
+		{"192.0.2.1", http.StatusTooManyRequests},
+		{"192.0.2.2", http.StatusCreated},
+		{"", http.StatusCreated},
+	} {
+		request := httptest.NewRequest(http.MethodPost, "/vif/api/sessions", nil)
+		if tc.player != "" {
+			request.Header.Set("X-Real-IP", tc.player)
+		}
+		response := httptest.NewRecorder()
+		api.ServeHTTP(response, request)
+		if response.Code != tc.want {
+			t.Errorf("request %d from %q answered %d, want %d", i+1, tc.player, response.Code, tc.want)
+		}
 	}
 }
 

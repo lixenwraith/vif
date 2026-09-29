@@ -27,6 +27,7 @@ func proxyTestServer(t *testing.T, target string) *apiServer {
 		parsed,
 		allocatorConfig{},
 		nil,
+		nil,
 	)
 }
 

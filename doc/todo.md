@@ -19,16 +19,17 @@ and P3 is an idea.
 certificate and key would wrap the listener's TCP port in `tls.NewListener` and let
 `wss://host:port` bind; decide where the key lives before adding the flags.
 
-### Key the browser route's admission in the allocator
+### Tighten the per-address budgets
 
 - Priority: P2
-- Affected files: `tool/vif-allocator/ws_proxy.go`
+- Affected files: `deploy/guest/vif-allocator.env`, `tool/vif-allocator`
 
-Decided: per-player admission for proxied routes is the allocator's, not the pod's.
-The front door keys `network.AdmissionLimiter` on the dialer's address before it
-dials; the browser route sees only the site's edge, so it leans on the edge's
-`limit_conn`/`limit_req`. Key the same limiter on the player's address once the edge
-hands the allocator one it can trust.
+The allocator budgets each player address 6 joins a minute over both proxied
+routes and 4 creations per `-first-join` window, loose while one address carries
+several test clients; the target is one of each. One NAT is one address, so loosen
+joins before creations if households report refusals, and key IPv6 on its /64
+first. The API and browser route charge nothing until the edge overwrites
+`X-Real-IP` and `VIF_ALLOCATOR_CLIENT_ADDRESS_HEADER` names it.
 
 ### Add browser admission authentication
 

@@ -325,7 +325,10 @@ reference: the exact `/vif/api/sessions` and `/vif/api/logs` locations, the
 `$proxy_protocol_addr`, and no `/healthz` or `/readyz`. Three properties decide
 whether it works: `Upgrade` and `Connection` forwarded for the browser route,
 buffering off with an hour-long read timeout for the streams, and `Origin`
-untouched — the allocator compares it against `VIF_ALLOCATOR_WEB_ORIGIN`. The
+untouched — the allocator compares it against `VIF_ALLOCATOR_WEB_ORIGIN`. A
+fourth keys the per-player budgets: `X-Real-IP` overwritten with
+`$proxy_protocol_addr` on the API and browser locations, then named in
+`VIF_ALLOCATOR_CLIENT_ADDRESS_HEADER`; unnamed, those routes charge none. The
 page's `connect-src 'self'` is what permits the same-origin socket.
 
 The launcher is [`web/`](../web), copied to the site as it stands together with the

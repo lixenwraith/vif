@@ -45,6 +45,11 @@ type allocatorConfig struct {
 	// RouteMax bounds one session's connections through the front door and the
 	// browser route together; see holds.
 	RouteMax int
+	// ClientAddressHeader is the header the site's edge overwrites with the player's
+	// address; ClientJoins and ClientCreates are that address's budgets.
+	ClientAddressHeader string
+	ClientJoins         int
+	ClientCreates       int
 
 	ReadyTimeout   time.Duration
 	PollInterval   time.Duration

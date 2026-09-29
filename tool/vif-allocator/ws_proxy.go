@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/pkg/websocket"
 )
 
@@ -26,11 +27,12 @@ var sessionIDPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
 type wsRouter struct {
 	origin string
 	holds  *holds
+	joins  *network.AdmissionLimiter
 	game   string // the pod port dialled; a test points it at a stand-in
 }
 
-func newWSRouter(origin string, held *holds) *wsRouter {
-	return &wsRouter{origin: origin, holds: held, game: gamePort}
+func newWSRouter(origin string, held *holds, joins *network.AdmissionLimiter) *wsRouter {
+	return &wsRouter{origin: origin, holds: held, joins: joins, game: gamePort}
 }
 
 // holds bounds the connections one session carries through this allocator, over
@@ -91,6 +93,13 @@ func (s *apiServer) handleSessionSocket(w http.ResponseWriter, r *http.Request) 
 	if r.Header.Get("Origin") != s.ws.origin {
 		writeAPIError(w, http.StatusForbidden, "origin_refused",
 			"This session route answers one origin")
+		return
+	}
+
+	// The front door's budget, charged where it charges it: before the lookup.
+	if s.ws.joins.Admit(s.clientAddr(r)) != nil {
+		w.Header().Set("Retry-After", "60")
+		writeAPIError(w, http.StatusTooManyRequests, "join_budget", capitalize(errRouteAdmission.Error()))
 		return
 	}
 

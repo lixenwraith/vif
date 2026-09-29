@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/network"
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/websocket"
 )
 
@@ -56,14 +56,14 @@ func startPod(t *testing.T) *testPod {
 }
 
 // startFrontDoor serves a front door whose every session resolves to pod.
-func startFrontDoor(t *testing.T, sessions sessionAllocator, held *holds, pod *testPod) string {
+func startFrontDoor(t *testing.T, sessions sessionAllocator, held *holds, joins *network.AdmissionLimiter, pod *testPod) string {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = listener.Close() })
-	router := newTCPRouter(sessions, held, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	router := newTCPRouter(sessions, held, joins, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	_, router.game, _ = net.SplitHostPort(pod.addr)
 	go router.serve(listener)
 	return listener.Addr().String()
@@ -76,7 +76,7 @@ func startBrowserRoute(t *testing.T, sessions sessionAllocator, held *holds, pod
 	t.Helper()
 	server := httptest.NewUnstartedServer(nil)
 	api := newAPIServer(sessions, slog.New(slog.NewTextHandler(io.Discard, nil)), nil,
-		allocatorConfig{WebOrigin: "http://" + server.Listener.Addr().String()}, held)
+		allocatorConfig{WebOrigin: "http://" + server.Listener.Addr().String()}, held, nil)
 	_, api.ws.game, _ = net.SplitHostPort(pod.addr)
 	server.Config.Handler = api
 	server.Start()
@@ -125,7 +125,7 @@ func TestTheFrontDoorRefusesBeforeDialling(t *testing.T) {
 		{"a full session", routedID, "not accepting players", fmt.Errorf("%w: occupied", errSessionRefusing)},
 	} {
 		addr := startFrontDoor(t, &fakeSessionAllocator{podIP: "127.0.0.1", routeErr: tc.routeErr},
-			newHolds(1), pod)
+			newHolds(1), network.NewAdmissionLimiter(), pod)
 		if err := join(addr, tc.id); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: joined with %v, want a refusal naming %q", tc.name, err, tc.want)
 		}
@@ -133,7 +133,7 @@ func TestTheFrontDoorRefusesBeforeDialling(t *testing.T) {
 
 	// A stream that does not open with a route frame is no vif dialer, so it is
 	// closed with nothing written back.
-	addr := startFrontDoor(t, &fakeSessionAllocator{podIP: "127.0.0.1"}, newHolds(1), pod)
+	addr := startFrontDoor(t, &fakeSessionAllocator{podIP: "127.0.0.1"}, newHolds(1), network.NewAdmissionLimiter(), pod)
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		t.Fatal(err)
@@ -156,7 +156,7 @@ func TestTheFrontDoorRefusesBeforeDialling(t *testing.T) {
 // reaches the other as a half-close.
 func TestTheFrontDoorReplaysTheNameAndSplicesBothWays(t *testing.T) {
 	pod := startPod(t)
-	addr := startFrontDoor(t, &fakeSessionAllocator{podIP: "127.0.0.1"}, newHolds(1), pod)
+	addr := startFrontDoor(t, &fakeSessionAllocator{podIP: "127.0.0.1"}, newHolds(1), network.NewAdmissionLimiter(), pod)
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		t.Fatal(err)
@@ -225,7 +225,7 @@ func TestTheSessionCeilingSpansBothRoutes(t *testing.T) {
 	pod := startPod(t)
 	held := newHolds(1)
 	sessions := &fakeSessionAllocator{podIP: "127.0.0.1"}
-	addr := startFrontDoor(t, sessions, held, pod)
+	addr := startFrontDoor(t, sessions, held, network.NewAdmissionLimiter(), pod)
 	browser, err := websocket.Dial(t.Context(), startBrowserRoute(t, sessions, held, pod)+routedID)
 	if err != nil {
 		t.Fatal(err)
@@ -258,18 +258,32 @@ func TestTheSessionCeilingSpansBothRoutes(t *testing.T) {
 	}
 }
 
-// TestTheFrontDoorBoundsAdmissionsPerAddress holds the game's own budget against
-// the dialler's address, which the pod no longer sees: past it a dialer is refused
-// before a lookup it could otherwise make the fleet repeat.
-func TestTheFrontDoorBoundsAdmissionsPerAddress(t *testing.T) {
-	pod := startPod(t)
-	addr := startFrontDoor(t, &fakeSessionAllocator{routeErr: errSessionUnknown}, newHolds(1), pod)
-	for i := range parameter.NetworkAdmitBurst {
-		if err := join(addr, routedID); err == nil || !strings.Contains(err.Error(), "no such session") {
-			t.Fatalf("dial %d of the budget returned %v", i+1, err)
-		}
+// TestAnAddressHasOneJoinBudgetOverBothRoutes holds the game's own budget against
+// the player's address, which the pod no longer sees: the front door keys it on the
+// dialler and the browser route on the edge's header, each before a lookup.
+func TestAnAddressHasOneJoinBudgetOverBothRoutes(t *testing.T) {
+	sessions := &fakeSessionAllocator{routeErr: errSessionUnknown}
+	joins := network.NewAdmissionLimiterOf(time.Minute, 1)
+	addr := startFrontDoor(t, sessions, newHolds(1), joins, startPod(t))
+	if err := join(addr, routedID); err == nil || !strings.Contains(err.Error(), "no such session") {
+		t.Fatalf("the budget's one dial returned %v", err)
 	}
 	if err := join(addr, routedID); err == nil || !strings.Contains(err.Error(), "too often") {
 		t.Fatalf("a dial past the budget returned %v", err)
+	}
+
+	api := newAPIServer(sessions, slog.New(slog.NewTextHandler(io.Discard, nil)), nil,
+		allocatorConfig{WebOrigin: "https://site.example", ClientAddressHeader: "X-Real-IP"}, newHolds(1), joins)
+	for player, want := range map[string]int{"127.0.0.1": http.StatusTooManyRequests, "192.0.2.1": http.StatusNotFound} {
+		request := httptest.NewRequest(http.MethodGet, wsRoutePrefix+routedID, nil)
+		request.Header.Set("Connection", "Upgrade")
+		request.Header.Set("Upgrade", "websocket")
+		request.Header.Set("Origin", "https://site.example")
+		request.Header.Set("X-Real-IP", player)
+		response := httptest.NewRecorder()
+		api.ServeHTTP(response, request)
+		if response.Code != want {
+			t.Errorf("a browser at %s was answered %d, want %d", player, response.Code, want)
+		}
 	}
 }
