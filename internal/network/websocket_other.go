@@ -46,6 +46,9 @@ func dialWebSocket(target string, timeout time.Duration) (net.Conn, error) {
 	return nil, err
 }
 
+// sessionLink is the front door's link: a native client is TCP end to end.
+func sessionLink(joinTarget, _ string) string { return joinTarget }
+
 // wsListener answers ws:// upgrades on a TCP port and yields each as a stream, so
 // the accept loop's handshake budget and per-address admission see a WebSocket
 // joiner as they see a TCP one. The HTTP request before it is bounded in time and

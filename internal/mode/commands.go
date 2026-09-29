@@ -819,7 +819,7 @@ func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 	if len(args) != 1 {
-		setCommandError(ctx, "Usage: :join <target>  (e.g. :join host:7777, or a ws(s):// URL)")
+		setCommandError(ctx, "Usage: :join <target>  (e.g. :join host:7777, a ws(s):// URL, or an https:// site for a new session)")
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 	if err := ctx.SessionCtl.Join(args[0]); err != nil {

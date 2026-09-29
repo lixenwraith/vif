@@ -30,13 +30,13 @@ Play at once and open the game to participants, e.g. :7777 or ws://:7777
 Bind a headless session with no local cursor, e.g. :7777 or ws://:7777
 .TP
 .B \-join <addr>
-Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL; tcp when no scheme is given
+Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given
 .TP
 .B \-name <name>
 Name this host answers to, so one address can serve several sessions
 .TP
 .B \-players <n>
-Roster ceiling including self, 2..16; unset holds the whole roster
+Roster ceiling including self, 2..16; unset holds the whole roster; with a \-join site, the one requested
 .TP
 .B \-authority host|migrate
 Where authorship goes when the authoring participant leaves; default host with \-serve, migrate otherwise

@@ -41,7 +41,8 @@ first. The API and browser route charge nothing until the edge overwrites
 
 Issue a short-lived, session-scoped admission credential after authentication and
 consume it during the WebSocket handshake without putting it in page history or
-logs. Decide whether the expanded allocator remains the credential boundary or is
+logs. Creation takes one too: `network.RequestSession` is the terminal's side of
+`POST /vif/api/sessions`, and already shows a 401 or 403 as the allocator's message. Decide whether the expanded allocator remains the credential boundary or is
 renamed/split before adding the planned `github.com/lixenwraith/auth`
 Argon2-SCRAM dependency.
 
@@ -240,17 +241,6 @@ link at the tower's floor it can hold the epochs behind it for two seconds, wher
 body now waits behind one 4 KiB chunk ([Troubleshooting](troubleshooting.md) §16).
 Carrying it in the correction chunk envelope through the per-peer outbox bounds that
 too. Repairs at 20 kB/s have so far been a few kilobytes.
-
-### Request a session from the terminal
-
-- Priority: P2
-- Affected files: `cmd/vif`, `internal/app`, `tool/vif-allocator`
-
-A player gets a session only from the site's page. `POST /vif/api/sessions`
-already answers any client through the site's edge, so the missing half is a game
-command that asks for one and joins the `join_target` it returns. The other shape is
-the front door creating a session for a route frame that names none, which needs a
-per-address creation budget of its own first.
 
 ## Session membership
 
