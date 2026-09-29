@@ -130,17 +130,13 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 	t.Logf("installed at tick %d, entered at %d (%d catch-up ticks), stage %dus commit %dus",
 		installed, guestTick, caught,
 		reg.Ints.Get("snapshot.stage_us").Load(), reg.Ints.Get("snapshot.commit_us").Load())
-	// The bound is an absolute offset, not a one-sided lag. A joiner that ends a
-	// tick ahead of the last epoch it saw is not a problem — its own crossings then
-	// carry the full playout lead — and the assertion is that neither side is
-	// further away than that lead, in either direction.
-	offset := int64(host.Position().Tick) - int64(guestTick)
-	if offset < 0 {
-		offset = -offset
-	}
-	if offset > int64(parameter.NetworkJoinLagTicks) {
-		t.Fatalf("guest stands %d ticks from the host after catching up; the lead is %d",
-			offset, parameter.NetworkJoinLagTicks)
+	// Behind by more than the lead is refused by the join itself, against the newest
+	// epoch it saw: the host's own tick also counts the ticks it closed on its own
+	// goroutine after that, which is wall time, not the join. Ahead is bounded here,
+	// since the guest's crossings then carry the playout lead and no further.
+	if ahead := int64(guestTick) - int64(host.Position().Tick); ahead > int64(parameter.NetworkJoinLagTicks) {
+		t.Fatalf("guest stands %d ticks ahead of the host after catching up; the lead is %d",
+			ahead, parameter.NetworkJoinLagTicks)
 	}
 
 	// The cadence is stopped for the rest of this test and everything already sent is
