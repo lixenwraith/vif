@@ -240,9 +240,15 @@ func TestAnAddressNamesItsSchemeAndSession(t *testing.T) {
 			t.Errorf("ParseEndpoint(%q) = %+v, %v; want %s %q %q", tc.target, e, err, tc.scheme, tc.addr, tc.name)
 		}
 	}
-	for _, f := range []sessionFlags{{join: "http://host.example:7777"}, {host: "wss://site.example/vif/ws"}, {host: "host.example"}} {
+	for _, f := range []sessionFlags{{join: "http://host.example:7777"}, {host: "wss://site.example/vif/ws"}, {host: "host.example"},
+		{serve: "wss://:7777"}, {host: "ws://:7777/vif/"}, {join: "host.example:7777", listen: "ws://:7778"}} {
 		if err := f.validateInvocation(false, false, ""); err == nil {
 			t.Errorf("%+v was accepted", f)
+		}
+	}
+	for _, f := range []sessionFlags{{host: "ws://:7777"}, {serve: "ws://127.0.0.1:7777/"}} {
+		if err := f.validateInvocation(false, false, ""); err != nil {
+			t.Errorf("%+v was refused: %v", f, err)
 		}
 	}
 	if err := (sessionFlags{join: "host.example:7777/7f_3c"}).validateInvocation(false, false, ""); err == nil {

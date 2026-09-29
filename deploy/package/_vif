@@ -1,9 +1,9 @@
 #compdef vif
 # Generated from cmd/vif/usage.go by TestGeneratedFilesAreTheHelpTable; do not edit.
 _arguments \
-  '-host[Play at once and open the game to participants, e.g. :7777]:addr: ' \
-  '-serve[Bind a headless session with no local cursor]:addr: ' \
-  '-join[Join a session at \[tcp://|vif://\]host:port\[/name\] or a wss:// route; tcp when no scheme is given]:addr: ' \
+  '-host[Play at once and open the game to participants, e.g. :7777 or ws://:7777]:addr: ' \
+  '-serve[Bind a headless session with no local cursor, e.g. :7777 or ws://:7777]:addr: ' \
+  '-join[Join a session at \[tcp://|vif://\]host:port\[/name\] or a ws(s):// URL; tcp when no scheme is given]:addr: ' \
   '-name[Name this host answers to, so one address can serve several sessions]:name: ' \
   '-players[Roster ceiling including self, 2..16; unset holds the whole roster]:n: ' \
   '-authority[Where authorship goes when the authoring participant leaves; default host with -serve, migrate otherwise]:value:(host migrate)' \

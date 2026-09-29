@@ -785,7 +785,7 @@ func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 }
 
 // handleHostCommand opens a running instance to participants.
-// Usage: :host <addr>   e.g. :host :7777, :host 0.0.0.0:7777
+// Usage: :host <addr>   e.g. :host :7777, :host 0.0.0.0:7777, :host ws://:7777
 //
 // It is deliberately not gated by the live-session guard above: the guard exists to
 // stop an operator changing shared scheduling under a session that has already
@@ -797,7 +797,7 @@ func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 	if len(args) != 1 && len(args) != 2 {
-		setCommandError(ctx, "Usage: :host <addr> [host|migrate]  (e.g. :host :7777 migrate)")
+		setCommandError(ctx, "Usage: :host <addr> [host|migrate]  (e.g. :host :7777 migrate, :host ws://:7777)")
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 	authority := ""
@@ -819,7 +819,7 @@ func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 	if len(args) != 1 {
-		setCommandError(ctx, "Usage: :join <target>  (e.g. :join host:7777, or the wss:// link a browser is given)")
+		setCommandError(ctx, "Usage: :join <target>  (e.g. :join host:7777, or a ws(s):// URL)")
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 	if err := ctx.SessionCtl.Join(args[0]); err != nil {

@@ -153,9 +153,10 @@ start/ready gate. Two flags activate the shared composition path:
 Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
 `[tcp://|vif://]host:port[/name]`, the name routing to one of several sessions on
 an address, or a `ws(s)://` route a browser joins by, whose last path segment is
-the name. The scheme picks the transport and tcp is the default; a bound address
-(`-host`, `-serve`, `-listen`, `:host`) is tcp only, since the WebSocket route is
-the deployment's bridge in front of it, and any other scheme is refused (§7.3).
+the name. The scheme picks the transport and tcp is the default. A host's bound
+address (`-host`, `-serve`, `:host`) is tcp or plain `ws://host:port`, one protocol
+per listener; `-listen` is tcp, which participants link to each other over; any
+other scheme is refused (§7.3).
 
 `-host` and `:host` are one path: the host plays from its first tick and a joiner
 takes the roster, then the world it names, as a chunked `MsgStateSnapshot` from
