@@ -187,6 +187,9 @@
         };
         program.postMessage({ type: 'start', bytes: bytes.buffer, argv: argv,
             cols: term.cols, rows: term.rows }, [bytes.buffer]);
+        document.addEventListener('visibilitychange', function() {
+            program.postMessage({ type: 'visibility', hidden: document.hidden });
+        });
         wireHandlers();
     }
 

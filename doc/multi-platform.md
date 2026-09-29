@@ -166,6 +166,35 @@ The browser is refused `-host` and `-serve` before initialization, because it ca
 bind nothing, and a `-join` or `:join` naming a `host:port` for the same reason. A
 browser guest never advertises a port, even in a migrate session.
 
+### What the browser adds to a link
+
+The Go program runs in a Worker (`web/worker.js`), so the page's drawing never holds
+it, but it runs on one thread with no preemption: Go returns to the browser only
+when every goroutine is idle, and a socket message is a browser event. An arriving
+epoch or echo therefore waits for the tick, frame or correction install in progress,
+and a busy world adds latency a native client does not pay. A link's writer flushes
+at once rather than lingering for a burst, because a browser timer is clamped to
+4 ms or coarser. Measured against a local host, round trip as the host reads it:
+
+| Guest | `main` at 120x40 | `td` at 500x250 |
+|---|---|---|
+| native terminal | 5 ms | 5 ms |
+| browser, headless Chromium, 1080p | 3–4 ms | 80–500 ms, the Worker at 100% of a core |
+
+### A hidden tab
+
+While the page is hidden the Go program draws nothing (`pageHidden`); its tick, its
+socket and its probe answers carry on in the Worker for as long as the browser runs
+it, so the other players see an idle participant. On return the page repaints the
+whole screen once. Drawing on would queue some 60 KB/s of terminal output behind the
+page's throttled timers, which the terminal then replays at speed on return.
+
+A browser that freezes the tab instead, as Chrome may under its energy or memory
+saving and mobile browsers readily do, stops the Worker, so nothing reads the socket. The session drops the participant after `DisconnectTimeout` (30 s)
+of silence, as it drops any silent peer, and on return the page shows "Host
+connection lost; continuing locally"; reloading the same link rejoins while the
+session lives.
+
 ### Where WebSocket is spoken
 
 In `pkg/websocket`: one minimal RFC 6455 implementation on the standard library,
