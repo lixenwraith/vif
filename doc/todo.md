@@ -5,10 +5,49 @@ the smallest thing that would close it. Delete an item when it lands; this file
 is not a changelog. Source files do not carry parallel TODO comments, so a
 code-originated item names its source here.
 
-Priorities: P0 blocks a release, P1 is wanted next, P2 is convenient follow-up,
-and P3 is an idea.
+Priorities: P0 blocks a release or leads the feature development push, P1 is
+wanted next, P2 is convenient follow-up, and P3 is an idea.
 
-## Browser sessions and mobile
+## Feature development push
+
+Bots come before the Android host. They need no presentation refactor, build on
+the scripted and headless paths that exist, give the session stack and the fleet
+continuous real play, and make the site playable alone. A bot is also the first
+non-terminal source of semantic input, the contract the Android extraction has to
+define first; doing Android first would define it without a second consumer.
+
+### Add bots that play as participants
+
+- Priority: P0, leading the push; not a release blocker
+- Affected files: `internal/input` and `internal/mode` (the `Intent` seam),
+  `internal/journal` (scripted input), `internal/app` roster and slots, `cmd/vif`,
+  `tool/vif-allocator`
+- Prerequisite: decide whether a bot emits `Intent` values or game events
+
+A bot is a participant whose input comes from a policy instead of a terminal: it
+holds a roster slot and a cursor, reads only what a player's instance holds, and
+is bound by the same barrier, admission and eviction. Networked, it is a headless
+`vif -join` whose policy authors its cursor as any guest does, which also
+load-tests the fleet. Local, a host seats bots in its own roster, which needs one
+instance to author several cursors where it authors one today. Stages: the policy
+seam and a seeded baseline policy that replays; networked bots; local seats; an
+allocator option that fills a session. Decide how a roster and the HUD mark one.
+
+### Extract the renderer-neutral Android host model
+
+- Priority: P1, after bots
+- Affected files: terminal-shaped input/cell/color values, `internal/app`, host
+  entry points
+- Prerequisite: the bots' input seam; define the minimum visual contract
+
+Target a minimally polished Android build within one month of development time.
+Move terminal-specific visual and input values behind positive renderer/host
+adapters, add a library entry point, and keep lifecycle, simulation, networking,
+and resource providers common. Touch input maps onto the semantic input bots
+already drive, and [Multi-platform](multi-platform.md) lists the terminal-shaped
+values that remain.
+
+## Browser sessions
 
 ### Serve wss from vif's own listener
 
@@ -42,8 +81,9 @@ first. The API and browser route charge nothing until the edge overwrites
 Issue a short-lived, session-scoped admission credential after authentication and
 consume it during the WebSocket handshake without putting it in page history or
 logs. Creation takes one too: `network.RequestSession` is the terminal's side of
-`POST /vif/api/sessions`, and already shows a 401 or 403 as the allocator's message. Decide whether the expanded allocator remains the credential boundary or is
-renamed/split before adding the planned `github.com/lixenwraith/auth`
+`POST /vif/api/sessions`, and already shows a 401 or 403 as the allocator's
+message. Decide whether the expanded allocator remains the credential boundary or
+is renamed/split before adding the planned `github.com/lixenwraith/auth`
 Argon2-SCRAM dependency.
 
 ### Fetch a content-addressed bundle over HTTP
@@ -66,18 +106,6 @@ anticipates, and it is one provider for both the browser case and a native playe
 who would rather fetch a scenario than unpack one. What it needs before it is
 written is whose signature makes bytes trustworthy, which origins may serve them,
 and how long a fetched container is kept.
-
-### Extract the renderer-neutral Android host model
-
-- Priority: P1
-- Affected files: terminal-shaped input/cell/color values, `internal/app`, host
-  entry points
-- Prerequisite: define the minimum visual and semantic-input contract for the app
-
-Target a minimally polished Android build within one month of development time.
-Move terminal-specific visual and input values behind positive renderer/host
-adapters, add a library entry point, and keep lifecycle, simulation, networking,
-and resource providers common.
 
 ## Packaging
 
