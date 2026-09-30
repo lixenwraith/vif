@@ -126,13 +126,7 @@ func (a *App) admitDial(addr net.Addr) error {
 	return a.admissions.Admit(addr)
 }
 
-// scenarioBody serves this session's scenario to a joiner whose roots do not hold
-// it, refusing any digest but the one being played — the transfer exists to make a
-// participant match this run, not to be a file service.
-//
-// Read without the world lock: a.scenario is written once during construction,
-// before any listener exists, and a scenario change builds a new App rather than
-// writing this one.
+// Serve only the immutable scenario this run holds; another scenario needs a new App.
 func (a *App) scenarioBody(digest string) ([]byte, error) {
 	if digest != a.scenario.Digest() {
 		return nil, fmt.Errorf("this session plays %s (%s), not %s",
@@ -528,7 +522,7 @@ func (a *App) releaseParticipant32(id uint32) { a.releaseParticipant(network.Pee
 // releaseParticipant returns an identity whose handshake did not complete, or whose
 // participant has left.
 func (a *App) releaseParticipant(id network.PeerID) {
-	if id == 0 || id == hostParticipantID {
+	if id == 0 || id == a.authorityID() {
 		return
 	}
 	a.reach.Forget(id)
@@ -749,13 +743,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 			}
 		}
 	}
-	// Not the first-guest window, which this roster already satisfied and which
-	// re-arming here would spend on installing the world. Its own bound is the
-	// install it is waiting for, the same one a mid-run join is given.
-	//
-	// abandoned holds the participants given up on at that bound, so the condition
-	// below settles at once rather than waiting for their closed links to be
-	// noticed.
+	// Bound the install separately from first arrival; closed links count as abandoned.
 	abandoned := make(map[network.PeerID]bool, admitted)
 	confirmedGuests := func() int {
 		n := 0
@@ -911,12 +899,7 @@ func (a *App) awaitStartGate(signals <-chan os.Signal) (network.SessionOffer, er
 	}
 }
 
-// waitForStartup treats rejected handshakes as recoverable while no peer was admitted.
-//
-// deadline, when non-zero, hands the wait to expire, which either ends it with an
-// error or settles ready and lets it finish. Both are the caller's, because the two
-// gates this serves bound different things: the lobby's deadline is the allocated
-// first-guest window, the start gate's is one world install.
+// Rejected handshakes are recoverable until the caller's lobby or install deadline.
 func (a *App) waitForStartup(port *network.SocketPort, signals <-chan os.Signal,
 	deadline time.Time, expire func(time.Time) error, ready func() bool) error {
 	// A pod nobody dialled is precisely the case the first-guest window exists for,

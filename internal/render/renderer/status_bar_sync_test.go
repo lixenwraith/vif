@@ -47,15 +47,15 @@ func TestStatusBarNetworkBadgeIsOneCellChosenBySeverity(t *testing.T) {
 	}
 
 	// A link with no completed round trip yet has no reading to show. The count is
-	// players, not links: a headless host's two guests read 2P on every instance.
+	// players, not links: a headless host's two guests read 2P:0 on every instance.
 	r.statNet.Store("connected")
 	seatPlayers(r, 2)
-	if item, ok := r.networkBadge(); !ok || item.text != " 2P -- " {
+	if item, ok := r.networkBadge(); !ok || item.text != " 2P:0 -- " {
 		t.Fatalf("unmeasured item = %#v, %t", item, ok)
 	}
 
 	r.statRTT.Store(42)
-	if item, ok := r.networkBadge(); !ok || item.text != " 2P 42ms " || item.bg != visual.RgbNetGoodBg {
+	if item, ok := r.networkBadge(); !ok || item.text != " 2P:0 42ms " || item.bg != visual.RgbNetGoodBg {
 		t.Fatalf("converged item = %#v, %t", item, ok)
 	}
 
@@ -64,13 +64,13 @@ func TestStatusBarNetworkBadgeIsOneCellChosenBySeverity(t *testing.T) {
 	r.statCadence.Store(8)
 	r.statConstrained.Store(true)
 	item, ok := r.networkBadge()
-	if !ok || item.text != " 2P 42ms slow " || item.bg != visual.RgbNetWarnBg {
+	if !ok || item.text != " 2P:0 42ms slow " || item.bg != visual.RgbNetWarnBg {
 		t.Fatalf("constrained item = %#v, %t", item, ok)
 	}
 
 	// Loss outranks it: the link itself is dropping what the cadence plans around.
 	r.statLoss.Store(7)
-	if item, ok := r.networkBadge(); !ok || item.text != " 2P 42ms loss 7% " {
+	if item, ok := r.networkBadge(); !ok || item.text != " 2P:0 42ms loss 7% " {
 		t.Fatalf("lossy item = %#v, %t", item, ok)
 	}
 
@@ -79,7 +79,7 @@ func TestStatusBarNetworkBadgeIsOneCellChosenBySeverity(t *testing.T) {
 	r.statStale.Store(true)
 	r.statLag.Store(7)
 	item, ok = r.networkBadge()
-	if !ok || item.text != " 2P 42ms desync 7 " || item.bg != visual.RgbNetWarnBg {
+	if !ok || item.text != " 2P:0 42ms desync 7 " || item.bg != visual.RgbNetWarnBg {
 		t.Fatalf("stale item = %#v, %t", item, ok)
 	}
 
@@ -87,7 +87,7 @@ func TestStatusBarNetworkBadgeIsOneCellChosenBySeverity(t *testing.T) {
 	// system degrading, the system unable to keep its guarantee.
 	r.statFloor.Store(true)
 	item, ok = r.networkBadge()
-	if !ok || item.text != " 2P 42ms slow! " || item.bg != visual.RgbNetBadBg {
+	if !ok || item.text != " 2P:0 42ms slow! " || item.bg != visual.RgbNetBadBg {
 		t.Fatalf("floor item = %#v, %t", item, ok)
 	}
 }
@@ -158,7 +158,7 @@ func TestStatusBarNetworkCellHoldsItsWidth(t *testing.T) {
 	}
 
 	clock.Step(parameter.StatusNetworkHoldDuration)
-	if item, _ := r.networkItem(); item.text != " 2P 42ms desync 7 " {
+	if item, _ := r.networkItem(); item.text != " 2P:0 42ms desync 7 " {
 		t.Fatalf("the cell is %q after its hold, want the current reading", item.text)
 	}
 }

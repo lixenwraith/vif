@@ -364,7 +364,7 @@ lifetime)
 
 bot)
 	# Each shipped graph plays through the binary, solo and flat out, until a region
-	# appended here quits it after a minute of game time; roam has to type. Then roam
+	# appended here quits it after a minute of game time; default has to type. Then it
 	# joins a dedicated host with two bots of its own, and a host seats its own.
 	need_bin
 	dir=$(mktemp -d)
@@ -382,14 +382,14 @@ bot)
 		[ "$(botstat "$dir/$name.log" injected)" -gt 0 ] 2>/dev/null || fail "$name played nothing: $dir/$name.log"
 		[ "$(botstat "$dir/$name.log" dropped)" = 0 ] || fail "$name overflowed its queue: $dir/$name.log"
 	done
-	[ "$(botstat "$dir/roam.log" typed)" -gt 0 ] 2>/dev/null || fail "roam typed nothing: $dir/roam.log"
-	pass "every shipped graph plays solo through the binary, and roam types"
+	[ "$(botstat "$dir/default.log" typed)" -gt 0 ] 2>/dev/null || fail "default typed nothing: $dir/default.log"
+	pass "every shipped graph plays solo through the binary, and default types"
 
 	note "a bot with two of its own joins a dedicated host, and they leave with it"
 	botlines() { grep -c "\"msg\":\"bot $2\"" "$1"; }
 	serve_bg -first-join 30s -empty 3s
 	wait_for 15 'probe_get /health' || fail "probe never answered"
-	{ cat internal/asset/bot/roam.toml; stop 5000; } >"$dir/join.toml"
+	{ cat internal/asset/bot/default.toml; stop 5000; } >"$dir/join.toml"
 	"$BIN" -bot "$dir/join.toml" -join "$HOST:$PORT" -bots 2:patrol -log-stdout -lv info >"$dir/join.log" 2>&1 \
 		|| fail "the joining bot did not end cleanly: $dir/join.log"
 	[ "$(botstat "$dir/join.log" typed)" -gt 0 ] 2>/dev/null || fail "the joining bot typed nothing: $dir/join.log"

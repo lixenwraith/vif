@@ -786,13 +786,7 @@ func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 	return CommandResult{Continue: true, KeepPaused: true}
 }
 
-// handleHostCommand opens a running instance to participants.
-// Usage: :host <addr>   e.g. :host :7777, :host 0.0.0.0:7777, :host ws://:7777
-//
-// It is deliberately not gated by the live-session guard above: the guard exists to
-// stop an operator changing shared scheduling under a session that has already
-// agreed on it, and this command is what creates one. BeginHosting refuses a run
-// that is already in a session, which is the same rule stated where it belongs.
+// Opening a session uses its own admission check, before the live-session guard applies.
 func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if ctx.SessionCtl == nil {
 		setCommandError(ctx, "This runtime has no session transport")
@@ -844,7 +838,7 @@ func handleSessionCommand(ctx *engine.GameContext) CommandResult {
 
 // handleBotCommand lists, seats or drops the bots this run holds. Outside the
 // live-session guard, like :host: a bot joins the session as any participant does.
-// Usage: :bot | :bot add [graph] | :bot drop <slot>
+// Usage: :bot | :bot add [N[:graph]|graph] | :bot drop <slot>
 func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if ctx.SessionCtl == nil {
 		setCommandError(ctx, "This runtime has no session transport")
@@ -864,12 +858,12 @@ func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 			ctx.SetStatusMessage("Bot joining; :bot lists this run's bots", parameter.StatusMessageDefaultTimeout, false)
 		}
 	case args[0] == "drop" && len(args) == 2:
-		slot, perr := strconv.Atoi(args[1])
+		slot, perr := strconv.ParseUint(args[1], 16, 8)
 		if err = perr; err == nil {
-			err = ctx.SessionCtl.DropBot(slot)
+			err = ctx.SessionCtl.DropBot(int(slot))
 		}
 	default:
-		setCommandError(ctx, "Usage: :bot [add [graph] | drop <slot>]")
+		setCommandError(ctx, "Usage: :bot [add [N[:graph]|graph] | drop <slot>]")
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 	if err != nil {

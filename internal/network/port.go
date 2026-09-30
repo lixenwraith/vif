@@ -98,6 +98,11 @@ func (p *SocketPort) Close() error {
 	return p.transport.Stop()
 }
 
+// ServeSession attaches an ordinary join gate to this port's existing peer set.
+func (p *SocketPort) ServeSession(addr string, accept func(net.Conn) (PeerID, error), admitted func(PeerID)) (string, error) {
+	return p.transport.serveSession(addr, accept, admitted)
+}
+
 // ParticipantID is the canonical source order used by the barrier.
 func (p *SocketPort) ParticipantID() uint32 { return uint32(p.config.ParticipantID) }
 
@@ -211,12 +216,7 @@ func (p *SocketPort) LinkMetric(peer uint32) linkpace.Metrics {
 	return metrics
 }
 
-// ObserveTransfer folds a completed bulk transfer into one link's estimate.
-//
-// A join's capture is a throughput measurement nothing else on the link can make
-// that early: the bytes went out, the joiner answered when it had them all, and
-// the sender was pushing the whole time. It is the number an admission decision
-// has before a single probe has completed a round trip.
+// A join capture measures throughput before ordinary probes have enough data.
 func (p *SocketPort) ObserveTransfer(peer uint32, bytes int64, elapsed time.Duration) {
 	p.meterMu.Lock()
 	defer p.meterMu.Unlock()
@@ -234,12 +234,7 @@ func (p *SocketPort) meterLocked(id PeerID) *linkMeter {
 	return m
 }
 
-// probeLoop emits one probe per peer per interval.
-//
-// It is wall-paced and off the tick deliberately. A cadence is a property of the
-// simulation and is counted in ticks; the *link* is not, and measuring it from a
-// loop the simulation drives would make a stalled instance stop noticing that
-// its link had gone.
+// Probe off the simulation clock so a stalled game still notices a lost link.
 func (p *SocketPort) probeLoop() {
 	defer close(p.probeDone)
 	ticker := time.NewTicker(parameter.NetworkProbeInterval) // [wall] the link, not the game

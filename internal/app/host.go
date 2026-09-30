@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/core"
@@ -33,24 +35,27 @@ func (c sessionControl) DropBot(slot int) error   { return c.a.dropSeat(slot) }
 func (c sessionControl) BotSummary() string       { return c.a.seatsSummary() }
 
 func (c sessionControl) AddBot(graph string) error {
-	return c.a.addSeatLocked(cmp.Or(graph, DefaultBotGraph))
+	specs := []string{cmp.Or(graph, DefaultBotGraph)}
+	if _, err := strconv.Atoi(graph); err == nil || strings.Contains(graph, ":") {
+		var err error
+		if specs, err = BotSpecs(graph); err != nil {
+			return err
+		}
+	}
+	for _, spec := range specs {
+		if err := c.a.addSeatLocked(spec); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c sessionControl) ChangeScenario(name string) (bool, error) {
 	return c.a.changeScenarioLocked(name)
 }
 
-// changeScenarioLocked validates the named scenario and latches the restart that
-// builds it. A scenario declares its own regions, and the regions are what register
-// the FSM metric set that Scheduler.Prepare freezes for the life of a run, so
-// loading a different one into this App is not available — Run builds another.
-//
-// Validation happens here rather than after the teardown because the operator
-// typed the name: a scenario that does not resolve, or that names a system this
-// build does not have, has to be an error they read with the game still running.
-// The bounded file I/O under the world lock is the cost `:log on` already pays.
-//
-// Caller MUST hold updateMutex.
+// Validate before teardown; a different scenario needs a new App and metric set.
+// Caller holds updateMutex.
 func (a *App) changeScenarioLocked(name string) (bool, error) {
 	// The session's rule first: it holds whatever shape this runtime is, and it is
 	// the more useful of the two answers to a participant that asked.
@@ -95,13 +100,8 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 	return true, nil
 }
 
-// receiveSessionRestart takes the authority's notice that the session is rebuilding
-// on another scenario. All it carries is where to come back to, which is not always
-// where this participant came from: a succession moves the door. Phase 3's transfer
-// covers a scenario no root here holds.
-//
-// Called under the world lock from the tick that drained the frame, so the latch is
-// atomic and the run it belongs to is the one Loop is about to leave.
+// A restart follows the authority's current address, which may have migrated.
+// Called under the world lock; the restart loop consumes the atomic request.
 func (a *App) receiveSessionRestart(from uint32, addr string) {
 	if a.cfg.Mode != ModePlay || a.cfg.JoinAddress == "" {
 		return // a coordinator hears its own broadcast back on a mesh; a driven run has no loop

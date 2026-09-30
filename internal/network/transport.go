@@ -17,9 +17,11 @@ const acceptRetryDelay = 10 * time.Millisecond
 
 // Transport handles network I/O for a specific role
 type Transport struct {
-	config   *Config
-	listener net.Listener
-	peers    *PeerManager
+	config         *Config
+	listener       net.Listener
+	listenMu       sync.Mutex
+	extraListeners []net.Listener
+	peers          *PeerManager
 
 	// handshakes is the concurrency budget for the pre-admission handshake, and
 	// pending is the connections currently spending one. The budget is what a
@@ -69,13 +71,7 @@ func (t *Transport) Start() error {
 	case RoleHost:
 		return t.startServer()
 	case RolePeer, RoleRelay:
-		// A relay dials like any other participant. Its role is what it does with
-		// the artifacts once they arrive, not how the stream was established.
-		//
-		// A participant with nothing to dial is not an error when it has a port of
-		// its own: that is a session member waiting to be reached rather than a
-		// misconfigured client, and it is what a successor left holding only its
-		// own listener is.
+		// A successor can retain only its listener after losing the last upstream link.
 		dialing := t.config.preconnected != nil || t.config.Address != ""
 		if !dialing && t.config.AcceptPeer == nil {
 			t.running.Store(false)
@@ -106,7 +102,7 @@ func (t *Transport) serveAsPeer() error {
 	if ln := t.config.PreboundListener; ln != nil {
 		t.listener = ln
 		t.wg.Add(1)
-		go t.acceptLoop(ln, t.config.AcceptPeer)
+		go t.acceptLoop(ln, t.config.AcceptPeer, t.config.OnAdmit)
 		return nil
 	}
 	if t.config.ListenAddress == "" {
@@ -147,7 +143,7 @@ func (t *Transport) listen(addr string, accept func(net.Conn) (PeerID, error)) e
 	t.listener = ln
 
 	t.wg.Add(1)
-	go t.acceptLoop(ln, accept)
+	go t.acceptLoop(ln, accept, t.config.OnAdmit)
 
 	return nil
 }
@@ -173,8 +169,25 @@ func (t *Transport) DialPeer(addr string, local PeerID) error {
 	return nil
 }
 
+// serveSession adds an admission listener without replacing surviving peer links.
+func (t *Transport) serveSession(addr string, accept func(net.Conn) (PeerID, error), admitted func(PeerID)) (string, error) {
+	t.listenMu.Lock()
+	defer t.listenMu.Unlock()
+	if !t.running.Load() {
+		return "", errors.New("transport is stopped")
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return "", err
+	}
+	t.extraListeners = append(t.extraListeners, ln)
+	t.wg.Add(1)
+	go t.acceptLoop(ln, accept, admitted)
+	return ln.Addr().String(), nil
+}
+
 // acceptLoop handles incoming connections
-func (t *Transport) acceptLoop(ln net.Listener, accept func(net.Conn) (PeerID, error)) {
+func (t *Transport) acceptLoop(ln net.Listener, accept func(net.Conn) (PeerID, error), admitted func(PeerID)) {
 	defer t.wg.Done()
 
 	for {
@@ -233,17 +246,12 @@ func (t *Transport) acceptLoop(ln net.Listener, accept func(net.Conn) (PeerID, e
 			continue
 		}
 		t.wg.Add(1)
-		go t.handshake(conn, handshake)
+		go t.handshake(conn, handshake, admitted)
 	}
 }
 
-// handshake admits one accepted connection, off the accept loop.
-//
-// The budget is released as soon as AcceptSession returns rather than when this
-// goroutine ends: the budget bounds unauthenticated work, and everything after
-// that point concerns a peer the session has already assigned an identity to,
-// which the roster ceiling bounds instead.
-func (t *Transport) handshake(conn net.Conn, accept func(net.Conn) (PeerID, error)) {
+// Release the unauthenticated budget before running the bounded participant gate.
+func (t *Transport) handshake(conn net.Conn, accept func(net.Conn) (PeerID, error), admitted func(PeerID)) {
 	defer t.wg.Done()
 	t.holdPending(conn)
 
@@ -260,8 +268,8 @@ func (t *Transport) handshake(conn net.Conn, accept func(net.Conn) (PeerID, erro
 		t.report(err)
 		return
 	}
-	if t.config.OnAdmit != nil {
-		t.config.OnAdmit(id)
+	if admitted != nil {
+		admitted(id)
 	}
 }
 
@@ -353,7 +361,12 @@ func (t *Transport) Stop() error {
 		return nil
 	}
 
+	t.listenMu.Lock()
 	close(t.stopCh)
+	for _, ln := range t.extraListeners {
+		_ = ln.Close()
+	}
+	t.listenMu.Unlock()
 
 	if t.listener != nil {
 		t.listener.Close()

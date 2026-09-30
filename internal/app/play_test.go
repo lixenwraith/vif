@@ -5,10 +5,14 @@ package app
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // TestReplayViewStopsAtTheMapEdges is the scroll rule: a map the viewer's view holds
@@ -84,4 +88,59 @@ func TestReplayViewerCommandLineReturnsTheRecordedState(t *testing.T) {
 		t.Fatalf("closed into mode %d paused %t, want the recorded INSERT, running",
 			a.Context().GetMode(), a.Context().TimeCtl.IsPaused())
 	}
+}
+
+func TestAWatchingBotOperatorCanResetAndSeatBotsWhileTheSessionKeepsTicking(t *testing.T) {
+	a := mustHeadless(t, fixtureSeed, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	graph, err := loadBotGraph(a.cfg.Resources, DefaultBotGraph)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.localParticipant())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &player{a: a, src: botSource{d}, interactive: true, interval: parameter.GameUpdateInterval,
+		rec: engine.ScaleNormal, scale: engine.ScaleNormal}
+	press := func(key terminal.Key, char rune) {
+		t.Helper()
+		if !p.key(terminal.Event{Type: terminal.EventKey, Key: key, Rune: char}) {
+			t.Fatal("operator quit")
+		}
+	}
+	command := func(s string) {
+		press(terminal.KeyRune, ':')
+		for _, char := range s {
+			press(terminal.KeyRune, char)
+		}
+		press(terminal.KeyEnter, 0)
+	}
+	before := a.Position().Run
+	command("n")
+	p.advance(parameter.GameUpdateInterval)
+	if a.Position().Run <= before || strings.Contains(a.ctx.GetStatusMessage(), "replay") {
+		t.Fatalf("new game failed: %s, position %+v", a.ctx.GetStatusMessage(), a.Position())
+	}
+	command("bot add 1:patrol")
+	if a.HostAddr() == "" {
+		t.Fatalf("bot add did not host: %s", a.ctx.GetStatusMessage())
+	}
+	press(terminal.KeyRune, ':')
+	if p.cmd == nil || a.ctx.Viewer.Load() {
+		t.Fatal("live bot controls are still a replay viewer")
+	}
+	beforeTick := a.Position().Tick
+	for deadline := time.Now().Add(socketWait); a.world.Resources.Player.Count() != 2 && time.Now().Before(deadline); {
+		p.advance(parameter.GameUpdateInterval)
+		time.Sleep(parameter.GameUpdateInterval)
+	}
+	if a.Position().Tick <= beforeTick {
+		t.Fatal("the command line stopped the session clock")
+	}
+	if a.world.Resources.Player.Count() != 2 {
+		t.Fatalf("the requested bot did not join: %s", a.ctx.GetStatusMessage())
+	}
+	press(terminal.KeyEscape, 0)
 }

@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -330,7 +329,7 @@ func buildConfig() app.Config {
 	if flagSession.size != "" {
 		cfg.Width, cfg.Height, _ = parseSize(flagSession.size) // validated in validateInvocation
 	}
-	cfg.Bots, _ = parseBots(flagSession.bots) // validated in validateInvocation
+	cfg.Bots, _ = app.BotSpecs(flagSession.bots) // validated in validateInvocation
 
 	cfg.AudioMuted = *flagMute
 	cfg.MusicWAV = musicWAVDir()
@@ -519,7 +518,7 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		(schema || check || replay != "") {
 		return fmt.Errorf("-host, -join, -serve, -probe, -players, -bots, -authority, -listen, -no-advertise, -name and the session lifetime bounds are available only in interactive play")
 	}
-	if _, err := parseBots(f.bots); err != nil {
+	if _, err := app.BotSpecs(f.bots); err != nil {
 		return err
 	}
 	if e, err := network.ParseEndpoint(f.join); f.players != 0 && f.join != "" && err == nil && e.Scheme != network.SchemeSite {
@@ -595,19 +594,6 @@ func validSessionName(name string) error {
 		}
 	}
 	return nil
-}
-
-// parseBots reads -bots N[:graph] as one graph spec a bot.
-func parseBots(spec string) ([]string, error) {
-	if spec == "" {
-		return nil, nil
-	}
-	count, graph, _ := strings.Cut(spec, ":")
-	n, err := strconv.Atoi(count)
-	if err != nil || n < 1 || n > parameter.MaxPlayers {
-		return nil, fmt.Errorf("-bots %q is not N or N:graph with N in 1..%d", spec, parameter.MaxPlayers)
-	}
-	return slices.Repeat([]string{cmp.Or(graph, app.DefaultBotGraph)}, n), nil
 }
 
 // parseSize reads a WxH geometry for a run that derives none from a terminal.

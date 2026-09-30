@@ -86,7 +86,7 @@ func runPresented(a *App, src pacedSource, kind, name string,
 	p := &player{
 		a: a, src: src, interval: interval,
 		rec: engine.ScaleNormal, scale: engine.ScaleNormal,
-		live: live, signals: signals,
+		live: live, interactive: kind == "bot", signals: signals,
 	}
 	return p.run()
 }
@@ -118,8 +118,8 @@ type player struct {
 	rec      engine.TimeScale // rate the stream was produced at
 	scale    engine.TimeScale // viewer rate, relative to the produced one
 
-	// live marks a run attached to a session. The playback controls are refused on
-	// one: they are instance-local, and half a session cannot be paused.
+	interactive bool // live bot control, separate from journal inspection
+	// Playback controls cannot stop one participant's clock in a live session.
 	live    bool
 	signals <-chan os.Signal
 
@@ -191,13 +191,20 @@ func (p *player) run() error {
 	}
 }
 
-// advance grants the simulation the ticks the elapsed wall time paid for. Nothing
-// plays while the viewer holds the command line, as the game pauses for it.
+// A live bot's command line borrows its input without stopping the session clock.
 func (p *player) advance(elapsed time.Duration) {
-	if p.done || p.cmd != nil || p.paused {
+	p.live = p.a.sessionTransport() != nil
+	if p.interactive && p.live {
+		p.paused, p.scale = false, engine.ScaleNormal
+		if p.a.cfg.TimeScaleSpec == "" {
+			p.interval = parameter.GameUpdateInterval
+		}
+	}
+	commandHeld := p.cmd != nil && !(p.interactive && p.live)
+	if p.done || commandHeld || p.paused {
 		p.a.world.Resources.Prof.Hold() // a profiler window spans played time only
 	}
-	if p.done || p.cmd != nil {
+	if p.done || commandHeld {
 		return
 	}
 	if p.paused {
@@ -229,6 +236,11 @@ func (p *player) perTick() time.Duration {
 
 // tickOnce advances the driver, latching the end of the stream
 func (p *player) tickOnce() bool {
+	// Keep the session clock running while the operator borrows the bot's router.
+	if p.cmd != nil && p.interactive {
+		p.a.Tick(1)
+		return true
+	}
 	more, err := p.src.Step()
 	if err != nil {
 		vlog.Error("app", "msg", "presented run failed", "error", err.Error())
@@ -278,6 +290,7 @@ func viewAxis(camera, recorded, size, mapSize, pan int) (cam, offset, kept int) 
 // routed through the keymap: these drive the viewer, not the game. Any other key is
 // offered to the keymap for the game bindings a viewer owns.
 func (p *player) key(ev terminal.Event) bool {
+	p.live = p.a.sessionTransport() != nil
 	if p.cmd != nil {
 		// The viewer's command line or overlay, parsed as the game parses it
 		if intent := p.a.inputMachine.Process(ev); intent != nil {
@@ -347,10 +360,10 @@ func (p *player) offer(ev terminal.Event) bool {
 	case input.IntentToggleAudioCycle:
 		return p.route(intent)
 	case input.IntentModeSwitch:
-		if intent.ModeTarget == input.ModeTargetCommand && !p.live {
+		if intent.ModeTarget == input.ModeTargetCommand && (p.interactive || !p.live) {
 			a := p.a
 			p.cmd = &viewerCommand{mode: a.ctx.GetMode(), paused: a.ctx.TimeCtl.IsPaused()}
-			a.ctx.Viewer.Store(true)
+			a.ctx.Viewer.Store(!p.interactive)
 			return p.command(intent)
 		}
 	}
@@ -393,6 +406,9 @@ func (p *player) holdMixer() { p.a.holdMixer(p.paused || p.done) }
 // out-of-band control rather than the recorded player, so none of it is effort.
 func (p *player) route(intent *input.Intent) bool {
 	a := p.a
+	if p.interactive {
+		return a.Inject(intent)
+	}
 	cont := true
 	a.world.RunSafe(func() {
 		a.world.WithOrigin(event.OriginDebug, func() { cont = a.router.Handle(intent) })
@@ -414,6 +430,9 @@ func (p *player) report() {
 	keys := ":h for keys"
 	if p.live {
 		state, keys = "LIVE", "hjkl 0 q"
+		if p.interactive {
+			keys = ":h for keys"
+		}
 	}
 	p.a.ctx.SetStatusMessage(fmt.Sprintf("%s %sx | %s | %s",
 		state, p.scale.String(), p.src.progress(), keys), 0, true)

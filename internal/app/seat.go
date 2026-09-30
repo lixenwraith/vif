@@ -1,11 +1,12 @@
 package app
 
 import (
-	"errors"
+	"cmp"
 	"fmt"
 	"net"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,7 +20,20 @@ import (
 )
 
 // DefaultBotGraph is the graph a bot seat plays when none is named.
-const DefaultBotGraph = "roam"
+const DefaultBotGraph = "default"
+
+// BotSpecs shares the count grammar between -bots and :bot add.
+func BotSpecs(spec string) ([]string, error) {
+	if spec == "" {
+		return nil, nil
+	}
+	count, graph, _ := strings.Cut(spec, ":")
+	n, err := strconv.Atoi(count)
+	if err != nil || n < 1 || n > parameter.MaxPlayers {
+		return nil, fmt.Errorf("%q is not N or N:graph with N in 1..%d", spec, parameter.MaxPlayers)
+	}
+	return slices.Repeat([]string{cmp.Or(graph, DefaultBotGraph)}, n), nil
+}
 
 // seatLoopback is where a run in no session opens one for its bots.
 const seatLoopback = "127.0.0.1:0"
@@ -82,14 +96,12 @@ func (a *App) addSeatLocked(spec string) error {
 	return nil
 }
 
-// seatConfigLocked is a new seat's run: headless at the fleet's terminal size, never
-// advertised, recording nothing process-wide, and joined to the session this run
-// joined, or to its own listener over loopback, which a run in none opens first.
-// Caller MUST hold updateMutex.
+// A successor admits local seats on its existing transport; its peer listener
+// only accepts already-rostered identities. Caller holds updateMutex.
 func (a *App) seatConfigLocked() (Config, error) {
 	cfg := Config{Mode: ModeHeadless, Resources: a.cfg.Resources, Width: BotWidth, Height: BotHeight,
 		NoAdvertise: true, StatTicks: -1, RecTicks: -1}
-	if a.cfg.JoinAddress != "" {
+	if a.cfg.JoinAddress != "" && !a.world.IsSessionCoordinator() {
 		cfg.JoinAddress, cfg.SessionName = a.cfg.JoinAddress, a.cfg.SessionName
 		return cfg, nil
 	}
@@ -100,7 +112,18 @@ func (a *App) seatConfigLocked() (Config, error) {
 	}
 	bound := a.ownListener()
 	if bound == "" {
-		return cfg, errors.New("this run's session has no listener to seat a bot on")
+		bound = a.seatAddress
+		if bound == "" {
+			port, err := a.socketPort()
+			if err != nil {
+				return cfg, err
+			}
+			bound, err = port.ServeSession(seatLoopback, a.hostNetworkConfig().AcceptSession, a.admitLateJoiner)
+			if err != nil {
+				return cfg, err
+			}
+			a.seatAddress = bound
+		}
 	}
 	target := loopbackOf(bound)
 	if a.cfg.SessionName != "" {
@@ -243,7 +266,7 @@ func (a *App) dropSeat(slot int) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("no bot of this run's is on slot %d", slot)
+	return fmt.Errorf("no bot of this run's is on slot %X", slot)
 }
 
 // seatGraphs are the graphs of the seats this run holds, in the order they came.
@@ -262,7 +285,7 @@ func (a *App) seatsSummary() string {
 	a.seatsMu.Lock()
 	defer a.seatsMu.Unlock()
 	if len(a.seats) == 0 {
-		return "No bots; :bot add [graph] seats one"
+		return "No bots; :bot add [N[:graph]|graph] seats bots"
 	}
 	parts := make([]string, 0, len(a.seats))
 	for _, s := range a.seats {
@@ -270,7 +293,7 @@ func (a *App) seatsSummary() string {
 			parts = append(parts, s.graph.Name+" joining")
 			continue
 		}
-		parts = append(parts, fmt.Sprintf("slot %d %s", s.slot.Load(), s.graph.Name))
+		parts = append(parts, fmt.Sprintf("slot %X %s", s.slot.Load(), s.graph.Name))
 	}
 	return "Bots: " + strings.Join(parts, ", ") + "; :bot drop <slot> drops one"
 }

@@ -128,6 +128,10 @@ func BotGraph(o Options, spec string) ([]byte, string, error) {
 		data, err := os.ReadFile(p)
 		return data, spec, err
 	}
+	// Preserve named overrides while old built-in names share the current policy.
+	if spec == "roam" || spec == "patrol" {
+		file, spec = "default.toml", "default"
+	}
 	data, err := fs.ReadFile(asset.DefaultBots, file)
 	if err != nil {
 		return nil, "", fmt.Errorf("bot graph %q not found as a path, in a configuration root or embedded", spec)
