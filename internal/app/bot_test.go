@@ -224,6 +224,36 @@ func TestAHoldersBotsComeAndGoAsParticipants(t *testing.T) {
 	}
 }
 
+// TestAnAuthorityPausesOnlyWhileItsOtherParticipantsAreItsBots: its own bots stand
+// still with its clock, and anybody else would run on without it, so an arrival
+// ends the pause and a session with a stranger in it refuses one.
+func TestAnAuthorityPausesOnlyWhileItsOtherParticipantsAreItsBots(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	holder, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, holder, 2)
+	pauses := func() bool {
+		holder.Context().SetPaused(true)
+		// A driven holder steps through its pause, so ticks bound the wait.
+		for from := holder.Position().Tick; holder.Position().Tick < from+20; {
+			if holder.Context().TimeCtl.IsPaused() {
+				return true
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		return false
+	}
+	if !pauses() {
+		t.Fatal("an authority whose only peer is its own bot refused to pause")
+	}
+	mustSocketJoiner(t, holder.HostAddr(), fixtureSeed, 120, 40)
+	if holder.Context().TimeCtl.IsPaused() {
+		t.Fatal("an arrival left the session paused, which its gate cannot serve")
+	}
+	if pauses() {
+		t.Fatal("an authority paused a session holding a participant it does not hold")
+	}
+}
+
 // TestAGuestsBotsLeaveWithIt: a guest's bots dial the session it joined and go when
 // it does, while the host's own bots stay.
 func TestAGuestsBotsLeaveWithIt(t *testing.T) {

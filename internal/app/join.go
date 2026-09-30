@@ -305,6 +305,20 @@ func (a *App) AttachTransport(port engine.NetworkPort) {
 // Caller MUST hold updateMutex.
 func (a *App) attachTransportLocked(port engine.NetworkPort) {
 	r := engine.NewNetworkResource(port)
+	a.bindSessionHooks(r)
+	term, holder := a.authorityStamp()
+	if holder != 0 {
+		r.Authority.Store(holder)
+		r.Term.Store(uint64(term))
+	}
+	a.world.Resources.Network = r
+	a.world.MarkSessionShared()
+	a.ctx.PublishMapLock()
+}
+
+// bindSessionHooks answers a network resource from this run's session layer, the
+// service's endpoint and an attached one alike.
+func (a *App) bindSessionHooks(r *engine.NetworkResource) {
 	r.OnDeparture = a.releaseParticipant32
 	r.SharedDigest = a.sharedDigestLocked
 	// The correction queue takes bytes and nothing else: this runs inside a tick,
@@ -316,12 +330,5 @@ func (a *App) attachTransportLocked(port engine.NetworkPort) {
 	r.OnAuthority = a.receiveAuthorityFrame
 	r.OnPeerLost = a.reportPeerLost
 	r.OnSessionRestart = a.receiveSessionRestart
-	term, holder := a.authorityStamp()
-	if holder != 0 {
-		r.Authority.Store(holder)
-		r.Term.Store(uint64(term))
-	}
-	a.world.Resources.Network = r
-	a.world.MarkSessionShared()
-	a.ctx.PublishMapLock()
+	r.SeatsOnly = a.seatsOnly
 }

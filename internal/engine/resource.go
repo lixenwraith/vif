@@ -1028,6 +1028,10 @@ type NetworkResource struct {
 	// for a frame the authority sent.
 	OnSessionRestart func(participant uint32, addr string)
 
+	// SeatsOnly reports whether every participant linked to this instance is a bot
+	// seat it holds, which stands still with its clock. Called under the world lock.
+	SeatsOnly func() bool
+
 	// OnPeerLost reports a direct neighbour's departure to the session layer,
 	// beside the identity release OnDeparture does. It is a different question:
 	// which identities the lobby may hand out again is local bookkeeping, and

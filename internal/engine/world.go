@@ -455,6 +455,14 @@ func (w *World) LiveSession() bool {
 	return net != nil && net.Port != nil && net.Port.IsRunning() && net.Port.PeerCount() > 0
 }
 
+// SeatsOnly reports whether this instance authors a live session whose every other
+// participant is a bot seat it holds. Such a session may pause: a paused authority
+// stops committing, and only its own seats can stop with it.
+func (w *World) SeatsOnly() bool {
+	r := w.Resources.Network
+	return r != nil && r.SeatsOnly != nil && w.IsSessionCoordinator() && r.SeatsOnly()
+}
+
 // LocalParticipant is this instance's session identity, zero when no transport is
 // attached. It is the seam every owner-authored rule turns on.
 func (w *World) LocalParticipant() uint32 {
