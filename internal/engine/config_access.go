@@ -40,11 +40,9 @@ func drawableWidth(w *World, viewport, mapped int) int64 {
 }
 
 // replicatedConfigKeys are the script-visible fields every instance agrees on: the
-// map bounds, the extent a script draws on, and the crop flag, whose only
-// authoritative writer is EventLevelSetup from the map script (D-14). The rest
-// describe this terminal — camera and color mode — and diverge silently once the
-// map is locked, because a guard branching on one takes a different arm on each
-// instance.
+// map bounds, the extent a script draws on, and the crop flag, written only by the
+// map script's EventLevelSetup (D-14). The rest describe this terminal — camera and
+// color mode — and a guard branching on one takes a different arm on each instance.
 var replicatedConfigKeys = map[string]bool{
 	"map_width": true, "map_height": true, "crop_on_resize": true,
 	"viewport_width": true, "viewport_height": true,
@@ -100,6 +98,19 @@ func ConfigBoolAccessor(field string) (func(*World) bool, bool) {
 		noteDivergentRead(w, field)
 		return fn(w)
 	}, true
+}
+
+// PrivateConfigIntAccessor is ConfigIntAccessor for a machine no other instance
+// runs, such as a bot's graph: its own terminal's fields are what it means to read.
+func PrivateConfigIntAccessor(field string) (func(*World) int64, bool) {
+	fn, ok := configIntAccessors[field]
+	return fn, ok
+}
+
+// PrivateConfigBoolAccessor is PrivateConfigIntAccessor's bool counterpart
+func PrivateConfigBoolAccessor(field string) (func(*World) bool, bool) {
+	fn, ok := configBoolAccessors[field]
+	return fn, ok
 }
 
 // ConfigIntFields returns the sorted script-visible int field names
