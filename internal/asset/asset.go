@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-//go:embed scenario/*.toml content/*.toml input/keymap.toml audio/*.toml vif.toml
+//go:embed scenario/*.toml content/*.toml input/keymap.toml audio/*.toml vif.toml bot/*.toml
 var assetFS embed.FS
 
 var (
@@ -22,6 +22,8 @@ var (
 	// DefaultSounds holds the built-in sound specs; DefaultSoundFiles is their
 	// load order, a later file overriding an earlier one by name.
 	DefaultSounds fs.FS
+	// DefaultBots holds the shipped bot graphs, one <name>.toml each.
+	DefaultBots fs.FS
 )
 
 const DefaultScenarioEntry = "scenario.toml"
@@ -42,6 +44,7 @@ func init() {
 	DefaultScenario = sub("scenario")
 	DefaultContent = sub("content")
 	DefaultSounds = sub("audio")
+	DefaultBots = sub("bot")
 	DefaultKeymap = read("input/keymap.toml")
 	DefaultMusic = read("audio/music.toml")
 	DefaultSettings = read("vif.toml")
