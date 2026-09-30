@@ -256,3 +256,19 @@ func (a *App) seatGraphs() []string {
 	}
 	return specs
 }
+
+// seatsOnly reports whether every participant linked to this run is a seat it
+// holds, which is what lets an authority pause: its seats stand still with it.
+// Called under the world lock.
+func (a *App) seatsOnly() bool {
+	port, ok := a.sessionTransportLocked().(interface{ Peers() []uint32 })
+	if !ok {
+		return false
+	}
+	peers := port.Peers()
+	a.seatsMu.Lock()
+	defer a.seatsMu.Unlock()
+	return !slices.ContainsFunc(peers, func(p uint32) bool {
+		return !slices.ContainsFunc(a.seats, func(s *seat) bool { return s.id.Load() == p })
+	})
+}
