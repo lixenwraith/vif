@@ -20,15 +20,15 @@ define first; doing Android first would define it without a second consumer.
 
 - Priority: P0, leading the push; not a release blocker
 - Affected files: `internal/bot` (new), `internal/app`, `internal/network`,
-  `internal/converge`, `internal/mode/commands.go`, `cmd/vif`, `tool/vif-allocator`
+  `internal/mode`, `cmd/vif`, `tool/vif-allocator`
 - Plan: [Bots](todo-bots.md)
 
-A bot is its own headless instance whose policy drives its router with intents, bound
-by the same barrier, admission and eviction as a person. Several in one process join
-over in-process streams, and a guest holding them relays for them, which merges this
-item with [Delegate convergence to relays](#delegate-convergence-to-relays). The
-foundations have landed; the stages, from a seeded baseline that replays to trained
-and adapting bots and an allocator option that fills a session, are in the plan.
+A bot is its own headless instance whose FSM graph drives its router with intents,
+keys and mouse alike, bound by the same barrier, admission and eviction as a person.
+Bots belong to the instance that started them: a host's stay as participants, a
+guest's leave with it, and every composition of people and bots joins through the
+ordinary handshake. Phases 1–3 (P0) make bots play in every composition; the fleet,
+decision logic, relays and learning follow in the plan's order.
 
 ### Extract the renderer-neutral Android host model
 
@@ -191,7 +191,7 @@ Per-store write counters stay rejected: a cache compares values it owns.
 
 ### Delegate convergence to relays
 
-- Priority: P2; R1–R4 lead with bots as their stages S4 and S5
+- Priority: P2; the bots plan's phase 6, once bots play in every composition
 - Affected files: `internal/converge/relay.go`, `internal/converge/selective.go`,
   `internal/converge/correction.go`, `internal/system/network.go`, `internal/network`
 - Plan: [Bots](todo-bots.md) §4
@@ -204,7 +204,7 @@ ticks and let a peer write the canonical world. The relay owns its subtree's
 convergence instead, in the order the plan gives: admission through a relay with the
 join served from its own proved world, one subtree proof upstream, bundled epochs,
 ingress only through the relay, then people behind relays with re-parenting and NAT.
-A bot's in-process seat is the first leaf: no hop, shared fate, no hole punching.
+A guest's bot is the first leaf: no hop, shared fate, no hole punching.
 
 Expected: leaves converge like direct guests without the stopgap's whole world per
 floor window through every link, which then goes with the lead sampled from returned
