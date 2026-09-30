@@ -132,7 +132,7 @@ its holder's fate so it never re-parents, and it needs no hole punching.
 
 | Phase | Priority | Delivers |
 |---|---|---|
-| 1 | P0 | The bot itself: pointer in map cells, `internal/bot`, `vif -bot`, shipped graphs. |
+| 1 | landed | The bot itself: pointer in map cells, `internal/bot`, `vif -bot`, shipped graphs. |
 | 2 | P0 | Marking, and the host's bots: seats on an in-process stream, `-bots`, `:bot`, occupancy, the pause rule. |
 | 3 | P0 | A guest's bots: every composition in §4. |
 | 4 | P1 | The fleet: an allocator request for bots. |
@@ -141,20 +141,15 @@ its holder's fate so it never re-parents, and it needs no hole punching.
 | 7 | P3 | Offline genetic training. |
 | 8 | P3 | Session adaptation. |
 
-### Phase 1 — the bot itself
+### Phase 1 — the bot itself (landed)
 
-- `Intent.MapCell`; the router accepts a map-cell pointer only on a cell the
-  viewport shows (`ConfigResource.MapToViewport`, the inverse of `ViewportToMap`).
-- `internal/bot`: `Graph`, `Driver`, the vocabulary of §6, the intent queue and rate.
-  The keymap-action-to-intent table and the ex-command round trip move to
-  `internal/input`, shared with authored scripts.
-- `vif -bot <name|path>` with `-watch`, `-seed`, `-speed`, `-host` and `-join`.
-- Shipped graphs: `roam`, which seeks glyphs and types them, jumps to gold and
-  nuggets and fires at species it sees, and `patrol`, a fixed looping sequence.
-- Exit: a solo bot run is the same twice from one seed; each shipped graph loads,
-  plays and types correctly; `./script/test.sh bot` passes.
-- A `-bot -join` run is already a networked participant through the driven session
-  path; phase 2 marks it.
+`vif -bot <name|path>` plays the seat from a graph, solo, hosting or joining
+through the driven session path `-script` uses. `internal/bot` holds the graph, the
+driver and the vocabulary of §6; `IntentFor` and `AppendCommand` in `internal/input`
+serve scripts and graphs alike; `roam` and `patrol` ship in `internal/asset/bot/`.
+A solo run is a pure function of its seed, and `./script/test.sh bot` plays every
+shipped graph through the binary and joins `roam` to a dedicated host. `roam` types
+a few hundred glyphs a minute and misses about one keystroke in two hundred (§6).
 
 ### Phase 2 — marking and the host's bots
 
@@ -225,6 +220,13 @@ hostile combat entity), `cursor` (another participant) and `random` (a cell the
 viewport shows). Nearest is by cell distance with rows counted twice, as the
 terminal draws them.
 
+`PointAt` and `TypeGlyph` read the world, so each acts only when the rate releases
+everything it queues before the next tick: behind a backlog, what it read would be
+stale by the time it lands. `TypeGlyph` switches to Insert first when the router is
+elsewhere. Of `std`'s actions, `EmitEvent` and system control are inert — a graph
+writes the world only through intents — and region control runs the bot's own
+machine.
+
 | `[bot]` setting | Default | Meaning |
 |---|---|---|
 | `actions_per_second` | 12 | intents released per second of game time; a queue of 256 holds the rest |
@@ -252,14 +254,20 @@ transitions = [{ trigger = "Tick", target = "Out", guard = "StateTimeExceeds", g
 
 Perception is the whole local instance's present state. The vocabulary never reads
 the event queue or barrier-held crossings, RNG positions, FSM delayed actions, the
-prediction ledger or network state: those are the future, or somebody else's.
+prediction ledger or network state: those are the future, or somebody else's. So
+a keystroke can still miss, as a person's can: a tick's own fire queues deaths —
+special fire's dust, a cleaner's hits — that settle before the next keystroke does.
+Settling first would make a bot run unreplayable, since a recorded driven run
+settles only what it pushed.
 
 ## 7. Driver contract
 
 - One graph update per tick, dt one tick of game time, under the bot's world lock.
 - Actions queue; guards and actions read the world and never write it.
-- The queue releases at most `actions_per_second` intents per second, carrying the
-  remainder of a tick's allowance; a full queue drops and counts.
+- Each step earns its allowance before the update, so the graph knows what will land
+  before the tick; the queue releases at most `actions_per_second` intents a
+  second, carrying the remainder, and a full queue drops and counts. Allowance left
+  idle is capped at one second's worth.
 - A draw is the bot's own: `vmath.NewSeededRand(seed, "bot.<participant>")`.
 - A graph's state is private: in no capture, no journal and no fingerprint. A
   correction or a reset reaches it only through the world it reads next.
@@ -291,9 +299,10 @@ prediction ledger or network state: those are the future, or somebody else's.
 
 ## 10. Verification
 
-- Phase 1: two solo runs from one seed produce the same journal records; every
-  shipped graph compiles and types correctly in a headless run; the pointer rule;
-  `./script/test.sh bot` runs each shipped graph through the binary.
+- Phase 1: two solo runs from one seed journal the same records; every shipped graph
+  plays without overflowing its queue and `roam` types what it reaches; a broken
+  graph fails at load naming the fault; intents land in order at the rate; the
+  pointer rule; `./script/test.sh bot` through the binary, solo and joined.
 - Phases 2–3: mesh and loopback tests with bots as participants; the existing parity
   and convergence assertions apply unchanged, which is the point of a bot being an
   instance; a script scenario per composition in §4.
