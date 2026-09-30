@@ -1,10 +1,14 @@
 package navigation
 
-import "github.com/lixenwraith/vif/pkg/vmath"
+import (
+	"github.com/lixenwraith/vif/pkg/vmath"
+	"slices"
+)
 
 // FlowFieldCache manages flow field recomputation with throttling
 type FlowFieldCache struct {
 	Field *FlowField
+	grid  []bool // passability used by this cache
 
 	// Recomputation throttling
 	LastTargets            []vmath.Point // Tracks previously requested target coords
@@ -54,6 +58,9 @@ func (c *FlowFieldCache) Update(targets []vmath.Point, isBlocked WallChecker) bo
 			if dy < 0 {
 				dy = -dy
 			}
+			if dx+dy > 0 {
+				c.PendingUpdate = true
+			}
 			if dx+dy >= c.DirtyDistance {
 				c.PendingUpdate = true
 				c.TicksSinceCompute = c.MinTicksBetweenCompute
@@ -79,17 +86,16 @@ func (c *FlowFieldCache) MarkDirty() {
 	c.PendingUpdate = true
 }
 
-// Rebuild recomputes the field for the targets the cache last computed for and
-// leaves the throttle phase exactly as it found it. It reports whether it ran.
-//
-// It exists for one caller: a cache whose throttle phase was restored from another
-// instance but whose field was not, because a field is derived rather than carried.
-// Update cannot serve that caller. It would derive from *this* tick's targets, which
-// are not the ones the restored phase belongs to, so the field would be one the
-// sender never held; and it would then reset TicksSinceCompute and clear
-// PendingUpdate, which is the phase itself. Deriving from LastTargets reproduces the
-// sender's field, and leaving the counters alone leaves the next recompute due on
-// the tick the sender's is.
+// ObserveGrid invalidates routes immediately when their passability changes.
+// The slice may describe blocked or passable cells; only equality matters.
+func (c *FlowFieldCache) ObserveGrid(grid []bool) {
+	if !slices.Equal(c.grid, grid) {
+		c.grid = append(c.grid[:0], grid...)
+		c.Field.Invalidate()
+	}
+}
+
+// Rebuild derives a restored field without advancing its captured throttle phase.
 func (c *FlowFieldCache) Rebuild(isBlocked WallChecker) {
 	ticks, pending := c.TicksSinceCompute, c.PendingUpdate
 	c.Field.Compute(c.LastTargets, isBlocked)

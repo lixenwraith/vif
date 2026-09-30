@@ -1,9 +1,13 @@
 package bot
 
 import (
+	"io/fs"
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/input"
 )
@@ -96,4 +100,73 @@ on_enter = [
 			t.Fatalf("intent %d has count %d; the queue reordered them", i, intent.Count)
 		}
 	}
+}
+
+func TestDefaultSeeksRunStartsAndPatrolsForNuggetsWithoutText(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
+	cursor := w.CreateEntity(core.DomainShared)
+	w.Components.Cursor.SetComponent(cursor, component.CursorComponent{Slot: 0})
+	w.Resources.Player.Bind(0, cursor)
+	w.Resources.Player.SetLocal(0)
+	w.Positions.SetPosition(cursor, component.PositionComponent{X: 12, Y: 3})
+	var glyphs []core.Entity
+	for x := 5; x <= 9; x++ {
+		e := w.CreateEntity(core.DomainPlayer)
+		w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'a', Type: component.GlyphGreen})
+		w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: 3})
+		glyphs = append(glyphs, e)
+	}
+	data, err := fs.ReadFile(asset.DefaultBots, "default.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := ParseGraph("default", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := &recorder{}
+	d, err := NewDriver(rec, ctx, g, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	step := func(n int) {
+		for range n {
+			if _, err := d.Step(); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	step(10)
+	for _, intent := range rec.got {
+		if intent.Type == input.IntentMouseMove && (intent.X != 5 || intent.Y != 3) {
+			t.Fatalf("approached a run from its end: %+v", intent)
+		}
+	}
+	if len(rec.got) == 0 {
+		t.Fatal("did not approach text")
+	}
+	for _, e := range glyphs {
+		w.DestroyEntity(e)
+	}
+	rec.got = nil
+	step(100)
+	if len(rec.got) == 0 {
+		t.Fatal("stood still without glyphs")
+	}
+	nugget := w.CreateEntity(core.DomainShared)
+	w.Components.Nugget.SetComponent(nugget, component.NuggetComponent{})
+	w.Positions.SetPosition(nugget, component.PositionComponent{X: 60, Y: 10})
+	rec.got = nil
+	step(100)
+	jump, err := input.IntentFor("nugget_jump", 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, intent := range rec.got {
+		if intent.Type == jump.Type {
+			return
+		}
+	}
+	t.Fatal("ignored a distant nugget between patrol movements")
 }

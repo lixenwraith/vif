@@ -69,7 +69,7 @@ them believes it is hosting one. See
 | `deploy` | what a node needs before a pod can start, none of which a normal build reaches: the image's `vif_headless` tag compiles, no manifest leaves an image placeholder unquoted, the wad installer reports what it installed, and a scenario resolves through the pod's `scenario/`+`image/` mount and names itself in the log the commissioning check reads |
 | `lifetime` | an unclaimed session exits 0 on its first-guest window; an emptied one exits 0 on its vacancy grace, each naming why |
 | `drain` | `SIGTERM` keeps the match running, reports `live=true ready=false phase=draining`, keeps the clock moving, then ends itself |
-| `bot` | every shipped bot graph plays through the binary solo until an appended region quits it, without overflowing its queue, and `roam` types; then `roam` joins a dedicated host with `-bots 2:patrol`, types there, and leaves with both its bots, and the emptied host ends; then a `-serve -bots 2` host outlives its `-empty` grace and its bots leave at once on its drain |
+| `bot` | every shipped graph plays solo without overflowing its queue, and `default` types; then it joins a dedicated host with two bots, types and leaves with them, and the emptied host ends; a `-serve -bots 2` host outlives its `-empty` grace and its bots leave on drain |
 | `identity` | a peer running a different build or session is refused (runs the Go tests that can construct one) |
 
 `drain` asserts the clock still advances after the signal rather than which reason

@@ -12,19 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/render"
 )
 
-// PeerCursorRenderer draws the cursors this instance does not drive.
-//
-// Without it another participant is visible only through the effects it happens
-// to be projecting — its shield, its ember — so a player holding none is not on
-// the map at all. The cursor itself is the one thing every participant always
-// has, and it is what a person looks for.
-//
-// It is deliberately not the local cursor's renderer with a loop around it. The
-// local cursor answers "where am I, and what am I about to act on", so it takes
-// the colour of the thing under it and follows the local input mode; a peer
-// answers "where is that player", so it keeps one colour per roster slot whatever
-// it is standing on. Drawing them the same way would make the two indistinguishable
-// exactly when it matters — when they overlap.
+// Peer cursors keep their slot colour and hexadecimal label across instances.
 type PeerCursorRenderer struct {
 	gameCtx    *engine.GameContext
 	renderCell peerCursorCellRenderer
@@ -86,21 +74,7 @@ func (r *PeerCursorRenderer) Render(ctx render.RenderContext, buf *render.Render
 			return true
 		}
 
-		// The cell's own character, drawn over the slot colour rather than under
-		// it: what a peer is standing on stays readable, and the colour saying
-		// which peer it is does not change with the cell.
-		char := ' '
-		glyphEntity, sigilEntity := cursorCellContent(r.gameCtx, pos.X, pos.Y)
-		switch {
-		case glyphEntity != 0:
-			if glyph, ok := world.Components.Glyph.GetPtr(glyphEntity); ok {
-				char = glyph.Rune
-			}
-		case sigilEntity != 0:
-			if sigil, ok := world.Components.Sigil.GetPtr(sigilEntity); ok {
-				char = sigil.Rune
-			}
-		}
+		char := rune("0123456789ABCDEF"[c.Slot%16])
 
 		r.renderCell(buf, screenX, screenY, char, c.Slot)
 		return true

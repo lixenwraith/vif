@@ -542,7 +542,12 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 	// slow      the cadence backed off and prediction carries more.
 	rtt := r.statRTT.Load()
 	// Players rather than links: a guest holds one link whatever the session's size.
-	text := fmt.Sprintf(" %dP %s", r.gameCtx.World.Resources.Player.Count(), status.FormatLatency(rtt))
+	players := r.gameCtx.World.Resources.Player
+	identity := fmt.Sprintf("%dP", players.Count())
+	if slot := players.LocalSlot(); slot != parameter.NoPlayerSlot {
+		identity += fmt.Sprintf(":%X", slot)
+	}
+	text := fmt.Sprintf(" %s %s", identity, status.FormatLatency(rtt))
 	severity := latencySeverity(rtt)
 	loss := r.statLoss.Load()
 	switch {

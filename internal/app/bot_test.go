@@ -196,7 +196,7 @@ func waitForCursors(t *testing.T, a *App, n int) {
 			return
 		}
 	}
-	t.Fatalf("the roster holds %d cursors, want %d", held, n)
+	t.Fatalf("the roster holds %d cursors, want %d; %+v; %s; bots %s", held, n, a.Position(), a.SessionSummary(), a.seatsSummary())
 }
 
 // TestAHoldersBotsComeAndGoAsParticipants: a run with bots and no session hosts one
@@ -325,15 +325,65 @@ func TestAHoldersBotsDialItFromThisMachine(t *testing.T) {
 	}
 }
 
-// TestRoamTypesWhatItReaches: roam reads the glyph under its cursor before it types.
+// TestDefaultTypesWhatItReaches: the bot reads the glyph under its cursor before it types.
 // A miss is a glyph the tick's own fire destroyed after the read, which is rare.
-func TestRoamTypesWhatItReaches(t *testing.T) {
+func TestDefaultTypesWhatItReaches(t *testing.T) {
 	t.Parallel()
-	a, _ := playBot(t, "roam", fixtureSeed, 1200, nil)
+	a, _ := playBot(t, "default", fixtureSeed, 1200, nil)
 	defer a.Close()
 	reg := a.world.Resources.Status
 	typed, missed := reg.Ints.Get("typing.correct").Load(), reg.Ints.Get("typing.errors").Load()
 	if typed < 100 || missed*20 > typed {
-		t.Fatalf("roam typed %d and missed %d in a minute of play", typed, missed)
+		t.Fatalf("default typed %d and missed %d in a minute of play", typed, missed)
+	}
+}
+
+func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.T) {
+	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	tickUntilCursor(t, host)
+	if err := host.BeginHosting(seatLoopback); err != nil {
+		t.Fatal(err)
+	}
+	stopTicks := tickInBackground(host)
+	stop := func() { stopTicks(); host.Close() }
+	t.Cleanup(stop)
+	holder, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
+	waitForCursors(t, host, 3)
+	waitForCursors(t, holder, 3)
+	port, err := holder.socketPort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(socketWait); port.PeerCount() != 2 && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+	if port.PeerCount() != 2 {
+		t.Fatal("the holder has no warm link to its bot")
+	}
+	holder.seatsMu.Lock()
+	kept := holder.seats[0]
+	holder.seatsMu.Unlock()
+	stop()
+	for deadline := time.Now().Add(socketWait); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if holder.authority.Holder() == holder.authority.Local() && !holder.authority.Migrating() {
+			break
+		}
+	}
+	if holder.authority.Holder() != holder.authority.Local() {
+		t.Fatal("the guest did not inherit the session")
+	}
+	waitForCursors(t, holder, 2)
+	for _, intent := range input.AppendCommand(nil, "bot add 2:patrol") {
+		if !holder.Inject(&intent) {
+			t.Fatal("adding bots quit the run")
+		}
+	}
+	waitForCursors(t, holder, 4)
+	select {
+	case <-kept.done:
+		t.Fatal("the holder's existing bot was replaced during migration")
+	default:
+	}
+	if holder.seatAddress == "" {
+		t.Fatal("the successor did not open local admission")
 	}
 }

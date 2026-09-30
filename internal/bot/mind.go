@@ -144,11 +144,15 @@ func (m *mind) glyphUnder() (rune, bool) {
 	if !ok {
 		return 0, false
 	}
+	return m.glyphAt(pos.X, pos.Y, false)
+}
+
+func (m *mind) glyphAt(x, y int, standalone bool) (rune, bool) {
 	var buf [parameter.MaxEntitiesPerCell]core.Entity
-	n := m.ctx.World.Positions.GetAllEntitiesAtInto(pos.X, pos.Y, buf[:])
+	n := m.ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
 	for _, e := range buf[:n] {
 		if g, ok := m.ctx.World.Components.Glyph.GetComponent(e); ok {
-			return g.Rune, true
+			return g.Rune, !standalone || g.Type != component.GlyphGold && !m.ctx.World.Components.Member.HasEntity(e)
 		}
 	}
 	return 0, false
@@ -182,6 +186,15 @@ func (m *mind) pointAt(p pointArgs) {
 			return
 		}
 		x, y = min(max(s.x, minX), maxX), min(max(s.y, minY), maxY)
+		// Start a newly acquired text run at its left edge instead of eating it backwards.
+		if p.target == targetGlyph {
+			for x > minX {
+				if _, ok := m.glyphAt(x-1, y, true); !ok {
+					break
+				}
+				x--
+			}
+		}
 	}
 	if p.fire {
 		m.push(input.Intent{Type: input.IntentMouseLeftDown, X: x, Y: y, MapCell: true},
