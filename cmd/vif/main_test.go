@@ -266,20 +266,29 @@ func TestAnAddressNamesItsSchemeAndSession(t *testing.T) {
 
 func TestScriptInvocation(t *testing.T) {
 	hosted := sessionFlags{host: ":7777", players: 2}
-	if err := validateInvocation(false, false, "", "scenario.toml", false, hosted); err != nil {
+	if err := validateInvocation(false, false, "", "scenario.toml", "", false, hosted); err != nil {
 		t.Fatalf("hosted script rejected: %v", err)
 	}
-	if err := validateInvocation(false, false, "", "scenario.toml", true, hosted); err != nil {
+	if err := validateInvocation(false, false, "", "scenario.toml", "", true, hosted); err != nil {
 		t.Fatalf("watched hosted script rejected: %v", err)
 	}
-	if err := validateInvocation(false, false, "run.jrn", "scenario.toml", false, sessionFlags{}); err == nil {
+	if err := validateInvocation(false, false, "", "", "roam", true, hosted); err != nil {
+		t.Fatalf("watched hosting bot rejected: %v", err)
+	}
+	if err := validateInvocation(false, false, "run.jrn", "scenario.toml", "", false, sessionFlags{}); err == nil {
 		t.Fatal("-replay and -script were accepted together")
 	}
-	if err := validateInvocation(true, false, "", "scenario.toml", false, sessionFlags{}); err == nil {
+	if err := validateInvocation(true, false, "", "scenario.toml", "", false, sessionFlags{}); err == nil {
 		t.Fatal("-schema and -script were accepted together")
 	}
-	if err := validateInvocation(false, false, "", "", true, sessionFlags{}); err == nil {
-		t.Fatal("-watch was accepted without a script to present")
+	if err := validateInvocation(false, false, "", "scenario.toml", "roam", false, sessionFlags{}); err == nil {
+		t.Fatal("-script and -bot were accepted together, and both drive the one seat")
+	}
+	if err := validateInvocation(false, false, "", "", "roam", false, sessionFlags{serve: ":7777"}); err == nil {
+		t.Fatal("-bot was accepted on a -serve host, which has no seat")
+	}
+	if err := validateInvocation(false, false, "", "", "", true, sessionFlags{}); err == nil {
+		t.Fatal("-watch was accepted without a script or bot to present")
 	}
 }
 

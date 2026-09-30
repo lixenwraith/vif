@@ -140,7 +140,7 @@ line wins.
 | Flag | Purpose |
 |---|---|
 | `-d`, `-config-embedded` | Use the embedded scenario and content; mutually exclusive with `-s` and `-f`. |
-| `-config-dir <dir>` | Search one categorized config root (`scenario/ input/ audio/ content/ image/`) before the user and system roots. |
+| `-config-dir <dir>` | Search one categorized config root (`scenario/ input/ audio/ content/ image/ bot/`) before the user and system roots. |
 | `-s`, `-config-scenario <name-or-path>` | Installed scenario name, a `scenario.toml`, or a directory containing one. |
 | `-f`, `-config-content <path>` | Content directory, or a single pinned `.txt`/`.toml` file. |
 | `-k`, `-config-keymap <path>` | Keymap override TOML. |
@@ -160,9 +160,10 @@ line wins.
 | Flag | Purpose |
 |---|---|
 | `-seed <n>` | Root RNG seed; zero draws one and logs it. |
-| `-speed <rate>` | Initial play-mode rate: `1/8`, `1/4`, `1/2`, `1`, `2`, `4`, `8`. With `-script` it is the run's wall pace instead and additionally accepts `max`. |
+| `-speed <rate>` | Initial play-mode rate: `1/8`, `1/4`, `1/2`, `1`, `2`, `4`, `8`. With `-script` or `-bot` it is the run's wall pace instead and additionally accepts `max`. |
 | `-script <path>` | Run a bounded authored TOML tick schedule; may be combined with `-host` or `-join`. |
-| `-watch` | Present a `-script` run on this terminal instead of running it headlessly. |
+| `-bot <name\|path>` | Play this instance's seat with a bot graph; may be combined with `-host` or `-join`. |
+| `-watch` | Present a `-script` or `-bot` run on this terminal instead of running it headlessly. |
 | `-replay <path>` | Present a recorded journal instead of starting interactive play. |
 | `-check` | Resolve and validate FSM, keymap, audio and content; print the result and exit. |
 | `-schema` | Print the FSM and event schema as JSON, then exit. |

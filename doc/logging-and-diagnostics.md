@@ -852,6 +852,7 @@ or not the profiler is on:
 | `-j`, `-journal` | Capture replay input in the user-state journal directory; does not imply a session log |
 | `-j=DIR`, `-journal=DIR` | Capture replay input in `DIR`; the space form is not supported |
 | `-script <file>` | Execute an authored headless tick schedule; may also host/join and may be journaled with `-j` |
+| `-bot <name\|path>` | Play the seat from a bot graph; journaled with `-j` like any input, so a replay needs no graph |
 | `-dev[=bool]` | Runtime stderr capture; defaults on for race builds |
 | `-host <bind-address>` | Host a TCP session |
 | `-join <host:port>` | Join a session and adopt the host anchor before world construction |

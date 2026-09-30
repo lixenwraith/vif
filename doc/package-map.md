@@ -74,6 +74,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/fsm` | Generic hierarchical, parallel-region machine; TOML graph loader; transitions, delayed actions, variables, per-region trigger masks, and optional transition/region observation hooks. |
 | `internal/fsm/std` | Reusable HFSM actions/guards and host capability interface. It does not import the game engine. |
 | `internal/input` | Terminal-event parser, semantic intents, keymap override decoding/merging; the default document comes from `internal/asset`. It does not import the ECS. |
+| `internal/bot` | Bot graphs: parse and validate a bot document, the vocabulary of actions and guards over the bot's own world, and the driver that releases a graph's intents through the router at the graph's rate. Engine-aware like `mode`; it imports neither `app` nor `converge`, and writes the world only through intents. |
 | `internal/journal` | Runtime-agnostic deterministic-run machinery: recording lifecycle, in-memory capture, rotated JSONL loading, replay ordering/payload decoding, seeded fuzz input, and versioned authored tick scripts. Drivers depend on narrow target interfaces and never import `internal/app`. |
 | `internal/lifecycle` | The allocated session's lifetime policy: a pure state machine over an injected clock turning roster observations into a phase (waiting, occupied, vacant, draining, expired), a deadline, and whether a dial may still be admitted. It opens nothing, reads no roster, and terminates nothing — the run supplies the observations and acts on the phase. |
 | `internal/manifest` | Authoritative component/system/renderer lists, the simulation fingerprint two participants must share, capability-split generated builders, game binding for the generic FSM, and the JSON schema dump the map editor consumes. |
@@ -170,7 +171,7 @@ The practical dependency rules are:
 6. `engine` owns data/lifecycle infrastructure but should not import concrete
    gameplay systems or renderers.
 7. `input` produces pure intents and must remain free of engine dependencies.
-8. `mode`, systems, and renderers may depend on engine data, but communicate
+8. `mode`, `bot`, systems, and renderers may depend on engine data, but communicate
    laterally through resources/events rather than concrete peer references.
 9. Generic FSM core/std stays independent of the game through `std.Host`; the
    manifest bridge is the adapter.
