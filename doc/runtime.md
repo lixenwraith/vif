@@ -36,6 +36,8 @@ a full development binary or the smaller deployment artifact. See
 `-serve <address>` constructs `ModeServer`. `cmd/vif` normally constructs `ModePlay`; `-replay <file>` constructs a replay
 from the journal anchor, and `-script <file>` constructs a caller-driven
 `ModeHeadless` run from an authored tick schedule, or `ModeScript` with `-watch`.
+`-bot <graph>` is the same driven run with a bot graph playing the seat instead
+of a schedule; see [Bots](todo-bots.md).
 `-check` and `-schema` are non-runtime tool paths:
 
 | Tool path | Entry | Terminal initialized? | Result |
@@ -43,6 +45,7 @@ from the journal anchor, and `-script <file>` constructs a caller-driven
 | Validate | `app.Check` | No | Resolve and load FSM plus corpus; print accepted/rejected sources. |
 | Export schema | `app.Schema` | No | Emit schema version 1 JSON for events, fields, actions, guards, operators, and config fields. |
 | Run script | `app.RunScript` | Only with `-watch` | Execute a bounded versioned TOML schedule; optional `-host`/`-join` uses the normal TCP gate. |
+| Run bot | `app.RunBot` | Only with `-watch` | Play the seat from a bot graph until it quits; `-host`/`-join` as for a script, and presented it keeps real time. |
 
 ### 1.0 The four session flags, and what each still decides
 

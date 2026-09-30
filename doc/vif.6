@@ -10,7 +10,7 @@ Without flags,
 .B vif
 starts a solo game in the terminal.
 The flags below also host, join or serve a networked session,
-replay or script a run, and validate the installed configuration.
+replay or script a run, play a bot, and validate the installed configuration.
 .PP
 Each resource resolves from its own flag, then
 .BR \-config\-dir ,
@@ -76,7 +76,7 @@ How long a termination signal waits for an empty roster; \-serve only, 0 exits a
 Use the embedded scenario and content, ignoring \-s and \-f
 .TP
 .B \-config\-dir <dir>
-Configuration root holding scenario/ input/ audio/ content/ image/
+Configuration root holding scenario/ input/ audio/ content/ image/ bot/
 .TP
 .B \-s, \-config\-scenario <name|path>
 Installed scenario name, scenario.toml, or a scenario directory
@@ -108,13 +108,16 @@ Force an audio backend instead of detecting one
 Root RNG seed; 0 draws one and logs it
 .TP
 .B \-speed <rate>
-Simulation rate 1/8 1/4 1/2 1 2 4 8; with \-script also "max" for no wall pacing
+Simulation rate 1/8 1/4 1/2 1 2 4 8; with \-script or \-bot also "max" for no wall pacing
 .TP
 .B \-script <path>
 Run an authored deterministic TOML tick script
 .TP
+.B \-bot <name|path>
+Play this instance's own seat with a bot graph instead of the terminal
+.TP
 .B \-watch
-Present a \-script run on this terminal instead of running it headlessly
+Present a \-script or \-bot run on this terminal instead of running it headlessly
 .TP
 .B \-replay <path>
 Replay a recorded journal instead of playing

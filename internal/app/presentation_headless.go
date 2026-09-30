@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vif/internal/journal"
 )
 
 type presentationState struct{}
@@ -50,7 +49,6 @@ func PlayJournal(Config, ...string) error {
 	return fmt.Errorf("journal presentation is unavailable in a vif_headless build")
 }
 
-func runPresentedScript(*App, *journal.ScriptDriver, string, time.Duration, bool,
-	<-chan os.Signal) (journal.ScriptStats, error) {
-	return journal.ScriptStats{}, fmt.Errorf("script presentation is unavailable in a vif_headless build")
+func runPresented(*App, pacedSource, string, string, time.Duration, bool, <-chan os.Signal) error {
+	return fmt.Errorf("presentation is unavailable in a vif_headless build")
 }

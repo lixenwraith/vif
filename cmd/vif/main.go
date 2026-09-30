@@ -52,6 +52,7 @@ var (
 	flagSeed   = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
 	flagReplay = flag.String("replay", "", "Replay a recorded journal instead of playing")
 	flagScript = flag.String("script", "", "Run an authored deterministic TOML tick script")
+	flagBot    = flag.String("bot", "", "Play this instance's own seat with a bot graph")
 	flagWatch  = flag.Bool("watch", false, "Present a -script run on this terminal")
 	flagHelp   = flag.Bool("h", false, "Print the flag help and exit")
 	flagVer    = flag.Bool("version", false, "Print the build version and exit")
@@ -115,7 +116,7 @@ func main() {
 
 	setupDiagnostics()
 
-	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, *flagWatch, flagSession)
+	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, *flagBot, *flagWatch, flagSession)
 	if sessionErr == nil {
 		sessionErr = requestSiteSession(requested)
 	}
@@ -135,6 +136,12 @@ func main() {
 			cfg.Mode = app.ModeScript
 		}
 		_, err = app.RunScript(cfg, *flagScript)
+	case *flagBot != "":
+		cfg := buildConfig()
+		if *flagWatch {
+			cfg.Mode = app.ModeScript
+		}
+		_, err = app.RunBot(cfg, *flagBot)
 	case flagSession.serve != "":
 		err = app.RunServer(buildConfig())
 	default:
@@ -166,14 +173,11 @@ func requestSiteSession(scenario string) error {
 	return nil
 }
 
-// setupDiagnostics installs the crash hook and session defaults unconditionally,
-// starts a log session if any log flag was given, and starts runtime capture if
-// enabled. Runs before the terminal enters the alternate screen.
-//
-// A log session that was asked for and could not start is fatal here rather than
-// reported at exit: the run has no other way to say so, and a supervised process
-// that plays a whole session unlogged has lost the record of whatever it was
-// started to investigate.
+// setupDiagnostics installs the crash hook and session defaults, starts a log
+// session if any log flag was given and runtime capture if enabled, before the
+// terminal enters the alternate screen. A log session asked for that cannot start
+// is fatal here: reported at exit, a supervised process would have played a whole
+// session unlogged.
 func setupDiagnostics() {
 	core.SetCrashHook(vlog.CrashHook)
 	vlog.SetCrashFlush(status.CrashFlush) // drains while the sink is still live
@@ -379,7 +383,7 @@ func (f *configFlags) options() resource.Options {
 }
 
 func (f *configFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&f.dir, "config-dir", "", "Configuration root holding scenario/ input/ audio/ content/ image/")
+	fs.StringVar(&f.dir, "config-dir", "", "Configuration root holding scenario/ input/ audio/ content/ image/ bot/")
 	fs.StringVar(&f.music, "config-music", "", "Music pattern override TOML")
 	fs.StringVar(&f.sounds, "config-sounds", "", "Sound definition override TOML")
 
@@ -580,18 +584,21 @@ func parseSize(spec string) (width, height int, err error) {
 	return width, height, nil
 }
 
-func validateInvocation(schema, check bool, replay, script string, watch bool, session sessionFlags) error {
+func validateInvocation(schema, check bool, replay, script, bot string, watch bool, session sessionFlags) error {
 	modes := 0
-	for _, selected := range []bool{schema, check, replay != "", script != ""} {
+	for _, selected := range []bool{schema, check, replay != "", script != "", bot != ""} {
 		if selected {
 			modes++
 		}
 	}
 	if modes > 1 {
-		return fmt.Errorf("-schema, -check, -replay, and -script are mutually exclusive")
+		return fmt.Errorf("-schema, -check, -replay, -script and -bot are mutually exclusive")
 	}
-	if watch && script == "" {
-		return fmt.Errorf("-watch presents a -script run and has no other subject")
+	if watch && script == "" && bot == "" {
+		return fmt.Errorf("-watch presents a -script or -bot run and has no other subject")
+	}
+	if bot != "" && session.serve != "" {
+		return fmt.Errorf("-bot plays this instance's own seat, and a -serve host has none")
 	}
 	return session.validateInvocation(schema, check, replay)
 }

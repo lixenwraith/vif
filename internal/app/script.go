@@ -6,12 +6,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
@@ -47,16 +49,82 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 	if err != nil {
 		return journal.ScriptStats{}, err
 	}
+	if script.Width != 0 {
+		cfg.Width, cfg.Height = script.Width, script.Height
+	}
+	var driver *journal.ScriptDriver
+	finished, err := runDriven(cfg, "script", path, func(a *App) (pacedSource, error) {
+		d, err := journal.NewScriptDriver(scriptTarget{a: a}, script)
+		if err != nil {
+			return nil, err
+		}
+		if cfg.HostAddress != "" || cfg.JoinAddress != "" {
+			if err := d.Live(); err != nil {
+				return nil, err
+			}
+		}
+		driver = d
+		return scriptSource{d}, nil
+	})
+	if driver == nil {
+		return journal.ScriptStats{}, err
+	}
+	stats := driver.Stats()
+	if finished {
+		vlog.Info("app", "msg", "script complete",
+			"path", path, "actions", stats.Executed, "ticks", stats.Ticks,
+			"run", stats.End.Run, "tick", stats.End.Tick)
+	}
+	return stats, err
+}
+
+// RunBot plays this instance's own seat with a bot graph: a name or a path, which
+// cfg.Resources resolves. It is otherwise a script run, and presented, it keeps real
+// time unless -speed says otherwise.
+func RunBot(cfg Config, spec string) (bot.Stats, error) {
+	data, name, err := resource.BotGraph(cfg.Resources, spec)
+	if err != nil {
+		return bot.Stats{}, err
+	}
+	graph, err := bot.ParseGraph(name, data)
+	if err != nil {
+		return bot.Stats{}, err
+	}
+	if cfg.Mode == ModeScript && cfg.TimeScaleSpec == "" {
+		cfg.TimeScaleSpec = "1"
+	}
+	var (
+		driver *bot.Driver
+		played *App
+	)
+	_, err = runDriven(cfg, "bot", name, func(a *App) (pacedSource, error) {
+		d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.localParticipant())
+		driver, played = d, a
+		return botSource{d}, err
+	})
+	if driver == nil {
+		return bot.Stats{}, err
+	}
+	stats := driver.Stats()
+	reg := played.world.Resources.Status
+	vlog.Info("app", "msg", "bot complete", "name", name, "ticks", stats.Ticks,
+		"injected", stats.Injected, "dropped", stats.Dropped, "state", stats.State,
+		"typed", reg.Ints.Get("typing.correct").Load(), "errors", reg.Ints.Get("typing.errors").Load())
+	return stats, err
+}
+
+// runDriven plays one driven participant, a script or a bot: it builds the App in
+// the session the flags name, lets build put a driver on it, and steps that driver
+// headless under the run's wall pace, or presented. finished is false when a
+// signal or a cancelled session stopped the run first.
+func runDriven(cfg Config, kind, name string, build func(*App) (pacedSource, error)) (finished bool, err error) {
 	if cfg.Mode != ModeScript {
 		cfg.Mode = ModeHeadless
 	}
 	cfg.scriptedSession = true
-	if script.Width != 0 {
-		cfg.Width, cfg.Height = script.Width, script.Height
-	}
 	interval, paced, err := scriptPacing(cfg)
 	if err != nil {
-		return journal.ScriptStats{}, err
+		return false, err
 	}
 
 	signals, stopSignals := notifySignals()
@@ -64,9 +132,9 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 	a, err := newScriptApp(cfg, signals)
 	if err != nil {
 		if errors.Is(err, errSessionCanceled) {
-			return journal.ScriptStats{}, nil
+			return false, nil
 		}
-		return journal.ScriptStats{}, err
+		return false, err
 	}
 	defer func() {
 		if r := recover(); r != nil {
@@ -75,20 +143,15 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 		a.Close()
 	}()
 
-	driver, err := journal.NewScriptDriver(scriptTarget{a: a}, script)
+	src, err := build(a)
 	if err != nil {
-		return journal.ScriptStats{}, err
-	}
-	if cfg.HostAddress != "" || cfg.JoinAddress != "" {
-		if err := driver.Live(); err != nil {
-			return journal.ScriptStats{}, err
-		}
+		return false, err
 	}
 	if a.cfg.Mode == ModeScript {
-		return runPresentedScript(a, driver, path, interval, paced, signals)
+		return true, runPresented(a, src, kind, name, interval, paced, signals)
 	}
-	// A solo script that opens a session with :host gains a peer to keep step with,
-	// so pacing engages at that moment. The clock is re-anchored there rather than
+	// A solo run that opens a session with :host gains a peer to keep step with, so
+	// pacing engages at that moment. The clock is re-anchored there rather than
 	// carried forward, or the ticks it ran flat out would be a debt the pacing
 	// immediately spends. An explicit -speed max is honoured either way.
 	autoPace := cfg.TimeScaleSpec == ""
@@ -96,40 +159,56 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 	for {
 		select {
 		case <-signals:
-			return driver.Stats(), nil
+			return false, nil
 		default:
 		}
 
-		more, err := driver.Step()
+		more, err := src.Step()
 		if err != nil {
-			return driver.Stats(), err
+			return false, err
 		}
 		if !more {
-			break
+			return true, nil
 		}
 		if !paced && autoPace && a.HostAddr() != "" {
 			paced, nextTick = true, time.Now() // [wall]
-			vlog.Info("app", "msg", "script pacing engaged",
+			vlog.Info("app", "msg", kind+" pacing engaged",
 				"address", a.HostAddr(), "tick", a.Position().Tick)
 		}
 		if paced {
 			trim, step := a.scheduler.TakePace()
 			nextTick = nextTick.Add(engine.PacedInterval(interval, trim, step))
 			if !waitScriptTick(signals, time.Until(nextTick)) {
-				return driver.Stats(), nil
+				return false, nil
 			}
 		}
 	}
-	return reportScript(driver, path), nil
 }
 
-// reportScript logs and returns one completed run's counters.
-func reportScript(driver *journal.ScriptDriver, path string) journal.ScriptStats {
-	stats := driver.Stats()
-	vlog.Info("app", "msg", "script complete",
-		"path", path, "actions", stats.Executed, "ticks", stats.Ticks,
-		"run", stats.End.Run, "tick", stats.End.Tick)
-	return stats
+// pacedSource is the driven stream a run advances. Each driver reports its own
+// counters, because "how far through" means a different thing to a record stream,
+// an action list and a graph.
+type pacedSource interface {
+	Step() (bool, error)
+	progress() string
+}
+
+type scriptSource struct{ d *journal.ScriptDriver }
+
+func (s scriptSource) Step() (bool, error) { return s.d.Step() }
+
+func (s scriptSource) progress() string {
+	st := s.d.Stats()
+	return fmt.Sprintf("run %d tick %d | %d/%d act", st.End.Run, st.End.Tick, st.Executed, st.Actions)
+}
+
+type botSource struct{ d *bot.Driver }
+
+func (s botSource) Step() (bool, error) { return s.d.Step() }
+
+func (s botSource) progress() string {
+	st := s.d.Stats()
+	return fmt.Sprintf("tick %d | %s | %d in %d dropped", st.Ticks, st.State, st.Injected, st.Dropped)
 }
 
 // newScriptApp starts the same tick-zero gate as interactive play, but leaves the

@@ -61,7 +61,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 		title: "Configuration",
 		lines: []flagLine{
 			{names: []string{"d", "config-embedded"}, hint: "Use the embedded scenario and content, ignoring -s and -f"},
-			{names: []string{"config-dir"}, arg: "<dir>", hint: "Configuration root holding scenario/ input/ audio/ content/ image/"},
+			{names: []string{"config-dir"}, arg: "<dir>", hint: "Configuration root holding scenario/ input/ audio/ content/ image/ bot/"},
 			{names: []string{"s", "config-scenario"}, arg: "<name|path>", hint: "Installed scenario name, scenario.toml, or a scenario directory"},
 			{names: []string{"f", "config-content"}, arg: "<path>", hint: "Content directory, or a single content file"},
 			{names: []string{"k", "config-keymap"}, arg: "<path>", hint: "Keymap TOML"},
@@ -79,9 +79,10 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 		title: "Run",
 		lines: []flagLine{
 			{names: []string{"seed"}, arg: "<n>", hint: "Root RNG seed; 0 draws one and logs it"},
-			{names: []string{"speed"}, arg: "<rate>", hint: `Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script also "max" for no wall pacing`},
+			{names: []string{"speed"}, arg: "<rate>", hint: `Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script or -bot also "max" for no wall pacing`},
 			{names: []string{"script"}, arg: "<path>", hint: "Run an authored deterministic TOML tick script"},
-			{names: []string{"watch"}, hint: "Present a -script run on this terminal instead of running it headlessly"},
+			{names: []string{"bot"}, arg: "<name|path>", hint: "Play this instance's own seat with a bot graph instead of the terminal"},
+			{names: []string{"watch"}, hint: "Present a -script or -bot run on this terminal instead of running it headlessly"},
 			{names: []string{"replay"}, arg: "<path>", hint: "Replay a recorded journal instead of playing"},
 			{names: []string{"check"}, hint: "Validate the resolved scenario, keymap, audio and content, then exit"},
 			{names: []string{"schema"}, hint: "Print the FSM schema as JSON, then exit"},
@@ -213,7 +214,7 @@ Without flags,
 .B vif
 starts a solo game in the terminal.
 The flags below also host, join or serve a networked session,
-replay or script a run, and validate the installed configuration.
+replay or script a run, play a bot, and validate the installed configuration.
 .PP
 Each resource resolves from its own flag, then
 .BR \-config\-dir ,
