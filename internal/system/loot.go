@@ -42,22 +42,7 @@ type pityKey struct {
 	slot    uint8
 }
 
-// ownerRoute is one cursor's private flow field: the route every loot that cursor
-// owns follows home.
-//
-// It is not the shared NavigationSystem's, and that is the whole point. Group 0 is
-// every live cursor, so the field it maintains is a multi-source Dijkstra whose
-// gradient leads to the *nearest* cursor — the right answer for a hostile species
-// and the wrong one for a drop that belongs to exactly one participant. Loot
-// steered by it walked to whichever cursor was closer and stalled there, and the
-// line-of-sight flag beside it was computed against that same nearest cursor while
-// the loot homed at its owner, so a loot standing next to the wrong cursor read
-// "direct path" and drove itself into the wall between it and its own.
-//
-// The field is derived from shared walls and one shared cursor cell, but *which*
-// fields exist is a function of this instance's own drops, so it is player-domain
-// state (D-6): no capture carries it, and its telemetry is under the `loot.` prefix
-// the compared surface already drops.
+// Loot routes are private and lead only to the cursor that owns each drop.
 type ownerRoute struct {
 	cache *navigation.FlowFieldCache
 	cell  vmath.Point
@@ -282,14 +267,7 @@ func (s *LootSystem) Update() {
 	s.statUnreachable.Store(unreachable)
 }
 
-// refreshOwnerRoutes brings one flow field up to date per cursor that currently has
-// loot in flight, and drops the rest.
-//
-// The goal is that cursor's cell and nothing else, which is the difference that
-// matters: a drop belongs to one participant, so the field it steers by must lead
-// to that participant and not to whoever happens to be nearer. A field is built the
-// first time that cursor drops something and released when the cursor itself goes;
-// in between, a tick with none of its loot in flight recomputes nothing.
+// Owners keep idle caches, so a later drop must validate walls as well as its goal.
 func (s *LootSystem) refreshOwnerRoutes(loots []core.Entity) {
 	for _, r := range s.ownerRoutes {
 		r.live = false
@@ -318,6 +296,7 @@ func (s *LootSystem) refreshOwnerRoutes(loots []core.Entity) {
 		return
 	}
 	blocked := s.world.Positions.WallTest(component.WallBlockKinetic, &s.walls)
+	blocked(-1, -1) // Build once, shared by all owner caches this tick.
 
 	var recomputes int64
 	for owner, r := range s.ownerRoutes {
@@ -343,6 +322,7 @@ func (s *LootSystem) refreshOwnerRoutes(loots []core.Entity) {
 		case r.cache.Field.Width != config.MapWidth || r.cache.Field.Height != config.MapHeight:
 			r.cache.Resize(config.MapWidth, config.MapHeight)
 		}
+		r.cache.ObserveGrid(s.walls)
 		s.routeGoal[0] = r.cell
 		if r.cache.Update(s.routeGoal[:], blocked) {
 			recomputes++
@@ -353,20 +333,7 @@ func (s *LootSystem) refreshOwnerRoutes(loots []core.Entity) {
 	s.buffers.Observe(1, len(s.ownerRoutes))
 }
 
-// homingTarget resolves one drop's steering target: its owner when the way there is
-// clear, and the next step of that owner's route when it is not.
-//
-// The two answers agree about which cursor they mean, which is what the shared
-// navigation component could not promise. Its line-of-sight flag was computed
-// against the nearest cursor in the roster while the movement homed at the owner,
-// so a drop beside someone else's cursor read "direct path" and accelerated into
-// the wall between it and its own.
-//
-// The lookahead is capped by the remaining distance to the owner. Homing at a point
-// a fixed distance ahead is a target that recedes as fast as the drop approaches
-// it, so the arrival steering in the profile never engages and the drop reaches
-// full cruising speed in a corridor one cell wide; capping it means the last
-// stretch of a blocked approach is steered like an arrival rather than a charge.
+// A drop follows its owner directly when visible, otherwise its private field.
 func (s *LootSystem) homingTarget(
 	lootComp *component.LootComponent,
 	kineticComp *component.KineticComponent,
