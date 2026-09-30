@@ -206,6 +206,10 @@ pointer names at once; the simulation is placed on the newest of them once a tic
 so a fast sweep costs one placement a tick and cells it only passed are never
 visited (D-18).
 
+A bot's pointer names a map cell instead (`Intent.MapCell`), and the router takes
+it only where `ConfigResource.MapToViewport` says the viewport shows it: a bot
+reaches no further than a mouse on the same screen would.
+
 `:mouse enable|disable|free` controls reporting and free motion. `:free` is a
 short toggle for free mouse motion. Input is ignored while suspended, in
 Command mode, or where pause/overlay policy blocks it.

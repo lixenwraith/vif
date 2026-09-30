@@ -1069,18 +1069,18 @@ func (r *Router) fireDue(now time.Time, last *time.Time, auto, held bool) (event
 	return event.OriginSystem, false
 }
 
-// moveMouseCursor handles coordinate conversion, bounds check, and cursor movement
-// Returns true if cursor was moved successfully
+// moveMouseCursor moves the cursor to the pointer's cell, reporting whether it may.
+// A map cell counts only where the viewport shows it, which is all a mouse reaches;
+// a terminal cell goes through ViewportToMap, which undoes the centring of a map
+// smaller than the viewport so the cell under the pointer is the one jumped to.
 func (r *Router) moveMouseCursor(intent *input.Intent) bool {
-	viewportX := intent.X - r.ctx.GameXOffset
-	viewportY := intent.Y - r.ctx.GameYOffset
-
-	// Viewport to map, which undoes the centring the renderer applies when the map
-	// is smaller than the viewport and rejects the margin around it. Without the
-	// offset a click on a centred map lands short by half the margin, so the cell
-	// under the pointer is not the cell the cursor jumps to.
 	config := r.ctx.World.Resources.Config
-	gameX, gameY, ok := config.ViewportToMap(viewportX, viewportY)
+	gameX, gameY, ok := intent.X, intent.Y, false
+	if intent.MapCell {
+		_, _, ok = config.MapToViewport(gameX, gameY)
+	} else {
+		gameX, gameY, ok = config.ViewportToMap(intent.X-r.ctx.GameXOffset, intent.Y-r.ctx.GameYOffset)
+	}
 	if !ok {
 		return false
 	}

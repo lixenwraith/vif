@@ -173,6 +173,17 @@ type Intent struct {
 	ScrollDir     ScrollDir
 	Count         int  // Effective count (minimum 1)
 	Char          rune // Target char for f/t motions or typed char
-	X, Y          int  // Pointer cell in terminal coordinates, for mouse intents
+	X, Y          int  // Pointer cell of a mouse intent, in terminal coordinates
+	MapCell       bool // X, Y name a map cell instead, as a bot's pointer does
 	MacroPlayback bool // True if intent originated from macro playback
+}
+
+// AppendCommand appends one ex command's intents: the switch to command mode, which
+// pauses a solo run, a character per rune, and the confirm that runs it.
+func AppendCommand(dst []Intent, command string) []Intent {
+	dst = append(dst, Intent{Type: IntentModeSwitch, ModeTarget: ModeTargetCommand, Count: 1})
+	for _, char := range command {
+		dst = append(dst, Intent{Type: IntentTextChar, Char: char, Count: 1})
+	}
+	return append(dst, Intent{Type: IntentTextConfirm, Count: 1})
 }

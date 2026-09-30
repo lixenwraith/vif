@@ -234,7 +234,8 @@ The external terminal emits keys, mouse reports, resize notifications, and
 close/error events. `internal/input.Machine` converts them into pure-data
 `Intent` values. It understands counts, operators, motions, character waits,
 `g` prefixes, search/command text, overlays, and macro control. It has no ECS
-dependency.
+dependency. A bot's graph produces the same intents, keys and mouse alike, and
+reaches the world through the same router ([Bots](todo-bots.md)).
 
 `internal/mode.Router` is the authoritative owner of game mode. Under the world
 lock, it interprets intents against the current map and components, requests

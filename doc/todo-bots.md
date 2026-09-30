@@ -2,101 +2,92 @@
 
 Working plan for bots that play as participants, merged with
 [Delegate convergence to relays](todo.md#delegate-convergence-to-relays). It is the
-basis for a `doc/bots.md` once the stages below land; until then `todo.md` points
-here and each landed stage is deleted from §5 and described in the doc instead.
+basis for a `doc/bots.md` once the phases below land; until then `todo.md` points
+here and each landed phase is deleted from §5 and described in the doc instead.
 
 ## 1. What a bot is
 
-A bot is a participant whose input comes from a policy instead of a terminal. It is
+A bot is a participant whose input comes from a graph instead of a terminal. It is
 its own instance: its own `World`, `mode.Router`, scheduler and journal, holding a
 roster slot and a cursor, bound by the same barrier, lead, admission and eviction as
-a person. Nothing in the simulation knows a policy exists; the policy sits above
-`App.Inject` exactly where a terminal, an authored script and the fuzz driver sit.
+a person. Nothing in the simulation knows a graph exists; it sits above `App.Inject`
+exactly where a terminal, an authored script and the fuzz driver sit.
 
-One process may run several bots. Each still is an instance, and the one holding the
-process's link to the session carries the others' traffic: a process with three
-bots is a relay whose own seat is a bot and who has two participants behind it. That
-is why bots and relay delegation are one plan — bots are the relay's first and
-easiest consumer, and relays are what let bots scale past one link each.
+Bots belong to the instance that started them. A process running a person and two
+bots is a participant with two more behind it — a relay whose leaves share its
+fate. That relation, not a new protocol, is what fits bots under the session
+protocol: every bot is admitted by the ordinary handshake, and the relay item later
+lets a holder carry its bots' traffic without changing who they are or when they go.
 
 ## 2. Decisions
 
 | Question | Decision | Why |
 |---|---|---|
-| Intents or events | `input.Intent` values through the bot's own router. | The router's grammar, modes and cooldowns bind a bot as they bind a person; the journal records the events the router produces, so a replay needs no policy; touch input will drive the same contract. |
-| Which intents | The keyboard grammar: motions with counts, `f`/`t`, Tab/Shift-Tab jumps, mode switches, typed text, fire. No ex commands and no pointer. | Commands are the operator surface (`:god`, `:energy`). A pointer is deferred (§11). |
-| Local seats | One headless instance per bot, joining over an in-process stream through the ordinary handshake. | D-2 stays whole. Two Player domains in one `World` would share one spatial grid's player partition, one D-18 ring and one input binding. |
-| Seats on a guest | The seat holder relays for its seats. | The merge in §4. |
-| Perception | The whole local instance, present state only (§6). | A bot reads what its instance holds, never another participant's Player domain, which does not exist locally. |
-| Objective | Cooperative first: a teammate against the environment. | Cursor-versus-cursor combat is not built ([Combat](todo.md#combat) items). |
-| Learning | Genomes trained offline and shipped as data; bounded adaptation per session, keyed by participant, discarded at session end. | There is no player identity to key a profile on. §8 keeps the key replaceable and persists nothing. |
-| Marking | `RosterEntry.Bot`, reported by the joiner and fixed for the participant's life, and a Shared `Bot` flag on its cursor. Presentation reads it; no mechanic does. | Value comparison of rosters still holds, and a capture carries the flag to a late joiner. |
-| Fairness | The router's limits, plus a reaction delay and an action budget per policy, both bounded parameters. | Whole-instance perception is already an advantage over a person's viewport. |
-| Determinism | The policy draws from its own stream, `vmath.NewSeededRand(seed, "bot")`, never a world stream (D-8). | A solo headless bot run is a pure function of its seed; in a session only its journal reproduces it, as for a person. |
-| Succession | A bot never advertises and is never a succession candidate. | A session of bots alone has no one to play for. |
-| Allocated lifetime | Only human participants make a session occupied. | A bot-filled session must still expire when its people leave. |
-| Fleet placement | A bot pod per session that asked for bots, joined to the session pod; its first bot relays for the rest. | Every seat is a full predictor, so seating bots in the session pod multiplies a CPU and memory budget sized for one. |
+| Intents or events | `input.Intent` values through the bot's own router: keys and the mouse. | The router's grammar, modes and cooldowns bind a bot as they bind a person; the journal records what the router produces, so a replay needs no graph; touch input drives the same contract. |
+| Pointer | A bot's pointer names a map cell (`Intent.MapCell`) the bot's viewport shows, as a person's mouse names a cell on the screen; the camera follows it. | Movement is one intent rather than a chain of motions, with the reach of a mouse. |
+| Brains | One mechanism: an `internal/fsm` graph per bot, with the bot vocabulary of §6. A fixed sequence is a state whose actions carry `delay_ms`. | Scripted and reactive play are one document shape and one runtime, and the game's HFSM already loads, validates and times them. `-script` stays the deterministic harness it is. |
+| Seats | One headless instance per bot. | D-2 stays whole: two Player domains in one `World` would share one grid partition, one D-18 ring and one input binding. |
+| Ownership | A bot belongs to the instance that started it. The host's bots are participants for as long as the host runs; a guest's bots leave when that guest does. A guest cannot hand its bots to the host. | A bot a person brought must not outlive the person, and one a host started is part of the session it offers. |
+| Compositions | On the host and on a guest alike: a person, a person with bots, or bots alone. | §4. |
+| Networking | Nothing bot-specific on the wire. A host's bot joins over an in-process stream into the host's own accept loop; a guest's bot dials the session its guest joined, from the guest's process. | The handshake, barrier, fences and eviction already hold for any participant; the relay item later moves a guest's bots onto its link (§4). |
+| Occupancy | Bots count: a session of bots alone is occupied. A guest's bots leave with it, so only the host's bots keep an allocated session alive, and its deadline still ends it. | A host that offers bots offers a session to play in. |
+| Pause | An instance may pause only while it is the authority and every other participant is its own bot; the pause stops its bots with it. | A paused authority stops committing, and a participant it cannot pause would run on ahead of every commit; only its own bots can stop with it. Anyone else in the session, or being a guest, refuses as today. |
+| Perception | The whole local instance, present state only, read by the vocabulary under the bot's own world lock while its graph updates. | A bot reads what its instance holds; another participant's Player domain does not exist locally. |
+| Objective | Cooperative: a teammate against the environment. | Cursor-versus-cursor combat is not built ([Combat](todo.md#combat) items). |
+| Learning | Deferred. No genetic code or hooks before bots and their networking are stable (phase 7). | The bot comes first. |
+| Marking | `RosterEntry.Bot`, reported by the joiner and fixed for the participant's life, and a Shared flag on its cursor. Presentation reads it; no mechanic does. An authored `-script` participant is a bot too. | Value comparison of rosters still holds, and a capture carries the flag to a late joiner. |
+| Budget | The router's limits, plus a per-graph intent rate: intents wait their turn in a bounded queue. | Whole-instance perception is already an advantage over a person's viewport. |
+| Determinism | A graph draws from its own stream, seeded from the session seed and its participant, never a world stream (D-8). | A solo bot run is a pure function of its seed; in a session only its journal reproduces it, as for a person. |
+| Succession | A bot seat never advertises: it lives in its holder's process. A process started with `-bot` follows `-no-advertise` like any other. | A seat elected successor would leave with its holder. |
 
 ## 3. Architecture
 
-### 3.1 Data flow
+### 3.1 One tick of a bot
 
 ```mermaid
 flowchart LR
-    World["bot's own World"] -->|"observe, under lock"| Obs["Observation"]
-    Obs --> Policy["Policy: HFSM + utilities"]
-    Policy -->|"intents, outside the lock"| Driver["bot.Driver: delay, budget"]
-    Driver -->|"App.Inject"| Router["mode.Router"]
+    Tick["tick completed"] --> Update["graph update, under the world lock"]
+    Update -->|"vocabulary reads the world"| Queue["intent queue"]
+    Queue -->|"at the graph's rate, App.Inject"| Router["mode.Router"]
     Router --> Events["events: D-3 crossings, local effects"]
-    Events --> World
+    Events --> Next["InputTick, Tick(1)"]
     Events --> Journal["journal"]
 ```
 
-The driver observes after a tick completes, releases the lock, lets the policy
-decide, and injects what is due before the next tick — the shape of the authored
-script loop in `RunScript`, with the actions coming from a policy. It calls
-`App.InputTick` once per tick so auto-fire and held repeats advance.
+The driver runs the shape of the authored-script loop: at a completed tick it updates
+the graph by one tick of game time, releases what the rate allows from the queue
+through `App.Inject`, calls `App.InputTick` so auto-fire and held buttons advance,
+and ticks. Graph actions only queue intents; nothing reachable from the update takes
+the world lock, and the injection that does happens after it is released. A bot run
+ends when an intent quits the game, a signal arrives, or its session ends.
 
 ### 3.2 `internal/bot`
 
-A new package beside `internal/mode`: engine-aware, imported by `internal/app`,
+A package beside `internal/mode`: engine-aware, imported by `internal/app`,
 importing neither `app` nor `converge`.
 
 | Piece | Responsibility |
 |---|---|
-| `Observation` | A value copied from the bot's world under its lock into reused buffers (§6). |
-| `Policy` | Turns an observation into intents (§7). Policies are a table indexed by name. |
-| `Driver` | Decision cadence, reaction delay, action budget, and the reused intent buffer. |
-| Baseline policy | Seeded and world-blind: the fuzz driver's player actions, drawn from its alphabets rather than a copy of them, and none of its operator actions. The first policy and the reproducibility fixture. |
-| HFSM policy | `fsm.Machine[*bot.Mind]` loaded from `wad/bot/<name>.toml` (§8). |
+| `Graph` | A parsed bot document: the `[bot]` settings and the FSM graph, validated by compiling it once. |
+| `Driver` | The loop in §3.1: one `fsm.Machine` per bot over the bot's mind, the intent queue and its rate. |
+| Vocabulary | The bot actions and guards of §6, registered with `internal/fsm/std`'s generic ones. |
 
-The App already exposes what the driver needs — `Position`, `Tick`, `Inject` and
-`InputTick`, the surface `journal.FuzzTarget` names — so the driver takes an
-interface of those four and the App gains only an observation read.
+Graphs resolve like every resource: a path, then `bot/<name>.toml` under
+`-config-dir`, the user root and the XDG system roots, then the embedded copy in
+`internal/asset/bot/`, which `make install-config` installs.
 
-### 3.3 Seats in one process
+### 3.3 Run paths
 
-A seat is a headless session App (`newScriptApp`'s shape) with a bot driver, on its
-own goroutine and paced against the authority like any guest. The seat holder owns
-their lifetime: closing a seat closes its stream, and the authority crosses the
-departure as for any link loss.
+`vif -bot <name|path>` drives the process's own seat with a graph. It is headless,
+or presented with `-watch`, and plays solo, hosts with `-host` or joins with
+`-join` through the driven session path `-script` already uses; the two share the
+paced loops, told apart only by their driver. Solo and headless it runs flat out
+unless `-speed` says otherwise; presented or in a session it is paced.
 
-The link is an in-process listener: a `net.Listener` whose `Accept` returns one end
-of a `net.Pipe` the seat dials with the other. `Transport.acceptLoop` already serves
-any listener — TCP, TLS and WebSocket today — so a seat is admitted by the same
-`AcceptSession`, offered the same roster and anchor, and installs the same capture.
-The per-peer send queue keeps an unbuffered pipe from blocking the authority's tick.
-The listener is pure Go, so a browser build can seat bots though it cannot listen.
-
-What changes for a seat:
-
-- It is exempt from the per-address `AdmissionLimiter` and counts against the roster
-  ceiling and `-players` like anyone.
-- It never advertises (§2), so it never binds a socket of its own.
-- A solo run that seats a bot becomes a session hosted on the in-process listener
-  alone, so the map locks and command mode stops pausing (§11).
-
-Process-wide state assumes one instance per process and is audited before seats:
+Seats (phases 2 and 3) are the same driver on further headless instances in the
+holder's process, each on its own goroutine and paced against the authority like
+any guest. Process-wide state assumes one instance per process and is audited
+before they land:
 
 | State | Today | For seats |
 |---|---|---|
@@ -104,251 +95,227 @@ Process-wide state assumes one instance per process and is audited before seats:
 | `vlog` | one sink, correlated per `GameContext` | a seat tag in each seat's correlation |
 | `engine.divergentReads` | package-level atomics | per world, or proven harmless |
 | signals, terminal, audio, probe | the front App only | seats are headless and ignore signals |
-| corpus, scenario and keymap parse | per App | share the parsed immutable values across seats |
+| corpus, scenario, keymap and graph parse | per App | share the parsed immutable values across seats |
 
-## 4. Seats and relays: the merge
+## 4. Compositions under the session protocol
 
-| Seat holder | Its seats are | The authority sees | Needs |
-|---|---|---|---|
-| Solo run or terminal host (authority) | direct guests over in-process streams | a link per seat, all local | §3.3 only |
-| Dedicated host `-serve` | the same; the fleet does not use it (§2) | the same | §3.3 only |
-| Guest: a person's instance or a bot pod | leaves behind the holder, which relays | one link carrying the subtree | R1–R4 |
-
-A seat is the easiest leaf a relay can have. Its hop is a function call, so two-hop
-staleness is the relay's own; it shares its relay's fate, so it never re-parents; it
-needs no hole punching; and it runs its holder's own binary. The
-hard half of the relay item — a person behind another person — keeps those problems
-and follows once the easy half is proven. The relay work, in the order bots need it:
-
-| Step | Work | First needed by |
+| Composition | On the host | On a guest |
 |---|---|---|
-| R1 | **Admission through a relay.** The holder accepts a seat's join and forwards its `JoinerReport` upstream; the coordinator admits it (identity, slot, the barrier-bound arrival) and returns the offer through the holder, which serves the join capture from its own proved world — a leaf proves it by the authority's root, since dense order and so integrity differ. A new message pair and a `ManifestVersion` bump. | S4 |
-| R2 | **One subtree proof upstream.** The holder's answer carries each leaf's newest proved tick in `Relayed`, so the authority's floor, flood and cadence count subtrees and the keyframe floor stops flooding a whole world through every link while anyone is behind a relay. | S4 |
-| R3 | **Bundled epochs.** The holder sends its leaves' raw epochs with its own, one frame a tick. The authority's per-source commit, fences and eviction accounting are unchanged. | S5 |
-| R4 | **Ingress through the relay.** The authority accepts a leaf's traffic only through its relay and budgets each link's ingress into the eviction policy, so a bad relay stalls only its own subtree. | S5 |
-| R5 | **People behind a relay.** Path advertisement for a leaf's lead, re-parenting to the authority or another relay, and reaching a relay behind NAT. A relay for people is native with a declared port; a browser relays only its own seats, over the in-process listener. | the relay item's own goal |
+| A person | today | today |
+| A person with bots | `-host … -bots N[:graph]`, or `:bot add` | `-join … -bots N[:graph]`, or `:bot add` |
+| Bots alone | `-serve … -bots N`, or `-bot <graph> -host …` | `-bot <graph> -join …`, with `-bots N` for more |
 
-A seat's lead follows from its holder's: the holder's round trip to the authority,
-its slack tick, and a hop of zero.
+| Bot of | Joins by | Leaves when | Occupies the session |
+|---|---|---|---|
+| the host | an in-process stream into the host's accept loop: the same `AcceptSession`, roster, anchor and capture, exempt from the per-address budget | the host ends, or `:bot drop` | yes |
+| a guest | dialling the session the guest joined, from the guest's process, on its own link | the guest leaves: it closes its bots, and its process ending takes them | while its guest is in it |
 
-## 5. Stages
+Nothing here is a new message. A host's bot is admitted by the accept loop that
+already serves TCP, TLS and WebSocket listeners; a guest's bot is one more
+participant from the guest's address, which shares that address's join budget.
 
-```mermaid
-flowchart LR
-    S0["S0 foundations"] --> S1["S1 policy seam"]
-    S1 --> S2["S2 networked bots"]
-    S1 --> S3["S3 seats on an authority"]
-    S3 --> S4["S4 seats on a guest: R1, R2"]
-    S2 --> S5["S5 allocator bots: R3, R4"]
-    S4 --> S5
-    S1 --> S6["S6 decision logic"]
-    S6 --> S7["S7 offline GA"]
-    S7 --> S8["S8 session adaptation"]
-```
+The relay item is where a guest's bots move onto its own link. That changes the
+link and nothing a roster says, and it waits until bots work in every composition:
 
-S6–S8 need only S1 and can run beside S2–S5: training uses headless solo and mesh
-runs, not the fleet.
-
-### S0 — Foundations (this branch)
-
-- The spatial grid is sized to its map: 34.0 → 4.5 MiB per headless instance at
-  120×40 (§9).
-- `Intent` carries a pointer cell in `X`, `Y` instead of `Count` and `Char`.
-- `ControlKind` is `ControlLocal` or `ControlRemote`; the unused in-simulation
-  `ControlBot` is gone.
-- One ex-command round trip in the journal drivers.
-
-### S1 — Policy seam and a baseline that replays
-
-- `internal/bot`: `Observation`, `Policy`, `Driver`, the baseline policy.
-- `vif -bot <policy>` makes this instance's own seat a bot and runs it headless: solo
-  until it is given `-join` or `-host`; `-watch` presents it, as for `-script`;
-  `-seed` seeds the policy.
-- Exit: one seed gives the same journal twice, and replaying it reproduces the run
-  without the policy.
-- Affected: `internal/bot`, `internal/app/script.go`'s loop, `cmd/vif`.
-
-### S2 — Networked bots
-
-- `vif -bot <policy> -join <addr>` joins as a participant; `-join https://<site>`
-  gives it a session of its own. Bots on one machine share its address's join and
-  creation budgets, so a load test raises `-client-joins` and `-client-creates`.
-- `JoinerReport.Bot` → `RosterEntry.Bot` → `ParticipantJoinedPayload.Bot` → the
-  cursor's Shared flag. The peer cursor renderer marks a bot's cursor; the status
-  bar's participant badge counts bots apart.
-- The run reports only human participants to `internal/lifecycle` as occupancy.
-- Exit: a host and two networked bots converge in a mesh test; the roster and
-  badge agree on every instance.
-- Affected: `internal/network/session.go`, `internal/event/payload.go`,
-  `internal/component/cursor.go`, `internal/system/network.go`,
-  `internal/render/renderer`, `internal/app/serve.go`.
-
-### S3 — Seats on an authority
-
-- The in-process listener and dialer in `internal/network`, an internal endpoint
-  scheme, and the admission exemption.
-- `-bots N[:policy]` adds N seats at startup, and `:bot add [policy]` /
-  `:bot drop <slot>` do it in command mode, beside the session membership commands.
-- The process-wide audit in §3.3.
-- Exit: a solo terminal run seats three bots; a seat dropped mid-run departs on
-  every instance; per-seat heap and tick cost are measured on every shipped scenario.
-- Affected: `internal/network/transport.go`, `endpoint.go`, `internal/app`,
-  `internal/mode/commands.go`, `internal/status/recorder.go`.
-
-### S4 — Seats on a guest
-
-- R1 and R2. A guest's `-bots` or `:bot add` seats behind it.
-- Exit: on `network.Mesh` under link shapes, a guest relaying two seats converges
-  hash-only, the authority's fan-out counts one link for the subtree, and the
-  keyframe floor no longer crosses that link while its seats are proved.
-- Affected: `internal/converge/relay.go`, `selective.go`, `correction.go`,
-  `internal/network/protocol.go`, `internal/app/join.go`.
-
-### S5 — The allocator fills a session
-
-- R3 and R4.
-- The create request gains `bots` (0 to `players - 1`). The allocator starts a bot
-  Job running `vif -bot <policy> -bots <K-1> -join vif://<session>`, owned by the
-  session Job so it goes with it, sized per seat from S3's measurements.
-- Exit: a fleet session asked for three bots shows them to the first person to join,
-  and expires when that person leaves.
-- Affected: `tool/vif-allocator`, `deploy/guest/vif-allocator.env`.
-
-### S6 — Decision logic
-
-- The HFSM policy (§8.1) and a motor layer that turns a goal cell or glyph into
-  intents.
-- Exit: a bot outscores the baseline over a fixed seed set on every shipped scenario.
-- Affected: `internal/bot`, `wad/bot/`, `internal/asset/bot/`.
-
-### S7 — Offline genetic training
-
-- A training entry point under `cmd/` that composes headless sessions (§8.2).
-- Exit: a trained genome beats S6's hand-tuned defaults on a held-out seed set, and
-  training resumes from a `pkg/genetic` checkpoint.
-
-### S8 — Session adaptation
-
-- Per-participant teammate models and a bandit over a genome archive (§8.3).
-- Exit: against scripted teammates of two styles, a bot's choice converges to the
-  better genome for each within one session.
-
-## 6. Perception
-
-The observation is copied from the bot's own world at the tick it completed, under
-the world lock, into buffers the driver reuses. It holds present state only:
-
-| Included | Excluded, and why |
+| Step | Work |
 |---|---|
-| Every component store: the Shared world as this instance predicts it, and its own Player domain | the event queue and barrier-held crossings: other participants' future |
-| Its own cursor through `World.LocalCursor`, the D-18 cell a person sees | RNG stream positions: every future draw |
-| Its owner-authored cursor values: heat, energy, shield, boost, weapon charges | FSM delayed actions and pending triggers: scheduled future |
-| Map bounds, walls and the current FSM region states and variables | the prediction ledger, network and convergence state |
-| The tick, its run, and a count of installs | nothing of another participant's Player domain, which is not here |
+| R1 | **Admission through a relay.** The holder forwards a bot's `JoinerReport`; the coordinator admits it and answers through the holder, which serves the join capture from its own proved world — a leaf proves it by the authority's root. A new message pair and a `ManifestVersion` bump. |
+| R2 | **One subtree proof upstream.** The holder's answer carries each leaf's newest proved tick in `Relayed`, so the authority's floor, flood and cadence count subtrees and the keyframe floor stops crossing every link while anyone is behind a relay. |
+| R3 | **Bundled epochs.** The holder sends its leaves' raw epochs with its own, one frame a tick. |
+| R4 | **Ingress through the relay.** The authority accepts a leaf's traffic only through its relay and budgets each link's ingress into eviction, so a bad relay stalls only its own subtree. |
+| R5 | **People behind a relay.** Path advertisement for a leaf's lead, re-parenting, and reaching a relay behind NAT. A relay for people is native with a declared port; a browser relays only its own bots. |
 
-A correction can move the world under a plan, so the install count lets the motor
-layer re-plan rather than chase a cell that no longer holds what it aimed at. The
-observation is typed — its own state, the nearest entities per class with cell and
-distance, the roster's cursors — and S6 derives a fixed-length feature vector from
-it for the utilities the genome tunes. Its cost is bounded per decision, not per
-tick, and measured in S6.
+A bot is the easiest leaf R1–R4 can have: its hop is a function call, it shares
+its holder's fate so it never re-parents, and it needs no hole punching.
 
-## 7. Policy contract
+## 5. Phases
 
-```go
-// Policy turns one observation into the intents for one decision.
-type Policy interface {
-	Decide(obs *Observation, out []input.Intent) []input.Intent
-	Reset(seed uint64) // a new run: forget plans, keep learned parameters
-}
+| Phase | Priority | Delivers |
+|---|---|---|
+| 1 | landed | The bot itself: pointer in map cells, `internal/bot`, `vif -bot`, shipped graphs. |
+| 2 | P0 | Marking, and the host's bots: seats on an in-process stream, `-bots`, `:bot`, occupancy, the pause rule. |
+| 3 | P0 | A guest's bots: every composition in §4. |
+| 4 | P1 | The fleet: an allocator request for bots. |
+| 5 | P1 | Decision logic: richer vocabulary and a motor layer. |
+| 6 | P2 | Relays own subtrees: R1–R4 for a guest's bots, then R5. |
+| 7 | P3 | Offline genetic training. |
+| 8 | P3 | Session adaptation. |
+
+### Phase 1 — the bot itself (landed)
+
+`vif -bot <name|path>` plays the seat from a graph, solo, hosting or joining
+through the driven session path `-script` uses. `internal/bot` holds the graph, the
+driver and the vocabulary of §6; `IntentFor` and `AppendCommand` in `internal/input`
+serve scripts and graphs alike; `roam` and `patrol` ship in `internal/asset/bot/`.
+A solo run is a pure function of its seed, and `./script/test.sh bot` plays every
+shipped graph through the binary and joins `roam` to a dedicated host. `roam` types
+a few hundred glyphs a minute and misses about one keystroke in two hundred (§6).
+
+### Phase 2 — marking and the host's bots
+
+- `JoinerReport.Bot` → `RosterEntry.Bot` → `ParticipantJoinedPayload.Bot` → the
+  cursor's Shared flag, for `-bot` and `-script` participants. The peer cursor
+  renderer marks a bot; the status bar's participant badge counts bots apart.
+- The in-process listener and dialer in `internal/network`, served by the transport's
+  existing accept loop, and exempt from the per-address `AdmissionLimiter`.
+- `-bots N[:graph]` on `-host`, `-serve` and a solo run, which then hosts on the
+  in-process listener alone; `:bot add [graph]` and `:bot drop <slot>` beside the
+  session membership commands.
+- Occupancy counts bots; the pause rule of §2; the process-wide audit of §3.3.
+- Exit: a solo terminal run with three bots pauses and resumes with them; a
+  `-serve -bots 2` session stays occupied with nobody else in it; a bot dropped
+  mid-run departs on every instance.
+- Affected: `internal/network`, `internal/app`, `internal/mode/commands.go`,
+  `internal/system/network.go`, `internal/system/meta.go`, `internal/render/renderer`,
+  `internal/status/recorder.go`.
+
+### Phase 3 — a guest's bots
+
+- `-join … -bots N` and `:bot add` on a guest dial the guest's own session; the guest
+  closes its bots when it leaves, forks or quits.
+- Exit: the §4 compositions each converge in a mesh or loopback test; a guest that
+  leaves takes its bots, and the host's bots stay.
+
+### Phase 4 — the fleet
+
+- The create request gains `bots` (0 to `players - 1`); the session pod runs with
+  `-bots K` and requests per bot what phase 2 measured.
+- A load test of networked bots, which also gives the session stack continuous play.
+
+### Phase 5 — decision logic
+
+- A motor layer over `pkg/navigation` for targets the viewport does not show,
+  event transitions from the bot's own dispatch, threat and evasion guards, and
+  utilities scored within a state.
+- Exit: a graph outscores `roam` over a fixed seed set on every shipped scenario.
+
+### Phases 6–8
+
+Relays (§4), then learning (§8), in that order.
+
+## 6. Vocabulary
+
+A bot document is a scenario graph (see [FSM reference](fsm-reference.md)) plus a
+`[bot]` table. `internal/fsm/std` supplies variables, timing, compound guards and
+status guards over the bot's own registry, whose bare keys — `heat.current`,
+`energy.current`, `boost.active`, `shield.active` — mirror its own slot.
+
+| Action | Payload | Queues |
+|---|---|---|
+| `Intent` | `name` (a keymap action), `count`, `char` | one semantic key press |
+| `Text` | `text` | a character intent per rune |
+| `Command` | `text` | the ex-command round trip |
+| `TypeGlyph` | — | the rune of the glyph under the cursor, if there is one |
+| `PointAt` | `target`, `fire` | the pointer at the nearest target, clamped to the viewport; `fire` clicks instead of moving |
+
+| Guard | Args | Passes when |
+|---|---|---|
+| `HasTarget` | `target`, `within` | a target of the class exists, within `within` cells when non-zero |
+| `OnTarget` | `target` | the cursor's cell holds one |
+| `InMode` | `mode` | the router is in `normal`, `insert`, `visual`, `search` or `command` |
+| `Chance` | `percent` | a draw from the bot's own stream |
+
+Targets: `glyph` (typeable text), `gold` (a gold member), `nugget`, `species` (a
+hostile combat entity), `cursor` (another participant) and `random` (a cell the
+viewport shows). Nearest is by cell distance with rows counted twice, as the
+terminal draws them.
+
+`PointAt` and `TypeGlyph` read the world, so each acts only when the rate releases
+everything it queues before the next tick: behind a backlog, what it read would be
+stale by the time it lands. `TypeGlyph` switches to Insert first when the router is
+elsewhere. Of `std`'s actions, `EmitEvent` and system control are inert — a graph
+writes the world only through intents — and region control runs the bot's own
+machine.
+
+| `[bot]` setting | Default | Meaning |
+|---|---|---|
+| `actions_per_second` | 12 | intents released per second of game time; a queue of 256 holds the rest |
+
+A fixed sequence:
+
+```toml
+[bot]
+actions_per_second = 8
+
+[regions.play]
+initial = "Out"
+
+[states.Out]
+on_enter = [
+    { action = "Intent", payload = { name = "motion_right", count = 12 } },
+    { action = "Intent", payload = { name = "fire_main" }, delay_ms = 500 },
+]
+transitions = [{ trigger = "Tick", target = "Back", guard = "StateTimeExceeds", guard_args = { ms = 1500 } }]
+
+[states.Back]
+on_enter = [{ action = "Intent", payload = { name = "motion_left", count = 12 } }]
+transitions = [{ trigger = "Tick", target = "Out", guard = "StateTimeExceeds", guard_args = { ms = 1500 } }]
 ```
 
-- Given its seed and its sequence of observations, a policy is deterministic.
-- It reads nothing but the observation and writes nothing but intents.
-- It does not block, allocate per decision in steady state, or do I/O.
-- It emits at most the driver's budget per decision; the driver drops the excess and
-  counts it.
-- Its state is private: in no capture, no journal and no fingerprint. A correction or
-  a reset reaches it only through the next observation.
+Perception is the whole local instance's present state. The vocabulary never reads
+the event queue or barrier-held crossings, RNG positions, FSM delayed actions, the
+prediction ledger or network state: those are the future, or somebody else's. So
+a keystroke can still miss, as a person's can: a tick's own fire queues deaths —
+special fire's dust, a cleaner's hits — that settle before the next keystroke does.
+Settling first would make a bot run unreplayable, since a recorded driven run
+settles only what it pushed.
 
-## 8. Decision logic and learning
+## 7. Driver contract
 
-### 8.1 A state machine the game already has
+- One graph update per tick, dt one tick of game time, under the bot's world lock.
+- Actions queue; guards and actions read the world and never write it.
+- Each step earns its allowance before the update, so the graph knows what will land
+  before the tick; the queue releases at most `actions_per_second` intents a
+  second, carrying the remainder, and a full queue drops and counts. Allowance left
+  idle is capped at one second's worth.
+- A draw is the bot's own: `vmath.NewSeededRand(seed, "bot.<participant>")`.
+- A graph's state is private: in no capture, no journal and no fingerprint. A
+  correction or a reset reaches it only through the world it reads next.
 
-The bot's state machine reuses `internal/fsm`, which is generic over its context and
-already loads hierarchical, parallel-region graphs from TOML. A policy is an
-`fsm.Machine[*bot.Mind]`: guards read the observation, actions queue intents, tick
-transitions evaluate guards, and event transitions react to what the bot's own
-instance dispatched. Starting states: explore, harvest (glyphs and gold), engage,
-evade, recover heat and energy, and assist a teammate under threat. Inside a state a
-utility table scores candidate targets; that table and every threshold in the graph
-are named, bounded parameters, which is what makes them a genome.
+## 8. Decision logic and learning, later
 
-The motor layer turns a goal into the grammar a person uses: a motion and a count,
-`f`/`t` onto a glyph, Tab to a nugget, Shift-Tab to gold, `i` and typed text, Escape,
-fire. Routing around walls uses `pkg/navigation` over the bot's own world.
-
-### 8.2 Offline training
-
-- Genome: the policy's declared parameters as a bounded vector. `pkg/genetic`'s
-  generational `Engine` fits, since one evaluation is one whole run.
-- Evaluation: a headless session of several bots and scripted teammates on
-  `network.Mesh`, whose virtual clock makes an evaluation reproducible, over a matrix
-  of scenarios, map sizes and fixed seeds.
-- Fitness, cooperative: team score, survival, gold typed, drains and species killed,
-  damage taken, all per minute, scalarised by `pkg/genetic/fitness`.
-- Output: genome TOML in `wad/bot/`, with an embedded fallback in
-  `internal/asset/bot/`. Training resumes from a `pkg/genetic` checkpoint.
-
-The in-game genetic registry is Shared state that captures carry (D-19); a bot's
-genomes never enter it.
-
-### 8.3 Session adaptation, and room for profiles
-
-- The bot keeps a small model of each other participant from Shared state it can
-  already see — distance kept, movement rate, what it engages — keyed by participant
-  identity for the session and dropped at its end.
-- A bandit over a small archive of trained genomes, per (map class, situation,
-  teammate model), picks what the bot plays next. It is the bot's own, never the
-  simulation's `AdaptationSystem`.
-- The model key is a type of its own rather than a bare participant ID, so a player
-  identity can key the same models if one ever exists. Nothing is persisted, and no
-  profile code is written before an identity exists.
+- **Motor layer** (phase 5): a goal cell the viewport does not show is reached by
+  clicks along a `pkg/navigation` route rather than a blind clamp.
+- **Offline training** (phase 7): a genome is a graph's declared numeric parameters
+  as a bounded vector; `pkg/genetic`'s generational `Engine` evaluates whole runs on
+  `network.Mesh`, whose virtual clock makes each evaluation reproducible, over a
+  matrix of scenarios and seeds; cooperative fitness is scalarised by
+  `pkg/genetic/fitness`; genomes ship beside their graphs. The in-game genetic
+  registry is Shared state captures carry (D-19), and bot genomes never enter it.
+- **Session adaptation** (phase 8): a small model of each other participant from
+  Shared state, keyed by participant for the session and dropped at its end, and a
+  bandit over trained genomes. The key is a type of its own, so a player identity
+  can key it if one ever exists; nothing is persisted.
 
 ## 9. Costs
 
 | Measure | Value | Source |
 |---|---|---|
-| Heap, one headless solo instance at 120×40 before S0 | 34.0 MiB, 89% of it the ceiling-sized spatial grid | heap profile, 2026-09-29 |
-| The same after S0 | 4.5 MiB | the same run |
+| Heap, one headless solo instance at 120×40 before the grid fix | 34.0 MiB, 89% of it the ceiling-sized spatial grid | heap profile, 2026-09-29 |
+| The same after it | 4.5 MiB | the same run |
 | Spatial grid on td, the 500×250 ceiling | 32 MB per world, and a guest's staging world holds a second | 256 bytes a cell |
-| CPU per seat | about a guest's: it predicts the Shared world and simulates its own Player domain | to measure in S3 |
-| Link | in process, the encode and decode of a guest's traffic and no bandwidth; behind a relay, one upstream link for the subtree | — |
-
-On the maps a person plays solo, a handful of seats now costs less than one
-instance cost before S0. td stays expensive per seat until its grid is.
+| CPU per bot | about a guest's: it predicts the Shared world and simulates its own Player domain | to measure in phase 2 |
+| Link | a host's bot costs the encode and decode of a guest's traffic and no bandwidth; a guest's bot costs a guest's link until R1–R4 | — |
 
 ## 10. Verification
 
-- S1: the double-run journal comparison and a replay without the policy.
-- S2 and S3: mesh tests with bots as participants, on `network.Mesh` and on the
-  in-process listener; the existing parity and convergence assertions apply
-  unchanged, which is the point of a bot being an instance.
-- S4: relayed topologies under `LinkShape`s, asserting hash-only convergence and
+- Phase 1: two solo runs from one seed journal the same records; every shipped graph
+  plays without overflowing its queue and `roam` types what it reaches; a broken
+  graph fails at load naming the fault; intents land in order at the rate; the
+  pointer rule; `./script/test.sh bot` through the binary, solo and joined.
+- Phases 2–3: mesh and loopback tests with bots as participants; the existing parity
+  and convergence assertions apply unchanged, which is the point of a bot being an
+  instance; a script scenario per composition in §4.
+- Phase 4: a fleet load test of networked bots.
+- Phase 6: relayed topologies under `LinkShape`s, asserting hash-only convergence and
   the authority's per-link fan-out.
-- S5: a fleet load test of networked bots, which is also the continuous real play the
-  session stack and the fleet lack.
-- S6–S8: fixed seed sets per scenario, held out from training.
 
 ## 11. Open questions
 
-1. **Pausing with seats.** Seating a bot makes a solo run a session, and a live
-   session refuses a pause. When every other participant is a seat of this process,
-   the authority could pause the session and its seats together.
-2. **A pointer for bots.** A map-cell pointer, limited to the bot's viewport as a
-   person's is, would give bots mouse play. Not before a policy needs it.
-3. **Labels.** Participants have no names; a bot's marker is its only label.
-4. **Difficulty.** Reaction delay and action budget are the natural knobs; whether
-   the site and `-bots` expose them is open.
-5. **td per seat.** A sparse or shared grid representation for seats, if S3's
-   measurements say seats on td matter.
+1. **Labels.** Participants have no names; a bot's marker is its only label.
+2. **Difficulty.** The intent rate is the natural knob; whether `-bots` and the site
+   expose it is open.
+3. **td per bot.** A sparse or shared grid representation, if phase 2's
+   measurements say bots on td matter.
+4. **A bot's geometry.** Its `-size` decides what its pointer can reach, and a
+   dedicated host with no `-size` takes its map from its first joiner, bot or not.

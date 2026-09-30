@@ -72,32 +72,23 @@ func PlayJournal(viewer Config, paths ...string) error {
 		rec: parseSpeed(an.Speed), scale: engine.ScaleNormal}).run()
 }
 
-// runPresentedScript presents an authored run. Pacing is the script's own: the
-// resolved interval is one tick's wall budget, and an unpaced run is presented as
-// fast as the frame loop can render it.
-func runPresentedScript(a *App, d *journal.ScriptDriver, path string,
-	interval time.Duration, paced bool, signals <-chan os.Signal) (journal.ScriptStats, error) {
+// runPresented presents a driven run, a script or a bot. Pacing is the run's own:
+// the resolved interval is one tick's wall budget, and an unpaced run is presented
+// as fast as the frame loop can render it.
+func runPresented(a *App, src pacedSource, kind, name string,
+	interval time.Duration, paced bool, signals <-chan os.Signal) error {
 
 	live := a.sessionTransport() != nil
 	if !paced {
 		interval = time.Millisecond // the floor perTick already clamps to
 	}
-	vlog.Info("app", "msg", "script open", "path", path, "paced", paced, "live", live)
+	vlog.Info("app", "msg", kind+" open", "name", name, "paced", paced, "live", live)
 	p := &player{
-		a: a, src: scriptSource{d}, interval: interval,
+		a: a, src: src, interval: interval,
 		rec: engine.ScaleNormal, scale: engine.ScaleNormal,
 		live: live, signals: signals,
 	}
-	err := p.run()
-	return reportScript(d, path), err
-}
-
-// pacedSource is the driven stream a presentation loop advances. Both drivers
-// report their own counters, because "how far through" means a different thing to
-// a record stream than to an action list.
-type pacedSource interface {
-	Step() (bool, error)
-	progress() string
+	return p.run()
 }
 
 // journalSource adapts a record stream to the presentation loop.
@@ -108,15 +99,6 @@ func (s journalSource) Step() (bool, error) { return s.d.Step() }
 func (s journalSource) progress() string {
 	st := s.d.Stats()
 	return fmt.Sprintf("run %d tick %d | %d/%d rec", st.End.Run, st.End.Tick, st.Injected, st.Records)
-}
-
-type scriptSource struct{ d *journal.ScriptDriver }
-
-func (s scriptSource) Step() (bool, error) { return s.d.Step() }
-
-func (s scriptSource) progress() string {
-	st := s.d.Stats()
-	return fmt.Sprintf("run %d tick %d | %d/%d act", st.End.Run, st.End.Tick, st.Executed, st.Actions)
 }
 
 // parseSpeed resolves the recorded rate, defaulting to real time

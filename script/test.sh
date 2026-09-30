@@ -149,6 +149,7 @@ Automated (assert, and used by `all`)
   deploy            the wad installer's refusal, the manifests and a mounted scenario
   lifetime          unclaimed expiry, then vacancy expiry
   drain             SIGTERM drains instead of cutting a match
+  bot               every shipped bot graph plays, solo and joined to a host
   identity          a peer running a different build is refused (runs the tests)
   all               every automated scenario above
 
@@ -358,6 +359,41 @@ lifetime)
 	wait_for 30 'gone "$SERVE_PID"' || fail "the emptied session did not end"
 	grep -q 'roster empty for' "$LOG" || fail "the session did not say why it ended: $LOG"
 	pass "emptied session exited on its vacancy grace"
+	;;
+
+bot)
+	# Each shipped graph plays through the binary, solo and flat out, until a region
+	# appended here quits it after a minute of game time; roam has to type. Then roam
+	# joins a dedicated host as its only participant, paced, and leaves it.
+	need_bin
+	dir=$(mktemp -d)
+	stop() {
+		printf '\n[regions.stop]\ninitial = "StopWait"\n\n[states.StopWait]\n'
+		printf 'transitions = [{ trigger = "Tick", target = "StopQuit", guard = "StateTimeExceeds", guard_args = { ms = %s } }]\n' "$1"
+		printf '\n[states.StopQuit]\non_enter = [{ action = "Intent", payload = { name = "quit" } }]\n'
+	}
+	botstat() { sed -n "s/.*\"msg\":\"bot stopped\",.*\"quit\":true.*\"$2\":\([0-9]*\).*/\1/p" "$1"; }
+	for graph in internal/asset/bot/*.toml; do
+		name=$(basename "$graph" .toml)
+		{ cat "$graph"; stop 60000; } >"$dir/$name.toml"
+		"$BIN" -bot "$dir/$name.toml" -d -speed max -size 120x40 -log-stdout -lv info \
+			>"$dir/$name.log" 2>&1 || fail "$name did not end cleanly: $dir/$name.log"
+		[ "$(botstat "$dir/$name.log" injected)" -gt 0 ] 2>/dev/null || fail "$name played nothing: $dir/$name.log"
+		[ "$(botstat "$dir/$name.log" dropped)" = 0 ] || fail "$name overflowed its queue: $dir/$name.log"
+	done
+	[ "$(botstat "$dir/roam.log" typed)" -gt 0 ] 2>/dev/null || fail "roam typed nothing: $dir/roam.log"
+	pass "every shipped graph plays solo through the binary, and roam types"
+
+	note "a bot joins a dedicated host and leaves it"
+	serve_bg -first-join 30s -empty 3s
+	wait_for 15 'probe_get /health' || fail "probe never answered"
+	{ cat internal/asset/bot/roam.toml; stop 5000; } >"$dir/join.toml"
+	"$BIN" -bot "$dir/join.toml" -join "$HOST:$PORT" -log-stdout -lv info >"$dir/join.log" 2>&1 \
+		|| fail "the joining bot did not end cleanly: $dir/join.log"
+	[ "$(botstat "$dir/join.log" typed)" -gt 0 ] 2>/dev/null || fail "the joining bot typed nothing: $dir/join.log"
+	wait_for 30 'gone "$SERVE_PID"' || fail "the host did not end once its bot left: $LOG"
+	rm -rf "$dir"
+	pass "a bot joined a dedicated host, played and left"
 	;;
 
 drain)
@@ -640,7 +676,7 @@ image)
 	;;
 
 all)
-	for s in check bundle scenario transfer follow corpus fleet deploy lifetime drain identity; do
+	for s in check bundle scenario transfer follow corpus fleet deploy lifetime drain bot identity; do
 		note "$s"
 		"$0" "$s"
 	done

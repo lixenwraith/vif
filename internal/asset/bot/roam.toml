@@ -1,0 +1,41 @@
+# roam: a teammate that plays the typing game. It jumps its pointer to the nearest
+# glyph and types the run under the cursor, takes a gold sequence when one appears,
+# and steps onto a nugget nearby. Auto-fire, on by default, answers species.
+[bot]
+actions_per_second = 12
+
+[regions.play]
+initial = "Seek"
+
+[states.Seek]
+on_update = [{ action = "PointAt", payload = { target = "glyph" } }]
+transitions = [
+    { trigger = "Tick", target = "Gold", guard = "HasTarget", guard_args = { target = "gold" } },
+    { trigger = "Tick", target = "Nugget", guard = "HasTarget", guard_args = { target = "nugget", within = 12 } },
+    { trigger = "Tick", target = "Type", guard = "OnTarget", guard_args = { target = "glyph" } },
+]
+
+# Each correct key moves the cursor one cell right, onto the next glyph of the run.
+[states.Type]
+on_update = [{ action = "TypeGlyph" }]
+transitions = [
+    { trigger = "Tick", internal = true, guard = "OnTarget", guard_args = { target = "glyph" } },
+    { trigger = "Tick", target = "Seek" },
+]
+
+# Shift-Tab lands on the first gold member left, the only one typing accepts; a jump
+# that did not land is retried through Seek.
+[states.Gold]
+on_enter = [{ action = "Intent", payload = { name = "gold_jump" } }]
+on_update = [{ action = "TypeGlyph", guard = "OnTarget", guard_args = { target = "gold" } }]
+transitions = [
+    { trigger = "Tick", internal = true, guard = "OnTarget", guard_args = { target = "gold" } },
+    { trigger = "Tick", target = "Seek", guard = "StateTimeExceeds", guard_args = { ms = 1500 } },
+]
+
+[states.Nugget]
+on_update = [{ action = "PointAt", payload = { target = "nugget" } }]
+transitions = [
+    { trigger = "Tick", internal = true, guard = "HasTarget", guard_args = { target = "nugget", within = 12 } },
+    { trigger = "Tick", target = "Seek" },
+]
