@@ -45,7 +45,7 @@ of a schedule; see [Bots](todo-bots.md).
 | Validate | `app.Check` | No | Resolve and load FSM plus corpus; print accepted/rejected sources. |
 | Export schema | `app.Schema` | No | Emit schema version 1 JSON for events, fields, actions, guards, operators, and config fields. |
 | Run script | `app.RunScript` | Only with `-watch` | Execute a bounded versioned TOML schedule; optional `-host`/`-join` uses the normal TCP gate. |
-| Run bot | `app.RunBot` | Only with `-watch` | Play the seat from a bot graph until it quits; `-host`/`-join` as for a script, and presented it keeps real time. |
+| Run bot | `app.RunBot` | Only with `-watch` | Play the seat from a bot graph until it quits; `-host`/`-join` as for a script. Presented it keeps real time on the terminal's size; headless it takes the fleet's 120x40 unless `-size` says otherwise, and says on stdout what it is doing. |
 
 ### 1.0 The four session flags, and what each still decides
 

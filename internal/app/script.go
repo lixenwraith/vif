@@ -94,6 +94,10 @@ func RunBot(cfg Config, spec string) (bot.Stats, error) {
 	if cfg.Mode == ModeScript && cfg.TimeScaleSpec == "" {
 		cfg.TimeScaleSpec = "1"
 	}
+	if cfg.Width == 0 && cfg.Height == 0 {
+		cfg.terminalGeometry = cfg.Mode == ModeScript
+		cfg.Width, cfg.Height = BotWidth, BotHeight
+	}
 	var (
 		driver *bot.Driver
 		played *App

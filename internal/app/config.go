@@ -20,6 +20,11 @@ import (
 const (
 	DefaultWidth  = 80
 	DefaultHeight = 24
+
+	// BotWidth and BotHeight size a headless bot given no -size: the terminal the
+	// fleet serves a session as, so a bot's map is the one a site session has.
+	BotWidth  = 120
+	BotHeight = 40
 )
 
 // Mode selects the runtime shape: which I/O services exist, which clock drives
@@ -227,6 +232,10 @@ type Config struct {
 	// scriptedSession admits headless network I/O only through RunScript, which
 	// performs the startup gate and owns wall pacing.
 	scriptedSession bool
+
+	// terminalGeometry sizes a presented run from its terminal, as play does; a
+	// presented bot takes it when -size names none.
+	terminalGeometry bool
 
 	// geometryDefaulted records that Normalize supplied Width or Height, which is
 	// how a dedicated host tells "size me from the session" apart from "serve
