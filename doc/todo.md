@@ -27,8 +27,14 @@ A bot is its own headless instance whose FSM graph drives its router with intent
 keys and mouse alike, bound by the same barrier, admission and eviction as a person.
 Bots belong to the instance that started them: a host's stay as participants, a
 guest's leave with it, and every composition of people and bots joins through the
-ordinary handshake. Phases 1–3 landed, so bots play in every composition; marking
-and the fleet, decision logic, relays and learning follow in the plan's order.
+ordinary handshake. Phases 1–3, hexadecimal cursor slots and the merged `default`
+policy landed; the fleet, richer decision logic, relays and learning follow.
+Seat instance log tags and whether seats should inherit their holder's terminal
+geometry remain open. Permanent holder-local admission as a guest waits for relays.
+Succession also needs a regression for overlapping departures: stopping an
+established bot host and its seats together can leave survivors with different
+rosters at handoff, refusing the new term or retaining departed cursors. This is
+separate from adding bots after a completed takeover; see troubleshooting §12.
 
 ### Extract the renderer-neutral Android host model
 

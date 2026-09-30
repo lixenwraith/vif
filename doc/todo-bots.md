@@ -29,13 +29,13 @@ lets a holder carry its bots' traffic without changing who they are or when they
 | Seats | One headless instance per bot. | D-2 stays whole: two Player domains in one `World` would share one grid partition, one D-18 ring and one input binding. |
 | Ownership | A bot belongs to the instance that started it. The host's bots are participants for as long as the host runs; a guest's bots leave when that guest does. A guest cannot hand its bots to the host. | A bot a person brought must not outlive the person, and one a host started is part of the session it offers. |
 | Compositions | On the host and on a guest alike: a person, a person with bots, or bots alone. | §4. |
-| Networking | Nothing bot-specific on the wire. A bot dials its holder's session over an ordinary link: a host's bot its holder's own listener over loopback, a guest's bot the address its guest joined. | The handshake, barrier, fences and eviction already hold for any participant, and a real socket needs no second accept path; the relay item later moves a guest's bots onto its link (§4). |
+| Networking | Ordinary participant links: a host's bots dial loopback; a guest's bots dial its join address. After succession, the holder admits new bots through a loopback listener on its surviving transport. | The same handshake and gate serve every join. Permanent holder-local admission while still a guest needs the relay work in §4. |
 | Occupancy | Bots count: a session of bots alone is occupied. A guest's bots leave with it, so only the host's bots keep an allocated session alive, and its deadline still ends it. | A host that offers bots offers a session to play in. |
 | Pause | An instance may pause only while it is the authority and every other participant is its own bot; the pause stops its bots with it, and an arrival ends it. | A paused authority stops committing, and a participant it cannot pause would run on ahead of every commit; only its own bots can stop with it. Anyone else in the session, or being a guest, refuses as today, and a joiner's gate waits on ticks. |
 | Perception | The whole local instance, present state only, read by the vocabulary under the bot's own world lock while its graph updates. | A bot reads what its instance holds; another participant's Player domain does not exist locally. |
 | Objective | Cooperative: a teammate against the environment. | Cursor-versus-cursor combat is not built ([Combat](todo.md#combat) items). |
 | Learning | Deferred. No genetic code or hooks before bots and their networking are stable (phase 7). | The bot comes first. |
-| Marking | `RosterEntry.Bot`, reported by the joiner and fixed for the participant's life, and a Shared flag on its cursor. Presentation reads it; no mechanic does. An authored `-script` participant is a bot too. Phase 4. | Value comparison of rosters still holds, and a capture carries the flag to a late joiner. It is the one bot-specific datum on the wire, so it waits for the fleet, where players first meet bots they did not start. |
+| Marking | Every remote cursor shows its existing slot as `0`–`F`; the local cursor stays unmarked. `4P:1` means four cursors and local slot 1. | Slots already agree across the session. No bot flag, name, protocol field or new colour is needed. |
 | Budget | The router's limits, plus a per-graph intent rate: intents wait their turn in a bounded queue. | Whole-instance perception is already an advantage over a person's viewport. |
 | Determinism | A graph draws from its own stream, seeded from the session seed and its participant, never a world stream (D-8). | A solo bot run is a pure function of its seed; in a session only its journal reproduces it, as for a person. |
 | Succession | A bot seat never advertises: it lives in its holder's process. A process started with `-bot` follows `-no-advertise` like any other. | A seat elected successor would leave with its holder. |
@@ -75,6 +75,9 @@ importing neither `app` nor `converge`.
 Graphs resolve like every resource: a path, then `bot/<name>.toml` under
 `-config-dir`, the user root and the XDG system roots, then the embedded copy in
 `internal/asset/bot/`, which `make install-config` installs.
+The shipped policy is `default`: text and gold first, with patrol and nugget
+jumps when text is absent. Legacy names `roam` and `patrol` fall back to this
+policy; explicitly installed graphs under those names still take precedence.
 
 ### 3.3 Run paths
 
@@ -83,6 +86,9 @@ or presented with `-watch`, and plays solo, hosts with `-host` or joins with
 `-join` through the driven session path `-script` already uses; the two share the
 paced loops, told apart only by their driver. Solo and headless it runs flat out
 unless `-speed` says otherwise; presented or in a session it is paced.
+`-bot … -watch` is live play: its operator can use `:n` and `:bot`. Opening the
+command line suspends graph input; a networked run keeps ticking. Journal viewers
+retain their inspection-only command restrictions.
 
 Seats (`internal/app/seat.go`) are the same driver on further headless instances
 in the holder's process, each on its own goroutine, paced against the authority
@@ -114,6 +120,9 @@ Nothing here is a new message. A host's bot is admitted by the accept loop that
 already serves TCP and WebSocket listeners; a guest's bot is one more participant
 from the guest's address, which shares that address's join budget. A seat never
 advertises, so it is never elected, and it ends once no session is left for it.
+An inherited authority lazily binds a loopback admission listener on the existing
+transport. Its established links stay attached; newly added bots use that listener
+instead of the departed host's address.
 
 The relay item is where a guest's bots move onto its own link. That changes the
 link and nothing a roster says, and it waits until bots work in every composition:
@@ -135,7 +144,7 @@ its holder's fate so it never re-parents, and it needs no hole punching.
 |---|---|---|
 | 1 | landed | The bot itself: pointer in map cells, `internal/bot`, `vif -bot`, shipped graphs. |
 | 2–3 | landed | Seats: the host's and a guest's bots in every composition of §4, `-bots`, `:bot`, occupancy, the pause rule. |
-| 4 | P1 | Marking, and the fleet: an allocator request for bots. |
+| 4 | P1 | The fleet: an allocator request for bots. Slot marking landed in the troubleshooting pass (§12). |
 | 5 | P1 | Decision logic: richer vocabulary and a motor layer. |
 | 6 | P2 | Relays own subtrees: R1–R4 for a guest's bots, then R5. |
 | 7 | P3 | Offline genetic training. |
@@ -146,30 +155,22 @@ its holder's fate so it never re-parents, and it needs no hole punching.
 `vif -bot <name|path>` plays the seat from a graph, solo, hosting or joining
 through the driven session path `-script` uses. `internal/bot` holds the graph, the
 driver and the vocabulary of §6; `IntentFor` and `AppendCommand` in `internal/input`
-serve scripts and graphs alike; `roam` and `patrol` ship in `internal/asset/bot/`.
+serve scripts and graphs alike; `default` ships in `internal/asset/bot/`.
 A solo run is a pure function of its seed, and `./script/test.sh bot` plays every
-shipped graph through the binary and joins `roam` to a dedicated host. `roam` types
-a few hundred glyphs a minute and misses about one keystroke in two hundred (§6).
+shipped graph through the binary and joins `default` to a dedicated host.
 
 ### Phases 2–3 — seats (landed)
 
-`-bots N[:graph]` on a played, served or bot run, and `:bot [add [graph]|drop
-<slot>]`, seat bots as §4 lays out; the run's restart carries its seats into the
+`-bots N[:graph]` on a played, served or bot run, and `:bot [add [N[:graph]|graph]|drop
+<hex-slot>]`, seat bots as §4 lays out; the run's restart carries its seats into the
 next run. Occupancy counts them, since they are roster entries. The pause rule is
 `World.SeatsOnly`. Two fixes came with it: a startup lobby waits for every rostered
 handshake before its gate sends to them, which simultaneous dials used to fail, and
 a loopback dial spends no join budget at the game host, while the fleet's front
-door keeps its own budget per player. Open:
+door keeps its own budget per player. Seat instance logs still need a seat tag.
 
-- A seat added after its guest holder inherited the session dials the address the
-  holder joined, which is gone.
-- A seat's own instance logs without a seat tag.
+### Phase 4 — the fleet
 
-### Phase 4 — marking and the fleet
-
-- `JoinerReport.Bot` → `RosterEntry.Bot` → `ParticipantJoinedPayload.Bot` → the
-  cursor's Shared flag, for `-bot`, `-script` and seat participants. The peer cursor
-  renderer marks a bot; the status bar's participant badge counts bots apart.
 - The create request gains `bots` (0 to `players - 1`); the session pod runs with
   `-bots K` and requests per bot what §9 measured.
 - A load test of networked bots, which also gives the session stack continuous play.
@@ -179,7 +180,7 @@ door keeps its own budget per player. Open:
 - A motor layer over `pkg/navigation` for targets the viewport does not show,
   event transitions from the bot's own dispatch, threat and evasion guards, and
   utilities scored within a state.
-- Exit: a graph outscores `roam` over a fixed seed set on every shipped scenario.
+- Exit: a graph outscores `default` over a fixed seed set on every shipped scenario.
 
 ### Phases 6–8
 
@@ -200,7 +201,7 @@ private graph reads without the divergence warning a shared script gets.
 | `Text` | `text` | a character intent per rune |
 | `Command` | `text` | the ex-command round trip |
 | `TypeGlyph` | — | the rune of the glyph under the cursor, if there is one |
-| `PointAt` | `target`, `fire` | the pointer at the nearest target, clamped to the viewport; `fire` clicks instead of moving |
+| `PointAt` | `target`, `fire` | the nearest target, clamped to the viewport; text starts at its visible run's left edge; `fire` clicks instead of moving |
 
 | Guard | Args | Passes when |
 |---|---|---|
@@ -297,7 +298,7 @@ settles only what it pushed.
 ## 10. Verification
 
 - Phase 1: two solo runs from one seed journal the same records; every shipped graph
-  plays without overflowing its queue and `roam` types what it reaches; a broken
+  plays without overflowing its queue and `default` types what it reaches; a broken
   graph fails at load naming the fault; intents land in order at the rate; the
   pointer rule; `./script/test.sh bot` through the binary, solo and joined.
 - Phases 2–3: over real loopback sockets, a holder's bots come and go as participants,
@@ -311,7 +312,7 @@ settles only what it pushed.
 
 ## 11. Open questions
 
-1. **Labels.** Participants have no names; a bot's marker is its only label.
+1. **Labels.** Participants have no names; hexadecimal slots identify cursors for this session only.
 2. **Difficulty.** The intent rate is the natural knob; whether `-bots` and the site
    expose it is open.
 3. **td per bot.** A sparse or shared grid representation, if phase 2's
@@ -319,3 +320,83 @@ settles only what it pushed.
 4. **A bot's geometry.** A seat takes the fleet's 120×40, so a dedicated host with no
    `-size` whose first joiner is its own bot serves the fleet's map; whether a
    person's seats should take the person's terminal instead is open.
+
+## 12. Troubleshooting after phases 2–3
+
+This pass fixes the manual reports against the first seven implementation commits.
+The old behaviour is retained here for the next iteration; the sections above
+describe the current contract.
+
+| Report | Previous behaviour | Current behaviour |
+|---|---|---|
+| Add a bot after guest takeover | `seatConfigLocked` always reused `JoinAddress`, including after that host departed. | Authority is checked first. A successor lazily opens one loopback admission listener on its existing transport; subsequent additions reuse it. |
+| Identify cursors | Colour distinguished peers locally; a future bot-only wire flag was proposed. | All remote cursors display their existing slot in uppercase hexadecimal. The local cursor remains unmarked, with its slot in `nP:s`; colours and latency qualifiers remain. |
+| Backward typing | Nearest-glyph acquisition could select the rightmost remaining letter, then reacquire letters to its left. | `PointAt glyph` starts at the left edge of the contiguous typeable run within the viewport. Gold and composite members are excluded from that scan. |
+| No glyphs / unrewarding patrol | `roam` waited for text; `patrol` moved and fired randomly without seeking nuggets. | One `default` graph keeps text/gold behaviour, patrols when text is absent and checks for nugget jumps between movements, including distant nuggets. |
+| Loot stuck at corners | An owner's private loot flow could survive wall changes while its goal stayed still. Small goal movements also failed to dirty the common cache. | `FlowFieldCache` observes passability by value, invalidates immediately on change and schedules small target changes at its existing throttle. Loot and ordinary navigation use this mechanism. |
+| `:n` reported a replay / `:bot add 1:patrol` failed under `-watch` | Presented bots borrowed the replay viewer's read-only commands; addition accepted only a graph name. | Watched bots route operator commands through `App.Inject`. Addition shares `-bots`' count grammar and accepts a plain graph too. |
+
+### Admission and succession
+
+The extra listener uses the ordinary session handshake, admission budget and
+mid-run capture gate, and closes with its transport. It does not replace existing
+peer links or recreate the holder's bots. The old authority's participant ID is
+also released for reuse: the protected ID is the current authority, not always 1.
+
+Permanent loopback admission while the holder is still a guest would require
+forwarding admission and captures through it (R1–R4). That remains phase 6. This
+fix only adds a local entry point once the holder actually has authority; it adds
+no messages, wire fields or manifest changes. Existing bots survive through the
+session's established succession links.
+
+The takeover regression waits until the holder sees its bot and has its warm peer
+link, then removes the host, adds two bots through `:bot add 2:patrol` and verifies
+the original bot remains running. Killing the host during incomplete admission
+does not provide that precondition.
+
+A separate, reproducible session limit remains: an established host and its seats
+leaving together can straddle a roster crossing at handoff. Survivors may see
+different roster lengths and refuse the new term, or retain departed cursors.
+This also needs a succession-level regression, recorded in `todo.md`; opening a
+bot admission listener does not repair conflicting handoff rosters.
+
+### Policy, identity and operator controls
+
+`default` replaces the two embedded graphs. `roam` and `patrol` remain fallback
+aliases, after normal resource resolution. An installed old graph under either
+name still overrides the fallback; use `-bot default` for the merged policy or
+update that installed graph deliberately. The policy uses the existing vocabulary
+and intent rate. Path planning, threat scoring and learning remain later phases.
+
+Slot markers identify people and bots equally, are stable across views and survive
+handoff. They are session slots, not persistent identities; departed slots can be
+reused. `:bot` lists slots in the same notation and `:bot drop A` drops slot 10.
+This replaces the proposed phase-4 bot flag with the presentation change requested
+here; the fleet request and occupancy accounting need no bot identity field.
+
+While the operator holds a watched bot's command line, its graph stops supplying
+input. A networked run continues ticking so joins and peers can progress; a solo
+run waits. Actual replay viewers keep their read-only rules. `:n` resets the
+current game, and `:bot add [N[:graph]|graph]` adds seats. This does not introduce a
+new human-takeover mode or the scenario restart loop absent from driven runs.
+
+### Navigation and verification
+
+The `flow` overlay showed the shared navigation group's field, while loot followed
+its owner's separate private field. A correct overlay therefore did not prove the
+loot cache was current. Both now compare the grids they consume; ordinary point
+and composite fields also observe wall changes, and route graphs compare their
+grid generation before reuse. Restored fields retain their captured throttle
+phase. No per-store write counters or new snapshot fields were added.
+
+Regression coverage includes approaching text from the right, movement without
+text and a distant nugget jump; all hexadecimal peer markers and the local badge;
+a watched operator resetting and admitting a bot while a command stays open;
+takeover additions over real sockets; small-goal cache refreshes; and loot reaching
+a stationary owner through a maze built after its cache was warmed.
+
+The affected packages and `./script/test.sh bot` pass, as do the default,
+`vif_headless` and WebAssembly builds. Generated CLI documentation/completions
+were refreshed. The separate
+simultaneous-departure limitation above is not claimed as fixed. Seat log tags,
+holder-sized bot geometry and future phase work remain open.
