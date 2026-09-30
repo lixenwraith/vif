@@ -14,9 +14,9 @@ skip host discovery and use embedded assets.
 
 `wad/` mirrors the installed tree exactly, so installing it is a copy and
 `vif -config-dir wad` plays the repository checkout without installing
-anything. The embedded keymap has no `wad/` copy: it is installed from
-`internal/asset/input/keymap.toml`, so the file the binary falls back to and the
-file a user edits are one source.
+anything. The embedded keymap and bot graphs have no `wad/` copy: they are
+installed from `internal/asset/input/keymap.toml` and `internal/asset/bot/`, so the
+file the binary falls back to and the file a user edits are one source.
 
 ```text
 wad/                            internal/asset/
@@ -24,8 +24,9 @@ wad/                            internal/asset/
 │   ├── main/   default          ├── content/   fallback corpus
 │   ├── blank/  scaffold         ├── input/     default keymap
 │   └── td/     tower defence    ├── audio/     built-in sound bank
-├── content/    typing corpus    ├── vif.toml   default settings
-└── image/      .vifimg assets   └── splash_font.go
+├── content/    typing corpus    ├── bot/       shipped bot graphs
+└── image/      .vifimg assets   ├── vif.toml   default settings
+                                 └── splash_font.go
 ```
 
 The external `main` scenario and the embedded fallback are intentionally
@@ -53,7 +54,8 @@ vif/
 ├── input/       keymap.toml
 ├── audio/       music.toml, sounds.toml (optional overrides)
 ├── content/     .txt and .toml typing corpus
-└── image/       .vifimg wall assets
+├── image/       .vifimg wall assets
+└── bot/         bot graphs, one <name>.toml each
 ```
 
 `scenario/main/` is the automatically discovered scenario. The other directories
@@ -86,6 +88,7 @@ the embedded fallback.
 | Sounds | `audio/sounds.toml` | built-in sound bank |
 | Content | `content/` | embedded tutorial corpus |
 | Wall image | `image/<name>.vifimg` | none; failure is reported in the game status |
+| Bot graph | `bot/<name>.toml`, or the path `-bot` names | the embedded graph of that name |
 
 An explicit scenario directory means one whose entry is directly at
 `<directory>/scenario.toml`. A named scenario is searched under

@@ -20,6 +20,7 @@ const (
 	AudioDirName     = "audio"
 	ContentDirName   = "content"
 	ImageDirName     = "image"
+	BotDirName       = "bot"
 	LogDirName       = "log"
 	JournalDirName   = "journal"
 	MusicDirName     = "music"

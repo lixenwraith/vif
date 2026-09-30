@@ -7,9 +7,12 @@ package resource
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/service"
 )
@@ -106,6 +109,30 @@ func isScenarioName(name string) bool {
 // default keymap.
 func Keymap(o Options) (string, error) {
 	return paths.ConfigFile(newResolver(o).roots, o.Keymap, paths.InputDirName, paths.KeymapConfigFile)
+}
+
+// BotGraph resolves a bot graph by path or by name: an existing file wins, and a
+// name finds bot/<name>.toml under the configured roots, then the embedded copy.
+// A graph is a participant's own, like its keymap, so -d does not pin it. It
+// returns the document and the name the graph goes by.
+func BotGraph(o Options, spec string) ([]byte, string, error) {
+	if info, err := os.Stat(spec); err == nil && !info.IsDir() {
+		data, err := os.ReadFile(spec)
+		return data, strings.TrimSuffix(filepath.Base(spec), ".toml"), err
+	}
+	if spec == "" || !isScenarioName(spec) {
+		return nil, "", fmt.Errorf("bot graph %q: no such file", spec)
+	}
+	file := spec + ".toml"
+	if p := paths.FindFile(newResolver(o).roots, paths.BotDirName, file); p != "" {
+		data, err := os.ReadFile(p)
+		return data, spec, err
+	}
+	data, err := fs.ReadFile(asset.DefaultBots, file)
+	if err != nil {
+		return nil, "", fmt.Errorf("bot graph %q not found as a path, in a configuration root or embedded", spec)
+	}
+	return data, spec, nil
 }
 
 // Files supplies the ordered configuration roots to FileService. Resolution
