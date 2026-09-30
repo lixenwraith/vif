@@ -23,10 +23,11 @@ const ScriptPaceMax = "max"
 // scriptPacing resolves a run's wall pace: the interval one simulation tick may
 // occupy, and whether pacing applies. An empty spec takes the default from the run
 // rather than the flags — a script that starts in a session is paced from its first
-// tick, a solo one runs flat out until it opens a session with :host.
+// tick, a solo one runs flat out until it opens a session with :host. Bots seat
+// in a session, so a run with them starts in one.
 func scriptPacing(cfg Config) (interval time.Duration, paced bool, err error) {
 	if cfg.TimeScaleSpec == "" {
-		inSession := cfg.HostAddress != "" || cfg.JoinAddress != ""
+		inSession := cfg.HostAddress != "" || cfg.JoinAddress != "" || len(cfg.Bots) > 0
 		return parameter.GameUpdateInterval, inSession, nil
 	}
 	if cfg.TimeScaleSpec == ScriptPaceMax {
@@ -83,14 +84,11 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 // time unless -speed says otherwise. It reports its counters however it stops;
 // quit says the graph ended the run itself.
 func RunBot(cfg Config, spec string) (bot.Stats, error) {
-	data, name, err := resource.BotGraph(cfg.Resources, spec)
+	graph, err := loadBotGraph(cfg.Resources, spec)
 	if err != nil {
 		return bot.Stats{}, err
 	}
-	graph, err := bot.ParseGraph(name, data)
-	if err != nil {
-		return bot.Stats{}, err
-	}
+	name := graph.Name
 	if cfg.Mode == ModeScript && cfg.TimeScaleSpec == "" {
 		cfg.TimeScaleSpec = "1"
 	}
@@ -118,11 +116,29 @@ func RunBot(cfg Config, spec string) (bot.Stats, error) {
 	return stats, err
 }
 
-// runDriven plays one driven participant, a script or a bot: it builds the App in
-// the session the flags name, lets build put a driver on it, and steps that driver
-// headless under the run's wall pace, or presented. finished is false when a
-// signal or a cancelled session stopped the run first.
+// loadBotGraph resolves and parses one graph spec, a name or a path.
+func loadBotGraph(o resource.Options, spec string) (*bot.Graph, error) {
+	data, name, err := resource.BotGraph(o, spec)
+	if err != nil {
+		return nil, err
+	}
+	return bot.ParseGraph(name, data)
+}
+
+// runDriven plays one driven participant, a script or a bot, until it finishes or
+// the process is signalled.
 func runDriven(cfg Config, kind, name string, build func(*App) (pacedSource, error)) (finished bool, err error) {
+	signals, stopSignals := notifySignals()
+	defer stopSignals()
+	return drive(cfg, kind, name, signals, nil, build)
+}
+
+// drive builds the App in the session cfg names, lets build put a driver on it, and
+// steps that driver headless under the run's wall pace, or presented. finished is
+// false when stop or a cancelled session ended the run first. While hold reports
+// true the run stands still, as a paused clock does, and re-anchors its pace after.
+func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() bool,
+	build func(*App) (pacedSource, error)) (finished bool, err error) {
 	if cfg.Mode != ModeScript {
 		cfg.Mode = ModeHeadless
 	}
@@ -132,8 +148,6 @@ func runDriven(cfg Config, kind, name string, build func(*App) (pacedSource, err
 		return false, err
 	}
 
-	signals, stopSignals := notifySignals()
-	defer stopSignals()
 	a, err := newScriptApp(cfg, signals)
 	if err != nil {
 		if errors.Is(err, errSessionCanceled) {
@@ -166,6 +180,13 @@ func runDriven(cfg Config, kind, name string, build func(*App) (pacedSource, err
 		case <-signals:
 			return false, nil
 		default:
+		}
+		if hold != nil && hold() {
+			if !waitScriptTick(signals, parameter.PausedPollInterval) {
+				return false, nil
+			}
+			nextTick = time.Now() // [wall]
+			continue
 		}
 
 		more, err := src.Step()
@@ -239,6 +260,10 @@ func newScriptApp(cfg Config, signals <-chan os.Signal) (*App, error) {
 		return fail(err)
 	}
 	if a.cfg.HostAddress != "" {
+		// Before the lobby, which the host's own bots may be all of.
+		if err := a.seatBots(); err != nil {
+			return fail(err)
+		}
 		if err := a.startHostSession(signals); err != nil {
 			return fail(err)
 		}
@@ -257,6 +282,11 @@ func newScriptApp(cfg Config, signals <-chan os.Signal) (*App, error) {
 	// about to start stepping. On a run that hosts nothing this is inert until a
 	// later :host opens a session.
 	a.openMidRunJoins()
+	if a.cfg.HostAddress == "" {
+		if err := a.seatBots(); err != nil {
+			return fail(err)
+		}
+	}
 	return a, nil
 }
 

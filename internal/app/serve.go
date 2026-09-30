@@ -67,6 +67,10 @@ func (a *App) Serve() error {
 	// lobby, because the window an allocated session gives its first guest is the
 	// lobby. An unbounded policy starts too and simply never reaches a deadline.
 	a.life.Start(time.Now())
+	// Before the lobby, which the host's own bots may be all of.
+	if err := a.seatBots(); err != nil {
+		return err
+	}
 
 	if err := a.startHostSession(sigChan); err != nil {
 		switch {
@@ -106,7 +110,9 @@ func (a *App) Serve() error {
 			// A signal drains rather than exits: the roster is what the session is
 			// for, and a rollout that ended a match in progress would be a rollout
 			// nobody could schedule. A second signal ends it, and so does a drain
-			// that finds an empty roster or runs out its deadline.
+			// that finds an empty roster or runs out its deadline. The host's own
+			// bots are nobody's match, so they leave at once.
+			a.haltSeats()
 			st := a.interrupt(time.Now(), "signal "+sig.String())
 			vlog.Info("app", "msg", "signal received",
 				"signal", sig.String(), "phase", st.Phase.String(),

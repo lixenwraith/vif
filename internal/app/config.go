@@ -186,6 +186,10 @@ type Config struct {
 	// which is what a dedicated host always does.
 	Participants int
 
+	// Bots names the graph of each bot seat this run holds, one entry a bot. Seats
+	// join the session the run is in, and a run in none hosts one on loopback.
+	Bots []string
+
 	// Width and Height are the terminal-equivalent dimensions a caller-driven run
 	// assumes; margins apply as usual, so the viewport is smaller than these.
 	// Ignored when the terminal owns geometry; zero selects the defaults.
@@ -374,6 +378,9 @@ func (c Config) Validate() error {
 	if c.Participants != 0 && c.JoinAddress != "" {
 		return errors.New("-players configures a host, not a joining guest")
 	}
+	if len(c.Bots) > parameter.MaxPlayers {
+		return fmt.Errorf("-bots %d is more than the %d a session holds", len(c.Bots), parameter.MaxPlayers)
+	}
 	if c.LogScope != "" {
 		if _, err := vlog.ParseScopes(c.LogScope, vlog.ScopeAll); err != nil {
 			return err
@@ -385,7 +392,7 @@ func (c Config) Validate() error {
 		}
 	}
 	if c.scriptedSession && c.TimeScaleSpec == ScriptPaceMax &&
-		(c.HostAddress != "" || c.JoinAddress != "") {
+		(c.HostAddress != "" || c.JoinAddress != "" || len(c.Bots) > 0) {
 		return errors.New("-speed max cannot pace a session: a script that outruns its peer " +
 			"is not simulating the session it is in")
 	}

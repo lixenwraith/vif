@@ -2,15 +2,22 @@ package app
 
 import (
 	"io/fs"
+	"net"
+	"os"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
+	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 )
 
@@ -136,6 +143,155 @@ func TestEveryShippedGraphPlays(t *testing.T) {
 		if st.Injected == 0 || st.Dropped != 0 {
 			t.Errorf("%s: injected %d, dropped %d", name, st.Injected, st.Dropped)
 		}
+	}
+}
+
+// driveBot plays graph on the run cfg describes, as vif -bot does, on its own
+// goroutine and paced, and returns the run once the driver is on it, with its stop.
+func driveBot(t *testing.T, cfg Config, graph string, hold func() bool) (*App, func()) {
+	t.Helper()
+	cfg.Seed, cfg.Width, cfg.Height = fixtureSeed, BotWidth, BotHeight
+	cfg.Resources = resource.Options{Embedded: true}
+	g, err := loadBotGraph(cfg.Resources, graph)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop, built, done := make(chan os.Signal), make(chan *App, 1), make(chan error, 1)
+	go func() {
+		_, err := drive(cfg, "bot", graph, stop, hold, func(a *App) (pacedSource, error) {
+			d, err := bot.NewDriver(a, a.ctx, g, a.Seed(), a.localParticipant())
+			built <- a
+			return botSource{d}, err
+		})
+		done <- err
+	}()
+	var a *App
+	select {
+	case a = <-built:
+	case err := <-done:
+		t.Fatalf("%s did not start: %v", graph, err)
+	case <-time.After(socketWait):
+		t.Fatalf("%s did not start within %s", graph, socketWait)
+	}
+	var once sync.Once
+	halt := func() {
+		once.Do(func() {
+			close(stop)
+			if err := <-done; err != nil {
+				t.Errorf("%s: %v", graph, err)
+			}
+		})
+	}
+	t.Cleanup(halt)
+	return a, halt
+}
+
+// waitForCursors waits for a running instance's roster to hold n cursors.
+func waitForCursors(t *testing.T, a *App, n int) {
+	t.Helper()
+	var held int
+	for deadline := time.Now().Add(socketWait); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		a.World().RunSafe(func() { held = a.World().Resources.Player.Count() })
+		if held == n {
+			return
+		}
+	}
+	t.Fatalf("the roster holds %d cursors, want %d", held, n)
+}
+
+// TestAHoldersBotsComeAndGoAsParticipants: a run with bots and no session hosts one
+// on loopback, its bots join it as participants, one dropped departs, and the rest
+// leave with the run.
+func TestAHoldersBotsComeAndGoAsParticipants(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	holder, stop := driveBot(t, Config{Bots: []string{"roam", "patrol"}}, "patrol", nil)
+	if addr := holder.HostAddr(); !strings.HasPrefix(addr, "127.0.0.1:") {
+		t.Fatalf("a run with bots hosts on %q, not on loopback", addr)
+	}
+	waitForCursors(t, holder, 3)
+	// A seat learns its slot from its own gate, which can finish after the holder
+	// has applied its arrival.
+	for err := holder.dropSeat(1); err != nil; err = holder.dropSeat(1) {
+		if len(holder.seatGraphs()) < 2 {
+			t.Fatalf("a seat left before it was dropped: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	waitForCursors(t, holder, 2)
+	stop()
+	if left := holder.seatGraphs(); len(left) != 0 {
+		t.Fatalf("seats %v outlived their holder", left)
+	}
+}
+
+// TestAGuestsBotsLeaveWithIt: a guest's bots dial the session it joined and go when
+// it does, while the host's own bots stay.
+func TestAGuestsBotsLeaveWithIt(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	_, leave := driveBot(t, Config{JoinAddress: host.HostAddr(), Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 4)
+	leave()
+	waitForCursors(t, host, 2)
+}
+
+// TestALobbyClosesOnlyOnGuestsOnItsLink: a dial is rostered before its handshake
+// ends, so a lobby its own bots fill at once has entries still in flight when its
+// first guest closes it, and its start gate has to wait for them.
+func TestALobbyClosesOnlyOnGuestsOnItsLink(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	bots := slices.Repeat([]string{"roam"}, 6)
+	host, _ := driveBot(t, Config{HostAddress: freeAddress(t), Bots: bots}, "patrol", nil)
+	waitForCursors(t, host, len(bots)+1)
+}
+
+// TestASeatStandsStillWhileItsHoldersClockIsStopped: held, a driven run takes no
+// tick, and released it resumes at pace rather than paying the hold back.
+func TestASeatStandsStillWhileItsHoldersClockIsStopped(t *testing.T) {
+	var held atomic.Bool
+	held.Store(true)
+	a, _ := driveBot(t, Config{TimeScaleSpec: "1"}, "patrol", held.Load)
+	time.Sleep(20 * parameter.GameUpdateInterval)
+	if at := a.Position().Tick; at != 0 {
+		t.Fatalf("a held run reached tick %d", at)
+	}
+	held.Store(false)
+	time.Sleep(5 * parameter.GameUpdateInterval)
+	if at := a.Position().Tick; at == 0 || at > 12 {
+		t.Fatalf("released for five tick intervals after twenty held, the run reached tick %d", at)
+	}
+}
+
+// TestAHoldersBotsDialItFromThisMachine: a bot reaches its holder's listener over
+// the loopback of the family it bound, and a loopback dial spends no join budget,
+// so a host seats more bots than one address may join in a window.
+func TestAHoldersBotsDialItFromThisMachine(t *testing.T) {
+	t.Parallel()
+	for bound, want := range map[string]string{
+		"127.0.0.1:7777":     "127.0.0.1:7777",
+		"0.0.0.0:7777":       "127.0.0.1:7777",
+		"[::]:7777":          "[::1]:7777",
+		"ws://[::]:7777":     "ws://[::1]:7777",
+		"192.0.2.10:7777":    "192.0.2.10:7777",
+		"ws://127.0.0.1:777": "ws://127.0.0.1:777",
+	} {
+		if got := loopbackOf(bound); got != want {
+			t.Errorf("a listener bound on %s is dialled at %s, want %s", bound, got, want)
+		}
+	}
+	a := &App{admissions: network.NewAdmissionLimiter()}
+	for i := range parameter.MaxPlayers {
+		if err := a.admitDial(&net.TCPAddr{IP: net.IPv6loopback, Port: 40000 + i}); err != nil {
+			t.Fatalf("loopback dial %d was refused: %v", i+1, err)
+		}
+	}
+	var err error
+	for range parameter.NetworkAdmitBurst + 1 {
+		err = a.admitDial(&net.TCPAddr{IP: net.ParseIP("192.0.2.7"), Port: 1})
+	}
+	if err == nil {
+		t.Fatal("a remote address was not budgeted")
 	}
 }
 

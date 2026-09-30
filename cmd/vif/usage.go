@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/lixenwraith/vif/internal/app"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
@@ -39,6 +40,9 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"players"}, arg: "<n>", hint: fmt.Sprintf(
 				"Roster ceiling including self, 2..%d; unset holds the whole roster; with a -join site, the one requested",
 				parameter.MaxPlayers)},
+			{names: []string{"bots"}, arg: "<n[:graph]>", hint: fmt.Sprintf(
+				"Seat n bots playing graph (default %s) in this run's session; a solo run hosts them on loopback",
+				app.DefaultBotGraph)},
 			{names: []string{"authority"}, arg: "host|migrate",
 				hint: "Where authorship goes when the authoring participant leaves; default host with -serve, migrate otherwise"},
 			{names: []string{"slow-window"}, arg: "<dur>",

@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -329,6 +330,7 @@ func buildConfig() app.Config {
 	if flagSession.size != "" {
 		cfg.Width, cfg.Height, _ = parseSize(flagSession.size) // validated in validateInvocation
 	}
+	cfg.Bots, _ = parseBots(flagSession.bots) // validated in validateInvocation
 
 	cfg.AudioMuted = *flagMute
 	cfg.MusicWAV = musicWAVDir()
@@ -431,6 +433,7 @@ type sessionFlags struct {
 	probe       string
 	size        string
 	players     int
+	bots        string
 	authority   string
 	listen      string
 	noAdvertise bool
@@ -474,6 +477,9 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.IntVar(&f.players, "players", 0, fmt.Sprintf(
 		"Ceiling on the roster, itself included (2..%d; default the whole roster); with a -join site, the one requested",
 		parameter.MaxPlayers))
+	fs.StringVar(&f.bots, "bots", "", fmt.Sprintf(
+		"Seat n bots playing graph (default %s) in this run's session; a solo run hosts them on loopback",
+		app.DefaultBotGraph))
 	fs.StringVar(&f.listen, "listen", "", fmt.Sprintf(
 		"With -join in a %q session, the address this participant is dialled back on. "+
 			"Default the host's own port, falling back to an OS-assigned one when that "+
@@ -508,10 +514,13 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	if f.authority != "" && f.host == "" && f.serve == "" {
 		return fmt.Errorf("-authority is the policy a host sets for its session; a guest adopts the one it is offered")
 	}
-	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0 ||
+	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0 || f.bots != "" ||
 		f.authority != "" || f.listen != "" || f.noAdvertise || f.name != "" || f.lifetime().Bounded()) &&
 		(schema || check || replay != "") {
-		return fmt.Errorf("-host, -join, -serve, -probe, -players, -authority, -listen, -no-advertise, -name and the session lifetime bounds are available only in interactive play")
+		return fmt.Errorf("-host, -join, -serve, -probe, -players, -bots, -authority, -listen, -no-advertise, -name and the session lifetime bounds are available only in interactive play")
+	}
+	if _, err := parseBots(f.bots); err != nil {
+		return err
 	}
 	if e, err := network.ParseEndpoint(f.join); f.players != 0 && f.join != "" && err == nil && e.Scheme != network.SchemeSite {
 		return fmt.Errorf("-players configures a host, or the session a -join site creates")
@@ -586,6 +595,19 @@ func validSessionName(name string) error {
 		}
 	}
 	return nil
+}
+
+// parseBots reads -bots N[:graph] as one graph spec a bot.
+func parseBots(spec string) ([]string, error) {
+	if spec == "" {
+		return nil, nil
+	}
+	count, graph, _ := strings.Cut(spec, ":")
+	n, err := strconv.Atoi(count)
+	if err != nil || n < 1 || n > parameter.MaxPlayers {
+		return nil, fmt.Errorf("-bots %q is not N or N:graph with N in 1..%d", spec, parameter.MaxPlayers)
+	}
+	return slices.Repeat([]string{cmp.Or(graph, app.DefaultBotGraph)}, n), nil
 }
 
 // parseSize reads a WxH geometry for a run that derives none from a terminal.

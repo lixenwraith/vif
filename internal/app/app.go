@@ -53,6 +53,9 @@ type restartRequest struct {
 	Rejoin  bool
 	Join    string
 	dialled *joinDial
+
+	// Bots are the graphs of the seats this run held, which the next one seats again.
+	Bots []string
 }
 
 // App owns the wired runtime: services, world, input, scheduler, and the selected
@@ -165,6 +168,11 @@ type App struct {
 	stageMu   sync.Mutex
 	staging   *App
 	stagedFor stagingKey
+
+	// seats are the bots this run holds. seatsMu is taken under the world lock and
+	// never takes it.
+	seatsMu sync.Mutex
+	seats   []*seat
 }
 
 // New wires the runtime, releasing anything already started on failure. Errors are
@@ -515,6 +523,7 @@ func (a *App) buildAnchor() event.JournalAnchor {
 // Safe on a partially constructed App
 func (a *App) Close() {
 	vlog.Info("app", "msg", "shutdown begin")
+	a.closeSeats()
 	if a.scheduler != nil {
 		a.scheduler.Stop()
 	}

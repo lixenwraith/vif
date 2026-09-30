@@ -5,6 +5,7 @@ complete -c vif -o serve -x -d 'Bind a headless session with no local cursor, e.
 complete -c vif -o join -x -d 'Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given'
 complete -c vif -o name -x -d 'Name this host answers to, so one address can serve several sessions'
 complete -c vif -o players -x -d 'Roster ceiling including self, 2..16; unset holds the whole roster; with a -join site, the one requested'
+complete -c vif -o bots -x -d 'Seat n bots playing graph (default roam) in this run\'s session; a solo run hosts them on loopback'
 complete -c vif -o authority -x -a 'host migrate' -d 'Where authorship goes when the authoring participant leaves; default host with -serve, migrate otherwise'
 complete -c vif -o slow-window -x -d 'Window a participant\'s lateness is judged over; host only, 0 never evicts (default 20s)'
 complete -c vif -o slow-late -x -d 'Evict at this many late epochs per second over the window; 0 ignores lateness (default 5)'

@@ -63,7 +63,7 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 	if sc.Digest() == a.scenario.Digest() {
 		return false, nil // already running these bytes; the caller resets instead
 	}
-	req := &restartRequest{Scenario: name}
+	req := &restartRequest{Scenario: name, Bots: a.seatGraphs()}
 	if port != nil {
 		// Where this run's participants come back to. The address it already
 		// listens on when it opened the session; the one it advertised when it
@@ -99,7 +99,7 @@ func (a *App) receiveSessionRestart(from uint32, addr string) {
 	if a.cfg.Mode != ModePlay || a.cfg.JoinAddress == "" {
 		return // a coordinator hears its own broadcast back on a mesh; a driven run has no loop
 	}
-	if a.restart.CompareAndSwap(nil, &restartRequest{Rejoin: true, Join: addr}) {
+	if a.restart.CompareAndSwap(nil, &restartRequest{Rejoin: true, Join: addr, Bots: a.seatGraphs()}) {
 		vlog.Info("app", "msg", "session restarting", "authority", from, "dial", addr)
 	}
 }

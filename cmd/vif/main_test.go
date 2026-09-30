@@ -4,9 +4,11 @@ import (
 	"flag"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/app"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
@@ -216,6 +218,17 @@ func TestSessionFlags(t *testing.T) {
 	}
 	if err := (sessionFlags{join: "host.example:7777", players: 4}).validateInvocation(false, false, ""); err == nil {
 		t.Fatal("a joining guest accepted a host lobby cap")
+	}
+	if bots, err := parseBots("2"); err != nil || !slices.Equal(bots, []string{app.DefaultBotGraph, app.DefaultBotGraph}) {
+		t.Fatalf("-bots 2 seats %v, %v", bots, err)
+	}
+	if bots, err := parseBots("1:patrol"); err != nil || !slices.Equal(bots, []string{"patrol"}) {
+		t.Fatalf("-bots 1:patrol seats %v, %v", bots, err)
+	}
+	for _, spec := range []string{"0", "17", "x", ":roam"} {
+		if err := (sessionFlags{bots: spec}).validateInvocation(false, false, ""); err == nil {
+			t.Fatalf("-bots %s was accepted", spec)
+		}
 	}
 }
 
