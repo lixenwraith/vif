@@ -171,8 +171,9 @@ type App struct {
 
 	// seats are the bots this run holds. seatsMu is taken under the world lock and
 	// never takes it.
-	seatsMu sync.Mutex
-	seats   []*seat
+	seatsMu     sync.Mutex
+	seats       []*seat
+	seatAddress string // extra loopback join listener after succession; world lock
 }
 
 // New wires the runtime, releasing anything already started on failure. Errors are

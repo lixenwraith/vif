@@ -41,15 +41,10 @@ func peerContext(ctx *engine.GameContext) render.RenderContext {
 	}
 }
 
-// TestPeerCursorsAreDrawnAndTheLocalOneIsNot is the defect this closes: a
-// participant used to be visible only through the effects it happened to be
-// projecting, so one holding no shield was not on the map at all.
-//
-// The local cursor is excluded because its own renderer draws it, with the mode
-// and the cell colour a player needs and a peer must not borrow.
+// A peer keeps its slot marker; the local cursor keeps its own presentation.
 func TestPeerCursorsAreDrawnAndTheLocalOneIsNot(t *testing.T) {
 	t.Parallel()
-	gameCtx, cursors := peerWorld(t, 3)
+	gameCtx, cursors := peerWorld(t, 16)
 	gameCtx.World.Resources.Config.ColorMode = terminal.ColorModeTrueColor
 	rc := peerContext(gameCtx)
 
@@ -77,6 +72,9 @@ func TestPeerCursorsAreDrawnAndTheLocalOneIsNot(t *testing.T) {
 		t.Fatal("the peer renderer drew the local cursor")
 	}
 	for slot := 1; slot < len(cursors); slot++ {
+		if got := cellFor(cursors[slot]).Rune; got != rune("0123456789ABCDEF"[slot]) {
+			t.Fatalf("slot %X drew %q", slot, got)
+		}
 		want := peerCursorColor(uint8(slot))
 		if got := cellFor(cursors[slot]).Bg; got != want {
 			t.Fatalf("slot %d drew background %v, want its slot colour %v", slot, got, want)
