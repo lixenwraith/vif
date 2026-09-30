@@ -372,7 +372,7 @@ bot)
 		printf 'transitions = [{ trigger = "Tick", target = "StopQuit", guard = "StateTimeExceeds", guard_args = { ms = %s } }]\n' "$1"
 		printf '\n[states.StopQuit]\non_enter = [{ action = "Intent", payload = { name = "quit" } }]\n'
 	}
-	botstat() { sed -n "s/.*\"msg\":\"bot complete\".*\"$2\":\([0-9]*\).*/\1/p" "$1"; }
+	botstat() { sed -n "s/.*\"msg\":\"bot stopped\",.*\"quit\":true.*\"$2\":\([0-9]*\).*/\1/p" "$1"; }
 	for graph in internal/asset/bot/*.toml; do
 		name=$(basename "$graph" .toml)
 		{ cat "$graph"; stop 60000; } >"$dir/$name.toml"
