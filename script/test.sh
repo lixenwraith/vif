@@ -149,7 +149,8 @@ Automated (assert, and used by `all`)
   deploy            the wad installer's refusal, the manifests and a mounted scenario
   lifetime          unclaimed expiry, then vacancy expiry
   drain             SIGTERM drains instead of cutting a match
-  bot               every shipped bot graph plays, solo and joined to a host
+  bot               every shipped bot graph plays solo; a guest's bots join and
+                    leave with it; a host's own bots keep its session
   identity          a peer running a different build is refused (runs the tests)
   all               every automated scenario above
 
@@ -364,7 +365,7 @@ lifetime)
 bot)
 	# Each shipped graph plays through the binary, solo and flat out, until a region
 	# appended here quits it after a minute of game time; roam has to type. Then roam
-	# joins a dedicated host as its only participant, paced, and leaves it.
+	# joins a dedicated host with two bots of its own, and a host seats its own.
 	need_bin
 	dir=$(mktemp -d)
 	stop() {
@@ -384,16 +385,28 @@ bot)
 	[ "$(botstat "$dir/roam.log" typed)" -gt 0 ] 2>/dev/null || fail "roam typed nothing: $dir/roam.log"
 	pass "every shipped graph plays solo through the binary, and roam types"
 
-	note "a bot joins a dedicated host and leaves it"
+	note "a bot with two of its own joins a dedicated host, and they leave with it"
+	botlines() { grep -c "\"msg\":\"bot $2\"" "$1"; }
 	serve_bg -first-join 30s -empty 3s
 	wait_for 15 'probe_get /health' || fail "probe never answered"
 	{ cat internal/asset/bot/roam.toml; stop 5000; } >"$dir/join.toml"
-	"$BIN" -bot "$dir/join.toml" -join "$HOST:$PORT" -log-stdout -lv info >"$dir/join.log" 2>&1 \
+	"$BIN" -bot "$dir/join.toml" -join "$HOST:$PORT" -bots 2:patrol -log-stdout -lv info >"$dir/join.log" 2>&1 \
 		|| fail "the joining bot did not end cleanly: $dir/join.log"
 	[ "$(botstat "$dir/join.log" typed)" -gt 0 ] 2>/dev/null || fail "the joining bot typed nothing: $dir/join.log"
-	wait_for 30 'gone "$SERVE_PID"' || fail "the host did not end once its bot left: $LOG"
+	[ "$(botlines "$dir/join.log" seated)" = 2 ] || fail "the guest's bots were not seated: $dir/join.log"
+	[ "$(botlines "$dir/join.log" left)" = 2 ] || fail "the guest's bots did not leave with it: $dir/join.log"
+	wait_for 30 'gone "$SERVE_PID"' || fail "the host did not end once its guests left: $LOG"
+	pass "a bot and two of its own joined a dedicated host, played and left together"
+
+	note "a dedicated host's own bots keep its session and leave on its drain"
+	serve_bg -first-join 30s -empty 3s -drain 30s -bots 2
+	wait_for 15 '[ "$(botlines "$LOG" seated)" = 2 ]' || fail "the host's bots were not seated: $LOG"
+	sleep 6
+	alive "$SERVE_PID" || fail "a session of the host's own bots ended as empty: $LOG"
+	kill -TERM "$SERVE_PID"
+	wait_for 10 'gone "$SERVE_PID"' || fail "the host's bots held its drain open: $LOG"
 	rm -rf "$dir"
-	pass "a bot joined a dedicated host, played and left"
+	pass "a dedicated host's bots kept its session and left on its drain"
 	;;
 
 drain)

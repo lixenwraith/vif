@@ -61,6 +61,13 @@ func newSessionApp(cfg Config) (*App, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	// Before anything is built, so a graph that does not resolve fails in front of
+	// the operator. Each seat parses its own copy when it is added.
+	for _, spec := range cfg.Bots {
+		if _, err := loadBotGraph(cfg.Resources, spec); err != nil {
+			return nil, err
+		}
+	}
 	if cfg.JoinAddress != "" {
 		return newJoiningApp(cfg)
 	}
@@ -92,7 +99,7 @@ func (a *App) hostNetworkConfig() *network.Config {
 	netCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
 		Assign:   a.assignParticipant,
 		Release:  a.releaseParticipant,
-		Admit:    a.admissions.Admit,
+		Admit:    a.admitDial,
 		Report:   a.noteJoinerReport,
 		Name:     a.cfg.SessionName,
 		Scenario: a.scenarioBody,
@@ -103,6 +110,20 @@ func (a *App) hostNetworkConfig() *network.Config {
 	// the run arms it, because until then the gate is the startup lobby's own.
 	netCfg.OnAdmit = a.admitLateJoiner
 	return netCfg
+}
+
+// admitDial spends the per-address join budget on every dial but one from this
+// machine: a holder's bot seats dial its listener over loopback, and only a process
+// on this host can. The fleet's front door keeps its own budget on the player.
+func (a *App) admitDial(addr net.Addr) error {
+	if addr != nil {
+		if host, _, err := net.SplitHostPort(addr.String()); err == nil {
+			if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+				return nil
+			}
+		}
+	}
+	return a.admissions.Admit(addr)
 }
 
 // scenarioBody serves this session's scenario to a joiner whose roots do not hold

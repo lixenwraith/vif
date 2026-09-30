@@ -49,7 +49,7 @@ func Run(cfg Config) error {
 		if next == nil {
 			return nil
 		}
-		solo, cfg.notice, cfg.dialled = nil, "", nil
+		solo, cfg.notice, cfg.dialled, cfg.Bots = nil, "", nil, next.Bots
 		if next.Scenario != "" {
 			cfg.Resources.Scenario, cfg.Resources.Embedded = next.Scenario, false
 		}
@@ -178,6 +178,12 @@ func (a *App) Loop() (*restartRequest, error) {
 			vlog.Warn("app", "msg", "hosting not opened; playing solo", "address", a.cfg.resumeHost, "error", err.Error())
 			a.ctx.SetStatusMessage("Host: "+err.Error()+"; playing solo", parameter.StatusMessageMaxDuration, true)
 		}
+	}
+	// After the door opens, for the same reason: every bot arrives through it. One
+	// that cannot be seated costs the bot, not the game.
+	if err := a.seatBots(); err != nil {
+		vlog.Warn("app", "msg", "bots not seated", "error", err.Error())
+		a.ctx.SetStatusMessage("Bots: "+err.Error(), parameter.StatusMessageMaxDuration, true)
 	}
 
 	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
