@@ -218,6 +218,11 @@ func TestLootReachesItsOwnerAcrossAMaze(t *testing.T) {
 		t.Fatal("no cursor")
 	}
 
+	loot := NewLootSystem(w).(*LootSystem)
+	warmDrop := dropLoot(w, loot, 65, 20, owner)
+	loot.refreshOwnerRoutes([]core.Entity{warmDrop})
+	w.DestroyEntity(warmDrop)
+
 	walls := NewWallSystem(w).(*WallSystem)
 	walls.HandleEvent(event.GameEvent{
 		Type: event.EventMazeSpawnRequest,
@@ -232,7 +237,6 @@ func TestLootReachesItsOwnerAcrossAMaze(t *testing.T) {
 		t.Fatalf("the maze produced %d walls; the crossing proves nothing", walls)
 	}
 
-	loot := NewLootSystem(w).(*LootSystem)
 	nav := NewNavigationSystem(w).(*NavigationSystem)
 	deaths := NewDeathSystem(w).(*DeathSystem)
 

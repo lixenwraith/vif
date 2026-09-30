@@ -135,3 +135,30 @@ func FuzzComputeMatchesReference(f *testing.F) {
 		}
 	})
 }
+
+func TestCacheRefreshesSmallTargetMovesAndChangedWalls(t *testing.T) {
+	c := NewFlowFieldCache(8, 6, 3, 4)
+	walls := make([]bool, 48)
+	blocked := func(x, y int) bool { return walls[y*8+x] }
+	goal := []vmath.Point{{X: 1, Y: 1}}
+	c.ObserveGrid(walls)
+	c.Update(goal, blocked)
+	goal[0].X++
+	for range 3 {
+		c.Update(goal, blocked)
+	}
+	if c.GetDistance(2, 1) != 0 {
+		t.Fatal("one-cell motion never refreshed the goal")
+	}
+	walls[1*8+3] = true
+	c.ObserveGrid(walls)
+	if !c.Update(goal, blocked) || c.GetDistance(3, 1) != -1 {
+		t.Fatal("changed walls left a stale route")
+	}
+	walls[1*8+3] = false
+	c.ObserveGrid(walls)
+	c.Update(goal, blocked)
+	if c.GetDistance(3, 1) < 0 {
+		t.Fatal("a removed wall stayed blocked")
+	}
+}

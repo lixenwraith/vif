@@ -284,11 +284,13 @@ func (s *NavigationSystem) recomputeCompositePassability() navigation.WallChecke
 }
 
 // noteWalls moves grid when the wall grid last built differs from the one before.
-func (s *NavigationSystem) noteWalls() {
+func (s *NavigationSystem) noteWalls() bool {
 	if !slices.Equal(s.walls, s.seenWalls) {
 		s.seenWalls = append(s.seenWalls[:0], s.walls...)
 		s.grid++
+		return true
 	}
+	return false
 }
 
 func (s *NavigationSystem) Update() {
@@ -312,9 +314,13 @@ func (s *NavigationSystem) Update() {
 
 	s.resolveGroupTargets()
 	s.snapshotTargets()
-	s.refreshRouteGraphs()
 
 	isBlockedPoint := s.world.Positions.WallTest(component.WallBlockKinetic, &s.walls)
+	isBlockedPoint(-1, -1)
+	if s.noteWalls() {
+		s.compositePassability.Compute(isBlockedPoint)
+	}
+	s.refreshRouteGraphs()
 
 	// Wall checker for composites (uses pre-computed passability)
 	isBlockedComposite := s.compositePassability.IsBlocked
@@ -401,9 +407,10 @@ func (s *NavigationSystem) Update() {
 		}
 		targetsSlice := targetsBuffer[:groupState.Count]
 
+		g.pointFlowCache.ObserveGrid(s.walls)
+		g.compositeFlowCache.ObserveGrid(s.compositePassability.Valid)
 		if g.pointFlowCache.Update(targetsSlice, isBlockedPoint) {
 			totalRecomputes++
-			s.noteWalls()
 			g.pointAt = s.grid
 		}
 
@@ -727,7 +734,7 @@ func (s *NavigationSystem) snapshotTargets() {
 
 // routeGraphFresh reports whether a graph's goal still matches a live target of the group
 func (s *NavigationSystem) routeGraphFresh(graph *navigation.RouteGraph, groupID uint8) bool {
-	if int(groupID) >= len(s.targets) {
+	if graph.Grid != s.grid || int(groupID) >= len(s.targets) {
 		return false
 	}
 	state := &s.targets[groupID]
@@ -1033,6 +1040,8 @@ func (s *NavigationSystem) LoadShared(data []byte) error {
 		if g == nil {
 			continue
 		}
+		g.pointFlowCache.ObserveGrid(s.walls)
+		g.compositeFlowCache.ObserveGrid(s.compositePassability.Valid)
 		g.pointAt = s.restoreField(g.pointFlowCache, g.pointAt, isBlockedPoint,
 			phase.PointTicks, phase.PointPending, phase.PointComputed, phase.PointLastTargets)
 		g.compositeAt = s.restoreField(g.compositeFlowCache, g.compositeAt, isBlockedComposite,
