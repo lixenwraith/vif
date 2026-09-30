@@ -18,17 +18,17 @@ define first; doing Android first would define it without a second consumer.
 
 ### Add bots that play as participants
 
-- Priority: P0, leading the push; not a release blocker
-- Affected files: `internal/bot` (new), `internal/app`, `internal/network`,
-  `internal/mode`, `cmd/vif`, `tool/vif-allocator`
+- Priority: P1, leading the push; its P0 phases have landed
+- Affected files: `internal/network`, `internal/app`, `internal/render/renderer`,
+  `tool/vif-allocator`, `internal/bot`
 - Plan: [Bots](todo-bots.md)
 
 A bot is its own headless instance whose FSM graph drives its router with intents,
 keys and mouse alike, bound by the same barrier, admission and eviction as a person.
 Bots belong to the instance that started them: a host's stay as participants, a
 guest's leave with it, and every composition of people and bots joins through the
-ordinary handshake. Phases 1–3 (P0) make bots play in every composition; the fleet,
-decision logic, relays and learning follow in the plan's order.
+ordinary handshake. Phases 1–3 landed, so bots play in every composition; marking
+and the fleet, decision logic, relays and learning follow in the plan's order.
 
 ### Extract the renderer-neutral Android host model
 
@@ -191,7 +191,7 @@ Per-store write counters stay rejected: a cache compares values it owns.
 
 ### Delegate convergence to relays
 
-- Priority: P2; the bots plan's phase 6, once bots play in every composition
+- Priority: P2; the bots plan's phase 6, which a guest's seats now wait on
 - Affected files: `internal/converge/relay.go`, `internal/converge/selective.go`,
   `internal/converge/correction.go`, `internal/system/network.go`, `internal/network`
 - Plan: [Bots](todo-bots.md) §4

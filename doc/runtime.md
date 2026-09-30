@@ -37,7 +37,9 @@ a full development binary or the smaller deployment artifact. See
 from the journal anchor, and `-script <file>` constructs a caller-driven
 `ModeHeadless` run from an authored tick schedule, or `ModeScript` with `-watch`.
 `-bot <graph>` is the same driven run with a bot graph playing the seat instead
-of a schedule; see [Bots](todo-bots.md).
+of a schedule; see [Bots](todo-bots.md). `-bots N[:graph]` seats bots beside a
+played, served or bot run: headless instances in the same process, each joining
+the run's session as a guest does, and closed with it.
 `-check` and `-schema` are non-runtime tool paths:
 
 | Tool path | Entry | Terminal initialized? | Result |
