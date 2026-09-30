@@ -1,0 +1,24 @@
+# patrol: a fixed looping sequence, the shape scripted play takes in a graph. Each
+# state lists its keys with delay_ms offsets from entry and hands over once they
+# have landed.
+[bot]
+actions_per_second = 8
+
+[regions.play]
+initial = "Out"
+
+[states.Out]
+on_enter = [
+    { action = "Intent", payload = { name = "motion_right", count = 12 } },
+    { action = "Intent", payload = { name = "fire_main" }, delay_ms = 500 },
+    { action = "Intent", payload = { name = "motion_down", count = 4 }, delay_ms = 1000 },
+]
+transitions = [{ trigger = "Tick", target = "Back", guard = "StateTimeExceeds", guard_args = { ms = 1500 } }]
+
+[states.Back]
+on_enter = [
+    { action = "Intent", payload = { name = "motion_left", count = 12 } },
+    { action = "Intent", payload = { name = "fire_special" }, delay_ms = 500 },
+    { action = "Intent", payload = { name = "motion_up", count = 4 }, delay_ms = 1000 },
+]
+transitions = [{ trigger = "Tick", target = "Out", guard = "StateTimeExceeds", guard_args = { ms = 1500 } }]

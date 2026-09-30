@@ -185,6 +185,16 @@ func (c *ConfigResource) MapToViewport(mapX, mapY int) (vx, vy int, ok bool) {
 	return vx, vy, ok
 }
 
+// VisibleMapRect is the inclusive range of map cells the viewport shows, the cells
+// MapToViewport accepts; ok is false when it shows none.
+func (c *ConfigResource) VisibleMapRect() (minX, minY, maxX, maxY int, ok bool) {
+	offsetX, offsetY := c.MapOffset()
+	minX, minY = max(c.CameraX-offsetX, 0), max(c.CameraY-offsetY, 0)
+	maxX = min(c.CameraX-offsetX+c.ViewportWidth, c.MapWidth) - 1
+	maxY = min(c.CameraY-offsetY+c.ViewportHeight, c.MapHeight) - 1
+	return minX, minY, maxX, maxY, minX <= maxX && minY <= maxY
+}
+
 // --- EventQueue Resource ---
 
 // EventQueueResource wraps the event queue for systems access
