@@ -1,5 +1,10 @@
 package input
 
+import (
+	"fmt"
+	"unicode/utf8"
+)
+
 // actionRegistry maps canonical action names to KeyEntry structs
 // Used by keymap config loader to resolve TOML action strings to bindings
 var actionRegistry map[string]KeyEntry
@@ -137,4 +142,40 @@ func ActionNames() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// IntentFor builds the intent one canonical action performs, as an authored script
+// or a bot names it: count defaults to one, and char is the one rune a char-wait
+// action targets. A parser prefix is refused, since it is half of a key sequence.
+func IntentFor(name string, count int, char string) (Intent, error) {
+	entry, ok := ActionEntry(name)
+	if !ok || name == "none" {
+		return Intent{}, fmt.Errorf("unknown intent action %q", name)
+	}
+	if char != "" && entry.Behavior != BehaviorCharWait {
+		return Intent{}, fmt.Errorf("char applies only to a char-wait intent")
+	}
+	if count == 0 {
+		count = 1
+	}
+	intent := Intent{Count: count, Command: name}
+	switch entry.Behavior {
+	case BehaviorMotion:
+		intent.Type, intent.Motion = IntentMotion, entry.Motion
+	case BehaviorCharWait:
+		if utf8.RuneCountInString(char) != 1 {
+			return Intent{}, fmt.Errorf("intent %q requires one char", name)
+		}
+		intent.Type, intent.Motion = IntentCharMotion, entry.Motion
+		intent.Char, _ = utf8.DecodeRuneInString(char)
+	case BehaviorModeSwitch:
+		intent.Type, intent.ModeTarget = IntentModeSwitch, entry.ModeTarget
+	case BehaviorSpecial:
+		intent.Type, intent.Special = IntentSpecial, entry.Special
+	case BehaviorSystem, BehaviorAction:
+		intent.Type = entry.IntentType
+	default:
+		return Intent{}, fmt.Errorf("intent action %q is a parser prefix; use command or a complete semantic action", name)
+	}
+	return intent, nil
 }

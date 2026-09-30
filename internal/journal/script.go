@@ -6,7 +6,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/core"
@@ -203,7 +202,7 @@ func compileScriptAction(index int, spec ScriptAction) (compiledScriptAction, er
 
 	switch {
 	case spec.Intent != "":
-		intent, err := intentForAction(spec.Intent, spec.Count, spec.Char)
+		intent, err := input.IntentFor(spec.Intent, spec.Count, spec.Char)
 		if err != nil {
 			return a, err
 		}
@@ -235,39 +234,6 @@ func compileScriptAction(index int, spec ScriptAction) (compiledScriptAction, er
 		a.kind, a.eventType, a.payload, a.domain = scriptEvent, et, spec.Payload, domain
 	}
 	return a, nil
-}
-
-func intentForAction(name string, count int, char string) (input.Intent, error) {
-	entry, ok := input.ActionEntry(name)
-	if !ok || name == "none" {
-		return input.Intent{}, fmt.Errorf("unknown intent action %q", name)
-	}
-	if char != "" && entry.Behavior != input.BehaviorCharWait {
-		return input.Intent{}, fmt.Errorf("char applies only to a char-wait intent")
-	}
-	if count == 0 {
-		count = 1
-	}
-	intent := input.Intent{Count: count, Command: name}
-	switch entry.Behavior {
-	case input.BehaviorMotion:
-		intent.Type, intent.Motion = input.IntentMotion, entry.Motion
-	case input.BehaviorCharWait:
-		if utf8.RuneCountInString(char) != 1 {
-			return input.Intent{}, fmt.Errorf("intent %q requires one char", name)
-		}
-		intent.Type, intent.Motion = input.IntentCharMotion, entry.Motion
-		intent.Char, _ = utf8.DecodeRuneInString(char)
-	case input.BehaviorModeSwitch:
-		intent.Type, intent.ModeTarget = input.IntentModeSwitch, entry.ModeTarget
-	case input.BehaviorSpecial:
-		intent.Type, intent.Special = input.IntentSpecial, entry.Special
-	case input.BehaviorSystem, input.BehaviorAction:
-		intent.Type = entry.IntentType
-	default:
-		return input.Intent{}, fmt.Errorf("intent action %q is a parser prefix; use command or a complete semantic action", name)
-	}
-	return intent, nil
 }
 
 func scriptEventDomain(et event.EventType, text string) (core.Domain, error) {
@@ -442,17 +408,13 @@ func (d *ScriptDriver) execute(a compiledScriptAction) error {
 	return nil
 }
 
-// injectCommand runs one ex command as a full round trip, keystroke by keystroke so
-// each settles on its own as live input does: the mode switch pauses a solo run and
-// the confirm unpauses and executes. False means an intent quit the game.
+// injectCommand runs one ex command keystroke by keystroke, so each settles on its
+// own as live input does. False means an intent quit the game.
 func injectCommand(inject func(...*input.Intent) bool, command string) bool {
-	if !inject(&input.Intent{Type: input.IntentModeSwitch, ModeTarget: input.ModeTargetCommand, Count: 1}) {
-		return false
-	}
-	for _, char := range command {
-		if !inject(&input.Intent{Type: input.IntentTextChar, Char: char, Count: 1}) {
+	for _, intent := range input.AppendCommand(nil, command) {
+		if !inject(&intent) {
 			return false
 		}
 	}
-	return inject(&input.Intent{Type: input.IntentTextConfirm, Count: 1})
+	return true
 }
