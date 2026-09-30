@@ -701,7 +701,7 @@ crosses, because its type is `ClassBus` and a crossing is what it becomes.
 
 The status bar renders the whole of this as **one badge**, chosen by severity, so a
 worse fact hides a lesser one rather than sitting beside it: `Host lost`,
-`Migrating [n]`, `Net: down`, `Net: wait`, or `Net: <peers> <round trip>` with at
+`Migrating [n]`, `Net: down`, `Net: wait`, or `<players>P:<local hex slot> <round trip>` with at
 most one qualifier — `slow!`, `desync <ticks>`, `loss <pct>%` or `slow` — and a
 background that is green, amber or red by the worst of the round trip and that
 qualifier. The rest of the measurements — jitter, cadence, keyframe interval,
