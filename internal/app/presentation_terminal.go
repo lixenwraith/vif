@@ -38,7 +38,7 @@ func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorM
 	a.term = a.termSvc.Terminal()
 	core.SetCrashTerminal(a.term)
 	colorMode = a.term.ColorMode()
-	if a.cfg.Mode.OwnsGeometry() {
+	if a.cfg.Mode.OwnsGeometry() || a.cfg.terminalGeometry {
 		width, height = a.term.Size()
 	}
 	return width, height, colorMode

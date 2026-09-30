@@ -12,6 +12,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/app"
+	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/converge"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/lifecycle"
@@ -140,8 +141,13 @@ func main() {
 		cfg := buildConfig()
 		if *flagWatch {
 			cfg.Mode = app.ModeScript
+		} else {
+			botNotice(cfg, *flagBot)
 		}
-		_, err = app.RunBot(cfg, *flagBot)
+		var st bot.Stats
+		if st, err = app.RunBot(cfg, *flagBot); err == nil && !*flagWatch {
+			fmt.Printf("bot %s stopped after %d ticks and %d intents\n", *flagBot, st.Ticks, st.Injected)
+		}
 	case flagSession.serve != "":
 		err = app.RunServer(buildConfig())
 	default:
@@ -153,6 +159,19 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitFailure)
+	}
+}
+
+// botNotice says what a headless bot run is doing, since it draws nothing: solo it
+// plays until its graph quits, and hosting it waits in the lobby for players.
+func botNotice(cfg app.Config, spec string) {
+	switch {
+	case cfg.HostAddress != "":
+		fmt.Printf("bot %s hosting %s; players join it with vif -join, Ctrl-C stops it\n", spec, cfg.HostAddress)
+	case cfg.JoinAddress != "":
+		fmt.Printf("bot %s joining %s; Ctrl-C stops it\n", spec, cfg.JoinAddress)
+	default:
+		fmt.Printf("bot %s playing solo and headless; -watch presents it, Ctrl-C stops it\n", spec)
 	}
 }
 
