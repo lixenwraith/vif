@@ -1,0 +1,38 @@
+<svg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+    <!-- Define center and key points -->
+    <!-- Square corners: top-left(100,100), top-right(300,100), bottom-right(300,300), bottom-left(100,300) -->
+    <!-- Mid points: left-mid(100,200), right-mid(300,200), top-mid(200,100), bottom-mid(200,300) -->
+    <!-- Center: (200,200) -->
+
+    <!-- Triangles (clockwise from bottom-mid line) -->
+    <!-- 1) Red: bottom-mid-left wedge: center(200,200)-bottom-mid(200,300)-bottom-left(100,300) -->
+    <polygon points="200,200 200,300 100,300" fill="red" />
+    <!-- 2) Orange: next wedge: center(200,200)-bottom-left(100,300)-left-mid(100,200) -->
+    <polygon points="200,200 100,300 100,200" fill="orange" />
+    <!-- 3) Yellow: center(200,200)-left-mid(100,200)-top-left(100,100) -->
+    <polygon points="200,200 100,200 100,100" fill="yellow" />
+    <!-- 4) Green: center(200,200)-top-left(100,100)-top-mid(200,100) -->
+    <polygon points="200,200 100,100 200,100" fill="green" />
+    <!-- 5) Blue: center(200,200)-top-mid(200,100)-top-right(300,100) -->
+    <polygon points="200,200 200,100 300,100" fill="blue" />
+    <!-- 6) Purple: center(200,200)-top-right(300,100)-right-mid(300,200) -->
+    <polygon points="200,200 300,100 300,200" fill="indigo" />
+    <!-- 7) White: center(200,200)-right-mid(300,200)-bottom-right(300,300) -->
+    <polygon points="200,200 300,200 300,300" fill="violet" />
+    <!-- 8) Black: center(200,200)-bottom-right(300,300)-bottom-mid(200,300) -->
+    <polygon points="200,200 300,300 200,300" fill="gray" />
+
+    <!-- Square outline -->
+    <line x1="100" y1="100" x2="300" y2="100" stroke="black" stroke-width="20" />
+    <line x1="300" y1="100" x2="300" y2="300" stroke="black" stroke-width="20" />
+    <line x1="300" y1="300" x2="100" y2="300" stroke="black" stroke-width="20" />
+    <line x1="100" y1="300" x2="100" y2="100" stroke="black" stroke-width="20" />
+
+    <!-- Internal lines that cross the center -->
+    <line x1="200" y1="100" x2="200" y2="300" stroke="black" stroke-width="20" />
+    <line x1="100" y1="200" x2="300" y2="200" stroke="black" stroke-width="20" />
+
+    <!-- Diagonal lines -->
+    <line x1="100" y1="100" x2="300" y2="300" stroke="black" stroke-width="20" />
+    <line x1="300" y1="100" x2="100" y2="300" stroke="black" stroke-width="20" />
+</svg>
