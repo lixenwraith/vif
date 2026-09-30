@@ -201,9 +201,24 @@ type pointArgs struct {
 }
 
 // register installs std's generic vocabulary, its status guards reading the bot's
-// own registry, whose bare keys mirror its own slot, and the bot's actions and guards.
+// own registry, whose bare keys mirror its own slot, its config guards reading the
+// bot's own view, and the bot's actions and guards.
 func register(m *fsm.Machine[*mind]) {
 	std.Register(m, std.Host[*mind]{
+		ConfigInt: func(field string) (func(*mind) int64, bool) {
+			read, ok := engine.PrivateConfigIntAccessor(field)
+			if !ok {
+				return nil, false
+			}
+			return func(m *mind) int64 { return read(m.ctx.World) }, true
+		},
+		ConfigBool: func(field string) (func(*mind) bool, bool) {
+			read, ok := engine.PrivateConfigBoolAccessor(field)
+			if !ok {
+				return nil, false
+			}
+			return func(m *mind) bool { return read(m.ctx.World) }, true
+		},
 		StatusInt: func(m *mind, key string) (int64, bool) {
 			reg := m.ctx.World.Resources.Status
 			if !reg.Ints.Has(key) {
@@ -221,21 +236,9 @@ func register(m *fsm.Machine[*mind]) {
 	})
 
 	queueAll := func(m *mind, args any) { m.push(args.([]input.Intent)...) }
-	m.RegisterAction("Intent", queueAll)
+	m.RegisterAction("Intent", func(m *mind, args any) { m.push(args.(intentChoice).draw(m.rng)) })
 	m.RegisterActionArgs("Intent", func(_ *fsm.Machine[*mind], cfg fsm.ActionConfig, _ fsm.StateResolver) (any, error) {
-		var p struct {
-			Name  string `toml:"name"`
-			Count int    `toml:"count"`
-			Char  string `toml:"char"`
-		}
-		if err := decodePayload(cfg.Payload, &p, "name", "count", "char"); err != nil {
-			return nil, err
-		}
-		if p.Count < 0 {
-			return nil, fmt.Errorf("count must not be negative")
-		}
-		intent, err := input.IntentFor(p.Name, p.Count, p.Char)
-		return []input.Intent{intent}, err
+		return compileIntent(cfg.Payload)
 	})
 	m.RegisterAction("Text", queueAll)
 	m.RegisterActionArgs("Text", func(_ *fsm.Machine[*mind], cfg fsm.ActionConfig, _ fsm.StateResolver) (any, error) {
@@ -309,6 +312,95 @@ func register(m *fsm.Machine[*mind]) {
 			return m.rng.Intn(100) < percent
 		}, nil
 	})
+}
+
+// intentChoice is a compiled Intent payload: one keymap action or a list drawn
+// from, with a fixed count or a [min, max] range drawn from. A payload with no
+// choice draws nothing, so a fixed sequence leaves the bot's stream alone.
+type intentChoice struct {
+	intents  []input.Intent
+	min, max int // the count range; max zero keeps each intent's own count
+}
+
+func (c intentChoice) draw(rng *vmath.FastRand) input.Intent {
+	intent := c.intents[0]
+	if len(c.intents) > 1 {
+		intent = c.intents[rng.Intn(len(c.intents))]
+	}
+	if c.max > 0 {
+		intent.Count = c.min + rng.Intn(c.max-c.min+1)
+	}
+	return intent
+}
+
+// compileIntent reads an Intent payload: name is one action or a list of them,
+// count one number or a [min, max] range, char the rune a char-wait action targets.
+func compileIntent(payload any) (intentChoice, error) {
+	table, _ := payload.(map[string]any)
+	if key := unknownKey(table, "name", "count", "char"); key != "" {
+		return intentChoice{}, fmt.Errorf("unknown payload field %q", key)
+	}
+	var names []string
+	switch v := table["name"].(type) {
+	case string:
+		names = []string{v}
+	case []any:
+		for _, n := range v {
+			name, ok := n.(string)
+			if !ok {
+				return intentChoice{}, fmt.Errorf("name list holds %v, not an action name", n)
+			}
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return intentChoice{}, fmt.Errorf("name must be an action or a list of them")
+	}
+	var c intentChoice
+	switch v := table["count"].(type) {
+	case nil:
+	case []any:
+		var lo, hi int
+		ok := len(v) == 2
+		if ok {
+			var okLo, okHi bool
+			lo, okLo = intValue(v[0])
+			hi, okHi = intValue(v[1])
+			ok = okLo && okHi && lo >= 1 && hi >= lo
+		}
+		if !ok {
+			return intentChoice{}, fmt.Errorf("count range must be [min, max] with 1 <= min <= max, got %v", v)
+		}
+		c.min, c.max = lo, hi
+	default:
+		n, ok := intValue(v)
+		if !ok || n < 0 {
+			return intentChoice{}, fmt.Errorf("count must be a non-negative number or a [min, max] range, got %v", v)
+		}
+		c.min = n
+	}
+	char, _ := table["char"].(string)
+	for _, name := range names {
+		intent, err := input.IntentFor(name, c.min, char)
+		if err != nil {
+			return intentChoice{}, err
+		}
+		c.intents = append(c.intents, intent)
+	}
+	return c, nil
+}
+
+// intValue reads a whole number as the TOML parser produces one
+func intValue(v any) (int, bool) {
+	switch n := v.(type) {
+	case int64:
+		return int(n), true
+	case int:
+		return n, true
+	case float64:
+		return int(n), n == float64(int(n))
+	}
+	return 0, false
 }
 
 // decodePayload decodes an action payload, refusing a key the action does not read

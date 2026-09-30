@@ -648,7 +648,7 @@ func (s *MetaSystem) handleAboutRequest() {
 // handlePauseRequest applies pause to game state and clock, then announces
 // the change; each system applies it to its own domain (audio → AudioSystem)
 func (s *MetaSystem) handlePauseRequest(paused bool) {
-	if paused && s.world.LiveSession() {
+	if paused && s.world.LiveSession() && !s.world.SeatsOnly() {
 		s.ctx.SetStatusMessage("Pause is unavailable in a live session", parameter.StatusMessageDefaultTimeout, true)
 		return
 	}

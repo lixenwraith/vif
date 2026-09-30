@@ -61,6 +61,13 @@ func newSessionApp(cfg Config) (*App, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	// Before anything is built, so a graph that does not resolve fails in front of
+	// the operator. Each seat parses its own copy when it is added.
+	for _, spec := range cfg.Bots {
+		if _, err := loadBotGraph(cfg.Resources, spec); err != nil {
+			return nil, err
+		}
+	}
 	if cfg.JoinAddress != "" {
 		return newJoiningApp(cfg)
 	}
@@ -92,7 +99,7 @@ func (a *App) hostNetworkConfig() *network.Config {
 	netCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
 		Assign:   a.assignParticipant,
 		Release:  a.releaseParticipant,
-		Admit:    a.admissions.Admit,
+		Admit:    a.admitDial,
 		Report:   a.noteJoinerReport,
 		Name:     a.cfg.SessionName,
 		Scenario: a.scenarioBody,
@@ -103,6 +110,20 @@ func (a *App) hostNetworkConfig() *network.Config {
 	// the run arms it, because until then the gate is the startup lobby's own.
 	netCfg.OnAdmit = a.admitLateJoiner
 	return netCfg
+}
+
+// admitDial spends the per-address join budget on every dial but one from this
+// machine: a holder's bot seats dial its listener over loopback, and only a process
+// on this host can. The fleet's front door keeps its own budget on the player.
+func (a *App) admitDial(addr net.Addr) error {
+	if addr != nil {
+		if host, _, err := net.SplitHostPort(addr.String()); err == nil {
+			if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+				return nil
+			}
+		}
+	}
+	return a.admissions.Admit(addr)
 }
 
 // scenarioBody serves this session's scenario to a joiner whose roots do not hold
@@ -144,8 +165,13 @@ func (a *App) admitLateJoiner(id network.PeerID) {
 	}
 	// Before the gate, not after it: the gate waits for a capture a playout lead
 	// ahead of the current tick, so a session parked for having nobody in it would
-	// time out every dial that came to end that.
+	// time out every dial that came to end that. A pause its own bots allowed ends
+	// the same way, since the arrival is somebody the pause does not hold.
 	a.resumeVacant()
+	if a.ctx.TimeCtl.IsPaused() {
+		a.ctx.SetPaused(false)
+		a.scheduler.DispatchEventsImmediately()
+	}
 	a.releaseMidRunJoiner(id)
 }
 
@@ -663,6 +689,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	a.adoptLobbyGeometry()
 
 	a.lobbyClosing.Store(true)
+	a.settleLobbyHandshakes(port)
 	offer, err := a.hostOffer()
 	if err != nil {
 		return err
@@ -793,6 +820,20 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 		offer.ParticipantCount(), confirmedGuests(), admitted))
 	a.corrections.StartPump()
 	return nil
+}
+
+// settleLobbyHandshakes waits until every guest the roster names is on the link. A
+// dial is rostered when it is assigned, before its handshake ends, and the gate sends
+// to every roster entry; a handshake that fails releases its entry, so this ends
+// within one handshake's bound.
+func (a *App) settleLobbyHandshakes(port *network.SocketPort) {
+	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound
+	for a.guestCount() > port.PeerCount() && time.Now().Before(deadline) {
+		select {
+		case <-port.Changes():
+		case <-time.After(2 * time.Millisecond):
+		}
+	}
 }
 
 // startJoinSession completes the tick-zero gate before the socket port owns the

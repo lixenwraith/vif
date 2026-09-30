@@ -49,6 +49,13 @@ type SessionController interface {
 	ChangeScenario(name string) (bool, error)
 	// SessionSummary is a one-line description of the session for the status bar.
 	SessionSummary() string
+	// AddBot seats a bot playing graph, "" for the default, in this run's session,
+	// hosting one on loopback when the run is in none.
+	AddBot(graph string) error
+	// DropBot halts the bot this run holds on slot; it leaves as a participant does.
+	DropBot(slot int) error
+	// BotSummary lists the bots this run holds.
+	BotSummary() string
 }
 
 // GameContext holds all game state including the ECS world

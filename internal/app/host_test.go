@@ -361,7 +361,8 @@ func pumpHost(t *testing.T, host *App, ticks int) {
 // TestHostCommandRunsUnderTheWorldLock is the regression for a deadlock. The router
 // path runs inside App.handleIntent's critical section, so a SessionController method
 // that took the world lock wedges the instance at the moment the operator presses
-// enter. Calling BeginHosting directly cannot see that; only the real input path can.
+// enter. Calling BeginHosting or seating a bot directly cannot see that; only the
+// real input path can.
 func TestHostCommandRunsUnderTheWorldLock(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
 	a := mustHeadless(t, 0x301A, 120, 40)
@@ -377,6 +378,21 @@ func TestHostCommandRunsUnderTheWorldLock(t *testing.T) {
 	a.Tick(1)
 	if got := a.Context().GetStatusMessage(); !strings.Contains(got, "host") {
 		t.Fatalf(":session reports %q", got)
+	}
+
+	injectExCommand(t, a, "bot add")
+	stopTicking := tickInBackground(a)
+	defer stopTicking()
+	for deadline := time.Now().Add(socketWait); !strings.Contains(a.seatsSummary(), "slot 1 roam"); {
+		if time.Now().After(deadline) {
+			t.Fatalf("the bot was not seated: %q", a.seatsSummary())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	stopTicking()
+	injectExCommand(t, a, "bot")
+	if got := a.Context().GetStatusMessage(); !strings.Contains(got, "slot 1 roam") {
+		t.Fatalf(":bot reports %q", got)
 	}
 }
 

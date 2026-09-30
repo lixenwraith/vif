@@ -121,6 +121,16 @@ func registerCompoundGuards[T any](m *fsm.Machine[T]) {
 			return false
 		}, nil
 	})
+
+	m.RegisterGuardFactory("Not", func(machine *fsm.Machine[T], args map[string]any) (fsm.GuardFunc[T], error) {
+		child, err := resolveGuardEntry(machine, args["guard"], "Not: 'guard'")
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx T, region *fsm.RegionState, payload any) bool {
+			return !child(ctx, region, payload)
+		}, nil
+	})
 }
 
 // === Static Guards ===
@@ -155,29 +165,32 @@ func resolveChildGuards[T any](m *fsm.Machine[T], args map[string]any) ([]fsm.Gu
 
 	result := make([]fsm.GuardFunc[T], 0, len(guardsList))
 	for i, item := range guardsList {
-		guardDef, ok := item.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("compound guard: entry %d is not a table", i)
-		}
-
-		name, _ := guardDef["name"].(string)
-		if name == "" {
-			return nil, fmt.Errorf("compound guard: entry %d missing 'name'", i)
-		}
-
-		var childArgs map[string]any
-		if argsRaw, ok := guardDef["args"]; ok {
-			childArgs, _ = argsRaw.(map[string]any)
-		}
-
-		g, err := ResolveGuard(m, name, childArgs)
+		g, err := resolveGuardEntry(m, item, fmt.Sprintf("compound guard: entry %d", i))
 		if err != nil {
-			return nil, fmt.Errorf("compound guard '%s': %w", name, err)
+			return nil, err
 		}
-
 		result = append(result, g)
 	}
 	return result, nil
+}
+
+// resolveGuardEntry compiles one nested { name, args } guard table; where names the
+// entry in an error.
+func resolveGuardEntry[T any](m *fsm.Machine[T], item any, where string) (fsm.GuardFunc[T], error) {
+	guardDef, ok := item.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%s is not a table", where)
+	}
+	name, _ := guardDef["name"].(string)
+	if name == "" {
+		return nil, fmt.Errorf("%s missing 'name'", where)
+	}
+	childArgs, _ := guardDef["args"].(map[string]any)
+	g, err := ResolveGuard(m, name, childArgs)
+	if err != nil {
+		return nil, fmt.Errorf("compound guard '%s': %w", name, err)
+	}
+	return g, nil
 }
 
 // ResolveGuard builds a guard from a registered factory or static guard by name

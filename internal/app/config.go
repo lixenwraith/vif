@@ -20,6 +20,11 @@ import (
 const (
 	DefaultWidth  = 80
 	DefaultHeight = 24
+
+	// BotWidth and BotHeight size a headless bot given no -size: the terminal the
+	// fleet serves a session as, so a bot's map is the one a site session has.
+	BotWidth  = 120
+	BotHeight = 40
 )
 
 // Mode selects the runtime shape: which I/O services exist, which clock drives
@@ -181,6 +186,10 @@ type Config struct {
 	// which is what a dedicated host always does.
 	Participants int
 
+	// Bots names the graph of each bot seat this run holds, one entry a bot. Seats
+	// join the session the run is in, and a run in none hosts one on loopback.
+	Bots []string
+
 	// Width and Height are the terminal-equivalent dimensions a caller-driven run
 	// assumes; margins apply as usual, so the viewport is smaller than these.
 	// Ignored when the terminal owns geometry; zero selects the defaults.
@@ -227,6 +236,10 @@ type Config struct {
 	// scriptedSession admits headless network I/O only through RunScript, which
 	// performs the startup gate and owns wall pacing.
 	scriptedSession bool
+
+	// terminalGeometry sizes a presented run from its terminal, as play does; a
+	// presented bot takes it when -size names none.
+	terminalGeometry bool
 
 	// geometryDefaulted records that Normalize supplied Width or Height, which is
 	// how a dedicated host tells "size me from the session" apart from "serve
@@ -365,6 +378,9 @@ func (c Config) Validate() error {
 	if c.Participants != 0 && c.JoinAddress != "" {
 		return errors.New("-players configures a host, not a joining guest")
 	}
+	if len(c.Bots) > parameter.MaxPlayers {
+		return fmt.Errorf("-bots %d is more than the %d a session holds", len(c.Bots), parameter.MaxPlayers)
+	}
 	if c.LogScope != "" {
 		if _, err := vlog.ParseScopes(c.LogScope, vlog.ScopeAll); err != nil {
 			return err
@@ -376,7 +392,7 @@ func (c Config) Validate() error {
 		}
 	}
 	if c.scriptedSession && c.TimeScaleSpec == ScriptPaceMax &&
-		(c.HostAddress != "" || c.JoinAddress != "") {
+		(c.HostAddress != "" || c.JoinAddress != "" || len(c.Bots) > 0) {
 		return errors.New("-speed max cannot pace a session: a script that outruns its peer " +
 			"is not simulating the session it is in")
 	}

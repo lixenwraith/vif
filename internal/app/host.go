@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,6 +29,12 @@ func (c sessionControl) BeginHosting(addr, authority string) error {
 }
 func (c sessionControl) Join(target string) error { return c.a.joinLocked(target) }
 func (c sessionControl) SessionSummary() string   { return c.a.sessionSummaryLocked() }
+func (c sessionControl) DropBot(slot int) error   { return c.a.dropSeat(slot) }
+func (c sessionControl) BotSummary() string       { return c.a.seatsSummary() }
+
+func (c sessionControl) AddBot(graph string) error {
+	return c.a.addSeatLocked(cmp.Or(graph, DefaultBotGraph))
+}
 
 func (c sessionControl) ChangeScenario(name string) (bool, error) {
 	return c.a.changeScenarioLocked(name)
@@ -63,7 +70,7 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 	if sc.Digest() == a.scenario.Digest() {
 		return false, nil // already running these bytes; the caller resets instead
 	}
-	req := &restartRequest{Scenario: name}
+	req := &restartRequest{Scenario: name, Bots: a.seatGraphs()}
 	if port != nil {
 		// Where this run's participants come back to. The address it already
 		// listens on when it opened the session; the one it advertised when it
@@ -99,7 +106,7 @@ func (a *App) receiveSessionRestart(from uint32, addr string) {
 	if a.cfg.Mode != ModePlay || a.cfg.JoinAddress == "" {
 		return // a coordinator hears its own broadcast back on a mesh; a driven run has no loop
 	}
-	if a.restart.CompareAndSwap(nil, &restartRequest{Rejoin: true, Join: addr}) {
+	if a.restart.CompareAndSwap(nil, &restartRequest{Rejoin: true, Join: addr, Bots: a.seatGraphs()}) {
 		vlog.Info("app", "msg", "session restarting", "authority", from, "dial", addr)
 	}
 }

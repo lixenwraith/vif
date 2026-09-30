@@ -448,6 +448,13 @@ Combine multiple guards with logical operators.
 ]}}
 ```
 
+### Not (negates one guard)
+
+```toml
+{ trigger = "Tick", target = "Seek", guard = "Not", guard_args = { guard =
+    { name = "StatusBoolEquals", args = { key = "boost.active", value = true } } } }
+```
+
 Compound guards support nesting:
 
 ```toml

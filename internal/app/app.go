@@ -53,6 +53,9 @@ type restartRequest struct {
 	Rejoin  bool
 	Join    string
 	dialled *joinDial
+
+	// Bots are the graphs of the seats this run held, which the next one seats again.
+	Bots []string
 }
 
 // App owns the wired runtime: services, world, input, scheduler, and the selected
@@ -165,6 +168,11 @@ type App struct {
 	stageMu   sync.Mutex
 	staging   *App
 	stagedFor stagingKey
+
+	// seats are the bots this run holds. seatsMu is taken under the world lock and
+	// never takes it.
+	seatsMu sync.Mutex
+	seats   []*seat
 }
 
 // New wires the runtime, releasing anything already started on failure. Errors are
@@ -289,14 +297,7 @@ func (a *App) initWorld() {
 	// Service resources bridged into the ECS
 	a.hub.BindResources(a.world.Resources)
 	if r := a.world.Resources.Network; r != nil {
-		r.OnDeparture = a.releaseParticipant32
-		r.SharedDigest = a.sharedDigestLocked
-		r.OnCorrection = a.receiveCorrection
-		r.OnSelective = a.receiveSelective
-		r.OnTickClosed = a.tickClosed
-		r.OnAuthority = a.receiveAuthorityFrame
-		r.OnPeerLost = a.reportPeerLost
-		r.OnSessionRestart = a.receiveSessionRestart
+		a.bindSessionHooks(r)
 		// A session endpoint exists, so this run is shared for its whole life whether
 		// or not a peer is attached at a given tick. Latching here rather than
 		// reading the port keeps the anchor, the D-14 verdict and the playout barrier
@@ -515,6 +516,7 @@ func (a *App) buildAnchor() event.JournalAnchor {
 // Safe on a partially constructed App
 func (a *App) Close() {
 	vlog.Info("app", "msg", "shutdown begin")
+	a.closeSeats()
 	if a.scheduler != nil {
 		a.scheduler.Stop()
 	}
