@@ -260,6 +260,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:host <addr> [host\|migrate]` | Open this running game to participants (`:host :7777`), under the authority policy named: `host` ends the session with this participant, `migrate` hands it to a survivor. Refused if the run is already in a session. |
 | `:join <target>` | Replace this solo game with the session at target, in any form `-join` takes; a browser takes only its `wss://` link. Refused while in a session. The game plays on while the dial runs and is replaced only once the host admits it; a refusal leaves it as it was, and a join that fails after that starts a solo game. |
 | `:session` | Report the session role, address, participant identity, its cursor slot, peer count and tick. |
+| `:bot [add [graph]\|drop <slot>]` | List this run's bots, seat one playing `roam` or the graph named, or drop the one on a slot. A run in no session hosts one on loopback for them; a guest's bots join its session and leave with it. |
 | `:system <runtime-name> enable\|disable` | Toggle a system that honors meta-system commands. |
 | `:flow [group]`, `:graph [group]` | Toggle navigation flow-field or route-graph debug views. |
 | `:speed [rate\|+\|-\|reset]`, `:sp` | Report or set the rational simulation rate. |
@@ -284,13 +285,16 @@ primarily developer/authoring controls.
 
 In a live session, pause, speed, step, system mutation, raw `:emit` and FSM region
 operations are refused because applying them to only one scheduler would
-desynchronise shared state. `:host` is deliberately outside that guard: the guard
-exists to stop an operator changing shared scheduling under a session that has
-already agreed on it, and this is the command that creates one. It refuses a run
-that is already in a session, which is the same rule stated where it belongs.
+desynchronise shared state. Pause alone is allowed to the authority while every
+other participant is its own bot, which stands still with it; an arrival ends the
+pause. `:host` is deliberately outside that guard: the guard exists to stop an
+operator changing shared scheduling under a session that has already agreed on
+it, and this is the command that creates one. It refuses a run that is already in
+a session, which is the same rule stated where it belongs. `:bot` is outside it
+too: a bot joins through the session's own gate, as any participant does.
 
-`:host` also binds a socket and starts goroutines, which is more than any other
-command does, and it does it **inside the router's critical section** — the whole
+`:host` binds a socket and `:bot add` dials one, and both start goroutines, which is
+more than any other command does, **inside the router's critical section** — the whole
 intent path runs under the world lock and `mode/` must never acquire it itself. The
 command reaches `engine.SessionController`, whose methods are therefore the
 lock-held forms; an implementation that took the lock again wedges the instance at

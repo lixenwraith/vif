@@ -128,6 +128,7 @@ line wins.
 | `-serve <addr>` | Bind a headless session with no local cursor: a dedicated host. |
 | `-join <addr>` | Join a session at `host:port`; the host supplies seed, config and content identity. |
 | `-players <n>` | Roster ceiling including self, `2`..`parameter.MaxPlayers`. Unset holds the whole roster. With `-serve` it counts guests, because the server is not one of them, and the session starts on its first guest and admits the rest as they arrive. |
+| `-bots <n[:graph]>` | Seat `n` bots playing `roam`, or the graph named, in the session the run holds; a solo run hosts them on loopback. With `-serve` they keep the session occupied. |
 | `-authority host\|migrate` | Where authorship goes when the authoring participant leaves. `host` pins it; `migrate` hands it to the lowest surviving identity. Default `host` with `-serve`, `migrate` otherwise. |
 | `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own. Omitted on a server, the first guest's terminal sizes the session. |
 | `-probe <addr>` | Serve `/health` and `/metrics`; `-serve` only. |
@@ -348,7 +349,8 @@ the example above holds at most two guests but plays as soon as one arrives.
 A dialling host is admitted at most `parameter.NetworkAdmitBurst`
 times per `NetworkAdmitWindow`, because the admission that follows a handshake
 reads and sends a whole world and a peer cycling through it would otherwise spend
-one connect per capture.
+one connect per capture. A loopback dial is not counted: only this machine makes
+one, a run's own bots among them.
 
 ### A scripted participant
 
@@ -397,6 +399,20 @@ The replay path rebuilds seed, config/content, timing, and geometry from its
 anchor rather than `buildConfig`; normal gameplay flags do not override those
 values. Session logging and `-dev` are still applied before playback starts;
 `-j` is an App config flag and does not journal a replay.
+
+### Bots beside a run
+
+`-bots N[:graph]` seats bots in the session a run holds. Each is a headless
+instance in the same process that joins as any guest does: over loopback to its
+holder's own listener, or to the address its holder joined. A solo run with bots
+hosts on loopback and still pauses, since every other participant is its own; a
+guest's bots leave with it. `:bot` lists, adds and drops them. See [Bots](todo-bots.md) §4.
+
+```bash
+./bin/vif -bots 2                             # play beside two roam bots
+./bin/vif -serve 127.0.0.1:7777 -d -bots 3    # a session of three bots to join
+./bin/vif -join 127.0.0.1:7777 -bots 1:patrol # join with a patrol of your own
+```
 
 ### End-to-end setups
 
