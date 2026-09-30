@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,6 +29,12 @@ func (c sessionControl) BeginHosting(addr, authority string) error {
 }
 func (c sessionControl) Join(target string) error { return c.a.joinLocked(target) }
 func (c sessionControl) SessionSummary() string   { return c.a.sessionSummaryLocked() }
+func (c sessionControl) DropBot(slot int) error   { return c.a.dropSeat(slot) }
+func (c sessionControl) BotSummary() string       { return c.a.seatsSummary() }
+
+func (c sessionControl) AddBot(graph string) error {
+	return c.a.addSeatLocked(cmp.Or(graph, DefaultBotGraph))
+}
 
 func (c sessionControl) ChangeScenario(name string) (bool, error) {
 	return c.a.changeScenarioLocked(name)

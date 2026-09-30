@@ -36,7 +36,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "blossom", "decay", "cleaner", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region",
-	"host", "join", "session",
+	"host", "join", "session", "bot",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -141,6 +141,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleJoinCommand(ctx, args)
 	case "session":
 		return handleSessionCommand(ctx)
+	case "bot":
+		return handleBotCommand(ctx, args)
 	default:
 		setCommandError(ctx, fmt.Sprintf("Unknown command: %s", cmd))
 		return CommandResult{Continue: true, KeepPaused: false}
@@ -837,6 +839,42 @@ func handleSessionCommand(ctx *engine.GameContext) CommandResult {
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 	ctx.SetStatusMessage(ctx.SessionCtl.SessionSummary(), parameter.StatusMessageDefaultTimeout, true)
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// handleBotCommand lists, seats or drops the bots this run holds. Outside the
+// live-session guard, like :host: a bot joins the session as any participant does.
+// Usage: :bot | :bot add [graph] | :bot drop <slot>
+func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if ctx.SessionCtl == nil {
+		setCommandError(ctx, "This runtime has no session transport")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	var err error
+	switch {
+	case len(args) == 0:
+		ctx.SetStatusMessage(ctx.SessionCtl.BotSummary(), parameter.StatusMessageDefaultTimeout, true)
+		return CommandResult{Continue: true, KeepPaused: false}
+	case args[0] == "add" && len(args) <= 2:
+		graph := ""
+		if len(args) == 2 {
+			graph = args[1]
+		}
+		if err = ctx.SessionCtl.AddBot(graph); err == nil {
+			ctx.SetStatusMessage("Bot joining; :bot lists this run's bots", parameter.StatusMessageDefaultTimeout, false)
+		}
+	case args[0] == "drop" && len(args) == 2:
+		slot, perr := strconv.Atoi(args[1])
+		if err = perr; err == nil {
+			err = ctx.SessionCtl.DropBot(slot)
+		}
+	default:
+		setCommandError(ctx, "Usage: :bot [add [graph] | drop <slot>]")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	if err != nil {
+		setCommandError(ctx, "Bot: "+err.Error())
+	}
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 

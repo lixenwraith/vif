@@ -257,6 +257,24 @@ func (a *App) seatGraphs() []string {
 	return specs
 }
 
+// seatsSummary is :bot's report of the seats this run holds.
+func (a *App) seatsSummary() string {
+	a.seatsMu.Lock()
+	defer a.seatsMu.Unlock()
+	if len(a.seats) == 0 {
+		return "No bots; :bot add [graph] seats one"
+	}
+	parts := make([]string, 0, len(a.seats))
+	for _, s := range a.seats {
+		if s.id.Load() == 0 {
+			parts = append(parts, s.graph.Name+" joining")
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("slot %d %s", s.slot.Load(), s.graph.Name))
+	}
+	return "Bots: " + strings.Join(parts, ", ") + "; :bot drop <slot> drops one"
+}
+
 // seatsOnly reports whether every participant linked to this run is a seat it
 // holds, which is what lets an authority pause: its seats stand still with it.
 // Called under the world lock.
