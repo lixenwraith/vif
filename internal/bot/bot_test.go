@@ -27,6 +27,14 @@ on_update = [{ action = "PointAt", payload = { target = "treasure" } }]`, `unkno
 transitions = [{ trigger = "Tick", target = "A", guard = "OnTarget", guard_args = { target = "random" } }]`, `unknown target "random"`},
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "InMode", guard_args = { mode = "replace" } }]`, `unknown mode "replace"`},
+		{region + `[states.A]
+on_enter = [{ action = "Intent", payload = { name = "motion_left", count = [] } }]`, "count range must be [min, max]"},
+		{region + `[states.A]
+on_enter = [{ action = "Intent", payload = { name = "motion_left", count = [9, 2] } }]`, "count range must be [min, max]"},
+		{region + `[states.A]
+on_enter = [{ action = "Intent", payload = { name = ["motion_left", 3] } }]`, "not an action name"},
+		{region + `[states.A]
+transitions = [{ trigger = "Tick", target = "A", guard = "Not", guard_args = {} }]`, "Not: 'guard' is not a table"},
 	} {
 		_, err := ParseGraph("broken", []byte(tt.doc))
 		if err == nil || !strings.Contains(err.Error(), tt.want) {

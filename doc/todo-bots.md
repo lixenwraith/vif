@@ -196,13 +196,15 @@ Relays (§4), then learning (§8), in that order.
 ## 6. Vocabulary
 
 A bot document is a scenario graph (see [FSM reference](fsm-reference.md)) plus a
-`[bot]` table. `internal/fsm/std` supplies variables, timing, compound guards and
-status guards over the bot's own registry, whose bare keys — `heat.current`,
-`energy.current`, `boost.active`, `shield.active` — mirror its own slot.
+`[bot]` table. `internal/fsm/std` supplies variables, timing, compound guards
+(`And`, `Or`, `Not`), status guards over the bot's own registry, whose bare keys —
+`heat.current`, `energy.current`, `boost.active`, `shield.active` — mirror its own
+slot, and config guards over its own view (`map_width`, `camera_x`, …), which a
+private graph reads without the divergence warning a shared script gets.
 
 | Action | Payload | Queues |
 |---|---|---|
-| `Intent` | `name` (a keymap action), `count`, `char` | one semantic key press |
+| `Intent` | `name` (a keymap action, or a list drawn from), `count` (a number, or a `[min, max]` range drawn from), `char` | one semantic key press |
 | `Text` | `text` | a character intent per rune |
 | `Command` | `text` | the ex-command round trip |
 | `TypeGlyph` | — | the rune of the glyph under the cursor, if there is one |
@@ -214,6 +216,9 @@ status guards over the bot's own registry, whose bare keys — `heat.current`,
 | `OnTarget` | `target` | the cursor's cell holds one |
 | `InMode` | `mode` | the router is in `normal`, `insert`, `visual`, `search` or `command` |
 | `Chance` | `percent` | a draw from the bot's own stream |
+
+A payload with no choice draws nothing, so a fixed sequence leaves the stream
+alone; `Chance` as an action guard is how a graph does something now and then.
 
 Targets: `glyph` (typeable text), `gold` (a gold member), `nugget`, `species` (a
 hostile combat entity), `cursor` (another participant) and `random` (a cell the

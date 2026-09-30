@@ -92,38 +92,49 @@ func TestAMapCellPointerReachesOnlyWhatTheViewportShows(t *testing.T) {
 }
 
 // TestASoloBotRunIsAPureFunctionOfItsSeed: a graph draws from its own stream and reads
-// a deterministic world, so one seed journals one run.
+// a deterministic world, so one seed journals one run, for every shipped graph.
 func TestASoloBotRunIsAPureFunctionOfItsSeed(t *testing.T) {
 	t.Parallel()
-	var runs [2][]event.JournalRecord
-	for i := range runs {
-		capture := journal.NewCapture()
-		a, _ := playBot(t, "roam", fixtureSeed, 600, capture)
-		a.Close()
-		runs[i] = capture.Records()
+	for _, name := range shippedGraphs(t) {
+		var runs [2][]event.JournalRecord
+		for i := range runs {
+			capture := journal.NewCapture()
+			a, _ := playBot(t, name, fixtureSeed, 600, capture)
+			a.Close()
+			runs[i] = capture.Records()
+		}
+		played := slices.ContainsFunc(runs[0], func(r event.JournalRecord) bool { return r.Origin == event.OriginInput })
+		if !played {
+			t.Fatalf("%s journaled no input, so its equality proves nothing", name)
+		}
+		if !slices.Equal(runs[0], runs[1]) {
+			t.Fatalf("%s: one seed journaled %d and %d records that differ", name, len(runs[0]), len(runs[1]))
+		}
 	}
-	typed := slices.ContainsFunc(runs[0], func(r event.JournalRecord) bool { return r.Type == event.EventCharacterTyped })
-	if !typed {
-		t.Fatal("the run typed nothing, so its equality proves nothing")
+}
+
+// shippedGraphs names every embedded bot graph.
+func shippedGraphs(t *testing.T) []string {
+	t.Helper()
+	files, err := fs.Glob(asset.DefaultBots, "*.toml")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no shipped graphs: %v", err)
 	}
-	if !slices.Equal(runs[0], runs[1]) {
-		t.Fatalf("one seed journaled %d and %d records that differ", len(runs[0]), len(runs[1]))
+	for i, file := range files {
+		files[i] = strings.TrimSuffix(file, ".toml")
 	}
+	return files
 }
 
 // TestEveryShippedGraphPlays: each embedded graph loads, acts, and never queues more
 // than its rate releases.
 func TestEveryShippedGraphPlays(t *testing.T) {
 	t.Parallel()
-	files, err := fs.Glob(asset.DefaultBots, "*.toml")
-	if err != nil || len(files) == 0 {
-		t.Fatalf("no shipped graphs: %v", err)
-	}
-	for _, file := range files {
-		a, st := playBot(t, strings.TrimSuffix(file, ".toml"), fixtureSeed, 1200, nil)
+	for _, name := range shippedGraphs(t) {
+		a, st := playBot(t, name, fixtureSeed, 1200, nil)
 		a.Close()
 		if st.Injected == 0 || st.Dropped != 0 {
-			t.Errorf("%s: injected %d, dropped %d", file, st.Injected, st.Dropped)
+			t.Errorf("%s: injected %d, dropped %d", name, st.Injected, st.Dropped)
 		}
 	}
 }
