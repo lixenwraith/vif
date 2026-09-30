@@ -173,6 +173,7 @@ type Intent struct {
 	ScrollDir     ScrollDir
 	Count         int  // Effective count (minimum 1)
 	Char          rune // Target char for f/t motions or typed char
-	X, Y          int  // Pointer cell in terminal coordinates, for mouse intents
+	X, Y          int  // Pointer cell of a mouse intent, in terminal coordinates
+	MapCell       bool // X, Y name a map cell instead, as a bot's pointer does
 	MacroPlayback bool // True if intent originated from macro playback
 }
