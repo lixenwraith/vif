@@ -663,6 +663,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	a.adoptLobbyGeometry()
 
 	a.lobbyClosing.Store(true)
+	a.settleLobbyHandshakes(port)
 	offer, err := a.hostOffer()
 	if err != nil {
 		return err
@@ -793,6 +794,20 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 		offer.ParticipantCount(), confirmedGuests(), admitted))
 	a.corrections.StartPump()
 	return nil
+}
+
+// settleLobbyHandshakes waits until every guest the roster names is on the link. A
+// dial is rostered when it is assigned, before its handshake ends, and the gate sends
+// to every roster entry; a handshake that fails releases its entry, so this ends
+// within one handshake's bound.
+func (a *App) settleLobbyHandshakes(port *network.SocketPort) {
+	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound
+	for a.guestCount() > port.PeerCount() && time.Now().Before(deadline) {
+		select {
+		case <-port.Changes():
+		case <-time.After(2 * time.Millisecond):
+		}
+	}
 }
 
 // startJoinSession completes the tick-zero gate before the socket port owns the
