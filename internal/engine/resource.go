@@ -146,11 +146,8 @@ type ConfigResource struct {
 
 // MapOffset returns the map's top-left corner in viewport coordinates: zero when
 // the camera crops a map at least as large as the viewport, and the centring
-// offset when the map is smaller.
-//
-// One definition rather than two, because the render transform and the mouse
-// transform are inverses of each other: a viewport coordinate the renderer draws
-// the map's origin at must be the coordinate a click there resolves to.
+// offset when the map is smaller. One definition, because the render and pointer
+// transforms are inverses: where the renderer draws a cell is where a click lands.
 func (c *ConfigResource) MapOffset() (int, int) {
 	offsetX, offsetY := 0, 0
 	if c.MapWidth < c.ViewportWidth {
@@ -176,6 +173,16 @@ func (c *ConfigResource) ViewportToMap(vx, vy int) (mapX, mapY int, ok bool) {
 		return 0, 0, false
 	}
 	return mapX, mapY, true
+}
+
+// MapToViewport is ViewportToMap's inverse: the viewport coordinate a map cell is
+// drawn at, and whether the viewport shows that cell.
+func (c *ConfigResource) MapToViewport(mapX, mapY int) (vx, vy int, ok bool) {
+	offsetX, offsetY := c.MapOffset()
+	vx, vy = mapX-c.CameraX+offsetX, mapY-c.CameraY+offsetY
+	ok = mapX >= 0 && mapX < c.MapWidth && mapY >= 0 && mapY < c.MapHeight &&
+		vx >= 0 && vx < c.ViewportWidth && vy >= 0 && vy < c.ViewportHeight
+	return vx, vy, ok
 }
 
 // --- EventQueue Resource ---
@@ -429,12 +436,10 @@ func (pr *PlayerResource) Retarget(pos component.PositionComponent) {
 	q.latest = pos
 }
 
-// Reconcile settles one announced placement of the local cursor. Own is one this
-// instance's barrier applied from its own crossing: those land in the order they
-// were produced, so each consumes the oldest outstanding one whatever cell a
-// clamp made of it. A placement without that identity — solo play, or a replay —
-// settles on matching cells. Anything else is an authoritative value the
-// prediction did not produce: D-18 snaps to it, and what was in flight is shed.
+// Reconcile settles one announced placement of the local cursor. Own placements
+// land in production order, so each consumes the oldest outstanding one whatever a
+// clamp made of it; without that identity (solo, replay) cells must match. Anything
+// else is an authoritative value: D-18 snaps to it and sheds what was in flight.
 func (pr *PlayerResource) Reconcile(pos component.PositionComponent, own bool) {
 	q := &pr.prediction
 	switch {
@@ -473,16 +478,10 @@ type RandResource struct {
 	root    uint64
 	session atomic.Uint64
 
-	// The generator most recently issued for each domain and label. A system draws
-	// its stream once in Init and holds that pointer for its lifetime, so these are
-	// the very generators the simulation draws from — which is what lets a snapshot
-	// resume all of them without every system having to hand its own over.
-	//
-	// Not cleared by NextSession: the counter advances immediately after a game's
-	// systems have finished drawing, so a map cleared there would be empty for the
-	// whole of the game it describes. A re-Init overwrites each key with the fresh
-	// generator it just drew, which is the same replacement the system does to its
-	// own field, so the two stay the same object.
+	// The generator most recently issued per domain and label: the very pointers
+	// systems hold from Init, so a snapshot resumes them all. NextSession keeps it,
+	// since the counter advances once a game's systems have drawn; a re-Init replaces
+	// each key with the generator it just drew, as the system does its own field.
 	streamMu sync.Mutex
 	streams  map[streamKey]*vmath.FastRand
 }
@@ -524,15 +523,10 @@ func (r *RandResource) NextSession() uint64 { return r.session.Add(1) }
 // leaves a world holding two sessions' streams.
 func (r *RandResource) SetSession(n uint64) { r.session.Store(n) }
 
-// Stream returns the labelled generator for a domain in the current session, and
-// records it as that name's live generator so SaveStreams can report where the
-// stream has reached.
-//
-// Every call issues a fresh generator, which is what a re-Init after a reset
-// needs: a resumed one would carry the finished game's position into the new one.
-// Two live holders of a single name would therefore be one stream by name and two
-// by behaviour, and only the later would be restorable —
-// TestSystemStreamLabelsAreUnique rules that out over the real system set.
+// Stream returns a fresh labelled generator for a domain in the current session and
+// records it for SaveStreams; a re-Init after a reset needs a fresh one. Two live
+// holders of one name would be one stream by name and two by behaviour, which
+// TestSystemStreamLabelsAreUnique rules out.
 func (r *RandResource) Stream(d core.Domain, label string) *vmath.FastRand {
 	g := vmath.NewSeededRand(r.DomainRoot(d), label)
 	r.streamMu.Lock()
@@ -597,10 +591,8 @@ func (r *RandResource) sessionRoot() uint64 {
 
 // FollowCamera soft-follows one cursor: the camera shifts by the least amount that
 // brings the cell back inside the dead zone, then clamps to the map. It lives here
-// rather than in CameraSystem because a resize has to re-anchor the view without
-// announcing a cursor move — an announcement is a shared event, and the flow-field
-// throttle it dirties is shared state, so a local view change that emitted one put
-// two instances on different recompute phases.
+// so a resize re-anchors the view without announcing a cursor move, a shared event
+// whose flow-field throttle would put two instances on different phases.
 func (c *ConfigResource) FollowCamera(cursorX, cursorY int) {
 	if !parameter.CameraEnabled {
 		return
@@ -911,16 +903,10 @@ type NetworkPort interface {
 }
 
 // OffTickDrainPort is a transport that can be polled between two ticks without the
-// poll counting as one.
-//
-// The Drain contract is "once per game tick", and some transports measure
-// themselves against it: a virtual link's clock, its shaping credit and its probe
-// interval are all denominated in polls. Phase 6's correction exchange has to
-// translate what has already arrived without moving that clock — a manifest
-// answered a tick late is a manifest answered about a world the receiver has
-// already predicted past — so a port that measures itself offers this second door.
-// A transport with no such measurement (a socket) need not implement it; the
-// caller falls back to Drain, which for it is the same operation.
+// poll counting as one: a virtual link's clock, shaping credit and probe interval
+// are denominated in Drains, and a correction exchange must read what arrived
+// without moving them. A socket need not implement it; the caller falls back to
+// Drain, which for it is the same operation.
 type OffTickDrainPort interface {
 	DrainOffTick(dst []network.Inbound) int
 }
@@ -946,20 +932,10 @@ type NetworkSessionPort interface {
 	ParticipantID() uint32
 }
 
-// LinkMeasuringPort is a transport that measures its own links.
-//
-// The whole of it is optional and asserted for rather than required, because a
-// port that cannot measure a link is still a perfectly good port: the crossing
-// stream, the syncs and the digests do not depend on any of this. What depends
-// on it is the *cadence*, and a session on an unmeasured transport simply keeps
-// its nominal one.
-//
-// The direction of the two halves is what keeps network timing out of the
-// simulation. SetLinkReport is the only thing the world tells the transport, and
-// it is a scheduling hint the far end may publish sooner because of; LinkMetric
-// is the only thing the transport tells the world, and nothing but transport
-// scheduling may read it. No round trip, no delivery rate and no jitter estimate
-// reaches a component store, an RNG stream, a replay or a game decision.
+// LinkMeasuringPort is a transport that measures its own links; optional, since
+// only the cadence depends on it. SetLinkReport is the one hint the world gives the
+// transport and LinkMetric the one reading it gets back, for transport scheduling
+// only: no round trip, rate or jitter reaches a store, a stream or a game decision.
 type LinkMeasuringPort interface {
 	// Peers lists the directly connected participants in a stable order.
 	Peers() []uint32
@@ -1017,23 +993,15 @@ type NetworkResource struct {
 	OnDeparture func(participant uint32)
 
 	// OnCorrection hands one reassembled authoritative correction to the session
-	// layer. It is called under the world lock, from the tick that drained the last
-	// chunk, so it must do nothing but take the bytes: decoding a correction is
-	// hundreds of kilobytes of JSON and installing one needs the lock this call
-	// already holds. What it hands to is a queue the corrector drains between two
-	// ticks.
+	// layer, under the world lock from the tick that drained its last chunk, so it
+	// only takes the bytes: decoding is costly and installing needs the lock it
+	// already holds. The corrector drains the queue between two ticks.
 	OnCorrection func(tick uint64, body []byte)
 
-	// OnSelective hands one Phase 6 selective-correction frame to the session
-	// layer: a manifest, a receiver's answer to one, or the repair that answers
-	// that. Like OnCorrection it is called under the world lock, from the tick that
-	// drained the frame, so it must do nothing but take the bytes — the comparison,
-	// the hashing and the apply all happen between two ticks.
-	//
-	// kind is the network.MessageType the frame arrived as. One seam rather than
-	// three keeps the transport's knowledge of the protocol to "this is a
-	// selective-correction frame from that peer", which is all it can usefully
-	// have.
+	// OnSelective hands one selective-correction frame — a manifest, an answer or a
+	// repair — to the session layer. Like OnCorrection it runs under the world lock
+	// and only takes the bytes. kind is the network.MessageType it arrived as: one
+	// seam keeps the transport's knowledge to "a selective frame from that peer".
 	OnSelective func(kind uint8, from uint32, body []byte)
 
 	// OnAuthority hands one Phase 7 succession frame — a report, a vote or a
