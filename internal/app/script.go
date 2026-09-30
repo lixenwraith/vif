@@ -80,7 +80,8 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 
 // RunBot plays this instance's own seat with a bot graph: a name or a path, which
 // cfg.Resources resolves. It is otherwise a script run, and presented, it keeps real
-// time unless -speed says otherwise.
+// time unless -speed says otherwise. It reports its counters however it stops;
+// quit says the graph ended the run itself.
 func RunBot(cfg Config, spec string) (bot.Stats, error) {
 	data, name, err := resource.BotGraph(cfg.Resources, spec)
 	if err != nil {
@@ -97,7 +98,7 @@ func RunBot(cfg Config, spec string) (bot.Stats, error) {
 		driver *bot.Driver
 		played *App
 	)
-	_, err = runDriven(cfg, "bot", name, func(a *App) (pacedSource, error) {
+	quit, err := runDriven(cfg, "bot", name, func(a *App) (pacedSource, error) {
 		d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.localParticipant())
 		driver, played = d, a
 		return botSource{d}, err
@@ -107,7 +108,7 @@ func RunBot(cfg Config, spec string) (bot.Stats, error) {
 	}
 	stats := driver.Stats()
 	reg := played.world.Resources.Status
-	vlog.Info("app", "msg", "bot complete", "name", name, "ticks", stats.Ticks,
+	vlog.Info("app", "msg", "bot stopped", "name", name, "quit", quit, "ticks", stats.Ticks,
 		"injected", stats.Injected, "dropped", stats.Dropped, "state", stats.State,
 		"typed", reg.Ints.Get("typing.correct").Load(), "errors", reg.Ints.Get("typing.errors").Load())
 	return stats, err
@@ -208,7 +209,7 @@ func (s botSource) Step() (bool, error) { return s.d.Step() }
 
 func (s botSource) progress() string {
 	st := s.d.Stats()
-	return fmt.Sprintf("tick %d | %s | %d in %d dropped", st.Ticks, st.State, st.Injected, st.Dropped)
+	return fmt.Sprintf("tick %d | %s | %d intents, %d dropped", st.Ticks, st.State, st.Injected, st.Dropped)
 }
 
 // newScriptApp starts the same tick-zero gate as interactive play, but leaves the
