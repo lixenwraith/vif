@@ -23,15 +23,22 @@ type configOption struct {
 	steps                   []uint64
 	read                    func(*engine.GameContext) string
 	change                  func(*engine.GameContext, int)
+	activate                func(*Router)
 	disabled                func(*engine.GameContext) string
 }
 
 type configPage struct {
 	key, label, description string
 	options                 []configOption
+	extra                   func(*engine.GameContext) []configOption
 }
 
 var configPages = []configPage{
+	{key: "bots", label: "Bots", description: "Add bots or remove a bot held by this run. Guests can bring their own bots.",
+		options: []configOption{configFormOption("add")}, extra: botConfigOptions},
+	{key: "multiplayer", label: "Multiplayer", description: "Host this run, join a session or request one from an allocator.", options: []configOption{
+		configFormOption("host"), configFormOption("join"), configFormOption("request"),
+	}, extra: sessionConfigOptions},
 	{key: "audio", label: "Audio", description: "Music, sound effects and effects volume.", options: []configOption{
 		{key: "effects", label: "Sound effects", description: "Game sound effects; independent of music.",
 			read: audioChannelValue(parameter.AudioChanEffects), change: toggleAudioChannel(parameter.AudioChanEffects), disabled: audioUnavailable},
@@ -119,7 +126,7 @@ var configPages = []configPage{
 		{key: "backend", label: "Audio device / buffer", description: "Use -audio-backend and vif.toml [audio].buffer_ms. The audio device opens at startup.", read: startupValue},
 		{key: "color", label: "Colour depth", description: "Use -color auto|256|true. Rendering resources are selected at startup.", read: startupValue},
 		{key: "keymap", label: "Key bindings", description: "Edit input/keymap.toml in your config root, or use -k. config_menu is the action bound to Ctrl+G.", read: startupValue},
-		{key: "session", label: "Session / bots", description: "Use :host, :join and :bot for session changes. Session identity, seed and recording are startup options.", read: startupValue},
+		{key: "session", label: "Identity / recording", description: "Session identity, seed and recording are startup options. Use the Multiplayer and Bots pages for live session actions.", read: startupValue},
 	}},
 }
 
@@ -162,10 +169,18 @@ func (o configOption) unavailable(ctx *engine.GameContext) string {
 	if o.disabled != nil {
 		return o.disabled(ctx)
 	}
-	if o.command == "" && o.change == nil {
+	if o.command == "" && o.change == nil && o.activate == nil {
 		return "Read only"
 	}
 	return ""
+}
+
+func (p configPage) entries(ctx *engine.GameContext) []configOption {
+	options := slices.Clone(p.options)
+	if p.extra != nil {
+		options = append(options, p.extra(ctx)...)
+	}
+	return options
 }
 
 func handleConfigCommand(ctx *engine.GameContext, args []string) CommandResult {
@@ -201,14 +216,14 @@ func showConfigMenu(ctx *engine.GameContext, page string) {
 				continue
 			}
 			title = "Configuration / " + p.label
-			for _, o := range p.options {
+			for _, o := range p.entries(ctx) {
 				menu.Rows = append(menu.Rows, core.OverlayMenuRow{Key: o.key, Label: o.label, Value: o.read(ctx), Description: o.description, Disabled: o.unavailable(ctx)})
 			}
 			break
 		}
 	}
 	old := configMenu(ctx)
-	if old != nil && old.Page == page && slices.Equal(old.Rows, menu.Rows) {
+	if old != nil && old.Form == nil && old.Page == page && slices.Equal(old.Rows, menu.Rows) {
 		return
 	}
 	scroll := ctx.GetOverlayScroll()
@@ -221,7 +236,11 @@ func showConfigMenu(ctx *engine.GameContext, page string) {
 // RefreshConfigMenu snapshots settled settings under the world lock before rendering.
 func (r *Router) RefreshConfigMenu() {
 	if m := configMenu(r.ctx); m != nil {
-		showConfigMenu(r.ctx, m.Page)
+		if m.Form == nil {
+			showConfigMenu(r.ctx, m.Page)
+		}
+	} else {
+		r.configForm = nil
 	}
 }
 
@@ -241,6 +260,14 @@ func (r *Router) handleConfigMenu() bool {
 
 func (r *Router) configMenuBack() bool {
 	m := configMenu(r.ctx)
+	if r.configForm != nil {
+		key := r.configForm.option.key
+		r.configForm = nil
+		showConfigMenu(r.ctx, m.Page)
+		r.ctx.SetOverlaySelection(key)
+		r.machine.SetMode(input.ModeOverlay)
+		return true
+	}
 	if m.Page == "" {
 		return r.closeOverlay()
 	}
@@ -256,9 +283,9 @@ func (r *Router) moveConfigMenu(motion input.MotionOp, pageDelta int) bool {
 	i = max(i, 0)
 	switch motion {
 	case input.MotionLeft:
-		return r.changeConfigMenu(-1)
+		return r.changeConfigMenu(-1, false)
 	case input.MotionRight:
-		return r.changeConfigMenu(1)
+		return r.changeConfigMenu(1, false)
 	case input.MotionUp:
 		i--
 	case input.MotionDown:
@@ -276,7 +303,7 @@ func (r *Router) moveConfigMenu(motion input.MotionOp, pageDelta int) bool {
 	return true
 }
 
-func (r *Router) changeConfigMenu(direction int) bool {
+func (r *Router) changeConfigMenu(direction int, activate bool) bool {
 	m := configMenu(r.ctx)
 	key := r.ctx.GetOverlaySelection()
 	if key == ".." {
@@ -296,15 +323,22 @@ func (r *Router) changeConfigMenu(direction int) bool {
 		if p.key != m.Page {
 			continue
 		}
-		for _, o := range p.options {
+		for _, o := range p.entries(r.ctx) {
 			if o.key != key {
 				continue
+			}
+			if o.activate != nil && !activate {
+				return true
 			}
 			if why := o.unavailable(r.ctx); why != "" {
 				setCommandError(r.ctx, why)
 				return true
 			}
 			r.ctx.WithOrigin(event.OriginCommand, func() {
+				if o.activate != nil {
+					o.activate(r)
+					return
+				}
 				if o.change != nil {
 					o.change(r.ctx, direction)
 					return

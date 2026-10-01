@@ -111,11 +111,12 @@ the link it gives, or open the session in the browser:
 
 ## Configuration and tools
 
-Press `Ctrl-G` or type `:g` (`:config`) for live settings: audio, mouse and
-auto-fire, display overlays, solo speed, and diagnostics. Select with arrows or
-`j/k`, change with `h/l` or Enter, and use Escape to go back or close. Changes
-apply to this run; unavailable settings show why. Rebind the `config_menu`
-action in the keymap. The menu's Startup settings page explains file/flag options.
+Press `Ctrl-G` or type `:g` (`:config`) for the [configuration menu](doc/config-menu.md):
+add/remove bots, host/join multiplayer, request an allocated session, or adjust
+audio, controls, display, solo speed and diagnostics. Use arrows or `j/k` to
+select, `h/l` to change values, Enter to choose, and Escape to go back. Forms use
+Up/Down between fields and Enter to submit. Changes apply to this run; unavailable
+settings explain why. Rebind the `config_menu` action in the keymap.
 
 - `-s <name|scenario.toml|directory>` selects an installed named scenario or an
   explicit one by path.

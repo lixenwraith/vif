@@ -182,6 +182,21 @@ with Up/Down or j/k. Left/Right or h/l changes values; Enter/Space chooses.
 Escape or q returns to categories, then closes; Ctrl-G closes from any page.
 Home/End and PageUp/PageDown navigate longer pages.
 .PP
+Bots adds local bots by count and policy graph, and removes this run's admitted
+bots by hexadecimal cursor slot, or cancels a joining bot. Leaving bots show their state.
+Host before adding bots to solo play if remote players should join; otherwise
+bots open a loopback session.
+.PP
+Multiplayer hosts this run, joins an address/link, or requests a session from
+an HTTP(S) vif-allocator site with a player count and scenario. Player count 0
+and a blank scenario use server defaults. Allocator-side bot provisioning is
+not yet implemented. Current session status is available on the same page.
+Forms use Up/Down between fields, Left/Right and Home/End to move the text
+cursor, Backspace/Delete to edit, Enter to submit, and Escape to cancel.
+Session actions require Enter/Space; arrows only adjust settings.
+Successful submissions resume play; asynchronous progress and failures appear
+in the status bar. A failed join preserves the current run.
+.PP
 Audio controls music, sound effects and effects volume. Controls adjusts mouse
 input, pointer following and auto-fire. Display controls the telemetry HUD and
 navigation overlays. Simulation changes solo speed. Diagnostics controls logging,

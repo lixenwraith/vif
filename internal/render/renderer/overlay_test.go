@@ -38,3 +38,32 @@ func TestConfigMenuKeepsSelectionVisibleAcrossResize(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigFormKeepsCursorVisibleWithoutMutatingPublishedFields(t *testing.T) {
+	ctx := engine.NewGameContext(engine.NewWorld(), 100, 40)
+	form := &core.OverlayForm{Focus: 2, Fields: []core.OverlayFormField{
+		{Label: "Site", Value: "https://example.test"},
+		{Label: "Players", Value: "3"},
+		{Label: "Scenario", Value: "a-long-scenario-name", Cursor: 19},
+	}, Help: "A scenario on the server", Error: "Please correct the scenario"}
+	ctx.SetOverlayContent(&core.OverlayContent{Title: "Request a session", Layout: core.OverlayLayoutMenu, Menu: &core.OverlayMenu{Form: form}})
+	r := NewOverlayRenderer(ctx)
+	for _, size := range [][2]int{{100, 40}, {40, 15}, {18, 8}, {100, 40}} {
+		ctx.SetPresentationSize(size[0], size[1])
+		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, size[0], size[1])
+		r.Render(render.RenderContext{}, buf)
+		g := ctx.OverlayGeometry()
+		cursor := false
+		for y := range g.ContentH {
+			for x := range g.ContentW {
+				cursor = cursor || buf.CellAt(g.X+g.ContentX+x, g.Y+g.ContentY+y).Bg == visual.RgbOverlaySelected
+			}
+		}
+		if !cursor {
+			t.Fatalf("size %v hides the focused cursor", size)
+		}
+	}
+	if form.Fields[2].Value != "a-long-scenario-name" || form.Fields[2].Cursor != 19 || form.Focus != 2 {
+		t.Fatal("render mutated the form snapshot")
+	}
+}
