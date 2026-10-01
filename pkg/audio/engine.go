@@ -571,7 +571,12 @@ func (ae *AudioEngine) BackendName() string {
 
 func (ae *AudioEngine) IsSilent() bool { return ae.silentMode.Load() }
 
-// SetVolume updates master volume (0.0-1.0)
+func (ae *AudioEngine) Volume() float64 {
+	ae.mu.RLock()
+	defer ae.mu.RUnlock()
+	return ae.config.MasterVolume
+}
+
 func (ae *AudioEngine) SetVolume(vol float64) {
 	if vol < 0 {
 		vol = 0
@@ -602,19 +607,9 @@ func (ae *AudioEngine) SetIntensity(t Intensity, crossfadeSamples int, quantize,
 	ae.send(audioCmd{op: cmdIntensity, tier: t, i1: crossfadeSamples, b: quantize, reveal: reveal})
 }
 
-// DefineSound registers or replaces a spec and hot-swaps the rendered result
-// into a running mixer. An existing name keeps its ID; a new name appends one
-// and every per-ID table grows to match.
-//
-// Rendering runs on the caller's goroutine — the mixer receives finished
-// buffers and never synthesizes. Voices already playing keep their old buffer
-// alias and ring out on the previous take, so the swap is click-free.
-//
-// Determinism note: the variant rng is seeded from the name, so re-rendering
-// under the same name reproduces the same noise. Renaming re-rolls it.
-//
-// Not safe for concurrent callers: ID assignment and table growth are separate
-// steps. One editor goroutine.
+// DefineSound renders on the caller; active voices retain their previous buffers.
+// Existing names keep their IDs and deterministic noise seed; new names append.
+// One editor goroutine must own ID assignment and table growth.
 func (ae *AudioEngine) DefineSound(d *SoundDef) (SoundID, error) {
 	id, err := defineSound(d)
 	if err != nil {

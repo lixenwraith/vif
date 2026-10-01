@@ -1,6 +1,8 @@
 package renderer
 
 import (
+	"slices"
+
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
@@ -168,6 +170,11 @@ func (r *OverlayRenderer) renderContent(root tui.Region, g engine.OverlayGeometr
 	body := root.Sub(g.ContentX, g.ContentY, g.ContentW, g.ContentH)
 
 	switch data.Layout {
+	case core.OverlayLayoutMenu:
+		r.renderMenu(root, body, g, data.Menu)
+		r.renderHint(root, g, parameter.OverlayHintsMenu)
+		return
+
 	case core.OverlayLayoutAbout:
 		r.renderAbout(body)
 		r.renderHint(root, g, parameter.OverlayHintsAbout)
@@ -196,12 +203,69 @@ func (r *OverlayRenderer) syncLayout(g engine.OverlayGeometry, data *core.Overla
 	r.cards = data.Cards()
 
 	switch data.Layout {
+	case core.OverlayLayoutMenu:
+		if data.Menu != nil {
+			r.gameCtx.SetOverlayContentH(len(data.Menu.Rows))
+		}
 	case core.OverlayLayoutAbout:
 		r.gameCtx.SetOverlayContentH(0)
 	case core.OverlayLayoutDoc:
 		r.buildDoc(g)
 	default:
 		r.buildCards(g)
+	}
+}
+
+func (r *OverlayRenderer) renderMenu(root, body tui.Region, g engine.OverlayGeometry, menu *core.OverlayMenu) {
+	if menu == nil || len(menu.Rows) == 0 {
+		return
+	}
+	selected := slices.IndexFunc(menu.Rows, func(row core.OverlayMenuRow) bool { return row.Key == r.gameCtx.GetOverlaySelection() })
+	selected = max(selected, 0)
+	listH := max(body.H-parameter.OverlayMenuDetailRows, 1)
+	scroll := tui.NewScrollState(len(menu.Rows), listH)
+	scroll.Offset = r.gameCtx.GetOverlayScroll()
+	scroll.Select(selected)
+	r.gameCtx.SetOverlayScroll(scroll.Offset)
+
+	items := make([]tui.ListItem, len(menu.Rows))
+	for i, row := range menu.Rows {
+		fg := visual.RgbOverlayValue
+		if row.Disabled != "" {
+			fg = visual.RgbOverlayHint
+		}
+		bg := visual.RgbOverlayBg
+		if i == selected {
+			fg, bg = visual.RgbOverlayBg, visual.RgbOverlaySelected
+		}
+		value := row.Value
+		if row.Disabled != "" {
+			value = "[" + value + "]"
+		}
+		valueW := min(tui.RuneLen(value), max(1, body.W/3))
+		labelW := max(1, body.W-valueW-3)
+		text := tui.PadRight(tui.Truncate(row.Label, labelW), labelW) + " " + tui.Truncate(value, valueW)
+		items[i] = tui.ListItem{Text: text, TextStyle: tui.Style{Fg: fg, Bg: bg}}
+	}
+	body.Sub(0, 0, body.W, listH).List(items, selected, scroll.Offset, tui.ListOpts{
+		CursorBg: visual.RgbOverlaySelected, DefaultBg: visual.RgbOverlayBg, IconWidth: 1,
+	})
+	if g.ScrollW > 0 {
+		root.Sub(g.ScrollX, g.ContentY, g.ScrollW, listH).ScrollBarStyled(0, scroll.Offset, listH, len(menu.Rows), tui.ScrollBarOpts{
+			ThumbFg: visual.RgbOverlayScrollThumb, TrackFg: visual.RgbOverlayScrollTrack, Bg: visual.RgbOverlayBg,
+		})
+	}
+	row := menu.Rows[selected]
+	detail := row.Description
+	if row.Disabled != "" && row.Disabled != "Read only" {
+		detail = row.Disabled + ". " + detail
+	}
+	for i, line := range tui.WrapText(detail, body.W) {
+		y := listH + 1 + i
+		if y >= body.H {
+			break
+		}
+		body.Text(0, y, line, visual.RgbOverlayHint, visual.RgbOverlayBg, terminal.AttrNone)
 	}
 }
 

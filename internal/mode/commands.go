@@ -36,7 +36,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "blossom", "decay", "cleaner", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region",
-	"host", "join", "session", "bot",
+	"host", "join", "session", "bot", "g", "config",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -55,28 +55,15 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 	cmd := parts[0]
 	args := parts[1:]
 
-	// A replay's viewer inspects a world the recording authors
-	if ctx.Viewer.Load() {
-		switch cmd {
-		case "h", "help", "?", "about", "t", "telemetry", "hud", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit":
-		default:
-			setCommandError(ctx, "Command unavailable in a replay: :"+cmd)
-			return CommandResult{Continue: true, KeepPaused: false}
-		}
-	}
-
-	// A live operator may inspect the instance and author its own player state,
-	// but may not mutate shared scheduling, systems or FSM configuration locally.
-	if ctx.World.LiveSession() {
-		switch cmd {
-		case "sp", "speed", "st", "step", "s", "system", "e", "emit", "event", "r", "region":
-			setCommandError(ctx, "Command unavailable in a live session: :"+cmd)
-			return CommandResult{Continue: true, KeepPaused: false}
-		}
+	if reason := commandUnavailable(ctx, cmd); reason != "" {
+		setCommandError(ctx, reason+": :"+cmd)
+		return CommandResult{Continue: true}
 	}
 
 	// Execute based on command
 	switch cmd {
+	case "g", "config":
+		return handleConfigCommand(ctx, args)
 	case "flow":
 		return handleFlowCommand(ctx, args)
 	case "graph":
@@ -147,6 +134,29 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		setCommandError(ctx, fmt.Sprintf("Unknown command: %s", cmd))
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
+}
+
+// The menu and command line share the same session and replay policy.
+func commandUnavailable(ctx *engine.GameContext, cmd string) string {
+	// A replay's viewer inspects a world the recording authors
+	if ctx.Viewer.Load() {
+		switch cmd {
+		case "g", "config", "h", "help", "?", "about", "t", "telemetry", "hud", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit":
+		default:
+			return "Unavailable in a replay"
+		}
+	}
+
+	// A live operator may inspect the instance and author its own player state,
+	// but may not mutate shared scheduling, systems or FSM configuration locally.
+	if ctx.World.LiveSession() {
+		switch cmd {
+		case "sp", "speed", "st", "step", "s", "system", "e", "emit", "event", "r", "region":
+			return "Unavailable in a live session"
+		}
+	}
+
+	return ""
 }
 
 // handleLogCommand controls the session logger

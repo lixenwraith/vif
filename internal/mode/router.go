@@ -203,6 +203,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleEscape()
 	case input.IntentToggleAudioCycle:
 		return r.handleToggleAudioCycle()
+	case input.IntentConfigMenu:
+		return r.handleConfigMenu()
 
 	// Normal mode navigation
 	case input.IntentMotion:
@@ -324,6 +326,9 @@ func (r *Router) handleEscape() bool {
 		r.resetCommandHistoryBrowse()
 		r.ctx.SetPaused(false)
 	case core.ModeOverlay:
+		if configMenu(r.ctx) != nil {
+			return r.configMenuBack()
+		}
 		if r.ctx.IsOverlayFilterEditing() {
 			r.endOverlayFilter()
 			r.setOverlayFilter("")
@@ -940,6 +945,13 @@ func (r *Router) resetCommandHistoryBrowse() {
 // --- Overlay Handlers ---
 
 func (r *Router) handleOverlayClose() bool {
+	if configMenu(r.ctx) != nil {
+		return r.configMenuBack()
+	}
+	return r.closeOverlay()
+}
+
+func (r *Router) closeOverlay() bool {
 	r.ctx.SetOverlayContent(nil)
 	r.ctx.SetPaused(false)
 	r.transitionMode(core.ModeNormal)
