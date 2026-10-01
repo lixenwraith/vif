@@ -130,6 +130,13 @@ jobs:
             ghcr.io/${{ github.repository }}:nightly
             ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
 
+      - name: Clean up old container images
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: 'vif'
+          package-type: 'container'
+          min-versions-to-keep: 1
+
   release:
     name: Publish release assets
     needs: [artifacts, image]
