@@ -1,4 +1,4 @@
-<svg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="80 80 240 240" xmlns="http://www.w3.org/2000/svg">
     <!-- Define center and key points -->
     <!-- Square corners: top-left(100,100), top-right(300,100), bottom-right(300,300), bottom-left(100,300) -->
     <!-- Mid points: left-mid(100,200), right-mid(300,200), top-mid(200,100), bottom-mid(200,300) -->
