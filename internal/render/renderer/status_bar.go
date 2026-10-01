@@ -380,7 +380,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	// Last command indicator (only in normal/visual/insert modes)
 	leftEndX := x + 1 // 1 char gap after mode indicator
 	lastCommand := r.gameCtx.GetLastCommand()
-	if lastCommand != "" && !r.gameCtx.IsSearchMode() && !r.gameCtx.IsCommandMode() {
+	if lastCommand != "" && r.getActiveStatusMessage(realNow) == "" && !r.gameCtx.IsSearchMode() && !r.gameCtx.IsCommandMode() {
 		for _, ch := range lastCommand {
 			if leftEndX >= ctx.ScreenWidth {
 				return

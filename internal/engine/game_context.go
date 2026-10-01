@@ -48,6 +48,16 @@ type SessionController interface {
 	RemoveBot(id uint64) error
 	BotSummary() string
 	Bots() []BotSeat
+	Participants() []SessionParticipant
+	DropPlayer(slot int) error
+	RemovePlayer(entity core.Entity) error
+}
+
+type SessionParticipant struct {
+	Entity core.Entity
+	Slot   uint8
+	Holder uint32
+	Local  bool
 }
 
 type BotSeat struct {

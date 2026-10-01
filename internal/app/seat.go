@@ -23,15 +23,18 @@ import (
 // DefaultBotGraph is the graph a bot seat plays when none is named.
 const DefaultBotGraph = "default"
 
-// BotSpecs shares the count grammar between -bots and :bot add.
+// BotSpecs is shared by CLI flags and :bot add; empty means no request.
 func BotSpecs(spec string) ([]string, error) {
 	if spec == "" {
 		return nil, nil
 	}
-	count, graph, _ := strings.Cut(spec, ":")
+	count, graph, counted := strings.Cut(spec, ":")
 	n, err := strconv.Atoi(count)
+	if err != nil && !counted {
+		return []string{spec}, nil
+	}
 	if err != nil || n < 1 || n > parameter.MaxPlayers {
-		return nil, fmt.Errorf("%q is not N or N:graph with N in 1..%d", spec, parameter.MaxPlayers)
+		return nil, fmt.Errorf("%q: use a graph or N[:graph], with N in 1..%d", spec, parameter.MaxPlayers)
 	}
 	return slices.Repeat([]string{cmp.Or(graph, DefaultBotGraph)}, n), nil
 }
@@ -41,7 +44,7 @@ const seatLoopback = "127.0.0.1:0"
 
 // seat is one bot this run holds: a headless instance of its own that joins the
 // run's session over an ordinary link, as any participant does, and plays a graph.
-// The session sees a participant; only the holder knows it is a bot.
+// The session carries holder identity; graph and lifecycle stay with this process.
 type seat struct {
 	number uint64
 	spec   string
@@ -60,6 +63,9 @@ func (s *seat) halt() { s.once.Do(func() { close(s.stop) }) }
 func (a *App) seatBots() error {
 	if len(a.cfg.Bots) == 0 {
 		return nil
+	}
+	if a.sessionTransport() == nil {
+		a.Settle() // Bind the boot cursor before opening the implicit host.
 	}
 	var err error
 	a.world.RunSafe(func() {
@@ -107,6 +113,7 @@ func (a *App) seatConfigLocked() (Config, error) {
 		NoAdvertise: true, StatTicks: -1, RecTicks: -1}
 	if a.cfg.JoinAddress != "" && !a.world.IsSessionCoordinator() {
 		cfg.JoinAddress, cfg.SessionName = a.cfg.JoinAddress, a.cfg.SessionName
+		cfg.holder = network.PeerID(a.world.LocalParticipant())
 		return cfg, nil
 	}
 	if a.sessionTransportLocked() == nil {
@@ -114,6 +121,7 @@ func (a *App) seatConfigLocked() (Config, error) {
 			return cfg, err
 		}
 	}
+	cfg.holder = network.PeerID(a.world.LocalParticipant())
 	bound := a.ownListener()
 	if bound == "" {
 		bound = a.seatAddress

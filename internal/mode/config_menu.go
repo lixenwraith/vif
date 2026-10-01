@@ -34,7 +34,7 @@ type configPage struct {
 }
 
 var configPages = []configPage{
-	{key: "bots", label: "Bots", description: "Add bots or remove a bot held by this run. Guests can bring their own bots.",
+	{key: "bots", label: "Bots", description: "Add bots or remove your bots. Hosts can also remove other players and bots on Multiplayer.",
 		options: []configOption{configFormOption("add")}, extra: botConfigOptions},
 	{key: "multiplayer", label: "Multiplayer", description: "Host this run, join a session or request one from an allocator.", options: []configOption{
 		configFormOption("host"), configFormOption("join"), configFormOption("request"),

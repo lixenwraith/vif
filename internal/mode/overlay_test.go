@@ -52,10 +52,11 @@ type menuSession struct {
 	err   error
 }
 
-func (s *menuSession) HostError() error       { return nil }
-func (s *menuSession) JoinError() error       { return nil }
-func (s *menuSession) SessionSummary() string { return "Test session" }
-func (s *menuSession) Bots() []engine.BotSeat { return s.bots }
+func (s *menuSession) HostError() error                          { return nil }
+func (s *menuSession) JoinError() error                          { return nil }
+func (s *menuSession) SessionSummary() string                    { return "Test session" }
+func (s *menuSession) Bots() []engine.BotSeat                    { return s.bots }
+func (s *menuSession) Participants() []engine.SessionParticipant { return nil }
 func (s *menuSession) BeginHosting(addr, authority string) error {
 	if s.err != nil {
 		return s.err

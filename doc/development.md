@@ -128,7 +128,7 @@ line wins.
 | `-serve <addr>` | Bind a headless session with no local cursor: a dedicated host. |
 | `-join <addr>` | Join a session at `host:port`; the host supplies seed, config and content identity. |
 | `-players <n>` | Roster ceiling including self, `2`..`parameter.MaxPlayers`. Unset holds the whole roster. With `-serve` it counts guests, because the server is not one of them, and the session starts on its first guest and admits the rest as they arrive. |
-| `-bots <n[:graph]>` | Seat `n` bots playing `default`, or the graph named, in the session the run holds; a solo run hosts them on loopback. With `-serve` they keep the session occupied. |
+| `-bots [N[:graph]\|graph]` | Same as `-bot`; requests from both flags add together. With `-serve`, bots keep the session occupied. |
 | `-authority host\|migrate` | Where authorship goes when the authoring participant leaves. `host` pins it; `migrate` hands it to the lowest surviving identity. Default `host` with `-serve`, `migrate` otherwise. |
 | `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own. Omitted on a server, the first guest's terminal sizes the session. |
 | `-probe <addr>` | Serve `/health` and `/metrics`; `-serve` only. |
@@ -161,10 +161,11 @@ line wins.
 | Flag | Purpose |
 |---|---|
 | `-seed <n>` | Root RNG seed; zero draws one and logs it. |
-| `-speed <rate>` | Initial play-mode rate: `1/8`, `1/4`, `1/2`, `1`, `2`, `4`, `8`. With `-script` or `-bot` it is the run's wall pace instead and additionally accepts `max`. |
+| `-speed <rate>` | Initial play-mode rate: `1/8`, `1/4`, `1/2`, `1`, `2`, `4`, `8`. With `-script` or autonomous bots it is the run's wall pace instead and additionally accepts `max`. |
 | `-script <path>` | Run a bounded authored TOML tick schedule; may be combined with `-host` or `-join`. |
-| `-bot <name\|path>` | Play this instance's seat with a bot graph; may be combined with `-host` or `-join`. |
-| `-watch` | Present a `-script` or `-bot` run on this terminal instead of running it headlessly. |
+| `-bot [N[:graph]\|graph]` | Add bots beside the human, including with `-host` or `-join`; omitted operands mean `1:default`. |
+| `-headless` | With bots, run without a human or terminal; solo runs are unpaced. |
+| `-watch` | Present a script or the first bot, with no human player. |
 | `-replay <path>` | Present a recorded journal instead of starting interactive play. |
 | `-check` | Resolve and validate FSM, keymap, audio and content; print the result and exit. |
 | `-schema` | Print the FSM and event schema as JSON, then exit. |
@@ -402,12 +403,14 @@ values. Session logging and `-dev` are still applied before playback starts;
 
 ### Bots beside a run
 
-`-bots N[:graph]` seats bots in the session a run holds. Each is a headless
+`-bot [N[:graph]|graph]` and `-bots` add bots to the session; bare flags add one
+`default` bot beside the human. Each is a headless
 instance in the same process that joins as any guest does: over loopback to its
 holder's own listener, or to the address its holder joined. A solo run with bots
 hosts on loopback and still pauses, since every other participant is its own; a
 guest's bots leave with it. After takeover, new bots join a local admission
-listener. `:bot add [N[:graph]|graph]` adds them; `:bot drop <hex-slot>` removes one.
+listener. `:bot add [N[:graph]|graph]` adds them; `:bot drop <slot>` removes one. Slots accept decimal or hex. Hosts can use
+`:player drop <slot>` to remove a player with its bots, or any bot alone.
 `-bot default -watch` permits these commands and `:n`. See [Bots](todo-bots.md) §4.
 
 ```bash

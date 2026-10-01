@@ -188,7 +188,7 @@ func (a *App) configureSessionRoster(o network.SessionOffer, local network.PeerI
 			continue
 		}
 		a.ctx.PushEventOrigin(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
-			Slot: p.Slot, Center: true, Control: uint8(component.ControlRemote), PeerID: uint32(p.ID),
+			Slot: p.Slot, Center: true, Control: uint8(component.ControlRemote), PeerID: uint32(p.ID), Holder: uint32(p.Holder),
 			Heat: initialHeat, Energy: initialEnergy,
 		}, event.OriginDebug)
 		a.scheduler.Settle()
@@ -259,7 +259,7 @@ func (a *App) bindCursorOwnersLocked(participants []network.RosterEntry, local n
 		if !ok {
 			continue
 		}
-		c.PeerID = uint32(p.ID)
+		c.PeerID, c.Holder = uint32(p.ID), uint32(p.Holder)
 		c.Control = component.ControlRemote
 		if p.ID == local {
 			c.Control = component.ControlLocal
@@ -320,6 +320,10 @@ func (a *App) attachTransportLocked(port engine.NetworkPort) {
 // service's endpoint and an attached one alike.
 func (a *App) bindSessionHooks(r *engine.NetworkResource) {
 	r.OnDeparture = a.releaseParticipant32
+	// Replays and staging worlds apply roster changes without ending their viewer.
+	if _, live := r.Port.(engine.PeerDroppingPort); live {
+		r.OnDismissed = func() { a.dismissed.Store(true); a.haltSeats() }
+	}
 	r.SharedDigest = a.sharedDigestLocked
 	// The correction queue takes bytes and nothing else: this runs inside a tick,
 	// and decoding or installing a correction here would do both under the lock the

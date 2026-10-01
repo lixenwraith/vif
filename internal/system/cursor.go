@@ -148,7 +148,7 @@ func (s *CursorSystem) spawn(p *event.CursorSpawnRequestPayload) {
 			q.Slot = entry.Slot
 			q.Auto = false
 			q.Control = uint8(entry.Control)
-			q.PeerID = entry.PeerID
+			q.PeerID, q.Holder = entry.PeerID, entry.Holder
 			s.spawnOne(&q)
 		}
 		return
@@ -188,6 +188,8 @@ func (s *CursorSystem) spawnOne(p *event.CursorSpawnRequestPayload) {
 	}
 
 	e := s.build(slot, x, y, component.ControlKind(p.Control), p.PeerID, p.Heat, p.Energy)
+	cursor, _ := s.world.Components.Cursor.GetPtr(e)
+	cursor.Holder = p.Holder
 	roster.Bind(slot, e)
 	s.world.UpdateBoundsRadius()
 	s.publishRoster()
@@ -263,13 +265,8 @@ func (s *CursorSystem) fail(reason string) {
 	s.world.PushEvent(event.EventCursorSpawnFailed, nil)
 }
 
-// setLocal rebinds the followed slot. The rebind is this instance's own — which
-// participant a world follows is not shared state — so it announces itself as
-// EventCursorLocalChanged and nothing else. It used to re-announce the cursor's
-// position as EventCursorMoved to make the camera re-anchor, which put a local view
-// change into a shared event stream: NavigationSystem's throttled flow-field cache
-// dirties on that event, so the one instance whose slot is not zero advanced its
-// recompute phase at startup and the two then read fields of different ages (D-17).
+// Rebinding emits LocalCursorChanged instead of CursorMoved so following a slot
+// does not dirty shared navigation state (D-17).
 func (s *CursorSystem) setLocal(slot uint8) {
 	roster := s.world.Resources.Player
 	if roster.LocalSlot() == slot {

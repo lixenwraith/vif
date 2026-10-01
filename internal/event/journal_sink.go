@@ -11,6 +11,7 @@ const (
 	SubJournalRecord  = "journal"
 	SubJournalAnchor  = "anchor"
 	SubJournalCapture = "capture"
+	SubJournalEnd     = "end"
 )
 
 // vlogSink writes journal output to the dedicated vlog journal session
@@ -79,4 +80,8 @@ func (vlogSink) Capture(c JournalCapture) {
 		"participant", uint64(c.Participant),
 		"authority", uint64(c.Authority),
 		"body", base64.StdEncoding.EncodeToString(c.Body))
+}
+
+func (vlogSink) Finish(st Stamp) {
+	vlog.Journal(SubJournalEnd, "jrun", st.Run, "jtick", st.Tick, "boundary", st.Boundary)
 }

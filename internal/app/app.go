@@ -35,6 +35,7 @@ const fallbackColorMode = terminal.ColorMode256
 // applies it to the command line it was given, so the operator's own flags still
 // decide everything a restart does not name — a pinned -seed most of all.
 type restartRequest struct {
+	Notice string
 	// Scenario replaces -s. Empty keeps the command line's, which is what a guest
 	// rebuilding into a session that is about to re-offer it one wants.
 	Scenario string
@@ -61,7 +62,8 @@ type restartRequest struct {
 // App owns the wired runtime: services, world, input, scheduler, and the selected
 // presentation adapter.
 type App struct {
-	cfg Config
+	dismissed atomic.Bool
+	cfg       Config
 
 	hub *service.Hub
 	presentationState

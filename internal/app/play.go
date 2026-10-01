@@ -66,6 +66,9 @@ func PlayJournal(viewer Config, paths ...string) error {
 	if err != nil {
 		return err
 	}
+	if set.End != nil {
+		d.FinishAt(*set.End)
+	}
 	vlog.Info("app", "msg", "replay open",
 		"records", len(set.Records), "seed", an.Seed, "speed", an.Speed)
 	return (&player{a: a, src: journalSource{d}, interval: time.Duration(an.TickInterval),
@@ -161,6 +164,9 @@ func (p *player) run() error {
 	last := time.Now()
 
 	for {
+		if p.a.dismissed.Load() {
+			return nil
+		}
 		select {
 		case <-sigChan:
 			return nil
@@ -193,7 +199,7 @@ func (p *player) run() error {
 
 // A live bot's command line borrows its input without stopping the session clock.
 func (p *player) advance(elapsed time.Duration) {
-	p.live = p.a.sessionTransport() != nil
+	p.live = p.interactive && p.a.sessionTransport() != nil
 	if p.interactive && p.live {
 		p.paused, p.scale = false, engine.ScaleNormal
 		if p.a.cfg.TimeScaleSpec == "" {
@@ -290,7 +296,7 @@ func viewAxis(camera, recorded, size, mapSize, pan int) (cam, offset, kept int) 
 // routed through the keymap: these drive the viewer, not the game. Any other key is
 // offered to the keymap for the game bindings a viewer owns.
 func (p *player) key(ev terminal.Event) bool {
-	p.live = p.a.sessionTransport() != nil
+	p.live = p.interactive && p.a.sessionTransport() != nil
 	if p.cmd != nil {
 		// The viewer's command line or overlay, parsed as the game parses it
 		if intent := p.a.inputMachine.Process(ev); intent != nil {
@@ -428,7 +434,7 @@ func (p *player) report() {
 	}
 	// The keys are on :help rather than on a bar the recording's messages share
 	keys := ":h for keys"
-	if p.live {
+	if p.live && !p.done {
 		state, keys = "LIVE", "hjkl 0 q"
 		if p.interactive {
 			keys = ":h for keys"

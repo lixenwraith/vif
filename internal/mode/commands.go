@@ -36,7 +36,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "blossom", "decay", "cleaner", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region",
-	"host", "join", "session", "bot", "g", "config",
+	"host", "join", "session", "bot", "player", "g", "config",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -130,6 +130,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleSessionCommand(ctx)
 	case "bot":
 		return handleBotCommand(ctx, args)
+	case "player":
+		return handlePlayerCommand(ctx, args)
 	default:
 		setCommandError(ctx, fmt.Sprintf("Unknown command: %s", cmd))
 		return CommandResult{Continue: true, KeepPaused: false}
@@ -313,10 +315,8 @@ func reportLogState(ctx *engine.GameContext) {
 		parameter.StatusMessageDefaultTimeout, true)
 }
 
-// setCommandError sets an error message in the status message
-// This string will be cleared by InputHandler on the next keystroke
 func setCommandError(ctx *engine.GameContext, message string) {
-	ctx.SetStatusMessage(message, 0, false)
+	ctx.SetStatusMessage(message, parameter.StatusMessageDefaultTimeout, true)
 }
 
 // handleQuitCommand exits the game
@@ -868,9 +868,12 @@ func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 			ctx.SetStatusMessage("Bot joining; :bot lists this run's bots", parameter.StatusMessageDefaultTimeout, false)
 		}
 	case args[0] == "drop" && len(args) == 2:
-		slot, perr := strconv.ParseUint(args[1], 16, 8)
+		slot, perr := parsePlayerSlot(args[1])
 		if err = perr; err == nil {
-			err = ctx.SessionCtl.DropBot(int(slot))
+			err = ctx.SessionCtl.DropBot(slot)
+			if err == nil {
+				ctx.SetStatusMessage(fmt.Sprintf("Bot %X leaving", slot), parameter.StatusMessageDefaultTimeout, true)
+			}
 		}
 	default:
 		setCommandError(ctx, "Usage: :bot [add [N[:graph]|graph] | drop <slot>]")
@@ -880,6 +883,54 @@ func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 		setCommandError(ctx, "Bot: "+err.Error())
 	}
 	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+func parsePlayerSlot(value string) (int, error) {
+	base := 10
+	if strings.HasPrefix(strings.ToLower(value), "0x") {
+		base, value = 16, value[2:]
+	} else if strings.ContainsAny(value, "abcdefABCDEF") {
+		base = 16
+	}
+	n, err := strconv.ParseUint(value, base, 8)
+	if err != nil || n >= parameter.MaxPlayers {
+		return 0, fmt.Errorf("slot must be 0..%d or hexadecimal 0..%X", parameter.MaxPlayers-1, parameter.MaxPlayers-1)
+	}
+	return int(n), nil
+}
+
+func handlePlayerCommand(ctx *engine.GameContext, args []string) CommandResult {
+	result := CommandResult{Continue: true, KeepPaused: false}
+	if ctx.SessionCtl == nil {
+		setCommandError(ctx, "This runtime has no session transport")
+		return result
+	}
+	if len(args) == 0 {
+		var names []string
+		for _, p := range ctx.SessionCtl.Participants() {
+			kind := "player"
+			if p.Holder != 0 {
+				kind = "bot"
+			}
+			names = append(names, fmt.Sprintf("%X %s", p.Slot, kind))
+		}
+		ctx.SetStatusMessage("Players: "+strings.Join(names, ", ")+"; :player drop <slot>", parameter.StatusMessageDefaultTimeout, true)
+		return result
+	}
+	if len(args) != 2 || args[0] != "drop" {
+		setCommandError(ctx, "Usage: :player [drop <slot>]")
+		return result
+	}
+	slot, err := parsePlayerSlot(args[1])
+	if err == nil {
+		err = ctx.SessionCtl.DropPlayer(slot)
+	}
+	if err != nil {
+		setCommandError(ctx, err.Error())
+	} else {
+		ctx.SetStatusMessage(fmt.Sprintf("Slot %X and its bots leaving", slot), parameter.StatusMessageDefaultTimeout, true)
+	}
+	return result
 }
 
 // handleAboutCommand triggers about overlay event

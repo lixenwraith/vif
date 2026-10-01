@@ -3,7 +3,7 @@
 Working plan for bots that play as participants, merged with
 [Delegate convergence to relays](todo.md#delegate-convergence-to-relays). It is the
 basis for a `doc/bots.md` once the phases below land; until then `todo.md` points
-here and each landed phase is deleted from §5 and described in the doc instead.
+here. Landed work and superseded behaviour remain as a work log.
 
 ## 1. What a bot is
 
@@ -38,7 +38,7 @@ lets a holder carry its bots' traffic without changing who they are or when they
 | Marking | Every remote cursor shows its existing slot as `0`–`F`; the local cursor stays unmarked. `4P:1` means four cursors and local slot 1. | Slots already agree across the session. No bot flag, name, protocol field or new colour is needed. |
 | Budget | The router's limits, plus a per-graph intent rate: intents wait their turn in a bounded queue. | Whole-instance perception is already an advantage over a person's viewport. |
 | Determinism | A graph draws from its own stream, seeded from the session seed and its participant, never a world stream (D-8). | A solo bot run is a pure function of its seed; in a session only its journal reproduces it, as for a person. |
-| Succession | A bot seat never advertises: it lives in its holder's process. A process started with `-bot` follows `-no-advertise` like any other. | A seat elected successor would leave with its holder. |
+| Succession | A bot seat never advertises: it lives in its holder's process. A watched or headless front bot follows `-no-advertise` like any other independent participant. | A seat elected successor would leave with its holder. |
 
 ## 3. Architecture
 
@@ -81,16 +81,21 @@ policy; explicitly installed graphs under those names still take precedence.
 
 ### 3.3 Run paths
 
-`vif -bot <name|path>` drives the process's own seat with a graph. It is headless,
-or presented with `-watch`, and plays solo, hosts with `-host` or joins with
-`-join` through the driven session path `-script` already uses; the two share the
-paced loops, told apart only by their driver. Solo and headless it runs flat out
-unless `-speed` says otherwise; presented or in a session it is paced.
-`-bot … -watch` is live play: its operator can use `:n`, `:bot` and the
-[configuration menu](config-menu.md). Its Bots page adds seats and removes
-this run's admitted bots by cursor slot or cancels a pending bot. Commands and
-overlays suspend graph input; networked runs keep ticking. Journal viewers
-remain inspection-only.
+`vif -bot [N[:graph]|graph]` adds bots beside the human player. Bare `-bot`
+means `1:default`; `-bot 2`, `-bot 2:default`, and a plain graph name/path
+use the same parser as `:bot add`. `-bots` accepts the same syntax; if both
+flags are given their requests add together. `-host` and `-join` retain the human.
+
+`-watch` gives the first requested bot the terminal view and leaves no human
+player. `-headless` drives that same bot without a terminal; a solo headless
+bot runs flat out unless `-speed` is set. More bots use ordinary paced sessions,
+so `-speed max` is refused with multiple bots or a network address. `-serve`
+remains a cursorless coordinator and seats all requested bots as guests.
+
+Watched bot commands and overlays suspend graph input; a networked run keeps
+ticking. `:n`, `:bot`, `:player` and the [configuration menu](config-menu.md)
+are live controls. Journal viewers remain inspection-only and stop at the saved
+simulation boundary, including quiet trailing ticks. Replays never restart a graph.
 
 Seats (`internal/app/seat.go`) are the same driver on further headless instances
 in the holder's process, each on its own goroutine, paced against the authority
@@ -110,15 +115,16 @@ Process-wide state assumes one instance per process:
 | Composition | On the host | On a guest |
 |---|---|---|
 | A person | today | today |
-| A person with bots | `-bots N[:graph]`, with `-host …` to let others in, or `:bot add` | `-join … -bots N[:graph]`, or `:bot add` |
-| Bots alone | `-serve … -bots N`, or `-bot <graph> [-host …]` with `-bots N` for more | `-bot <graph> -join …`, with `-bots N` for more |
+| A person with bots | `-bot N[:graph]`, with `-host …` to let others in, or `:bot add` | `-join … -bot N[:graph]`, or `:bot add` |
+| Bots alone | `-serve … -bot N`, or `-bot N[:graph] -watch` / `-headless` | `-join … -bot N[:graph] -watch` / `-headless` |
 
 | Bot of | Joins by | Leaves when | Occupies the session |
 |---|---|---|---|
 | the host | its holder's own listener over loopback, which a run in no session opens first: the same accept loop, roster, anchor and capture as anyone's, and a loopback dial spends no join budget | the host ends, `:bot drop`, or a `-serve` host's drain begins | yes |
 | a guest | dialling the address the guest joined, from the guest's process, on its own link | the guest leaves or loses its session: it closes its bots, and its process ending takes them | while its guest is in it |
 
-Nothing here is a new message. A host's bot is admitted by the accept loop that
+Direct links remain the transport. The join reply, roster and shared cursor carry
+a bot's holder identity for removal and succession (§13). A host's bot is admitted by the accept loop that
 already serves TCP and WebSocket listeners; a guest's bot is one more participant
 from the guest's address, which shares that address's join budget. A seat never
 advertises, so it is never elected, and it ends once no session is left for it.
@@ -146,15 +152,15 @@ its holder's fate so it never re-parents, and it needs no hole punching.
 |---|---|---|
 | 1 | landed | The bot itself: pointer in map cells, `internal/bot`, `vif -bot`, shipped graphs. |
 | 2–3 | landed | Seats: the host's and a guest's bots in every composition of §4, `-bots`, `:bot`, occupancy, the pause rule. |
-| 4 | P1 | The fleet: an allocator request for bots. Slot marking landed in the troubleshooting pass (§12). |
-| 5 | P1 | Decision logic: richer vocabulary and a motor layer. |
-| 6 | P2 | Relays own subtrees: R1–R4 for a guest's bots, then R5. |
+| 6 | P1, next | Relays own subtrees: ownership/removal foundation landed (§13); R1–R4 for a guest's bots, then R5. |
+| 4 | P2, after 6 | The fleet: an allocator request for bots. Slot marking landed in §12. |
+| 5 | P2, after 6 | Decision logic: richer vocabulary and a motor layer. |
 | 7 | P3 | Offline genetic training. |
 | 8 | P3 | Session adaptation. |
 
 ### Phase 1 — the bot itself (landed)
 
-`vif -bot <name|path>` plays the seat from a graph, solo, hosting or joining
+Originally, `vif -bot <name|path>` played the seat from a graph, solo, hosting or joining
 through the driven session path `-script` uses. `internal/bot` holds the graph, the
 driver and the vocabulary of §6; `IntentFor` and `AppendCommand` in `internal/input`
 serve scripts and graphs alike; `default` ships in `internal/asset/bot/`.
@@ -163,7 +169,7 @@ shipped graph through the binary and joins `default` to a dedicated host.
 
 ### Phases 2–3 — seats (landed)
 
-`-bots N[:graph]` on a played, served or bot run, and `:bot [add [N[:graph]|graph]|drop
+The original `-bots N[:graph]` on a played, served or bot run, and `:bot [add [N[:graph]|graph]|drop
 <hex-slot>]`, seat bots as §4 lays out; the run's restart carries its seats into the
 next run. Occupancy counts them, since they are roster entries. The pause rule is
 `World.SeatsOnly`. Two fixes came with it: a startup lobby waits for every rostered
@@ -171,22 +177,29 @@ handshake before its gate sends to them, which simultaneous dials used to fail, 
 a loopback dial spends no join budget at the game host, while the fleet's front
 door keeps its own budget per player. Seat instance logs still need a seat tag.
 
-### Phase 4 — the fleet
+### Phase 6 — relay subtrees (next)
+
+Holder identity, group departure and host removal landed as the prerequisites
+in §13. R1–R4 and then R5 (§4) still move admission, convergence proofs and traffic
+onto the holder's link. Permanent guest-local admission, including adding bots
+through a guest after the original host has departed, remains part of this work.
+
+### Phase 4 — the fleet (after phase 6)
 
 - The create request gains `bots` (0 to `players - 1`); the session pod runs with
   `-bots K` and requests per bot what §9 measured.
 - A load test of networked bots, which also gives the session stack continuous play.
 
-### Phase 5 — decision logic
+### Phase 5 — decision logic (after phase 6)
 
 - A motor layer over `pkg/navigation` for targets the viewport does not show,
   event transitions from the bot's own dispatch, threat and evasion guards, and
   utilities scored within a state.
 - Exit: a graph outscores `default` over a fixed seed set on every shipped scenario.
 
-### Phases 6–8
+### Phases 7–8
 
-Relays (§4), then learning (§8), in that order.
+Learning (§8) follows the relay, fleet and decision-logic work.
 
 ## 6. Vocabulary
 
@@ -356,11 +369,11 @@ link, then removes the host, adds two bots through `:bot add 2:patrol` and verif
 the original bot remains running. Killing the host during incomplete admission
 does not provide that precondition.
 
-A separate, reproducible session limit remains: an established host and its seats
+At this pass, a separate reproducible session limit remained (addressed in §13): an established host and its seats
 leaving together can straddle a roster crossing at handoff. Survivors may see
 different roster lengths and refuse the new term, or retain departed cursors.
-This also needs a succession-level regression, recorded in `todo.md`; opening a
-bot admission listener does not repair conflicting handoff rosters.
+The missing succession regression and ownership needed a later pass; opening a
+bot admission listener alone did not repair conflicting handoff rosters.
 
 ### Policy, identity and operator controls
 
@@ -399,6 +412,76 @@ a stationary owner through a maze built after its cache was warmed.
 
 The affected packages and `./script/test.sh bot` pass, as do the default,
 `vif_headless` and WebAssembly builds. Generated CLI documentation/completions
-were refreshed. The separate
-simultaneous-departure limitation above is not claimed as fixed. Seat log tags,
+were refreshed. This earlier pass did not fix the
+simultaneous-departure limitation above; see the follow-up in §13. Seat log tags,
 holder-sized bot geometry and future phase work remain open.
+
+## 13. CLI, replay and session control follow-up
+
+The reports and their resolutions are retained here; §§3–5 describe the current
+interface. Phase 6 now precedes phases 4 and 5.
+
+| Report | Resolution |
+|---|---|
+| Bare `-bot` failed, or consumed `-watch` as a graph | Optional operands are parsed at the flag boundary; omitted count and graph mean one `default` bot. Counts and graph names share one parser with live addition. |
+| `-host -bot` removed the human player | Bot addition retains the player by default. `-watch` and `-headless` explicitly select autonomous play; `-serve` remains cursorless. The earlier bot-only examples require one of those explicit modes. |
+| Replay bounds and controls | A journal writes its final simulation stamp on close. Playback includes trailing input-free ticks and freezes at that stamp. Recorded network state does not turn playback into a live session or disable its pause controls. A file without an end marker stops at its last recorded event. |
+| Bot lightning invisible | A one-tick zap could be settled and aged out before a driven frame. Its two-tick lifetime leaves a frame after the fire-and-tick step; the existing local-owner effect boundary stays intact. Other players' private weapon effects are still not replicated. |
+| Bot movement erased command feedback | Bot intents omit action-name feedback. Ordinary input no longer clears timed status messages; active messages take precedence over the separate last-command display. |
+| Host could not remove guest bots or players | `:bot drop <slot>` removes your bot, or any bot when you are host. `:player drop <slot>` is host-only and removes a player with its bots, or a single bot alone. Multiplayer menu rows invoke the same operation; local Bots rows also cancel pending admissions. |
+| Host and its bots leaving straddled a handoff | The roster, join reply and Shared cursor carry holder identity. A holder departure retires its subtree at one crossing. Handoff compares the surviving roster, tolerating only differences within the lost predecessor's subtree; bot leaves are never successors. Implicit hosting binds the boot cursor before assigning ownership; autonomous successors start their correction publisher. |
+| Removing a guest also removed surviving bots or triggered succession | A dismissed participant stops draining and publishing before closing its links. Notices from retired participants are ignored, and a relayed loss notice cannot retire a participant or replace an authority that is still directly connected. |
+
+Slots accept decimal `10`, hexadecimal `A` and `0xA`, all selecting the cursor
+marked `A`. `:player` lists players and bots. Menu removal captures the shared
+cursor entity, so a stale row cannot remove a new occupant of the same slot.
+A dismissed human starts a new local game without its bots; a dismissed autonomous
+run stops. Removal ends membership; it is not an address ban.
+
+Ownership is structurally checked against an admitted, independent holder.
+Links are still unauthenticated as documented in multiplayer; this is no new
+security boundary. Wire protocol 4, capture schema 12 and journal schema 17
+require matching builds. R1–R5 traffic relaying and per-instance log tagging
+remain pending; this pass does not claim to implement them.
+
+Manual checks after building `bin/vif`:
+
+```sh
+# Human and two bots, local only.
+bin/vif -bot 2:default
+
+# Human host and two bots; another terminal can join.
+bin/vif -host :7777 -bot 2:default
+bin/vif -join 127.0.0.1:7777
+
+# Human guest and two bots joining that host.
+bin/vif -join 127.0.0.1:7777 -bot 2:default
+
+# Watch one default bot; multiple bots are -bot 2 -watch.
+bin/vif -bot -watch
+
+# Record a solo bot at maximum speed; Ctrl-C saves its ending boundary.
+bin/vif -bot default -headless -speed max -j -l
+bin/vif -replay <journal-path>
+
+# Dedicated coordinator with two bots and room for people.
+bin/vif -serve :7777 -size 120x40 -bot 2
+```
+
+Use `:player` to find slots, then `:bot drop A` or `:player drop 10` on the
+host. Verify one bot's removal leaves its siblings and holder present; removing
+the holder removes all its bots. Ctrl-G / Multiplayer offers the same actions.
+For succession, use `-authority migrate`, connect two human guests (one with
+bots), then exit the host and verify both survivors agree on the new host and
+retain only their own groups. Replay should show `END` at its recorded boundary,
+remain there after waiting or stepping, and retain working pause/speed controls.
+
+Regression coverage includes a bot journal ending after 1,100 active ticks and
+seven input-free ticks, network replay controls, lightning lifetime, command
+feedback, individual and grouped removal, and host succession with bots. Terminal
+checks exercise local player plus two bots, host plus two bots, a plain guest,
+a guest with two bots, individual bot removal and removal of the guest's remaining
+group; the host's original bots remain present. Bare `-bot -watch` also runs.
+Affected package tests and the bot smoke suite pass, together with the default,
+`vif_headless` and WebAssembly builds. CLI documentation and shell completions
+were regenerated.

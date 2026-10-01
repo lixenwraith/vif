@@ -23,6 +23,7 @@ type Set struct {
 	Anchors  []event.JournalAnchor
 	Records  []event.JournalRecord
 	Captures []event.JournalCapture
+	End      *event.Stamp
 }
 
 // line is the envelope every vlog record shares; non-journal lines carry no sub
@@ -103,7 +104,7 @@ func Load(paths ...string) (Set, error) {
 			return Set{}, err
 		}
 	}
-	if len(s.Records) == 0 {
+	if len(s.Records) == 0 && len(s.Anchors) == 0 {
 		return s, fmt.Errorf("journal: no records in %v", paths)
 	}
 	slices.SortStableFunc(s.Records, func(a, b event.JournalRecord) int {
@@ -146,6 +147,15 @@ func (s *Set) readFile(path string) error {
 				return fmt.Errorf("%s:%d: %w", path, n, err)
 			}
 			s.Anchors = append(s.Anchors, a)
+		case event.SubJournalEnd:
+			var f recordFields
+			if err := json.Unmarshal(l.Fields, &f); err != nil {
+				return fmt.Errorf("%s:%d: %w", path, n, err)
+			}
+			st := event.Stamp{Run: f.Run, Tick: f.Tick, Boundary: f.Boundary}
+			if s.End == nil || (groupKey{s.End.Run, s.End.Tick, s.End.Boundary}).before(groupKey{st.Run, st.Tick, st.Boundary}) {
+				s.End = &st
+			}
 		case event.SubJournalCapture:
 			var f captureFields
 			if err := json.Unmarshal(l.Fields, &f); err != nil {

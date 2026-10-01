@@ -11,7 +11,7 @@ import (
 // JournalSchema is the record layout version; bump on any field change, or on a
 // change to what an unchanged field means. A join refuses a peer on another one,
 // since the anchor it offers is the journal's. Each bump's reason is its commit.
-const JournalSchema = 16
+const JournalSchema = 17
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.
@@ -141,7 +141,11 @@ type JournalSink interface {
 	Record(JournalRecord)
 	Anchor(JournalAnchor)
 	Capture(JournalCapture)
+	Finish(Stamp)
 }
+
+// Finish records the last simulated boundary, including ticks with no input.
+func (j *Journal) Finish(st Stamp) { j.sink.Finish(st) }
 
 // AnchorIntervalTicks is the tick period between anchor records, so a rotated
 // file carries one within this many ticks of its first record

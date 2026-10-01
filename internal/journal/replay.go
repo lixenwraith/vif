@@ -56,6 +56,7 @@ type ReplayDriver struct {
 	cur      groupKey
 	landed   bool // an install moved the clock past records stamped before it
 	stats    ReplayStats
+	end      *event.Stamp
 }
 
 // NewReplayDriver binds a record stream and the worlds written among it to a
@@ -68,6 +69,13 @@ func NewReplayDriver(target ReplayTarget, records []event.JournalRecord, capture
 
 // Done reports whether every record has been injected and every world installed.
 func (d *ReplayDriver) Done() bool {
+	return d.streamDone() && (d.end == nil || d.target.Position().Run == d.end.Run && d.target.Position().Tick >= d.end.Tick)
+}
+
+// FinishAt bounds trailing simulation; older journals end at their last record.
+func (d *ReplayDriver) FinishAt(end event.Stamp) { d.end = &end }
+
+func (d *ReplayDriver) streamDone() bool {
 	return d.next >= len(d.records) && d.nextCap >= len(d.captures)
 }
 
@@ -109,8 +117,11 @@ func (d *ReplayDriver) Stats() ReplayStats {
 	return st
 }
 
-// End returns the position of the final record.
+// End includes input-free trailing ticks when the recorder supplied its end.
 func (d *ReplayDriver) End() event.Stamp {
+	if d.end != nil {
+		return *d.end
+	}
 	if len(d.records) == 0 {
 		return event.Stamp{}
 	}
@@ -120,8 +131,19 @@ func (d *ReplayDriver) End() event.Stamp {
 
 // Step advances one tick and applies every settle group stamped on it.
 func (d *ReplayDriver) Step() (bool, error) {
-	if d.Done() {
-		return false, nil
+	if d.streamDone() {
+		if d.end == nil {
+			return false, nil
+		}
+		at := d.target.Position()
+		if at.Run != d.end.Run || at.Tick > d.end.Tick {
+			return false, fmt.Errorf("replay: position %v exceeds recorded end %v", at, *d.end)
+		}
+		if at.Tick == d.end.Tick {
+			return false, nil
+		}
+		d.target.Tick(1)
+		return true, nil
 	}
 	if d.dueCapture() {
 		return d.install()

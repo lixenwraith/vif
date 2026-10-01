@@ -32,7 +32,7 @@ only; their description explains the reason.
 | Page | Controls |
 |---|---|
 | Bots | Add bots by count and policy; remove a bot held by this run or cancel its admission. |
-| Multiplayer | Host this run, join an existing session, request an allocated session, inspect current session status. |
+| Multiplayer | Host this run, join an existing session, request an allocated session, inspect status, drop a player with its bots or an individual bot (host only). |
 | Audio | Music, sound effects, effects volume in 5% steps. |
 | Controls | Auto-fire (`off`, `main`, `on`), mouse input, pointer following. |
 | Display | Telemetry HUD, navigation flow field and route graph. |
@@ -56,10 +56,16 @@ outside this list.
 Adding bots to a solo run opens a loopback session. To invite remote players,
 **host at the intended listening address before adding bots**. An existing
 session cannot be rebound through the menu. The same operations are available
-as `:bot add [N[:graph]|graph]` and `:bot drop <hex-slot>`.
+as `:bot add [N[:graph]|graph]` and `:bot drop <slot>`.
 See [Bots](todo-bots.md) for current development and lifecycle details.
 
 ### Multiplayer
+
+Hosts also see **Drop <slot>: player/bot** rows. Dropping a player removes its
+bots; dropping a bot leaves its holder and siblings. Guests cannot remove other
+participants. Commands are `:player` and `:player drop <slot>`; `:bot drop <slot>`
+also lets the host remove any bot. Decimal `10`, hexadecimal `A` and `0xA` all
+refer to the cursor marked `A`. Slots may be reused after departure.
 
 **Host this run** takes a listening address such as `:4242`, `127.0.0.1:4242` or
 `ws://:4242`. Authority may be blank to keep the startup policy, `host` to end

@@ -36,18 +36,17 @@ a full development binary or the smaller deployment artifact. See
 `-serve <address>` constructs `ModeServer`. `cmd/vif` normally constructs `ModePlay`; `-replay <file>` constructs a replay
 from the journal anchor, and `-script <file>` constructs a caller-driven
 `ModeHeadless` run from an authored tick schedule, or `ModeScript` with `-watch`.
-`-bot <graph>` is the same driven run with a bot graph playing the seat instead
-of a schedule; see [Bots](todo-bots.md). `-bots N[:graph]` seats bots beside a
-played, served or bot run: headless instances in the same process, each joining
-the run's session as a guest does, and closed with it.
-`-check` and `-schema` are non-runtime tool paths:
+`-bot [N[:graph]|graph]` adds bots beside the human, including with `-host`
+and `-join`; `-bots` accepts the same grammar. `-watch` uses the first bot's view
+with no human, and `-headless` runs it without a terminal. Each additional bot is
+its own instance in the same process. See [Bots](todo-bots.md).
 
 | Tool path | Entry | Terminal initialized? | Result |
 |---|---|---:|---|
 | Validate | `app.Check` | No | Resolve and load FSM plus corpus; print accepted/rejected sources. |
 | Export schema | `app.Schema` | No | Emit schema version 1 JSON for events, fields, actions, guards, operators, and config fields. |
 | Run script | `app.RunScript` | Only with `-watch` | Execute a bounded versioned TOML schedule; optional `-host`/`-join` uses the normal TCP gate. |
-| Run bot | `app.RunBot` | Only with `-watch` | Play the seat from a bot graph until it quits; `-host`/`-join` as for a script. Presented it keeps real time on the terminal's size; headless it takes the fleet's 120x40 unless `-size` says otherwise, and says on stdout what it is doing. |
+| Run bot | `app.RunBot` | With `-watch` | Explicit `-watch` or `-headless` drives the first bot; remaining bots are seats. Headless solo runs are unpaced and default to 120x40. Ordinary `-bot` uses `app.Run` with a human. |
 
 ### 1.0 The four session flags, and what each still decides
 
@@ -76,11 +75,8 @@ crossings and the succession do not know which flag opened the session.
 
 **Can `-serve` and `-host` be merged?** They already are, everywhere it matters.
 What is left is the first three columns, and those are one question — *is a person
-sitting at this process* — asked three times. A single `-host` plus something like
-`-headless` would express it, at the cost of a flag combination that is legal to
-write and wrong to run (a terminal-less host that still holds a cursor nobody can
-move). The names are kept because each stands for a whole shape rather than a
-switch, and because `-serve` is what a deployment writes into a manifest. What is
+sitting at this process* — asked three times. `-headless` requires bots to drive
+its local cursor; `-serve` has no local cursor and remains the deployment shape. What is
 *not* kept is the difference in what they mean: the two rows above disagree only
 where the shape forces them to.
 
