@@ -176,38 +176,6 @@ Print the module version and commit a package should report
   Combine   join names or letters with + or , \[u2014] "app+fsm+stat" and "afs" are one set
   Adjust    lead with + or \- to add to or remove from the set already selected
 .fi
-.SH IN-GAME CONFIGURATION
-Ctrl-G or :g (:config) opens the configuration menu. Select a category or setting
-with Up/Down or j/k. Left/Right or h/l changes values; Enter/Space chooses.
-Escape or q returns to categories, then closes; Ctrl-G closes from any page.
-Home/End and PageUp/PageDown navigate longer pages.
-.PP
-Bots adds local bots by count and policy graph, and removes this run's admitted
-bots by hexadecimal cursor slot, or cancels a joining bot. Leaving bots show their state.
-Host before adding bots to solo play if remote players should join; otherwise
-bots open a loopback session.
-.PP
-Multiplayer hosts this run, joins an address/link, or requests a session from
-an HTTP(S) vif-allocator site with a player count and scenario. Player count 0
-and a blank scenario use server defaults. Allocator-side bot provisioning is
-not yet implemented. Current session status is available on the same page.
-Forms use Up/Down between fields, Left/Right and Home/End to move the text
-cursor, Backspace/Delete to edit, Enter to submit, and Escape to cancel.
-Session actions require Enter/Space; arrows only adjust settings.
-Successful submissions resume play; asynchronous progress and failures appear
-in the status bar. A failed join preserves the current run.
-.PP
-Audio controls music, sound effects and effects volume. Controls adjusts mouse
-input, pointer following and auto-fire. Display controls the telemetry HUD and
-navigation overlays. Simulation changes solo speed. Diagnostics controls logging,
-log level and scope presets, snapshot interval, flight-recorder depth and FSM
-trigger, and profiling. Values in brackets are unavailable or read only; the
-selected row explains why. Startup settings explains the relevant file or flag.
-.PP
-Changes apply to the current run and are not saved to disk. Solo play pauses;
-network play retains its existing pause policy. The menu shares the command
-line's replay and session restrictions. The config_menu keymap action can be
-rebound in normal_keys, text_keys and overlay_keys.
 .SH FILES
 .TP
 .I $XDG_CONFIG_HOME/vif
