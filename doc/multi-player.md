@@ -415,6 +415,13 @@ a star. Each source epoch is admitted once within a bounded replay window and
 forwarded to every neighbour except the arrival edge. Corrections retain the
 authority's term, tick, hashes, and chunks across relays.
 
+Bot admission declares an independent holder. That identity is retained in the
+roster and Shared cursor across captures, resets and succession. A holder
+departure retires its bot group at the same crossing. Hosts may remove any remote
+slot with `:player drop`; removing a bot alone leaves its holder and siblings.
+`:bot drop` also lets a guest remove its own bot. Both accept decimal or hex slots.
+Holder checks are structural; they do not authenticate a peer.
+
 ### 5.0 Who listens, who authors, who can be reached
 
 Three questions the rest of this section depends on, and they have different
@@ -448,8 +455,8 @@ live on the machine that started it.
 ### 5.1 Succession
 
 If the authority disappears, the successor is **the first survivor in the
-succession chain**, falling back to the roster's lowest surviving identity when the
-chain names nobody still present. It is a pure function of the chain, the roster and
+succession chain**, falling back to the roster's lowest surviving independent
+identity when the chain names nobody still present. Bot leaves are not candidates. It is a pure function of the chain, the roster and
 the participant that went, all three of which every survivor already holds, so every
 survivor names the same successor without exchanging anything. The chain is
 append-only, so a survivor holding a prefix of it elects the same participant as one
@@ -513,7 +520,9 @@ it. Having no link is what makes that exact rather than convenient: a departure 
 produced once at one agreed tick because two instances must destroy the same shared
 entity together, and here there is no second instance. On a fork the removal is
 therefore local; the successor produces the predecessor's as the ordinary crossing,
-because it may.
+because it may. The successor also starts correction publication for autonomous
+bot/script runs. A handoff preserves the surviving roster exactly; only the lost
+predecessor and its bots may differ when their departures straddle the handoff.
 
 An instance that still holds links keeps its roster, which is the worse half of
 gap 5 below: peers to agree an apply tick with, and no authority to name one.

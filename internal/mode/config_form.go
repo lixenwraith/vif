@@ -160,7 +160,40 @@ func sessionConfigOptions(ctx *engine.GameContext) []configOption {
 	if ctx.SessionCtl == nil {
 		return nil
 	}
-	return []configOption{{key: "status", label: "Current session", description: ctx.SessionCtl.SessionSummary(), read: startupValue}}
+	return append([]configOption{{key: "status", label: "Current session", description: ctx.SessionCtl.SessionSummary(), read: startupValue}}, participantConfigOptions(ctx)...)
+}
+
+func participantConfigOptions(ctx *engine.GameContext) []configOption {
+	if ctx.SessionCtl == nil {
+		return nil
+	}
+	var out []configOption
+	for _, p := range ctx.SessionCtl.Participants() {
+		if p.Local {
+			continue
+		}
+		kind, description := "player", "Enter removes this player and all bots it brought."
+		if p.Holder != 0 {
+			kind, description = "bot", "Enter removes this bot only; its holder and other bots stay."
+		}
+		out = append(out, configOption{key: fmt.Sprintf("player/%d", p.Entity),
+			label: fmt.Sprintf("Drop %X: %s", p.Slot, kind), description: description,
+			command: "player", read: func(*engine.GameContext) string { return "Enter" },
+			disabled: func(ctx *engine.GameContext) string {
+				if !ctx.World.IsSessionCoordinator() {
+					return "Only the host can remove other participants"
+				}
+				return ""
+			}, activate: func(r *Router) {
+				if err := r.ctx.SessionCtl.RemovePlayer(p.Entity); err != nil {
+					setCommandError(r.ctx, err.Error())
+					return
+				}
+				r.closeOverlay()
+				r.ctx.SetStatusMessage(fmt.Sprintf("Slot %X leaving", p.Slot), parameter.StatusMessageDefaultTimeout, true)
+			}})
+	}
+	return out
 }
 
 func (r *Router) publishConfigForm() {

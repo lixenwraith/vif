@@ -28,13 +28,14 @@ keys and mouse alike, bound by the same barrier, admission and eviction as a per
 Bots belong to the instance that started them: a host's stay as participants, a
 guest's leave with it, and every composition of people and bots joins through the
 ordinary handshake. Phases 1–3, hexadecimal cursor slots and the merged `default`
-policy landed; the fleet, richer decision logic, relays and learning follow.
+policy landed. Holder ownership, slot removal, explicit bot run modes and bounded
+replay landed in the next pass. Relays (phase 6) precede fleet work (4), richer
+decision logic (5), and learning.
 Seat instance log tags and whether seats should inherit their holder's terminal
 geometry remain open. Permanent holder-local admission as a guest waits for relays.
-Succession also needs a regression for overlapping departures: stopping an
-established bot host and its seats together can leave survivors with different
-rosters at handoff, refusing the new term or retaining departed cursors. This is
-separate from adding bots after a completed takeover; see troubleshooting §12.
+The overlapping host-and-bot departure defect is covered by the holder-subtree
+handoff rule and socket regression in troubleshooting §13. Admission through a
+still-guest holder after the original host leaves remains relay work.
 
 ### Extract the renderer-neutral Android host model
 
@@ -197,7 +198,7 @@ Per-store write counters stay rejected: a cache compares values it owns.
 
 ### Delegate convergence to relays
 
-- Priority: P2; the bots plan's phase 6, which a guest's seats now wait on
+- Priority: P1; bots phase 6, ahead of fleet (4) and decision logic (5)
 - Affected files: `internal/converge/relay.go`, `internal/converge/selective.go`,
   `internal/converge/correction.go`, `internal/system/network.go`, `internal/network`
 - Plan: [Bots](todo-bots.md) §4

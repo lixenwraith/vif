@@ -7,24 +7,11 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 )
 
-// ProtocolVersion is the session wire contract: the message numbering, the
-// handshake order, and the shape of everything that travels inside it.
-//
-// It is checked before anything else on both sides, because it is the one
-// disagreement that makes every other check meaningless — two builds that do not
-// agree on what a frame is cannot usefully compare what is in one. Bump it when a
-// change would be misread rather than rejected by the older side.
-const ProtocolVersion uint32 = 3
+// ProtocolVersion changes when peers cannot share the session wire contract.
+const ProtocolVersion uint32 = 4
 
-// IdentityRefusalTag marks a join refused because the peer would not simulate the
-// same session. It travels inside the refusal text because that is what the join
-// handshake carries back, and it is a tag rather than a sentence so a joiner can
-// recognise it without matching prose — the same arrangement HandoffRefusalTag
-// uses, and for the same reason.
-//
-// Unlike a handoff refusal, this one is not worth retrying: nothing about the peer
-// will be different a second later. It is recognisable so a joiner can say what is
-// wrong rather than what to do about it.
+// IdentityRefusalTag distinguishes incompatible simulation identity from a
+// retryable admission failure without matching user-facing prose.
 const IdentityRefusalTag = "identity-mismatch"
 
 // IsIdentityRefusal reports whether a join was refused for a build or session
@@ -33,19 +20,8 @@ func IsIdentityRefusal(err error) bool {
 	return err != nil && strings.Contains(err.Error(), IdentityRefusalTag)
 }
 
-// PeerIdentity is what a participant must reproduce for a session to be shared.
-//
-// It exists because the join used to be self-policed: the coordinator sent its
-// anchor, the joiner compared it against its own build and refused itself, and a
-// joiner that did not perform that comparison was admitted on its word. The
-// authority is the host, so the host has to be able to refuse — which means the
-// joiner reports what it actually is, and the coordinator, not the joiner, decides
-// whether that is the same session.
-//
-// Three of the fields are properties of the build and cannot be derived from an
-// anchor: the wire contract, the simulation the manifest assembles, and the layout
-// a capture is written in. The rest are the session identity an anchor already
-// carries, restated here so one comparison covers both.
+// PeerIdentity is the simulation contract verified by both sides before admission.
+// Build identity is checked before construction; session identity after construction.
 type PeerIdentity struct {
 	Protocol      uint32 `json:"protocol"`
 	Simulation    string `json:"simulation"`

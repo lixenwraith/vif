@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"io/fs"
 	"net"
 	"os"
@@ -196,7 +197,16 @@ func waitForCursors(t *testing.T, a *App, n int) {
 			return
 		}
 	}
-	t.Fatalf("the roster holds %d cursors, want %d; %+v; %s; bots %s", held, n, a.Position(), a.SessionSummary(), a.seatsSummary())
+	a.world.RunSafe(func() {
+		for slot := range parameter.MaxPlayers {
+			e := a.world.Resources.Player.Slot(uint8(slot))
+			if e != 0 {
+				c, ok := a.world.Components.Cursor.GetComponent(e)
+				t.Logf("slot=%d entity=%v cursor=%+v exists=%v", slot, e, c, ok)
+			}
+		}
+	})
+	t.Fatalf("the roster holds %d cursors, want %d; %+v; %s; bots %s", held, n, a.Position(), a.SessionSummary(), a.seatsSummary()+fmt.Sprint((instance{a}).WorldRoster()))
 }
 
 // TestAHoldersBotsComeAndGoAsParticipants: a run with bots and no session hosts one
@@ -412,5 +422,144 @@ func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.
 	}
 	if holder.seatAddress == "" {
 		t.Fatal("the successor did not open local admission")
+	}
+}
+
+func TestBotReplayEndsAtTheRecordedSimulationBoundary(t *testing.T) {
+	capture := journal.NewCapture()
+	source, _ := playBot(t, "default", fixtureSeed, 1100, capture)
+	// Quiet trailing ticks must replay too, without running the bot again.
+	source.Tick(7)
+	want := source.Position()
+	source.Close()
+	cfg, err := ConfigFromAnchor(capture.Anchors()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	d, err := newReplayDriver(a, capture.Records(), capture.Captures())
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.FinishAt(capture.End())
+	if err := d.RunAll(); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.Position(); got.Run != want.Run || got.Tick != want.Tick {
+		t.Fatalf("replay stopped at %v, recorded %v", got, want)
+	}
+	for range 10 {
+		if more, err := d.Step(); more || err != nil {
+			t.Fatalf("finished replay continued: %v %v", more, err)
+		}
+	}
+	if got := a.Position(); got.Run != want.Run || got.Tick != want.Tick {
+		t.Fatalf("replay advanced to %v", got)
+	}
+}
+
+func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
+	host, _ := driveBot(t, Config{Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
+	waitForCursors(t, host, 2)
+	guest, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), Bots: []string{DefaultBotGraph, DefaultBotGraph}}, DefaultBotGraph, nil)
+	waitForCursors(t, host, 5)
+	waitForCursors(t, guest, 5)
+	holder := guest.localParticipant()
+	var guestSlot, botSlot int
+	host.world.RunSafe(func() {
+		for _, p := range (sessionControl{host}).Participants() {
+			c, _ := host.world.Components.Cursor.GetComponent(p.Entity)
+			if c.PeerID == holder {
+				guestSlot = int(p.Slot)
+			}
+			if c.Holder == holder {
+				botSlot = int(p.Slot)
+			}
+		}
+	})
+	if botSlot == 0 || guestSlot == 0 {
+		t.Fatal("guest bot ownership absent from the host roster")
+	}
+	guest.world.RunSafe(func() {
+		if err := (sessionControl{guest}).DropPlayer(0); err == nil {
+			t.Error("guest dropped the host")
+		}
+	})
+	host.world.RunSafe(func() {
+		if err := (sessionControl{host}).DropBot(botSlot); err != nil {
+			t.Fatal(err)
+		}
+	})
+	waitForCursors(t, host, 4)
+	waitForCursors(t, guest, 4)
+	if guest.dismissed.Load() {
+		t.Fatal("dropping one bot dismissed its holder")
+	}
+	host.world.RunSafe(func() {
+		if err := (sessionControl{host}).DropPlayer(guestSlot); err != nil {
+			t.Fatal(err)
+		}
+	})
+	waitForCursors(t, host, 2)
+	for deadline := time.Now().Add(socketWait); !guest.dismissed.Load() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+	if !guest.dismissed.Load() {
+		t.Fatal("dropped guest did not receive dismissal")
+	}
+}
+
+func TestBotInputPreservesOperatorFeedback(t *testing.T) {
+	a, _ := playBot(t, DefaultBotGraph, fixtureSeed, 10, nil)
+	defer a.Close()
+	g, err := loadBotGraph(a.cfg.Resources, DefaultBotGraph)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := bot.NewDriver(a, a.ctx, g, a.Seed(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.ctx.SetLastCommand(":bot")
+	a.ctx.SetStatusMessage("Bots joined", parameter.StatusMessageDefaultTimeout, true)
+	for range 30 {
+		if more, err := d.Step(); !more || err != nil {
+			t.Fatal(err)
+		}
+	}
+	if a.ctx.GetStatusMessage() != "Bots joined" || a.ctx.GetLastCommand() != ":bot" {
+		t.Fatalf("bot replaced operator feedback: %q / %q", a.ctx.GetStatusMessage(), a.ctx.GetLastCommand())
+	}
+}
+
+func TestHostAndBotsLeavingPreservesTheSurvivingSession(t *testing.T) {
+	host, leave := driveBot(t, Config{Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
+	waitForCursors(t, host, 2)
+	successor, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
+	other, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, DefaultBotGraph, nil)
+	for _, a := range []*App{host, successor, other} {
+		waitForCursors(t, a, 5)
+	}
+	port, err := other.socketPort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := successor.localParticipant()
+	for deadline := time.Now().Add(socketWait); !port.Connected(id) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+	if !port.Connected(id) {
+		t.Fatal("survivors have no succession link")
+	}
+	leave()
+	for _, a := range []*App{successor, other} {
+		waitForCursors(t, a, 3)
+		for deadline := time.Now().Add(socketWait); (uint32(a.authority.Holder()) != id || a.authority.Migrating()) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		}
+		if uint32(a.authority.Holder()) != id || forkCell(a).Load() {
+			t.Fatal("survivors split after the host group left")
+		}
 	}
 }

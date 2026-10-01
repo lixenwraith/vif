@@ -377,7 +377,7 @@ bot)
 	for graph in internal/asset/bot/*.toml; do
 		name=$(basename "$graph" .toml)
 		{ cat "$graph"; stop 60000; } >"$dir/$name.toml"
-		"$BIN" -bot "$dir/$name.toml" -d -speed max -size 120x40 -log-stdout -lv info \
+		"$BIN" -headless -bot "$dir/$name.toml" -d -speed max -size 120x40 -log-stdout -lv info \
 			>"$dir/$name.log" 2>&1 || fail "$name did not end cleanly: $dir/$name.log"
 		[ "$(botstat "$dir/$name.log" injected)" -gt 0 ] 2>/dev/null || fail "$name played nothing: $dir/$name.log"
 		[ "$(botstat "$dir/$name.log" dropped)" = 0 ] || fail "$name overflowed its queue: $dir/$name.log"
@@ -390,7 +390,7 @@ bot)
 	serve_bg -first-join 30s -empty 3s
 	wait_for 15 'probe_get /health' || fail "probe never answered"
 	{ cat internal/asset/bot/default.toml; stop 5000; } >"$dir/join.toml"
-	"$BIN" -bot "$dir/join.toml" -join "$HOST:$PORT" -bots 2:patrol -log-stdout -lv info >"$dir/join.log" 2>&1 \
+	"$BIN" -headless -bot "$dir/join.toml" -join "$HOST:$PORT" -bots 2:patrol -log-stdout -lv info >"$dir/join.log" 2>&1 \
 		|| fail "the joining bot did not end cleanly: $dir/join.log"
 	[ "$(botstat "$dir/join.log" typed)" -gt 0 ] 2>/dev/null || fail "the joining bot typed nothing: $dir/join.log"
 	[ "$(botlines "$dir/join.log" seated)" = 2 ] || fail "the guest's bots were not seated: $dir/join.log"

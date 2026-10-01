@@ -232,29 +232,28 @@ func (a *App) lobbyQuorum() int {
 	return a.sessionCapacity()
 }
 
-// noteJoinerReport keeps the first geometry a guest reported. First rather than
-// smallest, and the difference is the mid-run gate: guests arrive throughout the
-// run, so "smallest" would mean shrinking the map under participants already
-// playing on it — which D-14 forbids for the same reason a terminal may not crop a
-// shared map. First is a number the session can commit to before it starts.
-func (a *App) noteJoinerReport(id network.PeerID, report network.JoinerReport) {
-	// The accepted socket's address, on the one instance that has it. It is what
-	// proves a deployment preserved the player's address rather than its gateway's,
-	// and the per-address admission budget is keyed on the same value. Its own sub
-	// is what keeps it out of any stream published from these files.
-	vlog.Info("admit", "msg", "peer admitted", "peer", uint64(id),
-		"remote", report.Remote, "declared", report.Listen)
-	// Before the geometry check: a participant that reported no terminal still
-	// reported a port.
-	a.reach.NoteDeclared(id, report)
-	if !report.Sized() {
-		return
-	}
+// Admission records ownership before a bot can enter the lobby or running roster.
+func (a *App) noteJoinerReport(id network.PeerID, report network.JoinerReport) error {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
-	if !a.firstJoiner.Sized() {
+	if report.Holder != 0 {
+		i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == report.Holder })
+		if i < 0 || report.Holder == id || a.sessionRoster[i].Holder != 0 || report.Listen != "" {
+			return errors.New("bot holder is absent, is itself a bot, or the bot advertised a listener")
+		}
+	}
+	i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
+	if i < 0 {
+		return errors.New("participant left during admission")
+	}
+	a.sessionRoster[i].Holder = report.Holder
+	if !a.firstJoiner.Sized() && report.Sized() {
 		a.firstJoiner = report
 	}
+	a.reach.NoteDeclared(id, report)
+	vlog.Info("admit", "msg", "peer admitted", "peer", uint64(id), "holder", uint64(report.Holder),
+		"remote", report.Remote, "declared", report.Listen)
+	return nil
 }
 
 // adoptLobbyGeometry sizes a dedicated host's map from its first guest, since a
@@ -532,7 +531,7 @@ func (a *App) releaseParticipant(id network.PeerID) {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
 	a.sessionRoster = slices.DeleteFunc(a.sessionRoster,
-		func(p network.RosterEntry) bool { return p.ID == id })
+		func(p network.RosterEntry) bool { return p.ID == id || p.Holder == id })
 }
 
 // crossPredecessorDeparture removes the authority that was lost from the roster. A
@@ -546,10 +545,11 @@ func (a *App) crossPredecessorDeparture(rec network.HandoffRecord) {
 	i := slices.IndexFunc(rec.Roster, func(p network.RosterEntry) bool {
 		return p.ID == rec.Predecessor
 	})
-	if i < 0 {
-		return
+	slot := uint8(parameter.NoPlayerSlot)
+	if i >= 0 {
+		slot = rec.Roster[i].Slot
 	}
-	a.crossDeparture(rec.Predecessor, rec.Roster[i].Slot)
+	a.crossDeparture(rec.Predecessor, slot)
 }
 
 // dropAbandonedCursors removes the participants an instance left alone will never

@@ -127,6 +127,7 @@ type NetworkConnectPayload struct {
 // admitted by one instance, and every other has to add the cursor at the same tick or
 // their shared entity creation order diverges (D-11).
 type ParticipantJoinedPayload struct {
+	Holder      uint32 `toml:"holder"`
 	Participant uint32 `toml:"participant"`
 	Slot        uint8  `toml:"slot"`
 }
@@ -137,6 +138,7 @@ type ParticipantJoinedPayload struct {
 // removal has to travel as an artifact with an apply tick, like any other outcome
 // every instance must reach together.
 type ParticipantDepartedPayload struct {
+	Dismissed   bool   `toml:"dismissed"`
 	Participant uint32 `toml:"participant"`
 	Slot        uint8  `toml:"slot"`
 }
@@ -171,21 +173,8 @@ type CursorDefeatStatePayload struct {
 	Defeated bool        `toml:"defeated"`
 }
 
-// CursorScopePayload names the cursor a local effect belongs to.
-//
-// It exists because the shared FSM is the producer of several per-instance
-// effects. A region is session-wide by construction — every instance runs the
-// same machine and enters the same state — so an effect its actions raise reaches
-// every participant whether or not the thing that caused it was theirs. That is
-// right for a storm, which is one encounter every participant is inside, and
-// wrong for a quasar, which is fused from *one* cursor's drains and should darken
-// one player's screen and stop one player's drains.
-//
-// Entity zero is the session-wide form and is what an action with no payload
-// emits, so a region that belongs to nobody needs no configuration. A nonzero
-// entity is one cursor's, and only the instance that simulates that cursor acts —
-// the same admission ResolveOwnedCursor makes for the D-13 owner-authored set,
-// and the same one FuseSystem already makes for the fusion this scope accompanies.
+// CursorScopePayload scopes local effects to an owned cursor, or all local cursors
+// when zero. Shared FSM emissions need this scope to preserve D-6.
 type CursorScopePayload struct {
 	Entity core.Entity `toml:"entity"`
 }
@@ -548,13 +537,8 @@ const (
 	ExplosionTypeEye                          // Self-destruct explosion with character noise
 )
 
-// ExplosionRequestPayload is the D-3 combat artifact for one explosion center.
-// Attack has no safe zero value; producers must set it explicitly.
-//
-// It carries CrossingID because the per-target hits it resolves into are re-derived
-// (D-5) but not at one tick: this artifact applies at once on its producer and a
-// playout lead later everywhere else, so their knockback must come from the
-// artifact rather than from a shared stream position the two reach apart (D-3).
+// ExplosionRequestPayload requires explicit attack data for the D-3 explosion.
+// CrossingID seeds derived hits independently of each receiver's timing.
 type ExplosionRequestPayload struct {
 	CrossingID
 	Entity core.Entity                `toml:"entity"` // Owner cursor, credited for damage
@@ -673,19 +657,8 @@ type CompositeDestroyRequestPayload struct {
 
 // --- Cursor ---
 
-// CursorStatePayload is one cursor's owner-authored state (D-13), sent by the
-// instance that simulates it and applied by every other. This is the only value
-// transfer in the design; everything else re-derives.
-//
-// Shield and Combat are split to their cursor fields: both stores also carry
-// quasar, loot and species state, which is re-derived and must not travel.
-// ShieldActive, ShieldInvRxSq/RySq and EmberActive reproduce the remote cursor's
-// presentation and owner-local interactions. No shared outcome reads this snapshot.
-// CursorViewComponent carries no player-domain reference for this payload to
-// exclude: its orb array named player entities, and a per-payload exclusion could
-// not stop a shared capture from copying the whole component, so WeaponSystem
-// derives that index from the Orb store instead (D-4).
-// Durations are nanoseconds so the TOML round trip is exact.
+// CursorStatePayload carries owner-authored Shared values (D-13). Shield and combat
+// values are cursor fields, never private player entity handles; durations are ns.
 type CursorStatePayload struct {
 	WeaponCharges  []int   `toml:"weapon_charges"`
 	WeaponCooldown []int64 `toml:"weapon_cooldown"`
@@ -726,6 +699,7 @@ type CursorStatePayload struct {
 // CursorSpawnRequestPayload asks for a cursor entity
 // Center overrides X/Y; Auto overrides Slot with the lowest free index
 type CursorSpawnRequestPayload struct {
+	Holder  uint32 `toml:"holder"`
 	X       int    `toml:"x"`
 	Y       int    `toml:"y"`
 	Heat    int    `toml:"heat"`
@@ -843,14 +817,8 @@ type WindStartPayload struct {
 
 // --- Post-Process ---
 
-// StrobeRequestPayload configures screen flash effect.
-//
-// Cursor scopes the flash the way CursorScopePayload scopes the grayout and the
-// drain pause: entity zero is the session-wide form every region belonging to
-// nobody emits, and a nonzero entity is one participant's to see. It is a field
-// here rather than a shared scope payload because a strobe carries a colour and a
-// duration as well, and a caller that only wants the flash should not have to
-// choose between describing it and scoping it.
+// StrobeRequestPayload scopes a flash to one owned cursor, or all local cursors
+// when zero, with its color and duration.
 type StrobeRequestPayload struct {
 	Color      color.RGB   `toml:"color"`
 	Intensity  float64     `toml:"intensity"`   // Base intensity 0.0-1.0
@@ -904,15 +872,8 @@ type LightningDespawnRequestPayload struct {
 
 // --- Combat ---
 
-// CrossingID names the artifact a payload travelled in: the participant that
-// produced it and that source's wire sequence. Zero is not a crossing, which every
-// re-derived event is.
-//
-// It is here rather than on GameEvent because it has to survive the wire: a
-// crossing applies at once on its producer and a playout lead later everywhere
-// else, so any value the receiver draws from a shared stream at apply time lands
-// at a different position than the producer's. Naming the artifact is what lets
-// both derive the same one. See Seed and D-3.
+// CrossingID gives derived outcomes a stable seed across receiver timing: producer
+// identity and wire sequence. Zero means no originating crossing.
 type CrossingID struct {
 	CrossingSource uint32 `toml:"crossing_source"`
 	CrossingSeq    uint64 `toml:"crossing_seq"`

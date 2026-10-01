@@ -22,9 +22,8 @@ const (
 const (
 	LightningAlpha = 0.8
 
-	// LightningZapDuration is the visual duration of short zap effects (energy drain, buff)
-	// One tick: the shortest interval a game-time duration can span
-	LightningZapDuration = GameUpdateInterval
+	// A zap settled before a driven tick must survive that tick to reach a frame.
+	LightningZapDuration = 2 * GameUpdateInterval
 
 	// LightningTrackedLease retires a tracked bolt its owner stopped renewing; a
 	// renewal raised in one tick is dispatched in the next, so it spans several

@@ -1,11 +1,5 @@
-// Package snapshot is the wire model for shared-world captures.
-//
-// It holds what a capture is (SharedCapture and its header), how it is encoded
-// (a bounded compressed JSON envelope), how it is indexed for selective repair
-// (Manifest, pages, section hashes), and which status keys belong to the
-// cross-instance comparison surface. It reads no world and holds no lock:
-// internal/app performs capture and install against the live world and passes
-// the values through here.
+// Package snapshot defines Shared captures, compression and manifests.
+// The caller owns the world lock while reading or installing a capture.
 package snapshot
 
 import (
@@ -20,11 +14,9 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 )
 
-// Schema is the capture layout version, distinct from the journal schema. A
-// header names both so a mismatch says which one moved. It also moves when what a
-// capture carries changes, since two builds would then misread each other's
-// installs: 11 returned the combat component's kill credit to the last damaging cursor.
-const Schema = 11
+// Capture and journal schemas are separate so compatibility errors identify
+// which layout prevents an install.
+const Schema = 12
 
 // SharedCapture is the shared world at one tick (D-19): the shared component
 // stores, the allocator's next ID, the Shared RNG stream positions, and the private
@@ -115,19 +107,8 @@ type CaptureHeader struct {
 	Term      network.AuthorityTerm `json:"term,omitempty"`
 	Authority uint32                `json:"authority,omitempty"`
 
-	// Crossings is, per participant, the source-local sequence through which this
-	// world contains that participant's ordinary crossings — the authority's own
-	// among them, where the number is the prefix it had completed dispatching when
-	// the world was read.
-	//
-	// It is a vector rather than the authority's single fence because the mismatch
-	// between an apply tick and a world's contents is not the authority's alone. A
-	// guest whose link misses the playout lead produces a crossing for a tick that
-	// is already past by the time the authority reads the world without it, and a
-	// receiver judging membership by tick concludes its own action is represented
-	// and discards it. Barrier-bound crossings keep using their agreed ApplyTick:
-	// they apply at one tick on every instance, producer included, so the tick is
-	// the exact answer for them.
+	// Crossings fences applied ordinary artifacts per participant, including late
+	// arrivals. Barrier-bound artifacts use the capture tick instead.
 	Crossings network.CrossingFences `json:"crossings,omitempty"`
 
 	// Integrity hashes the capture body with this field zeroed. "Did this arrive

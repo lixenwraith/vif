@@ -550,7 +550,7 @@ func (s *NetworkSystem) addParticipant(p *event.ParticipantJoinedPayload) {
 	}
 	heat, energy := s.world.Resources.Player.InitialResources()
 	s.world.PushEvent(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
-		Slot: p.Slot, Center: true, Control: uint8(control), PeerID: p.Participant,
+		Slot: p.Slot, Center: true, Control: uint8(control), PeerID: p.Participant, Holder: p.Holder,
 		Heat: heat, Energy: energy,
 	})
 	if control == component.ControlLocal {
@@ -604,15 +604,43 @@ func (s *NetworkSystem) barrierDelayTicks() uint64 {
 // tick on every instance, so the despawn it derives does too (D-5) — which is the
 // whole reason a disconnect is not acted on where it is observed.
 func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
+	if p.Participant == 0 {
+		return
+	}
+	if r := s.world.Resources.Network; r != nil && p.Dismissed && p.Participant == r.ParticipantID && r.OnDismissed != nil {
+		// A dismissed instance must not relay its closing links as fresh departures.
+		s.enabled = false
+		r.OnDismissed()
+	}
+	// One crossing retires the whole holder group at the same simulation boundary.
+	var children []event.ParticipantDepartedPayload
+	for _, e := range s.world.Components.Cursor.Entities() {
+		c, ok := s.world.Components.Cursor.GetComponent(e)
+		if ok && c.Holder == p.Participant {
+			children = append(children, event.ParticipantDepartedPayload{Participant: c.PeerID, Slot: c.Slot, Dismissed: true})
+		}
+	}
+	for i := range children {
+		s.removeParticipant(&children[i])
+	}
 	s.forgetParticipant(p.Participant)
 	if int(p.Participant) < len(s.departed) {
 		s.departed[p.Participant] = true
+	}
+	if r := s.world.Resources.Network; r != nil {
+		if r.OnDeparture != nil {
+			r.OnDeparture(p.Participant)
+		}
+	}
+	if port, ok := s.port().(engine.PeerDroppingPort); ok {
+		port.Disconnect(p.Participant)
 	}
 	if int(p.Slot) >= parameter.MaxPlayers {
 		return
 	}
 	cursor := s.world.Resources.Player.Slot(p.Slot)
-	if cursor == 0 || s.world.SimulatesLocally(cursor) {
+	c, ok := s.world.Components.Cursor.GetComponent(cursor)
+	if !ok || c.PeerID != p.Participant || s.world.SimulatesLocally(cursor) {
 		return
 	}
 	s.world.PushEvent(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{Slot: p.Slot})
@@ -1307,6 +1335,9 @@ func (s *NetworkSystem) DrainOffTick() {
 func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbound) int) {
 	n := poll(s.buf[:])
 	for i := range n {
+		if !s.enabled {
+			return
+		}
 		in := &s.buf[i]
 		switch in.Kind {
 		case network.InboundConnect:
@@ -1404,9 +1435,16 @@ func (s *NetworkSystem) announceDeparture(peerID uint32, from uint32) bool {
 // receiveDeparture handles a neighbour's notice: the coordinator turns it into the
 // crossing, anyone else passes it on.
 func (s *NetworkSystem) receiveDeparture(from uint32, body []byte) {
+	if from == 0 || int(from) >= len(s.departed) || s.departed[from] {
+		return
+	}
 	var p event.ParticipantDepartedPayload
 	if err := json.Unmarshal(body, &p); err != nil {
 		s.statDrop.Add(1)
+		return
+	}
+	// A neighbour losing its edge does not retire a participant still linked here.
+	if s.linked(p.Participant) {
 		return
 	}
 	if !s.announceDeparture(p.Participant, from) {
@@ -1588,7 +1626,7 @@ func (s *NetworkSystem) receiveSelective(kind network.MessageType, from uint32, 
 // by term and participant and decides what to relay. These flood: a survivor two
 // links from the lost authority learns of the loss only from reports crossing it.
 func (s *NetworkSystem) receiveAuthority(kind network.MessageType, from uint32, body []byte) {
-	if from == 0 {
+	if from == 0 || int(from) >= len(s.departed) || s.departed[from] {
 		s.statDrop.Add(1)
 		return
 	}

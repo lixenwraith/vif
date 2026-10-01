@@ -89,6 +89,7 @@ func (r *Recorder) Close() (RecordStats, error) {
 		return r.stats, nil
 	}
 
+	r.journal.Finish(r.queue.Stamp())
 	if r.queue.Journal() == r.journal {
 		r.queue.SetJournal(nil)
 	}

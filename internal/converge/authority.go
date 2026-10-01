@@ -721,6 +721,10 @@ func (u *Authority) onReport(from uint32, body []byte) {
 	if err != nil || rep.From == 0 {
 		return
 	}
+	// A closing or dismissed peer may lose an authority that remains linked here.
+	if p, ok := u.inst.Transport().(interface{ Peers() []uint32 }); ok && slices.Contains(p.Peers(), uint32(rep.Lost)) {
+		return
+	}
 	u.mu.Lock()
 	held, contested, holder, local := u.term, u.contested, u.holder, u.local
 	u.mu.Unlock()

@@ -45,7 +45,7 @@ func Run(cfg Config) error {
 		if next == nil {
 			return nil
 		}
-		solo, cfg.notice, cfg.dialled, cfg.Bots = nil, "", nil, next.Bots
+		solo, cfg.notice, cfg.dialled, cfg.Bots = nil, next.Notice, nil, next.Bots
 		if next.Scenario != "" {
 			cfg.Resources.Scenario, cfg.Resources.Embedded = next.Scenario, false
 		}
@@ -194,6 +194,9 @@ func (a *App) Loop() (*restartRequest, error) {
 		// Before the wait, not inside it: a latched restart is serviced on the
 		// iteration after the intent that asked for one, and every other path
 		// through the loop arrives back here too.
+		if a.dismissed.Load() {
+			return &restartRequest{Notice: "Removed by the host; started a local game"}, nil
+		}
 		if req := a.restart.Load(); req != nil {
 			return req, nil
 		}

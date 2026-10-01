@@ -45,18 +45,19 @@ const (
 // here are what `flag` prints on a parse error before that table is reachable, and
 // are deliberately the same sentence.
 var (
-	flagColor  = flag.String("color", colourAuto, "Colour depth: auto, 256 or true")
-	flagMute   = flag.Bool("mute", true, "Start muted; -mute=false starts with sound")
-	flagCheck  = flag.Bool("check", false, "Validate the resolved config, then exit")
-	flagSchema = flag.Bool("schema", false, "Print the FSM schema as JSON, then exit")
-	flagSpeed  = flag.String("speed", "", "Simulation rate: 1/8 1/4 1/2 1 2 4 8, or max with -script")
-	flagSeed   = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
-	flagReplay = flag.String("replay", "", "Replay a recorded journal instead of playing")
-	flagScript = flag.String("script", "", "Run an authored deterministic TOML tick script")
-	flagBot    = flag.String("bot", "", "Play this instance's own seat with a bot graph")
-	flagWatch  = flag.Bool("watch", false, "Present a -script run on this terminal")
-	flagHelp   = flag.Bool("h", false, "Print the flag help and exit")
-	flagVer    = flag.Bool("version", false, "Print the build version and exit")
+	flagColor    = flag.String("color", colourAuto, "Colour depth: auto, 256 or true")
+	flagMute     = flag.Bool("mute", true, "Start muted; -mute=false starts with sound")
+	flagCheck    = flag.Bool("check", false, "Validate the resolved config, then exit")
+	flagSchema   = flag.Bool("schema", false, "Print the FSM schema as JSON, then exit")
+	flagSpeed    = flag.String("speed", "", "Simulation rate: 1/8 1/4 1/2 1 2 4 8, or max with -script or autonomous bots")
+	flagSeed     = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
+	flagReplay   = flag.String("replay", "", "Replay a recorded journal instead of playing")
+	flagScript   = flag.String("script", "", "Run an authored deterministic TOML tick script")
+	flagBot      = flag.String("bot", "", "Add bots: [N[:graph]|graph], default 1:default")
+	flagHeadless = flag.Bool("headless", false, "Run -bot without a human player or terminal")
+	flagWatch    = flag.Bool("watch", false, "Watch the first bot or a script; no human player")
+	flagHelp     = flag.Bool("h", false, "Print the flag help and exit")
+	flagVer      = flag.Bool("version", false, "Print the build version and exit")
 
 	flagAudioBackend string
 	flagConfig       = newConfigFlags()
@@ -92,7 +93,7 @@ func init() {
 }
 
 func main() {
-	flag.Parse()
+	flag.CommandLine.Parse(botArgs(flag.CommandLine, os.Args[1:]))
 	if *flagHelp {
 		// Asked for, so it is output rather than a diagnostic: stdout, exit zero,
 		// greppable without redirecting stderr.
@@ -118,6 +119,9 @@ func main() {
 	setupDiagnostics()
 
 	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, *flagBot, *flagWatch, flagSession)
+	if sessionErr == nil && *flagHeadless && (*flagWatch || *flagBot == "" && flagSession.bots == "" || flagSession.serve != "") {
+		sessionErr = errors.New("-headless requires -bot and cannot combine with -watch or -serve")
+	}
 	if sessionErr == nil {
 		sessionErr = requestSiteSession(requested)
 	}
@@ -137,16 +141,18 @@ func main() {
 			cfg.Mode = app.ModeScript
 		}
 		_, err = app.RunScript(cfg, *flagScript)
-	case *flagBot != "":
+	case (*flagWatch || *flagHeadless) && (*flagBot != "" || flagSession.bots != ""):
 		cfg := buildConfig()
+		graph := cfg.Bots[0]
+		cfg.Bots = cfg.Bots[1:]
 		if *flagWatch {
 			cfg.Mode = app.ModeScript
 		} else {
-			botNotice(cfg, *flagBot)
+			botNotice(cfg, graph)
 		}
 		var st bot.Stats
-		if st, err = app.RunBot(cfg, *flagBot); err == nil && !*flagWatch {
-			fmt.Printf("bot %s stopped after %d ticks and %d intents\n", *flagBot, st.Ticks, st.Injected)
+		if st, err = app.RunBot(cfg, graph); err == nil && !*flagWatch {
+			fmt.Printf("Bot stopped: %d ticks, %d actions\n", st.Ticks, st.Injected)
 		}
 	case flagSession.serve != "":
 		err = app.RunServer(buildConfig())
@@ -167,11 +173,11 @@ func main() {
 func botNotice(cfg app.Config, spec string) {
 	switch {
 	case cfg.HostAddress != "":
-		fmt.Printf("bot %s hosting %s; players join it with vif -join, Ctrl-C stops it\n", spec, cfg.HostAddress)
+		fmt.Printf("Bot %s hosting %s (headless); Ctrl-C stops it\n", spec, cfg.HostAddress)
 	case cfg.JoinAddress != "":
-		fmt.Printf("bot %s joining %s; Ctrl-C stops it\n", spec, cfg.JoinAddress)
+		fmt.Printf("Bot %s joining %s (headless); Ctrl-C stops it\n", spec, cfg.JoinAddress)
 	default:
-		fmt.Printf("bot %s playing solo and headless; -watch presents it, Ctrl-C stops it\n", spec)
+		fmt.Printf("Bot %s running headless; Ctrl-C stops it\n", spec)
 	}
 }
 
@@ -329,7 +335,9 @@ func buildConfig() app.Config {
 	if flagSession.size != "" {
 		cfg.Width, cfg.Height, _ = parseSize(flagSession.size) // validated in validateInvocation
 	}
-	cfg.Bots, _ = app.BotSpecs(flagSession.bots) // validated in validateInvocation
+	cfg.Bots, _ = app.BotSpecs(*flagBot)
+	extra, _ := app.BotSpecs(flagSession.bots)
+	cfg.Bots = append(cfg.Bots, extra...)
 
 	cfg.AudioMuted = *flagMute
 	cfg.MusicWAV = musicWAVDir()
@@ -477,7 +485,7 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 		"Ceiling on the roster, itself included (2..%d; default the whole roster); with a -join site, the one requested",
 		parameter.MaxPlayers))
 	fs.StringVar(&f.bots, "bots", "", fmt.Sprintf(
-		"Seat n bots playing graph (default %s) in this run's session; a solo run hosts them on loopback",
+		"Add bots using [N[:graph]|graph] (default 1:%s); combines with -bot",
 		app.DefaultBotGraph))
 	fs.StringVar(&f.listen, "listen", "", fmt.Sprintf(
 		"With -join in a %q session, the address this participant is dialled back on. "+
@@ -621,13 +629,50 @@ func validateInvocation(schema, check bool, replay, script, bot string, watch bo
 	if modes > 1 {
 		return fmt.Errorf("-schema, -check, -replay, -script and -bot are mutually exclusive")
 	}
-	if watch && script == "" && bot == "" {
+	if watch && script == "" && bot == "" && session.bots == "" {
 		return fmt.Errorf("-watch presents a -script or -bot run and has no other subject")
 	}
-	if bot != "" && session.serve != "" {
-		return fmt.Errorf("-bot plays this instance's own seat, and a -serve host has none")
+	if watch && session.serve != "" {
+		return errors.New("-serve has no terminal; use -host with -watch to watch bots")
+	}
+	if _, err := app.BotSpecs(bot); err != nil {
+		return err
 	}
 	return session.validateInvocation(schema, check, replay)
+}
+
+// Go's flag parser has no optional string operand; preserve the next option.
+func botArgs(fs *flag.FlagSet, args []string) []string {
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" || !strings.HasPrefix(arg, "-") {
+			return append(out, args[i:]...)
+		}
+		name := strings.TrimLeft(arg, "-")
+		if strings.Contains(name, "=") {
+			out = append(out, arg)
+			continue
+		}
+		if name == "bot" || name == "bots" {
+			spec := "1"
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+				spec = args[i]
+			}
+			out = append(out, "-"+name+"="+spec)
+			continue
+		}
+		out = append(out, arg)
+		if f := fs.Lookup(name); f != nil {
+			b, ok := f.Value.(interface{ IsBoolFlag() bool })
+			if (!ok || !b.IsBoolFlag()) && i+1 < len(args) {
+				i++
+				out = append(out, args[i])
+			}
+		}
+	}
+	return out
 }
 
 // --- Flag types ---

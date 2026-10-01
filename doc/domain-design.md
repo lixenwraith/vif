@@ -59,6 +59,10 @@ drains, nuggets, and player effects. `World.SimulatesLocally` and
 `World.ResolveOwnedCursor` are the admission gates. Remote Player-domain state
 does not exist locally.
 
+Bots use the same owner boundary: watching or replaying a bot presents that
+instance's private effects. A short lightning zap survives its first driven tick
+so the next frame can display it.
+
 The same rule admits owner-authored cursor writes: grants and per-tick ageing do
 not update a cursor this instance does not simulate.
 
@@ -571,10 +575,14 @@ Arrival and departure are coordinator-authored barrier crossings. A non-authorit
 roster artifact is refused. Full reset is likewise serialized by the coordinator;
 it preserves the closed roster and rebuilds cursors in slot order.
 
-When the authority goes, the successor is the lowest surviving identity in the
-closed roster — the first guest admitted. Every survivor computes it from the
-roster alone, so at most one can claim the term and no vote is needed; a receiver
-refuses a record naming anyone else. A survivor that cannot reach the successor
+A bot's holder identity travels in admission, the roster and the Shared cursor.
+One departure crossing removes the holder and its bots. A host may remove one bot
+without removing its holder; a guest may remove its own bots.
+
+When the authority goes, the successor is the first surviving independent
+participant in the succession chain, falling back to the lowest independent
+roster identity. Bot leaves cannot inherit authority. Every survivor computes
+the same choice; a receiver refuses a record naming anyone else. A survivor that cannot reach the successor
 continues as an explicit local fork.
 
 The one instance that removes a participant without a crossing is an instance with

@@ -362,13 +362,8 @@ func (s *MetaSystem) resetKills() {
 	s.statKillsUncredited.Store(0)
 }
 
-// handleGameReset rebuilds world state; purge additionally clears operator session state
-// Execution sequence (race-free):
-//  1. Entity and cursor-roster cleanup
-//  2. GameState reset (counters, timers)
-//  3. Scheduler-owned FSM reset (emits and settles the cursor spawn request)
-//
-// Other systems handle EventGameResetRequest after this completes
+// Reset rebuilds the world and closed roster before state and FSM scheduling;
+// purge additionally clears operator state.
 func (s *MetaSystem) handleGameReset(purge bool) {
 	// 1. Pause and stop audio
 	s.ctx.SetPaused(true)
@@ -379,7 +374,7 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	for i := range parameter.MaxPlayers {
 		e := s.world.Resources.Player.Slot(uint8(i))
 		if c, ok := s.world.Components.Cursor.GetComponent(e); ok {
-			roster = append(roster, engine.CursorRosterEntry{Slot: c.Slot, Control: c.Control, PeerID: c.PeerID})
+			roster = append(roster, engine.CursorRosterEntry{Slot: c.Slot, Control: c.Control, PeerID: c.PeerID, Holder: c.Holder})
 		}
 	}
 	s.world.Resources.Player.PrepareRestore(roster)
@@ -479,12 +474,8 @@ func (s *MetaSystem) handleLevelSetup(payload *event.LevelSetupPayload) {
 	}
 }
 
-// handleScreenResize applies terminal dimensions and reflows the geometry. Sole
-// writer of ctx.Width/Height, live and headless alike, so the main loop and this
-// handler cannot race over them.
-// A report that would leave the game area below one cell is dropped rather than
-// clamped: the clamp in updateGameArea is exactly where screen and viewport stop
-// being mutually derivable, which would desync ScreenSize and the journal anchor.
+// Only this handler writes terminal geometry. Refuse an empty game area so
+// recorded geometry and the world cannot diverge.
 func (s *MetaSystem) handleScreenResize(p *event.ScreenResizePayload) {
 	if !engine.ViewportFits(p.Width, p.Height) {
 		return

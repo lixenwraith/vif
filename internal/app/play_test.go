@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
@@ -151,4 +152,33 @@ func TestAWatchingBotOperatorCanResetAndSeatBotsWhileTheSessionKeepsTicking(t *t
 		t.Fatalf("the requested bot did not join: %s", a.ctx.GetStatusMessage())
 	}
 	press(terminal.KeyEscape, 0)
+}
+
+func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {
+	capture := journal.NewCapture()
+	source, _ := playBot(t, "default", fixtureSeed, 20, capture)
+	source.Close()
+	a := mustHeadless(t, fixtureSeed, 120, 40)
+	defer a.Close()
+	d, err := newReplayDriver(a, capture.Records(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.FinishAt(capture.End())
+	a.AttachTransport(replayPort{id: 1})
+	p := &player{a: a, src: journalSource{d}, interval: parameter.GameUpdateInterval,
+		rec: engine.ScaleNormal, scale: engine.ScaleNormal}
+	p.key(terminal.Event{Key: terminal.KeyRune, Rune: ' '})
+	if !p.paused || p.live {
+		t.Fatal("recorded network participant was treated as a live bot")
+	}
+	p.key(terminal.Event{Key: terminal.KeyRune, Rune: ' '})
+	p.advance(40 * parameter.GameUpdateInterval)
+	if !p.done || p.err != nil || a.Position().Tick != capture.End().Tick {
+		t.Fatalf("playback end: done=%v err=%v position=%v", p.done, p.err, a.Position())
+	}
+	p.advance(time.Second)
+	if a.Position().Tick != capture.End().Tick || !strings.HasPrefix(a.ctx.GetStatusMessage(), "END") {
+		t.Fatal("finished replay advanced or lost its END status")
+	}
 }

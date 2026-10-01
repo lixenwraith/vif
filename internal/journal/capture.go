@@ -17,6 +17,7 @@ type Capture struct {
 	records  []event.JournalRecord
 	anchors  []event.JournalAnchor
 	captures []event.JournalCapture
+	end      event.Stamp
 }
 
 // NewCapture creates an empty capture sink.
@@ -80,4 +81,16 @@ func (c *Capture) CheckDense() error {
 		}
 	}
 	return nil
+}
+
+func (c *Capture) Finish(st event.Stamp) {
+	c.mu.Lock()
+	c.end = st
+	c.mu.Unlock()
+}
+
+func (c *Capture) End() event.Stamp {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.end
 }

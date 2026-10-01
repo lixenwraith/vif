@@ -169,11 +169,6 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return true
 	}
 
-	// Clear status message on any action, hold included: an empty bar that still
-	// refuses the next message is the message holding a space it does not occupy.
-	if r.ctx.GetStatusMessage() != "" {
-		r.ctx.ClearStatusMessage()
-	}
 	if r.configForm != nil && configMenu(r.ctx) != nil && r.handleConfigForm(intent) {
 		return true
 	}

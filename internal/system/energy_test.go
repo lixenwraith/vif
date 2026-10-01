@@ -81,6 +81,17 @@ func TestChainedEnergyDrainZapsBetweenOwnerAndTarget(t *testing.T) {
 			t.Fatalf("zap = (%d,%d)->entity %d, want cursor (%d,%d)->species %d",
 				p.OriginX, p.OriginY, p.TargetEntity, cursorPos.X, cursorPos.Y, target)
 		}
+		lightning := NewLightningSystem(w).(*LightningSystem)
+		lightning.HandleEvent(ev)
+		w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
+		lightning.Update()
+		if w.Components.Lightning.CountEntities() != 1 {
+			t.Fatal("a zap settled before a driven tick disappeared before presentation")
+		}
+		lightning.Update()
+		if w.Components.Lightning.CountEntities() != 0 {
+			t.Fatal("a transient zap outlived its duration")
+		}
 		return
 	}
 	t.Fatal("energy drain spawned no zap")

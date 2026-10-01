@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/core"
@@ -26,14 +24,63 @@ type sessionControl struct{ a *App }
 func (c sessionControl) BeginHosting(addr, authority string) error {
 	return c.a.beginHostingLocked(addr, authority)
 }
-func (c sessionControl) Join(target string) error  { return c.a.joinLocked(target) }
-func (c sessionControl) SessionSummary() string    { return c.a.sessionSummaryLocked() }
-func (c sessionControl) DropBot(slot int) error    { return c.a.dropSeat(slot) }
+func (c sessionControl) Join(target string) error { return c.a.joinLocked(target) }
+func (c sessionControl) SessionSummary() string   { return c.a.sessionSummaryLocked() }
+func (c sessionControl) DropBot(slot int) error {
+	if err := c.a.dropSeat(slot); err == nil {
+		return nil
+	}
+	e := c.a.world.Resources.Player.Slot(uint8(slot))
+	cursor, ok := c.a.world.Components.Cursor.GetComponent(e)
+	if !ok || cursor.Holder == 0 {
+		return fmt.Errorf("no bot on slot %X", slot)
+	}
+	return c.a.dropPlayerLocked(e)
+}
 func (c sessionControl) RemoveBot(id uint64) error { return c.a.removeSeat(id) }
 func (c sessionControl) BotSummary() string        { return c.a.seatsSummary() }
 func (c sessionControl) Bots() []engine.BotSeat    { return c.a.botSeats() }
 func (c sessionControl) HostError() error          { return c.a.hostErrorLocked() }
 func (c sessionControl) JoinError() error          { return c.a.joinErrorLocked() }
+
+func (c sessionControl) DropPlayer(slot int) error {
+	if slot < 0 || slot >= parameter.MaxPlayers {
+		return errors.New("invalid player slot")
+	}
+	return c.a.dropPlayerLocked(c.a.world.Resources.Player.Slot(uint8(slot)))
+}
+
+func (c sessionControl) RemovePlayer(entity core.Entity) error { return c.a.dropPlayerLocked(entity) }
+
+func (c sessionControl) Participants() []engine.SessionParticipant {
+	var out []engine.SessionParticipant
+	for slot := range parameter.MaxPlayers {
+		e := c.a.world.Resources.Player.Slot(uint8(slot))
+		if p, ok := c.a.world.Components.Cursor.GetComponent(e); ok {
+			out = append(out, engine.SessionParticipant{Entity: e, Slot: p.Slot, Holder: p.Holder,
+				Local: c.a.world.SimulatesLocally(e)})
+		}
+	}
+	return out
+}
+
+// The cursor entity prevents an open menu from dropping a replacement in its slot.
+func (a *App) dropPlayerLocked(entity core.Entity) error {
+	if !a.world.IsSessionCoordinator() {
+		return errors.New("only the host can drop other players or their bots")
+	}
+	p, ok := a.world.Components.Cursor.GetComponent(entity)
+	if !ok {
+		return errors.New("that player has already left")
+	}
+	if a.world.SimulatesLocally(entity) {
+		return errors.New("use :q to leave your own session")
+	}
+	a.world.PushEventFull(event.EventParticipantDeparted,
+		&event.ParticipantDepartedPayload{Participant: p.PeerID, Slot: p.Slot, Dismissed: true},
+		event.OriginSession, core.DomainPlayer)
+	return nil
+}
 
 func (c sessionControl) RequestSession(site string, players int, scenario string) error {
 	e, err := network.ParseEndpoint(site)
@@ -53,12 +100,9 @@ func (c sessionControl) AddBot(graph string) error {
 	if c.a.dialling.Load() {
 		return errors.New("a join is already being dialled")
 	}
-	specs := []string{cmp.Or(graph, DefaultBotGraph)}
-	if _, err := strconv.Atoi(graph); err == nil || strings.Contains(graph, ":") {
-		var err error
-		if specs, err = BotSpecs(graph); err != nil {
-			return err
-		}
+	specs, err := BotSpecs(cmp.Or(graph, DefaultBotGraph))
+	if err != nil {
+		return err
 	}
 	for _, spec := range specs {
 		if err := c.a.addSeatLocked(spec); err != nil {
@@ -205,6 +249,7 @@ const (
 // BeginHosting opens a running instance to participants, for a caller that holds
 // no lock. The operator command path reaches beginHostingLocked instead.
 func (a *App) BeginHosting(addr string) error {
+	a.Settle()
 	var err error
 	a.world.RunSafe(func() { err = a.beginHostingLocked(addr, "") })
 	return err
@@ -560,8 +605,16 @@ func (a *App) awaitJoinerReady(port *network.SocketPort, id network.PeerID) erro
 // (D-11). The coordinator is the only producer, as it is for a departure.
 func (a *App) crossParticipantArrival(id network.PeerID, slot uint8) {
 	a.world.RunSafe(func() {
+		a.sessionMu.Lock()
+		i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
+		if i < 0 {
+			a.sessionMu.Unlock()
+			return
+		}
+		holder := a.sessionRoster[i].Holder
+		a.sessionMu.Unlock()
 		a.world.PushEventFull(event.EventParticipantJoined,
-			&event.ParticipantJoinedPayload{Participant: uint32(id), Slot: slot},
+			&event.ParticipantJoinedPayload{Participant: uint32(id), Slot: slot, Holder: uint32(holder)},
 			event.OriginSession, core.DomainPlayer)
 	})
 }

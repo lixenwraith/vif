@@ -1,53 +1,3 @@
-// Package network: who is allowed to author, and for how long.
-//
-// One instance in a session holds the authoritative Shared world. Until Phase 7
-// that was whichever instance started the session, permanently: losing it ended
-// the session's shared identity and left every survivor predicting alone. This
-// file is the seam that separates *authorship* from *the instance that started
-// the session*.
-//
-// The unit is the **authority term**: a monotonically increasing generation, one
-// per session, incremented exactly once per successful handoff. `epoch` was not
-// available — in this codebase an epoch is a closed barrier production epoch, one
-// tick's worth of artifacts — and the word borrowed instead is Raft's, because
-// half the invariant is Raft's: at most one authority per term, and a term never
-// goes backwards on any instance.
-//
-// The other half is not Raft's, and the difference is the topology. Raft elects by
-// quorum because its members can all reach each other; a session's members often
-// cannot. The shipped CLI dials one address, so a session is a star, and when the
-// star's centre goes every survivor is left alone — no survivor can reach any
-// other, so no survivor can ever collect a vote, and a quorum rule elects nobody
-// in the one shape every real session has. That is why the rule here is not a
-// quorum:
-//
-//   - **The successor is the chain's, not the survivors'.** It is the first
-//     surviving member of the published succession chain, falling back to the
-//     roster's lowest survivor when the chain names none. Every instance computes
-//     it from state it already holds, with no messages and no agreement step, so at
-//     most one instance can ever conclude that it is the successor.
-//
-//   - **A term is never adopted, only granted.** A receiver ignores an artifact
-//     from a term older than the one it holds and refuses one from a term it has
-//     never seen. The only way forward is a handoff record naming an authority the
-//     receiver's own roster agrees is the designated one, which is what makes an
-//     unheralded higher term a split brain to report rather than a fast successor
-//     to follow.
-//
-//   - **The successor must hold retention.** A candidate with no retained
-//     authoritative record has no baseline to publish deltas against and would fan
-//     a keyframe out to every survivor at once. Retention *ordering* is
-//     deliberately not an eligibility test: with one designated candidate there is
-//     no alternative to prefer, and a successor a cadence behind a peer moves that
-//     peer back by a cadence — which is what a correction is. What it may not be
-//     is empty.
-//
-// Losing the authority and the successor together is survivable: every participant
-// holds the whole chain with addresses, so it dials the next candidate itself.
-//
-// Nothing here authenticates. A participant that can claim another's identity can
-// make itself the successor, which is a strictly larger exposure than Phase 6's and
-// is stated as such in the plan rather than partly mitigated.
 package network
 
 import (
@@ -67,14 +17,8 @@ type AuthorityTerm uint64
 // FirstTerm is the term the instance that opens a session authors under.
 const FirstTerm AuthorityTerm = 1
 
-// AuthorityReport is the loss notice a survivor floods when the authority goes.
-//
-// It carries no election input, because the election has none: the successor is a
-// function of the roster every instance already holds. What it carries is the
-// *news*, and that is load-bearing on its own — only a direct neighbour of the
-// authority sees the link drop, so a participant two links away would otherwise
-// wait for a departure crossing whose only producer is the participant that is
-// gone. Flooded and deduplicated by (From, Term) like any other artifact.
+// AuthorityReport floods loss news beyond the lost authority's direct neighbours.
+// Deduplication uses (From, Term); the roster, not reports, elects the successor.
 type AuthorityReport struct {
 	Term AuthorityTerm `json:"term"`
 	From PeerID        `json:"from"`
@@ -126,15 +70,18 @@ func (h HandoffRecord) Validate(roster []RosterEntry, chain SuccessionChain) err
 	if h.Term < FirstTerm {
 		return errors.New("handoff carries no authority term")
 	}
-	if h.Authority == 0 {
-		return errors.New("handoff names no authority")
+	if h.Authority == 0 || h.Predecessor == 0 || h.Authority == h.Predecessor {
+		return errors.New("handoff names invalid predecessor or authority")
 	}
-	if len(h.Roster) != len(roster) {
-		return fmt.Errorf("handoff carries a roster of %d, this session closed on %d",
-			len(h.Roster), len(roster))
+	// The lost process's bots may have crossed their departures before its link
+	// closed. Only that subtree can differ across the handoff boundary.
+	withoutLost := func(in []RosterEntry) []RosterEntry {
+		return slices.DeleteFunc(slices.Clone(in), func(p RosterEntry) bool {
+			return p.ID == h.Predecessor || p.Holder == h.Predecessor
+		})
 	}
-	if !SameRoster(h.Roster, roster) {
-		return errors.New("handoff carries a different roster than the session closed on")
+	if !SameRoster(withoutLost(h.Roster), withoutLost(roster)) {
+		return errors.New("handoff carries a different surviving roster")
 	}
 	// The whole of the split-brain check, and the receiver makes it for itself
 	// rather than counting evidence the record brought with it: the successor a
@@ -165,18 +112,12 @@ func SameRoster(a, b []RosterEntry) bool {
 	return slices.Equal(x, y)
 }
 
-// DesignatedSuccessor is the succession rule: the first chain member that is still
-// in the roster, or the roster's lowest survivor when the chain names none.
-//
-// It takes no reports, no links and no votes. Every instance computes it from a
-// roster D-11 makes identical and a chain that only ever grows by appending, so a
-// prefix and its extension name the same successor and no agreement step is needed.
-// A local dial result is never an input: two survivors filtering by their own reach
-// would compute two successors.
+// DesignatedSuccessor chooses the first surviving independent chain member, falling
+// back to the lowest independent roster identity. Local reach is never an input.
 func DesignatedSuccessor(roster []RosterEntry, lost PeerID, chain SuccessionChain) (PeerID, bool) {
 	alive := func(id PeerID) bool {
 		return id != 0 && id != lost &&
-			slices.ContainsFunc(roster, func(p RosterEntry) bool { return p.ID == id })
+			slices.ContainsFunc(roster, func(p RosterEntry) bool { return p.ID == id && p.Holder == 0 })
 	}
 	for _, e := range chain {
 		if alive(e.ID) {
