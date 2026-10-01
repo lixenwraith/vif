@@ -34,8 +34,9 @@ type mouseModeState struct {
 // Router interprets Intents and executes game logic
 // Authoritative owner of game mode state
 type Router struct {
-	ctx     *engine.GameContext
-	machine *input.Machine
+	ctx        *engine.GameContext
+	machine    *input.Machine
+	configForm *configForm
 
 	macro *MacroManager
 
@@ -172,6 +173,9 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	// refuses the next message is the message holding a space it does not occupy.
 	if r.ctx.GetStatusMessage() != "" {
 		r.ctx.ClearStatusMessage()
+	}
+	if r.configForm != nil && configMenu(r.ctx) != nil && r.handleConfigForm(intent) {
+		return true
 	}
 
 	// === Macro Context Interception ===
@@ -952,6 +956,7 @@ func (r *Router) handleOverlayClose() bool {
 }
 
 func (r *Router) closeOverlay() bool {
+	r.configForm = nil
 	r.ctx.SetOverlayContent(nil)
 	r.ctx.SetPaused(false)
 	r.transitionMode(core.ModeNormal)

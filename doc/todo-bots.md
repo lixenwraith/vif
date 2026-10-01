@@ -86,9 +86,11 @@ or presented with `-watch`, and plays solo, hosts with `-host` or joins with
 `-join` through the driven session path `-script` already uses; the two share the
 paced loops, told apart only by their driver. Solo and headless it runs flat out
 unless `-speed` says otherwise; presented or in a session it is paced.
-`-bot … -watch` is live play: its operator can use `:n` and `:bot`. Opening the
-command line suspends graph input; a networked run keeps ticking. Journal viewers
-retain their inspection-only command restrictions.
+`-bot … -watch` is live play: its operator can use `:n`, `:bot` and the
+[configuration menu](config-menu.md). Its Bots page adds seats and removes
+this run's admitted bots by cursor slot or cancels a pending bot. Commands and
+overlays suspend graph input; networked runs keep ticking. Journal viewers
+remain inspection-only.
 
 Seats (`internal/app/seat.go`) are the same driver on further headless instances
 in the holder's process, each on its own goroutine, paced against the authority

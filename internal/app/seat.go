@@ -14,6 +14,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/vlog"
@@ -42,13 +43,14 @@ const seatLoopback = "127.0.0.1:0"
 // run's session over an ordinary link, as any participant does, and plays a graph.
 // The session sees a participant; only the holder knows it is a bot.
 type seat struct {
-	spec  string
-	graph *bot.Graph
-	stop  chan os.Signal // closed to halt it; drive reads a closed channel as a signal
-	done  chan struct{}
-	once  sync.Once
-	id    atomic.Uint32 // the participant it was admitted as, zero until then
-	slot  atomic.Uint32
+	number uint64
+	spec   string
+	graph  *bot.Graph
+	stop   chan os.Signal // closed to halt it; drive reads a closed channel as a signal
+	done   chan struct{}
+	once   sync.Once
+	id     atomic.Uint32 // the participant it was admitted as, zero until then
+	slot   atomic.Uint32
 }
 
 func (s *seat) halt() { s.once.Do(func() { close(s.stop) }) }
@@ -90,6 +92,8 @@ func (a *App) addSeatLocked(spec string) error {
 	}
 	s := &seat{spec: spec, graph: graph, stop: make(chan os.Signal), done: make(chan struct{})}
 	a.seatsMu.Lock()
+	a.seatSerial++
+	s.number = a.seatSerial
 	a.seats = append(a.seats, s)
 	a.seatsMu.Unlock()
 	core.Go(func() { a.playSeat(s, cfg, hold) })
@@ -184,8 +188,8 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 				b.sessionMu.Lock()
 				entry, _ := b.sessionOffer.Entry(b.sessionOffer.Assigned)
 				b.sessionMu.Unlock()
-				s.id.Store(uint32(entry.ID))
 				s.slot.Store(uint32(entry.Slot))
+				s.id.Store(uint32(entry.ID))
 				vlog.Info("app", "msg", "bot seated", "graph", s.graph.Name,
 					"participant", s.id.Load(), "slot", s.slot.Load(), "joined", cfg.JoinAddress)
 				return seatSource{botSource{d}, forkCell(b), forkCell(a)}, nil
@@ -258,15 +262,29 @@ func (a *App) closeSeats() {
 
 // dropSeat halts the seat on slot; it leaves as any participant does.
 func (a *App) dropSeat(slot int) error {
+	if a.stopSeat(func(s *seat) bool { return s.id.Load() != 0 && int(s.slot.Load()) == slot }) {
+		return nil
+	}
+	return fmt.Errorf("no bot of this run's is on slot %X", slot)
+}
+
+func (a *App) removeSeat(id uint64) error {
+	if a.stopSeat(func(s *seat) bool { return s.number == id }) {
+		return nil
+	}
+	return fmt.Errorf("this bot has already left")
+}
+
+func (a *App) stopSeat(match func(*seat) bool) bool {
 	a.seatsMu.Lock()
 	defer a.seatsMu.Unlock()
 	for _, s := range a.seats {
-		if s.id.Load() != 0 && int(s.slot.Load()) == slot {
+		if match(s) {
 			s.halt()
-			return nil
+			return true
 		}
 	}
-	return fmt.Errorf("no bot of this run's is on slot %X", slot)
+	return false
 }
 
 // seatGraphs are the graphs of the seats this run holds, in the order they came.
@@ -280,20 +298,38 @@ func (a *App) seatGraphs() []string {
 	return specs
 }
 
-// seatsSummary is :bot's report of the seats this run holds.
-func (a *App) seatsSummary() string {
+func (a *App) botSeats() []engine.BotSeat {
 	a.seatsMu.Lock()
 	defer a.seatsMu.Unlock()
-	if len(a.seats) == 0 {
+	bots := make([]engine.BotSeat, 0, len(a.seats))
+	for _, s := range a.seats {
+		b := engine.BotSeat{ID: s.number, Joining: s.id.Load() == 0, Slot: uint8(s.slot.Load()), Graph: s.graph.Name}
+		select {
+		case <-s.stop:
+			b.Stopping = true
+		default:
+		}
+		bots = append(bots, b)
+	}
+	return bots
+}
+
+func (a *App) seatsSummary() string {
+	bots := a.botSeats()
+	if len(bots) == 0 {
 		return "No bots; :bot add [N[:graph]|graph] seats bots"
 	}
-	parts := make([]string, 0, len(a.seats))
-	for _, s := range a.seats {
-		if s.id.Load() == 0 {
-			parts = append(parts, s.graph.Name+" joining")
+	parts := make([]string, 0, len(bots))
+	for _, b := range bots {
+		if b.Joining {
+			parts = append(parts, b.Graph+" joining")
 			continue
 		}
-		parts = append(parts, fmt.Sprintf("slot %X %s", s.slot.Load(), s.graph.Name))
+		label := fmt.Sprintf("slot %X %s", b.Slot, b.Graph)
+		if b.Stopping {
+			label += " leaving"
+		}
+		parts = append(parts, label)
 	}
 	return "Bots: " + strings.Join(parts, ", ") + "; :bot drop <slot> drops one"
 }

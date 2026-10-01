@@ -81,7 +81,7 @@ func (r *Router) scrollOverlay(delta int) {
 // handleOverlayActivate pins or unpins the selected card and requests a rebuild
 func (r *Router) handleOverlayActivate() bool {
 	if configMenu(r.ctx) != nil {
-		return r.changeConfigMenu(1)
+		return r.changeConfigMenu(1, true)
 	}
 	key := r.ctx.GetOverlaySelection()
 	if !r.ctx.IsOverlaySelectable() || key == "" {

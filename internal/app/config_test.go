@@ -31,7 +31,7 @@ func TestConfigMenuChangesStayAppliedAfterClose(t *testing.T) {
 	if ctx.GetMode() != core.ModeOverlay || !ctx.TimeCtl.IsPaused() {
 		t.Fatal("menu did not pause solo play in overlay mode")
 	}
-	key(terminal.KeyDown, 0)
+	ctx.SetOverlaySelection("controls")
 	key(terminal.KeyEnter, 0)
 	key(terminal.KeyEnter, 0)
 	if ctx.AutoFire.Load() != engine.AutoFireOff || !ctx.TimeCtl.IsPaused() {

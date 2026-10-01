@@ -6,6 +6,8 @@ exists: the contract, the correction and ordering boundaries, authority
 continuity, the operating point, the diagnostics, and what remains. §10 is where
 the protocol came from — the incident that prompted it and the options it was
 chosen against — and is history rather than a description of the runtime.
+For hosting, joining and allocator requests during play, see the
+[configuration menu](config-menu.md#multiplayer).
 
 ## 1. Vocabulary and boundaries
 

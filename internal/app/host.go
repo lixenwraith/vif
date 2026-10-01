@@ -20,21 +20,39 @@ import (
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
-// sessionControl adapts App to engine.SessionController. Every method is the locked
-// form: the operator command surface runs inside App.handleIntent's critical
-// section, so a controller method that took the world lock would deadlock the
-// instance at the moment the command fired.
+// The router already holds the world lock when calling this adapter.
 type sessionControl struct{ a *App }
 
 func (c sessionControl) BeginHosting(addr, authority string) error {
 	return c.a.beginHostingLocked(addr, authority)
 }
-func (c sessionControl) Join(target string) error { return c.a.joinLocked(target) }
-func (c sessionControl) SessionSummary() string   { return c.a.sessionSummaryLocked() }
-func (c sessionControl) DropBot(slot int) error   { return c.a.dropSeat(slot) }
-func (c sessionControl) BotSummary() string       { return c.a.seatsSummary() }
+func (c sessionControl) Join(target string) error  { return c.a.joinLocked(target) }
+func (c sessionControl) SessionSummary() string    { return c.a.sessionSummaryLocked() }
+func (c sessionControl) DropBot(slot int) error    { return c.a.dropSeat(slot) }
+func (c sessionControl) RemoveBot(id uint64) error { return c.a.removeSeat(id) }
+func (c sessionControl) BotSummary() string        { return c.a.seatsSummary() }
+func (c sessionControl) Bots() []engine.BotSeat    { return c.a.botSeats() }
+func (c sessionControl) HostError() error          { return c.a.hostErrorLocked() }
+func (c sessionControl) JoinError() error          { return c.a.joinErrorLocked() }
+
+func (c sessionControl) RequestSession(site string, players int, scenario string) error {
+	e, err := network.ParseEndpoint(site)
+	if err != nil {
+		return err
+	}
+	if e.Scheme != network.SchemeSite {
+		return errors.New("allocator site must be an http:// or https:// URL")
+	}
+	if players < 0 || players > parameter.MaxPlayers {
+		return fmt.Errorf("players must be 0 (server default) or 1..%d", parameter.MaxPlayers)
+	}
+	return c.a.joinSessionLocked(site, players, scenario)
+}
 
 func (c sessionControl) AddBot(graph string) error {
+	if c.a.dialling.Load() {
+		return errors.New("a join is already being dialled")
+	}
 	specs := []string{cmp.Or(graph, DefaultBotGraph)}
 	if _, err := strconv.Atoi(graph); err == nil || strings.Contains(graph, ":") {
 		var err error
@@ -115,11 +133,25 @@ func (a *App) receiveSessionRestart(from uint32, addr string) {
 // the host has admitted it: a refusal leaves the game as it was. A run left alone
 // by its session may join another. Caller MUST hold updateMutex.
 func (a *App) joinLocked(target string) error {
+	return a.joinSessionLocked(target, 0, "")
+}
+
+func (a *App) joinErrorLocked() error {
 	if a.cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode has no restart loop", a.cfg.Mode)
 	}
 	if port := a.sessionTransportLocked(); a.cfg.HostAddress != "" || (port != nil && port.PeerCount() > 0) {
 		return errors.New("this run is already in a session")
+	}
+	if a.dialling.Load() {
+		return errors.New("a join is already being dialled")
+	}
+	return nil
+}
+
+func (a *App) joinSessionLocked(target string, players int, scenario string) error {
+	if err := a.joinErrorLocked(); err != nil {
+		return err
 	}
 	// A site is asked for a session off the lock, since it answers once the pod is up.
 	site, err := network.ParseEndpoint(target)
@@ -141,7 +173,7 @@ func (a *App) joinLocked(target string) error {
 		defer a.dialling.Store(false)
 		link, err := target, error(nil)
 		if site.Scheme == network.SchemeSite {
-			if link, err = network.RequestSession(site.Addr, 0, ""); err == nil {
+			if link, err = network.RequestSession(site.Addr, players, scenario); err == nil {
 				a.ctx.SetStatusMessage("Joining "+link+"...", 0, true)
 				if next, err = next.joining(link); err == nil {
 					err = next.Validate()
@@ -178,17 +210,12 @@ func (a *App) BeginHosting(addr string) error {
 	return err
 }
 
-// beginHostingLocked opens a running instance to participants: the same session
-// every other path builds, started at a tick that is not zero. What it adds is the
-// transport, which this App then owns for the rest of the run. Binding under the
-// world lock costs a tick, bounded by one listen(2) — the same deliberate operator
-// cost `:log on` pays. Caller MUST hold updateMutex.
-func (a *App) beginHostingLocked(addr, authority string) error {
+func (a *App) hostErrorLocked() error {
 	if !buildHasSocketNetwork {
 		return errors.New("host: a browser build can join a session but not host one")
 	}
-	if addr == "" {
-		return errors.New("host: no address")
+	if a.dialling.Load() {
+		return errors.New("a join is already being dialled")
 	}
 	if a.sessionTransportLocked() != nil {
 		return errors.New("host: this run is already in a session")
@@ -199,7 +226,17 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 		return errors.New("host: this run is already hosting")
 	}
 	a.sessionMu.Unlock()
+	return nil
+}
 
+// The world lock keeps admission from reading a partly attached session.
+func (a *App) beginHostingLocked(addr, authority string) error {
+	if err := a.hostErrorLocked(); err != nil {
+		return err
+	}
+	if addr == "" {
+		return errors.New("host: no address")
+	}
 	e, err := network.ParseEndpoint(addr)
 	if err == nil {
 		err = e.Listenable()

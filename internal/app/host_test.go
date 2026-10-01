@@ -1,7 +1,10 @@
 package app
 
 import (
+	"encoding/json"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
@@ -18,6 +21,77 @@ import (
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
 )
+
+func TestAllocatorRequestForwardsOptionsAndPreservesRunOnRefusal(t *testing.T) {
+	type request struct {
+		Players  int
+		Scenario string
+	}
+	received, release := make(chan request, 1), make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/vif/api/sessions" {
+			t.Errorf("unexpected allocator request %s %s", r.Method, r.URL.Path)
+		}
+		var req request
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Error(err)
+		}
+		received <- req
+		<-release
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"message":"test quota reached"}}`))
+	}))
+	defer site.Close()
+	defer unblock()
+	a := mustHeadless(t, fixtureSeed, 80, 24)
+	defer a.Close()
+	a.cfg.Mode = ModePlay
+	tickUntilCursor(t, a)
+	before := a.Position()
+	a.World().RunSafe(func() {
+		ctl := a.ctx.SessionCtl
+		for _, n := range []int{-1, parameter.MaxPlayers + 1} {
+			if err := ctl.RequestSession(site.URL, n, "tower"); err == nil {
+				t.Errorf("accepted players=%d", n)
+			}
+		}
+		if err := ctl.RequestSession("127.0.0.1:4242", 2, "tower"); err == nil {
+			t.Error("accepted a non-site allocator target")
+		}
+		if err := ctl.RequestSession(site.URL, 3, "tower"); err != nil {
+			t.Fatal(err)
+		}
+		if ctl.HostError() == nil || ctl.JoinError() == nil {
+			t.Error("pending join is available for another session action")
+		}
+		if err := ctl.AddBot("default"); err == nil {
+			t.Error("seated bots during a pending join")
+		}
+		if err := ctl.BeginHosting("127.0.0.1:0", ""); err == nil {
+			t.Error("hosted during a pending join")
+		}
+		if err := ctl.RequestSession(site.URL, 3, "tower"); err == nil {
+			t.Error("started two allocator requests")
+		}
+	})
+	select {
+	case req := <-received:
+		if req.Players != 3 || req.Scenario != "tower" {
+			t.Fatalf("allocator received %+v", req)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("allocator was not called")
+	}
+	unblock()
+	for deadline := time.Now().Add(2 * time.Second); a.dialling.Load() && time.Now().Before(deadline); {
+		time.Sleep(time.Millisecond)
+	}
+	if a.dialling.Load() || a.restart.Load() != nil || a.Position() != before || !strings.Contains(a.ctx.GetStatusMessage(), "test quota reached") {
+		t.Fatalf("refused request changed the run or hid the error: %s", a.ctx.GetStatusMessage())
+	}
+}
 
 // joinTestTickInterval paces the host through a join in this harness. See the
 // comment at its use.

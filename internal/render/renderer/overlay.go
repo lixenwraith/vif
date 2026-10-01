@@ -171,8 +171,13 @@ func (r *OverlayRenderer) renderContent(root tui.Region, g engine.OverlayGeometr
 
 	switch data.Layout {
 	case core.OverlayLayoutMenu:
-		r.renderMenu(root, body, g, data.Menu)
-		r.renderHint(root, g, parameter.OverlayHintsMenu)
+		if data.Menu != nil && data.Menu.Form != nil {
+			r.renderForm(body, data.Menu.Form)
+			r.renderHint(root, g, parameter.OverlayHintsForm)
+		} else {
+			r.renderMenu(root, body, g, data.Menu)
+			r.renderHint(root, g, parameter.OverlayHintsMenu)
+		}
 		return
 
 	case core.OverlayLayoutAbout:
@@ -213,6 +218,40 @@ func (r *OverlayRenderer) syncLayout(g engine.OverlayGeometry, data *core.Overla
 		r.buildDoc(g)
 	default:
 		r.buildCards(g)
+	}
+}
+
+func (r *OverlayRenderer) renderForm(body tui.Region, form *core.OverlayForm) {
+	if len(form.Fields) == 0 || body.H < 1 {
+		return
+	}
+	state := tui.NewFormState()
+	labelW := 0
+	for _, f := range form.Fields {
+		field := tui.NewTextFieldState(f.Value)
+		field.Cursor = f.Cursor
+		state.Fields = append(state.Fields, tui.FormField{Label: f.Label, State: field})
+		labelW = max(labelW, tui.RuneLen(f.Label)+2)
+	}
+	listH := min(len(form.Fields), max(body.H-parameter.OverlayMenuDetailRows, 1))
+	scroll := tui.NewScrollState(len(form.Fields), listH)
+	scroll.Select(form.Focus)
+	state.Fields = state.Fields[scroll.Offset:min(scroll.Offset+listH, len(state.Fields))]
+	state.Focus = form.Focus - scroll.Offset
+	body.Sub(0, 0, body.W, listH).Form(state, tui.FormOpts{LabelWidth: min(labelW, max(body.W/3, 1)), Style: tui.FormStyle{
+		LabelFg: visual.RgbOverlayTitle, FieldFg: visual.RgbOverlayValue, FieldBg: visual.RgbOverlayBg,
+		FocusBg: visual.RgbOverlayScrollTrack, CursorFg: visual.RgbOverlayBg, CursorBg: visual.RgbOverlaySelected, Bg: visual.RgbOverlayBg,
+	}})
+	detail := form.Help
+	if form.Error != "" {
+		detail = "Error: " + form.Error + "\n" + detail
+	}
+	for i, line := range tui.WrapText(detail, body.W) {
+		y := listH + 1 + i
+		if y >= body.H {
+			break
+		}
+		body.Text(0, y, line, visual.RgbOverlayHint, visual.RgbOverlayBg, terminal.AttrNone)
 	}
 }
 

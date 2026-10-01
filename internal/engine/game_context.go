@@ -31,31 +31,31 @@ type NavigationDebugState struct {
 	GroupID              uint8
 }
 
-// SessionController is what an operator command may ask of the session: start
-// hosting this run, and describe what it is part of now. Every method is called
-// with the world lock held — the router runs inside App.handleIntent's critical
-// section — so an implementation that took it would deadlock the instance.
+// SessionController methods run under the world lock; taking it again deadlocks.
 type SessionController interface {
-	// BeginHosting opens this running instance to participants at addr, under the
-	// authority policy named ("" keeps the run's own). It returns an error rather
-	// than reporting one, because the operator typed both.
+	// Empty authority keeps the run's policy.
 	BeginHosting(addr, authority string) error
-	// Join replaces this solo run with one joined to the session at target, taking
-	// the forms -join does. A target this build cannot dial is refused here.
 	Join(target string) error
-	// ChangeScenario restarts this run on the named scenario. It reports false when
-	// the name resolves to the scenario already running, which is a reset rather
-	// than a restart, and an error the operator reads with the game still going.
+	RequestSession(site string, players int, scenario string) error
+	HostError() error
+	JoinError() error
+	// False means the current scenario can reset without replacing the run.
 	ChangeScenario(name string) (bool, error)
-	// SessionSummary is a one-line description of the session for the status bar.
 	SessionSummary() string
-	// AddBot seats a bot playing graph, "" for the default, in this run's session,
-	// hosting one on loopback when the run is in none.
+	// A solo run opens a loopback session for its bots.
 	AddBot(graph string) error
-	// DropBot halts the bot this run holds on slot; it leaves as a participant does.
 	DropBot(slot int) error
-	// BotSummary lists the bots this run holds.
+	RemoveBot(id uint64) error
 	BotSummary() string
+	Bots() []BotSeat
+}
+
+type BotSeat struct {
+	ID       uint64 // Holder-local identity; roster slots and participant IDs can be reused
+	Slot     uint8
+	Graph    string
+	Joining  bool
+	Stopping bool
 }
 
 // GameContext holds all game state including the ECS world
