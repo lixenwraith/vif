@@ -356,6 +356,15 @@ Each still writes the shield-drain-or-heat pair by hand; `TestSharedCursorOverla
 
 ## Rendering
 
+### Configuration menu follow-up
+
+- Priority: P2
+- Affected files: `internal/mode/config_menu.go`, `internal/paths/settings.go`
+- Persist operator preferences through an explicit save action and startup
+  loading; the live menu currently changes only this run. Music gain needs an
+  authoritative readback before joining effects volume in the menu. Keymap,
+  backend, paths and colour depth remain startup settings.
+
 ### Use sixteen console backgrounds on Linux
 
 - Priority: P3

@@ -88,6 +88,14 @@ func TestReplayViewerCommandLineReturnsTheRecordedState(t *testing.T) {
 		t.Fatalf("closed into mode %d paused %t, want the recorded INSERT, running",
 			a.Context().GetMode(), a.Context().TimeCtl.IsPaused())
 	}
+	press(terminal.Event{Key: terminal.KeyCtrlG})
+	if p.cmd == nil || !a.ctx.Viewer.Load() || a.ctx.GetOverlayContent().Menu == nil {
+		t.Fatal("Ctrl-G did not open the viewer's menu")
+	}
+	press(terminal.Event{Key: terminal.KeyCtrlG})
+	if p.cmd != nil || a.ctx.Viewer.Load() || a.ctx.GetMode() != core.ModeInsert || a.ctx.TimeCtl.IsPaused() {
+		t.Fatal("closing the menu failed to return the recorded mode and pause")
+	}
 }
 
 func TestAWatchingBotOperatorCanResetAndSeatBotsWhileTheSessionKeepsTicking(t *testing.T) {

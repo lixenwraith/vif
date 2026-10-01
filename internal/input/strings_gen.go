@@ -100,6 +100,8 @@ func (i IntentType) String() string {
 		return "IntentMouseWheelMove"
 	case IntentMouseMove:
 		return "IntentMouseMove"
+	case IntentConfigMenu:
+		return "IntentConfigMenu"
 	default:
 		return fmt.Sprintf("IntentType(%d)", i)
 	}

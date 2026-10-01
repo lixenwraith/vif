@@ -11,6 +11,9 @@ import (
 // handleOverlayScroll moves the card selection when the overlay supports it,
 // otherwise scrolls the document by rows
 func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
+	if configMenu(r.ctx) != nil {
+		return r.moveConfigMenu(intent.Motion, 0)
+	}
 	if r.ctx.IsOverlaySelectable() {
 		if delta := selectedCardScrollDelta(
 			r.ctx.OverlayCards(), r.ctx.GetOverlaySelection(), r.ctx.GetOverlayScroll(),
@@ -57,6 +60,9 @@ func selectedCardScrollDelta(cards []engine.OverlayCardRef, selected string, off
 
 // handleOverlayPageScroll pages the view without disturbing the selection
 func (r *Router) handleOverlayPageScroll(direction int) bool {
+	if configMenu(r.ctx) != nil {
+		return r.moveConfigMenu(input.MotionNone, direction)
+	}
 	g := r.ctx.OverlayGeometry()
 	r.scrollOverlay(direction * max(g.ContentH-parameter.OverlayPageOverlap, 1))
 	return true
@@ -74,6 +80,9 @@ func (r *Router) scrollOverlay(delta int) {
 
 // handleOverlayActivate pins or unpins the selected card and requests a rebuild
 func (r *Router) handleOverlayActivate() bool {
+	if configMenu(r.ctx) != nil {
+		return r.changeConfigMenu(1)
+	}
 	key := r.ctx.GetOverlaySelection()
 	if !r.ctx.IsOverlaySelectable() || key == "" {
 		return true
