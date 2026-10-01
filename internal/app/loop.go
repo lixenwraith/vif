@@ -20,12 +20,8 @@ import (
 // defaultMouseMode is the reporting mode used outside free-look
 const defaultMouseMode = terminal.MouseModeClick | terminal.MouseModeDrag
 
-// Run wires, runs, and tears down the game, once per scenario the player asks for.
-// A scenario change ends one run and starts another on the same command line with
-// a different -s: the regions a scenario declares are what register the FSM metric
-// set, and that set is frozen for the life of a run. In a session every
-// participant does this together — the coordinator because the operator asked, the
-// rest because the coordinator said so.
+// A scenario change rebuilds the run because its FSM metrics are frozen at startup.
+// In a session the coordinator requests the change for every participant.
 func Run(cfg Config) error {
 	if cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode is caller-driven; Run owns the frame loop", cfg.Mode)
@@ -261,6 +257,7 @@ func (a *App) renderContext() render.RenderContext {
 		out              render.RenderContext
 	)
 	a.world.RunSafe(func() {
+		a.router.RefreshConfigMenu()
 		snapTime.GameTime = a.ctx.TimeCtl.Now()
 		snapTime.RealTime = a.ctx.TimeCtl.RealTime()
 		if pos, ok := a.world.LocalCursor(); ok {

@@ -73,6 +73,9 @@ const (
 	IntentMouseDrag      // Drag: update cursor if left held
 	IntentMouseWheelMove // Wheel: move cursor only
 	IntentMouseMove      // Free mouse movement (no button held)
+
+	// Appended so recorded intent numbers keep their meaning.
+	IntentConfigMenu // Ctrl+G
 )
 
 // MotionOp identifies motion algorithm

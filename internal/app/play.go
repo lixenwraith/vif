@@ -359,8 +359,8 @@ func (p *player) offer(ev terminal.Event) bool {
 		return false
 	case input.IntentToggleAudioCycle:
 		return p.route(intent)
-	case input.IntentModeSwitch:
-		if intent.ModeTarget == input.ModeTargetCommand && (p.interactive || !p.live) {
+	case input.IntentModeSwitch, input.IntentConfigMenu:
+		if (intent.Type == input.IntentConfigMenu || intent.ModeTarget == input.ModeTargetCommand) && (p.interactive || !p.live) {
 			a := p.a
 			p.cmd = &viewerCommand{mode: a.ctx.GetMode(), paused: a.ctx.TimeCtl.IsPaused()}
 			a.ctx.Viewer.Store(!p.interactive)

@@ -111,6 +111,12 @@ the link it gives, or open the session in the browser:
 
 ## Configuration and tools
 
+Press `Ctrl-G` or type `:g` (`:config`) for live settings: audio, mouse and
+auto-fire, display overlays, solo speed, and diagnostics. Select with arrows or
+`j/k`, change with `h/l` or Enter, and use Escape to go back or close. Changes
+apply to this run; unavailable settings show why. Rebind the `config_menu`
+action in the keymap. The menu's Startup settings page explains file/flag options.
+
 - `-s <name|scenario.toml|directory>` selects an installed named scenario or an
   explicit one by path.
 - `-f <content-file|directory>` selects typeable `.txt`/`.toml` content.

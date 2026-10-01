@@ -13,6 +13,7 @@ var topics = []topicDef{
 			{Keys: "[count]", Desc: "Repeat the next motion or operator, e.g. 3w or d2j"},
 			{Actions: []string{"escape"}, Desc: "Return to NORMAL; already in NORMAL, flash the ping grid"},
 			{Actions: []string{"toggle_audio_cycle"}, Desc: "Cycle audio: music and effects, music only, effects only, silent"},
+			{Actions: []string{"config_menu"}, Desc: "Open or close the configuration menu; changes apply to this run"},
 			{Actions: []string{"quit"}, All: true, Desc: "Quit the game"},
 		},
 	},
@@ -154,6 +155,7 @@ var topics = []topicDef{
 		Key: "commands", Title: "COMMANDS",
 		Entries: []entryDef{
 			{Keys: ":h  :?", Desc: "This help"},
+			{Keys: ":g  :config", Desc: "Live settings: audio, controls, display, solo speed and diagnostics; startup settings explain the file or flag to use"},
 			{Keys: ":about", Desc: "Version, engine and licence"},
 			{Keys: ":new  :n", Desc: "New game; in a live session the host resets everyone and a guest is refused"},
 			{Keys: ":new! :n!", Desc: "Restart and clear this operator's mouse, auto-fire, rate and pins; logging is untouched"},
@@ -167,6 +169,18 @@ var topics = []topicDef{
 			{Keys: ":join <target>", Desc: "Leave this solo game for the session at target, in any form -join takes; a failed join plays on solo"},
 			{Keys: ":session", Desc: "Report the session role, address, participant identity, peers and tick"},
 			{Keys: ":bot [add [N[:graph]|graph]|drop <hex-slot>]", Desc: "List this run's bots, seat bots playing graph (default: default) or drop one; a solo game hosts them on loopback and still pauses"},
+		},
+	},
+	{
+		Key: "config", Title: "CONFIGURATION MENU",
+		Entries: []entryDef{
+			{Actions: []string{"config_menu"}, Scope: input.SectionOverlay, Desc: "Close the configuration menu from any page, or open it from another overlay"},
+			{Actions: []string{"motion_up", "motion_down"}, Scope: input.SectionOverlay, Desc: "Select a category or setting; arrows also work"},
+			{Actions: []string{"motion_left", "motion_right"}, Scope: input.SectionOverlay, Desc: "Change the selected value; numeric controls stop at their limits"},
+			{Actions: []string{"overlay_activate"}, Scope: input.SectionOverlay, All: true, Desc: "Open a category or change a setting"},
+			{Actions: []string{"overlay_close"}, Scope: input.SectionOverlay, All: true, Desc: "Back to categories, then close; changes stay applied"},
+			{Keys: "Values in brackets", Desc: "Unavailable or read only; the explanation below gives the reason"},
+			{Keys: "This run", Desc: "No settings are written to disk. Solo play pauses; live sessions follow the existing pause policy. Replays keep only viewer controls"},
 		},
 	},
 	{

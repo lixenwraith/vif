@@ -76,8 +76,9 @@ const (
 	OverlayScreenMarginY = 1
 
 	// OverlayUsableWidth/OverlayUsableHeight is the smallest window worth drawing
-	OverlayUsableWidth  = 12
-	OverlayUsableHeight = 5
+	OverlayUsableWidth    = 12
+	OverlayUsableHeight   = 5
+	OverlayMenuDetailRows = 4 // Separator and selected-setting explanation
 
 	// OverlayPaddingX is the padding inside the left and right border
 	OverlayPaddingX = 2
@@ -160,6 +161,12 @@ const (
 
 // Overlay hint variants per layout, longest first; the renderer draws the widest that fits
 var (
+	OverlayHintsMenu = []string{
+		"j/k select · h/l change · ENTER choose · ESC back · this run only",
+		"↑↓ select · ←→ change · ENTER choose · ESC back",
+		"↑↓ select · ←→ change · ESC back",
+		"ESC back",
+	}
 	OverlayHintsCards = []string{
 		"ESC close · / filter · hjkl select · SPACE pin to HUD · :t save snapshot · :h keys",
 		"ESC close · / filter · hjkl select · SPACE pin to HUD · :t save snapshot",

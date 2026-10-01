@@ -7,6 +7,7 @@ const (
 	OverlayLayoutCards OverlayLayout = iota // Masonry cards (telemetry)
 	OverlayLayoutDoc                        // Single-column sections (help)
 	OverlayLayoutAbout                      // Logo and info panel
+	OverlayLayoutMenu                       // Live configuration
 )
 
 // OverlayContent holds typed overlay data, extensible via OverlayItem interface
@@ -15,6 +16,18 @@ type OverlayContent struct {
 	Title  string
 	Items  []OverlayItem
 	Layout OverlayLayout
+	Menu   *OverlayMenu
+}
+
+// OverlayMenu is a value snapshot; only the input router applies settings.
+type OverlayMenu struct {
+	Page string
+	Rows []OverlayMenuRow
+}
+
+type OverlayMenuRow struct {
+	Key, Label, Value, Description string
+	Disabled                       string // Why this setting cannot be changed
 }
 
 // OverlayItem is implemented by all overlay component types

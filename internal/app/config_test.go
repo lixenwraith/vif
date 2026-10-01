@@ -7,10 +7,69 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/paths"
 )
+
+func TestConfigMenuChangesStayAppliedAfterClose(t *testing.T) {
+	a, err := NewHeadless(scriptConfig(fixtureSeed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	key := func(k terminal.Key, ch rune) {
+		t.Helper()
+		intent := a.inputMachine.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: ch})
+		if intent == nil || !a.Inject(intent) {
+			t.Fatalf("key %v %q was not routed", k, ch)
+		}
+	}
+	key(terminal.KeyCtrlG, 0)
+	ctx := a.Context()
+	if ctx.GetMode() != core.ModeOverlay || !ctx.TimeCtl.IsPaused() {
+		t.Fatal("menu did not pause solo play in overlay mode")
+	}
+	key(terminal.KeyDown, 0)
+	key(terminal.KeyEnter, 0)
+	key(terminal.KeyEnter, 0)
+	if ctx.AutoFire.Load() != engine.AutoFireOff || !ctx.TimeCtl.IsPaused() {
+		t.Fatal("auto-fire change did not apply while paused")
+	}
+	key(terminal.KeyEscape, 0)
+	if ctx.GetOverlaySelection() != "controls" {
+		t.Fatal("back lost the category selection")
+	}
+	key(terminal.KeyEscape, 0)
+	if ctx.GetMode() != core.ModeNormal || ctx.IsOverlayActive() || ctx.TimeCtl.IsPaused() || ctx.AutoFire.Load() != engine.AutoFireOff {
+		t.Fatal("closing the menu failed to resume with changed settings")
+	}
+	key(terminal.KeyRune, ':')
+	key(terminal.KeyRune, 'g')
+	key(terminal.KeyEnter, 0)
+	ctx.SetOverlaySelection("simulation")
+	key(terminal.KeyEnter, 0)
+	key(terminal.KeyRight, 0)
+	a.World().RunSafe(a.router.RefreshConfigMenu)
+	m := ctx.GetOverlayContent().Menu
+	if m.Rows[1].Value != "2x" || !ctx.TimeCtl.IsPaused() {
+		t.Fatalf("queued speed change was not reflected: %+v", m)
+	}
+	key(terminal.KeyEscape, 0)
+	ctx.SetOverlaySelection("diagnostics")
+	ctx.World.Resources.Status.SetSnapshotInterval(77)
+	key(terminal.KeyEnter, 0)
+	ctx.SetOverlaySelection("stat")
+	key(terminal.KeyRight, 0)
+	if got := ctx.World.Resources.Status.SnapshotInterval(); got != 200 {
+		t.Fatalf("numeric preset should increase a custom value, got %d", got)
+	}
+	key(terminal.KeyCtrlG, 0)
+	if ctx.GetMode() != core.ModeNormal || ctx.TimeCtl.IsPaused() {
+		t.Fatal("Ctrl-G did not close from a settings page")
+	}
+}
 
 func TestNetworkSessionConfigValidation(t *testing.T) {
 	t.Parallel()

@@ -847,9 +847,23 @@ func (ctx *GameContext) SetOverlayContent(content *core.OverlayContent) {
 	ctx.syncOverlaySelection(content)
 }
 
-// syncOverlaySelection keeps the selected card across a rebuild, falling back
-// to the first card when the previous key is gone
+// Rebuilds retain the selected key when it still exists.
 func (ctx *GameContext) syncOverlaySelection(content *core.OverlayContent) {
+	if content != nil && content.Layout == core.OverlayLayoutMenu && content.Menu != nil {
+		ctx.overlaySelectable.Store(false)
+		prev := ctx.GetOverlaySelection()
+		for _, row := range content.Menu.Rows {
+			if row.Key == prev {
+				return
+			}
+		}
+		key := ""
+		if len(content.Menu.Rows) > 0 {
+			key = content.Menu.Rows[0].Key
+		}
+		ctx.SetOverlaySelection(key)
+		return
+	}
 	if content == nil || content.Layout != core.OverlayLayoutCards {
 		ctx.overlaySelectable.Store(false)
 		ctx.SetOverlaySelection("")

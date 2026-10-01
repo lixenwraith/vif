@@ -5,6 +5,7 @@
 ctrl_q = "quit"
 ctrl_c = "quit"
 ctrl_s = "toggle_audio_cycle"
+ctrl_g = "config_menu"
 escape = "escape"
 up = "motion_up"
 down = "motion_down"
@@ -120,6 +121,7 @@ q = "overlay_close"
 "/" = "overlay_filter"
 
 [overlay_keys]
+ctrl_g = "config_menu"
 up = "motion_up"
 down = "motion_down"
 left = "motion_left"
@@ -132,6 +134,7 @@ page_up = "overlay_page_up"
 page_down = "overlay_page_down"
 
 [text_keys]
+ctrl_g = "config_menu"
 up = "motion_up"
 down = "motion_down"
 left = "motion_left"
