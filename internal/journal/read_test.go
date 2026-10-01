@@ -65,6 +65,7 @@ func TestLoadRoundTripsRecordsAndAnchor(t *testing.T) {
 		`{"sub":"heartbeat","fields":{}}`, // a foreign line is skipped, not an error
 		record(1, "EventLevelSetup", "shared", "command"),
 		record(2, "EventCharacterTyped", "player", "input"),
+		`{"sub":"end","fields":{"jrun":0,"jtick":1107,"boundary":3}}`,
 	)
 
 	s, err := Load(p)
@@ -76,6 +77,10 @@ func TestLoadRoundTripsRecordsAndAnchor(t *testing.T) {
 	}
 	if len(s.Anchors) != 1 {
 		t.Fatalf("got %d anchors, want 1", len(s.Anchors))
+	}
+
+	if s.End == nil || *s.End != (event.Stamp{Tick: 1107, Boundary: 3}) {
+		t.Fatalf("recorded end lost: %v", s.End)
 	}
 
 	if a := s.Anchors[0]; a.Schema != event.JournalSchema || a.Seed != 42 ||

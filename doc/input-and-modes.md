@@ -260,7 +260,8 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:host <addr> [host\|migrate]` | Open this running game to participants (`:host :7777`), under the authority policy named: `host` ends the session with this participant, `migrate` hands it to a survivor. Refused if the run is already in a session. |
 | `:join <target>` | Replace this solo game with the session at target, in any form `-join` takes; a browser takes only its `wss://` link. Refused while in a session. The game plays on while the dial runs and is replaced only once the host admits it; a refusal leaves it as it was, and a join that fails after that starts a solo game. |
 | `:session` | Report the session role, address, participant identity, its cursor slot, peer count and tick. |
-| `:bot [add [N[:graph]\|graph]\|drop <hex-slot>]` | List this run's bots; add one by graph or N by count (default graph: `default`); drop by the hexadecimal slot shown on its cursor. A solo run hosts on loopback; a guest's bots join its session and leave with it. |
+| `:bot [add [N[:graph]\|graph]\|drop <slot>]` | List your bots; add one or N using `default` when omitted; drop your bot by slot, or any bot when hosting. Decimal `10`, hex `A` and `0xA` name the same slot. |
+| `:player [drop <slot>]` | List all players and bots. Host-only removal drops the player and its bots, or one bot alone; uses the same slot grammar. |
 | `:system <runtime-name> enable\|disable` | Toggle a system that honors meta-system commands. |
 | `:flow [group]`, `:graph [group]` | Toggle navigation flow-field or route-graph debug views. |
 | `:speed [rate\|+\|-\|reset]`, `:sp` | Report or set the rational simulation rate. |

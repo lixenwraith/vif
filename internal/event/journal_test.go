@@ -18,6 +18,7 @@ type captureSink struct {
 func (c *captureSink) Record(r JournalRecord) { c.records = append(c.records, r) }
 func (c *captureSink) Anchor(a JournalAnchor) { c.anchors = append(c.anchors, a) }
 func (c *captureSink) Capture(JournalCapture) {}
+func (c *captureSink) Finish(Stamp)           {}
 
 // TestJournalPayloadRoundTrip populates every registered prototype, encodes it,
 // and decodes it back. A field TOML cannot carry fails here, not at replay.

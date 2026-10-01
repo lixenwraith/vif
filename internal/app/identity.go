@@ -40,6 +40,7 @@ func identityFromAnchor(j event.JoinAnchor) network.PeerIdentity {
 // identity that host refuses the join on.
 func (a *App) joinerReport() network.JoinerReport {
 	return network.JoinerReport{
+		Holder:   a.cfg.holder,
 		Width:    a.ctx.Width,
 		Height:   a.ctx.Height,
 		Identity: a.sessionIdentity(),

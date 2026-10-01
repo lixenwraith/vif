@@ -277,6 +277,7 @@ type pendingPointer struct {
 // cursor. Every participant stores the same slots and peer IDs, but marks only
 // its own assignment non-remote.
 type CursorRosterEntry struct {
+	Holder  uint32
 	Slot    uint8
 	Control component.ControlKind
 	PeerID  uint32
@@ -1001,6 +1002,7 @@ type NetworkResource struct {
 	// session layer can return its identity to the pool. It must not take a lock
 	// that a world-lock acquisition waits behind.
 	OnDeparture func(participant uint32)
+	OnDismissed func()
 
 	// OnCorrection hands one reassembled authoritative correction to the session
 	// layer, under the world lock from the tick that drained its last chunk, so it

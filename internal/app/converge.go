@@ -44,7 +44,7 @@ func (i instance) WorldRoster() []network.RosterEntry {
 				continue
 			}
 			out = append(out, network.RosterEntry{
-				ID: network.PeerID(c.PeerID), Slot: uint8(slot),
+				ID: network.PeerID(c.PeerID), Slot: uint8(slot), Holder: network.PeerID(c.Holder),
 			})
 		}
 	})
@@ -52,7 +52,12 @@ func (i instance) WorldRoster() []network.RosterEntry {
 	return out
 }
 
-func (i instance) Transport() engine.NetworkPort { return i.a.sessionTransport() }
+func (i instance) Transport() engine.NetworkPort {
+	if i.a.dismissed.Load() {
+		return nil
+	}
+	return i.a.sessionTransport()
+}
 
 // DrainOffTick translates whatever the endpoint holds without advancing a tick, so
 // a manifest, a request or a repair is acted on the moment it lands.
@@ -260,6 +265,11 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 	}
 	if mine {
 		a.corrections.BecomeAuthority(rec)
+		// Live scripts and bots advance their clock, but need the same publication
+		// pump as their original host; only harnesses publish corrections by hand.
+		if a.cfg.scriptedSession {
+			a.corrections.StartPump()
+		}
 		a.crossPredecessorDeparture(rec)
 		return
 	}

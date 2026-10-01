@@ -225,7 +225,7 @@ func TestSessionFlags(t *testing.T) {
 	if bots, err := app.BotSpecs("1:patrol"); err != nil || !slices.Equal(bots, []string{"patrol"}) {
 		t.Fatalf("-bots 1:patrol seats %v, %v", bots, err)
 	}
-	for _, spec := range []string{"0", "17", "x", ":roam"} {
+	for _, spec := range []string{"0", "17", "-1", ":roam"} {
 		if err := (sessionFlags{bots: spec}).validateInvocation(false, false, ""); err == nil {
 			t.Fatalf("-bots %s was accepted", spec)
 		}
@@ -297,8 +297,8 @@ func TestScriptInvocation(t *testing.T) {
 	if err := validateInvocation(false, false, "", "scenario.toml", "roam", false, sessionFlags{}); err == nil {
 		t.Fatal("-script and -bot were accepted together, and both drive the one seat")
 	}
-	if err := validateInvocation(false, false, "", "", "roam", false, sessionFlags{serve: ":7777"}); err == nil {
-		t.Fatal("-bot was accepted on a -serve host, which has no seat")
+	if err := validateInvocation(false, false, "", "", "roam", false, sessionFlags{serve: ":7777"}); err != nil {
+		t.Fatalf("-serve cannot seat bots: %v", err)
 	}
 	if err := validateInvocation(false, false, "", "", "", true, sessionFlags{}); err == nil {
 		t.Fatal("-watch was accepted without a script or bot to present")
@@ -426,6 +426,32 @@ func TestGeneratedFilesAreTheHelpTable(t *testing.T) {
 		}
 		if string(got) != want.String() {
 			t.Errorf("%s is stale; VIF_WRITE_GENERATED=1 go test ./cmd/vif -run Generated rewrites it", page)
+		}
+	}
+}
+
+func TestBotOperandsKeepTheFollowingFlags(t *testing.T) {
+	for _, tt := range []struct {
+		args  []string
+		spec  string
+		watch bool
+	}{
+		{[]string{"-bot"}, "1", false},
+		{[]string{"-bot", "-watch"}, "1", true},
+		{[]string{"-bot", "2:default", "-watch"}, "2:default", true},
+		{[]string{"--bot=default", "-watch"}, "default", true},
+		{[]string{"-bots", "-watch"}, "1", true},
+	} {
+		fs := flag.NewFlagSet("bot", flag.ContinueOnError)
+		var spec string
+		fs.StringVar(&spec, "bot", "", "")
+		fs.StringVar(&spec, "bots", "", "")
+		watch := fs.Bool("watch", false, "")
+		if err := fs.Parse(botArgs(fs, tt.args)); err != nil {
+			t.Fatal(err)
+		}
+		if spec != tt.spec || *watch != tt.watch || fs.NArg() != 0 {
+			t.Fatalf("%v parsed as %q watch=%v rest=%v", tt.args, spec, *watch, fs.Args())
 		}
 	}
 }

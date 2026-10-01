@@ -19,8 +19,9 @@ import (
 // drives. NoPlayerSlot means it drives none, which is what a dedicated coordinator
 // holds: in the roster, and not one of the session's participants.
 type RosterEntry struct {
-	ID   PeerID `json:"id"`
-	Slot uint8  `json:"slot"`
+	ID     PeerID `json:"id"`
+	Slot   uint8  `json:"slot"`
+	Holder PeerID `json:"holder,omitempty"`
 }
 
 // SessionOffer carries the replay identity and the coordinator-owned roster.
@@ -45,15 +46,8 @@ type SessionOffer struct {
 	// compares by value: an address change must not look like a different roster.
 	Chain SuccessionChain `json:"chain,omitempty"`
 
-	// FixedAuthority pins authorship to the participant that opened the session:
-	// losing it ends the session rather than moving it. It travels in the offer
-	// because it has to be the session's policy rather than each instance's — two
-	// participants disagreeing about whether the term may move is one electing
-	// while the other refuses to follow.
-	//
-	// See authority.go for why a session may want it. In one sentence: a successor
-	// authors but does not listen, so migration reconstitutes a session only where
-	// the survivors already share links.
+	// FixedAuthority pins authorship to the opening participant. The session-wide
+	// policy keeps guests from interpreting one host loss in different ways.
 	FixedAuthority bool `json:"fixed_authority,omitempty"`
 
 	// SnapshotTick names the tick of the capture that follows the start gate, and
@@ -93,15 +87,13 @@ type sessionReply struct {
 	// Listen is the address this participant bound, empty for a leaf. Declared, not
 	// confirmed: the coordinator dials it once before publishing it.
 	Listen string `json:"listen,omitempty"`
+	Holder PeerID `json:"holder,omitempty"`
 }
 
-// JoinerReport is what a joining participant tells the coordinator about itself.
-//
-// A dedicated host has no terminal to derive a map from and would otherwise serve
-// the default one, so the first guest's geometry is the only real number the
-// session ever sees. It is advisory: a participant that reports nothing is one the
-// coordinator sizes without, and a coordinator that was given a size ignores it.
+// JoinerReport declares simulation identity, bot holder, and advisory geometry.
+// The coordinator validates it before accepting the participant.
 type JoinerReport struct {
+	Holder PeerID
 	Width  int
 	Height int
 
@@ -154,6 +146,15 @@ func (o SessionOffer) Validate() error {
 		}
 		slots[p.Slot] = true
 	}
+	for _, p := range o.Roster {
+		if p.Holder == 0 {
+			continue
+		}
+		holder, ok := o.Entry(p.Holder)
+		if !ok || holder.Holder != 0 || p.ID == p.Holder || p.ID == o.Host {
+			return errors.New("join offer carries invalid bot ownership")
+		}
+	}
 	if cursorless != 0 && cursorless != o.Host {
 		return errors.New("join offer makes a participant other than the host cursorless")
 	}
@@ -196,14 +197,10 @@ type Coordinator struct {
 	// Report carries what a joiner said about itself once its acceptance arrives.
 	// It runs after Assign and only for a handshake that completed, so what it
 	// describes is a participant the session actually holds.
-	Report func(PeerID, JoinerReport)
+	Report func(PeerID, JoinerReport) error
 
-	// Admit is the one decision made about a dialer before it costs the session
-	// anything. Assign allocates an identity and a roster slot, and on a host that
-	// is already running the admission that follows reads, encodes and sends a
-	// whole world — so a peer that joins and leaves in a loop spends one connect
-	// per capture. Refusing here is what bounds that; nil admits everything, which
-	// is what a harness and a two-terminal lobby want.
+	// Admit spends the dial budget before expensive world capture and construction.
+	// A nil hook admits the dial; loopback seats use the same handshake.
 	Admit func(net.Addr) error
 
 	// Name is what this session answers to, so one address can serve several. A
@@ -249,10 +246,7 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 		}
 		o, err := c.Assign()
 		if err != nil {
-			// Answered rather than dropped. A refusal the dialer can read is the
-			// difference between "retry against the new authority" and a stream
-			// that ended for no stated reason, and a succession is exactly the
-			// case where the two need telling apart.
+			// Return the admission reason so a dialer can distinguish retryable handoff.
 			RefuseJoin(conn, err, timeout)
 			return 0, err
 		}
@@ -302,25 +296,19 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 			err = errors.New(reply.Error)
 			return 0, err
 		}
-		// The authority's half of the join. The offer carries what this coordinator
-		// is; the reply carries what the peer turned out to be; a difference is a
-		// participant that would simulate a different game, and it is refused here
-		// rather than trusted to have refused itself.
-		//
-		// After the joiner's own refusal, because a peer that already knows why it
-		// cannot join has said so more precisely. Before Report, because a
-		// participant the session will not hold is not one to size the map from.
-		// An offer that names no identity — a harness, a test fixture — verifies
-		// nothing, and a peer answering one is not asked for anything either.
+		// Verify before Report so an incompatible joiner cannot affect session state.
 		if err = o.Identity.Verify(reply.Identity); err != nil {
 			RefuseJoin(conn, err, timeout)
 			return 0, err
 		}
 		if c.Report != nil {
-			c.Report(o.Assigned, JoinerReport{
+			if err = c.Report(o.Assigned, JoinerReport{
 				Width: reply.Width, Height: reply.Height, Listen: reply.Listen,
-				Remote: conn.RemoteAddr().String(),
-			})
+				Remote: conn.RemoteAddr().String(), Holder: reply.Holder,
+			}); err != nil {
+				RefuseJoin(conn, err, timeout)
+				return 0, err
+			}
 		}
 		return o.Assigned, nil
 	}
@@ -420,12 +408,7 @@ type PendingJoin struct {
 	started     bool
 	transferred bool
 
-	// deferred holds the session traffic that arrived on this stream before the
-	// port owned it. A mid-run host admits a participant *before* it reads the
-	// world that participant will install, precisely so the epochs produced in
-	// between reach it; they arrive interleaved with the gate and the capture, and
-	// dropping them here would lose exactly the crossings the ordering exists to
-	// preserve.
+	// Keep session traffic received before world installation for the first poll.
 	deferred []*Message
 
 	// gateBytes is what this stream has decoded during the handshake. It answers a
@@ -481,16 +464,8 @@ func (p *PendingJoin) hold(msg *Message) bool {
 	case MsgHeartbeat:
 		return true
 	case MsgLinkProbe:
-		// Answered rather than swallowed. A host admits a participant before it
-		// reads the world for it (D-22), so this stream is a peer — and therefore
-		// probed — while the gate is still running. Ignoring the probe would score
-		// the whole transfer as loss on the link it is measuring, which is exactly
-		// backwards: the transfer is the busiest that link will ever be.
-		//
-		// The report is empty because there is nothing true to put in it yet: this
-		// instance holds no world, so it has no tick, no lag and no cursor. The
-		// byte counter is this gate's own, and the meter on the other end re-bases
-		// when the port takes the stream over and starts counting again from zero.
+		// Answer probes during admission so snapshot transfer is not measured as loss.
+		// An empty pre-world report allows the host to rebase its counters.
 		p.answerProbe(msg)
 		return true
 	case MsgLinkEcho:
@@ -498,20 +473,8 @@ func (p *PendingJoin) hold(msg *Message) bool {
 		// a previous connection. Nothing to fold it into.
 		return true
 	case MsgStateCorrection, MsgStateManifest, MsgStateRequest, MsgStateShard, MsgStateUnserved:
-		// Swallowed rather than held. The host broadcasts its cadence to every peer
-		// it has, and this stream became one the moment the participant was admitted
-		// — before the world was read for it (D-22) — so correction chunks arrive
-		// interleaved with the gate. There is nothing to keep: this participant is
-		// about to install a whole world, and every correction before that describes
-		// one it does not have yet.
-		//
-		// The selective exchange is swallowed for the same reason and one more: an
-		// index, a request or a repair is a question about a world this stream's
-		// owner does not hold, and it cannot answer one until it does. Leaving them
-		// out of this list is what made a second mid-run join fail outright — the
-		// gate read a manifest where it wanted the start record and refused the
-		// join — as soon as a session had a participant the host was already
-		// publishing an index to.
+		// Discard corrections and selective requests for the uninstalled world.
+		// Admission supplies the baseline that subsequent traffic may reference.
 		return true
 	case MsgAuthorityReport, MsgAuthorityHandoff, MsgPeerList:
 		// Held rather than swallowed. These say who is allowed to author, which is
@@ -524,12 +487,7 @@ func (p *PendingJoin) hold(msg *Message) bool {
 		p.deferred = append(p.deferred, msg)
 		return true
 	case MsgEvent, MsgStateSync, MsgStateDigest, MsgDisconnect:
-		// Bounded, because this buffer is filled by the peer on the other end of the
-		// stream and drained only when the world arrives. The ceiling is far above
-		// the epochs a transfer can span — one per tick, and a transfer that took
-		// this many ticks has already failed the join's lag check — so reaching it
-		// means a sender that is not sending a capture. Dropping the oldest keeps
-		// the newest epochs, which are the ones the catch-up reads its target from.
+		// Bound peer-controlled admission buffering; retain the newest traffic.
 		if len(p.deferred) >= maxDeferredJoinFrames {
 			p.deferred = append(p.deferred[:0], p.deferred[1:]...)
 		}
@@ -615,12 +573,8 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 		_ = conn.Close()
 		return nil, SessionOffer{}, err
 	}
-	// The build half, here, before the caller constructs a world from this offer.
-	// The session half cannot be checked yet — this peer's seed, configuration and
-	// corpus do not exist until that world does — and the coordinator checks it
-	// when the acceptance reports what they turned out to be. A config that names
-	// no identity skips this, which is what leaves a harness free to dial with one
-	// side hand-built.
+	// Check build identity before constructing the offered world; session identity
+	// is verified after construction.
 	if base.Identity.Protocol != 0 {
 		if err := base.Identity.VerifyBuild(offer.Identity); err != nil {
 			_ = conn.Close()
@@ -654,7 +608,7 @@ func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
 	} else {
 		reply.Width, reply.Height = report.Width, report.Height
 		reply.Identity = report.Identity
-		reply.Listen = report.Listen
+		reply.Listen, reply.Holder = report.Listen, report.Holder
 	}
 	body, err := json.Marshal(reply)
 	if err == nil {
@@ -674,14 +628,8 @@ func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
 	return err
 }
 
-// WaitStart waits for the host to close the lobby and returns the roster it closed
-// on. A joiner's own offer describes only the participants present when it arrived,
-// so the roster every instance builds from — and therefore shared creation order,
-// which D-11 requires to be identical — is this one, not the offer.
-//
-// The start gate carries no deadline: it is the host waiting for the rest of the
-// lobby, which is a human-paced wait with no bound worth guessing at. A lost host
-// surfaces as a stream error instead.
+// WaitStart returns the closed roster before any cursor is built, preserving shared
+// entity creation order. Human lobby time has no deadline; transport closure ends it.
 func (p *PendingJoin) WaitStart() (SessionOffer, error) {
 	if !p.replied {
 		return SessionOffer{}, errors.New("join handshake has no reply")
@@ -718,12 +666,8 @@ func (p *PendingJoin) WaitStart() (SessionOffer, error) {
 	return final, nil
 }
 
-// ReceiveSnapshot reads the capture the start gate announced.
-//
-// It follows MsgStart on the same stream rather than preceding it, because the
-// roster the gate closes on is what decides which cursors the capture must already
-// contain: the host configures its own roster, captures the world that produced,
-// and sends the two in that order.
+// ReceiveSnapshot reads the announced capture after the roster, preserving the
+// world-install boundary before buffered session traffic is released.
 func (p *PendingJoin) ReceiveSnapshot() (uint64, []byte, error) {
 	if !p.started {
 		return 0, nil, errors.New("join start gate not received")
@@ -773,15 +717,8 @@ func (p *PendingJoin) Close() error {
 	return p.conn.Close()
 }
 
-// AdmissionLimiter is a fixed-window dial counter per dialling host, the default
-// Coordinator.Admit. A fixed window rather than a sliding one: the budget is two
-// orders of magnitude above ordinary use, so the burst a boundary allows costs
-// nothing and the state stays one integer and one timestamp per key.
-//
-// The key is the dialling address rather than the participant identity, because an
-// identity is what the attack consumes and is released the moment the connection
-// drops. A NAT is one key, so the budget is far above what a person reconnecting
-// after a crash needs.
+// AdmissionLimiter bounds expensive joins with a per-address fixed window.
+// Addresses share a budget behind NAT; participant identities can be reused.
 type AdmissionLimiter struct {
 	mu     sync.Mutex
 	window time.Duration

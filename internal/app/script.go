@@ -181,6 +181,9 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 			return false, nil
 		default:
 		}
+		if a.dismissed.Load() {
+			return false, nil
+		}
 		if hold != nil && hold() {
 			if !waitScriptTick(signals, parameter.PausedPollInterval) {
 				return false, nil

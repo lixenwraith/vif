@@ -92,6 +92,7 @@ func (m Mode) Audio() bool {
 // Built from CLI flags by cmd/vif, or programmatically by embedders
 // (map editor, wasm entry, headless harness) that have no flag set
 type Config struct {
+	holder network.PeerID
 	// Mode selects the runtime shape; the zero value is the interactive game
 	Mode Mode
 

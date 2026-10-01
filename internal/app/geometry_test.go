@@ -20,6 +20,17 @@ func geometryServer(t *testing.T, w, h int) *App {
 	return a
 }
 
+func reportGeometry(t *testing.T, a *App, report network.JoinerReport) {
+	t.Helper()
+	offer, err := a.assignParticipant()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.noteJoinerReport(offer.Assigned, report); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func mapSize(a *App) (int, int) {
 	var w, h int
 	a.World().RunSafe(func() {
@@ -29,11 +40,7 @@ func mapSize(a *App) (int, int) {
 	return w, h
 }
 
-// TestAServerWithNoSizeTakesItsMapFromItsFirstGuest is the defect this closes.
-//
-// A dedicated host has no terminal, so Config.Normalize gave it 80x24 and every
-// guest adopted the 77x21 map that produced — however large its own terminal was.
-// The first guest is the only real geometry the session ever sees.
+// Without an operator size, the first admitted guest supplies the real geometry.
 func TestAServerWithNoSizeTakesItsMapFromItsFirstGuest(t *testing.T) {
 	t.Parallel()
 	a := geometryServer(t, 0, 0)
@@ -43,7 +50,7 @@ func TestAServerWithNoSizeTakesItsMapFromItsFirstGuest(t *testing.T) {
 		t.Fatalf("a server with no -size started on a %dx%d map, expected the default", beforeW, beforeH)
 	}
 
-	a.noteJoinerReport(2, network.JoinerReport{Width: 160, Height: 45})
+	reportGeometry(t, a, network.JoinerReport{Width: 160, Height: 45})
 	a.adoptLobbyGeometry()
 
 	w, h := mapSize(a)
@@ -67,8 +74,8 @@ func TestFirstGuestWins(t *testing.T) {
 	t.Parallel()
 	a := geometryServer(t, 0, 0)
 
-	a.noteJoinerReport(2, network.JoinerReport{Width: 160, Height: 45})
-	a.noteJoinerReport(3, network.JoinerReport{Width: 80, Height: 24})
+	reportGeometry(t, a, network.JoinerReport{Width: 160, Height: 45})
+	reportGeometry(t, a, network.JoinerReport{Width: 80, Height: 24})
 	a.adoptLobbyGeometry()
 
 	if got := a.Context().Width; got != 160 {
@@ -83,7 +90,7 @@ func TestAnOperatorSizeIsNotOverridden(t *testing.T) {
 	a := geometryServer(t, 100, 30)
 
 	beforeW, beforeH := mapSize(a)
-	a.noteJoinerReport(2, network.JoinerReport{Width: 200, Height: 60})
+	reportGeometry(t, a, network.JoinerReport{Width: 200, Height: 60})
 	a.adoptLobbyGeometry()
 
 	if w, h := mapSize(a); w != beforeW || h != beforeH {
@@ -104,7 +111,7 @@ func TestAnUnreportedOrUnusableGeometryChangesNothing(t *testing.T) {
 	} {
 		a := geometryServer(t, 0, 0)
 		beforeW, beforeH := mapSize(a)
-		a.noteJoinerReport(2, report)
+		reportGeometry(t, a, report)
 		a.adoptLobbyGeometry()
 		if w, h := mapSize(a); w != beforeW || h != beforeH {
 			t.Fatalf("report %+v moved the map from %dx%d to %dx%d", report, beforeW, beforeH, w, h)

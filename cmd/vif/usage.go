@@ -6,7 +6,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/lixenwraith/vif/internal/app"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
@@ -40,9 +39,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"players"}, arg: "<n>", hint: fmt.Sprintf(
 				"Roster ceiling including self, 2..%d; unset holds the whole roster; with a -join site, the one requested",
 				parameter.MaxPlayers)},
-			{names: []string{"bots"}, arg: "<n[:graph]>", hint: fmt.Sprintf(
-				"Seat n bots playing graph (default %s) in this run's session; a solo run hosts them on loopback",
-				app.DefaultBotGraph)},
+			{names: []string{"bot", "bots"}, arg: "[N[:graph]|graph]", hint: "Add bots alongside you (default 1:default); -host/-join keep your player"},
 			{names: []string{"authority"}, arg: "host|migrate",
 				hint: "Where authorship goes when the authoring participant leaves; default host with -serve, migrate otherwise"},
 			{names: []string{"slow-window"}, arg: "<dur>",
@@ -83,10 +80,10 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 		title: "Run",
 		lines: []flagLine{
 			{names: []string{"seed"}, arg: "<n>", hint: "Root RNG seed; 0 draws one and logs it"},
-			{names: []string{"speed"}, arg: "<rate>", hint: `Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script or -bot also "max" for no wall pacing`},
+			{names: []string{"speed"}, arg: "<rate>", hint: `Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script or autonomous bots also "max" for no wall pacing`},
 			{names: []string{"script"}, arg: "<path>", hint: "Run an authored deterministic TOML tick script"},
-			{names: []string{"bot"}, arg: "<name|path>", hint: "Play this instance's own seat with a bot graph instead of the terminal"},
-			{names: []string{"watch"}, hint: "Present a -script or -bot run on this terminal instead of running it headlessly"},
+			{names: []string{"headless"}, hint: "With -bot, run bots without a human player or terminal; solo runs are unpaced"},
+			{names: []string{"watch"}, hint: "Watch the first bot or a script on this terminal, with no human player"},
 			{names: []string{"replay"}, arg: "<path>", hint: "Replay a recorded journal instead of playing"},
 			{names: []string{"check"}, hint: "Validate the resolved scenario, keymap, audio and content, then exit"},
 			{names: []string{"schema"}, hint: "Print the FSM schema as JSON, then exit"},
@@ -174,7 +171,7 @@ func (l flagLine) render() string {
 	if l.arg == "" {
 		return out
 	}
-	if strings.HasPrefix(l.arg, "[") {
+	if strings.HasPrefix(l.arg, "[=") {
 		return out + l.arg
 	}
 	return out + " " + l.arg
@@ -249,14 +246,18 @@ Escape or q returns to categories, then closes; Ctrl-G closes from any page.
 Home/End and PageUp/PageDown navigate longer pages.
 .PP
 Bots adds local bots by count and policy graph, and removes this run's admitted
-bots by hexadecimal cursor slot, or cancels a joining bot. Leaving bots show their state.
+bots by cursor slot, or cancels a joining bot. Leaving bots show their state.
 Host before adding bots to solo play if remote players should join; otherwise
 bots open a loopback session.
 .PP
 Multiplayer hosts this run, joins an address/link, or requests a session from
 an HTTP(S) vif-allocator site with a player count and scenario. Player count 0
 and a blank scenario use server defaults. Allocator-side bot provisioning is
-not yet implemented. Current session status is available on the same page.
+not yet implemented. Hosts can remove individual bots or players with all their bots
+on the Multiplayer page. :player lists slots; :player drop <slot> removes a player
+and its bots. :bot drop <slot> removes your bot, or any bot when hosting. Slots
+accept decimal 10, hexadecimal A or 0xA for the cursor marked A.
+Current session status is available on the same page.
 Forms use Up/Down between fields, Left/Right and Home/End to move the text
 cursor, Backspace/Delete to edit, Enter to submit, and Escape to cancel.
 Session actions require Enter/Space; arrows only adjust settings.

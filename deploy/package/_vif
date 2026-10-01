@@ -6,7 +6,7 @@ _arguments \
   '-join[Join a session at \[tcp://|vif://\]host:port\[/name\] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given]:addr: ' \
   '-name[Name this host answers to, so one address can serve several sessions]:name: ' \
   '-players[Roster ceiling including self, 2..16; unset holds the whole roster; with a -join site, the one requested]:n: ' \
-  '-bots[Seat n bots playing graph (default default) in this run'\''s session; a solo run hosts them on loopback]:n[:graph]: ' \
+  '(-bot -bots)'{-bot,-bots}'[Add bots alongside you (default 1:default); -host/-join keep your player]' \
   '-authority[Where authorship goes when the authoring participant leaves; default host with -serve, migrate otherwise]:value:(host migrate)' \
   '-slow-window[Window a participant'\''s lateness is judged over; host only, 0 never evicts (default 20s)]:dur: ' \
   '-slow-late[Evict at this many late epochs per second over the window; 0 ignores lateness (default 5)]:n: ' \
@@ -29,10 +29,10 @@ _arguments \
   '-mute[Start muted, which is the default; -mute=false starts with sound]' \
   '(-ab -audio-backend)'{-ab,-audio-backend}'[Force an audio backend instead of detecting one]:name: ' \
   '-seed[Root RNG seed; 0 draws one and logs it]:n: ' \
-  '-speed[Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script or -bot also "max" for no wall pacing]:rate: ' \
+  '-speed[Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script or autonomous bots also "max" for no wall pacing]:rate: ' \
   '-script[Run an authored deterministic TOML tick script]:path:_files' \
-  '-bot[Play this instance'\''s own seat with a bot graph instead of the terminal]:path:_files' \
-  '-watch[Present a -script or -bot run on this terminal instead of running it headlessly]' \
+  '-headless[With -bot, run bots without a human player or terminal; solo runs are unpaced]' \
+  '-watch[Watch the first bot or a script on this terminal, with no human player]' \
   '-replay[Replay a recorded journal instead of playing]:path:_files' \
   '-check[Validate the resolved scenario, keymap, audio and content, then exit]' \
   '-schema[Print the FSM schema as JSON, then exit]' \

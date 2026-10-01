@@ -216,6 +216,39 @@ func TestCoordinatorLossRaisesLocalStatus(t *testing.T) {
 	}
 }
 
+func TestDismissalCannotAnnounceClosingLinksAsDepartures(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	host, guest := network.NewLoopbackPair(1, 2)
+	t.Cleanup(func() { _ = host.Close(); _ = guest.Close() })
+	w.Resources.Network = engine.NewNetworkResource(guest)
+	dismissed, lost := false, false
+	w.Resources.Network.OnDismissed = func() { dismissed = true }
+	w.Resources.Network.OnPeerLost = func(uint32) { lost = true }
+	net := NewNetworkSystem(w).(*NetworkSystem)
+	net.receiveDeparture(3, mustJSON(t, event.ParticipantDepartedPayload{Participant: 1, Slot: 0}))
+	if lost || len(w.Resources.Event.Queue.Consume()) != 0 {
+		t.Fatal("a neighbour's closing link announced the still-connected host's departure")
+	}
+	net.removeParticipant(&event.ParticipantDepartedPayload{Participant: 2, Slot: 0, Dismissed: true})
+	w.Resources.Event.Queue.Consume()
+	if err := host.Close(); err != nil {
+		t.Fatal(err)
+	}
+	net.DrainOffTick()
+	if !dismissed || lost || len(w.Resources.Event.Queue.Consume()) != 0 {
+		t.Fatal("dismissal reported host loss or emitted another departure")
+	}
+
+	// Already-buffered notices from a retired participant cannot remove survivors.
+	w, _, _ = testCursorWorld(t)
+	net = NewNetworkSystem(w).(*NetworkSystem)
+	net.removeParticipant(&event.ParticipantDepartedPayload{Participant: 2, Slot: 2})
+	net.receiveDeparture(2, mustJSON(t, event.ParticipantDepartedPayload{Participant: 1, Slot: 0}))
+	if net.departed[1] {
+		t.Fatal("a retired participant announced the host's departure")
+	}
+}
+
 func mustJSON(t *testing.T, v any) []byte {
 	t.Helper()
 	b, err := json.Marshal(v)

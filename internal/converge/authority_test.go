@@ -1,6 +1,3 @@
-// Criteria for authority continuity: which record a term accepts, what the
-// succession elects, and where a survivor that can elect nobody ends up.
-
 package converge
 
 import (
@@ -62,6 +59,19 @@ func TestASecondHandoffForOneTermIsRefused(t *testing.T) {
 	foreign.Roster = append(slices.Clone(base.Roster), network.RosterEntry{ID: 4, Slot: 3})
 	if err := guest.u.adopt(foreign, 0); err == nil {
 		t.Fatal("a record carrying a roster this session never closed on was adopted")
+	}
+}
+
+func TestLossReportsCannotReplaceALinkedAuthority(t *testing.T) {
+	t.Parallel()
+	guest := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[2]
+	body, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: 2, From: 2, Lost: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	guest.u.Receive(uint8(network.MsgAuthorityReport), 2, body)
+	if guest.u.Migrating() || guest.u.Term() != network.FirstTerm {
+		t.Fatal("a neighbour's loss report displaced the connected authority")
 	}
 }
 
