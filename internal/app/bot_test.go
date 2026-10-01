@@ -224,6 +224,33 @@ func TestAHoldersBotsComeAndGoAsParticipants(t *testing.T) {
 	}
 }
 
+func TestBotRemovalDoesNotFollowReusedRosterIdentities(t *testing.T) {
+	a := &App{}
+	old := &seat{number: 1, graph: &bot.Graph{Name: "default"}, stop: make(chan os.Signal)}
+	old.id.Store(2)
+	old.slot.Store(1)
+	a.seats = []*seat{old}
+	selected := a.botSeats()[0]
+	replacement := &seat{number: 2, graph: old.graph, stop: make(chan os.Signal)}
+	replacement.id.Store(2)
+	replacement.slot.Store(1)
+	a.seats = []*seat{replacement}
+	if err := a.removeSeat(selected.ID); err == nil || a.botSeats()[0].Stopping {
+		t.Fatal("stale selection removed a replacement with the same participant and slot")
+	}
+	if err := a.removeSeat(replacement.number); err != nil || !a.botSeats()[0].Stopping {
+		t.Fatal("current bot could not be removed")
+	}
+	pending := &seat{number: 3, graph: old.graph, stop: make(chan os.Signal)}
+	a.seats = []*seat{pending}
+	if !a.botSeats()[0].Joining {
+		t.Fatal("pending bot appears admitted")
+	}
+	if err := a.removeSeat(pending.number); err != nil || !a.botSeats()[0].Stopping {
+		t.Fatal("pending bot could not be cancelled")
+	}
+}
+
 // TestAnAuthorityPausesOnlyWhileItsOtherParticipantsAreItsBots: its own bots stand
 // still with its clock, and anybody else would run on without it, so an arrival
 // ends the pause and a session with a stranger in it refuses one.

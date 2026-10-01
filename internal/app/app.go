@@ -173,6 +173,7 @@ type App struct {
 	// never takes it.
 	seatsMu     sync.Mutex
 	seats       []*seat
+	seatSerial  uint64
 	seatAddress string // extra loopback join listener after succession; world lock
 }
 

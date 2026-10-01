@@ -167,6 +167,12 @@ var (
 		"↑↓ select · ←→ change · ESC back",
 		"ESC back",
 	}
+	OverlayHintsForm = []string{
+		"↑↓ field · ←→ cursor · HOME/END · ENTER submit · ESC cancel",
+		"↑↓ field · ENTER submit · ESC cancel",
+		"ENTER submit · ESC cancel",
+		"ESC cancel",
+	}
 	OverlayHintsCards = []string{
 		"ESC close · / filter · hjkl select · SPACE pin to HUD · :t save snapshot · :h keys",
 		"ESC close · / filter · hjkl select · SPACE pin to HUD · :t save snapshot",

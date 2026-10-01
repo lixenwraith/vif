@@ -23,6 +23,18 @@ type OverlayContent struct {
 type OverlayMenu struct {
 	Page string
 	Rows []OverlayMenuRow
+	Form *OverlayForm
+}
+
+type OverlayForm struct {
+	Fields      []OverlayFormField
+	Focus       int
+	Help, Error string
+}
+
+type OverlayFormField struct {
+	Label, Value string
+	Cursor       int
 }
 
 type OverlayMenuRow struct {
