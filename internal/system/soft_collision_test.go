@@ -8,7 +8,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 )
 
-func TestSoftCollisionMatrixExcludesDrain(t *testing.T) {
+func TestDrainOnlyReceivesKrakenSoftCollisions(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	s := NewSoftCollisionSystem(w).(*SoftCollisionSystem)
@@ -17,7 +17,7 @@ func TestSoftCollisionMatrixExcludesDrain(t *testing.T) {
 		if s.matrix[component.SpeciesDrain][species] != nil {
 			t.Errorf("drain still pushes %s through soft collision", component.SpeciesNames[species])
 		}
-		if s.matrix[species][component.SpeciesDrain] != nil {
+		if species != component.SpeciesKraken && s.matrix[species][component.SpeciesDrain] != nil {
 			t.Errorf("%s still pushes drain through soft collision", component.SpeciesNames[species])
 		}
 	}

@@ -87,6 +87,7 @@ var combatEntityNames = [component.CombatEntityCount]string{
 	"snake_body",
 	"eye",
 	"tower",
+	"kraken",
 }
 
 // NewCombatSystem creates a new quasar system
@@ -336,17 +337,9 @@ func (s *CombatSystem) joining(p *physics.CollisionProfile, opened bool) *physic
 	return &s.joined
 }
 
-// knockbackStream selects the impulse source. A knockback on a local drain draws
-// from the player stream, so it never advances the shared sequence. A knockback on
-// a shared target draws from the artifact that asked for it when there is one: a
-// crossing applies at once on its producer and a playout lead later everywhere
-// else, so the shared stream hands the same two values to different artifacts on
-// each instance — a swarm deflected one way here and another way there, until the
-// next correction picks one. Only a re-derived event uses the stream, and every
-// instance produces those at the same tick in the same order.
-//
-// salt separates the several draws one artifact makes: a member hit and the header
-// it displaces are one artifact and two impulses.
+// Shared crossings draw from their artifact so playout order cannot change impulses.
+// Local targets and re-derived events use their domain streams. Salt separates
+// multiple impulses produced by the same artifact.
 func (s *CombatSystem) knockbackStream(id event.CrossingID, e core.Entity, salt uint64) *vmath.FastRand {
 	if e.Domain() == core.DomainPlayer {
 		return s.rngPlayer
@@ -931,6 +924,10 @@ func (s *CombatSystem) recordChain(depth uint8, count int) {
 // applyStunEffect applies stun to target entity
 // Returns false if target is immune to stun
 func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatComp *component.CombatComponent) bool {
+	if s.world.Components.Kraken.HasEntity(targetEntity) {
+		return false
+	}
+
 	// A running stun is not refreshed. Refreshing it made every later hit — the
 	// other participant's included — extend the lockdown, so a target under
 	// continuous fire never left it.
