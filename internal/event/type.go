@@ -27,42 +27,11 @@ type GameEvent struct {
 // EventType represents the type of game event
 type EventType int
 
-// EventType constants are the sole input to the event registry. The generator
-// (cmd/gen-manifest) parses this block and emits event/registry_gen.go; that
-// file is never hand-edited, and every constant declared here is registered.
-//
-// Doc comment format, one of:
-//
-//	// EventFoo (FooPayload) short description of what the event signals
-//	// EventFoo short description of what the event signals
-//
-// The first form registers the event with a typed payload, making its fields
-// addressable from a scenario and from ":emit". The second registers nil.
-// A constant with no doc comment at all is registered nil and warned about.
-//
-// Stem convention: an event named Event<Stem> pairs with a payload named
-// <Stem>Payload. Keeping the stem identical is what lets the generator detect
-// a forgotten annotation — it errors when <Stem>Payload exists but the doc
-// comment declares no payload. A deliberately divergent name (EventGoldCompleted
-// carrying GoldCompletionPayload) defeats that check and is registered nil in
-// silence, so prefer the convention and treat divergence as a last resort.
-//
-// Payload types that are not TOML-authorable are annotated for documentation
-// but register nil. The generator recognises them by the presence of '[' or
-// '.' in the annotation:
-//
-//	// EventFlashSpawnBatchRequest (BatchPayload[FlashSpawnEntry]) ...   pooled
-//	// EventDeathBatch (DeathRequestPayload) ...                         pooled
-//
-// Payload structs must carry `toml:"..."` tags on every field intended to be
-// set from a config or from ":emit"; untagged fields resolve only by Go name
-// and cannot be decoded.
-//
-// Ordering and numbering: values are contiguous in [0, EventTypeCount) and are
-// never serialized, so the block may be freely reordered. EventNone is reserved
-// at zero — it is the FSM tick sentinel (fsm.Transition.Event == 0) and the
-// "no effect" marker in DeathRequestPayload.EffectEvent and
-// CompositeDestroyRequestPayload.Effect. No real event may occupy it.
+// EventType comments generate the registry: EventFoo (FooPayload) [class] description.
+// Keep matching event/payload stems; omit the annotation only for nil payloads.
+// Generic or qualified payload types register nil; authorable fields need TOML tags.
+// Values are contiguous and never serialized. EventNone stays zero for FSM ticks
+// and the no-effect sentinel; regenerate instead of editing registry_gen.go.
 
 const (
 	// EventNone is the zero value, reserved so that no real event
@@ -408,6 +377,15 @@ const (
 	EventStormSpawnRequest
 	// EventStormCancelRequest [shared] signals destruction of all storm entities
 	EventStormCancelRequest
+
+	// --- Kraken ---
+
+	// EventKrakenSpawnRequest (KrakenSpawnRequestPayload) [shared] creates a Kraken near the requested cell
+	EventKrakenSpawnRequest
+	// EventKrakenSpawnFailed [shared] reports a body that could not be placed
+	EventKrakenSpawnFailed
+	// EventKrakenCancelRequest [shared] removes all Kraken composites
+	EventKrakenCancelRequest
 
 	// --- Environment ---
 

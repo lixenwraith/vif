@@ -15,6 +15,7 @@ const (
 	BehaviorSnake
 	BehaviorEye
 	BehaviorTower
+	BehaviorKraken
 	BehaviorBoss // Future
 )
 

@@ -53,6 +53,7 @@ var cursorDefenders = [...]component.CombatEntityType{
 	component.CombatEntitySnakeHead,
 	component.CombatEntitySnakeBody,
 	component.CombatEntityEye,
+	component.CombatEntityKraken,
 }
 
 // eyeTargets lists everything an eye can self-destruct against
@@ -65,6 +66,7 @@ var eyeTargets = [...]component.CombatEntityType{
 	component.CombatEntitySnakeBody,
 	component.CombatEntityCursor,
 	component.CombatEntityTower,
+	component.CombatEntityKraken,
 }
 
 // collisionSet maps a defender to its knockback profile for one attack family;

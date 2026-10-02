@@ -1,9 +1,5 @@
-// Package profile composes engine primitives (pkg/vmath/physics) with game
-// tuning (internal/parameter) into the concrete collision, homing and combat
-// profiles the systems consume.
-//
-// Boundary: parameter holds scalars and imports nothing from physics; profile
-// holds anything that composes them into an engine struct or a lookup table.
+// Package profile combines physics primitives with game tuning into collision,
+// homing and combat profiles. Parameter holds scalars; profile holds engine structs.
 package profile
 
 // Mass is an entity's collision mass in relative units
@@ -29,7 +25,8 @@ const (
 	// MassPylon marks the pylon effectively immovable. It is a soft-collision
 	// source only, never a knockback target, and SoftRatioMax is what actually
 	// bounds its push. Reserved for future cursor pushback.
-	MassPylon Mass = 1000.0
+	MassPylon  Mass = 1000.0
+	MassKraken Mass = 10000.0
 )
 
 // Mass ratio clamp. Below Min the impactor cannot meaningfully move the

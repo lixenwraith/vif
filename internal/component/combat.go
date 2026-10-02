@@ -20,6 +20,7 @@ const (
 	CombatEntitySnakeBody
 	CombatEntityEye
 	CombatEntityTower
+	CombatEntityKraken
 	CombatEntityCount
 )
 

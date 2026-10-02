@@ -21,9 +21,10 @@ type collisionEntry struct {
 
 // SoftCollisionRule defines a single soft collision interaction
 type SoftCollisionRule struct {
-	Profile     *physics.CollisionProfile
-	SourceInvRx float64 // Source collision radius (inverse squared X)
-	SourceInvRy float64 // Source collision radius (inverse squared Y)
+	Profile         *physics.CollisionProfile
+	SourceInvRx     float64 // Source collision radius (inverse squared X)
+	SourceInvRy     float64 // Source collision radius (inverse squared Y)
+	MemberFootprint bool    // Irregular composites collide through their occupied cells
 }
 
 // SoftCollisionMatrix maps [Source][Target] → Rule
@@ -55,12 +56,7 @@ type SoftCollisionSystem struct {
 	rngArtifact vmath.FastRand
 	rngPlayer   *vmath.FastRand
 
-	// Internal position caches (rebuilt each tick)
-	drains  []collisionEntry
-	swarms  []collisionEntry
-	quasars []collisionEntry
-	storms  []collisionEntry // Circle positions, not root
-	pylons  []collisionEntry
+	caches [component.SpeciesCount][]collisionEntry
 
 	// Collision and flocking matrices
 	matrix            SoftCollisionMatrix
@@ -74,14 +70,7 @@ type SoftCollisionSystem struct {
 
 // NewSoftCollisionSystem creates the centralized soft collision system
 func NewSoftCollisionSystem(world *engine.World) engine.System {
-	s := &SoftCollisionSystem{
-		world:   world,
-		drains:  make([]collisionEntry, 0, 16),
-		swarms:  make([]collisionEntry, 0, 8),
-		quasars: make([]collisionEntry, 0, 4),
-		storms:  make([]collisionEntry, 0, 12), // 3 circles * potential multiple storms
-		pylons:  make([]collisionEntry, 0, 4),
-	}
+	s := &SoftCollisionSystem{world: world}
 	s.statCollisions = world.Resources.Status.Ints.Get("soft_collision.collisions")
 	s.statImmuneRejects = world.Resources.Status.Ints.Get("soft_collision.immune_rejects")
 	s.buffers = newBufferTelemetry(world.Resources.Status, "soft_collision", "drains", "swarms", "quasars", "storms", "pylons")
@@ -148,6 +137,14 @@ func (s *SoftCollisionSystem) initMatrix() {
 		Profile:     &profile.SoftPylonToQuasar,
 		SourceInvRx: parameter.PylonCollisionInvRxSq,
 		SourceInvRy: parameter.PylonCollisionInvRySq,
+	}
+	for species := component.SpeciesType(1); species < component.SpeciesCount; species++ {
+		if profile.SoftKraken[species].MassRatio == 0 {
+			continue
+		}
+		s.matrix[component.SpeciesKraken][species] = &SoftCollisionRule{
+			Profile: &profile.SoftKraken[species], MemberFootprint: true,
+		}
 	}
 }
 
@@ -249,37 +246,14 @@ func (s *SoftCollisionSystem) Update() {
 
 // clearCaches resets all cache slices
 func (s *SoftCollisionSystem) clearCaches() {
-	s.drains = s.drains[:0]
-	s.swarms = s.swarms[:0]
-	s.quasars = s.quasars[:0]
-	s.storms = s.storms[:0]
-	s.pylons = s.pylons[:0]
+	for i := range s.caches {
+		s.caches[i] = s.caches[i][:0]
+	}
 }
 
 // rebuildCaches populates position caches from component stores
 func (s *SoftCollisionSystem) rebuildCaches() {
 	s.clearCaches()
-
-	// Drains
-	for _, entity := range s.world.Components.Drain.Entities() {
-		if pos, ok := s.world.Positions.GetPosition(entity); ok {
-			s.drains = append(s.drains, collisionEntry{entity: entity, x: pos.X, y: pos.Y})
-		}
-	}
-
-	// Swarms (header positions)
-	for _, entity := range s.world.Components.Swarm.Entities() {
-		if pos, ok := s.world.Positions.GetPosition(entity); ok {
-			s.swarms = append(s.swarms, collisionEntry{entity: entity, x: pos.X, y: pos.Y})
-		}
-	}
-
-	// Quasars (header positions)
-	for _, entity := range s.world.Components.Quasar.Entities() {
-		if pos, ok := s.world.Positions.GetPosition(entity); ok {
-			s.quasars = append(s.quasars, collisionEntry{entity: entity, x: pos.X, y: pos.Y})
-		}
-	}
 
 	// Storms (circle positions, not root)
 	for _, rootEntity := range s.world.Components.Storm.Entities() {
@@ -293,7 +267,7 @@ func (s *SoftCollisionSystem) rebuildCaches() {
 			}
 			circleEntity := stormComp.Circles[i]
 			if pos, ok := s.world.Positions.GetPosition(circleEntity); ok {
-				s.storms = append(s.storms, collisionEntry{entity: circleEntity, x: pos.X, y: pos.Y})
+				s.caches[component.SpeciesStorm] = append(s.caches[component.SpeciesStorm], collisionEntry{entity: circleEntity, x: pos.X, y: pos.Y})
 			}
 		}
 	}
@@ -304,31 +278,31 @@ func (s *SoftCollisionSystem) rebuildCaches() {
 		if !ok {
 			continue
 		}
-		s.pylons = append(s.pylons, collisionEntry{entity: entity, x: pylonComp.SpawnX, y: pylonComp.SpawnY})
+		s.caches[component.SpeciesPylon] = append(s.caches[component.SpeciesPylon], collisionEntry{entity: entity, x: pylonComp.SpawnX, y: pylonComp.SpawnY})
 	}
-	s.buffers.Observe(0, len(s.drains))
-	s.buffers.Observe(1, len(s.swarms))
-	s.buffers.Observe(2, len(s.quasars))
-	s.buffers.Observe(3, len(s.storms))
-	s.buffers.Observe(4, len(s.pylons))
-}
-
-// getCache returns the cache slice for a given species type
-func (s *SoftCollisionSystem) getCache(species component.SpeciesType) []collisionEntry {
-	switch species {
-	case component.SpeciesDrain:
-		return s.drains
-	case component.SpeciesSwarm:
-		return s.swarms
-	case component.SpeciesQuasar:
-		return s.quasars
-	case component.SpeciesStorm:
-		return s.storms
-	case component.SpeciesPylon:
-		return s.pylons
-	default:
-		return nil
+	for _, group := range []struct {
+		species  component.SpeciesType
+		entities []core.Entity
+	}{
+		{component.SpeciesDrain, s.world.Components.Drain.Entities()},
+		{component.SpeciesSwarm, s.world.Components.Swarm.Entities()},
+		{component.SpeciesQuasar, s.world.Components.Quasar.Entities()},
+		{component.SpeciesKraken, s.world.Components.Kraken.Entities()},
+		{component.SpeciesEye, s.world.Components.Eye.Entities()},
+		{component.SpeciesSnake, s.world.Components.SnakeHead.Entities()},
+		{component.SpeciesSnake, s.world.Components.SnakeBody.Entities()},
+	} {
+		for _, entity := range group.entities {
+			if pos, ok := s.world.Positions.GetPosition(entity); ok {
+				s.caches[group.species] = append(s.caches[group.species], collisionEntry{entity: entity, x: pos.X, y: pos.Y})
+			}
+		}
 	}
+	s.buffers.Observe(0, len(s.caches[component.SpeciesDrain]))
+	s.buffers.Observe(1, len(s.caches[component.SpeciesSwarm]))
+	s.buffers.Observe(2, len(s.caches[component.SpeciesQuasar]))
+	s.buffers.Observe(3, len(s.caches[component.SpeciesStorm]))
+	s.buffers.Observe(4, len(s.caches[component.SpeciesPylon]))
 }
 
 // processAllCollisions iterates the matrix and applies collisions
@@ -349,8 +323,8 @@ func (s *SoftCollisionSystem) processCollisionPair(
 	sourceType, targetType component.SpeciesType,
 	rule *SoftCollisionRule,
 ) {
-	sources := s.getCache(sourceType)
-	targets := s.getCache(targetType)
+	sources := s.caches[sourceType]
+	targets := s.caches[targetType]
 
 	if len(sources) == 0 || len(targets) == 0 {
 		return
@@ -372,12 +346,8 @@ func (s *SoftCollisionSystem) processCollisionPair(
 	}
 }
 
-// impulseStream selects the impulse source by the recipient's domain: an ordinary
-// stream for a player target, and for a shared one a seed from the tick and the
-// pair. A stream orders draws by tick and a collision is conditional on live
-// positions, so one member the producer had already killed cost the two instances a
-// different number of draws and desynced every later impulse (D-8). The pair is
-// mixed rather than packed: a domain tag lives in an entity's high bits.
+// Shared impulses use the tick and pair so predicted deaths cannot shift later
+// draws (D-8). Player targets keep their local stream; entity domain bits are mixed.
 func (s *SoftCollisionSystem) impulseStream(source, target core.Entity) *vmath.FastRand {
 	if target.Domain() == core.DomainPlayer {
 		return s.rngPlayer
@@ -419,14 +389,23 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 		return
 	}
 
-	// Check collision
-	radialX, radialY, hit := physics.CheckSoftCollision(
-		targetPos.X, targetPos.Y,
-		sourceX, sourceY,
-		rule.SourceInvRx, rule.SourceInvRy,
-	)
-	if !hit {
-		return
+	var radialX, radialY float64
+	if rule.MemberFootprint {
+		if !s.footprintsOverlap(sourceEntity, targetEntity, targetPos) {
+			return
+		}
+		radialX, radialY = float64(targetPos.X-sourceX), float64(targetPos.Y-sourceY)
+		if radialX == 0 && radialY == 0 {
+			radialX = 1
+		}
+	} else {
+		var hit bool
+		radialX, radialY, hit = physics.CheckSoftCollision(
+			targetPos.X, targetPos.Y, sourceX, sourceY, rule.SourceInvRx, rule.SourceInvRy,
+		)
+		if !hit {
+			return
+		}
 	}
 
 	impulseX, impulseY := physics.ImpulseFromProfile(radialX, radialY, rule.Profile,
@@ -440,11 +419,35 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 
 }
 
+func (s *SoftCollisionSystem) footprintsOverlap(source, target core.Entity, pos component.PositionComponent) bool {
+	contains := func(x, y int) bool {
+		var occupants [parameter.MaxEntitiesPerCell]core.Entity
+		n := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, occupants[:])
+		for _, occupant := range occupants[:n] {
+			if member, ok := s.world.Components.Member.GetPtr(occupant); ok && member.HeaderEntity == source {
+				return true
+			}
+		}
+		return false
+	}
+	if contains(pos.X, pos.Y) {
+		return true
+	}
+	if header, ok := s.world.Components.Header.GetPtr(target); ok {
+		for _, member := range header.MemberEntries {
+			if p, ok := s.world.Positions.GetPosition(member.Entity); ok && contains(p.X, p.Y) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // processAllFlocking calculates and integrates continuous separation acceleration
 func (s *SoftCollisionSystem) processAllFlocking(dtSec float64) {
 	// Loop over targets first to accumulate acceleration and minimize ECS writes
 	for targetType := component.SpeciesType(1); targetType < component.SpeciesCount; targetType++ {
-		targets := s.getCache(targetType)
+		targets := s.caches[targetType]
 		if len(targets) == 0 {
 			continue
 		}
@@ -473,7 +476,7 @@ func (s *SoftCollisionSystem) processAllFlocking(dtSec float64) {
 					continue
 				}
 
-				sources := s.getCache(sourceType)
+				sources := s.caches[sourceType]
 				for j := range sources {
 					src := &sources[j]
 					if src.entity == tgt.entity { // Prevent self-repulsion

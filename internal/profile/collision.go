@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
@@ -94,3 +95,13 @@ var (
 	SoftPylonToSwarm   = soft(MassPylon, MassSwarm)
 	SoftPylonToQuasar  = soft(MassPylon, MassQuasar)
 )
+
+// Kraken pushes movable species but never receives a reciprocal impulse.
+var SoftKraken = [component.SpeciesCount]physics.CollisionProfile{
+	component.SpeciesDrain:  soft(MassKraken, MassDrain),
+	component.SpeciesSwarm:  soft(MassKraken, MassSwarm),
+	component.SpeciesQuasar: soft(MassKraken, MassQuasar),
+	component.SpeciesStorm:  soft(MassKraken, MassStorm),
+	component.SpeciesSnake:  soft(MassKraken, MassSnakeHead),
+	component.SpeciesEye:    soft(MassKraken, MassEye),
+}
