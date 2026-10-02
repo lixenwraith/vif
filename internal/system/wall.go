@@ -29,12 +29,7 @@ type WallSystem struct {
 	// Configuration
 	pushCheckEveryTick bool // When true, runs full push check in Update()
 
-	// Maze generator source, reused across spawns so two mazes in one session
-	// differ. The PCG source is held beside the Rand that wraps it because only the
-	// source can report and resume its position, which is what D-19 needs: this is
-	// the "second generator" the hidden-state survey named, the one stream in the
-	// simulation that is not a vmath.FastRand and so is not in RandResource's
-	// inventory. WallSystem declares Snapshot: "state" for exactly this field.
+	// The maze uses PCG outside RandResource; its position needs a D-19 snapshot.
 	mazePCG *rand.PCG
 	mazeRng *rand.Rand
 
@@ -736,6 +731,10 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int) int64 {
 
 // getMaskForEntity returns appropriate wall block mask for entity type
 func (s *WallSystem) getMaskForEntity(entity core.Entity) component.WallBlockMask {
+	if member, ok := s.world.Components.Member.GetPtr(entity); ok && s.world.Components.Kraken.HasEntity(member.HeaderEntity) {
+		return component.WallBlockNone
+	}
+
 	if s.world.Components.Kinetic.HasEntity(entity) {
 		return component.WallBlockKinetic
 	}
@@ -1129,17 +1128,7 @@ func (s *WallSystem) invalidateBoxNeighbors(x, y int) {
 	}
 }
 
-// SaveShared carries the maze generator's position (D-19).
-//
-// Every other simulation stream is a vmath.FastRand issued through RandResource,
-// which enumerates them all. This one is a math/rand/v2 source, because the maze
-// generator in pkg/maze takes a *rand.Rand and uses Shuffle, which FastRand does
-// not provide. Its position decides the layout of every maze the run has yet to
-// build, so a snapshot that omitted it would reconstruct a world whose next maze
-// differs from the one the captured run was going to produce.
-//
-// PCG's own binary form is the encoding: it is canonical, versioned by the
-// standard library, and round-trips exactly.
+// SaveShared carries the maze PCG's position, which RandResource cannot enumerate.
 func (s *WallSystem) SaveShared() ([]byte, error) {
 	if s.mazePCG == nil {
 		return nil, errors.New("wall: maze generator is not initialized")

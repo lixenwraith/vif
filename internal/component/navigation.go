@@ -49,4 +49,5 @@ var SpeciesDimensionsLUT = [SpeciesCount]SpeciesDimensions{
 	{parameter.SnakeHeadWidth, parameter.SnakeHeadHeight}, // 6: SpeciesSnake
 	{parameter.EyeWidth, parameter.EyeHeight},             // 7: SpeciesEye
 	{1, 1}, // 8: SpeciesTower (stationary, dimensions from spawn params)
+	{int(parameter.KrakenBodyRadius*4) + 1, int(parameter.KrakenBodyRadius*2) + 1}, // 9: SpeciesKraken
 }

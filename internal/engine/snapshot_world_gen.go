@@ -80,6 +80,7 @@ type SharedWorldState struct {
 	SnakeMember  []StoreEntry[component.SnakeMemberComponent]  `json:"snakemember,omitempty"`
 	Eye          []StoreEntry[component.EyeComponent]          `json:"eye,omitempty"`
 	Tower        []StoreEntry[component.TowerComponent]        `json:"tower,omitempty"`
+	Kraken       []StoreEntry[component.KrakenComponent]       `json:"kraken,omitempty"`
 	Header       []StoreEntry[component.HeaderComponent]       `json:"header,omitempty"`
 	Member       []StoreEntry[component.MemberComponent]       `json:"member,omitempty"`
 	Flash        []StoreEntry[component.FlashComponent]        `json:"flash,omitempty"`
@@ -462,6 +463,14 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			s.Tower = append(s.Tower, StoreEntry[component.TowerComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
+	for _, e := range w.Components.Kraken.Entities() {
+		if e.Domain() != core.DomainShared {
+			continue
+		}
+		if v, ok := w.Components.Kraken.GetComponent(e); ok {
+			s.Kraken = append(s.Kraken, StoreEntry[component.KrakenComponent]{Entity: e, Value: DetachSnapshotValue(v)})
+		}
+	}
 	for _, e := range w.Components.Header.Entities() {
 		if e.Domain() != core.DomainShared {
 			continue
@@ -672,6 +681,9 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	for _, en := range s.Tower {
 		w.Components.Tower.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
+	for _, en := range s.Kraken {
+		w.Components.Kraken.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
+	}
 	for _, en := range s.Header {
 		w.Components.Header.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
@@ -766,6 +778,7 @@ type SharedWorldDelta struct {
 	SnakeMember  StoreDelta[component.SnakeMemberComponent]  `json:"snakemember,omitzero"`
 	Eye          StoreDelta[component.EyeComponent]          `json:"eye,omitzero"`
 	Tower        StoreDelta[component.TowerComponent]        `json:"tower,omitzero"`
+	Kraken       StoreDelta[component.KrakenComponent]       `json:"kraken,omitzero"`
 	Header       StoreDelta[component.HeaderComponent]       `json:"header,omitzero"`
 	Member       StoreDelta[component.MemberComponent]       `json:"member,omitzero"`
 	Flash        StoreDelta[component.FlashComponent]        `json:"flash,omitzero"`
@@ -830,6 +843,7 @@ func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
 	d.SnakeMember = diffStore(base.SnakeMember, next.SnakeMember)
 	d.Eye = diffStore(base.Eye, next.Eye)
 	d.Tower = diffStore(base.Tower, next.Tower)
+	d.Kraken = diffStore(base.Kraken, next.Kraken)
 	d.Header = diffStore(base.Header, next.Header)
 	d.Member = diffStore(base.Member, next.Member)
 	d.Flash = diffStore(base.Flash, next.Flash)
@@ -890,6 +904,7 @@ func ApplySharedWorldDelta(base SharedWorldState, d SharedWorldDelta) SharedWorl
 	s.SnakeMember = applyStore(base.SnakeMember, d.SnakeMember)
 	s.Eye = applyStore(base.Eye, d.Eye)
 	s.Tower = applyStore(base.Tower, d.Tower)
+	s.Kraken = applyStore(base.Kraken, d.Kraken)
 	s.Header = applyStore(base.Header, d.Header)
 	s.Member = applyStore(base.Member, d.Member)
 	s.Flash = applyStore(base.Flash, d.Flash)
@@ -949,6 +964,7 @@ func (d SharedWorldDelta) DeltaEntries() int {
 	n += d.SnakeMember.Entries()
 	n += d.Eye.Entries()
 	n += d.Tower.Entries()
+	n += d.Kraken.Entries()
 	n += d.Header.Entries()
 	n += d.Member.Entries()
 	n += d.Flash.Entries()
@@ -1011,6 +1027,7 @@ func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
 	w.Entries += countStoreDifference(a.SnakeMember, b.SnakeMember, touched)
 	w.Entries += countStoreDifference(a.Eye, b.Eye, touched)
 	w.Entries += countStoreDifference(a.Tower, b.Tower, touched)
+	w.Entries += countStoreDifference(a.Kraken, b.Kraken, touched)
 	w.Entries += countStoreDifference(a.Header, b.Header, touched)
 	w.Entries += countStoreDifference(a.Member, b.Member, touched)
 	w.Entries += countStoreDifference(a.Flash, b.Flash, touched)
@@ -1184,6 +1201,9 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	for _, en := range s.Tower {
 		target[en.Entity] = struct{}{}
 	}
+	for _, en := range s.Kraken {
+		target[en.Entity] = struct{}{}
+	}
 	for _, en := range s.Header {
 		target[en.Entity] = struct{}{}
 	}
@@ -1270,6 +1290,7 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	reconcileStore(w.Components.SnakeMember, s.SnakeMember)
 	reconcileStore(w.Components.Eye, s.Eye)
 	reconcileStore(w.Components.Tower, s.Tower)
+	reconcileStore(w.Components.Kraken, s.Kraken)
 	reconcileStore(w.Components.Header, s.Header)
 	reconcileStore(w.Components.Member, s.Member)
 	reconcileStore(w.Components.Flash, s.Flash)

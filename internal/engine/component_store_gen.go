@@ -54,6 +54,7 @@ const (
 	SnakeMemberBit
 	EyeBit
 	TowerBit
+	KrakenBit
 	HeaderBit
 	MemberBit
 	FlashBit
@@ -112,6 +113,7 @@ type Component struct {
 	SnakeMember  *Store[component.SnakeMemberComponent]
 	Eye          *Store[component.EyeComponent]
 	Tower        *Store[component.TowerComponent]
+	Kraken       *Store[component.KrakenComponent]
 	Header       *Store[component.HeaderComponent]
 	Member       *Store[component.MemberComponent]
 	Flash        *Store[component.FlashComponent]
@@ -169,6 +171,7 @@ func initComponents(w *World) {
 	w.Components.SnakeMember = NewStore[component.SnakeMemberComponent](w, SnakeMemberBit)
 	w.Components.Eye = NewStore[component.EyeComponent](w, EyeBit)
 	w.Components.Tower = NewStore[component.TowerComponent](w, TowerBit)
+	w.Components.Kraken = NewStore[component.KrakenComponent](w, KrakenBit)
 	w.Components.Header = NewStore[component.HeaderComponent](w, HeaderBit)
 	w.Components.Member = NewStore[component.MemberComponent](w, MemberBit)
 	w.Components.Flash = NewStore[component.FlashComponent](w, FlashBit)
@@ -328,6 +331,9 @@ func (w *World) removeEntity(e core.Entity) {
 	}
 	if mask&TowerBit != 0 {
 		w.Components.Tower.RemoveEntity(e, true)
+	}
+	if mask&KrakenBit != 0 {
+		w.Components.Kraken.RemoveEntity(e, true)
 	}
 	if mask&HeaderBit != 0 {
 		w.Components.Header.RemoveEntity(e, true)
@@ -507,6 +513,9 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	if union&TowerBit != 0 {
 		w.Components.Tower.RemoveBatch(entities, true)
 	}
+	if union&KrakenBit != 0 {
+		w.Components.Kraken.RemoveBatch(entities, true)
+	}
 	if union&HeaderBit != 0 {
 		w.Components.Header.RemoveBatch(entities, true)
 	}
@@ -587,6 +596,7 @@ func (w *World) wipeAll() {
 	w.Components.SnakeMember.ClearAllComponents()
 	w.Components.Eye.ClearAllComponents()
 	w.Components.Tower.ClearAllComponents()
+	w.Components.Kraken.ClearAllComponents()
 	w.Components.Header.ClearAllComponents()
 	w.Components.Member.ClearAllComponents()
 	w.Components.Flash.ClearAllComponents()

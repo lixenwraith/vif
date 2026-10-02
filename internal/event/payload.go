@@ -803,6 +803,12 @@ type SwarmSpawnRequestPayload struct {
 	Y int `toml:"y"`
 }
 
+// KrakenSpawnRequestPayload defaults (0, 0) to the map center.
+type KrakenSpawnRequestPayload struct {
+	X int `toml:"x"`
+	Y int `toml:"y"`
+}
+
 // --- Environment ---
 
 // WindStartPayload configures a global gameplay wind. Direction is the direction

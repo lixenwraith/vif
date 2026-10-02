@@ -31,7 +31,8 @@ const (
 	PrioritySnake       // After Quasar
 	PrioritySwarm       // After Drain
 	PriorityStorm       // After Swarm
-	PriorityPylon       // After Storm
+	PriorityKraken      // After Storm
+	PriorityPylon       // After Kraken
 	PriorityTower       // Before Eye
 
 	PriorityGateway // After Tower, before Eye — spawns eyes for the tick
