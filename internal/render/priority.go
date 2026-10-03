@@ -18,7 +18,6 @@ const (
 	PriorityGlyph
 	PriorityGold
 	PriorityNugget
-	PriorityHealthBar
 
 	// === Species (back to front) ===
 
@@ -33,6 +32,7 @@ const (
 	PriorityDrain
 	PriorityQuasar
 	PrioritySwarm
+	PriorityHealthBar // Body-centered bars must compose over species geometry.
 
 	// === Cleaner ===
 	PriorityCleaner
