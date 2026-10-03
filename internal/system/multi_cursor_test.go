@@ -734,54 +734,59 @@ func TestDamageImmunityBudgetIsPerAttacker(t *testing.T) {
 	}
 }
 
-// TestKineticKnockbackComposesInEitherOrder: two hits on one target can apply in
-// opposite orders on two instances, so a latch or an override leaves them holding
-// opposite velocities. The window is per attacker and joining hits add, so the pair
-// composes to one vector in either order.
-func TestKineticKnockbackComposesInEitherOrder(t *testing.T) {
-	// Each attacker keeps its own artifact and its own impact direction whatever
-	// order it lands in, which is what the two instances disagree about.
-	type hit struct {
-		slot   int
-		vx, vy float64
-	}
-	left := hit{slot: 0, vx: 40, vy: 8}
-	right := hit{slot: 1, vx: -40, vy: 8}
-
-	knock := func(hits ...hit) component.KineticComponent {
-		w, first, second := testCursorWorld(t)
-		combat := NewCombatSystem(w).(*CombatSystem)
-		target := w.CreateEntity(core.DomainShared)
-		w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
-		w.Components.Kinetic.SetComponent(target, component.KineticComponent{})
-		w.Components.Combat.SetComponent(target, component.CombatComponent{
-			OwnerEntity:      target,
-			CombatEntityType: component.CombatEntitySwarm,
-			HitPoints:        1 << 20, // outlives both hits: a death suppresses knockback
+func TestKnockbackAndStunImmunityCoverAllPlayersAndWeapons(t *testing.T) {
+	w, first, second := testCursorWorld(t)
+	combat := NewCombatSystem(w).(*CombatSystem)
+	target := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
+	w.Components.Kinetic.SetComponent(target, component.KineticComponent{})
+	w.Components.Combat.SetComponent(target, component.CombatComponent{
+		OwnerEntity: target, CombatEntityType: component.CombatEntitySwarm, HitPoints: 1 << 20,
+	})
+	direct := func(owner core.Entity) {
+		combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
+			OwnerEntity: owner, OriginEntity: owner, TargetEntity: target, HitEntity: target,
+			OriginVelX: 40, OriginVelY: 8, HasVelocity: true, AttackType: component.CombatAttackProjectile,
 		})
-		owners := [2]core.Entity{first, second}
-		for _, h := range hits {
-			combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
-				CrossingID:  event.CrossingID{CrossingSource: uint32(h.slot + 1), CrossingSeq: uint64(h.slot + 1)},
-				OwnerEntity: owners[h.slot], OriginEntity: owners[h.slot],
-				TargetEntity: target, HitEntity: target,
-				OriginVelX: h.vx, OriginVelY: h.vy,
-				HasVelocity: true, AttackType: component.CombatAttackProjectile,
-			})
-		}
+	}
+	area := func(owner core.Entity, attack component.CombatAttackType) {
+		combat.applyHitArea(&event.CombatAttackAreaRequestPayload{
+			OwnerEntity: owner, OriginEntity: owner, TargetEntity: target,
+			HitEntities: []core.Entity{target}, AttackType: attack,
+		})
+	}
+	direct(first)
+	motion, _ := w.Components.Kinetic.GetComponent(target)
+	if motion.VelX == 0 && motion.VelY == 0 {
+		t.Fatal("first knockback did not land")
+	}
+	state, _ := w.Components.Combat.GetPtr(target)
+	state.RemainingKineticImmunity /= 2
+	remaining := state.RemainingKineticImmunity
+	for _, owner := range []core.Entity{first, second} {
+		direct(owner)
+		area(owner, component.CombatAttackExplosion)
 		got, _ := w.Components.Kinetic.GetComponent(target)
-		return got
+		if got != motion || state.RemainingKineticImmunity != remaining {
+			t.Fatal("another weapon or player bypassed/refreshed knockback immunity")
+		}
 	}
-
-	both := knock(left, right)
-	if both.VelX == 0 && both.VelY == 0 {
-		t.Fatal("neither knockback landed; this criterion proves nothing")
+	area(first, component.CombatAttackPulse)
+	if state.StunnedRemaining == 0 {
+		t.Fatal("first stun did not land")
 	}
-	if reversed := knock(right, left); reversed != both {
-		t.Fatalf("left-then-right gave %v and right-then-left gave %v", both.Kinetic, reversed.Kinetic)
+	state.StunnedRemaining /= 2
+	stun := state.StunnedRemaining
+	area(second, component.CombatAttackPulse)
+	if state.StunnedRemaining != stun {
+		t.Fatal("another player's pulse refreshed stun immunity")
 	}
-	if solo := knock(left); solo == both {
-		t.Fatal("the second attacker's knockback was swallowed by the first attacker's window")
+	w.Resources.Time.DeltaTime = max(remaining, stun)
+	combat.Update()
+	area(second, component.CombatAttackExplosion)
+	got, _ := w.Components.Kinetic.GetComponent(target)
+	if got == motion || state.RemainingKineticImmunity == 0 {
+		t.Fatal("knockback immunity did not reopen after expiry")
 	}
 }
 

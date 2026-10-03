@@ -92,7 +92,8 @@ Hits on species resolve through the profile matrix in `internal/profile/combat.g
 `[attack][attacker][defender]`: damage type and value, knockback, stun, chain.
 Damage allowances are per player and attack family within the target's immunity
 window (D-3); chained effects keep their originating weapon's allowance. Knockback
-stays per player. Species-authored invulnerability still blocks every weapon.
+and stun immunity each cover all players and weapons. Species-authored
+invulnerability still blocks every weapon.
 Hits on cursors are `CursorDamage`: energy through an active shield, heat without
 one. Projectiles find the cursor they touch
 with `CursorContactAt`, shields first.

@@ -95,7 +95,7 @@ type CombatComponent struct {
 	// displaced", so it stays the whole target's window whoever opened it.
 	RemainingKineticImmunity time.Duration
 
-	// Knockback remains limited per cursor across weapons to keep impulses bounded.
+	// Records accepted displacement sources; immunity itself covers every attacker.
 	KineticImmunitySpent uint32
 
 	// StunnedRemaining is remaining stun duration (movement suppressed)
@@ -135,17 +135,13 @@ func (c *CombatComponent) SealDamageImmunity(d time.Duration) {
 	}
 }
 
-// KineticImmuneTo reports whether this attacker already spent its knockback in the
-// open window. Per attacker for the reason damage is: a shared latch would discard
-// whichever hit an instance applied second, and a late crossing changes which.
-func (c *CombatComponent) KineticImmuneTo(attacker uint32) bool {
-	return c.RemainingKineticImmunity != 0 && c.KineticImmunitySpent&attacker != 0
+// Every weapon and player shares the target's displacement window.
+func (c *CombatComponent) KineticImmuneTo(_ uint32) bool {
+	return c.RemainingKineticImmunity != 0
 }
 
-// SpendKineticImmunity records a landed knockback, opening the window when it is
-// closed, and reports whether this hit opened it. The opener replaces the target's
-// velocity and every joiner adds to it, so a window's impulses compose to the same
-// vector in any order and no hit needs to own it.
+// Record the accepted source without extending an open displacement window.
+// The return value preserves the impulse replacement/composition contract.
 func (c *CombatComponent) SpendKineticImmunity(attacker uint32, d time.Duration) (opened bool) {
 	if c.RemainingKineticImmunity == 0 {
 		c.RemainingKineticImmunity = d
