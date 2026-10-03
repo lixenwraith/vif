@@ -21,7 +21,7 @@ file the binary falls back to and the file a user edits are one source.
 ```text
 wad/                            internal/asset/
 ├── scenario/   named scenarios  ├── scenario/  fallback scenario
-│   ├── main/   default          ├── content/   fallback corpus
+│   ├── kraken/ combat arena          ├── content/   fallback corpus
 │   ├── blank/  scaffold         ├── input/     default keymap
 │   └── td/     tower defence    ├── audio/     built-in sound bank
 ├── content/    typing corpus    ├── bot/       shipped bot graphs
@@ -29,10 +29,11 @@ wad/                            internal/asset/
                                  └── splash_font.go
 ```
 
-The external `main` scenario and the embedded fallback are intentionally
-separate. The external one is editable and extended; the embedded one is the
-self-contained fallback required by native and browser binaries. They need not
-contain the same optional regions.
+The main campaign lives only in `internal/asset/scenario/`. Native, headless,
+and browser builds embed that same tree; `-s main` falls back to it when no
+external override exists. To author a variant, copy that directory into a
+configuration root as `scenario/<name>/`. Existing `scenario/main` overrides
+continue to take precedence, including copies installed by earlier releases.
 
 ## 2. Installed configuration tree
 
@@ -48,7 +49,7 @@ only.
 vif/
 ├── vif.toml     settings: flag defaults (§3)
 ├── scenario/    named scenarios, each rooted at scenario.toml
-│   ├── main/    discovered default
+│   ├── main/    optional default override
 │   ├── blank/   authoring scaffold
 │   └── td/      tower-defence scenario
 ├── input/       keymap.toml
@@ -58,7 +59,7 @@ vif/
 └── bot/         bot graphs, one <name>.toml each
 ```
 
-`scenario/main/` is the automatically discovered scenario. The other directories
+An optional `scenario/main/` override is the automatically discovered scenario. The other directories
 under `scenario/` are selected by name (`-s td`) or explicit path.
 `audio/` is empty until a user or `soundlab` writes an override. `image/` is the
 discovery category for `.vifimg` assets named by a `WallPatternSpawnRequest`.
@@ -97,7 +98,8 @@ image, an existing absolute or relative path is explicit; otherwise the event's
 path is a logical name below each root's `image/` directory, and it may include
 nested directories but not `..`. New configurations should use a logical name or
 an absolute path; the relative-path check remains for compatibility. Missing
-explicit paths or names are errors; absent discovered overrides are normal.
+explicit paths or names other than the built-in `main` are errors; absent
+discovered overrides are normal.
 
 `-d` bypasses scenario and content discovery only. Keymap and audio overrides remain
 local participant preferences and retain their ordinary resolution.

@@ -137,7 +137,7 @@ var (
 	RgbOrbLauncher  = color.TigerOrange
 	RgbOrbDisruptor = color.MintGreen
 	RgbOrbTurret    = color.Cornflower
-	RgbOrbBeam      = color.HotPink
+	RgbOrbEmitter   = color.HotPink
 	RgbOrbFlash     = color.White
 
 	// Orb corona colors (dimmer than sigil for glow effect)
@@ -145,7 +145,7 @@ var (
 	RgbOrbCoronaLauncher  = color.BurntOrange
 	RgbOrbCoronaDisruptor = color.SageGreen
 	RgbOrbCoronaTurret    = color.SteelBlue
-	RgbOrbCoronaBeam      = color.PaleVioletRed
+	RgbOrbCoronaEmitter   = color.PaleVioletRed
 
 	// Missile: Deep Orange
 	RgbMissileChildBody       = color.TigerOrange
@@ -230,7 +230,7 @@ var (
 	RgbLootLauncherGlow  = color.PaleLemon
 	RgbLootDisruptorGlow = color.PaleMint
 	RgbLootTurretGlow    = color.LightSkyBlue
-	RgbLootBeamGlow      = color.LightPink
+	RgbLootEmitterGlow   = color.LightPink
 	RgbLootEnergyGlow    = color.HotMagenta
 	RgbLootEnergySigil   = color.LemonYellow
 	RgbLootHeatSigil     = color.Coral

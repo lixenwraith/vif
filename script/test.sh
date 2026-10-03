@@ -454,9 +454,10 @@ transfer)
 	# scenario: an installed copy of the same wad would otherwise satisfy the join
 	# locally and the host would never be asked. The transfer is the only way in.
 	need_bin
-	[ -d wad/scenario/main ] || fail "wad/scenario/main is not in this checkout"
+	[ -d internal/asset/scenario ] || fail "internal/asset/scenario is not in this checkout"
 	ROOT=$(mktemp -d); HL=$(mktemp -d); GL=$(mktemp -d); WAD=$(mktemp -d)
 	cp -R wad/. "$WAD"
+	cp -R internal/asset/scenario "$WAD/scenario/main"
 	printf '\n# transfer nonce %s-%s\n' "$$" "$(date +%s)" >>"$WAD/scenario/main/scenario.toml"
 	own_ports
 	"$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -config-dir "$WAD" -s main \

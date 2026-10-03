@@ -1,3 +1,5 @@
+description = "Practice fighting a Kraken in an open arena with repeating encounters."
+
 # Kraken collision sandbox. Restart each fight three seconds after the kill.
 
 [regions.main]
@@ -30,6 +32,7 @@ transitions = [
 [states.KrakenAlive]
 parent = "KrakenArena"
 transitions = [
+    { trigger = "EventKrakenSpawnFailed", target = "KrakenWait" },
     { trigger = "EventSpeciesKilled", target = "KrakenWait", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 9 } },
 ]
 
@@ -57,3 +60,12 @@ transitions = [
 
 [states.PlayerActive]
 parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "PlayerReset", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
+]
+
+[states.PlayerReset]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGameResetRequest" },
+]

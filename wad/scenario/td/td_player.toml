@@ -3,7 +3,7 @@
 [states.PlayerBoot]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true } },
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true, heat = 10, energy = 100 } },
 ]
 transitions = [
     { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },

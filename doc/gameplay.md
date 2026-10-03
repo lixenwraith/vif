@@ -267,7 +267,7 @@ locally; only center/radius/attack geometry crosses for shared combat.
 | Launcher | Homing/area missiles assigned from the nearest-target set. |
 | Disruptor | Stun pulse centred on its orb; it fires only while a target is inside the ellipse. |
 | Turret | One spread bullet per charge from its orb at the nearest targets; each hit is direct damage. |
-| Beam | A sustained ray from the cursor through its orb to the first wall, one cell wide to the orb and three past it, sweeping as the orb orbits; more charges beam longer and hit harder. |
+| Emitter | A sustained ray from the cursor through its orb to the first wall, one cell wide to the orb and three past it, sweeping as the orb orbits; more charges beam longer and hit harder. |
 
 Weapon ownership is represented by charge count: zero means not owned. Each
 owned type has an orbiting orb entity and a separate cooldown. The combat system
@@ -331,47 +331,34 @@ for the exact motion paths and extension plan.
 
 ## 10. Embedded campaign progression
 
-The default scenario declares five parallel-capable regions. Only `main` and
-the background `monitor` start immediately; the other three are spawned as
-needed.
+The campaign has one source, `internal/asset/scenario/`, compiled into native,
+headless, and browser builds. `-s main` uses it unless a configuration root supplies
+an explicit `scenario/main` override. Only the background monitor starts at boot;
+it spawns and arms the cursor before opening `main`.
 
-```mermaid
-stateDiagram-v2
-    [*] --> Main
-    Main --> Quasar: 10 drain kills
-    Quasar --> Main: quasar destroyed
-    Quasar --> Storm: 3 quasar kills
-    Storm --> Main: storm destroyed
-    Storm --> Placeholder: configured kill thresholds
-    Placeholder --> Main: 5-second placeholder
-```
+1. `main` cycles gold sequences and decay waves. Ten drain kills elect the causal
+   cursor, pause `main`, and begin a quasar encounter.
+2. The quasar holds that owner's grayout and drains. Three quasar kills lead to a
+   storm; earlier kills return to `main`.
+3. Each storm kill raises the species damage multiplier. Three storm kills create
+   a full-map maze without rooms and spawn one Kraken at its center.
+4. Kraken contact destroys walls. Its body stays within the map; tentacles can
+   extend beyond it, but only their in-map cells interact.
+5. The first Kraken kill returns to `main`; another three storm kills open the
+   second Kraken encounter. Its defeat starts tower defense. Thus the escalation
+   is **3 storms → 1 Kraken → 3 storms → 1 Kraken → tower**.
+6. Destroying the tower's pylons resumes `main`; losing the tower fails the run.
+   Encounter transitions preserve uncollected loot. Snakes keep one cursor target
+   and its route until it disappears, becomes unreachable, or another route is
+   over one-third shorter.
+7. Any participant reaching zero heat **and** zero energy ends the run. The shared
+   monitor consumes owner-authored defeat state, cancels encounters, clears the
+   level and loot, then rearms the roster. Every shipped scenario uses this defeat
+   rule; tower defense also retains its objective-failure and victory conditions.
 
-The actual flow is:
-
-1. `main` repeatedly spawns a gold sequence, waits five seconds, starts a decay
-   wave, waits five seconds, and repeats.
-2. At ten drain kills it resets that counter, elects the cursor responsible for
-   the threshold defeat, spawns one `quasar`, and pauses `main`.
-3. `quasar` greys out that participant's screen, pauses that participant's
-   drains, strobes every screen, asks only that causal participant's drains to
-   fuse, and runs a faster gold/dust loop until the quasar dies. The grayout and
-   the drain pause name the elected cursor, so a quasar in a session affects the
-   player it was fused from; the region itself is session-wide.
-4. Before three cumulative quasar kills it resumes `main`; at three it starts
-   `storm` instead.
-5. Destroying a storm increases the species energy-damage multiplier. Current
-   threshold guards may route to a five-second placeholder region; otherwise
-   drains and `main` resume.
-6. The background monitor waits until every rostered cursor reports its combined
-   defeat state. Once all are defeated, it cancels live encounters, resets kill
-   tracking and the damage multiplier, clears/rebuilds the level, and preserves
-   and re-arms the complete roster before restarting `main`.
-
-This is data, not a guaranteed product rule. `wad/scenario/main` extends the
-embedded progression with a tower encounter; `wad/scenario/td` is a standalone
-500-by-250 tower defence using towers, pylons, gateways, route pressure, quasars,
-and a storm finale. `wad/scenario/blank` is a minimal authoring scaffold with most
-gameplay and audio systems disabled.
+`wad/scenario/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
+scaffold, and `kraken` is a repeating combat arena. Each entry has a short
+`description` for scenario listings.
 
 ## 11. System inventory
 
@@ -411,7 +398,7 @@ Each entry declares a domain profile and its dependencies in
 | Environment effects | `internal/system/environment.go`, `internal/parameter/environment.go`, `internal/profile/mass.go` |
 | System behavior | Matching files in `internal/system` |
 | Default progression | `internal/asset/scenario/*.toml` |
-| External scenarios | `wad/scenario/main`, `wad/scenario/td`, `wad/scenario/blank` |
+| External scenarios | `wad/scenario/td`, `wad/scenario/blank`, `wad/scenario/kraken` |
 
 Changing a number in `parameter` changes a mechanic; changing a transition in
 TOML changes when that mechanic is invoked. Keep that distinction intact when

@@ -5,8 +5,8 @@
 Entry config search order:
 
 1. `-s <path-or-name>` — file, directory containing `scenario.toml`, or a name
-   resolved as `game/<name>/scenario.toml` under the configured roots;
-2. `game/main/scenario.toml` under `-config-dir <root>`;
+   resolved as `scenario/<name>/scenario.toml` under the configured roots;
+2. `scenario/main/scenario.toml` under `-config-dir <root>`;
 3. the same under `$XDG_CONFIG_HOME/vif` (normally
    `~/.config/vif`);
 4. the same under each corresponding root in `$XDG_CONFIG_DIRS`;
@@ -18,13 +18,16 @@ embedded scenario and content corpus. For the runtime design behind this referen
 cross-resource order and migration policy are in
 [`doc/filesystem-layout.md`](filesystem-layout.md).
 
+The embedded main campaign is the only shipped source of `main`; `-s main`
+falls back to it. A `scenario/main/` directory is an optional user override.
+
 Region `file` references resolve relative to the entry config's directory and
 cannot escape it (`..` is rejected). Installed layout:
 
 ```text
 ~/.config/vif/
-├── game/
-│   ├── main/
+├── scenario/
+│   ├── main/  # optional override
 │   │   ├── scenario.toml
 │   │   ├── main.toml
 │   │   ├── quasar.toml
@@ -48,6 +51,8 @@ content config and exits; all state-level FSM errors are reported in one pass.
 ## Root Config (`scenario.toml`)
 
 ```toml
+description = "A short description for scenario selection."
+
 [systems]
 disabled_systems = ["system_name", ...] # Disabled at FSM init
 
@@ -95,7 +100,7 @@ Extract event payload fields into FSM variables when a transition matches:
 ```
 
 `species` uses the `component.SpeciesType` values: drain `1`, swarm `2`,
-quasar `3`, storm `4`, pylon `5`, snake `6`, eye `7`, and tower `8`.
+quasar `3`, storm `4`, pylon `5`, snake `6`, eye `7`, tower `8`, and kraken `9`.
 
 `capture_vars` maps payload field names to FSM variable names. Fields resolve by `toml` struct tag first, then Go field name. Captured values are set **before** the target state's `on_enter` executes.
 
@@ -377,10 +382,15 @@ Per-cursor state is published under `player.<slot>.<metric>`:
 | `player.<n>.typing.max_streak`   | Longest correct run        |
 
 `player.count` and `player.local` describe the roster.
+`session.any_defeated` becomes true when any rostered cursor reports zero heat
+and zero energy; all shipped scenarios use it for game over.
+`session.all_defeated` remains available for scenarios requiring unanimous defeat.
+Both derive from replicated owner reports and are safe shared-region guards.
+Reports carry their production tick; a reset rejects reports from the previous attempt.
 
 The bare keys `energy.current`, `heat.current`, `heat.overheat`, `heat.at_max`,
 `heat.ember`, `shield.active`, `boost.active`, `boost.remaining`, `weapon.rod`,
-`weapon.launcher`, `weapon.disruptor`, `weapon.turret`, `weapon.beam`, `weapon.orbs`, `typing.max_streak`,
+`weapon.launcher`, `weapon.disruptor`, `weapon.turret`, `weapon.emitter`, `weapon.orbs`, `typing.max_streak`,
 `player.x`, `player.y` mirror **the slot this instance drives**. That is what
 "the player" means on a status bar or in an operator command, and it is why the
 mirror follows the roster rather than slot 0: slot 0 is the coordinator's cursor,

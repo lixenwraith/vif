@@ -139,7 +139,10 @@ per-target combat requests derived from that geometry do not.
 
 Lightning, flash, fadeout, splash, motion markers, explosion smoke, pulse rings,
 materialise beams, dust, particles (decay and blossom), orbs, bullets, missiles,
-and loot are Player-domain.
+and loot are Player-domain. Encounter level clears explicitly preserve loot; run
+resets clear it. Shared corrections retain each receiver's drops and ownership,
+and loot revalidates its bounds and walls after an install. Collected weapon
+charges travel through the existing owner-state sync (D-13).
 They may depend on local view state and must not decide a Shared outcome.
 
 An effect keyed to a Shared entity retires with it. An install writes the world
@@ -369,10 +372,10 @@ Declared system carriers are:
 | `wall` | maze generator position |
 | `adaptation` | route weights, sample pool, consumer head, fallback rotation |
 | `genetic` | streaming checkpoints, archives, pending evaluations, IDs, scout state, fitness accumulators |
-| `navigation` | recompute phase, targets, route rebuild budget, route endpoints |
+| `navigation` | group and cursor-pursuit cache phases, targets, route rebuild budget, route endpoints |
 | `gold` | sequence liveness, header, deadlines, per-slot contribution |
 | `storm` | live root entity, swarm spawns pending a blue attack |
-| `meta` | kill tallies, combined defeat latch, cycle damage multiplier |
+| `meta` | kill tallies, defeat latches and reset tick, cycle damage multiplier |
 | `environment` | active base wind, remaining duration, enable/applied phase |
 
 A carrier is also where a status cell the compared surface excludes has to live.

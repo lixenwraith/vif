@@ -1,3 +1,5 @@
+description = "An empty arena for experimenting with commands and building scenarios."
+
 # The authoring scaffold: an empty map with a player on it and nothing to fight.
 
 [regions.main]
@@ -48,3 +50,12 @@ transitions = [
 
 [states.PlayerActive]
 parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "PlayerReset", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
+]
+
+[states.PlayerReset]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGameResetRequest" },
+]
