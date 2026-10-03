@@ -1,4 +1,4 @@
-# Storm region: final escalation phase
+# Storm region: escalation to the Kraken maze
 
 [states.StormHold]
 parent = "Root"
@@ -51,26 +51,26 @@ on_enter = [
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "SPECIES DAMAGE INCREASED" } },
 ]
 transitions = [
-    { trigger = "Tick", target = "StormEscalateTowerOne", guard = "StatusIntCompare", guard_args = { key = "kills.swarm", op = "gte", value = 20 } },
-    { trigger = "Tick", target = "StormEscalateTowerTwo", guard = "StatusIntCompare", guard_args = { key = "kills.storm", op = "gte", value = 3 } },
+    { trigger = "Tick", target = "StormEscalateKrakenOne", guard = "StatusIntCompare", guard_args = { key = "kills.swarm", op = "gte", value = 20 } },
+    { trigger = "Tick", target = "StormEscalateKrakenTwo", guard = "StatusIntCompare", guard_args = { key = "kills.storm", op = "gte", value = 3 } },
     { trigger = "Tick", target = "StormVictory" },
 ]
 
-[states.StormEscalateTowerOne]
+[states.StormEscalateKrakenOne]
 parent = "Root"
 on_enter = [
     { action = "ResetStatusInt", payload = { key = "kills.swarm" } },
     { action = "EmitEvent", event = "EventStormCancelRequest" },
-    { action = "SpawnRegion", region = "tower", initial_state = "TowerSetup" },
+    { action = "SpawnRegion", region = "kraken", initial_state = "KrakenSetup" },
     { action = "TerminateRegion", region = "storm" },
 ]
 
-[states.StormEscalateTowerTwo]
+[states.StormEscalateKrakenTwo]
 parent = "Root"
 on_enter = [
     { action = "ResetStatusInt", payload = { key = "kills.storm" } },
     { action = "EmitEvent", event = "EventStormCancelRequest" },
-    { action = "SpawnRegion", region = "tower", initial_state = "TowerSetup" },
+    { action = "SpawnRegion", region = "kraken", initial_state = "KrakenSetup" },
     { action = "TerminateRegion", region = "storm" },
 ]
 
