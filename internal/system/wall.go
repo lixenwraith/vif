@@ -731,6 +731,9 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int) int64 {
 
 // getMaskForEntity returns appropriate wall block mask for entity type
 func (s *WallSystem) getMaskForEntity(entity core.Entity) component.WallBlockMask {
+	if s.world.Components.Kraken.HasEntity(entity) {
+		return component.WallBlockNone
+	}
 	if member, ok := s.world.Components.Member.GetPtr(entity); ok && s.world.Components.Kraken.HasEntity(member.HeaderEntity) {
 		return component.WallBlockNone
 	}

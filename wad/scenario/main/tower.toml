@@ -1,5 +1,5 @@
 # Tower region: tower defense level
-# Entry: storm escalation spawns with initial_state = "TowerSetup"
+# Entry: two Kraken kills spawn this region with initial_state = "TowerSetup"
 # Exit: resume main region, terminate self
 # Spawning: gateways attached to pylons handle continuous eye spawning
 
