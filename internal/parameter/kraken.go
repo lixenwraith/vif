@@ -12,14 +12,15 @@ const (
 	KrakenWiggleFreq   = 0.2
 	KrakenWiggleSpeed  = 4.0
 	KrakenRotSpeed     = 0.2
+	KrakenSpinRotSpeed = 1.6
 	KrakenMoveSpeed    = 60.0
-	KrakenInertiaBend  = 0.1
+	KrakenInertiaBend  = 0.02
 	KrakenInertiaCurve = 0.1
 	KrakenSampleStep   = 0.35
 
 	KrakenAttackDuration = 1500 * time.Millisecond
 	KrakenMoveDuration   = 3 * time.Second
-	KrakenSpinDuration   = 2 * time.Second
+	KrakenSpinDuration   = 3 * time.Second
 	KrakenWaitMin        = 2 * time.Second
 	KrakenWaitMax        = 5 * time.Second
 	KrakenIdleTurnMin    = 600 * time.Millisecond

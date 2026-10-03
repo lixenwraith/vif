@@ -21,6 +21,8 @@ type KrakenComponent struct {
 	State             KrakenState
 	StateRemaining    time.Duration
 	IdleTurnRemaining time.Duration
+	LastAction        KrakenState
+	ActionStreak      int
 	AttackLegs        int
 	TargetX, TargetY  float64
 	DirX, DirY        float64

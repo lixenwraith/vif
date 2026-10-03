@@ -47,6 +47,7 @@ func TestKrakenWaitsThenAttacksOrSpinsBeforeAimedCharge(t *testing.T) {
 	w.Positions.SetPosition(first, component.PositionComponent{X: 0, Y: 0})
 	w.Positions.SetPosition(second, component.PositionComponent{X: 179, Y: 89})
 	attacks, charges, targets := 0, 0, map[vmath.Point]bool{}
+	previous, repeats, previousLegs := component.KrakenIdle, 0, -1
 	for i := range 64 {
 		s.rng.Reseed(uint64(i + 1))
 		s.wait(k)
@@ -58,12 +59,24 @@ func TestKrakenWaitsThenAttacksOrSpinsBeforeAimedCharge(t *testing.T) {
 			t.Fatal("idle moved the body")
 		}
 		s.chooseState(k, motion.PreciseX, motion.PreciseY)
+		if k.State == previous {
+			repeats++
+		} else {
+			previous, repeats = k.State, 1
+		}
+		if repeats > 2 {
+			t.Fatal("Kraken repeated the same action more than twice")
+		}
 		switch k.State {
 		case component.KrakenAttack:
 			attacks++
+			if k.AttackLegs == previousLegs {
+				t.Fatal("consecutive leg attacks reused the same four legs")
+			}
+			previousLegs = k.AttackLegs
 		case component.KrakenSpin:
 			charges++
-			if k.StateRemaining != 2*time.Second || !s.bodyFits(k.TargetX, k.TargetY) {
+			if k.StateRemaining != parameter.KrakenSpinDuration || !s.bodyFits(k.TargetX, k.TargetY) {
 				t.Fatalf("invalid spin or padded target: %+v", k)
 			}
 			targets[vmath.PointAtF(k.TargetX, k.TargetY)] = true
@@ -90,6 +103,97 @@ func TestKrakenWaitsThenAttacksOrSpinsBeforeAimedCharge(t *testing.T) {
 	s.aimCharge(k, 90.5, 45.5)
 	if k.TargetX >= 105 || !s.bodyFits(k.TargetX, k.TargetY) {
 		t.Fatalf("charge target crosses a wall: (%f,%f)", k.TargetX, k.TargetY)
+	}
+}
+
+func TestKrakenWindupKeepsSpinningUntilItsLockedCharge(t *testing.T) {
+	w, s, e, _ := krakenFixture(t)
+	k, _ := w.Components.Kraken.GetPtr(e)
+	motion, _ := w.Components.Kinetic.GetPtr(e)
+	k.LastAction, k.ActionStreak, k.StateRemaining = component.KrakenAttack, 2, 0
+	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
+	s.Update()
+	if k.State != component.KrakenSpin {
+		t.Fatal("charge did not start with a spin")
+	}
+	x, y, tx, ty := motion.PreciseX, motion.PreciseY, k.TargetX, k.TargetY
+	for slot := range 2 {
+		w.Positions.SetPosition(w.Resources.Player.Slot(uint8(slot)), component.PositionComponent{X: 170, Y: 80})
+	}
+	rotation := 0.0
+	for elapsed := parameter.GameUpdateInterval; elapsed < parameter.KrakenSpinDuration; elapsed += parameter.GameUpdateInterval {
+		angle := k.Angle
+		w.Resources.Game.State.IncrementGameTicks()
+		s.Update()
+		rotation += math.Abs(math.Remainder(k.Angle-angle, 2*math.Pi))
+		if k.State != component.KrakenSpin || motion.PreciseX != x || motion.PreciseY != y {
+			t.Fatal("spin ended or moved before its wind-up completed")
+		}
+		if elapsed >= time.Second && math.Abs(k.RotSpeed) < parameter.KrakenSpinRotSpeed*0.9 {
+			t.Fatal("spin lost its rotation before the charge")
+		}
+	}
+	if rotation < math.Pi {
+		t.Fatal("wind-up did not visibly rotate at least half a turn")
+	}
+	maxBend, leg := 0.0, -1
+	k.TentacleSamples(x, y, func(lx, ly, _, step float64, _ bool) {
+		if step == 0 {
+			leg++
+		}
+		if step < 0.95 {
+			return
+		}
+		base := k.Angle + float64(leg)*math.Pi/4
+		bend := math.Abs(math.Remainder(math.Atan2((ly-y)*2, lx-x)-base, 2*math.Pi))
+		maxBend = max(maxBend, bend)
+	})
+	if maxBend > math.Pi/4 {
+		t.Fatal("spinning tentacles curved behind the adjacent leg")
+	}
+	s.Update()
+	if k.State != component.KrakenMove || (motion.PreciseX == x && motion.PreciseY == y) || k.TargetX != tx || k.TargetY != ty {
+		t.Fatal("spin failed to move immediately toward the locked cursor position")
+	}
+}
+
+func TestKrakenChargeSlidesAlongWallsAndSkipsImmovableTargets(t *testing.T) {
+	w, s, e, _ := krakenFixture(t)
+	k, _ := w.Components.Kraken.GetPtr(e)
+	motion, _ := w.Components.Kinetic.GetPtr(e)
+	first, second := w.Resources.Player.Slot(0), w.Resources.Player.Slot(1)
+	for y := range 90 {
+		spawnWall(w, 100, y)
+	}
+	motion.PreciseX, motion.PreciseY = 92, 45.5
+	w.Positions.SetPosition(first, component.PositionComponent{X: 120, Y: 45})
+	w.Positions.SetPosition(second, component.PositionComponent{X: 120, Y: 70})
+	for seed := range 8 {
+		s.rng.Reseed(uint64(seed + 1))
+		if !s.aimCharge(k, motion.PreciseX, motion.PreciseY) || k.TargetY < 70 || !s.bodyFits(k.TargetX, k.TargetY) {
+			t.Fatal("blocked cursor prevented selecting a useful wall-sliding charge")
+		}
+	}
+	k.State, k.StateRemaining = component.KrakenMove, parameter.KrakenMoveDuration
+	for range 20 {
+		s.animate(k, motion, parameter.GameUpdateInterval.Seconds())
+		if !s.bodyFits(motion.PreciseX, motion.PreciseY) {
+			t.Fatal("sliding charge crossed the wall")
+		}
+	}
+	if motion.PreciseY < 70 {
+		t.Fatal("charge remained stuck against the wall")
+	}
+	w.Positions.RemoveEntity(first)
+	k.State, k.LastAction, k.ActionStreak = component.KrakenIdle, component.KrakenAttack, 2
+	s.chooseState(k, motion.PreciseX, motion.PreciseY)
+	if k.State != component.KrakenAttack {
+		t.Fatal("unreachable charge should become a leg attack, not an empty spin/wait")
+	}
+	k.State, k.StateRemaining, k.TargetX = component.KrakenMove, parameter.KrakenMoveDuration, 120.5
+	s.animate(k, motion, parameter.GameUpdateInterval.Seconds())
+	if k.StateRemaining != 0 {
+		t.Fatal("a newly blocked charge waited out the entire movement duration")
 	}
 }
 

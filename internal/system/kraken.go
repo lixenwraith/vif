@@ -88,7 +88,7 @@ func (s *KrakenSystem) spawn(p *event.KrakenSpawnRequestPayload) {
 		OwnerEntity: e, CombatEntityType: component.CombatEntityKraken, HitPoints: parameter.KrakenInitialHP,
 	})
 	s.world.Components.Kraken.SetComponent(e, component.KrakenComponent{
-		DirX: 1,
+		DirX: 1, AttackLegs: 1,
 	})
 	s.world.Components.Header.SetComponent(e, component.HeaderComponent{
 		Behavior: component.BehaviorKraken, Type: component.CompositeTypeUnit, SkipPositionSync: true,
@@ -143,13 +143,36 @@ func (s *KrakenSystem) Update() {
 func (s *KrakenSystem) chooseState(k *component.KrakenComponent, x, y float64) {
 	switch k.State {
 	case component.KrakenIdle:
-		if s.rng.Intn(2) == 0 {
+		action := component.KrakenAttack
+		if k.ActionStreak == 0 {
+			if s.rng.Intn(2) != 0 {
+				action = component.KrakenSpin
+			}
+		} else {
+			action = k.LastAction
+			if k.ActionStreak >= 2 || s.rng.Intn(75+50) < 75 {
+				if action == component.KrakenAttack {
+					action = component.KrakenSpin
+				} else {
+					action = component.KrakenAttack
+				}
+			}
+		}
+		// A cursor already under the body or behind an impassable wall needs a leg attack.
+		if action == component.KrakenSpin && !s.aimCharge(k, x, y) {
+			action = component.KrakenAttack
+		}
+		if action == k.LastAction {
+			k.ActionStreak = min(k.ActionStreak+1, 2)
+		} else {
+			k.LastAction, k.ActionStreak = action, 1
+		}
+		if action == component.KrakenAttack {
 			k.State, k.StateRemaining = component.KrakenAttack, parameter.KrakenAttackDuration
-			k.AttackLegs = s.rng.Intn(2)
+			k.AttackLegs = 1 - k.AttackLegs
 		} else {
 			k.State, k.StateRemaining = component.KrakenSpin, parameter.KrakenSpinDuration
 			k.TurnDir = float64(s.rng.Intn(2)*2 - 1)
-			s.aimCharge(k, x, y)
 		}
 	case component.KrakenSpin:
 		k.State, k.StateRemaining = component.KrakenMove, parameter.KrakenMoveDuration
@@ -170,7 +193,7 @@ func (s *KrakenSystem) wait(k *component.KrakenComponent) {
 	k.IdleTurnRemaining = 0
 }
 
-func (s *KrakenSystem) aimCharge(k *component.KrakenComponent, x, y float64) {
+func (s *KrakenSystem) aimCharge(k *component.KrakenComponent, x, y float64) bool {
 	var targets [parameter.MaxPlayers]vmath.Point
 	count := 0
 	for slot := range parameter.MaxPlayers {
@@ -182,26 +205,29 @@ func (s *KrakenSystem) aimCharge(k *component.KrakenComponent, x, y float64) {
 	}
 	k.TargetX, k.TargetY = x, y
 	if count == 0 {
-		return
+		return false
 	}
-	tx, ty := targets[s.rng.Intn(count)].CenterF()
 	cfg := s.world.Resources.Config
 	rx, ry := parameter.KrakenBodyRadius*2, parameter.KrakenBodyRadius
-	tx = max(rx+0.5, min(tx, float64(cfg.MapWidth)-rx-0.5))
-	ty = max(ry+0.5, min(ty, float64(cfg.MapHeight)-ry-0.5))
-	// Stop the planned charge at the first obstruction; tentacles keep their reach.
-	dx, dy := tx-x, ty-y
-	steps := max(1, int(math.Ceil(max(math.Abs(dx), math.Abs(dy))*2)))
-	for i := 1; i <= steps; i++ {
-		nx, ny := x+dx*float64(i)/float64(steps), y+dy*float64(i)/float64(steps)
-		if !s.bodyFits(nx, ny) {
-			break
+	start := s.rng.Intn(count)
+	for i := range count {
+		tx, ty := targets[(start+i)%count].CenterF()
+		tx = max(rx+0.5, min(tx, float64(cfg.MapWidth)-rx-0.5))
+		ty = max(ry+0.5, min(ty, float64(cfg.MapHeight)-ry-0.5))
+		// Plan with the same wall sliding as the charge; a blocked axis need not stop both.
+		probe := component.KineticComponent{}
+		probe.PreciseX, probe.PreciseY = x, y
+		s.moveBody(&probe, tx, ty)
+		dx, dy := probe.PreciseX-x, probe.PreciseY-y
+		if math.Hypot(dx, dy*2) < 1 {
+			continue
 		}
-		k.TargetX, k.TargetY = nx, ny
-	}
-	if dist := math.Hypot(dx, dy); dist > 0 {
+		k.TargetX, k.TargetY = probe.PreciseX, probe.PreciseY
+		dist := math.Hypot(dx, dy)
 		k.DirX, k.DirY = dx/dist, dy/dist
+		return true
 	}
+	return false
 }
 
 func (s *KrakenSystem) animate(k *component.KrakenComponent, motion *component.KineticComponent, dt float64) {
@@ -228,9 +254,13 @@ func (s *KrakenSystem) animate(k *component.KrakenComponent, motion *component.K
 			k.StateRemaining = 0
 		}
 	case component.KrakenSpin:
-		rot = k.TurnDir * (parameter.KrakenRotSpeed + 0.6)
+		rot = k.TurnDir * parameter.KrakenSpinRotSpeed
 	}
+	oldX, oldY := motion.PreciseX, motion.PreciseY
 	s.moveBody(motion, x, y)
+	if k.State == component.KrakenMove && dt > 0 && math.Hypot(motion.PreciseX-oldX, motion.PreciseY-oldY) < 1e-6 {
+		k.StateRemaining = 0 // A wall introduced during the wind-up must not leave a stalled charge.
+	}
 	// Like a pylon, Kraken is a push source, never an external impulse recipient.
 	motion.VelX, motion.VelY = 0, 0
 	k.RotSpeed += (rot - k.RotSpeed) * min(dt*4, 1)
