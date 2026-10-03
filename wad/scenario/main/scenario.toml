@@ -12,6 +12,10 @@ enabled_systems = ["glyph"]
 file = "storm.toml"
 enabled_systems = ["glyph"]
 
+[regions.kraken]
+file = "kraken.toml"
+enabled_systems = ["glyph", "nugget"]
+
 [regions.monitor]
 initial = "MonitorBoot"
 file = "monitor.toml"
