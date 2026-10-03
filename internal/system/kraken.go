@@ -71,15 +71,13 @@ func (s *KrakenSystem) spawn(p *event.KrakenSpawnRequestPayload) {
 	if x == 0 && y == 0 {
 		x, y = cfg.MapWidth/2, cfg.MapHeight/2
 	}
-	// Only the body needs free space; tentacles may cross walls and the map edge.
 	rx, ry := int(parameter.KrakenBodyRadius*2), int(parameter.KrakenBodyRadius)
-	x, y, found := s.world.Positions.FindFreeAreaSpiral(x, y, rx*2+1, ry*2+1, rx, ry, component.WallBlockSpawn, 0)
-	if !found {
+	x, y = max(rx, min(x, cfg.MapWidth-rx-1)), max(ry, min(y, cfg.MapHeight-ry-1))
+	px, py := (vmath.Point{X: x, Y: y}).CenterF()
+	if !s.bodyFits(px, py) {
 		s.world.PushEvent(event.EventKrakenSpawnFailed, nil)
 		return
 	}
-	x, y = x+rx, y+ry
-	px, py := (vmath.Point{X: x, Y: y}).CenterF()
 	e := s.world.CreateEntity(core.DomainShared)
 	s.world.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
 	s.world.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: component.ProtectAll ^ component.ProtectFromDeath})
@@ -158,7 +156,7 @@ func (s *KrakenSystem) chooseState(k *component.KrakenComponent, x, y float64) {
 				}
 			}
 		}
-		// A cursor already under the body or behind an impassable wall needs a leg attack.
+		// A cursor already at the padded destination needs a leg attack.
 		if action == component.KrakenSpin && !s.aimCharge(k, x, y) {
 			action = component.KrakenAttack
 		}
@@ -214,15 +212,12 @@ func (s *KrakenSystem) aimCharge(k *component.KrakenComponent, x, y float64) boo
 		tx, ty := targets[(start+i)%count].CenterF()
 		tx = max(rx+0.5, min(tx, float64(cfg.MapWidth)-rx-0.5))
 		ty = max(ry+0.5, min(ty, float64(cfg.MapHeight)-ry-0.5))
-		// Plan with the same wall sliding as the charge; a blocked axis need not stop both.
-		probe := component.KineticComponent{}
-		probe.PreciseX, probe.PreciseY = x, y
-		s.moveBody(&probe, tx, ty)
-		dx, dy := probe.PreciseX-x, probe.PreciseY-y
+		// Walls are demolished on contact, so only map bounds pad the destination.
+		dx, dy := tx-x, ty-y
 		if math.Hypot(dx, dy*2) < 1 {
 			continue
 		}
-		k.TargetX, k.TargetY = probe.PreciseX, probe.PreciseY
+		k.TargetX, k.TargetY = tx, ty
 		dist := math.Hypot(dx, dy)
 		k.DirX, k.DirY = dx/dist, dy/dist
 		return true
@@ -244,7 +239,7 @@ func (s *KrakenSystem) animate(k *component.KrakenComponent, motion *component.K
 	case component.KrakenAttack:
 		rot = 0
 	case component.KrakenMove:
-		moving, rot = 1, k.TurnDir*(parameter.KrakenRotSpeed+0.5)
+		moving, rot = 1, k.TurnDir*parameter.KrakenSpinRotSpeed
 		dx, dy := k.TargetX-x, k.TargetY-y
 		if dist := math.Hypot(dx, dy*2); dist > parameter.KrakenMoveSpeed*dt {
 			x += dx / dist * parameter.KrakenMoveSpeed * dt
@@ -259,7 +254,7 @@ func (s *KrakenSystem) animate(k *component.KrakenComponent, motion *component.K
 	oldX, oldY := motion.PreciseX, motion.PreciseY
 	s.moveBody(motion, x, y)
 	if k.State == component.KrakenMove && dt > 0 && math.Hypot(motion.PreciseX-oldX, motion.PreciseY-oldY) < 1e-6 {
-		k.StateRemaining = 0 // A wall introduced during the wind-up must not leave a stalled charge.
+		k.StateRemaining = 0 // A map resize must not leave a charge stalled at the new boundary.
 	}
 	// Like a pylon, Kraken is a push source, never an external impulse recipient.
 	motion.VelX, motion.VelY = 0, 0
@@ -278,14 +273,6 @@ func (s *KrakenSystem) bodyFits(x, y float64) bool {
 	cfg := s.world.Resources.Config
 	if x-rx < 0.5 || x+rx > float64(cfg.MapWidth)-0.5 || y-ry < 0.5 || y+ry > float64(cfg.MapHeight)-0.5 {
 		return false
-	}
-	for cy := int(math.Ceil(y - ry - 0.5)); cy <= int(y+ry-0.5); cy++ {
-		for cx := int(math.Ceil(x - rx - 0.5)); cx <= int(x+rx-0.5); cx++ {
-			dx, dy := (float64(cx)+0.5-x)/rx, (float64(cy)+0.5-y)/ry
-			if dx*dx+dy*dy <= 1 && s.world.Positions.HasBlockingWallAt(cx, cy, component.WallBlockKinetic) {
-				return false
-			}
-		}
 	}
 	return true
 }
@@ -313,6 +300,11 @@ func (s *KrakenSystem) syncMembers(e core.Entity, k *component.KrakenComponent, 
 		return
 	}
 	for i, cell := range s.cells {
+		if s.world.Positions.HasBlockingWallAt(cell.X, cell.Y, 0) {
+			s.world.PushEvent(event.EventWallDespawnRequest, &event.WallDespawnRequestPayload{
+				X: cell.X, Y: cell.Y, Width: 1, Height: 1,
+			})
+		}
 		if i == len(header.MemberEntries) {
 			member := s.world.CreateEntity(core.DomainShared)
 			s.world.Components.Member.SetComponent(member, component.MemberComponent{HeaderEntity: e})

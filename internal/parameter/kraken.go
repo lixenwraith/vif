@@ -12,9 +12,9 @@ const (
 	KrakenWiggleFreq   = 0.2
 	KrakenWiggleSpeed  = 4.0
 	KrakenRotSpeed     = 0.2
-	KrakenSpinRotSpeed = 1.6
+	KrakenSpinRotSpeed = 3.2
 	KrakenMoveSpeed    = 60.0
-	KrakenInertiaBend  = 0.02
+	KrakenInertiaBend  = 0.01
 	KrakenInertiaCurve = 0.1
 	KrakenSampleStep   = 0.35
 

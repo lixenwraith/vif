@@ -101,8 +101,8 @@ func TestKrakenWaitsThenAttacksOrSpinsBeforeAimedCharge(t *testing.T) {
 	}
 	w.Positions.RemoveEntity(first)
 	s.aimCharge(k, 90.5, 45.5)
-	if k.TargetX >= 105 || !s.bodyFits(k.TargetX, k.TargetY) {
-		t.Fatalf("charge target crosses a wall: (%f,%f)", k.TargetX, k.TargetY)
+	if k.TargetX <= 105 || !s.bodyFits(k.TargetX, k.TargetY) {
+		t.Fatalf("wall prevented a bounds-padded charge: (%f,%f)", k.TargetX, k.TargetY)
 	}
 }
 
@@ -133,8 +133,8 @@ func TestKrakenWindupKeepsSpinningUntilItsLockedCharge(t *testing.T) {
 			t.Fatal("spin lost its rotation before the charge")
 		}
 	}
-	if rotation < math.Pi {
-		t.Fatal("wind-up did not visibly rotate at least half a turn")
+	if rotation < 2*math.Pi {
+		t.Fatal("wind-up did not visibly rotate at least a full turn")
 	}
 	maxBend, leg := 0.0, -1
 	k.TentacleSamples(x, y, func(lx, ly, _, step float64, _ bool) {
@@ -151,13 +151,20 @@ func TestKrakenWindupKeepsSpinningUntilItsLockedCharge(t *testing.T) {
 	if maxBend > math.Pi/4 {
 		t.Fatal("spinning tentacles curved behind the adjacent leg")
 	}
+	direction, speed := k.TurnDir, math.Abs(k.RotSpeed)
 	s.Update()
 	if k.State != component.KrakenMove || (motion.PreciseX == x && motion.PreciseY == y) || k.TargetX != tx || k.TargetY != ty {
 		t.Fatal("spin failed to move immediately toward the locked cursor position")
 	}
+	for k.State == component.KrakenMove {
+		if k.TurnDir != direction || k.RotSpeed*direction <= 0 || math.Abs(k.RotSpeed) < speed*0.99 {
+			t.Fatal("charge interrupted or slowed the wind-up's rotation")
+		}
+		s.Update()
+	}
 }
 
-func TestKrakenChargeSlidesAlongWallsAndSkipsImmovableTargets(t *testing.T) {
+func TestKrakenChargeTargetsThroughWallsAndSkipsCoveredCursors(t *testing.T) {
 	w, s, e, _ := krakenFixture(t)
 	k, _ := w.Components.Kraken.GetPtr(e)
 	motion, _ := w.Components.Kinetic.GetPtr(e)
@@ -165,35 +172,87 @@ func TestKrakenChargeSlidesAlongWallsAndSkipsImmovableTargets(t *testing.T) {
 	for y := range 90 {
 		spawnWall(w, 100, y)
 	}
-	motion.PreciseX, motion.PreciseY = 92, 45.5
-	w.Positions.SetPosition(first, component.PositionComponent{X: 120, Y: 45})
+	w.Positions.SetPosition(first, component.PositionComponent{X: 90, Y: 45})
 	w.Positions.SetPosition(second, component.PositionComponent{X: 120, Y: 70})
 	for seed := range 8 {
 		s.rng.Reseed(uint64(seed + 1))
-		if !s.aimCharge(k, motion.PreciseX, motion.PreciseY) || k.TargetY < 70 || !s.bodyFits(k.TargetX, k.TargetY) {
-			t.Fatal("blocked cursor prevented selecting a useful wall-sliding charge")
+		if !s.aimCharge(k, motion.PreciseX, motion.PreciseY) || k.TargetX != 120.5 || k.TargetY != 70.5 {
+			t.Fatal("covered cursor prevented selecting a useful charge through walls")
 		}
 	}
 	k.State, k.StateRemaining = component.KrakenMove, parameter.KrakenMoveDuration
 	for range 20 {
 		s.animate(k, motion, parameter.GameUpdateInterval.Seconds())
-		if !s.bodyFits(motion.PreciseX, motion.PreciseY) {
-			t.Fatal("sliding charge crossed the wall")
-		}
 	}
-	if motion.PreciseY < 70 {
-		t.Fatal("charge remained stuck against the wall")
+	if motion.PreciseX != k.TargetX || motion.PreciseY != k.TargetY {
+		t.Fatal("charge stopped before reaching the cursor across the wall")
 	}
 	w.Positions.RemoveEntity(first)
 	k.State, k.LastAction, k.ActionStreak = component.KrakenIdle, component.KrakenAttack, 2
 	s.chooseState(k, motion.PreciseX, motion.PreciseY)
 	if k.State != component.KrakenAttack {
-		t.Fatal("unreachable charge should become a leg attack, not an empty spin/wait")
+		t.Fatal("covered cursor should receive a leg attack, not an empty spin/wait")
 	}
-	k.State, k.StateRemaining, k.TargetX = component.KrakenMove, parameter.KrakenMoveDuration, 120.5
-	s.animate(k, motion, parameter.GameUpdateInterval.Seconds())
-	if k.StateRemaining != 0 {
-		t.Fatal("a newly blocked charge waited out the entire movement duration")
+}
+
+func TestKrakenDestroysWallsAtSpawnAndAcrossItsFootprint(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	w.SetupLevel(180, 90, false, false)
+	s := NewKrakenSystem(w).(*KrakenSystem)
+	walls, death := NewWallSystem(w).(*WallSystem), NewDeathSystem(w).(*DeathSystem)
+	var leg vmath.Point
+	shape := component.KrakenComponent{}
+	shape.TentacleSamples(90.5, 45.5, func(x, y, _, step float64, _ bool) {
+		if leg == (vmath.Point{}) && step >= 0.5 {
+			leg = vmath.PointAtF(x, y)
+		}
+	})
+	for _, cell := range []vmath.Point{{X: 90, Y: 45}, leg, {X: 150, Y: 80}} {
+		spawnWall(w, cell.X, cell.Y)
+	}
+	decorative := w.CreateEntity(core.DomainShared)
+	w.Components.Wall.SetComponent(decorative, component.WallComponent{})
+	w.Positions.SetPosition(decorative, component.PositionComponent{X: 90, Y: 46})
+	s.spawn(&event.KrakenSpawnRequestPayload{X: 90, Y: 45})
+	if w.Components.Kraken.CountEntities() != 1 {
+		t.Fatal("walls prevented Kraken from spawning")
+	}
+	e := w.Components.Kraken.Entities()[0]
+	walls.pushEntitiesAtPosition(90, 45)
+	pos, _ := w.Positions.GetPosition(e)
+	if pos.X != 90 || pos.Y != 45 {
+		t.Fatal("walls displaced Kraken from its requested spawn center")
+	}
+	settle := func() {
+		for range 12 {
+			evs := w.Resources.Event.Queue.Consume()
+			if len(evs) == 0 {
+				return
+			}
+			for _, ev := range evs {
+				walls.HandleEvent(ev)
+				death.HandleEvent(ev)
+			}
+		}
+		t.Fatal("wall destruction did not settle")
+	}
+	settle()
+	for _, cell := range []vmath.Point{{X: 90, Y: 45}, leg, {X: 90, Y: 46}} {
+		if w.Positions.HasBlockingWallAt(cell.X, cell.Y, 0) {
+			t.Fatalf("spawn footprint left wall at %+v", cell)
+		}
+	}
+	spawnWall(w, 125, 45)
+	k, _ := w.Components.Kraken.GetPtr(e)
+	k.State, k.StateRemaining, k.TargetX, k.TargetY = component.KrakenMove, parameter.KrakenMoveDuration, 140.5, 45.5
+	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
+	for range 20 {
+		s.Update()
+		settle()
+	}
+	motion, _ := w.Components.Kinetic.GetComponent(e)
+	if motion.PreciseX < 125 || w.Positions.HasBlockingWallAt(125, 45, 0) || !w.Positions.HasBlockingWallAt(150, 80, 0) {
+		t.Fatal("charge failed to demolish its path or destroyed a wall outside its footprint")
 	}
 }
 
@@ -371,7 +430,7 @@ func TestKrakenLegInterceptsMissilesAndSharesUnstunnableHealth(t *testing.T) {
 	}
 }
 
-func TestKrakenOnlyBodyStopsAtWallsAndMapEdges(t *testing.T) {
+func TestKrakenOnlyBodyStopsAtMapEdges(t *testing.T) {
 	w, s, e, leg := krakenFixture(t)
 	_, member, _ := CombatTargetAt(w, leg.X, leg.Y, engine.ScopeShared, 0, 0)
 	spawnWall(w, leg.X, leg.Y)
@@ -380,14 +439,7 @@ func TestKrakenOnlyBodyStopsAtWallsAndMapEdges(t *testing.T) {
 	if pos, ok := w.Positions.GetPosition(member); !ok || pos.X != leg.X || pos.Y != leg.Y {
 		t.Fatal("wall displaced a Kraken leg")
 	}
-	for y := range 90 {
-		spawnWall(w, 105, y)
-	}
 	motion, _ := w.Components.Kinetic.GetPtr(e)
-	s.moveBody(motion, 140.5, 45.5)
-	if !s.bodyFits(motion.PreciseX, motion.PreciseY) || motion.PreciseX >= 105 {
-		t.Fatal("body crossed a wall")
-	}
 	s.moveBody(motion, -40, -40)
 	if !s.bodyFits(motion.PreciseX, motion.PreciseY) {
 		t.Fatal("body crossed the map edge")
