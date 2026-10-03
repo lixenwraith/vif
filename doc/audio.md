@@ -176,8 +176,11 @@ ends fades the same way before the engine stops. Muted, `MusicSystem` sends only
 what outlasts the mute (patterns, tempo): a start or a note waits for the unmute,
 and an unmute does not restart music the run stopped.
 
-Disabling the audio gameplay system silences new gameplay sound behavior but
-does not detach the service or lose the user's channel choices.
+Disabling `audio` gates both channels; disabling `music` gates music alone.
+Mute keys still update the user's preference, but cannot open a disabled channel.
+Re-enabling restores that preference. The status bar reports effective playback,
+including a stopped sequencer or unavailable backend. Pause and telemetry remain
+connected while disabled, and startup/reset waits for scenario gates to settle.
 
 ## 7. Music sequencer
 

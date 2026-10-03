@@ -72,8 +72,8 @@ A beam is a `vmath.Ray` in a `BeamComponent`: any angle, run to the first wall o
 the map edge, one width up to its knee and another past it. A cursor's beam sits on
 its orb: laid every tick from the cursor through the orb, one cell wide to the orb
 and three past it, so it sweeps as the orb orbits. It strikes every tick, and
-combat's per-attacker immunity rates each target, because a sweep crosses a far
-target in about one tick. More charges beam longer and multiply its area hits'
+combat's per-player, per-weapon immunity rates each target, because a sweep crosses
+a far target in about one tick. More charges beam longer and multiply its area hits'
 damage through `Scale`; its cooldown runs from firing, so they also beam more of it.
 
 A beam mount cycles on its host's `BeamComponent`: at rest until ready, then a
@@ -90,8 +90,11 @@ reads the mount's aim for its muzzle.
 
 Hits on species resolve through the profile matrix in `internal/profile/combat.go`,
 `[attack][attacker][defender]`: damage type and value, knockback, stun, chain.
-Immunity windows are per attacker (D-3). Hits on cursors are `CursorDamage`: energy
-through an active shield, heat without one. Projectiles find the cursor they touch
+Damage allowances are per player and attack family within the target's immunity
+window (D-3); chained effects keep their originating weapon's allowance. Knockback
+stays per player. Species-authored invulnerability still blocks every weapon.
+Hits on cursors are `CursorDamage`: energy through an active shield, heat without
+one. Projectiles find the cursor they touch
 with `CursorContactAt`, shields first.
 
 | Cursor weapon hit | Artifact |

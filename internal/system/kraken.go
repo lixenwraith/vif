@@ -19,6 +19,8 @@ type KrakenSystem struct {
 	rng     vmath.FastRand
 	cells   []vmath.Point
 	seen    map[vmath.Point]bool
+	sweep   cellSweep
+	glyphs  []core.Entity
 }
 
 func NewKrakenSystem(world *engine.World) engine.System {
@@ -86,12 +88,14 @@ func (s *KrakenSystem) spawn(p *event.KrakenSpawnRequestPayload) {
 		OwnerEntity: e, CombatEntityType: component.CombatEntityKraken, HitPoints: parameter.KrakenInitialHP,
 	})
 	s.world.Components.Kraken.SetComponent(e, component.KrakenComponent{
-		StateRemaining: 2 * time.Second, DirX: 1, TurnDir: 1, RotSpeed: parameter.KrakenRotSpeed,
+		DirX: 1,
 	})
 	s.world.Components.Header.SetComponent(e, component.HeaderComponent{
 		Behavior: component.BehaviorKraken, Type: component.CompositeTypeUnit, SkipPositionSync: true,
 	})
 	k, _ := s.world.Components.Kraken.GetPtr(e)
+	s.seed(e)
+	s.wait(k)
 	s.syncMembers(e, k, px, py)
 	s.world.PushEvent(event.EventSpeciesCreated, &event.SpeciesCreatedPayload{
 		Entity: e, Species: component.SpeciesKraken, X: x, Y: y, MemberCount: len(s.cells),
@@ -123,9 +127,10 @@ func (s *KrakenSystem) Update() {
 			continue
 		}
 		k.Time += seconds
+		s.seed(e)
 		k.StateRemaining -= dt
 		if k.StateRemaining <= 0 {
-			s.chooseState(e, k, motion.PreciseX, motion.PreciseY)
+			s.chooseState(k, motion.PreciseX, motion.PreciseY)
 		}
 		s.animate(k, motion, seconds)
 		cell := vmath.PointAtF(motion.PreciseX, motion.PreciseY)
@@ -135,35 +140,67 @@ func (s *KrakenSystem) Update() {
 	}
 }
 
-func (s *KrakenSystem) chooseState(e core.Entity, k *component.KrakenComponent, x, y float64) {
+func (s *KrakenSystem) chooseState(k *component.KrakenComponent, x, y float64) {
+	switch k.State {
+	case component.KrakenIdle:
+		if s.rng.Intn(2) == 0 {
+			k.State, k.StateRemaining = component.KrakenAttack, parameter.KrakenAttackDuration
+			k.AttackLegs = s.rng.Intn(2)
+		} else {
+			k.State, k.StateRemaining = component.KrakenSpin, parameter.KrakenSpinDuration
+			k.TurnDir = float64(s.rng.Intn(2)*2 - 1)
+			s.aimCharge(k, x, y)
+		}
+	case component.KrakenSpin:
+		k.State, k.StateRemaining = component.KrakenMove, parameter.KrakenMoveDuration
+	default:
+		s.wait(k)
+	}
+}
+
+func (s *KrakenSystem) seed(e core.Entity) {
 	// A transition's draw count must not depend on another Kraken's predicted death.
 	seed := vmath.DeriveSeed(s.world.Resources.Rand.DomainRoot(core.DomainShared), s.Name())
 	s.rng.Reseed(vmath.Mix64(seed ^ uint64(e) ^ s.world.Resources.Game.State.GetGameTicks()*0x9E3779B97F4A7C15))
-	r := s.rng.Float64()
-	switch {
-	case r < 0.30:
-		k.State, k.StateRemaining = component.KrakenAttack, parameter.KrakenAttackDuration
-		k.AttackLegs = s.rng.Intn(2)
-	case r < 0.60:
-		k.State, k.StateRemaining = component.KrakenMove, parameter.KrakenMoveDuration
-		cfg := s.world.Resources.Config
-		k.TargetX = float64(cfg.MapWidth) * (0.2 + s.rng.Float64()*0.6)
-		k.TargetY = float64(cfg.MapHeight) * (0.2 + s.rng.Float64()*0.6)
-		dx, dy := k.TargetX-x, k.TargetY-y
-		if dist := math.Hypot(dx, dy); dist > 0.001 {
-			dx, dy = dx/dist, dy/dist
-			k.TurnDir = 1
-			if k.DirX*dy-k.DirY*dx < 0 {
-				k.TurnDir = -1
-			}
-			k.DirX, k.DirY = dx, dy
+}
+
+func (s *KrakenSystem) wait(k *component.KrakenComponent) {
+	k.State = component.KrakenIdle
+	k.StateRemaining = parameter.KrakenWaitMin + time.Duration(s.rng.Float64()*float64(parameter.KrakenWaitMax-parameter.KrakenWaitMin))
+	k.IdleTurnRemaining = 0
+}
+
+func (s *KrakenSystem) aimCharge(k *component.KrakenComponent, x, y float64) {
+	var targets [parameter.MaxPlayers]vmath.Point
+	count := 0
+	for slot := range parameter.MaxPlayers {
+		cursor := s.world.Resources.Player.Slot(uint8(slot))
+		if pos, ok := s.world.Positions.GetPosition(cursor); cursor != 0 && ok {
+			targets[count] = vmath.Point{X: pos.X, Y: pos.Y}
+			count++
 		}
-	case r < 0.75:
-		k.State, k.StateRemaining = component.KrakenSpin, parameter.KrakenSpinDuration
-		k.TurnDir = float64(s.rng.Intn(2)*2 - 1)
-	default:
-		k.State = component.KrakenIdle
-		k.StateRemaining = time.Duration((1 + s.rng.Float64()*2) * float64(time.Second))
+	}
+	k.TargetX, k.TargetY = x, y
+	if count == 0 {
+		return
+	}
+	tx, ty := targets[s.rng.Intn(count)].CenterF()
+	cfg := s.world.Resources.Config
+	rx, ry := parameter.KrakenBodyRadius*2, parameter.KrakenBodyRadius
+	tx = max(rx+0.5, min(tx, float64(cfg.MapWidth)-rx-0.5))
+	ty = max(ry+0.5, min(ty, float64(cfg.MapHeight)-ry-0.5))
+	// Stop the planned charge at the first obstruction; tentacles keep their reach.
+	dx, dy := tx-x, ty-y
+	steps := max(1, int(math.Ceil(max(math.Abs(dx), math.Abs(dy))*2)))
+	for i := 1; i <= steps; i++ {
+		nx, ny := x+dx*float64(i)/float64(steps), y+dy*float64(i)/float64(steps)
+		if !s.bodyFits(nx, ny) {
+			break
+		}
+		k.TargetX, k.TargetY = nx, ny
+	}
+	if dist := math.Hypot(dx, dy); dist > 0 {
+		k.DirX, k.DirY = dx/dist, dy/dist
 	}
 }
 
@@ -172,9 +209,12 @@ func (s *KrakenSystem) animate(k *component.KrakenComponent, motion *component.K
 	rot, moving := parameter.KrakenRotSpeed, 0.0
 	switch k.State {
 	case component.KrakenIdle:
-		cfg := s.world.Resources.Config
-		x += (float64(cfg.MapWidth)/2 - x) * 0.2 * dt
-		y += (float64(cfg.MapHeight)/2 - y) * 0.2 * dt
+		k.IdleTurnRemaining -= time.Duration(dt * float64(time.Second))
+		if k.IdleTurnRemaining <= 0 {
+			k.TurnDir = float64(s.rng.Intn(3) - 1)
+			k.IdleTurnRemaining = parameter.KrakenIdleTurnMin + time.Duration(s.rng.Float64()*float64(parameter.KrakenIdleTurnMax-parameter.KrakenIdleTurnMin))
+		}
+		rot = k.TurnDir * parameter.KrakenIdleRotSpeed
 	case component.KrakenAttack:
 		rot = 0
 	case component.KrakenMove:
@@ -182,8 +222,9 @@ func (s *KrakenSystem) animate(k *component.KrakenComponent, motion *component.K
 		dx, dy := k.TargetX-x, k.TargetY-y
 		if dist := math.Hypot(dx, dy*2); dist > parameter.KrakenMoveSpeed*dt {
 			x += dx / dist * parameter.KrakenMoveSpeed * dt
-			y += dy / dist * parameter.KrakenMoveSpeed / 2 * dt
+			y += dy / dist * parameter.KrakenMoveSpeed * dt
 		} else {
+			x, y = k.TargetX, k.TargetY
 			k.StateRemaining = 0
 		}
 	case component.KrakenSpin:
@@ -275,6 +316,29 @@ func (s *KrakenSystem) addDisc(x, y, radius float64) {
 }
 
 func (s *KrakenSystem) interact(e core.Entity) {
+	s.sweep.reset()
+	s.glyphs = s.glyphs[:0]
+	for _, cell := range s.cells {
+		s.sweep.collect(s.world, cell.X, cell.Y, func(target core.Entity) bool {
+			if !speciesClearable(s.world, target, nil, nil) {
+				return false
+			}
+			if s.world.Components.Nugget.HasEntity(target) {
+				s.world.PushLocal(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: target})
+				return true
+			}
+			if s.world.Components.Glyph.HasEntity(target) {
+				if target.Domain() == core.DomainPlayer {
+					s.glyphs = append(s.glyphs, target)
+					return false
+				}
+				return true // Shared glyphs are gold members, regardless of character.
+			}
+			return false
+		})
+	}
+	s.sweep.emit(s.world, event.EventFlashSpawnOneRequest)
+	event.EmitParticleDeath(s.world.Resources.Event.Queue, component.ParticleDecay, s.glyphs...)
 	overlaps := CheckCursorOverlaps(s.world, e)
 	for i := range overlaps.Count {
 		o := &overlaps.Entries[i]

@@ -18,17 +18,16 @@ type AudioSystem struct {
 	world  *engine.World
 	player *audio.AudioEngine
 
-	mask    uint8 // parameter.AudioChan* bits; set = audible
-	enabled bool
+	mask         uint8 // Player preference, retained while scenario channels are disabled.
+	enabled      bool
+	musicEnabled bool
+	initialized  bool
 
 	// Cached registry pointers + telemetry
 	statBackend *status.AtomicString
 	statSilent  *atomic.Bool
 	statPlayed  *atomic.Int64
 	statDropped *atomic.Int64
-	statMask    *atomic.Int64 // -1 = audio unavailable
-	statSfxMute *atomic.Bool  // derived from mask; debug-overlay readability
-	statMusMute *atomic.Bool
 	statReject  [audio.RejectCount]*atomic.Int64
 	basePlayed  uint64
 	baseDropped uint64
@@ -48,9 +47,9 @@ func NewAudioSystem(world *engine.World) engine.System {
 	s.statSilent = reg.Bools.Get("audio.silent")
 	s.statPlayed = reg.Ints.Get("audio.played")
 	s.statDropped = reg.Ints.Get("audio.dropped")
-	s.statMask = reg.Ints.Get("audio.mask")
-	s.statSfxMute = reg.Bools.Get("audio.effect_muted")
-	s.statMusMute = reg.Bools.Get("audio.music_muted")
+	reg.Ints.Get("audio.mask")
+	reg.Bools.Get("audio.effect_muted")
+	reg.Bools.Get("audio.music_muted")
 	for i, n := range audio.RejectNames() {
 		s.statReject[i] = reg.Ints.Get("audio.rej_" + n)
 	}
@@ -59,10 +58,10 @@ func NewAudioSystem(world *engine.World) engine.System {
 	return s
 }
 
-// Init re-seeds from the engine rather than forcing a default, so :new
-// preserves the player's mute choice.
+// Reset preserves the player's preference even when scenario gates muted the engine.
 func (s *AudioSystem) Init() {
 	s.enabled = true
+	s.musicEnabled = true
 	s.statBackend.Store("-")
 	s.statSilent.Store(true)
 	s.statPlayed.Store(0)
@@ -71,24 +70,24 @@ func (s *AudioSystem) Init() {
 		stat.Store(0)
 	}
 	if s.player == nil {
-		s.statMask.Store(-1) // audio unavailable; renderers skip the indicator
-		s.statSfxMute.Store(false)
-		s.statMusMute.Store(false)
+		publishAudioMask(s.world, nil)
 		return
 	}
 	s.basePlayed, s.baseDropped = s.player.Stats()
 	s.baseReject = s.player.Rejections()
-	s.mask = parameter.AudioChanNone
-	if !s.player.IsEffectMuted() {
-		s.mask |= parameter.AudioChanEffects
+	if !s.initialized {
+		if !s.player.IsEffectMuted() {
+			s.mask |= parameter.AudioChanEffects
+		}
+		if !s.player.IsMusicMuted() {
+			s.mask |= parameter.AudioChanMusic
+		}
+		s.initialized = true
 	}
-	if !s.player.IsMusicMuted() {
-		s.mask |= parameter.AudioChanMusic
-	}
-	// Force-apply rather than seed: SetEffectMuted is idempotent, and this is
-	// the only thing preventing a mask/engine divergence from latching.
+	// Initial playback waits for MusicSystem's update after scenario gates settle.
 	s.player.SetEffectMuted(s.mask&parameter.AudioChanEffects == 0)
-	s.publishMask()
+	s.player.SetMusicMuted(s.mask&parameter.AudioChanMusic == 0)
+	publishAudioMask(s.world, s.player)
 }
 
 // Name returns system's name
@@ -120,8 +119,16 @@ func (s *AudioSystem) HandleEvent(ev event.GameEvent) {
 		return
 
 	case event.EventMetaSystemCommandRequest:
-		if p, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok && p.SystemName == s.Name() {
-			s.enabled = p.Enabled
+		if p, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			switch p.SystemName {
+			case s.Name():
+				s.enabled = p.Enabled
+			case "music":
+				s.musicEnabled = p.Enabled
+			default:
+				return
+			}
+			s.applyMask(s.mask)
 		}
 		return
 	}
@@ -130,9 +137,7 @@ func (s *AudioSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	// Device state, not gameplay: pause and mute apply regardless of enabled.
-	// ":system audio disable" silences gameplay sound; it must not detach the
-	// mixer from pause or leave the mask lying to the status bar.
+	// Pause and preferences remain responsive while scenario gates silence playback.
 	switch ev.Type {
 	case event.EventGamePauseChanged:
 		if p, ok := ev.Payload.(*event.GamePausePayload); ok {
@@ -165,31 +170,51 @@ func (s *AudioSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// applyMask applies the effects channel and announces the composed result.
-// The music bit is applied by MusicSystem so sequencer start/stop stays in one
-// place; this system never calls StartMusic/StopMusic. The effects store is
-// idempotent, so it runs unconditionally rather than branching per bit.
+// Apply the preference through scenario gates; MusicSystem owns sequencer control.
 func (s *AudioSystem) applyMask(m uint8) {
-	if m == s.mask {
+	s.mask = m
+	if s.player == nil {
 		return
 	}
-	s.mask = m
+	if !s.enabled {
+		m = parameter.AudioChanNone
+	}
+	if !s.musicEnabled {
+		m &^= parameter.AudioChanMusic
+	}
 	s.player.SetEffectMuted(m&parameter.AudioChanEffects == 0)
-	s.publishMask()
+	// Close the music bus immediately; MusicSystem owns sequencer start and resume.
+	if m&parameter.AudioChanMusic == 0 {
+		s.player.SetMusicMuted(true)
+	}
+	publishAudioMask(s.world, s.player)
 	s.world.PushEvent(event.EventAudioMuteChanged, &event.AudioMuteChangedPayload{Mask: m})
 }
 
-// publishMask writes on state change, not per tick: mute changes while paused,
-// when Update does not run.
-func (s *AudioSystem) publishMask() {
-	s.statMask.Store(int64(s.mask))
-	s.statSfxMute.Store(s.mask&parameter.AudioChanEffects == 0)
-	s.statMusMute.Store(s.mask&parameter.AudioChanMusic == 0)
+// Both controllers publish after device changes, including while gameplay is paused.
+func publishAudioMask(world *engine.World, player *audio.AudioEngine) {
+	m := parameter.AudioChanNone
+	if player != nil && player.IsEnabled() {
+		if !player.IsEffectMuted() {
+			m |= parameter.AudioChanEffects
+		}
+		if !player.IsMusicMuted() && player.IsMusicPlaying() {
+			m |= parameter.AudioChanMusic
+		}
+	}
+	reg := world.Resources.Status
+	mask := int64(m)
+	if player == nil {
+		mask = -1
+	}
+	reg.Ints.Get("audio.mask").Store(mask)
+	reg.Bools.Get("audio.effect_muted").Store(m&parameter.AudioChanEffects == 0)
+	reg.Bools.Get("audio.music_muted").Store(m&parameter.AudioChanMusic == 0)
 }
 
-// Update publishes engine telemetry; mask state is event-driven
+// Mixer commands settle asynchronously, so refresh the audible mask with telemetry.
 func (s *AudioSystem) Update() {
-	// Dropped disabled early return to report telemetry
+	publishAudioMask(s.world, s.player)
 	if s.player == nil {
 		return
 	}

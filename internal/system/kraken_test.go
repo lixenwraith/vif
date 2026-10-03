@@ -3,6 +3,7 @@ package system
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -36,6 +37,193 @@ func krakenFixture(t *testing.T) (*engine.World, *KrakenSystem, core.Entity, vma
 	}
 	w.Resources.Event.Queue.Consume()
 	return w, s, e, leg
+}
+
+func TestKrakenWaitsThenAttacksOrSpinsBeforeAimedCharge(t *testing.T) {
+	w, s, e, _ := krakenFixture(t)
+	k, _ := w.Components.Kraken.GetPtr(e)
+	motion, _ := w.Components.Kinetic.GetPtr(e)
+	first, second := w.Resources.Player.Slot(0), w.Resources.Player.Slot(1)
+	w.Positions.SetPosition(first, component.PositionComponent{X: 0, Y: 0})
+	w.Positions.SetPosition(second, component.PositionComponent{X: 179, Y: 89})
+	attacks, charges, targets := 0, 0, map[vmath.Point]bool{}
+	for i := range 64 {
+		s.rng.Reseed(uint64(i + 1))
+		s.wait(k)
+		if k.StateRemaining < parameter.KrakenWaitMin || k.StateRemaining > parameter.KrakenWaitMax {
+			t.Fatalf("idle duration %v outside wait bounds", k.StateRemaining)
+		}
+		s.animate(k, motion, 0.05)
+		if motion.PreciseX != 90.5 || motion.PreciseY != 45.5 {
+			t.Fatal("idle moved the body")
+		}
+		s.chooseState(k, motion.PreciseX, motion.PreciseY)
+		switch k.State {
+		case component.KrakenAttack:
+			attacks++
+		case component.KrakenSpin:
+			charges++
+			if k.StateRemaining != 2*time.Second || !s.bodyFits(k.TargetX, k.TargetY) {
+				t.Fatalf("invalid spin or padded target: %+v", k)
+			}
+			targets[vmath.PointAtF(k.TargetX, k.TargetY)] = true
+			x, y := k.TargetX, k.TargetY
+			s.chooseState(k, motion.PreciseX, motion.PreciseY)
+			if k.State != component.KrakenMove || k.TargetX != x || k.TargetY != y {
+				t.Fatal("spin did not charge at its locked target")
+			}
+		default:
+			t.Fatalf("idle entered state %v", k.State)
+		}
+		s.chooseState(k, motion.PreciseX, motion.PreciseY)
+		if k.State != component.KrakenIdle {
+			t.Fatal("action did not return to the common wait")
+		}
+	}
+	if attacks == 0 || charges == 0 || len(targets) != 2 {
+		t.Fatalf("attacks=%d charges=%d cursor targets=%v", attacks, charges, targets)
+	}
+	for y := range 90 {
+		spawnWall(w, 105, y)
+	}
+	w.Positions.RemoveEntity(first)
+	s.aimCharge(k, 90.5, 45.5)
+	if k.TargetX >= 105 || !s.bodyFits(k.TargetX, k.TargetY) {
+		t.Fatalf("charge target crosses a wall: (%f,%f)", k.TargetX, k.TargetY)
+	}
+}
+
+func TestKrakenConvertsGlyphsAndDestroysWholeGoldAndNuggets(t *testing.T) {
+	w, s, e, leg := krakenFixture(t)
+	gold := NewGoldSystem(w).(*GoldSystem)
+	nuggets := NewNuggetSystem(w).(*NuggetSystem)
+	death := NewDeathSystem(w).(*DeathSystem)
+	composite := NewCompositeSystem(w).(*CompositeSystem)
+	header := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(header, component.PositionComponent{X: leg.X, Y: leg.Y})
+	var members []component.MemberEntry
+	for i, ch := range "AZ" {
+		member := w.CreateEntity(core.DomainShared)
+		w.Components.Glyph.SetComponent(member, component.GlyphComponent{Rune: ch, Type: component.GlyphGold})
+		w.Components.Member.SetComponent(member, component.MemberComponent{HeaderEntity: header})
+		w.Positions.SetPosition(member, component.PositionComponent{X: leg.X + i*20, Y: leg.Y})
+		members = append(members, component.MemberEntry{Entity: member, OffsetX: i * 20})
+	}
+	w.Components.Header.SetComponent(header, component.HeaderComponent{Type: component.CompositeTypeContainer, Behavior: component.BehaviorGold, MemberEntries: members})
+	gold.headerEntity, gold.active = header, true
+	nugget := w.CreateEntity(core.DomainPlayer)
+	w.Components.Nugget.SetComponent(nugget, component.NuggetComponent{})
+	w.Positions.SetPosition(nugget, component.PositionComponent{X: leg.X, Y: leg.Y})
+	nuggets.activeNuggetEntity = nugget
+	for _, typ := range []component.GlyphType{component.GlyphGreen, component.GlyphRed, component.GlyphBlue, component.GlyphWhite} {
+		glyph := w.CreateEntity(core.DomainPlayer)
+		w.Components.Glyph.SetComponent(glyph, component.GlyphComponent{Rune: 'a' + rune(typ), Type: typ})
+		w.Positions.SetPosition(glyph, component.PositionComponent{X: leg.X, Y: leg.Y})
+	}
+	s.interact(e)
+	decays, goldDeaths := 0, 0
+	for range 12 {
+		evs := w.Resources.Event.Queue.Consume()
+		if len(evs) == 0 {
+			break
+		}
+		for _, ev := range evs {
+			if ev.Type == event.EventParticleSpawnBatch {
+				p := ev.Payload.(*event.BatchPayload[event.ParticleSpawnEntry])
+				for _, entry := range p.Entries {
+					if entry.Behavior != component.ParticleDecay || !entry.SkipStartCell {
+						t.Fatalf("glyph did not become decay: %+v", entry)
+					}
+					decays++
+				}
+			}
+			if ev.Type == event.EventGoldDestroyed {
+				goldDeaths++
+			}
+			gold.HandleEvent(ev)
+			nuggets.HandleEvent(ev)
+			composite.HandleEvent(ev)
+			death.HandleEvent(ev)
+		}
+		composite.Update()
+	}
+	if decays != 4 || goldDeaths != 1 || w.Components.Glyph.CountEntities() != 0 || w.Components.Nugget.HasEntity(nugget) || nuggets.activeNuggetEntity != 0 {
+		t.Fatalf("decays=%d gold deaths=%d glyphs=%d nugget=%d", decays, goldDeaths, w.Components.Glyph.CountEntities(), nuggets.activeNuggetEntity)
+	}
+}
+
+func TestKrakenCleanerAndGlyphExplosionsSpendSeparatePlayerWeaponBudgets(t *testing.T) {
+	w, _, kraken, leg := krakenFixture(t)
+	cleaner := NewCleanerSystem(w).(*CleanerSystem)
+	combat := NewCombatSystem(w).(*CombatSystem)
+	explosion := NewExplosionSystem(w).(*ExplosionSystem)
+	dust := NewDustSystem(w).(*DustSystem)
+	heat := NewHeatSystem(w).(*HeatSystem)
+	settle := func() {
+		for range 10 {
+			evs := w.Resources.Event.Queue.Consume()
+			if len(evs) == 0 {
+				break
+			}
+			for _, ev := range evs {
+				explosion.HandleEvent(ev)
+				combat.HandleEvent(ev)
+				heat.HandleEvent(ev)
+			}
+		}
+	}
+	hp, _ := w.Components.Combat.GetPtr(kraken)
+	before := hp.HitPoints
+	for slot := range 2 {
+		cursor := w.Resources.Player.Slot(uint8(slot))
+		w.Components.Energy.SetComponent(cursor, component.EnergyComponent{Current: 50})
+		heat.setHeat(cursor, 10)
+		cleaner.checkCollisions(leg.X, leg.Y, 0, cursor, 1, 0, component.CleanerColorPositive)
+		settle()
+		if hp.HitPoints != before-parameter.CombatDamageCleaner {
+			t.Fatalf("player %d cleaner damage=%d, want %d", slot, before-hp.HitPoints, parameter.CombatDamageCleaner)
+		}
+		before = hp.HitPoints
+		combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
+			OwnerEntity: cursor, OriginEntity: cursor, TargetEntity: kraken, HitEntity: kraken, AttackType: component.CombatAttackLightning,
+		})
+		if hp.HitPoints != before-parameter.CombatDamageRod {
+			t.Fatal("cleaner follow-up consumed the rod's damage allowance")
+		}
+		before = hp.HitPoints
+		glyph := w.CreateEntity(core.DomainPlayer)
+		w.Components.Glyph.SetComponent(glyph, component.GlyphComponent{Rune: 'x', Type: component.GlyphGreen})
+		w.Positions.SetPosition(glyph, component.PositionComponent{X: leg.X - 2, Y: leg.Y})
+		dust.HandleEvent(event.GameEvent{Type: event.EventFireSpecialRequest, Payload: &event.FireSpecialRequestPayload{Entity: cursor}})
+		settle()
+		if hp.HitPoints >= before || w.Components.Glyph.HasEntity(glyph) {
+			t.Fatalf("player %d glyph explosion lost its damage allowance", slot)
+		}
+		before = hp.HitPoints
+		cleaner.checkCollisions(leg.X, leg.Y, 0, cursor, 1, 0, component.CleanerColorPositive)
+		explosion.HandleEvent(event.GameEvent{Type: event.EventExplosionRequest, Payload: &event.ExplosionRequestPayload{
+			Entity: cursor, X: leg.X, Y: leg.Y, Radius: 4, Attack: component.CombatAttackExplosion,
+		}})
+		settle()
+		if hp.HitPoints != before {
+			t.Fatal("repeat cleaner or explosion bypassed its own allowance")
+		}
+	}
+	hp.SealDamageImmunity(parameter.CombatDamageImmunityDuration)
+	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
+		OwnerEntity: w.Resources.Player.Slot(0), TargetEntity: kraken, HitEntity: kraken, AttackType: component.CombatAttackBullet,
+	})
+	if hp.HitPoints != before {
+		t.Fatal("weapon separation bypassed species-authored invulnerability")
+	}
+	w.Resources.Time.DeltaTime = parameter.CombatDamageImmunityDuration
+	combat.Update()
+	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
+		OwnerEntity: w.Resources.Player.Slot(0), TargetEntity: kraken, HitEntity: kraken, AttackType: component.CombatAttackBullet,
+	})
+	if hp.HitPoints != before-parameter.CombatDamageBullet {
+		t.Fatal("weapon allowance did not reopen after immunity expired")
+	}
 }
 
 func TestKrakenLegInterceptsMissilesAndSharesUnstunnableHealth(t *testing.T) {

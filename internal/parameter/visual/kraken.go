@@ -2,6 +2,8 @@ package visual
 
 import "github.com/lixenwraith/color"
 
+const KrakenHealthBarWidth = 9
+
 var (
 	RgbKrakenVoid    = color.RGB{R: 12, G: 12, B: 18}
 	RgbKrakenLegBase = color.RGB{R: 35, G: 10, B: 50}
