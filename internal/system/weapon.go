@@ -280,22 +280,8 @@ func (s *WeaponSystem) triggerOrbFlash(orbEntity core.Entity) {
 	orbComp.FlashRemaining = parameter.OrbFlashDuration
 }
 
-// reapOrbs rebuilds the per-slot index from the Orb store and drops every orb the
-// store no longer justifies.
-//
-// The store is the index: each orb names its owner and its weapon type, so the
-// pass that reads it is also the pass that can see what it should not hold — an
-// orb whose owner is no longer a cursor this instance simulates, one whose weapon
-// is no longer charged, and any second orb for an (owner, weapon) pair that
-// already has one. Which duplicate survives is the older entity rather than
-// whichever the dense store happened to hold first, so two readings of one store
-// agree.
-//
-// This is what a lost reference used to cost. The index lived on the cursor's
-// shared view component, a correction overwrote it with the sender's zeroes, and
-// ensureOrbs read a zero and spawned a replacement: the entity the zero had named
-// stayed in the store, protected from particle effects, no longer followed by
-// updateOrbs and still drawn, once per correction for the life of the run.
+// Rebuild from live ownership so corrections cannot strand duplicate orbs.
+// Keep the oldest entity for each cursor/weapon pair, independent of store order.
 func (s *WeaponSystem) reapOrbs() {
 	s.orbs = [parameter.MaxPlayers]orbSlots{}
 	s.reapBuf = s.reapBuf[:0]
@@ -515,6 +501,21 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 
 	// Hysteresis threshold to prevent jitter (~11 degrees)
 	const angleThreshold = vmath.TwoPi / 32
+	redistribute := false
+	for i, entry := range entries {
+		orb, _ := s.world.Components.Orb.GetPtr(entry.entity)
+		if orb.TargetAngle < 0 || vmath.AbsF(vmath.AngleDiffF(orb.TargetAngle, targetAngles[i])) > angleThreshold {
+			redistribute = true
+			break
+		}
+	}
+	freeOrbit := fullCircle && !redistribute
+	for _, entry := range entries {
+		orb, _ := s.world.Components.Orb.GetPtr(entry.entity)
+		freeOrbit = freeOrbit && orb.RedistributeRemaining <= 0
+	}
+	phase := firstOrb.OrbitAngle + firstOrb.OrbitSpeed*dt.Seconds()
+	spacing := vmath.TwoPi / float64(len(entries))
 
 	// Update each orb
 	for i := range entries {
@@ -525,18 +526,17 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 		}
 		targetAngle := targetAngles[i]
 
-		// Check if redistribution needed (with hysteresis)
-		angleDiff := vmath.AbsF(vmath.AngleDiffF(orb.TargetAngle, targetAngle))
-		if angleDiff > angleThreshold || orb.TargetAngle < 0 { // TargetAngle -1 is sentinel, never a returned value
+		// All orbs must finish together before free rotation preserves their spacing.
+		if redistribute {
 			orb.StartAngle = orb.OrbitAngle
 			orb.TargetAngle = targetAngle
 			orb.RedistributeRemaining = parameter.OrbRedistributeDuration
 		}
 
 		// Handle movement based on arc availability
-		if fullCircle && orb.RedistributeRemaining <= 0 {
-			// Free orbit - advance angle
-			orb.OrbitAngle = vmath.NormalizeAngleF(orb.OrbitAngle + orb.OrbitSpeed*dt.Seconds())
+		if freeOrbit {
+			// A common phase also repairs offsets left by blocked-path recovery.
+			orb.OrbitAngle = vmath.NormalizeAngleF(phase + float64(i)*spacing)
 		} else if orb.RedistributeRemaining > 0 {
 			// Animating to new position
 			orb.RedistributeRemaining -= dt

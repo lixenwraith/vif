@@ -20,6 +20,11 @@ const (
 	KrakenAttackDuration = 1500 * time.Millisecond
 	KrakenMoveDuration   = 3 * time.Second
 	KrakenSpinDuration   = 2 * time.Second
+	KrakenWaitMin        = 2 * time.Second
+	KrakenWaitMax        = 5 * time.Second
+	KrakenIdleTurnMin    = 600 * time.Millisecond
+	KrakenIdleTurnMax    = 1400 * time.Millisecond
+	KrakenIdleRotSpeed   = 0.15
 	KrakenInitialHP      = 10000
 	KrakenShieldDrain    = 10 * QuasarShieldDrain
 	KrakenDamageHeat     = 10 * QuasarDamageHeat

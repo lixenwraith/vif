@@ -1,12 +1,17 @@
 package system
 
 import (
+	"math"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // armWeapon grants one charge of one weapon to one cursor and settles the grant.
@@ -15,6 +20,64 @@ func armWeapon(w *engine.World, weapon *WeaponSystem, cursor core.Entity, wt com
 		Type:    event.EventWeaponAddRequest,
 		Payload: &event.WeaponAddRequestPayload{Entity: cursor, Weapon: wt},
 	})
+}
+
+func TestFiveOrbsSpaceEvenlyAtEveryEdgeAndResumeTogether(t *testing.T) {
+	for _, edge := range []vmath.Point{{79, 20}, {0, 20}, {40, 0}, {40, 39}, {79, 0}} {
+		w, cursor, _ := testCursorWorld(t)
+		w.SetupLevel(80, 40, false, false)
+		w.Resources.Time.DeltaTime = 50 * time.Millisecond
+		s := NewWeaponSystem(w).(*WeaponSystem)
+		var orbs orbSlots
+		for weapon := range component.WeaponCount {
+			orbs[weapon] = s.spawnOrbEntity(cursor, component.WeaponType(weapon))
+		}
+		for _, point := range []vmath.Point{edge, {40, 20}} {
+			w.Positions.SetPosition(cursor, component.PositionComponent{X: point.X, Y: point.Y})
+			for range 40 {
+				s.updateOrbs(cursor, 0, orbs)
+			}
+			if point != edge {
+				orb, _ := w.Components.Orb.GetPtr(orbs[component.WeaponBeam])
+				orb.OrbitAngle += 0.1 // A small recovery offset must not persist in open space.
+				s.updateOrbs(cursor, 0, orbs)
+			}
+			var angles []float64
+			for _, e := range orbs {
+				orb, _ := w.Components.Orb.GetPtr(e)
+				pos, _ := w.Positions.GetPosition(e)
+				if !w.Positions.IsPointValidForOrbit(pos.X, pos.Y, component.WallBlockKinetic) {
+					t.Fatalf("edge %v: orb at blocked cell %+v", edge, pos)
+				}
+				angles = append(angles, orb.OrbitAngle)
+			}
+			if point == edge {
+				samples := vmath.SampleEllipseGridF(point.X, point.Y, parameter.OrbOrbitRadiusX, parameter.OrbOrbitRadiusY, vmath.EllipseSampleCount)
+				blocked := make([]bool, len(samples))
+				for i, p := range samples {
+					blocked[i] = !w.Positions.IsPointValidForOrbit(p[0], p[1], component.WallBlockKinetic)
+				}
+				arc := vmath.FindUnblockedArcsF(blocked)[0]
+				for i := range angles {
+					angles[i] = vmath.NormalizeAngleF(angles[i] - arc.StartAngle)
+				}
+				slices.Sort(angles)
+				for i := 1; i < len(angles); i++ {
+					if math.Abs(angles[i]-angles[i-1]-arc.Length/float64(len(angles))) > 1e-8 {
+						t.Fatalf("edge %v: uneven angles %v", edge, angles)
+					}
+				}
+			} else {
+				slices.Sort(angles)
+				for i := range angles {
+					gap := vmath.NormalizeAngleF(angles[(i+1)%len(angles)] - angles[i])
+					if math.Abs(gap-vmath.TwoPi/float64(len(angles))) > 1e-8 {
+						t.Fatalf("after edge %v: uneven free orbit %v", edge, angles)
+					}
+				}
+			}
+		}
+	}
 }
 
 // orbsOwnedBy counts one cursor's orbs per weapon type straight from the store.
@@ -42,14 +105,7 @@ func settleDeaths(w *engine.World, deaths *DeathSystem) {
 	}
 }
 
-// TestOrbsAreRecoveredFromTheStoreRatherThanDuplicated is the orb index's whole
-// claim: the Orb store is the index, so an orb is found rather than replaced, and
-// anything the store holds that no loadout justifies leaves.
-//
-// The three injections are the three ways the old cached index could be wrong and
-// could not say so: a second orb for a pair that already has one (what a lost
-// reference produced, once per correction), an orb whose owner is not a cursor this
-// instance simulates (D-2), and an orb for a weapon whose charges are gone.
+// Corrections must recover existing orbs and retire duplicates or invalid owners.
 func TestOrbsAreRecoveredFromTheStoreRatherThanDuplicated(t *testing.T) {
 	w, cursor, other := testCursorWorld(t)
 	weapon := NewWeaponSystem(w).(*WeaponSystem)
