@@ -1,6 +1,8 @@
 package renderer
 
 import (
+	"cmp"
+	"slices"
 	"testing"
 
 	"github.com/lixenwraith/terminal"
@@ -12,19 +14,29 @@ import (
 	"github.com/lixenwraith/vif/internal/render"
 )
 
-func TestKrakenHealthBarStaysCenteredAndScalesInBothColorModes(t *testing.T) {
+func TestKrakenHealthBarStaysVisibleCenteredAndScalesInBothColorModes(t *testing.T) {
 	for _, mode := range []terminal.ColorMode{terminal.ColorModeTrueColor, terminal.ColorMode256} {
 		w := engine.NewWorld()
 		game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 		w.Resources.Config.ColorMode = mode
 		e := w.CreateEntity(core.DomainShared)
 		w.Positions.SetPosition(e, component.PositionComponent{X: 20, Y: 12})
-		r := NewHealthBarRenderer(game)
+		w.Components.Kraken.SetComponent(e, component.KrakenComponent{})
+		motion := component.KineticComponent{}
+		motion.PreciseX, motion.PreciseY = 20.5, 12.5
+		w.Components.Kinetic.SetComponent(e, motion)
+		layers := []render.Registration{
+			{Renderer: NewHealthBarRenderer(game), Priority: render.PriorityHealthBar},
+			{Renderer: NewKrakenRenderer(game), Priority: render.PriorityKraken},
+		}
+		slices.SortFunc(layers, func(a, b render.Registration) int { return cmp.Compare(a.Priority, b.Priority) })
 		ctx := render.RenderContext{MapWidth: 40, MapHeight: 24, ViewportWidth: 40, ViewportHeight: 24}
 		for _, hp := range []int{parameter.KrakenInitialHP, parameter.KrakenInitialHP / 2, 1} {
 			w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntityKraken, HitPoints: hp})
 			buf := render.NewRenderBuffer(mode, 40, 24)
-			r.Render(ctx, buf)
+			for _, layer := range layers {
+				layer.Renderer.Render(ctx, buf)
+			}
 			want := (hp*visual.KrakenHealthBarWidth + parameter.KrakenInitialHP - 1) / parameter.KrakenInitialHP
 			count := 0
 			for y := range 24 {
