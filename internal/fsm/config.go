@@ -3,9 +3,10 @@ package fsm
 // ScenarioDoc is a scenario's top-level document: global toggles, the regions it
 // declares, and every state they resolve against
 type ScenarioDoc struct {
-	Systems *SystemsConfig          `toml:"systems,omitempty"` // Global system toggles
-	Regions map[string]RegionConfig `toml:"regions"`           // Multi-region
-	States  map[string]*StateConfig `toml:"states"`
+	Description string                  `toml:"description,omitempty"`
+	Systems     *SystemsConfig          `toml:"systems,omitempty"` // Global system toggles
+	Regions     map[string]RegionConfig `toml:"regions"`           // Multi-region
+	States      map[string]*StateConfig `toml:"states"`
 }
 
 // SystemsConfig defines global system enable/disable

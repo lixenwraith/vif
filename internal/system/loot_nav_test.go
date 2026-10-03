@@ -10,6 +10,26 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
+func TestLootSurvivesAnEncounterClearAndMapShrinkUntilReset(t *testing.T) {
+	w, owner, _ := testCursorWorld(t)
+	loot := NewLootSystem(w).(*LootSystem)
+	drop := dropLoot(w, loot, 35, 20, owner)
+	w.SetupLevel(20, 12, true, false, true)
+	loot.Update()
+	pos, ok := w.Positions.GetPosition(drop)
+	if !ok || !w.Components.Loot.HasEntity(drop) || w.Positions.IsOutOfBounds(pos.X, pos.Y) {
+		t.Fatal("encounter cleanup lost its uncollected loot")
+	}
+	if flight := flyLoot(t, w, drop, owner, 300); flight.ticks < 0 {
+		t.Fatal("preserved loot could not reach its owner after the resize")
+	}
+	drop = dropLoot(w, loot, 15, 10, owner)
+	w.SetupLevel(20, 12, true, false, false)
+	if w.Components.Loot.HasEntity(drop) {
+		t.Fatal("a game reset preserved the previous run's loot")
+	}
+}
+
 // spawnWall drops one blocking cell into a test world.
 func spawnWall(w *engine.World, x, y int) {
 	e := w.CreateEntity(core.DomainShared)
@@ -201,7 +221,7 @@ func TestLootSettlesInsteadOfOrbitingItsOwner(t *testing.T) {
 }
 
 // TestLootReachesItsOwnerAcrossAMaze is the tower region's own geometry: the maze
-// that wad/scenario/main/tower.toml builds, with drops scattered across it.
+// that internal/asset/scenario/tower.toml builds, with drops scattered across it.
 func TestLootReachesItsOwnerAcrossAMaze(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 120, 40, engine.NewManualClock())

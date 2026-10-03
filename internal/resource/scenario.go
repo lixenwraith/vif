@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/fsm"
 )
@@ -40,16 +41,10 @@ const (
 	scenarioFormat = uint16(1)
 )
 
-// Scenario is one playable scenario as a portable artifact: the entry file, the
-// region files it includes, and the digest of the canonical form.
-//
-// Name and digest answer different questions. The name is what a person and a
-// config root call it; the digest is whether two participants hold the same
-// bytes, which is the only thing a session can be refused on — two roots may
-// install the same scenario under different paths, and the same name may cover
-// an edit.
+// A scenario carries its files and content digest independently of its display name.
 type Scenario struct {
-	Name string
+	Name        string
+	Description string
 
 	entry  string
 	files  []scenarioFile
@@ -145,16 +140,7 @@ func (s Scenario) Marshal() []byte {
 	return out
 }
 
-// MarshalCompressed is the canonical form deflated, which is what a transfer
-// carries. The whole container is one stream rather than one per file, because the
-// files are near-identical TOML and a shared window is most of the saving.
-//
-// That is safe to do because the container is length-prefixed, not delimited: a
-// reader takes exactly the bytes each file declares and never scans for a
-// terminator, so a file that is truncated, malformed or deliberately unterminated
-// cannot run into the next one. Compression changes the bytes on the wire and
-// nothing about the framing, and the digest stays over what Marshal produced, so
-// what a receiver verifies is what a sender hashed.
+// Transfers deflate the length-prefixed canonical form; the digest stays over its bytes.
 func (s Scenario) MarshalCompressed() ([]byte, error) {
 	var out bytes.Buffer
 	w, err := flate.NewWriter(&out, flate.BestCompression)
@@ -258,6 +244,18 @@ func (s *Scenario) validate() error {
 	}
 	if !slices.ContainsFunc(s.files, func(f scenarioFile) bool { return f.name == s.entry }) {
 		return fmt.Errorf("entry %q is not one of the files", s.entry)
+	}
+	data, _ := fs.ReadFile(s.FS(), s.entry)
+	doc, err := toml.NewParser(data).Parse()
+	if err != nil {
+		return fmt.Errorf("entry %q: %w", s.entry, err)
+	}
+	if description, exists := doc["description"]; exists {
+		var ok bool
+		s.Description, ok = description.(string)
+		if !ok {
+			return errors.New("description must be a string")
+		}
 	}
 	return nil
 }

@@ -91,6 +91,9 @@ func ScenarioPath(o Options) (string, error) {
 		if p := newResolver(o).scenario(o.Scenario); p != "" {
 			return p, nil
 		}
+		if o.Scenario == paths.MainScenarioName {
+			return "", nil
+		}
 		return "", fmt.Errorf("scenario %q not found as a path or in any configuration root", o.Scenario)
 	}
 

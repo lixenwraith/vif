@@ -39,7 +39,10 @@ The scenario entry is resolved in this order:
 3. the same under the user config root, normally `$XDG_CONFIG_HOME/vif`
    or `~/.config/vif`;
 4. the same under each `$XDG_CONFIG_DIRS` system root;
-5. the embedded default.
+5. the embedded main campaign in `internal/asset/scenario/`.
+
+`-s main` also falls back to that campaign when no root holds an override; there
+is no duplicate main scenario under `wad/`.
 
 All external resources share this root hierarchy; see
 [External filesystem layout](filesystem-layout.md) for the categorized tree and
@@ -82,6 +85,8 @@ prints generated JSON describing known events, actions, guards, and payloads.
 ## 3. Root schema
 
 ```toml
+description = "A short description for scenario selection."
+
 [systems]
 disabled_systems = ["system_runtime_name"]
 
@@ -98,6 +103,7 @@ file = "boss.toml" # no initial: dynamic region
 
 | Field | Meaning |
 |---|---|
+| `description` | Optional short scenario summary, carried with the scenario during transfers. |
 | `systems.disabled_systems` | Systems disabled after FSM initialization. Names are validated against runtime `System.Name()` values. |
 | `regions.<name>.initial` | Initial state for a region started during machine initialization. Omit for a region spawned later. |
 | `file` | File supplying additional `[states.*]` tables. |
@@ -435,9 +441,12 @@ flowchart TD
 - Keep actions small; complex mechanics should remain Go systems triggered by a
   typed event.
 
-The embedded config demonstrates this structure with `main`, `quasar`, `storm`,
-`monitor`, and `placeholder`; its monitor also owns the cursor boot/retry
-sequence. The full current flow is summarized in [Gameplay design](gameplay.md),
+The embedded campaign uses `main`, `quasar`, `storm`, `kraken`, `tower`, and a
+background `monitor` that owns cursor boot/retry and resets on
+`session.any_defeated`. This guard aggregates replicated owner defeat reports; it
+does not read instance-local energy or heat mirrors. Encounter `EventLevelSetup`
+actions use `preserve_loot = true` alongside `clear_entities = true`; a run reset
+leaves it false to clear rewards as well. The full current flow is summarized in [Gameplay design](gameplay.md),
 and [the authoring reference](fsm-reference.md) shows cursor spawn payloads
 and capture.
 
@@ -499,5 +508,5 @@ event counter plus an outer tick transition.
 | Standard actions/guards | `internal/fsm/std/*.go` |
 | Game host adapter | `internal/manifest/fsm_bridge.go` |
 | Current embedded campaign | `internal/asset/scenario/*.toml` |
-| External examples | `wad/scenario/main`, `wad/scenario/td`, `wad/scenario/blank` |
+| External examples | `wad/scenario/td`, `wad/scenario/blank`, `wad/scenario/kraken` |
 | Extended syntax examples | `doc/fsm-reference.md` |

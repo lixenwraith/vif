@@ -14,7 +14,7 @@ const (
 	WeaponLauncher
 	WeaponDisruptor
 	WeaponTurret
-	WeaponBeam
+	WeaponEmitter
 	WeaponCount
 )
 
@@ -80,8 +80,8 @@ var WeaponSpecs = [WeaponCount]WeaponSpec{
 		Cooldown: parameter.WeaponCooldownTurret, MaxCharges: parameter.WeaponMaxChargeTurret,
 		HostedRange:  parameter.HostedTurretRange,
 		HostedDamage: CursorDamage{parameter.HostedTurretEnergy, -parameter.HostedTurretHeat}},
-	WeaponBeam: {Name: "beam", Delivery: DeliveryBeam, Attack: CombatAttackBeam,
-		Cooldown: parameter.WeaponCooldownBeam, MaxCharges: parameter.WeaponMaxChargeBeam,
+	WeaponEmitter: {Name: "emitter", Delivery: DeliveryBeam, Attack: CombatAttackBeam,
+		Cooldown: parameter.WeaponCooldownEmitter, MaxCharges: parameter.WeaponMaxChargeEmitter,
 		HostedRange:  parameter.HostedBeamRange,
 		HostedDamage: CursorDamage{parameter.HostedBeamEnergy, -parameter.HostedBeamHeat}},
 }

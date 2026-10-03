@@ -10,7 +10,61 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/resource"
 )
+
+func TestTowerLootSurvivesVictoryAndMultiplayerCorrection(t *testing.T) {
+	apps := meshSessionOf(t, Config{Seed: fixtureSeed, Width: 160, Height: 50,
+		Resources: resource.Options{Embedded: true}}, 2, [][2]int{{1, 2}})
+	owners := localCursors(t, apps)
+	advance := func() { tickAll(apps) }
+	for _, a := range apps {
+		a.Context().PushEventOrigin(event.EventFSMRegionRequest,
+			&event.FSMRegionPayload{Op: event.RegionPause, Region: "main"}, event.OriginDebug)
+		a.Context().PushEventOrigin(event.EventFSMRegionRequest,
+			&event.FSMRegionPayload{Op: event.RegionSpawn, Region: "tower", State: "TowerSetup"}, event.OriginDebug)
+		a.Settle()
+	}
+	for range 12 {
+		advance()
+	}
+	drops := make([]core.Entity, len(apps))
+	for i, a := range apps {
+		a.Context().PushLocal(event.EventLootSpawnRequest,
+			&event.LootSpawnRequestPayload{Type: component.LootEnergy, X: 10, Y: 10})
+		a.Settle()
+		for _, e := range a.World().Components.Loot.Entities() {
+			drops[i] = e
+		}
+		if drops[i] == 0 || a.World().Components.Pylon.CountEntities() != 4 {
+			t.Fatal("fixture did not reach tower gameplay with an uncollected drop")
+		}
+	}
+	host, guest := apps[0], apps[1]
+	for _, e := range host.World().Components.Pylon.Entities() {
+		zeroHitPoints(host, e, owners[0])
+		header, _ := host.World().Components.Header.GetComponent(e)
+		for _, member := range header.MemberEntries {
+			zeroHitPoints(host, member.Entity, owners[0])
+		}
+	}
+	for range 3 {
+		advance()
+	}
+	if host.World().Resources.Status.Strings.Get("fsm.tower.state").Load() != "-" {
+		t.Fatal("pylon defeats did not complete the tower encounter")
+	}
+	deliverCorrectionNow(t, host, []*App{guest}, advance)
+	for i, a := range apps {
+		loot, ok := a.World().Components.Loot.GetComponent(drops[i])
+		if !ok || loot.Owner != owners[i] {
+			t.Fatalf("participant %d lost its drop or ownership at the encounter boundary", i)
+		}
+		if a.World().Resources.Status.Strings.Get("fsm.tower.state").Load() != "-" {
+			t.Fatalf("participant %d did not adopt the completed encounter", i)
+		}
+	}
+}
 
 // zeroHitPoints is the death every species system derives from, credited to one
 // cursor and applied directly so the scenario is the correction path rather than

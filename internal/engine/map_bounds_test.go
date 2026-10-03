@@ -84,7 +84,7 @@ func TestSetupLevelRecordsOnlyBoundsTheGridHolds(t *testing.T) {
 	w := NewWorld()
 	NewGameContextWithClock(w, 80, 24, NewManualClock())
 
-	w.SetupLevel(math.MaxInt32, math.MaxInt32, false, false)
+	w.SetupLevel(math.MaxInt32, math.MaxInt32, false, false, false)
 
 	cfg := w.Resources.Config
 	if cfg.MapWidth > parameter.MaxMapWidth || cfg.MapHeight > parameter.MaxMapHeight ||
