@@ -28,12 +28,13 @@ type MusicSystem struct {
 
 	rng *vmath.FastRand
 
-	bpmF       float64 // slewed tempo state; drifts toward APM target
-	lastBPM    int
-	tier       audio.Intensity
-	manualTier bool
-	arranged   bool // first auto-arrangement applied; slots start silent otherwise
-	stopped    bool // the run stopped its music, so an unmute does not start it
+	bpmF         float64 // slewed tempo state; drifts toward APM target
+	lastBPM      int
+	tier         audio.Intensity
+	manualTier   bool
+	arranged     bool // first auto-arrangement applied; slots start silent otherwise
+	stopped      bool // the run stopped its music, so an unmute does not start it
+	startPending bool // Defer startup until scenario enable/disable events settle.
 
 	// What the sequencer sounds, for the telemetry HUD's music card; a slot's name is
 	// looked up only when its pattern changes
@@ -42,7 +43,8 @@ type MusicSystem struct {
 	statBPM             *atomic.Int64
 	lastSlot            [audio.MusicSlots]audio.PatternID
 
-	enabled bool
+	enabled      bool
+	audioEnabled bool
 }
 
 // NewMusicSystem creates a music system
@@ -58,11 +60,8 @@ func NewMusicSystem(world *engine.World) engine.System {
 	}
 	s.statBPM = reg.Ints.Get("music.bpm")
 	s.Init()
-	// A run that begins muted starts on its first unmute; one that begins audible,
-	// as -mute=false does, has no transition to start on.
-	if s.player != nil && !s.player.IsMusicMuted() {
-		s.startMusic()
-	}
+	// The first update starts audible runs after scenario disable events settle.
+	s.startPending = true
 	return s
 }
 
@@ -75,7 +74,9 @@ func (s *MusicSystem) Init() {
 	s.manualTier = false
 	s.arranged = false
 	s.stopped = false
+	s.startPending = false
 	s.enabled = true
+	s.audioEnabled = true
 	s.statGroup.Store("")
 	s.statTier.Store("")
 	s.statBPM.Store(0)
@@ -124,9 +125,7 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameResetRequest {
 		wasPlaying := s.player != nil && s.player.IsMusicPlaying()
 		s.Init()
-		if wasPlaying {
-			s.startMusic() // restart after :new; sequencer state was cleared
-		}
+		s.startPending = wasPlaying
 		return
 	}
 
@@ -134,6 +133,11 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {
 				s.enabled = payload.Enabled
+			} else if payload.SystemName == "audio" {
+				s.audioEnabled = payload.Enabled
+			}
+			if s.player != nil && (!s.enabled || !s.audioEnabled) {
+				s.applyMusicAudible(false)
 			}
 		}
 		return
@@ -143,9 +147,7 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	// Device state, not gameplay: applied even when disabled, or
-	// ":system music disable" leaves the mask claiming music is audible
-	// while the engine stays muted.
+	// Device synchronization stays active; disabled systems can only mute the bus.
 	if ev.Type == event.EventAudioMuteChanged {
 		if p, ok := ev.Payload.(*event.AudioMuteChangedPayload); ok {
 			s.applyMusicAudible(p.Mask&parameter.AudioChanMusic != 0)
@@ -153,7 +155,7 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	if !s.enabled {
+	if !s.enabled || !s.audioEnabled {
 		return
 	}
 
@@ -194,6 +196,7 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventMusicStop:
 		s.stopped = true
 		s.player.StopMusic()
+		s.publish()
 
 	case event.EventBeatPatternRequest:
 		if payload, ok := ev.Payload.(*event.BeatPatternRequestPayload); ok {
@@ -267,12 +270,12 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 // applyMusicAudible gates the music bus. The sequencer is frozen, not stopped,
 // so position and phrase survive the mute; start covers a run that began muted.
 func (s *MusicSystem) applyMusicAudible(audible bool) {
-	if audible == !s.player.IsMusicMuted() {
-		return
-	}
-	s.player.SetMusicMuted(!audible)
-	if audible && !s.stopped {
-		s.startMusic()
+	audible = audible && s.enabled && s.audioEnabled
+	if audible == s.player.IsMusicMuted() {
+		s.player.SetMusicMuted(!audible)
+		if audible && !s.stopped {
+			s.startMusic()
+		}
 	}
 	s.publish() // a pause stops Update, not the mute key
 }
@@ -282,21 +285,25 @@ func (s *MusicSystem) Update() {
 	if s.player == nil {
 		return
 	}
+	if s.startPending && s.enabled && s.audioEnabled && !s.stopped && !s.player.IsMusicMuted() {
+		s.startMusic()
+	}
 	s.publish()
 	// The sequencer is frozen while muted; a slew would queue commands it cannot play
-	if !s.enabled || !s.audible() {
+	if !s.enabled || !s.audioEnabled || !s.audible() {
 		return
 	}
 	s.syncToAPM()
 }
 
 func (s *MusicSystem) audible() bool {
-	return !s.player.IsMusicMuted() && s.player.IsMusicPlaying()
+	return s.enabled && s.audioEnabled && !s.stopped && !s.player.IsMusicMuted() && s.player.IsMusicPlaying()
 }
 
 // publish reports the group, tier, requested tempo and each slot's pattern. Silent
 // music reports none, since a muted sequencer holds the patterns it would resume on.
 func (s *MusicSystem) publish() {
+	publishAudioMask(s.world, s.player)
 	if !s.audible() {
 		s.statGroup.StoreIfChanged("-")
 		s.statTier.StoreIfChanged("-")
@@ -347,6 +354,10 @@ func (s *MusicSystem) fadeSamples(t time.Duration, rising bool) int {
 // bar-quantized path: the sequencer is stopped, so a pending transition would
 // not resolve until bar 1 and the first bar would render silence
 func (s *MusicSystem) startMusic() {
+	if !s.enabled || !s.audioEnabled || s.stopped || s.player.IsMusicMuted() {
+		return
+	}
+	s.startPending = false
 	s.player.SetHarmony(parameter.DefaultRootNote, audio.ScalePhrygian, nil)
 	apm := s.world.Resources.Game.State.GetMusicAPM()
 	s.syncTempo(apm)

@@ -299,7 +299,7 @@ func (s *CombatSystem) Update() {
 			combatComp.RemainingDamageImmunity -= dt
 			if combatComp.RemainingDamageImmunity <= 0 {
 				combatComp.RemainingDamageImmunity = 0
-				combatComp.DamageImmunitySpent = 0
+				clear(combatComp.DamageImmunitySpent[:])
 			}
 		}
 
@@ -407,6 +407,10 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		s.statCursor.Add(1)
 	}
 	attacker := s.attackerBit(damageCursor)
+	weapon := payload.AttackType
+	if payload.ChainDepth > 0 {
+		weapon = payload.RootAttackType
+	}
 
 	// Damage routing based on CompositeType
 	var damageTargetDead bool
@@ -415,7 +419,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		// Ablative: damage the HitEntity (member)
 		if memberCombat, ok := s.world.Components.Combat.GetPtr(hitEntity); ok && hitEntity != targetEntity {
 			if attack.DamageValue != 0 {
-				if memberCombat.DamageImmuneTo(attacker) {
+				if memberCombat.DamageImmuneTo(attacker, weapon) {
 					s.statImmune.Add(1)
 					s.recordDamage(attack.AttackType, attackerType, memberCombat.CombatEntityType, 0, attack.DamageValue)
 				} else {
@@ -425,7 +429,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 					resolved = true
 
 					memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
-					memberCombat.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
+					memberCombat.SpendDamageImmunity(attacker, weapon, parameter.CombatDamageImmunityDuration)
 					memberCombat.LastDamagedBy = damageCursor
 					targetCombatComp.LastDamagedBy = damageCursor
 					damageTargetDead = memberCombat.HitPoints == 0
@@ -437,7 +441,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	} else {
 		// Unit or Simple: damage the TargetEntity
 		if attack.DamageValue != 0 {
-			if targetCombatComp.DamageImmuneTo(attacker) {
+			if targetCombatComp.DamageImmuneTo(attacker, weapon) {
 				s.statImmune.Add(1)
 				s.recordDamage(attack.AttackType, attackerType, targetCombatComp.CombatEntityType, 0, attack.DamageValue)
 			} else {
@@ -447,7 +451,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 				resolved = true
 
 				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
-				targetCombatComp.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
+				targetCombatComp.SpendDamageImmunity(attacker, weapon, parameter.CombatDamageImmunityDuration)
 				targetCombatComp.LastDamagedBy = damageCursor
 				damageTargetDead = targetCombatComp.HitPoints == 0
 			}
@@ -463,16 +467,17 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 			// The chain is the same artifact seen one step on (D-5), so it carries
 			// the same identity; ChainDepth is what keeps its draws its own.
-			CrossingID:   payload.CrossingID,
-			AttackType:   chainAttack.AttackType,
-			OwnerEntity:  payload.OwnerEntity,
-			OriginEntity: payload.OwnerEntity,
-			TargetEntity: payload.TargetEntity,
-			HitEntity:    payload.HitEntity,
-			HasOrigin:    chainHasOrigin,
-			OriginX:      chainX,
-			OriginY:      chainY,
-			ChainDepth:   depth,
+			CrossingID:     payload.CrossingID,
+			AttackType:     chainAttack.AttackType,
+			OwnerEntity:    payload.OwnerEntity,
+			OriginEntity:   payload.OwnerEntity,
+			TargetEntity:   payload.TargetEntity,
+			HitEntity:      payload.HitEntity,
+			HasOrigin:      chainHasOrigin,
+			OriginX:        chainX,
+			OriginY:        chainY,
+			ChainDepth:     depth,
+			RootAttackType: weapon,
 		}, payload.TargetEntity.Domain())
 		s.recordChain(depth, 1)
 		resolved = true
@@ -586,6 +591,10 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		s.statCursor.Add(1)
 	}
 	attacker := s.attackerBit(damageCursor)
+	weapon := payload.AttackType
+	if payload.ChainDepth > 0 {
+		weapon = payload.RootAttackType
+	}
 	perHit := attack.DamageValue * max(int(payload.Scale), 1)
 
 	// Damage routing
@@ -602,7 +611,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				if !ok {
 					continue
 				}
-				if memberCombat.DamageImmuneTo(attacker) {
+				if memberCombat.DamageImmuneTo(attacker, weapon) {
 					s.statImmune.Add(1)
 					s.recordDamage(attack.AttackType, attackerType, memberCombat.CombatEntityType, 0, perHit)
 					continue
@@ -611,7 +620,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				memberCombat.HitPoints -= dealt
 				s.recordDamage(attack.AttackType, attackerType, memberCombat.CombatEntityType, dealt, 0)
 				memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
-				memberCombat.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
+				memberCombat.SpendDamageImmunity(attacker, weapon, parameter.CombatDamageImmunityDuration)
 				memberCombat.LastDamagedBy = damageCursor
 				damageApplied = true
 				resolved = true
@@ -634,7 +643,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				}
 			}
 			damageValue := perHit * validHitCount
-			if targetCombatComp.DamageImmuneTo(attacker) {
+			if targetCombatComp.DamageImmuneTo(attacker, weapon) {
 				s.statImmune.Add(1)
 				s.recordDamage(attack.AttackType, attackerType, targetCombatComp.CombatEntityType, 0, damageValue)
 			} else if validHitCount > 0 {
@@ -642,7 +651,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				targetCombatComp.HitPoints -= dealt
 				s.recordDamage(attack.AttackType, attackerType, targetCombatComp.CombatEntityType, dealt, 0)
 				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
-				targetCombatComp.SpendDamageImmunity(attacker, parameter.CombatDamageImmunityDuration)
+				targetCombatComp.SpendDamageImmunity(attacker, weapon, parameter.CombatDamageImmunityDuration)
 				damageApplied = true
 				resolved = true
 				if targetCombatComp.HitPoints == 0 {
@@ -688,16 +697,17 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 			payload.OriginX, payload.OriginY, payload.HasOrigin)
 		for _, hitEntity := range hits {
 			s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
-				CrossingID:   payload.CrossingID,
-				AttackType:   chainAttack.AttackType,
-				OwnerEntity:  payload.OwnerEntity,
-				OriginEntity: payload.OwnerEntity,
-				TargetEntity: targetEntity,
-				HitEntity:    hitEntity,
-				HasOrigin:    chainHasOrigin,
-				OriginX:      chainX,
-				OriginY:      chainY,
-				ChainDepth:   depth,
+				CrossingID:     payload.CrossingID,
+				AttackType:     chainAttack.AttackType,
+				OwnerEntity:    payload.OwnerEntity,
+				OriginEntity:   payload.OwnerEntity,
+				TargetEntity:   targetEntity,
+				HitEntity:      hitEntity,
+				HasOrigin:      chainHasOrigin,
+				OriginX:        chainX,
+				OriginY:        chainY,
+				ChainDepth:     depth,
+				RootAttackType: weapon,
 			}, targetEntity.Domain())
 		}
 		s.recordChain(depth, len(hits))

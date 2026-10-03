@@ -19,6 +19,7 @@ var allowedDomainAccess = map[string]string{
 	"death:Wall":    "GetPtr reads BlockMask while resolving a shared wall death",
 	"quasar:Nugget": "D-12 footprint sweep classifies a personal victim for local lifecycle notification",
 	"storm:Nugget":  "D-12 footprint sweep classifies a personal victim for local lifecycle notification",
+	"kraken:Nugget": "D-12 footprint sweep classifies a personal victim for local lifecycle notification",
 }
 
 // ownerAuthoredStores are the cursor-exclusive components exactly one instance
@@ -35,15 +36,9 @@ var ownerAuthoredStores = map[string]bool{
 // the entity, and the initial values are constants the shared creation order carries.
 var ownerAuthoredCreators = map[string]bool{"cursor": true}
 
-// predictedLocalReads are the accessors — on World and on its player roster — that
-// answer with the D-18 predicted local cursor cell: the placement this instance's
-// own input has already applied, before the crossing that shares it has reached
-// anyone. Only player-domain producers and the view may read them. A shared
-// derivation keyed to one would be a function of a single participant's un-agreed
-// input, which is what D-1 forbids, and it would move the shared digest by exactly
-// one playout lead. World.ReconcileLocalCursor is deliberately absent: it hands the
-// authoritative cell to the prediction and learns nothing back, which is why the
-// shared CursorSystem may call it.
+// Prediction is local input not yet agreed by peers (D-1, D-18), so shared systems
+// cannot read these accessors. ReconcileLocalCursor only writes the authoritative
+// cell into prediction and is safe for the shared CursorSystem.
 var predictedLocalReads = map[string]string{
 	"LocalCursor":           "the local cursor's predicted cell",
 	"CursorCell":            "a cursor's cell, predicted for the local one",

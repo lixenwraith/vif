@@ -115,8 +115,10 @@ func DigestWorld(w *engine.World, scope engine.DomainScope) WorldDigest {
 			i64(int64(c.StunnedRemaining)).
 			i64(int64(c.RemainingKineticImmunity)).
 			u64(uint64(c.KineticImmunitySpent)).
-			i64(int64(c.RemainingDamageImmunity)).
-			u64(uint64(c.DamageImmunitySpent))
+			i64(int64(c.RemainingDamageImmunity))
+		for _, spent := range c.DamageImmunitySpent {
+			wd.Combat = wd.Combat.u64(uint64(spent))
+		}
 	}
 
 	wd.Entities = newHash().

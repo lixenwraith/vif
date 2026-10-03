@@ -18,17 +18,18 @@ const (
 
 // The entire animation is simulation state so hitboxes and rendering survive snapshots together.
 type KrakenComponent struct {
-	State            KrakenState
-	StateRemaining   time.Duration
-	AttackLegs       int
-	TargetX, TargetY float64
-	DirX, DirY       float64
-	TurnDir          float64
-	Angle            float64
-	Time             float64
-	RotSpeed         float64
-	MoveBlend        float64
-	AttackT          float64
+	State             KrakenState
+	StateRemaining    time.Duration
+	IdleTurnRemaining time.Duration
+	AttackLegs        int
+	TargetX, TargetY  float64
+	DirX, DirY        float64
+	TurnDir           float64
+	Angle             float64
+	Time              float64
+	RotSpeed          float64
+	MoveBlend         float64
+	AttackT           float64
 }
 
 // TentacleSamples shares the sandbox's shape between solid hitboxes and shaded rendering.

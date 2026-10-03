@@ -57,6 +57,16 @@ func getOppositePosition(pos visual.HealthBarPosition) visual.HealthBarPosition 
 	}
 }
 
+var healthBarSpecs = [component.CombatEntityCount]struct {
+	width, height, maxHP, offsetX, offsetY int
+	centered                               bool
+}{
+	component.CombatEntityDrain:  {1, 1, parameter.CombatInitialHPDrain, 0, 0, false},
+	component.CombatEntitySwarm:  {parameter.SwarmWidth, parameter.SwarmHeight, parameter.CombatInitialHPSwarm, parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY, false},
+	component.CombatEntityQuasar: {parameter.QuasarWidth, parameter.QuasarHeight, parameter.CombatInitialHPQuasar, parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY, false},
+	component.CombatEntityKraken: {visual.KrakenHealthBarWidth, 1, parameter.KrakenInitialHP, 0, 0, true},
+}
+
 // Render draws health bars for all applicable combat entities
 func (r *HealthBarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	if !visual.HealthBarEnabled {
@@ -71,21 +81,15 @@ func (r *HealthBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	buf.SetWriteMask(visual.MaskHealthBar)
 
 	combats.Each(func(entity core.Entity, combatComp *component.CombatComponent) bool {
-		// Filter: only Drain, Swarm, Quasar
-		var width, height, maxHP, offsetX, offsetY int
-		switch combatComp.CombatEntityType {
-		case component.CombatEntityDrain:
-			width, height, maxHP = 1, 1, parameter.CombatInitialHPDrain
-			offsetX, offsetY = 0, 0
-		case component.CombatEntitySwarm:
-			width, height, maxHP = parameter.SwarmWidth, parameter.SwarmHeight, parameter.CombatInitialHPSwarm
-			offsetX, offsetY = parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY
-		case component.CombatEntityQuasar:
-			width, height, maxHP = parameter.QuasarWidth, parameter.QuasarHeight, parameter.CombatInitialHPQuasar
-			offsetX, offsetY = parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY
-		default:
+		if uint(combatComp.CombatEntityType) >= uint(len(healthBarSpecs)) {
 			return true
 		}
+		spec := healthBarSpecs[combatComp.CombatEntityType]
+		if spec.maxHP == 0 {
+			return true
+		}
+		width, height, maxHP := spec.width, spec.height, spec.maxHP
+		offsetX, offsetY := spec.offsetX, spec.offsetY
 
 		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
 		if !ok {
@@ -99,6 +103,12 @@ func (r *HealthBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		}
 		if ratio < 0 {
 			ratio = 0
+		}
+
+		if spec.centered {
+			length := max(visual.HealthBarMinLength, int(math.Ceil(float64(width)*ratio)))
+			r.renderHealthBar(ctx, buf, pos.X-length/2, pos.Y, length, ratio, visual.HealthBarAbove)
+			return true
 		}
 
 		// Entity top-left corner (accounting for header offset)
