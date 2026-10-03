@@ -124,6 +124,12 @@ func (s *KrakenSystem) Update() {
 		if !ok {
 			continue
 		}
+		cfg := s.world.Resources.Config
+		if cfg.MapWidth < int(parameter.KrakenBodyRadius*4)+1 || cfg.MapHeight < int(parameter.KrakenBodyRadius*2)+1 {
+			s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{HeaderEntity: e})
+			s.world.PushEvent(event.EventKrakenSpawnFailed, nil)
+			continue
+		}
 		k.Time += seconds
 		s.seed(e)
 		k.StateRemaining -= dt
@@ -278,16 +284,11 @@ func (s *KrakenSystem) bodyFits(x, y float64) bool {
 }
 
 func (s *KrakenSystem) moveBody(motion *component.KineticComponent, x, y float64) {
-	dx, dy := x-motion.PreciseX, y-motion.PreciseY
-	steps := max(1, int(math.Ceil(max(math.Abs(dx), math.Abs(dy))*2)))
-	for range steps {
-		if nx := motion.PreciseX + dx/float64(steps); s.bodyFits(nx, motion.PreciseY) {
-			motion.PreciseX = nx
-		}
-		if ny := motion.PreciseY + dy/float64(steps); s.bodyFits(motion.PreciseX, ny) {
-			motion.PreciseY = ny
-		}
-	}
+	// Walls do not constrain the body; a clamp also recovers from a map shrink.
+	cfg := s.world.Resources.Config
+	rx, ry := parameter.KrakenBodyRadius*2, parameter.KrakenBodyRadius
+	motion.PreciseX = max(rx+0.5, min(x, float64(cfg.MapWidth)-rx-0.5))
+	motion.PreciseY = max(ry+0.5, min(y, float64(cfg.MapHeight)-ry-0.5))
 }
 
 func (s *KrakenSystem) syncMembers(e core.Entity, k *component.KrakenComponent, x, y float64) {
@@ -325,6 +326,10 @@ func (s *KrakenSystem) syncMembers(e core.Entity, k *component.KrakenComponent, 
 
 func (s *KrakenSystem) addDisc(x, y, radius float64) {
 	cfg := s.world.Resources.Config
+	// Off-map samples remain animation geometry, without hitboxes or cell sweeps.
+	if x+radius < 0.5 || x-radius > float64(cfg.MapWidth)-0.5 || y+radius/2 < 0.5 || y-radius/2 > float64(cfg.MapHeight)-0.5 {
+		return
+	}
 	for cy := max(0, int(math.Ceil(y-radius/2-0.5))); cy <= min(cfg.MapHeight-1, int(math.Floor(y+radius/2-0.5))); cy++ {
 		for cx := max(0, int(math.Ceil(x-radius-0.5))); cx <= min(cfg.MapWidth-1, int(math.Floor(x+radius-0.5))); cx++ {
 			dx, dy := float64(cx)+0.5-x, (float64(cy)+0.5-y)*2

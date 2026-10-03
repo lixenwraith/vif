@@ -119,7 +119,7 @@ A correction must not be repairing entity allocation or run numbering.
 | `EventGameResetRequest` | replaces the run |
 | `EventSwarmSpawnRequest` / `EventQuasarSpawnRequest` | allocates a shared species from a drain fusion |
 | `EventDrainDefeated` | advances the shared progression a region gates its spawns on |
-| `EventCursorDefeatState` | folds into `session.all_defeated`, which `MonitorGlobalReset` rebuilds the level on |
+| `EventCursorDefeatState` | folds into `session.any_defeated`, which `MonitorGlobalReset` rebuilds the level on |
 
 The last two are the least obvious and each was a visible defect. A producer that
 counted its ninth drain a lead early entered the escalation a lead early and built

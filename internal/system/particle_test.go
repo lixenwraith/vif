@@ -65,7 +65,7 @@ func TestParticleSpawnBranchesByBehavior(t *testing.T) {
 
 func TestParticleWaveUsesBehaviorEdge(t *testing.T) {
 	w, particles := newParticleWorld(0xA11CE)
-	w.SetupLevel(4, 6, false, false)
+	w.SetupLevel(4, 6, false, false, false)
 
 	particles.HandleEvent(event.GameEvent{Type: event.EventParticleWave, Payload: &event.ParticleWavePayload{
 		Behavior: component.ParticleDecay,

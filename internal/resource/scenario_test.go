@@ -16,7 +16,7 @@ func writeScenario(t *testing.T, dir, regionBody string) string {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	entry := "[regions.main]\nfile = \"main.toml\"\n"
+	entry := "description = \"A portable test scenario.\"\n[regions.main]\nfile = \"main.toml\"\n"
 	for name, body := range map[string]string{"scenario.toml": entry, "main.toml": regionBody} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
@@ -59,7 +59,8 @@ func TestCanonicalFormRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if back.Digest() != src.Digest() || back.Entry() != src.Entry() || back.Files() != src.Files() {
+	if back.Digest() != src.Digest() || back.Entry() != src.Entry() || back.Files() != src.Files() ||
+		back.Description != "A portable test scenario." {
 		t.Fatalf("round trip lost identity: %+v", back)
 	}
 	body, err := fs.ReadFile(back.FS(), "main.toml")

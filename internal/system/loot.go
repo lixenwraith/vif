@@ -204,6 +204,13 @@ func (s *LootSystem) Update() {
 		}
 
 		curX, curY := physics.GridPos(&kineticComp.Kinetic)
+		// A transition or correction can shrink the shared map under private loot.
+		if s.world.Positions.IsOutOfBounds(curX, curY) {
+			curX, curY = min(max(curX, 0), config.MapWidth-1), min(max(curY, 0), config.MapHeight-1)
+			kineticComp.PreciseX, kineticComp.PreciseY = (vmath.Point{X: curX, Y: curY}).CenterF()
+			kineticComp.VelX, kineticComp.VelY = 0, 0
+			s.world.Positions.SetPosition(lootEntity, component.PositionComponent{X: curX, Y: curY})
+		}
 		// A wall that arrived without displacing the drop — a correction installs
 		// shared walls under player-domain loot — claims the cell as a spawn would.
 		if s.world.Positions.IsBlocked(curX, curY, component.WallBlockKinetic) {

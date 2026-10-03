@@ -16,7 +16,7 @@ import (
 func krakenFixture(t *testing.T) (*engine.World, *KrakenSystem, core.Entity, vmath.Point) {
 	t.Helper()
 	w, _, _ := testCursorWorld(t)
-	w.SetupLevel(180, 90, false, false)
+	w.SetupLevel(180, 90, false, false, false)
 	s := NewKrakenSystem(w).(*KrakenSystem)
 	s.spawn(&event.KrakenSpawnRequestPayload{X: 90, Y: 45})
 	if w.Components.Kraken.CountEntities() != 1 {
@@ -197,7 +197,7 @@ func TestKrakenChargeTargetsThroughWallsAndSkipsCoveredCursors(t *testing.T) {
 
 func TestKrakenDestroysWallsAtSpawnAndAcrossItsFootprint(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
-	w.SetupLevel(180, 90, false, false)
+	w.SetupLevel(180, 90, false, false, false)
 	s := NewKrakenSystem(w).(*KrakenSystem)
 	walls, death := NewWallSystem(w).(*WallSystem), NewDeathSystem(w).(*DeathSystem)
 	var leg vmath.Point
@@ -457,6 +457,17 @@ func TestKrakenOnlyBodyStopsAtMapEdges(t *testing.T) {
 	for _, cell := range s.cells {
 		if w.Positions.IsOutOfBounds(cell.X, cell.Y) {
 			t.Fatal("off-map tentacle got a spatial hitbox")
+		}
+	}
+	motion.PreciseX, motion.PreciseY = 170.5, 80.5
+	w.SetupLevel(80, 30, false, false, false)
+	s.Update()
+	if !s.bodyFits(motion.PreciseX, motion.PreciseY) {
+		t.Fatal("map shrink left Kraken's body out of bounds")
+	}
+	for _, cell := range s.cells {
+		if w.Positions.IsOutOfBounds(cell.X, cell.Y) {
+			t.Fatal("map shrink left an off-map interaction cell")
 		}
 	}
 }

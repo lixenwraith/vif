@@ -193,7 +193,7 @@ Closed since (2026-09-24):
   `network.artifacts_authority_superseded` in 1200 ticks; a non-zero count in a
   field log reopens the inventory.
 - **`SharedKey` answering two questions.** Every excluded cell a shared guard or
-  system reads — `kills.*`, `energy.damage_multiplier`, `session.all_defeated` — is
+  system reads — `kills.*`, `energy.damage_multiplier`, `session.any_defeated` — is
   carried and compared through `MetaSystem`'s record, and the other excluded groups
   are telemetry. A second predicate would be a second carrier for the same values.
 - **`MonitorWarmup`**, which guarded on owner-authored keys and nothing entered, is

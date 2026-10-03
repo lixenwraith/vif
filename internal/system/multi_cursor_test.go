@@ -1,6 +1,7 @@
 package system
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 	"time"
@@ -11,6 +12,77 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
+
+func TestSnakePursuitKeepsItsRouteUntilAReachableTargetIsMuchCloser(t *testing.T) {
+	w, first, second := testCursorWorld(t)
+	w.SetupLevel(80, 40, false, false, false)
+	w.Positions.SetPosition(first, component.PositionComponent{X: 10, Y: 10})
+	w.Positions.SetPosition(second, component.PositionComponent{X: 70, Y: 10})
+	for y := range 30 {
+		spawnWall(w, 30, y)
+		spawnWall(w, 50, y)
+	}
+	head := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(head, component.PositionComponent{X: 40, Y: 10})
+	w.Components.SnakeHead.SetComponent(head, component.SnakeHeadComponent{})
+	w.Components.Navigation.SetComponent(head, component.NavigationComponent{
+		Width: parameter.SnakeHeadWidth, Height: parameter.SnakeHeadHeight,
+		FlowLookahead: parameter.NavFlowLookaheadDefault,
+	})
+	motion := component.KineticComponent{}
+	motion.PreciseX, motion.PreciseY = 40.5, 10.5
+	w.Components.Kinetic.SetComponent(head, motion)
+	s := NewNavigationSystem(w).(*NavigationSystem)
+	s.Update()
+	nav, _ := w.Components.Navigation.GetPtr(head)
+	if nav.LockedTarget == 0 || nav.HasDirectPath {
+		t.Fatalf("expected a routed pursuit behind walls: %+v", nav)
+	}
+	locked := nav.LockedTarget
+	for tick := range 12 {
+		x := 39 + tick%3
+		w.Positions.SetPosition(head, component.PositionComponent{X: x, Y: 10})
+		kinetic, _ := w.Components.Kinetic.GetPtr(head)
+		kinetic.PreciseX = float64(x) + 0.5
+		s.Update()
+		if nav.LockedTarget != locked {
+			t.Fatal("small distance changes switched the snake between hidden cursors")
+		}
+		field := s.groups[s.getEntityGroup(head)].compositeFlowCache
+		fx, fy := s.getCompositeFlowDirection(kinetic.PreciseX, kinetic.PreciseY, field)
+		if (fx == 0 && fy == 0) || nav.FlowX != fx || nav.FlowY != fy {
+			t.Fatal("snake steering disagrees with its locked target's route")
+		}
+	}
+	other := first
+	if locked == first {
+		other = second
+	}
+	w.Positions.SetPosition(other, component.PositionComponent{X: 43, Y: 10})
+	s.Update()
+	if nav.LockedTarget != other || !nav.HasDirectPath {
+		t.Fatal("a substantially closer reachable cursor did not replace the pursuit")
+	}
+	state := w.CaptureSharedWorld()
+	phase, err := s.SaveShared()
+	if err != nil {
+		t.Fatal(err)
+	}
+	NewCursorSystem(w).(*CursorSystem).despawn(&event.CursorDespawnRequestPayload{Entity: other})
+	s.Update()
+	if nav.LockedTarget != locked {
+		t.Fatal("departed cursor remained the pursuit target")
+	}
+	w.InstallSharedWorld(state)
+	if err := s.LoadShared(phase); err != nil {
+		t.Fatal(err)
+	}
+	nav, _ = w.Components.Navigation.GetPtr(head)
+	back, err := s.SaveShared()
+	if err != nil || !bytes.Equal(phase, back) || nav.LockedTarget != other {
+		t.Fatal("snapshot lost pursuit identity or routing phase")
+	}
+}
 
 func testCursorWorld(t *testing.T) (*engine.World, core.Entity, core.Entity) {
 	t.Helper()

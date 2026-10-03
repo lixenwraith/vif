@@ -23,14 +23,8 @@ type TargetAssignment struct {
 	DistSq float64     // Squared distance from query origin to Hit
 }
 
-// ResolveTargetFromEntity resolves combat target chain for a single entity found at a position
-// Returns (target, hit, valid):
-//   - target: header entity for composite members, entity itself for unit headers and singles
-//   - hit: the input entity (spatial occupant that was encountered)
-//   - valid: true if entity is a combat-relevant target
-//
-// Container headers and ablative headers return invalid (not directly targetable)
-// selfEntity is excluded. Does not filter by ownership
+// ResolveTargetFromEntity returns the combat target and struck member, excluding self.
+// Container and ablative headers have no direct hit surface; ownership is not filtered.
 func ResolveTargetFromEntity(w *engine.World, entity, selfEntity core.Entity) (core.Entity, core.Entity, bool) {
 	if entity == 0 || entity == selfEntity {
 		return 0, 0, false
@@ -191,13 +185,8 @@ func FindTargetsIn(w *engine.World, contains func(x, y int) bool, scope engine.D
 	return result
 }
 
-// FindNearestTargets returns up to count targets, composite-grouped with closest member per header
-// Composites prioritized over distance-sorted singles.
-// If count exceeds available targets, results cycle through available targets (overflow distribution)
-// ownerEntity-owned entities excluded
-//
-// Composites are accumulated in Member store order, so the stable sort breaks
-// distance ties identically every run.
+// Nearest targets prioritize composites, then singles, excluding owner-owned entities.
+// Store order breaks distance ties; overflow cycles through the available targets.
 func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, scope engine.DomainScope, ownerEntity core.Entity) []TargetAssignment {
 	if count <= 0 {
 		return nil
@@ -383,6 +372,9 @@ func ResolveClosestMember(w *engine.World, headerEntity core.Entity, fromX, from
 // resolveBaseTarget returns the closest grid-coordinate target for an entity based on its group
 // Falls back to cursor position for group 0 or uninitialized groups
 func resolveBaseTarget(w *engine.World, entity core.Entity) (x, y int, valid bool) {
+	if nav, ok := w.Components.Navigation.GetPtr(entity); ok && nav.LockedTarget != 0 {
+		return targetCell(w, nav.LockedTarget)
+	}
 	groupID := uint8(0)
 	if tc, ok := w.Components.Target.GetComponent(entity); ok {
 		groupID = tc.GroupID
@@ -397,6 +389,9 @@ func resolveBaseTarget(w *engine.World, entity core.Entity) (x, y int, valid boo
 		}
 	}
 
+	if state.Type == component.TargetCursor && w.Components.SnakeHead.HasEntity(entity) {
+		return 0, 0, false // Navigation has not found a reachable cursor.
+	}
 	if state.Count == 1 {
 		return state.Targets[0].PosX, state.Targets[0].PosY, true
 	}

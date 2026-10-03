@@ -60,7 +60,7 @@ them believes it is hosting one. See
 
 | Scenario | Asserts |
 |---|---|
-| `check` | embedded, default `wad/scenario/main`, and named `wad/scenario/td` all resolve |
+| `check` | embedded/main fallback and named `wad/scenario/td` all resolve |
 | `scenario` | `:n td` then `:n main` each rebuild the run: three scenario records, the last matching the first. Needs a `script(1)` that can give it a pty, and skips rather than fails without one |
 | `transfer` | a guest joins a host playing a nonce-stamped copy of the wad's scenario, which no root on the machine can hold: the host serves it, the guest receives it and installs the session world on it |
 | `follow` | a host with a guest types `:n blank`: the guest is told, rebuilds, redials, receives the new scenario off the wire and installs the session world again. Two terminals, so it needs a pty like `scenario` |

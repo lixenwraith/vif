@@ -29,7 +29,7 @@ func TestGuttersNumberOnlyReachableRowsAndColumns(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			world := engine.NewWorld()
 			gameCtx := engine.NewGameContextWithClock(world, 80, 24, engine.NewManualClock())
-			world.SetupLevel(tc.mapW, tc.mapH, false, false)
+			world.SetupLevel(tc.mapW, tc.mapH, false, false, false)
 
 			cfg := world.Resources.Config
 			ctx := render.RenderContext{

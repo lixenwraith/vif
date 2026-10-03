@@ -1,3 +1,7 @@
+description = "Survive escalating storms, lure Krakens through mazes, and defend the tower."
+
+# Root configuration with region definitions
+
 [regions.main]
 file = "main.toml"
 enabled_systems = ["glyph"]
@@ -10,11 +14,17 @@ enabled_systems = ["glyph"]
 file = "storm.toml"
 enabled_systems = ["glyph"]
 
+[regions.kraken]
+file = "kraken.toml"
+enabled_systems = ["glyph", "nugget"]
+
 [regions.monitor]
 initial = "MonitorBoot"
 file = "monitor.toml"
 background = true
 
-[regions.placeholder]
-file = "placeholder.toml"
+[regions.tower]
+file = "tower.toml"
+disabled_systems = ["glyph"]
 
+#[states.Root]

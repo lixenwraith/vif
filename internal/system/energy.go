@@ -470,7 +470,7 @@ func (s *EnergySystem) pushDefeatTransition(cursor core.Entity, was bool) {
 		return
 	}
 	s.world.PushCrossing(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{
-		Entity: cursor, Defeated: now,
+		Entity: cursor, Defeated: now, ProducedTick: s.world.Resources.Game.State.GetGameTicks(),
 	})
 }
 

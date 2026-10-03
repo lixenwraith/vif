@@ -1,4 +1,4 @@
-# Kraken maze: use charges to clear passages, then defeat two Krakens to reach Tower.
+# One Kraken per maze; the second maze victory in a cycle advances to Tower.
 
 [states.KrakenHold]
 parent = "Root"
@@ -17,10 +17,9 @@ on_enter = [
     { action = "EmitEvent", event = "EventWallDespawnAll" },
     { action = "ConfigToVar", payload = { field = "viewport_width", name = "vw" } },
     { action = "ConfigToVar", payload = { field = "viewport_height", name = "vh" } },
-    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, clear_entities = true, crop_on_resize = false }, payload_vars = { Width = "vw", Height = "vh" } },
+    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, clear_entities = true, preserve_loot = true, crop_on_resize = false }, payload_vars = { Width = "vw", Height = "vh" } },
     { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 5, cell_height = 3, braiding = 0.5, room_count = 0, block_mask = 255, visual = { box_style = 1, fg_color = { r = 200, g = 200, b = 200 }, render_fg = true, bg_color = { r = 40, g = 40, b = 45 }, render_bg = true } } },
     { action = "EmitEvent", event = "EventWallPushCheckRequest" },
-    { action = "ResetStatusInt", payload = { key = "kills.kraken" } },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "LURE KRAKEN THROUGH THE MAZE" } },
 ]
 transitions = [
@@ -41,6 +40,7 @@ transitions = [
 [states.KrakenActive]
 parent = "KrakenHold"
 transitions = [
+    { trigger = "EventKrakenSpawnFailed", target = "KrakenWait" },
     { trigger = "EventSpeciesKilled", target = "KrakenDecision", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 9 } },
 ]
 
@@ -48,7 +48,7 @@ transitions = [
 parent = "KrakenHold"
 transitions = [
     { trigger = "Tick", target = "KrakenEscalateTower", guard = "StatusIntCompare", guard_args = { key = "kills.kraken", op = "gte", value = 2 } },
-    { trigger = "Tick", target = "KrakenWait" },
+    { trigger = "Tick", target = "KrakenVictory" },
 ]
 
 [states.KrakenWait]
@@ -62,5 +62,13 @@ parent = "Root"
 on_enter = [
     { action = "ResetStatusInt", payload = { key = "kills.kraken" } },
     { action = "SpawnRegion", region = "tower", initial_state = "TowerSetup" },
+    { action = "TerminateRegion", region = "kraken" },
+]
+
+[states.KrakenVictory]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, clear_entities = true, preserve_loot = true, crop_on_resize = true } },
+    { action = "ResumeRegion", region = "main" },
     { action = "TerminateRegion", region = "kraken" },
 ]

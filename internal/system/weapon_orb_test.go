@@ -25,7 +25,7 @@ func armWeapon(w *engine.World, weapon *WeaponSystem, cursor core.Entity, wt com
 func TestFiveOrbsSpaceEvenlyAtEveryEdgeAndResumeTogether(t *testing.T) {
 	for _, edge := range []vmath.Point{{79, 20}, {0, 20}, {40, 0}, {40, 39}, {79, 0}} {
 		w, cursor, _ := testCursorWorld(t)
-		w.SetupLevel(80, 40, false, false)
+		w.SetupLevel(80, 40, false, false, false)
 		w.Resources.Time.DeltaTime = 50 * time.Millisecond
 		s := NewWeaponSystem(w).(*WeaponSystem)
 		var orbs orbSlots
@@ -38,7 +38,7 @@ func TestFiveOrbsSpaceEvenlyAtEveryEdgeAndResumeTogether(t *testing.T) {
 				s.updateOrbs(cursor, 0, orbs)
 			}
 			if point != edge {
-				orb, _ := w.Components.Orb.GetPtr(orbs[component.WeaponBeam])
+				orb, _ := w.Components.Orb.GetPtr(orbs[component.WeaponEmitter])
 				orb.OrbitAngle += 0.1 // A small recovery offset must not persist in open space.
 				s.updateOrbs(cursor, 0, orbs)
 			}

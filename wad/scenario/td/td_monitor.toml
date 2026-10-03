@@ -3,7 +3,8 @@
 [states.MonWatch]
 parent = "Root"
 transitions = [
-    # defeat = both CENTRAL towers dead (quadrant towers sacrificial)
+    { trigger = "Tick", target = "MonDefeat", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
+    # Objective failure also ends the run.
     { trigger = "Tick", target = "MonDefeat", guard = "Or", guard_args = { guards = [
         { name = "And", args = { guards = [
             { name = "VarEquals", args = { var = "t1_dead", value = 1 } },
@@ -18,7 +19,7 @@ transitions = [
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 500 } },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "TOWERS LOST - RESTARTING" } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "GAME OVER - RESTARTING" } },
 ]
 transitions = [
     { trigger = "Tick", target = "MonReset", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
@@ -54,30 +55,5 @@ on_enter = [
     { action = "TerminateRegion", region = "td_counter" },
     { action = "TerminateRegion", region = "td_esc" },
     { action = "TerminateRegion", region = "td_storm" },
-    # full engine reset — clears cursor state (weapons/charges/energy/heat)
-    # LAST action: if EventGameResetRequest triggers FSM Reset(), regions restart from
-    # config initials and the MonRespawn SpawnRegion calls below fail with
-    # "already exists" (ignored) — both paths converge on a clean restart
     { action = "EmitEvent", event = "EventGameResetRequest" },
-
-    # ALTERNATIVE (if EventGameResetRequest misbehaves): zero energy (removes weapons) and heat
-    # { action = "EmitEvent", event = "EventEnergySetRequest", payload = { value = 0 } },
-    # { action = "EmitEvent", event = "EventHeatSetRequest", payload = { value = 0 } },
 ]
-transitions = [
-    { trigger = "Tick", target = "MonRespawn", guard = "StateTimeExceeds", guard_args = { ms = 250 } },
-]
-
-[states.MonRespawn]
-parent = "Root"
-on_enter = [
-    # SpawnRegion runs TdSetup on_enter synchronously → vars zeroed before MonWatch re-entry
-    { action = "SpawnRegion", region = "td_main", initial_state = "TdSetup" },
-    { action = "SpawnRegion", region = "td_counter", initial_state = "CntWatch" },
-    { action = "SpawnRegion", region = "td_esc", initial_state = "EscWait" },
-    { action = "SpawnRegion", region = "td_storm", initial_state = "StWait" },
-]
-transitions = [
-    { trigger = "Tick", target = "MonWatch" },
-]
-

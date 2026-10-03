@@ -20,6 +20,7 @@ type LevelSetupPayload struct {
 	Width         int  `toml:"width"`          // New map width in grid cells
 	Height        int  `toml:"height"`         // New map height in grid cells
 	ClearEntities bool `toml:"clear_entities"` // If true, destroy non-protected entities
+	PreserveLoot  bool `toml:"preserve_loot"`  // Encounter transitions keep uncollected rewards
 	CropOnResize  bool `toml:"crop_on_resize"` // Explicit crop behavior (false = level mode)
 }
 
@@ -169,8 +170,9 @@ type GameResetPayload struct {
 
 // CursorDefeatStatePayload carries one owner's combined heat/energy state.
 type CursorDefeatStatePayload struct {
-	Entity   core.Entity `toml:"entity"`
-	Defeated bool        `toml:"defeated"`
+	Entity       core.Entity `toml:"entity"`
+	Defeated     bool        `toml:"defeated"`
+	ProducedTick uint64      `toml:"produced_tick"`
 }
 
 // CursorScopePayload scopes local effects to an owned cursor, or all local cursors

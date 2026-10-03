@@ -391,7 +391,7 @@ func (a *App) applyMapLatch() {
 		a.cfg.CropOnResize == cfg.CropOnResize {
 		return
 	}
-	a.world.SetupLevel(a.cfg.MapWidth, a.cfg.MapHeight, false, a.cfg.CropOnResize)
+	a.world.SetupLevel(a.cfg.MapWidth, a.cfg.MapHeight, false, a.cfg.CropOnResize, false)
 }
 
 // initInput builds the intent pipeline. Kept headless because intents are the

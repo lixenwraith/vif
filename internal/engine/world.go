@@ -412,17 +412,7 @@ func (w *World) PushEventDomain(eventType event.EventType, payload any, domain c
 	w.pushEvent(eventType, payload, event.Origin(w.origin.Load()), domain)
 }
 
-// MapSizeLocal reports whether this world may derive map bounds from its own
-// terminal: nobody else shares it, so a crop rewriting shared state is admissible
-// (D-14).
-//
-// Map bounds are shared simulation state, so every writer of them must be a
-// function of state every participant agrees on — and, because a run is reproduced
-// by replaying its record stream, of state a reproduction agrees on too. That is
-// the whole of SessionShared: a second rostered cursor, which is shared state, or
-// the latch a session run carries, which travels in the journal anchor rather than
-// being read off the live transport. Deriving the verdict from a transport made a
-// replay crop where the run it reproduces did not.
+// Map bounds may follow the local terminal only outside a shared session or replay (D-14).
 func (w *World) MapSizeLocal() bool { return !w.SessionShared() }
 
 // SessionShared reports whether this world is, or reproduces, one shared with
@@ -761,16 +751,8 @@ func (w *World) ResolveOwnedCursor(e core.Entity) core.Entity {
 	return e
 }
 
-// LocalCursor returns the cell this instance's own cursor occupies.
-//
-// One accessor rather than the same three-line read at every input, view and
-// player-domain producer. It is also the seam the locally predicted position
-// installs itself behind (D-18): the authoritative cell is a D-3 crossing and
-// reaches the store a playout lead later, so an input path that resolved the next
-// motion from the store resolved it from a cell the player had already left. Every
-// producer that must see the player's own latest cell reads it here; a shared
-// system must not (D-1, D-18), which TestSystemDomainProfiles enforces.
-// Caller MUST hold updateMutex
+// LocalCursor includes this owner's predicted cell; Shared systems use stored positions.
+// Caller MUST hold updateMutex.
 func (w *World) LocalCursor() (component.PositionComponent, bool) {
 	return w.CursorCell(w.Resources.Player.Entity)
 }
@@ -789,13 +771,8 @@ func (w *World) CursorCell(e core.Entity) (component.PositionComponent, bool) {
 	return w.Positions.GetPosition(e)
 }
 
-// PushCursorMove requests a placement for a cursor this instance drives and
-// advances the D-18 prediction in the same statement, so no producer of a local
-// cursor move can emit the crossing without the prediction that answers it locally.
-// The placement itself is unchanged: the artifact is the same D-3 crossing, deferred
-// by the same playout lead, and the store still moves only when CursorSystem
-// applies it.
-// Caller MUST hold updateMutex
+// Placement and its local prediction must be emitted together (D-18).
+// Caller MUST hold updateMutex.
 func (w *World) PushCursorMove(e core.Entity, x, y int) {
 	if w.predictCursorMove(e, x, y, false) {
 		w.notePrediction(e, x, y, false)
@@ -896,7 +873,7 @@ func (w *World) CursorSlot(e core.Entity) (uint8, bool) {
 // SetupLevel reconfigures map dimensions and optionally clears entities
 // Respects Protection component - entities with ProtectAll survive
 // Repositions cursor if outside new bounds
-func (w *World) SetupLevel(width, height int, clearEntities bool, cropOnResize bool) {
+func (w *World) SetupLevel(width, height int, clearEntities, cropOnResize, preserveLoot bool) {
 	config := w.Resources.Config
 
 	// Clamped before it is recorded, not just before it is allocated. A LevelSetup
@@ -921,7 +898,7 @@ func (w *World) SetupLevel(width, height int, clearEntities bool, cropOnResize b
 	config.CameraY = 0
 
 	if clearEntities {
-		w.clearNonProtectedEntities()
+		w.clearNonProtectedEntities(preserveLoot)
 	}
 
 	// Clamp every cursor into the new bounds; CursorSystem applies and announces
@@ -938,12 +915,15 @@ func (w *World) SetupLevel(width, height int, clearEntities bool, cropOnResize b
 }
 
 // clearNonProtectedEntities destroys all entities except those with ProtectAll
-func (w *World) clearNonProtectedEntities() {
+func (w *World) clearNonProtectedEntities(preserveLoot bool) {
 	// Collect entities to destroy (avoid mutation during iteration)
 	var toDestroy []core.Entity
 
 	allEntities := w.Positions.AllEntities()
 	for _, e := range allEntities {
+		if preserveLoot && w.Components.Loot.HasEntity(e) {
+			continue
+		}
 		// Check protection
 		if prot, ok := w.Components.Protection.GetComponent(e); ok {
 			if prot.Mask == component.ProtectAll {

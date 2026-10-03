@@ -70,7 +70,7 @@ func TestCleanerSamplesEverySweptCellBeforeCombatImpact(t *testing.T) {
 
 func TestSweepingCleanerUsesFullMapBoundsWhenViewportIsSmaller(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	w.SetupLevel(120, 30, false, false)
+	w.SetupLevel(120, 30, false, false, false)
 
 	glyph := w.CreateEntity(core.DomainPlayer)
 	w.Positions.SetPosition(glyph, component.PositionComponent{X: 100, Y: 5})

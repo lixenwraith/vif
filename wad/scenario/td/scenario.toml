@@ -1,3 +1,5 @@
+description = "Defend two central towers in a sprawling maze against escalating enemy waves."
+
 # Standalone tower-defense map: fixed 500x250, twin towers, escalating pylons, storm finale
 
 [regions.td_main]

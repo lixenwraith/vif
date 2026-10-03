@@ -1,11 +1,15 @@
 package component
 
 import (
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // NavigationComponent provides pathfinding state for kinetic entities
 type NavigationComponent struct {
+	// Snakes keep aim and routing on the same shared cursor between switches.
+	LockedTarget core.Entity
+
 	// True when straight-line path to target is walkable
 	HasDirectPath bool
 

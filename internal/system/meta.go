@@ -40,8 +40,10 @@ type MetaSystem struct {
 	statKillsTotal       *atomic.Int64
 	statKillsUncredited  *atomic.Int64
 	statAllDefeated      *atomic.Bool
+	statAnyDefeated      *atomic.Bool
 	statDamageMultiplier *atomic.Int64
 	defeated             [parameter.MaxPlayers]bool
+	defeatResetTick      uint64
 
 	// Cycle difficulty scaling: a world property the shared FSM raises, applied
 	// by EnergySystem to penalties
@@ -67,6 +69,7 @@ func NewMetaSystem(ctx *engine.GameContext) engine.System {
 	s.statKillsTotal = reg.Ints.Get("kills.total")
 	s.statKillsUncredited = reg.Ints.Get("kills.uncredited")
 	s.statAllDefeated = reg.Bools.Get("session.all_defeated")
+	s.statAnyDefeated = reg.Bools.Get("session.any_defeated")
 	s.statDamageMultiplier = reg.Ints.Get("energy.damage_multiplier")
 	s.Init()
 	return s
@@ -81,7 +84,9 @@ func (s *MetaSystem) Init() {
 	s.statPlayerX.Reset()
 	s.statPlayerY.Reset()
 	s.defeated = [parameter.MaxPlayers]bool{}
+	s.defeatResetTick = 0
 	s.statAllDefeated.Store(false)
+	s.statAnyDefeated.Store(false)
 	s.setDamageMultiplier(1)
 	s.resetKills()
 }
@@ -213,20 +218,20 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 		s.statKillsTotal.Add(1)
 
 	case event.EventCursorDefeatState:
-		if p, ok := ev.Payload.(*event.CursorDefeatStatePayload); ok {
+		if p, ok := ev.Payload.(*event.CursorDefeatStatePayload); ok && p.ProducedTick >= s.defeatResetTick {
 			s.setCursorDefeated(p.Entity, p.Defeated)
 		}
 
 	case event.EventCursorSpawned:
 		if p, ok := ev.Payload.(*event.CursorSpawnedPayload); ok && int(p.Slot) < len(s.defeated) {
 			s.defeated[p.Slot] = false
-			s.publishAllDefeated()
+			s.publishDefeatState()
 		}
 
 	case event.EventCursorDespawned:
 		if p, ok := ev.Payload.(*event.CursorDespawnedPayload); ok && int(p.Slot) < len(s.defeated) {
 			s.defeated[p.Slot] = false
-			s.publishAllDefeated()
+			s.publishDefeatState()
 		}
 
 	case event.EventCycleDamageMultiplierIncrease:
@@ -250,20 +255,22 @@ func (s *MetaSystem) setCursorDefeated(entity core.Entity, defeated bool) {
 		return
 	}
 	s.defeated[slot] = defeated
-	s.publishAllDefeated()
+	s.publishDefeatState()
 }
 
-// publishAllDefeated folds the per-owner latch into one shared FSM guard.
-func (s *MetaSystem) publishAllDefeated() {
+// Shared guards fold owner-authored defeat latches, never stale energy/heat mirrors.
+func (s *MetaSystem) publishDefeatState() {
 	roster := s.world.Resources.Player
 	all := roster.Count() > 0
+	anyDefeated := false
 	for i := range parameter.MaxPlayers {
-		if roster.Slot(uint8(i)) != 0 && !s.defeated[i] {
-			all = false
-			break
+		if roster.Slot(uint8(i)) != 0 {
+			all = all && s.defeated[i]
+			anyDefeated = anyDefeated || s.defeated[i]
 		}
 	}
 	s.statAllDefeated.Store(all)
+	s.statAnyDefeated.Store(anyDefeated)
 }
 
 // Update publishes context and player telemetry; every read is world state
@@ -319,6 +326,7 @@ type metaSnapshot struct {
 	KillsTotal       int64                         `json:"kills_total"`
 	KillsUncredited  int64                         `json:"kills_uncredited"`
 	Defeated         [parameter.MaxPlayers]bool    `json:"defeated"`
+	DefeatResetTick  uint64                        `json:"defeat_reset_tick"`
 	DamageMultiplier int64                         `json:"damage_multiplier"`
 }
 
@@ -328,6 +336,7 @@ func (s *MetaSystem) SaveShared() ([]byte, error) {
 		KillsTotal:       s.statKillsTotal.Load(),
 		KillsUncredited:  s.statKillsUncredited.Load(),
 		Defeated:         s.defeated,
+		DefeatResetTick:  s.defeatResetTick,
 		DamageMultiplier: s.damageMultiplier,
 	}
 	for i := component.SpeciesType(1); i < component.SpeciesCount; i++ {
@@ -348,7 +357,8 @@ func (s *MetaSystem) LoadShared(data []byte) error {
 	s.statKillsTotal.Store(snap.KillsTotal)
 	s.statKillsUncredited.Store(snap.KillsUncredited)
 	s.defeated = snap.Defeated
-	s.publishAllDefeated()
+	s.defeatResetTick = snap.DefeatResetTick
+	s.publishDefeatState()
 	s.setDamageMultiplier(max(snap.DamageMultiplier, 1))
 	return nil
 }
@@ -462,15 +472,13 @@ func (s *MetaSystem) handleLevelSetup(payload *event.LevelSetupPayload) {
 		cropOnResize = true
 	}
 
-	s.world.SetupLevel(width, height, payload.ClearEntities, cropOnResize)
-
-	// A rebuild replaces the world every latched defeat described, and MonitorArm
-	// restores each owner's resources right after it. Leaving the latch set would
-	// re-enter the reset before the un-defeat crossing lands a playout lead later,
-	// resetting a second time. A resize carries ClearEntities false and keeps it.
-	if payload.ClearEntities {
+	s.world.SetupLevel(width, height, payload.ClearEntities, cropOnResize, payload.PreserveLoot)
+	// Encounter transitions preserve defeat; a reset clears it before rearming.
+	if payload.ClearEntities && !payload.PreserveLoot {
 		s.defeated = [parameter.MaxPlayers]bool{}
-		s.publishAllDefeated()
+		// Reports already in flight describe the previous attempt.
+		s.defeatResetTick = s.world.Resources.Game.State.GetGameTicks() + 1
+		s.publishDefeatState()
 	}
 }
 
