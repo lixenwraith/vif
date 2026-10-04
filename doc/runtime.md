@@ -429,6 +429,7 @@ keymap in NORMAL, which keeps only quit, the audio toggle and `:`.
 |---|---|
 | `SPACE` | Pause/resume. |
 | `.` | Advance one tick while paused. |
+| `,` | Pause and step back one tick. |
 | `+` / `-` | Move the viewer rate up/down the rational scale ladder. |
 | `h j k l` / `0` | Scroll a map larger than the view by four cells; re-centre. |
 | Ctrl+S | Cycle the viewer's mute, which starts as `-mute` says; no journal records it. |
@@ -442,6 +443,13 @@ centred in void as the game centres it; a larger one is shown from the recorded
 view's centre, and scroll stops at the map's edges. The command line pauses
 playback, as the game's does, and hands the recorded mode and pause back when it
 closes; a command that would change the recording is refused.
+
+A world cannot be rewound, so `,` builds a second replay App on the viewer's
+terminal, with no speakers, and replays the stream from its start through the
+last step that left the presented one before its tick, off the frame loop; the
+viewer moves to it with its HUD pins, and playback continues silent. The cost is
+the time to reach that tick headless, and its log snapshots are withheld so the
+log does not restate ticks it already holds.
 
 ### Authored headless scripts
 
