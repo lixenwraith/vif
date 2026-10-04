@@ -1,6 +1,7 @@
 package mode
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -71,6 +72,20 @@ var configForms = map[string]configFormSpec{
 				return err
 			}
 			ctx.MacroClearFlag.Store(true)
+			return nil
+		},
+	},
+	"scenario": {
+		label: "Change scenario", description: "Start another scenario. In a session only the host can, and its participants rejoin it.", command: "new",
+		fields: []configFormField{
+			{"Scenario", "", "Scenario name from the config roots, as -s takes it. The current one's name starts a new game."},
+		},
+		submit: func(ctx *engine.GameContext, f *tui.FormState) error {
+			name := strings.TrimSpace(f.Value(0))
+			if name == "" {
+				return errors.New("name a scenario")
+			}
+			changeScenario(ctx, name)
 			return nil
 		},
 	},

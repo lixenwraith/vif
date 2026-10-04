@@ -35,9 +35,9 @@ only; their description explains the reason.
 | Multiplayer | Host this run, join an existing session, request an allocated session, inspect status, drop a player with its bots or an individual bot (host only). |
 | Audio | Music, sound effects, effects volume in 5% steps. |
 | Controls | Auto-fire (`off`, `main`, `on`), mouse input, pointer following. |
-| Display | Telemetry HUD, navigation flow field and route graph. |
-| Simulation | Solo speed from 1/8x through 8x. |
-| Diagnostics | Logging, level and scope presets, snapshot interval, flight recorder depth and FSM trigger, profiler, starting a replay journal (`:journal start`). |
+| Display | Telemetry HUD and clearing its pins, navigation flow field and route graph. |
+| Simulation | Solo speed from 1/8x through 8x; a new game, or another scenario by name. |
+| Diagnostics | Logging, level and scope presets, snapshot interval, flight recorder depth, FSM trigger and flush, profiler, CPU/heap/mutex profiles and execution trace, telemetry snapshot, starting a replay journal. |
 | Startup settings | Guidance for paths/scenario, audio device/buffer, colour depth, key bindings and identity. |
 
 ### Bots
@@ -98,6 +98,12 @@ The `config_menu` action is bound to `ctrl_g` in `normal_keys`, `text_keys` and
 `overlay_keys` in `input/keymap.toml`. Override those sections (or use `-k`) to
 change its shortcut; `:g` remains available. Forms use the text-key bindings,
 while menu navigation uses overlay bindings.
+
+Action rows (`Enter`) run the command they name and close the menu: `:n`,
+`:n <scenario>`, `:t unpin`, `:t save`, `:log rec flush`, `:d cpu|heap|mutex|trace`
+and `:journal start`. Views (`:t`, `:d`, help), developer state commands (`:god`,
+`:energy` and the like), `:step`, `:emit`, `:system` and `:region` stay on the
+command line.
 
 Use CLI arguments and `vif.toml` for startup defaults. The Startup settings page
 identifies options that need a restart; it does not edit files. Exact values
