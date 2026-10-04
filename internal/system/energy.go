@@ -149,6 +149,11 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 				return
 			}
 			s.setEnergy(cursor, int64(payload.Value))
+			if payload.Weapons {
+				for wt := range component.WeaponCount {
+					s.world.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: cursor, Weapon: wt})
+				}
+			}
 		}
 	case event.EventCursorArmRequest:
 		if p, ok := ev.Payload.(*event.CursorArmRequestPayload); ok {

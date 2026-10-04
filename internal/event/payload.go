@@ -327,10 +327,12 @@ type EnergyAddPayload struct {
 	Type       component.EnergyDeltaType `toml:"type"`
 }
 
-// EnergySetPayload contains energy value
+// EnergySetPayload contains energy value. Weapons grants every weapon after the
+// set, so a polarity crossing the set causes strips the old ones first.
 type EnergySetPayload struct {
-	Entity core.Entity `toml:"entity"`
-	Value  int         `toml:"value"`
+	Entity  core.Entity `toml:"entity"`
+	Value   int         `toml:"value"`
+	Weapons bool        `toml:"weapons"`
 }
 
 // EnergyCrossedZeroPayload names the cursor whose energy changed sign
