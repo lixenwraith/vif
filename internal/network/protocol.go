@@ -78,7 +78,7 @@ const (
 	// that is also carrying epochs, syncs and digests.
 	MsgStateCorrection MessageType = 0x27 // Live: one chunk of an authoritative correction
 
-	// The Phase 6 selective-correction exchange. A manifest is a compact index over
+	// The selective-correction exchange. A manifest is a compact index over
 	// the same capture a correction would carry; a request is a receiver's answer to
 	// one, naming the pages it could not reproduce; a shard set is the repair. All
 	// three are separate message kinds rather than shapes of MsgStateCorrection
@@ -139,13 +139,10 @@ const (
 	MsgReady     MessageType = 0x25 // Live: joiner confirms it received the start gate
 
 	// Reserved, unused: coordinator assignment beyond the startup offer, and
-	// authentication. The list used to be longer. 0x26 carried the retired
-	// replay-the-session-from-tick-zero join and now carries the authoritative
-	// state snapshot that replaced it; 0x27 the periodic correction that snapshot
-	// became once the host was the authority; 0x14/0x15 the round trip Phase 5
-	// added; 0x28..0x2A Phase 6's manifest, request and repair; 0x2B..0x2E Phase
-	// 7's unserved answer and its succession; and 0x20, 0x02 and 0x04 the
-	// reachability map and the peer link that make a successor dialable.
+	// authentication. Codes once reserved here are live above: 0x26/0x27 the state
+	// snapshot and periodic correction, 0x14/0x15 the link probe, 0x28..0x2A the
+	// selective correction, 0x2B..0x2E the unserved answer and succession, and
+	// 0x20, 0x02 and 0x04 the reachability map and peer link.
 	MsgRoleAssign   MessageType = 0x21
 	MsgAuthRequest  MessageType = 0x30
 	MsgAuthResponse MessageType = 0x31

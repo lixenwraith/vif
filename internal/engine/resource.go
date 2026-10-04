@@ -1016,7 +1016,7 @@ type NetworkResource struct {
 	// seam keeps the transport's knowledge to "a selective frame from that peer".
 	OnSelective func(kind uint8, from uint32, body []byte)
 
-	// OnAuthority hands one Phase 7 succession frame — a report, a vote or a
+	// OnAuthority hands one succession frame — a report, a vote or a
 	// handoff record — to the session layer, under the same rule as the two seams
 	// above: called under the world lock, so it takes the bytes and decides
 	// nothing. Succession is a decision about who may author, which belongs beside

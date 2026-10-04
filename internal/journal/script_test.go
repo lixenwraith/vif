@@ -121,12 +121,9 @@ intnet = "motion_right"
 	}
 }
 
-// TestCheckedInScriptsCompile parses every script the repository ships.
-//
-// It used to name the Phase 3 pair, which meant each later phase's pair went in
-// unchecked: a script is only read by an operator running a two-terminal
-// diagnostic, so a typo in one is discovered at the moment it is least welcome.
-// Globbing the directory is what makes a new pair covered by existing it.
+// TestCheckedInScriptsCompile parses every script the repository ships. It globs
+// the directory, so a new pair is covered by existing: a script is read only by an
+// operator running a two-terminal diagnostic, the worst moment to find a typo.
 func TestCheckedInScriptsCompile(t *testing.T) {
 	paths, err := filepath.Glob(filepath.Join("..", "..", "script", "*.toml"))
 	if err != nil {

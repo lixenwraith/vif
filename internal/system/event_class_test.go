@@ -30,7 +30,7 @@ var stampingPush = map[string]bool{
 // crossingHelpers are World methods that wrap exactly one D-3 crossing, so their
 // call sites name no event constant. A helper exists where the crossing must not
 // leave alone: World.PushCursorMove carries the D-18 prediction that answers a local
-// cursor placement immediately, and requirement 3 of Phase 1 is that the two leave
+// cursor placement immediately, and the two must leave
 // from one statement. The D-3 table still has to see the push, so both walks resolve
 // the helper to the type and the method it stands for, and
 // TestCrossingHelpersPushWhatTheyDeclare pins each mapping against the helper body.

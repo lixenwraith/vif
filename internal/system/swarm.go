@@ -16,7 +16,7 @@ import (
 
 // SwarmSystem manages the elite swarm species lifecycle
 // Swarm is a 4x2 animated composite, spawned by fusing 2 enraged drains, that tracks cursor at 4x drain speed, charges the cursor and doesn't get deflected by shield when charging due to enrage, teleports to target location if charge LOS blocked
-// Removes one heat on direct cursor collision without shield, despawns after hitpoints reach zero, uses 5 charges, or 30 second timer runs out
+// Removes one heat on direct cursor collision without shield, despawns after hitpoints reach zero, uses its charges, or its lifetime timer runs out
 // Does not pause drain spawn; drain collisions heal it through the combat event boundary
 type SwarmSystem struct {
 	world *engine.World
@@ -38,7 +38,6 @@ type SwarmSystem struct {
 	enabled bool
 }
 
-// NewSwarmSystem creates a new quasar system
 func NewSwarmSystem(world *engine.World) engine.System {
 	s := &SwarmSystem{
 		world: world,
@@ -413,14 +412,10 @@ func (s *SwarmSystem) updateChaseState(
 		if s.enterLockState(headerEntity, swarmComp) {
 			return
 		}
-		// The lock could not resolve a target this tick. Re-arm the interval
-		// before falling through, because an expired interval takes this branch
-		// again on every following tick and the early return above skips both the
-		// homing and integrateAndSync — the swarm would stop integrating for good.
-		// A knockback still lands on its velocity, but nothing turns that velocity
-		// into movement, so it sits exactly where it stopped while the shield
-		// strikes it every tick and never ejects it. That is the swarm found
-		// parked inside a shield on 2026-08-31.
+		// No lock target this tick. Re-arm and fall through: an expired interval
+		// would retake this branch every tick, and the early return above skips
+		// integration, so a knocked-back swarm would sit inside a shield that
+		// strikes it every tick and never ejects it.
 		swarmComp.ChargeIntervalRemaining = parameter.SwarmTransitionRetryInterval
 		s.statStalls.Add(1)
 	}

@@ -50,17 +50,10 @@ func newStalledSwarm(t *testing.T) (*engine.World, *SwarmSystem, core.Entity) {
 	return w, s, header
 }
 
-// TestSwarmKeepsIntegratingWhenLockCannotResolve is the regression for the swarm
-// found parked inside a player's shield on 2026-08-31.
-//
-// updateChaseState decremented ChargeIntervalRemaining, called enterLockState and
-// returned. enterLockState refuses when no target resolves, and refused without
-// re-arming the interval — so every following tick took the same branch and
-// returned before applying homing or integrating. The swarm stopped moving
-// permanently. The shield kept striking it (shield.shield_hit climbed by 64 over
-// 200 ticks in the incident) and combat kept applying knockback impulses to its
-// velocity, but with nothing integrating that velocity the swarm never left. The
-// shield deals no damage by design, so nothing else resolved it.
+// TestSwarmKeepsIntegratingWhenLockCannotResolve: when no lock target resolves,
+// Chase re-arms and keeps homing and integrating. An early return on every tick
+// would park the swarm inside a shield that strikes and knocks it back without
+// damage, with nothing turning that velocity into movement.
 func TestSwarmKeepsIntegratingWhenLockCannotResolve(t *testing.T) {
 	w, s, header := newStalledSwarm(t)
 
@@ -90,11 +83,9 @@ func TestSwarmKeepsIntegratingWhenLockCannotResolve(t *testing.T) {
 	}
 }
 
-// TestAStunnedSwarmStillDies is the regression for the swarm found unkillable on
-// 2026-09-10. The stun check preceded the hit-point check and returned, so a
-// stunned swarm never noticed zero hit points; it also skipped the active tally,
-// so swarm.count read 0 while combat.live.swarm read 3. Pulse refreshed the stun
-// on every hit, and with two participants firing the stun never lapsed.
+// TestAStunnedSwarmStillDies: the hit-point check runs ahead of the stun check and
+// a stunned swarm still counts as active, so a swarm held in stun can neither
+// outlive zero hit points nor drop out of swarm.count.
 func TestAStunnedSwarmStillDies(t *testing.T) {
 	w, s, header := newStalledSwarm(t)
 

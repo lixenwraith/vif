@@ -1439,6 +1439,8 @@ func (s *StormSystem) terminateStorm() {
 		Effect:       0,
 	})
 
+	// Update skips the queue once the root is gone; a kept entry would fire into the next storm
+	s.pendingBlueSpawns = s.pendingBlueSpawns[:0]
 	s.rootEntity = 0
 	s.statActive.Store(false)
 	s.statCircleCount.Store(0)

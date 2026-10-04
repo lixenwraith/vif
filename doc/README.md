@@ -52,6 +52,8 @@ Existing focused references remain useful:
 - [TODO](todo.md) is the running work list the packaging checklists feed.
 - [Bots](todo-bots.md) is the working plan for bots and relayed seats, and becomes
   their document as its stages land.
+- [Behavior machines](machine-design.md) is the working design for per-entity
+  species state machines and data-driven species behavior.
 - [Keymap example](../internal/input/README.md) shows sparse key overrides.
 - [Genetic package reference](../pkg/genetic/README.md) documents the reusable
   optimization library.
