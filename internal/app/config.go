@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
+	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
@@ -233,6 +234,9 @@ type Config struct {
 	// replaces played on; notice is what that run's failure tells the next one.
 	dialled *joinDial
 	notice  string
+
+	// resume is the world the run this one replaces handed over (restartRequest).
+	resume *snapshot.SharedCapture
 
 	// scriptedSession admits headless network I/O only through RunScript, which
 	// performs the startup gate and owns wall pacing.

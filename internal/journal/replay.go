@@ -99,6 +99,11 @@ func (d *ReplayDriver) install() (bool, error) {
 		d.target.Tick(1)
 		return true, nil
 	}
+	// The recorded run settled what it held before the write, a fresh run's boot
+	// among it, and none of that was a record: only the boundary says so.
+	if at.Boundary < c.Boundary {
+		d.target.Settle()
+	}
 	if err := d.target.Install(c); err != nil {
 		return false, fmt.Errorf("replay: capture after jseq %d: %w", c.JSeq, err)
 	}

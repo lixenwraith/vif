@@ -42,6 +42,9 @@ func (c sessionControl) BotSummary() string        { return c.a.seatsSummary() }
 func (c sessionControl) Bots() []engine.BotSeat    { return c.a.botSeats() }
 func (c sessionControl) HostError() error          { return c.a.hostErrorLocked() }
 func (c sessionControl) JoinError() error          { return c.a.joinErrorLocked() }
+func (c sessionControl) StartJournal() error       { return c.a.startJournalLocked() }
+func (c sessionControl) JournalError() error       { return c.a.journalErrorLocked() }
+func (c sessionControl) JournalPath() string       { return c.a.recorder.Path() }
 
 func (c sessionControl) DropPlayer(slot int) error {
 	if slot < 0 || slot >= parameter.MaxPlayers {

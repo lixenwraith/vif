@@ -120,17 +120,43 @@ var configPages = []configPage{
 		{key: "prof", label: "Runtime profiler", description: "Collect module timings. Enabling also pins profiler cards to the telemetry HUD.",
 			command: "debug prof", choices: []string{"off", "on"},
 			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.World.Resources.Prof.Profiling()) }},
+		{key: "journal", label: "Replay journal", description: "Enter records a replay journal from here. A solo run restarts on its own world and a guest rejoins, so local glyphs and effects start fresh, as on a join.",
+			command: "journal", read: journalValue, disabled: journalUnavailable,
+			activate: func(r *Router) {
+				if err := r.ctx.SessionCtl.StartJournal(); err != nil {
+					setCommandError(r.ctx, "Journal: "+err.Error())
+					return
+				}
+				r.closeOverlay()
+			}},
 	}},
 	{key: "startup", label: "Startup settings", description: "Settings that require restarting, and where to configure them.", options: []configOption{
 		{key: "files", label: "Paths and scenario", description: "Use vif.toml [paths] or -config-dir, -s, -f, -k. :new <scenario> starts another scenario.", read: startupValue},
 		{key: "backend", label: "Audio device / buffer", description: "Use -audio-backend and vif.toml [audio].buffer_ms. The audio device opens at startup.", read: startupValue},
 		{key: "color", label: "Colour depth", description: "Use -color auto|256|true. Rendering resources are selected at startup.", read: startupValue},
 		{key: "keymap", label: "Key bindings", description: "Edit input/keymap.toml in your config root, or use -k. config_menu is the action bound to Ctrl+G.", read: startupValue},
-		{key: "session", label: "Identity / recording", description: "Session identity, seed and recording are startup options. Use the Multiplayer and Bots pages for live session actions.", read: startupValue},
+		{key: "session", label: "Identity", description: "Session identity and seed are startup options. Use the Multiplayer and Bots pages for live session actions, Diagnostics to start a replay journal.", read: startupValue},
 	}},
 }
 
 func startupValue(*engine.GameContext) string { return "info" }
+
+func journalValue(ctx *engine.GameContext) string {
+	if ctx.SessionCtl != nil && ctx.SessionCtl.JournalPath() != "" {
+		return "on"
+	}
+	return "Enter"
+}
+
+func journalUnavailable(ctx *engine.GameContext) string {
+	if ctx.SessionCtl == nil {
+		return "This runtime cannot start a journal"
+	}
+	if err := ctx.SessionCtl.JournalError(); err != nil {
+		return "Unavailable: " + err.Error()
+	}
+	return ""
+}
 
 func audioUnavailable(ctx *engine.GameContext) string {
 	reg := ctx.World.Resources.Status

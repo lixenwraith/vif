@@ -410,6 +410,90 @@ func TestAGuestJournalReplaysFromItsJoin(t *testing.T) {
 	}
 }
 
+// TestAJournalStartedMidRunReplaysFromItsWorld: a run that journals from the world
+// another left, as :journal start makes one, replays from the journal alone.
+func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
+	t.Parallel()
+	rng := vmath.NewFastRand(5)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	want := map[event.Stamp][]string{}
+	drive := func(a *App, ticks int) {
+		for range ticks {
+			if rng.Intn(3) == 0 {
+				inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+			}
+			if rng.Intn(5) == 0 {
+				inject(t, a, &input.Intent{Type: input.IntentFireMain, Count: 1})
+			}
+			a.Tick(1)
+			p := a.Position()
+			want[event.Stamp{Run: p.Run, Tick: p.Tick}] = a.SnapshotSimulation()
+		}
+	}
+	old := mustHeadless(t, 0x7E5, 120, 40)
+	defer old.Close()
+	drive(old, 400)
+	var cap snapshot.SharedCapture
+	var err error
+	old.World().RunSafe(func() {
+		if cap, err = old.captureSharedLocked(); err == nil {
+			err = old.sealCapture(&cap)
+		}
+	})
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+
+	rec := journal.NewCapture()
+	a, err := NewHeadless(Config{Width: 120, Height: 40, Resources: old.cfg.Resources,
+		Journal: true, JournalSink: rec, resume: &cap})
+	if err != nil {
+		t.Fatalf("resumed app: %v", err)
+	}
+	defer a.Close()
+	if err := a.resumeWorld(cap); err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	clear(want)
+	drive(a, 600)
+
+	busy := map[event.Stamp]bool{}
+	for _, r := range rec.Records() {
+		busy[event.Stamp{Run: r.Run, Tick: r.Tick}] = true
+	}
+	cfg, err := ConfigFromAnchor(rec.Anchors()[0])
+	if err != nil {
+		t.Fatalf("config from anchor: %v", err)
+	}
+	rep, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatalf("replay app: %v", err)
+	}
+	defer rep.Close()
+	d, err := newReplayDriver(rep, rec.Records(), rec.Captures())
+	if err != nil {
+		t.Fatalf("replay driver: %v", err)
+	}
+	compared := 0
+	for more := true; more; {
+		if more, err = d.Step(); err != nil {
+			t.Fatalf("replay: %v", err)
+		}
+		p := rep.Position()
+		at := event.Stamp{Run: p.Run, Tick: p.Tick}
+		if w, ok := want[at]; ok && !busy[at] {
+			compared++
+			if i, _, _, ok := snapshot.FirstDiff(w, rep.SnapshotSimulation()); ok {
+				t.Fatalf("diverged at tick %d at line %d:\n%s", p.Tick, i,
+					strings.Join(snapshot.Diff(w, rep.SnapshotSimulation(), 12), "\n"))
+			}
+		}
+	}
+	if compared < 100 {
+		t.Fatalf("compared %d ticks: the run exercised too little", compared)
+	}
+}
+
 // guestSurface is the simulation surface less what the recorded run's link did: a
 // replay has none, so its traffic and connect events are not the simulation's. The
 // session state a derivation's phase turns on is compared in their place.

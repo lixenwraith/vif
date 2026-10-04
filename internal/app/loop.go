@@ -46,6 +46,7 @@ func Run(cfg Config) error {
 			return nil
 		}
 		solo, cfg.notice, cfg.dialled, cfg.Bots = nil, next.Notice, nil, next.Bots
+		cfg.Journal, cfg.resume = cfg.Journal || next.Journal, next.Resume
 		if next.Scenario != "" {
 			cfg.Resources.Scenario, cfg.Resources.Embedded = next.Scenario, false
 		}
@@ -155,6 +156,13 @@ func (a *App) Loop() (*restartRequest, error) {
 		// Paused directly during construction, without emitting an operator event:
 		// the start gate is the authority that releases tick-zero game time.
 		a.ctx.TimeCtl.SetPaused(false)
+	}
+
+	if a.cfg.resume != nil {
+		if err := a.resumeWorld(*a.cfg.resume); err != nil {
+			vlog.Warn("app", "msg", "world not resumed; playing a new game", "error", err.Error())
+			a.ctx.SetStatusMessage("Journal: world not resumed: "+err.Error(), parameter.StatusMessageMaxDuration, true)
+		}
 	}
 
 	// Prime the first tick, then start the game clock
