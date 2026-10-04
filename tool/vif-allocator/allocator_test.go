@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/lixenwraith/vif/internal/asset"
 )
 
 type fakeKube struct {
@@ -424,6 +427,59 @@ func TestASessionRequestOutsideTheOpenedBoundsIsRefused(t *testing.T) {
 		if _, err := controller.createSession(context.Background(), request); !errors.Is(err, errRequestRefused) {
 			t.Fatalf("createSession(%+v) returned %v, want a refusal", request, err)
 		}
+	}
+}
+
+// TestScenarioDescriptionsComeFromTheirEntries reads each one from the file the
+// game reads, the embedded fallback standing in for a main the volume lacks. An
+// entry that states none, or whose preamble overruns the scan, is still offered.
+func TestScenarioDescriptionsComeFromTheirEntries(t *testing.T) {
+	cfg := testAllocatorConfig(t)
+	controller := newAllocator(&fakeKube{}, fakeHealth{}, cfg)
+	if got := controller.limits().Descriptions; got != nil {
+		t.Fatalf("entries stating no description gave %v", got)
+	}
+
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(cfg.WadDir, "scenario", name, "scenario.toml"),
+			[]byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("td", "# towers\ndescription = \"  Hold the line.  \"\n\n[regions.td]\ndescription = \"not this\"\n")
+	if got := controller.limits().Descriptions; len(got) != 1 || got["td"] != "Hold the line." {
+		t.Fatalf("descriptions = %v; want td's own, trimmed", got)
+	}
+
+	if err := os.RemoveAll(filepath.Join(cfg.WadDir, "scenario", "main")); err != nil {
+		t.Fatal(err)
+	}
+	embedded, err := fs.ReadFile(asset.DefaultScenario, asset.DefaultScenarioEntry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := preambleDescription(embedded)
+	if want == "" {
+		t.Fatal("the embedded scenario states no description")
+	}
+	if got := controller.limits().Descriptions["main"]; got != want {
+		t.Errorf("main off the volume is described as %q; want the embedded %q", got, want)
+	}
+
+	write("td", "description = \"late\"\n"+strings.Repeat("# padding\n", describeScan/10+1))
+	if got := controller.limits().Descriptions["td"]; got != "late" {
+		t.Errorf("a long preamble's leading description = %q; want it read", got)
+	}
+	write("td", strings.Repeat("# padding\n", describeScan/10+1)+"description = \"late\"\n")
+	limits := controller.limits()
+	if _, ok := limits.Descriptions["td"]; ok || !slices.Contains(limits.Scenarios, "td") {
+		t.Errorf("a description past the scan gave %v over %v; want td offered, undescribed",
+			limits.Descriptions, limits.Scenarios)
+	}
+	write("td", "description = [\"not\", \"text\"]\n")
+	if got, ok := controller.limits().Descriptions["td"]; ok {
+		t.Errorf("a non-string description gave %q", got)
 	}
 }
 

@@ -124,6 +124,23 @@ func TestGetSessionsAlwaysReturnsArray(t *testing.T) {
 	}
 }
 
+// TestGetSessionsNamesScenarioDescriptionsBesideTheList keeps the list a list of
+// names: descriptions are an object beside it, absent when there are none above.
+func TestGetSessionsNamesScenarioDescriptionsBesideTheList(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/vif/api/sessions", nil)
+	response := httptest.NewRecorder()
+
+	testServer(&fakeSessionAllocator{
+		bounds: fleetLimits{PlayersMax: 4, LogLevels: []string{"info"},
+			Scenarios: []string{"main", "td"}, Descriptions: map[string]string{"td": "Hold the line."}},
+	}).ServeHTTP(response, request)
+
+	want := `"scenarios":["main","td"],"scenario_descriptions":{"td":"Hold the line."}}`
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), want) {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
 // TestPostSessionCarriesTheChoicesItNames pins the one thing a caller may select. A
 // field the allocator dropped would be a session silently unlike the one the page
 // offered, which is worse than a refusal.

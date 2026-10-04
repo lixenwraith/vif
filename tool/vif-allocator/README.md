@@ -38,7 +38,7 @@ atomically without restarting the allocator. See
 
 | Request | Result |
 |---|---|
-| `POST /vif/api/sessions` with an empty body, `{}`, or `{"players":N,"log_level":"info"}` | `201` and one created session. Those two fields are the whole of what a caller may choose; an omitted one takes the deployment default, an unknown one is a `400`. |
+| `POST /vif/api/sessions` with an empty body, `{}`, or `{"players":N,"log_level":"info","scenario":"td"}` | `201` and one created session. Those three fields are the whole of what a caller may choose; an omitted one takes the deployment default, an unknown one is a `400`. |
 | `GET /vif/api/sessions` | `200` and `{ "sessions": [...], "limits": {...} }` for live, non-completed Jobs. |
 | `GET /healthz` | Process liveness. |
 | `GET /readyz` | Verifies that the current token can reach the Kubernetes API. |
@@ -74,9 +74,28 @@ One session row has this shape:
 game's countdown and the Job's `activeDeadlineSeconds`. An occupied game runs no
 countdown, so the Job's deadline is what it reports.
 
-`limits` names what this deployment will accept — `players_max` and the allowed
-`log_levels`, most verbose first — so a caller offers only choices that would be
-granted rather than discovering them by refusal. `-players-max` defaults to
+`limits` names what this deployment will accept — `players_max`, the allowed
+`log_levels`, most verbose first, and the installed `scenarios`, default first — so
+a caller offers only choices that would be granted rather than discovering them by
+refusal:
+
+```json
+{
+  "players_max": 4,
+  "log_levels": ["debug", "info", "warn", "error"],
+  "scenarios": ["main", "blank", "kraken", "td"],
+  "scenario_descriptions": {
+    "main": "Survive escalating storms, lure Krakens through mazes, and defend the tower.",
+    "td": "Defend two central towers in a sprawling maze against escalating enemy waves."
+  }
+}
+```
+
+`scenario_descriptions` is each scenario's top-level `description`, read from its
+`scenario.toml` on every request as the names are; `main` off the volume is the
+game's embedded fallback, described by that. A scenario that states none, or whose
+description is not in the file's first 4 KiB ahead of any table, is absent from the
+object and still offered; with none at all the key is omitted. `-players-max` defaults to
 `-players`, and `-log-level-min` defaults to `debug`: publishing the API must not
 hand an anonymous caller a sixteen-player world or the fleet's shared log rate, so
 both open only as far as an operator sets them. A value outside them is refused with
