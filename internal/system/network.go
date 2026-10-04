@@ -340,6 +340,9 @@ type barrierArtifact struct {
 	// void marks a crossing the authority refused as too late: it applies nothing
 	// and only closes its source's fence, so its producer stops replaying it.
 	void bool
+	// authored marks a frame its source sent while it held the authority, which a
+	// roster artifact keeps across a handoff that lands before its apply tick.
+	authored bool
 }
 
 // frameBytes is what one artifact costs a bounded buffer. The schedule and the
@@ -1906,6 +1909,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 			}
 			a := barrierArtifact{
 				frame: f.Frame, applyTick: f.ApplyTick, source: batch.Source, origin: event.OriginNetwork,
+				authored: batch.Source == s.authorityParticipant(),
 			}
 			if committing {
 				if next := s.localTick() + 1; a.applyTick < next {
@@ -2227,7 +2231,7 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 			s.statDrop.Add(1)
 			continue
 		}
-		if !s.admissibleFromSource(et, a.source) {
+		if !s.admissibleFromSource(et, a.source, a.authored) {
 			s.statForged.Add(1)
 			vlog.Warn("app", "msg", "artifact refused",
 				"peer", a.source, "event", event.GetEventName(et), "apply_tick", a.applyTick)
@@ -2269,13 +2273,14 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 	s.statRecv.Add(int64(peer))
 }
 
-// Only the coordinator may author roster changes, which create or destroy
-// shared identities. Other source authentication requires authenticated peers;
-// these sessions trust their participants.
-func (s *NetworkSystem) admissibleFromSource(et event.EventType, source uint32) bool {
+// Only the authority may author roster changes, which create or destroy shared
+// identities: the one that sent the frame, or the one it applies under — a dropped
+// guest sees the link close before its dismissal's tick and takes the term itself.
+// Other source authentication requires authenticated peers.
+func (s *NetworkSystem) admissibleFromSource(et event.EventType, source uint32, authored bool) bool {
 	switch et {
 	case event.EventParticipantJoined, event.EventParticipantDeparted:
-		return source == s.authorityParticipant()
+		return authored || source == s.authorityParticipant()
 	default:
 		return true
 	}

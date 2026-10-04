@@ -574,8 +574,10 @@ The measurements behind each are in the status snapshot and in `:session`.
 
 ### 4.4 Membership and session control
 
-Arrival and departure are coordinator-authored barrier crossings. A non-authority
-roster artifact is refused. Full reset is likewise serialized by the coordinator;
+Arrival and departure are coordinator-authored barrier crossings. A roster
+artifact is refused unless its source held the authority when it arrived or holds
+it when it applies: a dropped guest sees the link close before its dismissal's
+tick and takes the term itself. Full reset is likewise serialized by the coordinator;
 it preserves the closed roster and rebuilds cursors in slot order.
 
 A bot's holder identity travels in admission, the roster and the Shared cursor.

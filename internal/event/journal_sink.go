@@ -21,8 +21,8 @@ type vlogSink struct{}
 func VlogSink() JournalSink { return vlogSink{} }
 
 // Record writes one event record; every argument is an immutable value, as
-// vlog formats asynchronously on its own goroutine. encode_err is written only
-// when set: it is empty on all but a broken record.
+// vlog formats asynchronously on its own goroutine. encode_err and crossing are
+// written only when set: most records are neither broken nor an own crossing.
 func (vlogSink) Record(r JournalRecord) {
 	kv := []any{
 		"jseq", r.JSeq,
@@ -37,6 +37,9 @@ func (vlogSink) Record(r JournalRecord) {
 	}
 	if r.EncodeErr != "" {
 		kv = append(kv, "encode_err", r.EncodeErr)
+	}
+	if r.Crossing != 0 {
+		kv = append(kv, "crossing", r.Crossing)
 	}
 	vlog.Journal(SubJournalRecord, kv...)
 }

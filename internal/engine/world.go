@@ -555,8 +555,9 @@ func (w *World) pushEvent(eventType event.EventType, payload any, origin event.O
 // PushRecord republishes one journaled record without offering it to the wire,
 // reporting whether it was queued. A record is stamped where it applied, so the
 // barrier deferring it again would add a second playout lead; crossings no record
-// carries are re-derived through Push and deferred as the recorded run did.
-func (w *World) PushRecord(eventType event.EventType, payload any, origin event.Origin, domain core.Domain) bool {
+// carries are re-derived through Push and deferred as the recorded run did. An own
+// crossing keeps its identity, which decides how it settles the D-18 queue.
+func (w *World) PushRecord(rec event.JournalRecord, payload any) bool {
 	if w.Resources.Event.Queue == nil {
 		return false
 	}
@@ -564,7 +565,7 @@ func (w *World) PushRecord(eventType event.EventType, payload any, origin event.
 	// own, stamped where the barrier released it a lead later.
 	switch p := payload.(type) {
 	case *event.CursorMoveRequestPayload:
-		if eventType == event.EventCursorPredicted {
+		if rec.Type == event.EventCursorPredicted {
 			w.predictCursorMove(p.Entity, p.X, p.Y, p.Pointer)
 			return false
 		}
@@ -573,7 +574,7 @@ func (w *World) PushRecord(eventType event.EventType, payload any, origin event.
 		return false
 	}
 	w.Resources.Event.Queue.PushReady(event.GameEvent{
-		Type: eventType, Payload: payload, Origin: origin, Domain: domain,
+		Type: rec.Type, Payload: payload, Origin: rec.Origin, Domain: rec.Domain, CrossingSeq: rec.Crossing,
 	})
 	return true
 }
