@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -17,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/paths"
 )
 
@@ -68,10 +73,14 @@ type sessionRequest struct {
 
 // fleetLimits is what the deployment will accept, so a caller can offer only the
 // choices this allocator would allow rather than discovering them by refusal.
+// Descriptions holds each offered scenario's own one-line summary, keyed by name;
+// a scenario whose entry states none is absent. It sits beside Scenarios rather
+// than inside it so a caller that reads the names alone is unaffected.
 type fleetLimits struct {
-	PlayersMax int      `json:"players_max"`
-	LogLevels  []string `json:"log_levels"`
-	Scenarios  []string `json:"scenarios"`
+	PlayersMax   int               `json:"players_max"`
+	LogLevels    []string          `json:"log_levels"`
+	Scenarios    []string          `json:"scenarios"`
+	Descriptions map[string]string `json:"scenario_descriptions,omitempty"`
 }
 
 type session struct {
@@ -117,8 +126,9 @@ func newAllocator(kube kubeAPI, health healthProbe, cfg allocatorConfig) *alloca
 }
 
 func (a *allocator) limits() fleetLimits {
+	names := a.scenarios()
 	return fleetLimits{PlayersMax: a.cfg.PlayersMax, LogLevels: a.cfg.LogLevels,
-		Scenarios: a.scenarios()}
+		Scenarios: names, Descriptions: a.describe(names)}
 }
 
 // scenarios is what the node's volume holds, read per request rather than kept
@@ -144,6 +154,77 @@ func (a *allocator) scenarios() []string {
 		}
 	}
 	return out
+}
+
+// describeScan bounds what is read of an entry file for its description. The key
+// is top-level, which TOML places ahead of the first table; a preamble longer than
+// this leaves the scenario offered but undescribed.
+const describeScan = 4 << 10
+
+// describe reads each scenario's description from its entry file, per request for
+// the reason the names are. A main the volume does not hold is the game's embedded
+// fallback, so its description is that one's. An unreadable or malformed entry is
+// left undescribed: describing is not this service's check to fail.
+func (a *allocator) describe(names []string) map[string]string {
+	root := filepath.Join(a.cfg.WadDir, paths.ScenarioDirName)
+	out := make(map[string]string, len(names))
+	for _, name := range names {
+		head, err := readHead(filepath.Join(root, name, paths.ScenarioFile), describeScan)
+		if errors.Is(err, fs.ErrNotExist) && name == paths.MainScenarioName {
+			head, err = fs.ReadFile(asset.DefaultScenario, asset.DefaultScenarioEntry)
+		}
+		if err != nil {
+			continue
+		}
+		if text := preambleDescription(head); text != "" {
+			out[name] = text
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// readHead returns at most limit bytes of a file, cut back to its last whole line
+// when the file runs past them.
+func readHead(name string, limit int) ([]byte, error) {
+	file, err := os.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	head, err := io.ReadAll(io.LimitReader(file, int64(limit)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(head) > limit {
+		head = head[:bytes.LastIndexByte(head[:limit], '\n')+1]
+	}
+	return head, nil
+}
+
+// preambleDescription parses only what precedes the first table header, the one
+// place a top-level key can be, so a cut read never hands the parser half a table.
+func preambleDescription(data []byte) string {
+	end := len(data)
+	for offset := 0; offset < len(data); {
+		line := data[offset:]
+		if next := bytes.IndexByte(line, '\n'); next >= 0 {
+			line = line[:next+1]
+		}
+		if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 && trimmed[0] == '[' {
+			end = offset
+			break
+		}
+		offset += len(line)
+	}
+	doc, err := toml.NewParser(data[:end]).Parse()
+	if err != nil {
+		return ""
+	}
+	text, _ := doc["description"].(string)
+	return strings.TrimSpace(text)
 }
 
 // resolve folds a caller's choices into this deployment's workload. An omitted
