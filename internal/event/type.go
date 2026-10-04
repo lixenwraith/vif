@@ -8,10 +8,10 @@ type GameEvent struct {
 	Type    EventType
 	Seq     uint64 // Monotonic queue slot, stamped at push; orders events within a tick
 
-	// CrossingSeq is the source-local wire sequence of this instance's own ordinary
+	// CrossingSeq is the source-local wire sequence of this instance's own
 	// crossing, stamped when the barrier publishes it. The scheduler returns it to
 	// the sink after dispatch so a capture claims exactly the local crossings its
-	// world contains; the wire frame carries its own Seq.
+	// world contains, and the queue journals it whatever produced it.
 	CrossingSeq uint64
 
 	Origin Origin      // Producer, for journaling and replay; never affects dispatch

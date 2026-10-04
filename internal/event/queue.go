@@ -76,8 +76,9 @@ func (eq *EventQueue) publish(event GameEvent) {
 
 			// Last point the producer owns the payload: once published a
 			// handler may recycle it. Journaled is register compares, which
-			// keeps the system hot path cheap.
-			if event.Origin.Journaled() {
+			// keeps the system hot path cheap. An own crossing is a record
+			// whatever produced it: a replay's barrier applies none of its own.
+			if event.Origin.Journaled() || event.CrossingSeq != 0 {
 				if j := eq.journal.Load(); j != nil {
 					j.record(&event, *eq.stamp.Load())
 				}

@@ -761,7 +761,9 @@ func drainTimer(t *time.Timer) {
 
 // eventLoop settles queued events between ticks so a frame renders a settled
 // world. Runs regardless of pause: pause freezes the simulation (processTick),
-// not delivery.
+// not delivery. A whole settle, not a pass: a journal records each settle group,
+// and a cascade split across wakeups would interleave with the next records by
+// wall time, which a replay cannot reproduce.
 //
 // The world lock is mandatory here, not merely for component safety:
 // EventQueue.Consume is single-consumer, and updateMutex is what serializes
@@ -802,9 +804,7 @@ func (s *Scheduler) eventLoop() {
 					s.evBackoffs += pendingBackoffs
 				}
 				pendingBackoffs = 0
-				if s.dispatchOnePass("loop") > 0 {
-					s.world.Resources.Event.Queue.NextBoundary()
-				}
+				s.settleLocked("loop")
 				s.world.Unlock()
 				backoffCount = 0
 				continue
@@ -831,9 +831,7 @@ func (s *Scheduler) eventLoop() {
 					s.evBackoffs += pendingBackoffs
 				}
 				pendingBackoffs = 0
-				if s.dispatchOnePass("loop") > 0 {
-					s.world.Resources.Event.Queue.NextBoundary()
-				}
+				s.settleLocked("loop")
 				s.world.Unlock()
 				backoffCount = 0
 			}

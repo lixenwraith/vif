@@ -689,6 +689,11 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (taken bool) {
 	if !s.barrierActive.Load() {
 		return false
 	}
+	if s.world.FollowsJournal() {
+		// The recorded run's barrier applied this one where the journal records it
+		event.ReleaseDeferredPayload(ev.Payload)
+		return true
+	}
 	s.mu.Lock()
 	// Named before it is encoded, so this instance's own copy and every peer's
 	// carry one identity: a payload whose shared outcome needs a value no receiver
@@ -2243,10 +2248,10 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 			s.statLate.Add(1)
 		}
 		ev := event.GameEvent{Type: et, Payload: payload, Origin: a.origin, Domain: domain}
-		if a.source == localSource && !barrierBound(et) {
+		if a.source == localSource {
 			// The local fence closes at dispatch: a capture read between the
 			// schedule and the handlers must not claim an effect the world does
-			// not yet hold.
+			// not yet hold. The sequence also journals it, whatever produced it.
 			ev.CrossingSeq = a.frame.Seq
 		}
 		s.world.Resources.Event.Queue.PushReady(ev)

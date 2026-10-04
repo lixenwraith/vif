@@ -684,7 +684,7 @@ Only a platform with no resolvable user-state/cache location falls back to
 
 | Origin | Producer path |
 |---|---|
-| `system` | Simulation-internal event; never journaled. |
+| `system` | Simulation-internal event; journaled only as an own crossing the barrier applied (it then carries `crossing`). |
 | `input` | Physical key/mouse input through the mode router, including resize. |
 | `macro` | Macro playback and auto-fire. |
 | `command` | Ex command line, including a typed `:region`. |
@@ -709,9 +709,11 @@ Each record is stamped synchronously at queue push with
 
 A record `(R,T,b)` was produced after tick `T` of run `R` completed, in the
 `b`th settle group since. Separate boundaries matter: merging two injected
-groups can change their order relative to system events. The reset event that
-opens run `R+1` is itself recorded in run `R`, so replay follows that boundary
-rather than fabricating it.
+groups can change their order relative to system events. Every between-tick
+dispatch is a whole settle, the interactive event loop's included, so a group
+that held no record — a tick's leftovers — is one settle a replay reproduces
+before the next group it reaches. The reset event that opens run `R+1` is itself
+recorded in run `R`, so replay follows that boundary rather than fabricating it.
 
 ### Record and anchor shapes
 
@@ -725,7 +727,7 @@ Journal record fields are:
 | `origin`, `ev` | Producer class and registered event name. |
 | `payload` | TOML text encoded from the registered payload prototype. |
 | `encode_err` | Why a payload could not be captured, absent otherwise; replay refuses that record. |
-| `crossing` | This instance's own crossing sequence the barrier applied it under, absent otherwise; replay restores it, since an own placement settles the D-18 queue by identity rather than by cell. |
+| `crossing` | This instance's own crossing sequence the barrier applied it under, absent otherwise. Every such crossing is a record, a system-derived one included, at the place it interleaved with its peers'; a replay's barrier applies none of its own, and restores the identity, by which an own placement settles the D-18 queue. |
 
 An anchor is emitted when capture opens, after reset, and every 600 ticks so a
 rotated file soon receives a self-description. It carries:
@@ -761,7 +763,8 @@ they are not in.
 ### Written worlds and notes
 
 A participant writes worlds it did not simulate: the capture its join installed
-and each correction after it. Each is a `capture` record carrying `jseq` (the
+and each correction after it, and a host the world it opened its session on — the
+owners, latch and lead that `:host`, and `-host` once its clock runs, write. Each is a `capture` record carrying `jseq` (the
 records before it), its lattice position, the local `participant`, the
 `authority` and, as base64 `body`, a `snapshot.WrittenDelta`: what the write
 changed against the world held just before it, sealed with the written world's
@@ -769,9 +772,7 @@ integrity hash. Replay rebuilds it from its own world at that place, refuses a
 rebuild whose hash differs (it diverged before the write) and installs it under
 that identity, so a guest's journal replays from its join. A correction that
 changed nothing costs a few hundred bytes. Owner syncs and kill confirmations are
-records; the authority's worlds that proved them are not. A world written past
-the replay's settle boundary is preceded by a settle: what the recorded run
-dispatched there, a fresh run's boot among it, was no record.
+records; the authority's worlds that proved them are not.
 
 Two events are notes, journaled and applied by replay but never dispatched:
 `EventCursorPredicted`, the D-18 placement a keystroke made, and
