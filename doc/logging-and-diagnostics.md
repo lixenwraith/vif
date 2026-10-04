@@ -725,6 +725,7 @@ Journal record fields are:
 | `origin`, `ev` | Producer class and registered event name. |
 | `payload` | TOML text encoded from the registered payload prototype. |
 | `encode_err` | Why a payload could not be captured, absent otherwise; replay refuses that record. |
+| `crossing` | This instance's own crossing sequence the barrier applied it under, absent otherwise; replay restores it, since an own placement settles the D-18 queue by identity rather than by cell. |
 
 An anchor is emitted when capture opens, after reset, and every 600 ticks so a
 rotated file soon receives a self-description. It carries:
