@@ -2,19 +2,11 @@ package engine
 
 import "time"
 
-// SimEpoch is the origin every instance measures simulation time from. A constant
-// rather than a per-process time.Now, because game time is shared simulation state:
-// two participants must read the same instant at the same tick, and a replay must
-// read the same instant as the run it reproduces.
-//
-// Before this existed the simulation instant came from the pacing clock, so it
-// carried each process's own start offset and its own scheduler jitter. Every
-// shared reader takes a difference against a stored instant — a quasar's speed
-// step, the gold timer, adaptation drain ages, genotype ages — and a difference
-// against a wall-paced clock crosses its threshold on a different *tick* on each
-// instance. The 2026-08-31 kinetics divergence was exactly that: one instance
-// stepped a quasar's SpeedMultiplier a tick before the other, and the two velocity
-// streams never re-converged.
+// SimEpoch is the origin every instance measures simulation time from: a constant,
+// not a per-process time.Now, so participants and a replay read one instant per tick.
+// Shared readers difference against stored instants (quasar speed step, gold timer,
+// adaptation and genotype ages); against a wall-paced clock those cross their
+// thresholds on different ticks per instance and never re-converge.
 var SimEpoch = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 
 // SimTime is the simulation instant of one tick: a pure function of the tick

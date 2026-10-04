@@ -154,7 +154,7 @@ func splitKey(key string) (group, name, playerSlot string) {
 	return domain, name, ""
 }
 
-// snapshotSelectiveGroup partitions the Phase 6 correction counters into the three
+// snapshotSelectiveGroup partitions the selective-correction counters into the three
 // cards their questions divide into: what the index cost, what the repair moved,
 // and what replaying this participant's own actions across one took.
 //
