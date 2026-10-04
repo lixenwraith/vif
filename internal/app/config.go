@@ -238,6 +238,11 @@ type Config struct {
 	// resume is the world the run this one replaces handed over (restartRequest).
 	resume *snapshot.SharedCapture
 
+	// borrow is another replay's presentation, whose terminal a replay rebuilt
+	// behind its viewer draws on; it has no speakers, since two mixers would open
+	// one device.
+	borrow *presentationState
+
 	// scriptedSession admits headless network I/O only through RunScript, which
 	// performs the startup gate and owns wall pacing.
 	scriptedSession bool

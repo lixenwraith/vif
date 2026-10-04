@@ -22,6 +22,10 @@ func (a *App) initPresentationService() error {
 	if !a.cfg.Mode.Presents() {
 		return nil
 	}
+	if b := a.cfg.borrow; b != nil {
+		a.termSvc = b.termSvc // the lender's hub starts and stops it
+		return nil
+	}
 	colorMode := terminal.DetectColorMode()
 	if a.cfg.ColorModeSet {
 		colorMode = a.cfg.ColorMode

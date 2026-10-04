@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -71,8 +73,27 @@ func PlayJournal(viewer Config, paths ...string) error {
 	}
 	vlog.Info("app", "msg", "replay open",
 		"records", len(set.Records), "seed", an.Seed, "speed", an.Speed)
-	return (&player{a: a, src: journalSource{d}, interval: time.Duration(an.TickInterval),
-		rec: parseSpeed(an.Speed), scale: engine.ScaleNormal}).run()
+	p := &player{a: a, src: journalSource{d}, interval: time.Duration(an.TickInterval),
+		rec: parseSpeed(an.Speed), scale: engine.ScaleNormal}
+	p.rebuild = func() (*App, pacedSource, error) {
+		rc := cfg
+		rc.borrow = &a.presentationState
+		twin, err := NewReplay(rc)
+		if err != nil {
+			return nil, nil, err
+		}
+		td, err := newReplayDriver(twin, slices.Clone(set.Records), slices.Clone(set.Captures))
+		if err != nil {
+			twin.Close()
+			return nil, nil, err
+		}
+		if set.End != nil {
+			td.FinishAt(*set.End)
+		}
+		return twin, journalSource{td}, nil
+	}
+	defer p.closeRebuilt()
+	return p.run()
 }
 
 // runPresented presents a driven run, a script or a bot. Pacing is the run's own:
@@ -134,6 +155,22 @@ type player struct {
 	done         bool
 	cmd          *viewerCommand // open while the viewer holds the command line or an overlay
 	err          error          // the stream's own failure, returned by run
+
+	// rebuild makes a fresh copy of the presented run for stepping back: a world
+	// cannot be rewound, so the copy replays the stream from its start to the step
+	// before, off the frame loop. Nil for a stream that cannot be rebuilt.
+	rebuild func() (*App, pacedSource, error)
+	trail   []event.Stamp // position after each step, kept while rebuild is set
+	rewind  chan rewound  // the rebuild in flight
+	cancel  atomic.Bool
+}
+
+// rewound is a rebuilt run that has replayed steps of its stream.
+type rewound struct {
+	a     *App
+	src   pacedSource
+	steps int
+	err   error
 }
 
 // viewerCommand is the recorded player's operator state a viewer's command line
@@ -186,6 +223,9 @@ func (p *player) run() error {
 				}
 			}
 
+		case r := <-p.rewind:
+			p.adopt(r)
+
 		case now := <-frameTicker.C:
 			p.advance(now.Sub(last))
 			last = now
@@ -220,6 +260,7 @@ func (p *player) advance(elapsed time.Duration) {
 		}
 		if stepped {
 			p.holdMixer() // a recorded unpause inside the step released it
+			p.report()    // the key reported the tick before the step
 		}
 		return
 	}
@@ -261,7 +302,82 @@ func (p *player) tickOnce() bool {
 		p.report()
 		return false
 	}
+	if p.rebuild != nil {
+		p.trail = append(p.trail, p.a.Position())
+	}
 	return true
+}
+
+// back rebuilds the run as it stood after the last step that left it before the
+// presented tick, and pauses there once the copy arrives.
+func (p *player) back() {
+	at := p.a.Position()
+	n := len(p.trail)
+	for n > 0 && !(p.trail[n-1].Run < at.Run || p.trail[n-1].Run == at.Run && p.trail[n-1].Tick < at.Tick) {
+		n--
+	}
+	if p.rebuild == nil || p.rewind != nil || n == len(p.trail) {
+		return
+	}
+	twin, src, err := p.rebuild()
+	if err != nil {
+		p.a.ctx.SetStatusMessage("Step back failed: "+err.Error(), 0, true)
+		return
+	}
+	vlog.Info("app", "msg", "replay step back", "run", at.Run, "from_tick", at.Tick, "steps", n)
+	ch := make(chan rewound, 1)
+	p.rewind = ch
+	core.Go(func() {
+		// Its log snapshots would restate ticks the log already holds
+		reg := twin.world.Resources.Status
+		every := reg.SnapshotInterval()
+		reg.SetSnapshotInterval(0)
+		var err error
+		for i := 0; i < n && err == nil && !p.cancel.Load(); i++ {
+			_, err = src.Step()
+		}
+		reg.SetSnapshotInterval(every)
+		ch <- rewound{a: twin, src: src, steps: n, err: err}
+	})
+}
+
+// adopt presents a rebuilt run in place of the current one, carrying the viewer's
+// HUD over so the telemetry it watches continues from the rebuilt tick.
+func (p *player) adopt(r rewound) {
+	p.rewind = nil
+	if r.err != nil {
+		r.a.Close()
+		p.a.ctx.SetStatusMessage("Step back failed: "+r.err.Error(), 0, true)
+		return
+	}
+	old, twin := p.a, r.a
+	twin.ctx.ClearOverlayPins()
+	for _, key := range old.ctx.OverlayPins() {
+		twin.ctx.ToggleOverlayPin(key)
+	}
+	twin.ctx.OverlayHUD.Store(old.ctx.OverlayHUD.Load())
+	twin.ctx.SetPresentationSize(p.termW, p.termH)
+	twin.orchestrator.Resize(p.termW, p.termH)
+	p.a, p.src, p.trail = twin, r.src, p.trail[:r.steps]
+	p.done, p.err, p.step, p.budget, p.paused = false, nil, 0, 0, true
+	if old.cfg.borrow != nil {
+		old.Close()
+	}
+	p.report()
+}
+
+// closeRebuilt closes a rebuilt run, and one still replaying, before the run that
+// lent them its terminal.
+func (p *player) closeRebuilt() {
+	if p.rewind != nil {
+		p.cancel.Store(true)
+		if r := <-p.rewind; r.a != nil {
+			r.a.Close()
+		}
+	}
+	if p.a.cfg.borrow != nil {
+		p.a.Close()
+	}
 }
 
 // frame renders one presented frame, laid out for the viewer's terminal rather than
@@ -297,6 +413,9 @@ func viewAxis(camera, recorded, size, mapSize, pan int) (cam, offset, kept int) 
 // offered to the keymap for the game bindings a viewer owns.
 func (p *player) key(ev terminal.Event) bool {
 	p.live = p.interactive && p.a.sessionTransport() != nil
+	if p.rewind != nil {
+		return ev.Key != terminal.KeyRune || ev.Rune != 'q' // only quit while a step back rebuilds
+	}
 	if p.cmd != nil {
 		// The viewer's command line or overlay, parsed as the game parses it
 		if intent := p.a.inputMachine.Process(ev); intent != nil {
@@ -320,7 +439,7 @@ func (p *player) key(ev terminal.Event) bool {
 		p.panY += panStep
 	case '0':
 		p.panX, p.panY = 0, 0
-	case ' ', '.', '+', '=', '-', '_':
+	case ' ', '.', ',', '+', '=', '-', '_':
 		// Pause, step and rate are instance-local. A participant cannot stop or slow
 		// only its own copy of a live session, so the viewer keeps pan and quit.
 		if p.live {
@@ -344,6 +463,10 @@ func (p *player) control(r rune) {
 	case '.':
 		p.paused, p.step = true, p.step+1
 		p.holdMixer()
+	case ',':
+		p.paused = true
+		p.holdMixer()
+		p.back()
 	case '+', '=':
 		p.scale = engine.ScaleStep(p.scale, 1)
 	case '-', '_':
@@ -429,6 +552,8 @@ func (p *player) report() {
 	switch {
 	case p.done:
 		state = "END"
+	case p.rewind != nil:
+		state = "BACK" // rebuilding from the start of the stream
 	case p.paused:
 		state = "PAUSE"
 	}
