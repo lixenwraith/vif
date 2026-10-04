@@ -67,6 +67,7 @@ var SharedWorldStoreNames = []string{
 	"snakemember",
 	"eye",
 	"tower",
+	"kraken",
 	"header",
 	"member",
 	"flash",
@@ -178,20 +179,22 @@ func SharedWorldStoreRows(s *SharedWorldState, i int, dst []StoreRow) ([]StoreRo
 	case 44:
 		return appendStoreRows(dst, s.Tower)
 	case 45:
-		return appendStoreRows(dst, s.Header)
+		return appendStoreRows(dst, s.Kraken)
 	case 46:
-		return appendStoreRows(dst, s.Member)
+		return appendStoreRows(dst, s.Header)
 	case 47:
-		return appendStoreRows(dst, s.Flash)
+		return appendStoreRows(dst, s.Member)
 	case 48:
-		return appendStoreRows(dst, s.Fadeout)
+		return appendStoreRows(dst, s.Flash)
 	case 49:
-		return appendStoreRows(dst, s.Splash)
+		return appendStoreRows(dst, s.Fadeout)
 	case 50:
-		return appendStoreRows(dst, s.Marker)
+		return appendStoreRows(dst, s.Splash)
 	case 51:
-		return appendStoreRows(dst, s.Death)
+		return appendStoreRows(dst, s.Marker)
 	case 52:
+		return appendStoreRows(dst, s.Death)
+	case 53:
 		return appendStoreRows(dst, s.Timer)
 	}
 	return nil, fmt.Errorf("capture holds no store %d", i)
@@ -520,55 +523,62 @@ func SharedWorldApplyStoreRows(s *SharedWorldState, i int, owns func(core.Entity
 		s.Tower = out
 		return nil
 	case 45:
+		out, err := applyStoreRows(s.Kraken, owns, rows)
+		if err != nil {
+			return err
+		}
+		s.Kraken = out
+		return nil
+	case 46:
 		out, err := applyStoreRows(s.Header, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Header = out
 		return nil
-	case 46:
+	case 47:
 		out, err := applyStoreRows(s.Member, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Member = out
 		return nil
-	case 47:
+	case 48:
 		out, err := applyStoreRows(s.Flash, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Flash = out
 		return nil
-	case 48:
+	case 49:
 		out, err := applyStoreRows(s.Fadeout, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Fadeout = out
 		return nil
-	case 49:
+	case 50:
 		out, err := applyStoreRows(s.Splash, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Splash = out
 		return nil
-	case 50:
+	case 51:
 		out, err := applyStoreRows(s.Marker, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Marker = out
 		return nil
-	case 51:
+	case 52:
 		out, err := applyStoreRows(s.Death, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Death = out
 		return nil
-	case 52:
+	case 53:
 		out, err := applyStoreRows(s.Timer, owns, rows)
 		if err != nil {
 			return err

@@ -14,6 +14,7 @@ const (
 	SpeciesSnake
 	SpeciesEye
 	SpeciesTower
+	SpeciesKraken
 	SpeciesCount
 )
 
@@ -28,4 +29,5 @@ var SpeciesNames = [SpeciesCount]string{
 	SpeciesSnake:  "snake",
 	SpeciesEye:    "eye",
 	SpeciesTower:  "tower",
+	SpeciesKraken: "kraken",
 }

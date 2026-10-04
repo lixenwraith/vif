@@ -14,26 +14,15 @@ import (
 	"github.com/lixenwraith/vif/internal/render"
 )
 
-// TestNoRegisteredRendererDrawsOutsideTheMap runs every renderer the manifest
-// registers, at its real priority, on the geometry the out-of-bounds defect
-// appears in: a terminal larger than the map, so the map is centred and leaves a
-// margin nothing may draw into.
-//
-// The compositor clip is deliberately NOT applied here — that backstop has its
-// own tests in internal/render. What this asserts is the layer under it: that a
-// simulation renderer bounds itself, including when its own geometry overhangs
-// the map, as the marker and ping fixtures below do. Renderers with nothing to
-// draw in this world are covered only for surviving the frame.
-//
-// It is written over the registry rather than per renderer so a renderer added
-// later is covered without anyone remembering to extend a list.
+// Renderers must clip their own geometry without the compositor backstop,
+// including when a small map leaves margins inside the viewport.
 func TestNoRegisteredRendererDrawsOutsideTheMap(t *testing.T) {
 	t.Parallel()
 
 	const screenW, screenH = 80, 24
 	world := engine.NewWorld()
 	gameCtx := engine.NewGameContextWithClock(world, screenW, screenH, engine.NewManualClock())
-	world.SetupLevel(20, 8, false, false)
+	world.SetupLevel(20, 8, false, false, false)
 
 	cfg := world.Resources.Config
 	cursor := world.CreateEntity(core.DomainShared)
@@ -61,6 +50,12 @@ func TestNoRegisteredRendererDrawsOutsideTheMap(t *testing.T) {
 		X: cfg.MapWidth - 2, Y: cfg.MapHeight - 2, Width: 6, Height: 6,
 		Shape: component.MarkerShapeRectangle, Color: color.RGB{G: 200}, Intensity: 1.0,
 	})
+
+	kraken := world.CreateEntity(core.DomainShared)
+	world.Components.Kraken.SetComponent(kraken, component.KrakenComponent{State: component.KrakenAttack, AttackT: 1})
+	motion := component.KineticComponent{}
+	motion.PreciseX, motion.PreciseY = 10.5, 4.5
+	world.Components.Kinetic.SetComponent(kraken, motion)
 
 	ctx := render.RenderContext{
 		GameXOffset: 3, GameYOffset: 1,

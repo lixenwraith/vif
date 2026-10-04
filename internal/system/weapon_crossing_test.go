@@ -229,10 +229,10 @@ func TestPlayerBeamRunsThroughItsOrbAndCrossesOnlyItsImpacts(t *testing.T) {
 	wide, beside := drain(14, 4), drain(7, 4)
 
 	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
-	weaponComp.Charges[component.WeaponBeam] = 2
+	weaponComp.Charges[component.WeaponEmitter] = 2
 	weapon.Update()
 	orbs := weapon.orbsOf(cursor)
-	w.Positions.SetPosition(orbs[component.WeaponBeam], component.PositionComponent{X: 9, Y: 5})
+	w.Positions.SetPosition(orbs[component.WeaponEmitter], component.PositionComponent{X: 9, Y: 5})
 	w.Resources.Event.Queue.Consume()
 	weapon.fireAllWeapons(cursor, weaponComp, orbs)
 	weapon.advanceBeams(cursor, orbs, parameter.GameUpdateInterval)
@@ -257,10 +257,10 @@ func TestPlayerBeamRunsThroughItsOrbAndCrossesOnlyItsImpacts(t *testing.T) {
 			crossings, struck, wide, beside)
 	}
 
-	w.Positions.SetPosition(orbs[component.WeaponBeam], component.PositionComponent{X: 5, Y: 9})
+	w.Positions.SetPosition(orbs[component.WeaponEmitter], component.PositionComponent{X: 5, Y: 9})
 	weapon.advanceBeams(cursor, orbs, parameter.GameUpdateInterval)
 	w.Resources.Event.Queue.Consume()
-	if beam, _ := w.Components.Beam.GetComponent(orbs[component.WeaponBeam]); beam.Ray.DX != 0 || beam.Ray.DY <= 0 {
+	if beam, _ := w.Components.Beam.GetComponent(orbs[component.WeaponEmitter]); beam.Ray.DX != 0 || beam.Ray.DY <= 0 {
 		t.Fatalf("ray = %+v after the orb moved south, want it to follow", beam.Ray)
 	}
 }
@@ -275,7 +275,7 @@ func TestMountedBeamWarnsBeforeItStrikes(t *testing.T) {
 	host := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(host, component.PositionComponent{X: 10, Y: 5})
 	mount.HandleEvent(event.GameEvent{Type: event.EventMountRequest, Payload: &event.MountRequestPayload{
-		Host: host, Weapon: component.WeaponBeam, Lane: 1,
+		Host: host, Weapon: component.WeaponEmitter, Lane: 1,
 	}})
 
 	warningTicks := int(parameter.BeamWarning / parameter.GameUpdateInterval)

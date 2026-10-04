@@ -37,15 +37,10 @@ transitions = [
 [states.MonitorActive]
 parent = "MonitorCycle"
 transitions = [
-    { trigger = "Tick", target = "MonitorGlobalReset", guard = "StatusBoolEquals", guard_args = { key = "session.all_defeated", value = true } },
+    { trigger = "Tick", target = "MonitorGlobalReset", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
 ]
 
-# The heat burst used to route through this region: MonitorActive transitioned on
-# EventHeatBurst and emitted the cleaner sweep from its on_enter. EventHeatBurst is
-# owner-authored and player-domain — it never replicates — so only the bursting
-# participant's copy of this shared region transitioned, and fsm.monitor diverged
-# for the rest of the session. HeatSystem emits the sweep directly now, in its own
-# domain, which is what D-6 says a per-instance effect is. See D-20.
+# HeatSystem owns local burst effects; shared regions cannot transition on them (D-20).
 
 [states.MonitorGlobalReset]
 parent = "Root"
@@ -58,6 +53,7 @@ on_enter = [
     # Cancel species entities
     { action = "EmitEvent", event = "EventQuasarCancelRequest" },
     { action = "EmitEvent", event = "EventStormCancelRequest" },
+    { action = "EmitEvent", event = "EventKrakenCancelRequest" },
     { action = "EmitEvent", event = "EventSwarmCancelRequest" },
     # Reset tracking
     { action = "ResetKillVars" },
@@ -66,7 +62,8 @@ on_enter = [
     # Terminate all gameplay regions
     { action = "TerminateRegion", region = "quasar" },
     { action = "TerminateRegion", region = "storm" },
-    { action = "TerminateRegion", region = "placeholder" },
+    { action = "TerminateRegion", region = "kraken" },
+    { action = "TerminateRegion", region = "tower" },
     { action = "TerminateRegion", region = "main" },
     # Reset visual cue
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 250 } },

@@ -25,11 +25,8 @@ func newGeneticFixture(t *testing.T) *GeneticSystem {
 	return s
 }
 
-// A species declaration is a shared fact with a private effect: an FSM region's
-// entry actions raise it on both instances, and a predicting guest can register a
-// species hundreds of ticks before or after the authority. Registry.Import needs
-// the sets to match, so either mismatch must refuse atomically, before the store
-// pass rewrites the world, or the session forks at the level transition.
+// Shared region entry can precede or follow a correction's species registration.
+// Either ordering must restore the registry atomically.
 
 // geneticRecord renders one genetic system's declared state, as a capture carries
 // it.

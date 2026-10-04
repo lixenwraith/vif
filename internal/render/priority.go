@@ -18,7 +18,6 @@ const (
 	PriorityGlyph
 	PriorityGold
 	PriorityNugget
-	PriorityHealthBar
 
 	// === Species (back to front) ===
 
@@ -27,11 +26,13 @@ const (
 	PriorityPylon
 	PriorityTower
 	PriorityStorm
+	PriorityKraken
 	PriorityEye
 	PrioritySnake
 	PriorityDrain
 	PriorityQuasar
 	PrioritySwarm
+	PriorityHealthBar // Body-centered bars must compose over species geometry.
 
 	// === Cleaner ===
 	PriorityCleaner
@@ -81,19 +82,8 @@ const (
 	PriorityDebug
 )
 
-// ClipsToPlayfield reports whether a layer draws simulation content and so must
-// be confined to the cells the map covers.
-//
-// A map smaller than the viewport is centred inside it, and the margin that
-// leaves belongs to no cell any entity, effect, or field can occupy. A layer that
-// draws there is drawing outside the world, which is what a ping line, a cleaner
-// trail, or a materialize beam reaching the terminal edge on a zoomed pane is.
-// Answering it here rather than in each renderer is what makes the bound hold for
-// effects nobody has written yet.
-//
-// Post-processing, UI, and debug layers address the whole screen by design: the
-// status bar, the gutters, the overlay panels, and the dim/grayout passes all
-// live outside the map and stay unclipped.
+// ClipsToPlayfield confines simulation layers to the map, including when it is
+// smaller than the viewport. UI, debug and post-processing address the whole screen.
 func (p RenderPriority) ClipsToPlayfield() bool {
 	switch p {
 	case PriorityGrayout, PriorityStrobe, PriorityDim,

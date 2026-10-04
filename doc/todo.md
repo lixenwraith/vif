@@ -320,6 +320,28 @@ transferred world instead of a scenario.
 
 ## Combat
 
+### Let stronger knockback override the active immunity window
+
+- Priority: P2
+- Affected files: `internal/component/combat.go`, `internal/system/combat.go`,
+  `internal/profile/combat.go`
+
+Record the strength of the knockback that opened immunity. A stronger incoming
+knockback should reset the immunity duration and apply its impulse; equal or weaker
+hits remain blocked across all weapons and players. Carry the recorded strength
+through snapshots and synchronization. Stun immunity remains target-wide.
+
+### Tune and extend Kraken after gameplay trials
+
+- Priority: P2
+- Affected files: `internal/{component,system,render/renderer}/kraken.go`,
+  `internal/parameter/kraken.go`, `internal/profile/mass.go`, `wad/scenario/{kraken,main}/`
+
+Tune health, contact damage, mass and pacing in the looping Kraken scenario and main maze.
+Measure the sampled tentacle hitboxes and retained member pool under multiple
+Krakens; add swept tentacle contact if fast motion skips cursor cells. The first
+renderer uses the sandbox's default void body; other body profiles remain optional.
+
 ### Let mounted weapons strike more than cursors
 
 - Priority: P3

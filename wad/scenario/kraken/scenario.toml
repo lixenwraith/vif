@@ -1,0 +1,71 @@
+description = "Practice fighting a Kraken in an open arena with repeating encounters."
+
+# Kraken collision sandbox. Restart each fight three seconds after the kill.
+
+[regions.main]
+initial = "KrakenSpawn"
+disabled_systems = ["glyph", "nugget", "gold", "audio", "music"]
+
+[regions.player]
+initial = "PlayerBoot"
+background = true
+
+[states.KrakenArena]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventDrainPause", reconcile = true },
+]
+on_exit = [
+    { action = "EmitEvent", event = "EventDrainResume", reconcile = true },
+]
+
+[states.KrakenSpawn]
+parent = "KrakenArena"
+on_enter = [
+    { action = "EmitEvent", event = "EventKrakenSpawnRequest" },
+]
+transitions = [
+    { trigger = "EventSpeciesCreated", target = "KrakenAlive", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 9 } },
+    { trigger = "EventKrakenSpawnFailed", target = "KrakenWait" },
+]
+
+[states.KrakenAlive]
+parent = "KrakenArena"
+transitions = [
+    { trigger = "EventKrakenSpawnFailed", target = "KrakenWait" },
+    { trigger = "EventSpeciesKilled", target = "KrakenWait", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 9 } },
+]
+
+[states.KrakenWait]
+parent = "KrakenArena"
+transitions = [
+    { trigger = "Tick", target = "KrakenSpawn", guard = "StateTimeExceeds", guard_args = { ms = 3000 } },
+]
+
+[states.PlayerBoot]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { x = 2, y = 2, heat = 10, energy = 100 } },
+]
+transitions = [
+    { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },
+    { trigger = "EventCursorSpawnFailed", target = "PlayerBootRetry" },
+]
+
+[states.PlayerBootRetry]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "PlayerBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+]
+
+[states.PlayerActive]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "PlayerReset", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
+]
+
+[states.PlayerReset]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGameResetRequest" },
+]

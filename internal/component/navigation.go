@@ -1,11 +1,15 @@
 package component
 
 import (
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // NavigationComponent provides pathfinding state for kinetic entities
 type NavigationComponent struct {
+	// Snakes keep aim and routing on the same shared cursor between switches.
+	LockedTarget core.Entity
+
 	// True when straight-line path to target is walkable
 	HasDirectPath bool
 
@@ -49,4 +53,5 @@ var SpeciesDimensionsLUT = [SpeciesCount]SpeciesDimensions{
 	{parameter.SnakeHeadWidth, parameter.SnakeHeadHeight}, // 6: SpeciesSnake
 	{parameter.EyeWidth, parameter.EyeHeight},             // 7: SpeciesEye
 	{1, 1}, // 8: SpeciesTower (stationary, dimensions from spawn params)
+	{int(parameter.KrakenBodyRadius*4) + 1, int(parameter.KrakenBodyRadius*2) + 1}, // 9: SpeciesKraken
 }

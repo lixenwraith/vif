@@ -152,7 +152,9 @@ sudo docker build --pull \
 	--build-arg REVISION="$revision" \
 	-t "$image" "$build_source"
 container=$(sudo docker create "$image")
-sudo docker cp "$container:/logwisp" "$output"
+# The image ships /lw since LogWisp renamed its binary, /logwisp before
+sudo docker cp "$container:/lw" "$output" 2>/dev/null ||
+	sudo docker cp "$container:/logwisp" "$output"
 [ -x "$output" ]
 "$output" --version | grep -F "$revision"
 output_complete=true

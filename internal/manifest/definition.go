@@ -17,12 +17,8 @@ type SystemDef struct {
 	Requires    []string // Systems this one cannot function without
 	Optional    []string // Systems whose absence only degrades this one
 	Capability  string   // Optional local-only implementation capability, currently "audio"
-	// Snapshot is the D-19 obligation: "" (none) when the system holds no
-	// future-affecting state outside the component stores, "state" when it does
-	// and implements engine.SharedStateSaver to carry it. The declaration is
-	// asserted against the code by TestSnapshotDeclarationsMatchImplementations,
-	// so the pair cannot drift: a system that grows private state and forgets to
-	// declare it fails the build rather than a session.
+	// Snapshot is "state" when future-affecting private state needs a SharedStateSaver.
+	// The declaration test checks the implementation against this D-19 obligation.
 	Snapshot string
 }
 
@@ -91,6 +87,7 @@ var Components = []ComponentDef{
 	{"SnakeMember", "SnakeMemberComponent", "shared"},
 	{"Eye", "EyeComponent", "shared"},
 	{"Tower", "TowerComponent", "shared"},
+	{"Kraken", "KrakenComponent", "shared"},
 
 	// --- Composite ---
 	{"Header", "HeaderComponent", "shared"},
@@ -179,6 +176,8 @@ var Systems = []SystemDef{
 		Optional: []string{"navigation", "combat"}}, // shared stream and composite species with a D-12 footprint sweep
 	{Name: "storm", Constructor: "NewStormSystem", Domain: "shared", Snapshot: "state", Requires: []string{"composite"}, // the live root and pending blue spawns live outside any store
 		Optional: []string{"navigation", "combat", "mount", "dust", "wall"}}, // shared stream and composite species with a D-12 footprint sweep
+	{Name: "kraken", Constructor: "NewKrakenSystem", Domain: "shared", Requires: []string{"composite"},
+		Optional: []string{"combat"}},
 	{Name: "pylon", Constructor: "NewPylonSystem", Domain: "shared", Requires: []string{"composite"},
 		Optional: []string{"navigation", "combat"}}, // shared stream and composite species state
 	{Name: "snake", Constructor: "NewSnakeSystem", Domain: "shared", Requires: []string{"composite"},
@@ -248,6 +247,7 @@ var Renderers = []RendererDef{
 	{"quasar", "NewQuasarRenderer", "PriorityQuasar"},
 	{"swarm", "NewSwarmRenderer", "PrioritySwarm"},
 	{"storm", "NewStormRenderer", "PriorityStorm"},
+	{"kraken", "NewKrakenRenderer", "PriorityKraken"},
 
 	// --- Cleaner ---
 	{"cleaner", "NewCleanerRenderer", "PriorityCleaner"},

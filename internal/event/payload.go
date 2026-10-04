@@ -20,6 +20,7 @@ type LevelSetupPayload struct {
 	Width         int  `toml:"width"`          // New map width in grid cells
 	Height        int  `toml:"height"`         // New map height in grid cells
 	ClearEntities bool `toml:"clear_entities"` // If true, destroy non-protected entities
+	PreserveLoot  bool `toml:"preserve_loot"`  // Encounter transitions keep uncollected rewards
 	CropOnResize  bool `toml:"crop_on_resize"` // Explicit crop behavior (false = level mode)
 }
 
@@ -169,8 +170,9 @@ type GameResetPayload struct {
 
 // CursorDefeatStatePayload carries one owner's combined heat/energy state.
 type CursorDefeatStatePayload struct {
-	Entity   core.Entity `toml:"entity"`
-	Defeated bool        `toml:"defeated"`
+	Entity       core.Entity `toml:"entity"`
+	Defeated     bool        `toml:"defeated"`
+	ProducedTick uint64      `toml:"produced_tick"`
 }
 
 // CursorScopePayload scopes local effects to an owned cursor, or all local cursors
@@ -679,9 +681,9 @@ type CursorStatePayload struct {
 	BoostTotal       int64 `toml:"boost_total"`
 	MainFireCooldown int64 `toml:"main_fire_cooldown"`
 
-	HitPoints           int    `toml:"hit_points"`
-	DamageImmunity      int64  `toml:"damage_immunity"`
-	DamageImmunitySpent uint32 `toml:"damage_immunity_spent"`
+	HitPoints           int                                     `toml:"hit_points"`
+	DamageImmunity      int64                                   `toml:"damage_immunity"`
+	DamageImmunitySpent [component.CombatAttackTypeCount]uint32 `toml:"damage_immunity_spent"`
 
 	ErrorFlash     int64 `toml:"error_flash"`
 	BurstFlash     int64 `toml:"burst_flash"`
@@ -803,6 +805,12 @@ type SwarmSpawnRequestPayload struct {
 	Y int `toml:"y"`
 }
 
+// KrakenSpawnRequestPayload defaults (0, 0) to the map center.
+type KrakenSpawnRequestPayload struct {
+	X int `toml:"x"`
+	Y int `toml:"y"`
+}
+
 // --- Environment ---
 
 // WindStartPayload configures a global gameplay wind. Direction is the direction
@@ -900,18 +908,19 @@ func (c CrossingID) Seed(salt uint64) (uint64, bool) {
 // emitter (orb, cleaner, bullet) describes itself without naming its entity.
 type CombatAttackDirectRequestPayload struct {
 	CrossingID
-	OwnerEntity  core.Entity                `toml:"owner_entity"`
-	OriginEntity core.Entity                `toml:"origin_entity"`
-	TargetEntity core.Entity                `toml:"target_entity"`
-	HitEntity    core.Entity                `toml:"hit_entity"`
-	OriginVelX   float64                    `toml:"origin_vel_x"`
-	OriginVelY   float64                    `toml:"origin_vel_y"`
-	OriginX      int                        `toml:"origin_x"`
-	OriginY      int                        `toml:"origin_y"`
-	AttackType   component.CombatAttackType `toml:"attack_type"`
-	HasOrigin    bool                       `toml:"has_origin"`
-	HasVelocity  bool                       `toml:"has_velocity"`
-	ChainDepth   uint8                      `toml:"chain_depth"`
+	OwnerEntity    core.Entity                `toml:"owner_entity"`
+	OriginEntity   core.Entity                `toml:"origin_entity"`
+	TargetEntity   core.Entity                `toml:"target_entity"`
+	HitEntity      core.Entity                `toml:"hit_entity"`
+	OriginVelX     float64                    `toml:"origin_vel_x"`
+	OriginVelY     float64                    `toml:"origin_vel_y"`
+	OriginX        int                        `toml:"origin_x"`
+	OriginY        int                        `toml:"origin_y"`
+	AttackType     component.CombatAttackType `toml:"attack_type"`
+	HasOrigin      bool                       `toml:"has_origin"`
+	HasVelocity    bool                       `toml:"has_velocity"`
+	ChainDepth     uint8                      `toml:"chain_depth"`
+	RootAttackType component.CombatAttackType `toml:"root_attack_type"` // Chains share their originating weapon's immunity.
 }
 
 // IsDerived reports a chain follow-up, which the receiver produces from the root
@@ -930,11 +939,12 @@ type CombatAttackAreaRequestPayload struct {
 	TargetEntity core.Entity                `toml:"target_entity"`
 	// HasOrigin marks origin position for knockback direction (e.g., explosion center)
 	// Without it OriginEntity position is used
-	HasOrigin  bool  `toml:"has_origin"`
-	OriginX    int   `toml:"origin_x"`
-	OriginY    int   `toml:"origin_y"`
-	ChainDepth uint8 `toml:"chain_depth"`
-	Scale      uint8 `toml:"scale"` // Damage multiplier; zero is one
+	HasOrigin      bool                       `toml:"has_origin"`
+	OriginX        int                        `toml:"origin_x"`
+	OriginY        int                        `toml:"origin_y"`
+	ChainDepth     uint8                      `toml:"chain_depth"`
+	RootAttackType component.CombatAttackType `toml:"root_attack_type"`
+	Scale          uint8                      `toml:"scale"` // Damage multiplier; zero is one
 }
 
 // CombatHealRequestPayload adds uncapped hit points to a live target.

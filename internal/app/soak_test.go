@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
@@ -48,17 +50,17 @@ type soakRun struct {
 	root string // the config root the replay resolves the anchor's scenario under
 }
 
-// soakScenarioDir is the external scenario the tower soak drives; the tower region is
-// the only path that engages gateway, eye and route-graph navigation
+// The tower soak drives the canonical campaign and its gateway routes.
 const soakRoot = "../../wad"
-const soakScenarioDir = soakRoot + "/scenario/main"
+const soakScenarioDir = "../asset/scenario"
 const soakContentDir = soakRoot + "/content"
 
-// towerRegions mirrors wad/scenario/main's declared regions and their entry states
+// The fuzz driver can enter these encounters without waiting for campaign escalation.
 var towerRegions = []journal.FuzzRegion{
 	{Name: "main", State: "MainSpawnGold"},
 	{Name: "quasar", State: "QuasarFuse"},
 	{Name: "storm", State: "StormSetup"},
+	{Name: "kraken", State: "KrakenSetup"},
 	{Name: "monitor", State: "MonitorActive"},
 	{Name: "tower", State: "TowerSetup"},
 }
@@ -77,13 +79,103 @@ func towerScenario(t *testing.T, seed uint64) Config {
 	return cfg
 }
 
-// TestEveryShippedScenarioSpawnsAPlayer pins the one thing a scenario has to do
-// before anything else it declares matters. wad/scenario/blank did not, so a run
-// that switched to it had no player domain at all — and in a session, a host that
-// switched to it saw its guests and none of itself.
-func TestEveryShippedScenarioSpawnsAPlayer(t *testing.T) {
+func TestMainProgressesFromThreeStormKillsThroughTwoKrakensToTower(t *testing.T) {
+	a, err := NewHeadless(towerScenario(t, fixtureSeed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	a.Tick(1)
+	w := a.World()
+	cursor := w.Resources.Player.Slot(0)
+	a.Context().PushEventOrigin(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: cursor, X: 2, Y: 2}, event.OriginDebug)
+	a.Settle()
+	mazeCount, mazeWalls, krakenSpawns := 0, 0, 0
+	nuggetEnabled := false
+	a.SetDispatchTap(func(ev event.GameEvent) {
+		switch p := ev.Payload.(type) {
+		case *event.MazeSpawnRequestPayload:
+			mazeCount++
+			if mazeCount == 1 && (p.RoomCount != 0 || len(p.Rooms) != 0) {
+				t.Error("Kraken maze contains authored rooms")
+			}
+		case *event.WallSpawnedPayload:
+			if mazeCount == 1 && krakenSpawns == 0 {
+				mazeWalls = w.Components.Wall.CountEntities()
+			}
+		case *event.MetaSystemCommandPayload:
+			if p.SystemName == "nugget" {
+				nuggetEnabled = p.Enabled
+			}
+		case *event.SpeciesCreatedPayload:
+			if p.Species == component.SpeciesKraken {
+				krakenSpawns++
+				if mazeWalls == 0 || p.X != w.Resources.Config.MapWidth/2 || p.Y != w.Resources.Config.MapHeight/2 {
+					t.Error("Kraken did not spawn at the center after maze construction")
+				}
+			}
+		}
+	})
+	for round := 1; round <= 2; round++ {
+		for killed := 1; killed <= 3; killed++ {
+			a.Region(event.RegionPause, "main", "")
+			a.Region(event.RegionSpawn, "storm", "StormSetup")
+			if w.Components.Storm.CountEntities() != 1 {
+				t.Fatal("Storm did not spawn for progression check")
+			}
+			w.Components.Combat.Each(func(_ core.Entity, c *component.CombatComponent) bool {
+				if c.CombatEntityType == component.CombatEntityStorm {
+					c.HitPoints, c.LastDamagedBy = 0, cursor
+				}
+				return true
+			})
+			a.Tick(3)
+			if killed < 3 && (w.Components.Kraken.CountEntities() != 0 || w.Components.Tower.CountEntities() != 0) {
+				t.Fatal("Storm escalated before the third kill")
+			}
+		}
+		if krakenSpawns != round || mazeCount != round || (round == 1 && w.Components.Wall.CountEntities() >= mazeWalls) {
+			t.Fatal("third Storm kill did not spawn Kraken into a destructible maze")
+		}
+		cfg := w.Resources.Config
+		if cfg.MapWidth != cfg.ViewportWidth || cfg.MapHeight != cfg.ViewportHeight || cfg.CropOnResize {
+			t.Fatal("Kraken maze is not a fixed viewport-sized map")
+		}
+		if !statBoolOf(a, "glyph.enabled") || !nuggetEnabled {
+			t.Fatal("Kraken region did not enable glyphs and nuggets")
+		}
+		if w.Components.Kraken.CountEntities() != 1 {
+			t.Fatal("Kraken was not available for this cycle")
+		}
+		e := w.Components.Kraken.Entities()[0]
+		hp, _ := w.Components.Combat.GetPtr(e)
+		hp.HitPoints, hp.LastDamagedBy = 0, cursor
+		a.Tick(2)
+		if round == 1 {
+			a.Tick(60)
+			if w.Components.Tower.CountEntities() != 0 || w.Components.Kraken.CountEntities() != 0 ||
+				w.Resources.Status.Bools.Get("fsm.main.paused").Load() {
+				t.Fatal("first Kraken kill did not return to main between storm cycles")
+			}
+		}
+	}
+	if krakenSpawns != 2 || w.Components.Tower.CountEntities() != 1 || w.Components.Kraken.CountEntities() != 0 {
+		t.Fatal("second Kraken kill did not hand off to Tower")
+	}
+	a.Region(event.RegionTerminate, "tower", "")
+	a.Region(event.RegionSpawn, "kraken", "KrakenSetup")
+	a.Tick(1)
+	a.Context().PushEventOrigin(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: cursor, Defeated: true, ProducedTick: a.World().Resources.Game.State.GetGameTicks()}, event.OriginDebug)
+	a.Tick(3)
+	if w.Components.Kraken.CountEntities() != 0 || w.Resources.Status.Strings.Get("fsm.kraken.state").Load() != "-" {
+		t.Fatal("global defeat left the Kraken region or its entity alive")
+	}
+}
+
+// Each shipped scenario must boot a player and end the run on one participant defeat.
+func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"main", "blank", "td", ""} {
+	for _, name := range []string{"main", "blank", "kraken", "td", ""} {
 		label := name
 		if label == "" {
 			label = resource.EmbeddedLabel
@@ -93,7 +185,7 @@ func TestEveryShippedScenarioSpawnsAPlayer(t *testing.T) {
 			opts := resource.Options{Embedded: name == ""}
 			if name != "" {
 				opts = resource.Options{Dir: soakRoot, Scenario: name}
-				if _, err := os.Stat(filepath.Join(soakRoot, "scenario", name)); err != nil {
+				if _, err := resource.ScenarioPath(opts); err != nil {
 					t.Skipf("external scenario %s not present", name)
 				}
 			}
@@ -109,6 +201,26 @@ func TestEveryShippedScenarioSpawnsAPlayer(t *testing.T) {
 			if !placed {
 				t.Fatal("no cursor on the map after 60 ticks")
 			}
+			a.Context().PushEventOrigin(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
+				Slot: 1, X: 2, Y: 2, Heat: 10, Energy: 100, Control: uint8(component.ControlRemote), PeerID: 2,
+			}, event.OriginDebug)
+			a.Settle()
+			remote := a.World().Resources.Player.Slot(1)
+			resets := 0
+			a.SetDispatchTap(func(ev event.GameEvent) {
+				if ev.Type == event.EventGameResetRequest {
+					resets++
+				}
+				if p, ok := ev.Payload.(*event.LevelSetupPayload); ok && p.ClearEntities && !p.PreserveLoot {
+					resets++
+				}
+			})
+			a.Context().PushCrossing(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: remote, Defeated: true, ProducedTick: a.World().Resources.Game.State.GetGameTicks()})
+			a.Tick(110)
+			if resets == 0 {
+				t.Fatal("a remote participant's defeat did not reset the run while the local cursor survived")
+			}
+
 		})
 	}
 }

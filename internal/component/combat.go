@@ -20,6 +20,7 @@ const (
 	CombatEntitySnakeBody
 	CombatEntityEye
 	CombatEntityTower
+	CombatEntityKraken
 	CombatEntityCount
 )
 
@@ -83,10 +84,8 @@ type CombatComponent struct {
 	// RemainingDamageImmunity is remaining immunity time for damage
 	RemainingDamageImmunity time.Duration
 
-	// DamageImmunitySpent names the attackers that have already landed a hit in
-	// the open window: one bit per roster slot, the top bit for an attack no
-	// cursor owns. The window is the target's, its budget is per attacker.
-	DamageImmunitySpent uint32
+	// Each attack family has a separate allowance per cursor in the open window.
+	DamageImmunitySpent [CombatAttackTypeCount]uint32
 
 	// RemainingHitFlash is the remaining duration of hit visual feedback
 	RemainingHitFlash time.Duration
@@ -96,9 +95,7 @@ type CombatComponent struct {
 	// displaced", so it stays the whole target's window whoever opened it.
 	RemainingKineticImmunity time.Duration
 
-	// KineticImmunitySpent names the attackers that have already landed a
-	// knockback in the open window, one bit per roster slot, exactly as
-	// DamageImmunitySpent does for damage.
+	// Records accepted displacement sources; immunity itself covers every attacker.
 	KineticImmunitySpent uint32
 
 	// StunnedRemaining is remaining stun duration (movement suppressed)
@@ -108,42 +105,43 @@ type CombatComponent struct {
 // unownedAttacker is the immunity bit for an attack no cursor owns
 const unownedAttacker = 1 << parameter.MaxPlayers
 
-// DamageImmuneTo reports whether this attacker already spent its hit in the open
-// window. A window one participant opened does not consume another's budget: a
-// shared cooldown would divide one target's damage between the roster.
-func (c *CombatComponent) DamageImmuneTo(attacker uint32) bool {
-	return c.RemainingDamageImmunity != 0 && c.DamageImmunitySpent&attacker != 0
+func (c *CombatComponent) DamageImmuneTo(attacker uint32, weapon CombatAttackType) bool {
+	if uint(weapon) >= uint(CombatAttackTypeCount) {
+		return true
+	}
+	return c.RemainingDamageImmunity != 0 && c.DamageImmunitySpent[weapon]&attacker != 0
 }
 
 // SpendDamageImmunity records a landed hit, opening the window when it is closed.
 // An attacker joining a window late may land twice inside one duration; the rate
 // stays bounded at two hits per window and the alternative is a timer per slot.
-func (c *CombatComponent) SpendDamageImmunity(attacker uint32, d time.Duration) {
+func (c *CombatComponent) SpendDamageImmunity(attacker uint32, weapon CombatAttackType, d time.Duration) {
+	if uint(weapon) >= uint(CombatAttackTypeCount) {
+		return
+	}
 	if c.RemainingDamageImmunity == 0 {
 		c.RemainingDamageImmunity = d
-		c.DamageImmunitySpent = 0
+		clear(c.DamageImmunitySpent[:])
 	}
-	c.DamageImmunitySpent |= attacker
+	c.DamageImmunitySpent[weapon] |= attacker
 }
 
 // SealDamageImmunity opens a window no attacker may spend, for species-authored
 // invulnerability rather than the per-attacker hit rate limit.
 func (c *CombatComponent) SealDamageImmunity(d time.Duration) {
 	c.RemainingDamageImmunity = d
-	c.DamageImmunitySpent = ^uint32(0)
+	for weapon := range c.DamageImmunitySpent {
+		c.DamageImmunitySpent[weapon] = ^uint32(0)
+	}
 }
 
-// KineticImmuneTo reports whether this attacker already spent its knockback in the
-// open window. Per attacker for the reason damage is: a shared latch would discard
-// whichever hit an instance applied second, and a late crossing changes which.
-func (c *CombatComponent) KineticImmuneTo(attacker uint32) bool {
-	return c.RemainingKineticImmunity != 0 && c.KineticImmunitySpent&attacker != 0
+// Every weapon and player shares the target's displacement window.
+func (c *CombatComponent) KineticImmuneTo(_ uint32) bool {
+	return c.RemainingKineticImmunity != 0
 }
 
-// SpendKineticImmunity records a landed knockback, opening the window when it is
-// closed, and reports whether this hit opened it. The opener replaces the target's
-// velocity and every joiner adds to it, so a window's impulses compose to the same
-// vector in any order and no hit needs to own it.
+// Record the accepted source without extending an open displacement window.
+// The return value preserves the impulse replacement/composition contract.
 func (c *CombatComponent) SpendKineticImmunity(attacker uint32, d time.Duration) (opened bool) {
 	if c.RemainingKineticImmunity == 0 {
 		c.RemainingKineticImmunity = d

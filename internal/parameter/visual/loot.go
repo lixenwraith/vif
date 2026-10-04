@@ -38,10 +38,10 @@ var LootVisuals = map[component.LootType]LootVisualDef{
 		InnerColor: RgbOrbTurret,
 		GlowColor:  RgbLootTurretGlow,
 	},
-	component.LootBeam: {
+	component.LootEmitter: {
 		Rune:       'R',
-		InnerColor: RgbOrbBeam,
-		GlowColor:  RgbLootBeamGlow,
+		InnerColor: RgbOrbEmitter,
+		GlowColor:  RgbLootEmitterGlow,
 	},
 	component.LootHeat: {
 		Rune:       'H',

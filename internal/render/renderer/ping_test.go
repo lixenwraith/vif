@@ -11,18 +11,13 @@ import (
 	"github.com/lixenwraith/vif/internal/render"
 )
 
-// TestPingLinesStopAtTheMapEdge is the reported defect: on a pane zoomed larger
-// than the session's latched map, the crosshair and grid ran the full width and
-// height of the terminal, across cells no cursor can ever reach.
-//
-// The renderer is driven directly rather than through the orchestrator, so this
-// asserts the renderer's own bound rather than the compositor clip that backs it.
+// Ping lines must remain inside the map when the viewport extends beyond it.
 func TestPingLinesStopAtTheMapEdge(t *testing.T) {
 	t.Parallel()
 
 	world := engine.NewWorld()
 	gameCtx := engine.NewGameContextWithClock(world, 80, 24, engine.NewManualClock())
-	world.SetupLevel(10, 6, false, false)
+	world.SetupLevel(10, 6, false, false, false)
 
 	cursor := world.CreateEntity(core.DomainShared)
 	world.Components.Cursor.SetComponent(cursor, component.CursorComponent{})

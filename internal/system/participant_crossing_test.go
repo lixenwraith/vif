@@ -47,7 +47,7 @@ func TestCursorDefeatTransitionCrossesCombinedOwnerState(t *testing.T) {
 	}
 }
 
-func TestMetaDefeatGateRequiresEveryRosteredCursor(t *testing.T) {
+func TestMetaDefeatGatesFollowRosteredOwnerCrossings(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	cursors := NewCursorSystem(w).(*CursorSystem)
@@ -65,8 +65,8 @@ func TestMetaDefeatGateRequiresEveryRosteredCursor(t *testing.T) {
 	first, second := w.Resources.Player.Slot(0), w.Resources.Player.Slot(1)
 	meta.HandleEvent(event.GameEvent{Type: event.EventCursorDefeatState,
 		Payload: &event.CursorDefeatStatePayload{Entity: first, Defeated: true}})
-	if w.Resources.Status.Bools.Get("session.all_defeated").Load() {
-		t.Fatal("one defeated cursor ended a two-participant session")
+	if !w.Resources.Status.Bools.Get("session.any_defeated").Load() || w.Resources.Status.Bools.Get("session.all_defeated").Load() {
+		t.Fatal("one defeated cursor must set any_defeated without setting all_defeated")
 	}
 	meta.HandleEvent(event.GameEvent{Type: event.EventCursorDefeatState,
 		Payload: &event.CursorDefeatStatePayload{Entity: second, Defeated: true}})
@@ -77,6 +77,14 @@ func TestMetaDefeatGateRequiresEveryRosteredCursor(t *testing.T) {
 		Payload: &event.CursorDefeatStatePayload{Entity: first, Defeated: false}})
 	if w.Resources.Status.Bools.Get("session.all_defeated").Load() {
 		t.Fatal("revived cursor left the session defeated")
+	}
+	if !w.Resources.Status.Bools.Get("session.any_defeated").Load() {
+		t.Fatal("reviving one cursor hid the remaining defeat")
+	}
+	meta.HandleEvent(event.GameEvent{Type: event.EventCursorDefeatState,
+		Payload: &event.CursorDefeatStatePayload{Entity: second, Defeated: false}})
+	if w.Resources.Status.Bools.Get("session.any_defeated").Load() {
+		t.Fatal("all revived cursors left a stale defeat")
 	}
 }
 
