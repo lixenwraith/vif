@@ -111,9 +111,9 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 	case "boost":
 		return handleBoostCommand(ctx)
 	case "god":
-		return handleGodCommand(ctx)
+		return handleGodCommand(ctx, 1)
 	case "demon":
-		return handleDemonCommand(ctx)
+		return handleGodCommand(ctx, -1)
 	case "blossom":
 		return handleBlossomCommand(ctx)
 	case "decay":
@@ -1023,27 +1023,19 @@ func handleBoostCommand(ctx *engine.GameContext) CommandResult {
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
-// handleGodCommand sets heat to max and energy to high value
-func handleGodCommand(ctx *engine.GameContext) CommandResult {
+// handleGodCommand sets max heat, high energy of the given sign and every weapon;
+// :demon is the negative sign
+func handleGodCommand(ctx *engine.GameContext, sign int) CommandResult {
 	player := ctx.World.Resources.Player.Entity
 	ctx.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: player, Value: parameter.HeatMax})
-	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: player, Value: parameter.GodEnergyAmount})
-	for wt := range component.WeaponCount {
-		ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: wt})
+	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{
+		Entity: player, Value: sign * parameter.GodEnergyAmount, Weapons: true,
+	})
+	name := ":god"
+	if sign < 0 {
+		name = ":demon"
 	}
-	ctx.SetLastCommand(":god")
-	return CommandResult{Continue: true, KeepPaused: false}
-}
-
-// handleDemonCommand sets heat to max and energy to high value
-func handleDemonCommand(ctx *engine.GameContext) CommandResult {
-	player := ctx.World.Resources.Player.Entity
-	ctx.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: player, Value: parameter.HeatMax})
-	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: player, Value: -parameter.GodEnergyAmount})
-	for wt := range component.WeaponCount {
-		ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: wt})
-	}
-	ctx.SetLastCommand(":demon")
+	ctx.SetLastCommand(name)
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
