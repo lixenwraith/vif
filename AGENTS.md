@@ -9,6 +9,9 @@ It is the contract, not a suggestion.
 - One line is the default. Comment *why*, never *what* — the code says what.
 - No narrative, no history ("this used to…", "the plan proposed…"), no restating
   the diff, no essays on design philosophy. Git log and `doc/` hold those.
+- No dates, commit or PR references, or plan/phase labels in comments. Multi-step
+  work is tracked in a working doc under `doc/` (e.g. `doc/machine-design.md`) or
+  an item in `doc/todo.md`, never in code.
 - No comment on a self-evident function. `// Lookup returns the address` above
   `func Lookup` is noise.
 - Package doc blocks: 5 lines. Files do not get their own prologue.
