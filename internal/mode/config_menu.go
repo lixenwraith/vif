@@ -25,6 +25,7 @@ type configOption struct {
 	change                  func(*engine.GameContext, int)
 	activate                func(*Router)
 	disabled                func(*engine.GameContext) string
+	action                  bool // Enter alone runs command, then leaves the menu
 }
 
 type configPage struct {
@@ -73,6 +74,7 @@ var configPages = []configPage{
 		{key: "hud", label: "Telemetry HUD", description: "Show pinned telemetry cards over the game. Pin cards in :t with Enter.",
 			command: "hud", choices: []string{"off", "on"},
 			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.OverlayHUD.Load()) }},
+		commandAction("unpin", "Clear HUD pins", "Unpin every telemetry card from the HUD.", "t unpin"),
 		{key: "flow", label: "Flow field", description: "Show the navigation flow field for the selected target group (:flow <group>).",
 			command: "flow", read: func(ctx *engine.GameContext) string { return toggleWord(ctx.NavigationDebug.ShowFlow) }},
 		{key: "graph", label: "Route graph", description: "Show composite navigation routes (:graph <group> selects a target group).",
@@ -84,6 +86,14 @@ var configPages = []configPage{
 			change: func(ctx *engine.GameContext, d int) {
 				handleSpeedCommand(ctx, []string{engine.ScaleStep(ctx.TimeCtl.Scale(), d).String()})
 			}},
+		withDisabled(commandAction("new", "New game", "Restart this scenario from its first tick. In a session only the host can, and every participant restarts with it.", "new"),
+			func(ctx *engine.GameContext) string {
+				if ctx.World.LiveSession() && !ctx.World.IsSessionCoordinator() {
+					return "Only the host can start a new game in a session"
+				}
+				return ""
+			}),
+		configFormOption("scenario"),
 	}},
 	{key: "diagnostics", label: "Diagnostics", description: "Logging, snapshots, flight recorder and profiling.", options: []configOption{
 		{key: "logging", label: "File logging", description: "Start or stop writing diagnostic logs to the configured log directory.",
@@ -108,30 +118,21 @@ var configPages = []configPage{
 				rc := ctx.World.Resources.Status.Recorder()
 				return toggleWord(rc != nil && rc.FSMTrigger())
 			},
-			disabled: func(ctx *engine.GameContext) string {
-				if why := loggingUnavailable(ctx); why != "" {
-					return why
-				}
-				if ctx.World.Resources.Status.Recorder() == nil {
-					return "Enable the flight recorder first"
-				}
-				return ""
-			}},
+			disabled: recorderUnavailable},
+		withDisabled(commandAction("flush", "Flush flight recorder", "Write the recorder window on the next tick; needs rec in the log scope.", "log rec flush"), recorderUnavailable),
 		{key: "prof", label: "Runtime profiler", description: "Collect module timings. Enabling also pins profiler cards to the telemetry HUD.",
 			command: "debug prof", choices: []string{"off", "on"},
 			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.World.Resources.Prof.Profiling()) }},
+		commandAction("cpu", "CPU profile", captureDescription("a CPU profile"), "debug cpu"),
+		commandAction("heap", "Heap profile", "Write a heap profile; the status bar names the file.", "debug heap"),
+		commandAction("mutex", "Mutex profile", captureDescription("a mutex profile"), "debug mutex"),
+		commandAction("trace", "Execution trace", captureDescription("an execution trace"), "debug trace"),
+		commandAction("snap", "Telemetry snapshot", "Write every metric with the view and session state to a snapshot file in the log directory.", "t save"),
 		{key: "journal", label: "Replay journal", description: "Enter records a replay journal from here. A solo run restarts on its own world and a guest rejoins, so local glyphs and effects start fresh, as on a join.",
-			command: "journal", read: journalValue, disabled: journalUnavailable,
-			activate: func(r *Router) {
-				if err := r.ctx.SessionCtl.StartJournal(); err != nil {
-					setCommandError(r.ctx, "Journal: "+err.Error())
-					return
-				}
-				r.closeOverlay()
-			}},
+			command: "journal start", action: true, read: journalValue, disabled: journalUnavailable},
 	}},
 	{key: "startup", label: "Startup settings", description: "Settings that require restarting, and where to configure them.", options: []configOption{
-		{key: "files", label: "Paths and scenario", description: "Use vif.toml [paths] or -config-dir, -s, -f, -k. :new <scenario> starts another scenario.", read: startupValue},
+		{key: "files", label: "Paths and scenario", description: "Use vif.toml [paths] or -config-dir, -s, -f, -k. Simulation / Change scenario starts another one now.", read: startupValue},
 		{key: "backend", label: "Audio device / buffer", description: "Use -audio-backend and vif.toml [audio].buffer_ms. The audio device opens at startup.", read: startupValue},
 		{key: "color", label: "Colour depth", description: "Use -color auto|256|true. Rendering resources are selected at startup.", read: startupValue},
 		{key: "keymap", label: "Key bindings", description: "Edit input/keymap.toml in your config root, or use -k. config_menu is the action bound to Ctrl+G.", read: startupValue},
@@ -140,6 +141,31 @@ var configPages = []configPage{
 }
 
 func startupValue(*engine.GameContext) string { return "info" }
+
+// commandAction is a row Enter runs command from, leaving the menu as an action does.
+func commandAction(key, label, description, command string) configOption {
+	return configOption{key: key, label: label, description: description, command: command, action: true,
+		read: func(*engine.GameContext) string { return "Enter" }}
+}
+
+func withDisabled(o configOption, disabled func(*engine.GameContext) string) configOption {
+	o.disabled = disabled
+	return o
+}
+
+func captureDescription(what string) string {
+	return fmt.Sprintf("Capture %s for %v to the diagnostics directory; the status bar names the file.", what, parameter.ProfCaptureDefault)
+}
+
+func recorderUnavailable(ctx *engine.GameContext) string {
+	if why := loggingUnavailable(ctx); why != "" {
+		return why
+	}
+	if ctx.World.Resources.Status.Recorder() == nil {
+		return "Enable the flight recorder first"
+	}
+	return ""
+}
 
 func journalValue(ctx *engine.GameContext) string {
 	if ctx.SessionCtl != nil && ctx.SessionCtl.JournalPath() != "" {
@@ -353,7 +379,7 @@ func (r *Router) changeConfigMenu(direction int, activate bool) bool {
 			if o.key != key {
 				continue
 			}
-			if o.activate != nil && !activate {
+			if (o.activate != nil || o.action) && !activate {
 				return true
 			}
 			if why := o.unavailable(r.ctx); why != "" {
@@ -397,6 +423,9 @@ func (r *Router) changeConfigMenu(direction int, activate bool) bool {
 				}
 				ExecuteCommand(r.ctx, command)
 			})
+			if o.action {
+				return r.closeOverlay()
+			}
 			r.RefreshConfigMenu()
 			return true
 		}
