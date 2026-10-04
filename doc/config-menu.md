@@ -37,8 +37,8 @@ only; their description explains the reason.
 | Controls | Auto-fire (`off`, `main`, `on`), mouse input, pointer following. |
 | Display | Telemetry HUD, navigation flow field and route graph. |
 | Simulation | Solo speed from 1/8x through 8x. |
-| Diagnostics | Logging, level and scope presets, snapshot interval, flight recorder depth and FSM trigger, profiler. |
-| Startup settings | Guidance for paths/scenario, audio device/buffer, colour depth, key bindings, identity and recording. |
+| Diagnostics | Logging, level and scope presets, snapshot interval, flight recorder depth and FSM trigger, profiler, starting a replay journal (`:journal start`). |
+| Startup settings | Guidance for paths/scenario, audio device/buffer, colour depth, key bindings and identity. |
 
 ### Bots
 

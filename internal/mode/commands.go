@@ -36,7 +36,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "blossom", "decay", "cleaner", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region",
-	"host", "join", "session", "bot", "player", "g", "config",
+	"host", "join", "session", "bot", "player", "g", "config", "journal",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -128,6 +128,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleJoinCommand(ctx, args)
 	case "session":
 		return handleSessionCommand(ctx)
+	case "journal":
+		return handleJournalCommand(ctx, args)
 	case "bot":
 		return handleBotCommand(ctx, args)
 	case "player":
@@ -834,6 +836,33 @@ func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 	}
 	ctx.MacroClearFlag.Store(true)
 	return CommandResult{Continue: true, KeepPaused: true}
+}
+
+// handleJournalCommand reports the journal, or starts one from the current world.
+// Usage: :journal [start]
+func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if ctx.SessionCtl == nil {
+		setCommandError(ctx, "This runtime cannot start a journal")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	switch {
+	case len(args) == 0:
+		msg := "No journal; :journal start records from here"
+		if path := ctx.SessionCtl.JournalPath(); path != "" {
+			msg = "Journaling to " + path
+		}
+		ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, true)
+	case len(args) == 1 && (args[0] == "start" || args[0] == "on"):
+		if err := ctx.SessionCtl.StartJournal(); err != nil {
+			setCommandError(ctx, "Journal: "+err.Error())
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		ctx.MacroClearFlag.Store(true)
+		ctx.SetLastCommand(":journal start")
+	default:
+		setCommandError(ctx, "Usage: :journal [start]")
+	}
+	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleSessionCommand reports what this run is part of.
