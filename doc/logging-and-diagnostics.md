@@ -725,6 +725,7 @@ Journal record fields are:
 | `origin`, `ev` | Producer class and registered event name. |
 | `payload` | TOML text encoded from the registered payload prototype. |
 | `encode_err` | Why a payload could not be captured, absent otherwise; replay refuses that record. |
+| `crossing` | This instance's own crossing sequence the barrier applied it under, absent otherwise; replay restores it, since an own placement settles the D-18 queue by identity rather than by cell. |
 
 An anchor is emitted when capture opens, after reset, and every 600 ticks so a
 rotated file soon receives a self-description. It carries:
@@ -749,6 +750,14 @@ anchor with non-zero `start_run` or `start_tick` (`StartRun`/`StartTick` in
 Go): a journal beginning mid-run would need this instance's player-domain world,
 which no written world carries.
 
+A journal therefore starts with its run, and `:journal start` (Diagnostics →
+Replay journal) starts one mid-game the way a join does: it replaces the run. A
+solo run hands its shared world to the next run, which writes it before its clock
+starts and journals that write; a guest rejoins its session, so its journal opens
+at the join. The local player domain starts fresh there in both, as a joiner's
+does. A session's host refuses, since its guests' cursors would carry into a run
+they are not in.
+
 ### Written worlds and notes
 
 A participant writes worlds it did not simulate: the capture its join installed
@@ -760,7 +769,9 @@ integrity hash. Replay rebuilds it from its own world at that place, refuses a
 rebuild whose hash differs (it diverged before the write) and installs it under
 that identity, so a guest's journal replays from its join. A correction that
 changed nothing costs a few hundred bytes. Owner syncs and kill confirmations are
-records; the authority's worlds that proved them are not.
+records; the authority's worlds that proved them are not. A world written past
+the replay's settle boundary is preceded by a settle: what the recorded run
+dispatched there, a fresh run's boot among it, was no record.
 
 Two events are notes, journaled and applied by replay but never dispatched:
 `EventCursorPredicted`, the D-18 placement a keystroke made, and

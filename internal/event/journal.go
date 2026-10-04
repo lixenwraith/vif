@@ -11,7 +11,7 @@ import (
 // JournalSchema is the record layout version; bump on any field change, or on a
 // change to what an unchanged field means. A join refuses a peer on another one,
 // since the anchor it offers is the journal's. Each bump's reason is its commit.
-const JournalSchema = 17
+const JournalSchema = 18
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.
@@ -28,6 +28,7 @@ type JournalRecord struct {
 	EncodeErr string // non-empty when Payload could not be produced
 	JSeq      uint64 // dense record counter; a gap is exactly one lost record
 	Seq       uint64 // queue slot, legitimately sparse in the journal
+	Crossing  uint64 // own crossing sequence the barrier applied it under; 0 otherwise
 	Run       uint64 // reset generation; the tick counter restarts in each
 	Tick      uint64 // completed ticks in this run
 	Boundary  uint64 // completed between-tick settles this tick
@@ -245,6 +246,7 @@ func (j *Journal) record(ev *GameEvent, st Stamp) {
 		EncodeErr: encErr,
 		JSeq:      j.seq.Add(1),
 		Seq:       ev.Seq,
+		Crossing:  ev.CrossingSeq,
 		Run:       st.Run,
 		Tick:      st.Tick,
 		Boundary:  st.Boundary,

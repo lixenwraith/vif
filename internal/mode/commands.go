@@ -36,7 +36,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "blossom", "decay", "cleaner", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region",
-	"host", "join", "session", "bot", "player", "g", "config",
+	"host", "join", "session", "bot", "player", "g", "config", "journal",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -111,9 +111,9 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 	case "boost":
 		return handleBoostCommand(ctx)
 	case "god":
-		return handleGodCommand(ctx)
+		return handleGodCommand(ctx, 1)
 	case "demon":
-		return handleDemonCommand(ctx)
+		return handleGodCommand(ctx, -1)
 	case "blossom":
 		return handleBlossomCommand(ctx)
 	case "decay":
@@ -128,6 +128,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleJoinCommand(ctx, args)
 	case "session":
 		return handleSessionCommand(ctx)
+	case "journal":
+		return handleJournalCommand(ctx, args)
 	case "bot":
 		return handleBotCommand(ctx, args)
 	case "player":
@@ -836,6 +838,33 @@ func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 	return CommandResult{Continue: true, KeepPaused: true}
 }
 
+// handleJournalCommand reports the journal, or starts one from the current world.
+// Usage: :journal [start]
+func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if ctx.SessionCtl == nil {
+		setCommandError(ctx, "This runtime cannot start a journal")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	switch {
+	case len(args) == 0:
+		msg := "No journal; :journal start records from here"
+		if path := ctx.SessionCtl.JournalPath(); path != "" {
+			msg = "Journaling to " + path
+		}
+		ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, true)
+	case len(args) == 1 && (args[0] == "start" || args[0] == "on"):
+		if err := ctx.SessionCtl.StartJournal(); err != nil {
+			setCommandError(ctx, "Journal: "+err.Error())
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		ctx.MacroClearFlag.Store(true)
+		ctx.SetLastCommand(":journal start")
+	default:
+		setCommandError(ctx, "Usage: :journal [start]")
+	}
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
 // handleSessionCommand reports what this run is part of.
 func handleSessionCommand(ctx *engine.GameContext) CommandResult {
 	if ctx.SessionCtl == nil {
@@ -1023,27 +1052,19 @@ func handleBoostCommand(ctx *engine.GameContext) CommandResult {
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
-// handleGodCommand sets heat to max and energy to high value
-func handleGodCommand(ctx *engine.GameContext) CommandResult {
+// handleGodCommand sets max heat, high energy of the given sign and every weapon;
+// :demon is the negative sign
+func handleGodCommand(ctx *engine.GameContext, sign int) CommandResult {
 	player := ctx.World.Resources.Player.Entity
 	ctx.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: player, Value: parameter.HeatMax})
-	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: player, Value: parameter.GodEnergyAmount})
-	for wt := range component.WeaponCount {
-		ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: wt})
+	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{
+		Entity: player, Value: sign * parameter.GodEnergyAmount, Weapons: true,
+	})
+	name := ":god"
+	if sign < 0 {
+		name = ":demon"
 	}
-	ctx.SetLastCommand(":god")
-	return CommandResult{Continue: true, KeepPaused: false}
-}
-
-// handleDemonCommand sets heat to max and energy to high value
-func handleDemonCommand(ctx *engine.GameContext) CommandResult {
-	player := ctx.World.Resources.Player.Entity
-	ctx.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: player, Value: parameter.HeatMax})
-	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: player, Value: -parameter.GodEnergyAmount})
-	for wt := range component.WeaponCount {
-		ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: wt})
-	}
-	ctx.SetLastCommand(":demon")
+	ctx.SetLastCommand(name)
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 

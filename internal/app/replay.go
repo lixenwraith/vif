@@ -143,7 +143,7 @@ func (t replayTarget) Position() event.Stamp { return t.a.Position() }
 func (t replayTarget) Tick(n int)            { t.a.Tick(n) }
 func (t replayTarget) Settle()               { t.a.Settle() }
 func (t replayTarget) PushRecord(rec event.JournalRecord, payload any) bool {
-	return t.a.world.PushRecord(rec.Type, payload, rec.Origin, rec.Domain)
+	return t.a.world.PushRecord(rec, payload)
 }
 
 // Install writes a world the recorded run wrote, rebuilt from the one this replay
@@ -164,13 +164,16 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 		if err != nil {
 			return
 		}
+		// Participant zero wrote it solo, resuming a run it replaced, with no session.
 		r := a.world.Resources.Network
-		if r == nil || r.ParticipantID != c.Participant {
+		if c.Participant != 0 && (r == nil || r.ParticipantID != c.Participant) {
 			a.attachTransportLocked(replayPort{id: c.Participant})
 			r = a.world.Resources.Network
 		}
-		r.Authority.Store(c.Authority)
-		r.Term.Store(uint64(cap.Header.Term))
+		if r != nil {
+			r.Authority.Store(c.Authority)
+			r.Term.Store(uint64(cap.Header.Term))
+		}
 		_, err = a.writeSharedLocked(cap, &before, true)
 	})
 	return err

@@ -57,6 +57,12 @@ type restartRequest struct {
 
 	// Bots are the graphs of the seats this run held, which the next one seats again.
 	Bots []string
+
+	// Journal opens a journal in the next run. A journal starts with its run, so a
+	// solo run hands over Resume, its world, which the next one writes as a join
+	// writes the session's; a guest rejoins instead.
+	Journal bool
+	Resume  *snapshot.SharedCapture
 }
 
 // App owns the wired runtime: services, world, input, scheduler, and the selected
@@ -182,6 +188,11 @@ type App struct {
 // New wires the runtime, releasing anything already started on failure. Errors are
 // returned rather than panicked: the map editor and the wasm entry need them.
 func New(cfg Config) (*App, error) {
+	if c := cfg.resume; c != nil {
+		// The world it resumes decides what a joiner's offer would: roots and bounds.
+		h := c.Header
+		cfg.Seed, cfg.Session, cfg.MapWidth, cfg.MapHeight = h.Seed, h.Session, h.MapWidth, h.MapHeight
+	}
 	cfg.Normalize()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -488,6 +499,61 @@ func (a *App) initJournal() error {
 	a.recorder = r
 	vlog.Info("app", "msg", "journal open", "path", r.Path())
 	return nil
+}
+
+// journalErrorLocked says why this run cannot start a journal from here. A solo run
+// resumes its own world; a guest rejoins an authority that has not moved; a host
+// would hand its guests' cursors to a run they are not in. Caller MUST hold updateMutex.
+func (a *App) journalErrorLocked() error {
+	port := a.sessionTransportLocked()
+	guest := a.cfg.JoinAddress != "" && port != nil && port.IsRunning() && port.PeerCount() > 0 &&
+		!a.world.IsSessionCoordinator() && a.authorityID() == hostParticipantID
+	switch {
+	case a.cfg.Mode != ModePlay:
+		return fmt.Errorf("%s mode has no restart loop", a.cfg.Mode)
+	case a.recorder != nil:
+		return errors.New("already journaling to " + a.recorder.Path())
+	case a.dialling.Load() || a.restart.Load() != nil:
+		return errors.New("this run is already being replaced")
+	case !guest && a.world.SessionShared():
+		return errors.New("a session's host journals from its start (-j); a guest or a solo run can start one")
+	}
+	return nil
+}
+
+// startJournalLocked replaces this run with one that journals from its world.
+// Caller MUST hold updateMutex.
+func (a *App) startJournalLocked() error {
+	if err := a.journalErrorLocked(); err != nil {
+		return err
+	}
+	req := &restartRequest{Journal: true, Bots: a.seatGraphs(), Notice: "Journaling from here; :journal names the file"}
+	if a.cfg.JoinAddress != "" {
+		req.Rejoin = true
+	} else {
+		cap, err := a.captureSharedLocked()
+		if err == nil {
+			err = a.sealCapture(&cap)
+		}
+		if err != nil {
+			return err
+		}
+		req.Resume = &cap
+	}
+	a.restart.Store(req)
+	return nil
+}
+
+// resumeWorld writes the world a replaced run handed over, as a join writes the
+// session's: staged, then committed, which journals it. The player domain starts
+// here, as a joiner's does, and so does a replay of the journal.
+func (a *App) resumeWorld(cap snapshot.SharedCapture) error {
+	a.scheduler.Settle()
+	staged, err := a.StageShared(cap)
+	if err != nil {
+		return err
+	}
+	return staged.Commit()
 }
 
 // buildAnchor describes what a replay must reproduce. Reads the telemetry

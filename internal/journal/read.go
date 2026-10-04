@@ -40,6 +40,7 @@ type recordFields struct {
 	EncodeErr string `json:"encode_err"`
 	JSeq      uint64 `json:"jseq"`
 	Seq       uint64 `json:"seq"`
+	Crossing  uint64 `json:"crossing"`
 	Run       uint64 `json:"jrun"`
 	Tick      uint64 `json:"jtick"`
 	Boundary  uint64 `json:"boundary"`
@@ -186,7 +187,7 @@ func decodeRecord(raw json.RawMessage) (event.JournalRecord, error) {
 	}
 	return event.JournalRecord{
 		Payload: f.Payload, EncodeErr: f.EncodeErr,
-		JSeq: f.JSeq, Seq: f.Seq,
+		JSeq: f.JSeq, Seq: f.Seq, Crossing: f.Crossing,
 		Run: f.Run, Tick: f.Tick, Boundary: f.Boundary,
 		Type: et, Origin: origin, Domain: domain,
 	}, nil

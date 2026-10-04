@@ -51,6 +51,10 @@ type SessionController interface {
 	Participants() []SessionParticipant
 	DropPlayer(slot int) error
 	RemovePlayer(entity core.Entity) error
+	// StartJournal replaces the run with one journaling from its world.
+	StartJournal() error
+	JournalError() error
+	JournalPath() string
 }
 
 type SessionParticipant struct {

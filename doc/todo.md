@@ -284,6 +284,16 @@ takes on losing its host ([Multi-player](multi-player.md) §5.1) without the
 `Host lost` badge; an authority closes its listener first, and its guests succeed
 or fork as its `-authority` policy says.
 
+### Start a host's journal mid-session
+
+- Priority: P3
+- Affected files: `internal/app/app.go`, `internal/app/loop.go`
+
+`:journal start` replaces the run, and a host's world holds its guests' cursors, so a
+resumed host would carry them into a run they are not in. A host would resume with
+those participants departed and reopen its door, as a scenario change does, for its
+guests to rejoin.
+
 ### Let an authority drop a participant
 
 - Priority: P2
