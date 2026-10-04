@@ -12,7 +12,6 @@ web/*.wasm
 cmd/vif/vif
 /vif
 /vif-headless
-tmp/
 log/**/*.jsonl
 tmp/**/*.jsonl
 journal/**/*.jsonl
