@@ -555,7 +555,8 @@ On each event-loop interval:
 - a miss increments backoff telemetry;
 - after a configured number of misses, the event loop takes a blocking lock to
   guarantee progress after a long tick or render pass;
-- one consume/dispatch pass runs, then the lock is released.
+- one whole settle runs, then the lock is released. A single pass would split a
+  cascade across wakeups and interleave it with the next records by wall time.
 
 Each dispatched event goes to the HFSM first and then to registered handlers in
 registration order. The FSM's answer — whether any active region consumed the
