@@ -99,11 +99,7 @@ func (d *ReplayDriver) install() (bool, error) {
 		d.target.Tick(1)
 		return true, nil
 	}
-	// The recorded run settled what it held before the write, a fresh run's boot
-	// among it, and none of that was a record: only the boundary says so.
-	if at.Boundary < c.Boundary {
-		d.target.Settle()
-	}
+	d.settleTo(c.Boundary)
 	if err := d.target.Install(c); err != nil {
 		return false, fmt.Errorf("replay: capture after jseq %d: %w", c.JSeq, err)
 	}
@@ -202,7 +198,19 @@ func (d *ReplayDriver) RunAll() error {
 	}
 }
 
+// settleTo settles once when the recorded run had settled past where the replay
+// stands: what it held then, a fresh run's boot or a tick's leftovers among it,
+// was no record, and only the boundary says the settle happened.
+func (d *ReplayDriver) settleTo(boundary uint64) {
+	if d.target.Position().Boundary < boundary {
+		d.target.Settle()
+	}
+}
+
 func (d *ReplayDriver) injectGroup(k groupKey) error {
+	if p := d.target.Position(); p.Run == k.run && p.Tick == k.tick {
+		d.settleTo(k.boundary)
+	}
 	j := d.next
 	for j < len(d.records) && keyOf(d.records[j]) == k {
 		j++
@@ -249,7 +257,7 @@ func checkRecord(rec *event.JournalRecord) error {
 		event.GetEventName(rec.Type) == "" {
 		return fmt.Errorf("unregistered event type %d", rec.Type)
 	}
-	if !rec.Origin.Journaled() {
+	if !rec.Origin.Journaled() && rec.Crossing == 0 {
 		return fmt.Errorf("origin %s is not a journaled producer", rec.Origin)
 	}
 	return nil

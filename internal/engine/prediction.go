@@ -83,6 +83,9 @@ func (w *World) SettlePredictedDeaths() {
 // and the confirmations the recorded run raised arrive as records, so no ledger holds.
 func (w *World) FollowJournal() { w.followJournal.Store(true) }
 
+// FollowsJournal reports whether this world is a replay's.
+func (w *World) FollowsJournal() bool { return w.followJournal.Load() }
+
 // ResetPredictedDeaths drops the ledger for a run that has been replaced. A reward
 // held across a reset would land in a world that never saw the death.
 func (w *World) ResetPredictedDeaths() {

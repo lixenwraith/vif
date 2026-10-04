@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
+	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/status"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
@@ -285,6 +286,17 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	if addr == "" {
 		return errors.New("host: no address")
 	}
+	// Opening a session writes the world — owners, the latch, the lead — so a
+	// journal records the write as it records a join's, and a replay makes it.
+	journal := a.world.Resources.Event.Queue.Journal()
+	place, mark := a.Position(), journal.Mark()
+	var before snapshot.SharedCapture
+	if journal != nil {
+		var err error
+		if before, err = a.captureSharedLocked(); err != nil {
+			return fmt.Errorf("host: %w", err)
+		}
+	}
 	e, err := network.ParseEndpoint(addr)
 	if err == nil {
 		err = e.Listenable()
@@ -356,6 +368,11 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	// no peer is connected — publish returns on an empty roster — so a host waiting
 	// alone pays a ticker and no world reads.
 	a.corrections.StartPump()
+	if journal != nil {
+		if after, err := a.captureSharedLocked(); err == nil {
+			a.journalWritten(journal, place, mark, a.world.LocalParticipant(), before, after)
+		}
+	}
 
 	bound := addr
 	if b := port.Addr(); b != nil {

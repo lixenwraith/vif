@@ -102,12 +102,13 @@ func (s *StagedInstall) Commit() error {
 		return errors.New("staged install already discarded")
 	}
 	var (
-		err       error
-		behind    uint64
-		projected snapshot.SharedCapture
-		before    snapshot.SharedCapture
-		place     event.Stamp
-		mark      uint64
+		err         error
+		behind      uint64
+		projected   snapshot.SharedCapture
+		before      snapshot.SharedCapture
+		place       event.Stamp
+		mark        uint64
+		participant uint32
 	)
 	started := time.Now() // [wall] telemetry only
 	live, staging, header := s.live, s.staging, s.capture.Header
@@ -115,7 +116,7 @@ func (s *StagedInstall) Commit() error {
 
 	live.world.RunSafe(func() {
 		// Placed before the settlement below: its confirmations dispatch after the write.
-		place, mark = live.Position(), journal.Mark()
+		place, mark, participant = live.Position(), journal.Mark(), live.world.LocalParticipant()
 
 		// The ledger is settled against the authority's world as installed, before
 		// the projection re-derives this instance's own predictions over it.
@@ -166,7 +167,7 @@ func (s *StagedInstall) Commit() error {
 		return fmt.Errorf("commit a staged capture: %w", err)
 	}
 	if journal != nil {
-		live.journalWritten(journal, place, mark, before, projected)
+		live.journalWritten(journal, place, mark, participant, before, projected)
 	}
 	live.telemetry.StageUS.Store(s.stageDur.Microseconds())
 	live.telemetry.CommitUS.Store(s.commitDur.Microseconds())
@@ -183,7 +184,7 @@ func (s *StagedInstall) Commit() error {
 // replay holding the same world writes it at the same place as the same
 // participant. A join writes before its transport attaches, so the identity then
 // is the one the offer assigned.
-func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, before, cap snapshot.SharedCapture) {
+func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, participant uint32, before, cap snapshot.SharedCapture) {
 	d, err := snapshot.DiffWritten(before, cap)
 	var body []byte
 	if err == nil {
@@ -193,7 +194,6 @@ func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, befo
 		vlog.Warn("app", "msg", "journal capture not recorded", "tick", cap.Header.Tick, "error", err.Error())
 		return
 	}
-	participant := a.localParticipant()
 	if participant == 0 {
 		a.sessionMu.Lock()
 		participant = uint32(a.sessionOffer.Assigned)
