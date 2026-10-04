@@ -1250,7 +1250,7 @@ func (w *World) clearSharedEntities() {
 
 // snapshotPagesTemplate emits the page-level view of a capture's component stores.
 //
-// Phase 6 partitions a capture into sections and bounded pages so a correction can
+// A capture is partitioned into sections and bounded pages so a correction can
 // prove equality with a hash instead of carrying state. The store inventory that
 // partition is built over has to be the same one the capture is built over, or a
 // component added to the manifest would be captured and never hashed — hashed

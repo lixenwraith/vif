@@ -1030,11 +1030,9 @@ func TestSharedSnapshotExcludesLocalSchedulerTimingAndComparesGameTime(t *testin
 	a.World().Resources.Status.Ints.Get("engine.tick_slips").Store(3)
 	assertSharedParity(t, a, b, 0)
 
-	// The elapsed-game-time half is the regression for the 2026-08-31 kinetics
-	// divergence. Game time was read from each process's pacing clock, so every
-	// shared reader that measures now.Sub(stored) — the quasar's speed step is the
-	// one that diverged — crossed its threshold on a different tick per instance,
-	// and nothing compared the clock itself.
+	// The elapsed-game-time half pins game time to the tick: read from a pacing
+	// clock, every shared reader measuring now.Sub(stored), such as the quasar's
+	// speed step, would cross its threshold on a different tick per instance.
 	elapsed := func(x *App) int64 {
 		return x.World().Resources.Status.Ints.Get("time.game_elapsed_ms").Load()
 	}

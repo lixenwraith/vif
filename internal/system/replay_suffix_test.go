@@ -7,7 +7,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// The retention half of Phase 6's replay, tested where it lives.
+// The retention half of the correction replay, tested where it lives.
 //
 // The app-level suite proves a guest's own actions survive a correction. These
 // prove the three things retention itself promises, without a session: what it

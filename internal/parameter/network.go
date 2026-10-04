@@ -176,8 +176,8 @@ const (
 	// guessing, and a correction is a repair of the difference an unmodelled input
 	// made rather than the picture itself.
 	//
-	// Phase 5 made it the *nominal* point of a bounded controller rather than the
-	// cadence. What a peer actually receives is chosen per peer from its measured
+	// It is the *nominal* point of a bounded controller rather than the cadence.
+	// What a peer actually receives is chosen per peer from its measured
 	// link and its own demand, inside SnapshotCadenceMinTicks and
 	// SnapshotCadenceMaxTicks, and never past the convergence floor below.
 	SnapshotCorrectionTicks = 4
@@ -339,7 +339,7 @@ const (
 	// should cost freshness, never the newest authority.
 	SnapshotCorrectionQueue = 4
 
-	// === Phase 6: hash-guided selective correction ===
+	// === Hash-guided selective correction ===
 
 	// SnapshotManifestPageRows is how many rows a manifest page holds at the
 	// nominal partition. A page is the unit of both proof and repair, so it is a
