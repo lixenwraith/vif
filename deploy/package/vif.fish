@@ -30,7 +30,7 @@ complete -c vif -o ab -o audio-backend -x -d 'Force an audio backend instead of 
 complete -c vif -o seed -x -d 'Root RNG seed; 0 draws one and logs it'
 complete -c vif -o speed -x -d 'Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script or autonomous bots also "max" for no wall pacing'
 complete -c vif -o script -r -F -d 'Run an authored deterministic TOML tick script'
-complete -c vif -o headless -d 'With -bot, run bots without a human player or terminal; solo runs are unpaced'
+complete -c vif -o headless -d 'With -bot, run bots without a human player or terminal; solo runs are unpaced. With -replay, verify the journal\'s digests unattended'
 complete -c vif -o watch -d 'Watch the first bot or a script on this terminal, with no human player'
 complete -c vif -o r -o replay -r -F -d 'Replay a recorded journal instead of playing'
 complete -c vif -o check -d 'Validate the resolved scenario, keymap, audio and content, then exit'

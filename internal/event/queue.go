@@ -278,6 +278,16 @@ func (eq *EventQueue) NextBoundary() {
 	eq.stamp.Store(&Stamp{Run: s.Run, Tick: s.Tick, Boundary: s.Boundary + 1})
 }
 
+// DigestJournal emits a world digest at the current stamp. digest runs only when a
+// journal is installed. Caller MUST hold the world lock.
+func (eq *EventQueue) DigestJournal(digest func() JournalDigest) {
+	if j := eq.journal.Load(); j != nil {
+		d, st := digest(), eq.stamp.Load()
+		d.Run, d.Tick = st.Run, st.Tick
+		j.sink.Digest(d)
+	}
+}
+
 // AnchorJournal re-emits the anchor at the current stamp; a no-op when journaling is off
 func (eq *EventQueue) AnchorJournal(live AnchorLive) {
 	if j := eq.journal.Load(); j != nil {

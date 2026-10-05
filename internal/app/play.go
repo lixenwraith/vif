@@ -3,7 +3,6 @@
 package app
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -30,25 +29,14 @@ const panStep = 4
 // watcher's: where the scenario it names is found, as the run's -config-dir did,
 // and the speakers, colour and music recording.
 func PlayJournal(viewer Config, paths ...string) error {
-	event.EnsureRegistry()
-
-	set, err := journal.Load(paths...)
+	set, cfg, err := loadJournal(viewer, paths)
 	if err != nil {
 		return err
-	}
-	if len(set.Anchors) == 0 {
-		return errors.New("journal carries no anchor")
 	}
 	if err := set.CheckDense(); err != nil {
 		vlog.Warn("app", "msg", "journal incomplete", "error", err.Error())
 	}
 	an := set.Anchors[0]
-
-	cfg, err := ConfigFromAnchor(an)
-	if err != nil {
-		return err
-	}
-	cfg.Resources.Dir = viewer.Resources.Dir
 	cfg.AudioMuted, cfg.AudioBackend, cfg.AudioBuffer = viewer.AudioMuted, viewer.AudioBackend, viewer.AudioBuffer
 	cfg.MusicWAV, cfg.ColorMode, cfg.ColorModeSet = viewer.MusicWAV, viewer.ColorMode, viewer.ColorModeSet
 	a, err := NewReplay(cfg)
@@ -66,15 +54,12 @@ func PlayJournal(viewer Config, paths ...string) error {
 		return err
 	}
 	a.recordMusic()
-	d, err := newReplayDriver(a, set.Records, set.Captures)
+	d, err := replayDriver(a, set)
 	if err != nil {
 		return err
 	}
-	if set.End != nil {
-		d.FinishAt(*set.End)
-	}
 	vlog.Info("app", "msg", "replay open",
-		"records", len(set.Records), "seed", an.Seed, "speed", an.Speed)
+		"records", len(set.Records), "digests", len(set.Digests), "seed", an.Seed, "speed", an.Speed)
 	p := &player{a: a, src: journalSource{d}, interval: time.Duration(an.TickInterval),
 		rec: parseSpeed(an.Speed), scale: engine.ScaleNormal}
 	p.rebuild = func() (*App, pacedSource, error) {
@@ -84,13 +69,10 @@ func PlayJournal(viewer Config, paths ...string) error {
 		if err != nil {
 			return nil, nil, err
 		}
-		td, err := newReplayDriver(twin, slices.Clone(set.Records), slices.Clone(set.Captures))
+		td, err := replayDriver(twin, set)
 		if err != nil {
 			twin.Close()
 			return nil, nil, err
-		}
-		if set.End != nil {
-			td.FinishAt(*set.End)
 		}
 		return twin, journalSource{td}, nil
 	}
@@ -123,13 +105,25 @@ func runPresented(a *App, src pacedSource, kind, name string,
 // journalSource adapts a record stream to the presentation loop.
 type journalSource struct{ d *journal.ReplayDriver }
 
-func (s journalSource) Step() (bool, error) { return s.d.Step() }
+// Step logs the first digest the replay does not reproduce; the bar keeps showing it.
+func (s journalSource) Step() (bool, error) {
+	before := s.d.Stats().Diverged
+	more, err := s.d.Step()
+	if v := s.d.Stats().Diverged; v != nil && before == nil {
+		vlog.Warn("app", "msg", "replay diverged", "tick", v.At.Tick, "run", v.At.Run, "error", v.Error())
+	}
+	return more, err
+}
 
 func (s journalSource) progress() string {
 	st := s.d.Stats()
 	at := time.Duration(st.End.Tick) * parameter.GameUpdateInterval / time.Second
-	return fmt.Sprintf("run %d tick %d %d:%02d:%02d | %d/%d rec",
+	out := fmt.Sprintf("run %d tick %d %d:%02d:%02d | %d/%d rec",
 		st.End.Run, st.End.Tick, at/3600, at/60%60, at%60, st.Injected, st.Records)
+	if v := st.Diverged; v != nil {
+		out += fmt.Sprintf(" | diverged by tick %d", v.At.Tick)
+	}
+	return out
 }
 
 // parseSpeed resolves the recorded rate, defaulting to real time

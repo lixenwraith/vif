@@ -112,6 +112,18 @@ type JournalCapture struct {
 	Body []byte // snapshot.WrittenDelta: the world written, against the one before it
 }
 
+// JournalDigest is the world a run held after a tick's body, before anything
+// settled between it and the next, one hash per class of state. A replay compares
+// it after the same tick to name where it left the run.
+type JournalDigest struct {
+	Run       uint64
+	Tick      uint64
+	Positions uint64
+	Kinetics  uint64
+	Combat    uint64
+	Entities  uint64
+}
+
 // JoinAnchor is what one participant offers another so both reproduce the same
 // session. It wraps JournalAnchor rather than restating it: replay and join verify
 // the same identity, and a field added for one is available to the other.
@@ -142,6 +154,7 @@ type JournalSink interface {
 	Record(JournalRecord)
 	Anchor(JournalAnchor)
 	Capture(JournalCapture)
+	Digest(JournalDigest)
 	Finish(Stamp)
 }
 
@@ -154,6 +167,13 @@ const AnchorIntervalTicks = 600
 
 // AnchorDue reports whether a tick falls on the anchor cadence
 func AnchorDue(tick uint64) bool { return tick%AnchorIntervalTicks == 0 }
+
+// DigestIntervalTicks is the tick period between world digests: a replay names
+// the tick it left its run within one period, at about 5% of a bot journal.
+const DigestIntervalTicks = 20
+
+// DigestDue reports whether a completed tick falls on the digest cadence
+func DigestDue(tick uint64) bool { return tick%DigestIntervalTicks == 0 }
 
 // Journal captures non-system events for replay. One per queue, so concurrent
 // harness runs in a single process cannot share a counter.

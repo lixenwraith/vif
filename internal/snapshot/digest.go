@@ -8,6 +8,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 // FNV-1a 64, inlined so a per-tick digest allocates nothing
@@ -71,6 +72,12 @@ func (wd WorldDigest) Line(entities bool) string {
 		out += "|entities=" + wd.Entities.String()
 	}
 	return out
+}
+
+// Journal is the digest as a journal carries it, unstamped.
+func (wd WorldDigest) Journal() event.JournalDigest {
+	return event.JournalDigest{Positions: uint64(wd.Positions), Kinetics: uint64(wd.Kinetics),
+		Combat: uint64(wd.Combat), Entities: uint64(wd.Entities)}
 }
 
 // DigestWorld hashes one domain scope, so two instances compare shared state

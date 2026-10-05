@@ -17,6 +17,7 @@ type Capture struct {
 	records  []event.JournalRecord
 	anchors  []event.JournalAnchor
 	captures []event.JournalCapture
+	digests  []event.JournalDigest
 	end      event.Stamp
 }
 
@@ -43,6 +44,20 @@ func (c *Capture) Capture(w event.JournalCapture) {
 	c.mu.Lock()
 	c.captures = append(c.captures, w)
 	c.mu.Unlock()
+}
+
+// Digest appends one world digest.
+func (c *Capture) Digest(d event.JournalDigest) {
+	c.mu.Lock()
+	c.digests = append(c.digests, d)
+	c.mu.Unlock()
+}
+
+// Digests returns a copy of the world digests in emission order.
+func (c *Capture) Digests() []event.JournalDigest {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.digests)
 }
 
 // Captures returns a copy of the written worlds in emission order.
