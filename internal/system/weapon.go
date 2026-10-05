@@ -46,7 +46,7 @@ type WeaponSystem struct {
 	statKind       *atomic.Int64
 	rejects        rejectionTelemetry
 
-	enabled bool
+	toggle
 }
 
 // NewWeaponSystem creates a new weapon system

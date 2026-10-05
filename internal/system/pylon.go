@@ -25,7 +25,7 @@ type PylonSystem struct {
 	statCount  *atomic.Int64
 	lifecycle  lifecycleTelemetry
 
-	enabled bool
+	toggle
 }
 
 // NewPylonSystem creates a new pylon system

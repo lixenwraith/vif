@@ -16,7 +16,7 @@ type LightningSystem struct {
 
 	rng *vmath.FastRand // Seed generation for new lightnings
 
-	enabled bool
+	toggle
 }
 
 func NewLightningSystem(world *engine.World) engine.System {

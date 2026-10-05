@@ -1,6 +1,8 @@
 package system
 
 import (
+	"maps"
+
 	"math"
 	"sync/atomic"
 
@@ -35,7 +37,7 @@ type TypingSystem struct {
 	buffers       bufferTelemetry
 	rejects       rejectionTelemetry
 
-	enabled bool
+	toggle
 }
 
 // NewTypingSystem creates a new typing system
@@ -464,4 +466,20 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 	if len(s.deleteBuf) > 0 {
 		event.EmitDeath(s.world.Resources.Event.Queue, 0, s.deleteBuf...)
 	}
+}
+
+type typingState struct {
+	typed  map[core.Entity]uint64
+	streak [parameter.MaxPlayers]int64
+}
+
+func (s *TypingSystem) CopyState() any { return typingState{maps.Clone(s.typed), s.currentStreak} }
+
+func (s *TypingSystem) RestoreState(v any) error {
+	c := v.(typingState)
+	s.typed, s.currentStreak = maps.Clone(c.typed), c.streak
+	if s.typed == nil {
+		s.typed = make(map[core.Entity]uint64)
+	}
+	return nil
 }

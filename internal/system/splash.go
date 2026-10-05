@@ -21,7 +21,7 @@ type BBox struct {
 type SplashSystem struct {
 	world *engine.World
 
-	enabled bool
+	toggle
 }
 
 // NewSplashSystem creates a new splash system

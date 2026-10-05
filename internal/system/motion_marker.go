@@ -1,6 +1,8 @@
 package system
 
 import (
+	"slices"
+
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -23,7 +25,7 @@ type MotionMarkerSystem struct {
 	coloredMarkers []core.Entity
 	buffers        bufferTelemetry
 
-	enabled bool
+	toggle
 }
 
 func NewMotionMarkerSystem(world *engine.World) engine.System {
@@ -286,4 +288,22 @@ func (s *MotionMarkerSystem) validateBaseMarkers() {
 			return
 		}
 	}
+}
+
+type motionMarkerState struct {
+	base      []core.Entity
+	positions []vmath.Point
+	colored   []core.Entity
+}
+
+func (s *MotionMarkerSystem) CopyState() any {
+	return motionMarkerState{slices.Clone(s.baseMarkers), slices.Clone(s.basePositions), slices.Clone(s.coloredMarkers)}
+}
+
+func (s *MotionMarkerSystem) RestoreState(v any) error {
+	c := v.(motionMarkerState)
+	s.baseMarkers = append(s.baseMarkers[:0], c.base...)
+	s.basePositions = append(s.basePositions[:0], c.positions...)
+	s.coloredMarkers = append(s.coloredMarkers[:0], c.colored...)
+	return nil
 }

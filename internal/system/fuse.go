@@ -1,6 +1,7 @@
 package system
 
 import (
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -39,7 +40,7 @@ type FuseSystem struct {
 	statSpawnFailures *atomic.Int64
 	statDisabled      *atomic.Int64
 	buffers           bufferTelemetry
-	enabled           bool
+	toggle
 }
 
 // NewFuseSystem creates a new fuse system
@@ -352,4 +353,11 @@ func (s *FuseSystem) completeFusion(f pendingFusion) {
 			Y: f.TargetY,
 		})
 	}
+}
+
+func (s *FuseSystem) CopyState() any { return slices.Clone(s.fusions) }
+
+func (s *FuseSystem) RestoreState(v any) error {
+	s.fusions = append(s.fusions[:0], v.([]pendingFusion)...)
+	return nil
 }

@@ -80,7 +80,7 @@ type GlyphSystem struct {
 	statOrphanGlyph *atomic.Int64
 	buffers         bufferTelemetry
 
-	enabled bool
+	toggle
 }
 
 // NewGlyphSystem creates a new glyph system
@@ -374,4 +374,20 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 	}
 
 	return false
+}
+
+type glyphState struct {
+	census    glyphCensus
+	nextSpawn time.Duration
+	rate      float64
+}
+
+func (s *GlyphSystem) CopyState() any {
+	return glyphState{s.census, s.nextSpawnTimer, s.rateMultiplier}
+}
+
+func (s *GlyphSystem) RestoreState(v any) error {
+	c := v.(glyphState)
+	s.census, s.nextSpawnTimer, s.rateMultiplier = c.census, c.nextSpawn, c.rate
+	return nil
 }

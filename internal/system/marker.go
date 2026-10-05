@@ -11,8 +11,8 @@ import (
 
 // MarkerSystem manages visual area indicators
 type MarkerSystem struct {
-	world   *engine.World
-	enabled bool
+	world *engine.World
+	toggle
 }
 
 func NewMarkerSystem(world *engine.World) engine.System {

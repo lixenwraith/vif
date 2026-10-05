@@ -34,7 +34,7 @@ type EnergySystem struct {
 	statMissingEnergy    *atomic.Int64
 	statDisabled         *atomic.Int64
 
-	enabled bool
+	toggle
 }
 
 // NewEnergySystem creates a new energy system

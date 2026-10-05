@@ -16,8 +16,8 @@ import (
 // line and stop at walls and bounds; a hostile one strikes cursors and shields, a
 // cursor's resolves against species. Spawned via EventBulletSpawnRequest.
 type BulletSystem struct {
-	world   *engine.World
-	enabled bool
+	world *engine.World
+	toggle
 
 	statCount          *atomic.Int64
 	statSpawned        *atomic.Int64

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"sync"
@@ -208,7 +209,7 @@ type NetworkSystem struct {
 	resetBools   []*atomic.Bool
 	resetStrings []*status.AtomicString
 
-	enabled bool
+	toggle
 }
 
 // localCrossing retains the wire representation so projection, authority
@@ -2604,4 +2605,92 @@ func stateFrame(p *event.CursorStatePayload) event.WireFrame {
 		Type: event.EventCursorStateSync, Payload: p, Domain: core.DomainShared,
 	})
 	return f
+}
+
+// networkState is the barrier and session bookkeeping a replay copy carries. The
+// correction reassembly and the drain window belong to a transport, which a replay
+// copy only stands in for.
+type networkState struct {
+	crossings                                  []event.ScheduledWireFrame
+	scheduled, applied                         []barrierArtifact
+	scheduledBytes, suffixBytes                int
+	epochs, rawEpochs                          [participantSlots]epochWindow
+	productionEpoch, crossSeq, appliedCrossSeq uint64
+	appliedAhead                               map[uint64]struct{}
+	localSource, snapshotAuthority             uint32
+	delayTicks, lastApplyTick, snapshotFloor   uint64
+	encodeErr, suffixDropped                   int64
+	barrierActive                              bool
+	appliedPeerSeq, relayingAt                 [participantSlots]uint64
+	snapshotFences                             network.CrossingFences
+	syncSeq, ticks, lostSeq                    uint64
+	lastSync, stateSeen, rawStateSeen          [parameter.MaxPlayers]uint64
+	states                                     []pendingState
+	departed                                   [participantSlots]bool
+	digestHistory                              [parameter.NetworkEpochWindow]stateDigest
+	pendingDigest                              [participantSlots]stateDigest
+	suffix                                     []localCrossing
+	paceSamples, pathSamples                   [parameter.NetworkPaceWindow]int64
+	paceCount, pathCount                       int
+	paceLatest                                 int64
+	paceKnown                                  bool
+	pathEpoch, leadLowSince, leadPushed        uint64
+	lastLostIn, lastLostOut                    uint64
+}
+
+func (s *NetworkSystem) CopyState() any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c := networkState{
+		crossings: slices.Clone(s.crossings), scheduled: slices.Clone(s.scheduled), applied: slices.Clone(s.applied),
+		scheduledBytes: s.scheduledBytes, suffixBytes: s.suffixBytes, epochs: s.epochs, rawEpochs: s.rawEpochs,
+		productionEpoch: s.productionEpoch, crossSeq: s.crossSeq, appliedCrossSeq: s.appliedCrossSeq,
+		appliedAhead: maps.Clone(s.appliedAhead), localSource: s.localSource, snapshotAuthority: s.snapshotAuthority,
+		delayTicks: s.delayTicks, lastApplyTick: s.lastApplyTick, snapshotFloor: s.snapshotFloor,
+		encodeErr: s.encodeErr, suffixDropped: s.suffixDropped, barrierActive: s.barrierActive.Load(),
+		appliedPeerSeq: s.appliedPeerSeq, relayingAt: s.relayingAt, snapshotFences: slices.Clone(s.snapshotFences),
+		syncSeq: s.syncSeq, ticks: s.ticks, lostSeq: s.lostSeq, lastSync: s.lastSync, stateSeen: s.stateSeen,
+		rawStateSeen: s.rawStateSeen, states: clonePendingStates(s.states), departed: s.departed,
+		digestHistory: s.digestHistory, pendingDigest: s.pendingDigest, suffix: slices.Clone(s.suffix),
+		paceSamples: s.paceSamples, pathSamples: s.pathSamples, paceCount: s.paceCount, pathCount: s.pathCount,
+		paceLatest: s.paceLatest, paceKnown: s.paceKnown, pathEpoch: s.pathEpoch, leadLowSince: s.leadLowSince,
+		leadPushed: s.leadPushed, lastLostIn: s.lastLostIn, lastLostOut: s.lastLostOut,
+	}
+	return c
+}
+
+func (s *NetworkSystem) RestoreState(v any) error {
+	c := v.(networkState)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.crossings, s.scheduled, s.applied = slices.Clone(c.crossings), slices.Clone(c.scheduled), slices.Clone(c.applied)
+	s.scheduledBytes, s.suffixBytes, s.epochs, s.rawEpochs = c.scheduledBytes, c.suffixBytes, c.epochs, c.rawEpochs
+	s.productionEpoch, s.crossSeq, s.appliedCrossSeq = c.productionEpoch, c.crossSeq, c.appliedCrossSeq
+	s.appliedAhead, s.localSource, s.snapshotAuthority = maps.Clone(c.appliedAhead), c.localSource, c.snapshotAuthority
+	if s.appliedAhead == nil {
+		s.appliedAhead = make(map[uint64]struct{})
+	}
+	s.delayTicks, s.lastApplyTick, s.snapshotFloor = c.delayTicks, c.lastApplyTick, c.snapshotFloor
+	s.encodeErr, s.suffixDropped = c.encodeErr, c.suffixDropped
+	s.barrierActive.Store(c.barrierActive)
+	s.appliedPeerSeq, s.relayingAt, s.snapshotFences = c.appliedPeerSeq, c.relayingAt, slices.Clone(c.snapshotFences)
+	s.syncSeq, s.ticks, s.lostSeq, s.lastSync = c.syncSeq, c.ticks, c.lostSeq, c.lastSync
+	s.stateSeen, s.rawStateSeen, s.states, s.departed = c.stateSeen, c.rawStateSeen, clonePendingStates(c.states), c.departed
+	s.digestHistory, s.pendingDigest, s.suffix = c.digestHistory, c.pendingDigest, slices.Clone(c.suffix)
+	s.paceSamples, s.pathSamples, s.paceCount, s.pathCount = c.paceSamples, c.pathSamples, c.paceCount, c.pathCount
+	s.paceLatest, s.paceKnown, s.pathEpoch = c.paceLatest, c.paceKnown, c.pathEpoch
+	s.leadLowSince, s.leadPushed, s.lastLostIn, s.lastLostOut = c.leadLowSince, c.leadPushed, c.lastLostIn, c.lastLostOut
+	return nil
+}
+
+func clonePendingStates(states []pendingState) []pendingState {
+	out := slices.Clone(states)
+	for i := range out {
+		if p := out[i].payload; p != nil {
+			cp := *p
+			cp.WeaponCharges, cp.WeaponCooldown = slices.Clone(p.WeaponCharges), slices.Clone(p.WeaponCooldown)
+			out[i].payload = &cp
+		}
+	}
+	return out
 }

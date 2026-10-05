@@ -43,7 +43,7 @@ type MusicSystem struct {
 	statBPM             *atomic.Int64
 	lastSlot            [audio.MusicSlots]audio.PatternID
 
-	enabled      bool
+	toggle
 	audioEnabled bool
 }
 

@@ -31,7 +31,7 @@ type ExplosionSystem struct {
 	rejects       rejectionTelemetry
 	buffers       bufferTelemetry
 
-	enabled bool
+	toggle
 }
 
 func NewExplosionSystem(world *engine.World) engine.System {

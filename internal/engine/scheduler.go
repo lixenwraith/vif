@@ -333,6 +333,35 @@ func (s *Scheduler) SetJournalDigest(fn func() event.JournalDigest) { s.digest =
 // Caller MUST hold updateMutex: the machine is tick-owned.
 func (s *Scheduler) ExportFSM() fsm.MachineState { return s.fsm.Export() }
 
+// SchedulerCopy is the FSM position and the scheduler's own accumulators, for a
+// replay copy restored where another stood.
+type SchedulerCopy struct {
+	fsm                      fsm.MachineState
+	evBackoffs, tickSlips    int64
+	tickSlipPending          bool
+	eventDispatch, eventDead [event.EventTypeCount]int64
+	lastEvDropped            uint64
+	resetPending             bool
+}
+
+// ResetPending reports a game reset requested and not yet run, which the restoring
+// side signals on its own reset channel.
+func (c SchedulerCopy) ResetPending() bool { return c.resetPending }
+
+// CopyOut reads the scheduler. Caller MUST hold updateMutex.
+func (s *Scheduler) CopyOut() SchedulerCopy {
+	return SchedulerCopy{fsm: s.fsm.Export(), evBackoffs: s.evBackoffs, tickSlips: s.tickSlips,
+		tickSlipPending: s.tickSlipPending, eventDispatch: s.eventDispatch, eventDead: s.eventDead,
+		lastEvDropped: s.lastEvDropped, resetPending: len(s.resetChan) > 0}
+}
+
+// CopyIn places the scheduler where a copy was read. Caller MUST hold updateMutex.
+func (s *Scheduler) CopyIn(c SchedulerCopy) error {
+	s.evBackoffs, s.tickSlips, s.tickSlipPending = c.evBackoffs, c.tickSlips, c.tickSlipPending
+	s.eventDispatch, s.eventDead, s.lastEvDropped = c.eventDispatch, c.eventDead, c.lastEvDropped
+	return s.ImportFSM(c.fsm, false)
+}
+
 // ImportFSM places the FSM runtime where a capture found it. A staging import
 // resolves the graph without side effects. A live import additionally replays the
 // explicitly marked, idempotent ClassLocal lifecycle actions for state boundaries

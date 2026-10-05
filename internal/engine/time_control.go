@@ -106,6 +106,9 @@ func (tc *TimeControl) SetPaused(paused bool) bool {
 	return true
 }
 
+// Clock returns the clock time control drives.
+func (tc *TimeControl) Clock() Clock { return tc.clock }
+
 // IsPaused reports whether game time is frozen
 func (tc *TimeControl) IsPaused() bool { return tc.paused.Load() }
 

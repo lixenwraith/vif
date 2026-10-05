@@ -610,3 +610,176 @@ func (w *World) wipeAll() {
 	// Clear component mask
 	clear(w.componentMask)
 }
+
+// componentCopies is every component store detached from its world, in dense order
+type componentCopies struct {
+	Glyph        storeCopy[component.GlyphComponent]
+	Sigil        storeCopy[component.SigilComponent]
+	Nugget       storeCopy[component.NuggetComponent]
+	Cursor       storeCopy[component.CursorComponent]
+	Protection   storeCopy[component.ProtectionComponent]
+	Kinetic      storeCopy[component.KineticComponent]
+	Wall         storeCopy[component.WallComponent]
+	Loot         storeCopy[component.LootComponent]
+	Gateway      storeCopy[component.GatewayComponent]
+	Energy       storeCopy[component.EnergyComponent]
+	Heat         storeCopy[component.HeatComponent]
+	Shield       storeCopy[component.ShieldComponent]
+	Boost        storeCopy[component.BoostComponent]
+	Weapon       storeCopy[component.WeaponComponent]
+	Orb          storeCopy[component.OrbComponent]
+	Ping         storeCopy[component.PingComponent]
+	CursorView   storeCopy[component.CursorViewComponent]
+	Particle     storeCopy[component.ParticleComponent]
+	Cleaner      storeCopy[component.CleanerComponent]
+	Dust         storeCopy[component.DustComponent]
+	Navigation   storeCopy[component.NavigationComponent]
+	Combat       storeCopy[component.CombatComponent]
+	Genotype     storeCopy[component.GenotypeComponent]
+	Lightning    storeCopy[component.LightningComponent]
+	Missile      storeCopy[component.MissileComponent]
+	Mount        storeCopy[component.MountComponent]
+	Beam         storeCopy[component.BeamComponent]
+	Spirit       storeCopy[component.SpiritComponent]
+	Materialize  storeCopy[component.MaterializeComponent]
+	Target       storeCopy[component.TargetComponent]
+	TargetAnchor storeCopy[component.TargetAnchorComponent]
+	Drain        storeCopy[component.DrainComponent]
+	Quasar       storeCopy[component.QuasarComponent]
+	Swarm        storeCopy[component.SwarmComponent]
+	Storm        storeCopy[component.StormComponent]
+	StormCircle  storeCopy[component.StormCircleComponent]
+	Bullet       storeCopy[component.BulletComponent]
+	Pylon        storeCopy[component.PylonComponent]
+	Snake        storeCopy[component.SnakeComponent]
+	SnakeHead    storeCopy[component.SnakeHeadComponent]
+	SnakeBody    storeCopy[component.SnakeBodyComponent]
+	SnakeMember  storeCopy[component.SnakeMemberComponent]
+	Eye          storeCopy[component.EyeComponent]
+	Tower        storeCopy[component.TowerComponent]
+	Kraken       storeCopy[component.KrakenComponent]
+	Header       storeCopy[component.HeaderComponent]
+	Member       storeCopy[component.MemberComponent]
+	Flash        storeCopy[component.FlashComponent]
+	Fadeout      storeCopy[component.FadeoutComponent]
+	Splash       storeCopy[component.SplashComponent]
+	Marker       storeCopy[component.MarkerComponent]
+	Death        storeCopy[component.DeathComponent]
+	Timer        storeCopy[component.TimerComponent]
+}
+
+// copyComponentsOut detaches every component store. Caller MUST hold updateMutex
+func (w *World) copyComponentsOut() (c componentCopies) {
+	c.Glyph = w.Components.Glyph.copyOut()
+	c.Sigil = w.Components.Sigil.copyOut()
+	c.Nugget = w.Components.Nugget.copyOut()
+	c.Cursor = w.Components.Cursor.copyOut()
+	c.Protection = w.Components.Protection.copyOut()
+	c.Kinetic = w.Components.Kinetic.copyOut()
+	c.Wall = w.Components.Wall.copyOut()
+	c.Loot = w.Components.Loot.copyOut()
+	c.Gateway = w.Components.Gateway.copyOut()
+	c.Energy = w.Components.Energy.copyOut()
+	c.Heat = w.Components.Heat.copyOut()
+	c.Shield = w.Components.Shield.copyOut()
+	c.Boost = w.Components.Boost.copyOut()
+	c.Weapon = w.Components.Weapon.copyOut()
+	c.Orb = w.Components.Orb.copyOut()
+	c.Ping = w.Components.Ping.copyOut()
+	c.CursorView = w.Components.CursorView.copyOut()
+	c.Particle = w.Components.Particle.copyOut()
+	c.Cleaner = w.Components.Cleaner.copyOut()
+	c.Dust = w.Components.Dust.copyOut()
+	c.Navigation = w.Components.Navigation.copyOut()
+	c.Combat = w.Components.Combat.copyOut()
+	c.Genotype = w.Components.Genotype.copyOut()
+	c.Lightning = w.Components.Lightning.copyOut()
+	c.Missile = w.Components.Missile.copyOut()
+	c.Mount = w.Components.Mount.copyOut()
+	c.Beam = w.Components.Beam.copyOut()
+	c.Spirit = w.Components.Spirit.copyOut()
+	c.Materialize = w.Components.Materialize.copyOut()
+	c.Target = w.Components.Target.copyOut()
+	c.TargetAnchor = w.Components.TargetAnchor.copyOut()
+	c.Drain = w.Components.Drain.copyOut()
+	c.Quasar = w.Components.Quasar.copyOut()
+	c.Swarm = w.Components.Swarm.copyOut()
+	c.Storm = w.Components.Storm.copyOut()
+	c.StormCircle = w.Components.StormCircle.copyOut()
+	c.Bullet = w.Components.Bullet.copyOut()
+	c.Pylon = w.Components.Pylon.copyOut()
+	c.Snake = w.Components.Snake.copyOut()
+	c.SnakeHead = w.Components.SnakeHead.copyOut()
+	c.SnakeBody = w.Components.SnakeBody.copyOut()
+	c.SnakeMember = w.Components.SnakeMember.copyOut()
+	c.Eye = w.Components.Eye.copyOut()
+	c.Tower = w.Components.Tower.copyOut()
+	c.Kraken = w.Components.Kraken.copyOut()
+	c.Header = w.Components.Header.copyOut()
+	c.Member = w.Components.Member.copyOut()
+	c.Flash = w.Components.Flash.copyOut()
+	c.Fadeout = w.Components.Fadeout.copyOut()
+	c.Splash = w.Components.Splash.copyOut()
+	c.Marker = w.Components.Marker.copyOut()
+	c.Death = w.Components.Death.copyOut()
+	c.Timer = w.Components.Timer.copyOut()
+	return c
+}
+
+// copyComponentsIn replaces every component store with a detached copy. Caller
+// MUST hold updateMutex
+func (w *World) copyComponentsIn(c componentCopies) {
+	w.Components.Glyph.copyIn(c.Glyph)
+	w.Components.Sigil.copyIn(c.Sigil)
+	w.Components.Nugget.copyIn(c.Nugget)
+	w.Components.Cursor.copyIn(c.Cursor)
+	w.Components.Protection.copyIn(c.Protection)
+	w.Components.Kinetic.copyIn(c.Kinetic)
+	w.Components.Wall.copyIn(c.Wall)
+	w.Components.Loot.copyIn(c.Loot)
+	w.Components.Gateway.copyIn(c.Gateway)
+	w.Components.Energy.copyIn(c.Energy)
+	w.Components.Heat.copyIn(c.Heat)
+	w.Components.Shield.copyIn(c.Shield)
+	w.Components.Boost.copyIn(c.Boost)
+	w.Components.Weapon.copyIn(c.Weapon)
+	w.Components.Orb.copyIn(c.Orb)
+	w.Components.Ping.copyIn(c.Ping)
+	w.Components.CursorView.copyIn(c.CursorView)
+	w.Components.Particle.copyIn(c.Particle)
+	w.Components.Cleaner.copyIn(c.Cleaner)
+	w.Components.Dust.copyIn(c.Dust)
+	w.Components.Navigation.copyIn(c.Navigation)
+	w.Components.Combat.copyIn(c.Combat)
+	w.Components.Genotype.copyIn(c.Genotype)
+	w.Components.Lightning.copyIn(c.Lightning)
+	w.Components.Missile.copyIn(c.Missile)
+	w.Components.Mount.copyIn(c.Mount)
+	w.Components.Beam.copyIn(c.Beam)
+	w.Components.Spirit.copyIn(c.Spirit)
+	w.Components.Materialize.copyIn(c.Materialize)
+	w.Components.Target.copyIn(c.Target)
+	w.Components.TargetAnchor.copyIn(c.TargetAnchor)
+	w.Components.Drain.copyIn(c.Drain)
+	w.Components.Quasar.copyIn(c.Quasar)
+	w.Components.Swarm.copyIn(c.Swarm)
+	w.Components.Storm.copyIn(c.Storm)
+	w.Components.StormCircle.copyIn(c.StormCircle)
+	w.Components.Bullet.copyIn(c.Bullet)
+	w.Components.Pylon.copyIn(c.Pylon)
+	w.Components.Snake.copyIn(c.Snake)
+	w.Components.SnakeHead.copyIn(c.SnakeHead)
+	w.Components.SnakeBody.copyIn(c.SnakeBody)
+	w.Components.SnakeMember.copyIn(c.SnakeMember)
+	w.Components.Eye.copyIn(c.Eye)
+	w.Components.Tower.copyIn(c.Tower)
+	w.Components.Kraken.copyIn(c.Kraken)
+	w.Components.Header.copyIn(c.Header)
+	w.Components.Member.copyIn(c.Member)
+	w.Components.Flash.copyIn(c.Flash)
+	w.Components.Fadeout.copyIn(c.Fadeout)
+	w.Components.Splash.copyIn(c.Splash)
+	w.Components.Marker.copyIn(c.Marker)
+	w.Components.Death.copyIn(c.Death)
+	w.Components.Timer.copyIn(c.Timer)
+}

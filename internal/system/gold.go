@@ -44,7 +44,7 @@ type GoldSystem struct {
 	statSpawnFailures *atomic.Int64
 	rejects           rejectionTelemetry
 
-	enabled bool
+	toggle
 }
 
 // NewGoldSystem creates a new gold sequence system
@@ -640,5 +640,25 @@ func (s *GoldSystem) LoadShared(data []byte) error {
 	} else {
 		s.statTimer.Store(0)
 	}
+	return nil
+}
+
+type goldState struct {
+	header                core.Entity
+	startTime, timeout    time.Time
+	contrib               [parameter.MaxPlayers]int
+	active, spawn, splash bool
+}
+
+// CopyState carries the sequence as it stands, including the timer splash still
+// owed, which LoadShared re-derives as a joiner would.
+func (s *GoldSystem) CopyState() any {
+	return goldState{s.headerEntity, s.startTime, s.timeoutTime, s.contrib, s.active, s.spawnEnabled, s.splashDue}
+}
+
+func (s *GoldSystem) RestoreState(v any) error {
+	c := v.(goldState)
+	s.headerEntity, s.startTime, s.timeoutTime, s.contrib = c.header, c.startTime, c.timeout, c.contrib
+	s.active, s.spawnEnabled, s.splashDue = c.active, c.spawn, c.splash
 	return nil
 }

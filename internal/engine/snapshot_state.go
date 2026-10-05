@@ -56,6 +56,23 @@ type SharedStateChecker interface {
 	CheckShared(data []byte) error
 }
 
+// StateCopier is implemented by a system holding state outside the stores that a
+// replay copy restored from a checkpoint must take from its source to continue as
+// the source would: player-domain state, pending work, timers. It carries the whole
+// of the system, so the restore skips LoadShared, which re-derives as a joiner
+// would. CopyState's value shares no storage with the system.
+type StateCopier interface {
+	CopyState() any
+	RestoreState(any) error
+}
+
+// Toggled is a system with an FSM-driven enable flag, which a replay copy carries
+// beside its StateCopier state.
+type Toggled interface {
+	Enabled() bool
+	SetEnabled(bool)
+}
+
 // SnapshotProfile is a system's declared snapshot obligation, generated from the
 // manifest beside its domain profile.
 type SnapshotProfile uint8

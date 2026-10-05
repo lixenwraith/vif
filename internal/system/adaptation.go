@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"sync/atomic"
@@ -59,7 +60,7 @@ type AdaptationSystem struct {
 	statG           [4]*status.AtomicString
 	buffers         bufferTelemetry
 
-	enabled bool
+	toggle
 }
 
 func NewAdaptationSystem(world *engine.World) engine.System {
@@ -701,4 +702,49 @@ func (s *AdaptationSystem) LoadShared(data []byte) error {
 	}
 	res.LoadState(state, s.world.Resources.Time.GameTime)
 	return nil
+}
+
+type adaptationCopy struct {
+	saved         []byte
+	err           error
+	outcomes      map[uint32]map[uint8][]routeOutcome
+	tracking      map[core.Entity]trackedRoute
+	pendingDeaths []event.SpeciesKilledPayload
+	telemetry     int
+}
+
+// CopyState is the capture plus what it leaves to a tick boundary: the outcomes not
+// yet applied and the route each tracked entity took, which a copy between two
+// settles still needs.
+func (s *AdaptationSystem) CopyState() any {
+	saved, err := s.SaveShared()
+	c := adaptationCopy{saved: saved, err: err, outcomes: make(map[uint32]map[uint8][]routeOutcome, len(s.outcomes)),
+		tracking: maps.Clone(s.tracking), pendingDeaths: slices.Clone(s.pendingDeaths), telemetry: s.telemetryTicks}
+	for g, subs := range s.outcomes {
+		c.outcomes[g] = make(map[uint8][]routeOutcome, len(subs))
+		for sub, o := range subs {
+			c.outcomes[g][sub] = slices.Clone(o)
+		}
+	}
+	return c
+}
+
+func (s *AdaptationSystem) RestoreState(v any) error {
+	c := v.(adaptationCopy)
+	if c.err != nil {
+		return c.err
+	}
+	clear(s.outcomes)
+	for g, subs := range c.outcomes {
+		s.outcomes[g] = make(map[uint8][]routeOutcome, len(subs))
+		for sub, o := range subs {
+			s.outcomes[g][sub] = slices.Clone(o)
+		}
+	}
+	s.tracking = maps.Clone(c.tracking)
+	if s.tracking == nil {
+		s.tracking = make(map[core.Entity]trackedRoute)
+	}
+	s.pendingDeaths, s.telemetryTicks = append(s.pendingDeaths[:0], c.pendingDeaths...), c.telemetry
+	return s.LoadShared(c.saved)
 }

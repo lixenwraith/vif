@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"io"
+	"maps"
 	"sort"
 	"strconv"
 	"sync"
@@ -742,6 +743,13 @@ func (r *RouteGraphResource) Remove(id uint32) {
 		delete(r.graphs, id)
 	}
 }
+
+// Graphs returns the held graphs by ID. A graph is never written once set, so a
+// copy of the world may hold the same ones.
+func (r *RouteGraphResource) Graphs() map[uint32]*navigation.RouteGraph { return maps.Clone(r.graphs) }
+
+// SetGraphs replaces every held graph.
+func (r *RouteGraphResource) SetGraphs(g map[uint32]*navigation.RouteGraph) { r.graphs = maps.Clone(g) }
 
 // Clear removes all route graphs
 func (r *RouteGraphResource) Clear() {

@@ -1,5 +1,7 @@
 package navigation
 
+import "slices"
+
 // CompositePassability pre-computes valid header positions for a fixed footprint
 // A cell is valid iff the entire footprint fits within bounds and contains no walls
 type CompositePassability struct {
@@ -22,6 +24,13 @@ func NewCompositePassability(mapW, mapH, footW, footH, headerOffX, headerOffY in
 		HeaderOffY: headerOffY,
 		Valid:      make([]bool, size),
 	}
+}
+
+// Clone returns a grid sharing no storage with p.
+func (p *CompositePassability) Clone() *CompositePassability {
+	n := *p
+	n.Valid = slices.Clone(p.Valid)
+	return &n
 }
 
 // Resize adjusts dimensions, invalidates all cells

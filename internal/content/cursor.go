@@ -24,6 +24,22 @@ func NewCursor(c *Corpus, rng *vmath.FastRand) *Cursor {
 	return cu
 }
 
+// CursorState is where a walk stands, which a cursor over the same corpus resumes.
+type CursorState struct {
+	rng      uint64
+	src, blk int
+	pinned   bool
+}
+
+func (cu *Cursor) State() CursorState {
+	return CursorState{rng: cu.rng.State(), src: cu.src, blk: cu.blk, pinned: cu.pinned}
+}
+
+func (cu *Cursor) SetState(st CursorState) {
+	cu.rng.SetState(st.rng)
+	cu.src, cu.blk, cu.pinned = st.src, st.blk, st.pinned
+}
+
 // Pin restricts the walk to one source, cycling it indefinitely
 func (cu *Cursor) Pin(name string) bool {
 	i := cu.corpus.IndexOf(name)

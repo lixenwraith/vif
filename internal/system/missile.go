@@ -30,7 +30,7 @@ type MissileSystem struct {
 	statGridSteps      *atomic.Int64
 	statDisabled       *atomic.Int64
 
-	enabled bool
+	toggle
 }
 
 func NewMissileSystem(world *engine.World) engine.System {

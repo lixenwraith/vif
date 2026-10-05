@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/vmath"
+	"slices"
 )
 
 // SpiritSystem manages converging visual effect entities
@@ -20,7 +21,7 @@ type SpiritSystem struct {
 	destroyNextTick []core.Entity
 	buffers         bufferTelemetry
 
-	enabled bool
+	toggle
 }
 
 func NewSpiritSystem(world *engine.World) engine.System {
@@ -160,4 +161,11 @@ func (s *SpiritSystem) destroyAllSpirits() {
 	// Batch destruction mutates the live spirit slice, so detach it first.
 	entities := s.world.Components.Spirit.GetAllEntities()
 	s.world.DestroyEntitiesBatch(entities)
+}
+
+func (s *SpiritSystem) CopyState() any { return slices.Clone(s.destroyNextTick) }
+
+func (s *SpiritSystem) RestoreState(v any) error {
+	s.destroyNextTick = append(s.destroyNextTick[:0], v.([]core.Entity)...)
+	return nil
 }

@@ -69,7 +69,7 @@ type ParticleSystem struct {
 	entities []core.Entity
 	deathBuf []core.Entity
 
-	enabled bool
+	toggle
 }
 
 // NewParticleSystem creates the unified particle system.

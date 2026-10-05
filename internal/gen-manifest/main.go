@@ -532,6 +532,29 @@ func (w *World) wipeAll() {
 	// Clear component mask
 	clear(w.componentMask)
 }
+
+// componentCopies is every component store detached from its world, in dense order
+type componentCopies struct {
+{{- range .Components }}
+	{{ .Field }} storeCopy[component.{{ .Type }}]
+{{- end }}
+}
+
+// copyComponentsOut detaches every component store. Caller MUST hold updateMutex
+func (w *World) copyComponentsOut() (c componentCopies) {
+{{- range .Components }}
+	c.{{ .Field }} = w.Components.{{ .Field }}.copyOut()
+{{- end }}
+	return c
+}
+
+// copyComponentsIn replaces every component store with a detached copy. Caller
+// MUST hold updateMutex
+func (w *World) copyComponentsIn(c componentCopies) {
+{{- range .Components }}
+	w.Components.{{ .Field }}.copyIn(c.{{ .Field }})
+{{- end }}
+}
 `))
 
 // parseEvents reads the event package and derives the registry from the

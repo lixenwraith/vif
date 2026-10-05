@@ -41,7 +41,7 @@ type DeathSystem struct {
 	statPayloadRejects    *atomic.Int64
 	statDisabledRejects   *atomic.Int64
 
-	enabled bool
+	toggle
 }
 
 func NewDeathSystem(world *engine.World) engine.System {

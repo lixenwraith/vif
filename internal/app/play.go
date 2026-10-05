@@ -3,6 +3,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"runtime"
@@ -77,6 +78,7 @@ func PlayJournal(viewer Config, paths ...string) error {
 		return twin, journalSource{td}, nil
 	}
 	p.trail, p.slots = []event.Stamp{a.Position()}, make(chan struct{}, max(1, runtime.GOMAXPROCS(0)-1))
+	p.every = parameter.ReplayCheckpointSteps
 	a.ctx.ReplaySeek = p.seekLater
 	a.stampLog()
 	defer p.closeRebuilt()
@@ -164,14 +166,19 @@ type player struct {
 	rebuild func() (*App, pacedSource, error)
 	trail   []event.Stamp // position at each step count, from the copy before any step
 	spares  []*rebuilt    // copies parked one, two, ... ticks behind the presented one
-	backs   int           // step backs pressed and not yet presented
-	seek    *rebuilt      // a copy replaying to a tick behind that the viewer named
-	ahead   *event.Stamp  // a tick ahead that the viewer named, played to unpaced
-	resume  bool          // play on once the seek lands, as a restart does
-	pending func()        // a :replay the router took, applied once it has returned
-	slots   chan struct{} // copies step on all cores but the one the presented copy keeps
-	quiet   sync.RWMutex  // the frame loop's, so whatever logs while a copy steps is a copy
-	copies  sync.WaitGroup
+	// checkpoints hold the presented run's whole state every `every` steps, by step
+	// count; a copy starts from the nearest one behind its target. every is zero
+	// once one has left the run.
+	checkpoints []*checkpoint
+	every       int
+	backs       int           // step backs pressed and not yet presented
+	seek        *rebuilt      // a copy replaying to a tick behind that the viewer named
+	ahead       *event.Stamp  // a tick ahead that the viewer named, played to unpaced
+	resume      bool          // play on once the seek lands, as a restart does
+	pending     func()        // a :replay the router took, applied once it has returned
+	slots       chan struct{} // copies step on all cores but the one the presented copy keeps
+	quiet       sync.RWMutex  // the frame loop's, so whatever logs while a copy steps is a copy
+	copies      sync.WaitGroup
 }
 
 // rebuilt is a copy of the presented run replaying its stream on its own
@@ -179,7 +186,9 @@ type player struct {
 type rebuilt struct {
 	a       *App
 	src     pacedSource
-	w, h    int // the terminal its renderers were laid out for
+	from    *checkpoint         // restored before replaying on; nil replays from the start
+	left    *journal.Divergence // the first digest a restored copy did not reproduce
+	w, h    int                 // the terminal its renderers were laid out for
 	slots   chan struct{}
 	quiet   *sync.RWMutex
 	running *sync.WaitGroup
@@ -199,6 +208,18 @@ func (r *rebuilt) run() {
 	defer r.running.Done()
 	defer close(r.done)
 	defer r.exit()
+	if r.from != nil {
+		var err error
+		r.slots <- struct{}{}
+		r.quietly(func() { err = r.a.restore(r.from, r.src.(journalSource).d) })
+		<-r.slots
+		if err != nil {
+			r.mu.Lock()
+			r.err = err
+			r.mu.Unlock()
+			return
+		}
+	}
 	for {
 		r.mu.Lock()
 		at, target, cancel := r.at, r.target, r.cancel
@@ -213,6 +234,9 @@ func (r *rebuilt) run() {
 			<-r.slots
 			r.mu.Lock()
 			r.at, r.err = r.at+1, err
+			if r.from != nil && r.left == nil {
+				r.left = r.src.(journalSource).d.Stats().Diverged
+			}
 			r.mu.Unlock()
 			if err != nil {
 				return
@@ -450,7 +474,73 @@ func (p *player) tickOnce() bool {
 	}
 	if p.rebuild != nil {
 		p.trail = append(p.trail, p.a.Position())
+		p.checkpoint()
 	}
+	return true
+}
+
+// checkpoint keeps the presented run's state on the step cadence. Past the cap,
+// every other one is dropped and the spacing doubles.
+func (p *player) checkpoint() {
+	steps := len(p.trail) - 1
+	if p.every == 0 || steps%p.every != 0 {
+		return
+	}
+	i, found := slices.BinarySearchFunc(p.checkpoints, steps, func(c *checkpoint, s int) int { return cmp.Compare(c.steps, s) })
+	if found {
+		return
+	}
+	var (
+		c   *checkpoint
+		err error
+	)
+	p.a.world.RunSafe(func() { c, err = p.a.checkpointLocked(p.src.(journalSource).d) })
+	if err != nil {
+		vlog.Warn("app", "msg", "replay checkpoint failed", "error", err.Error())
+		p.every, p.checkpoints = 0, nil
+		return
+	}
+	c.steps = steps
+	p.checkpoints = slices.Insert(p.checkpoints, i, c)
+	if len(p.checkpoints) > parameter.ReplayCheckpoints {
+		p.every *= 2
+		p.checkpoints = slices.DeleteFunc(p.checkpoints, func(c *checkpoint) bool { return c.steps%p.every != 0 })
+	}
+}
+
+// closer reports a checkpoint between where a copy stands and its target, from
+// which a fresh copy arrives sooner than this one replays there.
+func (p *player) closer(r *rebuilt, target int) bool {
+	c := p.nearest(target)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return c != nil && c.steps > r.at
+}
+
+// nearest is the latest checkpoint at or before step count target, nil when none.
+func (p *player) nearest(target int) *checkpoint {
+	i, _ := slices.BinarySearchFunc(p.checkpoints, target+1, func(c *checkpoint, s int) int { return cmp.Compare(c.steps, s) })
+	if i == 0 {
+		return nil
+	}
+	return p.checkpoints[i-1]
+}
+
+// strayed reports a copy restored from a checkpoint that failed a digest the
+// presented run reproduced, and stops using checkpoints: one carried the world short.
+func (p *player) strayed(r *rebuilt) bool {
+	r.mu.Lock()
+	left := r.left
+	r.mu.Unlock()
+	if left == nil || p.every == 0 {
+		return false
+	}
+	if shown := p.src.(journalSource).d.Stats().Diverged; shown != nil &&
+		(shown.At.Run < left.At.Run || shown.At.Run == left.At.Run && shown.At.Tick <= left.At.Tick) {
+		return false // the recorded run is not reproduced there from the start either
+	}
+	vlog.Warn("app", "msg", "replay checkpoint left the run", "tick", left.At.Tick, "error", left.Error())
+	p.every, p.checkpoints = 0, nil
 	return true
 }
 
@@ -474,8 +564,8 @@ func (p *player) backTargets(n int) []int {
 // keep moves the spares to the ticks behind the presented one, starting a copy for
 // each the ladder lacks and replacing one that has replayed past its tick.
 func (p *player) keep() {
-	if p.rebuild == nil || p.seek != nil {
-		return // a seek's copy has the cores; the ladder follows where it lands
+	if p.rebuild == nil || p.seek != nil || p.ahead != nil {
+		return // a seek has the cores; the ladder follows where it lands
 	}
 	want := p.backTargets(parameter.ReplayBackSpares)
 	p.dropSpares(len(p.trail) - 1)
@@ -484,7 +574,7 @@ func (p *player) keep() {
 		p.spares = p.spares[:len(p.spares)-1]
 	}
 	for i, r := range p.spares {
-		if r.aim(want[i]) {
+		if !p.strayed(r) && !p.closer(r, want[i]) && r.aim(want[i]) {
 			continue
 		}
 		if _, err := r.parked(); err != nil {
@@ -518,6 +608,9 @@ func (p *player) spawn(target int) *rebuilt {
 	}
 	r := &rebuilt{a: a, src: src, w: p.termW, h: p.termH, slots: p.slots, quiet: &p.quiet,
 		running: &p.copies, target: target, wake: make(chan struct{}, 1), done: make(chan struct{})}
+	if r.from = p.nearest(target); r.from != nil {
+		r.at = r.from.steps
+	}
 	p.copies.Add(1)
 	core.Go(r.run)
 	return r
@@ -532,6 +625,11 @@ func (p *player) land() {
 		r = p.spares[0]
 	}
 	if r == nil {
+		return
+	}
+	if r == p.seek && p.strayed(r) {
+		r.stop()
+		p.seek = p.spawn(r.target)
 		return
 	}
 	if ok, err := r.parked(); err != nil {

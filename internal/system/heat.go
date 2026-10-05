@@ -19,7 +19,7 @@ type HeatSystem struct {
 	statEmber    *status.PlayerBool
 	rejects      rejectionTelemetry
 
-	enabled bool
+	toggle
 }
 
 // NewHeatSystem creates a new heat system

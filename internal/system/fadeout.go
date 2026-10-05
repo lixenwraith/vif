@@ -13,7 +13,7 @@ import (
 type FadeoutSystem struct {
 	world *engine.World
 
-	enabled bool
+	toggle
 }
 
 func NewFadeoutSystem(world *engine.World) engine.System {

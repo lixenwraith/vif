@@ -29,7 +29,7 @@ type EnvironmentSystem struct {
 	windRemaining time.Duration
 
 	statWindActive *atomic.Bool
-	enabled        bool
+	toggle
 }
 
 // NewEnvironmentSystem creates the global gameplay environment system.

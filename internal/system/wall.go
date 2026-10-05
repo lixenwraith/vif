@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"slices"
 	"sync/atomic"
 
 	"github.com/lixenwraith/color"
@@ -39,7 +40,7 @@ type WallSystem struct {
 	statPushEvents *atomic.Int64
 	buffers        bufferTelemetry
 
-	enabled bool
+	toggle
 }
 
 // NewWallSystem creates a new wall system
@@ -1149,4 +1150,26 @@ func (s *WallSystem) LoadShared(data []byte) error {
 		return fmt.Errorf("wall: maze generator state: %w", err)
 	}
 	return nil
+}
+
+type wallCopy struct {
+	maze      []byte
+	err       error
+	pending   []vmath.Point
+	everyTick bool
+}
+
+// CopyState is the maze generator plus the push checks still owed.
+func (s *WallSystem) CopyState() any {
+	maze, err := s.SaveShared()
+	return wallCopy{maze: maze, err: err, pending: slices.Clone(s.pendingPushChecks), everyTick: s.pushCheckEveryTick}
+}
+
+func (s *WallSystem) RestoreState(v any) error {
+	c := v.(wallCopy)
+	if c.err != nil {
+		return c.err
+	}
+	s.pendingPushChecks, s.pushCheckEveryTick = append(s.pendingPushChecks[:0], c.pending...), c.everyTick
+	return s.LoadShared(c.maze)
 }

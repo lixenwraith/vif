@@ -25,7 +25,7 @@ type TransientSystem struct {
 
 	evictNext int
 
-	enabled bool
+	toggle
 }
 
 func NewTransientSystem(world *engine.World) engine.System {
@@ -302,4 +302,11 @@ func (s *TransientSystem) handleStrobeRequest(req *event.StrobeRequestPayload) {
 	current.Remaining = duration
 
 	s.statStrobeActive.Store(true)
+}
+
+func (s *TransientSystem) CopyState() any { return s.evictNext }
+
+func (s *TransientSystem) RestoreState(v any) error {
+	s.evictNext = v.(int)
+	return nil
 }

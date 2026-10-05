@@ -59,7 +59,7 @@ type StormSystem struct {
 	motion               bounceTelemetry
 	sweep                cellSweep
 
-	enabled bool
+	toggle
 }
 
 func NewStormSystem(world *engine.World) engine.System {
