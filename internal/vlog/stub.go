@@ -58,6 +58,7 @@ func Init(Config) (string, error)      { return "", ErrDisabled }
 func Configure(Config)                 {}
 func Start() (string, error)           { return "", ErrDisabled }
 func Stop()                            {}
+func Mute() func()                     { return func() {} }
 func Enabled() bool                    { return false }
 func Path() string                     { return "" }
 func Dir() string                      { return "" }

@@ -32,7 +32,7 @@ complete -c vif -o speed -x -d 'Simulation rate 1/8 1/4 1/2 1 2 4 8; with -scrip
 complete -c vif -o script -r -F -d 'Run an authored deterministic TOML tick script'
 complete -c vif -o headless -d 'With -bot, run bots without a human player or terminal; solo runs are unpaced'
 complete -c vif -o watch -d 'Watch the first bot or a script on this terminal, with no human player'
-complete -c vif -o replay -r -F -d 'Replay a recorded journal instead of playing'
+complete -c vif -o r -o replay -r -F -d 'Replay a recorded journal instead of playing'
 complete -c vif -o check -d 'Validate the resolved scenario, keymap, audio and content, then exit'
 complete -c vif -o schema -d 'Print the FSM schema as JSON, then exit'
 complete -c vif -o l -o log -d 'Enable logging; DIR overrides $XDG_STATE_HOME/vif/log'

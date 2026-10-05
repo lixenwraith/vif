@@ -84,7 +84,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"script"}, arg: "<path>", hint: "Run an authored deterministic TOML tick script"},
 			{names: []string{"headless"}, hint: "With -bot, run bots without a human player or terminal; solo runs are unpaced"},
 			{names: []string{"watch"}, hint: "Watch the first bot or a script on this terminal, with no human player"},
-			{names: []string{"replay"}, arg: "<path>", hint: "Replay a recorded journal instead of playing"},
+			{names: []string{"r", "replay"}, arg: "<path>", hint: "Replay a recorded journal instead of playing"},
 			{names: []string{"check"}, hint: "Validate the resolved scenario, keymap, audio and content, then exit"},
 			{names: []string{"schema"}, hint: "Print the FSM schema as JSON, then exit"},
 		},

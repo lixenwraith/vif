@@ -270,6 +270,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:step [rate] ev <Event> [pause]` | Run until the named event is dispatched. |
 | `:step off` | Disarm run-until and restore 1x. |
 | `:region list\|spawn\|pause\|resume\|terminate ...` | Issue one scheduler-owned region primitive. |
+| `:replay restart\|tick <n>\|time <[[h:]m:]s>`, `:r` | In a replay only, where `:r` means it rather than `:region`: play again from the start, or go to a tick or 1x game time of the run shown. |
 | `:log ...` | Start/stop logging; set level/scope and snapshot period. |
 | `:log rec [ticks\|flush\|fsm [on\|off]]` | Configure, request, or transition-trigger the flight recorder. |
 | `:journal [start]` | Name the replay journal, or start one from here: a solo run restarts on its own world and a guest rejoins; a session's host journals from its start with `-j`. |
@@ -330,8 +331,9 @@ whole card, a `hidden` line names the omitted groups; the HUD intentionally has
 no focus or navigation mode of its own.
 
 Replay terminal keys are not entries in this command table or the keymap. A
-`ModeReplay` App reserves `SPACE . + - h j k l 0 q` for viewer pause, step,
-speed, pan/reset, and quit; those keys never become simulation intents.
+`ModeReplay` App reserves `SPACE . , + - h j k l 0 q` for viewer pause, step,
+step back, speed, pan/reset, and quit; those keys never become simulation intents.
+[Runtime and concurrency](runtime.md) describes playback.
 
 System control uses `System.Name()`, which the manifest keys match. `:system`
 refuses a disable that a system declares required, naming the dependents.

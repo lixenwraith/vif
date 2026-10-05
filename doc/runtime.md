@@ -33,7 +33,7 @@ and build profile remain separate so the same `ModeServer` behavior can run from
 a full development binary or the smaller deployment artifact. See
 [Build profiles and platform boundaries](multi-platform.md).
 
-`-serve <address>` constructs `ModeServer`. `cmd/vif` normally constructs `ModePlay`; `-replay <file>` constructs a replay
+`-serve <address>` constructs `ModeServer`. `cmd/vif` normally constructs `ModePlay`; `-r`/`-replay <file>` constructs a replay
 from the journal anchor, and `-script <file>` constructs a caller-driven
 `ModeHeadless` run from an authored tick schedule, or `ModeScript` with `-watch`.
 `-bot [N[:graph]|graph]` adds bots beside the human, including with `-host`
@@ -415,26 +415,34 @@ For a render frame, the application:
 
 ### Replay playback
 
-`app.PlayJournal` loads journal records, rebuilds config and geometry from the
-first anchor, verifies the resolved config/corpus fingerprint, and drives a
-`ModeReplay` App with `ReplayDriver`. The reader API accepts several files and
-sorts/deduplicates them by `jseq`; `cmd/vif -replay <file>` passes one path. A set
-whose first anchor says `StartRun != 0` or `StartTick != 0` is refused: input
-records alone cannot reconstruct the initial world without a world snapshot.
+`app.PlayJournal` (`-r`/`-replay <file>`) loads journal records, rebuilds config
+and geometry from the first anchor, verifies the config/corpus fingerprint, and
+drives a `ModeReplay` App with `journal.ReplayDriver`. The reader accepts several
+files and sorts/deduplicates them by `jseq`; the CLI passes one path. A set whose
+first anchor says `StartRun != 0` or `StartTick != 0` is refused: records alone
+cannot rebuild a world that began elsewhere. The record format is
+[Logging and diagnostics](logging-and-diagnostics.md) §9.
 
-The playback keys are fixed; `:help` lists them. Any other key is parsed by the
-keymap in NORMAL, which keeps only quit, the audio toggle and `:`.
+The playback keys are fixed; any other key is parsed by the keymap in NORMAL,
+which keeps only quit, the audio toggle and `:`.
 
-| Key | Playback action |
+| Control | Playback action |
 |---|---|
-| `SPACE` | Pause/resume. |
-| `.` | Advance one tick while paused. |
+| `SPACE` | Pause/resume; at the end, play again from the start. |
+| `.` | Pause and advance one tick. |
 | `,` | Pause and step back one tick. |
 | `+` / `-` | Move the viewer rate up/down the rational scale ladder. |
 | `h j k l` / `0` | Scroll a map larger than the view by four cells; re-centre. |
 | Ctrl+S | Cycle the viewer's mute, which starts as `-mute` says; no journal records it. |
-| `:` | Command line: `help`, `about`, `debug`, `content`, `flow`, `graph`, `log`, `q`. |
+| `:r tick <n>` | Go to tick `n` of the run shown, the status bar's `GT`. |
+| `:r time <[[h:]m:]s>` | Go to that game time at 1x: seconds alone, `m:s` or `h:m:s`. |
+| `:r restart` | Play again from the recording's start; also Simulation → Restart replay. |
+| `:` | Command line: `replay`, `help`, `about`, `telemetry`, `hud`, `debug`, `content`, `flow`, `graph`, `log`, `q`. |
 | `q` | Quit. |
+
+In a replay `:r` is `:replay`; elsewhere it remains `:region`, which a replay
+refuses. A game reset starts a run whose ticks count from zero, so `tick` and
+`time` address the run shown; the status bar reports run, tick and its 1x time.
 
 Pacing converts the recorded tick interval and speed to wall time, then applies
 the viewer's rate. The simulation keeps its recorded geometry; the frame is laid
@@ -444,15 +452,26 @@ view's centre, and scroll stops at the map's edges. The command line pauses
 playback, as the game's does, and hands the recorded mode and pause back when it
 closes; a command that would change the recording is refused.
 
-A world cannot be rewound, so `,` presents another copy of the run.
-`parameter.ReplayBackSpares` replay Apps on the viewer's terminal trail the
-presented one a tick apart, each replaying the stream off the frame loop, on all
-cores but one, and parking at its tick. Each press is one tick a frame presents, as
-`.` is: the nearest copy takes over with the HUD pins and the speakers, whose engine
-plays on while the gates the copy replayed decide what sounds. A replacement starts
-from the stream's start at the far end, so a press past the trailing copies waits
-for that replay. The copy draws into the same cells rather than repainting the
-terminal, and withholds log snapshots while it catches up.
+A world cannot be rewound, so going back presents another copy of the run: a
+`ModeReplay` App on the viewer's terminal replaying the stream from its start on
+its own goroutine, on all cores but one. `parameter.ReplayBackSpares` copies
+trail the presented one a tick apart and park there. Each `,` is one tick a frame
+presents, as `.` is, from the nearest; a replacement starts at the far end, so a
+press past the trailing copies waits for a replay from the start. `:r` behind
+takes a trailing copy standing at that tick, else replays one there; ahead, the
+presented copy plays there unpaced for most of each frame, so the view keeps
+drawing. A copy that takes over brings the HUD pins, the speakers, whose engine
+plays on while the gates the copy replayed decide what sounds, and the log stamp,
+and draws into the same cells rather than repainting the terminal.
+
+A replay logs as play does, so `:log on` and `:log off` bound a window around an
+issue found by seeking. Records carry the presented copy's `run` and `tick`; copies
+log nothing, because each step runs under `vlog.Mute` while a read-write lock holds
+off the frame loop, which does all of the presented copy's work. Each jump of the
+presented tick (`,`, a seek, a restart) is an `app` `replay seek` Info record with
+`tick`, `from_tick`, `delta` and their runs, stamped after the jump; a seek ahead
+is recorded as it starts, and the ticks it plays log as they pass. Ticks played
+again after going back log again, after the record that explains them.
 
 ### Authored headless scripts
 

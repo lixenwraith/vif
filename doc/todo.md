@@ -423,5 +423,60 @@ Its diagonal arrows and `◆●` are missing from console fonts, so in 256 colou
 tick further back waits for a copy replaying from the stream's start, about 0.75 ms a
 tick at four players, 63% of it `FlowField.Compute`. Replaying from a checkpoint
 instead needs a whole-world clone: the player domain, each system's private state,
+the queue and the replay cursor, which a shared capture leaves out.
+
+### Journal a world digest and name the first tick a replay leaves its run
+
+- Priority: P2, for a second evaluation
+- Affected files: `internal/event/journal.go`, `internal/journal/replay.go`,
+  `internal/snapshot/digest.go`, `internal/app/replay.go`
+
+A replay that leaves its run is caught only at the next written world ("the world
+before it differed"), and a host journal has none. Finding the tick took per-tick
+world dumps from the live and replayed runs and a diff of the two. A
+`snapshot.DigestWorld` line journaled every N ticks as a note, and compared by
+`ReplayDriver`, would name the first tick and component class that differ; a
+headless verify of a journal would run it unattended. Measure the digest's cost
+per tick at the map limit before choosing N.
+
+## Logging
+
+### Audit logging across the repository
+
+- Priority: P2, a session of its own
+- Affected files: `internal/vlog`, every producer
+
+vlog is process-global and most records say `app`, so a log cannot tell which App,
+seat or replay copy wrote a record, and a scope selects little:
+
+- About 150 of 180 call sites use `app`: network, session, convergence, bots,
+  journal and replay share it. `net`, `system` and `domain` are absent from
+  `subScope` and fall to `tap`, which also gates the domain audit.
+- Each App owns a correlation but records carry the global one, so a seat's records
+  bear its holder's tick, or none under `-headless`, and a replay needed `vlog.Mute`
+  and a lock to keep its copies out. A per-App handle carrying stamp, tag and gate
+  would replace both and settle the seat log tags left open under bots.
+- Levels and keys drift: FSM transitions at Info run to thousands a session, lock
+  "long hold" warns on CPU contention rather than a defect, duration fields mix `ms`
+  and `us`, and `msg` is a noun phrase in some places and a verb in others.
+
+Settle one table of subs, scopes and levels with message and field rules, check
+that hot sites guard with `vlog.On`, then bring every call site to it.
+
+## Fleet logging
+
+### Repin LogWisp past the fleet stream fixes
+
+- Priority: P1
+- Affected files: `deploy/logwisp/REVISION`
+- Prerequisite: the quiet-stream keepalive and the rotated-file resume reaching
+  LogWisp `main`, which the installer requires the pin to descend from
+
+`REVISION` names v0.18.1, which predates both. Until it moves, a vacant node still
+idle-expires a connected viewer and evicts it on the next session's first record,
+and a session crossing the 8 MiB file cap still replays its rotated log whole,
+spending the rate limit on duplicates while live records drop.
+[Deploying the session fleet](kube-docker-deploy.md) §10 states what the pin must
+carry.
 the queue and the replay cursor, which a shared capture leaves out. Copies also log
 the ticks they replay, since vlog has no per-world gate.

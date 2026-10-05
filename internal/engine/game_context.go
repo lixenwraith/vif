@@ -114,6 +114,10 @@ type GameContext struct {
 	// world, so a command may inspect it but not change it.
 	Viewer atomic.Bool
 
+	// ReplaySeek hands :replay to the player presenting this world: tick of the run
+	// it shows, or the recording's start on restart. Nil outside a replay.
+	ReplaySeek func(tick uint64, restart bool)
+
 	// === Main-Loop Exclusive ===
 
 	// Terminal geometry, written only by MetaSystem's EventScreenResize handler

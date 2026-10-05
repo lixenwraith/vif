@@ -101,7 +101,9 @@ cursorless coordinator included; anything named participants counts cursors.
 | `tick` | `Scheduler.processTick` via `vlog.SetTick` | once per simulation tick, before the tick body |
 
 `tick` is stamped with the tick *about to execute*, so records emitted inside
-`processTick` carry the tick they describe rather than the previous one.
+`processTick` carry the tick they describe rather than the previous one. A replay
+stamps its presented copy's position and its other copies log nothing; see
+[Runtime and concurrency](runtime.md), Replay playback.
 
 The render frame is not a stamp. Nothing logs from the render goroutine, so it
 correlates no record, and a headless run never advances it at all; the counter
@@ -781,8 +783,8 @@ Two events are notes, journaled and applied by replay but never dispatched:
 the recorded run did.
 
 `app.PlayJournal` presents the replay with fixed viewer controls rather than
-the keymap. See [Runtime and concurrency](runtime.md) for playback keys,
-manual-clock semantics, audio, and the current clipping/pan limit.
+the keymap. [Runtime and concurrency](runtime.md), Replay playback, covers its
+keys, seeking, the copies that step back, sound, and how a replay logs.
 
 The same package owns the replay timeline and authored-script timeline. A
 `-script` event is emitted with `OriginDebug`; semantic intents retain the

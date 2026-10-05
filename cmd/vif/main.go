@@ -79,6 +79,7 @@ func init() {
 	flag.StringVar(&flagAudioBackend, "ab", "", audioHint)
 	flag.StringVar(&flagAudioBackend, "audio-backend", "", audioHint)
 	flag.BoolVar(flagHelp, "help", false, "Print the flag help and exit")
+	flag.StringVar(flagReplay, "r", "", "Replay a recorded journal instead of playing")
 	journalHint := "Record a replay journal; -j=DIR overrides the user-state directory"
 	flag.Var(&flagJournal, "j", journalHint)
 	flag.Var(&flagJournal, "journal", journalHint)
