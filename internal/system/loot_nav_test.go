@@ -30,6 +30,39 @@ func TestLootSurvivesAnEncounterClearAndMapShrinkUntilReset(t *testing.T) {
 	}
 }
 
+// A capped weapon yields to its tier's siblings, and a tier with none left adds its
+// fallback to every later tier: Storm's pulse after bullets, Kraken's 3+3 after rays.
+func TestDropTableYieldsCappedWeaponsThenFallsBack(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	loot := NewLootSystem(w).(*LootSystem)
+	capWeapon := func(wt component.WeaponType) {
+		weapons, _ := w.Components.Weapon.GetPtr(cursor)
+		weapons.Charges[wt] = component.WeaponSpecs[wt].MaxCharges
+	}
+	roll := func(species component.SpeciesType) map[component.LootType]int {
+		got := map[component.LootType]int{}
+		for _, r := range loot.rollDropTable(species, cursor, 0) {
+			got[r.Loot] += r.Count
+		}
+		return got
+	}
+	capWeapon(component.WeaponTurret)
+	if got := roll(component.SpeciesStorm); got[component.LootDisruptor] != 1 || got[component.LootEnergy] != 3 {
+		t.Fatalf("storm with bullets capped dropped %v", got)
+	}
+	capWeapon(component.WeaponDisruptor)
+	if got := roll(component.SpeciesStorm); len(got) != 1 || got[component.LootEnergy] != 5 {
+		t.Fatalf("storm with both capped dropped %v", got)
+	}
+	if got := roll(component.SpeciesKraken); got[component.LootEmitter] != 1 || got[component.LootEnergy] != 2 || got[component.LootHeat] != 2 {
+		t.Fatalf("kraken dropped %v", got)
+	}
+	capWeapon(component.WeaponEmitter)
+	if got := roll(component.SpeciesKraken); len(got) != 2 || got[component.LootEnergy] != 3 || got[component.LootHeat] != 3 {
+		t.Fatalf("kraken with rays capped dropped %v", got)
+	}
+}
+
 // spawnWall drops one blocking cell into a test world.
 func spawnWall(w *engine.World, x, y int) {
 	e := w.CreateEntity(core.DomainShared)

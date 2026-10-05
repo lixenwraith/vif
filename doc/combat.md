@@ -132,7 +132,8 @@ missile and bullet integrate after combat; `transient` ages rings late.
 2. Reuse a delivery, or add one with a case in `WeaponSystem.fireAllWeapons` and
    `MountSystem.fire`.
 3. Give its attack family a profile against every cursor defender.
-4. Add its orb colours, loot type, loot visual and a drop tier.
+4. Add its orb colours, loot type with its `LootSpecs` and `LootVisuals` rows, and
+   a tier in `profile.Drops`.
 5. A player-domain push of a replicated event must be named in `crossingPushes`
    with the artifact it crosses; `TestEventClassMatchesSystemProfile` enforces it.
 

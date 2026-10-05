@@ -216,9 +216,10 @@ and energy.
 
 ### Species loot
 
-Kills are evaluated against ordered, species-specific drop tiers. Unique tiers
-skip weapon loot that is already owned or active; skipped entries can add a
-fallback count to a later tier. Pity-adjusted rolls improve repeated misses.
+Kills are evaluated against ordered, species-specific drop tiers, rolled for each
+local cursor. Unique tiers skip weapon loot already at full charge or in flight;
+skipped entries add their fallback count to every later tier. Pity-adjusted rolls
+improve repeated misses.
 Drops burst away from the death point, then home using direct line of sight or a
 flow field and collect near the player.
 
@@ -229,17 +230,20 @@ seeded from the owner's cell rather than the shared field over every cursor on
 the map. With two participants, a drop that lands beside the other one still
 goes home. A drop walled off from its owner comes to rest where it is.
 
-| Loot | Collection effect |
-|---|---|
-| Rod | Adds a rod charge/orb. |
-| Launcher | Adds a launcher charge/orb. |
-| Disruptor | Adds a disruptor charge/orb. |
-| Heat | Adds the configured heat reward (currently 10). |
-| Energy | Adds the configured energy reward (currently 10,000). |
+| Loot | Rune | Collection effect |
+|---|---|---|
+| Rod | `L` | Adds a rod charge/orb. |
+| Launcher | `M` | Adds a launcher charge/orb. |
+| Disruptor | `P` | Adds a disruptor charge/orb. |
+| Turret | `B` | Adds a turret charge/orb. |
+| Emitter | `R` | Adds an emitter charge/orb. |
+| Heat | `H` | Adds the configured heat reward (currently 10). |
+| Energy | `E` | Adds the configured energy reward (currently 10,000). |
 
-The exact tier rates are gameplay balance data in
-`internal/component/loot.go`; documentation does not duplicate every rate
-because those values are expected to change during tuning.
+Weapon loot is lettered for its attack: lightning, missile, pulse, bullet, ray.
+The exact tier rates are gameplay balance data in `internal/profile/loot.go`;
+documentation does not duplicate every rate because those values are expected
+to change during tuning.
 
 ## 7. Weapons and attacks
 
@@ -393,7 +397,7 @@ Each entry declares a domain profile and its dependencies in
 | Player and collectible constants | `internal/parameter/gameplay.go`, `player.go`, `collectible.go` |
 | Species tuning | `internal/parameter/{drain,quasar,swarm,storm,pylon,snake,eye,tower}.go` |
 | Combat matrix and profiles | `internal/component/combat.go`, `internal/system/combat.go` |
-| Drop tables and rewards | `internal/component/loot.go`, `internal/parameter/loot.go` |
+| Drop tables and rewards | `internal/profile/loot.go`, `internal/component/loot.go`, `internal/parameter/loot.go` |
 | Drop routing and homing | `internal/system/loot.go`, `internal/profile/homing.go` |
 | Environment effects | `internal/system/environment.go`, `internal/parameter/environment.go`, `internal/profile/mass.go` |
 | System behavior | Matching files in `internal/system` |

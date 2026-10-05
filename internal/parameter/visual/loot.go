@@ -5,8 +5,6 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 )
 
-// --- Drop Tables ---
-
 // LootVisualDef defines rendering properties for a loot type
 type LootVisualDef struct {
 	Rune       rune
@@ -14,10 +12,9 @@ type LootVisualDef struct {
 	GlowColor  color.RGB // Shield glow color
 }
 
-// LootVisuals defines the visual attributes of loot
-// Can't be cleanly placed in parameters due to cyclic dependency
-// Weapon loot is lettered for its attack (Lightning, Missile, Pulse, Bullet, Ray), the name players use
-var LootVisuals = map[component.LootType]LootVisualDef{
+// LootVisuals is indexed by LootType. Weapon loot is lettered for its attack
+// (Lightning, Missile, Pulse, Bullet, Ray), the name players use.
+var LootVisuals = [component.LootCount]LootVisualDef{
 	component.LootRod: {
 		Rune:       'L',
 		InnerColor: RgbOrbRod,
