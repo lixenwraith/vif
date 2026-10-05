@@ -40,15 +40,14 @@ disabled with `FORWARD ACCEPT` restored.
 
 | Helper | What it replaces | What it refuses |
 |---|---|---|
-| `install-logwisp.sh [checkout]` | first install of the pinned binary, identity, configuration and unit | an existing installation; a pin that is not an ancestor of upstream `main` |
-| `update-logwisp.sh [checkout]` | LogWisp's binary, configuration and unit only | a stopped `logwisp.service`; the same unreachable pin |
+| `install-logwisp.sh [revision]` | first install of the binary, identity, configuration and unit | an existing installation; a revision that is not on upstream `main` |
+| `update-logwisp.sh [revision]` | LogWisp's binary, configuration and unit only | a stopped `logwisp.service`; the same revision |
 | `update-vif-allocator.sh [--render]` | the allocator binary, unit, and env from `vif-allocator.env`; `--render` prints that env and changes nothing | a dirty worktree; a non-empty fleet |
 | `update-vif-image.sh [tag]` | the headless session image, imported pinned, and `VIF_ALLOCATOR_IMAGE` with it; empties Docker's store afterwards; rejects an image without the `headless` profile label | a dirty worktree; an occupied fleet |
 | `update-vif-wad.sh [dir]` | the node's scenario volume at `/var/db/vif/wad`, by atomic rename; validates every scenario first, with a binary built from the checkout and the layout a pod mounts | a tree that is not laid out like `wad/`; a scenario that does not load. **Not** an occupied fleet: a running match keeps the tree it mounted |
 
-An optional checkout argument is a download optimisation, never a working
-directory: the builder creates a temporary detached worktree at the pinned revision
-and does not switch, pull, clean or modify the branch it finds. Every refusal
+The LogWisp helpers build upstream `main`'s head, or the revision given, from a
+fresh clone in a temporary directory; no LogWisp checkout is needed. Every refusal
 message is explained in [`../runbook.md`](../runbook.md).
 
 ## Backing one component out
@@ -81,7 +80,7 @@ curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/readyz
 configuration and unit, and restores them itself when its own verification fails.
 
 If LogWisp's isolation or loopback checks fail, remove only its live listener and
-keep the pinned binary, configuration and locked identity for diagnosis. Nothing
+keep the installed binary, configuration and locked identity for diagnosis. Nothing
 else is touched: the allocator, K3s, the writer, the PV/PVC, the tmpfs and the
 Restricted namespace all stay as they are.
 
