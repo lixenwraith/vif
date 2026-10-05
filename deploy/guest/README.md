@@ -40,8 +40,8 @@ disabled with `FORWARD ACCEPT` restored.
 
 | Helper | What it replaces | What it refuses |
 |---|---|---|
-| `install-logwisp.sh [revision]` | first install of the binary, identity, configuration and unit | an existing installation; a revision that is not on upstream `main` |
-| `update-logwisp.sh [revision]` | LogWisp's binary, configuration and unit only | a stopped `logwisp.service`; the same revision |
+| `install-logwisp.sh [revision]` | first install of the binary, identity, configuration and unit | an existing installation; a revision that is not on upstream `main`; Docker without buildx |
+| `update-logwisp.sh [revision]` | LogWisp's binary, configuration and unit only | a stopped `logwisp.service`; the same revision and Docker refusals |
 | `update-vif-allocator.sh [--render]` | the allocator binary, unit, and env from `vif-allocator.env`; `--render` prints that env and changes nothing | a dirty worktree; a non-empty fleet |
 | `update-vif-image.sh [tag]` | the headless session image, imported pinned, and `VIF_ALLOCATOR_IMAGE` with it; empties Docker's store afterwards; rejects an image without the `headless` profile label | a dirty worktree; an occupied fleet |
 | `update-vif-wad.sh [dir]` | the node's scenario volume at `/var/db/vif/wad`, by atomic rename; validates every scenario first, with a binary built from the checkout and the layout a pod mounts | a tree that is not laid out like `wad/`; a scenario that does not load. **Not** an occupied fleet: a running match keeps the tree it mounted |
