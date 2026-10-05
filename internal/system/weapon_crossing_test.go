@@ -198,11 +198,11 @@ func TestPlayerBulletCrossesOnlyItsHit(t *testing.T) {
 	}
 }
 
-// TestPlayerBeamRunsThroughItsOrbAndCrossesOnlyItsImpacts: a cursor's beam runs
+// TestPlayerRayRunsThroughItsOrbAndCrossesOnlyItsImpacts: a cursor's ray runs
 // from the cursor through its orb, one cell wide to the orb and wider past it, and
 // follows the orb. A Shared target crosses once as its members, owner and charge
 // scale; a drain's hit stays local; nothing else leaves this instance.
-func TestPlayerBeamRunsThroughItsOrbAndCrossesOnlyItsImpacts(t *testing.T) {
+func TestPlayerRayRunsThroughItsOrbAndCrossesOnlyItsImpacts(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	weapon := NewWeaponSystem(w).(*WeaponSystem)
 
@@ -235,7 +235,7 @@ func TestPlayerBeamRunsThroughItsOrbAndCrossesOnlyItsImpacts(t *testing.T) {
 	w.Positions.SetPosition(orbs[component.WeaponEmitter], component.PositionComponent{X: 9, Y: 5})
 	w.Resources.Event.Queue.Consume()
 	weapon.fireAllWeapons(cursor, weaponComp, orbs)
-	weapon.advanceBeams(cursor, orbs, parameter.GameUpdateInterval)
+	weapon.advanceRays(cursor, orbs, parameter.GameUpdateInterval)
 
 	var crossings int
 	struck := make(map[core.Entity]bool)
@@ -258,16 +258,16 @@ func TestPlayerBeamRunsThroughItsOrbAndCrossesOnlyItsImpacts(t *testing.T) {
 	}
 
 	w.Positions.SetPosition(orbs[component.WeaponEmitter], component.PositionComponent{X: 5, Y: 9})
-	weapon.advanceBeams(cursor, orbs, parameter.GameUpdateInterval)
+	weapon.advanceRays(cursor, orbs, parameter.GameUpdateInterval)
 	w.Resources.Event.Queue.Consume()
-	if beam, _ := w.Components.Beam.GetComponent(orbs[component.WeaponEmitter]); beam.Ray.DX != 0 || beam.Ray.DY <= 0 {
-		t.Fatalf("ray = %+v after the orb moved south, want it to follow", beam.Ray)
+	if ray, _ := w.Components.Ray.GetComponent(orbs[component.WeaponEmitter]); ray.Ray.DX != 0 || ray.Ray.DY <= 0 {
+		t.Fatalf("ray = %+v after the orb moved south, want it to follow", ray.Ray)
 	}
 }
 
-// TestMountedBeamWarnsBeforeItStrikes: a laned beam holds its warning for the whole
+// TestMountedRayWarnsBeforeItStrikes: a laned ray holds its warning for the whole
 // warning window without a hit, then strikes the local cursors inside its band.
-func TestMountedBeamWarnsBeforeItStrikes(t *testing.T) {
+func TestMountedRayWarnsBeforeItStrikes(t *testing.T) {
 	w, _, second := testCursorWorld(t)
 	spawnRemoteCursor(t, w, 2, 25, 5, 9)
 	mount := NewMountSystem(w).(*MountSystem)
@@ -278,15 +278,15 @@ func TestMountedBeamWarnsBeforeItStrikes(t *testing.T) {
 		Host: host, Weapon: component.WeaponEmitter, Lane: 1,
 	}})
 
-	warningTicks := int(parameter.BeamWarning / parameter.GameUpdateInterval)
+	warningTicks := int(parameter.RayWarning / parameter.GameUpdateInterval)
 	for range warningTicks {
 		mount.Update()
 		if events := w.Resources.Event.Queue.Consume(); len(events) != 0 {
 			t.Fatalf("warning tick = %#v, want nothing", events)
 		}
 	}
-	if beam, ok := w.Components.Beam.GetComponent(host); !ok || beam.Phase != component.BeamWarning {
-		t.Fatalf("beam = %+v, want the host warning", beam)
+	if ray, ok := w.Components.Ray.GetComponent(host); !ok || ray.Phase != component.RayWarning {
+		t.Fatalf("ray = %+v, want the host warning", ray)
 	}
 	mount.Update()
 	events := w.Resources.Event.Queue.Consume()

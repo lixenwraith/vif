@@ -26,8 +26,8 @@ type MountComponent struct {
 	AimX, AimY int
 	HasAim     bool
 
-	// A beam's Lane fixes its direction (1-8 index vmath.Octants, 0 aims) and Width
-	// its cells across; its cycle runs on the host's BeamComponent
+	// A ray's Lane fixes its direction (1-8 index vmath.Octants, 0 aims) and Width
+	// its cells across; its cycle runs on the host's RayComponent
 	Lane  uint8
 	Width int
 }

@@ -152,24 +152,24 @@ const (
 	HostedTurretEnergy = 100
 	HostedTurretHeat   = 10
 
-	HostedEmitterRange  = 40.0 // an aiming beam's reach to its cursor; a beam runs to the first wall
-	HostedEmitterEnergy = 250  // per strike, every BeamHitInterval inside a firing beam
+	HostedEmitterRange  = 40.0 // an aiming ray's reach to its cursor; a ray runs to the first wall
+	HostedEmitterEnergy = 250  // per strike, every RayHitInterval inside a firing ray
 	HostedEmitterHeat   = 5
 
 	// MissileHostedMaxSpeed keeps a mounted launcher's missile outrunnable (cells/sec)
 	MissileHostedMaxSpeed = 40.0
 )
 
-// Beams run to the first wall or the map edge. A cursor's runs from the cursor
-// through its orb, one cell wide to the orb and BeamWidth past it, for BeamDuration
-// and BeamDurationPerCharge a charge past the first; a mount's warns, fires, rests.
+// Rays run to the first wall or the map edge. A cursor's runs from the cursor
+// through its orb, one cell wide to the orb and RayWidth past it, for RayDuration
+// and RayDurationPerCharge a charge past the first; a mount's warns, fires, rests.
 const (
-	BeamWidth             = 3 // cells across, centre included
-	BeamDuration          = 1500 * time.Millisecond
-	BeamDurationPerCharge = 750 * time.Millisecond
-	BeamWarning           = 750 * time.Millisecond
-	BeamFiring            = 1000 * time.Millisecond
-	BeamHitInterval       = 250 * time.Millisecond // a mount's; a cursor's strikes every tick
+	RayWidth             = 3 // cells across, centre included
+	RayDuration          = 1500 * time.Millisecond
+	RayDurationPerCharge = 750 * time.Millisecond
+	RayWarning           = 750 * time.Millisecond
+	RayFiring            = 1000 * time.Millisecond
+	RayHitInterval       = 250 * time.Millisecond // a mount's; a cursor's strikes every tick
 )
 
 // Turret bullets, a cursor's and a mount's alike

@@ -107,7 +107,7 @@ func (s *MountSystem) attach(p *event.MountRequestPayload) {
 	}
 	width := p.Width
 	if width <= 0 {
-		width = parameter.BeamWidth
+		width = parameter.RayWidth
 	}
 	s.world.Components.Mount.SetComponent(p.Host, component.MountComponent{
 		Weapon:   p.Weapon,
@@ -118,8 +118,8 @@ func (s *MountSystem) attach(p *event.MountRequestPayload) {
 		Lane:     uint8(p.Lane),
 		Width:    width,
 	})
-	// A beam the replaced mount had in flight would have nothing left to end it
-	s.world.Components.Beam.RemoveEntity(p.Host, false)
+	// A ray the replaced mount had in flight would have nothing left to end it
+	s.world.Components.Ray.RemoveEntity(p.Host, false)
 }
 
 func (s *MountSystem) Update() {
@@ -143,7 +143,7 @@ func (s *MountSystem) Update() {
 		}
 		cursor := s.aim(m, pos)
 		if component.WeaponSpecs[m.Weapon].Delivery == component.DeliveryRay {
-			s.cycleBeam(host, cursor, m, pos, dt)
+			s.cycleRay(host, cursor, m, pos, dt)
 			continue
 		}
 		if cursor == 0 || m.Cooldown > 0 || (m.Trigger == component.MountArmed && !m.Armed) {
@@ -253,44 +253,44 @@ func (s *MountSystem) fire(host, cursor core.Entity, m *component.MountComponent
 	}
 }
 
-// cycleBeam runs a beam mount's warn, fire, rest cycle on the host's BeamComponent.
+// cycleRay runs a ray mount's warn, fire, rest cycle on the host's RayComponent.
 // The ray is laid when the warning starts and holds until rest, so a cursor sees
-// where it will strike; a laned beam cycles whether or not a cursor is in range.
-func (s *MountSystem) cycleBeam(host, cursor core.Entity, m *component.MountComponent, pos component.PositionComponent, dt time.Duration) {
-	beams := s.world.Components.Beam
-	beam, ok := beams.GetPtr(host)
+// where it will strike; a laned ray cycles whether or not a cursor is in range.
+func (s *MountSystem) cycleRay(host, cursor core.Entity, m *component.MountComponent, pos component.PositionComponent, dt time.Duration) {
+	rays := s.world.Components.Ray
+	ray, ok := rays.GetPtr(host)
 	if !ok {
 		if m.Cooldown > 0 || (m.Trigger == component.MountArmed && !m.Armed) {
 			return
 		}
-		ray, ok := layLane(s.world, m, pos, cursor)
+		lane, ok := layLane(s.world, m, pos, cursor)
 		if !ok {
 			return
 		}
-		beams.SetComponent(host, component.BeamComponent{
-			Ray: ray, Phase: component.BeamWarning,
-			Remaining: parameter.BeamWarning, Duration: parameter.BeamWarning,
-			HitInterval: parameter.BeamHitInterval, Scale: 1, Palette: component.PaletteHostile,
+		rays.SetComponent(host, component.RayComponent{
+			Ray: lane, Phase: component.RayWarning,
+			Remaining: parameter.RayWarning, Duration: parameter.RayWarning,
+			HitInterval: parameter.RayHitInterval, Scale: 1, Palette: component.PaletteHostile,
 		})
 		s.statFired.Add(1)
 		return
 	}
 
-	beam.Remaining -= dt
+	ray.Remaining -= dt
 	switch {
-	case beam.Phase == component.BeamWarning && beam.Remaining <= 0:
-		beam.Phase, beam.Remaining, beam.Duration, beam.HitTimer =
-			component.BeamFiring, parameter.BeamFiring, parameter.BeamFiring, 0
-	case beam.Phase == component.BeamWarning:
+	case ray.Phase == component.RayWarning && ray.Remaining <= 0:
+		ray.Phase, ray.Remaining, ray.Duration, ray.HitTimer =
+			component.RayFiring, parameter.RayFiring, parameter.RayFiring, 0
+	case ray.Phase == component.RayWarning:
 		return
-	case beam.Remaining <= 0:
-		beams.RemoveEntity(host, false)
+	case ray.Remaining <= 0:
+		rays.RemoveEntity(host, false)
 		m.Cooldown = m.Interval
 		return
 	}
-	if beam.HitTimer -= dt; beam.HitTimer <= 0 {
-		strikeCursorsIn(s.world, beam.Ray.Contains, component.WeaponSpecs[m.Weapon].HostedDamage)
-		beam.HitTimer = beam.HitInterval
+	if ray.HitTimer -= dt; ray.HitTimer <= 0 {
+		strikeCursorsIn(s.world, ray.Ray.Contains, component.WeaponSpecs[m.Weapon].HostedDamage)
+		ray.HitTimer = ray.HitInterval
 	}
 }
 

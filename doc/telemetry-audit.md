@@ -302,7 +302,7 @@ the effect's current name; death API unification removed the two obsolete
 | `missile.wall_collisions` (int) | Resolved missile contacts with blocking wall cells. |
 | `mount.count` (int) | Shared hosts carrying a mounted weapon. |
 | `mount.disabled_rejects` (int) | Action requests dropped while the mount system was disabled. |
-| `mount.fired` (int) | Mounted discharges; a beam counts once per warn-fire cycle. |
+| `mount.fired` (int) | Mounted discharges; a ray counts once per warn-fire cycle. |
 | `mount.host_rejects` (int) | Mount requests naming no placed Shared host, a cursor, or an unknown weapon or lane. |
 | `motion_marker.buf_base_markers_hwm` (int) | High-water live length of the reusable base markers buffer/state collection. |
 | `motion_marker.buf_base_positions_hwm` (int) | High-water live length of the reusable base positions buffer/state collection. |

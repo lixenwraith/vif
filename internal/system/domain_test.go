@@ -432,30 +432,28 @@ func TestHelperFilesArePinned(t *testing.T) {
 	}
 }
 
-// TestSharedCursorOverlapOutcomesStayOwnerResolved pins every shared species
-// overlap to a local-ownership guard and a shield-impact crossing.
-func TestSharedCursorOverlapOutcomesStayOwnerResolved(t *testing.T) {
-	want := map[string][3]int{
-		"quasar.go": {1, 1, 1},
-		"swarm.go":  {1, 1, 1},
-		"storm.go":  {1, 1, 1},
-		"eye.go":    {1, 1, 1},
-		"pylon.go":  {1, 1, 1},
-		"snake.go":  {2, 2, 1},
+// TestCursorDamageGoesThroughStrikeCursor: shield drain and heat loss reach a cursor
+// only through strikeCursor, which applies them on the cursor's owner alone. The
+// other heat pushers grant or charge the local player for its own loot and typing.
+func TestCursorDamageGoesThroughStrikeCursor(t *testing.T) {
+	allowed := map[string]bool{"interaction.go": true, "loot.go": true, "nugget.go": true, "typing.go": true}
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for file, counts := range want {
-		body, err := os.ReadFile(file)
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || allowed[name] {
+			continue
+		}
+		body, err := os.ReadFile(name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		source := string(body)
-		got := [3]int{
-			strings.Count(source, "CheckCursorOverlaps("),
-			strings.Count(source, "SimulatesLocally("),
-			strings.Count(source, "PushCrossing(event.EventCombatAttackAreaCrossingRequest"),
-		}
-		if got != counts {
-			t.Errorf("%s overlap/owner/crossing counts = %v, want %v", file, got, counts)
+		for _, push := range []string{"(event.EventShieldDrainRequest,", "(event.EventHeatAddRequest,"} {
+			if strings.Contains(string(body), push) {
+				t.Errorf("%s pushes %s itself rather than through strikeCursor", name, push[1:len(push)-1])
+			}
 		}
 	}
 }

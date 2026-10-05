@@ -345,7 +345,7 @@ through snapshots and synchronization. Stun immunity remains target-wide.
 - Priority: P3
 - Affected files: `internal/system/mount.go`, `internal/profile/combat.go`
 
-A mounted beam destroying walls and glyphs, mounted weapons striking other species, and each instance's own drains; Shared outcomes must resolve from Shared geometry, not a Player-domain shot.
+A mounted ray destroying walls and glyphs, mounted weapons striking other species, and each instance's own drains; Shared outcomes must resolve from Shared geometry, not a Player-domain shot.
 
 ### Let cursor weapons strike other cursors
 
@@ -354,10 +354,10 @@ A mounted beam destroying walls and glyphs, mounted weapons striking other speci
 
 PvP: a hit on a remote cursor crosses as its impact and the victim's owner applies it, as `strikeCursor` does for mounts.
 
-### Fan a fully charged beam into spokes
+### Fan a fully charged ray into spokes
 
 - Priority: P3
-- Affected files: `internal/system/weapon.go`, `internal/component/beam.go`
+- Affected files: `internal/system/weapon.go`, `internal/component/ray.go`
 
 Charges beyond the ray could add rays 360°/n apart, one through the orb; a sweep already passes each target once a turn, so spokes trade coverage for crossings.
 
@@ -367,23 +367,6 @@ Charges beyond the ray could add rays 360°/n apart, one through the orb; a swee
 - Affected files: `internal/system/storm.go`
 
 Its area pulse is the hosted disruptor's shape; the red circle's turret mount is the pattern.
-
-### Route species contact damage through strikeCursor
-
-- Priority: P2
-- Affected files: `internal/system/{quasar,swarm,storm,eye,pylon,snake,drain,interaction}.go`,
-  `internal/system/domain_test.go`
-
-`profile.Contact` holds every species' contact damage; only Kraken applies its row
-through `strikeCursor`. Quasar, swarm, storm circles, eye and pylon share one loop
-over `CheckCursorOverlaps`: shield crossing when members are inside the shield,
-then a strike on shield members or a covered bare cursor, so one helper beside it
-takes that loop. Snake (head heats only while unshielded, body only drains) and
-drain (throttled, dies on contact) keep their conditions and call `strikeCursor`.
-Storm's green pulse becomes `strikeCursorsIn` and quasar's zap `strikeCursor`,
-gaining the owner gate both lack. Replace the count pin in
-`TestSharedCursorOverlapOutcomesStayOwnerResolved` with a rule that no species file
-pushes shield drain or heat itself, and test each migrated contact outcome.
 
 ## Rendering
 

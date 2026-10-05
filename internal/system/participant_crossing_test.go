@@ -88,7 +88,10 @@ func TestMetaDefeatGatesFollowRosteredOwnerCrossings(t *testing.T) {
 	}
 }
 
-func TestSharedSpeciesCrossesOnlyOwnedShieldImpact(t *testing.T) {
+// A species strikes only the cursors this instance owns: a shield its members reach,
+// with the impact crossing, and a bare cursor on a member's cell unless the species
+// strikes shields alone.
+func TestSpeciesContactStrikesOnlyOwnedCursors(t *testing.T) {
 	w, local, remote := testCursorWorld(t)
 	remoteCursor, _ := w.Components.Cursor.GetPtr(remote)
 	remoteCursor.Control = component.ControlRemote
@@ -106,27 +109,73 @@ func TestSharedSpeciesCrossesOnlyOwnedShieldImpact(t *testing.T) {
 		Type:          component.CompositeTypeUnit,
 		MemberEntries: []component.MemberEntry{{Entity: member}},
 	})
-
-	NewQuasarSystem(w).(*QuasarSystem).handleInteractions(header)
-	impacts, drains := 0, 0
-	for _, ev := range w.Resources.Event.Queue.Consume() {
-		switch ev.Type {
-		case event.EventCombatAttackAreaCrossingRequest:
-			p, _ := ev.Payload.(*event.CombatAttackAreaRequestPayload)
-			if !event.OnWire(ev) || p == nil || p.OwnerEntity != local || p.TargetEntity != header ||
-				len(p.HitEntities) != 1 || p.HitEntities[0] != member {
-				t.Fatalf("shield crossing = %#v payload %#v", ev, p)
+	damage := component.CursorDamage{EnergyDrain: 7, HeatDelta: -3}
+	strike := func(bare bool) (impacts, drains, heats int) {
+		strikeContacts(w, header, damage, bare)
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			switch p := ev.Payload.(type) {
+			case *event.CombatAttackAreaRequestPayload:
+				if !event.OnWire(ev) || p.OwnerEntity != local || p.TargetEntity != header ||
+					len(p.HitEntities) != 1 || p.HitEntities[0] != member {
+					t.Fatalf("shield crossing = %#v payload %#v", ev, p)
+				}
+				impacts++
+			case *event.ShieldDrainRequestPayload:
+				if p.Entity != local || p.Value != damage.EnergyDrain {
+					t.Fatalf("shield drain = %#v, want local cursor %d", p, local)
+				}
+				drains++
+			case *event.HeatAddRequestPayload:
+				if p.Entity != local || p.Delta != damage.HeatDelta {
+					t.Fatalf("heat = %#v, want local cursor %d", p, local)
+				}
+				heats++
 			}
-			impacts++
-		case event.EventShieldDrainRequest:
-			p, _ := ev.Payload.(*event.ShieldDrainRequestPayload)
-			if p == nil || p.Entity != local {
-				t.Fatalf("shield drain = %#v, want local cursor %d", p, local)
-			}
-			drains++
 		}
+		return impacts, drains, heats
 	}
-	if impacts != 1 || drains != 1 {
-		t.Fatalf("owner-resolved interactions = (%d impacts, %d drains), want (1, 1)", impacts, drains)
+	if i, d, h := strike(true); i != 1 || d != 1 || h != 0 {
+		t.Fatalf("shielded contact = (%d impacts, %d drains, %d heats), want (1, 1, 0)", i, d, h)
+	}
+	shield, _ := w.Components.Shield.GetPtr(local)
+	shield.Active = false
+	w.Positions.SetPosition(local, component.PositionComponent{X: 5, Y: 5})
+	if i, d, h := strike(true); i != 0 || d != 0 || h != 1 {
+		t.Fatalf("bare contact = (%d impacts, %d drains, %d heats), want (0, 0, 1)", i, d, h)
+	}
+	if i, d, h := strike(false); i+d+h != 0 {
+		t.Fatalf("shield-only contact struck a bare cursor: (%d, %d, %d)", i, d, h)
+	}
+}
+
+// The snake's head strikes only the cursor on its cell, and heats a bare cursor only
+// while the body no longer shields it.
+func TestSnakeHeadHeatsOnlyWhileUnshielded(t *testing.T) {
+	w, local, _ := testCursorWorld(t)
+	head := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(head, component.PositionComponent{X: 5, Y: 5})
+	snakes := NewSnakeSystem(w).(*SnakeSystem)
+	strikes := func(shielded bool) (drains, heats int) {
+		snakes.handleInteractions(&component.SnakeComponent{HeadEntity: head, IsShielded: shielded})
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			switch ev.Payload.(type) {
+			case *event.ShieldDrainRequestPayload:
+				drains++
+			case *event.HeatAddRequestPayload:
+				heats++
+			}
+		}
+		return drains, heats
+	}
+	if d, h := strikes(true); d+h != 0 {
+		t.Fatalf("shielded snake struck a bare cursor: (%d drains, %d heats)", d, h)
+	}
+	if d, h := strikes(false); d != 0 || h != 1 {
+		t.Fatalf("unshielded snake = (%d drains, %d heats), want (0, 1)", d, h)
+	}
+	shield, _ := w.Components.Shield.GetPtr(local)
+	shield.Active, shield.InvRxSq, shield.InvRySq = true, 1, 1
+	if d, h := strikes(true); d != 1 || h != 0 {
+		t.Fatalf("shielded cursor on the head = (%d drains, %d heats), want (1, 0)", d, h)
 	}
 }

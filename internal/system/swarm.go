@@ -225,7 +225,7 @@ func (s *SwarmSystem) Update() {
 		}
 
 		// Interactions with cursor and shield
-		s.handleCursorInteractions(headerEntity)
+		strikeContacts(s.world, headerEntity, profile.Contact[component.SpeciesSwarm], true)
 
 		activeCount++
 	}
@@ -768,40 +768,6 @@ func (s *SwarmSystem) syncMemberPositions(headerEntity core.Entity, headerX, hea
 		memberY := headerY + member.OffsetY
 
 		s.world.Positions.SetPosition(member.Entity, component.PositionComponent{X: memberX, Y: memberY})
-	}
-}
-
-// handleCursorInteractions processes shield overlap and cursor collision
-func (s *SwarmSystem) handleCursorInteractions(
-	headerEntity core.Entity,
-) {
-	overlaps := CheckCursorOverlaps(s.world, headerEntity)
-	for i := range overlaps.Count {
-		overlap := &overlaps.Entries[i]
-		if !s.world.SimulatesLocally(overlap.Cursor) {
-			continue
-		}
-		// Combat applies shield knockback and enrage immunity.
-		if len(overlap.ShieldMembers) > 0 {
-			s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, &event.CombatAttackAreaRequestPayload{
-				AttackType:   component.CombatAttackShield,
-				OwnerEntity:  overlap.Cursor,
-				OriginEntity: overlap.Cursor,
-				TargetEntity: headerEntity,
-				HitEntities:  overlap.ShieldMembers,
-			})
-
-			s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-				Entity: overlap.Cursor,
-				Value:  parameter.QuasarShieldDrain,
-			})
-		} else if overlap.OnCursor && !overlap.ShieldActive {
-			// Direct cursor collision without a shield reduces heat.
-			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-				Entity: overlap.Cursor,
-				Delta:  -parameter.DrainHeatReductionAmount,
-			})
-		}
 	}
 }
 
