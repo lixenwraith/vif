@@ -99,7 +99,7 @@ func (s *KrakenSystem) spawn(p *event.KrakenSpawnRequestPayload) {
 		OwnerEntity: e, CombatEntityType: component.CombatEntityKraken, HitPoints: parameter.KrakenInitialHP,
 	})
 	s.world.Components.Kraken.SetComponent(e, component.KrakenComponent{
-		DirX: 1, AttackLegs: 1,
+		AttackLegs: 1,
 	})
 	s.world.Components.Header.SetComponent(e, component.HeaderComponent{
 		Behavior: component.BehaviorKraken, Type: component.CompositeTypeUnit, SkipPositionSync: true,
@@ -210,38 +210,40 @@ func (s *KrakenSystem) wait(k *component.KrakenComponent) {
 	k.IdleTurnRemaining = 0
 }
 
+// aimCharge locks the charge on the farthest cursor, measured as the body moves, so it
+// crosses the most ground; equally far cursors are a random pick. Walls are demolished
+// on contact, so only map bounds pad the destination.
 func (s *KrakenSystem) aimCharge(k *component.KrakenComponent, x, y float64) bool {
-	var targets [parameter.MaxPlayers]vmath.Point
-	count := 0
-	for slot := range parameter.MaxPlayers {
-		cursor := s.world.Resources.Player.Slot(uint8(slot))
-		if pos, ok := s.world.Positions.GetPosition(cursor); cursor != 0 && ok {
-			targets[count] = vmath.Point{X: pos.X, Y: pos.Y}
-			count++
-		}
-	}
-	k.TargetX, k.TargetY = x, y
-	if count == 0 {
-		return false
-	}
+	pick := s.rng.Float64() // drawn whatever the roster holds, so positions never shift the stream
 	cfg := s.world.Resources.Config
 	rx, ry := parameter.KrakenBodyRadius*2, parameter.KrakenBodyRadius
-	start := s.rng.Intn(count)
-	for i := range count {
-		tx, ty := targets[(start+i)%count].CenterF()
-		tx = max(rx+0.5, min(tx, float64(cfg.MapWidth)-rx-0.5))
-		ty = max(ry+0.5, min(ty, float64(cfg.MapHeight)-ry-0.5))
-		// Walls are demolished on contact, so only map bounds pad the destination.
-		dx, dy := tx-x, ty-y
-		if math.Hypot(dx, dy*2) < 1 {
+	var ties [parameter.MaxPlayers][2]float64
+	count, farthest := 0, 1.0 // a cursor within a cell of the body is already covered
+	for slot := range parameter.MaxPlayers {
+		pos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Slot(uint8(slot)))
+		if !ok {
 			continue
 		}
-		k.TargetX, k.TargetY = tx, ty
-		dist := math.Hypot(dx, dy)
-		k.DirX, k.DirY = dx/dist, dy/dist
-		return true
+		tx, ty := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+		tx = max(rx+0.5, min(tx, float64(cfg.MapWidth)-rx-0.5))
+		ty = max(ry+0.5, min(ty, float64(cfg.MapHeight)-ry-0.5))
+		d := (tx-x)*(tx-x) + 4*(ty-y)*(ty-y)
+		if d < farthest {
+			continue
+		}
+		if d > farthest {
+			farthest, count = d, 0
+		}
+		ties[count] = [2]float64{tx, ty}
+		count++
 	}
-	return false
+	if count == 0 {
+		k.TargetX, k.TargetY = x, y
+		return false
+	}
+	target := ties[int(pick*float64(count))]
+	k.TargetX, k.TargetY = target[0], target[1]
+	return true
 }
 
 func (s *KrakenSystem) animate(k *component.KrakenComponent, motion *component.KineticComponent, dt float64) {
