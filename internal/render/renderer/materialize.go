@@ -21,16 +21,16 @@ const (
 	matRecede  = 1.0 - matHoldEnd
 )
 
-type beamDir int
+type rayDir int
 
 const (
-	dirUp beamDir = iota
+	dirUp rayDir = iota
 	dirDown
 	dirLeft
 	dirRight
 )
 
-// MaterializeRenderer draws phase-based converging beams
+// MaterializeRenderer draws phase-based converging rays
 type MaterializeRenderer struct {
 	gameCtx *engine.GameContext
 }
@@ -49,9 +49,9 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	// Beams run from the edge of the map, not the edge of the terminal: on a
+	// Rays run from the edge of the map, not the edge of the terminal: on a
 	// viewport wider than the map the two differ by the centring margin, and a
-	// beam starting there starts outside the world.
+	// ray starting there starts outside the world.
 	pf := ctx.PlayfieldViewportRect()
 	if pf.Empty() {
 		return
@@ -61,15 +61,15 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 		// Transform target area to viewport coords
 		targetVX, targetVY, _ := ctx.MapToViewport(mat.TargetX, mat.TargetY)
 
-		r.renderBeam(ctx, buf, pf, mat, targetVX, targetVY, dirUp)
-		r.renderBeam(ctx, buf, pf, mat, targetVX, targetVY, dirDown)
-		r.renderBeam(ctx, buf, pf, mat, targetVX, targetVY, dirLeft)
-		r.renderBeam(ctx, buf, pf, mat, targetVX, targetVY, dirRight)
+		r.renderRay(ctx, buf, pf, mat, targetVX, targetVY, dirUp)
+		r.renderRay(ctx, buf, pf, mat, targetVX, targetVY, dirDown)
+		r.renderRay(ctx, buf, pf, mat, targetVX, targetVY, dirLeft)
+		r.renderRay(ctx, buf, pf, mat, targetVX, targetVY, dirRight)
 		return true
 	})
 }
 
-func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, mat *component.MaterializeComponent, targetVX, targetVY int, dir beamDir) {
+func (r *MaterializeRenderer) renderRay(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, mat *component.MaterializeComponent, targetVX, targetVY int, dir rayDir) {
 	var edgePos, distance int
 	var spanStart, spanEnd int // Range along the target edge
 
@@ -99,7 +99,7 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 	}
 
 	if distance <= 0 {
-		return // Target at edge, no beam to draw
+		return // Target at edge, no ray to draw
 	}
 
 	dist := float64(distance)
@@ -142,12 +142,12 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 	for cellOffset := segStart; cellOffset <= segEnd; cellOffset++ {
 		intensity := r.calcIntensity(mat.Progress, cellOffset, segStart, segEnd)
 		for spanPos := spanStart; spanPos <= spanEnd; spanPos++ {
-			r.renderBeamCellSpan(ctx, buf, pf, dir, edgePos, cellOffset, spanPos, intensity)
+			r.renderRayCellSpan(ctx, buf, pf, dir, edgePos, cellOffset, spanPos, intensity)
 		}
 	}
 }
 
-func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, dir beamDir, edgePos, cellOffset, spanPos int, intensity float64) {
+func (r *MaterializeRenderer) renderRayCellSpan(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, dir rayDir, edgePos, cellOffset, spanPos int, intensity float64) {
 	var vx, vy int
 	switch dir {
 	case dirUp:

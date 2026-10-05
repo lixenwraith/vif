@@ -126,7 +126,7 @@ func TestCalculateCentroidFMatchesInt(t *testing.T) {
 }
 
 // TestRayCellsAreExactlyItsContents: the cells a ray enumerates are the cells it
-// contains, solid at any angle, so what draws a beam and what it hits agree; and a
+// contains, solid at any angle, so what draws a ray and what it hits agree; and a
 // ray aimed at a cell passes through it at its knee.
 func TestRayCellsAreExactlyItsContents(t *testing.T) {
 	dirs := [][2]int{{5, 2}, {-3, 7}, {1, -4}, {-6, -6}, {9, 0}, {0, -2}}

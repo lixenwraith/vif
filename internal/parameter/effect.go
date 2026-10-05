@@ -15,7 +15,7 @@ const (
 	MaterializePulseHz = 8   // Sine wave cycles during fill phase
 
 	// Materialize visual parameters
-	MaterializeWidthFalloff = 0.5 // Side-line intensity for multi-width beams
+	MaterializeWidthFalloff = 0.5 // Side-line intensity for multi-width rays
 )
 
 // Lightning Entity

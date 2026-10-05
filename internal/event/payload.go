@@ -392,7 +392,7 @@ type WeaponFireRequestPayload struct {
 
 // MountRequestPayload puts one weapon on a Shared host, replacing any it carried.
 // Zero interval, range and width take the weapon's hosted defaults; zero muzzle fires
-// from the host cell. A beam's Lane (1-8, vmath.Octants) fixes its direction; 0 aims.
+// from the host cell. A ray's Lane (1-8, vmath.Octants) fixes its direction; 0 aims.
 type MountRequestPayload struct {
 	Host       core.Entity          `toml:"host"`
 	Weapon     component.WeaponType `toml:"weapon"`
@@ -781,7 +781,7 @@ type FuseEffect int
 const (
 	FuseEffectNone        FuseEffect = iota
 	FuseEffectSpirit                 // Converging spirit trails
-	FuseEffectMaterialize            // Reverse beam convergence
+	FuseEffectMaterialize            // Reverse ray convergence
 )
 
 // FuseSwarmRequestPayload contains the two drains to fuse

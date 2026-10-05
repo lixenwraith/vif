@@ -18,14 +18,14 @@ const (
 	teleportRecede  = 1.0 - teleportHoldEnd
 )
 
-// TeleportLineRenderer draws a phase-based beam from swarm origin to teleport destination
-// Phases: Fill (beam extends) → Hold (full line) → Recede (darkness sweeps)
+// TeleportLineRenderer draws a phase-based ray from swarm origin to teleport destination
+// Phases: Fill (ray extends) → Hold (full line) → Recede (darkness sweeps)
 type TeleportLineRenderer struct {
 	gameCtx    *engine.GameContext
 	renderCell teleportLineCellRenderer
 }
 
-// teleportLineCellRenderer draws one beam cell at the given intensity
+// teleportLineCellRenderer draws one ray cell at the given intensity
 type teleportLineCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, intensity float64)
 
 func NewTeleportLineRenderer(ctx *engine.GameContext) *TeleportLineRenderer {
@@ -60,7 +60,7 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 			progress = 1
 		}
 
-		r.renderBeam(ctx, buf,
+		r.renderRay(ctx, buf,
 			swarmComp.TeleportStartX, swarmComp.TeleportStartY,
 			swarmComp.TeleportTargetX, swarmComp.TeleportTargetY,
 			parameter.SwarmWidth, parameter.SwarmHeight,
@@ -70,9 +70,9 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 	})
 }
 
-// renderBeam draws single line with phase-based visibility, excluding entity bounding boxes
+// renderRay draws single line with phase-based visibility, excluding entity bounding boxes
 // headerX/Y are anchor positions; width/height and offsets define the bounding box to exclude
-func (r *TeleportLineRenderer) renderBeam(
+func (r *TeleportLineRenderer) renderRay(
 	ctx render.RenderContext, buf *render.RenderBuffer,
 	x0, y0, x1, y1 int,
 	boxWidth, boxHeight, headerOffsetX, headerOffsetY int,
@@ -196,7 +196,7 @@ func (r *TeleportLineRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, 
 		render.BlendMaxBg, 1.0, terminal.AttrNone)
 }
 
-// cell256 has no intensity ramp, so dim beam cells are dropped rather than scaled
+// cell256 has no intensity ramp, so dim ray cells are dropped rather than scaled
 func (r *TeleportLineRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, intensity float64) {
 	if intensity > parameter.SwarmTeleport256Threshold {
 		buf.SetBg256(screenX, screenY, visual.SwarmChargeLine256Palette)

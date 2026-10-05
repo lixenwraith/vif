@@ -86,7 +86,7 @@ never enters the replay suffix (D-9).
 | Personal drain death affecting shared progression | owner cursor |
 | Typing or nugget cursor advance | cursor and absolute destination cell |
 | Pointer placement | cursor and the newest cell the pointer named that tick |
-| Owned shield or beam striking shared species | target/member set and owner cursor |
+| Owned shield or ray striking shared species | target/member set and owner cursor |
 | Cursor entering or leaving combined defeat state | cursor and state |
 
 Effects on Player targets do not cross. Shared follow-up events derived from a
@@ -138,7 +138,7 @@ per-target combat requests derived from that geometry do not.
 ### D-6 — Presentation and personal effects are Player-domain
 
 Lightning, flash, fadeout, splash, motion markers, explosion smoke, pulse rings,
-materialise beams, dust, particles (decay and blossom), orbs, bullets, missiles,
+materialise rays, dust, particles (decay and blossom), orbs, bullets, missiles,
 and loot are Player-domain. Encounter level clears explicitly preserve loot; run
 resets clear it. Shared corrections retain each receiver's drops and ownership,
 and loot revalidates its bounds and walls after an install. Collected weapon

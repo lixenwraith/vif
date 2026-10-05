@@ -49,7 +49,7 @@ var SharedWorldStoreNames = []string{
 	"lightning",
 	"missile",
 	"mount",
-	"beam",
+	"ray",
 	"spirit",
 	"materialize",
 	"target",
@@ -143,7 +143,7 @@ func SharedWorldStoreRows(s *SharedWorldState, i int, dst []StoreRow) ([]StoreRo
 	case 26:
 		return appendStoreRows(dst, s.Mount)
 	case 27:
-		return appendStoreRows(dst, s.Beam)
+		return appendStoreRows(dst, s.Ray)
 	case 28:
 		return appendStoreRows(dst, s.Spirit)
 	case 29:
@@ -397,11 +397,11 @@ func SharedWorldApplyStoreRows(s *SharedWorldState, i int, owns func(core.Entity
 		s.Mount = out
 		return nil
 	case 27:
-		out, err := applyStoreRows(s.Beam, owns, rows)
+		out, err := applyStoreRows(s.Ray, owns, rows)
 		if err != nil {
 			return err
 		}
-		s.Beam = out
+		s.Ray = out
 		return nil
 	case 28:
 		out, err := applyStoreRows(s.Spirit, owns, rows)

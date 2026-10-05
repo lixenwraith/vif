@@ -67,7 +67,7 @@ var Components = []ComponentDef{
 	{"Lightning", "LightningComponent", "player"},
 	{"Missile", "MissileComponent", "player"},
 	{"Mount", "MountComponent", "shared"},
-	{"Beam", "BeamComponent", ""},
+	{"Ray", "RayComponent", ""},
 	{"Spirit", "SpiritComponent", ""},
 	{"Materialize", "MaterializeComponent", ""},
 
@@ -263,7 +263,7 @@ var Renderers = []RendererDef{
 	{"lightning", "NewLightningRenderer", "PriorityLightning"},
 	{"missile", "NewMissileRenderer", "PriorityMissile"},
 	{"pulse", "NewPulseRenderer", "PriorityPulse"},
-	{"beam", "NewBeamRenderer", "PriorityBeam"},
+	{"ray", "NewRayRenderer", "PriorityRay"},
 	{"bullet", "NewBulletRenderer", "PriorityBullet"},
 
 	// --- Particles ---

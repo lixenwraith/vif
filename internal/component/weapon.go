@@ -26,7 +26,7 @@ const (
 	DeliveryMissile                         // homing projectile, area damage on impact
 	DeliveryPulse                           // area burst at the emitter, fired only on a target inside it
 	DeliveryBullet                          // linear projectile per shot, direct damage on contact
-	DeliveryRay                             // straight band to the first wall, drawn as a beam, area damage along it
+	DeliveryRay                             // straight band to the first wall, area damage along it
 )
 
 // Aimed reports whether the delivery needs targets assigned before it fires
