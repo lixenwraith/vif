@@ -20,7 +20,7 @@ reader can start with the application shape and then descend into a subsystem.
 |---|---|---|
 | [Architecture overview](architecture.md) | High | What are the major parts, boundaries, and design constraints? |
 | [Package map](package-map.md) | Medium | Which Go packages own each responsibility and how may they depend on one another? |
-| [Runtime and concurrency](runtime.md) | Medium/detail | How does the process start, tick, render, pause, reset, and shut down safely? |
+| [Runtime and concurrency](runtime.md) | Medium/detail | How does the process start, tick, render, pause, reset, and shut down safely? How is a replay presented, stepped back, sought and logged? |
 | [ECS and events](ecs-and-events.md) | Medium/detail | How are entities stored, systems ordered, spatial queries performed, and events settled? |
 | [Logging and diagnostics](logging-and-diagnostics.md) | Medium/detail | How do scopes, telemetry, the replay journal, snapshots, and the flight recorder work? |
 | [Multi-instance domain model](domain-design.md) | Medium/detail | How are entities, events, RNG streams and systems split between shared and player domains, who holds authority over what, and what is still missing? |

@@ -63,6 +63,9 @@ const recTimeFormat = "060102-150405.000"
 // the sink at. It targets the session log when one is running, otherwise a
 // standalone file. Returns the standalone path, empty otherwise.
 func EmitSet(sub string, run, tick uint64, fill func(emit func(args ...any))) (string, error) {
+	if !audible(LevelInfo) {
+		return "", nil
+	}
 	if l := sink.Load(); l != nil {
 		if !l.Enabled(LevelInfo) || !scopeEnabled(sub) {
 			return "", nil

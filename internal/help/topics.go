@@ -225,13 +225,15 @@ var topics = []topicDef{
 	{
 		Key: "replay", Title: "REPLAY (-replay, -script -watch)",
 		Entries: []entryDef{
-			{Keys: "Space", Desc: "Pause or resume playback"},
+			{Keys: "Space", Desc: "Pause or resume playback; at the end, play again from the start"},
 			{Keys: ".", Desc: "Pause and advance one tick"},
 			{Keys: ",", Desc: "Pause and step back one tick, each shown as '.' shows; recent ticks are ready at once, older ones wait on a replay from the start"},
 			{Keys: "+  -", Desc: "Faster and slower playback"},
 			{Keys: "h j k l  0", Desc: "Scroll a map larger than the terminal, stopping at its edges; 0 re-centres on the recorded view"},
 			{Actions: []string{"toggle_audio_cycle"}, Desc: "Cycle audio; a replay starts as -mute says"},
-			{Keys: ":", Desc: "Command line: help, about, telemetry, hud, debug, content, flow, graph, log and quit"},
+			{Keys: ":r tick <n>  :r time <[[h:]m:]s>", Desc: "Go to a tick of the run shown, or its game time at 1x; ahead plays there unpaced, behind replays a copy"},
+			{Keys: ":r restart", Desc: "Play the recording again from its start; :replay is :r's long form"},
+			{Keys: ":", Desc: "Command line: replay, help, about, telemetry, hud, debug, content, flow, graph, log and quit"},
 			{Keys: "q", Desc: "Quit the replay"},
 		},
 	},

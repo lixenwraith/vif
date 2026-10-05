@@ -94,6 +94,7 @@ var configPages = []configPage{
 				return ""
 			}),
 		configFormOption("scenario"),
+		commandAction("replay", "Restart replay", "Play the recording again from its first tick. :r tick and :r time go to any other.", "replay restart"),
 	}},
 	{key: "diagnostics", label: "Diagnostics", description: "Logging, snapshots, flight recorder and profiling.", options: []configOption{
 		{key: "logging", label: "File logging", description: "Start or stop writing diagnostic logs to the configured log directory.",

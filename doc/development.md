@@ -166,7 +166,7 @@ line wins.
 | `-bot [N[:graph]\|graph]` | Add bots beside the human, including with `-host` or `-join`; omitted operands mean `1:default`. |
 | `-headless` | With bots, run without a human or terminal; solo runs are unpaced. |
 | `-watch` | Present a script or the first bot, with no human player. |
-| `-replay <path>` | Present a recorded journal instead of starting interactive play. |
+| `-r`, `-replay <path>` | Present a recorded journal instead of starting interactive play. |
 | `-check` | Resolve and validate FSM, keymap, audio and content; print the result and exit. |
 | `-schema` | Print the FSM and event schema as JSON, then exit. |
 
@@ -395,7 +395,7 @@ responsiveness and rendering.
 
 `app.PlayJournal` and `journal.Load` can reassemble several
 rotated files by `jseq`. The current CLI flag stores one string and passes one
-path, so positional paths after `-replay` are not a supported multi-file form.
+path, so positional paths after `-r` are not a supported multi-file form.
 The replay path rebuilds seed, config/content, timing, and geometry from its
 anchor rather than `buildConfig`; normal gameplay flags do not override those
 values. Session logging and `-dev` are still applied before playback starts;
@@ -594,7 +594,7 @@ diagnostic playbooks. This section covers only the build-facing policy.
 Replay capture is a separate `vif-jrn-*` JSONL sink. `-j` records every
 journaled-origin event regardless of session log level/scope, and its anchor
 carries the seed, RNG session, config/corpus identity and fingerprint, fixed
-tick interval, and simulation geometry. `-replay` runs those records through a
+tick interval, and simulation geometry. `-r` runs those records through a
 manual-clock App; this is reproduction input, not another diagnostic scope.
 
 Logging is disabled at compile time for `wasm` or `novlog`. In enabled builds,
