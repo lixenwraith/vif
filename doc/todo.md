@@ -340,17 +340,6 @@ knockback should reset the immunity duration and apply its impulse; equal or wea
 hits remain blocked across all weapons and players. Carry the recorded strength
 through snapshots and synchronization. Stun immunity remains target-wide.
 
-### Tune and extend Kraken after gameplay trials
-
-- Priority: P2
-- Affected files: `internal/{component,system,render/renderer}/kraken.go`,
-  `internal/parameter/kraken.go`, `internal/profile/mass.go`, `wad/scenario/{kraken,main}/`
-
-Tune health, contact damage, mass and pacing in the looping Kraken scenario and main maze.
-Measure the sampled tentacle hitboxes and retained member pool under multiple
-Krakens; add swept tentacle contact if fast motion skips cursor cells. The first
-renderer uses the sandbox's default void body; other body profiles remain optional.
-
 ### Let mounted weapons strike more than cursors
 
 - Priority: P3
@@ -381,10 +370,20 @@ Its area pulse is the hosted disruptor's shape; the red circle's turret mount is
 
 ### Route species contact damage through strikeCursor
 
-- Priority: P3
-- Affected files: `internal/system/{quasar,swarm,storm,eye,pylon,snake,drain}.go`
+- Priority: P2
+- Affected files: `internal/system/{quasar,swarm,storm,eye,pylon,snake,drain,interaction}.go`,
+  `internal/system/domain_test.go`
 
-Each still writes the shield-drain-or-heat pair by hand; `TestSharedCursorOverlapOutcomesStayOwnerResolved` counts must move with it.
+`profile.Contact` holds every species' contact damage; only Kraken applies its row
+through `strikeCursor`. Quasar, swarm, storm circles, eye and pylon share one loop
+over `CheckCursorOverlaps`: shield crossing when members are inside the shield,
+then a strike on shield members or a covered bare cursor, so one helper beside it
+takes that loop. Snake (head heats only while unshielded, body only drains) and
+drain (throttled, dies on contact) keep their conditions and call `strikeCursor`.
+Storm's green pulse becomes `strikeCursorsIn` and quasar's zap `strikeCursor`,
+gaining the owner gate both lack. Replace the count pin in
+`TestSharedCursorOverlapOutcomesStayOwnerResolved` with a rule that no species file
+pushes shield drain or heat itself, and test each migrated contact outcome.
 
 ## Rendering
 

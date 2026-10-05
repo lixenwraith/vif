@@ -12,11 +12,9 @@ import (
 // CursorOverlap describes one cursor's spatial contact with an entity.
 type CursorOverlap struct {
 	Cursor        core.Entity   // Cursor identifies the contacted player.
-	Slot          uint8         // Slot identifies Cursor's roster slot.
 	OnCursor      bool          // OnCursor reports whether any part occupies the cursor cell.
 	ShieldActive  bool          // ShieldActive reports whether the cursor shield is active.
 	ShieldMembers []core.Entity // ShieldMembers lists parts inside the shield ellipse.
-	CursorMembers []core.Entity // CursorMembers lists parts on the exact cursor cell.
 }
 
 // CursorOverlaps holds every cursor contact in roster order.
@@ -80,7 +78,7 @@ func CursorContactAt(w *engine.World, x, y int) core.Entity {
 	return 0
 }
 
-// strikeCursor applies a mounted weapon's hit to one cursor: energy through an
+// strikeCursor applies a hit or a species contact to one cursor: energy through an
 // active shield, heat without one. Only the cursor's owner applies it; every other
 // instance saw the same shot and leaves the hit to that owner (D-2).
 func strikeCursor(w *engine.World, cursor core.Entity, damage component.CursorDamage) {
@@ -123,7 +121,6 @@ func CheckCursorOverlaps(w *engine.World, entity core.Entity) CursorOverlaps {
 			continue
 		}
 		overlap.Cursor = cursor
-		overlap.Slot = uint8(i)
 		result.Entries[result.Count] = overlap
 		result.Count++
 	}
@@ -155,7 +152,6 @@ func checkCursorOverlap(w *engine.World, cursorEntity, entity core.Entity) Curso
 
 			if memberPos.X == cursorPos.X && memberPos.Y == cursorPos.Y {
 				result.OnCursor = true
-				result.CursorMembers = append(result.CursorMembers, member.Entity)
 			}
 
 			if shieldActive && vmath.EllipseContainsPointF(memberPos.X, memberPos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
@@ -171,10 +167,7 @@ func checkCursorOverlap(w *engine.World, cursorEntity, entity core.Entity) Curso
 		return CursorOverlap{}
 	}
 
-	if pos.X == cursorPos.X && pos.Y == cursorPos.Y {
-		result.OnCursor = true
-		result.CursorMembers = append(result.CursorMembers, entity)
-	}
+	result.OnCursor = pos.X == cursorPos.X && pos.Y == cursorPos.Y
 
 	if shieldActive && vmath.EllipseContainsPointF(pos.X, pos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
 		result.ShieldMembers = append(result.ShieldMembers, entity)

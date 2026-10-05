@@ -503,7 +503,7 @@ is the Shared placement gate.
 
 | Domain | Entities |
 |---|---|
-| **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, tower, gateway, wall, gold, marker, FSM, time |
+| **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, kraken, tower, gateway, wall, gold, marker, FSM, time |
 | **Player** | glyph, nugget, dust, drain, particle (decay/blossom), bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, explosion presentation, loot |
 | **Stamped** | cleaner, materialise, spirit; domain is resolved per request |
 

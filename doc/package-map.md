@@ -87,6 +87,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/pattern` | Convert a dual-mode `.vifimg` asset into wall spawn cells. One file, one path, no drawing. |
 | `internal/prof` | Profiler: per-module wall time on the tick, event and render paths, process CPU/memory/GC/I/O sampling, and pprof CPU/heap and execution-trace captures. Publishes into the status registry; one atomic load per timed call while off. |
 | `internal/probe` | The supervised run's HTTP endpoint: `/health` and `/metrics`. Stdlib only and stateless — a snapshot function supplies the run's answer and a status registry supplies the metrics, so the run decides what its words mean and this decides only how to say them. |
+| `internal/profile` | Per-kind tables indexed by kind: the combat attack matrix and species contact damage, collision, homing and mass profiles, and species drop tiers. |
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |
 | `internal/service` | Dependency-ordered lifecycle hub and mode-selected adapters for categorized files, terminal, content, audio, and network transport. |
