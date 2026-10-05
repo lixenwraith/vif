@@ -221,7 +221,6 @@ func (s *LootSystem) Update() {
 		owner := lootComp.Owner
 		ownerPos, hasOwner := s.world.Positions.GetPosition(owner)
 
-		// Collection check
 		if hasOwner && vmath.IntAbs(curX-ownerPos.X) <= parameter.LootCollectRadius &&
 			vmath.IntAbs(curY-ownerPos.Y) <= parameter.LootCollectRadius {
 			s.collectLoot(owner, lootEntity, lootComp.Type)
@@ -393,7 +392,6 @@ func (s *LootSystem) onSpeciesKilled(payload *event.SpeciesKilledPayload) {
 			continue
 		}
 
-		// Flatten results into spawn list
 		var spawns []component.LootType
 		for _, r := range results {
 			for range r.Count {
@@ -410,14 +408,13 @@ func (s *LootSystem) onSpeciesKilled(payload *event.SpeciesKilledPayload) {
 
 // --- Spawn ---
 
-// spawnLootMulti spawns multiple loot items with scatter pattern and initial burst velocity
+// spawnLootMulti scatters drops in a fixed pattern, each bursting away from the centre
 func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owner core.Entity) {
 	count := len(loots)
 	if count == 0 {
 		return
 	}
 
-	// Clamp to pattern table size
 	patternIdx := count
 	if patternIdx >= len(spawnOffsets) {
 		patternIdx = len(spawnOffsets) - 1
@@ -425,18 +422,15 @@ func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owne
 	pattern := spawnOffsets[patternIdx]
 
 	for i, lootType := range loots {
-		// Cycle through pattern if more items than offsets
 		offset := pattern[i%len(pattern)]
 		spawnX, spawnY := cx+offset.dx, cy+offset.dy
 
-		// Calculate burst direction from offset (before validation may change position)
+		// The burst follows the pattern offset, before validation can move the drop
 		burstDirX, burstDirY := offset.dx, offset.dy
 
-		// Validate position, fallback to center
 		if !s.isValidSpawnPos(spawnX, spawnY) {
 			spawnX, spawnY = cx, cy
 			if !s.isValidSpawnPos(spawnX, spawnY) {
-				// Last resort: find any free cell nearby
 				if freeX, freeY, found := s.world.Positions.FindFreeFromPattern(
 					cx, cy, 1, 1,
 					engine.PatternCardinalFirst,
@@ -444,10 +438,9 @@ func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owne
 					component.WallBlockKinetic, nil,
 				); found {
 					spawnX, spawnY = freeX, freeY
-					// Update burst direction based on fallback position
 					burstDirX, burstDirY = freeX-cx, freeY-cy
 				} else {
-					continue // Skip this loot if no valid position
+					continue
 				}
 			}
 		}
@@ -457,17 +450,15 @@ func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owne
 	}
 }
 
-// spawnLootWithBurst creates an owned loot entity with initial velocity in burst direction
+// spawnLootWithBurst creates one owned drop moving in its burst direction
 func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burstDirX, burstDirY int, owner core.Entity) {
-	vis, ok := visual.LootVisuals[lootType]
-	if !ok {
+	if lootType >= component.LootCount {
 		return
 	}
 
 	entity := s.world.CreateEntity(core.DomainPlayer)
 	preciseX, preciseY := vmath.Point{X: x, Y: y}.CenterF()
 
-	// Calculate initial burst velocity
 	var velX, velY float64
 	if burstDirX != 0 || burstDirY != 0 {
 		dirX, dirY := vmath.Normalize2DF(float64(burstDirX), float64(burstDirY))
@@ -475,7 +466,6 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 		velY = dirY * parameter.LootBurstSpeed
 	}
 
-	// Loot component
 	s.world.Components.Loot.SetComponent(entity, component.LootComponent{
 		Type:     lootType,
 		Owner:    owner,
@@ -483,7 +473,6 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 		LastIntY: y,
 	})
 
-	// Kinetic with initial burst velocity
 	s.world.Components.Kinetic.SetComponent(entity, component.KineticComponent{
 		Kinetic: physics.Kinetic{
 			PreciseX: preciseX,
@@ -493,7 +482,6 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 		},
 	})
 
-	// Shield
 	cfg := &visual.ShieldConfigs[component.ShieldTypeLoot]
 	s.world.Components.Shield.SetComponent(entity, component.ShieldComponent{
 		Active:  true,
@@ -504,22 +492,13 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 		InvRySq: cfg.InvRySq,
 	})
 
-	// Position
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
 
-	// Sigil
-	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
-		Rune:  vis.Rune,
-		Color: vis.InnerColor,
-	})
-
-	// Protection
 	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 		Mask: component.ProtectFromSpecies | component.ProtectFromParticle,
 	})
 }
 
-// isValidSpawnPos checks if position is within bounds and not blocked
 func (s *LootSystem) isValidSpawnPos(x, y int) bool {
 	config := s.world.Resources.Config
 	if x < 0 || x >= config.MapWidth || y < 0 || y >= config.MapHeight {
@@ -528,11 +507,10 @@ func (s *LootSystem) isValidSpawnPos(x, y int) bool {
 	return !s.world.Positions.IsBlocked(x, y, component.WallBlockKinetic)
 }
 
-// rollDropTable processes tiered drop tables with pity and fallback accumulation
-// for one cursor. Returns slice of drop results (may be empty)
+// rollDropTable rolls a species' tiers for one cursor with pity and fallback
+// accumulation. Returns slice of drop results (may be empty)
 func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor core.Entity, slot uint8) []DropResult {
-	table, ok := component.DropTables[speciesType]
-	if !ok || len(table.Tiers) == 0 {
+	if speciesType >= component.SpeciesCount || len(profile.Drops[speciesType]) == 0 {
 		return nil
 	}
 
@@ -544,28 +522,26 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 		s.buffers.Observe(0, len(s.pity))
 	}
 
-	activeLoot := s.getActiveLootTypes(cursor)
+	activeLoot := s.activeLootTypes(cursor)
 
 	isOwned := func(lt component.LootType) bool {
 		if activeLoot[lt] {
 			return true
 		}
-		profile := component.LootProfiles[lt]
-		if profile.Reward == nil || profile.Reward.Type != component.RewardWeapon {
+		spec := &component.LootSpecs[lt]
+		if spec.Reward != component.RewardWeapon {
 			return false
 		}
 
 		// Max-charge check, repeats drops until this cursor is capped
-		wt := profile.Reward.WeaponType
-		weapons, ok := s.world.Components.Weapon.GetComponent(cursor)
-		return ok && weapons.Charges[wt] >= component.WeaponSpecs[wt].MaxCharges
+		weapons, ok := s.world.Components.Weapon.GetPtr(cursor)
+		return ok && weapons.Charges[spec.Weapon] >= component.WeaponSpecs[spec.Weapon].MaxCharges
 	}
 
 	var results []DropResult
 	fallbackBonus := 0
 
-	for _, tier := range table.Tiers {
-		// Unique tier: skip if all entries owned, accumulate fallback
+	for _, tier := range profile.Drops[speciesType] {
 		if tier.Unique {
 			allOwned := true
 			for _, entry := range tier.Entries {
@@ -575,16 +551,15 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 				}
 			}
 			if allOwned {
-				// Accumulate fallback from all entries
 				for _, entry := range tier.Entries {
 					fallbackBonus += entry.FallbackCount
 				}
-				continue // Next tier
+				continue
 			}
 		}
 
-		// Build eligible candidates
-		var candidates []candidate
+		var buf [component.LootCount]candidate
+		candidates := buf[:0]
 		var totalRate float64
 
 		for i := range tier.Entries {
@@ -601,18 +576,15 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 			continue
 		}
 
-		// Normalize if exceeds 1.0
 		if totalRate >= 1.0 {
 			for i := range candidates {
 				candidates[i].rate /= totalRate
 			}
-			totalRate = 1.0
 		}
 
-		// Roll
 		roll := s.rng.Float64()
 		var cumulative float64
-		var dropped *component.DropEntry
+		var dropped *profile.DropEntry
 
 		for _, c := range candidates {
 			cumulative += c.rate
@@ -622,7 +594,6 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 			}
 		}
 
-		// Update pity for candidates in this tier
 		for _, c := range candidates {
 			if dropped != nil && c.entry.Loot == dropped.Loot {
 				state.misses[c.entry.Loot] = 0
@@ -631,30 +602,15 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 			}
 		}
 
-		if dropped != nil {
-			count := dropped.Count
-			if count <= 0 {
-				count = 1
-			}
-			// Apply fallback bonus to non-unique tiers
+		switch {
+		case dropped != nil:
+			count := max(dropped.Count, 1)
+			// Every non-unique tier after a skipped weapon carries its fallback
 			if !tier.Unique {
 				count += fallbackBonus
 			}
 			results = append(results, DropResult{Loot: dropped.Loot, Count: count})
-
-			// Unique tier dropped: continue to next tier (no fallback accumulation)
-			if tier.Unique {
-				continue
-			}
-		}
-
-		// Non-unique tier: stop processing regardless of outcome
-		if !tier.Unique {
-			break
-		}
-
-		// Unique tier miss: accumulate fallback, continue
-		if dropped == nil {
+		case tier.Unique:
 			for _, c := range candidates {
 				fallbackBonus += c.entry.FallbackCount
 			}
@@ -664,38 +620,19 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 	return results
 }
 
-// allPlayersCapped reports whether every live cursor has maximum charges for a weapon.
-func (s *LootSystem) allPlayersCapped(weaponType component.WeaponType) bool {
-	players := 0
-	for i := range parameter.MaxPlayers {
-		cursor := s.world.Resources.Player.Slot(uint8(i))
-		if cursor == 0 {
-			continue
-		}
-		players++
-		weapons, ok := s.world.Components.Weapon.GetComponent(cursor)
-		if !ok || weapons.Charges[weaponType] < component.WeaponSpecs[weaponType].MaxCharges {
-			return false
-		}
-	}
-	return players > 0
-}
-
 // candidate holds entry with pity-adjusted rate
 type candidate struct {
-	entry *component.DropEntry
+	entry *profile.DropEntry
 	rate  float64
 }
 
-// getActiveLootTypes returns the loot types this cursor already has on the map
-func (s *LootSystem) getActiveLootTypes(cursor core.Entity) map[component.LootType]bool {
-	active := make(map[component.LootType]bool)
+// activeLootTypes reports the loot types this cursor already has on the map
+func (s *LootSystem) activeLootTypes(cursor core.Entity) (active [component.LootCount]bool) {
 	for _, entity := range s.world.Components.Loot.Entities() {
 		lootComp, ok := s.world.Components.Loot.GetPtr(entity)
-		if !ok || lootComp.Owner != cursor {
-			continue
+		if ok && lootComp.Owner == cursor && lootComp.Type < component.LootCount {
+			active[lootComp.Type] = true
 		}
-		active[lootComp.Type] = true
 	}
 	return active
 }
@@ -703,42 +640,35 @@ func (s *LootSystem) getActiveLootTypes(cursor core.Entity) map[component.LootTy
 // --- Collection ---
 
 func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.LootType) {
-	if int(lootType) >= len(component.LootProfiles) {
+	if lootType >= component.LootCount {
 		s.world.DestroyEntity(entity)
 		return
 	}
 
-	profile := &component.LootProfiles[lootType]
+	switch spec := &component.LootSpecs[lootType]; spec.Reward {
+	case component.RewardWeapon:
+		s.world.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{
+			Entity: cursor,
+			Weapon: spec.Weapon,
+		})
 
-	// Apply reward
-	if profile.Reward != nil {
-		switch profile.Reward.Type {
-		case component.RewardWeapon:
-			s.world.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{
-				Entity: cursor,
-				Weapon: profile.Reward.WeaponType,
-			})
+	case component.RewardEnergy:
+		s.world.PushLocal(event.EventEnergyAddRequest, &event.EnergyAddPayload{
+			Entity: cursor,
+			Delta:  spec.Delta,
+			Type:   component.EnergyDeltaReward,
+		})
 
-		case component.RewardEnergy:
-			s.world.PushLocal(event.EventEnergyAddRequest, &event.EnergyAddPayload{
-				Entity: cursor,
-				Delta:  profile.Reward.Delta,
-				Type:   component.EnergyDeltaReward,
-			})
-
-		case component.RewardHeat:
-			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-				Entity: cursor,
-				Delta:  profile.Reward.Delta,
-			})
-		}
+	case component.RewardHeat:
+		s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+			Entity: cursor,
+			Delta:  spec.Delta,
+		})
 	}
 
-	// Visual feedback
-	vis := visual.LootVisuals[lootType]
 	if pos, ok := s.world.Positions.GetPosition(entity); ok {
 		s.world.PushLocal(event.EventFlashSpawnOneRequest, &event.FlashRequestPayload{
-			X: pos.X, Y: pos.Y, Char: vis.Rune,
+			X: pos.X, Y: pos.Y, Char: visual.LootVisuals[lootType].Rune,
 		})
 	}
 

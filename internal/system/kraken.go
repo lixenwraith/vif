@@ -9,22 +9,35 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/profile"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
+)
+
+// Footprint states of one map cell in KrakenSystem.grid
+const (
+	footNone uint8 = iota
+	footCovered
+	footHeld // covered, and a member already stands on it
 )
 
 type KrakenSystem struct {
 	world *engine.World
 	toggle
-	rng    vmath.FastRand
-	cells  []vmath.Point
-	seen   map[vmath.Point]bool
+	rng vmath.FastRand
+
+	// The footprint syncMembers last built, as a cell list and a map-sized grid
+	cells        []vmath.Point
+	grid         []uint8
+	gridW, gridH int
+	spare, idle  []int // member indexes without a cell this tick: still positioned, or not
+
 	sweep  cellSweep
 	glyphs []core.Entity
 }
 
 func NewKrakenSystem(world *engine.World) engine.System {
-	s := &KrakenSystem{world: world, seen: make(map[vmath.Point]bool)}
+	s := &KrakenSystem{world: world}
 	s.Init()
 	return s
 }
@@ -35,7 +48,7 @@ func (s *KrakenSystem) Priority() int { return parameter.PriorityKraken }
 func (s *KrakenSystem) Init() {
 	s.enabled = true
 	s.cells = s.cells[:0]
-	clear(s.seen)
+	clear(s.grid)
 }
 
 func (s *KrakenSystem) EventTypes() []event.EventType {
@@ -140,7 +153,7 @@ func (s *KrakenSystem) Update() {
 		cell := vmath.PointAtF(motion.PreciseX, motion.PreciseY)
 		s.world.Positions.SetPosition(e, component.PositionComponent{X: cell.X, Y: cell.Y})
 		s.syncMembers(e, k, motion.PreciseX, motion.PreciseY)
-		s.interact(e)
+		s.interact()
 	}
 }
 
@@ -264,7 +277,7 @@ func (s *KrakenSystem) animate(k *component.KrakenComponent, motion *component.K
 	}
 	// Like a pylon, Kraken is a push source, never an external impulse recipient.
 	motion.VelX, motion.VelY = 0, 0
-	k.RotSpeed += (rot - k.RotSpeed) * min(dt*4, 1)
+	k.RotSpeed += (rot - k.RotSpeed) * min(dt*parameter.KrakenRotResponse, 1)
 	k.Angle = math.Mod(k.Angle+k.RotSpeed*dt, 2*math.Pi)
 	k.MoveBlend += (moving - k.MoveBlend) * min(dt*4, 1)
 	if k.State == component.KrakenAttack {
@@ -291,104 +304,179 @@ func (s *KrakenSystem) moveBody(motion *component.KineticComponent, x, y float64
 	motion.PreciseY = max(ry+0.5, min(y, float64(cfg.MapHeight)-ry-0.5))
 }
 
+// syncMembers rebuilds the footprint and stands one member on each cell. A member
+// keeps a cell the footprint still covers, so the spatial grid changes only along the
+// moving outline and a missile homing on a member does not see it jump between legs.
 func (s *KrakenSystem) syncMembers(e core.Entity, k *component.KrakenComponent, x, y float64) {
-	s.cells = s.cells[:0]
-	clear(s.seen)
+	s.resetFootprint()
 	s.addDisc(x, y, parameter.KrakenBodyRadius*2)
 	k.TentacleSamples(x, y, func(cx, cy, radius, _ float64, _ bool) { s.addDisc(cx, cy, radius) })
 	header, ok := s.world.Components.Header.GetPtr(e)
 	if !ok {
 		return
 	}
-	for i, cell := range s.cells {
+	ox, oy := int(x), int(y)
+	s.spare, s.idle = s.spare[:0], s.idle[:0]
+	for i := range header.MemberEntries {
+		member := &header.MemberEntries[i]
+		if member.Entity == 0 {
+			continue
+		}
+		pos, ok := s.world.Positions.GetPosition(member.Entity)
+		if !ok {
+			s.idle = append(s.idle, i)
+			continue
+		}
+		if s.covers(pos.X, pos.Y) {
+			if c := &s.grid[pos.Y*s.gridW+pos.X]; *c == footCovered {
+				*c = footHeld
+				member.OffsetX, member.OffsetY = pos.X-ox, pos.Y-oy
+				continue
+			}
+		}
+		s.spare = append(s.spare, i)
+	}
+	// Positioned spares move before idle ones join, so fewer members enter and leave the grid.
+	positioned := len(s.spare)
+	s.spare = append(s.spare, s.idle...)
+	next := 0
+	for _, cell := range s.cells {
 		if s.world.Positions.HasBlockingWallAt(cell.X, cell.Y, 0) {
 			s.world.PushEvent(event.EventWallDespawnRequest, &event.WallDespawnRequestPayload{
 				X: cell.X, Y: cell.Y, Width: 1, Height: 1,
 			})
 		}
-		if i == len(header.MemberEntries) {
-			member := s.world.CreateEntity(core.DomainShared)
-			s.world.Components.Member.SetComponent(member, component.MemberComponent{HeaderEntity: e})
-			s.world.Components.Protection.SetComponent(member, component.ProtectionComponent{
+		c := &s.grid[cell.Y*s.gridW+cell.X]
+		if *c == footHeld {
+			continue
+		}
+		*c = footHeld
+		for next < len(s.spare) && !s.world.Components.Member.HasEntity(header.MemberEntries[s.spare[next]].Entity) {
+			next++ // destroyed outside this system; composite reaps the entry
+		}
+		var member *component.MemberEntry
+		if next < len(s.spare) {
+			member = &header.MemberEntries[s.spare[next]]
+			next++
+		} else {
+			entity := s.world.CreateEntity(core.DomainShared)
+			s.world.Components.Member.SetComponent(entity, component.MemberComponent{HeaderEntity: e})
+			s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 				Mask: component.ProtectFromParticle | component.ProtectFromSpecies,
 			})
-			header.MemberEntries = append(header.MemberEntries, component.MemberEntry{Entity: member})
+			header.MemberEntries = append(header.MemberEntries, component.MemberEntry{Entity: entity})
+			member = &header.MemberEntries[len(header.MemberEntries)-1]
 		}
-		member := &header.MemberEntries[i]
-		member.OffsetX, member.OffsetY = cell.X-int(x), cell.Y-int(y)
+		member.OffsetX, member.OffsetY = cell.X-ox, cell.Y-oy
 		s.world.Positions.SetPosition(member.Entity, component.PositionComponent{X: cell.X, Y: cell.Y})
 	}
 	// Retain spare identities to avoid reallocating ECS entities as the legs contract.
-	for _, member := range header.MemberEntries[len(s.cells):] {
-		s.world.Positions.RemoveEntity(member.Entity)
+	for _, i := range s.spare[next:max(next, positioned)] {
+		s.world.Positions.RemoveEntity(header.MemberEntries[i].Entity)
 	}
+}
+
+// resetFootprint clears the previous footprint, or resizes the grid to the map
+func (s *KrakenSystem) resetFootprint() {
+	cfg := s.world.Resources.Config
+	if cfg.MapWidth != s.gridW || cfg.MapHeight != s.gridH {
+		s.gridW, s.gridH = cfg.MapWidth, cfg.MapHeight
+		n := max(0, s.gridW*s.gridH)
+		if cap(s.grid) < n {
+			s.grid = make([]uint8, n)
+		} else {
+			s.grid = s.grid[:n]
+			clear(s.grid)
+		}
+	} else {
+		for _, c := range s.cells {
+			s.grid[c.Y*s.gridW+c.X] = footNone
+		}
+	}
+	s.cells = s.cells[:0]
+}
+
+func (s *KrakenSystem) covers(x, y int) bool {
+	return x >= 0 && x < s.gridW && y >= 0 && y < s.gridH && s.grid[y*s.gridW+x] != footNone
 }
 
 func (s *KrakenSystem) addDisc(x, y, radius float64) {
-	cfg := s.world.Resources.Config
+	w, h := s.gridW, s.gridH
 	// Off-map samples remain animation geometry, without hitboxes or cell sweeps.
-	if x+radius < 0.5 || x-radius > float64(cfg.MapWidth)-0.5 || y+radius/2 < 0.5 || y-radius/2 > float64(cfg.MapHeight)-0.5 {
+	if x+radius < 0.5 || x-radius > float64(w)-0.5 || y+radius/2 < 0.5 || y-radius/2 > float64(h)-0.5 {
 		return
 	}
-	for cy := max(0, int(math.Ceil(y-radius/2-0.5))); cy <= min(cfg.MapHeight-1, int(math.Floor(y+radius/2-0.5))); cy++ {
-		for cx := max(0, int(math.Ceil(x-radius-0.5))); cx <= min(cfg.MapWidth-1, int(math.Floor(x+radius-0.5))); cx++ {
+	for cy := max(0, int(math.Ceil(y-radius/2-0.5))); cy <= min(h-1, int(math.Floor(y+radius/2-0.5))); cy++ {
+		row := s.grid[cy*w : (cy+1)*w]
+		for cx := max(0, int(math.Ceil(x-radius-0.5))); cx <= min(w-1, int(math.Floor(x+radius-0.5))); cx++ {
 			dx, dy := float64(cx)+0.5-x, (float64(cy)+0.5-y)*2
-			cell := vmath.Point{X: cx, Y: cy}
-			if dx*dx+dy*dy <= radius*radius && !s.seen[cell] {
-				s.seen[cell] = true
-				s.cells = append(s.cells, cell)
+			if dx*dx+dy*dy <= radius*radius && row[cx] == footNone {
+				row[cx] = footCovered
+				s.cells = append(s.cells, vmath.Point{X: cx, Y: cy})
 			}
 		}
 	}
 }
 
-func (s *KrakenSystem) interact(e core.Entity) {
+// interact clears what the footprint covers and strikes the cursors it touches
+func (s *KrakenSystem) interact() {
 	s.sweep.reset()
 	s.glyphs = s.glyphs[:0]
-	for _, cell := range s.cells {
-		s.sweep.collect(s.world, cell.X, cell.Y, func(target core.Entity) bool {
-			if !speciesClearable(s.world, target, nil, nil) {
+	clearable := func(target core.Entity) bool {
+		if !speciesClearable(s.world, target, nil, nil) {
+			return false
+		}
+		if s.world.Components.Nugget.HasEntity(target) {
+			s.world.PushLocal(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: target})
+			return true
+		}
+		if s.world.Components.Glyph.HasEntity(target) {
+			if target.Domain() == core.DomainPlayer {
+				s.glyphs = append(s.glyphs, target)
 				return false
 			}
-			if s.world.Components.Nugget.HasEntity(target) {
-				s.world.PushLocal(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: target})
-				return true
-			}
-			if s.world.Components.Glyph.HasEntity(target) {
-				if target.Domain() == core.DomainPlayer {
-					s.glyphs = append(s.glyphs, target)
-					return false
-				}
-				return true // Shared glyphs are gold members, regardless of character.
-			}
-			return false
-		})
+			return true // Shared glyphs are gold members, regardless of character.
+		}
+		return false
+	}
+	for _, cell := range s.cells {
+		s.sweep.collect(s.world, cell.X, cell.Y, clearable)
 	}
 	s.sweep.emit(s.world, event.EventFlashSpawnOneRequest)
 	event.EmitParticleDeath(s.world.Resources.Event.Queue, component.ParticleDecay, s.glyphs...)
-	overlaps := CheckCursorOverlaps(s.world, e)
-	for i := range overlaps.Count {
-		o := &overlaps.Entries[i]
-		if !s.world.SimulatesLocally(o.Cursor) {
+
+	damage := profile.Contact[component.SpeciesKraken]
+	for slot := range parameter.MaxPlayers {
+		cursor := s.world.Resources.Player.Slot(uint8(slot))
+		if cursor == 0 || !s.world.SimulatesLocally(cursor) {
 			continue
 		}
-		if len(o.ShieldMembers) > 0 {
-			s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{Entity: o.Cursor, Value: parameter.KrakenShieldDrain})
-		} else if o.OnCursor && !o.ShieldActive {
-			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Entity: o.Cursor, Delta: -parameter.KrakenDamageHeat})
+		if pos, ok := s.world.Positions.GetPosition(cursor); ok && s.touches(cursor, pos.X, pos.Y) {
+			strikeCursor(s.world, cursor, damage)
 		}
 	}
+}
+
+// touches reports contact as composites have it: an active shield wherever the
+// footprint enters its ellipse, a bare cursor only on a covered cell.
+func (s *KrakenSystem) touches(cursor core.Entity, x, y int) bool {
+	shield, ok := s.world.Components.Shield.GetPtr(cursor)
+	if !ok || !shield.Active {
+		return s.covers(x, y)
+	}
+	rx, ry := int(shield.RadiusX), int(shield.RadiusY)
+	for cy := y - ry; cy <= y+ry; cy++ {
+		for cx := x - rx; cx <= x+rx; cx++ {
+			if s.covers(cx, cy) && vmath.EllipseContainsPointF(cx, cy, x, y, shield.InvRxSq, shield.InvRySq) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *KrakenSystem) terminateAll() {
 	for _, e := range s.world.Components.Kraken.Entities() {
 		s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{HeaderEntity: e})
 	}
-}
-
-func (s *KrakenSystem) CopyState() any { return s.rng }
-
-func (s *KrakenSystem) RestoreState(v any) error {
-	s.rng = v.(vmath.FastRand)
-	return nil
 }
