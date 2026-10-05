@@ -35,7 +35,7 @@ var commandNames = []string{
 	"t", "telemetry", "hud", "d", "debug", "h", "help", "?", "about", "content", "energy", "heat",
 	"boost", "god", "demon", "blossom", "decay", "cleaner", "dust",
 	"sp", "speed", "st", "step",
-	"r", "region",
+	"r", "region", "replay",
 	"host", "join", "session", "bot", "player", "g", "config", "journal",
 }
 
@@ -54,6 +54,9 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 	parts := strings.Fields(command)
 	cmd := parts[0]
 	args := parts[1:]
+	if cmd == "r" && ctx.ReplaySeek != nil {
+		cmd = "replay" // a replay's regions are the recording's, so :r is the replay's own
+	}
 
 	if reason := commandUnavailable(ctx, cmd); reason != "" {
 		setCommandError(ctx, reason+": :"+cmd)
@@ -100,6 +103,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleHelpCommand(ctx)
 	case "r", "region":
 		return handleRegionCommand(ctx, args)
+	case "replay":
+		return handleReplayCommand(ctx, args)
 	case "about":
 		return handleAboutCommand(ctx)
 	case "content":
@@ -142,10 +147,13 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 
 // The menu and command line share the same session and replay policy.
 func commandUnavailable(ctx *engine.GameContext, cmd string) string {
+	if cmd == "replay" && ctx.ReplaySeek == nil {
+		return "Only in a replay"
+	}
 	// A replay's viewer inspects a world the recording authors
 	if ctx.Viewer.Load() {
 		switch cmd {
-		case "g", "config", "h", "help", "?", "about", "t", "telemetry", "hud", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit":
+		case "g", "config", "h", "help", "?", "about", "t", "telemetry", "hud", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit", "replay":
 		default:
 			return "Unavailable in a replay"
 		}
@@ -1235,6 +1243,52 @@ func parseStepCond(p *event.GameStepPayload, args []string) bool {
 func stepUsage(ctx *engine.GameContext) CommandResult {
 	setCommandError(ctx, "Usage: :step [n] | :step [rate] fsm [region] [pause] | :step [rate] ev <Event> [pause] | :step off")
 	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// handleReplayCommand moves a replay to its start, or to a tick of the run it
+// shows, named directly or as game time at 1x.
+func handleReplayCommand(ctx *engine.GameContext, args []string) CommandResult {
+	const usage = "Usage: :replay restart | tick <n> | time <[[h:]m:]s>"
+	switch {
+	case len(args) == 1 && args[0] == "restart":
+		ctx.ReplaySeek(0, true)
+	case len(args) == 2 && args[0] == "tick":
+		n, err := strconv.ParseUint(args[1], 10, 64)
+		if err != nil {
+			setCommandError(ctx, usage)
+			break
+		}
+		ctx.ReplaySeek(n, false)
+	case len(args) == 2 && args[0] == "time":
+		at, ok := parseClock(args[1])
+		if !ok {
+			setCommandError(ctx, usage)
+			break
+		}
+		ctx.ReplaySeek(uint64((at+parameter.GameUpdateInterval/2)/parameter.GameUpdateInterval), false)
+	default:
+		setCommandError(ctx, usage)
+	}
+	return CommandResult{Continue: true}
+}
+
+// parseClock reads seconds, m:s or h:m:s; only the seconds take a fraction, and
+// a field after the first stays under 60.
+func parseClock(s string) (time.Duration, bool) {
+	fields := strings.Split(s, ":")
+	if len(fields) > 3 {
+		return 0, false
+	}
+	var secs float64
+	for i, f := range fields {
+		v, err := strconv.ParseFloat(f, 64)
+		last := i == len(fields)-1
+		if err != nil || !(v >= 0 && v < 1e9) || !last && v != float64(int64(v)) || i > 0 && v >= 60 {
+			return 0, false
+		}
+		secs = secs*60 + v
+	}
+	return time.Duration(secs * float64(time.Second)), true
 }
 
 // handleRegionCommand controls FSM regions for debugging.

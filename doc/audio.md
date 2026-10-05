@@ -38,7 +38,9 @@ payloads retain compatible identifiers through the small `pkg/audio/model`
 package. Replay rebuilds simulation from recorded events, including sound
 requests; the journal carries no mute state, so `-mute`, `-ab` and `-mw` are the
 viewer's. The viewer's pause holds the mixer, as the game's pause does, and so
-does the end of the stream: its sound fades and stays faded.
+do a seek and the end of the stream. A copy that takes over to go back keeps the
+speakers and the conductor's state, since the engine does not rewind
+(`system.HandOverSound`).
 
 ## 2. Stream contract
 

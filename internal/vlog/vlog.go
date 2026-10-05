@@ -340,11 +340,24 @@ func Shutdown(timeout time.Duration) {
 	}
 }
 
+// muted counts Mute holders; while any holds it, records below error are dropped.
+var muted atomic.Int32
+
+// Mute withholds records below error until release runs: a replay's copies replay
+// ticks the log already holds. The caller keeps every other producer still meanwhile.
+func Mute() (release func()) {
+	muted.Add(1)
+	return func() { muted.Add(-1) }
+}
+
+// audible reports whether a record at level escapes Mute.
+func audible(level int64) bool { return level >= LevelError || muted.Load() == 0 }
+
 // E reports whether a record at level would be written, ignoring scope.
 // Prefer On at scoped call sites.
 func E(level int64) bool {
 	l := sink.Load()
-	return l != nil && l.Enabled(level)
+	return l != nil && l.Enabled(level) && audible(level)
 }
 
 // On reports whether a record with this sub and level would be written.
@@ -352,7 +365,7 @@ func E(level int64) bool {
 // and escapes to the heap.
 func On(sub string, level int64) bool {
 	l := sink.Load()
-	return l != nil && l.Enabled(level) && scopeEnabled(sub)
+	return l != nil && l.Enabled(level) && scopeEnabled(sub) && audible(level)
 }
 
 func Debug(sub string, args ...any) { emit(sub, LevelDebug, args) }
@@ -364,7 +377,7 @@ func Error(sub string, args ...any) { emit(sub, LevelError, args) }
 // Scopes filter noise, not failures: error and above always emit
 func emit(sub string, level int64, args []any) {
 	l := sink.Load()
-	if l == nil || !l.Enabled(level) {
+	if l == nil || !l.Enabled(level) || !audible(level) {
 		return
 	}
 	if level < LevelError && !scopeEnabled(sub) {
@@ -377,7 +390,7 @@ func emit(sub string, level int64, args []any) {
 // Depth is raised by one to cover this wrapper, which appears as the innermost trace entry.
 func Trace(sub string, level int64, depth int, args ...any) {
 	l := sink.Load()
-	if l == nil || !l.Enabled(level) {
+	if l == nil || !l.Enabled(level) || !audible(level) {
 		return
 	}
 	if level < LevelError && !scopeEnabled(sub) {
