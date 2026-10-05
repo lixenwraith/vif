@@ -42,8 +42,8 @@ const (
 	// CombatDamageBullet is damage per turret bullet hit
 	CombatDamageBullet = 1
 
-	// CombatDamageBeam is damage per member a beam covers, times its charges
-	CombatDamageBeam = 1
+	// CombatDamageRay is damage per member a ray covers, times its charges
+	CombatDamageRay = 1
 )
 
 // Timers
@@ -152,9 +152,9 @@ const (
 	HostedTurretEnergy = 100
 	HostedTurretHeat   = 10
 
-	HostedBeamRange  = 40.0 // an aiming beam's reach to its cursor; a beam runs to the first wall
-	HostedBeamEnergy = 250  // per strike, every BeamHitInterval inside a firing beam
-	HostedBeamHeat   = 5
+	HostedEmitterRange  = 40.0 // an aiming beam's reach to its cursor; a beam runs to the first wall
+	HostedEmitterEnergy = 250  // per strike, every BeamHitInterval inside a firing beam
+	HostedEmitterHeat   = 5
 
 	// MissileHostedMaxSpeed keeps a mounted launcher's missile outrunnable (cells/sec)
 	MissileHostedMaxSpeed = 40.0

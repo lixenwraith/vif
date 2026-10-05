@@ -190,7 +190,7 @@ the effect's current name; death API unification removed the two obsolete
 | `combat.damage_defender_storm` (int) | Damage points dealt to defenders of type storm. |
 | `combat.damage_defender_swarm` (int) | Damage points dealt to defenders of type swarm. |
 | `combat.damage_defender_tower` (int) | Damage points dealt to defenders of type tower. |
-| `combat.damage_family_<family>` (int) | Damage points dealt by one attack family (projectile, shield, lightning, explosion, missile, pulse, self_destruct, bullet, beam): how a weapon reads. |
+| `combat.damage_family_<family>` (int) | Damage points dealt by one attack family (projectile, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray): how a weapon reads. |
 | `combat.disabled_rejects` (int) | Action requests dropped while the combat system was disabled. |
 | `combat.effect_kinetic` (int) | Kinetic effect applications that resolved to an impulse. |
 | `combat.effect_stun` (int) | Stun effect applications that changed target state. |

@@ -703,7 +703,7 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 			fired = s.firePulse(cursor, x, y, spec.Attack)
 		case component.DeliveryBullet:
 			fired = s.fireBullets(cursor, x, y, spec.Attack, assignments)
-		case component.DeliveryBeam:
+		case component.DeliveryRay:
 			fired = len(assignments) > 0 && s.fireBeam(cursor, orbs[wt], charges)
 		}
 		if !fired {

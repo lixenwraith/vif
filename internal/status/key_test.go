@@ -12,7 +12,7 @@ func TestSplitKeyUsesBoundedSemanticGroups(t *testing.T) {
 		{"adapt.buf_pending_deaths_hwm", "adapt.buffers", "pending_deaths_hwm"},
 		{"combat.absorbed_attacker_cursor", "combat.absorbed.attacker", "cursor"},
 		{"combat.damage_defender_drain", "combat.damage.defender", "drain"},
-		{"combat.damage_family_beam", "combat.damage.family", "beam"},
+		{"combat.damage_family_ray", "combat.damage.family", "ray"},
 		{"combat.chain_depth_max", "combat.chain", "depth_max"},
 		{"combat.effect_stun", "combat.effects", "stun"},
 		{"combat.immune_rejects", "combat.rejects", "immune"},

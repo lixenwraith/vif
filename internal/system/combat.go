@@ -73,7 +73,7 @@ var combatAttackNames = [component.CombatAttackTypeCount]string{
 	component.CombatAttackPulse:        "pulse",
 	component.CombatAttackSelfDestruct: "self_destruct",
 	component.CombatAttackBullet:       "bullet",
-	component.CombatAttackBeam:         "beam",
+	component.CombatAttackRay:          "ray",
 }
 
 var combatEntityNames = [component.CombatEntityCount]string{
