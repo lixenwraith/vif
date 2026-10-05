@@ -29,13 +29,13 @@ _vif() {
 	-seed) ;;
 	-speed) ;;
 	-script) compopt -o default ;;
-	-replay) compopt -o default ;;
+	-r|-replay) compopt -o default ;;
 	-lv|-log-level) ;;
 	-ls|-log-scope) ;;
 	-lt|-log-stat) ;;
 	-lr|-log-recorder) ;;
 	-log-session-id) ;;
-	*) mapfile -t COMPREPLY < <(compgen -W '-host -serve -join -name -players -bot -bots -authority -slow-window -slow-late -slow-bytes -listen -no-advertise -size -probe -first-join -empty -drain -d -config-embedded -config-dir -s -config-scenario -f -config-content -k -config-keymap -config-music -config-sounds -color -mute -ab -audio-backend -seed -speed -script -headless -watch -replay -check -schema -l -log -lv -log-level -ls -log-scope -lt -log-stat -lr -log-recorder -log-session-id -log-stdout -j -journal -mw -music-wav -dev -h -help -version' -- "$cur") ;;
+	*) mapfile -t COMPREPLY < <(compgen -W '-host -serve -join -name -players -bot -bots -authority -slow-window -slow-late -slow-bytes -listen -no-advertise -size -probe -first-join -empty -drain -d -config-embedded -config-dir -s -config-scenario -f -config-content -k -config-keymap -config-music -config-sounds -color -mute -ab -audio-backend -seed -speed -script -headless -watch -r -replay -check -schema -l -log -lv -log-level -ls -log-scope -lt -log-stat -lr -log-recorder -log-session-id -log-stdout -j -journal -mw -music-wav -dev -h -help -version' -- "$cur") ;;
 	esac
 }
 complete -F _vif vif

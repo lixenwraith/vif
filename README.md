@@ -125,7 +125,7 @@ settings explain why. Rebind the `config_menu` action in the keymap.
 - `-version` prints the module version and commit a package should report.
 - `-seed <n>` selects the root RNG seed and `-speed <rate>` selects an exact
   startup rate from `1/8` through `8`.
-- `-j[=DIR]` records replay input to a dedicated journal; `-replay <file>`
+- `-j[=DIR]` records replay input to a dedicated journal; `-r <file>`
   presents a journal on the terminal with fixed playback controls.
 - `-script <file>` runs a bounded authored TOML input/event schedule headlessly;
   it can be combined with `-host` or `-join` for repeatable two-process runs.
