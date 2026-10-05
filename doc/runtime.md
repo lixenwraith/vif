@@ -445,9 +445,10 @@ playback, as the game's does, and hands the recorded mode and pause back when it
 closes; a command that would change the recording is refused.
 
 A world cannot be rewound, so `,` builds a second replay App on the viewer's
-terminal, with no speakers, and replays the stream from its start through the
+terminal, without speakers, and replays the stream from its start through the
 last step that left the presented one before its tick, off the frame loop; the
-viewer moves to it with its HUD pins, and playback continues silent. The first
+viewer moves to it with its HUD pins and the speakers, whose engine plays on while
+the gates the copy replayed decide what sounds. The first
 press costs the time to reach that tick headless. After it a second copy waits
 `parameter.ReplayBackLead` steps behind, so the next press replays only that far,
 and presses during a rebuild move its target rather than queue. The terminal is

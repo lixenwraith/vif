@@ -17,6 +17,7 @@ import (
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/system"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
@@ -434,8 +435,8 @@ func (p *player) rebuildDone() <-chan error {
 }
 
 // rebuilt presents a copy that reached the step back's target, carrying the
-// viewer's HUD over so the telemetry it watches continues from the rebuilt tick,
-// and parks a fresh copy a lead behind it for the next press.
+// viewer's HUD and speakers over so they continue from the rebuilt tick, and parks
+// a fresh copy a lead behind it for the next press.
 func (p *player) rebuilt(err error) {
 	r := p.re
 	p.re = nil
@@ -460,11 +461,13 @@ func (p *player) rebuilt(err error) {
 	if r.w != p.termW || r.h != p.termH {
 		twin.orchestrator.Resize(p.termW, p.termH) // a full repaint; only for a size it was not built for
 	}
+	system.HandOverSound(twin.world, old.world)
 	p.a, p.src, p.trail = twin, r.src, p.trail[:p.want]
 	p.done, p.err, p.step, p.budget, p.paused, p.backing = false, nil, 0, 0, true, false
 	if old.cfg.borrow != nil {
 		old.Close()
 	}
+	p.holdMixer()
 	p.report()
 	p.re = p.startRebuild(max(0, p.want-parameter.ReplayBackLead), false)
 }
