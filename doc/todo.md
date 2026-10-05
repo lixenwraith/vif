@@ -412,6 +412,20 @@ The framebuffer console shows a bright background under SGR 5, which vgacon blin
 
 Its diagonal arrows and `◆●` are missing from console fonts, so in 256 colours the view shows their fallbacks.
 
+## Replay
+
+### Step a replay back past its trailing copies
+
+- Priority: P2
+- Affected files: `internal/app/play.go`, `internal/engine`, `internal/snapshot`
+
+`,` presents the `parameter.ReplayBackSpares` copies trailing a replay at once; each
+tick further back waits for a copy replaying from the stream's start, about 0.75 ms a
+tick at four players, 63% of it `FlowField.Compute`. Replaying from a checkpoint
+instead needs a whole-world clone: the player domain, each system's private state,
+the queue and the replay cursor, which a shared capture leaves out. Copies also log
+the ticks they replay, since vlog has no per-world gate.
+
 ## Fleet logging
 
 ### Repin LogWisp past the fleet stream fixes
