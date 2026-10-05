@@ -462,21 +462,3 @@ seat or replay copy wrote a record, and a scope selects little:
 
 Settle one table of subs, scopes and levels with message and field rules, check
 that hot sites guard with `vlog.On`, then bring every call site to it.
-
-## Fleet logging
-
-### Repin LogWisp past the fleet stream fixes
-
-- Priority: P1
-- Affected files: `deploy/logwisp/REVISION`
-- Prerequisite: the quiet-stream keepalive and the rotated-file resume reaching
-  LogWisp `main`, which the installer requires the pin to descend from
-
-`REVISION` names v0.18.1, which predates both. Until it moves, a vacant node still
-idle-expires a connected viewer and evicts it on the next session's first record,
-and a session crossing the 8 MiB file cap still replays its rotated log whole,
-spending the rate limit on duplicates while live records drop.
-[Deploying the session fleet](kube-docker-deploy.md) §10 states what the pin must
-carry.
-the queue and the replay cursor, which a shared capture leaves out. Copies also log
-the ticks they replay, since vlog has no per-world gate.
