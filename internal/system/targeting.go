@@ -142,47 +142,50 @@ func FindTargetsIn(w *engine.World, contains func(x, y int) bool, scope engine.D
 	}
 
 	// 2. Composite members — covers Unit hitbox members and Ablative combat members.
-	// Container children are filtered by header type check.
 	// Members share their header's domain by construction, so filtering here covers both.
-	for _, memberEntity := range w.Components.Member.Entities() {
-		if !scope.Selects(memberEntity) {
-			continue
-		}
-		memberComp, ok := w.Components.Member.GetPtr(memberEntity)
-		if !ok {
-			continue
-		}
+	headers := headerFilter{owner: ownerEntity}
+	w.Components.Member.Each(func(memberEntity core.Entity, memberComp *component.MemberComponent) bool {
 		headerEntity := memberComp.HeaderEntity
-		headerComp, ok := w.Components.Header.GetPtr(headerEntity)
-		if !ok || headerComp.Type == component.CompositeTypeContainer {
-			continue
-		}
-		if !w.Components.Combat.HasEntity(headerEntity) {
-			continue
-		}
-		if isCursorOrOwnedOrb(w, headerEntity) {
-			continue
-		}
-		if isOwnedBy(w, headerEntity, ownerEntity) {
-			continue
+		if !scope.Selects(memberEntity) || !headers.targets(w, headerEntity) {
+			return true
 		}
 		x, y, ok := targetCell(w, memberEntity)
 		if !ok || !contains(x, y) {
-			continue
+			return true
 		}
 
 		if i, exists := index[headerEntity]; exists {
 			result[i].Members = append(result[i].Members, memberEntity)
-			continue
+			return true
 		}
 		index[headerEntity] = len(result)
 		result = append(result, TargetGroup{
 			Target:  headerEntity,
 			Members: []core.Entity{memberEntity},
 		})
-	}
+		return true
+	})
 
 	return result
+}
+
+// headerFilter answers whether a composite's members are hits for an owner's weapons.
+// The answer is per header, and a header's members mostly sit together in the member
+// store, so it is held across a run of them rather than looked up per member.
+type headerFilter struct {
+	owner, last core.Entity
+	valid       bool
+}
+
+func (f *headerFilter) targets(w *engine.World, header core.Entity) bool {
+	if header != f.last {
+		f.last = header
+		headerComp, ok := w.Components.Header.GetPtr(header)
+		f.valid = ok && headerComp.Type != component.CompositeTypeContainer &&
+			w.Components.Combat.HasEntity(header) &&
+			!isCursorOrOwnedOrb(w, header) && !isOwnedBy(w, header, f.owner)
+	}
+	return f.valid
 }
 
 // Nearest targets prioritize composites, then singles, excluding owner-owned entities.
@@ -220,31 +223,15 @@ func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, scope 
 	}
 
 	// 2. Composite members — closest member per header
-	for _, memberEntity := range w.Components.Member.Entities() {
-		if !scope.Selects(memberEntity) {
-			continue
-		}
-		memberComp, ok := w.Components.Member.GetPtr(memberEntity)
-		if !ok {
-			continue
-		}
+	headers := headerFilter{owner: ownerEntity}
+	w.Components.Member.Each(func(memberEntity core.Entity, memberComp *component.MemberComponent) bool {
 		headerEntity := memberComp.HeaderEntity
-		headerComp, ok := w.Components.Header.GetPtr(headerEntity)
-		if !ok || headerComp.Type == component.CompositeTypeContainer {
-			continue
-		}
-		if !w.Components.Combat.HasEntity(headerEntity) {
-			continue
-		}
-		if isCursorOrOwnedOrb(w, headerEntity) {
-			continue
-		}
-		if isOwnedBy(w, headerEntity, ownerEntity) {
-			continue
+		if !scope.Selects(memberEntity) || !headers.targets(w, headerEntity) {
+			return true
 		}
 		x, y, ok := targetCell(w, memberEntity)
 		if !ok {
-			continue
+			return true
 		}
 		px, py := vmath.Point{X: x, Y: y}.CenterF()
 		distSq := vmath.MagnitudeSqF(px-fromX, py-fromY)
@@ -254,7 +241,7 @@ func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, scope 
 				composites[i].Hit = memberEntity
 				composites[i].DistSq = distSq
 			}
-			continue
+			return true
 		}
 		compositeIdx[headerEntity] = len(composites)
 		composites = append(composites, TargetAssignment{
@@ -262,7 +249,8 @@ func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, scope 
 			Hit:    memberEntity,
 			DistSq: distSq,
 		})
-	}
+		return true
+	})
 
 	byDist := func(a, b TargetAssignment) int {
 		if a.DistSq < b.DistSq {
