@@ -444,16 +444,15 @@ view's centre, and scroll stops at the map's edges. The command line pauses
 playback, as the game's does, and hands the recorded mode and pause back when it
 closes; a command that would change the recording is refused.
 
-A world cannot be rewound, so `,` builds a second replay App on the viewer's
-terminal, without speakers, and replays the stream from its start through the
-last step that left the presented one before its tick, off the frame loop; the
-viewer moves to it with its HUD pins and the speakers, whose engine plays on while
-the gates the copy replayed decide what sounds. The first
-press costs the time to reach that tick headless. After it a second copy waits
-`parameter.ReplayBackLead` steps behind, so the next press replays only that far,
-and presses during a rebuild move its target rather than queue. The terminal is
-not repainted whole: the copy draws into the same cells. Log snapshots are
-withheld while a copy catches up, so the log does not restate ticks.
+A world cannot be rewound, so `,` presents another copy of the run.
+`parameter.ReplayBackSpares` replay Apps on the viewer's terminal trail the
+presented one a tick apart, each replaying the stream off the frame loop, on all
+cores but one, and parking at its tick. Each press is one tick a frame presents, as
+`.` is: the nearest copy takes over with the HUD pins and the speakers, whose engine
+plays on while the gates the copy replayed decide what sounds. A replacement starts
+from the stream's start at the far end, so a press past the trailing copies waits
+for that replay. The copy draws into the same cells rather than repainting the
+terminal, and withholds log snapshots while it catches up.
 
 ### Authored headless scripts
 
