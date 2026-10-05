@@ -495,13 +495,15 @@ func (p *player) checkpoint() {
 	}
 }
 
-// closer reports a checkpoint between where a copy stands and its target, from
-// which a fresh copy arrives sooner than this one replays there.
+// closer reports a checkpoint far enough past where a copy stands, short of its
+// target, that a fresh copy restored from it arrives sooner. A fresh copy is built
+// on the frame loop, so one inside the ladder's depth is not: the ladder crosses
+// every checkpoint the presented run passes, and rebuilding it there stalled 1x.
 func (p *player) closer(r *rebuilt, target int) bool {
 	c := p.nearest(target)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return c != nil && c.steps > r.at
+	return c != nil && c.steps > r.at+parameter.ReplayBackSpares
 }
 
 // nearest is the latest checkpoint at or before step count target, nil when none.
