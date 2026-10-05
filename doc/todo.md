@@ -478,3 +478,5 @@ and a session crossing the 8 MiB file cap still replays its rotated log whole,
 spending the rate limit on duplicates while live records drop.
 [Deploying the session fleet](kube-docker-deploy.md) §10 states what the pin must
 carry.
+the queue and the replay cursor, which a shared capture leaves out. Copies also log
+the ticks they replay, since vlog has no per-world gate.

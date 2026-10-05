@@ -1,15 +1,14 @@
 #!/bin/sh
-# Build the pinned LogWisp revision, install its standalone host service, and
-# initialize it. Run from any directory; an existing checkout is optional.
+# Build LogWisp at REVISION or upstream main's head, install its standalone host
+# service, and initialize it. Run from any directory.
 #
-#   ./deploy/guest/install-logwisp.sh
-#   ./deploy/guest/install-logwisp.sh /path/to/logwisp
+#   ./deploy/guest/install-logwisp.sh [REVISION]
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
-case ${1:-} in -h|--help) sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;; esac
-[ "$#" -le 1 ] || { echo "usage: $0 [LOGWISP_CHECKOUT]" >&2; exit 2; }
+case ${1:-} in -h|--help) sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;; esac
+[ "$#" -le 1 ] || { echo "usage: $0 [REVISION]" >&2; exit 2; }
 
 config_file=$repo_root/deploy/logwisp/aggregator.toml
 sysusers_file=$repo_root/deploy/guest/logwisp.sysusers
@@ -47,7 +46,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-if [ "$#" -eq 1 ]; then "$builder" "$stage_root/logwisp" "$1"; else "$builder" "$stage_root/logwisp"; fi
+"$builder" "$stage_root/logwisp" "$@"
 
 sudo install -o root -g root -m 0755 "$stage_root/logwisp" /usr/local/bin/logwisp
 sudo install -D -o root -g root -m 0644 "$sysusers_file" /etc/sysusers.d/logwisp.conf
