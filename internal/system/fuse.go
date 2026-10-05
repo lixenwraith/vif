@@ -191,7 +191,7 @@ func (s *FuseSystem) effectSpiritArea(sources []vmath.Point, area vmath.Area, c 
 }
 
 // effectMaterialize is presentation for the elected participant. FuseSystem's own
-// timer gates the later shared spawn crossing; the ray must not create a shared
+// timer gates the later shared spawn crossing; the beam must not create a shared
 // entity that exists only on the elected producer.
 func (s *FuseSystem) effectMaterialize(area vmath.Area) {
 	s.world.PushLocal(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{

@@ -204,7 +204,7 @@ a call before the plan is written.
   (`pendingBlueSpawns`) and drain (`pendingSpawns`) each defer a spawn behind a
   materialize. Drain completes on `EventMaterializeComplete`. Fuse and storm run
   their own timer of the same length; fuse does this deliberately, because its
-  ray is local presentation and its spawn is a shared crossing. Fuse and storm
+  beam is local presentation and its spawn is a shared crossing. Fuse and storm
   swap-remove while iterating in reverse, so same-tick emission order depends on
   slice history (deterministic, but fragile). The storm's clock agrees with the
   materialize's float progress only because 20 × 0.05 rounds up past 1.0.

@@ -781,7 +781,7 @@ type FuseEffect int
 const (
 	FuseEffectNone        FuseEffect = iota
 	FuseEffectSpirit                 // Converging spirit trails
-	FuseEffectMaterialize            // Reverse ray convergence
+	FuseEffectMaterialize            // Reverse beam convergence
 )
 
 // FuseSwarmRequestPayload contains the two drains to fuse
