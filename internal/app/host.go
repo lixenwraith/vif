@@ -16,7 +16,6 @@ import (
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/status"
-	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // The router already holds the world lock when calling this adapter.
@@ -161,7 +160,7 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 		port.Broadcast(uint8(network.MsgSessionRestart), []byte(req.Host))
 	}
 	a.restart.Store(req)
-	vlog.Info("app", "msg", "scenario change requested",
+	a.log.Info("app", "msg", "scenario change requested",
 		"scenario", sc.Name, "digest", sc.Short(), "host", req.Host)
 	return true, nil
 }
@@ -173,7 +172,7 @@ func (a *App) receiveSessionRestart(from uint32, addr string) {
 		return // a coordinator hears its own broadcast back on a mesh; a driven run has no loop
 	}
 	if a.restart.CompareAndSwap(nil, &restartRequest{Rejoin: true, Join: addr, Bots: a.seatGraphs()}) {
-		vlog.Info("app", "msg", "session restarting", "authority", from, "dial", addr)
+		a.log.Info("session", "msg", "session restarting", "authority", from, "dial", addr)
 	}
 }
 
@@ -216,7 +215,7 @@ func (a *App) joinSessionLocked(target string, players int, scenario string) err
 		return errors.New("a join is already being dialled")
 	}
 	a.ctx.SetStatusMessage("Joining "+target+"...", 0, true)
-	vlog.Info("app", "msg", "join requested", "target", target)
+	a.log.Info("session", "msg", "join requested", "target", target)
 	core.Go(func() {
 		defer a.dialling.Store(false)
 		link, err := target, error(nil)
@@ -234,7 +233,7 @@ func (a *App) joinSessionLocked(target string, players int, scenario string) err
 		}
 		switch {
 		case err != nil:
-			vlog.Warn("app", "msg", "join failed; playing on", "target", target, "error", err.Error())
+			a.log.Warn("session", "msg", "join failed; playing on", "target", target, "error", err.Error())
 			a.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusMessageMaxDuration, true)
 		case !a.restart.CompareAndSwap(nil, &restartRequest{Join: link, dialled: d}):
 			d.abandon(errors.New("the run that dialled is being replaced"))
@@ -378,7 +377,7 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	if b := port.Addr(); b != nil {
 		bound = b.String()
 	}
-	vlog.Info("app", "msg", "hosting opened mid-run",
+	a.log.Info("session", "msg", "hosting opened mid-run",
 		"address", bound, "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
 	a.ctx.SetStatusMessage("Hosting on "+bound, 0, false)
 	return nil
@@ -519,7 +518,7 @@ func (a *App) releaseMidRunJoiner(id network.PeerID) {
 		return
 	}
 	if err := a.sendMidRunGate(port, id); err != nil {
-		vlog.Warn("app", "msg", "mid-run join failed", "peer", id, "error", err.Error())
+		a.log.Warn("session", "msg", "mid-run join failed", "peer", id, "error", err.Error())
 		// The stream is already a peer by the time this runs, so refusing the join
 		// means dropping it: a participant holding a handshake it could not finish
 		// would otherwise stay in the session receiving crossings for a world it
@@ -581,7 +580,7 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 
 	assignment, _ := offer.Entry(id)
 	a.crossParticipantArrival(id, assignment.Slot)
-	vlog.Info("app", "msg", "mid-run participant admitted",
+	a.log.Info("session", "msg", "mid-run participant admitted",
 		"peer", id, "slot", assignment.Slot, "snapshot_tick", tick, "bytes", len(body))
 	return nil
 }
@@ -717,7 +716,7 @@ func (a *App) awaitSessionTick(local uint64) uint64 {
 func (a *App) finishCatchUp(held []*network.Message, caught uint64) error {
 	remaining := a.sessionLagTicks()
 	a.reportJoinLag(remaining)
-	vlog.Info("app", "msg", "join caught up", "held_frames", len(held),
+	a.log.Info("session", "msg", "join caught up", "held_frames", len(held),
 		"caught_up_ticks", caught, "tick", a.Position().Tick, "lag_ticks", remaining)
 	a.telemetry.CatchUp.Store(int64(caught))
 	if remaining > parameter.NetworkJoinLagTicks {

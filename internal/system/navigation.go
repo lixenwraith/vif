@@ -53,7 +53,7 @@ type NavigationSystem struct {
 	statROICells   *atomic.Int64
 	buffers        bufferTelemetry
 
-	enabled bool
+	toggle
 }
 
 func NewNavigationSystem(world *engine.World) engine.System {
@@ -1155,4 +1155,50 @@ func (s *NavigationSystem) restoreField(c *navigation.FlowFieldCache, at uint64,
 	}
 	c.Rebuild(isBlocked)
 	return s.grid
+}
+
+type navState struct {
+	groups            map[uint8]targetGroupNav
+	passability       *navigation.CompositePassability
+	walls, seenWalls  []bool
+	grid              uint64
+	targets           [component.MaxTargetGroups + parameter.MaxPlayers]engine.TargetGroupState
+	routeRebuildTicks int
+	graphs            map[uint32]*navigation.RouteGraph
+}
+
+// CopyState carries every field and route a copy would otherwise rebuild, and the
+// phase each was rebuilt in, which LoadShared re-derives as a joiner would.
+func (s *NavigationSystem) CopyState() any {
+	c := navState{groups: make(map[uint8]targetGroupNav, len(s.groups)), walls: slices.Clone(s.walls),
+		seenWalls: slices.Clone(s.seenWalls), grid: s.grid, targets: s.targets, routeRebuildTicks: s.routeRebuildTicks,
+		graphs: s.world.Resources.RouteGraph.Graphs()}
+	if s.compositePassability != nil {
+		c.passability = s.compositePassability.Clone()
+	}
+	for id, g := range s.groups {
+		c.groups[id] = targetGroupNav{pointFlowCache: g.pointFlowCache.Clone(), compositeFlowCache: g.compositeFlowCache.Clone(),
+			pointAt: g.pointAt, compositeAt: g.compositeAt}
+	}
+	return c
+}
+
+func (s *NavigationSystem) RestoreState(v any) error {
+	c := v.(navState)
+	clear(s.groups)
+	for id, g := range c.groups {
+		s.groups[id] = &targetGroupNav{pointFlowCache: g.pointFlowCache.Clone(), compositeFlowCache: g.compositeFlowCache.Clone(),
+			pointAt: g.pointAt, compositeAt: g.compositeAt}
+	}
+	s.compositePassability = nil
+	if c.passability != nil {
+		s.compositePassability = c.passability.Clone()
+	}
+	if dbg := s.world.Resources.NavigationDebug; dbg != nil {
+		dbg.CompositePassability = s.compositePassability
+	}
+	s.walls, s.seenWalls, s.grid = slices.Clone(c.walls), slices.Clone(c.seenWalls), c.grid
+	s.targets, s.routeRebuildTicks = c.targets, c.routeRebuildTicks
+	s.world.Resources.RouteGraph.SetGraphs(c.graphs)
+	return nil
 }

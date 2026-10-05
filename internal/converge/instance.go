@@ -71,6 +71,7 @@ func New(inst Instance, tel snapshot.Telemetry, reg *status.Registry) (*Correcti
 	c := newCorrections(inst, tel)
 	u := newAuthority(inst, tel, reg)
 	r := newReach(inst, reg)
+	c.log, u.log, r.log = reg.Log(), reg.Log(), reg.Log()
 	c.authority = u
 	u.corrections, u.reach = c, r
 	r.authority = u

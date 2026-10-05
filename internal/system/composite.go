@@ -15,8 +15,8 @@ import (
 // - Liveness validation and tombstone marking
 // - Lazy compaction of dead members
 type CompositeSystem struct {
-	world   *engine.World
-	enabled bool
+	world *engine.World
+	toggle
 }
 
 // NewCompositeSystem creates a new composite system

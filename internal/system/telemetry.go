@@ -20,6 +20,13 @@ func eachRosterSlot(w *engine.World, fn func(slot uint8, cursor core.Entity)) {
 	}
 }
 
+// toggle is a system's FSM-driven enable flag. An entry action sets it, so a world
+// restored at an FSM position does not re-derive it and a replay copy carries it.
+type toggle struct{ enabled bool }
+
+func (t *toggle) Enabled() bool      { return t.enabled }
+func (t *toggle) SetEnabled(on bool) { t.enabled = on }
+
 // bufferTelemetry tracks the largest live length reached by reusable buffers.
 // Names are stable field names so capacity changes can be compared across runs.
 type bufferTelemetry struct {

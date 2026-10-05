@@ -83,7 +83,7 @@ type GameContext struct {
 	TimeCtl *TimeControl // Sole time surface: reads, rate, pause, step; registry-bound
 
 	KeyTable        *input.KeyTable
-	Correlation     *vlog.Correlation
+	Log             *vlog.Log
 	NavigationDebug NavigationDebugState
 
 	// === Channels ===
@@ -185,21 +185,21 @@ type GameContext struct {
 
 // NewGameContext creates a GameContext on the interactive clock
 func NewGameContext(world *World, width, height int) *GameContext {
-	return newGameContext(world, width, height, NewPausableClock(), vlog.DefaultCorrelation())
+	return newGameContext(world, width, height, NewPausableClock(), vlog.Default())
 }
 
 // NewGameContextWithClock creates a GameContext on a caller-supplied time source.
 // Headless and replay runs pass a ManualClock.
 func NewGameContextWithClock(world *World, width, height int, clock Clock) *GameContext {
-	return newGameContext(world, width, height, clock, vlog.NewCorrelation())
+	return newGameContext(world, width, height, clock, vlog.NewLog(""))
 }
 
-func newGameContext(world *World, width, height int, clock Clock, corr *vlog.Correlation) *GameContext {
+func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log) *GameContext {
 	ctx := &GameContext{
-		World:       world,
-		Width:       width,
-		Height:      height,
-		Correlation: corr,
+		World:  world,
+		Width:  width,
+		Height: height,
+		Log:    log,
 	}
 
 	// Calculate game area
@@ -210,7 +210,7 @@ func newGameContext(world *World, width, height int, clock Clock, corr *vlog.Cor
 
 	// 1. Status Registry (before other resources that may use it)
 	world.Resources.Status = status.NewRegistry()
-	world.Resources.Status.SetCorrelation(corr)
+	world.Resources.Status.SetLog(log)
 	world.Resources.Status.SetSnapshotInterval(parameter.StatSnapshotTicks)
 	world.updateMutex.BindStatus(world.Resources.Status)
 	world.Positions.BindTelemetry(world.Resources.Status)
@@ -360,7 +360,7 @@ func (ctx *GameContext) HandleResizeLocked() {
 		config.CameraY = 0
 	} else {
 		if config.CropOnResize {
-			vlog.Info("app", "msg", "map size locked",
+			ctx.Log.Info("app", "msg", "map size locked",
 				"map_w", config.MapWidth, "map_h", config.MapHeight,
 				"viewport_w", viewportWidth, "viewport_h", viewportHeight)
 		}
@@ -685,12 +685,22 @@ func (ctx *GameContext) SetMode(m core.GameMode) {
 	}
 }
 
+// BindLog makes l the handle this context's world writes through, for a runtime
+// whose log is not the one its clock implies. Call before anything logs.
+func (ctx *GameContext) BindLog(l *vlog.Log) {
+	ctx.Log = l
+	ctx.World.Resources.Status.SetLog(l)
+}
+
 // RequestMode applies a mode change and announces it, so the transition is a
 // function of the event stream. Decision sites call this; MetaSystem's handler
 // calls SetMode, which is why the emit is not folded into it.
 // Caller MUST hold updateMutex: UpdateBoundsRadius reads component stores.
 func (ctx *GameContext) RequestMode(m core.GameMode) {
 	ctx.SetMode(m)
+	if ctx.Viewer.Load() {
+		return // a replay viewer borrows the mode; the recording authors the world
+	}
 	ctx.World.UpdateBoundsRadius()
 	ctx.PushLocal(event.EventModeChanged, &event.ModeChangedPayload{Mode: m})
 }
@@ -912,6 +922,11 @@ func (ctx *GameContext) syncOverlaySelection(content *core.OverlayContent) {
 
 // === Pause ===
 
+// SetPaused requests a pause change. A replay viewer's command line holds playback
+// itself and leaves the recorded clock alone.
 func (ctx *GameContext) SetPaused(paused bool) {
+	if ctx.Viewer.Load() {
+		return
+	}
 	ctx.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: paused})
 }

@@ -74,7 +74,7 @@ type LootSystem struct {
 	buffers         bufferTelemetry
 	motion          bounceTelemetry
 
-	enabled bool
+	toggle
 }
 
 func NewLootSystem(world *engine.World) engine.System {
@@ -744,4 +744,33 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.
 
 	s.world.DestroyEntity(entity)
 	s.statCollects.Add(1)
+}
+
+type lootState struct {
+	pity   map[pityKey]pityState
+	owners map[core.Entity]ownerRoute
+}
+
+func (s *LootSystem) CopyState() any {
+	c := lootState{pity: make(map[pityKey]pityState, len(s.pity)), owners: make(map[core.Entity]ownerRoute, len(s.ownerRoutes))}
+	for k, p := range s.pity {
+		c.pity[k] = *p
+	}
+	for k, r := range s.ownerRoutes {
+		c.owners[k] = ownerRoute{cache: r.cache.Clone(), cell: r.cell, live: r.live}
+	}
+	return c
+}
+
+func (s *LootSystem) RestoreState(v any) error {
+	c := v.(lootState)
+	clear(s.pity)
+	clear(s.ownerRoutes)
+	for k, p := range c.pity {
+		s.pity[k] = &p
+	}
+	for k, r := range c.owners {
+		s.ownerRoutes[k] = &ownerRoute{cache: r.cache.Clone(), cell: r.cell, live: r.live}
+	}
+	return nil
 }

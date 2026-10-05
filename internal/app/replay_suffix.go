@@ -4,7 +4,6 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/snapshot"
-	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // replaySource is the seam the barrier offers the correction path. An interface
@@ -55,7 +54,7 @@ func (a *App) feedProjectionLocked(staging *App, header snapshot.CaptureHeader) 
 	m.ReplayUnusable.Store(!available)
 	if !available {
 		m.ReplaySkipped.Add(1)
-		vlog.Warn("app", "msg", "local replay skipped",
+		a.log.Warn("converge", "msg", "local replay skipped",
 			"tick", tick, "retained", retained, "dropped", dropped)
 		frames, origins = nil, nil
 	}
@@ -68,7 +67,7 @@ func (a *App) feedProjectionLocked(staging *App, header snapshot.CaptureHeader) 
 		append(origins, agreedOrigins...))
 	m.ReplayReplayed.Add(int64(len(frames)))
 	if len(frames)+len(agreed) > 0 {
-		vlog.Debug("app", "msg", "local crossings projected",
+		a.log.Debug("converge", "msg", "local crossings projected",
 			"tick", tick, "records", len(frames), "agreed", len(agreed), "retained", retained)
 	}
 }

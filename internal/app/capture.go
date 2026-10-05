@@ -22,32 +22,37 @@ import (
 //
 // Caller MUST hold updateMutex.
 func (a *App) captureStatusLocked() snapshot.StatusState {
+	return a.statusCellsLocked(snapshot.SharedKey)
+}
+
+// statusCellsLocked reads the registry cells keep selects. Caller MUST hold updateMutex.
+func (a *App) statusCellsLocked(keep func(string) bool) snapshot.StatusState {
 	reg := a.world.Resources.Status
 	return snapshot.StatusState{
-		Ints: sharedCells(reg.Ints.Keys(), func(k string) snapshot.IntCell {
+		Ints: cellsOf(reg.Ints.Keys(), keep, func(k string) snapshot.IntCell {
 			return snapshot.IntCell{Key: k, Value: reg.Ints.Get(k).Load()}
 		}),
-		Bools: sharedCells(reg.Bools.Keys(), func(k string) snapshot.BoolCell {
+		Bools: cellsOf(reg.Bools.Keys(), keep, func(k string) snapshot.BoolCell {
 			return snapshot.BoolCell{Key: k, Value: reg.Bools.Get(k).Load()}
 		}),
-		Floats: sharedCells(reg.Floats.Keys(), func(k string) snapshot.FloatCell {
+		Floats: cellsOf(reg.Floats.Keys(), keep, func(k string) snapshot.FloatCell {
 			return snapshot.FloatCell{Key: k, Value: reg.Floats.Get(k).Get()}
 		}),
-		Strings: sharedCells(reg.Strings.Keys(), func(k string) snapshot.StringCell {
+		Strings: cellsOf(reg.Strings.Keys(), keep, func(k string) snapshot.StringCell {
 			return snapshot.StringCell{Key: k, Value: reg.Strings.Get(k).Load()}
 		}),
 	}
 }
 
-// sharedCells is one registry kind's shared-surface cells, in key order so two
-// instances holding equal state produce equal bytes. The result is nil when nothing
-// matches rather than an empty slice, because the encoding distinguishes the two and
-// the capture's integrity hash covers it.
-func sharedCells[C any](keys []string, cell func(string) C) []C {
+// cellsOf is one registry kind's selected cells, in key order so two instances
+// holding equal state produce equal bytes. The result is nil when nothing matches
+// rather than an empty slice, because the encoding distinguishes the two and the
+// capture's integrity hash covers it.
+func cellsOf[C any](keys []string, keep func(string) bool, cell func(string) C) []C {
 	slices.Sort(keys)
 	var out []C
 	for _, k := range keys {
-		if snapshot.SharedKey(k) {
+		if keep(k) {
 			out = append(out, cell(k))
 		}
 	}
@@ -339,8 +344,8 @@ func (a *App) writeSharedLocked(cap snapshot.SharedCapture, held *snapshot.Share
 func (a *App) adoptClockLocked(h snapshot.CaptureHeader) {
 	a.world.Resources.Game.State.SetGameTicks(h.Tick)
 	a.world.Resources.Event.Queue.RebaseStamp(h.Run, h.Tick)
-	a.world.Resources.Status.Correlation().SetRun(h.Run)
-	a.world.Resources.Status.Correlation().SetTick(h.Tick)
+	a.log.SetRun(h.Run)
+	a.log.SetTick(h.Tick)
 	reg := a.world.Resources.Status
 	reg.Ints.Get("engine.ticks").Store(int64(h.Tick))
 	reg.Ints.Get("time.game_elapsed_ms").Store(

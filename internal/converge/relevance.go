@@ -6,7 +6,6 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
-	"github.com/lixenwraith/vif/internal/vlog"
 	"github.com/lixenwraith/vif/pkg/linkpace"
 )
 
@@ -178,13 +177,13 @@ func (c *Corrections) reportFloorLocked() {
 	}
 	c.saidFloor = c.breached
 	if !c.breached {
-		vlog.Info("app", "msg", "link is carrying the convergence floor again",
+		c.log.Info("converge", "msg", "link is carrying the convergence floor again",
 			"floor_ticks", c.bounds.FloorKeyframeTicks)
 		c.inst.SetStatusMessage("Link recovered; corrections are converging again",
 			parameter.StatusMessageDefaultTimeout, false)
 		return
 	}
-	vlog.Warn("app", "msg", "link cannot sustain the convergence floor",
+	c.log.Warn("converge", "msg", "link cannot sustain the convergence floor",
 		"floor_ticks", c.bounds.FloorKeyframeTicks,
 		"floor_bps", int64(c.tel.FloorBps.Load()),
 		"budget_bps", int64(c.tel.BudgetBps.Load()))

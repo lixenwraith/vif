@@ -29,7 +29,7 @@ type CleanerSystem struct {
 	statDisabled       *atomic.Int64
 	buffers            bufferTelemetry
 
-	enabled bool
+	toggle
 }
 
 // NewCleanerSystem creates a new cleaner system

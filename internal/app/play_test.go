@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
 // TestReplayViewStopsAtTheMapEdges is the scroll rule: a map the viewer's view holds
@@ -42,8 +43,8 @@ func TestReplayViewStopsAtTheMapEdges(t *testing.T) {
 }
 
 // TestReplayViewerCommandLineReturnsTheRecordedState is the rule the viewer's command
-// line keeps: it inspects the recording and changes none of it, and the mode and pause
-// it borrowed are the recording's again once it closes.
+// line keeps: it inspects the recording and changes none of it, so the world neither
+// pauses nor hears of the mode it borrowed, which is the recording's again once it closes.
 func TestReplayViewerCommandLineReturnsTheRecordedState(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, fixtureSeed, 100, 40)
@@ -70,9 +71,16 @@ func TestReplayViewerCommandLineReturnsTheRecordedState(t *testing.T) {
 		return v
 	}
 
+	// An untouched twin of the recording, which the viewer's run must keep matching
+	twin := mustHeadless(t, fixtureSeed, 100, 40)
+	defer twin.Close()
+	tickUntilCursor(t, twin)
+	if !twin.Inject(intentModeSwitch(input.ModeTargetInsert)) {
+		t.Fatal("insert quit the twin")
+	}
 	press(terminal.Event{Key: terminal.KeyRune, Rune: ':'})
-	if p.cmd == nil || !a.Context().IsCommandMode() || !a.Context().TimeCtl.IsPaused() {
-		t.Fatal("':' did not open a paused command line for the viewer")
+	if p.cmd == nil || !a.Context().IsCommandMode() || a.Context().TimeCtl.IsPaused() {
+		t.Fatal("':' did not open a command line that leaves the recorded clock alone")
 	}
 	before := energy()
 	for _, r := range "energy 12345" {
@@ -96,6 +104,12 @@ func TestReplayViewerCommandLineReturnsTheRecordedState(t *testing.T) {
 	press(terminal.Event{Key: terminal.KeyCtrlG})
 	if p.cmd != nil || a.ctx.Viewer.Load() || a.ctx.GetMode() != core.ModeInsert || a.ctx.TimeCtl.IsPaused() {
 		t.Fatal("closing the menu failed to return the recorded mode and pause")
+	}
+	a.Tick(60)
+	twin.Tick(60)
+	if i, _, _, ok := snapshot.FirstDiff(twin.SnapshotSimulation(), a.SnapshotSimulation()); ok {
+		t.Fatalf("the viewer's command line and menu changed the recorded run, at line %d:\n%s", i,
+			strings.Join(snapshot.Diff(twin.SnapshotSimulation(), a.SnapshotSimulation(), 8), "\n"))
 	}
 }
 
@@ -166,7 +180,7 @@ func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {
 	}
 	d.FinishAt(capture.End())
 	a.AttachTransport(replayPort{id: 1})
-	p := &player{a: a, src: journalSource{d}, interval: parameter.GameUpdateInterval,
+	p := &player{a: a, src: journalSource{d, a.log}, interval: parameter.GameUpdateInterval,
 		rec: engine.ScaleNormal, scale: engine.ScaleNormal}
 	p.key(terminal.Event{Key: terminal.KeyRune, Rune: ' '})
 	if !p.paused || p.live {

@@ -21,7 +21,7 @@ type BoostSystem struct {
 	statTruncated *atomic.Int64
 	rejects       rejectionTelemetry
 
-	enabled bool
+	toggle
 }
 
 // NewBoostSystem creates a new boost system

@@ -73,7 +73,7 @@ type DustSystem struct {
 	rejects                 rejectionTelemetry
 	buffers                 bufferTelemetry
 
-	enabled bool
+	toggle
 }
 
 // Buffer telemetry slots for DustSystem
@@ -743,4 +743,17 @@ func dustProfileFor(level component.GlyphLevel) (time.Duration, color.RGB) {
 	default:
 		return parameter.DustTimerNormal, visual.RgbDustNormal
 	}
+}
+
+type dustState struct {
+	cursorX, cursorY int
+	stagger          uint8
+}
+
+func (s *DustSystem) CopyState() any { return dustState{s.lastCursorX, s.lastCursorY, s.staggerTick} }
+
+func (s *DustSystem) RestoreState(v any) error {
+	c := v.(dustState)
+	s.lastCursorX, s.lastCursorY, s.staggerTick = c.cursorX, c.cursorY, c.stagger
+	return nil
 }

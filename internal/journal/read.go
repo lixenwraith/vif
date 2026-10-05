@@ -12,17 +12,20 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
 )
 
 // Set is one parsed journal: its anchors in emission order, its records in jseq
-// order with duplicates from overlapping files removed, and the worlds it wrote
+// order with duplicates from overlapping files removed, the worlds it wrote and its
+// world digests in tick order
 type Set struct {
 	Anchors  []event.JournalAnchor
 	Records  []event.JournalRecord
 	Captures []event.JournalCapture
+	Digests  []event.JournalDigest
 	End      *event.Stamp
 }
 
@@ -54,6 +57,15 @@ type captureFields struct {
 	Participant uint32 `json:"participant"`
 	Authority   uint32 `json:"authority"`
 	Body        []byte `json:"body"` // base64, which encoding/json decodes into []byte
+}
+
+type digestFields struct {
+	Run       uint64 `json:"jrun"`
+	Tick      uint64 `json:"jtick"`
+	Positions string `json:"positions"`
+	Kinetics  string `json:"kinetics"`
+	Combat    string `json:"combat"`
+	Entities  string `json:"entities"`
 }
 
 type anchorFields struct {
@@ -117,6 +129,10 @@ func Load(paths ...string) (Set, error) {
 	slices.SortStableFunc(s.Captures, func(a, b event.JournalCapture) int {
 		return cmp.Compare(a.JSeq, b.JSeq)
 	})
+	slices.SortStableFunc(s.Digests, func(a, b event.JournalDigest) int {
+		return cmp.Or(cmp.Compare(a.Run, b.Run), cmp.Compare(a.Tick, b.Tick))
+	})
+	s.Digests = slices.Compact(s.Digests)
 	return s, nil
 }
 
@@ -157,6 +173,12 @@ func (s *Set) readFile(path string) error {
 			if s.End == nil || (groupKey{s.End.Run, s.End.Tick, s.End.Boundary}).before(groupKey{st.Run, st.Tick, st.Boundary}) {
 				s.End = &st
 			}
+		case event.SubJournalDigest:
+			d, err := decodeDigest(l.Fields)
+			if err != nil {
+				return fmt.Errorf("%s:%d: %w", path, n, err)
+			}
+			s.Digests = append(s.Digests, d)
 		case event.SubJournalCapture:
 			var f captureFields
 			if err := json.Unmarshal(l.Fields, &f); err != nil {
@@ -191,6 +213,25 @@ func decodeRecord(raw json.RawMessage) (event.JournalRecord, error) {
 		Run: f.Run, Tick: f.Tick, Boundary: f.Boundary,
 		Type: et, Origin: origin, Domain: domain,
 	}, nil
+}
+
+func decodeDigest(raw json.RawMessage) (event.JournalDigest, error) {
+	var f digestFields
+	if err := json.Unmarshal(raw, &f); err != nil {
+		return event.JournalDigest{}, err
+	}
+	d := event.JournalDigest{Run: f.Run, Tick: f.Tick}
+	for _, h := range []struct {
+		dst *uint64
+		hex string
+	}{{&d.Positions, f.Positions}, {&d.Kinetics, f.Kinetics}, {&d.Combat, f.Combat}, {&d.Entities, f.Entities}} {
+		v, err := strconv.ParseUint(h.hex, 16, 64)
+		if err != nil {
+			return event.JournalDigest{}, fmt.Errorf("digest at run %d tick %d: %w", f.Run, f.Tick, err)
+		}
+		*h.dst = v
+	}
+	return d, nil
 }
 
 func decodeAnchor(raw json.RawMessage) (event.JournalAnchor, error) {

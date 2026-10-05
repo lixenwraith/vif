@@ -24,7 +24,7 @@ type GatewaySystem struct {
 	statActive *atomic.Bool
 	statCount  *atomic.Int64
 
-	enabled bool
+	toggle
 }
 
 func NewGatewaySystem(world *engine.World) engine.System {

@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/network"
@@ -146,6 +148,17 @@ func (t replayTarget) PushRecord(rec event.JournalRecord, payload any) bool {
 	return t.a.world.PushRecord(rec, payload)
 }
 
+func (t replayTarget) Digest() (d event.JournalDigest) {
+	t.a.world.RunSafe(func() { d = t.a.journalDigestLocked() })
+	return d
+}
+
+// journalDigestLocked is the world a journal's digest carries: both domains, since
+// a replay reproduces the player's own as well. Caller MUST hold updateMutex.
+func (a *App) journalDigestLocked() event.JournalDigest {
+	return snapshot.DigestWorld(a.world, engine.ScopeBoth).Journal()
+}
+
 // Install writes a world the recorded run wrote, rebuilt from the one this replay
 // holds, as the participant it wrote it as: identity first, because the write
 // binds cursors by it.
@@ -190,6 +203,70 @@ func (replayPort) PeerCount() int                        { return 1 }
 func (replayPort) IsRunning() bool                       { return true }
 func (replayPort) Drain([]network.Inbound) int           { return 0 }
 func (p replayPort) ParticipantID() uint32               { return p.id }
+
+// loadJournal reads a journal set and the configuration that reproduces it. The
+// viewer supplies where the scenario the anchor names resolves, as the run's
+// -config-dir did.
+func loadJournal(viewer Config, paths []string) (journal.Set, Config, error) {
+	event.EnsureRegistry()
+	set, err := journal.Load(paths...)
+	if err != nil {
+		return set, Config{}, err
+	}
+	if len(set.Anchors) == 0 {
+		return set, Config{}, errors.New("journal carries no anchor")
+	}
+	cfg, err := ConfigFromAnchor(set.Anchors[0])
+	cfg.Resources.Dir = viewer.Resources.Dir
+	return set, cfg, err
+}
+
+// replayDriver binds a its own copy of the set's stream, since a driver sorts its
+// records in place, and the digests it is compared against.
+func replayDriver(a *App, set journal.Set) (*journal.ReplayDriver, error) {
+	d, err := newReplayDriver(a, slices.Clone(set.Records), slices.Clone(set.Captures))
+	if err != nil {
+		return nil, err
+	}
+	if set.End != nil {
+		d.FinishAt(*set.End)
+	}
+	d.CompareDigests(set.Digests)
+	return d, nil
+}
+
+// VerifyJournal replays a journal flat out without presenting it, up to its end or
+// the first digest it does not reproduce, which is returned as the error.
+func VerifyJournal(viewer Config, paths ...string) (journal.ReplayStats, error) {
+	set, cfg, err := loadJournal(viewer, paths)
+	if err != nil {
+		return journal.ReplayStats{}, err
+	}
+	if err := set.CheckDense(); err != nil {
+		return journal.ReplayStats{Records: len(set.Records)}, err
+	}
+	a, err := NewHeadless(cfg)
+	if err != nil {
+		return journal.ReplayStats{}, err
+	}
+	defer a.Close()
+	if err := a.VerifyAnchor(set.Anchors[0]); err != nil {
+		return journal.ReplayStats{}, err
+	}
+	d, err := replayDriver(a, set)
+	if err != nil {
+		return journal.ReplayStats{}, err
+	}
+	for more := true; more && d.Stats().Diverged == nil; {
+		if more, err = d.Step(); err != nil {
+			return d.Stats(), err
+		}
+	}
+	if st := d.Stats(); st.Diverged != nil {
+		return st, st.Diverged
+	}
+	return d.Stats(), nil
+}
 
 // Replay consumes an entire record stream. The caller runs any trailing ticks the
 // last record misses.

@@ -23,6 +23,7 @@ import (
 type Corrections struct {
 	inst     Instance
 	tel      snapshot.Telemetry
+	log      *vlog.Log
 	manifest snapshot.ManifestBuilder
 
 	// authority is the term gate and the succession. It decides whether an
@@ -267,7 +268,7 @@ func (c *Corrections) pump() {
 		// on an interactive host this goroutine is the only thing that is.
 		c.Apply()
 		if err := c.PublishDue(); err != nil {
-			vlog.Warn("app", "msg", "correction not published", "error", err.Error())
+			c.log.Warn("converge", "msg", "correction not published", "error", err.Error())
 		}
 	}
 }
@@ -360,7 +361,7 @@ func (c *Corrections) publishRound(force bool) error {
 		missed, mErr := c.publishManifest(port, index, due)
 		switch {
 		case mErr != nil:
-			vlog.Warn("app", "msg", "correction index not published", "error", mErr.Error())
+			c.log.Warn("converge", "msg", "correction index not published", "error", mErr.Error())
 		case c.canAnswerEveryParticipantLocked(ids):
 			bodyPeers = missed
 		default:
@@ -413,7 +414,7 @@ func (c *Corrections) publishRound(force bool) error {
 		}
 	}
 	c.publishPlanTelemetryLocked(ids)
-	vlog.Debug("app", "msg", "correction published",
+	c.log.Debug("converge", "msg", "correction published",
 		"tick", cap.Header.Tick, "keyframe", keyframe, "bytes", len(body),
 		"chunks", len(chunks), "whole_bodies", sent, "peers", len(due), "of", len(ids),
 		"cadence_ticks", c.base, "keyframe_period_ticks", c.keyPeriod,
@@ -635,7 +636,7 @@ func (c *Corrections) peerLocked(id uint32) *peerPublisher {
 		// The envelope is a build constant; a controller that will not build is a
 		// programming error rather than a link condition, and the session keeps its
 		// nominal cadence rather than stopping.
-		vlog.Error("app", "msg", "cadence bounds refused", "error", err.Error())
+		c.log.Error("converge", "msg", "cadence bounds refused", "error", err.Error())
 		return nil
 	}
 	p := &peerPublisher{ctrl: ctrl, plan: ctrl.Plan()}
@@ -764,7 +765,7 @@ func (c *Corrections) forgetRestartedRunLocked() {
 	if !c.haveKey || c.baseline.Header.Run == c.inst.Position().Run {
 		return
 	}
-	vlog.Info("app", "msg", "keyframe dropped across a restart",
+	c.log.Info("converge", "msg", "keyframe dropped across a restart",
 		"baseline_run", c.baseline.Header.Run, "run", c.inst.Position().Run)
 	c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = snapshot.SharedCapture{}, nil, false, 0
 	c.keyCorrection = nil
@@ -827,7 +828,7 @@ func (c *Corrections) takeKeyframe() ([]byte, uint64, error) {
 	c.recordSizeLocked(true, len(body))
 	c.tel.Bytes.Store(int64(len(body)))
 	c.tel.Keyframes.Add(1)
-	vlog.Info("app", "msg", "session capture",
+	c.log.Info("converge", "msg", "session captured",
 		"tick", cap.Header.Tick, "bytes", len(body),
 		"streams", len(cap.Streams), "systems", len(cap.Systems))
 	return body, cap.Header.Tick, nil
@@ -951,7 +952,7 @@ func (c *Corrections) Apply() {
 		cap, err := c.resolve(body)
 		if err != nil {
 			c.tel.Refused.Add(1)
-			vlog.Debug("app", "msg", "correction refused", "error", err.Error())
+			c.log.Debug("converge", "msg", "correction refused", "error", err.Error())
 			continue
 		}
 		if found && cap.Header.Tick <= newest.Header.Tick {
@@ -967,7 +968,7 @@ func (c *Corrections) Apply() {
 		return
 	}
 	if err := c.install(newest); err != nil {
-		vlog.Warn("app", "msg", "correction not applied",
+		c.log.Warn("converge", "msg", "correction not applied",
 			"tick", newest.Header.Tick, "error", err.Error())
 	}
 }
@@ -1107,7 +1108,7 @@ func (c *Corrections) releaseHeld() {
 	c.held, c.haveHeld = snapshot.SharedCapture{}, false
 	c.installedMu.Unlock()
 	if err := c.commit(cap); err != nil {
-		vlog.Warn("app", "msg", "held correction not applied",
+		c.log.Warn("converge", "msg", "held correction not applied",
 			"tick", cap.Header.Tick, "error", err.Error())
 	}
 }
@@ -1212,13 +1213,13 @@ func (c *Corrections) observeFloor() {
 		return
 	}
 	if !breached {
-		vlog.Info("app", "msg", "authoritative world arrived inside the convergence floor",
+		c.log.Info("converge", "msg", "authoritative world arrived inside the convergence floor",
 			"age_ticks", age)
 		c.inst.SetStatusMessage("Link recovered; the authority is arriving again",
 			parameter.StatusMessageDefaultTimeout, false)
 		return
 	}
-	vlog.Warn("app", "msg", "no authoritative world inside the convergence floor",
+	c.log.Warn("converge", "msg", "no authoritative world inside the convergence floor",
 		"age_ticks", age, "floor_ticks", parameter.SnapshotFloorKeyframeTicks,
 		"grace_ticks", parameter.SnapshotFloorGraceTicks)
 	c.inst.SetStatusMessage(
@@ -1279,8 +1280,8 @@ func (c *Corrections) AdmitLink(port *network.SocketPort, id network.PeerID, byt
 	if err := linkpace.Admit(cadenceBounds(), rate, sizes); err != nil {
 		return fmt.Errorf("participant %d: %w", id, err)
 	}
-	vlog.Debug("app", "msg", "join link measured",
-		"peer", id, "bytes", bytes, "ms", elapsed.Milliseconds(),
+	c.log.Debug("converge", "msg", "join link measured",
+		"peer", id, "bytes", bytes, "us", elapsed.Microseconds(),
 		"bytes_per_second", int64(rate))
 	return nil
 }

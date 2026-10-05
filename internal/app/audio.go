@@ -53,11 +53,11 @@ func (a *App) recordMusic() {
 		err = r.Engine.RecordMusic(path)
 	}
 	if err != nil {
-		vlog.Warn("app", "msg", "music not recorded", "path", path, "error", err.Error())
+		a.log.Warn("app", "msg", "music not recorded", "path", path, "error", err.Error())
 		a.ctx.SetStatusMessage("Music not recorded: "+err.Error(), parameter.StatusMessageMaxDuration, false)
 		return
 	}
-	vlog.Info("app", "msg", "music recording", "path", path)
+	a.log.Info("app", "msg", "music recording started", "path", path)
 }
 
 // holdMixer pauses the mixer with a replay viewer's pause, which stops ticks but not

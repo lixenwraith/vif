@@ -67,6 +67,22 @@ func NewGameState() *GameState {
 	return gs
 }
 
+// copyFrom takes src's whole state, for a replay copy restored where another stood.
+func (gs *GameState) copyFrom(src *GameState) {
+	src.mu.RLock()
+	defer src.mu.RUnlock()
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	gs.Mode.Store(src.Mode.Load())
+	gs.GameTicks.Store(src.GameTicks.Load())
+	gs.CurrentAPM.Store(src.CurrentAPM.Load())
+	gs.PendingActions.Store(src.PendingActions.Load())
+	gs.MusicAPM.Store(src.MusicAPM.Load())
+	gs.apmHistory, gs.apmHistoryIndex, gs.lastAPMTime = src.apmHistory, src.apmHistoryIndex, src.lastAPMTime
+	gs.pointerTravel, gs.pointerX, gs.pointerY, gs.pointerSeen = src.pointerTravel, src.pointerX, src.pointerY, src.pointerSeen
+	gs.pointerCounted, gs.lastKey, gs.lastKeyTick, gs.keyStreak = src.pointerCounted, src.lastKey, src.lastKeyTick, src.keyStreak
+}
+
 // Reset clears and resets the game state for a new game without recreation
 func (gs *GameState) Reset() {
 	gs.mu.Lock()

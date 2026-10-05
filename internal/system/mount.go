@@ -28,7 +28,7 @@ type MountSystem struct {
 	statRejects  *atomic.Int64
 	statDisabled *atomic.Int64
 
-	enabled bool
+	toggle
 }
 
 func NewMountSystem(world *engine.World) engine.System {
@@ -318,4 +318,11 @@ func (s *MountSystem) shotRand(host core.Entity) *vmath.FastRand {
 	tick := s.world.Resources.Game.State.GetGameTicks()
 	s.rng.Reseed(vmath.Mix64(s.sharedRoot ^ tick*0x9E3779B97F4A7C15 ^ uint64(host)*0xD6E8FEB86659FD93))
 	return &s.rng
+}
+
+func (s *MountSystem) CopyState() any { return s.sharedRoot }
+
+func (s *MountSystem) RestoreState(v any) error {
+	s.sharedRoot = v.(uint64)
+	return nil
 }

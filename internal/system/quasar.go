@@ -29,7 +29,7 @@ type QuasarSystem struct {
 	motion              bounceTelemetry
 	sweep               cellSweep
 
-	enabled bool
+	toggle
 }
 
 // NewQuasarSystem creates a new quasar system

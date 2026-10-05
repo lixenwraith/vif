@@ -117,7 +117,7 @@ Simulation rate 1/8 1/4 1/2 1 2 4 8; with \-script or autonomous bots also "max"
 Run an authored deterministic TOML tick script
 .TP
 .B \-headless
-With \-bot, run bots without a human player or terminal; solo runs are unpaced
+With \-bot, run bots without a human player or terminal; solo runs are unpaced. With \-replay, verify the journal's digests unattended
 .TP
 .B \-watch
 Watch the first bot or a script on this terminal, with no human player
@@ -170,8 +170,9 @@ Print this and exit
 Print the module version and commit a package should report
 .SS Scopes (\-ls)
 .nf
-  Names     app  fsm  event  dispatch  push  input  stat  rec  lock  tap
-  Letters   a    f    e      d         p     i      s     r    l     t
+  Names     app (a)  fsm (f)  event (e)  dispatch (d)  push (p)  input (i)
+            stat (s)  rec (r)  lock (l)  net (n)  session (m)  converge (c)
+            journal (j)  domain (o)  tap (t)
   Sets      all is every scope, none is nothing
   Combine   join names or letters with + or , \[u2014] "app+fsm+stat" and "afs" are one set
   Adjust    lead with + or \- to add to or remove from the set already selected

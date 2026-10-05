@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -407,6 +408,46 @@ func TestAGuestJournalReplaysFromItsJoin(t *testing.T) {
 	}
 	if st := d.Stats(); st.Installed < 2 || compared < 100 {
 		t.Fatalf("replay installed %d worlds and compared %d ticks: the run exercised too little", st.Installed, compared)
+	}
+}
+
+// TestAReplayNamesTheFirstDigestItDoesNotReproduce: a replay reproduces every digest
+// its run wrote, and one that does not names that tick and the last that matched.
+func TestAReplayNamesTheFirstDigestItDoesNotReproduce(t *testing.T) {
+	t.Parallel()
+	rec := journal.NewCapture()
+	live, _ := playBot(t, "default", 0xD16E, 400, rec)
+	live.Close()
+	replay := func(digests []event.JournalDigest) journal.ReplayStats {
+		cfg, err := ConfigFromAnchor(rec.Anchors()[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		a, err := NewHeadless(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer a.Close()
+		d, err := newReplayDriver(a, rec.Records(), rec.Captures())
+		if err != nil {
+			t.Fatal(err)
+		}
+		d.FinishAt(rec.End())
+		d.CompareDigests(digests)
+		if err := d.RunAll(); err != nil {
+			t.Fatal(err)
+		}
+		return d.Stats()
+	}
+	digests := rec.Digests()
+	if st := replay(digests); st.Diverged != nil || st.Digests != len(digests) || len(digests) < 10 {
+		t.Fatalf("reproduced %d of %d digests: %v", st.Digests, len(digests), st.Diverged)
+	}
+	digests[7].Combat++
+	v := replay(digests).Diverged
+	if v == nil || v.At.Tick != digests[7].Tick || v.Since == nil || v.Since.Tick != digests[6].Tick ||
+		!slices.Equal(v.Classes, []string{"combat"}) {
+		t.Fatalf("divergence %+v, want tick %d combat after %d", v, digests[7].Tick, digests[6].Tick)
 	}
 }
 

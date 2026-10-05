@@ -23,13 +23,19 @@ const (
 	ScopeStat
 	ScopeRec
 	ScopeLock
+	ScopeNet
+	ScopeSession
+	ScopeConverge
+	ScopeJournal
+	ScopeDomain
 	ScopeTap
 )
 
 const (
 	ScopeNone Scope = 0
 	ScopeAll        = ScopeApp | ScopeFSM | ScopeEvent | ScopeDispatch | ScopePush |
-		ScopeInput | ScopeStat | ScopeRec | ScopeLock | ScopeTap
+		ScopeInput | ScopeStat | ScopeRec | ScopeLock | ScopeNet | ScopeSession |
+		ScopeConverge | ScopeJournal | ScopeDomain | ScopeTap
 )
 
 // scopeDef is the canonical name table; short letters are unique
@@ -47,17 +53,24 @@ var scopeDef = []struct {
 	{ScopeStat, "stat", 's'},
 	{ScopeRec, "rec", 'r'},
 	{ScopeLock, "lock", 'l'},
+	{ScopeNet, "net", 'n'},
+	{ScopeSession, "session", 'm'},
+	{ScopeConverge, "converge", 'c'},
+	{ScopeJournal, "journal", 'j'},
+	{ScopeDomain, "domain", 'o'},
 	{ScopeTap, "tap", 't'},
 }
 
-// subScope binds a record's sub tag to its scope
+// subScope binds a record's sub tag to its scope. A scope holds more than one sub
+// only where one is a narrower view of another: a system toggle is an FSM effect,
+// and an admission is a session's record kept apart for the fleet stream.
 var subScope = map[string]Scope{
 	"race":     ScopeApp,
 	"crash":    ScopeApp,
 	"app":      ScopeApp,
-	"admit":    ScopeApp,
 	"service":  ScopeApp,
 	"fsm":      ScopeFSM,
+	"system":   ScopeFSM,
 	"event":    ScopeEvent,
 	"dispatch": ScopeDispatch,
 	"push":     ScopePush,
@@ -65,6 +78,12 @@ var subScope = map[string]Scope{
 	"stat":     ScopeStat,
 	"rec":      ScopeRec,
 	"lock":     ScopeLock,
+	"net":      ScopeNet,
+	"session":  ScopeSession,
+	"admit":    ScopeSession,
+	"converge": ScopeConverge,
+	"journal":  ScopeJournal,
+	"domain":   ScopeDomain,
 }
 
 var scopes atomic.Uint32

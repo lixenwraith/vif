@@ -47,7 +47,7 @@ func OpenStream(prefix string) (*Stream, error) {
 
 // Emit writes one record stamped with the live run and tick values
 func (s *Stream) Emit(sub string, args ...any) {
-	s.l.LogContext(context(sub), s.l.Flags()|log.FlagKV, LevelInfo, 0, sessionArgs(args)...)
+	s.l.LogContext(defaultLog.context(sub), s.l.Flags()|log.FlagKV, LevelInfo, 0, sessionArgs(args)...)
 }
 
 // Path returns the stream's file

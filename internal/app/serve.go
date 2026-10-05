@@ -9,7 +9,6 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/parameter"
-	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // serveReportInterval is how often a server logs what it is holding. It is a log
@@ -94,7 +93,7 @@ func (a *App) Serve() error {
 	// released. The gate reads a capture a playout lead ahead, so arming it over a
 	// stopped clock would time every such dial out.
 	a.openMidRunJoins()
-	vlog.Info("app", "msg", "server running",
+	a.log.Info("session", "msg", "server running",
 		"address", a.cfg.HostAddress, "capacity", a.sessionCapacity())
 
 	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
@@ -114,7 +113,7 @@ func (a *App) Serve() error {
 			// bots are nobody's match, so they leave at once.
 			a.haltSeats()
 			st := a.interrupt(time.Now(), "signal "+sig.String())
-			vlog.Info("app", "msg", "signal received",
+			a.log.Info("app", "msg", "signal received",
 				"signal", sig.String(), "phase", st.Phase.String(),
 				"guests", st.Guests, "reason", st.Reason)
 			if st.Expired {
@@ -134,7 +133,7 @@ func (a *App) Serve() error {
 			a.holdVacant(st)
 
 		case <-report.C:
-			vlog.Info("app", "msg", "session summary", "summary", a.SessionSummary())
+			a.log.Info("session", "msg", "session summary", "summary", a.SessionSummary())
 		}
 	}
 }
@@ -165,10 +164,10 @@ func (a *App) holdVacant(st lifecycle.State) {
 	if a.ctx.TimeCtl.SetPaused(true) {
 		a.parked.Store(true)
 		if a.life.Policy().Empty > 0 {
-			vlog.Info("app", "msg", "session parked", "tick", a.Position().Tick,
+			a.log.Info("session", "msg", "session parked", "tick", a.Position().Tick,
 				"expires_in", st.Remaining.Round(time.Second).String())
 		} else {
-			vlog.Info("app", "msg", "session parked", "tick", a.Position().Tick,
+			a.log.Info("session", "msg", "session parked", "tick", a.Position().Tick,
 				"restart_in", parameter.SessionVacantReset.String())
 		}
 	}
@@ -179,7 +178,7 @@ func (a *App) holdVacant(st lifecycle.State) {
 	if st.Vacant < parameter.SessionVacantReset || !a.vacantReset.CompareAndSwap(false, true) {
 		return
 	}
-	vlog.Info("app", "msg", "parked session restarted",
+	a.log.Info("session", "msg", "parked session restarted",
 		"vacant", st.Vacant.Round(time.Second).String(), "tick", a.Position().Tick)
 	a.world.RunSafe(func() {
 		a.world.PushEventFull(event.EventGameResetRequest, &event.GameResetPayload{},
@@ -202,7 +201,7 @@ func (a *App) dropOwnerlessCursors() {
 		a.world.PushEventFull(event.EventCursorDespawnRequest,
 			&event.CursorDespawnRequestPayload{All: true}, event.OriginSession, core.DomainShared)
 	})
-	vlog.Info("app", "msg", "parked session dropped ownerless cursors", "cursors", held)
+	a.log.Info("session", "msg", "parked session dropped ownerless cursors", "cursors", held)
 }
 
 // resumeVacant releases a parked session. It is called from the accept goroutine
@@ -214,14 +213,14 @@ func (a *App) resumeVacant() {
 		return
 	}
 	a.ctx.TimeCtl.SetPaused(false)
-	vlog.Info("app", "msg", "parked session resumed", "tick", a.Position().Tick)
+	a.log.Info("session", "msg", "parked session resumed", "tick", a.Position().Tick)
 }
 
 // logSessionEnd records why an allocated session stopped. It is the one line an
 // operator reading a pod's last output needs: a container that exits cleanly says
 // nothing about whether it was never claimed, emptied, or asked to go.
 func (a *App) logSessionEnd(st lifecycle.State) {
-	vlog.Info("app", "msg", "session ended",
+	a.log.Info("session", "msg", "session ended",
 		"phase", st.Phase.String(), "reason", st.Reason, "guests", st.Guests,
 		"address", a.cfg.HostAddress, "tick", a.Position().Tick)
 }

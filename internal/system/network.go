@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"sync"
@@ -17,7 +18,6 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/status"
-	"github.com/lixenwraith/vif/internal/vlog"
 	"github.com/lixenwraith/vif/pkg/linkpace"
 )
 
@@ -208,7 +208,7 @@ type NetworkSystem struct {
 	resetBools   []*atomic.Bool
 	resetStrings []*status.AtomicString
 
-	enabled bool
+	toggle
 }
 
 // localCrossing retains the wire representation so projection, authority
@@ -593,7 +593,7 @@ func (s *NetworkSystem) adoptDelay(ticks uint64) {
 	s.delayTicks = ticks
 	s.mu.Unlock()
 	s.statDelayTicks.Store(int64(ticks))
-	vlog.Info("net", "msg", "playout lead adopted", "ticks", ticks, "tick", s.localTick())
+	s.world.Log().Info("net", "msg", "playout lead adopted", "ticks", ticks, "tick", s.localTick())
 }
 
 // barrierDelayTicks returns this instance's own lead.
@@ -760,7 +760,7 @@ func (s *NetworkSystem) DropUncommitted() {
 	s.world.Resources.Player.DropPrediction()
 	if dropped > 0 {
 		s.statDrop.Add(int64(dropped))
-		vlog.Info("app", "msg", "uncommitted crossings dropped at handoff", "crossings", dropped)
+		s.world.Log().Info("session", "msg", "uncommitted crossings dropped at handoff", "crossings", dropped)
 	}
 }
 
@@ -1125,7 +1125,7 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 		s.statSuperseded.Add(int64(superseded))
 	}
 	if dropped > 0 || pendingDropped > 0 {
-		vlog.Debug("app", "msg", "snapshot pruned crossings",
+		s.world.Log().Debug("converge", "msg", "snapshot pruned crossings",
 			"tick", tick, "authority", authority, "local_fence", localFence,
 			"fences", len(fences), "scheduled", dropped, "sequence_superseded", superseded,
 			"pending_local", pendingDropped)
@@ -1201,7 +1201,7 @@ func (s *NetworkSystem) ActivateSession() {
 		// The slot is named beside the identity because they answer different
 		// questions: a dedicated host holds peer identity 1 and no slot, so its
 		// first guest is peer 2 and the session's only participant.
-		vlog.Info("app", "msg", "network session active",
+		s.world.Log().Info("session", "msg", "network session active",
 			"local", s.participantID(), "slot", s.world.Resources.Player.LocalSlot(),
 			"coordinator", s.isCoordinator(),
 			"barrier_delay_ticks", s.barrierDelayTicks(), "peers", peers)
@@ -1387,7 +1387,7 @@ func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
 	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
 		Message: message, Duration: 4 * parameter.StatusMessageDefaultTimeout, DurationOverride: true,
 	})
-	vlog.Warn("app", "msg", "peer link lost", "peer", peerID,
+	s.world.Log().Warn("net", "msg", "peer link lost", "peer", peerID,
 		"authority_lost", authorityLost, "remaining_peers", remaining)
 }
 
@@ -1587,7 +1587,7 @@ func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
 	if err != nil {
 		*asm = network.SnapshotAssembly{}
 		s.statDrop.Add(1)
-		vlog.Warn("app", "msg", "correction chunk refused", "peer", from, "error", err.Error())
+		s.world.Log().Warn("converge", "msg", "correction chunk refused", "peer", from, "error", err.Error())
 		return
 	}
 	if !admitted {
@@ -1684,7 +1684,7 @@ func (s *NetworkSystem) publishTransportLoss(p engine.NetworkPort) {
 	if in == s.lastLostIn && out == s.lastLostOut {
 		return
 	}
-	vlog.Warn("app", "msg", "network transport loss",
+	s.world.Log().Warn("net", "msg", "transport loss",
 		"inbound_dropped", in, "outbound_refused", out)
 	s.lastLostIn, s.lastLostOut = in, out
 }
@@ -1731,7 +1731,7 @@ func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint6
 	})
 	if err != nil {
 		s.statDrop.Add(int64(len(pending)))
-		vlog.Warn("app", "msg", "network encode", "frames", len(pending), "error", err.Error())
+		s.world.Log().Warn("net", "msg", "frames not encoded", "frames", len(pending), "error", err.Error())
 		return
 	}
 	p.Broadcast(uint8(network.MsgEvent), body)
@@ -1844,7 +1844,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	batch, err := event.DecodeWireBatch(body)
 	if err != nil {
 		s.statDrop.Add(1)
-		vlog.Warn("app", "msg", "network decode", "error", err.Error())
+		s.world.Log().Warn("net", "msg", "frame not decoded", "error", err.Error())
 		return
 	}
 	if batch.Source == 0 || int(batch.Source) >= len(s.epochs) {
@@ -1969,13 +1969,13 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	}
 	if overflowed > 0 {
 		s.statScheduleFull.Add(int64(overflowed))
-		vlog.Warn("app", "msg", "barrier schedule full",
+		s.world.Log().Warn("net", "msg", "barrier schedule full",
 			"source", batch.Source, "produced_tick", batch.ProducedTick,
 			"dropped", overflowed, "held", held, "bytes", s.scheduledBytes)
 	}
 	if superseded > 0 {
 		s.statSuperseded.Add(int64(superseded))
-		vlog.Debug("app", "msg", "snapshot refused crossings the installed world holds",
+		s.world.Log().Debug("converge", "msg", "snapshot refused crossings the installed world holds",
 			"source", batch.Source, "produced_tick", batch.ProducedTick,
 			"source_fence", sourceFence, "superseded", superseded)
 	}
@@ -2180,7 +2180,7 @@ func (s *NetworkSystem) relayBatch(from uint32, kind network.MessageType, batch 
 	}
 	if batch.Hops >= parameter.NetworkRelayHopLimit {
 		s.statDrop.Add(1)
-		vlog.Warn("app", "msg", "network relay hop limit",
+		s.world.Log().Warn("net", "msg", "relay hop limit reached",
 			"source", batch.Source, "produced_tick", batch.ProducedTick)
 		return
 	}
@@ -2188,7 +2188,7 @@ func (s *NetworkSystem) relayBatch(from uint32, kind network.MessageType, batch 
 	body, err := event.EncodeWireBatch(batch)
 	if err != nil {
 		s.statDrop.Add(int64(max(1, len(batch.Frames))))
-		vlog.Warn("app", "msg", "network relay encode", "error", err.Error())
+		s.world.Log().Warn("net", "msg", "relay not encoded", "error", err.Error())
 		return
 	}
 	p.BroadcastExcept(from, uint8(kind), body)
@@ -2238,7 +2238,7 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 		}
 		if !s.admissibleFromSource(et, a.source, a.authored) {
 			s.statForged.Add(1)
-			vlog.Warn("app", "msg", "artifact refused",
+			s.world.Log().Warn("session", "msg", "artifact refused",
 				"peer", a.source, "event", event.GetEventName(et), "apply_tick", a.applyTick)
 			continue
 		}
@@ -2604,4 +2604,92 @@ func stateFrame(p *event.CursorStatePayload) event.WireFrame {
 		Type: event.EventCursorStateSync, Payload: p, Domain: core.DomainShared,
 	})
 	return f
+}
+
+// networkState is the barrier and session bookkeeping a replay copy carries. The
+// correction reassembly and the drain window belong to a transport, which a replay
+// copy only stands in for.
+type networkState struct {
+	crossings                                  []event.ScheduledWireFrame
+	scheduled, applied                         []barrierArtifact
+	scheduledBytes, suffixBytes                int
+	epochs, rawEpochs                          [participantSlots]epochWindow
+	productionEpoch, crossSeq, appliedCrossSeq uint64
+	appliedAhead                               map[uint64]struct{}
+	localSource, snapshotAuthority             uint32
+	delayTicks, lastApplyTick, snapshotFloor   uint64
+	encodeErr, suffixDropped                   int64
+	barrierActive                              bool
+	appliedPeerSeq, relayingAt                 [participantSlots]uint64
+	snapshotFences                             network.CrossingFences
+	syncSeq, ticks, lostSeq                    uint64
+	lastSync, stateSeen, rawStateSeen          [parameter.MaxPlayers]uint64
+	states                                     []pendingState
+	departed                                   [participantSlots]bool
+	digestHistory                              [parameter.NetworkEpochWindow]stateDigest
+	pendingDigest                              [participantSlots]stateDigest
+	suffix                                     []localCrossing
+	paceSamples, pathSamples                   [parameter.NetworkPaceWindow]int64
+	paceCount, pathCount                       int
+	paceLatest                                 int64
+	paceKnown                                  bool
+	pathEpoch, leadLowSince, leadPushed        uint64
+	lastLostIn, lastLostOut                    uint64
+}
+
+func (s *NetworkSystem) CopyState() any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c := networkState{
+		crossings: slices.Clone(s.crossings), scheduled: slices.Clone(s.scheduled), applied: slices.Clone(s.applied),
+		scheduledBytes: s.scheduledBytes, suffixBytes: s.suffixBytes, epochs: s.epochs, rawEpochs: s.rawEpochs,
+		productionEpoch: s.productionEpoch, crossSeq: s.crossSeq, appliedCrossSeq: s.appliedCrossSeq,
+		appliedAhead: maps.Clone(s.appliedAhead), localSource: s.localSource, snapshotAuthority: s.snapshotAuthority,
+		delayTicks: s.delayTicks, lastApplyTick: s.lastApplyTick, snapshotFloor: s.snapshotFloor,
+		encodeErr: s.encodeErr, suffixDropped: s.suffixDropped, barrierActive: s.barrierActive.Load(),
+		appliedPeerSeq: s.appliedPeerSeq, relayingAt: s.relayingAt, snapshotFences: slices.Clone(s.snapshotFences),
+		syncSeq: s.syncSeq, ticks: s.ticks, lostSeq: s.lostSeq, lastSync: s.lastSync, stateSeen: s.stateSeen,
+		rawStateSeen: s.rawStateSeen, states: clonePendingStates(s.states), departed: s.departed,
+		digestHistory: s.digestHistory, pendingDigest: s.pendingDigest, suffix: slices.Clone(s.suffix),
+		paceSamples: s.paceSamples, pathSamples: s.pathSamples, paceCount: s.paceCount, pathCount: s.pathCount,
+		paceLatest: s.paceLatest, paceKnown: s.paceKnown, pathEpoch: s.pathEpoch, leadLowSince: s.leadLowSince,
+		leadPushed: s.leadPushed, lastLostIn: s.lastLostIn, lastLostOut: s.lastLostOut,
+	}
+	return c
+}
+
+func (s *NetworkSystem) RestoreState(v any) error {
+	c := v.(networkState)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.crossings, s.scheduled, s.applied = slices.Clone(c.crossings), slices.Clone(c.scheduled), slices.Clone(c.applied)
+	s.scheduledBytes, s.suffixBytes, s.epochs, s.rawEpochs = c.scheduledBytes, c.suffixBytes, c.epochs, c.rawEpochs
+	s.productionEpoch, s.crossSeq, s.appliedCrossSeq = c.productionEpoch, c.crossSeq, c.appliedCrossSeq
+	s.appliedAhead, s.localSource, s.snapshotAuthority = maps.Clone(c.appliedAhead), c.localSource, c.snapshotAuthority
+	if s.appliedAhead == nil {
+		s.appliedAhead = make(map[uint64]struct{})
+	}
+	s.delayTicks, s.lastApplyTick, s.snapshotFloor = c.delayTicks, c.lastApplyTick, c.snapshotFloor
+	s.encodeErr, s.suffixDropped = c.encodeErr, c.suffixDropped
+	s.barrierActive.Store(c.barrierActive)
+	s.appliedPeerSeq, s.relayingAt, s.snapshotFences = c.appliedPeerSeq, c.relayingAt, slices.Clone(c.snapshotFences)
+	s.syncSeq, s.ticks, s.lostSeq, s.lastSync = c.syncSeq, c.ticks, c.lostSeq, c.lastSync
+	s.stateSeen, s.rawStateSeen, s.states, s.departed = c.stateSeen, c.rawStateSeen, clonePendingStates(c.states), c.departed
+	s.digestHistory, s.pendingDigest, s.suffix = c.digestHistory, c.pendingDigest, slices.Clone(c.suffix)
+	s.paceSamples, s.pathSamples, s.paceCount, s.pathCount = c.paceSamples, c.pathSamples, c.paceCount, c.pathCount
+	s.paceLatest, s.paceKnown, s.pathEpoch = c.paceLatest, c.paceKnown, c.pathEpoch
+	s.leadLowSince, s.leadPushed, s.lastLostIn, s.lastLostOut = c.leadLowSince, c.leadPushed, c.lastLostIn, c.lastLostOut
+	return nil
+}
+
+func clonePendingStates(states []pendingState) []pendingState {
+	out := slices.Clone(states)
+	for i := range out {
+		if p := out[i].payload; p != nil {
+			cp := *p
+			cp.WeaponCharges, cp.WeaponCooldown = slices.Clone(p.WeaponCharges), slices.Clone(p.WeaponCooldown)
+			out[i].payload = &cp
+		}
+	}
+	return out
 }

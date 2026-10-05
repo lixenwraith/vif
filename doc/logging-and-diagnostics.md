@@ -58,7 +58,11 @@ payload is an open key-value map.
 | `run` | Reset generation; incremented by game reset, so `:new` starts run 1 |
 | `tick` | Simulation tick at emission |
 | `fields` | Record payload; `msg` is the discriminator by convention |
-| `trace` | Present only on `vlog.Trace` records: a `->` joined call chain |
+| `trace` | Present only on `Trace` records: a `->` joined call chain |
+
+`fields.instance` names the runtime when a process runs more than one: `seat N`
+for a bot seat, `staging` for the world a received capture is resolved in. The
+process's own runtime carries none.
 
 `-log-session-id=<id>` adds `fields.session_id` to every record emitted through
 the vif logging facade. The key is absent when the flag is absent. IDs
@@ -93,35 +97,41 @@ cursorless coordinator included; anything named participants counts cursors.
 
 ### Correlation stamps
 
-`run` and `tick` are process-global atomics published by two owners:
+`run` and `tick` are the writing runtime's. Each runtime writes through its own
+`vlog.Log` handle, bound to its status registry and reached as `World.Log()` or
+`GameContext.Log`, which holds its stamp, its `instance` tag and a mute:
 
 | Stamp | Owner | Advances |
 |---|---|---|
-| `run` | `MetaSystem.handleGameReset` via `vlog.SetRun` | once per game reset, with the replay tick rebased to zero |
-| `tick` | `Scheduler.processTick` via `vlog.SetTick` | once per simulation tick, before the tick body |
+| `run` | `MetaSystem.handleGameReset` | once per game reset, with the replay tick rebased to zero |
+| `tick` | `Scheduler.processTick` | once per simulation tick, before the tick body |
 
 `tick` is stamped with the tick *about to execute*, so records emitted inside
-`processTick` carry the tick they describe rather than the previous one. A replay
-stamps its presented copy's position and its other copies log nothing; see
-[Runtime and concurrency](runtime.md), Replay playback.
+`processTick` carry the tick they describe rather than the previous one. A played
+or served runtime adopts `vlog.Default()`, which also stamps the process's own
+records (flags, runtime capture, a crash); a driven one keeps its own, so a process
+stepping several stamps each. A replay's copies are muted until presented, and a
+mute passes failures; see [Runtime and concurrency](runtime.md), Replay playback.
 
 The render frame is not a stamp. Nothing logs from the render goroutine, so it
 correlates no record, and a headless run never advances it at all; the counter
 is published as the `context.frame` metric and read once per snapshot instead.
 Emitters describing one instant — snapshots and recorder flushes — use
-`vlog.EmitSet`, which binds one explicit stamp for the whole set.
+`Log.EmitSet`, which binds one explicit stamp for the whole set.
 
 ## 3. Levels
 
 | Level | Constant | Used for |
 |---|---|---|
 | `TRACE` | `vlog.LevelTrace` | per-item taps: individual event dispatch, event push |
-| `DEBUG` | `vlog.LevelDebug` | per-pass and per-intent detail: dispatch summaries, input intents, FSM internal transitions, lock holds |
-| `INFO` | `vlog.LevelInfo` | lifecycle and state change: startup, service transitions, FSM transitions and region ops, status snapshots, recorder flushes |
-| `WARN` | `vlog.LevelWarn` | recoverable anomalies: event queue overflow, long lock holds |
+| `DEBUG` | `vlog.LevelDebug` | per-pass and per-item detail: dispatch summaries, input intents, FSM transitions, published corrections |
+| `INFO` | `vlog.LevelInfo` | lifecycle and state change: startup, services, FSM region ops, status snapshots, recorder flushes, long lock holds |
+| `WARN` | `vlog.LevelWarn` | recoverable anomalies: event queue overflow, a lost link, a refused or unapplied artifact |
 | `ERROR` | `vlog.LevelError` | failures and runtime reports: service init/start failure, panic records, race and fatal reports |
 
-The threshold is a single process-wide value. `ERROR` and above **bypass the
+The threshold is a single process-wide value. A long lock hold is contention, not
+a defect, so it is `INFO`; FSM transitions run to thousands a session, so `-lv info`
+leaves them out. `ERROR` and above **bypass the
 scope mask** — a scope can silence noise but never a failure. Level still
 applies to errors.
 
@@ -136,8 +146,8 @@ the level for everything else.
 
 | Scope | Letter | `sub` tags mapped to it |
 |---|---|---|
-| `app` | `a` | `app`, `admit`, `service`, `race`, `crash` |
-| `fsm` | `f` | `fsm` |
+| `app` | `a` | `app`, `service`, `race`, `crash` |
+| `fsm` | `f` | `fsm`, `system` |
 | `event` | `e` | `event` |
 | `dispatch` | `d` | `dispatch` |
 | `push` | `p` | `push` |
@@ -145,6 +155,11 @@ the level for everything else.
 | `stat` | `s` | `stat` |
 | `rec` | `r` | `rec` |
 | `lock` | `l` | `lock` |
+| `net` | `n` | `net`: links, listeners, transport loss, the playout barrier |
+| `session` | `m` | `session`, `admit`: membership, start gate, authority and succession, parking |
+| `converge` | `c` | `converge`: corrections, repairs, manifests, captures staged and installed |
+| `journal` | `j` | `journal`: the journal file, replay open, moves, digests and checkpoints |
+| `domain` | `o` | `domain`: the D-1/D-14 audit, which runs while this scope is on at debug |
 | `tap` | `t` | any unmapped `sub` |
 
 An unrecognized `sub` falls into `tap`, so an ad-hoc debugging tap is visible
@@ -177,35 +192,51 @@ Set with `-ls <spec>` at startup or `:log scope <spec>` at runtime.
 | Watch input translation | `-ls ai` |
 | Quiet run with snapshots and recorder only | `-ls asr` |
 | Lock contention | `-ls al -lv debug` |
+| A session's membership and convergence | `-ls amnc` |
 
 ## 5. Subsystem catalog
 
-What each `sub` carries, and the records worth naming. `app` is the run's own
-narration and grows with the session paths; it is described by its field
-conventions (§2) rather than enumerated, because a pinned list of seventy
-records is a list that goes stale.
+What each `sub` carries, and the records worth naming. The session subs narrate
+whole protocols and grow with them, so their tables name the records an operator
+greps for rather than enumerating every refusal.
 
 ### `sub="app"`
 
 | `msg` | Level | Fields | Emitted by |
 |---|---|---|---|
-| `init begin` / `init complete` | INFO | `width`, `height`, `systems` | `app.init` |
-| `shutdown begin` / `shutdown complete` | INFO | — | `app.Close` |
+| `init started` / `init completed` | INFO | `mode` / `width`, `height`, `systems` | `app.init` |
+| `seed resolved` / `scenario loaded` | INFO | `seed` / `name`, `digest`, `files` | `app.init` |
+| `shutdown started` / `shutdown completed` | INFO | — | `app.Close` |
 | `signal received` | INFO | `signal` | main loop |
-| `runtime capture` | INFO | `path`, `reason`, `race` | `setupDiagnostics` |
+| `runtime capture started` | INFO | `path`, `reason`, `race` | `setupDiagnostics` |
 | `logging started` / `logging stopped by command` | INFO | `path`, `level` | `:log on`/`off` |
 | `log level changed` / `log scope changed` | INFO | `level` / `scope` | `:log` |
-| `stat interval changed` | INFO | `ticks` | `:log stat` |
-| `recorder depth changed` | INFO | `ticks` | `:log rec N` |
-| `recorder flush` | INFO | `reason`, `t0`, `ticks`, `records`, `us` | recorder, when the session log absorbed the flush |
-| `recorder flush failed` | ERROR | `reason`, `error` | recorder |
-| `snapshot saved` | INFO | `path` | `:t save` |
-| `network session active` | INFO | `local`, `slot`, `coordinator`, `barrier_delay_ticks`, `peers` | this instance's one statement of who it is |
+| `stat interval changed` / `recorder depth changed` | INFO | `ticks` | `:log stat`, `:log rec N` |
+| `snapshot saved` / `capture saved` | INFO | `path`, plus `kind` | `:t save`, `:d heap` and the timed `:d` captures |
+| `time scale changed` / `steps granted` / `breakpoint hit` | INFO | `scale` / `ticks` / `on`, `cause` | operator time control |
+| `cursor spawned` / `cursor despawned` | INFO | `entity`, `slot`, plus `x`, `y` | `CursorSystem` |
+
+### `sub="net"`
+
+| `msg` | Level | Fields | Emitted by |
+|---|---|---|---|
+| `peer link opened` / `peer link lost` | INFO / WARN | `peer`, plus `address` on the dial and `authority_lost`, `remaining_peers` on the loss | `Reach.dial`, `NetworkSystem.reportDisconnect` |
+| `peer listener bound` | INFO | `bound`, `declared` | `Reach.AdoptListener` |
 | `playout lead adopted` | INFO | `ticks`, `tick` | a change of this instance's own lead, at the tick its journaled event dispatched |
-| `participant evicted as too slow` | WARN | `participant`, `late_per_s`, `bytes_per_s`, `window` | the authority's slow policy (multi-player.md §3.5) |
-| `uncommitted crossings dropped at handoff` | INFO | `crossings` | a guest following a new authority |
+| `transport loss` | WARN | `inbound_dropped`, `outbound_refused` | `NetworkSystem`, when either count moves |
+| `barrier schedule full` | WARN | `source`, `produced_tick`, `dropped`, `held`, `bytes` | the playout barrier |
+
+### `sub="session"`
+
+| `msg` | Level | Fields | Emitted by |
+|---|---|---|---|
+| `network session active` | INFO | `local`, `slot`, `coordinator`, `barrier_delay_ticks`, `peers` | this instance's one statement of who it is |
 | `session summary` | INFO | `summary` | the `-serve` loop, every 30 s; the same line `:session` prints |
-| `peer link opened` / `peer link lost` | INFO / WARN | `peer`, plus `address` on the dial and `authority_lost`, `remaining_peers` on the loss | `reach.dial`, `NetworkSystem.reportDisconnect` |
+| `participant evicted as too slow` | WARN | `participant`, `late_per_s`, `bytes_per_s`, `window` | the authority's slow policy (multi-player.md §3.5) |
+| `authority handed off` / `authority lost; succession opened` | WARN | `term`, `authority`, `predecessor`, `roster` / `peer`, `term`, `local` | `Authority` |
+| `uncommitted crossings dropped at handoff` | INFO | `crossings` | a guest following a new authority |
+| `join installed the session world` | INFO | `tick`, `run`, `stage_us`, `commit_us` | `App.JoinSessionAt` |
+| `session parked` / `session ended` | INFO | `tick`, plus `phase`, `reason`, `guests` | the `-serve` loop |
 
 ### `sub="admit"`
 
@@ -216,17 +247,53 @@ records is a list that goes stale.
 `remote` is the accepted socket's address and `declared` what the peer said it
 listens on. They are here and nowhere else: it is the one value that proves a
 deployment reached the pod with the player's address rather than its gateway's,
-and the per-address admission budget is keyed on it. The sub exists so the fleet's
-published stream can drop the whole category —
+and the per-address admission budget is keyed on it. The sub sits in the `session`
+scope and exists so the fleet's published stream can drop the whole category —
 [`deploy/logwisp/aggregator.toml`](../deploy/logwisp/aggregator.toml) excludes it
 beside `TRACE` — while the node-local file keeps it for an operator.
+
+### `sub="converge"`
+
+| `msg` | Level | Fields | Emitted by |
+|---|---|---|---|
+| `capture staged` / `capture installed` | INFO | `tick`, `streams`, `systems`, `stage_us`, plus `projected_ticks`, `commit_us` | `App.stageProved`, `StagedInstall.Commit` |
+| `correction published` / `repair applied` | DEBUG | `tick`, `bytes`, `peers` / `tick`, `pages`, `sections`, `cells` | `Corrections` |
+| `correction not applied` / `repair failed its proof` | WARN | `tick`, `error` | `Corrections`, which falls back to a keyframe |
+| `link cannot sustain the convergence floor` | WARN | `floor_ticks`, `floor_bps` | the relevance budget |
+
+### `sub="journal"`
+
+| `msg` | Level | Fields | Emitted by |
+|---|---|---|---|
+| `journal opened` / `journal closed` | INFO | `path`, plus `records`, `encode_failed` | `app.initJournal`, `app.Close` |
+| `replay opened` | INFO | `records`, `digests`, `seed`, `speed` | `PlayJournal` |
+| `replay moved` | INFO | `run`, `tick`, `from_run`, `from_tick`, `delta` | each jump of the presented tick |
+| `replay diverged` | WARN | `run`, `tick`, `error` | the first digest the replay does not reproduce (§9) |
+| `replay checkpoint left the run` | WARN | `tick`, `error` | a restored copy failing a digest the presented run passed |
+
+### `sub="domain"`
+
+| `msg` | Level | Fields |
+|---|---|---|
+| `component domain mismatch` | WARN | `component`, `want`, `got`, `id`, `system` |
+| `shared system wrote player entity` | WARN | `system`, `id` |
+| `non-replicated config read under a locked map` | WARN | `field`, `rule` |
+
+The component audit runs only while the `domain` scope is on at debug, refreshed
+per tick; the config read warns once per key per process.
+
+### `sub="system"`
+
+| `msg` | Level | Fields |
+|---|---|---|
+| `disable refused` / `dependents degraded` | WARN / INFO | `system`, `required_by` / `optional_for` |
 
 ### `sub="service"`
 
 | `msg` | Level | Fields |
 |---|---|---|
-| `init` / `start` / `stop` | INFO | `service`, `ms` |
-| `init failed` / `start failed` / `stop failed` | ERROR | `service`, `error` |
+| `service initialized` / `service started` / `service stopped` | INFO | `service`, `us` |
+| `service init failed` / `service start failed` / `service stop failed` | ERROR | `service`, `error` |
 
 ### `sub="fsm"`
 
@@ -237,9 +304,10 @@ order, for every region.
 
 | `msg` | Level | Fields |
 |---|---|---|
-| `transition` | INFO | `region`, `from`, `to`, `via`, `index`, `max_ms` |
+| `transition` | DEBUG | `region`, `from`, `to`, `via`, `index`, `max_ms` |
 | `internal` | DEBUG | `region`, `state`, `via` |
 | `region` | INFO | `region`, `op`, `state` |
+| `region requested` | INFO | `op`, `region`, `state` |
 | `session reset` | INFO | — |
 
 `via` is the triggering event name, or `Tick` for an automatic transition.
@@ -339,6 +407,7 @@ One record per metric group per snapshot. All records of one snapshot share
 |---|---|---|
 | `window` | INFO | `reason`, `t0`, `t1`, `n`, `groups` |
 | `<group>` | INFO | `t0`, `n`, then one key per metric |
+| `recorder flushed` / `recorder flush failed` | INFO / ERROR | `reason`, `t0`, `ticks`, `records`, `us` / `reason`, `error` |
 
 One flush is a `window` header followed by one record per group. See §8.
 
@@ -346,7 +415,7 @@ One flush is a `window` header followed by one record per group. See §8.
 
 | `msg` | Level | Fields |
 |---|---|---|
-| `long hold` | WARN | `us`, plus a `trace` call chain |
+| `long hold` | INFO | `us`, plus a `trace` call chain |
 
 Emitted when a world-lock hold exceeds `LockHoldWarn` (20 ms). The trace
 identifies the holder. Also triggers a recorder flush.
@@ -497,7 +566,7 @@ committed. It:
    scope is enabled at info level;
 4. drains a pending recorder flush request.
 
-The snapshot emits through `vlog.EmitSet` with one explicit stamp, so all
+The snapshot emits through `Log.EmitSet` with one explicit stamp, so all
 records of one snapshot name the instant they describe.
 
 A snapshot is stamped with tick *n*, but it is not a barrier. The world lock is
@@ -782,6 +851,18 @@ Two events are notes, journaled and applied by replay but never dispatched:
 (`World.LatchSession`). A replay settles only a group that queued an event, as
 the recorded run did.
 
+Every `event.DigestIntervalTicks` (20) ticks the run writes a `digest` record,
+`jrun`, `jtick` and four hex hashes from `snapshot.DigestWorld` over both domains:
+`positions`, `kinetics`, `combat` and `entities`. It is taken last in the tick
+body, before anything settles between that tick and the next; a replay compares
+it after the tick that reaches the same place, before injecting that tick's
+groups. The first one it does not reproduce names the tick, the classes that
+differ and the last digest that matched, so a replay that left its run is caught
+within 20 ticks instead of at the next written world, which a host journal never
+has. A digest costs about 75 µs at the map limit, against a 12 ms tick, and adds
+about 5% to a bot's journal. `-replay <file> -headless` verifies a journal
+unattended and exits non-zero at the first digest it does not reproduce.
+
 `app.PlayJournal` presents the replay with fixed viewer controls rather than
 the keymap. [Runtime and concurrency](runtime.md), Replay playback, covers its
 keys, seeking, the copies that step back, sound, and how a replay logs.
@@ -969,28 +1050,44 @@ copies only — never `Store.GetPtr` pointers, pooled event payloads, dense
 entity slices, or reused scratch buffers. Their contents may change before
 formatting.
 
+**Write through the runtime's handle.** Simulation, session and replay code logs
+through `World.Log()`, `GameContext.Log` or its App's handle. The package functions
+write the process's own handle, so a seat, a staging world or a replay copy using
+them would carry another runtime's stamp and escape its own mute; they are for
+records with no runtime: flags, process lifecycle before an App exists, the crash.
+
 **Gate hot call sites.** The variadic slice is built before the call and
-escapes to the heap. Guard with `vlog.On(sub, level)` and hoist the gate out of
-loops:
+escapes to the heap. Guard with `On(sub, level)` and hoist the handle and the gate
+out of loops:
 
 ```go
-trace := vlog.On("dispatch", vlog.LevelTrace)
+log := s.world.Log()
+trace := log.On("dispatch", vlog.LevelTrace)
 for _, ev := range events {
     if trace {
-        vlog.Detail("dispatch", "msg", "ev", "ev", event.GetEventName(ev.Type))
+        log.Detail("dispatch", "msg", "ev", "ev", event.GetEventName(ev.Type))
     }
 }
 ```
 
-**Choose the right entry point.**
+**Name records by rule.** `msg` is a constant lowercase phrase and values go in
+fields. An event is a subject and past participle (`journal opened`, `peer link
+lost`), a failure says what did not happen (`correction not applied`) or what
+failed, a periodic report is a noun phrase (`session summary`), and a per-item tap
+names its item (`ev`, `intent`, `push`). A measured span is an integer with its
+unit as suffix (`stage_us`); bare `us` is the record's own duration, and `_ms` is
+for game-time bounds (`max_ms`). The sub is its scope's name unless a narrower view
+needs a tag of its own (`system`, `admit`).
 
-| Function | Use |
+**Choose the right entry point.** All are `vlog.Log` methods.
+
+| Method | Use |
 |---|---|
 | `Debug`, `Info`, `Warn`, `Error` | ordinary records |
 | `Detail` | trace level without a stack trace; per-item taps |
-| `Trace(sub, level, depth, ...)` | records that need a call chain; depth is raised by one to skip the wrapper |
+| `Trace(sub, level, depth, ...)` | records that need a call chain; depth is raised to skip the wrapper |
 | `EmitSet(sub, run, tick, fill)` | a correlated set that must share one stamp |
-| `Dump(fill)` | a standalone file, blocking |
+| `vlog.Dump(fill)` | a standalone file, blocking |
 
 **Never log inside the world lock at volume.** A guarded call is a channel send
 and is cheap, but a per-entity record inside a system update extends the
@@ -1013,7 +1110,7 @@ requires a logging-enabled native build.
 
 ## 16. Diagnostic playbooks
 
-**"The FSM is in the wrong state."** `-ls afs`. Filter `sub=fsm`. The
+**"The FSM is in the wrong state."** `-ls afs -lv debug`. Filter `sub=fsm`. The
 `transition` records give the complete ordered path including intra-tick
 chains, background regions, and region lifecycle. `via` identifies the cause of
 each step; a step with `via=Tick` means a guard passed.
@@ -1050,7 +1147,8 @@ both the snapshot and the recorder.
 
 | Concern | Primary source |
 |---|---|
-| Facade, levels, stamps, sink lifecycle | `internal/vlog/vlog.go` |
+| Facade, levels, sink lifecycle | `internal/vlog/vlog.go` |
+| Per-runtime handles: stamp, instance tag, mute | `internal/vlog/handle.go` |
 | Scopes and spec parsing | `internal/vlog/scope.go` |
 | Standalone files, correlated sets | `internal/vlog/dump.go` |
 | WASM/`novlog` stub | `internal/vlog/stub.go` |

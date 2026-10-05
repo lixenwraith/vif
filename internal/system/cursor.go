@@ -9,7 +9,6 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/status"
-	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // CursorSystem owns the cursor roster: lifecycle and placement.
@@ -194,7 +193,7 @@ func (s *CursorSystem) spawnOne(p *event.CursorSpawnRequestPayload) {
 	s.world.UpdateBoundsRadius()
 	s.publishRoster()
 
-	vlog.Info("app", "msg", "cursor spawn", "entity", uint64(e), "slot", int(slot), "x", x, "y", y)
+	s.world.Log().Info("app", "msg", "cursor spawned", "entity", uint64(e), "slot", int(slot), "x", x, "y", y)
 	s.world.PushEvent(event.EventCursorSpawned, &event.CursorSpawnedPayload{Entity: e, X: x, Y: y, Slot: slot})
 	s.world.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{Entity: e, X: x, Y: y})
 }
@@ -227,7 +226,7 @@ func (s *CursorSystem) destroy(slot uint8) {
 	roster.Unbind(slot)
 	s.world.DestroyEntity(e)
 
-	vlog.Info("app", "msg", "cursor despawn", "entity", uint64(e), "slot", int(slot))
+	s.world.Log().Info("app", "msg", "cursor despawned", "entity", uint64(e), "slot", int(slot))
 	s.world.PushEvent(event.EventCursorDespawned, &event.CursorDespawnedPayload{Entity: e, Slot: slot})
 }
 
@@ -261,7 +260,7 @@ func (s *CursorSystem) build(slot uint8, x, y int, control component.ControlKind
 // fail reports a spawn refusal so the FSM can retry
 func (s *CursorSystem) fail(reason string) {
 	s.statSpawnFailures.Add(1)
-	vlog.Warn("app", "msg", "cursor spawn failed", "reason", reason)
+	s.world.Log().Warn("app", "msg", "cursor spawn failed", "reason", reason)
 	s.world.PushEvent(event.EventCursorSpawnFailed, nil)
 }
 
@@ -281,7 +280,7 @@ func (s *CursorSystem) setLocal(slot uint8) {
 	s.world.UpdateBoundsRadius()
 	s.publishRoster()
 
-	vlog.Info("app", "msg", "cursor local", "slot", int(slot), "entity", uint64(roster.Entity))
+	s.world.Log().Info("app", "msg", "local cursor bound", "slot", int(slot), "entity", uint64(roster.Entity))
 	s.world.PushLocal(event.EventCursorLocalChanged, &event.CursorSetLocalPayload{Slot: slot})
 }
 

@@ -235,6 +235,10 @@ type Config struct {
 	dialled *joinDial
 	notice  string
 
+	// log is a secondary runtime's handle: a seat's or a staging world's is tagged,
+	// a replay copy's muted until presented. Nil takes the process's or, driven, its own.
+	log *vlog.Log
+
 	// resume is the world the run this one replaces handed over (restartRequest).
 	resume *snapshot.SharedCapture
 

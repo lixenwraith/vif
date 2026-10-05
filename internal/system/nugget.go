@@ -29,7 +29,7 @@ type NuggetSystem struct {
 	statSpawnFailures *atomic.Int64
 	rejects           rejectionTelemetry
 
-	enabled bool
+	toggle
 }
 
 // NewNuggetSystem creates a new nugget system
@@ -353,4 +353,17 @@ func (s *NuggetSystem) collectionCursor(nuggetX, nuggetY int) core.Entity {
 		return cursor
 	}
 	return 0
+}
+
+type nuggetState struct {
+	lastSpawnAttempt time.Time
+	active           core.Entity
+}
+
+func (s *NuggetSystem) CopyState() any { return nuggetState{s.lastSpawnAttempt, s.activeNuggetEntity} }
+
+func (s *NuggetSystem) RestoreState(v any) error {
+	c := v.(nuggetState)
+	s.lastSpawnAttempt, s.activeNuggetEntity = c.lastSpawnAttempt, c.active
+	return nil
 }

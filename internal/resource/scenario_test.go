@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -98,7 +99,10 @@ func TestATransferCarriesBytesByLengthNotByScanning(t *testing.T) {
 	adversarial := scenarioRegion +
 		"\n# VIFSCEN\x00\x00\x01 unbalanced \" and a lone ' in a comment\n" +
 		"[states.MainOther]\nparent = \"Root\"\n"
-	src := read(t, writeScenario(t, filepath.Join(t.TempDir(), "scenario", "main"), adversarial))
+	src := read(t, writeScenario(t, filepath.Join(t.TempDir(), "scenario", "main"), scenarioRegion))
+	// TOML refuses a NUL, so it cannot load from disk; a peer's body can still carry one.
+	src.files[slices.IndexFunc(src.files, func(f scenarioFile) bool { return f.name == "main.toml" })].data = []byte(adversarial)
+	src.digest = digestOf(src.Marshal())
 
 	body, err := src.MarshalCompressed()
 	if err != nil {

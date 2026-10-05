@@ -440,6 +440,11 @@ which keeps only quit, the audio toggle and `:`.
 | `:` | Command line: `replay`, `help`, `about`, `telemetry`, `hud`, `debug`, `content`, `flow`, `graph`, `log`, `q`. |
 | `q` | Quit. |
 
+The status bar adds `diverged by tick <n>` once the replay fails to reproduce a
+world digest the run wrote (logging and diagnostics §9), and an `app`
+`replay diverged` Warn record names it. `-r <file> -headless` runs the same check
+flat out, with no terminal.
+
 In a replay `:r` is `:replay`; elsewhere it remains `:region`, which a replay
 refuses. A game reset starts a run whose ticks count from zero, so `tick` and
 `time` address the run shown; the status bar reports run, tick and its 1x time.
@@ -448,28 +453,43 @@ Pacing converts the recorded tick interval and speed to wall time, then applies
 the viewer's rate. The simulation keeps its recorded geometry; the frame is laid
 out for the viewer's terminal, and a resize re-lays it. A map the view holds is
 centred in void as the game centres it; a larger one is shown from the recorded
-view's centre, and scroll stops at the map's edges. The command line pauses
-playback, as the game's does, and hands the recorded mode and pause back when it
-closes; a command that would change the recording is refused.
+view's centre, and scroll stops at the map's edges. The command line holds
+playback, as the game's does, and borrows the recorded mode without announcing a
+change to the world or pausing its clock (`GameContext.Viewer`), so closing it
+leaves the run as recorded; a command that would change the recording is refused.
 
 A world cannot be rewound, so going back presents another copy of the run: a
-`ModeReplay` App on the viewer's terminal replaying the stream from its start on
-its own goroutine, on all cores but one. `parameter.ReplayBackSpares` copies
-trail the presented one a tick apart and park there. Each `,` is one tick a frame
-presents, as `.` is, from the nearest; a replacement starts at the far end, so a
-press past the trailing copies waits for a replay from the start. `:r` behind
-takes a trailing copy standing at that tick, else replays one there; ahead, the
-presented copy plays there unpaced for most of each frame, so the view keeps
-drawing. A copy that takes over brings the HUD pins, the speakers, whose engine
-plays on while the gates the copy replayed decide what sounds, and the log stamp,
-and draws into the same cells rather than repainting the terminal.
+`ModeReplay` App on the viewer's terminal replaying the stream on its own
+goroutine, on all cores but one. `parameter.ReplayBackSpares` copies trail the
+presented one a tick apart and park there. Each `,` is one tick a frame presents,
+as `.` is, from the nearest; a replacement starts at the far end. `:r` behind takes
+a trailing copy standing at that tick, else replays one there; ahead, the presented
+copy plays there unpaced for most of each frame, so the view keeps drawing.
+
+A copy starts from the nearest checkpoint behind its target rather than the
+stream's start. Every `parameter.ReplayCheckpointSteps` (100) presented steps the
+player keeps the whole state of the run (`app.checkpoint`): every store and grid
+cell in its own order and both domains' allocators (`engine.WorldCopy`), RNG
+streams, FSM position, scheduler and queue with its pending events, every registry
+cell, each system's FSM toggle and its private state (`engine.StateCopier`, or
+`SharedStateSaver` for a carrier without one), the corpus cursor, the session a
+written world was installed under, and the driver's place. Past
+`parameter.ReplayCheckpoints` (32) every other is dropped and the spacing doubles.
+At the 500×250 map limit one costs about 6 ms to take and 6.5 MB to keep, and a
+restore 35 ms with the copy's construction, against a replay from the start of
+about 16 ms a tick there. A restored copy compares the journal's digests as it
+replays; one failing a digest the presented run reproduced stops checkpointing
+(a `journal` `replay checkpoint left the run` Warn), and copies replay from the start
+again. A copy that takes over brings the HUD pins, the speakers, whose engine
+plays on while the gates the copy replayed decide what sounds, and draws into the
+same cells rather than repainting the terminal.
 
 A replay logs as play does, so `:log on` and `:log off` bound a window around an
-issue found by seeking. Records carry the presented copy's `run` and `tick`; copies
-log nothing, because each step runs under `vlog.Mute` while a read-write lock holds
-off the frame loop, which does all of the presented copy's work. Each jump of the
-presented tick (`,`, a seek, a restart) is an `app` `replay seek` Info record with
-`tick`, `from_tick`, `delta` and their runs, stamped after the jump; a seek ahead
+issue found by seeking. Each copy writes through its own log handle, muted until it
+is presented, so records carry the presented copy's `run` and `tick` and a copy
+replaying behind it writes only its failures. Each jump of the presented tick (`,`,
+a seek, a restart) is a `journal` `replay moved` Info record with `tick`,
+`from_tick`, `delta` and their runs, stamped after the jump; a seek ahead
 is recorded as it starts, and the ticks it plays log as they pass. Ticks played
 again after going back log again, after the record that explains them.
 

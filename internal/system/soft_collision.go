@@ -65,7 +65,7 @@ type SoftCollisionSystem struct {
 	statImmuneRejects *atomic.Int64
 	buffers           bufferTelemetry
 
-	enabled bool
+	toggle
 }
 
 // NewSoftCollisionSystem creates the centralized soft collision system
@@ -531,4 +531,11 @@ func (s *SoftCollisionSystem) calculateFlockingAccel(
 	accelMag := rule.Strength * weight
 
 	return dirX * accelMag, dirY * accelMag, true
+}
+
+func (s *SoftCollisionSystem) CopyState() any { return s.sharedRoot }
+
+func (s *SoftCollisionSystem) RestoreState(v any) error {
+	s.sharedRoot = v.(uint64)
+	return nil
 }
