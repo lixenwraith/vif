@@ -54,7 +54,7 @@ var (
 	flagReplay   = flag.String("replay", "", "Replay a recorded journal instead of playing")
 	flagScript   = flag.String("script", "", "Run an authored deterministic TOML tick script")
 	flagBot      = flag.String("bot", "", "Add bots: [N[:graph]|graph], default 1:default")
-	flagHeadless = flag.Bool("headless", false, "Run -bot without a human player or terminal")
+	flagHeadless = flag.Bool("headless", false, "Run -bot without a human player or terminal, or verify a -replay")
 	flagWatch    = flag.Bool("watch", false, "Watch the first bot or a script; no human player")
 	flagHelp     = flag.Bool("h", false, "Print the flag help and exit")
 	flagVer      = flag.Bool("version", false, "Print the build version and exit")
@@ -120,8 +120,8 @@ func main() {
 	setupDiagnostics()
 
 	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, *flagBot, *flagWatch, flagSession)
-	if sessionErr == nil && *flagHeadless && (*flagWatch || *flagBot == "" && flagSession.bots == "" || flagSession.serve != "") {
-		sessionErr = errors.New("-headless requires -bot and cannot combine with -watch or -serve")
+	if sessionErr == nil && *flagHeadless && (*flagWatch || *flagBot == "" && flagSession.bots == "" && *flagReplay == "" || flagSession.serve != "") {
+		sessionErr = errors.New("-headless requires -bot or -replay and cannot combine with -watch or -serve")
 	}
 	if sessionErr == nil {
 		sessionErr = requestSiteSession(requested)
@@ -134,6 +134,8 @@ func main() {
 	case *flagCheck:
 		fmt.Println("settings ok:", cmp.Or(settingsPath, "embedded default"))
 		err = resource.Check(buildConfig().Resources, os.Stdout)
+	case *flagReplay != "" && *flagHeadless:
+		err = verifyJournal(*flagReplay)
 	case *flagReplay != "":
 		err = app.PlayJournal(buildConfig(), *flagReplay)
 	case *flagScript != "":
@@ -167,6 +169,17 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitFailure)
 	}
+}
+
+// verifyJournal reports what a headless replay reproduced; leaving the run is the error.
+func verifyJournal(path string) error {
+	st, err := app.VerifyJournal(buildConfig(), path)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Replay verified to run %d tick %d: %d records, %d worlds written, %d digests reproduced\n",
+		st.End.Run, st.End.Tick, st.Injected, st.Installed, st.Digests)
+	return nil
 }
 
 // botNotice says what a headless bot run is doing, since it draws nothing: solo it

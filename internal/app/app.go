@@ -457,6 +457,7 @@ func (a *App) initScheduler() error {
 		a.frameReady,
 	)
 	a.ctx.ResetChan = resetChan
+	a.scheduler.SetJournalDigest(a.journalDigestLocked)
 
 	if err := a.scheduler.LoadScenarioFromFS(
 		a.scenario.FS(), a.scenario.Entry(), manifest.RegisterFSMComponents); err != nil {

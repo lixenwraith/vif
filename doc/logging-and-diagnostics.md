@@ -782,6 +782,18 @@ Two events are notes, journaled and applied by replay but never dispatched:
 (`World.LatchSession`). A replay settles only a group that queued an event, as
 the recorded run did.
 
+Every `event.DigestIntervalTicks` (20) ticks the run writes a `digest` record,
+`jrun`, `jtick` and four hex hashes from `snapshot.DigestWorld` over both domains:
+`positions`, `kinetics`, `combat` and `entities`. It is taken last in the tick
+body, before anything settles between that tick and the next; a replay compares
+it after the tick that reaches the same place, before injecting that tick's
+groups. The first one it does not reproduce names the tick, the classes that
+differ and the last digest that matched, so a replay that left its run is caught
+within 20 ticks instead of at the next written world, which a host journal never
+has. A digest costs about 75 µs at the map limit, against a 12 ms tick, and adds
+about 5% to a bot's journal. `-replay <file> -headless` verifies a journal
+unattended and exits non-zero at the first digest it does not reproduce.
+
 `app.PlayJournal` presents the replay with fixed viewer controls rather than
 the keymap. [Runtime and concurrency](runtime.md), Replay playback, covers its
 keys, seeking, the copies that step back, sound, and how a replay logs.

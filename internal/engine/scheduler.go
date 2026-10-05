@@ -50,6 +50,9 @@ type Scheduler struct {
 	// tap observes every event before dispatch; harness-only, set before Start
 	tap func(event.GameEvent)
 
+	// digest reads the world a journal's digest carries, under the world lock
+	digest func() event.JournalDigest
+
 	// handlerTimers attributes dispatch time to each handler; bound by Prepare
 	handlerTimers map[event.Handler]*prof.Timer
 
@@ -317,6 +320,10 @@ func (s *Scheduler) RegisterEventHandler(handler event.Handler) {
 // system handlers see it, so a pooled payload is still the producer's. Harness-only:
 // set before Start, or any time on a driven App, never on a running scheduler.
 func (s *Scheduler) SetDispatchTap(fn func(event.GameEvent)) { s.tap = fn }
+
+// SetJournalDigest installs the world reading a journal carries every
+// event.DigestIntervalTicks ticks; set before Start.
+func (s *Scheduler) SetJournalDigest(fn func() event.JournalDigest) { s.digest = fn }
 
 // ExportFSM reads the FSM runtime's position for a D-19 capture: which state each
 // region stands in, how long it has stood there, the variables guards read, and
@@ -1317,6 +1324,10 @@ func (s *Scheduler) processTick() {
 		// Outbound transport closes the tick: everything this tick produced has
 		// settled, so a peer receives one tick's artifacts as one tick's worth
 		s.world.Resources.Event.Queue.FlushWire(ticks)
+		// Last in the body, where a replay compares it before injecting this tick's groups
+		if s.digest != nil && event.DigestDue(ticks) {
+			s.world.Resources.Event.Queue.DigestJournal(s.digest)
+		}
 
 		cfg := s.world.Resources.Config
 		screenW, screenH = ScreenSize(cfg)

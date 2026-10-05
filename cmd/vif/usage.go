@@ -82,7 +82,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"seed"}, arg: "<n>", hint: "Root RNG seed; 0 draws one and logs it"},
 			{names: []string{"speed"}, arg: "<rate>", hint: `Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script or autonomous bots also "max" for no wall pacing`},
 			{names: []string{"script"}, arg: "<path>", hint: "Run an authored deterministic TOML tick script"},
-			{names: []string{"headless"}, hint: "With -bot, run bots without a human player or terminal; solo runs are unpaced"},
+			{names: []string{"headless"}, hint: "With -bot, run bots without a human player or terminal; solo runs are unpaced. With -replay, verify the journal's digests unattended"},
 			{names: []string{"watch"}, hint: "Watch the first bot or a script on this terminal, with no human player"},
 			{names: []string{"r", "replay"}, arg: "<path>", hint: "Replay a recorded journal instead of playing"},
 			{names: []string{"check"}, hint: "Validate the resolved scenario, keymap, audio and content, then exit"},

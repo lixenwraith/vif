@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/event"
@@ -17,15 +18,35 @@ type ReplayTarget interface {
 	Settle()
 	PushRecord(event.JournalRecord, any) bool // false: applied, nothing queued
 	Install(event.JournalCapture) error
+	Digest() event.JournalDigest // the world now; the driver stamps nothing
 }
 
-// ReplayStats reports what a replay consumed.
+// ReplayStats reports what a replay consumed. Digests counts the written digests
+// it reproduced; Diverged is the first it did not, after which none is compared.
 type ReplayStats struct {
 	Records   int
 	Injected  int
 	Groups    int
 	Installed int
+	Digests   int
+	Diverged  *Divergence
 	End       event.Stamp
+}
+
+// Divergence is the first written digest a replay did not reproduce: it left the
+// recorded run after Since, the last digest that matched, and by At.
+type Divergence struct {
+	At      event.Stamp
+	Since   *event.Stamp
+	Classes []string // the state classes that differ, in digest order
+}
+
+func (v *Divergence) Error() string {
+	msg := fmt.Sprintf("replay left its run by run %d tick %d (%s)", v.At.Run, v.At.Tick, strings.Join(v.Classes, ", "))
+	if v.Since != nil {
+		msg += fmt.Sprintf("; it matched at run %d tick %d", v.Since.Run, v.Since.Tick)
+	}
+	return msg
 }
 
 type groupKey struct{ run, tick, boundary uint64 }
@@ -57,6 +78,9 @@ type ReplayDriver struct {
 	landed   bool // an install moved the clock past records stamped before it
 	stats    ReplayStats
 	end      *event.Stamp
+	digests  []event.JournalDigest
+	nextDig  int
+	matched  *event.Stamp
 }
 
 // NewReplayDriver binds a record stream and the worlds written among it to a
@@ -74,6 +98,42 @@ func (d *ReplayDriver) Done() bool {
 
 // FinishAt bounds trailing simulation; older journals end at their last record.
 func (d *ReplayDriver) FinishAt(end event.Stamp) { d.end = &end }
+
+// CompareDigests checks the world after each tick the recorded run wrote a digest
+// for; ds must be in tick order. A digest the replay never stands on is skipped.
+func (d *ReplayDriver) CompareDigests(ds []event.JournalDigest) { d.digests = ds }
+
+// tick advances the target one tick and compares the digest written after it.
+func (d *ReplayDriver) tick() {
+	d.target.Tick(1)
+	at := d.target.Position()
+	for ; d.nextDig < len(d.digests) && d.stats.Diverged == nil; d.nextDig++ {
+		w := d.digests[d.nextDig]
+		if w.Run > at.Run || w.Run == at.Run && w.Tick > at.Tick {
+			return
+		}
+		if w.Run != at.Run || w.Tick != at.Tick {
+			continue
+		}
+		got := d.target.Digest()
+		var classes []string
+		for _, c := range []struct {
+			name      string
+			want, got uint64
+		}{{"positions", w.Positions, got.Positions}, {"kinetics", w.Kinetics, got.Kinetics},
+			{"combat", w.Combat, got.Combat}, {"entities", w.Entities, got.Entities}} {
+			if c.want != c.got {
+				classes = append(classes, c.name)
+			}
+		}
+		if len(classes) > 0 {
+			d.stats.Diverged = &Divergence{At: event.Stamp{Run: at.Run, Tick: at.Tick}, Since: d.matched, Classes: classes}
+			return
+		}
+		d.stats.Digests++
+		d.matched = &event.Stamp{Run: at.Run, Tick: at.Tick}
+	}
+}
 
 func (d *ReplayDriver) streamDone() bool {
 	return d.next >= len(d.records) && d.nextCap >= len(d.captures)
@@ -96,7 +156,7 @@ func (d *ReplayDriver) install() (bool, error) {
 			c.JSeq, c.Run, c.Tick, at.Run, at.Tick)
 	}
 	if at.Tick < c.Tick {
-		d.target.Tick(1)
+		d.tick()
 		return true, nil
 	}
 	d.settleTo(c.Boundary)
@@ -143,7 +203,7 @@ func (d *ReplayDriver) Step() (bool, error) {
 		if at.Tick == d.end.Tick {
 			return false, nil
 		}
-		d.target.Tick(1)
+		d.tick()
 		return true, nil
 	}
 	if d.dueCapture() {
@@ -169,7 +229,7 @@ func (d *ReplayDriver) Step() (bool, error) {
 	}
 
 	if k.tick > d.cur.tick {
-		d.target.Tick(1)
+		d.tick()
 		d.cur.tick++
 		if k.tick > d.cur.tick {
 			return true, nil

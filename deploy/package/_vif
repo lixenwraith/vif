@@ -31,7 +31,7 @@ _arguments \
   '-seed[Root RNG seed; 0 draws one and logs it]:n: ' \
   '-speed[Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script or autonomous bots also "max" for no wall pacing]:rate: ' \
   '-script[Run an authored deterministic TOML tick script]:path:_files' \
-  '-headless[With -bot, run bots without a human player or terminal; solo runs are unpaced]' \
+  '-headless[With -bot, run bots without a human player or terminal; solo runs are unpaced. With -replay, verify the journal'\''s digests unattended]' \
   '-watch[Watch the first bot or a script on this terminal, with no human player]' \
   '(-r -replay)'{-r,-replay}'[Replay a recorded journal instead of playing]:path:_files' \
   '-check[Validate the resolved scenario, keymap, audio and content, then exit]' \

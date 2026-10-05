@@ -425,20 +425,6 @@ tick at four players, 63% of it `FlowField.Compute`. Replaying from a checkpoint
 instead needs a whole-world clone: the player domain, each system's private state,
 the queue and the replay cursor, which a shared capture leaves out.
 
-### Journal a world digest and name the first tick a replay leaves its run
-
-- Priority: P2, for a second evaluation
-- Affected files: `internal/event/journal.go`, `internal/journal/replay.go`,
-  `internal/snapshot/digest.go`, `internal/app/replay.go`
-
-A replay that leaves its run is caught only at the next written world ("the world
-before it differed"), and a host journal has none. Finding the tick took per-tick
-world dumps from the live and replayed runs and a diff of the two. A
-`snapshot.DigestWorld` line journaled every N ticks as a note, and compared by
-`ReplayDriver`, would name the first tick and component class that differ; a
-headless verify of a journal would run it unattended. Measure the digest's cost
-per tick at the map limit before choosing N.
-
 ## Logging
 
 ### Audit logging across the repository

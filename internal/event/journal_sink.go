@@ -2,6 +2,7 @@ package event
 
 import (
 	"encoding/base64"
+	"strconv"
 
 	"github.com/lixenwraith/vif/internal/vlog"
 )
@@ -11,6 +12,7 @@ const (
 	SubJournalRecord  = "journal"
 	SubJournalAnchor  = "anchor"
 	SubJournalCapture = "capture"
+	SubJournalDigest  = "digest"
 	SubJournalEnd     = "end"
 )
 
@@ -83,6 +85,15 @@ func (vlogSink) Capture(c JournalCapture) {
 		"participant", uint64(c.Participant),
 		"authority", uint64(c.Authority),
 		"body", base64.StdEncoding.EncodeToString(c.Body))
+}
+
+// Digest writes one world digest, its hashes in hex as a snapshot line carries them
+func (vlogSink) Digest(d JournalDigest) {
+	vlog.Journal(SubJournalDigest, "jrun", d.Run, "jtick", d.Tick,
+		"positions", strconv.FormatUint(d.Positions, 16),
+		"kinetics", strconv.FormatUint(d.Kinetics, 16),
+		"combat", strconv.FormatUint(d.Combat, 16),
+		"entities", strconv.FormatUint(d.Entities, 16))
 }
 
 func (vlogSink) Finish(st Stamp) {

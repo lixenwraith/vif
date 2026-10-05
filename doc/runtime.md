@@ -440,6 +440,11 @@ which keeps only quit, the audio toggle and `:`.
 | `:` | Command line: `replay`, `help`, `about`, `telemetry`, `hud`, `debug`, `content`, `flow`, `graph`, `log`, `q`. |
 | `q` | Quit. |
 
+The status bar adds `diverged by tick <n>` once the replay fails to reproduce a
+world digest the run wrote (logging and diagnostics §9), and an `app`
+`replay diverged` Warn record names it. `-r <file> -headless` runs the same check
+flat out, with no terminal.
+
 In a replay `:r` is `:replay`; elsewhere it remains `:region`, which a replay
 refuses. A game reset starts a run whose ticks count from zero, so `tick` and
 `time` address the run shown; the status bar reports run, tick and its 1x time.
