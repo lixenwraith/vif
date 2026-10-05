@@ -836,7 +836,7 @@ func (p *player) command(intent *input.Intent) bool {
 	}
 	c := p.cmd
 	p.cmd = nil
-	a.ctx.Viewer.Store(false)
+	// Handed back as the viewer, so it announces nothing the recording did not
 	a.world.RunSafe(func() {
 		if a.ctx.GetMode() != c.mode {
 			a.ctx.RequestMode(c.mode)
@@ -845,6 +845,7 @@ func (p *player) command(intent *input.Intent) bool {
 			a.ctx.SetPaused(c.paused)
 		}
 	})
+	a.ctx.Viewer.Store(false)
 	a.Settle()
 	p.holdMixer()
 	if move := p.pending; move != nil {
