@@ -289,10 +289,8 @@ func (r *ShieldRenderer) renderShield(ctx render.RenderContext, buf *render.Rend
 		}
 
 	case component.ShieldTypeLoot:
-		if loot, ok := r.gameCtx.World.Components.Loot.GetPtr(shieldEntity); ok {
-			if vis, exists := visual.LootVisuals[loot.Type]; exists {
-				style.GlowColor = vis.GlowColor
-			}
+		if loot, ok := r.gameCtx.World.Components.Loot.GetPtr(shieldEntity); ok && loot.Type < component.LootCount {
+			style.GlowColor = visual.LootVisuals[loot.Type].GlowColor
 		}
 	}
 
