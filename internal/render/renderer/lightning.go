@@ -16,7 +16,7 @@ import (
 type lightningBoltRenderer func(ctx render.RenderContext, buf *render.RenderBuffer,
 	points []struct{ X, Y int }, colorType component.LightningColorType, alpha float64)
 
-// LightningRenderer draws transient energy rays: quadrant characters at 2x2 sub-cell
+// LightningRenderer draws transient energy beams: quadrant characters at 2x2 sub-cell
 // resolution in TrueColor, background-filled cells in 256 colors
 type LightningRenderer struct {
 	gameCtx *engine.GameContext

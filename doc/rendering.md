@@ -98,7 +98,7 @@ modes are different:
 - **Compositor layer.** `RenderBuffer.SetClip` bounds every write path, and the
   orchestrator sets it per layer from `RenderPriority.ClipsToPlayfield`. This
   covers renderers that never convert a map coordinate at all because they
-  iterate the viewport directly — ping lines, materialize rays, the explosion
+  iterate the viewport directly — ping lines, materialize beams, the explosion
   accumulation buffer — and it holds for effects nobody has written yet.
 
 `ClipsToPlayfield` is the single classification of layers into simulation and
@@ -108,7 +108,7 @@ is added without a declared side.
 
 Where a renderer's own geometry depends on the bound rather than merely being
 trimmed by it, it reads `PlayfieldViewportRect` directly: ping spans the map
-rather than the viewport, materialize rays run from the map edge so their
+rather than the viewport, materialize beams run from the map edge so their
 length and intensity gradient stay correct, and the indicator gutters number
 only reachable rows and columns.
 
