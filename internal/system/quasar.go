@@ -224,8 +224,10 @@ func (s *QuasarSystem) Update() {
 
 		} else if quasarComp.IsZapping {
 			// Already zapping: continue zap, update target
-			cursor := s.updateZapTarget(headerEntity)
-			s.applyZapDamage(cursor)
+			// A zap costs a cursor what touching the quasar does
+			if cursor := s.updateZapTarget(headerEntity); cursor != 0 {
+				strikeCursor(s.world, cursor, profile.Contact[component.SpeciesQuasar])
+			}
 			quasars.SetComponent(headerEntity, quasarComp)
 
 		} else if quasarComp.IsCharging {
@@ -246,7 +248,7 @@ func (s *QuasarSystem) Update() {
 		}
 
 		// Shield and cursor interaction (all states)
-		s.handleInteractions(headerEntity)
+		strikeContacts(s.world, headerEntity, profile.Contact[component.SpeciesQuasar], true)
 
 		// Combat update: enraged state blocks kinetic via combat system
 		isActiveState := quasarComp.IsCharging || quasarComp.IsZapping
@@ -632,28 +634,6 @@ func (s *QuasarSystem) updateZapTarget(headerEntity core.Entity) core.Entity {
 	return cursorEntity
 }
 
-// applyZapDamage applies zap damage
-func (s *QuasarSystem) applyZapDamage(cursorEntity core.Entity) {
-	if cursorEntity == 0 {
-		return
-	}
-	shield, ok := s.world.Components.Shield.GetPtr(cursorEntity)
-	shieldActive := ok && shield.Active
-
-	if shieldActive {
-		// Drain energy through shield
-		s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-			Entity: cursorEntity,
-			Value:  parameter.QuasarShieldDrain,
-		})
-	} else {
-		s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-			Entity: cursorEntity,
-			Delta:  -parameter.QuasarDamageHeat,
-		})
-	}
-}
-
 // processCollisionsAtNewPositions destroys entities at quasar's destination.
 // Walls are not exempt here: a moving quasar plows through them.
 func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity, headerX, headerY int) {
@@ -698,36 +678,6 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 		}
 	}
 	s.sweep.emit(s.world, event.EventFlashSpawnOneRequest)
-}
-
-// handleInteractions processes shield drain and cursor collision
-func (s *QuasarSystem) handleInteractions(headerEntity core.Entity) {
-	overlaps := CheckCursorOverlaps(s.world, headerEntity)
-	for i := range overlaps.Count {
-		overlap := &overlaps.Entries[i]
-		if !s.world.SimulatesLocally(overlap.Cursor) {
-			continue
-		}
-		// Apply shield knockback before exact cursor contact.
-		if len(overlap.ShieldMembers) > 0 {
-			s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, &event.CombatAttackAreaRequestPayload{
-				AttackType:   component.CombatAttackShield,
-				OwnerEntity:  overlap.Cursor,
-				OriginEntity: overlap.Cursor,
-				TargetEntity: headerEntity,
-				HitEntities:  overlap.ShieldMembers,
-			})
-			s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-				Entity: overlap.Cursor,
-				Value:  parameter.QuasarShieldDrain,
-			})
-		} else if overlap.OnCursor && !overlap.ShieldActive {
-			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-				Entity: overlap.Cursor,
-				Delta:  -parameter.QuasarDamageHeat,
-			})
-		}
-	}
 }
 
 // terminateQuasar ends a specific quasar

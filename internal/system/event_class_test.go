@@ -71,14 +71,8 @@ var crossingPushes = map[string]string{
 	"energy:EventCursorDefeatState": "the owner's combined energy/heat lifecycle state crosses",
 	"heat:EventCursorDefeatState":   "the owner's combined energy/heat lifecycle state crosses",
 
-	// A shared species reads only the locally owned shield and crosses the exact
-	// target/member set; periodic remote shield state never resolves shared combat.
-	"quasar:EventCombatAttackAreaCrossingRequest": "owner-resolved shield impact on a shared quasar",
-	"swarm:EventCombatAttackAreaCrossingRequest":  "owner-resolved shield impact on a shared swarm",
-	"storm:EventCombatAttackAreaCrossingRequest":  "owner-resolved shield impact on a shared storm",
-	"eye:EventCombatAttackAreaCrossingRequest":    "owner-resolved shield impact on a shared eye",
-	"pylon:EventCombatAttackAreaCrossingRequest":  "owner-resolved shield impact on a shared pylon",
-	"snake:EventCombatAttackAreaCrossingRequest":  "owner-resolved shield impact on a shared snake",
+	// A species' owner-resolved shield impact crosses from strikeContacts, a helper no
+	// system file owns; TestSpeciesContactStrikesOnlyOwnedCursors checks its stamp.
 }
 
 // systemPushes records, per event constant one system's file pushes, the World

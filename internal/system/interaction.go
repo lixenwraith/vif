@@ -98,6 +98,31 @@ func strikeCursor(w *engine.World, cursor core.Entity, damage component.CursorDa
 	})
 }
 
+// strikeContacts strikes each cursor this instance simulates that an entity touches:
+// a shield with members inside it, which also knocks them back, and a bare cursor
+// on a member's cell unless the entity strikes shields alone.
+func strikeContacts(w *engine.World, entity core.Entity, damage component.CursorDamage, bare bool) {
+	overlaps := CheckCursorOverlaps(w, entity)
+	for i := range overlaps.Count {
+		o := &overlaps.Entries[i]
+		if !w.SimulatesLocally(o.Cursor) {
+			continue
+		}
+		if len(o.ShieldMembers) > 0 {
+			w.PushCrossing(event.EventCombatAttackAreaCrossingRequest, &event.CombatAttackAreaRequestPayload{
+				AttackType:   component.CombatAttackShield,
+				OwnerEntity:  o.Cursor,
+				OriginEntity: o.Cursor,
+				TargetEntity: entity,
+				HitEntities:  o.ShieldMembers,
+			})
+		} else if !bare || !o.OnCursor || o.ShieldActive {
+			continue
+		}
+		strikeCursor(w, o.Cursor, damage)
+	}
+}
+
 // strikeCursorsIn strikes every rostered cursor whose cell contains accepts, in roster order
 func strikeCursorsIn(w *engine.World, contains func(x, y int) bool, damage component.CursorDamage) {
 	for i := range parameter.MaxPlayers {
