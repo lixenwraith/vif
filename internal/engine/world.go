@@ -554,9 +554,9 @@ func (w *World) pushEvent(eventType event.EventType, payload any, origin event.O
 
 // PushRecord republishes one journaled record without offering it to the wire,
 // reporting whether it was queued. A record is stamped where it applied, so the
-// barrier deferring it again would add a second playout lead; crossings no record
-// carries are re-derived through Push and deferred as the recorded run did. An own
-// crossing keeps its identity, which decides how it settles the D-18 queue.
+// barrier deferring it again would add a second playout lead. Every crossing the
+// recorded barrier applied is a record, so a replay's barrier drops its own
+// re-derivations; an own one keeps its identity, as the D-18 queue settles by it.
 func (w *World) PushRecord(rec event.JournalRecord, payload any) bool {
 	if w.Resources.Event.Queue == nil {
 		return false
