@@ -477,10 +477,12 @@ written world was installed under, and the driver's place. Past
 `parameter.ReplayCheckpoints` (32) every other is dropped and the spacing doubles.
 At the 500×250 map limit one costs about 6 ms to take and 6.5 MB to keep, and a
 restore 35 ms with the copy's construction, against a replay from the start of
-about 16 ms a tick there. A restored copy compares the journal's digests as it
-replays; one failing a digest the presented run reproduced stops checkpointing
-(a `journal` `replay checkpoint left the run` Warn), and copies replay from the start
-again. A copy that takes over brings the HUD pins, the speakers, whose engine
+about 16 ms a tick there. A running copy is replaced only from a checkpoint more
+than the ladder's depth past it: a copy is built on the frame loop, and at 1x the
+ladder crosses each checkpoint the presented run passes a few steps behind it.
+A restored copy compares the journal's digests as it replays; one failing a digest
+the presented run reproduced stops checkpointing (a `journal` `replay checkpoint
+left the run` Warn), and copies replay from the start again. A copy that takes over brings the HUD pins, the speakers, whose engine
 plays on while the gates the copy replayed decide what sounds, and draws into the
 same cells rather than repainting the terminal.
 
@@ -789,8 +791,8 @@ exact replay-excluded keys in `internal/snapshot/surface.go`:
 | Snapshot bookkeeping | `stat.late`, `stat.groups`, `stat.metrics` |
 | Capture and correction | the whole `snapshot.` prefix |
 
-`engine.fps` is meaningless under a manual clock; the other entries describe
-pacing, contention, or telemetry rather than world behavior. The deny-list
+`engine.fps` counts frames per wall second, which no replay reproduces; the other
+entries describe pacing, contention, or telemetry rather than world behavior. The deny-list
 uses exact keys, not whole prefixes, because the same metric groups also
 contain simulation counters that must still compare — with one exception, and it
 is a whole group rather than a compromise. A replay installs no capture and applies

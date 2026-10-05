@@ -282,7 +282,7 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 	// 12. Operator session state; see the session state contract above ResetSessionState
 	ctx.recomputeOverlayGeometry()
 	ctx.SetMode(core.ModeNormal)
-	ctx.lastFPSUpdate = ctx.TimeCtl.RealTime()
+	ctx.lastFPSUpdate = time.Now() // [wall] see IncrementFrameNumber
 
 	// 13. Initial input state - Not restored by EventGameResetRequest: user-owned for the session
 	ctx.MouseFreeMode.Store(parameter.DefaultMouseFreeMode)
@@ -603,9 +603,10 @@ func (ctx *GameContext) GetFrameNumber() int64 {
 // The count is a metric rather than a log stamp: nothing logs from the render
 // goroutine, and a headless run never calls this at all.
 func (ctx *GameContext) IncrementFrameNumber() int64 {
-	// FPS calculation (once per second)
+	// [wall] Frames per wall second: a replay's manual clock stands still through a
+	// pause or a step, which read as over a hundred frames once play resumed.
 	ctx.frameCountFPS++
-	now := ctx.TimeCtl.RealTime()
+	now := time.Now()
 	if now.Sub(ctx.lastFPSUpdate) >= time.Second {
 		ctx.statFPS.Store(ctx.frameCountFPS)
 		ctx.frameCountFPS = 0

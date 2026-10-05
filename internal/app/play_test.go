@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -194,5 +195,55 @@ func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {
 	p.advance(time.Second)
 	if a.Position().Tick != capture.End().Tick || !strings.HasPrefix(a.ctx.GetStatusMessage(), "END") {
 		t.Fatal("finished replay advanced or lost its END status")
+	}
+}
+
+// TestAReplayKeepsItsTrailingCopiesAcrossACheckpoint: at 1x the copies trailing the
+// presented run cross each checkpoint it passes a few steps behind it. Rebuilding
+// them there put an App's construction on the frame loop for each tick of the ladder.
+func TestAReplayKeepsItsTrailingCopiesAcrossACheckpoint(t *testing.T) {
+	capture := journal.NewCapture()
+	source, _ := playBot(t, "default", fixtureSeed, 3*parameter.ReplayCheckpointSteps, capture)
+	source.Close()
+	cfg, err := ConfigFromAnchor(capture.Anchors()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	end := capture.End()
+	set := journal.Set{Anchors: capture.Anchors(), Records: capture.Records(), Digests: capture.Digests(), End: &end}
+	a, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	d, err := replayDriver(a, set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	built := 0
+	p := &player{a: a, src: journalSource{d, a.log}, every: parameter.ReplayCheckpointSteps,
+		trail: []event.Stamp{a.Position()}, slots: make(chan struct{}, 1)}
+	p.rebuild = func() (*App, pacedSource, error) {
+		built++
+		twin, err := NewHeadless(cfg)
+		if err != nil {
+			return nil, nil, err
+		}
+		td, err := replayDriver(twin, set)
+		return twin, journalSource{td, twin.log}, err
+	}
+	defer p.closeRebuilt()
+	for p.tickOnce() {
+		p.keep()
+		// At 1x the copies park between the presented ticks
+		for _, r := range p.spares {
+			for ok, err := r.parked(); !ok && err == nil; ok, err = r.parked() {
+				time.Sleep(time.Millisecond)
+			}
+		}
+	}
+	if len(p.checkpoints) < 2 || built != parameter.ReplayBackSpares {
+		t.Fatalf("across %d checkpoints the ladder of %d was built %d times",
+			len(p.checkpoints), parameter.ReplayBackSpares, built)
 	}
 }
