@@ -45,6 +45,9 @@ func (s *unavailableAudioSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
+// HandOverSound has no speakers to move.
+func HandOverSound(to, from *engine.World) {}
+
 type unavailableMusicSystem struct{}
 
 func NewMusicSystem(*engine.World) engine.System { return &unavailableMusicSystem{} }

@@ -110,3 +110,64 @@ func TestAudioAvailabilityGatesMuteResetAndMusicWithoutLosingPreferences(t *test
 	command("music", true)
 	assertMask(parameter.AudioChanAll)
 }
+
+// A copy rebuilt to replace a presented world replayed without speakers; on taking
+// them it sounds what its own replayed gates allow, and the replaced world goes quiet.
+func TestARebuiltCopyTakesOverTheSpeakers(t *testing.T) {
+	audio.ResetRegistries()
+	t.Cleanup(audio.ResetRegistries)
+	cfg := audio.DefaultAudioConfig()
+	cfg.Enabled, cfg.ForceBackend = true, audio.BackendNameNull
+	player, err := audio.NewAudioEngine(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := player.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(player.Stop)
+	world := func(r *engine.AudioResource) (*engine.World, *MusicSystem, func(event.GameEvent)) {
+		w := engine.NewWorld()
+		engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+		w.Resources.Audio = r
+		a, m := NewAudioSystem(w).(*AudioSystem), NewMusicSystem(w).(*MusicSystem)
+		w.AddSystem(a, engine.SystemProfile{})
+		w.AddSystem(m, engine.SystemProfile{})
+		return w, m, func(ev event.GameEvent) {
+			for evs := []event.GameEvent{ev}; len(evs) > 0; evs = w.Resources.Event.Queue.Consume() {
+				for _, e := range evs {
+					a.HandleEvent(e)
+					m.HandleEvent(e)
+				}
+			}
+		}
+	}
+	mask := func(w *engine.World) int64 { return w.Resources.Status.Ints.Get("audio.mask").Load() }
+	settle := func(what string, ok func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(time.Second); !ok(); time.Sleep(time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatal(what)
+			}
+		}
+	}
+	gate := func(enabled bool) event.GameEvent {
+		return event.GameEvent{Type: event.EventMetaSystemCommandRequest, Payload: &event.MetaSystemCommandPayload{SystemName: "music", Enabled: enabled}}
+	}
+	from, _, play := world(&engine.AudioResource{Engine: player})
+	to, music, dispatch := world(nil)
+	play(event.GameEvent{Type: event.EventSoundMuteToggle, Payload: &event.SoundMuteTogglePayload{Mode: event.MuteSet, Mask: parameter.AudioChanAll}})
+	play(event.GameEvent{Type: event.EventMusicStart})
+	settle("presented world's music did not start", player.IsMusicPlaying)
+	dispatch(gate(false)) // the copy stands before a region opened the music gate
+
+	HandOverSound(to, from)
+	if to.Resources.Audio == nil || from.Resources.Audio != nil || !player.IsMusicMuted() || mask(to) != int64(parameter.AudioChanEffects) {
+		t.Fatalf("handed over: copy mask %d, music muted %v", mask(to), player.IsMusicMuted())
+	}
+	dispatch(gate(true))
+	settle("the copy's gate did not resume the music", func() bool {
+		music.Update()
+		return mask(to) == int64(parameter.AudioChanAll)
+	})
+}
