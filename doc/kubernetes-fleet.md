@@ -23,7 +23,7 @@ in [`script/`](../script/README.md).
 | Scenario | Chosen per session from the allocator's advertised list, served from a read-only node directory (`/var/db/vif/wad`) mounted `scenario/` and `image/` only. The corpus and keymap stay embedded, so a native guest running `-d` can still join. |
 | Transport | Raw framed TCP, for every participant. A WebSocket route carries the same bytes for a browser, or for a terminal whose network blocks 7777: the allocator terminates it with the repository's standard-library `pkg/websocket` and splices it to the pod (§9). Unauthenticated initially (§4). |
 | Reached by | Its name, on three routes (§9): `vif://<site>:7777/<session>` through the allocator's front door, `vif://<site>:<nodeport>/<session>` straight to the session's forwarded NodePort, and `wss://<site>/vif/ws/<session>` through the site's edge and the allocator to the pod. |
-| Logs and metrics | Each Job writes `<session-id>.jsonl` through a Bound local PVC onto a 256 MiB node tmpfs. One standalone LogWisp node service, pinned by `deploy/logwisp/REVISION`, has a read-only view and a loopback-only listener; the allocator reverse-proxies its SSE bytes at `/vif/api/logs` without parsing a record. |
+| Logs and metrics | Each Job writes `<session-id>.jsonl` through a Bound local PVC onto a 256 MiB node tmpfs. One standalone LogWisp node service, built from upstream LogWisp `main`, has a read-only view and a loopback-only listener; the allocator reverse-proxies its SSE bytes at `/vif/api/logs` without parsing a record. |
 | Public API | Exactly `/vif/api/sessions`, `/vif/api/logs` and `/vif/ws/<session>`, over TLS through the site's edge. `/healthz`, `/readyz` and every node port but the game's stay unreachable from outside. |
 
 ```mermaid
@@ -410,8 +410,8 @@ These constraints hold for every change until then:
   but must not parse, normalize, buffer, or own the stream processor;
 - stop allocation and prove the fleet empty before changing a live workload,
   allocator binary, Role, mount, or logging service;
-- pin LogWisp to a commit reachable from upstream `main`, never a pull-request head,
-  and judge its journal only by the invocation running the pinned binary;
+- build LogWisp from upstream `main`, never a pull-request head, and judge its
+  journal only by the invocation running the installed binary;
 - announce restarts, simultaneous clients, and deadline-sensitive joins first;
 - put placeholders in repository commands; never commit a real machine address;
 - remove rendered files, probe pods and verification JSONL after each change, and

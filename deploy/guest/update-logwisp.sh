@@ -1,18 +1,16 @@
 #!/bin/sh
-# Build and deploy vif's pinned standalone LogWisp without controlling
-# K3s or the allocator. The fleet procedure separately enforces its empty-fleet
-# maintenance gate. Retains one known-good binary/config/unit.
+# Build and deploy vif's standalone LogWisp, at REVISION or upstream main's head,
+# without controlling K3s or the allocator. The fleet procedure separately enforces
+# its empty-fleet maintenance gate. Retains one known-good binary/config/unit.
 #
-#   ./deploy/guest/update-logwisp.sh
-#   ./deploy/guest/update-logwisp.sh /path/to/logwisp
+#   ./deploy/guest/update-logwisp.sh [REVISION]
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 case ${1:-} in -h|--help) sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;; esac
-[ "$#" -le 1 ] || { echo "usage: $0 [LOGWISP_CHECKOUT]" >&2; exit 2; }
+[ "$#" -le 1 ] || { echo "usage: $0 [REVISION]" >&2; exit 2; }
 
-revision_file=$repo_root/deploy/logwisp/REVISION
 config_file=$repo_root/deploy/logwisp/aggregator.toml
 unit_file=$repo_root/deploy/guest/logwisp.service
 builder=$repo_root/deploy/guest/build-logwisp.sh
@@ -23,10 +21,9 @@ backup_binary=/usr/local/libexec/logwisp.previous
 backup_config=/etc/logwisp/vif-fleet.toml.previous
 backup_unit=/etc/systemd/system/logwisp.service.previous
 
-for artifact in "$revision_file" "$config_file" "$unit_file" "$builder"; do
+for artifact in "$config_file" "$unit_file" "$builder"; do
 	[ -r "$artifact" ] || { echo "$0: missing artifact: $artifact" >&2; exit 1; }
 done
-revision=$(tr -d '[:space:]' <"$revision_file")
 for installed in "$binary" "$installed_config" "$installed_unit"; do
 	[ -f "$installed" ] || { echo "$0: missing installed file: $installed" >&2; exit 1; }
 done
@@ -59,7 +56,8 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-if [ "$#" -eq 1 ]; then "$builder" "$stage_root/logwisp" "$1"; else "$builder" "$stage_root/logwisp"; fi
+"$builder" "$stage_root/logwisp" "$@"
+staged=$("$stage_root/logwisp" --version)
 
 sudo install -D -o root -g root -m 0755 "$binary" "$backup_binary"
 sudo install -o root -g root -m 0644 "$installed_config" "$backup_config"
@@ -79,7 +77,7 @@ for attempt in $(seq 1 50); do
 	sleep 0.1
 done
 systemctl is-active --quiet logwisp.service
-"$binary" --version | grep -F "$revision"
+[ "$("$binary" --version)" = "$staged" ]
 # Read from the configuration just installed rather than restated here: a second
 # copy of these bounds drifts the first time one of them is tuned, and the check
 # then rejects the build that carries the new value.

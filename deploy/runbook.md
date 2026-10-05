@@ -94,9 +94,9 @@ Both arguments are optional and bounded by `-players-max` and `-log-level-min`;
 | `the fleet did not drain` | A pod outlived the background cascade by more than 60 seconds. | `./deploy/k3s/session.sh drain --force` |
 | `the worktree differs from HEAD` | Uncommitted changes. Updates build from HEAD, so they refuse to install something the tree does not describe; `--diff` still runs. | Commit, stash, or check out the revision you mean to deploy. |
 | `empty the fleet first … or update only: …` | `image`, `allocator` or `logwisp` differs while a fleet object exists. | `./deploy/k3s/session.sh drain`, or run only the components it names. |
-| `pinned revision is not an ancestor of LogWisp main` | `deploy/logwisp/REVISION` names a commit that upstream `main` does not contain, usually a pull-request head a squash merge discarded. | Repin to the merged commit on `main`. |
+| `revision is not on LogWisp main` | A revision given to a LogWisp helper names a commit upstream `main` does not contain: a pull-request head a squash merge discarded, or one a rewritten `main` dropped. | Give a commit on `main`, or none for its head. |
 | `logwisp.service must be active before an update` | The updater replaces a running service and keeps one rollback set; it will not install onto a stopped one. | `sudo systemctl start logwisp.service` |
-| `the served stream bounds are not {...}` | The restarted LogWisp is not serving the queue, connection and timeout bounds in `deploy/logwisp/aggregator.toml`, so the install did not take. The previous build is already back. | Compare the message against `curl -fsS http://127.0.0.1:8081/status \| jq .server`. A pinned revision too old to carry a setting is the usual cause. |
+| `the served stream bounds are not {...}` | The restarted LogWisp is not serving the queue, connection and timeout bounds in `deploy/logwisp/aggregator.toml`, so the install did not take. The previous build is already back. | Compare the message against `curl -fsS http://127.0.0.1:8081/status \| jq .server`. A LogWisp revision that lacks a setting is the usual cause. |
 | `cannot read the sink bounds from ...aggregator.toml` | The HTTP sink block lost one of `client_buffer_size`, `max_connections` or `write_timeout_ms`, which the verification reads from it. | Restore the setting; the updater will not install a configuration it cannot check. |
 | `docker.service must be inactive before the temporary build` | Docker is a build tool here, not a runtime, and the node baseline keeps it disabled. | `sudo systemctl disable --now docker.service docker.socket containerd.service` |
 
@@ -130,7 +130,7 @@ sudo journalctl -u vif-allocator.service -n 50 --no-pager
 sudo journalctl -u logwisp.service -n 50 --no-pager
 ```
 
-Judge LogWisp's journal by the invocation running the pinned binary; earlier
+Judge LogWisp's journal by the invocation running the installed binary; earlier
 entries came from whatever it replaced:
 
 ```sh

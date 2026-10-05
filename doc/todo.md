@@ -425,19 +425,3 @@ tick at four players, 63% of it `FlowField.Compute`. Replaying from a checkpoint
 instead needs a whole-world clone: the player domain, each system's private state,
 the queue and the replay cursor, which a shared capture leaves out. Copies also log
 the ticks they replay, since vlog has no per-world gate.
-
-## Fleet logging
-
-### Repin LogWisp past the fleet stream fixes
-
-- Priority: P1
-- Affected files: `deploy/logwisp/REVISION`
-- Prerequisite: the quiet-stream keepalive and the rotated-file resume reaching
-  LogWisp `main`, which the installer requires the pin to descend from
-
-`REVISION` names v0.18.1, which predates both. Until it moves, a vacant node still
-idle-expires a connected viewer and evicts it on the next session's first record,
-and a session crossing the 8 MiB file cap still replays its rotated log whole,
-spending the rate limit on duplicates while live records drop.
-[Deploying the session fleet](kube-docker-deploy.md) §10 states what the pin must
-carry.

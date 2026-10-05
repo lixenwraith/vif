@@ -1,7 +1,8 @@
 #!/bin/sh
-# Bring the node to this checkout's HEAD. Each component that differs is shown as a
-# diff (installed -, incoming +) and then updated, in dependency order; a current
-# one is skipped. --diff shows and changes nothing, and exits 1 if anything differs.
+# Bring the node to this checkout's HEAD, and LogWisp to upstream main. Each component
+# that differs is shown as a diff (installed -, incoming +) and then updated, in
+# dependency order; a current one is skipped. --diff shows and changes nothing, and
+# exits 1 if anything differs.
 # Usage: deploy/update.sh [--diff] [filter objects wad image allocator logwisp]
 set -eu
 
@@ -15,7 +16,7 @@ diff_only=false
 selected=
 for arg in "$@"; do
 	case $arg in
-		-h|--help) sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		-h|--help) sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 		--diff) diff_only=true ;;
 		filter|objects|wad|image|allocator|logwisp) selected="$selected $arg" ;;
 		*) echo "usage: $0 [--diff] [$all]" >&2; exit 2 ;;
@@ -144,11 +145,16 @@ check_allocator() {
 	return "$status"
 }
 
+# Upstream main's head, read without a LogWisp checkout; apply_logwisp builds it.
 check_logwisp() {
 	status=0
-	revision=$(tr -d '[:space:]' <"$deploy/logwisp/REVISION")
-	if ! /usr/local/bin/logwisp --version 2>/dev/null | grep -qF "$revision"; then
-		echo "binary: -> LogWisp $(printf '%.12s' "$revision")"
+	logwisp_revision=$(git ls-remote https://github.com/lixenwraith/logwisp.git refs/heads/main |
+		cut -f 1)
+	printf '%s\n' "$logwisp_revision" | grep -Eq '^[0-9a-f]{40}$' || return 2
+	installed=$(/usr/local/bin/logwisp --version 2>/dev/null |
+		sed -n 's/.*commit: \([0-9a-f]\{12\}\).*/\1/p')
+	if [ "$installed" != "$(printf '%.12s' "$logwisp_revision")" ]; then
+		echo "binary: ${installed:-unknown} -> $(printf '%.12s' "$logwisp_revision")"
 		status=1
 	fi
 	sudo_copy /etc/logwisp/vif-fleet.toml "$work/logwisp.toml"
@@ -177,7 +183,7 @@ apply_allocator() { "$guest/update-vif-allocator.sh"; }
 apply_logwisp() {
 	sudo systemctl stop vif-allocator.service
 	rc=0
-	"$guest/update-logwisp.sh" || rc=$?
+	"$guest/update-logwisp.sh" "$logwisp_revision" || rc=$?
 	sudo systemctl start vif-allocator.service
 	return "$rc"
 }
