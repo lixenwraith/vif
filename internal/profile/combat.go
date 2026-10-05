@@ -69,6 +69,19 @@ var eyeTargets = [...]component.CombatEntityType{
 	component.CombatEntityKraken,
 }
 
+// Contact is what touching a species costs a cursor: energy through an active shield
+// the body reaches, heat to a bare cursor it covers. Applied through strikeCursor.
+var Contact = [component.SpeciesCount]component.CursorDamage{
+	component.SpeciesDrain:  {EnergyDrain: parameter.DrainShieldEnergyDrainAmount, HeatDelta: -parameter.DrainHeatReductionAmount},
+	component.SpeciesSwarm:  {EnergyDrain: parameter.QuasarShieldDrain, HeatDelta: -parameter.DrainHeatReductionAmount},
+	component.SpeciesQuasar: {EnergyDrain: parameter.QuasarShieldDrain, HeatDelta: -parameter.QuasarDamageHeat},
+	component.SpeciesStorm:  {EnergyDrain: parameter.QuasarShieldDrain, HeatDelta: -parameter.HeatMax},
+	component.SpeciesPylon:  {EnergyDrain: parameter.PylonShieldDrain, HeatDelta: -parameter.PylonDamageHeat},
+	component.SpeciesSnake:  {EnergyDrain: parameter.SnakeShieldDrainPerTick, HeatDelta: -parameter.SnakeDamageHeat},
+	component.SpeciesEye:    {EnergyDrain: parameter.EyeShieldDrain, HeatDelta: -parameter.EyeDamageHeat},
+	component.SpeciesKraken: {EnergyDrain: parameter.KrakenShieldDrain, HeatDelta: -parameter.KrakenDamageHeat},
+}
+
 // collisionSet maps a defender to its knockback profile for one attack family;
 // a nil entry means that defender takes no knockback (pylon is stationary)
 type collisionSet [component.CombatEntityCount]*physics.CollisionProfile
@@ -210,6 +223,7 @@ func init() {
 		}
 		register(&pulseProfiles[d])
 	}
+	pulseProfiles[component.CombatEntityKraken].EffectMask = 0 // too massive to stun
 
 	// Bullet: damage only, one per turret shot
 	for _, d := range cursorDefenders {

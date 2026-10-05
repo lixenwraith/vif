@@ -934,10 +934,6 @@ func (s *CombatSystem) recordChain(depth uint8, count int) {
 // applyStunEffect applies stun to target entity
 // Returns false if target is immune to stun
 func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatComp *component.CombatComponent) bool {
-	if s.world.Components.Kraken.HasEntity(targetEntity) {
-		return false
-	}
-
 	// A running stun is not refreshed. Refreshing it made every later hit — the
 	// other participant's included — extend the lockdown, so a target under
 	// continuous fire never left it.

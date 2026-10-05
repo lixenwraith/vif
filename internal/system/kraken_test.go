@@ -257,7 +257,7 @@ func TestKrakenDestroysWallsAtSpawnAndAcrossItsFootprint(t *testing.T) {
 }
 
 func TestKrakenConvertsGlyphsAndDestroysWholeGoldAndNuggets(t *testing.T) {
-	w, s, e, leg := krakenFixture(t)
+	w, s, _, leg := krakenFixture(t)
 	gold := NewGoldSystem(w).(*GoldSystem)
 	nuggets := NewNuggetSystem(w).(*NuggetSystem)
 	death := NewDeathSystem(w).(*DeathSystem)
@@ -283,7 +283,7 @@ func TestKrakenConvertsGlyphsAndDestroysWholeGoldAndNuggets(t *testing.T) {
 		w.Components.Glyph.SetComponent(glyph, component.GlyphComponent{Rune: 'a' + rune(typ), Type: typ})
 		w.Positions.SetPosition(glyph, component.PositionComponent{X: leg.X, Y: leg.Y})
 	}
-	s.interact(e)
+	s.interact()
 	decays, goldDeaths := 0, 0
 	for range 12 {
 		evs := w.Resources.Event.Queue.Consume()
@@ -479,8 +479,8 @@ func TestKrakenContactsDamageEachOwnerAndPushOtherSpecies(t *testing.T) {
 	for _, cursor := range []core.Entity{first, second, remote} {
 		w.Positions.SetPosition(cursor, component.PositionComponent{X: leg.X, Y: leg.Y})
 	}
-	w.Components.Shield.SetComponent(first, component.ShieldComponent{Active: true, InvRxSq: 1.0 / 16, InvRySq: 1.0 / 4})
-	s.interact(e)
+	w.Components.Shield.SetComponent(first, component.ShieldComponent{Active: true, RadiusX: 4, RadiusY: 2, InvRxSq: 1.0 / 16, InvRySq: 1.0 / 4})
+	s.interact()
 	shieldHits, heatHits := 0, 0
 	for _, ev := range w.Resources.Event.Queue.Consume() {
 		switch p := ev.Payload.(type) {
@@ -516,6 +516,44 @@ func TestKrakenContactsDamageEachOwnerAndPushOtherSpecies(t *testing.T) {
 	}
 }
 
+// A member keeps its cell while the footprint covers it, so a slight turn moves only
+// the outline's members and a missile's sticky member stays where it was.
+func TestKrakenMembersHoldTheirCellsWhileCovered(t *testing.T) {
+	w, s, e, _ := krakenFixture(t)
+	k, _ := w.Components.Kraken.GetPtr(e)
+	header, _ := w.Components.Header.GetPtr(e)
+	before := map[core.Entity]component.PositionComponent{}
+	for _, member := range header.MemberEntries {
+		if pos, ok := w.Positions.GetPosition(member.Entity); ok {
+			before[member.Entity] = pos
+		}
+	}
+	k.Angle += 0.02
+	s.syncMembers(e, k, 90.5, 45.5)
+	held, moved, cells := 0, 0, map[component.PositionComponent]bool{}
+	for _, member := range header.MemberEntries {
+		pos, ok := w.Positions.GetPosition(member.Entity)
+		if !ok {
+			continue
+		}
+		if cells[pos] {
+			t.Fatalf("two members stand on %+v", pos)
+		}
+		cells[pos] = true
+		if old, ok := before[member.Entity]; ok && s.covers(old.X, old.Y) {
+			if old != pos {
+				t.Fatalf("member left covered cell %+v for %+v", old, pos)
+			}
+			held++
+		} else {
+			moved++
+		}
+	}
+	if len(cells) != len(s.cells) || held == 0 || moved == 0 || moved > held/4 {
+		t.Fatalf("cells=%d footprint=%d held=%d moved=%d", len(cells), len(s.cells), held, moved)
+	}
+}
+
 func TestKrakenDeathRetiresWholeMemberPool(t *testing.T) {
 	w, s, e, _ := krakenFixture(t)
 	k, _ := w.Components.Kraken.GetPtr(e)
@@ -527,10 +565,17 @@ func TestKrakenDeathRetiresWholeMemberPool(t *testing.T) {
 	if len(header.MemberEntries) <= len(s.cells) {
 		t.Fatal("fixture needs spare hitbox identities after contraction")
 	}
-	for _, member := range header.MemberEntries[len(s.cells):] {
-		if _, ok := w.Positions.GetPosition(member.Entity); ok {
-			t.Fatal("retracted hitbox still occupies a cell")
+	positioned := 0
+	for _, member := range header.MemberEntries {
+		if pos, ok := w.Positions.GetPosition(member.Entity); ok {
+			positioned++
+			if !s.covers(pos.X, pos.Y) {
+				t.Fatal("retracted hitbox still occupies a cell")
+			}
 		}
+	}
+	if positioned != len(s.cells) {
+		t.Fatalf("%d positioned hitboxes for %d footprint cells", positioned, len(s.cells))
 	}
 	hp, _ := w.Components.Combat.GetPtr(e)
 	hp.HitPoints, hp.LastDamagedBy = 0, w.Resources.Player.Slot(0)
