@@ -1,13 +1,9 @@
 //go:build !wasm && !novlog
 
-// Package vlog is the process-wide logging facade. Leaf package: it imports
-// only the standard library and lixenwraith/log, so any vif package may
-// use it without creating a cycle.
-//
-// ARGUMENT LIFETIME: records are formatted asynchronously on the logger
-// goroutine, up to BufferSize records after the call. Pass primitives and
-// value copies only — never Store.GetPtr pointers, pooled event payloads, or
-// reused scratch slices.
+// Package vlog is the process's one log sink, written through a handle per runtime.
+// A leaf: it imports only the standard library and lixenwraith/log. Records format
+// asynchronously, up to BufferSize records after the call, so pass primitives and
+// value copies only, never Store.GetPtr pointers, pooled payloads or scratch slices.
 package vlog
 
 import (
@@ -78,13 +74,9 @@ type Config struct {
 	Scope      string // scope spec; empty means all. Pre-validate with ParseScopes
 	SessionID  string // optional deployment identity added to every application record
 
-	// Console sends the session log to stdout as JSON instead of to a file.
-	//
-	// It is off by default and must stay so for a run that presents: the game owns
-	// the alternate screen, and a log line written into it is corruption rather
-	// than output. A run with no terminal has the opposite problem — a file under
-	// the user state tree is invisible to whatever is supervising it — which is
-	// what this is for.
+	// Console sends the session log to stdout as JSON instead of to a file, for a
+	// run with no terminal whose supervisor never reads the user state tree. A run
+	// that presents keeps it off: a line written into the alternate screen corrupts it.
 	Console bool
 }
 
@@ -340,63 +332,58 @@ func Shutdown(timeout time.Duration) {
 	}
 }
 
-// muted counts Mute holders; while any holds it, records below error are dropped.
-var muted atomic.Int32
+// On reports whether a process record with this sub and level would be written.
+func On(sub string, level int64) bool { return defaultLog.On(sub, level) }
 
-// Mute withholds records below error until release runs: a replay's copies replay
-// ticks the log already holds. The caller keeps every other producer still meanwhile.
-func Mute() (release func()) {
-	muted.Add(1)
-	return func() { muted.Add(-1) }
-}
-
-// audible reports whether a record at level escapes Mute.
-func audible(level int64) bool { return level >= LevelError || muted.Load() == 0 }
-
-// E reports whether a record at level would be written, ignoring scope.
-// Prefer On at scoped call sites.
-func E(level int64) bool {
-	l := sink.Load()
-	return l != nil && l.Enabled(level) && audible(level)
-}
+// The process's own records; a runtime writes through its own handle.
+func Debug(sub string, args ...any)  { defaultLog.emit(sub, LevelDebug, 0, args) }
+func Info(sub string, args ...any)   { defaultLog.emit(sub, LevelInfo, 0, args) }
+func Warn(sub string, args ...any)   { defaultLog.emit(sub, LevelWarn, 0, args) }
+func Error(sub string, args ...any)  { defaultLog.emit(sub, LevelError, 0, args) }
+func Detail(sub string, args ...any) { defaultLog.emit(sub, LevelTrace, 0, args) }
 
 // On reports whether a record with this sub and level would be written.
 // Guard hot call sites with it: the variadic slice is built before the call
 // and escapes to the heap.
-func On(sub string, level int64) bool {
-	l := sink.Load()
-	return l != nil && l.Enabled(level) && scopeEnabled(sub) && audible(level)
+func (l *Log) On(sub string, level int64) bool {
+	s := sink.Load()
+	return s != nil && s.Enabled(level) && scopeEnabled(sub) && l.audible(level)
 }
 
-func Debug(sub string, args ...any) { emit(sub, LevelDebug, args) }
-func Info(sub string, args ...any)  { emit(sub, LevelInfo, args) }
-func Warn(sub string, args ...any)  { emit(sub, LevelWarn, args) }
-func Error(sub string, args ...any) { emit(sub, LevelError, args) }
+func (l *Log) Debug(sub string, args ...any) { l.emit(sub, LevelDebug, 0, args) }
+func (l *Log) Info(sub string, args ...any)  { l.emit(sub, LevelInfo, 0, args) }
+func (l *Log) Warn(sub string, args ...any)  { l.emit(sub, LevelWarn, 0, args) }
+func (l *Log) Error(sub string, args ...any) { l.emit(sub, LevelError, 0, args) }
 
-// emit stamps the record with the current correlation values and queues it
-// Scopes filter noise, not failures: error and above always emit
-func emit(sub string, level int64, args []any) {
-	l := sink.Load()
-	if l == nil || !l.Enabled(level) || !audible(level) {
+// Detail emits at the trace level without a stack trace, for per-item taps
+// gated by scope rather than by call site. Trace is for call chains.
+func (l *Log) Detail(sub string, args ...any) { l.emit(sub, LevelTrace, 0, args) }
+
+// Trace emits a record carrying a stack trace of depth frames, raised by two to
+// cover this method and emit, which appear as the innermost trace entries.
+func (l *Log) Trace(sub string, level int64, depth int, args ...any) {
+	l.emit(sub, level, int64(depth)+2, args)
+}
+
+// emit stamps the record with this handle's run and tick and queues it. Scopes
+// filter noise, not failures: error and above always emit.
+func (l *Log) emit(sub string, level, depth int64, args []any) {
+	s := sink.Load()
+	if s == nil || !s.Enabled(level) || !l.audible(level) {
 		return
 	}
 	if level < LevelError && !scopeEnabled(sub) {
 		return
 	}
-	l.LogContext(context(sub), l.Flags()|log.FlagKV, level, 0, sessionArgs(args)...)
+	s.LogContext(l.context(sub), s.Flags()|log.FlagKV, level, depth, l.args(args)...)
 }
 
-// Trace emits a record carrying a stack trace of depth frames
-// Depth is raised by one to cover this wrapper, which appears as the innermost trace entry.
-func Trace(sub string, level int64, depth int, args ...any) {
-	l := sink.Load()
-	if l == nil || !l.Enabled(level) || !audible(level) {
-		return
+// args tags a record with this handle's instance and the process's session.
+func (l *Log) args(args []any) []any {
+	if l.instance == "" {
+		return sessionArgs(args)
 	}
-	if level < LevelError && !scopeEnabled(sub) {
-		return
-	}
-	l.LogContext(context(sub), l.Flags()|log.FlagKV, level, int64(depth)+1, sessionArgs(args)...)
+	return sessionArgs(append(append(make([]any, 0, len(args)+4), args...), "instance", l.instance))
 }
 
 // sessionArgs returns args unchanged for ordinary runs. A commissioned fleet
@@ -414,23 +401,13 @@ func sessionArgs(args []any) []any {
 	return tagged
 }
 
-func context(sub string) log.Context {
-	run, tick := defaultCorrelation.Stamp()
+func (l *Log) context(sub string) log.Context {
+	run, tick := l.Stamp()
 	return log.Context{
 		Tag:  sub,
 		Vals: [log.ContextSlots]uint64{run, tick},
 	}
 }
-
-// SetRun advances the session counter; owned by the FSM reset path
-func SetRun(n uint64) { defaultCorrelation.SetRun(n) }
-
-// SetTick publishes the game tick stamped on subsequent records
-func SetTick(n uint64) { defaultCorrelation.SetTick(n) }
-
-// Stamp returns the live correlation values, for callers that emit a set of
-// records describing one instant and need them to share a stamp.
-func Stamp() (uint64, uint64) { return defaultCorrelation.Stamp() }
 
 // CrashHook records a panic and flushes before the host restores the terminal.
 // Registered with core.SetCrashHook.
@@ -445,7 +422,7 @@ func CrashHook(r any, stack []byte) {
 	if l == nil {
 		return
 	}
-	l.LogContext(context("crash"), l.Flags()|log.FlagKV, LevelError, 0, sessionArgs([]any{
+	l.LogContext(defaultLog.context("crash"), l.Flags()|log.FlagKV, LevelError, 0, sessionArgs([]any{
 		"msg", "panic",
 		"panic", fmt.Sprint(r),
 		"stack", string(stack),
@@ -462,13 +439,6 @@ func SetCrashFlush(fn func()) { crashFlush.Store(&fn) }
 
 // recordInternalError holds logger diagnostics until shutdown
 func recordInternalError(msg string) { lastErr.Store(&msg) }
-
-// NextRun advances the session counter stamped on subsequent records
-func NextRun() uint64 { return defaultCorrelation.NextRun() }
-
-// Detail emits at the trace level without a stack trace, for per-item taps
-// gated by scope rather than by call site. Trace is for call chains.
-func Detail(sub string, args ...any) { emit(sub, LevelTrace, args) }
 
 // === Journal ===
 
@@ -540,7 +510,7 @@ func Journal(sub string, args ...any) {
 	if l == nil {
 		return
 	}
-	l.LogContext(context(sub), l.Flags()|log.FlagKV, LevelInfo, 0, sessionArgs(args)...)
+	l.LogContext(defaultLog.context(sub), l.Flags()|log.FlagKV, LevelInfo, 0, sessionArgs(args)...)
 }
 
 // LastJournalPath returns the journal file, live or most recently closed

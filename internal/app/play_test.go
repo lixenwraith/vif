@@ -180,7 +180,7 @@ func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {
 	}
 	d.FinishAt(capture.End())
 	a.AttachTransport(replayPort{id: 1})
-	p := &player{a: a, src: journalSource{d}, interval: parameter.GameUpdateInterval,
+	p := &player{a: a, src: journalSource{d, a.log}, interval: parameter.GameUpdateInterval,
 		rec: engine.ScaleNormal, scale: engine.ScaleNormal}
 	p.key(terminal.Event{Key: terminal.KeyRune, Rune: ' '})
 	if !p.paused || p.live {

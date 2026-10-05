@@ -72,6 +72,7 @@ type App struct {
 	cfg       Config
 
 	hub *service.Hub
+	log *vlog.Log
 	presentationState
 	networkSvc *service.NetworkService
 
@@ -198,9 +199,18 @@ func New(cfg Config) (*App, error) {
 		return nil, err
 	}
 
+	log := cfg.log
+	if log == nil {
+		// A driven run stamps its own ticks: a process may step several at once.
+		log = vlog.Default()
+		if cfg.Mode.Driven() {
+			log = vlog.NewLog("")
+		}
+	}
 	a := &App{
 		cfg:        cfg,
-		hub:        service.NewHub(),
+		log:        log,
+		hub:        service.NewHub(log),
 		admissions: network.NewAdmissionLimiter(),
 		life:       lifecycle.New(cfg.Lifetime),
 	}
@@ -219,14 +229,14 @@ func New(cfg Config) (*App, error) {
 
 // init wires the runtime in dependency order; a headless run skips presentation
 func (a *App) init() error {
-	vlog.Info("app", "msg", "init begin", "mode", a.cfg.Mode.String())
+	a.log.Info("app", "msg", "init started", "mode", a.cfg.Mode.String())
 
 	// Root RNG seed; resolved first, since services and systems both derive
 	// from it. A drawn seed is logged so any run replays with -seed.
 	if a.cfg.Seed == 0 {
 		a.cfg.Seed = uint64(time.Now().UnixNano()) // [wall] once per process
 	}
-	vlog.Info("app", "msg", "seed", "seed", a.cfg.Seed)
+	a.log.Info("app", "msg", "seed resolved", "seed", a.cfg.Seed)
 
 	// Embedders never call vlog.Configure, so the scope is applied here.
 	// The CLI reaches this too and applies it twice; both resolve the spec
@@ -261,7 +271,7 @@ func (a *App) init() error {
 	}
 	a.ctx.SessionCtl = sessionControl{a}
 
-	vlog.Info("app", "msg", "init complete",
+	a.log.Info("app", "msg", "init completed",
 		"width", a.ctx.Width,
 		"height", a.ctx.Height,
 		"systems", len(a.world.Systems()))
@@ -331,6 +341,7 @@ func (a *App) initWorld() {
 	} else {
 		a.ctx = engine.NewGameContext(a.world, width, height)
 	}
+	a.ctx.BindLog(a.log)
 	a.world.Resources.Config.ColorMode = colorMode
 
 	a.applyMapLatch()
@@ -476,7 +487,7 @@ func (a *App) initScheduler() error {
 	if err != nil {
 		return fmt.Errorf("system dependencies: %w", err)
 	}
-	vlog.Debug("app", "msg", "system init order", "systems", strings.Join(order, ","))
+	a.log.Debug("app", "msg", "system init order", "systems", strings.Join(order, ","))
 
 	for _, sys := range a.world.Systems() {
 		if h, ok := sys.(event.Handler); ok {
@@ -498,7 +509,7 @@ func (a *App) initJournal() error {
 		return err
 	}
 	a.recorder = r
-	vlog.Info("app", "msg", "journal open", "path", r.Path())
+	a.log.Info("journal", "msg", "journal opened", "path", r.Path())
 	return nil
 }
 
@@ -586,7 +597,7 @@ func (a *App) buildAnchor() event.JournalAnchor {
 // Close stops the scheduler before the services it depends on
 // Safe on a partially constructed App
 func (a *App) Close() {
-	vlog.Info("app", "msg", "shutdown begin")
+	a.log.Info("app", "msg", "shutdown started")
 	a.closeSeats()
 	if a.scheduler != nil {
 		a.scheduler.Stop()
@@ -605,14 +616,14 @@ func (a *App) Close() {
 
 	if a.recorder != nil {
 		stats, err := a.recorder.Close()
-		vlog.Info("app", "msg", "journal close",
+		a.log.Info("journal", "msg", "journal closed",
 			"path", stats.Path, "records", stats.Emitted, "encode_failed", stats.EncodeFailed)
 		if err != nil {
-			vlog.Error("app", "msg", "journal close", "error", err.Error())
+			a.log.Error("journal", "msg", "journal not closed", "error", err.Error())
 		}
 	}
 
-	vlog.Info("app", "msg", "shutdown complete")
+	a.log.Info("app", "msg", "shutdown completed")
 }
 
 // loadKeymap merges an external key table over the embedded default document.
@@ -652,6 +663,6 @@ func (a *App) readScenario() error {
 		return fmt.Errorf("scenario: %w", err)
 	}
 	a.scenario = sc
-	vlog.Info("app", "msg", "scenario", "name", sc.Name, "digest", sc.Short(), "files", sc.Files())
+	a.log.Info("app", "msg", "scenario loaded", "name", sc.Name, "digest", sc.Short(), "files", sc.Files())
 	return nil
 }

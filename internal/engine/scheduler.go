@@ -222,12 +222,12 @@ func (s *Scheduler) HandleEvent(ev event.GameEvent) {
 		return
 	}
 	if err := s.applyRegionOp(p); err != nil {
-		vlog.Error("fsm", "msg", "region request failed",
+		s.world.Log().Error("fsm", "msg", "region request failed",
 			"op", p.Op, "region", p.Region, "state", p.State, "error", err.Error())
 		s.report("region: " + err.Error())
 		return
 	}
-	vlog.Info("fsm", "msg", "region request", "op", p.Op, "region", p.Region, "state", p.State)
+	s.world.Log().Info("fsm", "msg", "region requested", "op", p.Op, "region", p.Region, "state", p.State)
 }
 
 // applyRegionOp dispatches one primitive region operation
@@ -374,7 +374,7 @@ func (s *Scheduler) ImportFSM(state fsm.MachineState, reconcileLocal bool) error
 		var actions int
 		actions, err = s.fsm.ImportReconciled(s.world, state)
 		if err == nil && actions > 0 {
-			vlog.Debug("fsm", "msg", "import reconciled local lifecycle", "actions", actions)
+			s.world.Log().Debug("fsm", "msg", "import reconciled local lifecycle", "actions", actions)
 		}
 	} else {
 		err = s.fsm.Import(s.world, state)
@@ -456,19 +456,20 @@ func (s *Scheduler) bindFSMTelemetry() {
 	// region is the first string field on every record, so vif-log's follow
 	// key (f/F) walks one region's path
 	s.fsm.OnTransition = func(region string, from, to fsm.StateID, trigger event.EventType, internal bool) {
+		log := s.world.Log()
 		if internal {
-			if !vlog.On("fsm", vlog.LevelDebug) {
+			if !log.On("fsm", vlog.LevelDebug) {
 				return
 			}
-			vlog.Debug("fsm", "msg", "internal",
+			log.Debug("fsm", "msg", "internal",
 				"region", region,
 				"state", s.fsm.StateName(from),
 				"via", event.GetEventName(trigger))
 			return
 		}
 		s.world.Resources.Status.TriggerFSM(region)
-		if vlog.On("fsm", vlog.LevelInfo) {
-			vlog.Info("fsm", "msg", "transition",
+		if log.On("fsm", vlog.LevelDebug) {
+			log.Debug("fsm", "msg", "transition",
 				"region", region,
 				"from", s.fsm.StateName(from),
 				"to", s.fsm.StateName(to),
@@ -483,10 +484,11 @@ func (s *Scheduler) bindFSMTelemetry() {
 	}
 
 	s.fsm.OnRegion = func(op, region string, state fsm.StateID) {
-		if !vlog.On("fsm", vlog.LevelInfo) {
+		log := s.world.Log()
+		if !log.On("fsm", vlog.LevelInfo) {
 			return
 		}
-		vlog.Info("fsm", "msg", "region",
+		log.Info("fsm", "msg", "region",
 			"region", region,
 			"op", op,
 			"state", s.fsm.StateName(state))
@@ -727,7 +729,7 @@ func (s *Scheduler) Reset() { s.executeReset() }
 // cause, and pause when asked
 func (s *Scheduler) breakHit(bs *BreakState, cause string) {
 	s.world.Resources.Status.Trigger(status.TrigBreak)
-	vlog.Info("app", "msg", "breakpoint",
+	s.world.Log().Info("app", "msg", "breakpoint hit",
 		"on", bs.Label, "cause", cause, "scale", bs.Restore.String(), "pause", bs.Pause)
 
 	if bs.Pause {
@@ -890,8 +892,9 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 	// Gates hoisted out of the loop: one atomic load each per pass.
 	// Payloads are pooled and released by their handlers, so only the type
 	// is logged — retaining ev.Payload would race the next Acquire.
-	perEvent := vlog.On("dispatch", vlog.LevelTrace)
-	summary := vlog.On("event", vlog.LevelDebug)
+	log := s.world.Log()
+	perEvent := log.On("dispatch", vlog.LevelTrace)
+	summary := log.On("event", vlog.LevelDebug)
 
 	// Breakpoint probe: one pointer load per pass, one compare per event
 	var brkEv event.EventType
@@ -947,7 +950,7 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 		// Emitted after HandleEvent so the fsm verdict is known; any transition
 		// record it produced carries via=<this event> and reads as the cause
 		if perEvent {
-			vlog.Detail("dispatch", "msg", "ev",
+			log.Detail("dispatch", "msg", "ev",
 				"ev", event.GetEventName(ev.Type),
 				"sys", len(handlers),
 				"fsm", took)
@@ -979,7 +982,7 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 	}
 
 	if summary {
-		vlog.Debug("event", "msg", "pass",
+		log.Debug("event", "msg", "pass",
 			"src", src,
 			"n", len(eventsList),
 			"fsm", nFSM,
@@ -1142,7 +1145,7 @@ func appendEventTypeCounts(dst []byte, counts *[event.EventTypeCount]int64) []by
 
 // executeReset performs FSM reset while scheduler mutex is held
 func (s *Scheduler) executeReset() {
-	vlog.Info("fsm", "msg", "session reset")
+	s.world.Log().Info("fsm", "msg", "session reset")
 
 	// 1. Synchronize with world lock
 	// Acquire lock, wait till MetaSystem finishes synchronous cleanup and releases the lock
@@ -1175,7 +1178,7 @@ func (s *Scheduler) executeReset() {
 
 	// 5. Re-apply global system configuration (mirrors the scenario load)
 	if err := s.applySystemConfig(); err != nil {
-		vlog.Error("fsm", "msg", "system config", "error", err.Error())
+		s.world.Log().Error("fsm", "msg", "system config not applied", "error", err.Error())
 	}
 
 	// 6. Unpause via the single owner so clock, context, and audio move
@@ -1189,7 +1192,7 @@ func (s *Scheduler) executeReset() {
 	// 8. Systems re-Init on the reset dispatch that preceded this call, so the
 	//    next game's streams differ while staying a function of the root seed
 	session := s.world.Resources.Rand.NextSession()
-	vlog.Info("app", "msg", "rng session", "session", session)
+	s.world.Log().Info("app", "msg", "rng session advanced", "session", session)
 	s.world.Resources.Event.Queue.AnchorJournal(s.anchorLive(session))
 }
 
@@ -1224,8 +1227,9 @@ func (s *Scheduler) processTick() {
 	}
 
 	// Lock sampling is a per-tick decision, not a per-acquire probe
-	s.world.SetLockSampling(vlog.On("lock", vlog.LevelDebug) || s.world.Resources.Status.RecorderActive())
-	SetDomainAudit(vlog.On("domain", vlog.LevelDebug))
+	log := s.world.Log()
+	s.world.SetLockSampling(log.On("lock", vlog.LevelDebug) || s.world.Resources.Status.RecorderActive())
+	SetDomainAudit(log.On("domain", vlog.LevelDebug))
 
 	var (
 		tickTime         time.Time // this tick's game instant, read once under the lock
@@ -1279,7 +1283,7 @@ func (s *Scheduler) processTick() {
 
 		// Stamp under the lock: a producer must not observe the new tick before
 		// the tick body it belongs to has started.
-		s.world.Resources.Status.Correlation().SetTick(tick)
+		s.world.Log().SetTick(tick)
 		s.world.Resources.Event.Queue.BeginTick(tick)
 
 		// 1. Sync Time
@@ -1371,7 +1375,7 @@ func (s *Scheduler) processTick() {
 
 	// Queue overflow is silent state loss; report every increase.
 	if droppedDelta != 0 {
-		vlog.Warn("event", "msg", "queue overflow",
+		s.world.Log().Warn("event", "msg", "queue overflow",
 			"dropped", dropped,
 			"delta", droppedDelta)
 		s.world.Resources.Status.Trigger(status.TrigDrop)

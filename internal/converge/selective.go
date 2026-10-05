@@ -9,7 +9,6 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
-	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // retainedCapture is one published capture and its index, kept so the host can
@@ -293,7 +292,7 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	req, err := snapshot.DecodeCorrectionRequest(pending.body)
 	if err != nil {
 		m.ShardsRefused.Add(1)
-		vlog.Debug("app", "msg", "correction request refused",
+		c.log.Debug("converge", "msg", "correction request refused",
 			"peer", pending.from, "error", err.Error())
 		return
 	}
@@ -314,7 +313,7 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	if req.Version != snapshot.ManifestVersion || req.Schema != snapshot.Schema {
 		c.publishMu.Unlock()
 		m.ShardsRefused.Add(1)
-		vlog.Debug("app", "msg", "correction request refused",
+		c.log.Debug("converge", "msg", "correction request refused",
 			"peer", pending.from, "version", req.Version, "schema", req.Schema)
 		return
 	}
@@ -370,7 +369,7 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	c.publishMu.Unlock()
 	if err != nil {
 		m.ShardsRefused.Add(1)
-		vlog.Debug("app", "msg", "repair not built",
+		c.log.Debug("converge", "msg", "repair not built",
 			"peer", pending.from, "tick", req.Tick, "error", err.Error())
 		c.sendKeyframeTo(port, pending.from, req.Tick)
 		return
@@ -400,7 +399,7 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	c.publishMu.Lock()
 	c.recordSelectiveSizeLocked(len(body))
 	c.publishMu.Unlock()
-	vlog.Debug("app", "msg", "repair sent",
+	c.log.Debug("converge", "msg", "repair sent",
 		"peer", pending.from, "tick", req.Tick, "pages", pages, "bytes", len(body))
 }
 
@@ -463,7 +462,7 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 	if !c.haveKey || c.baseline.Header.Tick < minTick {
 		if _, _, err := c.takeKeyframe(); err != nil {
 			c.publishMu.Unlock()
-			vlog.Warn("app", "msg", "keyframe fallback capture", "error", err.Error())
+			c.log.Warn("converge", "msg", "keyframe fallback not captured", "error", err.Error())
 			return
 		}
 	}
@@ -473,7 +472,7 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 		body, err = snapshot.EncodeCorrection(cap)
 		if err != nil {
 			c.publishMu.Unlock()
-			vlog.Warn("app", "msg", "keyframe fallback encode", "error", err.Error())
+			c.log.Warn("converge", "msg", "keyframe fallback not encoded", "error", err.Error())
 			return
 		}
 		c.keyCorrection = body
@@ -487,14 +486,14 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 	c.releaseLocked(port)
 	c.publishMu.Unlock()
 	if err != nil {
-		vlog.Warn("app", "msg", "keyframe fallback chunk", "error", err.Error())
+		c.log.Warn("converge", "msg", "keyframe fallback not chunked", "error", err.Error())
 		return
 	}
 	// Counted where every other correction body is: a fallback is not free, and a
 	// wire total that omitted it would flatter the protocol that provoked it.
 	c.tel.SentBytes.Add(int64(len(body)))
 	c.tel.KeyframeFallback.Add(1)
-	vlog.Debug("app", "msg", "keyframe fallback sent",
+	c.log.Debug("converge", "msg", "keyframe fallback sent",
 		"peer", id, "tick", cap.Header.Tick, "bytes", len(body))
 }
 
@@ -643,7 +642,7 @@ func (c *Corrections) TickClosed(tick uint64) {
 	}
 	at, err := c.inst.CaptureSharedLocked()
 	if err != nil {
-		vlog.Warn("app", "msg", "manifest tick capture", "tick", tick, "error", err.Error())
+		c.log.Warn("converge", "msg", "manifest tick not captured", "tick", tick, "error", err.Error())
 		return
 	}
 	c.selectiveMu.Lock()
@@ -670,7 +669,7 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 	want, err := snapshot.DecodeManifest(body)
 	if err != nil {
 		m.BaselineRefusals.Add(1)
-		vlog.Debug("app", "msg", "manifest refused", "error", err.Error())
+		c.log.Debug("converge", "msg", "manifest refused", "error", err.Error())
 		return 0
 	}
 	from := c.selectiveSource()
@@ -685,7 +684,7 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 	}
 	if err := c.inst.VerifyCaptureIdentity(want.Header); err != nil {
 		m.BaselineRefusals.Add(1)
-		vlog.Debug("app", "msg", "manifest describes another session", "error", err.Error())
+		c.log.Debug("converge", "msg", "manifest describes another session", "error", err.Error())
 		return 0
 	}
 
@@ -700,14 +699,14 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		mine, index = prior.capture, prior.index
 	} else {
 		if mine, err = c.worldAt(want.Header.Tick); err != nil {
-			vlog.Warn("app", "msg", "manifest comparison capture", "error", err.Error())
+			c.log.Warn("converge", "msg", "manifest comparison not captured", "error", err.Error())
 			return 0
 		}
 		// Compared under the authority's term, so a capture stamped just before a
 		// handoff was adopted does not differ from the index for that reason alone.
 		mine.Header.Term = want.Header.Term
 		if index, err = c.manifest.Build(mine, want.Authority); err != nil {
-			vlog.Warn("app", "msg", "manifest comparison index", "error", err.Error())
+			c.log.Warn("converge", "msg", "manifest comparison not indexed", "error", err.Error())
 			return 0
 		}
 	}
@@ -800,7 +799,7 @@ func (c *Corrections) applyRepair(body []byte) {
 	set, err := snapshot.DecodeShardSet(body)
 	if err != nil {
 		m.ShardsRefused.Add(1)
-		vlog.Debug("app", "msg", "repair refused", "error", err.Error())
+		c.log.Debug("converge", "msg", "repair refused", "error", err.Error())
 		return
 	}
 	m.ShardsRecv.Add(int64(len(set.Shards)))
@@ -813,14 +812,14 @@ func (c *Corrections) applyRepair(body []byte) {
 	if awaiting == nil {
 		m.BaselineRefusals.Add(1)
 		m.ShardsRefused.Add(1)
-		vlog.Debug("app", "msg", "repair names a baseline this instance has moved past",
+		c.log.Debug("converge", "msg", "repair names a baseline this instance has moved past",
 			"repair_tick", set.Header.Tick)
 		return
 	}
 	if err := snapshot.ValidateShardSet(set, awaiting.tick, awaiting.manifest.Authority, awaiting.manifest.Root, awaiting.manifest.Header); err != nil {
 		m.ProofFailures.Add(1)
 		m.ShardsRefused.Add(1)
-		vlog.Warn("app", "msg", "repair failed its proof", "error", err.Error())
+		c.log.Warn("converge", "msg", "repair failed its proof", "error", err.Error())
 		c.requestKeyframe(awaiting.from, awaiting.manifest)
 		return
 	}
@@ -833,7 +832,7 @@ func (c *Corrections) applyRepair(body []byte) {
 	if err != nil {
 		m.ProofFailures.Add(1)
 		m.ShardsRefused.Add(1)
-		vlog.Warn("app", "msg", "repair did not verify", "error", err.Error())
+		c.log.Warn("converge", "msg", "repair did not verify", "error", err.Error())
 		c.requestKeyframe(awaiting.from, awaiting.manifest)
 		return
 	}
@@ -842,7 +841,7 @@ func (c *Corrections) applyRepair(body []byte) {
 	// and the commit does not index the same capture again.
 	c.retain(repaired, index, false)
 	if err := c.install(repaired); err != nil {
-		vlog.Warn("app", "msg", "repair not installed",
+		c.log.Warn("converge", "msg", "repair not installed",
 			"tick", repaired.Header.Tick, "error", err.Error())
 		c.requestKeyframe(awaiting.from, awaiting.manifest)
 		return
@@ -855,7 +854,7 @@ func (c *Corrections) applyRepair(body []byte) {
 	m.PagesRepaired.Add(int64(rep.Pages))
 	m.EntitiesRepaired.Add(int64(rep.Entities))
 	m.CellsRepaired.Add(int64(rep.Rows))
-	vlog.Debug("app", "msg", "repair applied",
+	c.log.Debug("converge", "msg", "repair applied",
 		"tick", repaired.Header.Tick, "pages", rep.Pages,
 		"sections", rep.Sections, "cells", rep.Rows)
 }
@@ -883,7 +882,7 @@ func (c *Corrections) sendRequest(from uint32, req snapshot.CorrectionRequest) {
 	}
 	body, err := snapshot.EncodeCorrectionRequest(req)
 	if err != nil {
-		vlog.Warn("app", "msg", "correction request encode", "error", err.Error())
+		c.log.Warn("converge", "msg", "correction request not encoded", "error", err.Error())
 		return
 	}
 	if len(body) > network.MaxPayloadSize && !req.Keyframe {

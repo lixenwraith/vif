@@ -125,11 +125,11 @@ func (r *Registry) Tick(n uint64) {
 	}
 
 	if every := r.snapEvery.Load(); every != 0 && n%every == 0 &&
-		vlog.On(SubStat, vlog.LevelInfo) {
+		r.Log().On(SubStat, vlog.LevelInfo) {
 		// One explicit stamp for the whole snapshot, so every group in it names
 		// the instant it describes
-		run, tick := r.Correlation().Stamp()
-		_, _ = vlog.EmitSet(SubStat, run, tick, r.emitGroups)
+		run, tick := r.Log().Stamp()
+		_, _ = r.Log().EmitSet(SubStat, run, tick, r.emitGroups)
 	}
 
 	if rc != nil {

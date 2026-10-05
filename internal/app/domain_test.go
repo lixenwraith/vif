@@ -511,10 +511,10 @@ func TestAppsScopeOperatorState(t *testing.T) {
 
 	a.Tick(2)
 	b.Tick(1)
-	_, tickA := a.Context().Correlation.Stamp()
-	_, tickB := b.Context().Correlation.Stamp()
+	_, tickA := a.Context().Log.Stamp()
+	_, tickB := b.Context().Log.Stamp()
 	if tickA == tickB {
-		t.Fatalf("correlation ticks = (%d, %d), want independent values", tickA, tickB)
+		t.Fatalf("log stamp ticks = (%d, %d), want independent values", tickA, tickB)
 	}
 }
 

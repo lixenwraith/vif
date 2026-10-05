@@ -4,8 +4,6 @@ import (
 	"maps"
 	"slices"
 	"sync/atomic"
-
-	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // Script-visible ConfigResource fields, the single authority for
@@ -72,7 +70,7 @@ func noteDivergentRead(w *World, field string) {
 	if !watched || !w.SessionShared() || seen.Swap(true) {
 		return
 	}
-	vlog.Warn("fsm", "msg", "non-replicated config read under a locked map",
+	w.Log().Warn("domain", "msg", "non-replicated config read under a locked map",
 		"field", field, "rule", "D-14")
 }
 

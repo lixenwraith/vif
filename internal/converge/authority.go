@@ -21,6 +21,7 @@ import (
 type Authority struct {
 	inst Instance
 	tel  snapshot.Telemetry
+	log  *vlog.Log
 
 	// slow is the eviction policy and watch the window each participant is being
 	// judged over; see driveEviction. Touched only by the correction loop.
@@ -179,7 +180,7 @@ func (u *Authority) driveEviction(now time.Time) {
 		}
 		if u.inst.DropParticipant(uint32(e.ID)) {
 			u.statEvict.Add(1)
-			vlog.Warn("app", "msg", "participant evicted as too slow",
+			u.log.Warn("session", "msg", "participant evicted as too slow",
 				"participant", e.ID, "late_per_s", rate, "bytes_per_s", bps,
 				"window", u.slow.Window.String())
 		}
@@ -277,7 +278,7 @@ func (u *Authority) admit(term network.AuthorityTerm, from uint32) bool {
 // refuse records and reports one artifact turned away by the term gate.
 func (u *Authority) refuse(from uint32, term network.AuthorityTerm, why string) {
 	u.statRefused.Add(1)
-	vlog.Warn("app", "msg", "authoritative artifact refused",
+	u.log.Warn("session", "msg", "authoritative artifact refused",
 		"peer", from, "term", uint64(term), "held", uint64(u.Term()), "reason", why)
 }
 
@@ -314,7 +315,7 @@ func (u *Authority) beginSuccession(lost network.PeerID) {
 	u.mu.Unlock()
 
 	u.statMigrating.Store(true)
-	vlog.Warn("app", "msg", "authority lost; succession opened",
+	u.log.Warn("session", "msg", "authority lost; succession opened",
 		"peer", uint64(lost), "term", uint64(term), "local", uint64(local))
 	u.sendReport()
 	u.drive()
@@ -462,7 +463,7 @@ func (u *Authority) trySucceed() {
 	u.mu.Unlock()
 
 	if err := u.adopt(rec, 0); err != nil {
-		vlog.Error("app", "msg", "succession could not adopt its own record", "error", err.Error())
+		u.log.Error("session", "msg", "succession could not adopt its own record", "error", err.Error())
 		return
 	}
 	// The roster the successor took over names participants it may have no path to
@@ -505,7 +506,7 @@ func (u *Authority) giveUp() {
 	if fixed {
 		why = "the session pinned its authority"
 	}
-	vlog.Warn("app", "msg", "continuing locally", "held_term", uint64(u.Term()),
+	u.log.Warn("session", "msg", "continuing locally", "held_term", uint64(u.Term()),
 		"contested_term", uint64(term), "lost", uint64(lost), "reason", why)
 	u.inst.SetStatusMessage(
 		"Host connection lost; continuing locally from the last authoritative state",
@@ -563,7 +564,7 @@ func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 	u.publish()
 	u.inst.AuthorityChanged(rec, mine)
 
-	vlog.Warn("app", "msg", "authority handed off",
+	u.log.Warn("session", "msg", "authority handed off",
 		"term", uint64(rec.Term), "authority", uint64(rec.Authority),
 		"predecessor", uint64(rec.Predecessor), "roster", len(rec.Roster),
 		"evidence_tick", rec.EvidenceTick, "local", mine)
@@ -659,7 +660,7 @@ func (u *Authority) PublishChain() {
 		return
 	}
 	u.flood(network.MsgPeerList, 0, body)
-	vlog.Info("app", "msg", "succession chain published",
+	u.log.Info("session", "msg", "succession chain published",
 		"term", uint64(term), "candidates", len(chain))
 }
 
@@ -774,7 +775,7 @@ func (u *Authority) onHandoff(from uint32, body []byte) {
 	}
 	if err := u.adopt(rec, from); err != nil {
 		u.statRefused.Add(1)
-		vlog.Warn("app", "msg", "handoff refused",
+		u.log.Warn("session", "msg", "handoff refused",
 			"peer", from, "term", uint64(rec.Term), "authority", uint64(rec.Authority),
 			"error", err.Error())
 		u.inst.SetStatusMessage("Refused a conflicting authority handoff: "+err.Error(),

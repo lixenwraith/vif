@@ -479,17 +479,17 @@ At the 500×250 map limit one costs about 6 ms to take and 6.5 MB to keep, and a
 restore 35 ms with the copy's construction, against a replay from the start of
 about 16 ms a tick there. A restored copy compares the journal's digests as it
 replays; one failing a digest the presented run reproduced stops checkpointing
-(an `app` `replay checkpoint left the run` Warn), and copies replay from the start
+(a `journal` `replay checkpoint left the run` Warn), and copies replay from the start
 again. A copy that takes over brings the HUD pins, the speakers, whose engine
-plays on while the gates the copy replayed decide what sounds, and the log stamp,
-and draws into the same cells rather than repainting the terminal.
+plays on while the gates the copy replayed decide what sounds, and draws into the
+same cells rather than repainting the terminal.
 
 A replay logs as play does, so `:log on` and `:log off` bound a window around an
-issue found by seeking. Records carry the presented copy's `run` and `tick`; copies
-log nothing, because each step runs under `vlog.Mute` while a read-write lock holds
-off the frame loop, which does all of the presented copy's work. Each jump of the
-presented tick (`,`, a seek, a restart) is an `app` `replay seek` Info record with
-`tick`, `from_tick`, `delta` and their runs, stamped after the jump; a seek ahead
+issue found by seeking. Each copy writes through its own log handle, muted until it
+is presented, so records carry the presented copy's `run` and `tick` and a copy
+replaying behind it writes only its failures. Each jump of the presented tick (`,`,
+a seek, a restart) is a `journal` `replay moved` Info record with `tick`,
+`from_tick`, `delta` and their runs, stamped after the jump; a seek ahead
 is recorded as it starts, and the ticks it plays log as they pass. Ticks played
 again after going back log again, after the record that explains them.
 

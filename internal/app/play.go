@@ -35,7 +35,7 @@ func PlayJournal(viewer Config, paths ...string) error {
 		return err
 	}
 	if err := set.CheckDense(); err != nil {
-		vlog.Warn("app", "msg", "journal incomplete", "error", err.Error())
+		vlog.Warn("journal", "msg", "journal incomplete", "error", err.Error())
 	}
 	an := set.Anchors[0]
 	cfg.AudioMuted, cfg.AudioBackend, cfg.AudioBuffer = viewer.AudioMuted, viewer.AudioBackend, viewer.AudioBuffer
@@ -59,13 +59,15 @@ func PlayJournal(viewer Config, paths ...string) error {
 	if err != nil {
 		return err
 	}
-	vlog.Info("app", "msg", "replay open",
+	a.log.Info("journal", "msg", "replay opened",
 		"records", len(set.Records), "digests", len(set.Digests), "seed", an.Seed, "speed", an.Speed)
-	p := &player{a: a, src: journalSource{d}, interval: time.Duration(an.TickInterval),
+	p := &player{a: a, src: journalSource{d, a.log}, interval: time.Duration(an.TickInterval),
 		rec: parseSpeed(an.Speed), scale: engine.ScaleNormal}
 	p.rebuild = func() (*App, pacedSource, error) {
+		// A copy replays ticks the log already holds; it writes once presented.
 		rc := cfg
-		rc.borrow = &a.presentationState
+		rc.borrow, rc.log = &a.presentationState, vlog.NewLog("")
+		rc.log.Mute(true)
 		twin, err := NewReplay(rc)
 		if err != nil {
 			return nil, nil, err
@@ -75,12 +77,11 @@ func PlayJournal(viewer Config, paths ...string) error {
 			twin.Close()
 			return nil, nil, err
 		}
-		return twin, journalSource{td}, nil
+		return twin, journalSource{td, twin.log}, nil
 	}
 	p.trail, p.slots = []event.Stamp{a.Position()}, make(chan struct{}, max(1, runtime.GOMAXPROCS(0)-1))
 	p.every = parameter.ReplayCheckpointSteps
 	a.ctx.ReplaySeek = p.seekLater
-	a.stampLog()
 	defer p.closeRebuilt()
 	return p.run()
 }
@@ -95,7 +96,7 @@ func runPresented(a *App, src pacedSource, kind, name string,
 	if !paced {
 		interval = time.Millisecond // the floor perTick already clamps to
 	}
-	vlog.Info("app", "msg", kind+" open", "name", name, "paced", paced, "live", live)
+	a.log.Info("app", "msg", kind+" opened", "name", name, "paced", paced, "live", live)
 	p := &player{
 		a: a, src: src, interval: interval,
 		rec: engine.ScaleNormal, scale: engine.ScaleNormal,
@@ -105,14 +106,17 @@ func runPresented(a *App, src pacedSource, kind, name string,
 }
 
 // journalSource adapts a record stream to the presentation loop.
-type journalSource struct{ d *journal.ReplayDriver }
+type journalSource struct {
+	d   *journal.ReplayDriver
+	log *vlog.Log
+}
 
 // Step logs the first digest the replay does not reproduce; the bar keeps showing it.
 func (s journalSource) Step() (bool, error) {
 	before := s.d.Stats().Diverged
 	more, err := s.d.Step()
 	if v := s.d.Stats().Diverged; v != nil && before == nil {
-		vlog.Warn("app", "msg", "replay diverged", "tick", v.At.Tick, "run", v.At.Run, "error", v.Error())
+		s.log.Warn("journal", "msg", "replay diverged", "tick", v.At.Tick, "run", v.At.Run, "error", v.Error())
 	}
 	return more, err
 }
@@ -177,7 +181,6 @@ type player struct {
 	resume      bool          // play on once the seek lands, as a restart does
 	pending     func()        // a :replay the router took, applied once it has returned
 	slots       chan struct{} // copies step on all cores but the one the presented copy keeps
-	quiet       sync.RWMutex  // the frame loop's, so whatever logs while a copy steps is a copy
 	copies      sync.WaitGroup
 }
 
@@ -190,7 +193,6 @@ type rebuilt struct {
 	left    *journal.Divergence // the first digest a restored copy did not reproduce
 	w, h    int                 // the terminal its renderers were laid out for
 	slots   chan struct{}
-	quiet   *sync.RWMutex
 	running *sync.WaitGroup
 	mu      sync.Mutex
 	at      int // steps replayed
@@ -211,7 +213,7 @@ func (r *rebuilt) run() {
 	if r.from != nil {
 		var err error
 		r.slots <- struct{}{}
-		r.quietly(func() { err = r.a.restore(r.from, r.src.(journalSource).d) })
+		err = r.a.restore(r.from, r.src.(journalSource).d)
 		<-r.slots
 		if err != nil {
 			r.mu.Lock()
@@ -230,7 +232,7 @@ func (r *rebuilt) run() {
 		case at < target:
 			var err error
 			r.slots <- struct{}{}
-			r.quietly(func() { _, err = r.src.Step() })
+			_, err = r.src.Step()
 			<-r.slots
 			r.mu.Lock()
 			r.at, r.err = r.at+1, err
@@ -247,15 +249,6 @@ func (r *rebuilt) run() {
 	}
 }
 
-// quietly runs fn with the frame loop held off and the log muted: a copy replays
-// ticks the log already holds, and the presented run logs as play does.
-func (r *rebuilt) quietly(fn func()) {
-	r.quiet.RLock()
-	defer r.quiet.RUnlock()
-	defer vlog.Mute()()
-	fn()
-}
-
 // exit closes a copy stopped while it ran; stop closes one stopped after.
 func (r *rebuilt) exit() {
 	r.mu.Lock()
@@ -263,7 +256,7 @@ func (r *rebuilt) exit() {
 	drop := r.drop
 	r.mu.Unlock()
 	if drop {
-		r.quietly(r.a.Close)
+		r.a.Close()
 	}
 }
 
@@ -313,7 +306,6 @@ func (r *rebuilt) stop() {
 	r.mu.Unlock()
 	r.signal()
 	if exited {
-		defer vlog.Mute()()
 		r.a.Close()
 	}
 }
@@ -354,19 +346,14 @@ func (p *player) run() error {
 			return nil
 
 		case ev := <-events:
-			p.quiet.Lock()
-			more := p.event(ev)
-			p.quiet.Unlock()
-			if !more {
+			if !p.event(ev) {
 				return nil
 			}
 
 		case now := <-frameTicker.C:
-			p.quiet.Lock()
 			p.advance(now.Sub(last))
 			p.keep()
 			p.frame()
-			p.quiet.Unlock()
 			last = now
 			if p.done && p.err != nil {
 				return p.err
@@ -460,7 +447,7 @@ func (p *player) tickOnce() bool {
 	}
 	more, err := p.src.Step()
 	if err != nil {
-		vlog.Error("app", "msg", "presented run failed", "error", err.Error())
+		p.a.log.Error("app", "msg", "presented run failed", "error", err.Error())
 		p.done = true
 		p.err = err
 		p.a.ctx.SetStatusMessage("ERROR: "+err.Error(), 0, true)
@@ -496,7 +483,7 @@ func (p *player) checkpoint() {
 	)
 	p.a.world.RunSafe(func() { c, err = p.a.checkpointLocked(p.src.(journalSource).d) })
 	if err != nil {
-		vlog.Warn("app", "msg", "replay checkpoint failed", "error", err.Error())
+		p.a.log.Warn("journal", "msg", "replay checkpoint failed", "error", err.Error())
 		p.every, p.checkpoints = 0, nil
 		return
 	}
@@ -539,7 +526,7 @@ func (p *player) strayed(r *rebuilt) bool {
 		(shown.At.Run < left.At.Run || shown.At.Run == left.At.Run && shown.At.Tick <= left.At.Tick) {
 		return false // the recorded run is not reproduced there from the start either
 	}
-	vlog.Warn("app", "msg", "replay checkpoint left the run", "tick", left.At.Tick, "error", left.Error())
+	p.a.log.Warn("journal", "msg", "replay checkpoint left the run", "tick", left.At.Tick, "error", left.Error())
 	p.every, p.checkpoints = 0, nil
 	return true
 }
@@ -599,15 +586,12 @@ func (p *player) keep() {
 
 // spawn builds a copy and replays it toward target on its own goroutine.
 func (p *player) spawn(target int) *rebuilt {
-	release := vlog.Mute() // a copy's construction restates the replay's opening
 	a, src, err := p.rebuild()
-	release()
 	if err != nil {
 		p.fail(err)
 		return nil
 	}
-	r := &rebuilt{a: a, src: src, w: p.termW, h: p.termH, slots: p.slots, quiet: &p.quiet,
-		running: &p.copies, target: target, wake: make(chan struct{}, 1), done: make(chan struct{})}
+	r := &rebuilt{a: a, src: src, w: p.termW, h: p.termH, slots: p.slots, running: &p.copies, target: target, wake: make(chan struct{}, 1), done: make(chan struct{})}
 	if r.from = p.nearest(target); r.from != nil {
 		r.at = r.from.steps
 	}
@@ -646,8 +630,8 @@ func (p *player) land() {
 	p.adopt(r)
 }
 
-// adopt presents a parked copy, carrying the viewer's HUD, speakers and log stamp
-// over so they continue from it.
+// adopt presents a parked copy, carrying the viewer's HUD and speakers over so they
+// continue from it; the log follows the presented copy.
 func (p *player) adopt(r *rebuilt) {
 	r.halt()
 	old, twin := p.a, r.a
@@ -663,13 +647,12 @@ func (p *player) adopt(r *rebuilt) {
 	}
 	system.HandOverSound(twin.world, old.world)
 	twin.ctx.ReplaySeek = p.seekLater
-	twin.stampLog()
+	old.log.Mute(true)
+	twin.log.Mute(false)
 	p.a, p.src, p.trail = twin, r.src, p.trail[:r.target+1]
 	p.done, p.err, p.step, p.budget = false, nil, 0, 0
 	if old.cfg.borrow != nil {
-		release := vlog.Mute()
 		old.Close()
-		release()
 	}
 	p.logSeek(from, twin.Position())
 	p.holdMixer()
@@ -677,21 +660,10 @@ func (p *player) adopt(r *rebuilt) {
 	p.report()
 }
 
-// stampLog makes this copy's run and tick the ones the process log stamps, as a
-// played run's are; a replay copy otherwise keeps its own.
-func (a *App) stampLog() {
-	c := vlog.DefaultCorrelation()
-	run, tick := a.ctx.Correlation.Stamp()
-	c.SetRun(run)
-	c.SetTick(tick)
-	a.ctx.Correlation = c
-	a.world.Resources.Status.SetCorrelation(c)
-}
-
 // logSeek records a jump of the presented tick, so ticks a log restates after
 // going back read as the replay they are.
 func (p *player) logSeek(from, to event.Stamp) {
-	vlog.Info("app", "msg", "replay seek", "run", to.Run, "tick", to.Tick,
+	p.a.log.Info("journal", "msg", "replay moved", "run", to.Run, "tick", to.Tick,
 		"from_run", from.Run, "from_tick", from.Tick, "delta", int64(to.Tick)-int64(from.Tick))
 }
 
@@ -770,7 +742,7 @@ func (p *player) cancelMoves() {
 
 // fail gives up stepping back once a copy could not be built or replayed.
 func (p *player) fail(err error) {
-	vlog.Warn("app", "msg", "replay step back failed", "error", err.Error())
+	p.a.log.Warn("journal", "msg", "replay step back failed", "error", err.Error())
 	p.stopSpares()
 	p.cancelMoves()
 	p.rebuild, p.backs = nil, 0

@@ -281,7 +281,7 @@ host-loss)
 		eval "pid=\$GUEST${i}_PID"
 		if alive "$pid"; then state="still playing"; else state="exited"; fi
 		printf '\n-- guest %d (%s)\n' "$i" "$state"
-		grep -oE '"msg":"(authority handed off|continuing locally|cursor despawn)"[^}]*' \
+		grep -oE '"msg":"(authority handed off|continuing locally|cursor despawned)"[^}]*' \
 			"$D/guest$i.log" | tail -4
 		kill -9 "$pid" 2>/dev/null || true
 		i=$((i + 1))
@@ -588,7 +588,7 @@ follow)
 	# alone says nothing.
 	own=$(cat "$HL"/*.jsonl 2>/dev/null | awk '
 		/"msg":"run restarting"/ { seen = 1; n = 0; next }
-		seen && /"msg":"cursor spawn"/ && /"slot":0/ { n++ }
+		seen && /"msg":"cursor spawned"/ && /"slot":0/ { n++ }
 		END { print n + 0 }')
 	[ "$own" -ge 1 ] || fail "the rebuilt host spawned no cursor of its own: $HL"
 	rm -rf "$HL" "$GL" "$ROOT" "$HK" "$GK"
@@ -673,7 +673,7 @@ deploy)
 		-l="$mount/log" -log-session-id=volume-check -lv=info \
 		-config-dir="$mount" -s=main -first-join=3s -empty=3s -drain=3s >/dev/null 2>&1 \
 		|| fail "the probe pod's arguments do not run"
-	grep -q '"msg":"scenario"' "$mount/log/volume-check.jsonl" \
+	grep -q '"msg":"scenario loaded"' "$mount/log/volume-check.jsonl" \
 		|| fail "no scenario record; the commissioning check has nothing to read"
 	grep -q '"name":"main"' "$mount/log/volume-check.jsonl" \
 		|| fail "the session did not load main off the mount"

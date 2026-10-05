@@ -30,7 +30,7 @@ type Registry struct {
 
 	rec      atomic.Pointer[Recorder]
 	statLate *atomic.Int64
-	corr     *vlog.Correlation
+	log      *vlog.Log
 
 	// The roster slot the bare per-player keys mirror, and the metrics that hold
 	// one. Registration happens before Freeze like every other metric; the slot
@@ -52,7 +52,7 @@ func NewRegistry() *Registry {
 		Ints:    NewMetricMap[atomic.Int64](),
 		Floats:  NewMetricMap[AtomicFloat](),
 		Strings: NewMetricMap[AtomicString](),
-		corr:    vlog.DefaultCorrelation(),
+		log:     vlog.Default(),
 	}
 	r.statLate = r.Ints.Get("stat.late")
 	r.slot.Store(0)
@@ -93,15 +93,16 @@ func (r *Registry) SetLocalSlot(slot int) {
 	}
 }
 
-// SetCorrelation binds snapshots and recorder output to one runtime's stamp.
-func (r *Registry) SetCorrelation(c *vlog.Correlation) {
-	if c != nil {
-		r.corr = c
+// SetLog binds snapshots, recorder output and every record its world's producers
+// write to one runtime's log handle. Call before the registry freezes.
+func (r *Registry) SetLog(l *vlog.Log) {
+	if l != nil {
+		r.log = l
 	}
 }
 
-// Correlation returns the stamp owner bound before the registry freezes.
-func (r *Registry) Correlation() *vlog.Correlation { return r.corr }
+// Log returns the runtime's log handle, which anything holding the registry writes through.
+func (r *Registry) Log() *vlog.Log { return r.log }
 
 // TotalCount returns total metrics across all types
 func (r *Registry) TotalCount() int {

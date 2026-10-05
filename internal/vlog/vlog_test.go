@@ -5,8 +5,10 @@ package vlog
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -44,7 +46,7 @@ func TestSessionIDTagsEveryApplicationRecord(t *testing.T) {
 		t.Fatalf("log filename = %q, want abc123.jsonl", got)
 	}
 	Info("app", "msg", "session test", "answer", 42)
-	if _, err := EmitSet("stat", 7, 8, func(emit func(args ...any)) {
+	if _, err := Default().EmitSet("stat", 7, 8, func(emit func(args ...any)) {
 		emit("msg", "status test", "value", true)
 	}); err != nil {
 		t.Fatal(err)
@@ -236,5 +238,44 @@ func TestCommissionedLoggersRotateOnlyTheirOwnFiles(t *testing.T) {
 		if !found {
 			t.Errorf("%s did not rotate its own file", id)
 		}
+	}
+}
+
+// TestAHandleWritesItsOwnStampAndTagAndMutedOnlyItsFailures: runtimes sharing a
+// process are told apart by their records, and a muted one, a replay copy restating
+// ticks already logged, still reports what failed.
+func TestAHandleWritesItsOwnStampAndTagAndMutedOnlyItsFailures(t *testing.T) {
+	Configure(Config{Dir: t.TempDir(), Level: "info", Scope: "all"})
+	path, err := Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { Shutdown(time.Second) })
+	seat, copied := NewLog("seat 1"), NewLog("")
+	seat.SetRun(2)
+	seat.SetTick(30)
+	copied.Mute(true)
+	seat.Info("app", "msg", "seated")
+	copied.Info("app", "msg", "restated")
+	copied.Error("app", "msg", "failed")
+	Shutdown(time.Second)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, line := range bytes.Split(data, []byte{'\n'}) {
+		var r struct {
+			Run, Tick uint64
+			Fields    map[string]any
+		}
+		if len(line) == 0 || json.Unmarshal(line, &r) != nil || r.Fields["msg"] == nil {
+			continue
+		}
+		got = append(got, fmt.Sprintf("%v %d/%d %v", r.Fields["msg"], r.Run, r.Tick, r.Fields["instance"]))
+	}
+	if want := []string{"seated 2/30 seat 1", "failed 0/0 <nil>"}; !slices.Equal(got, want) {
+		t.Fatalf("records = %q, want %q", got, want)
 	}
 }

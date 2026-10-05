@@ -243,7 +243,7 @@ var topics = []topicDef{
 			{Keys: ":log", Desc: "Report the session log target, level, scope and recorder depth"},
 			{Keys: ":log on|off", Desc: "Start or stop the session log; each start opens a new file"},
 			{Keys: ":log level <lvl>", Desc: "trace, debug, info, warn or error"},
-			{Keys: ":log scope <spec>", Desc: "app fsm event dispatch push input stat rec lock tap; also all, none, short letters, +x, -x"},
+			{Keys: ":log scope <spec>", Desc: "app fsm event dispatch push input stat rec lock net session converge journal domain tap; also all, none, short letters, +x, -x"},
 			{Keys: ":log stat <ticks>", Desc: "Periodic status snapshot period in game ticks; 0 disables"},
 			{Keys: ":log rec <ticks>", Desc: "Flight recorder ring depth in game ticks; 0 disables. Flushes need 'rec' in the log scope"},
 			{Keys: ":log rec flush", Desc: "Write the current recorder window on the next tick"},
