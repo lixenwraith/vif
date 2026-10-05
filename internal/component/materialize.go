@@ -1,8 +1,8 @@
 package component
 
-// MaterializeComponent represents a converging beam effect toward a spawn target
+// MaterializeComponent represents a converging ray effect toward a spawn target
 type MaterializeComponent struct {
-	// Target area (beams converge to this rectangle)
+	// Target area (rays converge to this rectangle)
 	TargetX    int // Top-left X
 	TargetY    int // Top-left Y
 	AreaWidth  int // Target width (1 = single column)
@@ -12,7 +12,7 @@ type MaterializeComponent struct {
 	Progress float64
 
 	// Visual parameters
-	BeamWidth int // Beam thickness perpendicular to direction (1 = thin)
+	RayWidth int // Ray thickness perpendicular to direction (1 = thin)
 
 	// Type of entity being spawned (for completion event)
 	Type SpawnType

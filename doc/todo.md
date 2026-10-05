@@ -345,7 +345,7 @@ through snapshots and synchronization. Stun immunity remains target-wide.
 - Priority: P3
 - Affected files: `internal/system/mount.go`, `internal/profile/combat.go`
 
-A mounted beam destroying walls and glyphs, mounted weapons striking other species, and each instance's own drains; Shared outcomes must resolve from Shared geometry, not a Player-domain shot.
+A mounted ray destroying walls and glyphs, mounted weapons striking other species, and each instance's own drains; Shared outcomes must resolve from Shared geometry, not a Player-domain shot.
 
 ### Let cursor weapons strike other cursors
 
@@ -354,10 +354,10 @@ A mounted beam destroying walls and glyphs, mounted weapons striking other speci
 
 PvP: a hit on a remote cursor crosses as its impact and the victim's owner applies it, as `strikeCursor` does for mounts.
 
-### Fan a fully charged beam into spokes
+### Fan a fully charged ray into spokes
 
 - Priority: P3
-- Affected files: `internal/system/weapon.go`, `internal/component/beam.go`
+- Affected files: `internal/system/weapon.go`, `internal/component/ray.go`
 
 Charges beyond the ray could add rays 360°/n apart, one through the orb; a sweep already passes each target once a turn, so spokes trade coverage for crossings.
 

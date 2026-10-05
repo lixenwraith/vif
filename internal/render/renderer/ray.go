@@ -11,77 +11,77 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// BeamRenderer draws every beam in flight from its BeamComponent: a white core with
+// RayRenderer draws every ray in flight from its RayComponent: a white core with
 // palette-coloured sides where the ray widens, brighter the more charges fired it
 // and fading over its last quarter. A warning is the core line alone. Walls stay clear.
-type BeamRenderer struct {
+type RayRenderer struct {
 	gameCtx  *engine.GameContext
-	drawCell beamCellRenderer
+	drawCell rayCellRenderer
 }
 
-// beamCellRenderer draws one beam cell, core or side, in the colour mode chosen at construction
-type beamCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, alpha float64, palette component.WeaponPalette, core, warning bool)
+// rayCellRenderer draws one ray cell, core or side, in the colour mode chosen at construction
+type rayCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, alpha float64, palette component.WeaponPalette, core, warning bool)
 
 var (
-	beamSides = [component.PaletteCount]color.RGB{
-		component.PalettePositive: visual.RgbBeamPositive,
-		component.PaletteNegative: visual.RgbBeamNegative,
-		component.PaletteHostile:  visual.RgbBeamHostile,
+	raySides = [component.PaletteCount]color.RGB{
+		component.PalettePositive: visual.RgbRayPositive,
+		component.PaletteNegative: visual.RgbRayNegative,
+		component.PaletteHostile:  visual.RgbRayHostile,
 	}
-	beamSides256 = [component.PaletteCount]uint8{
-		component.PalettePositive: visual.Beam256Positive,
-		component.PaletteNegative: visual.Beam256Negative,
-		component.PaletteHostile:  visual.Beam256Hostile,
+	raySides256 = [component.PaletteCount]uint8{
+		component.PalettePositive: visual.Ray256Positive,
+		component.PaletteNegative: visual.Ray256Negative,
+		component.PaletteHostile:  visual.Ray256Hostile,
 	}
 )
 
-func NewBeamRenderer(gameCtx *engine.GameContext) *BeamRenderer {
-	r := &BeamRenderer{gameCtx: gameCtx, drawCell: beamCellTrueColor}
+func NewRayRenderer(gameCtx *engine.GameContext) *RayRenderer {
+	r := &RayRenderer{gameCtx: gameCtx, drawCell: rayCellTrueColor}
 	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
-		r.drawCell = beamCell256
+		r.drawCell = rayCell256
 	}
 	return r
 }
 
-func beamCellTrueColor(buf *render.RenderBuffer, screenX, screenY int, alpha float64, palette component.WeaponPalette, core, warning bool) {
-	c := beamSides[palette]
+func rayCellTrueColor(buf *render.RenderBuffer, screenX, screenY int, alpha float64, palette component.WeaponPalette, core, warning bool) {
+	c := raySides[palette]
 	if core && !warning {
-		c = visual.RgbBeamCore
+		c = visual.RgbRayCore
 	}
 	buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendScreen, alpha, terminal.AttrNone)
 }
 
-// beamCell256 fills a cell solid where its blend would show
-func beamCell256(buf *render.RenderBuffer, screenX, screenY int, alpha float64, palette component.WeaponPalette, core, warning bool) {
+// rayCell256 fills a cell solid where its blend would show
+func rayCell256(buf *render.RenderBuffer, screenX, screenY int, alpha float64, palette component.WeaponPalette, core, warning bool) {
 	if alpha < visual.Effect256Threshold {
 		return
 	}
 	switch {
 	case warning:
-		buf.SetBg256(screenX, screenY, visual.Beam256Warning)
+		buf.SetBg256(screenX, screenY, visual.Ray256Warning)
 	case core:
-		buf.SetBg256(screenX, screenY, visual.Beam256Core)
+		buf.SetBg256(screenX, screenY, visual.Ray256Core)
 	default:
-		buf.SetBg256(screenX, screenY, beamSides256[palette])
+		buf.SetBg256(screenX, screenY, raySides256[palette])
 	}
 }
 
-// Render draws every beam this instance holds: its own cursors' and every mount's
-func (r *BeamRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	beams := r.gameCtx.World.Components.Beam
-	if beams.CountEntities() == 0 {
+// Render draws every ray this instance holds: its own cursors' and every mount's
+func (r *RayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
+	rays := r.gameCtx.World.Components.Ray
+	if rays.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
 	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
 	flicker := 0.85 + 0.15*vmath.SinF(float64(gameTimeMs%120)/120*vmath.TwoPi)
-	beams.Each(func(_ core.Entity, b *component.BeamComponent) bool {
+	rays.Each(func(_ core.Entity, b *component.RayComponent) bool {
 		if b.Duration <= 0 || b.Palette >= component.PaletteCount {
 			return true
 		}
 		left := float64(b.Remaining) / float64(b.Duration)
-		if b.Phase == component.BeamWarning {
+		if b.Phase == component.RayWarning {
 			// Brightens toward the strike so the lane reads as a countdown
 			r.drawRay(ctx, buf, b, (0.7-0.4*left)*flicker, 0, true)
 			return true
@@ -92,8 +92,8 @@ func (r *BeamRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 	})
 }
 
-// drawRay draws a beam's cells, a warning's core only, its sides at sides of the core's alpha
-func (r *BeamRenderer) drawRay(ctx render.RenderContext, buf *render.RenderBuffer, b *component.BeamComponent, alpha, sides float64, warning bool) {
+// drawRay draws a ray's cells, a warning's core only, its sides at sides of the core's alpha
+func (r *RayRenderer) drawRay(ctx render.RenderContext, buf *render.RenderBuffer, b *component.RayComponent, alpha, sides float64, warning bool) {
 	positions := r.gameCtx.World.Positions
 	for i := 1; i <= b.Ray.Length; i++ {
 		half := b.Ray.Half(i)

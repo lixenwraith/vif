@@ -48,7 +48,7 @@ const (
 	PriorityLightning
 	PriorityMissile
 	PriorityPulse
-	PriorityBeam
+	PriorityRay
 	PriorityBullet
 
 	// === Particles ===

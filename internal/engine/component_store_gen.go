@@ -36,7 +36,7 @@ const (
 	LightningBit
 	MissileBit
 	MountBit
-	BeamBit
+	RayBit
 	SpiritBit
 	MaterializeBit
 	TargetBit
@@ -95,7 +95,7 @@ type Component struct {
 	Lightning    *Store[component.LightningComponent]
 	Missile      *Store[component.MissileComponent]
 	Mount        *Store[component.MountComponent]
-	Beam         *Store[component.BeamComponent]
+	Ray          *Store[component.RayComponent]
 	Spirit       *Store[component.SpiritComponent]
 	Materialize  *Store[component.MaterializeComponent]
 	Target       *Store[component.TargetComponent]
@@ -153,7 +153,7 @@ func initComponents(w *World) {
 	w.Components.Lightning = NewStore[component.LightningComponent](w, LightningBit)
 	w.Components.Missile = NewStore[component.MissileComponent](w, MissileBit)
 	w.Components.Mount = NewStore[component.MountComponent](w, MountBit)
-	w.Components.Beam = NewStore[component.BeamComponent](w, BeamBit)
+	w.Components.Ray = NewStore[component.RayComponent](w, RayBit)
 	w.Components.Spirit = NewStore[component.SpiritComponent](w, SpiritBit)
 	w.Components.Materialize = NewStore[component.MaterializeComponent](w, MaterializeBit)
 	w.Components.Target = NewStore[component.TargetComponent](w, TargetBit)
@@ -278,8 +278,8 @@ func (w *World) removeEntity(e core.Entity) {
 	if mask&MountBit != 0 {
 		w.Components.Mount.RemoveEntity(e, true)
 	}
-	if mask&BeamBit != 0 {
-		w.Components.Beam.RemoveEntity(e, true)
+	if mask&RayBit != 0 {
+		w.Components.Ray.RemoveEntity(e, true)
 	}
 	if mask&SpiritBit != 0 {
 		w.Components.Spirit.RemoveEntity(e, true)
@@ -459,8 +459,8 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	if union&MountBit != 0 {
 		w.Components.Mount.RemoveBatch(entities, true)
 	}
-	if union&BeamBit != 0 {
-		w.Components.Beam.RemoveBatch(entities, true)
+	if union&RayBit != 0 {
+		w.Components.Ray.RemoveBatch(entities, true)
 	}
 	if union&SpiritBit != 0 {
 		w.Components.Spirit.RemoveBatch(entities, true)
@@ -578,7 +578,7 @@ func (w *World) wipeAll() {
 	w.Components.Lightning.ClearAllComponents()
 	w.Components.Missile.ClearAllComponents()
 	w.Components.Mount.ClearAllComponents()
-	w.Components.Beam.ClearAllComponents()
+	w.Components.Ray.ClearAllComponents()
 	w.Components.Spirit.ClearAllComponents()
 	w.Components.Materialize.ClearAllComponents()
 	w.Components.Target.ClearAllComponents()
@@ -639,7 +639,7 @@ type componentCopies struct {
 	Lightning    storeCopy[component.LightningComponent]
 	Missile      storeCopy[component.MissileComponent]
 	Mount        storeCopy[component.MountComponent]
-	Beam         storeCopy[component.BeamComponent]
+	Ray          storeCopy[component.RayComponent]
 	Spirit       storeCopy[component.SpiritComponent]
 	Materialize  storeCopy[component.MaterializeComponent]
 	Target       storeCopy[component.TargetComponent]
@@ -696,7 +696,7 @@ func (w *World) copyComponentsOut() (c componentCopies) {
 	c.Lightning = w.Components.Lightning.copyOut()
 	c.Missile = w.Components.Missile.copyOut()
 	c.Mount = w.Components.Mount.copyOut()
-	c.Beam = w.Components.Beam.copyOut()
+	c.Ray = w.Components.Ray.copyOut()
 	c.Spirit = w.Components.Spirit.copyOut()
 	c.Materialize = w.Components.Materialize.copyOut()
 	c.Target = w.Components.Target.copyOut()
@@ -755,7 +755,7 @@ func (w *World) copyComponentsIn(c componentCopies) {
 	w.Components.Lightning.copyIn(c.Lightning)
 	w.Components.Missile.copyIn(c.Missile)
 	w.Components.Mount.copyIn(c.Mount)
-	w.Components.Beam.copyIn(c.Beam)
+	w.Components.Ray.copyIn(c.Ray)
 	w.Components.Spirit.copyIn(c.Spirit)
 	w.Components.Materialize.copyIn(c.Materialize)
 	w.Components.Target.copyIn(c.Target)

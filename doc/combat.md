@@ -18,7 +18,7 @@ another one.
 | What crosses | impacts only: damage, knockback, stun (D-3) | nothing |
 | Hits on cursors | none (no PvP) | applied by each cursor's owner alone |
 
-A peer never sees a remote cursor's orbs, projectiles, bolts, rings or beams, and
+A peer never sees a remote cursor's orbs, projectiles, bolts, rings or rays, and
 never receives its loadout's behaviour; it receives what that loadout did to the
 Shared world, as the artifacts in §4. A mount raises only local events: its
 cursor hits go through `strikeCursor`, which acts only on a cursor this instance
@@ -34,7 +34,7 @@ flowchart LR
     Mount --> Delivery
     Delivery --> Combat["combat profiles: species targets"]
     Delivery --> Strike["strikeCursor: cursor targets"]
-    Delivery --> Presented["transient rings; beam, missile, bullet and lightning components"]
+    Delivery --> Presented["transient rings; ray, missile, bullet and lightning components"]
 ```
 
 `component.WeaponSpecs` is the one table of weapon kinds: status name, delivery,
@@ -47,7 +47,7 @@ combat attack family, cursor cooldown and charge cap, and the hosted range and
 | Launcher | missile | one homing missile per charge; the blast is explosion geometry | one hostile missile that homes on cursors |
 | Disruptor | pulse | stun burst centred on the orb when a target is inside | strikes every cursor inside its ring |
 | Turret | bullet | one spread bullet per charge, direct damage | hostile bullets; storm's red circle is one |
-| Emitter | ray | sustained beam from the cursor through its orb, sweeping as the orb orbits | warns, fires, rests along a locked ray |
+| Emitter | ray | sustained ray from the cursor through its orb, sweeping as the orb orbits | warns, fires, rests along a locked ray |
 
 ## 3. Drivers
 
@@ -68,18 +68,18 @@ may set the component itself. Each tick it:
 - seeds a shot's spread from the tick and the host, never a stream, so store order
   and a correction's replay cannot reorder draws (D-8).
 
-The ray delivery draws a beam: a `vmath.Ray` in a `BeamComponent`, any angle, run
-to the first wall or the map edge, one width up to its knee and another past it. A cursor's beam sits on
+A ray is a `vmath.Ray` in a `RayComponent`: any angle, run to the first wall or
+the map edge, one width up to its knee and another past it. A cursor's ray sits on
 its orb: laid every tick from the cursor through the orb, one cell wide to the orb
 and three past it, so it sweeps as the orb orbits. It strikes every tick, and
 combat's per-player, per-weapon immunity rates each target, because a sweep crosses
-a far target in about one tick. More charges beam longer and multiply its area hits'
-damage through `Scale`; its cooldown runs from firing, so they also beam more of it.
+a far target in about one tick. More charges fire longer and multiply its area hits'
+damage through `Scale`; its cooldown runs from firing, so they also fire more of it.
 
-A beam mount cycles on its host's `BeamComponent`: at rest until ready, then a
+A ray mount cycles on its host's `RayComponent`: at rest until ready, then a
 warning with the ray laid and locked (its lane, or straight at the aim), then firing,
-striking the cursors inside every `BeamHitInterval`, then rest for its interval. A
-laned beam needs no cursor in range; that is the level obstacle. Width is the
+striking the cursors inside every `RayHitInterval`, then rest for its interval. A
+laned ray needs no cursor in range; that is the level obstacle. Width is the
 mount's to set; a cursor's is fixed.
 
 Storm's red circle carries a turret mount the storm arms from the state each tick
@@ -103,7 +103,7 @@ Kraken applies it through `strikeCursor`, the other species still by hand.
 |---|---|
 | Rod, turret bullet, cleaner on a Shared target | one direct request stamped Shared (stamped class) |
 | Missile blast, disruptor pulse | explosion geometry: centre, radius, attack, owner |
-| Ray on a Shared target, each tick its beam covers it | area crossing: target, member set, owner, scale |
+| Ray on a Shared target, each tick it covers it | area crossing: target, member set, owner, scale |
 | Any hit on a drain | local; drains are Player-domain |
 
 The cleaner is the always-held main weapon: its impact chains into a lightning
@@ -115,8 +115,8 @@ why the cleaner's bolt starts at the cursor and the rod's at its orb.
 Renderers draw only what exists on their instance. Orbs take their kind's colour
 from `orbPalette`. A discharge's `WeaponPalette` is positive or negative by the
 cursor's energy, or hostile for a mount. Pulse rings are a fixed-capacity list in
-`TransientResource`, raised by `EventPulseVisualRequest`. Beams are drawn straight
-from their `BeamComponent`: a white core, sides in the palette where the ray widens,
+`TransientResource`, raised by `EventPulseVisualRequest`. Rays are drawn straight
+from their `RayComponent`: a white core, sides in the palette where the ray widens,
 a mount's warning as its core line alone. Missiles and bullets draw hostile colours
 from their `Hostile` flag; lightning uses its colour table. Each has a 256-colour
 path.
