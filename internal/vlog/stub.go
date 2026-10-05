@@ -31,13 +31,19 @@ const (
 	ScopeStat
 	ScopeRec
 	ScopeLock
+	ScopeNet
+	ScopeSession
+	ScopeConverge
+	ScopeJournal
+	ScopeDomain
 	ScopeTap
 )
 
 const (
 	ScopeNone Scope = 0
 	ScopeAll        = ScopeApp | ScopeFSM | ScopeEvent | ScopeDispatch | ScopePush |
-		ScopeInput | ScopeStat | ScopeRec | ScopeLock | ScopeTap
+		ScopeInput | ScopeStat | ScopeRec | ScopeLock | ScopeNet | ScopeSession |
+		ScopeConverge | ScopeJournal | ScopeDomain | ScopeTap
 )
 
 // ErrDisabled reports that this build carries no logger
@@ -54,49 +60,49 @@ type Config struct {
 	Console    bool
 }
 
-func Init(Config) (string, error)      { return "", ErrDisabled }
-func Configure(Config)                 {}
-func Start() (string, error)           { return "", ErrDisabled }
-func Stop()                            {}
-func Mute() func()                     { return func() {} }
-func Enabled() bool                    { return false }
-func Path() string                     { return "" }
-func Dir() string                      { return "" }
-func LevelName() string                { return "OFF" }
-func SetLevelName(string) error        { return ErrDisabled }
-func E(int64) bool                     { return false }
-func On(string, int64) bool            { return false }
-func Debug(string, ...any)             {}
-func Info(string, ...any)              {}
-func Warn(string, ...any)              {}
-func Error(string, ...any)             {}
-func SetRun(uint64)                    {}
-func SetTick(uint64)                   {}
-func SetLevel(int64)                   {}
-func CrashHook(any, []byte)            {}
-func Shutdown(time.Duration)           {}
-func Trace(string, int64, int, ...any) {}
-func NextRun() uint64                  { return 0 }
-func Detail(string, ...any)            {}
-func StartJournal() (string, error)    { return "", ErrDisabled }
-func StopJournal() error               { return nil }
-func JournalEnabled() bool             { return false }
-func JournalPath() string              { return "" }
-func Journal(string, ...any)           {}
-func LastJournalPath() string          { return "" }
+func Init(Config) (string, error)   { return "", ErrDisabled }
+func Configure(Config)              {}
+func Start() (string, error)        { return "", ErrDisabled }
+func Stop()                         {}
+func Enabled() bool                 { return false }
+func Path() string                  { return "" }
+func Dir() string                   { return "" }
+func LevelName() string             { return "OFF" }
+func SetLevelName(string) error     { return ErrDisabled }
+func On(string, int64) bool         { return false }
+func Debug(string, ...any)          {}
+func Info(string, ...any)           {}
+func Warn(string, ...any)           {}
+func Error(string, ...any)          {}
+func SetLevel(int64)                {}
+func CrashHook(any, []byte)         {}
+func Shutdown(time.Duration)        {}
+func Detail(string, ...any)         {}
+func StartJournal() (string, error) { return "", ErrDisabled }
+func StopJournal() error            { return nil }
+func JournalEnabled() bool          { return false }
+func JournalPath() string           { return "" }
+func Journal(string, ...any)        {}
+func LastJournalPath() string       { return "" }
 
 func ScopeOf(string) Scope     { return ScopeTap }
 func Scopes() Scope            { return ScopeNone }
 func SetScopes(Scope)          {}
 func ScopeString(Scope) string { return "none" }
-func Stamp() (uint64, uint64)  { return 0, 0 }
 func SetCrashFlush(func())     {}
 
 func Dump(uint64, uint64, func(func(string, ...any))) (string, error) {
 	return "", ErrDisabled
 }
 
-func EmitSet(string, uint64, uint64, func(func(...any))) (string, error) {
+func (*Log) On(string, int64) bool            { return false }
+func (*Log) Debug(string, ...any)             {}
+func (*Log) Info(string, ...any)              {}
+func (*Log) Warn(string, ...any)              {}
+func (*Log) Error(string, ...any)             {}
+func (*Log) Detail(string, ...any)            {}
+func (*Log) Trace(string, int64, int, ...any) {}
+func (*Log) EmitSet(string, uint64, uint64, func(func(...any))) (string, error) {
 	return "", ErrDisabled
 }
 

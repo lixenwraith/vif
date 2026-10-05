@@ -21,6 +21,7 @@ import (
 type Reach struct {
 	inst      Instance
 	authority *Authority
+	log       *vlog.Log
 
 	mu       sync.Mutex
 	listener net.Listener
@@ -61,7 +62,7 @@ func BindAdvertised(want, hostAddr string, cfg *network.Config) (net.Listener, s
 	ln, err := network.BindPeer(want, cfg)
 	if err != nil {
 		// A port a participant could not take makes it a leaf, never an error.
-		vlog.Warn("app", "msg", "no listening port; this participant is a leaf",
+		vlog.Warn("net", "msg", "no listening port; this participant is a leaf",
 			"address", want, "error", err.Error())
 		return nil, ""
 	}
@@ -97,7 +98,7 @@ func (r *Reach) AdoptListener(ln net.Listener, declared string) {
 	r.inst.SetStatusMessage(
 		fmt.Sprintf("Listening on %s; the session will share it with the other peers", ln.Addr()),
 		4*parameter.StatusMessageDefaultTimeout, false)
-	vlog.Info("app", "msg", "peer listener bound",
+	r.log.Info("net", "msg", "peer listener bound",
 		"bound", ln.Addr().String(), "declared", declared)
 }
 
@@ -249,11 +250,11 @@ func (r *Reach) dial(id network.PeerID, addr string) {
 			return
 		}
 		if err := dialer.DialPeer(addr); err != nil {
-			vlog.Debug("app", "msg", "peer dial failed",
+			r.log.Debug("net", "msg", "peer dial failed",
 				"peer", uint64(id), "address", addr, "error", err.Error())
 			return
 		}
-		vlog.Info("app", "msg", "peer link opened",
+		r.log.Info("net", "msg", "peer link opened",
 			"peer", uint64(id), "address", addr)
 		r.authority.sendReport()
 	}()

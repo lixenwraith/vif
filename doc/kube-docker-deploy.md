@@ -249,7 +249,7 @@ sed -e "s|\${IMAGE}|docker.io/library/vif:$VIF_TAG|g" -e "s|\${SCENARIO}|main|g"
   deploy/k3s/06-log-volume-check.yaml | sudo kubectl apply -f -
 sudo kubectl -n vif wait --for=jsonpath='{.status.phase}'=Succeeded \
   pod/vif-log-volume-check --timeout=90s
-sudo jq -r 'select(.fields.msg == "scenario") | .fields | "\(.name) \(.digest)"' \
+sudo jq -r 'select(.fields.msg == "scenario loaded") | .fields | "\(.name) \(.digest)"' \
   /var/log/vif-fleet/volume-check.jsonl                # main <digest>, not embedded
 sudo kubectl -n vif delete pod vif-log-volume-check --wait=true
 sudo find /var/log/vif-fleet -maxdepth 1 -name 'volume-check*.jsonl' -delete

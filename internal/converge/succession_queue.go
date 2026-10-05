@@ -4,7 +4,6 @@ import (
 	"slices"
 
 	"github.com/lixenwraith/vif/internal/network"
-	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // authorityFrame is one queued succession message.
@@ -96,7 +95,7 @@ func (c *Corrections) BecomeAuthority(rec network.HandoffRecord) {
 	// instance's clock describes a world it is about to supersede.
 	c.dropHeld()
 
-	vlog.Warn("app", "msg", "authoring under a new term",
+	c.log.Warn("session", "msg", "authoring under a new term",
 		"term", uint64(rec.Term), "seeded_from_tick", seedTick, "have_baseline", seeded)
 
 	// A driven run's caller paces its own corrections and calls PublishCorrection;
@@ -126,6 +125,6 @@ func (c *Corrections) FollowAuthority(rec network.HandoffRecord) {
 	// has just left, and the successor's first correction supersedes it anyway.
 	c.dropHeld()
 
-	vlog.Info("app", "msg", "following a new authority",
+	c.log.Info("session", "msg", "following a new authority",
 		"term", uint64(rec.Term), "authority", uint64(rec.Authority))
 }

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/lixenwraith/vif/internal/vlog"
 	"io"
 	"os"
 	"path/filepath"
@@ -20,7 +21,7 @@ func TestFileServiceContributesCategorizedOpenCapability(t *testing.T) {
 	}
 
 	svc := NewFileService(FileSource{Roots: []string{root}})
-	hub := NewHub()
+	hub := NewHub(vlog.Default())
 	if err := hub.Register(svc); err != nil {
 		t.Fatal(err)
 	}

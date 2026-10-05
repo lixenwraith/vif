@@ -136,7 +136,7 @@ func (a *App) scenarioBody(digest string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	vlog.Info("app", "msg", "scenario served",
+	a.log.Info("app", "msg", "scenario served",
 		"scenario", a.scenario.Name, "digest", a.scenario.Short(), "bytes", len(body))
 	return body, nil
 }
@@ -251,7 +251,7 @@ func (a *App) noteJoinerReport(id network.PeerID, report network.JoinerReport) e
 		a.firstJoiner = report
 	}
 	a.reach.NoteDeclared(id, report)
-	vlog.Info("admit", "msg", "peer admitted", "peer", uint64(id), "holder", uint64(report.Holder),
+	a.log.Info("admit", "msg", "peer admitted", "peer", uint64(id), "holder", uint64(report.Holder),
 		"remote", report.Remote, "declared", report.Listen)
 	return nil
 }
@@ -292,7 +292,7 @@ func (a *App) adoptLobbyGeometry() {
 		vw, vh = cfg.ViewportWidth, cfg.ViewportHeight
 	})
 	a.SetupLevel(vw, vh, false, true)
-	vlog.Info("app", "msg", "session sized from its first guest",
+	a.log.Info("session", "msg", "session sized from its first guest",
 		"terminal_w", report.Width, "terminal_h", report.Height, "map_w", vw, "map_h", vh)
 }
 
@@ -660,7 +660,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	if bound := port.Addr(); bound != nil {
 		addr = bound.String()
 	}
-	vlog.Info("app", "msg", "network host waiting",
+	a.log.Info("session", "msg", "host waiting",
 		"address", addr, "quorum", quorum, "capacity", capacity)
 	a.showStartupStatus(fmt.Sprintf("Hosting on %s; waiting for %d of up to %d participant(s) (Ctrl-C cancels)",
 		addr, quorum, capacity))
@@ -768,7 +768,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 				}
 				abandoned[id] = true
 				port.Disconnect(uint32(id))
-				vlog.Warn("app", "msg", "participant did not confirm the start gate",
+				a.log.Warn("session", "msg", "participant did not confirm the start gate",
 					"peer", id, "within", parameter.NetworkJoinReadyTimeout.String())
 			}
 			return nil
@@ -799,7 +799,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 		}
 		if err := a.corrections.AdmitMeasuredLink(port, id); err != nil {
 			port.Disconnect(uint32(id))
-			vlog.Warn("app", "msg", "participant refused at the start gate",
+			a.log.Warn("session", "msg", "participant refused at the start gate",
 				"peer", id, "error", err.Error())
 		}
 	}
@@ -958,6 +958,6 @@ func (a *App) activateNetworkSessionLocked() {
 
 func logSessionError(err error) {
 	if err != nil {
-		vlog.Warn("app", "msg", "network session", "error", err.Error())
+		vlog.Warn("session", "msg", "session not run", "error", err.Error())
 	}
 }

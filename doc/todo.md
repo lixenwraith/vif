@@ -31,8 +31,7 @@ ordinary handshake. Phases 1–3, hexadecimal cursor slots and the merged `defau
 policy landed. Holder ownership, slot removal, explicit bot run modes and bounded
 replay landed in the next pass. Relays (phase 6) precede fleet work (4), richer
 decision logic (5), and learning.
-Seat instance log tags and whether seats should inherit their holder's terminal
-geometry remain open. Permanent holder-local admission as a guest waits for relays.
+Whether seats should inherit their holder's terminal geometry remains open. Permanent holder-local admission as a guest waits for relays.
 The overlapping host-and-bot departure defect is covered by the holder-subtree
 handoff rule and socket regression in troubleshooting §13. Admission through a
 still-guest holder after the original host leaves remains relay work.
@@ -411,27 +410,3 @@ The framebuffer console shows a bright background under SGR 5, which vgacon blin
 - Affected files: `internal/render/renderer/flow_debug.go`
 
 Its diagonal arrows and `◆●` are missing from console fonts, so in 256 colours the view shows their fallbacks.
-
-## Logging
-
-### Audit logging across the repository
-
-- Priority: P2, a session of its own
-- Affected files: `internal/vlog`, every producer
-
-vlog is process-global and most records say `app`, so a log cannot tell which App,
-seat or replay copy wrote a record, and a scope selects little:
-
-- About 150 of 180 call sites use `app`: network, session, convergence, bots,
-  journal and replay share it. `net`, `system` and `domain` are absent from
-  `subScope` and fall to `tap`, which also gates the domain audit.
-- Each App owns a correlation but records carry the global one, so a seat's records
-  bear its holder's tick, or none under `-headless`, and a replay needed `vlog.Mute`
-  and a lock to keep its copies out. A per-App handle carrying stamp, tag and gate
-  would replace both and settle the seat log tags left open under bots.
-- Levels and keys drift: FSM transitions at Info run to thousands a session, lock
-  "long hold" warns on CPU contention rather than a defect, duration fields mix `ms`
-  and `us`, and `msg` is a noun phrase in some places and a verb in others.
-
-Settle one table of subs, scopes and levels with message and field rules, check
-that hot sites guard with `vlog.On`, then bring every call site to it.

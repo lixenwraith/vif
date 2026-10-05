@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/lixenwraith/vif/internal/vlog"
 	"strings"
 	"testing"
 )
@@ -22,7 +23,7 @@ func (s *stubService) Stop() error            { *s.log = append(*s.log, "stop:"+
 // to the names it depends on
 func newStubHub(t *testing.T, log *[]string, order []string, deps map[string][]string) *Hub {
 	t.Helper()
-	h := NewHub()
+	h := NewHub(vlog.Default())
 	for _, n := range order {
 		if err := h.Register(&stubService{name: n, deps: deps[n], log: log}); err != nil {
 			t.Fatalf("register %s: %v", n, err)

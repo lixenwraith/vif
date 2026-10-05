@@ -62,15 +62,15 @@ const recTimeFormat = "060102-150405.000"
 // whole set describes one instant rather than whichever tick each record reached
 // the sink at. It targets the session log when one is running, otherwise a
 // standalone file. Returns the standalone path, empty otherwise.
-func EmitSet(sub string, run, tick uint64, fill func(emit func(args ...any))) (string, error) {
-	if !audible(LevelInfo) {
+func (l *Log) EmitSet(sub string, run, tick uint64, fill func(emit func(args ...any))) (string, error) {
+	if !l.audible(LevelInfo) {
 		return "", nil
 	}
-	if l := sink.Load(); l != nil {
-		if !l.Enabled(LevelInfo) || !scopeEnabled(sub) {
+	if s := sink.Load(); s != nil {
+		if !s.Enabled(LevelInfo) || !scopeEnabled(sub) {
 			return "", nil
 		}
-		emitSet(l, sub, run, tick, fill)
+		emitSet(s, sub, run, tick, l.args, fill)
 		return "", nil
 	}
 
@@ -82,32 +82,32 @@ func EmitSet(sub string, run, tick uint64, fill func(emit func(args ...any))) (s
 	}
 
 	name := recPrefix + time.Now().Format(recTimeFormat)
-	l, p, err := buildLogger(dir, name, "trace", false)
+	f, p, err := buildLogger(dir, name, "trace", false)
 	if err != nil {
 		return "", err
 	}
-	l.SetErrorHandler(recordInternalError)
+	f.SetErrorHandler(recordInternalError)
 	if spawn != nil {
-		l.SetSpawn(spawn)
+		f.SetSpawn(spawn)
 	}
-	if err := l.Start(); err != nil {
-		_ = l.Shutdown(time.Second)
+	if err := f.Start(); err != nil {
+		_ = f.Shutdown(time.Second)
 		return "", err
 	}
 
-	emitSet(l, sub, run, tick, fill)
+	emitSet(f, sub, run, tick, l.args, fill)
 
-	if err := l.Shutdown(dumpTimeout); err != nil {
+	if err := f.Shutdown(dumpTimeout); err != nil {
 		return p, fmt.Errorf("record drain: %w", err)
 	}
 	return p, nil
 }
 
 // emitSet feeds fill an emitter bound to one context stamp
-func emitSet(l *log.Logger, sub string, run, tick uint64, fill func(emit func(args ...any))) {
+func emitSet(l *log.Logger, sub string, run, tick uint64, tag func([]any) []any, fill func(emit func(args ...any))) {
 	ctx := log.Context{Tag: sub, Vals: [log.ContextSlots]uint64{run, tick}}
 	flags := l.Flags() | log.FlagKV
 	fill(func(args ...any) {
-		l.LogContext(ctx, flags, LevelInfo, 0, sessionArgs(args)...)
+		l.LogContext(ctx, flags, LevelInfo, 0, tag(args)...)
 	})
 }

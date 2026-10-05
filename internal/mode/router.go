@@ -135,8 +135,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return true
 	}
 
-	if vlog.On("input", vlog.LevelDebug) {
-		vlog.Debug("input", "msg", "intent",
+	if r.ctx.Log.On("input", vlog.LevelDebug) {
+		r.ctx.Log.Debug("input", "msg", "intent",
 			"type", intent.Type.String(),
 			"motion", intent.Motion.String(),
 			"operator", intent.Operator.String(),

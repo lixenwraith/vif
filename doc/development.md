@@ -189,8 +189,7 @@ line wins.
 
 | Row | Meaning |
 |---|---|
-| Names | `app` `fsm` `event` `dispatch` `push` `input` `stat` `rec` `lock` `tap` |
-| Letters | `a` `f` `e` `d` `p` `i` `s` `r` `l` `t`, positionally the same list |
+| Names | each scope with its letter: `app (a)` … `tap (t)`, listed in [logging](logging-and-diagnostics.md) §4 |
 | Sets | `all` is every scope — `dispatch` included — and `none` is nothing |
 | Combine | join names or letters with `+`, `,` or a space: `app+fsm+stat` and `afs` are one set |
 | Adjust | a leading `+` or `-` adds to or removes from the set already selected, instead of replacing it |
@@ -583,9 +582,8 @@ disabled so one commissioned writer cannot remove another session's files. The
 fleet node owns the shared-directory bound and cleanup policy.
 
 Every record can carry subsystem plus run/tick correlation stamps.
-Scopes are `app`, `fsm`, `event`, `dispatch`, `push`, `input`, `stat`, `rec`,
-`lock`, and `tap`; unknown subsystem labels fall into tap. Errors bypass scope
-filtering, while level still applies.
+Scopes are listed in [logging](logging-and-diagnostics.md) §4; unknown subsystem
+labels fall into tap. Errors bypass scope filtering, while level still applies.
 
 [Logging and diagnostics](logging-and-diagnostics.md) is the full reference for
 record shapes, scopes, the status registry, the flight recorder, and the

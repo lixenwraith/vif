@@ -73,9 +73,9 @@ func (a *App) stageProved(cap snapshot.SharedCapture) (*StagedInstall, error) {
 	}
 
 	st := &StagedInstall{live: a, staging: staging, capture: cap, stageDur: time.Since(started)}
-	vlog.Info("app", "msg", "capture staged",
+	a.log.Info("converge", "msg", "capture staged",
 		"tick", cap.Header.Tick, "streams", len(cap.Streams), "systems", len(cap.Systems),
-		"stage_ms", st.stageDur.Milliseconds())
+		"stage_us", st.stageDur.Microseconds())
 	return st, nil
 }
 
@@ -162,7 +162,7 @@ func (s *StagedInstall) Commit() error {
 	s.committed = true
 	s.release()
 	if err != nil {
-		vlog.Error("app", "msg", "staged capture failed its live install",
+		s.live.log.Error("converge", "msg", "staged capture failed its live install",
 			"tick", header.Tick, "error", err.Error())
 		return fmt.Errorf("commit a staged capture: %w", err)
 	}
@@ -171,9 +171,9 @@ func (s *StagedInstall) Commit() error {
 	}
 	live.telemetry.StageUS.Store(s.stageDur.Microseconds())
 	live.telemetry.CommitUS.Store(s.commitDur.Microseconds())
-	vlog.Info("app", "msg", "capture installed",
+	s.live.log.Info("converge", "msg", "capture installed",
 		"tick", header.Tick, "projected_ticks", behind,
-		"stage_ms", s.stageDur.Milliseconds(), "commit_ms", s.commitDur.Milliseconds(),
+		"stage_us", s.stageDur.Microseconds(), "commit_us", s.commitDur.Microseconds(),
 		"correction_entries", s.difference.Entries,
 		"correction_entities", s.difference.Entities,
 		"correction_cells", s.difference.CellShift)
@@ -191,7 +191,7 @@ func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, part
 		body, err = snapshot.EncodeJSON(d)
 	}
 	if err != nil {
-		vlog.Warn("app", "msg", "journal capture not recorded", "tick", cap.Header.Tick, "error", err.Error())
+		a.log.Warn("journal", "msg", "journal capture not recorded", "tick", cap.Header.Tick, "error", err.Error())
 		return
 	}
 	if participant == 0 {
@@ -329,6 +329,7 @@ func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 		RecTicks:  -1,
 		StatTicks: -1,
 		LockMap:   true,
+		log:       vlog.NewLog("staging"),
 	}
 	if cap.Header.MapWidth > 0 && cap.Header.MapHeight > 0 {
 		cfg.MapWidth, cfg.MapHeight = cap.Header.MapWidth, cap.Header.MapHeight

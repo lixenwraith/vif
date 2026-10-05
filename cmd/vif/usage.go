@@ -115,21 +115,32 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 // TestScopeNoteMatchesTheParser feeds every entry back through vlog.ParseScopes.
 var scopeRows = []struct{ name, letter string }{
 	{"app", "a"}, {"fsm", "f"}, {"event", "e"}, {"dispatch", "d"}, {"push", "p"},
-	{"input", "i"}, {"stat", "s"}, {"rec", "r"}, {"lock", "l"}, {"tap", "t"},
+	{"input", "i"}, {"stat", "s"}, {"rec", "r"}, {"lock", "l"}, {"net", "n"},
+	{"session", "m"}, {"converge", "c"}, {"journal", "j"}, {"domain", "o"}, {"tap", "t"},
 }
 
 // scopeNote is the one piece of grammar a hint cannot carry, so it is printed once
 // rather than crammed into -ls.
 func scopeNote() string {
-	var names, letters strings.Builder
-	for _, row := range scopeRows {
-		width := max(len(row.name), len(row.letter)) + 2
-		fmt.Fprintf(&names, "%-*s", width, row.name)
-		fmt.Fprintf(&letters, "%-*s", width, row.letter)
+	const indent, width = "            ", 80
+	var names strings.Builder
+	col := len(indent)
+	for i, row := range scopeRows {
+		cell := row.name + " (" + row.letter + ")"
+		switch {
+		case i == 0:
+		case col+2+len(cell) > width:
+			names.WriteString("\n" + indent)
+			col = len(indent)
+		default:
+			names.WriteString("  ")
+			col += 2
+		}
+		names.WriteString(cell)
+		col += len(cell)
 	}
 	return "Scopes (-ls)\n" +
-		"  Names     " + strings.TrimRight(names.String(), " ") + "\n" +
-		"  Letters   " + strings.TrimRight(letters.String(), " ") + "\n" +
+		"  Names     " + names.String() + "\n" +
 		"  Sets      all is every scope, none is nothing\n" +
 		`  Combine   join names or letters with + or , — "app+fsm+stat" and "afs" are one set` + "\n" +
 		"  Adjust    lead with + or - to add to or remove from the set already selected"

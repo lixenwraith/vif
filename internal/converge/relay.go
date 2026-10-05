@@ -7,7 +7,6 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
-	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // links is the transport and the participants this instance is directly linked to,
@@ -57,7 +56,7 @@ func (c *Corrections) forwardManifest(body []byte, from uint32, tick uint64) {
 		return
 	}
 	c.tel.RelayBytesSent.Add(int64(len(body) * sent))
-	vlog.Debug("app", "msg", "manifest relayed", "tick", tick, "from", from, "to", sent)
+	c.log.Debug("converge", "msg", "manifest relayed", "tick", tick, "from", from, "to", sent)
 }
 
 // behindLinks is this instance's links other than the one an index arrives on,
@@ -113,7 +112,7 @@ func (c *Corrections) canAnswerEveryParticipantLocked(ids []uint32) bool {
 	}
 	if !c.saidUnrelayed {
 		c.saidUnrelayed = true
-		vlog.Info("app", "msg", "selective correction withheld; a participant cannot be answered",
+		c.log.Info("converge", "msg", "selective correction withheld; a participant cannot be answered",
 			"roster", roster, "direct", len(ids), "answerable", len(covered))
 	}
 	return false
@@ -164,7 +163,7 @@ func (c *Corrections) serveRelayed(port engine.NetworkPort, pending pendingReque
 	c.publishMu.Lock()
 	c.recordSelectiveSizeLocked(len(body))
 	c.publishMu.Unlock()
-	vlog.Debug("app", "msg", "relayed repair served",
+	c.log.Debug("converge", "msg", "relayed repair served",
 		"peer", pending.from, "tick", req.Tick, "pages", pages, "bytes", len(body))
 	return true
 }
@@ -186,7 +185,7 @@ func (c *Corrections) sendUnserved(port engine.NetworkPort, to uint32, req snaps
 		return
 	}
 	port.Send(to, uint8(network.MsgStateUnserved), body)
-	vlog.Debug("app", "msg", "request cannot be served from retention",
+	c.log.Debug("converge", "msg", "request cannot be served from retention",
 		"peer", to, "tick", req.Tick, "reason", why)
 }
 
@@ -207,6 +206,6 @@ func (c *Corrections) applyUnserved(body []byte) {
 	c.selective.wantKeyframe = true
 	c.selectiveMu.Unlock()
 	m.KeyframeFallback.Add(1)
-	vlog.Debug("app", "msg", "repair unavailable from the relaying neighbour",
+	c.log.Debug("converge", "msg", "repair unavailable from the relaying neighbour",
 		"peer", u.From, "tick", u.Tick, "reason", u.Reason)
 }

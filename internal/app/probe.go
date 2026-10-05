@@ -6,7 +6,6 @@ import (
 
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/probe"
-	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // startProbe binds the endpoint, if one was configured. It runs before the lobby:
@@ -24,7 +23,7 @@ func (a *App) startProbe() error {
 		return err
 	}
 	a.probe = p
-	vlog.Info("app", "msg", "probe listening", "address", p.Addr())
+	a.log.Info("app", "msg", "probe listening", "address", p.Addr())
 	return nil
 }
 

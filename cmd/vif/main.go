@@ -269,7 +269,7 @@ func setupDiagnostics() {
 			reason = "race build"
 		}
 		fmt.Printf("runtime capture: %s (%s)\n", path, reason)
-		vlog.Info("app", "msg", "runtime capture",
+		vlog.Info("app", "msg", "runtime capture started",
 			"path", path, "reason", reason, "race", core.RaceEnabled)
 		core.StartStderrDrain(parameter.DevDrainInterval, logRuntimeReport)
 	}

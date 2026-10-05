@@ -318,7 +318,7 @@ func (rc *Recorder) Flush(reason string) {
 
 	// EmitSet discards the whole set when scope or level suppresses it; walking
 	// the window and counting a flush that wrote nothing is a false success
-	if vlog.Enabled() && !vlog.On(SubRec, vlog.LevelInfo) {
+	if vlog.Enabled() && !rc.reg.Log().On(SubRec, vlog.LevelInfo) {
 		rc.statSkipped.Add(1)
 		return
 	}
@@ -347,9 +347,9 @@ func (rc *Recorder) Flush(reason string) {
 
 	start := time.Now()
 	records := 0
-	run, tick := rc.reg.Correlation().Stamp()
+	run, tick := rc.reg.Log().Stamp()
 
-	path, err := vlog.EmitSet(SubRec, run, tick, func(emit func(args ...any)) {
+	path, err := rc.reg.Log().EmitSet(SubRec, run, tick, func(emit func(args ...any)) {
 		emit("msg", "window", "reason", reason,
 			"t0", t0, "t1", t1, "n", n, "groups", visibleGroups)
 		records++
@@ -377,11 +377,11 @@ func (rc *Recorder) Flush(reason string) {
 	// Breadcrumb lands in the session log; a standalone file has nothing to
 	// correlate against and reports through :log rec instead
 	if err != nil {
-		vlog.Error("app", "msg", "recorder flush failed", "reason", reason, "error", err.Error())
+		rc.reg.Log().Error("rec", "msg", "recorder flush failed", "reason", reason, "error", err.Error())
 		return
 	}
 	if path == "" {
-		vlog.Info("app", "msg", "recorder flush",
+		rc.reg.Log().Info("rec", "msg", "recorder flushed",
 			"reason", reason, "t0", t0, "ticks", n,
 			"records", records, "us", time.Since(start).Microseconds())
 	}

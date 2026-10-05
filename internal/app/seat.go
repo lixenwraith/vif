@@ -102,6 +102,7 @@ func (a *App) addSeatLocked(spec string) error {
 	s.number = a.seatSerial
 	a.seats = append(a.seats, s)
 	a.seatsMu.Unlock()
+	cfg.log = vlog.NewLog("seat " + strconv.FormatUint(s.number, 10))
 	core.Go(func() { a.playSeat(s, cfg, hold) })
 	return nil
 }
@@ -198,7 +199,7 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 				b.sessionMu.Unlock()
 				s.slot.Store(uint32(entry.Slot))
 				s.id.Store(uint32(entry.ID))
-				vlog.Info("app", "msg", "bot seated", "graph", s.graph.Name,
+				a.log.Info("app", "msg", "bot seated", "graph", s.graph.Name,
 					"participant", s.id.Load(), "slot", s.slot.Load(), "joined", cfg.JoinAddress)
 				return seatSource{botSource{d}, forkCell(b), forkCell(a)}, nil
 			})
@@ -208,11 +209,11 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 		}
 		switch {
 		case driver == nil && err != nil:
-			vlog.Warn("app", "msg", "bot not seated", "graph", s.graph.Name, "error", err.Error())
+			a.log.Warn("app", "msg", "bot not seated", "graph", s.graph.Name, "error", err.Error())
 			a.ctx.SetStatusMessage("Bot "+s.graph.Name+": "+err.Error(), parameter.StatusMessageMaxDuration, true)
 		case driver != nil:
 			st := driver.Stats()
-			vlog.Info("app", "msg", "bot left", "graph", s.graph.Name, "participant", s.id.Load(),
+			a.log.Info("app", "msg", "bot left", "graph", s.graph.Name, "participant", s.id.Load(),
 				"finished", finished, "ticks", st.Ticks, "injected", st.Injected, "error", fmt.Sprint(err))
 		}
 		return

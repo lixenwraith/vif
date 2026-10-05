@@ -105,7 +105,7 @@ Process-wide state assumes one instance per process:
 | State | Shared by | For seats |
 |---|---|---|
 | `status.active` flight recorder | the last registry to register wins `status.Trigger` | seats run with no recorder and no status snapshots |
-| `vlog` | one sink, stamped with the front run's tick | a seat's own lines name its graph and participant; its instance's lines are untagged |
+| `vlog` | one sink; each instance writes through its own handle | a seat's records carry its own run and tick and `instance` `seat N` |
 | `engine.divergentReads` | package-level once-per-key warning latch | harmless across instances |
 | signals, terminal, audio, probe | the front App only | seats are headless and stop when their holder says so |
 | corpus, scenario, keymap and graph parse | per App | still per seat (§9) |
@@ -175,7 +175,7 @@ next run. Occupancy counts them, since they are roster entries. The pause rule i
 `World.SeatsOnly`. Two fixes came with it: a startup lobby waits for every rostered
 handshake before its gate sends to them, which simultaneous dials used to fail, and
 a loopback dial spends no join budget at the game host, while the fleet's front
-door keeps its own budget per player. Seat instance logs still need a seat tag.
+door keeps its own budget per player.
 
 ### Phase 6 — relay subtrees (next)
 
@@ -413,8 +413,8 @@ a stationary owner through a maze built after its cache was warmed.
 The affected packages and `./script/test.sh bot` pass, as do the default,
 `vif_headless` and WebAssembly builds. Generated CLI documentation/completions
 were refreshed. This earlier pass did not fix the
-simultaneous-departure limitation above; see the follow-up in §13. Seat log tags,
-holder-sized bot geometry and future phase work remain open.
+simultaneous-departure limitation above; see the follow-up in §13. Holder-sized
+bot geometry and future phase work remain open.
 
 ## 13. CLI, replay and session control follow-up
 
@@ -441,8 +441,7 @@ run stops. Removal ends membership; it is not an address ban.
 Ownership is structurally checked against an admitted, independent holder.
 Links are still unauthenticated as documented in multiplayer; this is no new
 security boundary. Wire protocol 4, capture schema 12 and journal schema 19
-require matching builds. R1–R5 traffic relaying and per-instance log tagging
-remain pending; this pass does not claim to implement them.
+require matching builds. R1–R5 traffic relaying remains pending; this pass does not claim to implement them.
 
 Manual checks after building `bin/vif`:
 

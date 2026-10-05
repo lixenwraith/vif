@@ -76,8 +76,12 @@ func (m *UpdateMutex) report() {
 	if held <= LockHoldWarn {
 		return
 	}
-	vlog.Trace("lock", vlog.LevelWarn, 4, "msg", "long hold", "us", held.Microseconds())
-	if reg := m.status.Load(); reg != nil {
+	log, reg := vlog.Default(), m.status.Load()
+	if reg != nil {
+		log = reg.Log()
+	}
+	log.Trace("lock", vlog.LevelInfo, 4, "msg", "long hold", "us", held.Microseconds())
+	if reg != nil {
 		reg.Trigger(status.TrigLock)
 	}
 }

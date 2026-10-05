@@ -20,12 +20,14 @@ type Hub struct {
 	initialized []string // completed Init(), for teardown
 	started     []string // Services that completed Start(), for rollback
 	mu          sync.RWMutex
+	log         *vlog.Log
 }
 
-// NewHub creates an empty service hub
-func NewHub() *Hub {
+// NewHub creates an empty service hub writing through its runtime's log handle
+func NewHub(log *vlog.Log) *Hub {
 	return &Hub{
 		services: make(map[string]Service),
+		log:      log,
 	}
 }
 
@@ -84,14 +86,14 @@ func (h *Hub) InitAll() error {
 		svc := h.services[name]
 		start := time.Now()
 		if err := svc.Init(); err != nil {
-			vlog.Error("service", "msg", "init failed", "service", name, "error", err.Error())
+			h.log.Error("service", "msg", "service init failed", "service", name, "error", err.Error())
 			// Rollback: stop already-initialized in reverse order
 			for i := len(initialized) - 1; i >= 0; i-- {
 				h.services[initialized[i]].Stop()
 			}
 			return fmt.Errorf("service %s init failed: %w", name, err)
 		}
-		vlog.Info("service", "msg", "init", "service", name, "ms", time.Since(start).Milliseconds())
+		h.log.Info("service", "msg", "service initialized", "service", name, "us", time.Since(start).Microseconds())
 		initialized = append(initialized, name)
 	}
 	h.initialized = initialized
@@ -111,13 +113,13 @@ func (h *Hub) StartAll() error {
 		svc := h.services[name]
 		start := time.Now()
 		if err := svc.Start(); err != nil {
-			vlog.Error("service", "msg", "start failed", "service", name, "error", err.Error())
+			h.log.Error("service", "msg", "service start failed", "service", name, "error", err.Error())
 			for _, serviceID := range slices.Backward(h.started) {
 				h.services[serviceID].Stop()
 			}
 			return fmt.Errorf("service %s start failed: %w", name, err)
 		}
-		vlog.Info("service", "msg", "start", "service", name, "ms", time.Since(start).Milliseconds())
+		h.log.Info("service", "msg", "service started", "service", name, "us", time.Since(start).Microseconds())
 		h.started = append(h.started, name)
 	}
 
@@ -138,10 +140,10 @@ func (h *Hub) StopAll() {
 			continue
 		}
 		if err := svc.Stop(); err != nil {
-			vlog.Error("service", "msg", "stop failed", "service", name, "error", err.Error())
+			h.log.Error("service", "msg", "service stop failed", "service", name, "error", err.Error())
 			continue
 		}
-		vlog.Info("service", "msg", "stop", "service", name)
+		h.log.Info("service", "msg", "service stopped", "service", name)
 	}
 	h.initialized, h.started = nil, nil
 }

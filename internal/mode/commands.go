@@ -191,7 +191,7 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 			setCommandError(ctx, "Logging failed: "+err.Error())
 			return CommandResult{Continue: true, KeepPaused: false}
 		}
-		vlog.Info("app", "msg", "logging started", "path", path, "level", vlog.LevelName())
+		ctx.Log.Info("app", "msg", "logging started", "path", path, "level", vlog.LevelName())
 		ctx.SetStatusMessage("Logging to "+path, parameter.StatusMessageDefaultTimeout, true)
 
 	case "off", "stop":
@@ -199,7 +199,7 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 			ctx.SetStatusMessage("Logging already stopped", parameter.StatusMessageDefaultTimeout, true)
 			break
 		}
-		vlog.Info("app", "msg", "logging stopped by command")
+		ctx.Log.Info("app", "msg", "logging stopped by command")
 		vlog.Stop() // drains asynchronously; never blocks the world lock
 		ctx.SetStatusMessage("Logging stopped", parameter.StatusMessageDefaultTimeout, true)
 
@@ -210,11 +210,11 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 		}
 		s, err := vlog.ParseScopes(strings.Join(args[1:], "+"), vlog.Scopes())
 		if err != nil {
-			setCommandError(ctx, "Usage: :log scope [+|-]app+fsm+event+dispatch+push+input+stat+rec+lock+tap | afs | all | none")
+			setCommandError(ctx, "Usage: :log scope [+|-]<scope>+<scope> | <letters> | all | none; scopes in :help logging")
 			return CommandResult{Continue: true, KeepPaused: false}
 		}
 		vlog.SetScopes(s)
-		vlog.Info("app", "msg", "log scope changed", "scope", vlog.ScopeString(s))
+		ctx.Log.Info("app", "msg", "log scope changed", "scope", vlog.ScopeString(s))
 		reportLogState(ctx)
 
 	case "level", "lvl":
@@ -222,7 +222,7 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 			setCommandError(ctx, "Usage: :log level trace|debug|info|warn|error")
 			return CommandResult{Continue: true, KeepPaused: false}
 		}
-		vlog.Info("app", "msg", "log level changed", "level", vlog.LevelName())
+		ctx.Log.Info("app", "msg", "log level changed", "level", vlog.LevelName())
 		reportLogState(ctx)
 
 	case "stat", "snap":
@@ -236,7 +236,7 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 			return CommandResult{Continue: true, KeepPaused: false}
 		}
 		ctx.World.Resources.Status.SetSnapshotInterval(uint64(n))
-		vlog.Info("app", "msg", "stat interval changed", "ticks", n)
+		ctx.Log.Info("app", "msg", "stat interval changed", "ticks", n)
 		reportLogState(ctx)
 
 	case "rec", "recorder":
@@ -247,7 +247,7 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 			setCommandError(ctx, "Usage: :log [on|off|trace|debug|info|warn|error|scope|level|stat]")
 			return CommandResult{Continue: true, KeepPaused: false}
 		}
-		vlog.Info("app", "msg", "log level changed", "level", vlog.LevelName())
+		ctx.Log.Info("app", "msg", "log level changed", "level", vlog.LevelName())
 		reportLogState(ctx)
 	}
 
@@ -302,7 +302,7 @@ func handleLogRec(ctx *engine.GameContext, args []string) CommandResult {
 		}
 		// Relayout discards history; the metric set is already frozen
 		reg.EnableRecorder(n)
-		vlog.Info("app", "msg", "recorder depth changed", "ticks", n)
+		ctx.Log.Info("app", "msg", "recorder depth changed", "ticks", n)
 		reportLogState(ctx)
 	}
 
@@ -669,7 +669,7 @@ func handleTelemetrySaveCommand(ctx *engine.GameContext) CommandResult {
 	capture := func(sub string, args ...any) { records = append(records, snapRecord{sub, args}) }
 	ctx.SnapshotContext(capture)
 	ctx.World.Resources.Status.Snapshot(capture)
-	run, tick := ctx.Correlation.Stamp()
+	run, tick := ctx.Log.Stamp()
 
 	core.Go(func() {
 		path, err := vlog.Dump(run, tick, func(emit func(sub string, args ...any)) {
@@ -681,7 +681,7 @@ func handleTelemetrySaveCommand(ctx *engine.GameContext) CommandResult {
 			setCommandError(ctx, "Snapshot failed: "+err.Error())
 			return
 		}
-		vlog.Info("app", "msg", "snapshot saved", "path", path)
+		ctx.Log.Info("app", "msg", "snapshot saved", "path", path)
 		ctx.SetStatusMessage("Snapshot saved to "+path, parameter.StatusMessageDefaultTimeout, true)
 	})
 
@@ -741,7 +741,7 @@ func handleProfCommand(ctx *engine.GameContext, args []string) {
 		}
 		msg = "Profiler on: its cards are pinned to the HUD, :d shows every module"
 	}
-	vlog.Info("app", "msg", "profiler", "on", on)
+	ctx.Log.Info("app", "msg", "profiler toggled", "on", on)
 	ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, false)
 	ctx.SetLastCommand(":d prof " + toggleWord(on))
 }
@@ -785,7 +785,7 @@ func reportCapture(ctx *engine.GameContext, label, path string, err error) {
 		setCommandError(ctx, label+" failed: "+err.Error())
 		return
 	}
-	vlog.Info("app", "msg", "capture saved", "kind", label, "path", path)
+	ctx.Log.Info("app", "msg", "capture saved", "kind", label, "path", path)
 	ctx.SetStatusMessage(label+" saved to "+path, parameter.StatusMessageDefaultTimeout, true)
 }
 

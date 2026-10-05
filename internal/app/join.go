@@ -11,7 +11,6 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
-	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // ErrJoinMidRun is returned when the two participants are not at the same position.
@@ -105,9 +104,9 @@ func (a *App) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCapture) 
 		return err
 	}
 	stage, commit := staged.Timings()
-	vlog.Info("app", "msg", "join installed the session world",
+	a.log.Info("session", "msg", "join installed the session world",
 		"tick", cap.Header.Tick, "run", cap.Header.Run,
-		"stage_ms", stage.Milliseconds(), "commit_ms", commit.Milliseconds())
+		"stage_us", stage.Microseconds(), "commit_us", commit.Microseconds())
 
 	// The world a join installs is the host's current keyframe, which is what the
 	// deltas that follow it are computed against. Adopting it here is what lets a

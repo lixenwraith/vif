@@ -344,8 +344,8 @@ func (a *App) writeSharedLocked(cap snapshot.SharedCapture, held *snapshot.Share
 func (a *App) adoptClockLocked(h snapshot.CaptureHeader) {
 	a.world.Resources.Game.State.SetGameTicks(h.Tick)
 	a.world.Resources.Event.Queue.RebaseStamp(h.Run, h.Tick)
-	a.world.Resources.Status.Correlation().SetRun(h.Run)
-	a.world.Resources.Status.Correlation().SetTick(h.Tick)
+	a.log.SetRun(h.Run)
+	a.log.SetTick(h.Tick)
 	reg := a.world.Resources.Status
 	reg.Ints.Get("engine.ticks").Store(int64(h.Tick))
 	reg.Ints.Get("time.game_elapsed_ms").Store(

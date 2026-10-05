@@ -72,7 +72,7 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 	}
 	stats := driver.Stats()
 	if finished {
-		vlog.Info("app", "msg", "script complete",
+		vlog.Info("app", "msg", "script completed",
 			"path", path, "actions", stats.Executed, "ticks", stats.Ticks,
 			"run", stats.End.Run, "tick", stats.End.Tick)
 	}
@@ -110,7 +110,7 @@ func RunBot(cfg Config, spec string) (bot.Stats, error) {
 	}
 	stats := driver.Stats()
 	reg := played.world.Resources.Status
-	vlog.Info("app", "msg", "bot stopped", "name", name, "quit", quit, "ticks", stats.Ticks,
+	played.log.Info("app", "msg", "bot stopped", "name", name, "quit", quit, "ticks", stats.Ticks,
 		"injected", stats.Injected, "dropped", stats.Dropped, "state", stats.State,
 		"typed", reg.Ints.Get("typing.correct").Load(), "errors", reg.Ints.Get("typing.errors").Load())
 	return stats, err
@@ -201,7 +201,7 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 		}
 		if !paced && autoPace && a.HostAddr() != "" {
 			paced, nextTick = true, time.Now() // [wall]
-			vlog.Info("app", "msg", kind+" pacing engaged",
+			a.log.Info("app", "msg", kind+" pacing engaged",
 				"address", a.HostAddr(), "tick", a.Position().Tick)
 		}
 		if paced {

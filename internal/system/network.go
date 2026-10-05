@@ -18,7 +18,6 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/status"
-	"github.com/lixenwraith/vif/internal/vlog"
 	"github.com/lixenwraith/vif/pkg/linkpace"
 )
 
@@ -594,7 +593,7 @@ func (s *NetworkSystem) adoptDelay(ticks uint64) {
 	s.delayTicks = ticks
 	s.mu.Unlock()
 	s.statDelayTicks.Store(int64(ticks))
-	vlog.Info("net", "msg", "playout lead adopted", "ticks", ticks, "tick", s.localTick())
+	s.world.Log().Info("net", "msg", "playout lead adopted", "ticks", ticks, "tick", s.localTick())
 }
 
 // barrierDelayTicks returns this instance's own lead.
@@ -761,7 +760,7 @@ func (s *NetworkSystem) DropUncommitted() {
 	s.world.Resources.Player.DropPrediction()
 	if dropped > 0 {
 		s.statDrop.Add(int64(dropped))
-		vlog.Info("app", "msg", "uncommitted crossings dropped at handoff", "crossings", dropped)
+		s.world.Log().Info("session", "msg", "uncommitted crossings dropped at handoff", "crossings", dropped)
 	}
 }
 
@@ -1126,7 +1125,7 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 		s.statSuperseded.Add(int64(superseded))
 	}
 	if dropped > 0 || pendingDropped > 0 {
-		vlog.Debug("app", "msg", "snapshot pruned crossings",
+		s.world.Log().Debug("converge", "msg", "snapshot pruned crossings",
 			"tick", tick, "authority", authority, "local_fence", localFence,
 			"fences", len(fences), "scheduled", dropped, "sequence_superseded", superseded,
 			"pending_local", pendingDropped)
@@ -1202,7 +1201,7 @@ func (s *NetworkSystem) ActivateSession() {
 		// The slot is named beside the identity because they answer different
 		// questions: a dedicated host holds peer identity 1 and no slot, so its
 		// first guest is peer 2 and the session's only participant.
-		vlog.Info("app", "msg", "network session active",
+		s.world.Log().Info("session", "msg", "network session active",
 			"local", s.participantID(), "slot", s.world.Resources.Player.LocalSlot(),
 			"coordinator", s.isCoordinator(),
 			"barrier_delay_ticks", s.barrierDelayTicks(), "peers", peers)
@@ -1388,7 +1387,7 @@ func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
 	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
 		Message: message, Duration: 4 * parameter.StatusMessageDefaultTimeout, DurationOverride: true,
 	})
-	vlog.Warn("app", "msg", "peer link lost", "peer", peerID,
+	s.world.Log().Warn("net", "msg", "peer link lost", "peer", peerID,
 		"authority_lost", authorityLost, "remaining_peers", remaining)
 }
 
@@ -1588,7 +1587,7 @@ func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
 	if err != nil {
 		*asm = network.SnapshotAssembly{}
 		s.statDrop.Add(1)
-		vlog.Warn("app", "msg", "correction chunk refused", "peer", from, "error", err.Error())
+		s.world.Log().Warn("converge", "msg", "correction chunk refused", "peer", from, "error", err.Error())
 		return
 	}
 	if !admitted {
@@ -1685,7 +1684,7 @@ func (s *NetworkSystem) publishTransportLoss(p engine.NetworkPort) {
 	if in == s.lastLostIn && out == s.lastLostOut {
 		return
 	}
-	vlog.Warn("app", "msg", "network transport loss",
+	s.world.Log().Warn("net", "msg", "transport loss",
 		"inbound_dropped", in, "outbound_refused", out)
 	s.lastLostIn, s.lastLostOut = in, out
 }
@@ -1732,7 +1731,7 @@ func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint6
 	})
 	if err != nil {
 		s.statDrop.Add(int64(len(pending)))
-		vlog.Warn("app", "msg", "network encode", "frames", len(pending), "error", err.Error())
+		s.world.Log().Warn("net", "msg", "frames not encoded", "frames", len(pending), "error", err.Error())
 		return
 	}
 	p.Broadcast(uint8(network.MsgEvent), body)
@@ -1845,7 +1844,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	batch, err := event.DecodeWireBatch(body)
 	if err != nil {
 		s.statDrop.Add(1)
-		vlog.Warn("app", "msg", "network decode", "error", err.Error())
+		s.world.Log().Warn("net", "msg", "frame not decoded", "error", err.Error())
 		return
 	}
 	if batch.Source == 0 || int(batch.Source) >= len(s.epochs) {
@@ -1970,13 +1969,13 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	}
 	if overflowed > 0 {
 		s.statScheduleFull.Add(int64(overflowed))
-		vlog.Warn("app", "msg", "barrier schedule full",
+		s.world.Log().Warn("net", "msg", "barrier schedule full",
 			"source", batch.Source, "produced_tick", batch.ProducedTick,
 			"dropped", overflowed, "held", held, "bytes", s.scheduledBytes)
 	}
 	if superseded > 0 {
 		s.statSuperseded.Add(int64(superseded))
-		vlog.Debug("app", "msg", "snapshot refused crossings the installed world holds",
+		s.world.Log().Debug("converge", "msg", "snapshot refused crossings the installed world holds",
 			"source", batch.Source, "produced_tick", batch.ProducedTick,
 			"source_fence", sourceFence, "superseded", superseded)
 	}
@@ -2181,7 +2180,7 @@ func (s *NetworkSystem) relayBatch(from uint32, kind network.MessageType, batch 
 	}
 	if batch.Hops >= parameter.NetworkRelayHopLimit {
 		s.statDrop.Add(1)
-		vlog.Warn("app", "msg", "network relay hop limit",
+		s.world.Log().Warn("net", "msg", "relay hop limit reached",
 			"source", batch.Source, "produced_tick", batch.ProducedTick)
 		return
 	}
@@ -2189,7 +2188,7 @@ func (s *NetworkSystem) relayBatch(from uint32, kind network.MessageType, batch 
 	body, err := event.EncodeWireBatch(batch)
 	if err != nil {
 		s.statDrop.Add(int64(max(1, len(batch.Frames))))
-		vlog.Warn("app", "msg", "network relay encode", "error", err.Error())
+		s.world.Log().Warn("net", "msg", "relay not encoded", "error", err.Error())
 		return
 	}
 	p.BroadcastExcept(from, uint8(kind), body)
@@ -2239,7 +2238,7 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 		}
 		if !s.admissibleFromSource(et, a.source, a.authored) {
 			s.statForged.Add(1)
-			vlog.Warn("app", "msg", "artifact refused",
+			s.world.Log().Warn("session", "msg", "artifact refused",
 				"peer", a.source, "event", event.GetEventName(et), "apply_tick", a.applyTick)
 			continue
 		}

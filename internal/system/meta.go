@@ -15,7 +15,6 @@ import (
 	"github.com/lixenwraith/vif/internal/help"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/status"
-	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // MetaSystem handles meta-game commands like Reset, Telemetry, Debug, and Help
@@ -397,7 +396,7 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	// 4. Journal run advances with the tick counter it re-bases; both are world-lock state,
 	// so no producer can observe one without the other
 	run := s.world.Resources.Event.Queue.NextRun()
-	s.ctx.Correlation.SetRun(run)
+	s.ctx.Log.SetRun(run)
 
 	// 5. Config reset (map dimensions to viewport)
 	// A reset is one logical shared action every participant applies from the same
@@ -441,7 +440,7 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	// 9. Purge operator session state; last, so it wins over anything reset restored
 	if purge {
 		s.ctx.ResetSessionState()
-		vlog.Info("app", "msg", "session purge")
+		s.world.Log().Info("app", "msg", "session purged")
 	}
 }
 
@@ -673,7 +672,7 @@ func (s *MetaSystem) handleSpeedRequest(p *event.GameSpeedPayload) {
 		return
 	}
 	s.ctx.TimeCtl.SetScale(scale)
-	vlog.Info("app", "msg", "time scale", "scale", scale.String())
+	s.world.Log().Info("app", "msg", "time scale changed", "scale", scale.String())
 	s.ctx.PushLocal(event.EventGameSpeedChanged, &event.GameSpeedPayload{Num: scale.Num, Den: scale.Den})
 }
 
@@ -693,7 +692,7 @@ func (s *MetaSystem) handleStepRequest(p *event.GameStepPayload) {
 		n := min(p.Ticks, int64(parameter.StepBurstMax))
 		s.handlePauseRequest(true)
 		s.ctx.TimeCtl.StepTicks(n)
-		vlog.Info("app", "msg", "step", "ticks", n)
+		s.world.Log().Info("app", "msg", "steps granted", "ticks", n)
 		return
 	}
 
@@ -730,7 +729,7 @@ func (s *MetaSystem) handleStepRequest(p *event.GameStepPayload) {
 		bs.Label += "!"
 	}
 	s.ctx.TimeCtl.Arm(bs, run)
-	vlog.Info("app", "msg", "break armed", "on", bs.Label, "scale", run.String(), "expiry", bs.Expiry)
+	s.world.Log().Info("app", "msg", "break armed", "on", bs.Label, "scale", run.String(), "expiry", bs.Expiry)
 	s.ctx.SetStatusMessage("Run until "+bs.Label, 0, true)
 }
 

@@ -34,7 +34,7 @@ func Run(cfg Config) error {
 	for {
 		next, err := runScenario(cfg, rejoin)
 		if err != nil && solo != nil && !errors.Is(err, errSessionSignalled) {
-			vlog.Warn("app", "msg", "join failed; playing solo", "join", cfg.JoinAddress, "error", err.Error())
+			vlog.Warn("session", "msg", "join failed; playing solo", "join", cfg.JoinAddress, "error", err.Error())
 			cfg, solo = *solo, nil
 			cfg.notice = "Join failed: " + err.Error()
 			continue
@@ -160,7 +160,7 @@ func (a *App) Loop() (*restartRequest, error) {
 
 	if a.cfg.resume != nil {
 		if err := a.resumeWorld(*a.cfg.resume); err != nil {
-			vlog.Warn("app", "msg", "world not resumed; playing a new game", "error", err.Error())
+			a.log.Warn("journal", "msg", "world not resumed; playing a new game", "error", err.Error())
 			a.ctx.SetStatusMessage("Journal: world not resumed: "+err.Error(), parameter.StatusMessageMaxDuration, true)
 		}
 	}
@@ -179,14 +179,14 @@ func (a *App) Loop() (*restartRequest, error) {
 	// the game.
 	if a.cfg.resumeHost != "" {
 		if err := a.BeginHosting(a.cfg.resumeHost); err != nil {
-			vlog.Warn("app", "msg", "hosting not opened; playing solo", "address", a.cfg.resumeHost, "error", err.Error())
+			a.log.Warn("session", "msg", "hosting not opened; playing solo", "address", a.cfg.resumeHost, "error", err.Error())
 			a.ctx.SetStatusMessage("Host: "+err.Error()+"; playing solo", parameter.StatusMessageMaxDuration, true)
 		}
 	}
 	// After the door opens, for the same reason: every bot arrives through it. One
 	// that cannot be seated costs the bot, not the game.
 	if err := a.seatBots(); err != nil {
-		vlog.Warn("app", "msg", "bots not seated", "error", err.Error())
+		a.log.Warn("app", "msg", "bots not seated", "error", err.Error())
 		a.ctx.SetStatusMessage("Bots: "+err.Error(), parameter.StatusMessageMaxDuration, true)
 	}
 
@@ -210,7 +210,7 @@ func (a *App) Loop() (*restartRequest, error) {
 		}
 		select {
 		case sig := <-sigChan:
-			vlog.Info("app", "msg", "signal received", "signal", sig.String())
+			a.log.Info("app", "msg", "signal received", "signal", sig.String())
 			return nil, nil
 
 		case ev := <-eventChan:

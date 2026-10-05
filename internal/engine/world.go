@@ -102,6 +102,15 @@ func NewWorld() *World {
 	return w
 }
 
+// Log is the handle this world's producers write through; the process's until a
+// context binds its registry.
+func (w *World) Log() *vlog.Log {
+	if r := w.Resources.Status; r != nil {
+		return r.Log()
+	}
+	return vlog.Default()
+}
+
 // CreateEntity reserves a new entity ID in the given domain
 // Caller holds updateMutex (all creation paths: systems, event handlers)
 func (w *World) CreateEntity(d core.Domain) core.Entity {
@@ -333,13 +342,13 @@ func (w *World) Seal() {
 // FSM actions that validation cannot see.
 func (w *World) AllowSystemDisable(name string) bool {
 	if required := w.SystemsRequiring(name, DepRequired); len(required) > 0 {
-		vlog.Warn("system", "msg", "disable refused", "system", name,
+		w.Log().Warn("system", "msg", "disable refused", "system", name,
 			"required_by", strings.Join(required, ","))
 		return false
 	}
 	if optional := w.SystemsRequiring(name, DepOptional); len(optional) > 0 {
 		if _, reported := w.degradedSystems.LoadOrStore(name, true); !reported {
-			vlog.Info("system", "msg", "dependents degraded", "system", name,
+			w.Log().Info("system", "msg", "dependents degraded", "system", name,
 				"optional_for", strings.Join(optional, ","))
 		}
 	}
@@ -531,8 +540,8 @@ func (w *World) pushEvent(eventType event.EventType, payload any, origin event.O
 		return // Not yet initialized
 	}
 
-	if vlog.On("push", vlog.LevelTrace) {
-		vlog.Trace("push", vlog.LevelTrace, 4, "msg", "push", "ev", event.GetEventName(eventType))
+	if l := w.Log(); l.On("push", vlog.LevelTrace) {
+		l.Trace("push", vlog.LevelTrace, 4, "msg", "push", "ev", event.GetEventName(eventType))
 	}
 
 	ev := event.GameEvent{

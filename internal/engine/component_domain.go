@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vif/internal/core"
-	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // domainViolationCap bounds the retained descriptions; the counter is the alarm,
@@ -101,7 +100,7 @@ func auditComponentDomain(w *World, e core.Entity, bit uint64) {
 	recordViolation("component " + rule.field + " wants " + rule.domain.String() +
 		", entity is " + e.Domain().String() + " id " + strconv.FormatUint(e.ID(), 10) +
 		" (in " + w.auditScopeName() + ")")
-	vlog.Warn("domain", "msg", "component domain mismatch",
+	w.Log().Warn("domain", "msg", "component domain mismatch",
 		"component", rule.field,
 		"want", rule.domain.String(),
 		"got", e.Domain().String(),
@@ -120,6 +119,6 @@ func auditEntityDomain(w *World, e core.Entity) {
 	}
 	recordViolation("shared system " + w.audit.name + " wrote player entity id " +
 		strconv.FormatUint(e.ID(), 10))
-	vlog.Warn("domain", "msg", "shared system wrote player entity",
+	w.Log().Warn("domain", "msg", "shared system wrote player entity",
 		"system", w.audit.name, "id", e.ID())
 }
