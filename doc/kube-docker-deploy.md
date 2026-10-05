@@ -263,8 +263,8 @@ match keeps the tree it mounted.
 ## 10. LogWisp, the node log reader
 
 One node service reads `/var/log/vif-fleet/*.jsonl` and serves SSE on loopback. It
-holds no Kubernetes credential and is pinned to the upstream revision in
-`deploy/logwisp/REVISION`, which must be reachable from upstream `main`:
+holds no Kubernetes credential and is built from upstream LogWisp `main`, whose head
+`./deploy/update.sh` compares with the installed binary:
 
 ```sh
 ./deploy/guest/install-logwisp.sh            # once; later: ./deploy/update.sh logwisp
@@ -274,7 +274,7 @@ test "$(sudo ss -ltnH 'sport = :8081' | awk 'NR == 1 {print $4}')" = 127.0.0.1:8
 
 What the stream may lose is the `rate_limit` in
 [`aggregator.toml`](../deploy/logwisp/aggregator.toml) and nothing else; §16 names
-the symptoms of a queue below the burst or a pin older than the rotation fix.
+the symptoms of a queue below the burst.
 
 ## 11. The allocator
 
@@ -625,9 +625,6 @@ Each row below was a dead end in the proof-of-concept run when it was not known:
 | `kubectl auth can-i get pods/log` answers `yes`. | Positional `pods/log` parses as `TYPE/NAME`. Use `--subresource=log` (§9). |
 | LogWisp shows no lines written before it started. | A watcher seeks to end-of-file on discovery. The source needs `from = "start"` (§10). |
 | `dropped_writes` rises on `/status` with one reader and an idle node. | Records lost from a burst larger than `client_buffer_size`, not backpressure. Keep that queue at or above the `rate_limit` burst (§10). |
-| The viewer's `duplicates` counter jumps, and live records thin out for a minute. | A session crossed the 8 MiB file cap. Pinned LogWisp older than the rotation fix replays the whole archive it renames, and the replay spends the rate limit (§10). |
-| The viewer reconnects while the fleet is quiet, or its `reconnects` climbs on an idle node. | Pinned LogWisp older than the idle keepalive: a stream carrying nothing was idle-expired and evicted on the next record (§10). |
-| `Watcher failed … watcher stopped` in LogWisp's journal. | Read only the invocation running the pinned binary (§10); earlier entries belong to whatever it replaced. |
-| A build stops with `pinned revision is not an ancestor of LogWisp main`. | `deploy/logwisp/REVISION` names a pull-request head a squash merge discarded. Repin to the merged commit. |
+| `Watcher failed … watcher stopped` in LogWisp's journal. | Read only the invocation running the installed binary (§10); earlier entries belong to whatever it replaced. |
 | `curl` to `:9080` is refused right after `systemctl start`. | Only on an allocator that predates `Type=notify`; otherwise the bind has already happened and the refusal is real. |
 | Testing the public address from the FreeBSD host returns an immediate RST. | Host-originated traffic bypasses `rdr`. Test from off-box, or test the node address directly (§2). |
