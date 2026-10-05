@@ -453,9 +453,10 @@ Pacing converts the recorded tick interval and speed to wall time, then applies
 the viewer's rate. The simulation keeps its recorded geometry; the frame is laid
 out for the viewer's terminal, and a resize re-lays it. A map the view holds is
 centred in void as the game centres it; a larger one is shown from the recorded
-view's centre, and scroll stops at the map's edges. The command line pauses
-playback, as the game's does, and hands the recorded mode and pause back when it
-closes; a command that would change the recording is refused.
+view's centre, and scroll stops at the map's edges. The command line holds
+playback, as the game's does, and borrows the recorded mode without announcing a
+change to the world or pausing its clock (`GameContext.Viewer`), so closing it
+leaves the run as recorded; a command that would change the recording is refused.
 
 A world cannot be rewound, so going back presents another copy of the run: a
 `ModeReplay` App on the viewer's terminal replaying the stream from its start on

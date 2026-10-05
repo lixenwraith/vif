@@ -691,6 +691,9 @@ func (ctx *GameContext) SetMode(m core.GameMode) {
 // Caller MUST hold updateMutex: UpdateBoundsRadius reads component stores.
 func (ctx *GameContext) RequestMode(m core.GameMode) {
 	ctx.SetMode(m)
+	if ctx.Viewer.Load() {
+		return // a replay viewer borrows the mode; the recording authors the world
+	}
 	ctx.World.UpdateBoundsRadius()
 	ctx.PushLocal(event.EventModeChanged, &event.ModeChangedPayload{Mode: m})
 }
@@ -912,6 +915,11 @@ func (ctx *GameContext) syncOverlaySelection(content *core.OverlayContent) {
 
 // === Pause ===
 
+// SetPaused requests a pause change. A replay viewer's command line holds playback
+// itself and leaves the recorded clock alone.
 func (ctx *GameContext) SetPaused(paused bool) {
+	if ctx.Viewer.Load() {
+		return
+	}
 	ctx.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: paused})
 }
