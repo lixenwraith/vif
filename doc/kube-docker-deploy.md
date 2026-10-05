@@ -84,7 +84,7 @@ Record every version with the deployment. Then one package set covers the proced
 uname -a; findmnt -no FSTYPE /sys/fs/cgroup   # expect: cgroup2fs
 sudo pacman -Syu --needed \
   curl git go jq make python util-linux iptables-nft conntrack-tools \
-  ethtool tcpdump nftables docker
+  ethtool tcpdump nftables docker docker-buildx
 sudo systemctl enable --now systemd-timesyncd
 ```
 

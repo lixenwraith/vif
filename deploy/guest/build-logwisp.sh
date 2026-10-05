@@ -31,6 +31,13 @@ revision=${2:-}
 	exit 1
 }
 
+# LogWisp's Dockerfile needs BuildKit, and buildx reaches it with no fallback to the
+# legacy builder; checked before Docker starts.
+sudo docker buildx version >/dev/null || {
+	echo "$0: Docker has no buildx plugin, which LogWisp's build needs; install docker-buildx" >&2
+	exit 1
+}
+
 for build_unit in docker.service docker.socket containerd.service; do
 	if systemctl is-active --quiet "$build_unit"; then
 		echo "$0: $build_unit must be inactive before the temporary build" >&2
@@ -66,7 +73,8 @@ cleanup() {
 		if [ -n "$container" ]; then
 			sudo docker rm -f "$container" >/dev/null 2>&1 || cleanup_status=$?
 		fi
-		# Everything, not just the image: --pull leaves each earlier base behind.
+		# Everything, not just the image: --pull leaves each earlier base behind, and
+		# BuildKit its cache.
 		sudo docker system prune --all --force >/dev/null 2>&1 || cleanup_status=$?
 	fi
 	case "$build_root" in
@@ -106,7 +114,7 @@ echo "building LogWisp $version at revision $revision"
 sudo systemctl start docker.service
 docker_started=true
 restore_forward_policy
-sudo docker build --pull \
+sudo docker buildx build --load --pull \
 	--build-arg VERSION="$version" \
 	--build-arg REVISION="$revision" \
 	-t "$image" "$build_source"
