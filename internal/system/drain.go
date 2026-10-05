@@ -884,10 +884,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 			if len(overlap.ShieldMembers) > 0 {
 				if drainReady {
 					drainedShield = true
-					s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-						Entity: overlap.Cursor,
-						Value:  parameter.DrainShieldEnergyDrainAmount,
-					})
+					strikeCursor(s.world, overlap.Cursor, profile.Contact[component.SpeciesDrain])
 				}
 
 				s.world.PushLocal(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
@@ -901,10 +898,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 			}
 
 			if overlap.OnCursor {
-				s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-					Entity: overlap.Cursor,
-					Delta:  -parameter.DrainHeatReductionAmount,
-				})
+				strikeCursor(s.world, overlap.Cursor, profile.Contact[component.SpeciesDrain])
 				destroyDrain = true
 			}
 		}

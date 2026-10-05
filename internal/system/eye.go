@@ -216,7 +216,7 @@ func (s *EyeSystem) Update() {
 		}
 
 		// Cursor/shield interaction (incidental, not target-related)
-		s.handleCursorInteraction(headerEntity)
+		strikeContacts(s.world, headerEntity, profile.Contact[component.SpeciesEye], true)
 
 		activeCount++
 	}
@@ -603,34 +603,6 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 }
 
 // === Interactions ===
-
-func (s *EyeSystem) handleCursorInteraction(headerEntity core.Entity) {
-	overlaps := CheckCursorOverlaps(s.world, headerEntity)
-	for i := range overlaps.Count {
-		overlap := &overlaps.Entries[i]
-		if !s.world.SimulatesLocally(overlap.Cursor) {
-			continue
-		}
-		if len(overlap.ShieldMembers) > 0 {
-			s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, &event.CombatAttackAreaRequestPayload{
-				AttackType:   component.CombatAttackShield,
-				OwnerEntity:  overlap.Cursor,
-				OriginEntity: overlap.Cursor,
-				TargetEntity: headerEntity,
-				HitEntities:  overlap.ShieldMembers,
-			})
-			s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-				Entity: overlap.Cursor,
-				Value:  parameter.EyeShieldDrain,
-			})
-		} else if overlap.OnCursor && !overlap.ShieldActive {
-			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-				Entity: overlap.Cursor,
-				Delta:  -parameter.EyeDamageHeat,
-			})
-		}
-	}
-}
 
 // === Lifecycle ===
 

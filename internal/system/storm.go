@@ -1030,42 +1030,11 @@ func (s *StormSystem) handleCircleBreach(headerEntity core.Entity) {
 	}
 }
 
-// handleCircleInteractions processes player collision and shield drain
+// handleCircleInteractions strikes the cursors each live circle touches
 func (s *StormSystem) handleCircleInteractions(stormComp *component.StormComponent) {
 	for i := range component.StormCircleCount {
-		if !stormComp.CirclesAlive[i] {
-			continue
-		}
-
-		circleEntity := stormComp.Circles[i]
-
-		overlaps := CheckCursorOverlaps(s.world, circleEntity)
-		for j := range overlaps.Count {
-			overlap := &overlaps.Entries[j]
-			if !s.world.SimulatesLocally(overlap.Cursor) {
-				continue
-			}
-			// Apply shield interaction before exact cursor contact.
-			if len(overlap.ShieldMembers) > 0 {
-				s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-					Entity: overlap.Cursor,
-					Value:  parameter.QuasarShieldDrain,
-				})
-
-				s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, &event.CombatAttackAreaRequestPayload{
-					AttackType:   component.CombatAttackShield,
-					OwnerEntity:  overlap.Cursor,
-					OriginEntity: overlap.Cursor,
-					TargetEntity: circleEntity,
-					HitEntities:  overlap.ShieldMembers,
-				})
-			} else if overlap.OnCursor && !overlap.ShieldActive {
-				// Direct cursor collision without a shield resets heat.
-				s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-					Entity: overlap.Cursor,
-					Delta:  -parameter.HeatMax,
-				})
-			}
+		if stormComp.CirclesAlive[i] {
+			strikeContacts(s.world, stormComp.Circles[i], profile.Contact[component.SpeciesStorm], true)
 		}
 	}
 }
@@ -1242,6 +1211,12 @@ func (s *StormSystem) processCircleAttack(
 	}
 }
 
+// stormGreenDamage is what the green circle's pulse costs each cursor inside it
+var stormGreenDamage = component.CursorDamage{
+	EnergyDrain: parameter.StormGreenDamageEnergy,
+	HeatDelta:   -parameter.StormGreenDamageHeat,
+}
+
 // processGreenAttack handles area pulse damage around green circle
 func (s *StormSystem) processGreenAttack(
 	circleComp *component.StormCircleComponent,
@@ -1252,30 +1227,11 @@ func (s *StormSystem) processGreenAttack(
 	remaining := circleComp.AttackRemaining.Seconds()
 	circleComp.AttackProgress = 1.0 - (remaining / attackDuration)
 
-	// Telemetry
 	s.statGreenActiveFrame.Add(1)
 
-	for i := range parameter.MaxPlayers {
-		cursor := s.world.Resources.Player.Slot(uint8(i))
-		cursorPos, ok := s.world.Positions.GetPosition(cursor)
-		if !ok || !vmath.EllipseContainsPointF(cursorPos.X, cursorPos.Y, circleX, circleY,
-			parameter.StormGreenInvRxSq, parameter.StormGreenInvRySq) {
-			continue
-		}
-
-		shieldComp, shieldOK := s.world.Components.Shield.GetComponent(cursor)
-		if shieldOK && shieldComp.Active {
-			s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-				Entity: cursor,
-				Value:  parameter.StormGreenDamageEnergy,
-			})
-		} else {
-			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-				Entity: cursor,
-				Delta:  -parameter.StormGreenDamageHeat,
-			})
-		}
-	}
+	strikeCursorsIn(s.world, func(x, y int) bool {
+		return vmath.EllipseContainsPointF(x, y, circleX, circleY, parameter.StormGreenInvRxSq, parameter.StormGreenInvRySq)
+	}, stormGreenDamage)
 }
 
 // processRedAttack advances the burst's visual progress; the circle's turret mount fires it

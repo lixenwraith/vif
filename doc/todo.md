@@ -368,23 +368,6 @@ Charges beyond the ray could add rays 360°/n apart, one through the orb; a swee
 
 Its area pulse is the hosted disruptor's shape; the red circle's turret mount is the pattern.
 
-### Route species contact damage through strikeCursor
-
-- Priority: P2
-- Affected files: `internal/system/{quasar,swarm,storm,eye,pylon,snake,drain,interaction}.go`,
-  `internal/system/domain_test.go`
-
-`profile.Contact` holds every species' contact damage; only Kraken applies its row
-through `strikeCursor`. Quasar, swarm, storm circles, eye and pylon share one loop
-over `CheckCursorOverlaps`: shield crossing when members are inside the shield,
-then a strike on shield members or a covered bare cursor, so one helper beside it
-takes that loop. Snake (head heats only while unshielded, body only drains) and
-drain (throttled, dies on contact) keep their conditions and call `strikeCursor`.
-Storm's green pulse becomes `strikeCursorsIn` and quasar's zap `strikeCursor`,
-gaining the owner gate both lack. Replace the count pin in
-`TestSharedCursorOverlapOutcomesStayOwnerResolved` with a rule that no species file
-pushes shield drain or heat itself, and test each migrated contact outcome.
-
 ## Rendering
 
 ### Configuration menu follow-up

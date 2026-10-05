@@ -96,8 +96,9 @@ and stun immunity each cover all players and weapons. Species-authored
 invulnerability still blocks every weapon.
 Hits on cursors are `CursorDamage`: energy through an active shield, heat without
 one. Projectiles find the cursor they touch
-with `CursorContactAt`, shields first. Species contact costs `profile.Contact`;
-Kraken applies it through `strikeCursor`, the other species still by hand.
+with `CursorContactAt`, shields first. Species contact costs `profile.Contact`
+through `strikeCursor`: `strikeContacts` for composites, with the shield's impact
+crossing, and Kraken's own footprint test for its hundreds of cells.
 
 | Cursor weapon hit | Artifact |
 |---|---|

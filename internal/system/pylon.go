@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/profile"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -140,43 +141,13 @@ func (s *PylonSystem) Update() {
 		s.processAblativeCombat(headerEntity, headerComp)
 
 		// Cursor/shield interaction
-		s.handleInteractions(headerEntity)
+		strikeContacts(s.world, headerEntity, profile.Contact[component.SpeciesPylon], true)
 
 		activeCount++
 	}
 
 	s.statCount.Store(int64(activeCount))
 	s.statActive.Store(activeCount > 0)
-}
-
-// handleInteractions processes shield drain and cursor collision
-func (s *PylonSystem) handleInteractions(headerEntity core.Entity) {
-	overlaps := CheckCursorOverlaps(s.world, headerEntity)
-	for i := range overlaps.Count {
-		overlap := &overlaps.Entries[i]
-		if !s.world.SimulatesLocally(overlap.Cursor) {
-			continue
-		}
-		if len(overlap.ShieldMembers) > 0 {
-			s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-				Entity: overlap.Cursor,
-				Value:  parameter.PylonShieldDrain,
-			})
-
-			s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, &event.CombatAttackAreaRequestPayload{
-				AttackType:   component.CombatAttackShield,
-				OwnerEntity:  overlap.Cursor,
-				OriginEntity: overlap.Cursor,
-				TargetEntity: headerEntity,
-				HitEntities:  overlap.ShieldMembers,
-			})
-		} else if overlap.OnCursor && !overlap.ShieldActive {
-			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-				Entity: overlap.Cursor,
-				Delta:  -parameter.PylonDamageHeat,
-			})
-		}
-	}
 }
 
 func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {

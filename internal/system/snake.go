@@ -852,51 +852,18 @@ func (s *SnakeSystem) updateShieldState(snakeComp *component.SnakeComponent, bod
 	snakeComp.IsShielded = hasLiving
 }
 
+// handleInteractions strikes cursors on the head's cell, heating them only while the
+// snake is unshielded, and shields the body reaches; the body never heats.
 func (s *SnakeSystem) handleInteractions(snakeComp *component.SnakeComponent) {
-	// Apply the head interaction to every overlapping cursor.
-	headOverlaps := CheckCursorOverlaps(s.world, snakeComp.HeadEntity)
-	for i := range headOverlaps.Count {
-		headOverlap := &headOverlaps.Entries[i]
-		if !headOverlap.OnCursor || !s.world.SimulatesLocally(headOverlap.Cursor) {
-			continue
-		}
-		if headOverlap.ShieldActive {
-			s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-				Entity: headOverlap.Cursor,
-				Value:  parameter.SnakeShieldDrainPerTick,
-			})
-		} else if !snakeComp.IsShielded {
-			// The head damages a cursor only when the snake is unshielded.
-			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-				Entity: headOverlap.Cursor,
-				Delta:  -parameter.SnakeDamageHeat,
-			})
+	damage := profile.Contact[component.SpeciesSnake]
+	head := CheckCursorOverlaps(s.world, snakeComp.HeadEntity)
+	for i := range head.Count {
+		if o := &head.Entries[i]; o.OnCursor && (o.ShieldActive || !snakeComp.IsShielded) {
+			strikeCursor(s.world, o.Cursor, damage)
 		}
 	}
-
-	// Apply the body interaction to every overlapping player shield.
-	if snakeComp.BodyEntity == 0 {
-		return
-	}
-
-	bodyOverlaps := CheckCursorOverlaps(s.world, snakeComp.BodyEntity)
-	for i := range bodyOverlaps.Count {
-		bodyOverlap := &bodyOverlaps.Entries[i]
-		if len(bodyOverlap.ShieldMembers) == 0 || !s.world.SimulatesLocally(bodyOverlap.Cursor) {
-			continue
-		}
-		s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-			Entity: bodyOverlap.Cursor,
-			Value:  parameter.SnakeShieldDrainPerTick,
-		})
-
-		s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, &event.CombatAttackAreaRequestPayload{
-			AttackType:   component.CombatAttackShield,
-			OwnerEntity:  bodyOverlap.Cursor,
-			OriginEntity: bodyOverlap.Cursor,
-			TargetEntity: snakeComp.BodyEntity,
-			HitEntities:  bodyOverlap.ShieldMembers,
-		})
+	if snakeComp.BodyEntity != 0 {
+		strikeContacts(s.world, snakeComp.BodyEntity, damage, false)
 	}
 }
 
