@@ -30,7 +30,7 @@ type SnakeSystem struct {
 	motion              bounceTelemetry
 	sweep               cellSweep
 
-	enabled bool
+	toggle
 }
 
 func NewSnakeSystem(world *engine.World) engine.System {

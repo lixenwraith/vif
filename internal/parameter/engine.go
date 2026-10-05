@@ -67,6 +67,14 @@ const (
 	// apart, so that many step backs present at once; each costs a world and its
 	// share of the simulation while playback runs
 	ReplayBackSpares = 8
+
+	// ReplayCheckpointSteps is the presented steps between the whole-state
+	// checkpoints a replay keeps, so a copy behind its spares replays from the
+	// nearest instead of the stream's start. ReplayCheckpoints bounds how many are
+	// kept: past it every other is dropped and the spacing doubles. One holds about
+	// 6.5 MB at the map limit.
+	ReplayCheckpointSteps = 100
+	ReplayCheckpoints     = 32
 )
 
 // ECS & Resources Limits

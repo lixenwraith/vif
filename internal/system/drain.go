@@ -75,7 +75,7 @@ type DrainSystem struct {
 	pausedAll bool
 	pausedFor []core.Entity
 
-	enabled bool
+	toggle
 }
 
 // NewDrainSystem creates a new drain system
@@ -1259,4 +1259,26 @@ func (e *drainCacheEntry) killPos() (int, int) {
 		return -1, -1
 	}
 	return e.pos.X, e.pos.Y
+}
+
+type drainState struct {
+	pending                []pendingDrainSpawn
+	order                  int
+	cooldownUntil, backoff uint64
+	pausedAll              bool
+	pausedFor              []core.Entity
+}
+
+func (s *DrainSystem) CopyState() any {
+	return drainState{slices.Clone(s.pendingSpawns), s.nextSpawnOrder, s.spawnCooldownUntil, s.spawnBackoff,
+		s.pausedAll, slices.Clone(s.pausedFor)}
+}
+
+func (s *DrainSystem) RestoreState(v any) error {
+	c := v.(drainState)
+	s.pendingSpawns, s.nextSpawnOrder = append(s.pendingSpawns[:0], c.pending...), c.order
+	s.spawnCooldownUntil, s.spawnBackoff = c.cooldownUntil, c.backoff
+	// Into its own backing: a hold past its capacity reads as a leak
+	s.pausedAll, s.pausedFor = c.pausedAll, append(s.pausedFor[:0], c.pausedFor...)
+	return nil
 }

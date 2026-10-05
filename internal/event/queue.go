@@ -1,6 +1,7 @@
 package event
 
 import (
+	"reflect"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -293,4 +294,102 @@ func (eq *EventQueue) AnchorJournal(live AnchorLive) {
 	if j := eq.journal.Load(); j != nil {
 		j.Anchor(*eq.stamp.Load(), live)
 	}
+}
+
+// QueueCopy is a queue's undispatched events, slot counter, telemetry and stamp,
+// detached from it, for a replay copy restored where another stood.
+type QueueCopy struct {
+	pending                []GameEvent
+	tail, overwritten      uint64
+	dispatched, deadLetter [EventTypeCount]int64
+	stamp                  Stamp
+}
+
+// CopyOut reads the queue. Caller MUST hold the world lock and no producer may run.
+func (eq *EventQueue) CopyOut() QueueCopy {
+	c := QueueCopy{tail: eq.tail.Load(), overwritten: eq.overwritten.Load(), stamp: *eq.stamp.Load()}
+	for i := eq.head.Load(); i < c.tail; i++ {
+		ev := eq.events[i&parameter.EventBufferMask]
+		ev.Payload = clonePayload(ev.Payload)
+		c.pending = append(c.pending, ev)
+	}
+	eq.SnapshotTelemetry(&c.dispatched, &c.deadLetter)
+	return c
+}
+
+// CopyIn replaces the queue's contents with a copy; its wire and journal stay its
+// own. Caller MUST hold the world lock and no producer may run.
+func (eq *EventQueue) CopyIn(c QueueCopy) {
+	eq.Consume()
+	head := c.tail - uint64(len(c.pending))
+	for i, ev := range c.pending {
+		idx := (head + uint64(i)) & parameter.EventBufferMask
+		ev.Payload = clonePayload(ev.Payload)
+		eq.events[idx] = ev
+		eq.published[idx].Store(true)
+	}
+	eq.head.Store(head)
+	eq.tail.Store(c.tail)
+	eq.overwritten.Store(c.overwritten)
+	for i := 1; i < EventTypeCount; i++ {
+		eq.dispatched[i].Store(c.dispatched[i])
+		eq.deadLetter[i].Store(c.deadLetter[i])
+	}
+	st := c.stamp
+	eq.stamp.Store(&st)
+}
+
+// clonePayload returns a payload sharing no storage with p: a queued one may be
+// pooled, and whoever dispatches it recycles it.
+func clonePayload(p any) any {
+	if p == nil {
+		return nil
+	}
+	return deepCopy(reflect.ValueOf(p)).Interface()
+}
+
+func deepCopy(v reflect.Value) reflect.Value {
+	switch v.Kind() {
+	case reflect.Pointer:
+		if v.IsNil() {
+			return v
+		}
+		n := reflect.New(v.Type().Elem())
+		n.Elem().Set(deepCopy(v.Elem()))
+		return n
+	case reflect.Struct:
+		n := reflect.New(v.Type()).Elem()
+		n.Set(v)
+		for i := range v.NumField() {
+			if n.Field(i).CanSet() {
+				n.Field(i).Set(deepCopy(v.Field(i)))
+			}
+		}
+		return n
+	case reflect.Slice:
+		if v.IsNil() {
+			return v
+		}
+		n := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		for i := range v.Len() {
+			n.Index(i).Set(deepCopy(v.Index(i)))
+		}
+		return n
+	case reflect.Array:
+		n := reflect.New(v.Type()).Elem()
+		for i := range v.Len() {
+			n.Index(i).Set(deepCopy(v.Index(i)))
+		}
+		return n
+	case reflect.Map:
+		if v.IsNil() {
+			return v
+		}
+		n := reflect.MakeMapWithSize(v.Type(), v.Len())
+		for it := v.MapRange(); it.Next(); {
+			n.SetMapIndex(deepCopy(it.Key()), deepCopy(it.Value()))
+		}
+		return n
+	}
+	return v
 }

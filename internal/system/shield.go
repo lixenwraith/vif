@@ -22,7 +22,7 @@ type ShieldSystem struct {
 	rejects       rejectionTelemetry
 
 	lastHitSound time.Time // game time of the last hit sound; local audio only
-	enabled      bool
+	toggle
 }
 
 // NewShieldSystem creates a new shield system
@@ -214,4 +214,11 @@ func (s *ShieldSystem) Update() {
 		}
 		return true
 	})
+}
+
+func (s *ShieldSystem) CopyState() any { return s.lastHitSound }
+
+func (s *ShieldSystem) RestoreState(v any) error {
+	s.lastHitSound = v.(time.Time)
+	return nil
 }

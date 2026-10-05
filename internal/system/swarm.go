@@ -35,7 +35,7 @@ type SwarmSystem struct {
 	motion              bounceTelemetry
 	sweep               cellSweep
 
-	enabled bool
+	toggle
 }
 
 func NewSwarmSystem(world *engine.World) engine.System {
@@ -820,4 +820,11 @@ func (s *SwarmSystem) resetSwarmState(swarmComp *component.SwarmComponent) {
 	swarmComp.LockRemaining = 0
 	swarmComp.ChargeRemaining = 0
 	swarmComp.DecelRemaining = 0
+}
+
+func (s *SwarmSystem) CopyState() any { return s.active }
+
+func (s *SwarmSystem) RestoreState(v any) error {
+	s.active = v.(bool)
+	return nil
 }

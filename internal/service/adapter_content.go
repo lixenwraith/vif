@@ -105,6 +105,20 @@ func (s *ContentService) NextBlock() (core.CodeBlock, bool) {
 	return block, true
 }
 
+// CursorState reads where the walk stands, for a copy of the run restored there.
+func (s *ContentService) CursorState() content.CursorState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cursor.State()
+}
+
+// SetCursorState resumes a walk read from a service over the same corpus.
+func (s *ContentService) SetCursorState(st content.CursorState) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cursor.SetState(st)
+}
+
 // PublishStatus registers corpus telemetry.
 // Called after GameContext creates the registry; the corpus is already final.
 func (s *ContentService) PublishStatus(reg *status.Registry) {

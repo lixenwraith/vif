@@ -67,6 +67,9 @@ func (mc *ManualClock) SetScale(s TimeScale) {
 // Elapsed returns total game time advanced since epoch
 func (mc *ManualClock) Elapsed() time.Duration { return time.Duration(mc.elapsed.Load()) }
 
+// SetElapsed places the clock where another stood, for a replay copy restored there.
+func (mc *ManualClock) SetElapsed(d time.Duration) { mc.elapsed.Store(int64(d)) }
+
 // Pause is a no-op: manual time advances only on Step, so TimeControl's flag is
 // the whole of the pause state
 func (mc *ManualClock) Pause() {}

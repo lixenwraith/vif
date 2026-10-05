@@ -91,6 +91,28 @@ func NewReplayDriver(target ReplayTarget, records []event.JournalRecord, capture
 		stats: ReplayStats{Records: len(records)}}
 }
 
+// Cursor is where a driver stands in its stream. A driver over another copy of the
+// same stream resumes from it, as a replay restored from a checkpoint does.
+type Cursor struct {
+	next, nextCap, nextDig int
+	cur                    groupKey
+	landed                 bool
+	stats                  ReplayStats
+	matched                *event.Stamp
+}
+
+// Cursor reads where the driver stands.
+func (d *ReplayDriver) Cursor() Cursor {
+	return Cursor{next: d.next, nextCap: d.nextCap, nextDig: d.nextDig, cur: d.cur,
+		landed: d.landed, stats: d.stats, matched: d.matched}
+}
+
+// Resume places the driver where c was read; its target must stand where c's did.
+func (d *ReplayDriver) Resume(c Cursor) {
+	d.next, d.nextCap, d.nextDig, d.cur = c.next, c.nextCap, c.nextDig, c.cur
+	d.landed, d.stats, d.matched = c.landed, c.stats, c.matched
+}
+
 // Done reports whether every record has been injected and every world installed.
 func (d *ReplayDriver) Done() bool {
 	return d.streamDone() && (d.end == nil || d.target.Position().Run == d.end.Run && d.target.Position().Tick >= d.end.Tick)

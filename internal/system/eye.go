@@ -26,7 +26,7 @@ type EyeSystem struct {
 	motion              bounceTelemetry
 	sweep               cellSweep
 
-	enabled bool
+	toggle
 }
 
 func NewEyeSystem(world *engine.World) engine.System {

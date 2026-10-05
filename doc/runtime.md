@@ -459,14 +459,28 @@ change to the world or pausing its clock (`GameContext.Viewer`), so closing it
 leaves the run as recorded; a command that would change the recording is refused.
 
 A world cannot be rewound, so going back presents another copy of the run: a
-`ModeReplay` App on the viewer's terminal replaying the stream from its start on
-its own goroutine, on all cores but one. `parameter.ReplayBackSpares` copies
-trail the presented one a tick apart and park there. Each `,` is one tick a frame
-presents, as `.` is, from the nearest; a replacement starts at the far end, so a
-press past the trailing copies waits for a replay from the start. `:r` behind
-takes a trailing copy standing at that tick, else replays one there; ahead, the
-presented copy plays there unpaced for most of each frame, so the view keeps
-drawing. A copy that takes over brings the HUD pins, the speakers, whose engine
+`ModeReplay` App on the viewer's terminal replaying the stream on its own
+goroutine, on all cores but one. `parameter.ReplayBackSpares` copies trail the
+presented one a tick apart and park there. Each `,` is one tick a frame presents,
+as `.` is, from the nearest; a replacement starts at the far end. `:r` behind takes
+a trailing copy standing at that tick, else replays one there; ahead, the presented
+copy plays there unpaced for most of each frame, so the view keeps drawing.
+
+A copy starts from the nearest checkpoint behind its target rather than the
+stream's start. Every `parameter.ReplayCheckpointSteps` (100) presented steps the
+player keeps the whole state of the run (`app.checkpoint`): every store and grid
+cell in its own order and both domains' allocators (`engine.WorldCopy`), RNG
+streams, FSM position, scheduler and queue with its pending events, every registry
+cell, each system's FSM toggle and its private state (`engine.StateCopier`, or
+`SharedStateSaver` for a carrier without one), the corpus cursor, the session a
+written world was installed under, and the driver's place. Past
+`parameter.ReplayCheckpoints` (32) every other is dropped and the spacing doubles.
+At the 500×250 map limit one costs about 6 ms to take and 6.5 MB to keep, and a
+restore 35 ms with the copy's construction, against a replay from the start of
+about 16 ms a tick there. A restored copy compares the journal's digests as it
+replays; one failing a digest the presented run reproduced stops checkpointing
+(an `app` `replay checkpoint left the run` Warn), and copies replay from the start
+again. A copy that takes over brings the HUD pins, the speakers, whose engine
 plays on while the gates the copy replayed decide what sounds, and the log stamp,
 and draws into the same cells rather than repainting the terminal.
 

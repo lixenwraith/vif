@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"slices"
+
 	"github.com/lixenwraith/vif/internal/core"
 )
 
@@ -162,4 +164,29 @@ func (s *Store[T]) ClearAllComponents() {
 	clear(s.dense) // zero elements: release inner pointers
 	s.dense = s.dense[:0]
 	s.entities = s.entities[:0]
+}
+
+// storeCopy is a store's contents detached from its world, in dense order, which
+// is the order its systems visit it in.
+type storeCopy[T any] struct {
+	dense    []T
+	entities []core.Entity
+}
+
+func (s *Store[T]) copyOut() storeCopy[T] {
+	c := storeCopy[T]{dense: make([]T, len(s.dense)), entities: slices.Clone(s.entities)}
+	for i, v := range s.dense {
+		c.dense[i] = DetachSnapshotValue(v)
+	}
+	return c
+}
+
+// copyIn replaces the contents with c, layout included; the caller restores masks.
+func (s *Store[T]) copyIn(c storeCopy[T]) {
+	s.ClearAllComponents()
+	for i, e := range c.entities {
+		s.index[e] = int32(i)
+		s.dense = append(s.dense, DetachSnapshotValue(c.dense[i]))
+		s.entities = append(s.entities, e)
+	}
 }

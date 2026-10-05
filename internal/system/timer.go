@@ -13,7 +13,7 @@ import (
 type TimerSystem struct {
 	world *engine.World
 
-	enabled bool
+	toggle
 }
 
 // NewTimerSystem creates a new timer system

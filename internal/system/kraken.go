@@ -14,13 +14,13 @@ import (
 )
 
 type KrakenSystem struct {
-	world   *engine.World
-	enabled bool
-	rng     vmath.FastRand
-	cells   []vmath.Point
-	seen    map[vmath.Point]bool
-	sweep   cellSweep
-	glyphs  []core.Entity
+	world *engine.World
+	toggle
+	rng    vmath.FastRand
+	cells  []vmath.Point
+	seen   map[vmath.Point]bool
+	sweep  cellSweep
+	glyphs []core.Entity
 }
 
 func NewKrakenSystem(world *engine.World) engine.System {
@@ -384,4 +384,11 @@ func (s *KrakenSystem) terminateAll() {
 	for _, e := range s.world.Components.Kraken.Entities() {
 		s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{HeaderEntity: e})
 	}
+}
+
+func (s *KrakenSystem) CopyState() any { return s.rng }
+
+func (s *KrakenSystem) RestoreState(v any) error {
+	s.rng = v.(vmath.FastRand)
+	return nil
 }

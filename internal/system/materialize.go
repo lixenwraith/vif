@@ -12,7 +12,7 @@ import (
 type MaterializeSystem struct {
 	world *engine.World
 
-	enabled bool
+	toggle
 }
 
 // NewMaterializeSystem creates a new materialize system

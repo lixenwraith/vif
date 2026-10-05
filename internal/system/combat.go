@@ -59,7 +59,7 @@ type CombatSystem struct {
 	statChainDepthTotal   *atomic.Int64
 	statChainDepthMax     *atomic.Int64
 
-	enabled bool
+	toggle
 }
 
 // combatAttackNames keys the damage each attack family deals, which is how a

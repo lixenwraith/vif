@@ -72,7 +72,7 @@ type GeneticSystem struct {
 	typeFitBuf  []byte
 	buffers     bufferTelemetry
 
-	enabled bool
+	toggle
 }
 
 func NewGeneticSystem(world *engine.World) engine.System {
@@ -668,4 +668,26 @@ func (s *GeneticSystem) publishTypeFit() {
 	s.typeFitBuf = buf
 	s.buffers.Observe(2, len(s.typeFitBuf))
 	s.statTypeFit.Store(string(buf))
+}
+
+type geneticCopy struct {
+	saved    []byte
+	seedRoot uint64
+	err      error
+}
+
+// CopyState is the capture plus the root this game's registrations seed from,
+// which a joiner shares with its authority and a copy across a reset does not.
+func (s *GeneticSystem) CopyState() any {
+	saved, err := s.SaveShared()
+	return geneticCopy{saved: saved, seedRoot: s.seedRoot, err: err}
+}
+
+func (s *GeneticSystem) RestoreState(v any) error {
+	c := v.(geneticCopy)
+	if c.err != nil {
+		return c.err
+	}
+	s.seedRoot = c.seedRoot
+	return s.LoadShared(c.saved)
 }

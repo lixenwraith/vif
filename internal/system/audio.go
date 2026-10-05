@@ -18,8 +18,8 @@ type AudioSystem struct {
 	world  *engine.World
 	player *audio.AudioEngine
 
-	mask         uint8 // Player preference, retained while scenario channels are disabled.
-	enabled      bool
+	mask uint8 // Player preference, retained while scenario channels are disabled.
+	toggle
 	musicEnabled bool
 	initialized  bool
 

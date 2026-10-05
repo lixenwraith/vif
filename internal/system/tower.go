@@ -26,7 +26,7 @@ type TowerSystem struct {
 	statCount  *atomic.Int64
 	lifecycle  lifecycleTelemetry
 
-	enabled bool
+	toggle
 }
 
 func NewTowerSystem(world *engine.World) engine.System {

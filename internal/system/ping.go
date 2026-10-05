@@ -16,7 +16,7 @@ type PingSystem struct {
 	statCursorRejects *atomic.Int64
 	statDisabled      *atomic.Int64
 
-	enabled bool
+	toggle
 }
 
 // NewPingSystem creates a new ping system

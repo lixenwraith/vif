@@ -12,7 +12,7 @@ import (
 type FlashSystem struct {
 	world *engine.World
 
-	enabled bool
+	toggle
 }
 
 func NewFlashSystem(world *engine.World) engine.System {
