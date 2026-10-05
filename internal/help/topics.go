@@ -227,7 +227,7 @@ var topics = []topicDef{
 		Entries: []entryDef{
 			{Keys: "Space", Desc: "Pause or resume playback"},
 			{Keys: ".", Desc: "Pause and advance one tick"},
-			{Keys: ",", Desc: "Pause and step back one tick, rebuilt from the start of the replay; playback continues silent"},
+			{Keys: ",", Desc: "Pause and step back one tick; the first press rebuilds from the start, later ones from a copy kept close behind. Playback continues silent"},
 			{Keys: "+  -", Desc: "Faster and slower playback"},
 			{Keys: "h j k l  0", Desc: "Scroll a map larger than the terminal, stopping at its edges; 0 re-centres on the recorded view"},
 			{Actions: []string{"toggle_audio_cycle"}, Desc: "Cycle audio; a replay starts as -mute says"},

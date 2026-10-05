@@ -62,6 +62,10 @@ const (
 	// ProfCaptureDefault/ProfCaptureMax bound a timed :d cpu or :d trace [wall]
 	ProfCaptureDefault = 10 * time.Second
 	ProfCaptureMax     = 5 * time.Minute
+
+	// ReplayBackLead is how many replay steps behind the presented one the next
+	// step back's copy waits, so a press replays that many rather than the stream
+	ReplayBackLead = 64
 )
 
 // ECS & Resources Limits
