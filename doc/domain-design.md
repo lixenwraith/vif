@@ -138,7 +138,7 @@ per-target combat requests derived from that geometry do not.
 ### D-6 — Presentation and personal effects are Player-domain
 
 Lightning, flash, fadeout, splash, motion markers, explosion smoke, pulse rings,
-materialise rays, dust, particles (decay and blossom), orbs, bullets, missiles,
+materialise beams, dust, particles (decay and blossom), orbs, bullets, missiles,
 and loot are Player-domain. Encounter level clears explicitly preserve loot; run
 resets clear it. Shared corrections retain each receiver's drops and ownership,
 and loot revalidates its bounds and walls after an install. Collected weapon

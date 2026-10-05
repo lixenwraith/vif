@@ -46,7 +46,7 @@ func TestKrakenWaitsThenAttacksOrSpinsBeforeAimedCharge(t *testing.T) {
 	first, second := w.Resources.Player.Slot(0), w.Resources.Player.Slot(1)
 	w.Positions.SetPosition(first, component.PositionComponent{X: 0, Y: 0})
 	w.Positions.SetPosition(second, component.PositionComponent{X: 179, Y: 89})
-	attacks, charges, targets := 0, 0, map[vmath.Point]bool{}
+	attacks, charges := 0, 0
 	previous, repeats, previousLegs := component.KrakenIdle, 0, -1
 	for i := range 64 {
 		s.rng.Reseed(uint64(i + 1))
@@ -79,7 +79,6 @@ func TestKrakenWaitsThenAttacksOrSpinsBeforeAimedCharge(t *testing.T) {
 			if k.StateRemaining != parameter.KrakenSpinDuration || !s.bodyFits(k.TargetX, k.TargetY) {
 				t.Fatalf("invalid spin or padded target: %+v", k)
 			}
-			targets[vmath.PointAtF(k.TargetX, k.TargetY)] = true
 			x, y := k.TargetX, k.TargetY
 			s.chooseState(k, motion.PreciseX, motion.PreciseY)
 			if k.State != component.KrakenMove || k.TargetX != x || k.TargetY != y {
@@ -93,8 +92,8 @@ func TestKrakenWaitsThenAttacksOrSpinsBeforeAimedCharge(t *testing.T) {
 			t.Fatal("action did not return to the common wait")
 		}
 	}
-	if attacks == 0 || charges == 0 || len(targets) != 2 {
-		t.Fatalf("attacks=%d charges=%d cursor targets=%v", attacks, charges, targets)
+	if attacks == 0 || charges == 0 {
+		t.Fatalf("attacks=%d charges=%d", attacks, charges)
 	}
 	for y := range 90 {
 		spawnWall(w, 105, y)
@@ -103,6 +102,33 @@ func TestKrakenWaitsThenAttacksOrSpinsBeforeAimedCharge(t *testing.T) {
 	s.aimCharge(k, 90.5, 45.5)
 	if k.TargetX <= 105 || !s.bodyFits(k.TargetX, k.TargetY) {
 		t.Fatalf("wall prevented a bounds-padded charge: (%f,%f)", k.TargetX, k.TargetY)
+	}
+}
+
+// A charge locks on the farthest cursor, so it crosses the most ground; cursors equally
+// far are a random pick.
+func TestKrakenChargesTheFarthestCursor(t *testing.T) {
+	w, s, e, _ := krakenFixture(t)
+	k, _ := w.Components.Kraken.GetPtr(e)
+	first, second := w.Resources.Player.Slot(0), w.Resources.Player.Slot(1)
+	w.Positions.SetPosition(first, component.PositionComponent{X: 100, Y: 45})
+	w.Positions.SetPosition(second, component.PositionComponent{X: 150, Y: 60})
+	for seed := range 16 {
+		s.rng.Reseed(uint64(seed + 1))
+		if !s.aimCharge(k, 90.5, 45.5) || k.TargetX != 150.5 || k.TargetY != 60.5 {
+			t.Fatalf("charge aimed at (%v, %v), want the farther cursor", k.TargetX, k.TargetY)
+		}
+	}
+	w.Positions.SetPosition(first, component.PositionComponent{X: 60, Y: 45})
+	w.Positions.SetPosition(second, component.PositionComponent{X: 120, Y: 45})
+	picked := map[float64]bool{}
+	for seed := range 32 {
+		s.rng.Reseed(uint64(seed + 1))
+		s.aimCharge(k, 90.5, 45.5)
+		picked[k.TargetX] = true
+	}
+	if len(picked) != 2 || !picked[60.5] || !picked[120.5] {
+		t.Fatalf("equally far cursors picked %v, want both", picked)
 	}
 }
 

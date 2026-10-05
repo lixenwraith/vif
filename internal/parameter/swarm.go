@@ -82,10 +82,10 @@ const (
 	// SwarmTeleportDuration is visual effect duration before instant move
 	SwarmTeleportDuration = 400 * time.Millisecond
 
-	// SwarmTeleportRayAlpha is peak ray opacity
-	SwarmTeleportRayAlpha = 0.5
-	// SwarmTeleportRayTrail is trail length fraction
-	SwarmTeleportRayTrail = 0.3
+	// SwarmTeleportBeamAlpha is peak beam opacity
+	SwarmTeleportBeamAlpha = 0.5
+	// SwarmTeleportBeamTrail is trail length fraction
+	SwarmTeleportBeamTrail = 0.3
 	// SwarmTeleport256Threshold for 256-color visibility
 	SwarmTeleport256Threshold = 0.15
 )
