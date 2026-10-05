@@ -455,7 +455,6 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 	if lootType >= component.LootCount {
 		return
 	}
-	vis := &visual.LootVisuals[lootType]
 
 	entity := s.world.CreateEntity(core.DomainPlayer)
 	preciseX, preciseY := vmath.Point{X: x, Y: y}.CenterF()
@@ -494,11 +493,6 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 	})
 
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
-
-	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
-		Rune:  vis.Rune,
-		Color: vis.InnerColor,
-	})
 
 	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 		Mask: component.ProtectFromSpecies | component.ProtectFromParticle,

@@ -8,7 +8,7 @@ import (
 // LootVisualDef defines rendering properties for a loot type
 type LootVisualDef struct {
 	Rune       rune
-	InnerColor color.RGB // Sigil color
+	InnerColor color.RGB // Rune color
 	GlowColor  color.RGB // Shield glow color
 }
 
