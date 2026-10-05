@@ -25,7 +25,6 @@ type KrakenComponent struct {
 	ActionStreak      int
 	AttackLegs        int
 	TargetX, TargetY  float64
-	DirX, DirY        float64
 	TurnDir           float64
 	Angle             float64
 	Time              float64

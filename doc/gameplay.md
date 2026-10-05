@@ -346,8 +346,9 @@ it spawns and arms the cursor before opening `main`.
    storm; earlier kills return to `main`.
 3. Each storm kill raises the species damage multiplier. Three storm kills create
    a full-map maze without rooms and spawn one Kraken at its center.
-4. Kraken contact destroys walls. Its body stays within the map; tentacles can
-   extend beyond it, but only their in-map cells interact.
+4. Kraken contact destroys walls, and each charge locks on to the farthest cursor.
+   Its body stays within the map; tentacles can extend beyond it, but only their
+   in-map cells interact.
 5. The first Kraken kill returns to `main`; another three storm kills open the
    second Kraken encounter. Its defeat starts tower defense. Thus the escalation
    is **3 storms → 1 Kraken → 3 storms → 1 Kraken → tower**.
