@@ -176,12 +176,7 @@ func (s *AudioSystem) applyMask(m uint8) {
 	if s.player == nil {
 		return
 	}
-	if !s.enabled {
-		m = parameter.AudioChanNone
-	}
-	if !s.musicEnabled {
-		m &^= parameter.AudioChanMusic
-	}
+	m = s.gated()
 	s.player.SetEffectMuted(m&parameter.AudioChanEffects == 0)
 	// Close the music bus immediately; MusicSystem owns sequencer start and resume.
 	if m&parameter.AudioChanMusic == 0 {
@@ -189,6 +184,56 @@ func (s *AudioSystem) applyMask(m uint8) {
 	}
 	publishAudioMask(s.world, s.player)
 	s.world.PushEvent(event.EventAudioMuteChanged, &event.AudioMuteChangedPayload{Mask: m})
+}
+
+// gated is the player's preference through the scenario's system gates.
+func (s *AudioSystem) gated() uint8 {
+	m := s.mask
+	if !s.enabled {
+		m = parameter.AudioChanNone
+	}
+	if !s.musicEnabled {
+		m &^= parameter.AudioChanMusic
+	}
+	return m
+}
+
+// HandOverSound moves the speakers from a presented world to a copy rebuilt to
+// replace it, which replayed without them. The engine plays on rather than
+// rewinding, so the viewer's preference and the conductor's state go with it; the
+// gates the copy replayed then decide what sounds.
+func HandOverSound(to, from *engine.World) {
+	ta, fa := systemOf[*AudioSystem](to), systemOf[*AudioSystem](from)
+	if ta == nil || fa == nil || fa.player == nil {
+		return
+	}
+	to.Resources.Audio, from.Resources.Audio = from.Resources.Audio, nil
+	ta.player, ta.mask, ta.initialized = fa.player, fa.mask, fa.initialized
+	ta.basePlayed, ta.baseDropped, ta.baseReject = fa.basePlayed, fa.baseDropped, fa.baseReject
+	fa.player = nil
+	m := ta.gated()
+	ta.player.SetEffectMuted(m&parameter.AudioChanEffects == 0)
+	publishAudioMask(to, ta.player)
+
+	tm, fm := systemOf[*MusicSystem](to), systemOf[*MusicSystem](from)
+	if tm == nil || fm == nil {
+		return
+	}
+	tm.player, tm.bpmF, tm.lastBPM, tm.tier = fm.player, fm.bpmF, fm.lastBPM, fm.tier
+	tm.manualTier, tm.arranged, tm.stopped, tm.startPending = fm.manualTier, fm.arranged, fm.stopped, fm.startPending
+	fm.player = nil
+	tm.applyMusicAudible(m&parameter.AudioChanMusic != 0)
+}
+
+// systemOf finds a world's system of type T, nil when it has none.
+func systemOf[T engine.System](w *engine.World) T {
+	var none T
+	for _, s := range w.Systems() {
+		if t, ok := s.(T); ok {
+			return t
+		}
+	}
+	return none
 }
 
 // Both controllers publish after device changes, including while gameplay is paused.

@@ -63,9 +63,10 @@ const (
 	ProfCaptureDefault = 10 * time.Second
 	ProfCaptureMax     = 5 * time.Minute
 
-	// ReplayBackLead is how many replay steps behind the presented one the next
-	// step back's copy waits, so a press replays that many rather than the stream
-	ReplayBackLead = 64
+	// ReplayBackSpares is how many replay copies trail the presented one, a tick
+	// apart, so that many step backs present at once; each costs a world and its
+	// share of the simulation while playback runs
+	ReplayBackSpares = 8
 )
 
 // ECS & Resources Limits
