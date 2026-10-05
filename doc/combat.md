@@ -30,7 +30,7 @@ simulates.
 flowchart LR
     Spec["WeaponSpecs by WeaponType"] --> Weapon["weapon (player): cursor loadout"]
     Spec --> Mount["mount (shared): hosted weapons"]
-    Weapon --> Delivery["lightning · missile · pulse · bullet · beam"]
+    Weapon --> Delivery["lightning · missile · pulse · bullet · ray"]
     Mount --> Delivery
     Delivery --> Combat["combat profiles: species targets"]
     Delivery --> Strike["strikeCursor: cursor targets"]
@@ -47,7 +47,7 @@ combat attack family, cursor cooldown and charge cap, and the hosted range and
 | Launcher | missile | one homing missile per charge; the blast is explosion geometry | one hostile missile that homes on cursors |
 | Disruptor | pulse | stun burst centred on the orb when a target is inside | strikes every cursor inside its ring |
 | Turret | bullet | one spread bullet per charge, direct damage | hostile bullets; storm's red circle is one |
-| Beam | beam | sustained ray from the cursor through its orb, sweeping as the orb orbits | warns, fires, rests along a locked ray |
+| Emitter | ray | sustained beam from the cursor through its orb, sweeping as the orb orbits | warns, fires, rests along a locked ray |
 
 ## 3. Drivers
 
@@ -68,8 +68,8 @@ may set the component itself. Each tick it:
 - seeds a shot's spread from the tick and the host, never a stream, so store order
   and a correction's replay cannot reorder draws (D-8).
 
-A beam is a `vmath.Ray` in a `BeamComponent`: any angle, run to the first wall or
-the map edge, one width up to its knee and another past it. A cursor's beam sits on
+The ray delivery draws a beam: a `vmath.Ray` in a `BeamComponent`, any angle, run
+to the first wall or the map edge, one width up to its knee and another past it. A cursor's beam sits on
 its orb: laid every tick from the cursor through the orb, one cell wide to the orb
 and three past it, so it sweeps as the orb orbits. It strikes every tick, and
 combat's per-player, per-weapon immunity rates each target, because a sweep crosses
@@ -102,7 +102,7 @@ with `CursorContactAt`, shields first.
 |---|---|
 | Rod, turret bullet, cleaner on a Shared target | one direct request stamped Shared (stamped class) |
 | Missile blast, disruptor pulse | explosion geometry: centre, radius, attack, owner |
-| Beam on a Shared target, each tick it covers it | area crossing: target, member set, owner, scale |
+| Ray on a Shared target, each tick its beam covers it | area crossing: target, member set, owner, scale |
 | Any hit on a drain | local; drains are Player-domain |
 
 The cleaner is the always-held main weapon: its impact chains into a lightning

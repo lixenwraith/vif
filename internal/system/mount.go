@@ -142,7 +142,7 @@ func (s *MountSystem) Update() {
 			continue
 		}
 		cursor := s.aim(m, pos)
-		if component.WeaponSpecs[m.Weapon].Delivery == component.DeliveryBeam {
+		if component.WeaponSpecs[m.Weapon].Delivery == component.DeliveryRay {
 			s.cycleBeam(host, cursor, m, pos, dt)
 			continue
 		}
