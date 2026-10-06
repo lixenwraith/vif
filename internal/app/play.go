@@ -64,12 +64,23 @@ func PlayJournal(viewer Config, paths ...string) error {
 		"records", len(set.Records), "digests", len(set.Digests), "seed", an.Seed, "speed", an.Speed)
 	p := &player{a: a, src: journalSource{d, a.log}, interval: time.Duration(an.TickInterval),
 		rec: parseSpeed(an.Speed), scale: engine.ScaleNormal}
-	p.rebuild = func() (*App, pacedSource, error) {
-		// A copy replays ticks the log already holds; it writes once presented.
+	p.lender, p.rebuild = a, replayCopies(a, cfg, stream, NewReplay)
+	p.trail, p.slots = []event.Stamp{a.Position()}, make(chan struct{}, max(1, runtime.GOMAXPROCS(0)-1))
+	p.every = parameter.ReplayCheckpointSteps
+	a.ctx.ReplaySeek = p.seekLater
+	defer p.closeRebuilt()
+	return p.run()
+}
+
+// replayCopies builds copies of lender's run for going back. A copy replays ticks
+// the log already holds, so it writes once presented, and holds no flight recorder:
+// the process has one, and adopt hands it to the copy presented.
+func replayCopies(lender *App, cfg Config, stream *journal.Stream, newApp func(Config) (*App, error)) func() (*App, pacedSource, error) {
+	return func() (*App, pacedSource, error) {
 		rc := cfg
-		rc.borrow, rc.log = &a.presentationState, vlog.NewLog("")
+		rc.borrow, rc.log, rc.RecTicks = &lender.presentationState, vlog.NewLog(""), -1
 		rc.log.Mute(true)
-		twin, err := NewReplay(rc)
+		twin, err := newApp(rc)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -80,11 +91,6 @@ func PlayJournal(viewer Config, paths ...string) error {
 		}
 		return twin, journalSource{td, twin.log}, nil
 	}
-	p.trail, p.slots = []event.Stamp{a.Position()}, make(chan struct{}, max(1, runtime.GOMAXPROCS(0)-1))
-	p.every = parameter.ReplayCheckpointSteps
-	a.ctx.ReplaySeek = p.seekLater
-	defer p.closeRebuilt()
-	return p.run()
 }
 
 // runPresented presents a driven run, a script or a bot. Pacing is the run's own:
@@ -175,6 +181,7 @@ type player struct {
 	// loop and trail the presented one a tick apart. Nil for a stream that cannot
 	// be rebuilt.
 	rebuild func() (*App, pacedSource, error)
+	lender  *App          // the run copies borrow the terminal from; it gets the recorder back
 	trail   []event.Stamp // position at each step count, from the copy before any step
 	spares  []*rebuilt    // copies parked one, two, ... ticks behind the presented one
 	// checkpoints hold the presented run's whole state every `every` steps, by step
@@ -655,6 +662,7 @@ func (p *player) adopt(r *rebuilt) {
 		twin.orchestrator.Resize(p.termW, p.termH) // a full repaint; only for a size it was not built for
 	}
 	system.HandOverSound(twin.world, old.world)
+	twin.world.Resources.Status.TakeRecorder(old.world.Resources.Status)
 	twin.ctx.ReplaySeek = p.seekLater
 	old.log.Mute(true)
 	twin.log.Mute(false)
@@ -772,6 +780,7 @@ func (p *player) closeRebuilt() {
 	p.cancelMoves()
 	p.copies.Wait()
 	if p.a.cfg.borrow != nil {
+		p.lender.world.Resources.Status.TakeRecorder(p.a.world.Resources.Status)
 		p.a.Close()
 	}
 }
