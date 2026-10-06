@@ -410,7 +410,8 @@ neighbour reports a disconnect; the authority turns it into one departure at one
 apply tick. A mid-run join is admitted to transport before its capture is read, so
 traffic produced during transfer is buffered rather than lost. The join waits for
 a capture far enough past admission to include pre-admission epochs and refuses an
-unbounded catch-up gap.
+unbounded catch-up gap, or one still wider than the playout lead once it has caught
+up; a bot seat retries either, since a fresh attempt brings a fresher world.
 
 The session protocol supports a mesh even though the shipped CLI normally builds
 a star. Each source epoch is admitted once within a bounded replay window and

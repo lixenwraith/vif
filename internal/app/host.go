@@ -678,8 +678,8 @@ func (a *App) resumeJoinedSession() error {
 		}
 		step := target - local
 		if caught+step > parameter.NetworkJoinCatchUpTicks {
-			return fmt.Errorf("join: the session is more than %d ticks ahead of the world it sent",
-				parameter.NetworkJoinCatchUpTicks)
+			return fmt.Errorf("%w: it is more than %d ticks ahead of the world it sent",
+				errJoinBehind, parameter.NetworkJoinCatchUpTicks)
 		}
 		a.scheduler.RunTicks(int(step))
 		caught += step
@@ -720,11 +720,15 @@ func (a *App) finishCatchUp(held []*network.Message, caught uint64) error {
 		"caught_up_ticks", caught, "tick", a.Position().Tick, "lag_ticks", remaining)
 	a.telemetry.CatchUp.Store(int64(caught))
 	if remaining > parameter.NetworkJoinLagTicks {
-		return fmt.Errorf("join: still %d ticks behind the session after catching up, lead is %d",
-			remaining, parameter.NetworkJoinLagTicks)
+		return fmt.Errorf("%w: still %d ticks after catching up, lead is %d",
+			errJoinBehind, remaining, parameter.NetworkJoinLagTicks)
 	}
 	return nil
 }
+
+// errJoinBehind refuses a join that could not close the gap to the session while it
+// installed, a matter of load rather than of the session; a seat retries it.
+var errJoinBehind = errors.New("join: behind the session")
 
 // joinCatchUpRounds is how many times a joining participant re-reads the session's
 // tick while closing the gap. Each round drains what the previous one revealed;
