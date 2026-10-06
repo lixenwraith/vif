@@ -325,12 +325,9 @@ func (s *Scheduler) SetDispatchTap(fn func(event.GameEvent)) { s.tap = fn }
 // event.DigestIntervalTicks ticks; set before Start.
 func (s *Scheduler) SetJournalDigest(fn func() event.JournalDigest) { s.digest = fn }
 
-// ExportFSM reads the FSM runtime's position for a D-19 capture: which state each
-// region stands in, how long it has stood there, the variables guards read, and
-// the delayed actions still pending. The state graph itself is configuration and
-// travels with the build.
-//
-// Caller MUST hold updateMutex: the machine is tick-owned.
+// ExportFSM reads the FSM runtime's position for a D-19 capture: each region's state
+// and dwell, the variables guards read, and pending delayed actions; the graph
+// travels with the build. Caller MUST hold updateMutex: the machine is tick-owned.
 func (s *Scheduler) ExportFSM() fsm.MachineState { return s.fsm.Export() }
 
 // SchedulerCopy is the FSM position and the scheduler's own accumulators, for a
@@ -363,11 +360,9 @@ func (s *Scheduler) CopyIn(c SchedulerCopy) error {
 }
 
 // ImportFSM places the FSM runtime where a capture found it. A staging import
-// resolves the graph without side effects. A live import additionally replays the
-// explicitly marked, idempotent ClassLocal lifecycle actions for state boundaries
-// the imported position crossed; ordinary entry actions are never re-run.
-//
-// Caller MUST hold updateMutex.
+// resolves the graph without side effects; a live one also replays the marked,
+// idempotent ClassLocal lifecycle actions for state boundaries the position crossed,
+// never ordinary entry actions. Caller MUST hold updateMutex.
 func (s *Scheduler) ImportFSM(state fsm.MachineState, reconcileLocal bool) error {
 	var err error
 	if reconcileLocal {
@@ -564,11 +559,9 @@ func (s *Scheduler) bindHandlerTimers() {
 }
 
 // RunTicks advances the simulation by n ticks as fast as the caller's goroutine
-// allows. Requires a manual clock: Step is a no-op on the interactive clock
-// while it is running. The caller owns the loop, so Start must not be running —
-// a concurrent scheduler or event goroutine reintroduces the nondeterminism
-// this exists to avoid. A reset requested during a tick is serviced before the
-// next one, matching the scheduler loop.
+// allows, on a manual clock with Start not running: a concurrent scheduler or event
+// goroutine reintroduces the nondeterminism this exists to avoid. A reset requested
+// during a tick is serviced before the next one, matching the scheduler loop.
 func (s *Scheduler) RunTicks(n int) {
 	s.Prepare()
 	for range n {
@@ -797,23 +790,11 @@ func drainTimer(t *time.Timer) {
 	}
 }
 
-// eventLoop settles queued events between ticks so a frame renders a settled
-// world. Runs regardless of pause: pause freezes the simulation (processTick),
-// not delivery. A whole settle, not a pass: a journal records each settle group,
-// and a cascade split across wakeups would interleave with the next records by
-// wall time, which a replay cannot reproduce.
-//
-// The world lock is mandatory here, not merely for component safety:
-// EventQueue.Consume is single-consumer, and updateMutex is what serializes
-// this goroutine against processTick, DispatchEventsImmediately, and
-// executeReset. Never Consume without holding it.
-//
-// TryLock first — short holds (frame snapshot, router RunSafe) are cheaper to
-// skip and retry than to queue behind. Escalate to a blocking acquire after
-// EventLoopBackoffMax misses: a hold that long means a tick is in progress,
-// and its post-UpdateLocked events need settling before the next frame.
-// Without the escalation the only guaranteed consumer is processTick, i.e.
-// one tick of latency on exactly the ticks that need it least.
+// eventLoop settles queued events between ticks, pause or not, a whole settle at a
+// time so a journal's groups never interleave by wall time. Consume is
+// single-consumer, so it runs under the world lock: tried first, since short holds
+// are cheaper to skip, and blocking after EventLoopBackoffMax misses, since a hold
+// that long is a tick whose events need settling before the next frame.
 func (s *Scheduler) eventLoop() {
 	defer s.wg.Done()
 
@@ -1269,17 +1250,20 @@ func (s *Scheduler) processTick() {
 		// therefore replays between ticks, before the next BeginTick resets Boundary.
 		tick := s.world.Resources.Game.State.GetGameTicks() + 1
 
+		// Settled on every tick of a session, not only one that delivered something:
+		// arrivals are this instance's own traffic, and settling on them gave the last
+		// tick's leftovers a different phase and GameTime on each instance. A reset
+		// crossing among them re-bases the counter, so the tick that opens is re-read.
+		if s.world.Resources.Event.Queue.ReceiveWire(tick) {
+			s.settleLocked("wire")
+			tick = s.world.Resources.Game.State.GetGameTicks() + 1
+		}
+
 		// The simulation instant is derived from the tick, never from the pacing
 		// clock: it is shared state, and every participant must read the same value
 		// at the same tick (SimEpoch). The pacing clock still decides *when* this
 		// tick runs, and RealTime below still reports the wall.
 		tickTime = SimTime(tick, s.tickInterval)
-		// Settled on every tick of a session, not only one that delivered something:
-		// arrivals are this instance's own traffic, and settling on them gave the last
-		// tick's leftovers a different phase and GameTime on each instance.
-		if s.world.Resources.Event.Queue.ReceiveWire(tick) {
-			s.settleLocked("wire")
-		}
 
 		// Stamp under the lock: a producer must not observe the new tick before
 		// the tick body it belongs to has started.
