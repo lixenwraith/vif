@@ -162,6 +162,8 @@ type App struct {
 	// publish its cost into a registry that is frozen by then.
 	telemetry snapshot.Telemetry
 
+	sharedStatus statusKeys // the registry keys a capture carries; world lock
+
 	// The three halves of the authority protocol, built together because they hold
 	// references to each other: corrections is what this instance publishes and
 	// installs, authority whether it is allowed to, and reach the links a

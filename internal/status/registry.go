@@ -129,7 +129,7 @@ func (r *Registry) Freeze() {
 	r.Strings.Freeze()
 
 	idx := r.buildIndex()
-	r.idx, r.idxGen = idx, r.gen()
+	r.idx, r.idxGen = idx, r.Gen()
 	r.idxFast.Store(&idx)
 	r.frozen.Store(true)
 

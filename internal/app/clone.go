@@ -70,7 +70,7 @@ func (a *App) checkpointLocked(d *journal.ReplayDriver) (*checkpoint, error) {
 		queue:     a.world.Resources.Event.Queue.CopyOut(),
 		scheduler: a.scheduler.CopyOut(),
 		systems:   systems,
-		status:    a.statusCellsLocked(func(string) bool { return true }),
+		status:    a.statusCellsLocked(a.statusKeysLocked(func(string) bool { return true })),
 		paused:    a.ctx.TimeCtl.IsPaused(),
 		scale:     a.ctx.TimeCtl.Scale(),
 		width:     a.ctx.Width,
