@@ -440,7 +440,7 @@ run stops. Removal ends membership; it is not an address ban.
 
 Ownership is structurally checked against an admitted, independent holder.
 Links are still unauthenticated as documented in multiplayer; this is no new
-security boundary. Wire protocol 4, capture schema 12 and journal schema 19
+security boundary. Wire protocol 4, capture schema 12 and journal schema 20
 require matching builds. R1–R5 traffic relaying remains pending; this pass does not claim to implement them.
 
 Manual checks after building `bin/vif`:

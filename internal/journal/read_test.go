@@ -3,6 +3,7 @@ package journal
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/core"
@@ -98,17 +99,29 @@ func TestLoadRoundTripsRecordsAndAnchor(t *testing.T) {
 	}
 }
 
-// TestLoadReassemblesRotatedFilesByJSeq asserts the property Load exists for:
-// a rotated set overlaps, and the overlap must collapse rather than duplicate.
-func TestLoadReassemblesRotatedFilesByJSeq(t *testing.T) {
+// written builds one capture line; every one with the same jseq is equal but for cseq
+func written(jseq, cseq uint64) string {
+	return `{"sub":"capture","fields":{"jseq":` + itoa(jseq) + `,"cseq":` + itoa(cseq) +
+		`,"jrun":0,"jtick":1,"boundary":0,"participant":2,"authority":1,"body":"AAEC"}}`
+}
+
+// TestLoadReassemblesRotatedFiles asserts the property Load exists for: a rotated
+// set overlaps, and the overlap must collapse rather than duplicate, a written
+// world's as a record's, while two writes equal but for cseq both stay. The first
+// anchor is the earliest, whatever order the files came in.
+func TestLoadReassemblesRotatedFiles(t *testing.T) {
 	event.EnsureRegistry()
 
+	later := strings.Replace(anchorLine, `"jseq":0,"jrun":0,"jtick":0`, `"jseq":2,"jrun":0,"jtick":600`, 1)
 	first := write(t, "1.jsonl", anchorLine,
 		record(1, "EventLevelSetup", "shared", "command"),
-		record(2, "EventCharacterTyped", "player", "input"))
-	second := write(t, "2.jsonl", anchorLine,
-		record(2, "EventCharacterTyped", "player", "input"), // overlap
-		record(3, "EventDeleteRequest", "player", "input"))
+		written(1, 1), written(1, 2),
+		record(2, "EventCharacterTyped", "player", "input"),
+		later)
+	second := write(t, "2.jsonl",
+		written(1, 2), record(2, "EventCharacterTyped", "player", "input"), later, // overlap
+		record(3, "EventDeleteRequest", "player", "input"),
+		written(3, 3))
 
 	s, err := Load(second, first) // out of order on purpose
 	if err != nil {
@@ -121,6 +134,17 @@ func TestLoadReassemblesRotatedFilesByJSeq(t *testing.T) {
 		if r.JSeq != uint64(i+1) {
 			t.Fatalf("record %d has jseq %d; set is not in jseq order", i, r.JSeq)
 		}
+	}
+	if len(s.Captures) != 3 {
+		t.Fatalf("got %d written worlds, want 3", len(s.Captures))
+	}
+	for i, c := range s.Captures {
+		if c.CSeq != uint64(i+1) {
+			t.Fatalf("written world %d has cseq %d; set is not in cseq order", i, c.CSeq)
+		}
+	}
+	if len(s.Anchors) != 2 || s.Anchors[0].JSeq != 0 || s.Anchors[1].JSeq != 2 {
+		t.Fatalf("anchors %+v, want the opening one then the later, once each", s.Anchors)
 	}
 }
 

@@ -18,9 +18,9 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 )
 
-// Set is one parsed journal: its anchors in emission order, its records in jseq
-// order with duplicates from overlapping files removed, the worlds it wrote and its
-// world digests in tick order
+// Set is one parsed journal: its anchors and records in jseq order, the worlds it
+// wrote in cseq order and its world digests in tick order, each once however the
+// files it was read from overlap.
 type Set struct {
 	Anchors  []event.JournalAnchor
 	Records  []event.JournalRecord
@@ -51,6 +51,7 @@ type recordFields struct {
 
 type captureFields struct {
 	JSeq        uint64 `json:"jseq"`
+	CSeq        uint64 `json:"cseq"`
 	Run         uint64 `json:"jrun"`
 	Tick        uint64 `json:"jtick"`
 	Boundary    uint64 `json:"boundary"`
@@ -126,9 +127,12 @@ func Load(paths ...string) (Set, error) {
 	s.Records = slices.CompactFunc(s.Records, func(a, b event.JournalRecord) bool {
 		return a.JSeq == b.JSeq
 	})
-	slices.SortStableFunc(s.Captures, func(a, b event.JournalCapture) int {
-		return cmp.Compare(a.JSeq, b.JSeq)
-	})
+	// A write is known by its cseq alone: two can be equal in every other field.
+	slices.SortFunc(s.Captures, func(a, b event.JournalCapture) int { return cmp.Compare(a.CSeq, b.CSeq) })
+	s.Captures = slices.CompactFunc(s.Captures, func(a, b event.JournalCapture) bool { return a.CSeq == b.CSeq })
+	// Config is built from the first anchor, so it is the earliest whatever order the files came in.
+	slices.SortStableFunc(s.Anchors, func(a, b event.JournalAnchor) int { return cmp.Compare(a.JSeq, b.JSeq) })
+	s.Anchors = slices.Compact(s.Anchors)
 	slices.SortStableFunc(s.Digests, func(a, b event.JournalDigest) int {
 		return cmp.Or(cmp.Compare(a.Run, b.Run), cmp.Compare(a.Tick, b.Tick))
 	})

@@ -11,7 +11,7 @@ import (
 // JournalSchema is the record layout version; bump on any field change, or on a
 // change to what an unchanged field means. A join refuses a peer on another one,
 // since the anchor it offers is the journal's. Each bump's reason is its commit.
-const JournalSchema = 19
+const JournalSchema = 20
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.
@@ -100,6 +100,7 @@ type JournalAnchor struct {
 // JSeq is the record count before it; the stamp is where the live world stood.
 type JournalCapture struct {
 	JSeq     uint64
+	CSeq     uint64 // dense write counter; writes with no record between share a JSeq and can match otherwise
 	Run      uint64
 	Tick     uint64
 	Boundary uint64
@@ -180,6 +181,7 @@ func DigestDue(tick uint64) bool { return tick%DigestIntervalTicks == 0 }
 type Journal struct {
 	sink    JournalSink // immutable after NewJournal
 	seq     atomic.Uint64
+	written atomic.Uint64
 	encFail atomic.Uint64
 	anchor  atomic.Pointer[JournalAnchor] // run-invariant template
 }
@@ -250,6 +252,7 @@ func (j *Journal) Mark() uint64 {
 // Capture emits one written world; c.JSeq comes from Mark at the write.
 func (j *Journal) Capture(c JournalCapture) {
 	if j != nil {
+		c.CSeq = j.written.Add(1)
 		j.sink.Capture(c)
 	}
 }
