@@ -67,14 +67,15 @@ func (c *Corrections) driveAuthority() {
 }
 
 // BecomeAuthority turns a receiver into the publisher for a new term, seeded from
-// the last whole capture it installed. That capture is the one every other survivor
-// installed too, so it is already the baseline a delta may name — without it the
-// successor would publish a keyframe to everyone at once. The per-peer schedule is
-// not inherited: a plan is a statement about this instance's links.
+// the last whole capture it installed in this run. That capture is the one every
+// other survivor installed too, so it is already the baseline a delta may name —
+// without it the successor would publish a keyframe to everyone at once. A plan is
+// a statement about this instance's links, so the per-peer schedule is not inherited.
 func (c *Corrections) BecomeAuthority(rec network.HandoffRecord) {
 	c.publishMu.Lock()
+	run := c.followRunLocked().Run
 	c.installedMu.Lock()
-	if c.haveBase {
+	if c.haveBase && c.installed.Header.Run == run {
 		c.baseline, c.haveKey, c.lastKeyTick = c.installed, true, c.installed.Header.Tick
 		c.keyBody, c.keyCorrection = nil, nil
 	}

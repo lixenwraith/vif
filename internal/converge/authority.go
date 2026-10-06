@@ -419,6 +419,23 @@ func (u *Authority) drive() {
 	}
 }
 
+// restartRun moves the pending deadlines onto a run that restarted the tick count
+// at tick: each window starts again there, which can only lengthen it, where a
+// deadline from the run before would not fall due until the new run passed it.
+func (u *Authority) restartRun(tick uint64) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.contested != 0 {
+		u.since = tick
+	}
+	if u.badgeUntil != 0 {
+		u.badgeUntil = tick + parameter.NetworkMigrationBadgeTicks
+	}
+	if u.reconcileAt != 0 {
+		u.reconcileAt = tick + parameter.NetworkSuccessionTicks
+	}
+}
+
 // trySucceed takes the term, when this instance is the one the roster names.
 // DesignatedSuccessor is a pure function of the closed roster and the participant
 // that went, so exactly one instance reaches the publish below and reaches it as
