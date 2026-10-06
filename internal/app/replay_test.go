@@ -308,7 +308,8 @@ func TestReplayReproducesRecordedRuns(t *testing.T) {
 
 // TestAGuestJournalReplaysFromItsJoin records a guest from its join until after its
 // host has left, then replays the journal with no host: the joined world, each
-// correction written, the owner syncs and the session's end all come from records.
+// correction written, the owner syncs and the session's end all come from records,
+// and so does the pause the guest could take only once its session had ended.
 func TestAGuestJournalReplaysFromItsJoin(t *testing.T) {
 	want := map[event.Stamp][]string{}
 	rec := guestJournalPastItsHost(t, func(guest *App) {
@@ -367,7 +368,8 @@ func TestAGuestJournalReplaysFromItsJoin(t *testing.T) {
 
 // guestJournalPastItsHost records a guest from its join until after its host has
 // left, with one of its crossings late at the host, so the journal holds a
-// correction written between two ticks. each sees the guest after every tick.
+// correction written between two ticks, and a pause the guest takes alone. each
+// sees the guest after every tick.
 func guestJournalPastItsHost(t *testing.T, each func(guest *App)) *journal.Capture {
 	t.Helper()
 	const seed, hostLeaves = 0x3017, 400
@@ -400,6 +402,11 @@ func guestJournalPastItsHost(t *testing.T, each func(guest *App)) *journal.Captu
 			inject(t, guest, &input.Intent{Type: input.IntentFireMain, Count: 1}, intentMotion(input.MotionRight, 2))
 			guest.Tick(2 * parameter.NetworkBarrierDelayTicks)
 		}
+		if i == hostLeaves+150 || i == hostLeaves+200 {
+			guest.Context().PushEventOrigin(event.EventGamePauseRequest,
+				&event.GamePausePayload{Paused: i == hostLeaves+150}, event.OriginDebug)
+			guest.Settle()
+		}
 		if rng.Intn(3) == 0 {
 			inject(t, guest, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
 		}
@@ -415,6 +422,9 @@ func guestJournalPastItsHost(t *testing.T, each func(guest *App)) *journal.Captu
 		guest.Tick(1)
 		guest.ApplyPendingCorrections()
 		each(guest)
+		if i == hostLeaves+150 && !guest.Context().TimeCtl.IsPaused() {
+			t.Fatal("the guest was refused a pause after its session ended")
+		}
 	}
 	if guest.World().PredictsShared() {
 		t.Fatal("the guest still predicts after its host left")
@@ -548,7 +558,7 @@ func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
 
 // guestSurface is the simulation surface less what the recorded run's link did: a
 // replay has none, so its traffic and connect events are not the simulation's. The
-// session state a derivation's phase turns on is compared in their place.
+// session the simulation read, and the pause it decided, are compared in their place.
 func guestSurface(a *App) []string {
 	var out []string
 	for _, l := range a.SnapshotSimulation() {
@@ -556,7 +566,9 @@ func guestSurface(a *App) []string {
 			out = append(out, l)
 		}
 	}
-	return append(out, fmt.Sprintf("predicts=%t", a.World().PredictsShared()))
+	s := a.World().Session()
+	return append(out, fmt.Sprintf("session=%t/%d/%d/%t paused=%t", s.Live, s.Participant, s.Authority,
+		s.SeatsOnly, a.Context().TimeCtl.IsPaused()))
 }
 
 // TestModeChangedAppliesWithoutRouter covers the applier directly, so a MetaSystem

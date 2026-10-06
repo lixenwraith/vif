@@ -150,9 +150,13 @@ type PlayoutLeadPayload struct {
 	Ticks uint64 `toml:"ticks"`
 }
 
-// SessionPredictingPayload is the prediction state a tick opened under.
-type SessionPredictingPayload struct {
-	Predicting bool `toml:"predicting"`
+// SessionStatePayload is the session a world's simulation reads (engine.SessionState).
+type SessionStatePayload struct {
+	Live        bool   `toml:"live"`
+	Participant uint32 `toml:"participant"`
+	Authority   uint32 `toml:"authority"`
+	SeatsOnly   bool   `toml:"seats_only"`
+	Peers       uint32 `toml:"peers"`
 }
 
 // NetworkDisconnectPayload signals peer disconnection

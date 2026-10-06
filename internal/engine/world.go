@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"slices"
 	"strings"
 	"sync"
@@ -79,8 +80,8 @@ type World struct {
 	// path and released from an install that already holds the update mutex.
 	predictionMu            sync.Mutex
 	predicted               []predictedDeath
-	predicting              atomic.Bool // PredictsShared, latched per tick
-	followJournal           atomic.Bool // a replay: session state and settlements are records
+	session                 atomic.Pointer[SessionState] // latched; see LatchSession
+	followJournal           atomic.Bool                  // a replay: session state and settlements are records
 	statPredictionPending   *atomic.Int64
 	statPredictionConfirmed *atomic.Int64
 	statPredictionDropped   *atomic.Int64
@@ -454,14 +455,6 @@ func (w *World) LiveSession() bool {
 	return net != nil && net.Port != nil && net.Port.IsRunning() && net.Port.PeerCount() > 0
 }
 
-// SeatsOnly reports whether this instance authors a live session whose every other
-// participant is a bot seat it holds. Such a session may pause: a paused authority
-// stops committing, and only its own seats can stop with it.
-func (w *World) SeatsOnly() bool {
-	r := w.Resources.Network
-	return r != nil && r.SeatsOnly != nil && w.IsSessionCoordinator() && r.SeatsOnly()
-}
-
 // LocalParticipant is this instance's session identity, zero when no transport is
 // attached. It is the seam every owner-authored rule turns on.
 func (w *World) LocalParticipant() uint32 {
@@ -479,10 +472,8 @@ func (w *World) LocalParticipant() uint32 {
 const CoordinatorParticipant uint32 = 1
 
 // IsSessionCoordinator reports whether this instance is the one authoring the
-// session: the participant the current term names, which is the participant that
-// opened it until a succession moves the term. It used to compare against identity
-// 1 alone, so a successor was refused every rule reserved for the authority — its
-// own resets among them — while still being the only instance able to apply one.
+// session now: the participant the current term names, which moves with a
+// succession. Simulation reads the latched Session().Coordinator() instead.
 func (w *World) IsSessionCoordinator() bool {
 	r := w.Resources.Network
 	if r == nil {
@@ -494,24 +485,65 @@ func (w *World) IsSessionCoordinator() bool {
 	return r.ParticipantID == CoordinatorParticipant
 }
 
-// PredictsShared reports whether this world runs the shared domain ahead of an
-// authority that may correct it. The authority's world is never a prediction, nor
-// is a run with nobody to correct it: what either derives is settled at once.
-func (w *World) PredictsShared() bool { return w.predicting.Load() }
+// SessionState is the session a world's simulation reads. The transport changes
+// between ticks on its own goroutine, so a rule that turns on it reads this latch
+// instead, which the journal carries and a replay adopts; operator paths keep the
+// instantaneous LiveSession and IsSessionCoordinator. Peers is presentation only.
+type SessionState struct {
+	Live                   bool
+	Participant, Authority uint32
+	SeatsOnly              bool
+	Peers                  uint32
+}
 
-// LatchSession opens a tick under the transport's answer to PredictsShared, so a
-// derivation's phase does not hang on when a link noticed its peer, and journals
-// a change; a replay takes it from the journal. Caller MUST hold updateMutex.
+// Coordinator reports whether this participant authors the session.
+func (s SessionState) Coordinator() bool {
+	return s.Participant != 0 && s.Participant == cmp.Or(s.Authority, CoordinatorParticipant)
+}
+
+// Predicting reports a world running the shared domain ahead of an authority that
+// may correct it. The authority's world never is, nor a run with nobody to correct
+// it: what either derives is settled at once.
+func (s SessionState) Predicting() bool { return s.Live && !s.Coordinator() }
+
+// Session is the latched session; zero before anything latched one.
+func (w *World) Session() SessionState {
+	if p := w.session.Load(); p != nil {
+		return *p
+	}
+	return SessionState{}
+}
+
+// AdoptSession sets the latch without journaling it: a replay's record, or a
+// written world's own identity.
+func (w *World) AdoptSession(s SessionState) { w.session.Store(&s) }
+
+// PredictsShared reports whether a derivation now is provisional; see Predicting.
+func (w *World) PredictsShared() bool { return w.Session().Predicting() }
+
+// LatchSession reads the transport into the latch and journals a change. It runs
+// when a tick opens and wherever the session's transport, links or authority move,
+// so nothing between ticks reads a session the journal never named; a replay takes
+// it from the journal instead. Caller MUST hold updateMutex.
 func (w *World) LatchSession() {
 	if w.followJournal.Load() {
 		return
 	}
-	net := w.Resources.Network
-	p := net != nil && net.Port != nil && net.Port.IsRunning() && net.Port.PeerCount() > 0 &&
-		net.Authority.Load() != net.ParticipantID
-	if w.predicting.Swap(p) != p && w.Resources.Event.Queue != nil {
+	var s SessionState
+	if r := w.Resources.Network; r != nil && r.Port != nil {
+		s.Participant, s.Authority = r.ParticipantID, r.Authority.Load()
+		s.Live = r.Port.IsRunning() && r.Port.PeerCount() > 0
+		s.Peers = uint32(r.Port.PeerCount())
+		s.SeatsOnly = s.Live && s.Coordinator() && r.SeatsOnly != nil && r.SeatsOnly()
+	}
+	if s == w.Session() {
+		return
+	}
+	w.AdoptSession(s)
+	if w.Resources.Event != nil && w.Resources.Event.Queue != nil {
 		w.Resources.Event.Queue.Note(event.GameEvent{
-			Type: event.EventSessionPredicting, Payload: &event.SessionPredictingPayload{Predicting: p},
+			Type: event.EventSessionState, Payload: &event.SessionStatePayload{Live: s.Live,
+				Participant: s.Participant, Authority: s.Authority, SeatsOnly: s.SeatsOnly, Peers: s.Peers},
 			Origin: event.OriginSession, Domain: core.DomainPlayer,
 		})
 	}
@@ -578,8 +610,9 @@ func (w *World) PushRecord(rec event.JournalRecord, payload any) bool {
 			w.predictCursorMove(p.Entity, p.X, p.Y, p.Pointer)
 			return false
 		}
-	case *event.SessionPredictingPayload:
-		w.predicting.Store(p.Predicting)
+	case *event.SessionStatePayload:
+		w.AdoptSession(SessionState{Live: p.Live, Participant: p.Participant, Authority: p.Authority,
+			SeatsOnly: p.SeatsOnly, Peers: p.Peers})
 		return false
 	}
 	w.Resources.Event.Queue.PushReady(event.GameEvent{

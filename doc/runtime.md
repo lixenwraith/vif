@@ -475,8 +475,8 @@ player keeps the whole state of the run (`app.checkpoint`): every store and grid
 cell in its own order and both domains' allocators (`engine.WorldCopy`), RNG
 streams, FSM position, scheduler and queue with its pending events, every registry
 cell, each system's FSM toggle and its private state (`engine.StateCopier`, or
-`SharedStateSaver` for a carrier without one), the corpus cursor, the session a
-written world was installed under, and the driver's place. Past
+`SharedStateSaver` for a carrier without one), the corpus cursor, the latched
+session (`engine.SessionState`, from the journal), and the driver's place. Past
 `parameter.ReplayCheckpoints` (32) every other is dropped and the spacing doubles.
 At the 500×250 map limit one costs about 6 ms to take and 6.5 MB to keep, and a
 restore 35 ms with the copy's construction, against a replay from the start of

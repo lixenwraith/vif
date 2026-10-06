@@ -116,7 +116,7 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 		// Nil is retained for debug/backward compatibility. In a live session it
 		// elects the coordinator, so a shared legacy trigger still cannot fan out.
 		if owner == 0 {
-			if s.world.LiveSession() && !s.world.IsSessionCoordinator() {
+			if session := s.world.Session(); session.Live && !session.Coordinator() {
 				return
 			}
 			owner = s.world.Resources.Player.Entity

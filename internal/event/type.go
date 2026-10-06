@@ -89,8 +89,8 @@ const (
 	EventPlayoutLead
 	// EventCursorStateSync (CursorStatePayload) [local] carries one cursor's owner-authored state to the instances that do not simulate it
 	EventCursorStateSync
-	// EventSessionPredicting (SessionPredictingPayload) [local] journals whether an authority still corrects this instance; never dispatched
-	EventSessionPredicting
+	// EventSessionState (SessionStatePayload) [local] journals the session a world's simulation reads; never dispatched
+	EventSessionState
 
 	// --- Meta ---
 

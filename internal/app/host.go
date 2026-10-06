@@ -360,6 +360,7 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 		a.lateJoins.Store(false)
 		a.cfg.HostAddress, a.cfg.FixedAuthority = "", fixed
 		a.world.Resources.Network = nil
+		a.world.LatchSession()
 		return fmt.Errorf("host %s: %w", addr, err)
 	}
 

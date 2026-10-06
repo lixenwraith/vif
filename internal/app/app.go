@@ -262,6 +262,8 @@ func (a *App) init() error {
 	if err := a.initJournal(); err != nil {
 		return err
 	}
+	// After the journal opens, so a run that starts in a session notes it first.
+	a.world.RunSafe(a.world.LatchSession)
 	if a.cfg.Mode.Presents() {
 		a.initPresentation()
 	}

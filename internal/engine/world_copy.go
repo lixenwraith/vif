@@ -29,7 +29,7 @@ type WorldCopy struct {
 	view       ViewResource
 	generators []StreamState
 	session    uint64
-	predicting bool
+	latched    SessionState
 	shared     bool
 }
 
@@ -72,7 +72,7 @@ func (w *World) CopyOut() *WorldCopy {
 	for d := range core.DomainCount {
 		c.generators = append(c.generators, r.Rand.SaveStreams(core.Domain(d))...)
 	}
-	c.session, c.predicting, c.shared = r.Rand.Session(), w.predicting.Load(), w.sessionShared.Load()
+	c.session, c.latched, c.shared = r.Rand.Session(), w.Session(), w.sessionShared.Load()
 	return c
 }
 
@@ -109,7 +109,7 @@ func (w *World) CopyIn(c *WorldCopy) {
 	r.Target.mu.Unlock()
 	*r.Transient, *r.View = c.transient, c.view
 	r.Rand.SetSession(c.session)
-	w.predicting.Store(c.predicting)
+	w.AdoptSession(c.latched)
 	if c.shared {
 		w.MarkSessionShared()
 	}

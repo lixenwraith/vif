@@ -298,6 +298,7 @@ func (a *App) publishAuthorityResourceLocked() {
 		r.Authority.Store(holder)
 		r.Term.Store(uint64(term))
 	}
+	a.world.LatchSession()
 }
 
 // sessionChain is what an offer carries, read through the authority because a

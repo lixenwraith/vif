@@ -42,6 +42,7 @@ func sessionSystem(t *testing.T, local uint32, tick uint64, port *linkedPort) *N
 	r := engine.NewNetworkResource(port)
 	r.ParticipantID = local
 	s.world.Resources.Network = r
+	s.world.RunSafe(s.world.LatchSession)
 	s.world.Resources.Event.Queue.RebaseStamp(0, tick)
 	s.Init()
 	return s
