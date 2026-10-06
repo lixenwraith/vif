@@ -61,6 +61,9 @@ func (o *RenderOrchestrator) Register(reg Registration) {
 // SetConsole finishes every frame on a text console's palette
 func (o *RenderOrchestrator) SetConsole(c *Console) { o.buffer.SetConsole(c) }
 
+// Size is the terminal the frame buffer is laid out for.
+func (o *RenderOrchestrator) Size() (int, int) { return o.buffer.width, o.buffer.height }
+
 // Resize updates buffer dimensions and syncs terminal
 func (o *RenderOrchestrator) Resize(width, height int) {
 	o.buffer.Resize(width, height)

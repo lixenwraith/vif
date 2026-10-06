@@ -177,7 +177,8 @@ Diagnoses and what each item follows from are in
 
 - Priority: P1
 - Affected files: `internal/snapshot`, `internal/app/capture.go`,
-  `internal/engine/snapshot_delta.go`, `internal/gen-manifest`, `pkg/navigation`
+  `internal/engine/snapshot_delta.go`, `internal/gen-manifest`, `pkg/navigation`,
+  `internal/app/clone.go`, `internal/system/navigation.go`
 
 At td with 16 players the host spends about 1.2 of its 1.4 CPU-s/s on protocol and
 an instance averages about 250 MiB of heap, against the pod's 500m and 160 MiB
@@ -192,6 +193,12 @@ remainder is mostly the static wall positions. Each step below must stay exact:
   call `reflect.DeepEqual` per entry.
 - Measure navigation's share again, then exact storage and loop work in
   `FlowField.Compute` with identical directions, distances and throttle phase.
+- Skip `CompositePassability.Compute` in `NavigationSystem.LoadShared` when the walls
+  are unchanged, once passability is shown equal to `Compute(seenWalls)` across ROI
+  updates, resize and `RestoreState`: about 0.17 ms of each full install, live too.
+- Reuse a replay's ring checkpoint buffers (`engine.WorldCopy` and the store copies),
+  never one the ladder keeps or a move holds: at the limit a checkpoint per presented
+  step allocates 6.5 MB, about 130 MB/s at 1x.
 
 Per-store write counters stay rejected: a cache compares values it owns.
 

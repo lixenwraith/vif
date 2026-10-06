@@ -434,7 +434,7 @@ which keeps only quit, the audio toggle and `:`.
 | `+` / `-` | Move the viewer rate up/down the rational scale ladder. |
 | `h j k l` / `0` | Scroll a map larger than the view by four cells; re-centre. |
 | Ctrl+S | Cycle the viewer's mute, which starts as `-mute` says; no journal records it. |
-| `:r tick <n>` | Go to tick `n` of the run shown, the status bar's `GT`. |
+| `:r tick <n>` | Go to the first step at or past tick `n` of the run shown, the status bar's `GT`. |
 | `:r time <[[h:]m:]s>` | Go to that game time at 1x: seconds alone, `m:s` or `h:m:s`. |
 | `:r restart` | Play again from the recording's start; also Simulation → Restart replay. |
 | `:` | Command line: `replay`, `help`, `about`, `telemetry`, `hud`, `debug`, `content`, `flow`, `graph`, `log`, `q`. |
@@ -462,39 +462,44 @@ change to the world or pausing its clock (`GameContext.Viewer`), so closing it
 leaves the run as recorded; a command that would change the recording is refused.
 
 A world cannot be rewound, so going back presents another copy of the run: a
-`ModeReplay` App on the viewer's terminal replaying the stream on its own
-goroutine, on all cores but one. `parameter.ReplayBackSpares` copies trail the
-presented one a tick apart and park there. Each `,` is one tick a frame presents,
-as `.` is, from the nearest; a replacement starts at the far end. `:r` behind takes
-a trailing copy standing at that tick, else replays one there; ahead, the presented
-copy plays there unpaced for most of each frame, so the view keeps drawing.
+`ModeReplay` App on the viewer's terminal, built off the frame loop, muted and
+without a flight recorder until it is presented. One fresh copy waits idle, and
+one job at a time builds it or moves it into place on its own goroutine.
 
-A copy starts from the nearest checkpoint behind its target rather than the
-stream's start. Every `parameter.ReplayCheckpointSteps` (100) presented steps the
-player keeps the whole state of the run (`app.checkpoint`): every store and grid
-cell in its own order and both domains' allocators (`engine.WorldCopy`), RNG
-streams, FSM position, scheduler and queue with its pending events, every registry
-cell, each system's FSM toggle and its private state (`engine.StateCopier`, or
-`SharedStateSaver` for a carrier without one), the corpus cursor, the latched
-session (`engine.SessionState`, from the journal), and the driver's place. Past
-`parameter.ReplayCheckpoints` (32) every other is dropped and the spacing doubles.
-At the 500×250 map limit one costs about 6 ms to take and 6.5 MB to keep, and a
-restore 35 ms with the copy's construction, against a replay from the start of
-about 16 ms a tick there. A running copy is replaced only from a checkpoint more
-than the ladder's depth past it: a copy is built on the frame loop, and at 1x the
-ladder crosses each checkpoint the presented run passes a few steps behind it.
-A restored copy compares the journal's digests as it replays; one failing a digest
-the presented run reproduced stops checkpointing (a `journal` `replay checkpoint
-left the run` Warn), and copies replay from the start again. A copy that takes
-over brings the HUD pins, the speakers, whose engine plays on while the gates the
-copy replayed decide what sounds, and the process's flight recorder, whose window
-starts again (a hidden copy holds none), and draws into the same cells rather than
-repainting the terminal.
+After each step the presented copy plays, the player keeps the whole state of the
+run (`app.checkpoint`) and its world digest: the last `parameter.ReplayRing` (8)
+steps in a ring, and every `parameter.ReplayCheckpointSteps` (100) on a ladder that
+drops every other and doubles its spacing past `parameter.ReplayCheckpoints` (32).
+A checkpoint holds every store and grid cell in its own order and both domains'
+allocators (`engine.WorldCopy`), RNG streams, FSM position, scheduler and queue with
+its pending events, every registry cell, each system's FSM toggle and its private
+state (`engine.StateCopier`, or `SharedStateSaver` for a carrier without one), the
+corpus cursor, the latched session (`engine.SessionState`, from the journal) and the
+driver's place. One costs about 1 ms at 146×34, and 6 ms and 6.5 MB at the 500×250
+map limit, where a restore takes about 35 ms with the copy's construction.
+
+Every move goes to the first step at or past a tick of the run shown: `,` to the
+step before, one a frame, as `.` steps on; `:r` to the tick asked; a restart to the
+start. The presented copy plays there unpaced for most of each frame when it stands
+before it and no checkpoint is more than a ring nearer, so the view keeps drawing;
+otherwise the idle copy restores the nearest checkpoint, or starts fresh, replays
+there and keeps the last ring of steps before it, and is presented the next frame.
+So `,` within the ring restores without replaying.
+
+A restored copy must reproduce its checkpoint's digest (positions, kinetics,
+combat, entity counts), and every copy stepping through ticks the run has passed
+must stand and diverge where the run did. One that does not is never presented:
+every checkpoint is dropped and none is taken again (a `journal` `replay checkpoint
+left the run` Warn), and the move replays from the start. The bar's `diverged by
+tick` is the run's, which the first copy past it found, not one copy's. A copy that
+takes over brings the HUD pins, the speakers, whose engine plays on while the gates
+the copy replayed decide what sounds, and the process's flight recorder, whose
+window starts again, and draws into the same cells rather than repainting.
 
 A replay logs as play does, so `:log on` and `:log off` bound a window around an
 issue found by seeking. Each copy writes through its own log handle, muted until it
 is presented, so records carry the presented copy's `run` and `tick` and a copy
-replaying behind it writes only its failures. Each jump of the presented tick (`,`,
+replaying off the frame loop writes only its failures. Each jump of the presented tick (`,`,
 a seek, a restart) is a `journal` `replay moved` Info record with `tick`,
 `from_tick`, `delta` and their runs, stamped after the jump; a seek ahead
 is recorded as it starts, and the ticks it plays log as they pass. Ticks played
