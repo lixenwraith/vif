@@ -96,13 +96,13 @@ func continuesFromCheckpoints(t *testing.T, rec *journal.Capture, at []event.Sta
 		t.Fatal(err)
 	}
 	end := rec.End()
-	set := journal.Set{Anchors: rec.Anchors(), Records: rec.Records(), Captures: rec.Captures(), Digests: rec.Digests(), End: &end}
+	stream := journal.Set{Records: rec.Records(), Captures: rec.Captures(), Digests: rec.Digests(), End: &end}.Stream()
 	src, err := NewHeadless(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer src.Close()
-	d, err := replayDriver(src, set)
+	d, err := newReplayDriver(src, stream)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func continuesFromCheckpoints(t *testing.T, rec *journal.Capture, at []event.Sta
 		if err != nil {
 			t.Fatal(err)
 		}
-		cd, err := replayDriver(copied, set)
+		cd, err := newReplayDriver(copied, stream)
 		if err != nil {
 			t.Fatal(err)
 		}
