@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -221,9 +222,10 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 }
 
 // retryableJoin reports a refusal that asks the dialer to retry: the host is between
-// its lobby and its mid-run gate, or electing an authority.
+// its lobby and its mid-run gate or electing an authority, or the seat fell behind it.
 func retryableJoin(err error) bool {
-	return network.IsHandoffRefusal(err) || strings.Contains(err.Error(), ErrSessionStarting.Error())
+	return network.IsHandoffRefusal(err) || strings.Contains(err.Error(), ErrSessionStarting.Error()) ||
+		errors.Is(err, errJoinBehind)
 }
 
 // forkCell is an instance's own "no session left" flag: it lost its authority and
