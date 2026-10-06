@@ -361,8 +361,10 @@ match the manifest's authority term, participant, and crossing fence; this binds
 the ordering metadata used to prune queued events. Its capture integrity may
 differ on a relay whose equal canonical state has another dense-store order.
 
-Nothing acknowledges or retransmits a correction; the newest supersedes, so loss
-costs freshness rather than correctness. A body leaves in
+Nothing acknowledges or retransmits a correction; the newest in the run supersedes,
+so loss costs freshness rather than correctness. A reset restarts the tick count, so
+on a run change each end drops what it keyed by tick and refuses an artifact naming
+another run (`Corrections.followRun`). A body leaves in
 `SnapshotCorrectionChunkBytes` chunks while the link's backlog — bytes sent beyond
 what its latest echo reports received — drains within `SnapshotBulkQueue` past the
 round trip, so an epoch waits behind a chunk, not a world. A link still delivering

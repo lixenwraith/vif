@@ -324,6 +324,35 @@ func TestAGuestRecoversAtTheFloorAfterTheLinkComesBack(t *testing.T) {
 	assertCorrected(t, want, guest, "guest after the link came back")
 }
 
+// TestCorrectionsResumeAcrossASessionReset: a reset restarts the tick count in a
+// new run, so a tick either end kept from the run before reads as far ahead of every
+// new one. The host's cadence carries on through it, and the guest adopts what
+// follows on the host's clock, hash-only proofs included.
+func TestCorrectionsResumeAcrossASessionReset(t *testing.T) {
+	t.Parallel()
+	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{})
+	runSession(host, guest, 400)
+	if !host.Reset(false) {
+		t.Fatal("the host's reset was refused")
+	}
+	sent := statOf(host, "snapshot.corrections_sent")
+	applied := statOf(guest, "snapshot.corrections_applied")
+	hashOnly := statOf(guest, "snapshot.corrections_hash_only")
+	const ticks = 200
+	runSession(host, guest, ticks)
+
+	if h, g := host.Position(), guest.Position(); g.Run != 1 || g.Run != h.Run || g.Tick != h.Tick {
+		t.Fatalf("after the reset the guest stands at %+v and the host at %+v", g, h)
+	}
+	if got := statOf(host, "snapshot.corrections_sent") - sent; got < ticks/parameter.SnapshotCorrectionTicks/2 {
+		t.Fatalf("the host published %d corrections in the %d ticks after the reset", got, ticks)
+	}
+	proofs := statOf(guest, "snapshot.corrections_hash_only") - hashOnly
+	if got := statOf(guest, "snapshot.corrections_applied") - applied; proofs == 0 || got < proofs {
+		t.Fatalf("the guest applied %d corrections of the new run against %d proved by hash", got, proofs)
+	}
+}
+
 // TestAJoinIsRefusedWhenTheLinkCannotCarryTheFloor exercises the refusal through
 // the same App method a mid-run join uses, rather than a re-derivation of it.
 func TestAJoinIsRefusedWhenTheLinkCannotCarryTheFloor(t *testing.T) {
