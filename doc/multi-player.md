@@ -394,8 +394,10 @@ after its tick is compared against the present and counted in
 tick-exact comparison would not have. The newest arrival while one waits replaces
 it, so at most one is ever delayed and never by more than the lead. One further
 ahead than the lead is adopted at its own tick as the jump it is, counted in
-`snapshot.corrections_jumped`. A hash-only acknowledgement behind the clock is not
-adopted: the world already equals it, and adopting its tick would be the rewind.
+`snapshot.corrections_jumped`, and supersedes the one still waiting: installed
+after it, that one would rewind the world past every crossing applied since. A
+hash-only acknowledgement behind the clock is not adopted: the world already equals
+it, and adopting its tick would be the rewind.
 
 The host publishes at the close of the tick it describes rather than on a timer's
 phase: `TickClosed` wakes its pump, so an index leaves with the epoch of the same
