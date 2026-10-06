@@ -814,14 +814,15 @@ rotated file soon receives a self-description. It carries:
 - fixed tick interval and terminal-equivalent `width`/`height` used by the
   simulation.
 
-The reader accepts multiple files, sorts records by `jseq`, removes overlap,
-and reports the first gap. `ConfigFromAnchor` verifies schema/tick interval,
-seed, scenario name and digest, corpus fingerprint, and geometry before replay.
-The scenario is asked for by name, so a journal recorded against one that is not
-installed replays under the same `-config-dir` the run used. It refuses an
-anchor with non-zero `start_run` or `start_tick` (`StartRun`/`StartTick` in
-Go): a journal beginning mid-run would need this instance's player-domain world,
-which no written world carries.
+The reader accepts multiple files, sorts records and anchors by `jseq` and
+written worlds by `cseq`, removes overlap from all three, and reports the first
+gap; the first anchor is the earliest. `ConfigFromAnchor` verifies schema/tick
+interval, seed, scenario name and digest, corpus fingerprint, and geometry
+before replay. The scenario is asked for by name, so a journal recorded against
+one that is not installed replays under the same `-config-dir` the run used. It
+refuses an anchor with non-zero `start_run` or `start_tick` (`StartRun`/
+`StartTick` in Go): a journal beginning mid-run would need this instance's
+player-domain world, which no written world carries.
 
 A journal therefore starts with its run, and `:journal start` (Diagnostics →
 Replay journal) starts one mid-game the way a join does: it replaces the run. A
@@ -835,8 +836,10 @@ they are not in.
 
 A participant writes worlds it did not simulate: the capture its join installed
 and each correction after it, and a host the world it opened its session on — the
-owners, latch and lead that `:host`, and `-host` once its clock runs, write. Each is a `capture` record carrying `jseq` (the
-records before it), its lattice position, the local `participant`, the
+owners, latch and lead that `:host`, and `-host` once its clock runs, write.
+Each is a `capture` record carrying `jseq` (the records before it), `cseq` (the
+writes up to it, since two with no record between share a `jseq` and can match in
+every other field), its lattice position, the local `participant`, the
 `authority` and, as base64 `body`, a `snapshot.WrittenDelta`: what the write
 changed against the world held just before it, sealed with the written world's
 integrity hash. Replay rebuilds it from its own world at that place, refuses a

@@ -175,11 +175,11 @@ func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {
 	source.Close()
 	a := mustHeadless(t, fixtureSeed, 120, 40)
 	defer a.Close()
-	d, err := newReplayDriver(a, capture.Records(), nil)
+	end := capture.End()
+	d, err := newReplayDriver(a, journal.Set{Records: capture.Records(), End: &end}.Stream())
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.FinishAt(capture.End())
 	a.AttachTransport(replayPort{id: 1})
 	p := &player{a: a, src: journalSource{d, a.log}, interval: parameter.GameUpdateInterval,
 		rec: engine.ScaleNormal, scale: engine.ScaleNormal}
@@ -210,13 +210,13 @@ func TestAReplayKeepsItsTrailingCopiesAcrossACheckpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	end := capture.End()
-	set := journal.Set{Anchors: capture.Anchors(), Records: capture.Records(), Digests: capture.Digests(), End: &end}
+	stream := journal.Set{Records: capture.Records(), Digests: capture.Digests(), End: &end}.Stream()
 	a, err := NewHeadless(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	d, err := replayDriver(a, set)
+	d, err := newReplayDriver(a, stream)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +229,7 @@ func TestAReplayKeepsItsTrailingCopiesAcrossACheckpoint(t *testing.T) {
 		if err != nil {
 			return nil, nil, err
 		}
-		td, err := replayDriver(twin, set)
+		td, err := newReplayDriver(twin, stream)
 		return twin, journalSource{td, twin.log}, err
 	}
 	defer p.closeRebuilt()
@@ -262,7 +262,7 @@ func TestAPresentedReplayStepIsOneRecordedTick(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	d, err := newReplayDriver(a, rec.Records(), rec.Captures())
+	d, err := newReplayDriver(a, journal.Set{Records: rec.Records(), Captures: rec.Captures()}.Stream())
 	if err != nil {
 		t.Fatal(err)
 	}

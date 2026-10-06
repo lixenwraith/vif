@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
@@ -30,6 +31,9 @@ type Corrections struct {
 	// artifact may be acted on and whether this instance is the one publishing;
 	// this decides what is published and what is installed.
 	authority *Authority
+
+	// run is the game run every tick below was read in; see followRun.
+	run atomic.Uint64
 
 	// publishMu serialises every world read a capture makes, so a join re-uses a
 	// keyframe fresh enough and two joins arriving together share one read. It also
@@ -300,6 +304,7 @@ func (c *Corrections) publishRound(force bool) error {
 
 	c.publishMu.Lock()
 	defer c.publishMu.Unlock()
+	tick := c.followRunLocked().Tick
 
 	link, _ := port.(engine.LinkMeasuringPort)
 	ids := c.peerIDs(link)
@@ -307,7 +312,7 @@ func (c *Corrections) publishRound(force bool) error {
 		// A transport that cannot name its links cannot be scheduled per peer, so
 		// the session keeps the nominal operating point and broadcasts. Adaptation
 		// improves a measured link; it is not a requirement for a working one.
-		return c.publishBroadcast(port, force)
+		return c.publishBroadcast(port, tick, force)
 	}
 	if len(ids) == 0 {
 		return nil
@@ -315,8 +320,6 @@ func (c *Corrections) publishRound(force bool) error {
 	c.decideLocked(ids, link)
 	c.releaseLocked(port)
 
-	c.forgetRestartedRunLocked()
-	tick := c.inst.Position().Tick
 	keyframe := (!c.haveKey || tick >= c.lastKeyTick+c.keyPeriod) && !c.allProvedLocked(ids, tick)
 	// No answer on these links proves a participant behind a relay: it keeps the floor.
 	keyframe = keyframe || c.behindRelay(ids) && tick >= c.lastKeyTick+c.bounds.FloorKeyframeTicks
@@ -425,9 +428,7 @@ func (c *Corrections) publishRound(force bool) error {
 // publishBroadcast is the unmeasured path: one correction to everyone on the
 // nominal schedule, so a transport without link measurement keeps a working
 // authority rather than a silent one. Caller MUST hold publishMu.
-func (c *Corrections) publishBroadcast(port engine.NetworkPort, force bool) error {
-	c.forgetRestartedRunLocked()
-	tick := c.inst.Position().Tick
+func (c *Corrections) publishBroadcast(port engine.NetworkPort, tick uint64, force bool) error {
 	keyframe := !c.haveKey || tick >= c.lastKeyTick+c.keyPeriod
 	if !force && !keyframe && tick < c.nextBroadcast {
 		return nil
@@ -757,18 +758,55 @@ func (c *Corrections) readWorld() (snapshot.SharedCapture, error) {
 	return cap, nil
 }
 
-// forgetRestartedRunLocked drops the keyframe this host holds when it describes a
-// game the run has since restarted. A reset re-bases the tick counter and every
-// decision here reads ticks, so the stale keyframe would read as arbitrarily fresh.
-// The run number is what distinguishes them. Caller MUST hold publishMu.
-func (c *Corrections) forgetRestartedRunLocked() {
-	if !c.haveKey || c.baseline.Header.Run == c.inst.Position().Run {
-		return
+// followRun is the one run check, made by every entry that reads a tick, and
+// returns the position it checked. A reset restarts the tick count, so a tick read
+// in the run before would compare as arbitrarily far ahead: every field keyed by one
+// is dropped when the run changes, and an artifact naming another run is refused.
+func (c *Corrections) followRun() event.Stamp {
+	if at := c.inst.Position(); c.run.Load() == at.Run {
+		return at
 	}
-	c.log.Info("converge", "msg", "keyframe dropped across a restart",
-		"baseline_run", c.baseline.Header.Run, "run", c.inst.Position().Run)
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+	return c.followRunLocked()
+}
+
+// followRunLocked is followRun for a caller that holds publishMu, which also
+// serialises the drop. The links' measurements and plans are kept: a reset moves
+// the game, not the wire. Caller MUST hold publishMu.
+func (c *Corrections) followRunLocked() event.Stamp {
+	at := c.inst.Position()
+	if c.run.Load() == at.Run {
+		return at
+	}
+	c.log.Info("converge", "msg", "tick-keyed state dropped for a new run",
+		"from_run", c.run.Load(), "run", at.Run)
 	c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = snapshot.SharedCapture{}, nil, false, 0
-	c.keyCorrection = nil
+	c.keyCorrection, c.nextBroadcast = nil, 0
+	for _, p := range c.peers {
+		p.nextTick, p.manifestTick, p.answeredTick, p.converged, p.outbox = 0, 0, 0, false, nil
+	}
+	c.selective.retained = nil
+	c.tel.RelayRetained.Store(0)
+
+	// The floor restarts at the run's first tick. The delta baseline stays, marking
+	// this instance a receiver: a delta resolves against it only by reproducing an
+	// integrity hash, which a world from another run cannot, and a successor seeds
+	// from it only within its run (BecomeAuthority).
+	c.installedMu.Lock()
+	c.lastInstalled, c.keyTick = 0, 0
+	c.held, c.haveHeld = snapshot.SharedCapture{}, false
+	c.installedMu.Unlock()
+
+	c.selectiveMu.Lock()
+	s := &c.selective
+	s.want, s.at, s.awaiting, s.heldManifest = nil, nil, nil, nil
+	s.forward, s.forwardTick = nil, 0
+	c.selectiveMu.Unlock()
+
+	c.authority.restartRun(at.Tick)
+	c.run.Store(at.Run)
+	return at
 }
 
 // KeyframeAt returns a keyframe describing the world at or after minTick, taking
@@ -779,7 +817,7 @@ func (c *Corrections) forgetRestartedRunLocked() {
 func (c *Corrections) KeyframeAt(minTick uint64, deadline time.Time) ([]byte, uint64, error) {
 	for {
 		c.publishMu.Lock()
-		c.forgetRestartedRunLocked()
+		at := c.followRunLocked()
 		if c.haveKey && c.baseline.Header.Tick >= minTick {
 			var err error
 			if c.keyBody == nil {
@@ -789,7 +827,7 @@ func (c *Corrections) KeyframeAt(minTick uint64, deadline time.Time) ([]byte, ui
 			c.publishMu.Unlock()
 			return body, tick, err
 		}
-		if c.inst.Position().Tick >= minTick {
+		if at.Tick >= minTick {
 			body, tick, err := c.takeKeyframe()
 			c.publishMu.Unlock()
 			return body, tick, err
@@ -902,6 +940,7 @@ func (c *Corrections) correct() {
 func (c *Corrections) Apply() {
 	c.applyMu.Lock()
 	defer c.applyMu.Unlock()
+	c.followRun()
 
 	// Whatever the transport holds is translated first, without advancing a tick, so
 	// the exchange completes inside one cadence rather than paying a tick per leg.
@@ -998,6 +1037,9 @@ func (c *Corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
 	}
 	if !c.authority.admit(header.Term, 0) {
 		return snapshot.SharedCapture{}, errors.New("correction carries a term this instance does not hold")
+	}
+	if header.Run != c.followRun().Run {
+		return snapshot.SharedCapture{}, errors.New("correction describes a run this instance is not in")
 	}
 	if kind == snapshot.CorrectionKeyframe {
 		if sum, err := snapshot.Integrity(full); err != nil || sum != full.Header.Integrity {
@@ -1169,6 +1211,7 @@ func (c *Corrections) holdingThrough(tick uint64) bool {
 // SetBaseline records the keyframe later deltas are computed against, and the
 // tick the convergence floor is measured from.
 func (c *Corrections) SetBaseline(cap snapshot.SharedCapture) {
+	c.followRun()
 	c.installedMu.Lock()
 	c.installed, c.haveBase, c.keyTick = cap, true, cap.Header.Tick
 	c.installedMu.Unlock()

@@ -334,7 +334,7 @@ func TestAGuestJournalReplaysFromItsJoin(t *testing.T) {
 		t.Fatalf("replay app: %v", err)
 	}
 	defer rep.Close()
-	d, err := newReplayDriver(rep, rec.Records(), rec.Captures())
+	d, err := newReplayDriver(rep, journal.Set{Records: rec.Records(), Captures: rec.Captures()}.Stream())
 	if err != nil {
 		t.Fatalf("replay driver: %v", err)
 	}
@@ -439,12 +439,12 @@ func TestAReplayNamesTheFirstDigestItDoesNotReproduce(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer a.Close()
-		d, err := newReplayDriver(a, rec.Records(), rec.Captures())
+		end := rec.End()
+		d, err := newReplayDriver(a, journal.Set{Records: rec.Records(), Captures: rec.Captures(),
+			Digests: digests, End: &end}.Stream())
 		if err != nil {
 			t.Fatal(err)
 		}
-		d.FinishAt(rec.End())
-		d.CompareDigests(digests)
 		if err := d.RunAll(); err != nil {
 			t.Fatal(err)
 		}
@@ -522,7 +522,7 @@ func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
 		t.Fatalf("replay app: %v", err)
 	}
 	defer rep.Close()
-	d, err := newReplayDriver(rep, rec.Records(), rec.Captures())
+	d, err := newReplayDriver(rep, journal.Set{Records: rec.Records(), Captures: rec.Captures()}.Stream())
 	if err != nil {
 		t.Fatalf("replay driver: %v", err)
 	}
@@ -1140,7 +1140,7 @@ func TestReplayLockstep(t *testing.T) {
 	if err := rep.VerifyAnchor(anchors[0]); err != nil {
 		t.Fatalf("verify anchor: %v", err)
 	}
-	d, err := newReplayDriver(rep, cap.Records(), cap.Captures())
+	d, err := newReplayDriver(rep, journal.Set{Records: cap.Records(), Captures: cap.Captures()}.Stream())
 	if err != nil {
 		t.Fatalf("driver: %v", err)
 	}

@@ -298,7 +298,7 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	}
 	m.RequestBytes.Add(int64(len(pending.body)))
 
-	if !c.authority.admit(req.Term, pending.from) {
+	if !c.authority.admit(req.Term, pending.from) || req.Run != c.followRun().Run {
 		m.ShardsRefused.Add(1)
 		return
 	}
@@ -458,7 +458,7 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 		c.publishMu.Unlock()
 		return // asked again with the next index once the link drains
 	}
-	c.forgetRestartedRunLocked()
+	c.followRunLocked()
 	if !c.haveKey || c.baseline.Header.Tick < minTick {
 		if _, _, err := c.takeKeyframe(); err != nil {
 			c.publishMu.Unlock()
@@ -673,7 +673,7 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		return 0
 	}
 	from := c.selectiveSource()
-	if !c.authority.admit(want.Header.Term, from) {
+	if !c.authority.admit(want.Header.Term, from) || want.Header.Run != c.followRun().Run {
 		m.BaselineRefusals.Add(1)
 		return 0
 	}
@@ -923,8 +923,9 @@ func (c *Corrections) ReceiveSelective(kind uint8, from uint32, body []byte) {
 		c.selective.manifests = keepNewest(
 			append(c.selective.manifests, body), parameter.SnapshotCorrectionQueue)
 		if m, err := snapshot.DecodeManifest(body); err == nil {
+			at := c.inst.Position()
 			for _, t := range []uint64{m.Header.Tick, m.Next} {
-				if t > c.inst.Position().Tick && !slices.Contains(c.selective.want, t) {
+				if m.Header.Run == at.Run && t > at.Tick && !slices.Contains(c.selective.want, t) {
 					c.selective.want = keepNewest(append(c.selective.want, t), 2)
 				}
 			}

@@ -1,9 +1,10 @@
 package journal
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/lixenwraith/toml"
@@ -66,33 +67,71 @@ func (k groupKey) before(o groupKey) bool {
 	return k.boundary < o.boundary
 }
 
+// Stream is a journal ordered for replay, which every driver over it reads and
+// none writes. Each settle group's records are split where a world was written
+// among them, and each part is in queue slot order, the order the run dispatched.
+type Stream struct {
+	records  []event.JournalRecord
+	captures []event.JournalCapture
+	digests  []event.JournalDigest
+	end      *event.Stamp // input-free trailing ticks; older journals end at their last record
+}
+
+// Stream orders the set for replay. A driver over it compares the set's digests
+// and, when the set has an end, plays on to it.
+func (s Set) Stream() *Stream {
+	recs, caps := slices.Clone(s.Records), slices.Clone(s.Captures)
+	// A Capture sink holds records as producers appended them, which jseq can invert.
+	slices.SortStableFunc(recs, func(a, b event.JournalRecord) int { return cmp.Compare(a.JSeq, b.JSeq) })
+	slices.SortStableFunc(caps, func(a, b event.JournalCapture) int { return cmp.Compare(a.JSeq, b.JSeq) })
+	for i, c := 0, 0; i < len(recs); {
+		for c < len(caps) && caps[c].JSeq < recs[i].JSeq {
+			c++
+		}
+		j := segmentEnd(recs, i, caps, c)
+		slices.SortStableFunc(recs[i:j], func(a, b event.JournalRecord) int { return cmp.Compare(a.Seq, b.Seq) })
+		i = j
+	}
+	st := &Stream{records: recs, captures: caps, digests: slices.Clone(s.Digests)}
+	if s.End != nil {
+		end := *s.End
+		st.end = &end
+	}
+	return st
+}
+
+// segmentEnd is where the part of a settle group opening at i ends: at a record of
+// another group, or one emitted after the next written world, which landed on it.
+// It reads no order inside the part, so it finds the same end once that is sorted.
+func segmentEnd(recs []event.JournalRecord, i int, caps []event.JournalCapture, c int) int {
+	k, j := keyOf(recs[i]), i+1
+	for j < len(recs) && keyOf(recs[j]) == k && (c >= len(caps) || recs[j].JSeq <= caps[c].JSeq) {
+		j++
+	}
+	return j
+}
+
 // ReplayDriver injects a record stream into a caller-driven target. Step consumes
 // one tick so a presenting loop can pace it and a harness can run it flat out.
 type ReplayDriver struct {
-	target   ReplayTarget
-	records  []event.JournalRecord
-	captures []event.JournalCapture
-	next     int
-	nextCap  int
-	cur      groupKey
-	landed   bool // an install moved the clock past records stamped before it
-	stats    ReplayStats
-	end      *event.Stamp
-	digests  []event.JournalDigest
-	nextDig  int
-	matched  *event.Stamp
+	target  ReplayTarget
+	s       *Stream
+	next    int
+	nextCap int
+	cur     groupKey
+	landed  bool // an install moved the clock past records stamped before it
+	stats   ReplayStats
+	nextDig int
+	matched *event.Stamp
 }
 
-// NewReplayDriver binds a record stream and the worlds written among it to a
-// target. Both slices belong to the driver; each settle group is sorted in place
-// by queue slot, and captures must be in jseq order.
-func NewReplayDriver(target ReplayTarget, records []event.JournalRecord, captures []event.JournalCapture) *ReplayDriver {
-	return &ReplayDriver{target: target, records: records, captures: captures,
-		stats: ReplayStats{Records: len(records)}}
+// NewReplayDriver binds a stream to a target.
+func NewReplayDriver(target ReplayTarget, s *Stream) *ReplayDriver {
+	return &ReplayDriver{target: target, s: s, stats: ReplayStats{Records: len(s.records)}}
 }
 
-// Cursor is where a driver stands in its stream. A driver over another copy of the
-// same stream resumes from it, as a replay restored from a checkpoint does.
+// Cursor is where a driver stands in its stream. Another driver over the same
+// stream resumes from it, as a replay restored from a checkpoint does.
 type Cursor struct {
 	next, nextCap, nextDig int
 	cur                    groupKey
@@ -115,22 +154,17 @@ func (d *ReplayDriver) Resume(c Cursor) {
 
 // Done reports whether every record has been injected and every world installed.
 func (d *ReplayDriver) Done() bool {
-	return d.streamDone() && (d.end == nil || d.target.Position().Run == d.end.Run && d.target.Position().Tick >= d.end.Tick)
+	end := d.s.end
+	return d.streamDone() && (end == nil || d.target.Position().Run == end.Run && d.target.Position().Tick >= end.Tick)
 }
 
-// FinishAt bounds trailing simulation; older journals end at their last record.
-func (d *ReplayDriver) FinishAt(end event.Stamp) { d.end = &end }
-
-// CompareDigests checks the world after each tick the recorded run wrote a digest
-// for; ds must be in tick order. A digest the replay never stands on is skipped.
-func (d *ReplayDriver) CompareDigests(ds []event.JournalDigest) { d.digests = ds }
-
-// tick advances the target one tick and compares the digest written after it.
+// tick advances the target one tick and compares the digest written after it. The
+// digests are in tick order; one the replay never stands on is skipped.
 func (d *ReplayDriver) tick() {
 	d.target.Tick(1)
 	at := d.target.Position()
-	for ; d.nextDig < len(d.digests) && d.stats.Diverged == nil; d.nextDig++ {
-		w := d.digests[d.nextDig]
+	for ; d.nextDig < len(d.s.digests) && d.stats.Diverged == nil; d.nextDig++ {
+		w := d.s.digests[d.nextDig]
 		if w.Run > at.Run || w.Run == at.Run && w.Tick > at.Tick {
 			return
 		}
@@ -158,20 +192,21 @@ func (d *ReplayDriver) tick() {
 }
 
 func (d *ReplayDriver) streamDone() bool {
-	return d.next >= len(d.records) && d.nextCap >= len(d.captures)
+	return d.next >= len(d.s.records) && d.nextCap >= len(d.s.captures)
 }
 
 // dueCapture reports whether the next thing in the stream is a written world: one
-// whose place is before the next record, or any left after the last.
+// whose place is before the next record, or any left after the last. Every record
+// of the part opening at next lies on one side of each world, so any one answers.
 func (d *ReplayDriver) dueCapture() bool {
-	return d.nextCap < len(d.captures) &&
-		(d.next >= len(d.records) || d.captures[d.nextCap].JSeq < d.records[d.next].JSeq)
+	return d.nextCap < len(d.s.captures) &&
+		(d.next >= len(d.s.records) || d.s.captures[d.nextCap].JSeq < d.s.records[d.next].JSeq)
 }
 
 // install ticks to where the recorded run stood when it wrote the next world, then
 // writes it; the install moves the clock, so the position is read back.
 func (d *ReplayDriver) install() (bool, error) {
-	c := d.captures[d.nextCap]
+	c := d.s.captures[d.nextCap]
 	at := d.target.Position()
 	if at.Run != c.Run || at.Tick > c.Tick {
 		return false, fmt.Errorf("replay: capture after jseq %d was written at run %d tick %d, the replay is at run %d tick %d",
@@ -202,27 +237,28 @@ func (d *ReplayDriver) Stats() ReplayStats {
 
 // End includes input-free trailing ticks when the recorder supplied its end.
 func (d *ReplayDriver) End() event.Stamp {
-	if d.end != nil {
-		return *d.end
+	if d.s.end != nil {
+		return *d.s.end
 	}
-	if len(d.records) == 0 {
+	if len(d.s.records) == 0 {
 		return event.Stamp{}
 	}
-	r := d.records[len(d.records)-1]
+	r := d.s.records[len(d.s.records)-1]
 	return event.Stamp{Run: r.Run, Tick: r.Tick, Boundary: r.Boundary}
 }
 
 // Step advances one tick and applies every settle group stamped on it.
 func (d *ReplayDriver) Step() (bool, error) {
 	if d.streamDone() {
-		if d.end == nil {
+		end := d.s.end
+		if end == nil {
 			return false, nil
 		}
 		at := d.target.Position()
-		if at.Run != d.end.Run || at.Tick > d.end.Tick {
-			return false, fmt.Errorf("replay: position %v exceeds recorded end %v", at, *d.end)
+		if at.Run != end.Run || at.Tick > end.Tick {
+			return false, fmt.Errorf("replay: position %v exceeds recorded end %v", at, *end)
 		}
-		if at.Tick == d.end.Tick {
+		if at.Tick == end.Tick {
 			return false, nil
 		}
 		d.tick()
@@ -231,11 +267,11 @@ func (d *ReplayDriver) Step() (bool, error) {
 	if d.dueCapture() {
 		return d.install()
 	}
-	k := keyOf(d.records[d.next])
+	k := keyOf(d.s.records[d.next])
 	if k.before(d.cur) {
 		if !d.landed {
 			return false, fmt.Errorf("replay: jseq %d stamped run %d tick %d boundary %d, out of order",
-				d.records[d.next].JSeq, k.run, k.tick, k.boundary)
+				d.s.records[d.next].JSeq, k.run, k.tick, k.boundary)
 		}
 		// Pushed just before a write that moved the clock: it lands on that world.
 		return true, d.injectGroup(k)
@@ -245,7 +281,7 @@ func (d *ReplayDriver) Step() (bool, error) {
 	if k.run != d.cur.run {
 		if got := d.target.Position().Run; got != k.run {
 			return false, fmt.Errorf("replay: jseq %d opens run %d, the replay is in run %d",
-				d.records[d.next].JSeq, k.run, got)
+				d.s.records[d.next].JSeq, k.run, got)
 		}
 		d.cur = groupKey{run: k.run}
 	}
@@ -258,8 +294,8 @@ func (d *ReplayDriver) Step() (bool, error) {
 		}
 	}
 
-	for d.next < len(d.records) && !d.dueCapture() {
-		k = keyOf(d.records[d.next])
+	for d.next < len(d.s.records) && !d.dueCapture() {
+		k = keyOf(d.s.records[d.next])
 		if k.run != d.cur.run || k.tick != d.cur.tick {
 			break
 		}
@@ -293,16 +329,8 @@ func (d *ReplayDriver) injectGroup(k groupKey) error {
 	if p := d.target.Position(); p.Run == k.run && p.Tick == k.tick {
 		d.settleTo(k.boundary)
 	}
-	j := d.next
-	for j < len(d.records) && keyOf(d.records[j]) == k {
-		j++
-		// A world written inside a settle group ends it: what follows landed on that world.
-		if d.nextCap < len(d.captures) && d.captures[d.nextCap].JSeq <= d.records[j-1].JSeq {
-			break
-		}
-	}
-	group := d.records[d.next:j]
-	sort.SliceStable(group, func(x, y int) bool { return group[x].Seq < group[y].Seq })
+	j := segmentEnd(d.s.records, d.next, d.s.captures, d.nextCap)
+	group := d.s.records[d.next:j]
 
 	queued := false
 	for i := range group {

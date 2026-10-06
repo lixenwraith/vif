@@ -55,7 +55,8 @@ func PlayJournal(viewer Config, paths ...string) error {
 		return err
 	}
 	a.recordMusic()
-	d, err := replayDriver(a, set)
+	stream := set.Stream() // every copy replays this one
+	d, err := newReplayDriver(a, stream)
 	if err != nil {
 		return err
 	}
@@ -72,7 +73,7 @@ func PlayJournal(viewer Config, paths ...string) error {
 		if err != nil {
 			return nil, nil, err
 		}
-		td, err := replayDriver(twin, set)
+		td, err := newReplayDriver(twin, stream)
 		if err != nil {
 			twin.Close()
 			return nil, nil, err

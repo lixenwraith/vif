@@ -79,6 +79,7 @@ func (vlogSink) Anchor(a JournalAnchor) {
 func (vlogSink) Capture(c JournalCapture) {
 	vlog.Journal(SubJournalCapture,
 		"jseq", c.JSeq,
+		"cseq", c.CSeq,
 		"jrun", c.Run,
 		"jtick", c.Tick,
 		"boundary", c.Boundary,
