@@ -16,7 +16,9 @@ import (
 // checkpoint is a replay copy's whole state where its driver stood: what a fresh
 // copy restores to continue from there instead of replaying the stream before it.
 type checkpoint struct {
-	steps     int // the driver steps it was read after
+	steps     int                 // the driver steps it was read after
+	at        event.Stamp         // where the copy stood
+	digest    event.JournalDigest // its world, which a restore must reproduce
 	world     *engine.WorldCopy
 	queue     event.QueueCopy
 	scheduler engine.SchedulerCopy
@@ -68,6 +70,8 @@ func (a *App) checkpointLocked(d *journal.ReplayDriver) (*checkpoint, error) {
 		toggles:   toggles,
 		content:   service.MustGet[*service.ContentService](a.hub, "content").CursorState(),
 		driver:    d.Cursor(),
+		at:        a.Position(),
+		digest:    a.journalDigestLocked(),
 	}
 	if mc, ok := a.ctx.TimeCtl.Clock().(*engine.ManualClock); ok {
 		c.clock = mc.Elapsed()
@@ -75,10 +79,20 @@ func (a *App) checkpointLocked(d *journal.ReplayDriver) (*checkpoint, error) {
 	return c, nil
 }
 
-// restore settles a fresh replay copy's boot and places it where c was read.
+// restore settles a fresh replay copy's boot and places it where c was read. A copy
+// that does not then stand where c's did, on the digested classes of its world, is
+// refused: a checkpoint that carried the run short is caught before anything plays.
 func (a *App) restore(c *checkpoint, d *journal.ReplayDriver) (err error) {
 	a.Settle()
-	a.world.RunSafe(func() { err = a.restoreLocked(c, d) })
+	a.world.RunSafe(func() {
+		if err = a.restoreLocked(c, d); err != nil {
+			return
+		}
+		if at, got := a.Position(), a.journalDigestLocked(); at != c.at || got != c.digest {
+			err = fmt.Errorf("restore at step %d: stands at %+v with digest %+v, the checkpoint at %+v with %+v",
+				c.steps, at, got, c.at, c.digest)
+		}
+	})
 	return err
 }
 
