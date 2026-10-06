@@ -30,18 +30,7 @@ type checkpoint struct {
 	scale     engine.TimeScale
 	width     int
 	height    int
-	network   *networkCopy
 	driver    journal.Cursor
-}
-
-// networkCopy is the session a replay copy stands in for: the participant a written
-// world was installed as and the authority, lead and pace it last adopted.
-type networkCopy struct {
-	participant, authority uint32
-	term, delay            uint64
-	pace                   int32
-	paceStep               int64
-	commitLate             []uint64
 }
 
 // checkpointLocked reads a replay copy and where its driver stands. Caller MUST
@@ -83,13 +72,6 @@ func (a *App) checkpointLocked(d *journal.ReplayDriver) (*checkpoint, error) {
 	if mc, ok := a.ctx.TimeCtl.Clock().(*engine.ManualClock); ok {
 		c.clock = mc.Elapsed()
 	}
-	if r := a.world.Resources.Network; r != nil {
-		c.network = &networkCopy{participant: r.ParticipantID, authority: r.Authority.Load(), term: r.Term.Load(),
-			delay: r.BarrierDelayTicks, pace: r.Pace.Load(), paceStep: r.PaceStep.Load()}
-		for i := range r.CommitLate {
-			c.network.commitLate = append(c.network.commitLate, r.CommitLate[i].Load())
-		}
-	}
 	return c, nil
 }
 
@@ -103,20 +85,6 @@ func (a *App) restore(c *checkpoint, d *journal.ReplayDriver) (err error) {
 // restoreLocked places a fresh replay copy, built from the same journal, where c
 // was read, and its driver with it. Caller MUST hold updateMutex.
 func (a *App) restoreLocked(c *checkpoint, d *journal.ReplayDriver) error {
-	if n := c.network; n != nil {
-		if r := a.world.Resources.Network; r == nil || r.ParticipantID != n.participant {
-			a.attachTransportLocked(replayPort{id: n.participant})
-		}
-		r := a.world.Resources.Network
-		r.Authority.Store(n.authority)
-		r.Term.Store(n.term)
-		r.BarrierDelayTicks = n.delay
-		r.Pace.Store(n.pace)
-		r.PaceStep.Store(n.paceStep)
-		for i, v := range n.commitLate {
-			r.CommitLate[i].Store(v)
-		}
-	}
 	a.world.CopyIn(c.world)
 	if unknown := c.world.LoadStreams(a.world.Resources.Rand); len(unknown) > 0 {
 		return fmt.Errorf("restore: RNG streams this copy does not issue: %v", unknown)

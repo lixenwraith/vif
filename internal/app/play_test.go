@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
+	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
 )
@@ -180,7 +181,7 @@ func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.AttachTransport(replayPort{id: 1})
+	a.AttachTransport(network.NewMesh().Node(1))
 	p := &player{a: a, src: journalSource{d, a.log}, interval: parameter.GameUpdateInterval,
 		rec: engine.ScaleNormal, scale: engine.ScaleNormal}
 	p.key(terminal.Event{Key: terminal.KeyRune, Rune: ' '})

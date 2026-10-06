@@ -8,7 +8,6 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
-	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/service"
@@ -159,8 +158,8 @@ func (a *App) journalDigestLocked() event.JournalDigest {
 }
 
 // Install writes a world the recorded run wrote, rebuilt from the one this replay
-// holds, as the participant it wrote it as: identity first, because the write
-// binds cursors by it.
+// holds, as the participant it wrote it as: identity first, because the write binds
+// cursors by it, and a join writes before its transport attaches or notes anything.
 func (t replayTarget) Install(c event.JournalCapture) error {
 	var d snapshot.WrittenDelta
 	if err := snapshot.DecodeJSON(c.Body, &d); err != nil {
@@ -177,31 +176,17 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 			return
 		}
 		// Participant zero wrote it solo, resuming a run it replaced, with no session.
-		r := a.world.Resources.Network
-		if c.Participant != 0 && (r == nil || r.ParticipantID != c.Participant) {
-			a.attachTransportLocked(replayPort{id: c.Participant})
-			r = a.world.Resources.Network
-		}
-		if r != nil {
-			r.Authority.Store(c.Authority)
-			r.Term.Store(uint64(cap.Header.Term))
+		if c.Participant != 0 {
+			s := a.world.Session()
+			s.Participant, s.Authority = c.Participant, c.Authority
+			a.world.AdoptSession(s)
+			a.world.MarkSessionShared()
+			a.ctx.PublishMapLock()
 		}
 		_, err = a.writeSharedLocked(cap, &before, true)
 	})
 	return err
 }
-
-// replayPort stands for the session a recorded participant was in: running and
-// peered, so the replay predicts and refuses what the live run did, and silent.
-type replayPort struct{ id uint32 }
-
-func (replayPort) Send(uint32, uint8, []byte) bool       { return true }
-func (replayPort) Broadcast(uint8, []byte)               {}
-func (replayPort) BroadcastExcept(uint32, uint8, []byte) {}
-func (replayPort) PeerCount() int                        { return 1 }
-func (replayPort) IsRunning() bool                       { return true }
-func (replayPort) Drain([]network.Inbound) int           { return 0 }
-func (p replayPort) ParticipantID() uint32               { return p.id }
 
 // loadJournal reads a journal set and the configuration that reproduces it. The
 // viewer supplies where the scenario the anchor names resolves, as the run's

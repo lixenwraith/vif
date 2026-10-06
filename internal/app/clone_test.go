@@ -17,7 +17,7 @@ import (
 
 // TestAReplayRestoredFromACheckpointContinuesAsItsSource: a copy restored where
 // another replay stood steps on through the same simulation surface, across a game
-// reset and in a guest's journal, whose session it stands in for.
+// reset and in a guest's journal, whose session it follows from the notes.
 func TestAReplayRestoredFromACheckpointContinuesAsItsSource(t *testing.T) {
 	t.Parallel()
 	t.Run("solo across a reset", func(t *testing.T) {

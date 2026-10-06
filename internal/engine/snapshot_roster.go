@@ -62,7 +62,7 @@ func writeOwned[T any](s *Store[T], e core.Entity, o owned[T]) {
 func (w *World) CaptureCursorControl() LocalControl {
 	var out LocalControl
 	out.local = w.Resources.Player.LocalSlot()
-	session := w.LocalParticipant() != 0
+	session := w.Session().Participant != 0
 	w.Components.Cursor.Each(func(e core.Entity, c *component.CursorComponent) bool {
 		if int(c.Slot) < parameter.MaxPlayers {
 			out.control[c.Slot], out.held[c.Slot] = c.Control, true
@@ -157,7 +157,7 @@ func (w *World) RebindCursorRoster(prior LocalControl) {
 		return true
 	})
 
-	localID := w.LocalParticipant()
+	localID := w.Session().Participant
 	// The placements this instance has requested are still pending on the barrier
 	// after the write; dropping them would snap the local cell back for a lead.
 	// They are kept exactly when the same entity is still the cursor it drives.
