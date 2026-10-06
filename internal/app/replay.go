@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"slices"
 
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -124,9 +123,9 @@ func (a *App) VerifyAnchor(an event.JournalAnchor) error {
 	return firstAnchorMismatch("anchor", fields)
 }
 
-// newReplayDriver checks App-specific policy, then hands the record timeline to
+// newReplayDriver checks App-specific policy, then hands the stream to
 // internal/journal. The driver itself knows only the small replayTarget contract.
-func newReplayDriver(a *App, records []event.JournalRecord, captures []event.JournalCapture) (*journal.ReplayDriver, error) {
+func newReplayDriver(a *App, s *journal.Stream) (*journal.ReplayDriver, error) {
 	if !a.cfg.Mode.Driven() {
 		return nil, errors.New("replay: requires a caller-driven App")
 	}
@@ -136,7 +135,7 @@ func newReplayDriver(a *App, records []event.JournalRecord, captures []event.Jou
 	// The recorded run's session and the authority's worlds that settled its
 	// predictions are not here; what they decided is in the records.
 	a.world.RunSafe(func() { a.world.FollowJournal() })
-	return journal.NewReplayDriver(replayTarget{a: a}, records, captures), nil
+	return journal.NewReplayDriver(replayTarget{a: a}, s), nil
 }
 
 type replayTarget struct{ a *App }
@@ -221,20 +220,6 @@ func loadJournal(viewer Config, paths []string) (journal.Set, Config, error) {
 	return set, cfg, err
 }
 
-// replayDriver binds a its own copy of the set's stream, since a driver sorts its
-// records in place, and the digests it is compared against.
-func replayDriver(a *App, set journal.Set) (*journal.ReplayDriver, error) {
-	d, err := newReplayDriver(a, slices.Clone(set.Records), slices.Clone(set.Captures))
-	if err != nil {
-		return nil, err
-	}
-	if set.End != nil {
-		d.FinishAt(*set.End)
-	}
-	d.CompareDigests(set.Digests)
-	return d, nil
-}
-
 // VerifyJournal replays a journal flat out without presenting it, up to its end or
 // the first digest it does not reproduce, which is returned as the error.
 func VerifyJournal(viewer Config, paths ...string) (journal.ReplayStats, error) {
@@ -253,7 +238,7 @@ func VerifyJournal(viewer Config, paths ...string) (journal.ReplayStats, error) 
 	if err := a.VerifyAnchor(set.Anchors[0]); err != nil {
 		return journal.ReplayStats{}, err
 	}
-	d, err := replayDriver(a, set)
+	d, err := newReplayDriver(a, set.Stream())
 	if err != nil {
 		return journal.ReplayStats{}, err
 	}
@@ -271,7 +256,7 @@ func VerifyJournal(viewer Config, paths ...string) (journal.ReplayStats, error) 
 // Replay consumes an entire record stream. The caller runs any trailing ticks the
 // last record misses.
 func (a *App) Replay(records []event.JournalRecord) (journal.ReplayStats, error) {
-	d, err := newReplayDriver(a, records, nil)
+	d, err := newReplayDriver(a, journal.Set{Records: records}.Stream())
 	if err != nil {
 		return journal.ReplayStats{Records: len(records)}, err
 	}

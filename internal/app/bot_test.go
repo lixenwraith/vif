@@ -443,11 +443,11 @@ func TestBotReplayEndsAtTheRecordedSimulationBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	d, err := newReplayDriver(a, capture.Records(), capture.Captures())
+	end := capture.End()
+	d, err := newReplayDriver(a, journal.Set{Records: capture.Records(), Captures: capture.Captures(), End: &end}.Stream())
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.FinishAt(capture.End())
 	if err := d.RunAll(); err != nil {
 		t.Fatal(err)
 	}
