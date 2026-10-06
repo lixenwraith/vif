@@ -40,7 +40,9 @@ func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorM
 		return width, height, colorMode
 	}
 	a.term = a.termSvc.Terminal()
-	core.SetCrashTerminal(a.term)
+	if a.cfg.borrow == nil {
+		core.SetCrashTerminal(a.term) // a copy built off the frame loop shares the lender's
+	}
 	colorMode = a.term.ColorMode()
 	if a.cfg.Mode.OwnsGeometry() || a.cfg.terminalGeometry {
 		width, height = a.term.Size()

@@ -472,10 +472,9 @@ func (s *NetworkSystem) Init() {
 	s.crossSeq = 0
 	s.appliedCrossSeq = 0
 	s.appliedAhead = make(map[uint64]struct{})
-	s.localSource = 0
+	s.localSource = s.world.Session().Participant
 	s.delayTicks = parameter.NetworkBarrierDelayTicks
 	if r := s.world.Resources.Network; r != nil {
-		s.localSource = r.ParticipantID
 		s.delayTicks = r.BarrierDelayTicks
 	}
 	s.encodeErr = 0
@@ -580,18 +579,22 @@ func (s *NetworkSystem) localTick() uint64 {
 }
 
 // adoptDelay installs this instance's own lead at the tick its journaled event
-// dispatches, so a reproduction switches on the same tick. The resource is the
-// single copy refreshLink re-reads. Caller holds the world lock.
+// dispatches, so a reproduction switches on the same tick. The resource is the copy
+// refreshLink re-reads; a replay holds none, and keeps the system's own.
+// Caller holds the world lock.
 func (s *NetworkSystem) adoptDelay(ticks uint64) {
 	ticks = min(max(ticks, parameter.NetworkBarrierMinDelayTicks), parameter.NetworkBarrierMaxDelayTicks)
-	r := s.world.Resources.Network
-	if r == nil || r.BarrierDelayTicks == ticks {
-		return
-	}
-	r.BarrierDelayTicks = ticks
 	s.mu.Lock()
+	same := s.delayTicks == ticks
 	s.delayTicks = ticks
 	s.mu.Unlock()
+	if r := s.world.Resources.Network; r != nil {
+		same = r.BarrierDelayTicks == ticks
+		r.BarrierDelayTicks = ticks
+	}
+	if same {
+		return
+	}
 	s.statDelayTicks.Store(int64(ticks))
 	s.world.Log().Info("net", "msg", "playout lead adopted", "ticks", ticks, "tick", s.localTick())
 }
@@ -1010,12 +1013,12 @@ func (s *NetworkSystem) refreshLink(p engine.NetworkPort) bool {
 	// because the tick an artifact applies at is what a reproduction has to reach.
 	active := s.enabled && (s.world.SessionBarrier() ||
 		(p != nil && p.IsRunning() && p.PeerCount() > 0))
+	s.mu.Lock()
+	s.localSource = s.world.Session().Participant
 	if r := s.world.Resources.Network; r != nil {
-		s.mu.Lock()
-		s.localSource = r.ParticipantID
 		s.delayTicks = r.BarrierDelayTicks
-		s.mu.Unlock()
 	}
+	s.mu.Unlock()
 	s.barrierActive.Store(active)
 	s.statDelayTicks.Store(int64(s.barrierDelayTicks()))
 	return active
@@ -1114,8 +1117,8 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 	if len(s.crossings) == 0 {
 		s.productionEpoch = max(s.productionEpoch, tick+1)
 	}
+	s.localSource = s.world.Session().Participant
 	if r := s.world.Resources.Network; r != nil {
-		s.localSource = r.ParticipantID
 		s.delayTicks = r.BarrierDelayTicks
 	}
 	if dropped > 0 {
@@ -1350,7 +1353,9 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 		switch in.Kind {
 		case network.InboundConnect:
 			s.world.PushLocal(event.EventNetworkConnect, &event.NetworkConnectPayload{PeerID: uint32(in.Peer)})
+			s.world.LatchSession()
 		case network.InboundDisconnect:
+			s.world.LatchSession()
 			s.world.PushLocal(event.EventNetworkDisconnect, &event.NetworkDisconnectPayload{PeerID: uint32(in.Peer)})
 			s.reportDisconnect(uint32(in.Peer), p.PeerCount())
 			s.forgetDigestPeer(uint32(in.Peer))
@@ -1507,7 +1512,12 @@ func (s *NetworkSystem) participantSlot(peerID uint32) (uint8, bool) {
 func (s *NetworkSystem) publishConnectionTelemetry(p engine.NetworkPort) {
 	peers := 0
 	state := "off"
-	if p != nil {
+	if session := s.world.Session(); p == nil && s.world.FollowsJournal() && s.world.SessionShared() {
+		peers, state = int(session.Peers), "down"
+		if session.Live {
+			state = "connected"
+		}
+	} else if p != nil {
 		peers = p.PeerCount()
 		if statePort, ok := p.(interface{ ConnectionState() network.ConnState }); ok {
 			switch statePort.ConnectionState() {

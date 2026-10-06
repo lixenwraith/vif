@@ -187,6 +187,7 @@ func TestCoordinatorLossRaisesLocalStatus(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	host, guest := network.NewLoopbackPair(1, 2)
 	w.Resources.Network = engine.NewNetworkResource(guest)
+	w.RunSafe(w.LatchSession)
 	net := NewNetworkSystem(w).(*NetworkSystem)
 
 	if err := host.Close(); err != nil {
@@ -221,6 +222,7 @@ func TestDismissalCannotAnnounceClosingLinksAsDepartures(t *testing.T) {
 	host, guest := network.NewLoopbackPair(1, 2)
 	t.Cleanup(func() { _ = host.Close(); _ = guest.Close() })
 	w.Resources.Network = engine.NewNetworkResource(guest)
+	w.RunSafe(w.LatchSession)
 	dismissed, lost := false, false
 	w.Resources.Network.OnDismissed = func() { dismissed = true }
 	w.Resources.Network.OnPeerLost = func(uint32) { lost = true }

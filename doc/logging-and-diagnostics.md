@@ -269,7 +269,8 @@ beside `TRACE` — while the node-local file keeps it for an operator.
 | `replay opened` | INFO | `records`, `digests`, `seed`, `speed` | `PlayJournal` |
 | `replay moved` | INFO | `run`, `tick`, `from_run`, `from_tick`, `delta` | each jump of the presented tick |
 | `replay diverged` | WARN | `run`, `tick`, `error` | the first digest the replay does not reproduce (§9) |
-| `replay checkpoint left the run` | WARN | `tick`, `error` | a restored copy failing a digest the presented run passed |
+| `replay checkpoint left the run` | WARN | `error` | a restored copy not reproducing its checkpoint's digest, or a copy standing or diverging where the run did not; checkpoints are dropped |
+| `replay checkpoint failed` / `replay step back failed` | WARN | `error` | a checkpoint could not be taken; a copy could not be built, so nothing replays behind |
 
 ### `sub="domain"`
 
@@ -761,7 +762,7 @@ Only a platform with no resolvable user-state/cache location falls back to
 | `command` | Ex command line, including a typed `:region`. |
 | `network` | Remote producer. |
 | `debug` | Harness or out-of-band APIs such as `App.Region`. |
-| `session` | Roster/lifecycle observation from the session layer, and what it settled: kill confirmations and a tick's prediction state. |
+| `session` | Roster/lifecycle observation from the session layer, and what it settled: kill confirmations and the session state the simulation reads. |
 | `device` | This machine's own output, the audio mute; never journaled. |
 
 The dispatcher does not branch on origin. The value exists for APM admission
@@ -850,9 +851,15 @@ records; the authority's worlds that proved them are not.
 
 Two events are notes, journaled and applied by replay but never dispatched:
 `EventCursorPredicted`, the D-18 placement a keystroke made, and
-`EventSessionPredicting`, the prediction state a tick opened under
-(`World.LatchSession`). A replay settles only a group that queued an event, as
-the recorded run did.
+`EventSessionState`, the session the simulation reads (`engine.SessionState`:
+live, this participant, the authority, whether its only peers are its own seats,
+and the peer count the network badge shows). `World.LatchSession` reads it from the
+transport under the world lock when a tick opens, a transport attaches or goes, the
+authority moves or a link comes or goes, and notes a change; prediction derives from
+it. A replay holds no transport: it follows these notes, and a written world names
+the participant and authority it is installed as, since a join writes before its
+transport attaches. A replay settles only a group that queued an event, as the
+recorded run did.
 
 Every `event.DigestIntervalTicks` (20) ticks the run writes a `digest` record,
 `jrun`, `jtick` and four hex hashes from `snapshot.DigestWorld` over both domains:
@@ -868,7 +875,7 @@ unattended and exits non-zero at the first digest it does not reproduce.
 
 `app.PlayJournal` presents the replay with fixed viewer controls rather than
 the keymap. [Runtime and concurrency](runtime.md), Replay playback, covers its
-keys, seeking, the copies that step back, sound, and how a replay logs.
+keys, seeking, how it goes back, sound, and how a replay logs.
 
 The same package owns the replay timeline and authored-script timeline. A
 `-script` event is emitted with `OriginDebug`; semantic intents retain the

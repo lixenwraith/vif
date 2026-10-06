@@ -184,7 +184,7 @@ func (r *Registry) groups() []statGroup {
 			return *p
 		}
 	}
-	gen := r.gen()
+	gen := r.Gen()
 
 	r.idxMu.Lock()
 	defer r.idxMu.Unlock()
@@ -196,8 +196,8 @@ func (r *Registry) groups() []statGroup {
 	return r.idx
 }
 
-// gen combines the four registration counters into one invalidation key
-func (r *Registry) gen() uint64 {
+// Gen combines the four registration counters into one invalidation key
+func (r *Registry) Gen() uint64 {
 	return r.Bools.Gen() + r.Ints.Gen() + r.Floats.Gen() + r.Strings.Gen()
 }
 

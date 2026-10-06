@@ -39,6 +39,7 @@ var (
 		}
 		return w
 	}}
+	snapshotInflaters = sync.Pool{New: func() any { return flate.NewReader(bytes.NewReader(nil)) }}
 )
 
 // EncodeJSON marshals the schema body and compresses it for transport.
@@ -121,9 +122,13 @@ func DecodeJSON(body []byte, dst any) error {
 		return json.Unmarshal(body[snapshotWireHeader:], dst)
 	}
 
-	r := flate.NewReader(bytes.NewReader(body[snapshotWireHeader:]))
+	r := snapshotInflaters.Get().(io.ReadCloser)
+	if err := r.(flate.Resetter).Reset(bytes.NewReader(body[snapshotWireHeader:]), nil); err != nil {
+		return fmt.Errorf("snapshot decompress: %w", err)
+	}
 	plain, readErr := io.ReadAll(io.LimitReader(r, int64(plainBytes)+1))
 	closeErr := r.Close()
+	snapshotInflaters.Put(r)
 	if readErr != nil {
 		return fmt.Errorf("snapshot decompress: %w", readErr)
 	}

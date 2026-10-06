@@ -3,19 +3,25 @@
 package app
 
 import (
+	"io/fs"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
+	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	"github.com/lixenwraith/vif/internal/status"
 )
 
 // TestReplayViewStopsAtTheMapEdges is the scroll rule: a map the viewer's view holds
@@ -180,7 +186,7 @@ func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.AttachTransport(replayPort{id: 1})
+	a.AttachTransport(network.NewMesh().Node(1))
 	p := &player{a: a, src: journalSource{d, a.log}, interval: parameter.GameUpdateInterval,
 		rec: engine.ScaleNormal, scale: engine.ScaleNormal}
 	p.key(terminal.Event{Key: terminal.KeyRune, Rune: ' '})
@@ -198,53 +204,257 @@ func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {
 	}
 }
 
-// TestAReplayKeepsItsTrailingCopiesAcrossACheckpoint: at 1x the copies trailing the
-// presented run cross each checkpoint it passes a few steps behind it. Rebuilding
-// them there put an App's construction on the frame loop for each tick of the ladder.
-func TestAReplayKeepsItsTrailingCopiesAcrossACheckpoint(t *testing.T) {
-	capture := journal.NewCapture()
-	source, _ := playBot(t, "default", fixtureSeed, 3*parameter.ReplayCheckpointSteps, capture)
-	source.Close()
-	cfg, err := ConfigFromAnchor(capture.Anchors()[0])
+// setOf is what Load reads from the journal rec captured.
+func setOf(rec *journal.Capture) journal.Set {
+	end := rec.End()
+	return journal.Set{Anchors: rec.Anchors(), Records: rec.Records(), Captures: rec.Captures(),
+		Digests: rec.Digests(), End: &end}
+}
+
+// replayPlayer presents a journal as PlayJournal does, on headless copies; edit
+// changes the configuration of the run that lends the terminal.
+func replayPlayer(t *testing.T, set journal.Set, edit func(*Config)) *player {
+	t.Helper()
+	cfg, err := ConfigFromAnchor(set.Anchors[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	end := capture.End()
-	stream := journal.Set{Records: capture.Records(), Digests: capture.Digests(), End: &end}.Stream()
+	if edit != nil {
+		edit(&cfg)
+	}
+	stream := set.Stream()
 	a, err := NewHeadless(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer a.Close()
 	d, err := newReplayDriver(a, stream)
 	if err != nil {
 		t.Fatal(err)
 	}
-	built := 0
-	p := &player{a: a, src: journalSource{d, a.log}, every: parameter.ReplayCheckpointSteps,
-		trail: []event.Stamp{a.Position()}, slots: make(chan struct{}, 1)}
-	p.rebuild = func() (*App, pacedSource, error) {
-		built++
-		twin, err := NewHeadless(cfg)
-		if err != nil {
-			return nil, nil, err
+	shown := &replayCopy{a: a, src: journalSource{d, a.log}}
+	p := &player{a: a, src: shown.src, interval: parameter.GameUpdateInterval,
+		rec: engine.ScaleNormal, scale: engine.ScaleNormal}
+	p.rw = newRewinder(shown, a, replayCopies(a, cfg, stream, NewHeadless))
+	t.Cleanup(func() {
+		p.rw.close()
+		a.Close()
+	})
+	return p
+}
+
+// playSteps plays the presented copy n steps on, as '.' grants them, taking each
+// batch back as the frame loop does.
+func playSteps(p *player, n int) {
+	p.paused, p.step = true, n
+	for p.rw.lent || p.step > 0 && !p.done {
+		if p.rw.lent {
+			(<-p.rw.results)()
+			continue
 		}
-		td, err := newReplayDriver(twin, stream)
-		return twin, journalSource{td, twin.log}, err
+		p.advance(0)
 	}
-	defer p.closeRebuilt()
-	for p.tickOnce() {
-		p.keep()
-		// At 1x the copies park between the presented ticks
-		for _, r := range p.spares {
-			for ok, err := r.parked(); !ok && err == nil; ok, err = r.parked() {
-				time.Sleep(time.Millisecond)
+}
+
+// settle runs frames until what the viewer asked for is presented and every job off
+// the frame loop has returned.
+func settle(t *testing.T, p *player) {
+	t.Helper()
+	for deadline := time.Now().Add(time.Minute); p.seek != nil || p.backs > 0 || p.rw.busy || p.rw.lent || p.rw.ready != nil; {
+		if time.Now().After(deadline) {
+			t.Fatalf("the replay never settled: seek %+v backs %d busy %t", p.seek, p.backs, p.rw.busy)
+		}
+		select {
+		case apply := <-p.rw.results:
+			apply()
+		default:
+			p.advance(0)
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+// TestAReplayStepsBackOneTickAPressFromItsRing: each step back presents the tick
+// before the one shown. The last ring of steps restores without replaying, and one
+// further back replays from the ladder and refills the ring as it goes.
+func TestAReplayStepsBackOneTickAPressFromItsRing(t *testing.T) {
+	t.Parallel()
+	rec := journal.NewCapture()
+	source, _ := playBot(t, "default", fixtureSeed, parameter.ReplayCheckpointSteps+60, rec)
+	source.Close()
+	p := replayPlayer(t, setOf(rec), nil)
+	const shown = parameter.ReplayCheckpointSteps + 40
+	playSteps(p, shown)
+	settle(t, p)
+	for i := 1; i <= 2*parameter.ReplayRing+2; i++ {
+		p.control(',')
+		settle(t, p)
+		if got, want := p.rw.shown.steps, shown-i; got != want || p.a.Position() != p.rw.trail[want] {
+			t.Fatalf("press %d presents step %d at %+v, want step %d at %+v", i, got, p.a.Position(), want, p.rw.trail[want])
+		}
+	}
+	if p.rw.every == 0 || len(p.rw.trail) != shown+1 {
+		t.Fatalf("stepping back dropped the checkpoints (every %d) or rewrote the run (%d steps)", p.rw.every, len(p.rw.trail)-1)
+	}
+}
+
+// TestAReplaySeekLandsOnTheFirstStepAtOrPastItsTick: a seek names a tick of the run
+// shown and lands on the first step there or after, behind, ahead, and past what the
+// replay has reached; a tick past its run's end lands on the next run's start.
+func TestAReplaySeekLandsOnTheFirstStepAtOrPastItsTick(t *testing.T) {
+	t.Parallel()
+	data, err := fs.ReadFile(asset.DefaultBots, "default.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph, err := bot.ParseGraph("default", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := journal.NewCapture()
+	a, err := NewHeadless(Config{Seed: 0xC1, Width: 120, Height: 40,
+		Resources: resource.Options{Embedded: true}, Journal: true, JournalSink: rec})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.localParticipant())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range 300 {
+		if i == 150 {
+			a.Reset(false)
+		}
+		if more, err := d.Step(); !more || err != nil {
+			t.Fatalf("bot: more %v, err %v", more, err)
+		}
+	}
+	a.Close()
+
+	p := replayPlayer(t, setOf(rec), nil)
+	lands := func(tick uint64, want event.Stamp) {
+		t.Helper()
+		p.goTo(tick)
+		settle(t, p)
+		if at := p.a.Position(); tickOrder(at, want) != 0 || !p.paused {
+			t.Fatalf(":r tick %d presents %+v (paused %t), want run %d tick %d", tick, at, p.paused, want.Run, want.Tick)
+		}
+	}
+	lands(80, event.Stamp{Tick: 80}) // ahead, past what the replay reached
+	lands(30, event.Stamp{Tick: 30}) // behind
+	lands(60, event.Stamp{Tick: 60}) // ahead, inside what it reached
+	p.goTo(1 << 20)                  // past run 0's end
+	settle(t, p)
+	first := p.rw.trail[slices.IndexFunc(p.rw.trail, func(s event.Stamp) bool { return s.Run == 1 })]
+	if at := p.a.Position(); tickOrder(at, first) != 0 {
+		t.Fatalf("a tick past run 0's end presents %+v, want run 1's first step %+v", at, first)
+	}
+	lands(first.Tick+40, event.Stamp{Run: 1, Tick: first.Tick + 40})
+	lands(first.Tick+10, event.Stamp{Run: 1, Tick: first.Tick + 10})
+}
+
+// TestACopyThatLeftTheRunIsNeverPresented: a copy restored from a checkpoint that
+// does not reproduce its world, or that stands where the run did not, is replaced by
+// one replayed from the start; no checkpoint is trusted after, and the bar does not
+// claim a divergence the recording does not have.
+func TestACopyThatLeftTheRunIsNeverPresented(t *testing.T) {
+	t.Parallel()
+	rec := journal.NewCapture()
+	source, _ := playBot(t, "default", fixtureSeed, parameter.ReplayCheckpointSteps+60, rec)
+	source.Close()
+	const shown = parameter.ReplayCheckpointSteps + 40
+	for name, spoil := range map[string]func(p *player) int{
+		"digest": func(p *player) int {
+			p.rw.ring[(shown-1)%parameter.ReplayRing].digest.Positions ^= 1
+			p.control(',')
+			return shown - 1
+		},
+		"trail": func(p *player) int {
+			p.rw.trail[parameter.ReplayCheckpointSteps+10].Tick += 1000
+			p.goTo(p.rw.trail[parameter.ReplayCheckpointSteps+20].Tick)
+			return parameter.ReplayCheckpointSteps + 20
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			p := replayPlayer(t, setOf(rec), nil)
+			playSteps(p, shown)
+			settle(t, p)
+			trail := slices.Clone(p.rw.trail)
+			want := spoil(p)
+			settle(t, p)
+			if got := p.a.Position(); p.rw.shown.steps != want || got != trail[want] {
+				t.Fatalf("presents step %d at %+v, want step %d at %+v", p.rw.shown.steps, got, want, trail[want])
 			}
-		}
+			if p.rw.every != 0 || p.rw.ladder != nil || p.rw.nearest(shown) != nil {
+				t.Fatal("checkpoints are still trusted after one left the run")
+			}
+			p.report()
+			if bar := p.a.ctx.GetStatusMessage(); strings.Contains(bar, "diverged") {
+				t.Fatalf("the bar claims a divergence the recording does not have: %q", bar)
+			}
+		})
 	}
-	if len(p.checkpoints) < 2 || built != parameter.ReplayBackSpares {
-		t.Fatalf("across %d checkpoints the ladder of %d was built %d times",
-			len(p.checkpoints), parameter.ReplayBackSpares, built)
+}
+
+// TestOnlyThePresentedReplayCopyHoldsTheFlightRecorder: a crash or race flush
+// reaches the one process-wide recorder, so it belongs to the copy presented. A copy
+// built off the frame loop holds none, and the run that lent the terminal gets it back.
+func TestOnlyThePresentedReplayCopyHoldsTheFlightRecorder(t *testing.T) {
+	const depth = 50
+	capture := journal.NewCapture()
+	source, _ := playBot(t, "default", fixtureSeed, 60, capture)
+	source.Close()
+	p := replayPlayer(t, setOf(capture), func(c *Config) { c.RecTicks = depth })
+	lender := p.a
+	playSteps(p, 20)
+	p.control(',')
+	settle(t, p)
+	depthOf := func(x *App) int { return x.world.Resources.Status.RecorderDepth() }
+	if p.a == lender || depthOf(p.a) != depth || depthOf(lender) != 0 || !status.RecorderActive() {
+		t.Fatalf("after a step back the presented copy records %d ticks, the lender %d", depthOf(p.a), depthOf(lender))
+	}
+	if depthOf(p.rw.idle.a) != 0 {
+		t.Fatalf("the idle copy records %d ticks", depthOf(p.rw.idle.a))
+	}
+	p.rw.close()
+	if depthOf(lender) != depth {
+		t.Fatalf("the lender records %d ticks after the copies closed, want %d", depthOf(lender), depth)
+	}
+}
+
+// TestAReplayThatFailsPausesThereAndStepsBack: a stream that fails, as a written
+// world does once the replay has left its run, ends where it failed. The viewer stays
+// there with the error on the bar, can go back, and plays no further than it.
+func TestAReplayThatFailsPausesThereAndStepsBack(t *testing.T) {
+	t.Parallel()
+	set := setOf(guestJournalPastItsHost(t, func(*App) {}))
+	set.Captures[len(set.Captures)-1].Body = []byte("{")
+	p := replayPlayer(t, set, nil)
+	rw := p.rw
+	bar := func() string {
+		p.report()
+		return p.a.ctx.GetStatusMessage()
+	}
+	playSteps(p, 1<<20)
+	settle(t, p)
+	failed := rw.failedAt
+	if !p.done || !p.paused || rw.fail == nil || !strings.Contains(bar(), "ERROR") {
+		t.Fatalf("at the failure: done %t paused %t failure %v, bar %q", p.done, p.paused, rw.fail, bar())
+	}
+	p.control(',')
+	settle(t, p)
+	if rw.shown.steps != failed || p.a.Position() != rw.trail[failed] || !strings.Contains(bar(), "ERROR") {
+		t.Fatalf("a step back from the failure presents step %d at %+v, want step %d at %+v; bar %q",
+			rw.shown.steps, p.a.Position(), failed, rw.trail[failed], bar())
+	}
+	playSteps(p, 1)
+	if rw.shown.steps != failed || !p.done {
+		t.Fatalf("a step on from the last good step reached step %d (done %t), want to stop at %d", rw.shown.steps, p.done, failed)
+	}
+	p.control(',')
+	settle(t, p)
+	if rw.shown.steps != failed-1 {
+		t.Fatalf("a step back from where it failed presents step %d, want %d", rw.shown.steps, failed-1)
 	}
 }
 

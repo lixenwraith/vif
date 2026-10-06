@@ -162,6 +162,8 @@ type App struct {
 	// publish its cost into a registry that is frozen by then.
 	telemetry snapshot.Telemetry
 
+	sharedStatus statusKeys // the registry keys a capture carries; world lock
+
 	// The three halves of the authority protocol, built together because they hold
 	// references to each other: corrections is what this instance publishes and
 	// installs, authority whether it is allowed to, and reach the links a
@@ -260,6 +262,8 @@ func (a *App) init() error {
 	if err := a.initJournal(); err != nil {
 		return err
 	}
+	// After the journal opens, so a run that starts in a session notes it first.
+	a.world.RunSafe(a.world.LatchSession)
 	if a.cfg.Mode.Presents() {
 		a.initPresentation()
 	}

@@ -312,6 +312,7 @@ func (a *App) attachTransportLocked(port engine.NetworkPort) {
 	}
 	a.world.Resources.Network = r
 	a.world.MarkSessionShared()
+	a.world.LatchSession()
 	a.ctx.PublishMapLock()
 }
 
