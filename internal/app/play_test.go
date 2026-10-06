@@ -247,3 +247,40 @@ func TestAReplayKeepsItsTrailingCopiesAcrossACheckpoint(t *testing.T) {
 			len(p.checkpoints), parameter.ReplayBackSpares, built)
 	}
 }
+
+// TestAPresentedReplayStepIsOneRecordedTick: a correction a guest wrote between two
+// ticks took none of the recorded run's time. Presented as a step of its own, it
+// held the view a tick each time one was installed.
+func TestAPresentedReplayStepIsOneRecordedTick(t *testing.T) {
+	rec := guestJournalPastItsHost(t, func(*App) {})
+	cfg, err := ConfigFromAnchor(rec.Anchors()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	d, err := newReplayDriver(a, rec.Records(), rec.Captures())
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := journalSource{d, a.log}
+	for {
+		from := a.Position()
+		more, err := src.Step()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !more {
+			break
+		}
+		if at := a.Position(); at.Run == from.Run && at.Tick == from.Tick {
+			t.Fatalf("a presented step stood at run %d tick %d", at.Run, at.Tick)
+		}
+	}
+	if st := d.Stats(); st.Installed < 2 {
+		t.Fatalf("the guest journal installed %d worlds; it exercised no correction", st.Installed)
+	}
+}
