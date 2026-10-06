@@ -206,7 +206,8 @@ func waitForCursors(t *testing.T, a *App, n int) {
 			}
 		}
 	})
-	t.Fatalf("the roster holds %d cursors, want %d; %+v; %s; bots %s", held, n, a.Position(), a.SessionSummary(), a.seatsSummary()+fmt.Sprint((instance{a}).WorldRoster()))
+	t.Fatalf("the roster holds %d cursors, want %d; %+v; %s; bots %s; status %q", held, n, a.Position(), a.SessionSummary(),
+		a.seatsSummary()+fmt.Sprint((instance{a}).WorldRoster()), a.ctx.GetStatusMessage())
 }
 
 // TestAHoldersBotsComeAndGoAsParticipants: a run with bots and no session hosts one
@@ -409,10 +410,11 @@ func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.
 		t.Fatal("the guest did not inherit the session")
 	}
 	waitForCursors(t, holder, 2)
-	for _, intent := range input.AppendCommand(nil, "bot add 2:patrol") {
-		if !holder.Inject(&intent) {
-			t.Fatal("adding bots quit the run")
-		}
+	// Through the session control `:bot add` calls rather than typed: the holder's own
+	// bot types as well, and a mode it switched to would swallow the command.
+	holder.world.RunSafe(func() { err = holder.ctx.SessionCtl.AddBot("2:patrol") })
+	if err != nil {
+		t.Fatalf("adding bots: %v", err)
 	}
 	waitForCursors(t, holder, 4)
 	select {
