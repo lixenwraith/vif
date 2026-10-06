@@ -441,7 +441,7 @@ which keeps only quit, the audio toggle and `:`.
 | `q` | Quit. |
 
 The status bar adds `diverged by tick <n>` once the replay fails to reproduce a
-world digest the run wrote (logging and diagnostics §9), and an `app`
+world digest the run wrote (logging and diagnostics §9), and a `journal`
 `replay diverged` Warn record names it. `-r <file> -headless` runs the same check
 flat out, with no terminal.
 
@@ -450,8 +450,11 @@ refuses. A game reset starts a run whose ticks count from zero, so `tick` and
 `time` address the run shown; the status bar reports run, tick and its 1x time.
 
 Pacing converts the recorded tick interval and speed to wall time, then applies
-the viewer's rate. The simulation keeps its recorded geometry; the frame is laid
-out for the viewer's terminal, and a resize re-lays it. A map the view holds is
+the viewer's rate. A presented step is one recorded tick: a guest's written world
+and the groups that landed on it take none of the run's time, so they share the
+tick after them rather than holding the view a tick of their own. The simulation
+keeps its recorded geometry; the frame is laid out for the viewer's terminal, and a
+resize re-lays it. A map the view holds is
 centred in void as the game centres it; a larger one is shown from the recorded
 view's centre, and scroll stops at the map's edges. The command line holds
 playback, as the game's does, and borrows the recorded mode without announcing a

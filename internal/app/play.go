@@ -111,11 +111,17 @@ type journalSource struct {
 	log *vlog.Log
 }
 
-// Step logs the first digest the replay does not reproduce; the bar keeps showing it.
+// Step advances one recorded tick. A world written between two ticks, or a group
+// landing on one, took none of the recorded run's time, so it shares the next tick's
+// rather than holding the view a tick of its own. It logs the first digest the
+// replay does not reproduce; the bar keeps showing it.
 func (s journalSource) Step() (bool, error) {
-	before := s.d.Stats().Diverged
+	from := s.d.Stats()
 	more, err := s.d.Step()
-	if v := s.d.Stats().Diverged; v != nil && before == nil {
+	for at := s.d.Stats().End; more && err == nil && at.Run == from.End.Run && at.Tick == from.End.Tick; at = s.d.Stats().End {
+		more, err = s.d.Step()
+	}
+	if v := s.d.Stats().Diverged; v != nil && from.Diverged == nil {
 		s.log.Warn("journal", "msg", "replay diverged", "tick", v.At.Tick, "run", v.At.Run, "error", v.Error())
 	}
 	return more, err

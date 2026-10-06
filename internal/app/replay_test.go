@@ -310,57 +310,11 @@ func TestReplayReproducesRecordedRuns(t *testing.T) {
 // host has left, then replays the journal with no host: the joined world, each
 // correction written, the owner syncs and the session's end all come from records.
 func TestAGuestJournalReplaysFromItsJoin(t *testing.T) {
-	const seed, hostLeaves = 0x3017, 400
-	host := mustHeadless(t, seed, 120, 40)
-	defer host.Close()
-	tickUntilCursor(t, host)
-	host.Tick(240)
-	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
-		t.Fatalf("host: %v", err)
-	}
-	stop := tickInBackground(host)
-	rec := journal.NewCapture()
-	guest, _ := mustSocketJoiner(t, host.HostAddr(), seed, 120, 40, func(c *Config) {
-		c.Journal, c.JournalSink = true, rec
-	})
-	stop()
-	waitForRosterPair(t, host, guest)
-
 	want := map[event.Stamp][]string{}
-	rng := vmath.NewFastRand(3)
-	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
-	for i := range hostLeaves + 300 {
-		if i == hostLeaves {
-			host.Close()
-		}
-		if i == hostLeaves/4 {
-			// One guest crossing late at the host by construction, however fast the
-			// link: the host is two leads ahead when it is made, so the host applies it
-			// where it lands and the guest has a correction to install from the record.
-			host.Tick(2 * parameter.NetworkBarrierDelayTicks)
-			inject(t, guest, &input.Intent{Type: input.IntentFireMain, Count: 1}, intentMotion(input.MotionRight, 2))
-			guest.Tick(2 * parameter.NetworkBarrierDelayTicks)
-		}
-		if rng.Intn(3) == 0 {
-			inject(t, guest, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
-		}
-		if rng.Intn(5) == 0 {
-			inject(t, guest, &input.Intent{Type: input.IntentFireMain, Count: 1})
-		}
-		if i < hostLeaves {
-			if rng.Intn(3) == 0 {
-				inject(t, host, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
-			}
-			host.Tick(1)
-		}
-		guest.Tick(1)
-		guest.ApplyPendingCorrections()
+	rec := guestJournalPastItsHost(t, func(guest *App) {
 		p := guest.Position()
 		want[event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(guest)
-	}
-	if guest.World().PredictsShared() {
-		t.Fatal("the guest still predicts after its host left")
-	}
+	})
 
 	// Compared only on ticks nothing was recorded on: there the live guest had not
 	// yet consumed what the replay injects after the tick.
@@ -409,6 +363,63 @@ func TestAGuestJournalReplaysFromItsJoin(t *testing.T) {
 	if st := d.Stats(); st.Installed < 2 || compared < 100 {
 		t.Fatalf("replay installed %d worlds and compared %d ticks: the run exercised too little", st.Installed, compared)
 	}
+}
+
+// guestJournalPastItsHost records a guest from its join until after its host has
+// left, with one of its crossings late at the host, so the journal holds a
+// correction written between two ticks. each sees the guest after every tick.
+func guestJournalPastItsHost(t *testing.T, each func(guest *App)) *journal.Capture {
+	t.Helper()
+	const seed, hostLeaves = 0x3017, 400
+	host := mustHeadless(t, seed, 120, 40)
+	defer host.Close()
+	tickUntilCursor(t, host)
+	host.Tick(240)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	stop := tickInBackground(host)
+	rec := journal.NewCapture()
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), seed, 120, 40, func(c *Config) {
+		c.Journal, c.JournalSink = true, rec
+	})
+	stop()
+	waitForRosterPair(t, host, guest)
+
+	rng := vmath.NewFastRand(3)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	for i := range hostLeaves + 300 {
+		if i == hostLeaves {
+			host.Close()
+		}
+		if i == hostLeaves/4 {
+			// One guest crossing late at the host by construction, however fast the
+			// link: the host is two leads ahead when it is made, so the host applies it
+			// where it lands and the guest has a correction to install from the record.
+			host.Tick(2 * parameter.NetworkBarrierDelayTicks)
+			inject(t, guest, &input.Intent{Type: input.IntentFireMain, Count: 1}, intentMotion(input.MotionRight, 2))
+			guest.Tick(2 * parameter.NetworkBarrierDelayTicks)
+		}
+		if rng.Intn(3) == 0 {
+			inject(t, guest, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+		}
+		if rng.Intn(5) == 0 {
+			inject(t, guest, &input.Intent{Type: input.IntentFireMain, Count: 1})
+		}
+		if i < hostLeaves {
+			if rng.Intn(3) == 0 {
+				inject(t, host, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+			}
+			host.Tick(1)
+		}
+		guest.Tick(1)
+		guest.ApplyPendingCorrections()
+		each(guest)
+	}
+	if guest.World().PredictsShared() {
+		t.Fatal("the guest still predicts after its host left")
+	}
+	return rec
 }
 
 // TestAReplayNamesTheFirstDigestItDoesNotReproduce: a replay reproduces every digest
