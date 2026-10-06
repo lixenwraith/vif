@@ -486,6 +486,11 @@ otherwise the idle copy restores the nearest checkpoint, or starts fresh, replay
 there and keeps the last ring of steps before it, and is presented the next frame.
 So `,` within the ring restores without replaying.
 
+A step that fails, such as a written world failing its integrity check once the
+replay has left its run, ends the stream there: the viewer pauses on it with the
+error on the bar for the rest of the replay, `,` and seeks still work, and nothing
+plays past it. Quitting then exits with that error.
+
 A restored copy must reproduce its checkpoint's digest (positions, kinetics,
 combat, entity counts), and every copy stepping through ticks the run has passed
 must stand and diverge where the run did. One that does not is never presented:

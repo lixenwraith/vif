@@ -190,6 +190,7 @@ type stepPlan struct {
 	n        int
 	step     int
 	to       *event.Stamp
+	limit    int // the step the stream failed after, which ends it; -1 none
 	deadline time.Time
 	cancel   *atomic.Bool
 
@@ -230,6 +231,9 @@ func (c *replayCopy) advance(p stepPlan) (b batch) {
 			return
 		case p.step >= 0 && c.steps >= p.step, p.to != nil && tickOrder(c.a.Position(), *p.to) >= 0:
 			b.reached = true
+			return
+		case p.limit >= 0 && c.steps >= p.limit:
+			c.end = true
 			return
 		case p.n >= 0 && len(b.stamps) >= p.n, p.cancel != nil && p.cancel.Load(),
 			len(b.stamps) > 0 && !p.deadline.IsZero() && time.Now().After(p.deadline):
@@ -299,6 +303,8 @@ type rewinder struct {
 	trail      []event.Stamp
 	divergedAt int // the step that first failed a written digest, -1 none
 	diverged   *journal.Divergence
+	fail       error // the stream failed after step failedAt, where it ends
+	failedAt   int
 
 	ring   [parameter.ReplayRing]*checkpoint // the last steps taken, at step % len
 	ladder []*checkpoint                     // every `every` steps, thinned past the cap
@@ -318,14 +324,14 @@ type move struct {
 
 func newRewinder(shown *replayCopy, lender *App, build func() (*App, pacedSource, error)) *rewinder {
 	rw := &rewinder{build: build, lender: lender, shown: shown, results: make(chan func(), 2),
-		trail: []event.Stamp{shown.a.Position()}, divergedAt: -1, every: parameter.ReplayCheckpointSteps}
+		trail: []event.Stamp{shown.a.Position()}, divergedAt: -1, failedAt: -1, every: parameter.ReplayCheckpointSteps}
 	rw.pump()
 	return rw
 }
 
 // plan is what a copy at its step must reproduce and which of its steps to keep.
 func (rw *rewinder) plan(c *replayCopy) stepPlan {
-	p := stepPlan{n: -1, step: -1, divergedAt: rw.divergedAt, every: rw.every}
+	p := stepPlan{n: -1, step: -1, limit: rw.failedAt, divergedAt: rw.divergedAt, every: rw.every}
 	if c.steps+1 < len(rw.trail) {
 		p.known = rw.trail[c.steps+1:]
 	}

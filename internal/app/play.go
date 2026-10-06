@@ -188,15 +188,15 @@ func (p *player) run() error {
 
 	for {
 		if p.a.dismissed.Load() {
-			return nil
+			return p.failure()
 		}
 		select {
 		case <-sigChan:
-			return nil
+			return p.failure()
 
 		case ev := <-events:
 			if !p.event(ev) {
-				return nil
+				return p.failure()
 			}
 
 		case apply := <-results:
@@ -211,6 +211,15 @@ func (p *player) run() error {
 			}
 		}
 	}
+}
+
+// failure is why a replay's stream stopped, which quitting reports; a bot's or a
+// script's ends the presentation where it happens instead.
+func (p *player) failure() error {
+	if p.rw != nil {
+		return p.rw.fail
+	}
+	return nil
 }
 
 // event applies one terminal event; false ends the presentation.
@@ -362,9 +371,13 @@ func (p *player) play(pl stepPlan) batch {
 		p.paused = true
 		p.moveOff(c.steps, false)
 	case c.err != nil:
-		p.a.log.Error("app", "msg", "presented run failed", "error", c.err.Error())
-		p.done, p.err = true, c.err
-		p.a.ctx.SetStatusMessage("ERROR: "+c.err.Error(), 0, true)
+		// The stream ends where it failed: the viewer stays there and can go back
+		p.a.log.Error("app", "msg", "presented run failed", "step", c.steps, "error", c.err.Error())
+		p.rw.fail, p.rw.failedAt = c.err, c.steps
+		p.cancelSeek()
+		p.done, p.paused = true, true
+		p.holdMixer()
+		p.report()
 	case c.end:
 		p.done = true
 		p.holdMixer()
@@ -400,7 +413,10 @@ func (p *player) adopt(c *replayCopy) {
 	}
 	resume := p.seek != nil && p.seek.resume
 	p.seek, p.paused = nil, !resume
-	p.done, p.err, p.step, p.budget = c.end || c.err != nil, c.err, 0, 0
+	p.done, p.step, p.budget = c.end || c.err != nil, 0, 0
+	if c.err != nil && rw.fail == nil {
+		rw.fail, rw.failedAt = c.err, c.steps
+	}
 	p.logSeek(from, twin.Position())
 	if p.backs > 0 {
 		if p.backs--; p.backs > 0 {
@@ -467,7 +483,7 @@ func (p *player) toStep(m int, resume bool) {
 	p.cancelSeek()
 	p.paused = true
 	switch ck := rw.nearest(m); {
-	case m == c.steps:
+	case m == c.steps && c.err == nil:
 		p.paused = !resume
 	case m > c.steps && !c.end && c.err == nil && (ck == nil || ck.steps <= c.steps+parameter.ReplayRing):
 		p.seek = &seekState{step: m, resume: resume}
@@ -490,9 +506,14 @@ func (p *player) moveOff(m int, resume bool) {
 	rw.pump()
 }
 
-// back presents the step before the one shown.
+// back presents the step before the one shown; from a step that failed, the last one
+// that did not.
 func (p *player) back() {
-	if m := p.rw.shown.steps - 1; m >= 0 {
+	m := p.rw.shown.steps - 1
+	if p.rw.shown.err != nil {
+		m++
+	}
+	if m >= 0 {
 		p.toStep(m, false)
 		return
 	}
@@ -710,6 +731,9 @@ func (p *player) report() {
 	}
 	// The keys are on :help rather than on a bar the recording's messages share
 	keys := ":h for keys"
+	if rw := p.rw; rw != nil && rw.fail != nil {
+		keys = "ERROR: " + rw.fail.Error()
+	}
 	if p.live && !p.done {
 		state, keys = "LIVE", "hjkl 0 q"
 		if p.interactive {
