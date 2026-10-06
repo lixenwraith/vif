@@ -295,8 +295,9 @@ type rewinder struct {
 	lost    error                             // why build is nil
 	lender  *App                              // the run copies borrow the terminal from
 	results chan func()
-	busy    bool
-	shown   *replayCopy
+	busy    bool        // a build or a move is running
+	lent    bool        // a batch of the presented copy's steps is running
+	shown   *replayCopy // nothing but a batch touches it while lent
 
 	// trail is where the run stood after each step, as far as any copy went. It only
 	// grows, so a job reads its tail while the loop appends; a cut copies it.
@@ -345,6 +346,21 @@ func (rw *rewinder) plan(c *replayCopy) stepPlan {
 		p.nextLadder = (max(c.steps, len(rw.trail)-1)/p.every + 1) * p.every
 	}
 	return p
+}
+
+// lend steps the presented copy as p says on its own goroutine, so an install or a
+// checkpoint never holds the frame loop; then runs on the loop once it is handed back.
+func (rw *rewinder) lend(p stepPlan, then func(batch)) {
+	c, from := rw.shown, rw.shown.steps
+	rw.lent = true
+	core.Go(func() {
+		b := c.advance(p)
+		rw.results <- func() {
+			rw.lent = false
+			rw.learn(from, b)
+			then(b)
+		}
+	})
 }
 
 // learn takes what a copy's batch found from step from: the steps the run had not
@@ -536,7 +552,7 @@ func (rw *rewinder) close() {
 	}
 	rw.closing = true
 	rw.cancel()
-	for rw.busy {
+	for rw.busy || rw.lent {
 		(<-rw.results)()
 	}
 	for _, c := range []*replayCopy{rw.idle, rw.ready} {
