@@ -17,6 +17,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	"github.com/lixenwraith/vif/internal/status"
 )
 
 // TestReplayViewStopsAtTheMapEdges is the scroll rule: a map the viewer's view holds
@@ -246,6 +247,57 @@ func TestAReplayKeepsItsTrailingCopiesAcrossACheckpoint(t *testing.T) {
 	if len(p.checkpoints) < 2 || built != parameter.ReplayBackSpares {
 		t.Fatalf("across %d checkpoints the ladder of %d was built %d times",
 			len(p.checkpoints), parameter.ReplayBackSpares, built)
+	}
+}
+
+// TestOnlyThePresentedReplayCopyHoldsTheFlightRecorder: a crash or race flush
+// reaches the one process-wide recorder, so it belongs to the copy presented. A copy
+// replaying hidden holds none, and the run that lent the terminal gets it back.
+func TestOnlyThePresentedReplayCopyHoldsTheFlightRecorder(t *testing.T) {
+	const depth = 50
+	capture := journal.NewCapture()
+	source, _ := playBot(t, "default", fixtureSeed, 60, capture)
+	source.Close()
+	cfg, err := ConfigFromAnchor(capture.Anchors()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.RecTicks = depth
+	end := capture.End()
+	stream := journal.Set{Records: capture.Records(), Digests: capture.Digests(), End: &end}.Stream()
+	a, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	d, err := newReplayDriver(a, stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &player{a: a, src: journalSource{d, a.log}, every: parameter.ReplayCheckpointSteps,
+		trail: []event.Stamp{a.Position()}, slots: make(chan struct{}, 1),
+		lender: a, rebuild: replayCopies(a, cfg, stream, NewHeadless)}
+	for range 20 {
+		p.tickOnce()
+		p.keep()
+	}
+	p.control(',')
+	for p.a == a {
+		p.advance(0)
+		time.Sleep(time.Millisecond)
+	}
+	depthOf := func(x *App) int { return x.world.Resources.Status.RecorderDepth() }
+	if depthOf(p.a) != depth || depthOf(a) != 0 || !status.RecorderActive() {
+		t.Fatalf("after a step back the presented copy records %d ticks, the lender %d", depthOf(p.a), depthOf(a))
+	}
+	for _, r := range p.spares {
+		if depthOf(r.a) != 0 {
+			t.Fatalf("a hidden copy records %d ticks", depthOf(r.a))
+		}
+	}
+	p.closeRebuilt()
+	if depthOf(a) != depth {
+		t.Fatalf("the lender records %d ticks after the copies closed, want %d", depthOf(a), depth)
 	}
 }
 

@@ -169,6 +169,18 @@ func (r *Registry) EnableRecorder(depth int) {
 	active.Store(rc)
 }
 
+// TakeRecorder moves from's flight recorder, its depth and FSM trigger, to r, and the
+// process hook with it, for a runtime that replaces another; r's window starts empty.
+func (r *Registry) TakeRecorder(from *Registry) {
+	old := from.rec.Load()
+	if old == nil {
+		return
+	}
+	r.EnableRecorder(old.depth)
+	r.rec.Load().SetFSMTrigger(old.FSMTrigger())
+	from.EnableRecorder(0)
+}
+
 // RecorderDepth returns the configured ring depth in ticks, 0 when disabled
 func (r *Registry) RecorderDepth() int {
 	if rc := r.rec.Load(); rc != nil {

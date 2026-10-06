@@ -485,9 +485,11 @@ than the ladder's depth past it: a copy is built on the frame loop, and at 1x th
 ladder crosses each checkpoint the presented run passes a few steps behind it.
 A restored copy compares the journal's digests as it replays; one failing a digest
 the presented run reproduced stops checkpointing (a `journal` `replay checkpoint
-left the run` Warn), and copies replay from the start again. A copy that takes over brings the HUD pins, the speakers, whose engine
-plays on while the gates the copy replayed decide what sounds, and draws into the
-same cells rather than repainting the terminal.
+left the run` Warn), and copies replay from the start again. A copy that takes
+over brings the HUD pins, the speakers, whose engine plays on while the gates the
+copy replayed decide what sounds, and the process's flight recorder, whose window
+starts again (a hidden copy holds none), and draws into the same cells rather than
+repainting the terminal.
 
 A replay logs as play does, so `:log on` and `:log off` bound a window around an
 issue found by seeking. Each copy writes through its own log handle, muted until it
