@@ -63,16 +63,14 @@ const (
 	ProfCaptureDefault = 10 * time.Second
 	ProfCaptureMax     = 5 * time.Minute
 
-	// ReplayBackSpares is how many replay copies trail the presented one, a tick
-	// apart, so that many step backs present at once; each costs a world and its
-	// share of the simulation while playback runs
-	ReplayBackSpares = 8
+	// ReplayRing is how many of a replay's last steps keep a whole-state checkpoint,
+	// so a step back restores one instead of replaying to it
+	ReplayRing = 8
 
-	// ReplayCheckpointSteps is the presented steps between the whole-state
-	// checkpoints a replay keeps, so a copy behind its spares replays from the
-	// nearest instead of the stream's start. ReplayCheckpoints bounds how many are
-	// kept: past it every other is dropped and the spacing doubles. One holds about
-	// 6.5 MB at the map limit.
+	// ReplayCheckpointSteps is the steps between the checkpoints a replay keeps past
+	// its ring, so a move further back replays from the nearest instead of the
+	// stream's start. ReplayCheckpoints bounds how many are kept: past it every other
+	// is dropped and the spacing doubles. One holds about 6.5 MB at the map limit.
 	ReplayCheckpointSteps = 100
 	ReplayCheckpoints     = 32
 )
