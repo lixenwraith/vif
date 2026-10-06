@@ -70,6 +70,8 @@ It is the contract, not a suggestion.
   split it across stacked PRs or multiple branches.
 - Work that continues after its PR merged starts again from the latest main; never
   stack new commits on merged history.
+- Finish and push one commit before starting the next. Dispatch few subagents: a
+  usage limit stops every one in flight, and their unpushed work is lost.
 
 ## Gates
 
