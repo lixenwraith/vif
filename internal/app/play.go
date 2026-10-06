@@ -138,6 +138,7 @@ type player struct {
 	cmd          *viewerCommand // open while the viewer holds the command line or an overlay
 	err          error          // the stream's own failure, returned by run
 	pending      func()         // a :replay the router took, applied once it has returned
+	redraw       bool           // a batch returned; draw it now rather than at the next tick
 
 	// rw goes back in a journal replay, where a world cannot be rewound; nil for a
 	// stream that cannot be rebuilt.
@@ -190,22 +191,37 @@ func (p *player) run() error {
 		if p.a.dismissed.Load() {
 			return p.failure()
 		}
+		// A batch holds the presented copy: keys wait for it, and so does the frame
+		lent := p.rw != nil && p.rw.lent
+		evs := events
+		if lent {
+			evs = nil
+		}
 		select {
 		case <-sigChan:
 			return p.failure()
 
-		case ev := <-events:
+		case ev := <-evs:
 			if !p.event(ev) {
 				return p.failure()
 			}
 
 		case apply := <-results:
 			apply()
+			if p.redraw && !p.rw.lent {
+				p.redraw = false
+				p.frame()
+			}
 
 		case now := <-frameTicker.C:
+			if lent {
+				continue // last stays, so the time the batch took is owed
+			}
 			p.advance(now.Sub(last))
-			p.frame()
 			last = now
+			if p.rw == nil || !p.rw.lent {
+				p.frame()
+			}
 			if p.done && p.err != nil {
 				return p.err
 			}
@@ -240,6 +256,9 @@ func (p *player) event(ev terminal.Event) bool {
 
 // A live bot's command line borrows its input without stopping the session clock.
 func (p *player) advance(elapsed time.Duration) {
+	if p.rw != nil && p.rw.lent {
+		return // a batch holds the presented copy
+	}
 	p.live = p.interactive && p.a.sessionTransport() != nil
 	if p.interactive && p.live {
 		p.paused, p.scale = false, engine.ScaleNormal
@@ -333,18 +352,22 @@ func (p *player) advanceReplay(elapsed time.Duration) {
 		}
 	case s != nil:
 		pl.step, pl.to = s.step, s.to
-		if b := p.play(pl); b.reached || p.done {
-			p.seek, p.paused = nil, !s.resume
-			p.holdMixer()
-			p.report()
-		}
+		p.play(pl, func(b batch) {
+			if (b.reached || p.done) && p.seek == s {
+				p.seek, p.paused = nil, !s.resume
+				p.holdMixer()
+				p.report()
+			}
+		})
 	case p.done:
 	case p.paused:
 		if p.step > 0 {
 			pl.n, pl.ringAll = p.step, true
-			p.step -= len(p.play(pl).stamps)
-			p.holdMixer() // a recorded unpause inside the step released it
-			p.report()    // the key reported the tick before the step
+			p.play(pl, func(b batch) {
+				p.step -= len(b.stamps)
+				p.holdMixer() // a recorded unpause inside the step released it
+				p.report()    // the key reported the tick before the step
+			})
 		}
 	default:
 		p.budget += elapsed
@@ -353,18 +376,27 @@ func (p *player) advanceReplay(elapsed time.Duration) {
 			// Owed time a frame could not play is not banked: a run slower than its
 			// rate plays as fast as it can rather than in bursts.
 			pl.n, pl.ringAll = n, true
-			p.budget = min(p.budget-time.Duration(len(p.play(pl).stamps))*per, per)
+			p.play(pl, func(b batch) {
+				p.budget = min(p.budget-time.Duration(len(b.stamps))*per, per)
+			})
 		}
 	}
 }
 
-// play steps the presented copy as pl says and takes what it found. A copy that
-// left the run is replaced, from the start, at the last step it agreed on.
-func (p *player) play(pl stepPlan) batch {
+// play lends the presented copy to a batch of steps as pl says, and takes what it
+// found once it is back: a copy that left the run is replaced, from the start, at
+// the last step it agreed on; then sees the batch after that.
+func (p *player) play(pl stepPlan, then func(batch)) {
 	c := p.rw.shown
-	from := c.steps
-	b := c.advance(pl)
-	p.rw.learn(from, b)
+	p.rw.lend(pl, func(b batch) {
+		p.took(c, b)
+		then(b)
+		p.redraw = true
+	})
+}
+
+// took is the run's own handling of what a batch of the presented copy's steps found.
+func (p *player) took(c *replayCopy, b batch) {
 	switch {
 	case b.mismatch != nil:
 		p.cancelSeek()
@@ -383,7 +415,6 @@ func (p *player) play(pl stepPlan) batch {
 		p.holdMixer()
 		p.report()
 	}
-	return b
 }
 
 // adopt presents a copy a move positioned, carrying the viewer's HUD, speakers and

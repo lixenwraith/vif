@@ -452,7 +452,11 @@ refuses. A game reset starts a run whose ticks count from zero, so `tick` and
 Pacing converts the recorded tick interval and speed to wall time, then applies
 the viewer's rate. A presented step is one recorded tick: a guest's written world
 and the groups that landed on it take none of the run's time, so they share the
-tick after them rather than holding the view a tick of their own. The simulation
+tick after them rather than holding the view a tick of their own. The presented
+copy steps on its own goroutine in batches of at most three quarters of a frame
+that alternate with frames: the loop reads no key and draws nothing while one runs,
+so an install or a checkpoint delays a frame instead of stalling the loop, and owed
+time a run too slow for its rate cannot play is not banked. The simulation
 keeps its recorded geometry; the frame is laid out for the viewer's terminal, and a
 resize re-lays it. A map the view holds is
 centred in void as the game centres it; a larger one is shown from the recorded

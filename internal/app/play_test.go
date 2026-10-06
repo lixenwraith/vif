@@ -242,10 +242,15 @@ func replayPlayer(t *testing.T, set journal.Set, edit func(*Config)) *player {
 	return p
 }
 
-// playSteps plays the presented copy n steps on, as '.' grants them.
+// playSteps plays the presented copy n steps on, as '.' grants them, taking each
+// batch back as the frame loop does.
 func playSteps(p *player, n int) {
 	p.paused, p.step = true, n
-	for p.step > 0 && !p.done {
+	for p.rw.lent || p.step > 0 && !p.done {
+		if p.rw.lent {
+			(<-p.rw.results)()
+			continue
+		}
 		p.advance(0)
 	}
 }
@@ -254,7 +259,7 @@ func playSteps(p *player, n int) {
 // the frame loop has returned.
 func settle(t *testing.T, p *player) {
 	t.Helper()
-	for deadline := time.Now().Add(time.Minute); p.seek != nil || p.backs > 0 || p.rw.busy || p.rw.ready != nil; {
+	for deadline := time.Now().Add(time.Minute); p.seek != nil || p.backs > 0 || p.rw.busy || p.rw.lent || p.rw.ready != nil; {
 		if time.Now().After(deadline) {
 			t.Fatalf("the replay never settled: seek %+v backs %d busy %t", p.seek, p.backs, p.rw.busy)
 		}
