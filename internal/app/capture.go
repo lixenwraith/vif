@@ -3,7 +3,6 @@ package app
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"sort"
 
 	"github.com/lixenwraith/vif/internal/core"
@@ -18,43 +17,66 @@ import (
 
 // captureStatusLocked reads every shared-surface registry cell, through
 // snapshot.SharedKey — the same predicate the compared surface uses, so a capture
-// carries exactly what a session is asserted to agree on.
-//
+// carries exactly what a session is asserted to agree on. The keys are selected
+// again only after a registration: SharedKey over every key was most of a capture.
 // Caller MUST hold updateMutex.
 func (a *App) captureStatusLocked() snapshot.StatusState {
-	return a.statusCellsLocked(snapshot.SharedKey)
+	if a.sharedStatus.gen != a.world.Resources.Status.Gen() {
+		a.sharedStatus = a.statusKeysLocked(snapshot.SharedKey)
+	}
+	return a.statusCellsLocked(a.sharedStatus)
 }
 
-// statusCellsLocked reads the registry cells keep selects. Caller MUST hold updateMutex.
-func (a *App) statusCellsLocked(keep func(string) bool) snapshot.StatusState {
+// statusKeys is a selection of the registry's keys by kind, in key order so two
+// instances holding equal state produce equal bytes, made at registration count gen.
+type statusKeys struct {
+	gen                          uint64
+	ints, bools, floats, strings []string
+}
+
+// statusKeysLocked selects the registry keys keep admits. Caller MUST hold updateMutex.
+func (a *App) statusKeysLocked(keep func(string) bool) statusKeys {
+	reg := a.world.Resources.Status
+	gen := reg.Gen() // before the keys, so a registration between reads as stale
+	return statusKeys{gen: gen, ints: keysWhere(reg.Ints.Keys(), keep), bools: keysWhere(reg.Bools.Keys(), keep),
+		floats: keysWhere(reg.Floats.Keys(), keep), strings: keysWhere(reg.Strings.Keys(), keep)}
+}
+
+func keysWhere(keys []string, keep func(string) bool) []string {
+	var out []string
+	for _, k := range keys {
+		if keep(k) {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// statusCellsLocked reads the registry cells k names. Caller MUST hold updateMutex.
+func (a *App) statusCellsLocked(k statusKeys) snapshot.StatusState {
 	reg := a.world.Resources.Status
 	return snapshot.StatusState{
-		Ints: cellsOf(reg.Ints.Keys(), keep, func(k string) snapshot.IntCell {
+		Ints: cellsOf(k.ints, func(k string) snapshot.IntCell {
 			return snapshot.IntCell{Key: k, Value: reg.Ints.Get(k).Load()}
 		}),
-		Bools: cellsOf(reg.Bools.Keys(), keep, func(k string) snapshot.BoolCell {
+		Bools: cellsOf(k.bools, func(k string) snapshot.BoolCell {
 			return snapshot.BoolCell{Key: k, Value: reg.Bools.Get(k).Load()}
 		}),
-		Floats: cellsOf(reg.Floats.Keys(), keep, func(k string) snapshot.FloatCell {
+		Floats: cellsOf(k.floats, func(k string) snapshot.FloatCell {
 			return snapshot.FloatCell{Key: k, Value: reg.Floats.Get(k).Get()}
 		}),
-		Strings: cellsOf(reg.Strings.Keys(), keep, func(k string) snapshot.StringCell {
+		Strings: cellsOf(k.strings, func(k string) snapshot.StringCell {
 			return snapshot.StringCell{Key: k, Value: reg.Strings.Get(k).Load()}
 		}),
 	}
 }
 
-// cellsOf is one registry kind's selected cells, in key order so two instances
-// holding equal state produce equal bytes. The result is nil when nothing matches
-// rather than an empty slice, because the encoding distinguishes the two and the
-// capture's integrity hash covers it.
-func cellsOf[C any](keys []string, keep func(string) bool, cell func(string) C) []C {
-	slices.Sort(keys)
+// cellsOf is one registry kind's cells. It is nil for no keys rather than empty,
+// because the encoding distinguishes the two and the capture's integrity hash covers it.
+func cellsOf[C any](keys []string, cell func(string) C) []C {
 	var out []C
 	for _, k := range keys {
-		if keep(k) {
-			out = append(out, cell(k))
-		}
+		out = append(out, cell(k))
 	}
 	return out
 }
