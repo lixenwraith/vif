@@ -1023,17 +1023,21 @@ func (c *Corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
 // this instance's own tick, which is itself a prediction; and one this instance has
 // not yet reached, which is held rather than dropped.
 func (c *Corrections) install(cap snapshot.SharedCapture) error {
+	if c.superseded(cap) || c.hold(cap) {
+		return nil
+	}
+	return c.commit(cap)
+}
+
+// superseded reports, and counts, a correction no newer than the last installed.
+func (c *Corrections) superseded(cap snapshot.SharedCapture) bool {
 	c.installedMu.Lock()
 	stale := c.lastInstalled > 0 && cap.Header.Tick <= c.lastInstalled
 	c.installedMu.Unlock()
 	if stale {
 		c.tel.Superseded.Add(1)
-		return nil
 	}
-	if c.hold(cap) {
-		return nil
-	}
-	return c.commit(cap)
+	return stale
 }
 
 // commit installs one correction whose playout time has come.
@@ -1107,6 +1111,11 @@ func (c *Corrections) releaseHeld() {
 	c.installedMu.Lock()
 	c.held, c.haveHeld = snapshot.SharedCapture{}, false
 	c.installedMu.Unlock()
+	// A newer one may have jumped the clock past it since; installing this one then
+	// rewinds the world, losing every crossing applied after its tick.
+	if c.superseded(cap) {
+		return
+	}
 	if err := c.commit(cap); err != nil {
 		c.log.Warn("converge", "msg", "held correction not applied",
 			"tick", cap.Header.Tick, "error", err.Error())

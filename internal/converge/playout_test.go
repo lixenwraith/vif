@@ -74,6 +74,11 @@ func TestASecondWaitingCorrectionTakesTheStep(t *testing.T) {
 	if got := guest.world.Position().Tick; got != far {
 		t.Fatalf("the step left the clock at tick %d, want the newer authority's %d", got, far)
 	}
+	// The first is superseded by the step: released now, it would rewind the guest.
+	guest.c.Apply()
+	if n, got := guest.world.installs(), guest.world.Position().Tick; n != 1 || got != far {
+		t.Fatalf("after the step the guest installed %d times and stands at tick %d", n, got)
+	}
 }
 
 // TestATamperedKeyframeInstallsNothing: an install stages what the protocol has
