@@ -204,19 +204,25 @@ func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {
 	}
 }
 
+// setOf is what Load reads from the journal rec captured.
+func setOf(rec *journal.Capture) journal.Set {
+	end := rec.End()
+	return journal.Set{Anchors: rec.Anchors(), Records: rec.Records(), Captures: rec.Captures(),
+		Digests: rec.Digests(), End: &end}
+}
+
 // replayPlayer presents a journal as PlayJournal does, on headless copies; edit
 // changes the configuration of the run that lends the terminal.
-func replayPlayer(t *testing.T, rec *journal.Capture, edit func(*Config)) *player {
+func replayPlayer(t *testing.T, set journal.Set, edit func(*Config)) *player {
 	t.Helper()
-	cfg, err := ConfigFromAnchor(rec.Anchors()[0])
+	cfg, err := ConfigFromAnchor(set.Anchors[0])
 	if err != nil {
 		t.Fatal(err)
 	}
 	if edit != nil {
 		edit(&cfg)
 	}
-	end := rec.End()
-	stream := journal.Set{Records: rec.Records(), Captures: rec.Captures(), Digests: rec.Digests(), End: &end}.Stream()
+	stream := set.Stream()
 	a, err := NewHeadless(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -270,7 +276,7 @@ func TestAReplayStepsBackOneTickAPressFromItsRing(t *testing.T) {
 	rec := journal.NewCapture()
 	source, _ := playBot(t, "default", fixtureSeed, parameter.ReplayCheckpointSteps+60, rec)
 	source.Close()
-	p := replayPlayer(t, rec, nil)
+	p := replayPlayer(t, setOf(rec), nil)
 	const shown = parameter.ReplayCheckpointSteps + 40
 	playSteps(p, shown)
 	settle(t, p)
@@ -319,7 +325,7 @@ func TestAReplaySeekLandsOnTheFirstStepAtOrPastItsTick(t *testing.T) {
 	}
 	a.Close()
 
-	p := replayPlayer(t, rec, nil)
+	p := replayPlayer(t, setOf(rec), nil)
 	lands := func(tick uint64, want event.Stamp) {
 		t.Helper()
 		p.goTo(tick)
@@ -365,7 +371,7 @@ func TestACopyThatLeftTheRunIsNeverPresented(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			p := replayPlayer(t, rec, nil)
+			p := replayPlayer(t, setOf(rec), nil)
 			playSteps(p, shown)
 			settle(t, p)
 			trail := slices.Clone(p.rw.trail)
@@ -393,7 +399,7 @@ func TestOnlyThePresentedReplayCopyHoldsTheFlightRecorder(t *testing.T) {
 	capture := journal.NewCapture()
 	source, _ := playBot(t, "default", fixtureSeed, 60, capture)
 	source.Close()
-	p := replayPlayer(t, capture, func(c *Config) { c.RecTicks = depth })
+	p := replayPlayer(t, setOf(capture), func(c *Config) { c.RecTicks = depth })
 	lender := p.a
 	playSteps(p, 20)
 	p.control(',')
@@ -408,6 +414,42 @@ func TestOnlyThePresentedReplayCopyHoldsTheFlightRecorder(t *testing.T) {
 	p.rw.close()
 	if depthOf(lender) != depth {
 		t.Fatalf("the lender records %d ticks after the copies closed, want %d", depthOf(lender), depth)
+	}
+}
+
+// TestAReplayThatFailsPausesThereAndStepsBack: a stream that fails, as a written
+// world does once the replay has left its run, ends where it failed. The viewer stays
+// there with the error on the bar, can go back, and plays no further than it.
+func TestAReplayThatFailsPausesThereAndStepsBack(t *testing.T) {
+	t.Parallel()
+	set := setOf(guestJournalPastItsHost(t, func(*App) {}))
+	set.Captures[len(set.Captures)-1].Body = []byte("{")
+	p := replayPlayer(t, set, nil)
+	rw := p.rw
+	bar := func() string {
+		p.report()
+		return p.a.ctx.GetStatusMessage()
+	}
+	playSteps(p, 1<<20)
+	settle(t, p)
+	failed := rw.failedAt
+	if !p.done || !p.paused || rw.fail == nil || !strings.Contains(bar(), "ERROR") {
+		t.Fatalf("at the failure: done %t paused %t failure %v, bar %q", p.done, p.paused, rw.fail, bar())
+	}
+	p.control(',')
+	settle(t, p)
+	if rw.shown.steps != failed || p.a.Position() != rw.trail[failed] || !strings.Contains(bar(), "ERROR") {
+		t.Fatalf("a step back from the failure presents step %d at %+v, want step %d at %+v; bar %q",
+			rw.shown.steps, p.a.Position(), failed, rw.trail[failed], bar())
+	}
+	playSteps(p, 1)
+	if rw.shown.steps != failed || !p.done {
+		t.Fatalf("a step on from the last good step reached step %d (done %t), want to stop at %d", rw.shown.steps, p.done, failed)
+	}
+	p.control(',')
+	settle(t, p)
+	if rw.shown.steps != failed-1 {
+		t.Fatalf("a step back from where it failed presents step %d, want %d", rw.shown.steps, failed-1)
 	}
 }
 
