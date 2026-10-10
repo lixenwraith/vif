@@ -22,8 +22,8 @@ sanitizer_policy = "raw"
 # Bound both entry size and aggregate rate. Log loss is preferable to allowing a
 # log burst to consume resources needed by a running game.
 [pipelines.flow.rate_limit]
-rate = 400.0
-burst = 800.0
+entries_per_second = 400.0
+burst_entries = 800.0
 policy = "drop"
 max_entry_size_bytes = 65536
 
