@@ -43,7 +43,10 @@ func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorM
 	if a.cfg.borrow == nil {
 		core.SetCrashTerminal(a.term) // a copy built off the frame loop shares the lender's
 	}
-	colorMode = a.term.ColorMode()
+	// The terminal reports a text console as 16 colors, the console the 256-color tier draws for
+	if colorMode = a.term.ColorMode(); colorMode == terminal.ColorMode16 {
+		colorMode = terminal.ColorMode256
+	}
 	if a.cfg.Mode.OwnsGeometry() || a.cfg.terminalGeometry {
 		width, height = a.term.Size()
 	}
