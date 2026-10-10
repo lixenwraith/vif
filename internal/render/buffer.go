@@ -13,9 +13,9 @@ type backgroundOverlay struct {
 	intensity float64
 }
 
-// voidRegion is the part of the game area that no simulation cell covers: the
-// margin a map smaller than the viewport is centred in. Left at the theme
-// background it reads as playable space, so finalize paints it separately.
+// voidRegion is the part of the play frame no map cell covers: the margin a map
+// smaller than the viewport is centred in, and the gutter cells beside it. Left at
+// the theme background it reads as playable space, so finalize paints it separately.
 type voidRegion struct {
 	active    bool
 	area      Rect
@@ -322,7 +322,7 @@ func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg color.RGB) {
 	dst.Bg = bg
 	dst.Attrs = terminal.AttrNone
 	b.touched[idx] = true
-	// b.masks[idx] |= b.currentMask // changed due to game leaking to overlay, test if other things break
+	// An opaque write owns the cell: lower layers' tags must not reach post-processing
 	b.masks[idx] = b.currentMask
 }
 
@@ -429,8 +429,10 @@ func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask, excludeMas
 
 // === OUTPUT ===
 
-// finalize delegates to the appropriate implementation selected at init, then
-// repaints the non-playable margin over the background it just filled
+// finalize gives every cell nothing painted its region's background: the theme
+// background (or strobe overlay) on the map, the void colour around it. Every cell
+// also leaves with a glyph: after a resize the terminal records its screen as blank
+// black cells, so a blank black cell would match that record and never be sent.
 func (b *RenderBuffer) finalize() {
 	b.finalizeFunc(b)
 	b.fillVoid()
@@ -472,39 +474,43 @@ func (b *RenderBuffer) fillVoidBand(x0, x1, y0, y1 int) {
 	}
 }
 
-// finalizeTrueColorOcclusion handles untouched backgrounds and occlusion dimming
+// finalizeTrueColorOcclusion resolves untouched backgrounds and dims occluded ones
 func finalizeTrueColorOcclusion(b *RenderBuffer) {
-	// Pre-compute untouched background once
-	untouchedBg := visual.RgbBackground
-	if b.bgOverlay.active {
-		untouchedBg = color.Scale(b.bgOverlay.bgColor, b.bgOverlay.intensity)
-	}
-
+	untouchedBg := b.untouchedBg()
 	for i := range b.cells {
-		if !b.touched[i] {
-			b.cells[i].Bg = untouchedBg
-			continue
+		cell := &b.cells[i]
+		switch {
+		case !b.touched[i]:
+			cell.Bg = untouchedBg
+		case cell.Rune != 0 && b.masks[i]&visual.OcclusionDimMask != 0:
+			cell.Bg = color.Scale(cell.Bg, visual.OcclusionDimFactor)
 		}
-		// Occlusion dimming for touched cells with foreground
-		// if b.cells[i].Rune != 0 && b.masks[i]&visual.OcclusionDimMask != 0 && b.masks[i]&visual.MaskUI == 0 {
-		if b.cells[i].Rune != 0 && b.masks[i]&visual.OcclusionDimMask != 0 {
-			b.cells[i].Bg = color.Scale(b.cells[i].Bg, visual.OcclusionDimFactor)
+		if cell.Rune == 0 {
+			cell.Rune = ' '
 		}
 	}
 }
 
-// finalizeSimple handles untouched backgrounds only (256-color or no occlusion)
+// finalizeSimple resolves untouched backgrounds only (256-color or no occlusion)
 func finalizeSimple(b *RenderBuffer) {
-	untouchedBg := visual.RgbBackground
-	if b.bgOverlay.active {
-		untouchedBg = color.Scale(b.bgOverlay.bgColor, b.bgOverlay.intensity)
-	}
-
+	untouchedBg := b.untouchedBg()
 	for i := range b.cells {
+		cell := &b.cells[i]
 		if !b.touched[i] {
-			b.cells[i].Bg = untouchedBg
+			cell.Bg = untouchedBg
+		}
+		if cell.Rune == 0 {
+			cell.Rune = ' '
 		}
 	}
+}
+
+// untouchedBg is what a cell nothing painted shows this frame, outside the void
+func (b *RenderBuffer) untouchedBg() color.RGB {
+	if b.bgOverlay.active {
+		return color.Scale(b.bgOverlay.bgColor, b.bgOverlay.intensity)
+	}
+	return visual.RgbBackground
 }
 
 // FlushToTerminal writes render buffer to terminal

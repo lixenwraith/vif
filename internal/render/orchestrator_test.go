@@ -78,8 +78,8 @@ func TestScreenSpaceLayersStayUnclipped(t *testing.T) {
 }
 
 // TestTheMarginIsPresentedAsOutOfPlay covers the same frame without a UI layer
-// over it: the simulation layer stops at the map edge and the margin the map is
-// centred in is filled rather than left looking like empty playable space.
+// over it: the simulation layer stops at the map edge, and the frame around the
+// map, its margin and the gutters nothing numbered, is filled as out of play.
 func TestTheMarginIsPresentedAsOutOfPlay(t *testing.T) {
 	t.Parallel()
 
@@ -93,7 +93,7 @@ func TestTheMarginIsPresentedAsOutOfPlay(t *testing.T) {
 	ctx := centredContext()
 	o.RenderFrame(ctx, engine.NewWorld())
 
-	pf, area := ctx.PlayfieldRect(), ctx.GameAreaRect()
+	pf, frame := ctx.PlayfieldRect(), ctx.FrameRect()
 	for y := range screenH {
 		for x := range screenW {
 			got := term.at(x, y).Bg
@@ -101,7 +101,7 @@ func TestTheMarginIsPresentedAsOutOfPlay(t *testing.T) {
 			switch {
 			case pf.Contains(x, y):
 				want = drawn
-			case area.Contains(x, y):
+			case frame.Contains(x, y):
 				want = visual.RgbVoid
 			default:
 				want = visual.RgbBackground
@@ -114,8 +114,8 @@ func TestTheMarginIsPresentedAsOutOfPlay(t *testing.T) {
 }
 
 // TestACroppedMapIsUnchanged is the safety property: every run whose map matches
-// its viewport — crop_on_resize, or any camera-cropped map — composes exactly as
-// it did before the clip existed.
+// its viewport — crop_on_resize, or any camera-cropped map — composes the game area
+// exactly as it did before the clip existed. Gutters no layer here numbers are void.
 func TestACroppedMapIsUnchanged(t *testing.T) {
 	t.Parallel()
 
@@ -129,13 +129,16 @@ func TestACroppedMapIsUnchanged(t *testing.T) {
 	ctx := croppedContext()
 	o.RenderFrame(ctx, engine.NewWorld())
 
-	area := ctx.GameAreaRect()
+	area, frame := ctx.GameAreaRect(), ctx.FrameRect()
 	for y := range screenH {
 		for x := range screenW {
 			got := term.at(x, y).Bg
 			want := visual.RgbBackground
-			if area.Contains(x, y) {
+			switch {
+			case area.Contains(x, y):
 				want = drawn
+			case frame.Contains(x, y):
+				want = visual.RgbVoid
 			}
 			if got != want {
 				t.Fatalf("cell (%d,%d) = %v, want %v", x, y, got, want)

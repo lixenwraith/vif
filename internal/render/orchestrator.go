@@ -86,10 +86,10 @@ func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World)
 
 	// A map smaller than the viewport is centred in the game area, and the margin
 	// that leaves is not addressable by any simulation coordinate. The clip is set
-	// per layer here so no renderer has to re-derive the bound, and the margin is
-	// declared so finalize can present it as out of play rather than as empty map.
+	// per layer here so no renderer has to re-derive the bound, and the frame outside
+	// the map is declared so finalize presents it as out of play, not as empty map.
 	playfield := ctx.PlayfieldRect()
-	o.buffer.SetVoidRegion(ctx.GameAreaRect(), playfield, visual.RgbVoid)
+	o.buffer.SetVoidRegion(ctx.FrameRect(), playfield, visual.RgbVoid)
 
 	wait := p.BeginPhase(prof.PhaseFrameWait)
 	world.Lock()

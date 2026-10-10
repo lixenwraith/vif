@@ -80,13 +80,14 @@ whenever the render area outgrows the simulation: a `crop_on_resize = false`
 scenario such as `wad/scenario/td`, a multi-participant session whose bounds were
 latched by the first joiner, or a tmux pane zoomed after the map was fixed.
 
-Three rectangles describe it, all derived from `RenderContext`:
+Four rectangles describe it, all derived from `RenderContext`:
 
 | Helper | Space | Meaning |
 |---|---|---|
 | `PlayfieldViewportRect` | viewport | the map's extent inside the viewport |
 | `PlayfieldRect` | screen | the cells a simulation coordinate can reach |
 | `GameAreaRect` | screen | the whole viewport; the part outside the playfield is the margin |
+| `FrameRect` | screen | the game area with its row and column gutters; the part outside the playfield is the void |
 
 Confinement is enforced in two independent places, because the two failure
 modes are different:
@@ -110,7 +111,7 @@ Where a renderer's own geometry depends on the bound rather than merely being
 trimmed by it, it reads `PlayfieldViewportRect` directly: ping spans the map
 rather than the viewport, materialize beams run from the map edge so their
 length and intensity gradient stay correct, and the indicator gutters number
-only reachable rows and columns.
+only reachable rows and columns, leaving the rest of the frame to the void.
 
 When the map fills the game area — every `crop_on_resize` run, and every
 camera-cropped map — the playfield equals the game area and the clip is a no-op,
@@ -139,7 +140,7 @@ The buffer allocates parallel arrays sized to `width * height`:
 | current write mask | Mask applied by subsequent drawing calls. |
 | clip rectangle | Writable area; set per layer by the orchestrator, reopened by `Clear`. |
 | background overlay | Deferred color/intensity for otherwise untouched cells. |
-| void region | Game area and playfield rectangles plus the color the margin is filled with. |
+| void region | Frame and playfield rectangles plus the color the void is filled with. |
 | finalizer function | Selected once from color mode and occlusion configuration. |
 
 Resize reuses capacity when possible and synchronizes the terminal. Clear
@@ -232,12 +233,18 @@ The buffer chooses one of two finalizers at construction:
 Both use the normal background unless a renderer set a deferred background
 overlay, in which case its precomputed color/intensity fills untouched cells.
 
-A third pass then repaints the void region: the part of the game area outside
-the playfield is filled with `visual.RgbVoid` so the non-playable margin reads
-as out of play rather than as empty map. Only untouched cells are repainted, so
-a UI or debug layer that legitimately reaches into the margin keeps the colors
-it composed, and the pass walks the four margin bands rather than the whole
-area. Setting `RgbVoid` to `RgbBackground` restores the undifferentiated look.
+A third pass then repaints the void region: the part of the frame outside the
+playfield (the centering margin, and the gutter cells beside it) is filled with
+`visual.RgbVoid` so it reads as out of play rather than as empty map. Only
+untouched cells are repainted, so a UI or debug layer that legitimately reaches
+into the margin keeps the colors it composed, and the pass walks the four margin
+bands rather than the whole area. Setting `RgbVoid` to `RgbBackground` restores
+the undifferentiated look.
+
+Every cell also leaves finalization with a glyph, a space where none was drawn.
+After a resize the terminal module records its screen as zero cells over a
+screen cleared to the terminal's own background, so a glyphless black cell (the
+void, the heat bar's unlit track) would match that record and never be sent.
 
 In 256-color mode the game draws for a text console, and a last pass settles
 every cell on one of the console's sixteen colors. The palette is the Linux
@@ -339,7 +346,10 @@ the renderer should project it.
 ## 9. UI and debug projections
 
 The heat bar, indicators, status bar, and cursor are late layers marked as UI
-so normal dimming does not make control information unreadable. The status bar
+so normal dimming does not make control information unreadable. A heat level
+lights `width*level/100` cells over a black track, and the ten segments and
+their notches derive from the same division, so a level of 10k ends exactly on
+the k-th notch at any width. The status bar
 draws a fixed priority of items: session badge, time control, FSM phase, energy,
 damage multiplier, boost, grid state, and lower-priority metrics that are dropped
 first when space is tight. Typed input takes the space it needs from them; a

@@ -112,6 +112,14 @@ func (rc *RenderContext) GameAreaRect() Rect {
 	return RectWH(rc.GameXOffset, rc.GameYOffset, rc.ViewportWidth, rc.ViewportHeight)
 }
 
+// FrameRect returns the game area with the row gutter beside it and the column
+// gutter below it. The part outside PlayfieldRect is the void, so a gutter cell
+// beside an unreachable row or column reads as the margin it borders.
+func (rc *RenderContext) FrameRect() Rect {
+	a := rc.GameAreaRect()
+	return Rect{X0: 0, Y0: a.Y0, X1: a.X1, Y1: a.Y1 + 1}
+}
+
 // MapToViewport converts map coordinates to viewport-relative coordinates
 // Returns (vx, vy, visible) where visible=false if the coordinate is outside the
 // map or outside viewport bounds. The projection is returned either way, so a
