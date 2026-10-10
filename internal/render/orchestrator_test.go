@@ -28,6 +28,7 @@ func (t *captureTerminal) Sync()                                   {}
 func (t *captureTerminal) PollEvent() terminal.Event               { return terminal.Event{} }
 func (t *captureTerminal) PostEvent(terminal.Event)                {}
 func (t *captureTerminal) SetMouseMode(terminal.MouseMode) error   { return nil }
+func (t *captureTerminal) SetPasteMode(bool) error                 { return nil }
 
 func (t *captureTerminal) Flush(cells []terminal.Cell, width, height int) {
 	t.cells = append(t.cells[:0], cells...)
