@@ -128,3 +128,4 @@ func (nullTerminal) Sync()                                   {}
 func (nullTerminal) PollEvent() terminal.Event               { return terminal.Event{} }
 func (nullTerminal) PostEvent(terminal.Event)                {}
 func (nullTerminal) SetMouseMode(terminal.MouseMode) error   { return nil }
+func (nullTerminal) SetPasteMode(bool) error                 { return nil }

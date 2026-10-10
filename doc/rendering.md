@@ -255,9 +255,11 @@ Finalization is immediately followed by the terminal module's full-buffer
 `Flush`.
 
 The CLI can force 256-color (`-color 256`) or truecolor (`-color true`);
-`-color auto`, the default, lets the terminal capability select the mode. Visual
-parameter files provide truecolor and palette-specific values. Renderer logic
-should not assume every color channel contains RGB.
+`-color auto`, the default, lets the terminal capability select the mode, and a
+text console, which the terminal reports as 16 colors and draws in SGR 30-37 and
+90-97, takes 256-color. Visual parameter files provide truecolor and
+palette-specific values. Renderer logic should not assume every color channel
+contains RGB.
 
 ## 7. Layer inventory
 
