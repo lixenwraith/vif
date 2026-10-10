@@ -19,111 +19,57 @@ func NewIndicatorRenderer(gameCtx *engine.GameContext) *IndicatorRenderer {
 	}
 }
 
-// Render implements SystemRenderer.
+// Render implements SystemRenderer. The gutters number only the rows and columns
+// the map covers, since no motion reaches the others; every gutter cell left
+// undrawn is part of the frame the buffer fills as void.
 func (r *IndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(visual.MaskUI)
 
 	cursorVX, cursorVY := ctx.CursorViewportPos()
 	inputMode := r.gameCtx.IsSearchMode() || r.gameCtx.IsCommandMode()
-
-	// Rows and columns outside the map are not addressable by any motion, so the
-	// gutters mark them as out of play rather than numbering them. Without this a
-	// centred map would sit inside a black margin with numbered rows beside it.
 	pf := ctx.PlayfieldViewportRect()
 
-	// --- Row indicators (left gutter, its digit against the game area) ---
-	for y := range ctx.ViewportHeight {
+	// Row indicators: the left gutter, its digit against the game area
+	for y := pf.Y0; y < pf.Y1; y++ {
 		screenY := ctx.GameYOffset + y
-		if y < pf.Y0 || y >= pf.Y1 {
-			for x := range ctx.GameXOffset {
-				buf.SetWithBg(x, screenY, ' ', visual.RgbVoid, visual.RgbVoid)
-			}
-			continue
+		for x := range ctx.GameXOffset - 1 {
+			buf.SetWithBg(x, screenY, ' ', visual.RgbBackground, visual.RgbBackground)
 		}
-
-		relativeNum := y - cursorVY
-		absRelative := relativeNum
-		if absRelative < 0 {
-			absRelative = -absRelative
-		}
-
-		var ch rune
-		var fg, bg color.RGB
-
-		if relativeNum == 0 {
-			ch = '0'
-			if inputMode {
-				fg = visual.RgbCursorNormal
-				bg = visual.RgbBackground
-			} else {
-				fg = visual.RgbBlack
-				bg = visual.RgbCursorNormal
-			}
-		} else {
-			fg = visual.RgbIndicator
-			bg = visual.RgbBackground
-
-			if absRelative%10 == 0 {
-				ch = rune('0' + (absRelative/10)%10)
-			} else if absRelative%2 == 0 {
-				ch = '─'
-			} else {
-				ch = ' '
-			}
-		}
-
+		ch, fg, bg := indicatorCell(y-cursorVY, inputMode, '─', 2)
 		buf.SetWithBg(ctx.GameXOffset-1, screenY, ch, fg, bg)
 	}
 
-	// --- Column indicators (bottom row) ---
+	// Column indicators: the row under the game area
 	indicatorY := ctx.GameYOffset + ctx.ViewportHeight
+	for x := pf.X0; x < pf.X1; x++ {
+		ch, fg, bg := indicatorCell(x-cursorVX, inputMode, '|', 5)
+		buf.SetWithBg(ctx.GameXOffset+x, indicatorY, ch, fg, bg)
+	}
 
-	for x := range ctx.ViewportWidth {
-		screenX := ctx.GameXOffset + x
-		if x < pf.X0 || x >= pf.X1 {
-			buf.SetWithBg(screenX, indicatorY, ' ', visual.RgbVoid, visual.RgbVoid)
-			continue
+	// The corner joins the two gutters only where both reach it
+	if pf.Y1 == ctx.ViewportHeight && pf.X0 == 0 {
+		for x := range ctx.GameXOffset {
+			buf.SetWithBg(x, indicatorY, ' ', visual.RgbBackground, visual.RgbBackground)
 		}
+	}
+}
 
-		relativeCol := x - cursorVX
-
-		var ch rune
-		var fg, bg color.RGB
-
-		if relativeCol == 0 {
-			ch = '0'
-			if inputMode {
-				fg = visual.RgbCursorNormal
-				bg = visual.RgbBackground
-			} else {
-				fg = visual.RgbBlack
-				bg = visual.RgbCursorNormal
-			}
-		} else {
-			absRelative := relativeCol
-			if absRelative < 0 {
-				absRelative = -absRelative
-			}
-			if absRelative%10 == 0 {
-				ch = rune('0' + (absRelative / 10 % 10))
-			} else if absRelative%5 == 0 {
-				ch = '|'
-			} else {
-				ch = ' '
-			}
-			fg = visual.RgbIndicator
-			bg = visual.RgbBackground
+// indicatorCell returns the gutter cell rel rows or columns from the cursor: its
+// own '0', the tens digit every ten, and minor every minorEvery between
+func indicatorCell(rel int, inputMode bool, minor rune, minorEvery int) (rune, color.RGB, color.RGB) {
+	if rel == 0 {
+		if inputMode {
+			return '0', visual.RgbCursorNormal, visual.RgbBackground
 		}
-		buf.SetWithBg(screenX, indicatorY, ch, fg, bg)
+		return '0', visual.RgbBlack, visual.RgbCursorNormal
 	}
-
-	// The corner joins the two gutters where both reach it, and continues the void
-	// where either stops short of it.
-	corner := visual.RgbBackground
-	if pf.Y1 < ctx.ViewportHeight || pf.X0 > 0 {
-		corner = visual.RgbVoid
+	rel = max(rel, -rel)
+	ch := ' '
+	switch {
+	case rel%10 == 0:
+		ch = rune('0' + rel/10%10)
+	case rel%minorEvery == 0:
+		ch = minor
 	}
-	for x := range ctx.GameXOffset {
-		buf.SetWithBg(x, indicatorY, ' ', corner, corner)
-	}
+	return ch, visual.RgbIndicator, visual.RgbBackground
 }

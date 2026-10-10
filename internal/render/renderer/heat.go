@@ -35,65 +35,47 @@ func NewHeatRenderer(ctx *engine.GameContext) *HeatRenderer {
 	return r
 }
 
-// Render implements SystemRenderer
+// Render implements SystemRenderer. The unlit track is black, and with no local
+// cursor the whole bar is that empty track rather than the theme background.
 func (r *HeatRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	if !r.gameCtx.World.Resources.Player.Valid() {
-		return
-	}
-
-	// Calculate Fill Limit from HeatComponent
-	heatComp, ok := r.gameCtx.World.Components.Heat.GetPtr(r.gameCtx.World.Resources.Player.Entity)
-	if !ok {
-		return
-	}
-
 	buf.SetWriteMask(visual.MaskUI)
 
-	heat := heatComp.Current
-	overheat := heatComp.Overheat
+	var heat, overheat int
 	r.burstBlink = false
-	if view, ok := r.gameCtx.World.Components.CursorView.GetPtr(r.gameCtx.World.Resources.Player.Entity); ok {
-		r.burstBlink = view.BurstFlashRemaining > 0
-	}
-
-	maxX := ctx.ScreenWidth - 1
-	heatFillWidth := heatBarFill(heat, ctx.ScreenWidth)
-	overheatFillWidth := heatBarFill(overheat, ctx.ScreenWidth)
-
-	var overheatRune rune
-	if overheat > 0 {
-		overheatRune = r.density[overheat/25]
-	} else {
-		overheatRune = 0
-	}
-
-	// Render Loop
-	for x := 0; x <= maxX; x++ {
-		// No early exit optimization, must clear the rest of the bar to Black/Empty
-		if x > heatFillWidth || heatFillWidth == 0 {
-			buf.SetBgOnly(x, 0, visual.RgbBlack)
-			continue
+	if player := r.gameCtx.World.Resources.Player; player.Valid() {
+		if heatComp, ok := r.gameCtx.World.Components.Heat.GetPtr(player.Entity); ok {
+			heat, overheat = heatComp.Current, heatComp.Overheat
 		}
+		if view, ok := r.gameCtx.World.Components.CursorView.GetPtr(player.Entity); ok {
+			r.burstBlink = view.BurstFlashRemaining > 0
+		}
+	}
 
-		if x > overheatFillWidth || overheatFillWidth == 0 {
-			r.renderCell(buf, x, ctx.ScreenWidth, 0)
-		} else {
-			r.renderCell(buf, x, ctx.ScreenWidth, overheatRune)
+	width := ctx.ScreenWidth
+	lit, overheatLit := heatBarLit(heat, width), heatBarLit(overheat, width)
+	overheatRune := r.density[min(overheat/25, len(r.density)-1)]
+
+	for x := range width {
+		switch {
+		case x >= lit:
+			buf.SetBgOnly(x, 0, visual.RgbBlack)
+		case x < overheatLit:
+			r.renderCell(buf, x, width, overheatRune)
+		default:
+			r.renderCell(buf, x, width, 0)
 		}
 	}
 }
 
-// cellTrueColor renders with smooth gradient
+// cellTrueColor renders with smooth gradient, only a notch carrying the overheat glyph
 func (r *HeatRenderer) cellTrueColor(buf *render.RenderBuffer, x, width int, fillRune rune) {
-	lutIdx := (x * 255) / (width - 1)
-	c := render.HeatGradientLUT[lutIdx]
+	c := render.HeatGradientLUT[(x*255)/(width-1)]
 
-	separatorPos := segmentIndex(x, width) != segmentIndex(x+1, width)
-	if x > 0 && separatorPos {
-		if !r.burstBlink {
-			c = color.Scale(c, 0.5)
-		} else {
+	if heatNotch(x, width) {
+		if r.burstBlink {
 			c = visual.RgbRed
+		} else {
+			c = color.Scale(c, 0.5)
 		}
 	} else {
 		fillRune = 0
@@ -114,17 +96,24 @@ func (r *HeatRenderer) cell256(buf *render.RenderBuffer, x, width int, fillRune 
 	}
 }
 
-// segmentIndex returns which of the ten 256-colour bar segments column x falls in
+// heatBarLit returns how many bar cells, from the left, a 0-100 level lights
+func heatBarLit(level, width int) int {
+	return width * min(max(level, 0), 100) / 100
+}
+
+// segmentIndex returns which tenth of the bar column x lies in. It inverts
+// heatBarLit, so a level of 10k lights exactly the first k tenths at any width,
+// and the notch closing each tenth is the last cell lit.
 func segmentIndex(x, width int) int {
-	return min(max(x*10/max(width-1, 1), 0), 9)
+	return min(max((10*(x+1)-1)/max(width, 1), 0), 9)
 }
 
-// heatBarFill returns the last bar column a 0-100 level fills
-func heatBarFill(level, width int) int {
-	return ((width - 1) * level) / 100
+// heatNotch reports whether column x is the last cell of its tenth
+func heatNotch(x, width int) bool {
+	return segmentIndex(x, width) != segmentIndex(x+1, width)
 }
 
-// heatLead256 returns the palette colour of the bar's last filled cell
+// heatLead256 returns the palette colour of the bar's last lit cell
 func heatLead256(heat, width int) uint8 {
-	return visual.Heat256LUT[segmentIndex(heatBarFill(min(max(heat, 0), 100), width), width)]
+	return visual.Heat256LUT[segmentIndex(heatBarLit(heat, width)-1, width)]
 }
