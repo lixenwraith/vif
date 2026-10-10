@@ -344,7 +344,10 @@ the renderer should project it.
 ## 9. UI and debug projections
 
 The heat bar, indicators, status bar, and cursor are late layers marked as UI
-so normal dimming does not make control information unreadable. The status bar
+so normal dimming does not make control information unreadable. A heat level
+lights `width*level/100` cells over a black track, and the ten segments and
+their notches derive from the same division, so a level of 10k ends exactly on
+the k-th notch at any width. The status bar
 draws a fixed priority of items: session badge, time control, FSM phase, energy,
 damage multiplier, boost, grid state, and lower-priority metrics that are dropped
 first when space is tight. Typed input takes the space it needs from them; a
