@@ -124,7 +124,7 @@ func convertBackground(img image.Image, cells []terminal.Cell, outW, outH int, c
 			cells[idx].Rune = ' '
 
 			if colorMode == terminal.ColorMode256 {
-				palIdx := terminal.RGBTo256(rgb)
+				palIdx := lcolor.RGBTo256(rgb)
 				cells[idx].Bg = lcolor.RGB{R: palIdx}
 				cells[idx].Attrs = terminal.AttrBg256
 			} else {
@@ -171,8 +171,8 @@ func convertQuadrant(img image.Image, cells []terminal.Cell, outW, outH int, col
 			cells[idx].Rune = char
 
 			if colorMode == terminal.ColorMode256 {
-				fgIdx := terminal.RGBTo256(fg)
-				bgIdx := terminal.RGBTo256(bg)
+				fgIdx := lcolor.RGBTo256(fg)
+				bgIdx := lcolor.RGBTo256(bg)
 				cells[idx].Fg = lcolor.RGB{R: fgIdx}
 				cells[idx].Bg = lcolor.RGB{R: bgIdx}
 				cells[idx].Attrs = terminal.AttrFg256 | terminal.AttrBg256
