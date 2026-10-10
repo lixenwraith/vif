@@ -2,13 +2,16 @@ package ui
 
 import (
 	"github.com/lixenwraith/color"
-	"github.com/lixenwraith/terminal/tui"
 	"github.com/lixenwraith/vif/tool/vif-log/internal/logfile"
 )
 
-// Theme extends the tui theme with log-specific colors.
+// Theme is the viewer's colors by role, the log's levels and domains included.
 type Theme struct {
-	tui.Theme
+	Bg, Fg, FocusBg, CursorBg, InputBg color.RGB
+	HeaderBg, HeaderFg, StatusFg       color.RGB
+	HintFg, Border, Selected, Partial  color.RGB
+	Error, Warning                     color.RGB
+
 	Accent  color.RGB
 	Accent2 color.RGB
 	Level   [logfile.LevelCount]color.RGB
@@ -21,16 +24,14 @@ type Theme struct {
 
 // DefaultTheme is the built-in theme.
 var DefaultTheme = Theme{
-	Theme: tui.Theme{
-		Bg: color.Gunmetal, Fg: color.RGB{R: 192, G: 202, B: 245},
-		FocusBg: color.DarkSlate, CursorBg: color.RGB{R: 45, G: 50, B: 80},
-		Selected: color.RGB{R: 158, G: 206, B: 106}, Unselected: color.RGB{R: 86, G: 95, B: 137},
-		Partial: color.RGB{R: 125, G: 207, B: 255}, Error: color.RGB{R: 247, G: 118, B: 142},
-		Warning: color.RGB{R: 224, G: 175, B: 104}, Border: color.RGB{R: 59, G: 66, B: 97},
-		HeaderBg: color.RGB{R: 22, G: 22, B: 30}, HeaderFg: color.RGB{R: 192, G: 202, B: 245},
-		StatusFg: color.RGB{R: 140, G: 152, B: 200}, HintFg: color.RGB{R: 86, G: 95, B: 137},
-		InputBg: color.RGB{R: 31, G: 32, B: 46},
-	},
+	Bg: color.Gunmetal, Fg: color.RGB{R: 192, G: 202, B: 245},
+	FocusBg: color.DarkSlate, CursorBg: color.RGB{R: 45, G: 50, B: 80},
+	InputBg:  color.RGB{R: 31, G: 32, B: 46},
+	HeaderBg: color.RGB{R: 22, G: 22, B: 30}, HeaderFg: color.RGB{R: 192, G: 202, B: 245},
+	StatusFg: color.RGB{R: 140, G: 152, B: 200}, HintFg: color.RGB{R: 86, G: 95, B: 137},
+	Border: color.RGB{R: 59, G: 66, B: 97}, Selected: color.RGB{R: 158, G: 206, B: 106},
+	Partial: color.RGB{R: 125, G: 207, B: 255}, Error: color.RGB{R: 247, G: 118, B: 142},
+	Warning: color.RGB{R: 224, G: 175, B: 104},
 	Accent:  color.RGB{R: 122, G: 162, B: 247},
 	Accent2: color.RGB{R: 187, G: 154, B: 247},
 	Level: [logfile.LevelCount]color.RGB{

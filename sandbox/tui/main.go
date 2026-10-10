@@ -28,10 +28,27 @@ var viewNames = []string{
 	"TextField", "Editor", "Tree", "List", "Dialog", "Toast", "Progress", "Table",
 }
 
+// palette is the demo's colors by role
+type palette struct {
+	Bg, Fg, FocusBg, CursorBg, HeaderBg, HeaderFg color.RGB
+	Selected, Warning, Error, Border, HintFg      color.RGB
+	DirFg, FileFg, SymbolFg                       color.RGB
+}
+
+var defaultPalette = palette{
+	Bg: color.RGB{R: 20, G: 20, B: 30}, Fg: color.RGB{R: 200, G: 200, B: 200},
+	FocusBg: color.RGB{R: 30, G: 35, B: 45}, CursorBg: color.RGB{R: 50, G: 50, B: 70},
+	HeaderBg: color.RGB{R: 40, G: 60, B: 90}, HeaderFg: color.RGB{R: 255, G: 255, B: 255},
+	Selected: color.RGB{R: 80, G: 200, B: 80}, Warning: color.RGB{R: 255, G: 80, B: 80},
+	Error: color.RGB{R: 255, G: 80, B: 80}, Border: color.RGB{R: 60, G: 80, B: 100},
+	HintFg: color.RGB{R: 100, G: 180, B: 200}, DirFg: color.RGB{R: 130, G: 170, B: 220},
+	FileFg: color.RGB{R: 200, G: 200, B: 200}, SymbolFg: color.RGB{R: 180, G: 220, B: 220},
+}
+
 type appState struct {
 	view   DemoView
 	frame  int
-	theme  tui.Theme
+	theme  palette
 	term   terminal.Terminal
 	width  int
 	height int
@@ -82,7 +99,7 @@ func main() {
 		term:   term,
 		width:  w,
 		height: h,
-		theme:  tui.DefaultTheme,
+		theme:  defaultPalette,
 	}
 	app.initDemos()
 
