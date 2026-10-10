@@ -98,7 +98,7 @@ func wallIndex256(c color.RGB, index bool) uint8 {
 	if index {
 		return c.R
 	}
-	return terminal.RGBTo256(c)
+	return color.RGBTo256(c)
 }
 
 // wallShade256 is the shade mixing a quadrant block's two colors in the share it fills, since

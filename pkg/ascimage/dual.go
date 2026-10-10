@@ -109,7 +109,7 @@ func convertBackgroundDual(img image.Image, cells []DualCell, outW, outH int) {
 			rgb := colorToRGB(c)
 			cells[idx].Rune = ' '
 			cells[idx].TrueBg = rgb
-			cells[idx].Palette256Bg = terminal.RGBTo256(rgb)
+			cells[idx].Palette256Bg = lcolor.RGBTo256(rgb)
 		}
 	}
 }
@@ -162,8 +162,8 @@ func convertQuadrantDual(img image.Image, cells []DualCell, outW, outH int) {
 			cells[idx].Rune = char
 			cells[idx].TrueFg = fg
 			cells[idx].TrueBg = bg
-			cells[idx].Palette256Fg = terminal.RGBTo256(fg)
-			cells[idx].Palette256Bg = terminal.RGBTo256(bg)
+			cells[idx].Palette256Fg = lcolor.RGBTo256(fg)
+			cells[idx].Palette256Bg = lcolor.RGBTo256(bg)
 		}
 	}
 }
