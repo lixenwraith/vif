@@ -44,3 +44,22 @@ func TestRGBWritesComposeOverPaletteColour(t *testing.T) {
 		}
 	}
 }
+
+// TestNoCellLeavesBlank: after a resize the terminal records its screen as zero
+// cells, so a frame cell left as one, no glyph on black, would never be sent and
+// the terminal's own background would show there instead.
+func TestNoCellLeavesBlank(t *testing.T) {
+	t.Parallel()
+	ctx := centredContext()
+	for _, mode := range []terminal.ColorMode{terminal.ColorModeTrueColor, terminal.ColorMode256} {
+		b := NewRenderBuffer(mode, 30, 16)
+		b.SetVoidRegion(ctx.FrameRect(), ctx.PlayfieldRect(), visual.RgbVoid)
+		b.SetBgOnly(0, 0, visual.RgbBlack)
+		b.finalize()
+		for i, c := range b.cells {
+			if c.Rune == 0 {
+				t.Fatalf("mode %d: cell (%d,%d) left without a glyph: %+v", mode, i%30, i/30, c)
+			}
+		}
+	}
+}
