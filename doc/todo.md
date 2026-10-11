@@ -29,12 +29,12 @@ Bots belong to the instance that started them: a host's stay as participants, a
 guest's leave with it, and every composition of people and bots joins through the
 ordinary handshake. Phases 1–3, hexadecimal cursor slots and the merged `default`
 policy landed. Holder ownership, slot removal, explicit bot run modes and bounded
-replay landed in the next pass. Relays (phase 6) precede fleet work (4), richer
+replay landed in the next pass, and a guest's bots now join and play through it
+(phase 6, R1–R4). People behind relays (R5) precede fleet work (4), richer
 decision logic (5), and learning.
-Whether seats should inherit their holder's terminal geometry remains open. Permanent holder-local admission as a guest waits for relays.
+Whether seats should inherit their holder's terminal geometry remains open.
 The overlapping host-and-bot departure defect is covered by the holder-subtree
-handoff rule and socket regression in troubleshooting §13. Admission through a
-still-guest holder after the original host leaves remains relay work.
+handoff rule and socket regression in troubleshooting §13.
 
 ### Extract the renderer-neutral Android host model
 
@@ -235,30 +235,30 @@ owns.
 
 ### Delegate convergence to relays
 
-- Priority: P1; bots phase 6, ahead of fleet (4) and decision logic (5)
-- Affected files: `internal/converge/relay.go`, `internal/converge/selective.go`,
-  `internal/converge/correction.go`, `internal/system/network.go`, `internal/network`
+- Priority: P1; bots phase 6 (R5), ahead of fleet (4) and decision logic (5)
+- Affected files: `internal/app/relay.go`, `internal/converge/relay.go`,
+  `internal/converge/authority.go`, `internal/system/network.go`, `internal/network`
 - Plan: [Bots](todo-bots.md) §4
 
 Goal: a player who cannot reach the host joins through another player, and a player
 who relays lends the session uplink and CPU without becoming its host, though it
-stays a succession candidate. The host commits alone, so this is not a merge: a relay
-that committed crossings or sent up a merged world would give one crossing two apply
-ticks and let a peer write the canonical world. The relay owns its subtree's
-convergence instead, in the order the plan gives: admission through a relay with the
-join served from its own proved world, one subtree proof upstream, bundled epochs,
-ingress only through the relay, then people behind relays with re-parenting and NAT.
-A guest's bot is the first leaf: no hop, shared fate, no hole punching.
+stays a succession candidate. The host commits alone and the relay owns its
+subtree's convergence. A guest's bots already work that way (R1–R4): they join on
+its in-process stream and install its proved world, their proofs ride its manifest
+answer, their epochs its one bundle a tick, and the authority takes their traffic
+only on its link, budgeted per participant it carries.
 
-Expected: leaves converge like direct guests without the stopgap's whole world per
-floor window through every link, which then goes with the lead sampled from returned
-commits. The host's correction work and fan-out follow its direct links: sixteen
+What remains is people behind a relay (R5). A person does not share a relay's fate,
+so the relation needs a parent other than `Holder`, which a relay's departure
+re-parents rather than retires. A relay for people is native and serves the same
+relayed admission on a declared port, with a way through NAT; a browser relays only
+its own bots. A leaf's lead is advertised along its path instead of sampled from
+returned commits.
+
+Expected: the host's correction work and fan-out follow its direct links: sixteen
 players as four relays of three cut its epoch fan-out from (N−1)² to about 4N copies
-a tick, while each relay pays its leaves' share. About 800–1,000 lines with tests;
-high complexity: two-hop staleness, root verification of a relay's world, a new
-request field and keyframe marker behind a `ManifestVersion` bump, re-parenting, and
-relayed topologies under link shapes. §4.2 of domain-design and multi-player §2, §4
-and §5 change with it.
+a tick, while each relay pays its leaves' share. Verified by relayed topologies under
+link shapes, asserting hash-only convergence and the authority's per-link fan-out.
 
 ### Decide the authority's fan-out and publication cadence
 
@@ -268,12 +268,11 @@ and §5 change with it.
 A star's authority relays every participant's epochs and owner syncs to every other:
 at 16 players 4,444 epochs and 736 syncs a second, 1.4 MB/s framed on the tower map
 and 2.8 MB/s on td before deflate. Rounds follow the union of peer deadlines, 7.2 a
-second at td, and whole bodies add 2.2 MB/s there; while anyone is behind a relay the
-floor adds one per window through every link. Candidates, each a message-set or
+second at td, and whole bodies add 2.2 MB/s there. Candidates, each a message-set or
 cadence change that cuts constants where delegated relays move the quadratic term
 off the host: one bundle per guest per tick carrying every source's committed frames
-with their epoch markers, which pacing and fences read; owner syncs as deltas; and
-rounds aligned across peers.
+with their epoch markers, which pacing and fences read, as `MsgBundle` already does
+upstream; owner syncs as deltas; and rounds aligned across peers.
 
 ### Project a correction outside the live lock
 

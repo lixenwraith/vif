@@ -334,6 +334,45 @@ func TestAGuestsBotsJoinThroughIt(t *testing.T) {
 	}
 }
 
+// TestAStillGuestSeatsBotsAfterItsHostLeaves: a guest's bots join through it
+// whoever holds authority, so the departed host's address is never dialled.
+func TestAStillGuestSeatsBotsAfterItsHostLeaves(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host, leave := driveBot(t, Config{Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
+	waitForCursors(t, host, 2)
+	successor, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, DefaultBotGraph, nil)
+	guest, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, DefaultBotGraph, nil)
+	for _, a := range []*App{host, successor, guest} {
+		waitForCursors(t, a, 4)
+	}
+	port, err := guest.socketPort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := successor.localParticipant()
+	for deadline := time.Now().Add(socketWait); !port.Connected(id) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+	leave()
+	for _, a := range []*App{successor, guest} {
+		waitForCursors(t, a, 2)
+		for deadline := time.Now().Add(socketWait); (uint32(a.authority.Holder()) != id || a.authority.Migrating()) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		}
+		if uint32(a.authority.Holder()) != id {
+			t.Fatal("the session did not pass to the first guest")
+		}
+	}
+	guest.world.RunSafe(func() { err = guest.ctx.SessionCtl.AddBot(DefaultBotGraph) })
+	if err != nil {
+		t.Fatalf("adding a bot: %v", err)
+	}
+	for _, a := range []*App{successor, guest} {
+		waitForCursors(t, a, 3)
+	}
+	if s, g := successor.sessionTransport().PeerCount(), guest.sessionTransport().PeerCount(); s != 1 || g != 2 {
+		t.Fatalf("the authority holds %d links and the guest %d, want 1 and 2", s, g)
+	}
+}
+
 // TestALobbyClosesOnlyOnGuestsOnItsLink: a dial is rostered before its handshake
 // ends, so a lobby its own bots fill at once has entries still in flight when its
 // first guest closes it, and its start gate has to wait for them.
