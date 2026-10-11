@@ -36,9 +36,9 @@ The scenario entry is resolved in this order:
 1. `-s <path-or-name>`, where a path is `scenario.toml` or a directory containing
    it, and a name resolves under `scenario/<name>/` in the configured roots;
 2. `scenario/main/scenario.toml` under a root passed with `-config-dir`;
-3. the same under the user config root, normally `$XDG_CONFIG_HOME/vif`
-   or `~/.config/vif`;
-4. the same under each `$XDG_CONFIG_DIRS` system root;
+3. the same under the user config root, normally `~/.config/vif`;
+4. the same under the checkout's `wad/` for a binary in its `bin/`, then under
+   each system root, `/usr/local/etc/vif` and `/etc/vif`;
 5. the embedded main campaign in `internal/asset/scenario/`.
 
 `-s main` also falls back to that campaign when no root holds an override; there

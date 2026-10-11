@@ -33,7 +33,8 @@ It is the contract, not a suggestion.
   manual is `doc/vif.6`. Nowhere else, and never beside the code that reads them.
 - `pkg/` never imports `internal/`. A leaf package that needs game data takes it
   from its caller.
-- Resolution is flag, `-config-dir`, user root, XDG system roots, embedded.
+- Resolution is flag, `-config-dir`, user root, the checkout `wad/` beside a
+  `bin/` binary, system roots (`/usr/local/etc/vif`, `/etc/vif`), embedded.
   Never add a working-directory probe.
 
 ## Scope

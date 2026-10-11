@@ -161,7 +161,7 @@ settings explain why. Rebind the `config_menu` action in the keymap.
 
 Editable files ship in `wad/`, laid out exactly as they install; everything the
 binary can play without a filesystem is embedded in `internal/asset`. User
-configuration defaults to `$XDG_CONFIG_HOME/vif`; logs and journals
+configuration defaults to `~/.config/vif`; logs and journals
 default to separate directories under `$XDG_STATE_HOME/vif`. See the
 [external filesystem layout](doc/filesystem-layout.md) for exact precedence,
 installation, and WASM behavior, and [packaging](doc/packaging.md) for the

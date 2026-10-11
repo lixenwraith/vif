@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
 )
@@ -22,7 +23,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	_ = os.Setenv("XDG_CONFIG_HOME", empty)
-	_ = os.Setenv("XDG_CONFIG_DIRS", empty)
+	_ = os.Setenv(paths.SystemRootsEnv, empty)
 	code := m.Run()
 	_ = os.RemoveAll(empty)
 	os.Exit(code)

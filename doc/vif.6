@@ -14,7 +14,11 @@ replay or script a run, play a bot, and validate the installed configuration.
 .PP
 Each resource resolves from its own flag, then
 .BR \-config\-dir ,
-then the user configuration root, then each system root,
+then the user configuration root, then the
+.I wad
+of the checkout whose
+.I bin
+holds the binary, then each system root,
 and finally the copy compiled into the binary.
 The first root holding a
 .I vif.toml
@@ -223,12 +227,10 @@ User configuration root, normally
 Settings at the top of a configuration root: another root, the log, journal,
 music, scenario, content and keymap paths, and the audio mixer buffer.
 .TP
-.I $XDG_CONFIG_DIRS/vif
-System configuration roots, normally
-.IR /etc/xdg/vif ,
-and on FreeBSD
-.I /usr/local/etc/xdg/vif
-before it.
+.IR /usr/local/etc/vif ", " /etc/vif
+System configuration roots, in that order;
+.B VIF_SYSTEM_ROOTS
+names others in their place, separated by colons.
 .TP
 .I $XDG_STATE_HOME/vif
 Logs and journals, normally

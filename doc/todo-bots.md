@@ -73,7 +73,7 @@ importing neither `app` nor `converge`.
 | Vocabulary | The bot actions and guards of §6, registered with `internal/fsm/std`'s generic ones. |
 
 Graphs resolve like every resource: a path, then `bot/<name>.toml` under
-`-config-dir`, the user root and the XDG system roots, then the embedded copy in
+`-config-dir`, the user root, the checkout's `wad/` and the system roots, then the embedded copy in
 `internal/asset/bot/`, which `make install-config` installs.
 The shipped policy is `default`: text and gold first, with patrol and nugget
 jumps when text is absent. Legacy names `roam` and `patrol` fall back to this

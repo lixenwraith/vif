@@ -1,7 +1,7 @@
 # vif.toml: what a flag would otherwise say on every run. A flag given on the
 # command line wins. The first configuration root holding this file supplies it
-# (-config-dir, the user root, then the XDG system roots); a key it leaves out
-# keeps the default written here. A relative path is relative to this file, and
+# (-config-dir, the user root, a checkout's wad, then the system roots); a key it
+# leaves out keeps the default written here. A relative path is relative to this file, and
 # "~/" is the home directory; an empty path is the platform default.
 
 [paths]
