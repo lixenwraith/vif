@@ -549,6 +549,8 @@ type ExplosionRequestPayload struct {
 	Y      int                        `toml:"y"`
 	Radius float64                    `toml:"radius"` // 0 = ExplosionFieldRadius
 	Attack component.CombatAttackType `toml:"attack"`
+	// Charged says the weapon was at its charge cap, so a profile's Charged chain fires
+	Charged bool `toml:"charged,omitempty"`
 }
 
 // ExplosionBatchRequestPayload describes one combat artifact made of several
@@ -945,7 +947,8 @@ type CombatAttackAreaRequestPayload struct {
 	OriginY        int                        `toml:"origin_y"`
 	ChainDepth     uint8                      `toml:"chain_depth"`
 	RootAttackType component.CombatAttackType `toml:"root_attack_type"`
-	Scale          uint8                      `toml:"scale"` // Damage multiplier; zero is one
+	Scale          uint8                      `toml:"scale"`             // Damage multiplier; zero is one
+	Charged        bool                       `toml:"charged,omitempty"` // The weapon was at its cap; the profile's Charged chain fires
 }
 
 // CombatHealRequestPayload adds uncapped hit points to a live target.

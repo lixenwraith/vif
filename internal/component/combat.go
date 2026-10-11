@@ -31,7 +31,7 @@ const (
 	CombatDamageNone CombatDamageType = iota
 	CombatDamageDirect
 	CombatDamageArea
-	CombatDamageOverTime // Future
+	CombatDamageOverTime // a status the direct resolver leaves, ticking from the profile's figures
 )
 
 // Attack Types
@@ -50,6 +50,7 @@ const (
 	CombatAttackSelfDestruct
 	CombatAttackBullet
 	CombatAttackRay
+	CombatAttackBurn // a charged pulse's follow-up; nothing spends its immunity, so only a sealed window blocks it
 	CombatAttackTypeCount
 )
 
@@ -68,6 +69,7 @@ type StatusKind uint8
 
 const (
 	StatusStun StatusKind = iota // movement suppressed
+	StatusBurn                   // periodic damage credited to Source
 	StatusCount
 )
 

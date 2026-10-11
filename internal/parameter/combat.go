@@ -133,6 +133,11 @@ const (
 
 	// PulseEffectCap is the maximum number of concurrent pulse rings; the oldest is replaced
 	PulseEffectCap = 16
+
+	// A charged pulse leaves a burn: BurnDamage every BurnPeriod for BurnDuration
+	BurnDamage   = 1
+	BurnPeriod   = 1000 * time.Millisecond
+	BurnDuration = 3000 * time.Millisecond
 )
 
 // Mounted weapons: a hit costs a cursor energy through an active shield, heat without one

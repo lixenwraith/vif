@@ -67,7 +67,7 @@ const (
 const (
 	WeaponMaxChargeRod       = 10
 	WeaponMaxChargeLauncher  = 10
-	WeaponMaxChargeDisruptor = 1
+	WeaponMaxChargeDisruptor = 2
 	WeaponMaxChargeTurret    = 5
 	WeaponMaxChargeEmitter   = 3
 )

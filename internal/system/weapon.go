@@ -700,7 +700,7 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 		case component.DeliveryMissile:
 			fired = s.fireMissiles(cursor, x, y, charges, assignments)
 		case component.DeliveryPulse:
-			fired = s.firePulse(cursor, x, y, spec.Attack)
+			fired = s.firePulse(cursor, x, y, spec.Attack, charges >= spec.MaxCharges)
 		case component.DeliveryBullet:
 			fired = s.fireBullets(cursor, x, y, spec.Attack, assignments)
 		case component.DeliveryRay:
@@ -789,8 +789,9 @@ func (s *WeaponSystem) fireBullets(cursor core.Entity, x, y int, attack componen
 	return fired
 }
 
-// firePulse bursts at the emitter cell when a target is inside the ellipse
-func (s *WeaponSystem) firePulse(cursor core.Entity, x, y int, attack component.CombatAttackType) bool {
+// firePulse bursts at the emitter cell when a target is inside the ellipse; a
+// charged burst's artifact says so, and the profile's charged chain follows it
+func (s *WeaponSystem) firePulse(cursor core.Entity, x, y int, attack component.CombatAttackType, charged bool) bool {
 	targets := FindTargetsInEllipse(s.world, x, y, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq, engine.ScopeBoth, cursor)
 	if len(targets) == 0 {
 		return false
@@ -799,13 +800,14 @@ func (s *WeaponSystem) firePulse(cursor core.Entity, x, y int, attack component.
 	// Resolve player targets here; shared targets are re-derived from the crossing geometry.
 	var pulse blastArea
 	pulse.resetOne(x, y, parameter.PulseRadiusX)
-	strikePlayerTargets(s.world, cursor, &pulse, attack)
+	strikePlayerTargets(s.world, cursor, &pulse, attack, charged)
 	s.world.PushCrossing(event.EventExplosionRequest, &event.ExplosionRequestPayload{
-		Entity: cursor,
-		X:      x,
-		Y:      y,
-		Radius: parameter.PulseRadiusX,
-		Attack: attack,
+		Entity:  cursor,
+		X:       x,
+		Y:       y,
+		Radius:  parameter.PulseRadiusX,
+		Attack:  attack,
+		Charged: charged,
 	})
 
 	s.world.PushLocal(event.EventPulseVisualRequest, &event.PulseVisualRequestPayload{X: x, Y: y, Palette: s.palette(cursor)})

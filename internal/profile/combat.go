@@ -18,8 +18,14 @@ type AttackProfile struct {
 	DamageValue int
 	EffectMask  component.CombatEffectMask
 
-	// Chain fires as a follow-up direct attack after this one resolves
-	Chain *AttackProfile
+	// Chain fires as a follow-up direct attack after this one resolves; Charged
+	// fires as another when the hit says its weapon was at its charge cap
+	Chain   *AttackProfile
+	Charged *AttackProfile
+
+	// A CombatDamageOverTime profile leaves Status, ticking DamageValue every Period for Duration
+	Status           component.StatusKind
+	Period, Duration time.Duration
 
 	// Collision and KineticImmunity apply when EffectMask has CombatEffectKinetic
 	Collision       *physics.CollisionProfile
@@ -127,6 +133,7 @@ var (
 	pulseProfiles        [component.CombatEntityCount]AttackProfile
 	bulletProfiles       [component.CombatEntityCount]AttackProfile
 	rayProfiles          [component.CombatEntityCount]AttackProfile
+	burnProfiles         [component.CombatEntityCount]AttackProfile
 	selfDestructProfiles [component.CombatEntityCount]AttackProfile
 )
 
@@ -224,6 +231,22 @@ func init() {
 		register(&pulseProfiles[d])
 	}
 	pulseProfiles[component.CombatEntityKraken].EffectMask = 0 // too massive to stun
+
+	// Burn: the charged pulse's follow-up
+	for _, d := range cursorDefenders {
+		burnProfiles[d] = AttackProfile{
+			AttackType:  component.CombatAttackBurn,
+			Attacker:    component.CombatEntityCursor,
+			Defender:    d,
+			DamageType:  component.CombatDamageOverTime,
+			DamageValue: parameter.BurnDamage,
+			Status:      component.StatusBurn,
+			Period:      parameter.BurnPeriod,
+			Duration:    parameter.BurnDuration,
+		}
+		register(&burnProfiles[d])
+		pulseProfiles[d].Charged = &burnProfiles[d]
+	}
 
 	// Bullet: damage only, one per turret shot
 	for _, d := range cursorDefenders {
