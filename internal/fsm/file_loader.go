@@ -51,9 +51,9 @@ func ResolveScenario(fsys fs.FS, entry string) (map[string]any, error) {
 }
 
 // ScenarioFiles names every file a scenario is made of — its entry, its macro
-// files and the region files it includes — sorted and deduplicated. A portable copy is read
-// through this, so it carries exactly the files the loader would have read and
-// nothing that happens to sit beside them.
+// files and the region files it includes — sorted and deduplicated. A portable
+// copy is read through this, so it carries exactly the files the loader would
+// have read and nothing that happens to sit beside them.
 func ScenarioFiles(fsys fs.FS, entry string) ([]string, error) {
 	var visited []string
 	if _, err := loadAndResolve(fsys, entry, make(map[string]bool), &visited, nil); err != nil {
