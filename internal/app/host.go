@@ -131,8 +131,12 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 	if a.cfg.Mode != ModePlay {
 		return false, fmt.Errorf("%s mode has no restart loop", a.cfg.Mode)
 	}
+	// A scenario received from a coordinator answers its own name and no other.
 	o := a.cfg.Resources
 	o.Scenario, o.Embedded = name, false
+	if o.Provided != nil && o.Provided.Name != name {
+		o.Provided = nil
+	}
 	sc, err := resource.ValidateScenario(o)
 	if err != nil {
 		return false, err
