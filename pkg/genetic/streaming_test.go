@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math/rand/v2"
 	"reflect"
+	"slices"
 	"sync"
 	"testing"
 )
@@ -63,6 +64,33 @@ func TestStreaming_Elitism(t *testing.T) {
 	}
 	if best := e.Stats().BestScore; best != 1000 {
 		t.Fatalf("elite lost: %v", best)
+	}
+}
+
+// With SetEqual the archive never holds two equal genotypes, while a distinct
+// genotype with the same score is still admitted
+func TestStreaming_RejectsDuplicates(t *testing.T) {
+	cfg := DefaultStreamingConfig()
+	cfg.PoolSize = 8
+	e := newTestEngine(t, cfg)
+	e.SetEqual(slices.Equal[[]float64])
+
+	for i := range 64 {
+		e.CompleteEvaluation(e.BeginEvaluation([]float64{0.5}), 1)
+		e.CompleteEvaluation(e.BeginEvaluation([]float64{float64(i % 3)}), 1)
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(e.archive) != 4 {
+		t.Fatalf("archive holds %d members, want 4 distinct", len(e.archive))
+	}
+	for i := range e.archive {
+		for j := i + 1; j < len(e.archive); j++ {
+			if slices.Equal(e.archive[i].Data, e.archive[j].Data) {
+				t.Fatalf("duplicate genotype %v", e.archive[i].Data)
+			}
+		}
 	}
 }
 

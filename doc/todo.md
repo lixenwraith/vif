@@ -412,3 +412,28 @@ The framebuffer console shows a bright background under SGR 5, which vgacon blin
 - Affected files: `internal/render/renderer/flow_debug.go`
 
 Its diagonal arrows and `◆●` are missing from console fonts, so in 256 colours the view shows their fallbacks.
+
+## Genetic library
+
+### Spin off `pkg/genetic` as its own module
+
+- Priority: P2
+- Affected files: `pkg/genetic`, `pkg/genetic/registry`, `pkg/genetic/fitness`,
+  `pkg/genetic/tracking`, `pkg/genetic/persistence`, `sandbox/genetic`
+
+The audit before the spin-off left these for the new module, none of which the
+game needs. The pending table is direct-mapped, so a long evaluation is evicted
+by issue distance even when the table is nearly empty; bounded linear probing
+that evicts the oldest id in its window would make `PendingCapacity` a live-count
+bound, at the cost of a checkpoint-format version. The streaming engine breeds as
+soon as two outcomes exist; breeding only once the archive is full was measured
+on the lander example and changed nothing, so it stays unimplemented. The batch
+`Engine` spawns one goroutine per candidate under a semaphore and reallocates
+offspring every generation; a fixed worker set over an atomic index and a free
+list would remove both. `RouletteSelector` rebuilds its cumulative table on every
+`Select`; cache it by archive version. `registry.Stats` restates
+`genetic.PoolStats` field for field and `SpeciesConfig.PerturbationStdDev`
+restates `EngineConfig.PerturbationStrength`; collapse each pair. The `fitness`
+context keys and most `tracking` metric keys are conventions of this game, and
+the `persistence` default codec is the one external dependency: make JSON the
+default and move the TOML codec to the caller, or drop the subpackage.

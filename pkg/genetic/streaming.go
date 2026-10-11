@@ -25,6 +25,7 @@ type StreamingEngine[S Solution, F Numeric] struct {
 	perturbator Perturbator[S]
 	cloner      Cloner[S]
 	diversity   DiversityFunc[S, F]
+	equal       EqualFunc[S]
 
 	cfg StreamingConfig
 
@@ -90,6 +91,15 @@ func NewStreamingEngine[S Solution, F Numeric](
 func (e *StreamingEngine[S, F]) SetDiversity(fn DiversityFunc[S, F]) {
 	e.mu.Lock()
 	e.diversity = fn
+	e.mu.Unlock()
+}
+
+// SetEqual installs duplicate rejection: a scored genotype equal to an archive
+// member with the same score is discarded instead of displacing a distinct one.
+// Without it an elitist archive fills with clones of its best member
+func (e *StreamingEngine[S, F]) SetEqual(fn EqualFunc[S]) {
+	e.mu.Lock()
+	e.equal = fn
 	e.mu.Unlock()
 }
 
@@ -281,22 +291,31 @@ func (e *StreamingEngine[S, F]) beginLocked(sol S) EvalID {
 }
 
 // insertLocked places a scored candidate into the descending archive,
-// evicting the tail when full
+// evicting the tail when full. Equal-score members sit just above the insertion
+// point, so duplicate rejection only scans that run
 func (e *StreamingEngine[S, F]) insertLocked(sol S, score F) {
 	n := len(e.archive)
-	if n == cap(e.archive) {
-		if score <= e.archive[n-1].Score {
-			e.recycleLocked(sol)
-			return
-		}
-		e.recycleLocked(e.archive[n-1].Data)
-		n--
-		e.archive = e.archive[:n]
+	if n == cap(e.archive) && score <= e.archive[n-1].Score {
+		e.recycleLocked(sol)
+		return
 	}
 
 	idx := n
 	for idx > 0 && e.archive[idx-1].Score < score {
 		idx--
+	}
+	if e.equal != nil {
+		for i := idx - 1; i >= 0 && e.archive[i].Score == score; i-- {
+			if e.equal(e.archive[i].Data, sol) {
+				e.recycleLocked(sol)
+				return
+			}
+		}
+	}
+	if n == cap(e.archive) {
+		e.recycleLocked(e.archive[n-1].Data)
+		n--
+		e.archive = e.archive[:n]
 	}
 	e.archive = e.archive[:n+1]
 	copy(e.archive[idx+1:], e.archive[idx:n])

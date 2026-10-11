@@ -1,52 +1,44 @@
+// Command genetic evolves lander controllers with genetic.StreamingEngine.
+// Landers are proposed, fly for up to maxTicks while others are still in the
+// air, and report one scalar score on touchdown. Arrow keys move the pad and
+// re-score the archive against it; q quits. -headless N runs N ticks without
+// the terminal view and prints a convergence table instead.
 package main
 
 import (
 	"bytes"
-	"context"
+	"flag"
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"os/signal"
-	"sync/atomic"
+	"slices"
 	"syscall"
 	"time"
 
 	"github.com/lixenwraith/vif/pkg/genetic"
-	"github.com/lixenwraith/vif/pkg/genetic/fitness"
-	"github.com/lixenwraith/vif/pkg/genetic/registry"
-	"github.com/lixenwraith/vif/pkg/genetic/tracking"
 )
 
 const (
-	screenWidth = 80
-	simHeight   = 18
-	groundY     = 0.0
+	fieldWidth  = 80
+	fieldHeight = 18
+	landerCount = 32
+	maxTicks    = 300
+	frame       = 16 * time.Millisecond
 
-	maxTicks  = 300
-	dt        = 16 * time.Millisecond
 	gravity   = 0.04
 	maxThrust = 0.08
+	startX    = 10.0
+	startY    = fieldHeight - 2.0
 
-	// One fixed initial condition. The controller no longer has to solve
-	// two mirrored tasks simultaneously.
-	startX  = 10.0
-	startY  = simHeight - 2.0
-	startVx = 0.0
-
-	simCount   = 32
-	speciesLID = 1
+	padHalf  = 4
+	markLife = 150
 )
 
-// Genome:
-//
-//	[0] horizontal Kp
-//	[1] horizontal Kd
-//	[2] vertical Kp
-//	[3] vertical Kd
-//
-// Controller signs are fixed by the equations below, so the GA searches only
-// physically meaningful positive gains.
+// The genome is the four PD gains. Signs are fixed by the control law in step,
+// so the search space is positive gains only
 const (
 	geneKpX = iota
 	geneKdX
@@ -55,370 +47,367 @@ const (
 	geneCount
 )
 
-type Lander struct {
-	id    uint64
-	genes []float64
+var bounds = []genetic.ParameterBounds{
+	{Min: 0, Max: 4}, {Min: 0, Max: 8}, {Min: 0, Max: 4}, {Min: 0, Max: 24},
+}
 
+type lander struct {
+	id     genetic.EvalID
+	genes  []float64
 	x, y   float64
 	vx, vy float64
 	fuel   float64
 	ticks  int
+}
 
-	active bool
+func (l *lander) launch(genes []float64, id genetic.EvalID) {
+	*l = lander{id: id, genes: genes, x: startX, y: startY}
+}
+
+func (l *lander) flying() bool { return l.genes != nil }
+
+// step advances one tick and reports whether the flight ended. Thrust acts in
+// both directions on each axis, so a controller can dive as well as brake
+func (l *lander) step(targetX float64) bool {
+	g := l.genes
+	reqX := g[geneKpX]*(targetX-l.x)/fieldWidth - g[geneKdX]*l.vx/2
+	reqY := -g[geneKpY]*l.y/fieldHeight - g[geneKdY]*l.vy/2
+	tx := clamp(reqX, -1, 1) * maxThrust
+	ty := clamp(reqY, -1, 1) * maxThrust
+	l.fuel += math.Abs(tx) + math.Abs(ty)
+	l.vx += tx
+	l.vy += ty - gravity
+	l.x += l.vx
+	l.y += l.vy
+	l.ticks++
+	return l.y <= 0 || l.x < 0 || l.x >= fieldWidth || l.y > fieldHeight || l.ticks >= maxTicks
+}
+
+func (l *lander) landed() bool { return l.y <= 0 && l.x >= 0 && l.x < fieldWidth }
+
+func (l *lander) speed() float64 { return math.Hypot(l.vx, l.vy) }
+
+// score rewards touchdown near the pad centre. Only a landing earns the softness
+// and fuel terms, so hovering until timeout or leaving the field is a miss at
+// the final distance, altitude included
+func (l *lander) score(targetX float64) float64 {
+	dx := l.x - targetX
+	if !l.landed() {
+		d := math.Hypot(dx, l.y) / 3
+		return 0.5 / (1 + d*d)
+	}
+	d := dx / 3
+	v := l.speed() / 0.1
+	return 0.5/(1+d*d) + 0.35/(1+v*v) + 0.15/(1+l.fuel/20)
+}
+
+// fly runs genes to completion synchronously
+func fly(genes []float64, targetX float64) lander {
+	var l lander
+	l.launch(genes, 0)
+	for !l.step(targetX) {
+	}
+	return l
+}
+
+func clamp(v, lo, hi float64) float64 { return math.Min(math.Max(v, lo), hi) }
+
+type mark struct {
+	until int
+	soft  bool
+}
+
+type world struct {
+	engine  *genetic.StreamingEngine[[]float64, float64]
+	landers [landerCount]lander
+	targetX float64
+	tick    int
+	marks   [fieldWidth]mark
+
+	// champion replays the archive's best genes so the current optimum is visible
+	champion lander
+	best     genetic.Candidate[[]float64, float64]
+	bestRun  lander
+}
+
+func newWorld(seed uint64) *world {
+	cfg := genetic.DefaultStreamingConfig()
+	cfg.PoolSize = 48
+	// A shallow queue keeps proposals bred from the current archive, not a stale one
+	cfg.ProposalCapacity = 8
+	// A pending slot is reclaimed once PendingCapacity further evaluations have
+	// started. Flights last 20..300 ticks with 32 in the air, so one slow flight
+	// can see ~500 launches; 1024 keeps it from being evicted before it lands
+	cfg.PendingCapacity = 1024
+	cfg.MinOutcomesPerGen = landerCount
+	// Four genes: mutate two per child on average, at a tenth of each range
+	cfg.PerturbationRate = 0.5
+	cfg.PerturbationStrength = 0.1
+	cfg.Seed = seed
+
+	e := genetic.NewStreamingEngine[[]float64, float64](
+		func(rng *rand.Rand) []float64 {
+			g := make([]float64, geneCount)
+			for i, b := range bounds {
+				g[i] = b.Min + rng.Float64()*(b.Max-b.Min)
+			}
+			return g
+		},
+		&genetic.TournamentSelector[[]float64, float64]{TournamentSize: 3},
+		&genetic.UniformCombiner[[]float64, float64, float64]{MixProbability: 0.5},
+		&genetic.BoundedPerturbator{Bounds: bounds, Boundary: genetic.BoundaryReflect},
+		genetic.SliceCloner[[]float64, float64]{},
+		cfg,
+	)
+	// Without duplicate rejection an elitist archive fills with clones of its best
+	e.SetEqual(slices.Equal[[]float64])
+	e.SetDiversity(genetic.GeneSpread[float64](bounds))
+	e.Start()
+	return &world{engine: e, targetX: fieldWidth / 2}
+}
+
+// advance launches a lander into every idle slot, flies them one tick, and
+// scores the ones that ended. Flights end at different ticks, so outcomes reach
+// the engine out of proposal order
+func (w *world) advance() {
+	w.tick++
+	for i := range w.landers {
+		l := &w.landers[i]
+		if l.flying() {
+			continue
+		}
+		if genes, id := w.engine.Propose(); id != 0 {
+			l.launch(genes, id)
+		}
+	}
+	for i := range w.landers {
+		l := &w.landers[i]
+		if !l.flying() || !l.step(w.targetX) {
+			continue
+		}
+		w.engine.CompleteEvaluation(l.id, l.score(w.targetX))
+		if l.landed() {
+			w.marks[int(l.x)] = mark{until: w.tick + markLife, soft: l.speed() < 0.15}
+		}
+		l.genes = nil
+	}
+	w.flyChampion()
+}
+
+func (w *world) flyChampion() {
+	best, ok := w.engine.Best()
+	if !ok {
+		return
+	}
+	if best.Score != w.best.Score || !slices.Equal(best.Data, w.best.Data) {
+		w.best = best
+		w.bestRun = fly(best.Data, w.targetX)
+	}
+	if !w.champion.flying() || w.champion.step(w.targetX) {
+		w.champion.launch(w.best.Data, 0)
+	}
+}
+
+// retarget moves the pad and re-scores the archive against it, so the learned
+// gains survive the objective change instead of being thrown away
+func (w *world) retarget(dx int) {
+	x := clamp(w.targetX+float64(dx), padHalf+1, fieldWidth-padHalf-2)
+	if x == w.targetX {
+		return
+	}
+	w.targetX = x
+	for i := range w.landers {
+		if l := &w.landers[i]; l.flying() {
+			w.engine.AbandonEvaluation(l.id)
+			l.genes = nil
+		}
+	}
+	pool := w.engine.Snapshot()
+	for i := range pool.Members {
+		run := fly(pool.Members[i].Data, x)
+		pool.Members[i].Score = run.score(x)
+	}
+	w.engine.Inject(pool.Members, pool.Generation)
+	w.marks = [fieldWidth]mark{}
+	w.best = genetic.Candidate[[]float64, float64]{}
 }
 
 func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
+	seed := flag.Uint64("seed", 1, "PCG seed; the same seed replays the same run")
+	headless := flag.Int("headless", 0, "run this many ticks without the terminal view")
+	flag.Parse()
 
-	rawMode := exec.Command("stty", "-icanon", "-echo")
-	rawMode.Stdin = os.Stdin
-	_ = rawMode.Run()
-
-	fmt.Print("\033[?25l\033[2J")
-	defer func() {
-		reset := exec.Command("stty", "icanon", "echo")
-		reset.Stdin = os.Stdin
-		_ = reset.Run()
-		fmt.Print("\033[?25h\033[2J\033[H")
-	}()
-
-	var targetPos atomic.Int32
-	targetPos.Store(40)
-
-	resetEnv := make(chan struct{}, 1)
-
-	go func() {
-		b := make([]byte, 3)
-		for {
-			n, err := os.Stdin.Read(b)
-			if err != nil {
-				return
-			}
-			if n == 0 {
-				continue
-			}
-
-			if b[0] == 'q' || b[0] == 'Q' {
-				cancel()
-				return
-			}
-
-			move := 0
-			if b[0] == 'h' || b[0] == 'a' ||
-				(n == 3 && b[0] == 27 && b[1] == '[' && b[2] == 'D') {
-				move = -3
-			}
-			if b[0] == 'l' || b[0] == 'd' ||
-				(n == 3 && b[0] == 27 && b[1] == '[' && b[2] == 'C') {
-				move = 3
-			}
-			if move == 0 {
-				continue
-			}
-
-			old := targetPos.Load()
-			next := old + int32(move)
-			if next < 5 {
-				next = 5
-			}
-			if next > screenWidth-6 {
-				next = screenWidth - 6
-			}
-			if next == old {
-				continue
-			}
-
-			targetPos.Store(next)
-
-			// A target change is a new optimization problem. Discard both
-			// queued proposals and scored candidates from the old objective.
-			select {
-			case resetEnv <- struct{}{}:
-			default:
-			}
-		}
-	}()
-
-	cfg := genetic.DefaultStreamingConfig()
-	cfg.PoolSize = 48
-	cfg.ProposalCapacity = simCount
-	cfg.PendingCapacity = simCount * 2
-	cfg.MinOutcomesPerGen = simCount
-
-	// Conservative mutation lets good controllers be refined instead of
-	// constantly being thrown far away from the current basin.
-	cfg.PerturbationRate = 0.20
-	cfg.PerturbationStrength = 0.06
-	cfg.Seed = uint64(time.Now().UnixNano())
-
-	reg := registry.NewRegistry(nil)
-
-	sCfg := registry.SpeciesConfig{
-		ID:        speciesLID,
-		Name:      "lander",
-		GeneCount: geneCount,
-		Bounds: []genetic.ParameterBounds{
-			{Min: 0.0, Max: 4.0}, // horizontal Kp
-			{Min: 0.0, Max: 8.0}, // horizontal Kd
-			{Min: 0.0, Max: 4.0}, // vertical Kp
-			{Min: 0.0, Max: 8.0}, // vertical Kd
-		},
-		TournamentSize: 3,
-		MixProbability: 0.5,
-		EngineConfig:   &cfg,
+	w := newWorld(*seed)
+	if *headless > 0 {
+		runHeadless(w, *headless)
+		return
 	}
-
-	// Landing position and touchdown speed dominate. Fuel is only a
-	// secondary tie-breaker, so "do nothing" is not an attractive solution.
-	agg := &fitness.WeightedAggregator{
-		Weights: map[string]float64{
-			"landing_distance": 0.65,
-			"landing_speed":    0.25,
-			"fuel_used":        0.10,
-		},
-		Normalizers: map[string]fitness.NormalizeFunc{
-			"landing_distance": fitness.NormalizeInverse(4.0),
-			"landing_speed":    fitness.NormalizeInverse(0.25),
-			"fuel_used":        fitness.NormalizeInverse(10.0),
-		},
-	}
-
-	if err := reg.Register(sCfg, agg); err != nil {
-		panic(err)
-	}
-	reg.Start()
-	defer reg.Stop()
-
-	var landers [simCount]Lander
-	buf := bytes.NewBuffer(make([]byte, 0, screenWidth*simHeight+2048))
-	ticker := time.NewTicker(dt)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		case <-resetEnv:
-			ts := reg.GetTracker(speciesLID)
-			ts.Engine.Inject(nil, 0)
-
-			for i := range landers {
-				if landers[i].active {
-					reg.AbandonFitness(speciesLID, landers[i].id)
-					landers[i].active = false
-				}
-			}
-		}
-
-		targetX := float64(targetPos.Load())
-
-		for i := range landers {
-			if landers[i].active {
-				continue
-			}
-
-			genes, evalID := reg.Sample(speciesLID)
-			if evalID == 0 {
-				continue
-			}
-			reg.BeginTracking(speciesLID, evalID)
-
-			landers[i] = Lander{
-				id:     evalID,
-				genes:  genes,
-				x:      startX,
-				y:      startY,
-				vx:     startVx,
-				vy:     0,
-				active: true,
-			}
-		}
-
-		for i := range landers {
-			l := &landers[i]
-			if !l.active {
-				continue
-			}
-
-			// Horizontal PD:
-			// Kp accelerates toward the target; Kd damps vx.
-			errX := (targetX - l.x) / screenWidth
-			normVx := l.vx / 2.0
-			reqX := l.genes[geneKpX]*errX - l.genes[geneKdX]*normVx
-
-			// Vertical PD toward the ground.  The previous version used
-			// positive altitude as the position error, which made positive KpY
-			// accelerate upward.  The GA consequently discovered that falling
-			// straight down was a perfectly stable local basin.
-			normY := (groundY - l.y) / simHeight
-			normVy := l.vy / 2.0
-			reqY := l.genes[geneKpY]*normY - l.genes[geneKdY]*normVy
-
-			thrustX := clamp(reqX*maxThrust, -maxThrust, maxThrust)
-			thrustY := clamp(reqY*maxThrust, -maxThrust, maxThrust)
-
-			l.fuel += math.Abs(thrustX) + math.Abs(thrustY)
-			l.vx += thrustX
-			l.vy += thrustY - gravity
-			l.x += l.vx
-			l.y += l.vy
-			l.ticks++
-
-			outOfBounds := l.x < 0 || l.x >= screenWidth || l.y > simHeight
-			landed := l.y <= groundY
-			timeout := l.ticks >= maxTicks
-
-			if !landed && !outOfBounds && !timeout {
-				continue
-			}
-
-			// At terminal evaluation y is already at/below the ground, so
-			// horizontal miss distance is the cleanest position objective.
-			landingDistance := math.Abs(targetX - l.x)
-			landingSpeed := math.Hypot(l.vx, l.vy)
-
-			// Leaving the sandbox is much worse than an ordinary miss.
-			if outOfBounds {
-				landingDistance += float64(screenWidth)
-			}
-
-			deathMetrics := tracking.MetricBundle{
-				"landing_distance": landingDistance,
-				"landing_speed":    landingSpeed,
-				"fuel_used":        l.fuel,
-			}
-			reg.CompleteTracking(speciesLID, l.id, deathMetrics, fitness.MapContext{})
-			l.active = false
-		}
-
-		activeCount := 0
-		for i := range landers {
-			if landers[i].active {
-				activeCount++
-			}
-		}
-
-		render(buf, landers[:], reg, int(targetX), activeCount)
-	}
+	runInteractive(w)
 }
 
-func clamp(v, lo, hi float64) float64 {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
-
-func render(buf *bytes.Buffer, landers []Lander, reg *registry.Registry, targetX int, activeCount int) {
-	buf.Reset()
-	buf.WriteString("\033[H") // Cursor Home
-
-	stats := reg.Stats(speciesLID)
-	ts := reg.GetTracker(speciesLID)
-
-	var bestGenes []float64
-	if best, ok := ts.Engine.Best(); ok {
-		bestGenes = best.Data
-	}
-
-	// \033[K erases from the cursor to the end of the line, fixing trailing text
-	buf.WriteString(fmt.Sprintf(
-		"\033[1;37m GA Lander Sandbox \033[0m| Gen: \033[36m%d\033[0m | Archive: \033[36m%d\033[0m | Active: \033[36m%d\033[0m\n",
-		stats.Generation, stats.PoolSize, activeCount,
-	))
-	buf.WriteString(fmt.Sprintf(
-		" Fit  | Best: \033[32m%.4f\033[0m | Avg: \033[36m%.4f\033[0m | Worst: \033[31m%.4f\033[0m | Target X: \033[32m%d\033[0m\033[K\n",
-		stats.BestFitness, stats.AvgFitness, stats.WorstFitness, targetX,
-	))
-	buf.WriteString(fmt.Sprintf(
-		" Stat | Evals: \033[36m%d\033[0m | Evicted: \033[31m%d\033[0m | Diversity: \033[36m%.3f\033[0m\033[K\n",
-		stats.TotalEvals, stats.Evicted, stats.Diversity,
-	))
-
-	if len(bestGenes) >= geneCount {
-		buf.WriteString(fmt.Sprintf(
-			" Best | X [Kp:\033[36m%+5.2f\033[0m Kd:\033[36m%+5.2f\033[0m] Y [Kp:\033[36m%+5.2f\033[0m Kd:\033[36m%+5.2f\033[0m]\033[K\n",
-			bestGenes[geneKpX], bestGenes[geneKdX],
-			bestGenes[geneKpY], bestGenes[geneKdY],
-		))
-	} else {
-		buf.WriteString(" Best | Waiting for evaluations...\033[K\n")
-	}
-
-	buf.WriteString("\033[K\n") // Spacer line
-
-	buf.WriteString(fmt.Sprintf(
-		" Press '\033[33mq\033[0m' to quit, '\033[33m< >\033[0m' to move\033[K\n",
-	))
-
-	buf.WriteString("\033[K\n") // Spacer line
-
-	var screen [simHeight][screenWidth]byte
-	for y := 0; y < simHeight; y++ {
-		for x := 0; x < screenWidth; x++ {
-			screen[y][x] = ' '
-		}
-	}
-
-	// Fancier landing pad: [===o===]
-	for i := -4; i <= 4; i++ {
-		tx := targetX + i
-		if tx >= 0 && tx < screenWidth {
-			switch i {
-			case -4:
-				screen[simHeight-1][tx] = '['
-			case 4:
-				screen[simHeight-1][tx] = ']'
-			case 0:
-				screen[simHeight-1][tx] = 'o'
-			default:
-				screen[simHeight-1][tx] = '='
-			}
-		}
-	}
-
-	for _, l := range landers {
-		if !l.active {
+func runHeadless(w *world, ticks int) {
+	fmt.Println("  tick   gen  evals evicted   best    avg  worst spread |   KpX   KdX   KpY   KdY |  miss speed  fuel ticks")
+	for w.tick < ticks {
+		w.advance()
+		if (w.tick%500 != 0 && w.tick != ticks) || w.best.Data == nil {
 			continue
 		}
-		x := int(l.x)
-		y := simHeight - 1 - int(l.y)
-		if x >= 0 && x < screenWidth && y >= 0 && y < simHeight {
-			// If crashed on the ground outside the pad, show an 'X'
-			if y == simHeight-1 && screen[y][x] == ' ' {
-				screen[y][x] = 'X'
-			} else if screen[y][x] == ' ' {
-				screen[y][x] = 'A'
+		s, r := w.engine.Stats(), w.bestRun
+		fmt.Printf("%6d %5d %6d %7d  %.3f  %.3f  %.3f  %.3f | %5.2f %5.2f %5.2f %5.2f | %5.2f %.3f %5.1f %5d\n",
+			w.tick, s.Generation, s.Evaluations, s.Evicted, s.BestScore, s.AverageScore, s.WorstScore, s.Diversity,
+			w.best.Data[geneKpX], w.best.Data[geneKdX], w.best.Data[geneKpY], w.best.Data[geneKdY],
+			math.Abs(r.x-w.targetX), r.speed(), r.fuel, r.ticks)
+	}
+}
+
+func runInteractive(w *world) {
+	defer rawTerminal()()
+
+	keys := make(chan byte, 8)
+	go readKeys(keys)
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	ticker := time.NewTicker(frame)
+	defer ticker.Stop()
+
+	buf := bytes.NewBuffer(make([]byte, 0, 16<<10))
+	for {
+		select {
+		case <-sig:
+			return
+		case k := <-keys:
+			switch k {
+			case 'q':
+				return
+			case '<':
+				w.retarget(-3)
+			case '>':
+				w.retarget(3)
+			}
+		case <-ticker.C:
+			w.advance()
+			render(buf, w)
+		}
+	}
+}
+
+// rawTerminal switches stdin to unbuffered input through stty, which keeps the
+// sandbox on the standard library. It returns the function that undoes it
+func rawTerminal() func() {
+	stty := func(args ...string) {
+		c := exec.Command("stty", args...)
+		c.Stdin = os.Stdin
+		_ = c.Run()
+	}
+	stty("-icanon", "-echo")
+	fmt.Print("\033[?25l\033[2J")
+	return func() {
+		stty("icanon", "echo")
+		fmt.Print("\033[?25h\033[2J\033[H")
+	}
+}
+
+// readKeys maps q, h/l, a/d and the arrow keys onto 'q', '<' and '>'
+func readKeys(keys chan<- byte) {
+	b := make([]byte, 3)
+	for {
+		n, err := os.Stdin.Read(b)
+		if err != nil {
+			return
+		}
+		arrow := n == 3 && b[0] == 27 && b[1] == '['
+		switch {
+		case b[0] == 'q' || b[0] == 'Q':
+			keys <- 'q'
+		case b[0] == 'h' || b[0] == 'a' || (arrow && b[2] == 'D'):
+			keys <- '<'
+		case b[0] == 'l' || b[0] == 'd' || (arrow && b[2] == 'C'):
+			keys <- '>'
+		}
+	}
+}
+
+const (
+	ansiReset  = "\033[0m"
+	ansiDim    = "\033[2m"
+	ansiBold   = "\033[1;37m"
+	ansiCyan   = "\033[36m"
+	ansiGreen  = "\033[32m"
+	ansiYellow = "\033[33m"
+	ansiRed    = "\033[31m"
+	ansiClear  = "\033[K\n"
+)
+
+func render(buf *bytes.Buffer, w *world) {
+	buf.Reset()
+	buf.WriteString("\033[H")
+
+	s := w.engine.Stats()
+	fmt.Fprintf(buf, "%s genetic lander %s| gen %s%d%s | evals %s%d%s | pending %s%d%s | evicted %s%d%s | archive %s%d%s%s",
+		ansiBold, ansiReset, ansiCyan, s.Generation, ansiReset, ansiCyan, s.Evaluations, ansiReset,
+		ansiCyan, s.Pending, ansiReset, ansiRed, s.Evicted, ansiReset, ansiCyan, s.Size, ansiReset, ansiClear)
+	fmt.Fprintf(buf, " best %s%.3f%s | avg %s%.3f%s | worst %s%.3f%s | spread %s%.3f%s%s",
+		ansiGreen, s.BestScore, ansiReset, ansiCyan, s.AverageScore, ansiReset,
+		ansiRed, s.WorstScore, ansiReset, ansiCyan, s.Diversity, ansiReset, ansiClear)
+	if w.best.Data == nil {
+		buf.WriteString(" waiting for the first touchdown" + ansiClear)
+	} else {
+		g, r := w.best.Data, w.bestRun
+		fmt.Fprintf(buf, " champion %s@%s KpX %.2f KdX %.2f KpY %.2f KdY %.2f -> %.1f off pad at %.3f/tick, %.1f fuel, %d ticks%s",
+			ansiCyan, ansiReset, g[geneKpX], g[geneKdX], g[geneKpY], g[geneKdY],
+			math.Abs(r.x-w.targetX), r.speed(), r.fuel, r.ticks, ansiClear)
+	}
+	fmt.Fprintf(buf, " %s[<] [>]%s move pad   %s[q]%s quit%s%s", ansiYellow, ansiReset, ansiYellow, ansiReset, ansiClear, ansiClear)
+
+	var field [fieldHeight][fieldWidth]byte
+	plot := func(l *lander, glyph byte) {
+		if !l.flying() {
+			return
+		}
+		col, row := int(l.x), fieldHeight-1-int(l.y)
+		if col >= 0 && col < fieldWidth && row >= 0 && row < fieldHeight {
+			field[row][col] = glyph
+		}
+	}
+	for i := range w.landers {
+		plot(&w.landers[i], 'A')
+	}
+	plot(&w.champion, '@')
+
+	for row := range field {
+		for _, c := range field[row] {
+			switch c {
+			case 'A':
+				buf.WriteString(ansiYellow + "A" + ansiReset)
+			case '@':
+				buf.WriteString(ansiBold + "@" + ansiReset)
+			default:
+				buf.WriteByte(' ')
 			}
 		}
+		buf.WriteString(ansiClear)
 	}
 
-	for y := 0; y < simHeight; y++ {
-		for x := 0; x < screenWidth; x++ {
-			switch screen[y][x] {
-			case 'A': // Flying lander
-				buf.WriteString("\033[1;33mA\033[0m")
-			case 'X': // Crashed lander
-				buf.WriteString("\033[1;31mX\033[0m")
-			case '=': // Pad surface
-				buf.WriteString("\033[1;32m=\033[0m")
-			case 'o': // Pad center
-				buf.WriteString("\033[1;31mo\033[0m")
-			case '[', ']': // Pad edges
-				buf.WriteString("\033[1;37m")
-				buf.WriteByte(screen[y][x])
-				buf.WriteString("\033[0m")
-			default:
-				buf.WriteByte(screen[y][x])
-			}
+	// Ground row: the pad, and recent touchdowns as '.' (soft) or 'x' (hard)
+	pad := int(w.targetX)
+	for col := range fieldWidth {
+		m := w.marks[col]
+		switch {
+		case col == pad:
+			buf.WriteString(ansiRed + "o" + ansiReset)
+		case col == pad-padHalf || col == pad+padHalf:
+			buf.WriteString(ansiBold + "|" + ansiReset)
+		case col > pad-padHalf && col < pad+padHalf:
+			buf.WriteString(ansiGreen + "=" + ansiReset)
+		case m.until > w.tick && m.soft:
+			buf.WriteString(ansiGreen + "." + ansiReset)
+		case m.until > w.tick:
+			buf.WriteString(ansiRed + "x" + ansiReset)
+		default:
+			buf.WriteString(ansiDim + "_" + ansiReset)
 		}
-		buf.WriteString("\033[K\n")
 	}
+	buf.WriteString(ansiClear)
 
 	_, _ = os.Stdout.Write(buf.Bytes())
 }

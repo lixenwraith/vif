@@ -2,6 +2,7 @@ package registry
 
 import (
 	"math/rand/v2"
+	"slices"
 	"sync"
 	"time"
 
@@ -47,20 +48,23 @@ func NewTrackedSpecies(cfg SpeciesConfig, agg fitness.Aggregator) *TrackedSpecie
 		return g
 	}
 
+	engine := genetic.NewStreamingEngine[[]float64, float64](
+		initializer,
+		&genetic.TournamentSelector[[]float64, float64]{TournamentSize: cfg.TournamentSize},
+		&genetic.UniformCombiner[[]float64, float64, float64]{MixProbability: cfg.MixProbability},
+		&genetic.BoundedPerturbator{Bounds: bounds, Boundary: cfg.Boundary},
+		genetic.SliceCloner[[]float64, float64]{},
+		engineCfg,
+	)
+	engine.SetEqual(slices.Equal[[]float64])
+
 	return &TrackedSpecies{
 		Config:     cfg,
 		Aggregator: agg,
 		// Probe stream derives from the engine seed so both replay together
 		probeSource: probeSource,
 		probeRng:    rand.New(probeSource),
-		Engine: genetic.NewStreamingEngine[[]float64, float64](
-			initializer,
-			&genetic.TournamentSelector[[]float64, float64]{TournamentSize: cfg.TournamentSize},
-			&genetic.UniformCombiner[[]float64, float64, float64]{MixProbability: cfg.MixProbability},
-			&genetic.BoundedPerturbator{Bounds: bounds, Boundary: cfg.Boundary},
-			genetic.SliceCloner[[]float64, float64]{},
-			engineCfg,
-		),
+		Engine:      engine,
 	}
 }
 
