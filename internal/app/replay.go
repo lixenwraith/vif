@@ -170,7 +170,7 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 	a.world.RunSafe(func() {
 		var before, cap snapshot.SharedCapture
 		if before, err = a.captureSharedLocked(); err == nil {
-			cap, err = snapshot.ApplyWritten(before, d)
+			cap, err = a.encoder.ApplyWritten(before, d)
 		}
 		if err != nil {
 			return

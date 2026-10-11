@@ -161,6 +161,7 @@ type App struct {
 	// telemetry is reserved during construction so a capture or an install can
 	// publish its cost into a registry that is frozen by then.
 	telemetry snapshot.Telemetry
+	encoder   snapshot.Encoder // capture encodings the seal, the index and the journal share
 
 	sharedStatus statusKeys // the registry keys a capture carries; world lock
 

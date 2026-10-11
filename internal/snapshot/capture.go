@@ -3,9 +3,7 @@
 package snapshot
 
 import (
-	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/engine"
@@ -16,7 +14,7 @@ import (
 
 // Capture and journal schemas are separate so compatibility errors identify
 // which layout prevents an install.
-const Schema = 12
+const Schema = 13
 
 // SharedCapture is the shared world at one tick (D-19): the shared component
 // stores, the allocator's next ID, the Shared RNG stream positions, and the private
@@ -146,21 +144,12 @@ func Anchor(h CaptureHeader) event.JournalAnchor {
 	}
 }
 
-// Integrity hashes a capture body with the header's integrity field zeroed, so
-// the value covers everything except itself.
-func Integrity(cap SharedCapture) (uint64, error) {
-	cap.Header.Integrity = 0
-	body, err := json.Marshal(cap)
-	if err != nil {
-		return 0, fmt.Errorf("capture encode: %w", err)
-	}
-	h := fnv.New64a()
-	_, _ = h.Write(body)
-	return h.Sum64(), nil
-}
+// Integrity hashes a capture with the header's integrity field zeroed, so the value
+// covers everything except itself. An Encoder's own method reuses its encodings.
+func Integrity(cap SharedCapture) (uint64, error) { return new(Encoder).Integrity(cap) }
 
 // EncodeCapture renders a capture in the bounded compressed wire envelope.
-func EncodeCapture(cap SharedCapture) ([]byte, error) { return EncodeJSON(cap) }
+func EncodeCapture(cap SharedCapture) ([]byte, error) { return new(Encoder).EncodeCapture(cap) }
 
 // DecodeCapture parses what EncodeCapture produced. It validates nothing: the
 // caller passes the result to VerifyCapture or InstallShared.

@@ -38,6 +38,8 @@ type Instance interface {
 	// projection, and reports how far the live world had drifted from it.
 	// AdoptAuthority takes a header whose world this instance provably holds already.
 	// VerifyCaptureIdentity answers whether a header describes this session.
+	// Encoder is this instance's capture encodings, which every seal, index and
+	// body here shares.
 	CaptureShared() (snapshot.SharedCapture, error)
 	// CaptureSharedLocked is the read without its seal, for TickClosed, which runs
 	// under the world lock; a comparison needs no integrity hash, only the index.
@@ -45,6 +47,7 @@ type Instance interface {
 	InstallCapture(snapshot.SharedCapture) (engine.WorldDifference, error)
 	AdoptAuthority(snapshot.CaptureHeader)
 	VerifyCaptureIdentity(snapshot.CaptureHeader) error
+	Encoder() *snapshot.Encoder
 
 	// DropParticipant closes one participant's link; the departure that follows is
 	// the ordinary one. CommitLate is how many of a participant's crossings reached

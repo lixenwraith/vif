@@ -185,7 +185,7 @@ func (s *StagedInstall) Commit() error {
 // participant. A join writes before its transport attaches, so the identity then
 // is the one the offer assigned.
 func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, participant uint32, before, cap snapshot.SharedCapture) {
-	d, err := snapshot.DiffWritten(before, cap)
+	d, err := a.encoder.DiffWritten(before, cap)
 	var body []byte
 	if err == nil {
 		body, err = snapshot.EncodeJSON(d)

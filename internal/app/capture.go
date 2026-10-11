@@ -182,12 +182,7 @@ func (a *App) captureSharedLocked() (snapshot.SharedCapture, error) {
 // sealCapture pins the corpus and hashes the capture, outside the world lock.
 func (a *App) sealCapture(cap *snapshot.SharedCapture) error {
 	cap.Header.ContentPin = service.MustGet[*service.ContentService](a.hub, "content").Pin()
-	integrity, err := snapshot.Integrity(*cap)
-	if err != nil {
-		return err
-	}
-	cap.Header.Integrity = integrity
-	return nil
+	return a.encoder.Seal(cap)
 }
 
 // captureSystemStatesLocked collects every declared carrier's state, in system
@@ -421,11 +416,7 @@ func (a *App) VerifyCapture(cap snapshot.SharedCapture) error {
 		return fmt.Errorf("capture schema %d, this build reads %d",
 			cap.Header.Schema, snapshot.Schema)
 	}
-	want, err := snapshot.Integrity(cap)
-	if err != nil {
-		return err
-	}
-	if want != cap.Header.Integrity {
+	if !a.encoder.Verify(cap) {
 		return errors.New("capture integrity hash does not match its body")
 	}
 

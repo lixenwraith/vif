@@ -5,17 +5,19 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
-	"slices"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 )
 
 // StoreRow is one component cell in the manifest's canonical form: the entity it
 // belongs to and the exact bytes its value marshals to. The bytes are the hashed
 // content and the repaired content both, so a row that hashes equal decodes equal.
+// Hash is the row hash a RowEncoder computed, zero on a row it did not encode.
 type StoreRow struct {
 	Entity core.Entity     `json:"e"`
 	Value  json.RawMessage `json:"v"`
+	Hash   uint64          `json:"-"`
 }
 
 // SharedWorldStoreNames are the wire-stable section ids of the capture's component
@@ -81,123 +83,226 @@ var SharedWorldStoreNames = []string{
 // SharedWorldStoreCount is how many component stores a capture carries.
 var SharedWorldStoreCount = len(SharedWorldStoreNames)
 
-// SharedWorldStoreRows appends store i's cells to dst in entity-ascending order.
-//
-// Marshalling per cell rather than per store is what makes a page independently
-// hashable and independently repairable; it runs on the correction goroutine,
-// outside the world lock, on a capture that has already been taken.
-func SharedWorldStoreRows(s *SharedWorldState, i int, dst []StoreRow) ([]StoreRow, error) {
-	switch i {
-	case 0:
-		return appendStoreRows(dst, s.Positions)
-	case 1:
-		return appendStoreRows(dst, s.Glyph)
-	case 2:
-		return appendStoreRows(dst, s.Sigil)
-	case 3:
-		return appendStoreRows(dst, s.Nugget)
-	case 4:
-		return appendStoreRows(dst, s.Cursor)
-	case 5:
-		return appendStoreRows(dst, s.Protection)
-	case 6:
-		return appendStoreRows(dst, s.Kinetic)
-	case 7:
-		return appendStoreRows(dst, s.Wall)
-	case 8:
-		return appendStoreRows(dst, s.Loot)
-	case 9:
-		return appendStoreRows(dst, s.Gateway)
-	case 10:
-		return appendStoreRows(dst, s.Energy)
-	case 11:
-		return appendStoreRows(dst, s.Heat)
-	case 12:
-		return appendStoreRows(dst, s.Shield)
-	case 13:
-		return appendStoreRows(dst, s.Boost)
-	case 14:
-		return appendStoreRows(dst, s.Weapon)
-	case 15:
-		return appendStoreRows(dst, s.Orb)
-	case 16:
-		return appendStoreRows(dst, s.Ping)
-	case 17:
-		return appendStoreRows(dst, s.CursorView)
-	case 18:
-		return appendStoreRows(dst, s.Particle)
-	case 19:
-		return appendStoreRows(dst, s.Tracer)
-	case 20:
-		return appendStoreRows(dst, s.Dust)
-	case 21:
-		return appendStoreRows(dst, s.Navigation)
-	case 22:
-		return appendStoreRows(dst, s.Combat)
-	case 23:
-		return appendStoreRows(dst, s.Genotype)
-	case 24:
-		return appendStoreRows(dst, s.Lightning)
-	case 25:
-		return appendStoreRows(dst, s.Missile)
-	case 26:
-		return appendStoreRows(dst, s.Mount)
-	case 27:
-		return appendStoreRows(dst, s.Ray)
-	case 28:
-		return appendStoreRows(dst, s.Spirit)
-	case 29:
-		return appendStoreRows(dst, s.Materialize)
-	case 30:
-		return appendStoreRows(dst, s.Target)
-	case 31:
-		return appendStoreRows(dst, s.TargetAnchor)
-	case 32:
-		return appendStoreRows(dst, s.Drain)
-	case 33:
-		return appendStoreRows(dst, s.Quasar)
-	case 34:
-		return appendStoreRows(dst, s.Swarm)
-	case 35:
-		return appendStoreRows(dst, s.Storm)
-	case 36:
-		return appendStoreRows(dst, s.StormCircle)
-	case 37:
-		return appendStoreRows(dst, s.Bullet)
-	case 38:
-		return appendStoreRows(dst, s.Pylon)
-	case 39:
-		return appendStoreRows(dst, s.Snake)
-	case 40:
-		return appendStoreRows(dst, s.SnakeHead)
-	case 41:
-		return appendStoreRows(dst, s.SnakeBody)
-	case 42:
-		return appendStoreRows(dst, s.SnakeMember)
-	case 43:
-		return appendStoreRows(dst, s.Eye)
-	case 44:
-		return appendStoreRows(dst, s.Tower)
-	case 45:
-		return appendStoreRows(dst, s.Kraken)
-	case 46:
-		return appendStoreRows(dst, s.Header)
-	case 47:
-		return appendStoreRows(dst, s.Member)
-	case 48:
-		return appendStoreRows(dst, s.Flash)
-	case 49:
-		return appendStoreRows(dst, s.Fadeout)
-	case 50:
-		return appendStoreRows(dst, s.Splash)
-	case 51:
-		return appendStoreRows(dst, s.Marker)
-	case 52:
-		return appendStoreRows(dst, s.Death)
-	case 53:
-		return appendStoreRows(dst, s.Timer)
+// newStoreEncoders builds one row encoder per store, in SharedWorldStoreNames order.
+func newStoreEncoders() []storeEncoder {
+	return []storeEncoder{
+		&rowEncoder[component.PositionComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.PositionComponent] { return s.Positions },
+			equal: equalPositions,
+		},
+		&rowEncoder[component.GlyphComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.GlyphComponent] { return s.Glyph },
+			equal: equalGlyph,
+		},
+		&rowEncoder[component.SigilComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.SigilComponent] { return s.Sigil },
+			equal: equalSigil,
+		},
+		&rowEncoder[component.NuggetComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.NuggetComponent] { return s.Nugget },
+			equal: equalNugget,
+		},
+		&rowEncoder[component.CursorComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.CursorComponent] { return s.Cursor },
+			equal: equalCursor,
+		},
+		&rowEncoder[component.ProtectionComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.ProtectionComponent] { return s.Protection },
+			equal: equalProtection,
+		},
+		&rowEncoder[component.KineticComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.KineticComponent] { return s.Kinetic },
+			equal: equalKinetic,
+		},
+		&rowEncoder[component.WallComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.WallComponent] { return s.Wall },
+			equal: equalWall,
+		},
+		&rowEncoder[component.LootComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.LootComponent] { return s.Loot },
+			equal: equalLoot,
+		},
+		&rowEncoder[component.GatewayComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.GatewayComponent] { return s.Gateway },
+			equal: equalGateway,
+		},
+		&rowEncoder[component.EnergyComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.EnergyComponent] { return s.Energy },
+			equal: equalEnergy,
+		},
+		&rowEncoder[component.HeatComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.HeatComponent] { return s.Heat },
+			equal: equalHeat,
+		},
+		&rowEncoder[component.ShieldComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.ShieldComponent] { return s.Shield },
+			equal: equalShield,
+		},
+		&rowEncoder[component.BoostComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.BoostComponent] { return s.Boost },
+			equal: equalBoost,
+		},
+		&rowEncoder[component.WeaponComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.WeaponComponent] { return s.Weapon },
+			equal: equalWeapon,
+		},
+		&rowEncoder[component.OrbComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.OrbComponent] { return s.Orb },
+			equal: equalOrb,
+		},
+		&rowEncoder[component.PingComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.PingComponent] { return s.Ping },
+			equal: equalPing,
+		},
+		&rowEncoder[component.CursorViewComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.CursorViewComponent] { return s.CursorView },
+			equal: equalCursorView,
+		},
+		&rowEncoder[component.ParticleComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.ParticleComponent] { return s.Particle },
+			equal: equalParticle,
+		},
+		&rowEncoder[component.TracerComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.TracerComponent] { return s.Tracer },
+			equal: equalTracer,
+		},
+		&rowEncoder[component.DustComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.DustComponent] { return s.Dust },
+			equal: equalDust,
+		},
+		&rowEncoder[component.NavigationComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.NavigationComponent] { return s.Navigation },
+			equal: equalNavigation,
+		},
+		&rowEncoder[component.CombatComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.CombatComponent] { return s.Combat },
+			equal: equalCombat,
+		},
+		&rowEncoder[component.GenotypeComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.GenotypeComponent] { return s.Genotype },
+			equal: equalGenotype,
+		},
+		&rowEncoder[component.LightningComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.LightningComponent] { return s.Lightning },
+			equal: equalLightning,
+		},
+		&rowEncoder[component.MissileComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.MissileComponent] { return s.Missile },
+			equal: equalMissile,
+		},
+		&rowEncoder[component.MountComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.MountComponent] { return s.Mount },
+			equal: equalMount,
+		},
+		&rowEncoder[component.RayComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.RayComponent] { return s.Ray },
+			equal: equalRay,
+		},
+		&rowEncoder[component.SpiritComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.SpiritComponent] { return s.Spirit },
+			equal: equalSpirit,
+		},
+		&rowEncoder[component.MaterializeComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.MaterializeComponent] { return s.Materialize },
+			equal: equalMaterialize,
+		},
+		&rowEncoder[component.TargetComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.TargetComponent] { return s.Target },
+			equal: equalTarget,
+		},
+		&rowEncoder[component.TargetAnchorComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.TargetAnchorComponent] { return s.TargetAnchor },
+			equal: equalTargetAnchor,
+		},
+		&rowEncoder[component.DrainComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.DrainComponent] { return s.Drain },
+			equal: equalDrain,
+		},
+		&rowEncoder[component.QuasarComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.QuasarComponent] { return s.Quasar },
+			equal: equalQuasar,
+		},
+		&rowEncoder[component.SwarmComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.SwarmComponent] { return s.Swarm },
+			equal: equalSwarm,
+		},
+		&rowEncoder[component.StormComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.StormComponent] { return s.Storm },
+			equal: equalStorm,
+		},
+		&rowEncoder[component.StormCircleComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.StormCircleComponent] { return s.StormCircle },
+			equal: equalStormCircle,
+		},
+		&rowEncoder[component.BulletComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.BulletComponent] { return s.Bullet },
+			equal: equalBullet,
+		},
+		&rowEncoder[component.PylonComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.PylonComponent] { return s.Pylon },
+			equal: equalPylon,
+		},
+		&rowEncoder[component.SnakeComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.SnakeComponent] { return s.Snake },
+			equal: equalSnake,
+		},
+		&rowEncoder[component.SnakeHeadComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.SnakeHeadComponent] { return s.SnakeHead },
+			equal: equalSnakeHead,
+		},
+		&rowEncoder[component.SnakeBodyComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.SnakeBodyComponent] { return s.SnakeBody },
+			equal: equalSnakeBody,
+		},
+		&rowEncoder[component.SnakeMemberComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.SnakeMemberComponent] { return s.SnakeMember },
+			equal: equalSnakeMember,
+		},
+		&rowEncoder[component.EyeComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.EyeComponent] { return s.Eye },
+			equal: equalEye,
+		},
+		&rowEncoder[component.TowerComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.TowerComponent] { return s.Tower },
+			equal: equalTower,
+		},
+		&rowEncoder[component.KrakenComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.KrakenComponent] { return s.Kraken },
+			equal: equalKraken,
+		},
+		&rowEncoder[component.HeaderComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.HeaderComponent] { return s.Header },
+			equal: equalHeader,
+		},
+		&rowEncoder[component.MemberComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.MemberComponent] { return s.Member },
+			equal: equalMember,
+		},
+		&rowEncoder[component.FlashComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.FlashComponent] { return s.Flash },
+			equal: equalFlash,
+		},
+		&rowEncoder[component.FadeoutComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.FadeoutComponent] { return s.Fadeout },
+			equal: equalFadeout,
+		},
+		&rowEncoder[component.SplashComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.SplashComponent] { return s.Splash },
+			equal: equalSplash,
+		},
+		&rowEncoder[component.MarkerComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.MarkerComponent] { return s.Marker },
+			equal: equalMarker,
+		},
+		&rowEncoder[component.DeathComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.DeathComponent] { return s.Death },
+			equal: equalDeath,
+		},
+		&rowEncoder[component.TimerComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.TimerComponent] { return s.Timer },
+			equal: equalTimer,
+		},
 	}
-	return nil, fmt.Errorf("capture holds no store %d", i)
 }
 
 // SharedWorldApplyStoreRows replaces every cell of store i the page owns with rows.
@@ -589,34 +694,11 @@ func SharedWorldApplyStoreRows(s *SharedWorldState, i int, owns func(core.Entity
 	return fmt.Errorf("capture holds no store %d", i)
 }
 
-// appendStoreRows renders one store's entries in the manifest's canonical order.
-func appendStoreRows[T any](dst []StoreRow, entries []StoreEntry[T]) ([]StoreRow, error) {
-	start := len(dst)
-	for _, en := range entries {
-		v, err := json.Marshal(en.Value)
-		if err != nil {
-			return nil, err
-		}
-		dst = append(dst, StoreRow{Entity: en.Entity, Value: v})
-	}
-	rows := dst[start:]
-	slices.SortFunc(rows, func(a, b StoreRow) int {
-		switch {
-		case a.Entity < b.Entity:
-			return -1
-		case a.Entity > b.Entity:
-			return 1
-		}
-		return 0
-	})
-	return dst, nil
-}
-
 // applyStoreRows rebuilds one store with the page's cells replaced.
 //
 // The result keeps the entries the page does not own in their existing order and
 // appends the page's in canonical order. Store order is not compared and is not in
-// the manifest's hashed surface — see SharedWorldStoreRows — so what matters here
+// the manifest's hashed surface, so what matters here
 // is only that the set and the values are the authority's.
 func applyStoreRows[T any](entries []StoreEntry[T], owns func(core.Entity) bool, rows []StoreRow) ([]StoreEntry[T], error) {
 	out := make([]StoreEntry[T], 0, len(entries)+len(rows))

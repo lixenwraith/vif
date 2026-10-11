@@ -1,8 +1,6 @@
 package engine
 
 import (
-	"reflect"
-
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 )
@@ -43,31 +41,42 @@ func DetachSnapshotValue[T any](v T) T {
 	return v
 }
 
-// diffStore computes one store's delta against a baseline. Values compare with
-// reflect.DeepEqual: three shared components carry a slice, so == is not available
-// to the set, and a per-component list of which need a deep compare would drift.
-func diffStore[T any](base, next []StoreEntry[T]) StoreDelta[T] {
+// diffStore computes one store's delta against a baseline. equal is the store's
+// generated comparison, so an entry it omits encodes as the baseline's does. The
+// common prefix of the two orders is compared in place, so a store that kept its
+// order, as a static one does, is diffed without being indexed.
+func diffStore[T any](base, next []StoreEntry[T], equal func(a, b *T) bool) StoreDelta[T] {
 	var d StoreDelta[T]
-
-	baseIndex := make(map[core.Entity]int, len(base))
-	for i, en := range base {
-		baseIndex[en.Entity] = i
-	}
-	inNext := make(map[core.Entity]struct{}, len(next))
-
-	for _, en := range next {
-		inNext[en.Entity] = struct{}{}
-		i, ok := baseIndex[en.Entity]
-		if !ok || !reflect.DeepEqual(base[i].Value, en.Value) {
-			d.Changed = append(d.Changed, en)
+	k := 0
+	for ; k < len(base) && k < len(next) && base[k].Entity == next[k].Entity; k++ {
+		if !equal(&base[k].Value, &next[k].Value) {
+			d.Changed = append(d.Changed, next[k])
 		}
 	}
-	for _, en := range base {
+	restBase, restNext := base[k:], next[k:]
+	if len(restBase) == 0 && len(restNext) == 0 {
+		return d
+	}
+
+	baseIndex := make(map[core.Entity]int, len(restBase))
+	for i, en := range restBase {
+		baseIndex[en.Entity] = i
+	}
+	inNext := make(map[core.Entity]struct{}, len(restNext))
+	for j := range restNext {
+		en := &restNext[j]
+		inNext[en.Entity] = struct{}{}
+		i, ok := baseIndex[en.Entity]
+		if !ok || !equal(&restBase[i].Value, &en.Value) {
+			d.Changed = append(d.Changed, *en)
+		}
+	}
+	for _, en := range restBase {
 		if _, ok := inNext[en.Entity]; !ok {
 			d.Removed = append(d.Removed, en.Entity)
 		}
 	}
-	if !sameOrder(derivedOrder(base, inNext, next), next) {
+	if !sameOrder(derivedOrder(restBase, inNext, restNext), restNext) {
 		d.Order = make([]core.Entity, len(next))
 		for i, en := range next {
 			d.Order[i] = en.Entity
@@ -168,10 +177,10 @@ func applyStore[T any](base []StoreEntry[T], d StoreDelta[T]) []StoreEntry[T] {
 // store and records the entities behind them, which is the correction magnitude's
 // unit and its entity count. Two readings of one world mostly hold a store in one
 // order, so their common prefix is compared in place and only the rest is indexed.
-func countStoreDifference[T any](a, b []StoreEntry[T], touched map[core.Entity]struct{}) int {
+func countStoreDifference[T any](a, b []StoreEntry[T], touched map[core.Entity]struct{}, equal func(a, b *T) bool) int {
 	n, k := 0, 0
 	for ; k < len(a) && k < len(b) && a[k].Entity == b[k].Entity; k++ {
-		if !reflect.DeepEqual(a[k].Value, b[k].Value) {
+		if !equal(&a[k].Value, &b[k].Value) {
 			n++
 			touched[b[k].Entity] = struct{}{}
 		}
@@ -182,10 +191,11 @@ func countStoreDifference[T any](a, b []StoreEntry[T], touched map[core.Entity]s
 		index[en.Entity] = i
 	}
 	seen := make(map[core.Entity]struct{}, len(b))
-	for _, en := range b {
+	for j := range b {
+		en := &b[j]
 		seen[en.Entity] = struct{}{}
 		i, ok := index[en.Entity]
-		if !ok || !reflect.DeepEqual(a[i].Value, en.Value) {
+		if !ok || !equal(&a[i].Value, &en.Value) {
 			n++
 			touched[en.Entity] = struct{}{}
 		}

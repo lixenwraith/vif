@@ -515,7 +515,8 @@ the operating point (multi-player §6) and fixed what it found.
   owned copy of every wall entry compares equal, and a reflect guard refuses a wall
   field whose `==` could disagree with its JSON. Warm builds fell from about 10 to
   4 ms on the tower map and from about 120 to 30 ms on td, and combined CPU by about
-  a quarter and a sixth, with identical roots and hash-only counts.
+  a quarter and a sixth, with identical roots and hash-only counts. Every store now
+  reuses its rows this way, under generated comparisons in place of the guard.
 - **Body reuse.** A baseline keeps its correction envelope for every fallback
   recipient. Its join body now follows the same rule, which a successor's baseline
   had broken by keeping its predecessor's.

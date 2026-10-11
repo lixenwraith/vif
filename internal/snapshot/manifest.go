@@ -1,13 +1,10 @@
 package snapshot
 
 import (
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -19,7 +16,7 @@ import (
 // Schema. The schema says what a capture contains; this says how it is
 // partitioned and hashed. Either moving invalidates a comparison, and a receiver
 // has to be able to say which one did.
-const ManifestVersion = 1
+const ManifestVersion = 2
 
 // The section ids that are not component stores. Component store sections take
 // their ids from engine.SharedWorldStoreNames, which is generated beside the
@@ -130,125 +127,12 @@ type Manifest struct {
 	sections  map[string]*section
 	index     map[string]int // section id to its slot in summary.Sections
 	authority uint32
+	enc       *Encoder // what built it, which a repair's rebuild reuses
 }
 
-// ManifestBuilder reuses the wall section only after comparing every detached value.
-// Its owned copy detects pointer writes without relying on store write counters.
-// The pair is replaced, never mutated, so builds share it and run unserialised.
-type ManifestBuilder struct {
-	mu    sync.Mutex
-	walls []engine.StoreEntry[component.WallComponent]
-	wall  *section
-}
-
-func (b *ManifestBuilder) Build(cap SharedCapture, authority uint32) (*Manifest, error) {
-	b.mu.Lock()
-	walls, wall := b.walls, b.wall
-	b.mu.Unlock()
-	if wall != nil && !slices.Equal(walls, cap.World.Wall) {
-		wall = nil
-	}
-	m, err := buildManifest(cap, authority, wall)
-	if err == nil && wall == nil {
-		walls = slices.Clone(cap.World.Wall)
-		b.mu.Lock()
-		b.walls, b.wall = walls, m.sections[StoreSectionPrefix+"wall"]
-		b.mu.Unlock()
-	}
-	return m, err
-}
-
-// BuildManifest indexes a detached capture outside the world lock.
+// BuildManifest indexes a detached capture outside the world lock, encoding afresh.
 func BuildManifest(cap SharedCapture, authority uint32) (*Manifest, error) {
-	return buildManifest(cap, authority, nil)
-}
-
-func buildManifest(cap SharedCapture, authority uint32, wall *section) (*Manifest, error) {
-	cursors := ownerAuthoredCursors(cap)
-	m := &Manifest{
-		summary: CorrectionManifest{
-			Version:   ManifestVersion,
-			Header:    cap.Header,
-			Authority: authority,
-		},
-		authority: authority,
-		sections:  make(map[string]*section, engine.SharedWorldStoreCount+5),
-		index:     make(map[string]int, engine.SharedWorldStoreCount+5),
-	}
-
-	add := func(sec *section) {
-		m.sections[sec.ID] = sec
-		m.index[sec.ID] = len(m.summary.Sections)
-		m.summary.Sections = append(m.summary.Sections, sec.SectionSummary)
-	}
-
-	meta, err := metaRows(cap)
-	if err != nil {
-		return nil, err
-	}
-	add(newSection(SectionMeta, meta))
-
-	var scratch []engine.StoreRow
-	for i := range engine.SharedWorldStoreCount {
-		name := engine.SharedWorldStoreNames[i]
-		if name == "wall" && wall != nil {
-			add(wall)
-			continue
-		}
-		scratch = scratch[:0]
-		scratch, err = engine.SharedWorldStoreRows(&cap.World, i, scratch)
-		if err != nil {
-			return nil, fmt.Errorf("manifest %s: %w", name, err)
-		}
-		rows, err := storeManifestRows(name, scratch, cursors)
-		if err != nil {
-			return nil, fmt.Errorf("manifest %s: %w", name, err)
-		}
-		add(newSection(StoreSectionPrefix+name, rows))
-	}
-
-	if rows, err := streamRows(cap); err != nil {
-		return nil, err
-	} else {
-		add(newSection(SectionStreams, rows))
-	}
-	if rows, err := systemRows(cap); err != nil {
-		return nil, err
-	} else {
-		add(newSection(SectionSystems, rows))
-	}
-	if rows, err := statusRows(cap); err != nil {
-		return nil, err
-	} else {
-		add(newSection(SectionStatus, rows))
-	}
-	if rows, err := fsmRows(cap); err != nil {
-		return nil, err
-	} else {
-		add(newSection(SectionFSM, rows))
-	}
-
-	m.summary.Root = manifestRoot(cap.Header, authority, m.summary.Sections)
-	return m, nil
-}
-
-// storeManifestRows turns one store's canonical rows into indexed rows: the
-// owner-authored cells of a cursor dropped, and the re-derived cells of what
-// remains zeroed.
-func storeManifestRows(name string, scratch []engine.StoreRow, cursors map[core.Entity]bool) ([]ManifestRow, error) {
-	owner := ownerAuthoredStores[name]
-	rows := make([]ManifestRow, 0, len(scratch))
-	for _, r := range scratch {
-		if owner && cursors[r.Entity] {
-			continue // D-13: one author, and it is not the receiver's to repair
-		}
-		value, err := normaliseStoreValue(name, r.Value)
-		if err != nil {
-			return nil, err
-		}
-		rows = append(rows, ManifestRow{Entity: r.Entity, Value: value})
-	}
-	return rows, nil
+	return new(Encoder).Build(cap, authority)
 }
 
 // ownerAuthoredCursors is the cursor set whose owner-authored cells stay outside the
@@ -322,10 +206,7 @@ func rowPage(row ManifestRow, pages uint32) uint32 {
 	if pages <= 1 {
 		return 0
 	}
-	h := fnv.New64a()
-	writeString(h, row.Name)
-	writeUint64(h, uint64(row.Entity))
-	return uint32(h.Sum64()) & (pages - 1)
+	return uint32(newHash().text(row.Name).u64(uint64(row.Entity))) & (pages - 1)
 }
 
 // pageHash commits to a page's identity and to its rows in canonical order.
@@ -334,142 +215,76 @@ func rowPage(row ManifestRow, pages uint32) uint32 {
 // neither a row moved between pages nor two rows swapped can reproduce the hash —
 // which is what a shard's proof rests on.
 func pageHash(section string, page uint32, rows []ManifestRow) uint64 {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(hashDomainPage))
-	writeUint64(h, ManifestVersion)
-	writeUint64(h, Schema)
-	writeString(h, section)
-	writeUint64(h, uint64(page))
-	writeUint64(h, uint64(len(rows)))
+	h := pageHasher(section, page, len(rows))
 	for _, row := range rows {
-		rh := fnv.New64a()
-		_, _ = rh.Write([]byte(hashDomainRow))
-		writeString(rh, row.Name)
-		writeUint64(rh, uint64(row.Entity))
-		writeUint64(rh, uint64(len(row.Value)))
-		_, _ = rh.Write(row.Value)
-		writeUint64(h, rh.Sum64())
+		h = h.u64(rowHash(row.Name, row.Entity, row.Value))
 	}
-	return h.Sum64()
+	return uint64(h)
+}
+
+// pageHashOf is pageHash over rows already hashed: members index hashes.
+func pageHashOf(section string, page uint32, members []int32, hashes []uint64) uint64 {
+	h := pageHasher(section, page, len(members))
+	for _, c := range members {
+		h = h.u64(hashes[c])
+	}
+	return uint64(h)
+}
+
+func pageHasher(section string, page uint32, rows int) hash {
+	return newHash().text(hashDomainPage).u64(ManifestVersion).u64(Schema).
+		text(section).u64(uint64(page)).u64(uint64(rows))
+}
+
+// rowHash commits to one row's identity and bytes.
+func rowHash(name string, entity core.Entity, value []byte) uint64 {
+	return uint64(newHash().text(hashDomainRow).text(name).u64(uint64(entity)).bytes(value))
 }
 
 // sectionHash commits to a section's identity and to its page hashes in order.
 func sectionHash(section string, pages []uint64) uint64 {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(hashDomainSection))
-	writeUint64(h, ManifestVersion)
-	writeUint64(h, Schema)
-	writeString(h, section)
-	writeUint64(h, uint64(len(pages)))
+	h := newHash().text(hashDomainSection).u64(ManifestVersion).u64(Schema).
+		text(section).u64(uint64(len(pages)))
 	for _, p := range pages {
-		writeUint64(h, p)
+		h = h.u64(p)
 	}
-	return h.Sum64()
+	return uint64(h)
 }
 
 // The root includes identity and section hashes, but excludes tick-local
 // metadata so equal worlds can agree across capture ticks.
 func manifestRoot(h CaptureHeader, authority uint32, sections []SectionSummary) uint64 {
-	w := fnv.New64a()
-	_, _ = w.Write([]byte(hashDomainRoot))
-	writeUint64(w, ManifestVersion)
-	writeUint64(w, uint64(h.Schema))
-	writeUint64(w, h.JournalSchema)
-	writeUint64(w, h.Run)
-	writeUint64(w, h.Session)
-	writeUint64(w, h.Seed)
-	writeUint64(w, uint64(h.MapWidth))
-	writeUint64(w, uint64(h.MapHeight))
-	writeUint64(w, uint64(authority))
-	writeUint64(w, uint64(h.Term))
-	writeUint64(w, uint64(len(sections)))
+	w := newHash().text(hashDomainRoot).u64(ManifestVersion).u64(uint64(h.Schema)).
+		u64(h.JournalSchema).u64(h.Run).u64(h.Session).u64(h.Seed).
+		u64(uint64(h.MapWidth)).u64(uint64(h.MapHeight)).u64(uint64(authority)).
+		u64(uint64(h.Term)).u64(uint64(len(sections)))
 	for _, s := range sections {
-		writeString(w, s.ID)
-		writeUint64(w, uint64(s.Pages))
-		writeUint64(w, uint64(s.Rows))
-		writeUint64(w, s.Hash)
+		w = w.text(s.ID).u64(uint64(s.Pages)).u64(uint64(s.Rows)).u64(s.Hash)
 	}
-	return w.Sum64()
+	return uint64(w)
 }
 
 // Rebuild only repaired sections; unchanged sections retain their immutable
 // rows and hashes. Preserve summary order because the root absorbs it.
 func (m *Manifest) rebuild(cap SharedCapture, ids []string) error {
-	rows, err := m.sectionRowsFor(cap, ids)
+	want := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if _, ok := m.index[id]; !ok {
+			return fmt.Errorf("manifest holds no section %q", id)
+		}
+		want[id] = true
+	}
+	secs, err := m.enc.sectionsFor(cap, want)
 	if err != nil {
 		return err
 	}
-	for id, r := range rows {
-		slot, ok := m.index[id]
-		if !ok {
-			return fmt.Errorf("manifest holds no section %q", id)
-		}
-		sec := newSection(id, r)
-		m.sections[id] = sec
-		m.summary.Sections[slot] = sec.SectionSummary
+	for _, sec := range secs {
+		m.sections[sec.ID] = sec
+		m.summary.Sections[m.index[sec.ID]] = sec.SectionSummary
 	}
 	m.summary.Header = cap.Header
 	m.summary.Root = manifestRoot(cap.Header, m.authority, m.summary.Sections)
 	return nil
-}
-
-// sectionRowsFor re-derives the canonical rows of just the named sections.
-func (m *Manifest) sectionRowsFor(cap SharedCapture, ids []string) (map[string][]ManifestRow, error) {
-	want := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		want[id] = true
-	}
-	out := make(map[string][]ManifestRow, len(ids))
-	var err error
-	if want[SectionMeta] {
-		if out[SectionMeta], err = metaRows(cap); err != nil {
-			return nil, err
-		}
-	}
-	if want[SectionStreams] {
-		if out[SectionStreams], err = streamRows(cap); err != nil {
-			return nil, err
-		}
-	}
-	if want[SectionSystems] {
-		if out[SectionSystems], err = systemRows(cap); err != nil {
-			return nil, err
-		}
-	}
-	if want[SectionStatus] {
-		if out[SectionStatus], err = statusRows(cap); err != nil {
-			return nil, err
-		}
-	}
-	if want[SectionFSM] {
-		if out[SectionFSM], err = fsmRows(cap); err != nil {
-			return nil, err
-		}
-	}
-	cursors := ownerAuthoredCursors(cap)
-	var scratch []engine.StoreRow
-	for i := range engine.SharedWorldStoreCount {
-		name := engine.SharedWorldStoreNames[i]
-		id := StoreSectionPrefix + name
-		if !want[id] {
-			continue
-		}
-		scratch = scratch[:0]
-		if scratch, err = engine.SharedWorldStoreRows(&cap.World, i, scratch); err != nil {
-			return nil, fmt.Errorf("manifest %s: %w", name, err)
-		}
-		rows, err := storeManifestRows(name, scratch, cursors)
-		if err != nil {
-			return nil, fmt.Errorf("manifest %s: %w", name, err)
-		}
-		out[id] = rows
-	}
-	for _, id := range ids {
-		if _, ok := out[id]; !ok {
-			return nil, fmt.Errorf("manifest holds no section %q", id)
-		}
-	}
-	return out, nil
 }
 
 // Adopt rebinds the index to the header of a world it already describes: the root
@@ -649,17 +464,4 @@ func fsmRows(cap SharedCapture) ([]ManifestRow, error) {
 		return nil, err
 	}
 	return []ManifestRow{{Name: "machine", Value: body}}, nil
-}
-
-// === hashing helpers ===
-
-func writeUint64(h interface{ Write([]byte) (int, error) }, v uint64) {
-	var b [8]byte
-	binary.BigEndian.PutUint64(b[:], v)
-	_, _ = h.Write(b[:])
-}
-
-func writeString(h interface{ Write([]byte) (int, error) }, s string) {
-	writeUint64(h, uint64(len(s)))
-	_, _ = h.Write([]byte(s))
 }

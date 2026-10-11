@@ -48,6 +48,14 @@ func (h hash) text(v string) hash {
 	return h.u64(uint64(len(v)))
 }
 
+func (h hash) bytes(v []byte) hash {
+	for _, c := range v {
+		h ^= hash(c)
+		h *= hash(fnvPrime)
+	}
+	return h.u64(uint64(len(v)))
+}
+
 func (h hash) String() string { return strconv.FormatUint(uint64(h), 16) }
 
 // WorldDigest hashes the state the status registry does not carry: entity

@@ -22,10 +22,9 @@ import (
 // a guest, not both, so the two field sets are never both live; one object makes
 // "this run is in a session" one lifetime rather than two that can disagree.
 type Corrections struct {
-	inst     Instance
-	tel      snapshot.Telemetry
-	log      *vlog.Log
-	manifest snapshot.ManifestBuilder
+	inst Instance
+	tel  snapshot.Telemetry
+	log  *vlog.Log
 
 	// authority is the term gate and the succession. It decides whether an
 	// artifact may be acted on and whether this instance is the one publishing;
@@ -348,7 +347,7 @@ func (c *Corrections) publishRound(force bool) error {
 	// One index per publication, whether or not it leads the correction. A keyframe
 	// does not carry it, but retention answers a request naming that tick and is this
 	// instance's evidence that its world is current if it is ever elected.
-	index, err := c.manifest.Build(cap, c.inst.LocalParticipant())
+	index, err := c.inst.Encoder().Build(cap, c.inst.LocalParticipant())
 	if err != nil {
 		return fmt.Errorf("correction manifest: %w", err)
 	}
@@ -377,7 +376,7 @@ func (c *Corrections) publishRound(force bool) error {
 	}
 
 	bodyPeers = slices.DeleteFunc(slices.Clone(bodyPeers), func(id uint32) bool { return !takes(id, keyframe) })
-	body, joinBody, encodeDur, err := c.encodeBodyLocked(cap, keyframe, keyframe || len(bodyPeers) > 0)
+	body, encodeDur, err := c.encodeBodyLocked(cap, keyframe, keyframe || len(bodyPeers) > 0)
 	if err != nil {
 		return err
 	}
@@ -407,7 +406,7 @@ func (c *Corrections) publishRound(force bool) error {
 	}
 	c.releaseLocked(port)
 
-	c.recordPublicationLocked(cap, keyframe, body, joinBody, encodeDur, sent)
+	c.recordPublicationLocked(cap, keyframe, body, encodeDur, sent)
 	if keyframe {
 		// A whole world resets every peer's standing in the selective exchange: it
 		// is the state each one now holds, so the next manifest is answered against
@@ -437,7 +436,7 @@ func (c *Corrections) publishBroadcast(port engine.NetworkPort, tick uint64, for
 	if err != nil {
 		return err
 	}
-	body, joinBody, encodeDur, err := c.encodeBodyLocked(cap, keyframe, true)
+	body, encodeDur, err := c.encodeBodyLocked(cap, keyframe, true)
 	if err != nil {
 		return err
 	}
@@ -449,34 +448,31 @@ func (c *Corrections) publishBroadcast(port engine.NetworkPort, tick uint64, for
 		port.Broadcast(uint8(network.MsgStateCorrection), chunk)
 	}
 	c.nextBroadcast = tick + c.base
-	c.recordPublicationLocked(cap, keyframe, body, joinBody, encodeDur, 1)
+	c.recordPublicationLocked(cap, keyframe, body, encodeDur, 1)
 	c.publishPlanTelemetryLocked(nil)
 	return nil
 }
 
 // encodeBodyLocked encodes one capture into the shape the schedule asked for and
-// returns what it cost. A keyframe is encoded twice: the bare capture is what the
-// join handshake sends, and keeping it is what lets a join and a keyframe be one
-// object. want is false when nobody is owed a body, which the selective exchange
-// makes the ordinary case. Caller MUST hold publishMu.
+// returns what it cost. A keyframe's bare form, which a join sends, is encoded when a
+// join first asks for it. want is false when nobody is owed a body, which the
+// selective exchange makes the ordinary case. Caller MUST hold publishMu.
 func (c *Corrections) encodeBodyLocked(
 	cap snapshot.SharedCapture, keyframe, want bool,
-) (body, joinBody []byte, took time.Duration, err error) {
+) (body []byte, took time.Duration, err error) {
 	if !want {
-		return nil, nil, 0, nil
+		return nil, 0, nil
 	}
 	start := time.Now() // [wall] telemetry only; outside the world lock
 	if keyframe {
-		if body, err = snapshot.EncodeCorrection(cap); err == nil {
-			joinBody, err = snapshot.EncodeCapture(cap)
-		}
+		body, err = c.inst.Encoder().EncodeCorrection(cap)
 	} else {
 		body, err = snapshot.EncodeCorrectionDelta(snapshot.DiffCapture(c.baseline, cap))
 	}
 	if err != nil {
-		return nil, nil, 0, fmt.Errorf("correction encode: %w", err)
+		return nil, 0, fmt.Errorf("correction encode: %w", err)
 	}
-	return body, joinBody, time.Since(start), nil
+	return body, time.Since(start), nil
 }
 
 // recordPublicationLocked folds one publication into the cost model, the baseline
@@ -485,13 +481,13 @@ func (c *Corrections) encodeBodyLocked(
 //
 // Caller MUST hold publishMu.
 func (c *Corrections) recordPublicationLocked(
-	cap snapshot.SharedCapture, keyframe bool, body, joinBody []byte, took time.Duration, bodies int,
+	cap snapshot.SharedCapture, keyframe bool, body []byte, took time.Duration, bodies int,
 ) {
 	if len(body) > 0 {
 		c.recordSizeLocked(keyframe, len(body))
 	}
 	if keyframe {
-		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, joinBody, true, cap.Header.Tick
+		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, nil, true, cap.Header.Tick
 		c.keyCorrection = body
 	}
 	m := c.tel
@@ -821,7 +817,7 @@ func (c *Corrections) KeyframeAt(minTick uint64, deadline time.Time) ([]byte, ui
 		if c.haveKey && c.baseline.Header.Tick >= minTick {
 			var err error
 			if c.keyBody == nil {
-				c.keyBody, err = snapshot.EncodeCapture(c.baseline)
+				c.keyBody, err = c.inst.Encoder().EncodeCapture(c.baseline)
 			}
 			body, tick := c.keyBody, c.baseline.Header.Tick
 			c.publishMu.Unlock()
@@ -857,7 +853,7 @@ func (c *Corrections) takeKeyframe() ([]byte, uint64, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	body, err := snapshot.EncodeCapture(cap)
+	body, err := c.inst.Encoder().EncodeCapture(cap)
 	if err != nil {
 		return nil, 0, fmt.Errorf("capture encode: %w", err)
 	}
@@ -1042,7 +1038,7 @@ func (c *Corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
 		return snapshot.SharedCapture{}, errors.New("correction describes a run this instance is not in")
 	}
 	if kind == snapshot.CorrectionKeyframe {
-		if sum, err := snapshot.Integrity(full); err != nil || sum != full.Header.Integrity {
+		if !c.inst.Encoder().Verify(full) {
 			return snapshot.SharedCapture{}, errors.New("correction keyframe does not match its integrity hash")
 		}
 		c.SetBaseline(full)
@@ -1052,7 +1048,7 @@ func (c *Corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
 	if !ok {
 		return snapshot.SharedCapture{}, errors.New("correction delta arrived before any keyframe")
 	}
-	cap, err := snapshot.ApplyCaptureDelta(base, delta)
+	cap, err := c.inst.Encoder().ApplyCaptureDelta(base, delta)
 	if err != nil {
 		return snapshot.SharedCapture{}, err
 	}
