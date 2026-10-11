@@ -49,16 +49,16 @@ The Makefile targets are:
 | `tools` | Build `cmd/ascimage`, `cmd/soundlab`, and every `tool/*` command. |
 | `allocator` | Build the website-to-K3s session allocator as `bin/vif-allocator`. |
 | `serve` | Build WASM and the small HTTP server, then serve `web/`. |
-| `install-config` | Copy `wad/` and the embedded keymap into the user config root, keeping existing files. |
-| `install-config-force` | Replace files in the selected user config root. |
-| `install` | Stage a distribution package: binary, `wad/` as a system config root, licence, docs. |
+| `install-config` | Copy `wad/`, bot graphs, keymap and `vif.toml` into the user config root; `CLEAN=1` removes the previous install first. |
+| `install` | Install binary, `wad/` as the system config root, licence, docs under `PREFIX`; a user without write access there gets `~/.local` and the user root. |
 | `image` | Build the dedicated-session container image from `deploy/docker/Dockerfile`. |
 | `image-check` | Run the built image's own `-check` as its numeric user, read-only and with no network. |
 | `clean` | Remove `bin/`. |
 
 `TAGS` appends native build tags and `PORT` changes the WASM server port.
-`VIF_CONFIG_DIR` retargets `install-config`; `DESTDIR`, `PREFIX` and
-`SYSCONFDIR` retarget `install`. See [Packaging](packaging.md).
+`VIF_CONFIG_DIR` retargets `install-config`; `DESTDIR`, `PREFIX` (default
+`/usr/local`) and `SYSCONFDIR` (`/etc` for `PREFIX=/usr`, else `$(PREFIX)/etc`)
+retarget `install`. See [Packaging](packaging.md).
 `CONTAINER_ENGINE`, `IMAGE` and `IMAGE_TAG` retarget the image build — the engine
 defaults to `docker` and accepts `podman`. The image is a `scratch` layer holding
 one static non-root binary; `image-check` is the only way to prove it starts,

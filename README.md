@@ -81,9 +81,12 @@ make release
 ```
 
 Useful targets include `make dev`, `make test`, `make verify`, `make headless`,
-`make tools`, `make wasm`, and `make serve`. `make install-config` copies the
-`wad/` payload and the default keymap under the user config root without replacing
-existing files; `make install` stages the same payload for a distribution package.
+`make tools`, `make wasm`, and `make serve`. `make install` installs the binary
+and the `wad/` payload under `/usr/local`, or for the current user under `~/.local`
+and `~/.config/vif` when `/usr/local` is not writable; `make install-config` installs
+only the payload into the user root. A reinstall replaces shipped files and keeps
+added ones; `CLEAN=1` starts the payload fresh. Uninstalled, `./bin/vif -s td` plays
+the checkout's `wad/`.
 Audio starts muted; press `Ctrl-S` to cycle audio channels or launch with
 `-mute=false`. Run `./bin/vif -h` for all flags — it prints to stdout, so it pipes
 into `grep` without redirecting stderr.
@@ -161,7 +164,7 @@ settings explain why. Rebind the `config_menu` action in the keymap.
 
 Editable files ship in `wad/`, laid out exactly as they install; everything the
 binary can play without a filesystem is embedded in `internal/asset`. User
-configuration defaults to `$XDG_CONFIG_HOME/vif`; logs and journals
+configuration defaults to `~/.config/vif`; logs and journals
 default to separate directories under `$XDG_STATE_HOME/vif`. See the
 [external filesystem layout](doc/filesystem-layout.md) for exact precedence,
 installation, and WASM behavior, and [packaging](doc/packaging.md) for the

@@ -40,9 +40,13 @@ const (
 // virtual-filesystem path is supplied by an embedder.
 func ExternalFiles() bool { return runtime.GOOS != "js" }
 
+// SystemRootsEnv names the system roots in place of the default list, separated
+// as PATH is; set but empty, there are none.
+const SystemRootsEnv = "VIF_SYSTEM_ROOTS"
+
 // ConfigRoots returns configuration roots in descending priority: an operator
-// override, the per-user root, then XDG system roots. Duplicate roots are
-// removed without changing order.
+// override, the per-user root, the checkout this binary was built in, then the
+// system roots. Duplicate roots are removed without changing order.
 func ConfigRoots(override string) []string {
 	if !ExternalFiles() {
 		return nil
@@ -66,10 +70,25 @@ func ConfigRoots(override string) []string {
 	if base, err := os.UserConfigDir(); err == nil {
 		add(filepath.Join(base, AppDirName))
 	}
-	for _, base := range systemConfigBases() {
-		add(filepath.Join(base, AppDirName))
+	add(checkoutRoot())
+	for _, root := range systemRoots() {
+		add(root)
 	}
 	return roots
+}
+
+// checkoutRoot is the wad/ beside the bin/ holding this binary, so a build plays
+// its checkout's scenarios uninstalled; "" for a binary anywhere else.
+func checkoutRoot() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	root := filepath.Join(filepath.Dir(filepath.Dir(exe)), "wad")
+	if info, err := os.Stat(root); err != nil || !info.IsDir() {
+		return ""
+	}
+	return root
 }
 
 // CheckRoot rejects a -config-dir that is not an existing directory; empty is none.
@@ -163,24 +182,21 @@ func stateBase() string {
 	return ""
 }
 
-func systemConfigBases() []string {
+func systemRoots() []string {
 	if !isUnixLike() {
 		return nil
 	}
-	spec := os.Getenv("XDG_CONFIG_DIRS")
-	if spec == "" {
-		spec = "/etc/xdg"
-		if runtime.GOOS == "freebsd" {
-			// Ports install under /usr/local, which the XDG default does not name.
-			spec = "/usr/local/etc/xdg:/etc/xdg"
-		}
+	spec, ok := os.LookupEnv(SystemRootsEnv)
+	if !ok {
+		// A source install's /usr/local shadows a distribution package's /etc.
+		spec = "/usr/local/etc/vif:/etc/vif"
 	}
 
 	var out []string
-	for _, base := range filepath.SplitList(spec) {
-		base = strings.TrimSpace(base)
-		if filepath.IsAbs(base) {
-			out = append(out, filepath.Clean(base))
+	for _, root := range filepath.SplitList(spec) {
+		root = strings.TrimSpace(root)
+		if filepath.IsAbs(root) {
+			out = append(out, filepath.Clean(root))
 		}
 	}
 	return out

@@ -134,7 +134,7 @@ spec:
             # The scenario comes off the node's read-only volume; the corpus is
             # embedded and unused, because a dedicated host spawns no glyphs and
             # each player reads their own text. -config-dir is explicit rather than
-            # relying on the XDG default: a scratch image has no /etc/xdg and no
+            # relying on the system roots: a scratch image has no /etc/vif and no
             # reason to acquire one.
             - "-config-dir"
             - "/wad"

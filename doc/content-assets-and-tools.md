@@ -230,8 +230,8 @@ authored image metadata, but `WallSystem` does not consume it yet.
 The extension is `.vifimg`, which is what `cmd/ascimage` detects and what the
 shipped `wad/image/test.vifimg` sample uses. An existing absolute or relative path
 in `WallPatternSpawnRequest.path` is explicit. Otherwise it is a logical name
-below `image/`, resolved through `-config-dir`, the user configuration root, and
-XDG system roots in that order. Thus `path="test.vifimg"` works both with
+below `image/`, resolved through `-config-dir`, the user configuration root, the
+checkout's `wad/` and the system roots in that order. Thus `path="test.vifimg"` works both with
 `-config-dir wad` and from an installed tree, independent of the process working
 directory; the existing-relative-path check is retained only for compatibility.
 Runtime image opens cross the generic `FileService` capability contributed to

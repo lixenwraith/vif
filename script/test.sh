@@ -450,7 +450,7 @@ identity)
 
 transfer)
 	# The host plays a copy of the wad whose entry carries a nonce, so no root the
-	# guest searches — its own, the user's, XDG's or the embedded one — can hold the
+	# guest searches — its own, the user's, the system's or the embedded one — can hold the
 	# scenario: an installed copy of the same wad would otherwise satisfy the join
 	# locally and the host would never be asked. The transfer is the only way in.
 	need_bin
@@ -653,7 +653,7 @@ deploy)
 	# A pod has no user or system configuration root, so neither may these runs: a
 	# corpus installed on this machine would otherwise stand in for the embedded one.
 	bare=$(mktemp -d)
-	pod() { env HOME="$bare" XDG_CONFIG_HOME="$bare" XDG_CONFIG_DIRS="$bare" "$@"; }
+	pod() { env HOME="$bare" XDG_CONFIG_HOME="$bare" VIF_SYSTEM_ROOTS="$bare" "$@"; }
 
 	# The pod mounts scenario/ and image/ and nothing else, so prove a scenario
 	# resolves from exactly that and names itself in the log the commissioning

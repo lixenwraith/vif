@@ -7,9 +7,9 @@ Entry config search order:
 1. `-s <path-or-name>` — file, directory containing `scenario.toml`, or a name
    resolved as `scenario/<name>/scenario.toml` under the configured roots;
 2. `scenario/main/scenario.toml` under `-config-dir <root>`;
-3. the same under `$XDG_CONFIG_HOME/vif` (normally
-   `~/.config/vif`);
-4. the same under each corresponding root in `$XDG_CONFIG_DIRS`;
+3. the same under the user root, normally `~/.config/vif`;
+4. the same under the checkout's `wad/` for a binary in its `bin/`, then under
+   `/usr/local/etc/vif` and `/etc/vif`;
 5. embedded default (`internal/asset/scenario/`; forced with `-d`).
 
 `-d` is mutually exclusive with both `-s` and `-f`; by itself it selects the
