@@ -101,3 +101,40 @@ func TestCappedTurretStreamsBetweenWavesAndStopsWithTheCooldown(t *testing.T) {
 		t.Fatalf("stream = %d bullets after the cooldown ended, want none", got)
 	}
 }
+
+// TestCappedEmitterSustainsItsRayAndMainFireLeavesItAlone: the last charge
+// converts a burning timed ray in place; the sustained ray outlasts any duration
+// at full strength; main fire at the cap resets no cooldown and flashes no orb.
+func TestCappedEmitterSustainsItsRayAndMainFireLeavesItAlone(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	weapon := NewWeaponSystem(w).(*WeaponSystem)
+	capTarget(w, 8, 5)
+	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
+	spec := &component.WeaponSpecs[component.WeaponEmitter]
+	weaponComp.Charges[component.WeaponEmitter] = spec.MaxCharges - 1
+	weapon.Update()
+	orb := weapon.orbsOf(cursor)[component.WeaponEmitter]
+	weapon.fireAllWeapons(cursor, weaponComp, weapon.orbsOf(cursor))
+	timed, ok := w.Components.Ray.GetPtr(orb)
+	if !ok {
+		t.Fatal("no ray fired below the cap")
+	}
+
+	weaponComp.Charges[component.WeaponEmitter] = spec.MaxCharges
+	w.Resources.Time.DeltaTime = 10 * parameter.RayDuration
+	for range 2 {
+		weapon.Update()
+	}
+	ray, ok := w.Components.Ray.GetPtr(orb)
+	if !ok || ray != timed || ray.Scale != spec.MaxCharges || ray.Remaining != ray.Duration {
+		t.Fatalf("ray at the cap = %+v, want the same ray outliving its duration at scale %d and full strength", ray, spec.MaxCharges)
+	}
+
+	weaponComp.Cooldown[component.WeaponEmitter] = 0
+	weapon.fireAllWeapons(cursor, weaponComp, weapon.orbsOf(cursor))
+	orbComp, _ := w.Components.Orb.GetPtr(orb)
+	if weaponComp.Cooldown[component.WeaponEmitter] != 0 || orbComp.FlashRemaining != 0 {
+		t.Fatalf("cooldown %v, flash %v after main fire at the cap, want neither touched",
+			weaponComp.Cooldown[component.WeaponEmitter], orbComp.FlashRemaining)
+	}
+}

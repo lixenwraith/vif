@@ -220,7 +220,7 @@ func (s *WeaponSystem) Update() {
 		}
 		orbs := s.ensureOrbs(cursor, slot, weaponComp)
 		s.updateOrbs(cursor, slot, orbs)
-		s.advanceRays(cursor, orbs, dt)
+		s.advanceRays(cursor, weaponComp, orbs, dt)
 		s.advanceStreams(cursor, weaponComp, orbs, dt)
 		return true
 	})
@@ -736,7 +736,8 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 		case component.DeliveryBullet:
 			fired = s.fireBullets(cursor, x, y, spec.Attack, assignments)
 		case component.DeliveryRay:
-			fired = len(assignments) > 0 && s.fireRay(cursor, orbs[wt], charges)
+			// A sustained ray is advanceRays's; main fire leaves it alone
+			fired = !(capped && spec.Sustained) && len(assignments) > 0 && s.fireRay(cursor, orbs[wt], charges)
 		}
 		if !fired {
 			continue
@@ -916,20 +917,31 @@ func (s *WeaponSystem) fireRay(cursor, orb core.Entity, charges int) bool {
 
 // advanceRays re-lays each of a cursor's rays through its orb as the orb orbits
 // and strikes what it covers every tick: a sweep crosses a far target in about one,
-// and combat's per-attacker immunity is what rates each target
-func (s *WeaponSystem) advanceRays(cursor core.Entity, orbs orbSlots, dt time.Duration) {
+// and combat's per-attacker immunity is what rates each target. A capped kind that
+// sustains keeps a ray lit on its orb; a timed ray still burning converts in place
+func (s *WeaponSystem) advanceRays(cursor core.Entity, weaponComp *component.WeaponComponent, orbs orbSlots, dt time.Duration) {
 	rays := s.world.Components.Ray
 	for wt, orb := range orbs {
+		spec := &component.WeaponSpecs[wt]
+		charges := weaponComp.Charges[wt]
+		sustained := orb != 0 && spec.Sustained && charges >= spec.MaxCharges
 		ray, ok := rays.GetPtr(orb)
 		if !ok {
-			continue
+			if !sustained {
+				continue
+			}
+			rays.SetComponent(orb, component.RayComponent{Phase: component.RayFiring,
+				Remaining: parameter.RayDuration, Duration: parameter.RayDuration, Palette: s.palette(cursor)})
+			ray, _ = rays.GetPtr(orb)
 		}
-		if ray.Remaining -= dt; ray.Remaining <= 0 {
+		if sustained {
+			ray.Scale, ray.Remaining = charges, ray.Duration
+		} else if ray.Remaining -= dt; ray.Remaining <= 0 {
 			rays.RemoveEntity(orb, false)
 			continue
 		}
 		s.layRay(cursor, orb, ray)
-		s.strikeRay(cursor, ray, component.WeaponSpecs[wt].Attack)
+		s.strikeRay(cursor, ray, spec.Attack)
 	}
 }
 

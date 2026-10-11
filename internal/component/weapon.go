@@ -48,6 +48,7 @@ type WeaponSpec struct {
 	ArcRange      float64       // cells a hit arcs to the nearest other target within
 	MaxedCooldown time.Duration // replaces Cooldown
 	Stream        int           // bullets per stream shot while a wave's cooldown runs
+	Sustained     bool          // the ray never ends
 }
 
 // CursorDamage is a hit on a cursor: energy drained through an active shield,
@@ -91,7 +92,8 @@ var WeaponSpecs = [WeaponCount]WeaponSpec{
 	WeaponEmitter: {Name: "emitter", Delivery: DeliveryRay, Attack: CombatAttackRay,
 		Cooldown: parameter.WeaponCooldownEmitter, MaxCharges: parameter.WeaponMaxChargeEmitter,
 		HostedRange:  parameter.HostedEmitterRange,
-		HostedDamage: CursorDamage{parameter.HostedEmitterEnergy, -parameter.HostedEmitterHeat}},
+		HostedDamage: CursorDamage{parameter.HostedEmitterEnergy, -parameter.HostedEmitterHeat},
+		Sustained:    true},
 }
 
 // WeaponComponent is a cursor's loadout: charges and cooldown per kind, and main fire's cooldown.
