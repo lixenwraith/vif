@@ -111,6 +111,9 @@ const (
 
 const LightningEnergyDrainReward = 100
 
+// LightningArcRange is how far a capped rod's hit arcs to the next target, in cells
+const LightningArcRange = OrbOrbitRadiusX
+
 // Missile
 const (
 	// MissileImpactRadius is hit detection threshold (cells)

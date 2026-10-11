@@ -692,15 +692,20 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 		spec := &component.WeaponSpecs[wt]
 		x, y := s.emitterCell(orbs[wt], cursorPos)
 		assignments := nearest[:min(len(nearest), charges)]
+		capped := charges >= spec.MaxCharges
 
 		var fired bool
 		switch spec.Delivery {
 		case component.DeliveryLightning:
-			fired = s.fireLightning(cursor, x, y, spec.Attack, assignments)
+			arcRange := 0.0
+			if capped {
+				arcRange = spec.ArcRange
+			}
+			fired = s.fireLightning(cursor, x, y, spec.Attack, assignments, arcRange)
 		case component.DeliveryMissile:
 			fired = s.fireMissiles(cursor, x, y, charges, assignments)
 		case component.DeliveryPulse:
-			fired = s.firePulse(cursor, x, y, spec.Attack, charges >= spec.MaxCharges)
+			fired = s.firePulse(cursor, x, y, spec.Attack, capped)
 		case component.DeliveryBullet:
 			fired = s.fireBullets(cursor, x, y, spec.Attack, assignments)
 		case component.DeliveryRay:
@@ -715,9 +720,10 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 	}
 }
 
-// fireLightning strikes each unique assigned target from the emitter cell;
-// assignments repeat under overflow, a bolt does not
-func (s *WeaponSystem) fireLightning(cursor core.Entity, x, y int, attack component.CombatAttackType, assignments []TargetAssignment) bool {
+// fireLightning strikes each unique assigned target from the emitter cell, and
+// arcs each hit on within arcRange; assignments repeat under overflow, a bolt does not
+func (s *WeaponSystem) fireLightning(cursor core.Entity, x, y int, attack component.CombatAttackType, assignments []TargetAssignment, arcRange float64) bool {
+	var arced []core.Entity
 	for i, a := range assignments {
 		if slices.ContainsFunc(assignments[:i], func(b TargetAssignment) bool { return b.Target == a.Target }) {
 			continue
@@ -733,8 +739,53 @@ func (s *WeaponSystem) fireLightning(cursor core.Entity, x, y int, attack compon
 			OriginX:      x,
 			OriginY:      y,
 		}, a.Target.Domain())
+		if arcRange > 0 {
+			arced = s.arcLightning(cursor, a, assignments, arced, attack, arcRange)
+		}
 	}
 	return len(assignments) > 0
+}
+
+// arcLightning chains one hit to the nearest other target within range, in the
+// rod's own priority of composites before singles: a request of the same family
+// whose origin is the struck cell, so the zap runs from one target to the next.
+// A target this volley struck or arced to is skipped rather than left to its
+// immunity window
+func (s *WeaponSystem) arcLightning(cursor core.Entity, from TargetAssignment, assignments []TargetAssignment, arced []core.Entity, attack component.CombatAttackType, arcRange float64) []core.Entity {
+	pos, ok := s.world.Positions.GetPosition(from.Hit)
+	if !ok {
+		return arced
+	}
+	fromX, fromY := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+	struck := func(e core.Entity) bool {
+		return slices.Contains(arced, e) ||
+			slices.ContainsFunc(assignments, func(a TargetAssignment) bool { return a.Target == e })
+	}
+	composites, singles := nearestTargets(s.world, fromX, fromY, engine.ScopeBoth, cursor)
+	for _, group := range [2][]TargetAssignment{composites, singles} {
+		var best *TargetAssignment
+		for i := range group {
+			c := &group[i]
+			if c.DistSq <= arcRange*arcRange && !struck(c.Target) && (best == nil || c.DistSq < best.DistSq) {
+				best = c
+			}
+		}
+		if best == nil {
+			continue
+		}
+		s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+			AttackType:   attack,
+			OwnerEntity:  cursor,
+			OriginEntity: cursor,
+			TargetEntity: best.Target,
+			HitEntity:    best.Hit,
+			HasOrigin:    true,
+			OriginX:      pos.X,
+			OriginY:      pos.Y,
+		}, best.Target.Domain())
+		return append(arced, best.Target)
+	}
+	return arced
 }
 
 // fireMissiles launches one missile per charge from the emitter cell at the assigned targets

@@ -43,6 +43,9 @@ type WeaponSpec struct {
 
 	HostedRange  float64      // cells a mounted weapon reaches, horizontally; vertical is half
 	HostedDamage CursorDamage // what a mounted weapon's hit costs a cursor
+
+	// What the kind gains at MaxCharges; a zero field changes nothing
+	ArcRange float64 // cells a hit arcs to the nearest other target within
 }
 
 // CursorDamage is a hit on a cursor: energy drained through an active shield,
@@ -67,7 +70,8 @@ var WeaponSpecs = [WeaponCount]WeaponSpec{
 	WeaponRod: {Name: "rod", Delivery: DeliveryLightning, Attack: CombatAttackLightning,
 		Cooldown: parameter.WeaponCooldownRod, MaxCharges: parameter.WeaponMaxChargeRod,
 		HostedRange:  parameter.HostedRodRange,
-		HostedDamage: CursorDamage{parameter.HostedRodEnergy, -parameter.HostedRodHeat}},
+		HostedDamage: CursorDamage{parameter.HostedRodEnergy, -parameter.HostedRodHeat},
+		ArcRange:     parameter.LightningArcRange},
 	WeaponLauncher: {Name: "launcher", Delivery: DeliveryMissile, Attack: CombatAttackMissile,
 		Cooldown: parameter.WeaponCooldownLauncher, MaxCharges: parameter.WeaponMaxChargeLauncher,
 		HostedRange:  parameter.HostedLauncherRange,
