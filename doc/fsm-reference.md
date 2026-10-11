@@ -52,6 +52,7 @@ content config and exits; all state-level FSM errors are reported in one pass.
 
 ```toml
 description = "A short description for scenario selection."
+macro_files = ["macros.toml"]       # Macro libraries, relative to this file
 
 [systems]
 disabled_systems = ["system_name", ...] # Disabled at FSM init
@@ -63,6 +64,31 @@ background = true                   # Exclude region from telemetry overlay
 enabled_systems = ["system_name"]   # Enable on region spawn/resume
 disabled_systems = ["system_name"]  # Disable on region spawn/resume
 ```
+
+---
+
+## Macros
+
+A repeated shape is written once and invoked by name; the loader expands it before
+anything below sees the document. The entry and its `macro_files` define macros,
+and region files invoke them:
+
+```toml
+# macros.toml
+[macros.Gateway]
+params = { group = "int", count = "string", next = "string" }
+body = { parent = "Root", on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, group_id = "${group}" }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "${count}" } },
+], transitions = [{ trigger = "Tick", target = "${next}" }] }
+
+# a region file
+[states]
+TdGwTL = { macro = "Gateway", group = 3, count = "l_p1n", next = "TdP1TR" }
+```
+
+Types, defaults, splicing into arrays, `each` and the rules are in
+[TOML macros](toml-macros.md); `wad/scenario/td/td_macros.toml` is a full library.
 
 ---
 
