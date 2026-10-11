@@ -120,7 +120,7 @@ func TestDrainIntegratesExplosionKnockbackDuringKineticImmunity(t *testing.T) {
 	// the shared explosion request crosses, so no shared system sees the drain
 	var area blastArea
 	area.reset([]event.ExplosionCenterEntry{{X: 5, Y: 5}}, 4)
-	strikePlayerTargets(w, cursor, &area, component.CombatAttackExplosion)
+	strikePlayerTargets(w, cursor, &area, component.CombatAttackExplosion, false)
 	applyQueuedCombatArea(t, w, combat)
 
 	assertDrainKnockbackIntegrated(t, w, drain, drains)
@@ -132,7 +132,7 @@ func TestDrainStunStillStopsKineticIntegration(t *testing.T) {
 	kinetic, _ := w.Components.Kinetic.GetPtr(drain)
 	kinetic.VelX = 20
 	combat, _ := w.Components.Combat.GetPtr(drain)
-	combat.StunnedRemaining = time.Second
+	combat.Status[component.StatusStun].Remaining = time.Second
 	combat.RemainingKineticImmunity = parameter.CombatKineticImmunityDuration
 	beforeX, beforeY := kinetic.PreciseX, kinetic.PreciseY
 

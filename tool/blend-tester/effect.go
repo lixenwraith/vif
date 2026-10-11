@@ -321,11 +321,11 @@ func drawShieldPreview(startX, startY, w, h, cx, cy int, shieldColor, bgColor co
 }
 
 func drawTrailEffect(startY int, fg, bg color.RGB) {
-	drawText(1, startY, "↑↓:Length C:Color T:Type(Cleaner/Materialize)", color.RGB{R: 100, G: 100, B: 100}, bg)
+	drawText(1, startY, "↑↓:Length C:Color T:Type(Tracer/Materialize)", color.RGB{R: 100, G: 100, B: 100}, bg)
 	startY += 2
 
-	typeName := "Cleaner"
-	baseColor := visual.RgbCleanerBasePositive
+	typeName := "Tracer"
+	baseColor := visual.RgbTracerPositive
 	if state.trailType == 1 {
 		typeName = "Materialize"
 		baseColor = visual.RgbMaterialize

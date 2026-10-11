@@ -406,7 +406,7 @@ func handleAutoCommand(ctx *engine.GameContext, args []string) CommandResult {
 			next = engine.AutoFireBoth
 		case "off":
 			next = engine.AutoFireOff
-		case "main", "cleaner":
+		case "main", "gun":
 			next = engine.AutoFireMain
 		default:
 			valid = false

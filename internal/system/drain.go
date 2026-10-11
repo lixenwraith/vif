@@ -1044,7 +1044,7 @@ func (s *DrainSystem) updateDrainMovement() {
 		}
 		// A stun freezes the drain completely. Kinetic immunity only suppresses
 		// homing and drag below: collision velocity must still displace the drain.
-		if combatComp.StunnedRemaining > 0 {
+		if combatComp.Stunned() {
 			continue
 		}
 

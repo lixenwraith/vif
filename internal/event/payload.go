@@ -265,16 +265,6 @@ type NuggetJumpRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
-// --- Cleaner ---
-
-// DirectionalCleanerPayload contains origin for 4-way cleaner spawn
-type DirectionalCleanerPayload struct {
-	Entity    core.Entity                `toml:"entity"`
-	OriginX   int                        `toml:"origin_x"`
-	OriginY   int                        `toml:"origin_y"`
-	ColorType component.CleanerColorType `toml:"color_type"`
-}
-
 // --- Gold ---
 
 // GoldSpawnedPayload provides information about the spawned gold sequence
@@ -380,6 +370,12 @@ type ShieldDrainRequestPayload struct {
 
 // WeaponAddRequestPayload adds a weapon to cursor
 type WeaponAddRequestPayload struct {
+	Entity core.Entity          `toml:"entity"`
+	Weapon component.WeaponType `toml:"weapon"`
+}
+
+// WeaponRemoveRequestPayload takes one kind from a cursor, the innate gun included
+type WeaponRemoveRequestPayload struct {
 	Entity core.Entity          `toml:"entity"`
 	Weapon component.WeaponType `toml:"weapon"`
 }
@@ -549,6 +545,8 @@ type ExplosionRequestPayload struct {
 	Y      int                        `toml:"y"`
 	Radius float64                    `toml:"radius"` // 0 = ExplosionFieldRadius
 	Attack component.CombatAttackType `toml:"attack"`
+	// Charged says the weapon was at its charge cap, so a profile's Charged chain fires
+	Charged bool `toml:"charged,omitempty"`
 }
 
 // ExplosionBatchRequestPayload describes one combat artifact made of several
@@ -906,7 +904,7 @@ func (c CrossingID) Seed(salt uint64) (uint64, bool) {
 
 // CombatAttackDirectRequestPayload contains direct attack information.
 // HasOrigin/HasVelocity carry the emitter's geometry explicitly, so a player-domain
-// emitter (orb, cleaner, bullet) describes itself without naming its entity.
+// emitter (orb, tracer, bullet) describes itself without naming its entity.
 type CombatAttackDirectRequestPayload struct {
 	CrossingID
 	OwnerEntity    core.Entity                `toml:"owner_entity"`
@@ -945,7 +943,8 @@ type CombatAttackAreaRequestPayload struct {
 	OriginY        int                        `toml:"origin_y"`
 	ChainDepth     uint8                      `toml:"chain_depth"`
 	RootAttackType component.CombatAttackType `toml:"root_attack_type"`
-	Scale          uint8                      `toml:"scale"` // Damage multiplier; zero is one
+	Scale          uint8                      `toml:"scale"`             // Damage multiplier; zero is one
+	Charged        bool                       `toml:"charged,omitempty"` // The weapon was at its cap; the profile's Charged chain fires
 }
 
 // CombatHealRequestPayload adds uncapped hit points to a live target.

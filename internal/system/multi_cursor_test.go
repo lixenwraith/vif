@@ -521,12 +521,12 @@ func TestCombatRecordsCursorDamageCreditOnUnitAndAblativeHeader(t *testing.T) {
 	w.Components.Combat.SetComponent(unit, component.CombatComponent{
 		OwnerEntity:      unit,
 		CombatEntityType: component.CombatEntityDrain,
-		HitPoints:        parameter.CombatDamageCleaner,
+		HitPoints:        parameter.CombatDamageTracer,
 	})
 	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
 		OwnerEntity: cursor, OriginEntity: cursor,
 		TargetEntity: unit, HitEntity: unit,
-		AttackType: component.CombatAttackProjectile,
+		AttackType: component.CombatAttackTracer,
 	})
 	unitCombat, _ := w.Components.Combat.GetComponent(unit)
 	if unitCombat.HitPoints != 0 || unitCombat.LastDamagedBy != cursor {
@@ -549,12 +549,12 @@ func TestCombatRecordsCursorDamageCreditOnUnitAndAblativeHeader(t *testing.T) {
 	w.Components.Combat.SetComponent(member, component.CombatComponent{
 		OwnerEntity:      header,
 		CombatEntityType: component.CombatEntityPylon,
-		HitPoints:        parameter.CombatDamageCleaner,
+		HitPoints:        parameter.CombatDamageTracer,
 	})
 	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
 		OwnerEntity: cursor, OriginEntity: cursor,
 		TargetEntity: header, HitEntity: member,
-		AttackType: component.CombatAttackProjectile,
+		AttackType: component.CombatAttackTracer,
 	})
 
 	headerCombat, _ := w.Components.Combat.GetComponent(header)
@@ -589,12 +589,12 @@ func TestCombatTelemetryAttributesDamageAbsorptionAndChains(t *testing.T) {
 	w.Components.Combat.SetComponent(target, component.CombatComponent{
 		OwnerEntity:      target,
 		CombatEntityType: component.CombatEntityDrain,
-		HitPoints:        parameter.CombatDamageCleaner * 3,
+		HitPoints:        parameter.CombatDamageTracer * 3,
 	})
 	payload := &event.CombatAttackDirectRequestPayload{
 		OwnerEntity: cursor, OriginEntity: cursor,
 		TargetEntity: target, HitEntity: target,
-		AttackType: component.CombatAttackProjectile,
+		AttackType: component.CombatAttackTracer,
 	}
 	combat.applyHitDirect(payload)
 
@@ -604,11 +604,11 @@ func TestCombatTelemetryAttributesDamageAbsorptionAndChains(t *testing.T) {
 
 	reg := w.Resources.Status
 	for key, want := range map[string]int64{
-		"combat.damage_dealt":             parameter.CombatDamageCleaner,
-		"combat.damage_attacker_cursor":   parameter.CombatDamageCleaner,
-		"combat.damage_defender_drain":    parameter.CombatDamageCleaner,
-		"combat.absorbed_attacker_cursor": parameter.CombatDamageCleaner,
-		"combat.absorbed_defender_drain":  parameter.CombatDamageCleaner,
+		"combat.damage_dealt":             parameter.CombatDamageTracer,
+		"combat.damage_attacker_cursor":   parameter.CombatDamageTracer,
+		"combat.damage_defender_drain":    parameter.CombatDamageTracer,
+		"combat.absorbed_attacker_cursor": parameter.CombatDamageTracer,
+		"combat.absorbed_defender_drain":  parameter.CombatDamageTracer,
 		"combat.chain_followups":          2,
 		"combat.chain_depth_total":        2,
 		"combat.chain_depth_max":          1,
@@ -628,12 +628,12 @@ func TestCombatClearsStaleCursorCreditWhenSpeciesDealsFatalDamage(t *testing.T) 
 	w.Components.Combat.SetComponent(target, component.CombatComponent{
 		OwnerEntity:      target,
 		CombatEntityType: component.CombatEntitySwarm,
-		HitPoints:        parameter.CombatDamageCleaner + parameter.CombatDamageEyeSelfDestruct,
+		HitPoints:        parameter.CombatDamageTracer + parameter.CombatDamageEyeSelfDestruct,
 	})
 	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
 		OwnerEntity: cursor, OriginEntity: cursor,
 		TargetEntity: target, HitEntity: target,
-		AttackType: component.CombatAttackProjectile,
+		AttackType: component.CombatAttackTracer,
 	})
 
 	targetCombat, _ := w.Components.Combat.GetComponent(target)
@@ -752,17 +752,17 @@ func TestDirectDamageAppliesExactlyOnce(t *testing.T) {
 	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
 		OwnerEntity: cursor, OriginEntity: cursor,
 		TargetEntity: target, HitEntity: target,
-		AttackType: component.CombatAttackProjectile,
+		AttackType: component.CombatAttackTracer,
 	})
 
 	got, _ := w.Components.Combat.GetComponent(target)
-	want := parameter.CombatInitialHPDrain - parameter.CombatDamageCleaner
+	want := parameter.CombatInitialHPDrain - parameter.CombatDamageTracer
 	if got.HitPoints != want {
 		t.Fatalf("hit points = %d, want %d (one application of %d)",
-			got.HitPoints, want, parameter.CombatDamageCleaner)
+			got.HitPoints, want, parameter.CombatDamageTracer)
 	}
-	if n := combat.statDamage.Load(); n != int64(parameter.CombatDamageCleaner) {
-		t.Fatalf("combat.damage_dealt = %d, want %d", n, parameter.CombatDamageCleaner)
+	if n := combat.statDamage.Load(); n != int64(parameter.CombatDamageTracer) {
+		t.Fatalf("combat.damage_dealt = %d, want %d", n, parameter.CombatDamageTracer)
 	}
 }
 
@@ -785,7 +785,7 @@ func TestDamageImmunityBudgetIsPerAttacker(t *testing.T) {
 		combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
 			OwnerEntity: owner, OriginEntity: owner,
 			TargetEntity: target, HitEntity: target,
-			AttackType: component.CombatAttackProjectile,
+			AttackType: component.CombatAttackTracer,
 		})
 	}
 
@@ -796,7 +796,7 @@ func TestDamageImmunityBudgetIsPerAttacker(t *testing.T) {
 	hit(second)
 
 	got, _ := w.Components.Combat.GetComponent(target)
-	want := parameter.CombatInitialHPDrain - 2*parameter.CombatDamageCleaner
+	want := parameter.CombatInitialHPDrain - 2*parameter.CombatDamageTracer
 	if got.HitPoints != want {
 		t.Fatalf("hit points = %d, want %d: one hit per cursor per window", got.HitPoints, want)
 	}
@@ -818,7 +818,7 @@ func TestKnockbackAndStunImmunityCoverAllPlayersAndWeapons(t *testing.T) {
 	direct := func(owner core.Entity) {
 		combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
 			OwnerEntity: owner, OriginEntity: owner, TargetEntity: target, HitEntity: target,
-			OriginVelX: 40, OriginVelY: 8, HasVelocity: true, AttackType: component.CombatAttackProjectile,
+			OriginVelX: 40, OriginVelY: 8, HasVelocity: true, AttackType: component.CombatAttackTracer,
 		})
 	}
 	area := func(owner core.Entity, attack component.CombatAttackType) {
@@ -844,13 +844,13 @@ func TestKnockbackAndStunImmunityCoverAllPlayersAndWeapons(t *testing.T) {
 		}
 	}
 	area(first, component.CombatAttackPulse)
-	if state.StunnedRemaining == 0 {
+	if !state.Stunned() {
 		t.Fatal("first stun did not land")
 	}
-	state.StunnedRemaining /= 2
-	stun := state.StunnedRemaining
+	state.Status[component.StatusStun].Remaining /= 2
+	stun := state.Status[component.StatusStun].Remaining
 	area(second, component.CombatAttackPulse)
-	if state.StunnedRemaining != stun {
+	if state.Status[component.StatusStun].Remaining != stun {
 		t.Fatal("another player's pulse refreshed stun immunity")
 	}
 	w.Resources.Time.DeltaTime = max(remaining, stun)

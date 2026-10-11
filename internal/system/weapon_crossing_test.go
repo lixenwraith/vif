@@ -49,7 +49,8 @@ func TestDisruptorCrossesGeometry(t *testing.T) {
 
 	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
 	weaponComp.Charges[component.WeaponDisruptor] = 1
-	weapon.fireAllWeapons(cursor, weaponComp, orbs)
+	weaponComp.Charges[component.WeaponGun] = 0 // the pulse's artifacts alone
+	weapon.fireLoadout(cursor, weaponComp, orbs)
 
 	events := w.Resources.Event.Queue.Consume()
 	if len(events) != 3 {
@@ -230,12 +231,13 @@ func TestPlayerRayRunsThroughItsOrbAndCrossesOnlyItsImpacts(t *testing.T) {
 
 	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
 	weaponComp.Charges[component.WeaponEmitter] = 2
+	weaponComp.Charges[component.WeaponGun] = 0 // the ray's artifacts alone
 	weapon.Update()
 	orbs := weapon.orbsOf(cursor)
 	w.Positions.SetPosition(orbs[component.WeaponEmitter], component.PositionComponent{X: 9, Y: 5})
 	w.Resources.Event.Queue.Consume()
-	weapon.fireAllWeapons(cursor, weaponComp, orbs)
-	weapon.advanceRays(cursor, orbs, parameter.GameUpdateInterval)
+	weapon.fireLoadout(cursor, weaponComp, orbs)
+	weapon.advanceRays(cursor, weaponComp, orbs, parameter.GameUpdateInterval)
 
 	var crossings int
 	struck := make(map[core.Entity]bool)
@@ -258,7 +260,7 @@ func TestPlayerRayRunsThroughItsOrbAndCrossesOnlyItsImpacts(t *testing.T) {
 	}
 
 	w.Positions.SetPosition(orbs[component.WeaponEmitter], component.PositionComponent{X: 5, Y: 9})
-	weapon.advanceRays(cursor, orbs, parameter.GameUpdateInterval)
+	weapon.advanceRays(cursor, weaponComp, orbs, parameter.GameUpdateInterval)
 	w.Resources.Event.Queue.Consume()
 	if ray, _ := w.Components.Ray.GetComponent(orbs[component.WeaponEmitter]); ray.Ray.DX != 0 || ray.Ray.DY <= 0 {
 		t.Fatalf("ray = %+v after the orb moved south, want it to follow", ray.Ray)

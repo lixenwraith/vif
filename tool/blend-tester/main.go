@@ -74,7 +74,7 @@ type AppState struct {
 	// Effect mode - Trail
 	trailLength   int
 	trailColorIdx int
-	trailType     int // 0=cleaner, 1=materialize
+	trailType     int // 0=tracer, 1=materialize
 
 	// Effect mode - Flash
 	flashFrame    int

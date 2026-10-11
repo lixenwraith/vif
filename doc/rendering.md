@@ -95,7 +95,7 @@ modes are different:
 - **Coordinate layer.** `MapToScreen` and friends reject off-map coordinates, so
   every renderer that projects map cells is bounded by construction. This covers
   shapes drawn per-cell from a possibly off-map anchor: splash bitmaps, health
-  bars, cleaner trails, marker areas.
+  bars, tracer trails, marker areas.
 - **Compositor layer.** `RenderBuffer.SetClip` bounds every write path, and the
   orchestrator sets it per layer from `RenderPriority.ClipsToPlayfield`. This
   covers renderers that never convert a map coordinate at all because they
@@ -280,7 +280,7 @@ also the visual stacking order; exact integer priorities are in
 | Environment/guidance | `wall`, `chargeline` |
 | Base entities | `sigil`, `glyph`, `gold`, `healthbar` |
 | Species/structures | `pylon`, `tower`, `storm`, `eye`, `snake`, `drain`, `quasar`, `swarm` |
-| Cleaner/materialize | `cleaner`, `materialize`, `teleportline` |
+| Tracer/materialize | `tracer`, `materialize`, `teleportline` |
 | Fields/projectiles | `shield`, `ember`, `orb`, `lightning`, `missile`, `pulse`, `ray`, `bullet` |
 | Particles | `flash`, `fadeout`, `explosion`, `spirit` |
 | Overlay effects | `splash`, `marker` |
@@ -295,11 +295,11 @@ a game component needs no renderer if another renderer deliberately projects
 it (nuggets use their visual/sigil representation rather than a registered
 `nugget` renderer).
 
-The cleaner renderer is intentionally background-only: every sampled trail
-cell writes no rune/foreground, so typeable text remains readable as a cleaner
+The tracer renderer is intentionally background-only: every sampled trail
+cell writes no rune/foreground, so typeable text remains readable as a tracer
 crosses it. `BlendMaxBg` bounds overlapping auto-fire at the brighter input
 instead of accumulating color, and the visible ring-buffer prefix contracts as
-a blocked cleaner drains to its stop point.
+a blocked tracer drains to its stop point.
 
 ### Local and peer cursors
 

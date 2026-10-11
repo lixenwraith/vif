@@ -24,8 +24,8 @@ const (
 
 // Damage
 const (
-	// CombatDamageCleaner is damage caused by cleaner hit
-	CombatDamageCleaner = 1
+	// CombatDamageTracer is damage per tracer hit
+	CombatDamageTracer = 1
 
 	// CombatDamageRod is damage caused by lightning rod buff hit
 	CombatDamageRod = 1
@@ -54,7 +54,7 @@ const (
 	// CombatDamageImmunityDuration is the duration of immunity from damage after taking damage
 	CombatDamageImmunityDuration = 150 * time.Millisecond
 
-	// CombatHitFlashDuration is yellow flash duration and immunity window on cleaner hit
+	// CombatHitFlashDuration is the hit flash's length on any damaging hit
 	CombatHitFlashDuration = 150 * time.Millisecond
 )
 
@@ -111,6 +111,9 @@ const (
 
 const LightningEnergyDrainReward = 100
 
+// LightningArcRange is how far a capped rod's hit arcs to the next target, in cells
+const LightningArcRange = OrbOrbitRadiusX
+
 // Missile
 const (
 	// MissileImpactRadius is hit detection threshold (cells)
@@ -133,6 +136,11 @@ const (
 
 	// PulseEffectCap is the maximum number of concurrent pulse rings; the oldest is replaced
 	PulseEffectCap = 16
+
+	// A charged pulse leaves a burn: BurnDamage every BurnPeriod for BurnDuration
+	BurnDamage   = 1
+	BurnPeriod   = 1000 * time.Millisecond
+	BurnDuration = 3000 * time.Millisecond
 )
 
 // Mounted weapons: a hit costs a cursor energy through an active shield, heat without one
@@ -177,4 +185,5 @@ const (
 	TurretBulletSpeed     = 50.0 // cells/sec
 	TurretSpreadHalfAngle = 0.26 // radians (~15°)
 	TurretBulletLifetime  = 4 * time.Second
+	TurretStream          = 1 // bullets per stream shot between a capped turret's waves
 )

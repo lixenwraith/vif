@@ -1,8 +1,9 @@
 # Combat and weapons
 
-How weapons are defined, who fires them, how their hits resolve, and what crosses
-between instances. The domain rules cited as D-n are in
-[the domain model](domain-design.md); per-weapon tuning is in `internal/parameter`.
+How weapons are defined, who fires them, how their hits resolve, what a hit can
+leave behind, and what crosses between instances. The domain rules cited as D-n
+are in [the domain model](domain-design.md); per-weapon tuning is in
+`internal/parameter`.
 
 ## 1. The boundary
 
@@ -15,14 +16,14 @@ another one.
 | State | `WeaponComponent`, owner-authored (D-13) | `MountComponent` on the host, in the capture |
 | Positions read | the predicted cursor cell (D-18) | Shared positions only, roster order on ties |
 | Shots and visuals | Player-domain, on the owner alone | Player-domain, re-derived on every instance (D-6) |
-| What crosses | impacts only: damage, knockback, stun (D-3) | nothing |
+| What crosses | impacts only: damage, knockback, stun, burn (D-3) | nothing |
 | Hits on cursors | none (no PvP) | applied by each cursor's owner alone |
 
-A peer never sees a remote cursor's orbs, projectiles, bolts, rings or rays, and
-never receives its loadout's behaviour; it receives what that loadout did to the
-Shared world, as the artifacts in §4. A mount raises only local events: its
-cursor hits go through `strikeCursor`, which acts only on a cursor this instance
-simulates.
+A peer never sees a remote cursor's orbs, tracers, projectiles, bolts, rings or
+rays, and never receives its loadout's behaviour; it receives what that loadout
+did to the Shared world, as the artifacts in §5. A mount raises only local
+events: its cursor hits go through `strikeCursor`, which acts only on a cursor
+this instance simulates.
 
 ## 2. Layers
 
@@ -30,19 +31,22 @@ simulates.
 flowchart LR
     Spec["WeaponSpecs by WeaponType"] --> Weapon["weapon (player): cursor loadout"]
     Spec --> Mount["mount (shared): hosted weapons"]
-    Weapon --> Delivery["lightning · missile · pulse · bullet · ray"]
+    Weapon --> Delivery["tracer · lightning · missile · pulse · bullet · ray"]
     Mount --> Delivery
-    Delivery --> Combat["combat profiles: species targets"]
+    Delivery --> Combat["combat profiles: species targets, statuses"]
     Delivery --> Strike["strikeCursor: cursor targets"]
-    Delivery --> Presented["transient rings; ray, missile, bullet and lightning components"]
+    Delivery --> Presented["transient rings; tracer, ray, missile, bullet and lightning components"]
 ```
 
 `component.WeaponSpecs` is the one table of weapon kinds: status name, delivery,
-combat attack family, cursor cooldown and charge cap, and the hosted range and
-`CursorDamage`. A new kind adds a row; drivers and renderers index by kind.
+combat attack family, cursor cooldown and charge cap, whether the kind is innate
+and fires from the cursor, the hosted range and `CursorDamage`, and what the
+kind gains at its cap (§4). A new kind adds a row; drivers and renderers index
+by kind.
 
 | Kind | Delivery | On a cursor | Mounted |
 |---|---|---|---|
+| Gun | tracer | innate; one streak per cardinal from the cursor, direct damage on contact, the polarity's glyph effect along the way | none |
 | Rod | lightning | direct hit per unique nearest target, bolt from the orb | zaps the aimed cursor |
 | Launcher | missile | one homing missile per charge; the blast is explosion geometry | one hostile missile that homes on cursors |
 | Disruptor | pulse | stun burst centred on the orb when a target is inside | strikes every cursor inside its ring |
@@ -52,10 +56,19 @@ combat attack family, cursor cooldown and charge cap, and the hosted range and
 ## 3. Drivers
 
 **`weapon`** (player) owns cursor loadouts: charges and cooldowns, one orb per
-held kind, and firing on main fire. Aimed deliveries share one nearest-target query
-from the cursor, sized to the largest ready loadout; every shot leaves from its
-kind's orb, or the cursor while the orb is unplaced. Spread draws from the Player
-stream. Loot grants kinds; a zero crossing of the cursor's energy clears them.
+held kind that has one, and firing on main fire. A cursor spawns holding the gun
+(`component.Loadout`); loot grants the other kinds; a zero crossing of the
+cursor's energy clears those and keeps the gun; `EventWeaponRemoveRequest` takes
+any kind, the gun included, for a region fought without it. Aimed deliveries
+share one nearest-target query from the cursor, sized to the largest ready
+loadout; every shot leaves from its kind's orb, or the cursor while the orb is
+unplaced or the kind has none. Spread draws from the Player stream.
+
+Tracers are the weapon system's own, as rays are: the gun's volley spawns one
+per direction and lane, and every tick each sweeps its row or column cell by
+cell, striking the first wall or combatant it meets and draining its trail
+there. A tracer takes the cursor's polarity when fired: a positive one blossoms
+the red glyphs it crosses, a negative one decays blue ones to green.
 
 **`mount`** (shared) fires the one weapon a Shared host carries. A level attaches
 it with `EventMountRequest` (host, weapon, interval, range, muzzle, lane, width),
@@ -86,60 +99,97 @@ Storm's red circle carries a turret mount the storm arms from the state each tic
 opens with, so the burst fires on its active ticks exactly; the storm renderer
 reads the mount's aim for its muzzle.
 
-## 4. Resolution and what crosses
+## 4. At the charge cap
+
+Charges only rise, so a kind at `MaxCharges` keeps its cap effect until the
+loadout is lost. The row names the effect; a zero field leaves the kind as it
+is below the cap.
+
+| Kind | At the cap | Row |
+|---|---|---|
+| Gun | three lanes per direction, one row or column apart; two charges give two | `MaxCharges` |
+| Rod | each unique hit arcs once to the nearest other target within `ArcRange`, in the rod's own priority: a request of the same family from the struck cell, so the zap runs target to target; a target the volley struck or arced to is skipped, and nothing random decides a hit | `ArcRange` |
+| Launcher | fires on `MaxedCooldown`, half its cooldown | `MaxedCooldown` |
+| Disruptor | the pulse artifact carries `Charged`, and the pulse profile's `Charged` chain burns every hit entity (§5) | the profile |
+| Turret | streams between waves: a wave arms a per-kind timer the weapon system ticks only while that wave's cooldown runs, firing `Stream` bullets at the nearest target every `WeaponStreamInterval` without resetting the cooldown or flashing the orb; the timer is its author's alone, so a new author's starts over at most one interval late | `Stream` |
+| Emitter | the ray is sustained: laid on the orb whenever none exists, needing no target, held at full strength, a timed ray still burning converting in place; main fire resets no cooldown and flashes no orb | `Sustained` |
+
+## 5. Resolution, statuses, and what crosses
 
 Hits on species resolve through the profile matrix in `internal/profile/combat.go`,
-`[attack][attacker][defender]`: damage type and value, knockback, stun, chain.
-Damage allowances are per player and attack family within the target's immunity
-window (D-3); chained effects keep their originating weapon's allowance. Knockback
-and stun immunity each cover all players and weapons. Species-authored
-invulnerability still blocks every weapon.
+`[attack][attacker][defender]`: damage type and value, knockback, stun, chains.
+The damage type picks the resolver: direct, area, or over-time, which leaves a
+status instead of taking hit points. Damage allowances are per player and attack
+family within the target's immunity window (D-3); chained effects keep their
+originating weapon's allowance. Knockback and stun immunity each cover all players
+and weapons. Species-authored invulnerability still blocks every weapon.
+
+A status is one slot per kind on `CombatComponent`, no stacking: remaining time,
+a period and its timer, a magnitude, the crediting cursor and the family it
+records under. Combat ages every slot each tick. Stun suppresses movement and is
+never refreshed while it runs, so a target under fire from two players still
+leaves it. Burn is the charged pulse's chained over-time attack,
+`CombatAttackBurn`: `BurnDamage` every `BurnPeriod` for `BurnDuration`, the last
+refresher credited, each tick recorded under the burn family, flashing the target
+and setting `LastDamagedBy` on it and its header. Nothing spends the burn
+family's immunity, so only a sealed window refuses a burn or its tick; a tick
+spends no window, so a player's own burn never blocks their direct hits. The
+digest names every slot field, so a status is compared state.
+
 Hits on cursors are `CursorDamage`: energy through an active shield, heat without
-one. Projectiles find the cursor they touch
-with `CursorContactAt`, shields first. Species contact costs `profile.Contact`
-through `strikeCursor`: `strikeContacts` for composites, with the shield's impact
-crossing, and Kraken's own footprint test for its hundreds of cells.
+one. Projectiles find the cursor they touch with `CursorContactAt`, shields
+first. Species contact costs `profile.Contact` through `strikeCursor`:
+`strikeContacts` for composites, with the shield's impact crossing, and Kraken's
+own footprint test for its hundreds of cells.
 
 | Cursor weapon hit | Artifact |
 |---|---|
-| Rod, turret bullet, cleaner on a Shared target | one direct request stamped Shared (stamped class) |
-| Missile blast, disruptor pulse | explosion geometry: centre, radius, attack, owner |
+| Tracer, rod, turret bullet on a Shared target | one direct request stamped Shared (stamped class) |
+| Missile blast, disruptor pulse | explosion geometry: centre, radius, attack, owner, and whether the weapon was at its cap |
 | Ray on a Shared target, each tick it covers it | area crossing: target, member set, owner, scale |
 | Any hit on a drain | local; drains are Player-domain |
 
-The cleaner is the always-held main weapon: its impact chains into a lightning
-direct attack whose energy-drain effect spawns the zap from the cursor, which is
-why the cleaner's bolt starts at the cursor and the rod's at its orb.
+Follow-ups are derived, never transported (D-5). The tracer's impact chains into
+a lightning direct attack whose energy-drain effect spawns the zap from the
+cursor, which is why the tracer's bolt starts at the cursor and the rod's at its
+orb; a charged pulse's area hit chains one burn request per hit entity, the same
+on every instance.
 
-## 5. Presentation
+## 6. Presentation
 
 Renderers draw only what exists on their instance. Orbs take their kind's colour
-from `orbPalette`. A discharge's `WeaponPalette` is positive or negative by the
-cursor's energy, or hostile for a mount. Pulse rings are a fixed-capacity list in
+from `orbPalette` and show the bullseye at the cap. A discharge's `WeaponPalette`
+is positive or negative by the cursor's energy, or hostile for a mount; a tracer
+keeps the palette it was fired with and draws as a background-only trail that
+contracts as it drains. Pulse rings are a fixed-capacity list in
 `TransientResource`, raised by `EventPulseVisualRequest`. Rays are drawn straight
 from their `RayComponent`: a white core, sides in the palette where the ray widens,
 a mount's warning as its core line alone. Missiles and bullets draw hostile colours
 from their `Hostile` flag; lightning uses its colour table. Each has a 256-colour
 path.
 
-## 6. Tick order
+## 7. Tick order
 
-`weapon` runs early with the player state. Host species run next, then `mount`
-after every host so a host arms before its mount fires, then `combat`. Lightning,
-missile and bullet integrate after combat; `transient` ages rings late.
+`weapon` runs early with the player state and advances tracers last in its tick.
+Host species run next, then `mount` after every host so a host arms before its
+mount fires, then `combat`, which also ages statuses and lands burn ticks.
+Lightning, missile and bullet integrate after combat; `transient` ages rings late.
 
-## 7. Adding a weapon
+## 8. Adding a weapon
 
-1. Add the kind to `WeaponType` and its row to `WeaponSpecs`, with parameters.
-2. Reuse a delivery, or add one with a case in `WeaponSystem.fireAllWeapons` and
+1. Add the kind to `WeaponType` and its row to `WeaponSpecs`, with parameters; an
+   innate kind sets `Innate` and `FromCursor`, a cap effect fills its field.
+2. Reuse a delivery, or add one with a case in `WeaponSystem.fireLoadout` and
    `MountSystem.fire`.
-3. Give its attack family a profile against every cursor defender.
+3. Give its attack family a profile against every cursor defender; an over-time
+   family sets `Status`, `Period` and `Duration`.
 4. Add its orb colours, loot type with its `LootSpecs` and `LootVisuals` rows, and
-   a tier in `profile.Drops`.
+   a tier in `profile.Drops`, unless it is innate.
 5. A player-domain push of a replicated event must be named in `crossingPushes`
    with the artifact it crosses; `TestEventClassMatchesSystemProfile` enforces it.
 
-Telemetry: the `weapon` card holds the loadout and orbs, `weapon.fired` and
-`weapon.rejects` the counters; `combat.damage.family` is the damage each attack
-family deals, which is how a weapon's effect reads; `mount`, `missile` and `bullet`
-hold their own.
+Telemetry: the `weapon` card holds the loadout, orbs and tracers in flight,
+`weapon.fired` and `weapon.rejects` the counters, `weapon.tracer_*` the sweep;
+`combat.damage.family` is the damage each attack family deals, which is how a
+weapon's effect reads; `combat.effect_burn` and `combat.burn_ticks` count burns
+left and ticks landed; `mount`, `missile` and `bullet` hold their own.

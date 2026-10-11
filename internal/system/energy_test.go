@@ -31,7 +31,7 @@ func TestEnergyRewardKeepsPolarityUntilDrainReachesZero(t *testing.T) {
 	}
 }
 
-// TestChainedEnergyDrainZapsBetweenOwnerAndTarget pins the geometry a cleaner hit
+// TestChainedEnergyDrainZapsBetweenOwnerAndTarget pins the geometry a tracer hit
 // produces: the chain is authored by the cursor, so the zap spans cursor to
 // species instead of collapsing onto the projectile's impact cell.
 func TestChainedEnergyDrainZapsBetweenOwnerAndTarget(t *testing.T) {
@@ -44,11 +44,11 @@ func TestChainedEnergyDrainZapsBetweenOwnerAndTarget(t *testing.T) {
 		OwnerEntity: target, CombatEntityType: component.CombatEntityDrain, HitPoints: 100,
 	})
 
-	// The impact cell a cleaner reports: the species cell, not the cursor's.
+	// The impact cell a tracer reports: the species cell, not the cursor's.
 	combat.HandleEvent(event.GameEvent{
 		Type: event.EventCombatAttackDirectRequest,
 		Payload: &event.CombatAttackDirectRequestPayload{
-			AttackType:   component.CombatAttackProjectile,
+			AttackType:   component.CombatAttackTracer,
 			OwnerEntity:  cursor,
 			OriginEntity: cursor,
 			TargetEntity: target,

@@ -119,12 +119,15 @@ func DigestWorld(w *engine.World, scope engine.DomainScope) WorldDigest {
 		}
 		wd.Combat = wd.Combat.u64(uint64(e)).
 			i64(int64(c.HitPoints)).b(c.IsEnraged).
-			i64(int64(c.StunnedRemaining)).
 			i64(int64(c.RemainingKineticImmunity)).
 			u64(uint64(c.KineticImmunitySpent)).
 			i64(int64(c.RemainingDamageImmunity))
 		for _, spent := range c.DamageImmunitySpent {
 			wd.Combat = wd.Combat.u64(uint64(spent))
+		}
+		for _, st := range c.Status {
+			wd.Combat = wd.Combat.i64(int64(st.Remaining)).i64(int64(st.Period)).i64(int64(st.Timer)).
+				i64(int64(st.Magnitude)).u64(uint64(st.Source)).i64(int64(st.Attack))
 		}
 	}
 

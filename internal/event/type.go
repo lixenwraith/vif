@@ -137,11 +137,6 @@ const (
 	// EventNuggetJumpRequest (NuggetJumpRequestPayload) [local] signals player intent to jump to their active nugget
 	EventNuggetJumpRequest
 
-	// --- Cleaner ---
-
-	// EventCleanerDirectionalRequest (DirectionalCleanerPayload) [local] spawns 4-way cleaners from origin
-	EventCleanerDirectionalRequest
-
 	// --- Gold ---
 
 	// EventGoldSpawnRequest [shared] signals a specific request to try spawning a gold sequence
@@ -194,8 +189,10 @@ const (
 
 	// --- Weapon ---
 
-	// EventWeaponAddRequest (WeaponAddRequestPayload) [local] signals activating buff for cursor
+	// EventWeaponAddRequest (WeaponAddRequestPayload) [local] grants or recharges one kind on a cursor
 	EventWeaponAddRequest
+	// EventWeaponRemoveRequest (WeaponRemoveRequestPayload) [local] takes one kind from a cursor's loadout
+	EventWeaponRemoveRequest
 	// EventWeaponFireRequest (WeaponFireRequestPayload) [local] signals weapon fire request
 	EventWeaponFireRequest
 	// EventFireSpecialRequest (FireSpecialRequestPayload) [local] signals player intent to fire special ability
