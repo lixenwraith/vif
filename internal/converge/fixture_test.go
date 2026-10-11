@@ -29,6 +29,7 @@ type stub struct {
 	roster []network.RosterEntry
 	port   engine.NetworkPort
 	world  snapshot.SharedCapture
+	enc    snapshot.Encoder
 
 	installed []snapshot.SharedCapture
 	adopted   []snapshot.CaptureHeader
@@ -97,6 +98,8 @@ func (s *stub) InstallCapture(cap snapshot.SharedCapture) (engine.WorldDifferenc
 }
 
 func (s *stub) VerifyCaptureIdentity(snapshot.CaptureHeader) error { return nil }
+
+func (s *stub) Encoder() *snapshot.Encoder { return &s.enc }
 
 // AdoptAuthority records a header this instance's world already equals.
 func (s *stub) AdoptAuthority(h snapshot.CaptureHeader) {

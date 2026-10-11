@@ -623,8 +623,13 @@ to plan by. Tower is the 239×64 tower region, td the 500×250 `td` scenario.
 | Heap in use per instance | 70 MiB | 90 MiB | 210 MiB | 250 MiB |
 
 Per round the host captures under the world lock (about 1.2 ms tower, 14 ms td),
-seals the capture (9 / 65 ms) and indexes it (4.5 / 30 ms with the wall section
-reused). A keyframe is 80 / 516 kB compressed and 9 / 65 ms to encode. An install that
+seals the capture (9 / 65 ms) and indexes it (4.5 / 30 ms). A keyframe is 80 / 516 kB
+compressed and 9 / 65 ms to encode. The seal, the index and a keyframe now reuse the
+bytes and hash of every row whose owned copy still compares equal: at 16 players,
+rounds four ticks apart and on a slower container, the seal fell from 16 to 1.8 ms
+on the tower map and from 123 to 5 ms on td, the index from 12 to 2.4 and from 64 to
+12 ms, and a keyframe from 19 to 7.6 and from 125 to 58 ms, now mostly deflate. The
+table predates that reuse. An install that
 projects nothing holds the live lock 7–10 / 40–70 ms, and each projected tick adds up
 to a simulation tick. Sealing, indexing and encoding run outside the lock, but on the
 one thread a browser guest has.
@@ -638,11 +643,12 @@ participant's epochs and owner syncs to every other, (N−1)² of each: at 16 pl
 
 What that means for scaling:
 
-- **Protocol, not simulation, bounds the map limit.** At td with 16 players the host
-  needs about 1.4 cores, 86% of it protocol: rounds of capture, seal and index cost
-  about 100 ms each, 0.7 CPU-s/s at 7.2 rounds, and whole bodies most of the rest. The
-  seal now costs twice the index. The fleet pod's 500m CPU and 160 MiB `GOMEMLIMIT`
-  hold the tower map at 16 players and not td.
+- **Protocol, not simulation, bounded the map limit.** At td with 16 players the host
+  needed about 1.4 cores, 86% of it protocol: rounds of capture, seal and index cost
+  about 100 ms each, 0.7 CPU-s/s at 7.2 rounds, and whole bodies most of the rest.
+  Row reuse takes about nine tenths off the seal and index, which leaves the capture
+  under the lock the largest part of a round. The fleet pod's 500m CPU and 160 MiB
+  `GOMEMLIMIT` held the tower map at 16 players and not td.
 - **A td guest costs 0.4–0.5 CPU-s/s natively,** which a browser's single WASM thread
   cannot hold; the tower map costs a guest about 0.1.
 - **Bandwidth is quadratic before it is anything else.** Epoch and owner-sync fan-out

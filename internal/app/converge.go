@@ -90,6 +90,7 @@ func (i instance) InstallCapture(cap snapshot.SharedCapture) (engine.WorldDiffer
 	return staged.Difference(), nil
 }
 
+func (i instance) Encoder() *snapshot.Encoder { return &i.a.encoder }
 func (i instance) VerifyCaptureIdentity(h snapshot.CaptureHeader) error {
 	return i.a.verifyCaptureIdentity(h)
 }

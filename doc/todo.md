@@ -224,21 +224,14 @@ Diagnoses and what each item follows from are in
 ### Reduce exact snapshot and navigation costs at the map limit
 
 - Priority: P1
-- Affected files: `internal/snapshot`, `internal/app/capture.go`,
-  `internal/engine/snapshot_delta.go`, `internal/gen-manifest`, `pkg/navigation`,
-  `internal/app/clone.go`, `internal/system/navigation.go`
+- Affected files: `pkg/navigation`, `internal/app/clone.go`,
+  `internal/system/navigation.go`
 
-At td with 16 players the host spends about 1.2 of its 1.4 CPU-s/s on protocol and
+At td with 16 players the host spent about 1.2 of its 1.4 CPU-s/s on protocol and
 an instance averages about 250 MiB of heap, against the pod's 500m and 160 MiB
-(multi-player §6). Per round the seal (about 65 ms) now costs twice the index, whose
-remainder is mostly the static wall positions. Each step below must stay exact:
+(multi-player §6). Row reuse took about nine tenths off a round's seal and index;
+what remains is navigation and replay. Each step below must stay exact:
 
-- Reuse the wall store's own encoding in `Integrity` and the capture encoders, under
-  the builder's owned-value comparison: each seal and keyframe re-encodes every wall.
-- Reuse the row encodings of unchanged entries in every store. That also replaces
-  the wall special case in `ManifestBuilder` with a table indexed by store.
-- Generate typed comparisons for `DiffCapture` and `countStoreDifference`, which
-  call `reflect.DeepEqual` per entry.
 - Measure navigation's share again, then exact storage and loop work in
   `FlowField.Compute` with identical directions, distances and throttle phase.
 - Skip `CompositePassability.Compute` in `NavigationSystem.LoadShared` when the walls
