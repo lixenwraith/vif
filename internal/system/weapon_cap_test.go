@@ -60,3 +60,44 @@ func TestCappedRodArcsToTheNearestOtherTargetInRange(t *testing.T) {
 		t.Fatalf("requests = %v, want no arc: %d is already struck and %d is out of range", got, next, far)
 	}
 }
+
+// TestCappedTurretStreamsBetweenWavesAndStopsWithTheCooldown: a wave arms the
+// stream; each interval while the wave cooldown runs fires TurretStream bullets
+// without touching the cooldown; a cooldown that has ended fires none.
+func TestCappedTurretStreamsBetweenWavesAndStopsWithTheCooldown(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	weapon := NewWeaponSystem(w).(*WeaponSystem)
+	capTarget(w, 8, 5)
+	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
+	weaponComp.Charges[component.WeaponTurret] = component.WeaponSpecs[component.WeaponTurret].MaxCharges
+	bullets := func() int {
+		n := 0
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if ev.Type == event.EventBulletSpawnRequest {
+				n++
+			}
+		}
+		return n
+	}
+
+	weapon.Update()
+	w.Resources.Event.Queue.Consume()
+	weapon.fireAllWeapons(cursor, weaponComp, weapon.orbsOf(cursor))
+	if got := bullets(); got != weaponComp.Charges[component.WeaponTurret] {
+		t.Fatalf("wave = %d bullets, want one per charge", got)
+	}
+	cooldown := weaponComp.Cooldown[component.WeaponTurret]
+
+	w.Resources.Time.DeltaTime = parameter.WeaponStreamInterval
+	weapon.Update()
+	if got := bullets(); got != parameter.TurretStream || weaponComp.Cooldown[component.WeaponTurret] != cooldown-parameter.WeaponStreamInterval {
+		t.Fatalf("stream = %d bullets, cooldown %v; want %d and the wave cooldown merely aged",
+			got, weaponComp.Cooldown[component.WeaponTurret], parameter.TurretStream)
+	}
+
+	weaponComp.Cooldown[component.WeaponTurret] = 0
+	weapon.Update()
+	if got := bullets(); got != 0 {
+		t.Fatalf("stream = %d bullets after the cooldown ended, want none", got)
+	}
+}

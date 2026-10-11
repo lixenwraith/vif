@@ -45,7 +45,9 @@ type WeaponSpec struct {
 	HostedDamage CursorDamage // what a mounted weapon's hit costs a cursor
 
 	// What the kind gains at MaxCharges; a zero field changes nothing
-	ArcRange float64 // cells a hit arcs to the nearest other target within
+	ArcRange      float64       // cells a hit arcs to the nearest other target within
+	MaxedCooldown time.Duration // replaces Cooldown
+	Stream        int           // bullets per stream shot while a wave's cooldown runs
 }
 
 // CursorDamage is a hit on a cursor: energy drained through an active shield,
@@ -74,8 +76,9 @@ var WeaponSpecs = [WeaponCount]WeaponSpec{
 		ArcRange:     parameter.LightningArcRange},
 	WeaponLauncher: {Name: "launcher", Delivery: DeliveryMissile, Attack: CombatAttackMissile,
 		Cooldown: parameter.WeaponCooldownLauncher, MaxCharges: parameter.WeaponMaxChargeLauncher,
-		HostedRange:  parameter.HostedLauncherRange,
-		HostedDamage: CursorDamage{parameter.HostedLauncherEnergy, -parameter.HostedLauncherHeat}},
+		HostedRange:   parameter.HostedLauncherRange,
+		HostedDamage:  CursorDamage{parameter.HostedLauncherEnergy, -parameter.HostedLauncherHeat},
+		MaxedCooldown: parameter.WeaponCooldownLauncherMaxed},
 	WeaponDisruptor: {Name: "disruptor", Delivery: DeliveryPulse, Attack: CombatAttackPulse,
 		Cooldown: parameter.WeaponCooldownDisruptor, MaxCharges: parameter.WeaponMaxChargeDisruptor,
 		HostedRange:  parameter.PulseRadiusX,
@@ -83,7 +86,8 @@ var WeaponSpecs = [WeaponCount]WeaponSpec{
 	WeaponTurret: {Name: "turret", Delivery: DeliveryBullet, Attack: CombatAttackBullet,
 		Cooldown: parameter.WeaponCooldownTurret, MaxCharges: parameter.WeaponMaxChargeTurret,
 		HostedRange:  parameter.HostedTurretRange,
-		HostedDamage: CursorDamage{parameter.HostedTurretEnergy, -parameter.HostedTurretHeat}},
+		HostedDamage: CursorDamage{parameter.HostedTurretEnergy, -parameter.HostedTurretHeat},
+		Stream:       parameter.TurretStream},
 	WeaponEmitter: {Name: "emitter", Delivery: DeliveryRay, Attack: CombatAttackRay,
 		Cooldown: parameter.WeaponCooldownEmitter, MaxCharges: parameter.WeaponMaxChargeEmitter,
 		HostedRange:  parameter.HostedEmitterRange,
@@ -95,5 +99,6 @@ var WeaponSpecs = [WeaponCount]WeaponSpec{
 type WeaponComponent struct {
 	Charges          [WeaponCount]int
 	Cooldown         [WeaponCount]time.Duration
+	Stream           [WeaponCount]time.Duration // until a capped kind's next stream shot; runs only while its Cooldown does, and stays with its author
 	MainFireCooldown time.Duration
 }

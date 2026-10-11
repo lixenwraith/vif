@@ -221,8 +221,34 @@ func (s *WeaponSystem) Update() {
 		orbs := s.ensureOrbs(cursor, slot, weaponComp)
 		s.updateOrbs(cursor, slot, orbs)
 		s.advanceRays(cursor, orbs, dt)
+		s.advanceStreams(cursor, weaponComp, orbs, dt)
 		return true
 	})
+}
+
+// advanceStreams fires a capped kind's stream shots while its wave cooldown runs,
+// on its own clock at the main-fire rate; a wave arms it and the cooldown's end stops it
+func (s *WeaponSystem) advanceStreams(cursor core.Entity, weaponComp *component.WeaponComponent, orbs orbSlots, dt time.Duration) {
+	cursorPos, ok := s.world.CursorCell(cursor)
+	if !ok {
+		return
+	}
+	for wt, charges := range weaponComp.Charges {
+		spec := &component.WeaponSpecs[wt]
+		if spec.Stream <= 0 || charges < spec.MaxCharges || weaponComp.Cooldown[wt] <= 0 {
+			continue
+		}
+		if weaponComp.Stream[wt] -= dt; weaponComp.Stream[wt] > 0 {
+			continue
+		}
+		weaponComp.Stream[wt] = parameter.WeaponStreamInterval
+		x, y := s.emitterCell(orbs[wt], cursorPos)
+		fromX, fromY := vmath.Point{X: x, Y: y}.CenterF()
+		targets := FindNearestTargets(s.world, fromX, fromY, spec.Stream, engine.ScopeBoth, cursor)
+		if spec.Delivery == component.DeliveryBullet && s.fireBullets(cursor, x, y, spec.Attack, targets) {
+			s.statFired[wt].Add(1)
+		}
+	}
 }
 
 // addWeapon grants or recharges one weapon on one cursor
@@ -254,6 +280,7 @@ func (s *WeaponSystem) removeAllWeapons(cursor core.Entity) {
 
 	weaponComp.Charges = [component.WeaponCount]int{}
 	weaponComp.Cooldown = [component.WeaponCount]time.Duration{}
+	weaponComp.Stream = [component.WeaponCount]time.Duration{}
 
 	s.publishLoadout(cursor, weaponComp)
 	if slot, ok := s.world.CursorSlot(cursor); ok {
@@ -715,6 +742,12 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 			continue
 		}
 		weaponComp.Cooldown[wt] = spec.Cooldown
+		if capped && spec.MaxedCooldown > 0 {
+			weaponComp.Cooldown[wt] = spec.MaxedCooldown
+		}
+		if capped && spec.Stream > 0 {
+			weaponComp.Stream[wt] = parameter.WeaponStreamInterval
+		}
 		s.statFired[wt].Add(1)
 		s.triggerOrbFlash(orbs[wt])
 	}

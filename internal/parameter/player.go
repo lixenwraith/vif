@@ -61,6 +61,9 @@ const (
 	WeaponCooldownDisruptor = 2000 * time.Millisecond
 	WeaponCooldownTurret    = 500 * time.Millisecond
 	WeaponCooldownEmitter   = 6000 * time.Millisecond // from firing, so more charges fire for more of it
+
+	WeaponCooldownLauncherMaxed = WeaponCooldownLauncher / 2 // at the charge cap
+	WeaponStreamInterval        = WeaponCooldownMain         // between a capped kind's stream shots
 )
 
 // Weapon Max Charges, read through component.WeaponSpecs

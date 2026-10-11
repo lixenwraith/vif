@@ -185,4 +185,5 @@ const (
 	TurretBulletSpeed     = 50.0 // cells/sec
 	TurretSpreadHalfAngle = 0.26 // radians (~15°)
 	TurretBulletLifetime  = 4 * time.Second
+	TurretStream          = 1 // bullets per stream shot between a capped turret's waves
 )
