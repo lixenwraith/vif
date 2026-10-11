@@ -16,8 +16,8 @@ exactly where a terminal, an authored script and the fuzz driver sit.
 Bots belong to the instance that started them. A process running a person and two
 bots is a participant with two more behind it — a relay whose leaves share its
 fate. That relation, not a new protocol, is what fits bots under the session
-protocol: every bot is admitted by the ordinary handshake, and the relay item later
-lets a holder carry its bots' traffic without changing who they are or when they go.
+protocol: every bot is admitted by the ordinary handshake, and a guest carries its
+bots' traffic (§4) without changing who they are or when they go.
 
 ## 2. Decisions
 
@@ -29,7 +29,7 @@ lets a holder carry its bots' traffic without changing who they are or when they
 | Seats | One headless instance per bot. | D-2 stays whole: two Player domains in one `World` would share one grid partition, one D-18 ring and one input binding. |
 | Ownership | A bot belongs to the instance that started it. The host's bots are participants for as long as the host runs; a guest's bots leave when that guest does. A guest cannot hand its bots to the host. | A bot a person brought must not outlive the person, and one a host started is part of the session it offers. |
 | Compositions | On the host and on a guest alike: a person, a person with bots, or bots alone. | §4. |
-| Networking | Ordinary participant links: a host's bots dial loopback; a guest's bots dial its join address. After succession, the holder admits new bots through a loopback listener on its surviving transport. | The same handshake and gate serve every join. Permanent holder-local admission while still a guest needs the relay work in §4. |
+| Networking | A host's bots dial loopback; a guest's bots join on an in-process stream the guest serves and relays. After succession, a holder that inherited authority admits new bots through a loopback listener on its surviving transport. | The same handshake and gate serve every join, and a guest's bots cost the authority no link of their own. |
 | Occupancy | Bots count: a session of bots alone is occupied. A guest's bots leave with it, so only the host's bots keep an allocated session alive, and its deadline still ends it. | A host that offers bots offers a session to play in. |
 | Pause | An instance may pause only while it is the authority and every other participant is its own bot; the pause stops its bots with it, and an arrival ends it. | A paused authority stops committing, and a participant it cannot pause would run on ahead of every commit; only its own bots can stop with it. Anyone else in the session, or being a guest, refuses as today, and a joiner's gate waits on ticks. |
 | Perception | The whole local instance, present state only, read by the vocabulary under the bot's own world lock while its graph updates. | A bot reads what its instance holds; another participant's Player domain does not exist locally. |
@@ -123,24 +123,23 @@ Process-wide state assumes one instance per process:
 | the host | its holder's own listener over loopback, which a run in no session opens first: the same accept loop, roster, anchor and capture as anyone's, and a loopback dial spends no join budget | the host ends, `:bot drop`, or a `-serve` host's drain begins | yes |
 | a guest | dialling the address the guest joined, from the guest's process, on its own link | the guest leaves or loses its session: it closes its bots, and its process ending takes them | while its guest is in it |
 
-Direct links remain the transport. The join reply, roster and shared cursor carry
-a bot's holder identity for removal and succession (§13). A host's bot is admitted by the accept loop that
-already serves TCP and WebSocket listeners; a guest's bot is one more participant
-from the guest's address, which shares that address's join budget. A seat never
-advertises, so it is never elected, and it ends once no session is left for it.
-An inherited authority lazily binds a loopback admission listener on the existing
-transport. Its established links stay attached; newly added bots use that listener
-instead of the departed host's address.
+The join reply, roster and shared cursor carry a bot's holder identity for removal
+and succession (§13). A host's bot is admitted by the accept loop that already
+serves TCP and WebSocket listeners. A seat never advertises, so it is never
+elected, dials no peer links, and ends once no session is left for it. An
+inherited authority lazily binds a loopback admission listener on the existing
+transport; its established links stay attached.
 
-The relay item is where a guest's bots move onto its own link. That changes the
-link and nothing a roster says, and it waits until bots work in every composition:
+A guest's bots live on the guest's own link: that changes the link and nothing a
+roster says. R1–R4 landed for a guest's bots; R5 remains
+([Delegate convergence to relays](todo.md#delegate-convergence-to-relays)):
 
 | Step | Work |
 |---|---|
-| R1 | **Admission through a relay.** The holder forwards a bot's `JoinerReport`; the coordinator admits it and answers through the holder, which serves the join capture from its own proved world — a leaf proves it by the authority's root. A new message pair and a `ManifestVersion` bump. |
-| R2 | **One subtree proof upstream.** The holder's answer carries each leaf's newest proved tick in `Relayed`, so the authority's floor, flood and cadence count subtrees and the keyframe floor stops crossing every link while anyone is behind a relay. |
-| R3 | **Bundled epochs.** The holder sends its leaves' raw epochs with its own, one frame a tick. |
-| R4 | **Ingress through the relay.** The authority accepts a leaf's traffic only through its relay and budgets each link's ingress into eviction, so a bad relay stalls only its own subtree. |
+| R1 | **Admission through a relay (landed).** The bot dials its holder over an in-process stream. The holder asks the authority to assign, admit or abandon it (`MsgRelayJoin`), the authority answers from its tick (`MsgRelayAdmit`) and crosses the arrival, and the holder serves the join capture from its own proved world, resealed so the leaf proves it by the authority's root. Protocol 5. |
+| R2 | **One subtree proof upstream (landed).** The holder's answer carries each leaf's newest proved tick in `Relayed`; the authority counts every roster participant as answered on its own link or through a relay, and the keyframe floor no longer crosses every link. |
+| R3 | **Bundled epochs (landed).** A guest linked to the authority sends its own raw epochs and syncs and its leaves' as one `MsgBundle` a tick. |
+| R4 | **Ingress through the relay (landed).** The authority takes a participant's raw traffic only on its own link, else on its holder's, and evicts a link whose ingress exceeds `NetworkIngressBytesPerSecond` for each participant it carries, so a bad relay stalls only its own subtree. |
 | R5 | **People behind a relay.** Path advertisement for a leaf's lead, re-parenting, and reaching a relay behind NAT. A relay for people is native with a declared port; a browser relays only its own bots. |
 
 A bot is the easiest leaf R1–R4 can have: its hop is a function call, it shares
@@ -152,7 +151,7 @@ its holder's fate so it never re-parents, and it needs no hole punching.
 |---|---|---|
 | 1 | landed | The bot itself: pointer in map cells, `internal/bot`, `vif -bot`, shipped graphs. |
 | 2–3 | landed | Seats: the host's and a guest's bots in every composition of §4, `-bots`, `:bot`, occupancy, the pause rule. |
-| 6 | P1, next | Relays own subtrees: ownership/removal foundation landed (§13); R1–R4 for a guest's bots, then R5. |
+| 6 | P1, next | Relays own subtrees: ownership/removal (§13) and R1–R4 for a guest's bots landed; R5 next. |
 | 4 | P2, after 6 | The fleet: an allocator request for bots. Slot marking landed in §12. |
 | 5 | P2, after 6 | Decision logic: richer vocabulary and a motor layer. |
 | 7 | P3 | Offline genetic training. |
@@ -177,12 +176,12 @@ handshake before its gate sends to them, which simultaneous dials used to fail, 
 a loopback dial spends no join budget at the game host, while the fleet's front
 door keeps its own budget per player.
 
-### Phase 6 — relay subtrees (next)
+### Phase 6 — relay subtrees (R1–R4 landed)
 
 Holder identity, group departure and host removal landed as the prerequisites
-in §13. R1–R4 and then R5 (§4) still move admission, convergence proofs and traffic
-onto the holder's link. Permanent guest-local admission, including adding bots
-through a guest after the original host has departed, remains part of this work.
+in §13. R1–R4 (§4) moved a guest's bots' admission, convergence proofs and traffic
+onto its link, so a guest seats bots through whoever holds authority, including
+after the original host has departed. R5 brings people behind relays.
 
 ### Phase 4 — the fleet (after phase 6)
 
@@ -308,7 +307,7 @@ settles only what it pushed.
 | The same after it | 4.5 MiB | the same run |
 | Spatial grid on td, the 500×250 ceiling | 32 MB per world, and a guest's staging world holds a second | 256 bytes a cell |
 | A seat at 120×40 | about 45 ms of CPU a second and 24 MB resident, not yet broken down | `-serve -bots 1` against `-bots 8`, 20 s steady state, 2026-09-30 |
-| Link | a host's bot costs the encode and decode of a guest's traffic over loopback; a guest's bot costs a guest's link until R1–R4 | — |
+| Link | a host's bot costs the encode and decode of a guest's traffic over loopback; a guest's bot costs its holder an in-process stream, and the authority its share of the holder's link, about 10–12 KB/s a participant | per-link ingress at the host, a guest with two bots, 10 s, 2026-10-11 |
 
 ## 10. Verification
 
@@ -322,8 +321,9 @@ settles only what it pushed.
   and a held seat stands still; `./script/test.sh bot` joins a bot with bots of its
   own to a dedicated host and keeps a `-serve -bots 2` session past its `-empty`.
 - Phase 4: a fleet load test of networked bots.
-- Phase 6: relayed topologies under `LinkShape`s, asserting hash-only convergence and
-  the authority's per-link fan-out.
+- Phase 6: a guest's bots join and play on its link, and a still-guest holder seats
+  bots after the host leaves; R5 adds relayed topologies under `LinkShape`s,
+  asserting hash-only convergence and the authority's per-link fan-out.
 
 ## 11. Open questions
 
@@ -358,8 +358,8 @@ mid-run capture gate, and closes with its transport. It does not replace existin
 peer links or recreate the holder's bots. The old authority's participant ID is
 also released for reuse: the protected ID is the current authority, not always 1.
 
-Permanent loopback admission while the holder is still a guest would require
-forwarding admission and captures through it (R1–R4). That remains phase 6. This
+Admission while the holder is still a guest was left to phase 6, which forwards
+it through the holder (R1, §4). This
 fix only adds a local entry point once the holder actually has authority; it adds
 no messages, wire fields or manifest changes. Existing bots survive through the
 session's established succession links.
@@ -441,7 +441,7 @@ run stops. Removal ends membership; it is not an address ban.
 Ownership is structurally checked against an admitted, independent holder.
 Links are still unauthenticated as documented in multiplayer; this is no new
 security boundary. Wire protocol 4, capture schema 12 and journal schema 21
-require matching builds. R1–R5 traffic relaying remains pending; this pass does not claim to implement them.
+require matching builds. Traffic relaying (R1–R5) was left to phase 6.
 
 Manual checks after building `bin/vif`:
 
