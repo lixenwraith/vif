@@ -8,7 +8,7 @@ import (
 
 func TestMatrixCoversCursorAttacks(t *testing.T) {
 	families := []component.CombatAttackType{
-		component.CombatAttackProjectile,
+		component.CombatAttackTracer,
 		component.CombatAttackShield,
 		component.CombatAttackExplosion,
 	}

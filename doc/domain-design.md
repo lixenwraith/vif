@@ -504,8 +504,8 @@ is the Shared placement gate.
 | Domain | Entities |
 |---|---|
 | **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, kraken, tower, gateway, wall, gold, marker, FSM, time |
-| **Player** | glyph, nugget, dust, drain, particle (decay/blossom), bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, explosion presentation, loot |
-| **Stamped** | cleaner, materialise, spirit; domain is resolved per request |
+| **Player** | glyph, nugget, dust, drain, particle (decay/blossom), tracer, bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, explosion presentation, loot |
+| **Stamped** | materialise, spirit; domain is resolved per request |
 
 Gold is contested Shared state: typing contribution is tallied per roster slot and
 ties resolve to the lowest slot. Nuggets and loot are personal and cannot be

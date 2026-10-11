@@ -128,7 +128,7 @@ generated typed store and mask bit.
 |---|---|
 | Identity and presentation | `Glyph`, `Sigil`, `Nugget`, `Cursor`, `Protection`, `Kinetic`, `Wall`, `Loot`, `Gateway` |
 | Player state | `Energy`, `Heat`, `Shield`, `Boost`, `Weapon`, `Orb`, `Ping`, `CursorView` |
-| General behavior | `Particle`, `Cleaner`, `Dust`, `Navigation`, `Combat`, `Genotype`, `Lightning`, `Missile`, `Mount`, `Spirit`, `Materialize` |
+| General behavior | `Particle`, `Tracer`, `Dust`, `Navigation`, `Combat`, `Genotype`, `Lightning`, `Missile`, `Mount`, `Spirit`, `Materialize` |
 | Species and structures | `Target`, `TargetAnchor`, `Drain`, `Quasar`, `Swarm`, `Storm`, `StormCircle`, `Bullet`, `Pylon`, `Snake`, `SnakeHead`, `SnakeBody`, `SnakeMember`, `Eye`, `Tower` |
 | Composite entities | `Header`, `Member` |
 | Transient effects | `Flash`, `Fadeout`, `Splash`, `Marker` |
@@ -343,7 +343,7 @@ The catalog covers these domains:
 | Player and typing | cursor lifecycle/placement, character input, deletion, per-cursor energy, heat, boost, shield, and weapons |
 | World structure | walls, maze, composites, gateways, towers, navigation graphs |
 | Species and combat | creation, attacks, damage, death, fusion, projectiles, adaptation, genetics |
-| Visual effects | flash, fade, splash, dust, cleaner, markers and explosions |
+| Visual effects | flash, fade, splash, dust, markers and explosions |
 | Multiplayer network | connect/disconnect, remote cursor input, state sync, and transport notifications |
 
 Payload ownership depends on the event. Several high-frequency payloads are

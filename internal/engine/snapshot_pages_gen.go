@@ -41,7 +41,7 @@ var SharedWorldStoreNames = []string{
 	"ping",
 	"cursorview",
 	"particle",
-	"cleaner",
+	"tracer",
 	"dust",
 	"navigation",
 	"combat",
@@ -127,7 +127,7 @@ func SharedWorldStoreRows(s *SharedWorldState, i int, dst []StoreRow) ([]StoreRo
 	case 18:
 		return appendStoreRows(dst, s.Particle)
 	case 19:
-		return appendStoreRows(dst, s.Cleaner)
+		return appendStoreRows(dst, s.Tracer)
 	case 20:
 		return appendStoreRows(dst, s.Dust)
 	case 21:
@@ -341,11 +341,11 @@ func SharedWorldApplyStoreRows(s *SharedWorldState, i int, owns func(core.Entity
 		s.Particle = out
 		return nil
 	case 19:
-		out, err := applyStoreRows(s.Cleaner, owns, rows)
+		out, err := applyStoreRows(s.Tracer, owns, rows)
 		if err != nil {
 			return err
 		}
-		s.Cleaner = out
+		s.Tracer = out
 		return nil
 	case 20:
 		out, err := applyStoreRows(s.Dust, owns, rows)

@@ -31,7 +31,7 @@ const (
 	CombatDamageNone CombatDamageType = iota
 	CombatDamageDirect
 	CombatDamageArea
-	CombatDamageOverTime // Future
+	CombatDamageOverTime // a status the direct resolver leaves, ticking from the profile's figures
 )
 
 // Attack Types
@@ -41,7 +41,7 @@ type CombatAttackType int
 const CombatAttackNone CombatAttackType = -1
 
 const (
-	CombatAttackProjectile CombatAttackType = iota
+	CombatAttackTracer CombatAttackType = iota
 	CombatAttackShield
 	CombatAttackLightning
 	CombatAttackExplosion
@@ -50,6 +50,7 @@ const (
 	CombatAttackSelfDestruct
 	CombatAttackBullet
 	CombatAttackRay
+	CombatAttackBurn // a charged pulse's follow-up; nothing spends its immunity, so only a sealed window blocks it
 	CombatAttackTypeCount
 )
 
@@ -60,12 +61,31 @@ const CombatEffectNone CombatEffectMask = 0
 const (
 	CombatEffectEnergyDrain CombatEffectMask = 1 << iota
 	CombatEffectKinetic
-	CombatEffectStun // Future
+	CombatEffectStun
 )
+
+// StatusKind indexes CombatComponent.Status: one slot per kind, no stacking
+type StatusKind uint8
+
+const (
+	StatusStun StatusKind = iota // movement suppressed
+	StatusBurn                   // periodic damage credited to Source
+	StatusCount
+)
+
+// Status is one effect a hit left on a combat entity, aged by combat each tick
+type Status struct {
+	Remaining time.Duration    // zero: inactive
+	Period    time.Duration    // between ticks of a periodic effect; zero: none
+	Timer     time.Duration    // until the next tick
+	Magnitude int              // what a tick applies
+	Source    core.Entity      // crediting cursor; Shared, so capture-safe
+	Attack    CombatAttackType // family a tick records under and checks immunity against
+}
 
 // CombatComponent tags an entity as combat-relevant for interactions.
 type CombatComponent struct {
-	// OwnerEntity indicates owner/parent of the entity with combat component (e.g. cursor is the parent of cleaner)
+	// OwnerEntity indicates owner/parent of the entity with combat component (e.g. cursor is the parent of a tracer)
 	OwnerEntity core.Entity
 
 	// LastDamagedBy identifies the cursor that most recently dealt HP damage.
@@ -98,9 +118,11 @@ type CombatComponent struct {
 	// Records accepted displacement sources; immunity itself covers every attacker.
 	KineticImmunitySpent uint32
 
-	// StunnedRemaining is remaining stun duration (movement suppressed)
-	StunnedRemaining time.Duration
+	// Status is indexed by StatusKind
+	Status [StatusCount]Status
 }
+
+func (c *CombatComponent) Stunned() bool { return c.Status[StatusStun].Remaining > 0 }
 
 // unownedAttacker is the immunity bit for an attack no cursor owns
 const unownedAttacker = 1 << parameter.MaxPlayers

@@ -26,6 +26,7 @@ var componentDomains = map[uint64]componentRule{
 	PingBit:         {"Ping", core.DomainShared},
 	CursorViewBit:   {"CursorView", core.DomainShared},
 	ParticleBit:     {"Particle", core.DomainPlayer},
+	TracerBit:       {"Tracer", core.DomainPlayer},
 	DustBit:         {"Dust", core.DomainPlayer},
 	GenotypeBit:     {"Genotype", core.DomainShared},
 	LightningBit:    {"Lightning", core.DomainPlayer},

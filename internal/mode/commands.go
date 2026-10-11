@@ -33,7 +33,7 @@ var commandNames = []string{
 	"flow", "graph", "l", "log", "q", "quit", "n", "new", "new!", "n!",
 	"f", "free", "a", "auto", "s", "system", "m", "mouse", "e", "emit", "event",
 	"t", "telemetry", "hud", "d", "debug", "h", "help", "?", "about", "content", "energy", "heat",
-	"boost", "god", "demon", "blossom", "decay", "cleaner", "dust",
+	"boost", "god", "demon", "blossom", "decay", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region", "replay",
 	"host", "join", "session", "bot", "player", "g", "config", "journal",
@@ -125,8 +125,6 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleBlossomCommand(ctx)
 	case "decay":
 		return handleDecayCommand(ctx)
-	case "cleaner":
-		return handleCleanerCommand(ctx)
 	case "dust":
 		return handleDustCommand(ctx)
 	case "host":
@@ -408,7 +406,7 @@ func handleAutoCommand(ctx *engine.GameContext, args []string) CommandResult {
 			next = engine.AutoFireBoth
 		case "off":
 			next = engine.AutoFireOff
-		case "main", "cleaner":
+		case "main", "gun":
 			next = engine.AutoFireMain
 		default:
 			valid = false
@@ -1057,14 +1055,6 @@ func handleBlossomCommand(ctx *engine.GameContext) CommandResult {
 // handleDecayCommand triggers a decay wave
 func handleDecayCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushLocal(event.EventParticleWave, &event.ParticleWavePayload{Behavior: component.ParticleDecay})
-	return CommandResult{Continue: true, KeepPaused: false}
-}
-
-// handleCleanerCommand triggers sweeping cleaners
-func handleCleanerCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEventDomain(event.EventCleanerSweepingRequest, &event.CleanerSweepingRequestPayload{
-		Entity: ctx.World.Resources.Player.Entity,
-	}, core.DomainPlayer)
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 

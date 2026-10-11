@@ -341,9 +341,9 @@ func TestKrakenConvertsGlyphsAndDestroysWholeGoldAndNuggets(t *testing.T) {
 	}
 }
 
-func TestKrakenCleanerAndGlyphExplosionsSpendSeparatePlayerWeaponBudgets(t *testing.T) {
+func TestKrakenTracerAndGlyphExplosionsSpendSeparatePlayerWeaponBudgets(t *testing.T) {
 	w, _, kraken, leg := krakenFixture(t)
-	cleaner := NewCleanerSystem(w).(*CleanerSystem)
+	weapon := NewWeaponSystem(w).(*WeaponSystem)
 	combat := NewCombatSystem(w).(*CombatSystem)
 	explosion := NewExplosionSystem(w).(*ExplosionSystem)
 	dust := NewDustSystem(w).(*DustSystem)
@@ -367,17 +367,17 @@ func TestKrakenCleanerAndGlyphExplosionsSpendSeparatePlayerWeaponBudgets(t *test
 		cursor := w.Resources.Player.Slot(uint8(slot))
 		w.Components.Energy.SetComponent(cursor, component.EnergyComponent{Current: 50})
 		heat.setHeat(cursor, 10)
-		cleaner.checkCollisions(leg.X, leg.Y, 0, cursor, 1, 0, component.CleanerColorPositive)
+		weapon.tracerStrike(leg.X, leg.Y, 0, cursor, 1, 0, component.PalettePositive)
 		settle()
-		if hp.HitPoints != before-parameter.CombatDamageCleaner {
-			t.Fatalf("player %d cleaner damage=%d, want %d", slot, before-hp.HitPoints, parameter.CombatDamageCleaner)
+		if hp.HitPoints != before-parameter.CombatDamageTracer {
+			t.Fatalf("player %d tracer damage=%d, want %d", slot, before-hp.HitPoints, parameter.CombatDamageTracer)
 		}
 		before = hp.HitPoints
 		combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
 			OwnerEntity: cursor, OriginEntity: cursor, TargetEntity: kraken, HitEntity: kraken, AttackType: component.CombatAttackLightning,
 		})
 		if hp.HitPoints != before-parameter.CombatDamageRod {
-			t.Fatal("cleaner follow-up consumed the rod's damage allowance")
+			t.Fatal("tracer follow-up consumed the rod's damage allowance")
 		}
 		before = hp.HitPoints
 		glyph := w.CreateEntity(core.DomainPlayer)
@@ -389,13 +389,13 @@ func TestKrakenCleanerAndGlyphExplosionsSpendSeparatePlayerWeaponBudgets(t *test
 			t.Fatalf("player %d glyph explosion lost its damage allowance", slot)
 		}
 		before = hp.HitPoints
-		cleaner.checkCollisions(leg.X, leg.Y, 0, cursor, 1, 0, component.CleanerColorPositive)
+		weapon.tracerStrike(leg.X, leg.Y, 0, cursor, 1, 0, component.PalettePositive)
 		explosion.HandleEvent(event.GameEvent{Type: event.EventExplosionRequest, Payload: &event.ExplosionRequestPayload{
 			Entity: cursor, X: leg.X, Y: leg.Y, Radius: 4, Attack: component.CombatAttackExplosion,
 		}})
 		settle()
 		if hp.HitPoints != before {
-			t.Fatal("repeat cleaner or explosion bypassed its own allowance")
+			t.Fatal("repeat tracer or explosion bypassed its own allowance")
 		}
 	}
 	hp.SealDamageImmunity(parameter.CombatDamageImmunityDuration)
@@ -442,7 +442,7 @@ func TestKrakenLegInterceptsMissilesAndSharesUnstunnableHealth(t *testing.T) {
 	combat.applyHitArea(&event.CombatAttackAreaRequestPayload{
 		AttackType: component.CombatAttackPulse, OriginEntity: cursor, OwnerEntity: cursor, TargetEntity: e, HitEntities: []core.Entity{hit},
 	})
-	if hp.HitPoints != before-parameter.CombatDamagePulse || hp.StunnedRemaining != 0 {
+	if hp.HitPoints != before-parameter.CombatDamagePulse || hp.Stunned() {
 		t.Fatalf("pulse must damage without stunning: %+v", hp)
 	}
 	for _, attack := range []component.CombatAttackType{component.CombatAttackShield, component.CombatAttackExplosion} {

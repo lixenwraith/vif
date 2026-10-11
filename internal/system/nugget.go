@@ -219,17 +219,10 @@ func (s *NuggetSystem) handleJumpRequest(cursorEntity core.Entity) {
 	s.statJumps.Add(1)
 }
 
-// emitBeacon fires the personal nugget's cleaner from the local cursor.
+// emitBeacon converges the personal nugget's beams on it; nothing spawns when they land
 func (s *NuggetSystem) emitBeacon(x, y int) {
-	cursor := s.world.ResolveOwnedCursor(s.world.Resources.Player.Entity)
-	if cursor == 0 {
-		return
-	}
-	s.world.PushLocal(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
-		Entity:    cursor,
-		OriginX:   x,
-		OriginY:   y,
-		ColorType: component.CleanerColorNugget,
+	s.world.PushLocal(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
+		X: x, Y: y, Type: component.SpawnTypeNugget,
 	})
 }
 
@@ -278,7 +271,7 @@ func (s *NuggetSystem) spawnNugget() {
 
 	s.statSpawned.Add(1)
 
-	// Emit directional cleaners on spawn
+	// The beacon announces the spawn
 	s.emitBeacon(x, y)
 }
 

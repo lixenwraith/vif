@@ -75,8 +75,8 @@ func TestWindAppliesBySpeciesMassAndExcludesOtherKinetics(t *testing.T) {
 	addExcluded("cursor", core.DomainShared, func(e core.Entity) {
 		w.Components.Cursor.SetComponent(e, component.CursorComponent{})
 	})
-	addExcluded("cleaner", core.DomainPlayer, func(e core.Entity) {
-		w.Components.Cleaner.SetComponent(e, component.CleanerComponent{})
+	addExcluded("tracer", core.DomainPlayer, func(e core.Entity) {
+		w.Components.Tracer.SetComponent(e, component.TracerComponent{})
 	})
 	addExcluded("missile", core.DomainPlayer, func(e core.Entity) {
 		w.Components.Missile.SetComponent(e, component.MissileComponent{})

@@ -269,7 +269,7 @@ Perception is the whole local instance's present state. The vocabulary never rea
 the event queue or barrier-held crossings, RNG positions, FSM delayed actions, the
 prediction ledger or network state: those are the future, or somebody else's. So
 a keystroke can still miss, as a person's can: a tick's own fire queues deaths —
-special fire's dust, a cleaner's hits — that settle before the next keystroke does.
+special fire's dust, a tracer's hits — that settle before the next keystroke does.
 Settling first would make a bot run unreplayable, since a recorded driven run
 settles only what it pushed.
 

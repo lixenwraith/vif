@@ -54,7 +54,7 @@ type SharedWorldState struct {
 	Ping         []StoreEntry[component.PingComponent]         `json:"ping,omitempty"`
 	CursorView   []StoreEntry[component.CursorViewComponent]   `json:"cursorview,omitempty"`
 	Particle     []StoreEntry[component.ParticleComponent]     `json:"particle,omitempty"`
-	Cleaner      []StoreEntry[component.CleanerComponent]      `json:"cleaner,omitempty"`
+	Tracer       []StoreEntry[component.TracerComponent]       `json:"tracer,omitempty"`
 	Dust         []StoreEntry[component.DustComponent]         `json:"dust,omitempty"`
 	Navigation   []StoreEntry[component.NavigationComponent]   `json:"navigation,omitempty"`
 	Combat       []StoreEntry[component.CombatComponent]       `json:"combat,omitempty"`
@@ -255,12 +255,12 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			s.Particle = append(s.Particle, StoreEntry[component.ParticleComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
-	for _, e := range w.Components.Cleaner.Entities() {
+	for _, e := range w.Components.Tracer.Entities() {
 		if e.Domain() != core.DomainShared {
 			continue
 		}
-		if v, ok := w.Components.Cleaner.GetComponent(e); ok {
-			s.Cleaner = append(s.Cleaner, StoreEntry[component.CleanerComponent]{Entity: e, Value: DetachSnapshotValue(v)})
+		if v, ok := w.Components.Tracer.GetComponent(e); ok {
+			s.Tracer = append(s.Tracer, StoreEntry[component.TracerComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Dust.Entities() {
@@ -603,8 +603,8 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	for _, en := range s.Particle {
 		w.Components.Particle.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
-	for _, en := range s.Cleaner {
-		w.Components.Cleaner.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
+	for _, en := range s.Tracer {
+		w.Components.Tracer.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Dust {
 		w.Components.Dust.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
@@ -752,7 +752,7 @@ type SharedWorldDelta struct {
 	Ping         StoreDelta[component.PingComponent]         `json:"ping,omitzero"`
 	CursorView   StoreDelta[component.CursorViewComponent]   `json:"cursorview,omitzero"`
 	Particle     StoreDelta[component.ParticleComponent]     `json:"particle,omitzero"`
-	Cleaner      StoreDelta[component.CleanerComponent]      `json:"cleaner,omitzero"`
+	Tracer       StoreDelta[component.TracerComponent]       `json:"tracer,omitzero"`
 	Dust         StoreDelta[component.DustComponent]         `json:"dust,omitzero"`
 	Navigation   StoreDelta[component.NavigationComponent]   `json:"navigation,omitzero"`
 	Combat       StoreDelta[component.CombatComponent]       `json:"combat,omitzero"`
@@ -817,7 +817,7 @@ func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
 	d.Ping = diffStore(base.Ping, next.Ping)
 	d.CursorView = diffStore(base.CursorView, next.CursorView)
 	d.Particle = diffStore(base.Particle, next.Particle)
-	d.Cleaner = diffStore(base.Cleaner, next.Cleaner)
+	d.Tracer = diffStore(base.Tracer, next.Tracer)
 	d.Dust = diffStore(base.Dust, next.Dust)
 	d.Navigation = diffStore(base.Navigation, next.Navigation)
 	d.Combat = diffStore(base.Combat, next.Combat)
@@ -878,7 +878,7 @@ func ApplySharedWorldDelta(base SharedWorldState, d SharedWorldDelta) SharedWorl
 	s.Ping = applyStore(base.Ping, d.Ping)
 	s.CursorView = applyStore(base.CursorView, d.CursorView)
 	s.Particle = applyStore(base.Particle, d.Particle)
-	s.Cleaner = applyStore(base.Cleaner, d.Cleaner)
+	s.Tracer = applyStore(base.Tracer, d.Tracer)
 	s.Dust = applyStore(base.Dust, d.Dust)
 	s.Navigation = applyStore(base.Navigation, d.Navigation)
 	s.Combat = applyStore(base.Combat, d.Combat)
@@ -938,7 +938,7 @@ func (d SharedWorldDelta) DeltaEntries() int {
 	n += d.Ping.Entries()
 	n += d.CursorView.Entries()
 	n += d.Particle.Entries()
-	n += d.Cleaner.Entries()
+	n += d.Tracer.Entries()
 	n += d.Dust.Entries()
 	n += d.Navigation.Entries()
 	n += d.Combat.Entries()
@@ -1001,7 +1001,7 @@ func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
 	w.Entries += countStoreDifference(a.Ping, b.Ping, touched)
 	w.Entries += countStoreDifference(a.CursorView, b.CursorView, touched)
 	w.Entries += countStoreDifference(a.Particle, b.Particle, touched)
-	w.Entries += countStoreDifference(a.Cleaner, b.Cleaner, touched)
+	w.Entries += countStoreDifference(a.Tracer, b.Tracer, touched)
 	w.Entries += countStoreDifference(a.Dust, b.Dust, touched)
 	w.Entries += countStoreDifference(a.Navigation, b.Navigation, touched)
 	w.Entries += countStoreDifference(a.Combat, b.Combat, touched)
@@ -1123,7 +1123,7 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	for _, en := range s.Particle {
 		target[en.Entity] = struct{}{}
 	}
-	for _, en := range s.Cleaner {
+	for _, en := range s.Tracer {
 		target[en.Entity] = struct{}{}
 	}
 	for _, en := range s.Dust {
@@ -1264,7 +1264,7 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	reconcileStore(w.Components.Ping, s.Ping)
 	reconcileStore(w.Components.CursorView, s.CursorView)
 	reconcileStore(w.Components.Particle, s.Particle)
-	reconcileStore(w.Components.Cleaner, s.Cleaner)
+	reconcileStore(w.Components.Tracer, s.Tracer)
 	reconcileStore(w.Components.Dust, s.Dust)
 	reconcileStore(w.Components.Navigation, s.Navigation)
 	reconcileStore(w.Components.Combat, s.Combat)

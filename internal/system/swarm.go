@@ -197,7 +197,7 @@ func (s *SwarmSystem) Update() {
 		}
 
 		// Stun check: skip movement, reset state machine
-		if combatComp.StunnedRemaining > 0 {
+		if combatComp.Stunned() {
 			// Reset state machine on first stunned tick
 			if swarmComp.State != component.SwarmStateChase {
 				s.resetSwarmState(swarmComp)

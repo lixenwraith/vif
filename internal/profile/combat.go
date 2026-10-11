@@ -18,8 +18,14 @@ type AttackProfile struct {
 	DamageValue int
 	EffectMask  component.CombatEffectMask
 
-	// Chain fires as a follow-up direct attack after this one resolves
-	Chain *AttackProfile
+	// Chain fires as a follow-up direct attack after this one resolves; Charged
+	// fires as another when the hit says its weapon was at its charge cap
+	Chain   *AttackProfile
+	Charged *AttackProfile
+
+	// A CombatDamageOverTime profile leaves Status, ticking DamageValue every Period for Duration
+	Status           component.StatusKind
+	Period, Duration time.Duration
 
 	// Collision and KineticImmunity apply when EffectMask has CombatEffectKinetic
 	Collision       *physics.CollisionProfile
@@ -86,14 +92,14 @@ var Contact = [component.SpeciesCount]component.CursorDamage{
 // a nil entry means that defender takes no knockback (pylon is stationary)
 type collisionSet [component.CombatEntityCount]*physics.CollisionProfile
 
-var cleanerCollision = collisionSet{
-	component.CombatEntityDrain:     &CleanerToDrain,
-	component.CombatEntityQuasar:    &CleanerToQuasar,
-	component.CombatEntitySwarm:     &CleanerToSwarm,
-	component.CombatEntityStorm:     &CleanerToStorm,
-	component.CombatEntitySnakeHead: &CleanerToSnakeHead,
-	component.CombatEntitySnakeBody: &CleanerToSnakeBody,
-	component.CombatEntityEye:       &CleanerToEye,
+var tracerCollision = collisionSet{
+	component.CombatEntityDrain:     &TracerToDrain,
+	component.CombatEntityQuasar:    &TracerToQuasar,
+	component.CombatEntitySwarm:     &TracerToSwarm,
+	component.CombatEntityStorm:     &TracerToStorm,
+	component.CombatEntitySnakeHead: &TracerToSnakeHead,
+	component.CombatEntitySnakeBody: &TracerToSnakeBody,
+	component.CombatEntityEye:       &TracerToEye,
 }
 
 var shieldCollision = collisionSet{
@@ -119,7 +125,7 @@ var explosionCollision = collisionSet{
 // Backing storage: fixed arrays keep profile addresses stable for Chain
 // pointers and for the matrix
 var (
-	cleanerProfiles      [component.CombatEntityCount]AttackProfile
+	tracerProfiles       [component.CombatEntityCount]AttackProfile
 	lightningProfiles    [component.CombatEntityCount]AttackProfile
 	shieldProfiles       [component.CombatEntityCount]AttackProfile
 	explosionProfiles    [component.CombatEntityCount]AttackProfile
@@ -127,6 +133,7 @@ var (
 	pulseProfiles        [component.CombatEntityCount]AttackProfile
 	bulletProfiles       [component.CombatEntityCount]AttackProfile
 	rayProfiles          [component.CombatEntityCount]AttackProfile
+	burnProfiles         [component.CombatEntityCount]AttackProfile
 	selfDestructProfiles [component.CombatEntityCount]AttackProfile
 )
 
@@ -142,7 +149,7 @@ func withKinetic(p *AttackProfile, set *collisionSet) {
 }
 
 func init() {
-	// Lightning first: cleaner chains into it
+	// Lightning first: the tracer chains into it
 	for _, d := range cursorDefenders {
 		lightningProfiles[d] = AttackProfile{
 			AttackType:  component.CombatAttackLightning,
@@ -155,18 +162,18 @@ func init() {
 		register(&lightningProfiles[d])
 	}
 
-	// Cleaner: direct damage, knockback, chains into lightning
+	// Tracer: direct damage, knockback, chains into lightning
 	for _, d := range cursorDefenders {
-		p := &cleanerProfiles[d]
+		p := &tracerProfiles[d]
 		*p = AttackProfile{
-			AttackType:  component.CombatAttackProjectile,
+			AttackType:  component.CombatAttackTracer,
 			Attacker:    component.CombatEntityCursor,
 			Defender:    d,
 			DamageType:  component.CombatDamageDirect,
-			DamageValue: parameter.CombatDamageCleaner,
+			DamageValue: parameter.CombatDamageTracer,
 			Chain:       &lightningProfiles[d],
 		}
-		withKinetic(p, &cleanerCollision)
+		withKinetic(p, &tracerCollision)
 		register(p)
 	}
 
@@ -224,6 +231,22 @@ func init() {
 		register(&pulseProfiles[d])
 	}
 	pulseProfiles[component.CombatEntityKraken].EffectMask = 0 // too massive to stun
+
+	// Burn: the charged pulse's follow-up
+	for _, d := range cursorDefenders {
+		burnProfiles[d] = AttackProfile{
+			AttackType:  component.CombatAttackBurn,
+			Attacker:    component.CombatEntityCursor,
+			Defender:    d,
+			DamageType:  component.CombatDamageOverTime,
+			DamageValue: parameter.BurnDamage,
+			Status:      component.StatusBurn,
+			Period:      parameter.BurnPeriod,
+			Duration:    parameter.BurnDuration,
+		}
+		register(&burnProfiles[d])
+		pulseProfiles[d].Charged = &burnProfiles[d]
+	}
 
 	// Bullet: damage only, one per turret shot
 	for _, d := range cursorDefenders {

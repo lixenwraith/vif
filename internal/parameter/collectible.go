@@ -30,6 +30,6 @@ const (
 	// NuggetJumpCostPercent is the energy cost to jump to a nugget
 	NuggetJumpCostPercent = 1
 
-	// NuggetBeaconInterval is the interval between directional cleaner emissions
+	// NuggetBeaconInterval is the interval between the beacon's converging beams
 	NuggetBeaconInterval = 2 * time.Second
 )

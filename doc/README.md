@@ -56,9 +56,6 @@ Existing focused references remain useful:
   their document as its stages land.
 - [Behavior machines](machine-design.md) is the working design for per-entity
   species state machines and data-driven species behavior.
-- [Weapons](weapon-design.md) is the working design for combat statuses, what
-  each weapon gains at its charge cap, and the cleaner's reshaping into the main
-  gun.
 - [Keymap example](../internal/input/README.md) shows sparse key overrides.
 - [Genetic package reference](../pkg/genetic/README.md) documents the reusable
   optimization library.

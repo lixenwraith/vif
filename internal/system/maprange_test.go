@@ -35,7 +35,6 @@ var allowedMapRanges = map[string]string{
 	"Machine.RegisteredActions:actionReg":       "collects names, sorted before return",
 	"MetricMap.Keys:items":                      "collects keys, sorted before caching",
 	"Registry.buildIndex:byGroup":               "collects group names, sorted before index build",
-	"CleanerSystem.scanTargetRows:targetRows":   "collects rows, sorted before spawn",
 	"RandResource.SaveStreams:streams":          "collects one domain's stream positions, sorted by label before return",
 	"World.DestroyDomainEntities:componentMask": "collects one domain's entities, sorted before the batch destroy",
 	"AdaptationResource.SaveState:Entries":      "collects gateway IDs, sorted before export",

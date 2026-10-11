@@ -72,7 +72,7 @@ func pushDeathBatch(q *EventQueue, effect EventType, behavior component.Particle
 // Pattern 2: Individual Kill with Flash Effect (e.g., Typing correct char)
 // event.EmitDeath(s.res.Event.Queue, event.EventFlashSpawnOneRequest, entity)
 //
-// Pattern 3: Batch Kill (e.g., Cleaner sweep, particle row)
+// Pattern 3: Batch Kill (e.g., a tracer's red glyphs, particle row)
 // 'toDestroy' is prepared []core.Entity slice
 // event.EmitDeath(s.res.Event.Queue, event.EventFlashSpawnOneRequest, toDestroy...)
 //

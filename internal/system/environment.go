@@ -183,7 +183,7 @@ func (s *EnvironmentSystem) sampleWind() (force, direction float64) {
 
 // applyPlanarWind writes acceleration only to the mobile species currently
 // backed by the ordinary 2D integrators. In particular it deliberately does not
-// range every Kinetic component, so cleaners, missiles, bullets, loot, weapon
+// range every Kinetic component, so tracers, missiles, bullets, loot, weapon
 // orbs, dust, and particle behaviors are excluded.
 func (s *EnvironmentSystem) applyPlanarWind(forceX, forceY float64) {
 	apply := func(entities []core.Entity, mass profile.Mass) {
@@ -219,7 +219,7 @@ func (s *EnvironmentSystem) applyPlanarWind(forceX, forceY float64) {
 func (s *EnvironmentSystem) applyStormWind(forceX, forceY, seconds float64) {
 	s.world.WithDomain(core.DomainShared, func() {
 		for _, entity := range s.world.Components.StormCircle.Entities() {
-			if combat, ok := s.world.Components.Combat.GetComponent(entity); ok && combat.StunnedRemaining > 0 {
+			if combat, ok := s.world.Components.Combat.GetComponent(entity); ok && combat.Stunned() {
 				continue
 			}
 			if kinetic, ok := s.world.Components.Kinetic.GetPtr(entity); ok {

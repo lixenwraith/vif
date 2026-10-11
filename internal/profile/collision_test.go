@@ -25,7 +25,7 @@ func TestMassRatioMonotonic(t *testing.T) {
 	targets := []Mass{MassDrain, MassSwarm, MassEye, MassQuasar, MassStorm}
 	prev := math.MaxFloat64
 	for _, tgt := range targets {
-		r := massRatio(MassCleaner, tgt)
+		r := massRatio(MassTracer, tgt)
 		if r > prev {
 			t.Fatalf("ratio rose with target mass: %v > %v", r, prev)
 		}
@@ -36,10 +36,10 @@ func TestMassRatioMonotonic(t *testing.T) {
 // allProfiles enumerates every shipped collision profile for invariant checks
 func allProfiles() map[string]*physics.CollisionProfile {
 	return map[string]*physics.CollisionProfile{
-		"CleanerToDrain": &CleanerToDrain, "CleanerToSwarm": &CleanerToSwarm,
-		"CleanerToQuasar": &CleanerToQuasar, "CleanerToStorm": &CleanerToStorm,
-		"CleanerToSnakeHead": &CleanerToSnakeHead, "CleanerToSnakeBody": &CleanerToSnakeBody,
-		"CleanerToEye":  &CleanerToEye,
+		"TracerToDrain": &TracerToDrain, "TracerToSwarm": &TracerToSwarm,
+		"TracerToQuasar": &TracerToQuasar, "TracerToStorm": &TracerToStorm,
+		"TracerToSnakeHead": &TracerToSnakeHead, "TracerToSnakeBody": &TracerToSnakeBody,
+		"TracerToEye":   &TracerToEye,
 		"ShieldToDrain": &ShieldToDrain, "ShieldToSwarm": &ShieldToSwarm,
 		"ShieldToQuasar": &ShieldToQuasar, "ShieldToStorm": &ShieldToStorm,
 		"ShieldToSnakeHead": &ShieldToSnakeHead, "ShieldToSnakeBody": &ShieldToSnakeBody,

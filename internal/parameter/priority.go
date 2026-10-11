@@ -17,10 +17,9 @@ const (
 	PriorityGlyph
 	PriorityNugget
 	PriorityGold
-	PriorityCleaner
 	PriorityDust       // Before Explosion
 	PriorityExplosion  // After Dust
-	PriorityFuse       // After Cleaner, before Drain
+	PriorityFuse       // After Explosion, before Drain
 	PrioritySpirit     // After Fuse, before Drain
 	PriorityNavigation // Before systems that move entities
 	PrioritySoftCollision

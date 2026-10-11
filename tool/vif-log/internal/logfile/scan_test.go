@@ -85,7 +85,7 @@ func indexFile(t *testing.T, lines ...string) *Index {
 func TestScanIndexesJournalDomainAndEvent(t *testing.T) {
 	x := indexFile(t,
 		anchorLine,
-		jrn(1, 1, "shared", "EventCleanerDirectionalRequest", ""),
+		jrn(1, 1, "shared", "EventWeaponFireRequest", ""),
 		jrn(2, 2, "player", "EventNuggetJumpRequest", ""),
 		statLine,
 	)
@@ -102,7 +102,7 @@ func TestScanIndexesJournalDomainAndEvent(t *testing.T) {
 	}
 
 	// The journal carries no msg; ev is what names the record.
-	if got := x.MsgName(m[1].Msg); got != "EventCleanerDirectionalRequest" {
+	if got := x.MsgName(m[1].Msg); got != "EventWeaponFireRequest" {
 		t.Errorf("journal msg = %q, want the event name", got)
 	}
 	// The anchor carries neither, so its sub stands in as its discriminator.

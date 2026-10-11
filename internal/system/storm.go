@@ -627,7 +627,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		// Check stun state on circle header
 		stunned := false
 		if combatComp, ok := s.world.Components.Combat.GetComponent(stormComp.Circles[i]); ok {
-			stunned = combatComp.StunnedRemaining > 0
+			stunned = combatComp.Stunned()
 		}
 		circleBuffer[circleCount] = circleState{
 			entity:  stormComp.Circles[i],

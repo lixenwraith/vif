@@ -241,7 +241,7 @@ var fuzzSpecials = [...]input.SpecialOp{
 // opens a file, or takes a free-form payload.
 var fuzzCommands = [...]string{
 	"energy 500", "energy -200", "heat 80", "heat 0", "boost", "god", "demon",
-	"blossom", "decay", "cleaner", "dust", "content",
+	"blossom", "decay", "dust", "content",
 	"free on", "free off", "auto on", "auto off",
 	"mouse enable", "mouse disable",
 	"speed 2", "speed 1/2", "speed reset", "step off",

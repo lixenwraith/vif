@@ -7,5 +7,5 @@ import "time"
 type NuggetComponent struct {
 	Char            rune          // Character for visual display
 	SpawnTime       time.Time     // When this nugget was spawned
-	BeaconRemaining time.Duration // Time until next directional cleaner emission
+	BeaconRemaining time.Duration // Time until the beacon's next beams
 }

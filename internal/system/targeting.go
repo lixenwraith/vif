@@ -188,16 +188,10 @@ func (f *headerFilter) targets(w *engine.World, header core.Entity) bool {
 	return f.valid
 }
 
-// Nearest targets prioritize composites, then singles, excluding owner-owned entities.
-// Store order breaks distance ties; overflow cycles through the available targets.
-func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, scope engine.DomainScope, ownerEntity core.Entity) []TargetAssignment {
-	if count <= 0 {
-		return nil
-	}
-
+// nearestTargets collects every target a point can reach with its closest member
+// and distance, composites and singles apart, each in store order
+func nearestTargets(w *engine.World, fromX, fromY float64, scope engine.DomainScope, ownerEntity core.Entity) (composites, singles []TargetAssignment) {
 	compositeIdx := make(map[core.Entity]int)
-	var composites []TargetAssignment
-	var singles []TargetAssignment
 
 	// 1. Simple combat entities
 	for _, e := range w.Components.Combat.Entities() {
@@ -251,6 +245,16 @@ func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, scope 
 		})
 		return true
 	})
+	return composites, singles
+}
+
+// Nearest targets prioritize composites, then singles, excluding owner-owned entities.
+// Store order breaks distance ties; overflow cycles through the available targets.
+func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, scope engine.DomainScope, ownerEntity core.Entity) []TargetAssignment {
+	if count <= 0 {
+		return nil
+	}
+	composites, singles := nearestTargets(w, fromX, fromY, scope, ownerEntity)
 
 	byDist := func(a, b TargetAssignment) int {
 		if a.DistSq < b.DistSq {

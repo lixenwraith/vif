@@ -16,7 +16,7 @@ Every metric is consumed generically by the status snapshot, telemetry overlay, 
 | Shield | `shield.{active,shield_hit,cursor_rejects,disabled_rejects}`, `player.<slot>.shield.active` | `NewShieldSystem` | Resolved shield handlers/update | `Init` / player reset | Generic only |
 | Heat | `heat.{current,overheat,at_max,ember,cursor_rejects,disabled_rejects}`, `player.<slot>.heat.*` | `NewHeatSystem` | Resolved heat handlers/update | `Init` / player reset | Generic only |
 | Boost | `boost.{active,remaining,truncated,cursor_rejects,disabled_rejects}`, `player.<slot>.boost.*` | `NewBoostSystem` | Resolved boost handlers/update | `Init` / player reset | Generic only |
-| Weapon | `weapon.{<kind>,orbs,orbs_reaped}`, `weapon.{main,<kind>}_fired` (card `weapon.fired`), `weapon.{kind,cursor,disabled}_rejects` (card `weapon.rejects`), `player.<slot>.weapon.*`; kinds are `WeaponSpecs` names | `NewWeaponSystem` | Resolved fire/weapon handlers | `Init` / player reset | Generic only |
+| Weapon | `weapon.{<kind>,orbs,orbs_reaped,tracers,tracer_{wall_collisions,boundary_steps,grid_steps},buf_{tracers,glyphs}_hwm}`, `weapon.{main,<kind>}_fired` (card `weapon.fired`), `weapon.{kind,cursor,disabled}_rejects` (card `weapon.rejects`), `player.<slot>.weapon.*`; kinds are `WeaponSpecs` names | `NewWeaponSystem` | Resolved fire/weapon handlers and the tracer sweep | `Init` / player reset | Generic only |
 | Typing | `typing.{correct,errors,max_streak,buf_delete_hwm,cursor_rejects,disabled_rejects}`, `player.<slot>.typing.max_streak` | `NewTypingSystem` | Resolved typing/delete paths | `Init` / player reset | Generic only |
 | Composite | None | — | — | — | — |
 | Wall | `wall.{enabled,count,push_events,buf_pending_push_checks_hwm}` | `NewWallSystem` | Wall handlers/update and buffer observation | `Init` | Generic only |
@@ -28,14 +28,13 @@ Every metric is consumed generically by the status snapshot, telemetry overlay, 
 | Particle | `decay.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}`, `blossom.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}` | `NewParticleSystem` | Behavior-selected spawn/apply/update paths | `Init` | Separate decay/blossom series preserve the operator surface |
 | Gold | `gold.{active,header_entity,timer,spawn_failures,cursor_rejects,disabled_rejects}` | `NewGoldSystem` | Resolved sequence handlers/update | `Init` | Generic only |
 | Materialize | None | — | — | — | — |
-| Cleaner | `cleaner.{active,spawned,wall_collisions,boundary_steps,grid_steps,cursor_rejects,disabled_rejects,buf_entities_hwm}` | `NewCleanerSystem` | Resolved requests and swept update | `Init` | Generic only |
 | Fuse | `fuse.{spawn_failures,disabled_rejects,buf_pending_hwm}` | `NewFuseSystem` | Fuse request/update failure paths and buffer observation | `Init` | Generic only |
 | Spirit | `spirit.buf_destroy_next_tick_hwm` | `NewSpiritSystem` | Deferred-destroy buffer observation | `Init` | Generic only |
 | Lightning | None | — | — | — | — |
 | Missile | `missile.{count,spawned,impacts,expired,wall_collisions,boundary_hits,grid_steps,disabled_rejects}` | `NewMissileSystem` | Resolved spawn/impact/expiry and swept update | `Init` | Generic only |
 | Navigation | `nav.{entities,recomputes,roi_cells,buf_groups_hwm}` | `NewNavigationSystem` | Recompute/update paths and group observation | `Init` | Generic only |
 | Soft collision | `soft_collision.{collisions,immune_rejects,buf_{drains,swarms,quasars,storms,pylons}_hwm}` | `NewSoftCollisionSystem` | Resolved collision pass and buffer observation | `Init` | Generic only |
-| Combat | `combat.{active,count,live_*,hits_direct,hits_area,knockbacks,stuns,damage_dealt,immune_rejects,unprofiled,*_rejects,effect_*,chain_*,damage_{attacker,defender,family}_*,absorbed_{attacker,defender}_*}` | `NewCombatSystem` | Resolved direct/area attacks | `Init` | Generic only |
+| Combat | `combat.{active,count,live_*,hits_direct,hits_area,knockbacks,stuns,burn_ticks,damage_dealt,immune_rejects,unprofiled,*_rejects,effect_*,chain_*,damage_{attacker,defender,family}_*,absorbed_{attacker,defender}_*}` | `NewCombatSystem` | Resolved direct/area/over-time attacks and status ticks | `Init` | Generic only |
 | Drain | `drain.{count,pending,paused,collisions,suicides,spawned,fusions,despawned,spawn_failures,killed_by_*,wall_collisions,boundary_reflections,grid_steps,protected_rejects,buf_*_hwm}` | `NewDrainSystem` | Spawn/lifecycle/collision/movement paths | `Init` | Generic only |
 | Quasar | `quasar.{active,count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewQuasarSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
 | Swarm | `swarm.{active,count,player_kills,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewSwarmSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
@@ -138,12 +137,6 @@ the effect's current name; death API unification removed the two obsolete
 | `bullet.hits` (int) | Bullets stopped by a cursor or shield they struck, or a species they hit. |
 | `bullet.spawned` (int) | Bullets created, by a mount or a cursor's turret. |
 | `bullet.wall_collisions` (int) | Resolved bullet contacts with blocking wall cells. |
-| `cleaner.boundary_steps` (int) | cleaner swept traversal steps rejected by simulation bounds. |
-| `cleaner.buf_entities_hwm` (int) | High-water live length of the reusable entities buffer/state collection. |
-| `cleaner.cursor_rejects` (int) | Requests rejected because cleaner could not resolve a roster cursor. |
-| `cleaner.disabled_rejects` (int) | Action requests dropped while the cleaner system was disabled. |
-| `cleaner.grid_steps` (int) | Grid-traversal steps executed by swept cleaner movers. |
-| `cleaner.wall_collisions` (int) | Resolved cleaner contacts with blocking wall cells. |
 | `combat.absorbed_attacker_cursor` (int) | Damage points rejected by immunity from attacks attributed to cursor. |
 | `combat.absorbed_attacker_drain` (int) | Damage points rejected by immunity from attacks attributed to drain. |
 | `combat.absorbed_attacker_eye` (int) | Damage points rejected by immunity from attacks attributed to eye. |
@@ -190,10 +183,12 @@ the effect's current name; death API unification removed the two obsolete
 | `combat.damage_defender_storm` (int) | Damage points dealt to defenders of type storm. |
 | `combat.damage_defender_swarm` (int) | Damage points dealt to defenders of type swarm. |
 | `combat.damage_defender_tower` (int) | Damage points dealt to defenders of type tower. |
-| `combat.damage_family_<family>` (int) | Damage points dealt by one attack family (projectile, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray): how a weapon reads. |
+| `combat.damage_family_<family>` (int) | Damage points dealt by one attack family (tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn): how a weapon reads. |
 | `combat.disabled_rejects` (int) | Action requests dropped while the combat system was disabled. |
 | `combat.effect_kinetic` (int) | Kinetic effect applications that resolved to an impulse. |
 | `combat.effect_stun` (int) | Stun effect applications that changed target state. |
+| `combat.effect_burn` (int) | Burns left or refreshed on a target by a charged pulse's chain. |
+| `combat.burn_ticks` (int) | Burn ticks that dealt damage. |
 | `combat.effect_energy_drain` (int) | Energy-drain effect applications that emitted an energy reward. |
 | `combat.kinetic_immune_rejects` (int) | Kinetic effects rejected by kinetic immunity, enrage, or a dead target. |
 | `combat.live_<type>` (int) | Live population of the Combat store per entity type, one key per `combatEntityNames` entry. Decomposes `combat.count`: a type still counted while its species reports inactive is a lifecycle leak. |
@@ -512,7 +507,11 @@ the effect's current name; death API unification removed the two obsolete
 | `wall.buf_pending_push_checks_hwm` (int) | High-water live length of the reusable pending push checks buffer/state collection. |
 | `weapon.orbs_reaped` (int) | Orbs the `Orb` store held that no loadout justified — a duplicate, one owned by a cursor this instance does not simulate, or one whose charges are gone. Zero is the ordinary reading; a rising count is an orb lifecycle the store-derived index disagrees with. |
 | `weapon.cursor_rejects` (int) | Requests rejected because weapon could not resolve a roster cursor. |
-| `weapon.kind_rejects` (int) | Grants naming a weapon kind outside `WeaponSpecs`. |
+| `weapon.kind_rejects` (int) | Grants or removals naming a weapon kind outside `WeaponSpecs`. |
 | `weapon.disabled_rejects` (int) | Action requests dropped while the weapon system was disabled. |
+| `weapon.tracers` (int) | Tracers in flight. |
+| `weapon.tracer_boundary_steps` (int) | Tracer swept traversal steps outside the map. |
+| `weapon.tracer_grid_steps` (int) | Grid-traversal steps executed by the tracer sweep. |
+| `weapon.tracer_wall_collisions` (int) | Tracers stopped by a blocking wall cell. |
 | `event.dead_by_type` (string) | Snapshot-cadence sparse `EventType=count` dead-letter summary. |
 | `event.dispatch_by_type` (string) | Snapshot-cadence sparse `EventType=count` dispatch summary. |

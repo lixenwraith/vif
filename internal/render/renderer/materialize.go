@@ -14,12 +14,12 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// Phase thresholds for fill, hold, and recede.
-const (
-	matFillEnd = parameter.MaterializeFillEnd
-	matHoldEnd = parameter.MaterializeHoldEnd
-	matRecede  = 1.0 - matHoldEnd
-)
+// A beacon's beams take the nugget's own colour; a spawn's keep the materialize cyan
+var materializePalette = [component.SpawnTypeCount]color.RGB{
+	component.SpawnTypeDrain:  visual.RgbMaterialize,
+	component.SpawnTypeSwarm:  visual.RgbMaterialize,
+	component.SpawnTypeNugget: visual.RgbMaterializeNugget,
+}
 
 type beamDir int
 
@@ -61,15 +61,19 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 		// Transform target area to viewport coords
 		targetVX, targetVY, _ := ctx.MapToViewport(mat.TargetX, mat.TargetY)
 
-		r.renderBeam(ctx, buf, pf, mat, targetVX, targetVY, dirUp)
-		r.renderBeam(ctx, buf, pf, mat, targetVX, targetVY, dirDown)
-		r.renderBeam(ctx, buf, pf, mat, targetVX, targetVY, dirLeft)
-		r.renderBeam(ctx, buf, pf, mat, targetVX, targetVY, dirRight)
+		style := mat.Type.Style()
+		c := visual.RgbMaterialize
+		if mat.Type >= 0 && mat.Type < component.SpawnTypeCount {
+			c = materializePalette[mat.Type]
+		}
+		for _, dir := range [...]beamDir{dirUp, dirDown, dirLeft, dirRight} {
+			r.renderBeam(ctx, buf, pf, mat, style, c, targetVX, targetVY, dir)
+		}
 		return true
 	})
 }
 
-func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, mat *component.MaterializeComponent, targetVX, targetVY int, dir beamDir) {
+func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, mat *component.MaterializeComponent, style component.MaterializeStyle, c color.RGB, targetVX, targetVY int, dir beamDir) {
 	var edgePos, distance int
 	var spanStart, spanEnd int // Range along the target edge
 
@@ -109,29 +113,23 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 	var segStartF, segEndF float64
 
 	switch {
-	case progress < matFillEnd:
+	case progress < style.FillEnd:
 		// Fill: edge to leading edge
-		// fillProgress = progress / fillEnd (normalized within fill phase)
-		if matFillEnd == 0.0 {
-			return
-		}
-		fillProgress := progress / matFillEnd
 		segStartF = 0.0
-		segEndF = fillProgress * dist
+		segEndF = progress / style.FillEnd * dist
 
-	case progress < matHoldEnd:
+	case progress < style.HoldEnd:
 		// Hold: full line
 		segStartF = 0.0
 		segEndF = dist
 
 	default:
 		// Recede: darkness from edge toward target
-		// recedeProgress = (progress - holdEnd) / (1.0 - holdEnd)
-		if matRecede == 0.0 {
+		recede := 1.0 - style.HoldEnd
+		if recede <= 0 {
 			return
 		}
-		recedeProgress := (progress - matHoldEnd) / matRecede
-		segStartF = recedeProgress * dist
+		segStartF = (progress - style.HoldEnd) / recede * dist
 		segEndF = dist
 	}
 
@@ -140,14 +138,14 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 
 	// Render cells across the target edge span
 	for cellOffset := segStart; cellOffset <= segEnd; cellOffset++ {
-		intensity := r.calcIntensity(mat.Progress, cellOffset, segStart, segEnd)
+		intensity := r.calcIntensity(style, mat.Progress, cellOffset, segStart, segEnd)
 		for spanPos := spanStart; spanPos <= spanEnd; spanPos++ {
-			r.renderBeamCellSpan(ctx, buf, pf, dir, edgePos, cellOffset, spanPos, intensity)
+			r.renderBeamCellSpan(ctx, buf, pf, c, dir, edgePos, cellOffset, spanPos, intensity)
 		}
 	}
 }
 
-func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, dir beamDir, edgePos, cellOffset, spanPos int, intensity float64) {
+func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, c color.RGB, dir beamDir, edgePos, cellOffset, spanPos int, intensity float64) {
 	var vx, vy int
 	switch dir {
 	case dirUp:
@@ -176,14 +174,14 @@ func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *
 		intensity = 0.0
 	}
 
-	scaledColor := color.Scale(visual.RgbMaterialize, intensity)
+	scaledColor := color.Scale(c, intensity)
 	screenX, screenY := ctx.ViewportToScreen(vx, vy)
 
 	buf.Set(screenX, screenY, 0, visual.RgbBlack, scaledColor, render.BlendMaxBg, 1.0, terminal.AttrNone)
 }
 
 // calcIntensity returns normalized intensity for a cell based on phase and position.
-func (r *MaterializeRenderer) calcIntensity(progress float64, cellOffset, segStart, segEnd int) float64 {
+func (r *MaterializeRenderer) calcIntensity(style component.MaterializeStyle, progress float64, cellOffset, segStart, segEnd int) float64 {
 	if segEnd <= segStart {
 		return 1.0
 	}
@@ -192,7 +190,7 @@ func (r *MaterializeRenderer) calcIntensity(progress float64, cellOffset, segSta
 	cellPos := cellOffset - segStart // Positions within segment
 
 	switch {
-	case progress < matFillEnd:
+	case progress < style.FillEnd:
 		// Fill: gradient from dim (edge) to bright (leading edge) + pulse at front
 		// Base gradient: cellPos / segLen
 		baseIntensity := float64(cellPos) / float64(segLen)
@@ -206,7 +204,7 @@ func (r *MaterializeRenderer) calcIntensity(progress float64, cellOffset, segSta
 		}
 		return baseIntensity
 
-	case progress < matHoldEnd:
+	case progress < style.HoldEnd:
 		// Hold: max brightness
 		return 1.0
 

@@ -100,9 +100,6 @@ func (s *MaterializeSystem) Update() {
 	// Cap delta time to prevent tunneling on lag spikes
 	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
-	// Full progress (1.0) over the animation duration
-	progressDelta := dtSec / parameter.MaterializeAnimationDuration.Seconds()
-
 	materializes := s.world.Components.Materialize
 	if materializes.CountEntities() == 0 {
 		return
@@ -115,7 +112,7 @@ func (s *MaterializeSystem) Update() {
 			continue
 		}
 
-		matComp.Progress += progressDelta
+		matComp.Progress += dtSec / matComp.Type.Style().Duration.Seconds()
 
 		if matComp.Progress >= 1.0 {
 			// The completion carries the domain of the entity it completes, so a

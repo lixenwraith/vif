@@ -96,7 +96,7 @@ func TestAStunnedSwarmStillDies(t *testing.T) {
 	}
 
 	combat, _ := w.Components.Combat.GetPtr(header)
-	combat.StunnedRemaining = parameter.PulseStunDuration
+	combat.Status[component.StatusStun].Remaining = parameter.PulseStunDuration
 
 	// A stun suspends movement, not membership: swarm.count and combat.live.swarm
 	// disagreeing is what named this defect in the session log.
@@ -134,15 +134,15 @@ func TestAStunIsNotRefreshedWhileItRuns(t *testing.T) {
 	if !combat.applyStunEffect(header, c) {
 		t.Fatal("the first stun was refused")
 	}
-	c.StunnedRemaining -= parameter.GameUpdateInterval
-	held := c.StunnedRemaining
+	c.Status[component.StatusStun].Remaining -= parameter.GameUpdateInterval
+	held := c.Status[component.StatusStun].Remaining
 
 	if combat.applyStunEffect(header, c) {
 		t.Fatal("a second stun was applied while one was running")
 	}
-	if c.StunnedRemaining != held {
+	if c.Status[component.StatusStun].Remaining != held {
 		t.Fatalf("stun = %v, want %v: a refused stun still moved the timer",
-			c.StunnedRemaining, held)
+			c.Status[component.StatusStun].Remaining, held)
 	}
 }
 

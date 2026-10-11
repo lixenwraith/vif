@@ -69,8 +69,7 @@ func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 	})
 }
 
-// chargeGlyph resolves the ASCII digit for stacked sub-max charges (1-9), or the base
-// bullseye at max charge (Disruptor's max is 1, so it always renders as bullseye)
+// chargeGlyph is the digit of a charge count below the cap, or the bullseye at it
 func (r *OrbRenderer) chargeGlyph(orb *component.OrbComponent) rune {
 	weaponComp, ok := r.gameCtx.World.Components.Weapon.GetPtr(orb.OwnerEntity)
 	if !ok {

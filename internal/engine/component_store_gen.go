@@ -28,7 +28,7 @@ const (
 	PingBit
 	CursorViewBit
 	ParticleBit
-	CleanerBit
+	TracerBit
 	DustBit
 	NavigationBit
 	CombatBit
@@ -87,7 +87,7 @@ type Component struct {
 	Ping         *Store[component.PingComponent]
 	CursorView   *Store[component.CursorViewComponent]
 	Particle     *Store[component.ParticleComponent]
-	Cleaner      *Store[component.CleanerComponent]
+	Tracer       *Store[component.TracerComponent]
 	Dust         *Store[component.DustComponent]
 	Navigation   *Store[component.NavigationComponent]
 	Combat       *Store[component.CombatComponent]
@@ -145,7 +145,7 @@ func initComponents(w *World) {
 	w.Components.Ping = NewStore[component.PingComponent](w, PingBit)
 	w.Components.CursorView = NewStore[component.CursorViewComponent](w, CursorViewBit)
 	w.Components.Particle = NewStore[component.ParticleComponent](w, ParticleBit)
-	w.Components.Cleaner = NewStore[component.CleanerComponent](w, CleanerBit)
+	w.Components.Tracer = NewStore[component.TracerComponent](w, TracerBit)
 	w.Components.Dust = NewStore[component.DustComponent](w, DustBit)
 	w.Components.Navigation = NewStore[component.NavigationComponent](w, NavigationBit)
 	w.Components.Combat = NewStore[component.CombatComponent](w, CombatBit)
@@ -254,8 +254,8 @@ func (w *World) removeEntity(e core.Entity) {
 	if mask&ParticleBit != 0 {
 		w.Components.Particle.RemoveEntity(e, true)
 	}
-	if mask&CleanerBit != 0 {
-		w.Components.Cleaner.RemoveEntity(e, true)
+	if mask&TracerBit != 0 {
+		w.Components.Tracer.RemoveEntity(e, true)
 	}
 	if mask&DustBit != 0 {
 		w.Components.Dust.RemoveEntity(e, true)
@@ -435,8 +435,8 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	if union&ParticleBit != 0 {
 		w.Components.Particle.RemoveBatch(entities, true)
 	}
-	if union&CleanerBit != 0 {
-		w.Components.Cleaner.RemoveBatch(entities, true)
+	if union&TracerBit != 0 {
+		w.Components.Tracer.RemoveBatch(entities, true)
 	}
 	if union&DustBit != 0 {
 		w.Components.Dust.RemoveBatch(entities, true)
@@ -570,7 +570,7 @@ func (w *World) wipeAll() {
 	w.Components.Ping.ClearAllComponents()
 	w.Components.CursorView.ClearAllComponents()
 	w.Components.Particle.ClearAllComponents()
-	w.Components.Cleaner.ClearAllComponents()
+	w.Components.Tracer.ClearAllComponents()
 	w.Components.Dust.ClearAllComponents()
 	w.Components.Navigation.ClearAllComponents()
 	w.Components.Combat.ClearAllComponents()
@@ -631,7 +631,7 @@ type componentCopies struct {
 	Ping         storeCopy[component.PingComponent]
 	CursorView   storeCopy[component.CursorViewComponent]
 	Particle     storeCopy[component.ParticleComponent]
-	Cleaner      storeCopy[component.CleanerComponent]
+	Tracer       storeCopy[component.TracerComponent]
 	Dust         storeCopy[component.DustComponent]
 	Navigation   storeCopy[component.NavigationComponent]
 	Combat       storeCopy[component.CombatComponent]
@@ -688,7 +688,7 @@ func (w *World) copyComponentsOut() (c componentCopies) {
 	c.Ping = w.Components.Ping.copyOut()
 	c.CursorView = w.Components.CursorView.copyOut()
 	c.Particle = w.Components.Particle.copyOut()
-	c.Cleaner = w.Components.Cleaner.copyOut()
+	c.Tracer = w.Components.Tracer.copyOut()
 	c.Dust = w.Components.Dust.copyOut()
 	c.Navigation = w.Components.Navigation.copyOut()
 	c.Combat = w.Components.Combat.copyOut()
@@ -747,7 +747,7 @@ func (w *World) copyComponentsIn(c componentCopies) {
 	w.Components.Ping.copyIn(c.Ping)
 	w.Components.CursorView.copyIn(c.CursorView)
 	w.Components.Particle.copyIn(c.Particle)
-	w.Components.Cleaner.copyIn(c.Cleaner)
+	w.Components.Tracer.copyIn(c.Tracer)
 	w.Components.Dust.copyIn(c.Dust)
 	w.Components.Navigation.copyIn(c.Navigation)
 	w.Components.Combat.copyIn(c.Combat)

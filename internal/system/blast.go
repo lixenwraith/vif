@@ -62,7 +62,7 @@ func (a *blastArea) find(x, y int) (cx, cy int, ok bool) {
 }
 
 // Player targets resolve before geometry crosses; the shared resolver never reads them.
-func strikePlayerTargets(w *engine.World, owner core.Entity, area *blastArea, attack component.CombatAttackType) {
+func strikePlayerTargets(w *engine.World, owner core.Entity, area *blastArea, attack component.CombatAttackType, charged bool) {
 	cursor := w.ResolveCursor(owner)
 	if cursor == 0 {
 		return
@@ -84,6 +84,7 @@ func strikePlayerTargets(w *engine.World, owner core.Entity, area *blastArea, at
 			HasOrigin:    true,
 			OriginX:      cx,
 			OriginY:      cy,
+			Charged:      charged,
 		})
 	}
 }

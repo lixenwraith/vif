@@ -437,12 +437,33 @@ A mounted ray destroying walls and glyphs, mounted weapons striking other specie
 
 PvP: a hit on a remote cursor crosses as its impact and the victim's owner applies it, as `strikeCursor` does for mounts.
 
+### Tune the charge-cap effects after play tests
+
+- Priority: P1
+- Affected files: `internal/parameter/{combat,player}.go`, `internal/component/tracer.go`
+
+Arc reward (an arc pays the lightning's full energy reward; halve it if the cap doubles the rod's income too far), the sustained ray's scale (three damage per covered member per immunity window, continuously), the burn figures and whether the charged pulse's stun should shorten to offset them, `LightningArcRange`, `WeaponStreamInterval` and `TurretStream`, the gun's lane offsets at two charges, `LightningZapDuration` for an arc, and a burn tint on species renderers, which show only the hit flash per tick now.
+
+### Drop the gun's charges as loot
+
+- Priority: P2
+- Affected files: `internal/component/loot.go`, `internal/profile/loot.go`
+
+Only a scenario's `EventWeaponAddRequest` or god mode raises the gun past one charge; a loot row with a drop tier would let play do it.
+
+### Direct the gun by scenario
+
+- Priority: P3
+- Affected files: `internal/component/weapon.go`, `internal/system/tracer.go`, `internal/fsm`
+
+`WeaponSpec.Directions` is a cardinal mask the spawn already reads; a side-scroller needs a level to set one direction, which waits on scenario authoring.
+
 ### Fan a fully charged ray into spokes
 
 - Priority: P3
 - Affected files: `internal/system/weapon.go`, `internal/component/ray.go`
 
-Charges beyond the ray could add rays 360°/n apart, one through the orb; a sweep already passes each target once a turn, so spokes trade coverage for crossings.
+Charges beyond the ray could add rays 360°/n apart, one through the sustained orb ray; a sweep already passes each target once a turn, so spokes trade coverage for crossings.
 
 ### Move storm's green circle onto a disruptor mount
 
