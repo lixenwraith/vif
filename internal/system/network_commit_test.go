@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -13,15 +14,28 @@ import (
 )
 
 // linkedPort names its links and their measurements, which is all the commit and
-// the lead read from one, and keeps what it floods.
+// the lead read from one, and keeps what it floods and sends.
 type linkedPort struct {
 	peers   []uint32
 	rtt     time.Duration
 	flooded [][]byte
+	sent    []sentFrame
 }
 
-func (p *linkedPort) Send(uint32, uint8, []byte) bool { return true }
-func (p *linkedPort) Broadcast(uint8, []byte)         {}
+// sentFrame is one frame a linkedPort was asked to send; to is zero for everyone.
+type sentFrame struct {
+	to   uint32
+	kind network.MessageType
+	body []byte
+}
+
+func (p *linkedPort) Send(to uint32, kind uint8, b []byte) bool {
+	p.sent = append(p.sent, sentFrame{to, network.MessageType(kind), b})
+	return true
+}
+func (p *linkedPort) Broadcast(kind uint8, b []byte) {
+	p.sent = append(p.sent, sentFrame{0, network.MessageType(kind), b})
+}
 func (p *linkedPort) BroadcastExcept(_ uint32, _ uint8, b []byte) {
 	p.flooded = append(p.flooded, b)
 }
@@ -124,16 +138,46 @@ func TestACommittedCopyRestartsItsHopCount(t *testing.T) {
 }
 
 // TestARawEpochOnAnotherLinkIsRefused: a producer with a link of its own is heard
-// on it, so its identity arriving on another link is claimed, not relayed.
+// on it, and a bot behind its holder on the holder's, so either identity arriving
+// on another link is claimed, not relayed.
 func TestARawEpochOnAnotherLinkIsRefused(t *testing.T) {
 	t.Parallel()
 	s := sessionSystem(t, 1, 100, &linkedPort{peers: []uint32{2, 3}})
+	bot := s.world.CreateEntity(core.DomainShared)
+	s.world.Components.Cursor.SetComponent(bot, component.CursorComponent{PeerID: 4, Holder: 2})
 	s.scheduleCrossings(3, rawBatch(t, 2, 95, 105))
+	s.scheduleCrossings(3, rawBatch(t, 4, 95, 105))
 	if got := scheduledCount(s); got != 0 {
-		t.Fatalf("a claimed identity scheduled %d crossings", got)
+		t.Fatalf("claimed identities scheduled %d crossings", got)
 	}
-	if s.statForged.Load() == 0 {
-		t.Fatal("the claimed identity was not counted")
+	if got := s.statForged.Load(); got != 2 {
+		t.Fatalf("%d claims counted, want 2", got)
+	}
+	s.scheduleCrossings(2, rawBatch(t, 4, 95, 105))
+	if got := scheduledCount(s); got != 1 {
+		t.Fatalf("the bot's epoch on its holder's link scheduled %d crossings, want 1", got)
+	}
+}
+
+// TestAGuestSendsTheAuthorityOneFrameATick: a guest linked to the authority sends it
+// alone its own raw epoch and those it carries for the participants behind it, as
+// one frame, since nobody else does more with a raw one than pass it on.
+func TestAGuestSendsTheAuthorityOneFrameATick(t *testing.T) {
+	t.Parallel()
+	port := &linkedPort{peers: []uint32{1, 3}}
+	s := sessionSystem(t, 2, 100, port)
+	s.scheduleCrossings(3, rawBatch(t, 3, 100, 104))
+	s.Flush(100)
+	if len(port.sent) != 1 || port.sent[0].to != 1 || port.sent[0].kind != network.MsgBundle {
+		t.Fatalf("the guest sent %+v, want one bundle to the authority", port.sent)
+	}
+	var sources []uint32
+	if err := network.Unbundle(port.sent[0].body, func(kind network.MessageType, body []byte) {
+		if b, err := event.DecodeWireBatch(body); err == nil && kind == network.MsgEvent {
+			sources = append(sources, b.Source)
+		}
+	}); err != nil || len(sources) != 2 || sources[0] != 3 || sources[1] != 2 {
+		t.Fatalf("the bundle carries epochs of %v (%v), want the leaf's then the guest's", sources, err)
 	}
 }
 

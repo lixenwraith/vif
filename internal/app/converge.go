@@ -115,6 +115,15 @@ func (i instance) CommitLate(id uint32) (n uint64) {
 	return n
 }
 
+func (i instance) Ingress(id uint32) (n uint64) {
+	i.a.world.RunSafe(func() {
+		if r := i.a.world.Resources.Network; r != nil && int(id) < len(r.Ingress) {
+			n = r.Ingress[id].Load()
+		}
+	})
+	return n
+}
+
 func (i instance) AuthorityChanged(rec network.HandoffRecord, mine bool) {
 	i.a.applyAuthorityChange(rec, mine)
 }

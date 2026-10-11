@@ -53,6 +53,9 @@ type Instance interface {
 	DropParticipant(id uint32) bool
 	CommitLate(id uint32) uint64
 
+	// Ingress is how many frame bytes this instance has drained from a link.
+	Ingress(id uint32) uint64
+
 	// AuthorityChanged moves the membership a handoff carries into the places the
 	// run reads it from; DropAbandonedCursors removes the participants an instance
 	// left with no link will never hear from again.

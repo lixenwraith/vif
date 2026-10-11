@@ -39,6 +39,7 @@ type stub struct {
 
 	// What the eviction policy reads, and what it decided.
 	late    map[uint32]uint64
+	ingress map[uint32]uint64
 	dropped []uint32
 }
 
@@ -106,6 +107,12 @@ func (s *stub) CommitLate(id uint32) uint64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.late[id]
+}
+
+func (s *stub) Ingress(id uint32) uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ingress[id]
 }
 
 func (s *stub) DropParticipant(id uint32) bool {
