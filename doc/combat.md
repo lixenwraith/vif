@@ -112,7 +112,7 @@ is below the cap.
 | Launcher | fires on `MaxedCooldown`, half its cooldown | `MaxedCooldown` |
 | Disruptor | the pulse artifact carries `Charged`, and the pulse profile's `Charged` chain burns every hit entity (§5) | the profile |
 | Turret | streams between waves: a wave arms a per-kind timer the weapon system ticks only while that wave's cooldown runs, firing `Stream` bullets at the nearest target every `WeaponStreamInterval` without resetting the cooldown or flashing the orb; the timer is its author's alone, so a new author's starts over at most one interval late | `Stream` |
-| Emitter | the ray is sustained: laid on the orb whenever none exists, needing no target, held at full strength, a timed ray still burning converting in place; main fire resets no cooldown and flashes no orb | `Sustained` |
+| Emitter | the ray is sustained while main fire is held: every fire request, taken by the main cooldown or not, lights a ray on the orb where none burns, needing no target, and renews its `RayHold`; a held ray stays at full strength, a timed ray still burning converting in place; main fire resets no cooldown and flashes no orb; when the hold lapses the ray burns out as a timed one | `Sustained` |
 
 ## 5. Resolution, statuses, and what crosses
 

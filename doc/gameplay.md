@@ -272,7 +272,7 @@ locally; only center/radius/attack geometry crosses for shared combat.
 | Launcher | Homing/area missiles assigned from the nearest-target set; at the cap its cooldown halves. |
 | Disruptor | Stun pulse centred on its orb; it fires only while a target is inside the ellipse; at two charges the pulse also burns. |
 | Turret | One spread bullet per charge from its orb at the nearest targets; each hit is direct damage; at the cap it streams single bullets between waves. |
-| Emitter | A sustained ray from the cursor through its orb to the first wall, one cell wide to the orb and three past it, sweeping as the orb orbits; more charges fire longer and hit harder, and at the cap the ray stays lit. |
+| Emitter | A sustained ray from the cursor through its orb to the first wall, one cell wide to the orb and three past it, sweeping as the orb orbits; more charges fire longer and hit harder, and at the cap the ray stays lit for as long as main fire is held. |
 
 Weapon ownership is represented by charge count: zero means not owned. Each
 owned kind but the gun has an orbiting orb entity and its own cooldown; the gun
