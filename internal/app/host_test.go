@@ -557,6 +557,37 @@ func TestOnlyTheHostChangesALiveSessionsScenario(t *testing.T) {
 	}
 }
 
+// TestAReceivedScenarioAnswersOnlyItsOwnName: a run that plays bytes a coordinator
+// sent resets on their name and resolves any other from its roots, so a successor
+// holding one can still change the session's scenario.
+func TestAReceivedScenarioAnswersOnlyItsOwnName(t *testing.T) {
+	t.Parallel()
+	received, err := resource.LoadScenario(resource.Options{
+		Scenario: writeScenario(t, t.TempDir(), "duel", "A received duel.")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	writeScenario(t, root, "other", "A scenario this root holds.")
+	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 80, Height: 24,
+		Resources: resource.Options{Dir: root, Provided: &received}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	a.cfg.Mode = ModePlay
+
+	var changed bool
+	a.World().RunSafe(func() { changed, err = a.changeScenarioLocked("duel") })
+	if err != nil || changed {
+		t.Fatalf("its own name: changed %v, %v; want a reset", changed, err)
+	}
+	a.World().RunSafe(func() { changed, err = a.changeScenarioLocked("other") })
+	if err != nil || !changed || a.restart.Load().Scenario != "other" {
+		t.Fatalf("another name: changed %v, %v; want a restart on it", changed, err)
+	}
+}
+
 // TestASuccessorLeadsTheSessionItInherited pins what a term means for every rule
 // reserved for the authority. IsSessionCoordinator used to compare against
 // identity 1 alone, so a participant that had inherited the session was refused
