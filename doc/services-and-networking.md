@@ -144,10 +144,10 @@ start/ready gate. Two flags activate the shared composition path:
 
 | Entry point | Behavior |
 |---|---|
-| `-host <bind-address>` | Play at once and open the listener when the clock starts, exactly as `:host` does. A bind that fails leaves the game playing solo. |
+| `-host <bind-address>` | Bind before the terminal starts, so a port the run cannot have ends it with the reason on stderr, as a `-join` that cannot dial does; then play at once and serve the listener when the clock starts, exactly as `:host` does. A rebuilt run that cannot reopen its door plays on solo. |
 | `-join <addr>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. |
 | `-name <name>` | With `-host` or `-serve`, the name this session answers to, so one address can serve several. A host that sets one refuses a dial that names nothing, so it is taken with a front door that routes on the name or not at all. |
-| `:host <addr> [host\|migrate]` | Open a run that is **already playing**, under the authority policy named. The port is created, started and attached; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick. |
+| `:host <addr> [host\|migrate]` | Open a run that is **already playing**, under the authority policy named. The port is bound before anything is written, so one the run cannot have leaves it solo; then it is created, started and attached; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick. |
 | `:session` | Report the role, address, participant identity, its cursor slot, peer count and tick. |
 
 Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
@@ -225,7 +225,11 @@ flowchart TD
 ```
 
 Host uses `tls.Listen` when a TLS config is supplied programmatically, otherwise
-`net.Listen`; peer uses the corresponding dialer. The CLI deliberately supplies
+`net.Listen`; peer uses the corresponding dialer. A bind or dial that fails is
+reported as what the player can do (`plainNetError`): a port below 1024, a port in
+use, a name not found, nothing listening, no answer; a dial that connects to
+something that offers no session says so, and a host's refusal is prefixed as one.
+Anything else keeps the system's words. The CLI deliberately supplies
 no TLS configuration in this trusted-peer proof. `dial` is also where a WebSocket
 route diverges and stops diverging: a `ws://` or `wss://` target is opened as the
 page's own WebSocket in a browser, or with `pkg/websocket` natively, wrapped in a
@@ -618,7 +622,7 @@ travels the same way, produced only by the coordinator so it has one apply tick.
 `MsgStateSync` periodically copies only the D-13 owner-authored cursor set, is
 written at the tick the authority committed it to, and only when the payload's
 entity and roster slot agree and its sequence is newer than that slot's last. Disconnect drains through the same poll boundary and
-raises a local eight-second status message. While the coordinator remains
+raises a local alert on the status bar. While the coordinator remains
 reachable, its roster crossing despawns only cursors owned by that participant,
 releases that slot's sync sequence, and leaves both the barrier and the map latch
 in place: the barrier and the bounds are properties of the run, so a stretch with

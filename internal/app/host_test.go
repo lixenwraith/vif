@@ -602,6 +602,27 @@ func TestBeginHostingRefusesASecondSession(t *testing.T) {
 	}
 }
 
+// TestAHostThatCannotBindLeavesTheRunSolo: the port is bound before anything a
+// session needs is written, so a run refused one plays on exactly as it was.
+func TestAHostThatCannotBindLeavesTheRunSolo(t *testing.T) {
+	a := mustHeadless(t, 0x301A, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	busy, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer busy.Close()
+
+	if err := a.BeginHosting(busy.Addr().String()); err == nil {
+		t.Fatal("hosting on a port in use was accepted")
+	}
+	if w := a.World(); w.SessionShared() || w.SessionBarrier() || a.sessionTransport() != nil {
+		t.Fatalf("a refused port left the run shared %t, barrier %t, transport %v",
+			w.SessionShared(), w.SessionBarrier(), a.sessionTransport())
+	}
+}
+
 // TestHostCarriesItsAuthorityPolicy: the word :host is given is the policy every
 // offer it makes names, and a word that is neither is refused before binding.
 func TestHostCarriesItsAuthorityPolicy(t *testing.T) {

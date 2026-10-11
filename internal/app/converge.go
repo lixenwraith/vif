@@ -2,7 +2,6 @@ package app
 
 import (
 	"slices"
-	"time"
 
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -128,8 +127,8 @@ func (i instance) DropAbandonedCursors(roster []network.RosterEntry, local netwo
 	i.a.dropAbandonedCursors(roster, local)
 }
 
-func (i instance) SetStatusMessage(msg string, duration time.Duration, override bool) {
-	i.a.ctx.SetStatusMessage(msg, duration, override)
+func (i instance) SetStatusMessage(msg string, kind parameter.StatusKind) {
+	i.a.ctx.SetStatusMessage(msg, kind)
 }
 
 // === the run's side ===

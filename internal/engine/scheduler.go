@@ -278,10 +278,7 @@ func (s *Scheduler) applyRegionOp(p *event.FSMRegionPayload) error {
 
 // report surfaces a scheduler-side message in the status bar
 func (s *Scheduler) report(msg string) {
-	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
-		Message:          msg,
-		DurationOverride: true,
-	})
+	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: msg})
 }
 
 // reportRegions publishes declared regions for :region list.
@@ -728,9 +725,7 @@ func (s *Scheduler) breakHit(bs *BreakState, cause string) {
 	if bs.Pause {
 		s.world.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: true})
 	}
-	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
-		Message: "Break: " + cause, DurationOverride: true,
-	})
+	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: "Break: " + cause})
 }
 
 // awaitFrame applies render backpressure: at real time and slower a tick waits

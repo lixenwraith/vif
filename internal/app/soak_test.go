@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
@@ -419,7 +420,7 @@ func TestSoakSessionStateStaysOperator(t *testing.T) {
 		ctx.MouseFreeMode.Store(rng.Intn(2) == 0)
 		ctx.OverlayHUD.Store(rng.Intn(2) == 0)
 		ctx.ToggleOverlayPin("engine")
-		ctx.SetStatusMessage("perturb", 0, true)
+		ctx.SetStatusMessage("perturb", parameter.StatusAlert)
 		ctx.IncrementFrameNumber()
 	}
 	if _, err := journal.RunFuzz(noisy, opt); err != nil {

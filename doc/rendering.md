@@ -352,9 +352,13 @@ their notches derive from the same division, so a level of 10k ends exactly on
 the k-th notch at any width. The status bar
 draws a fixed priority of items: session badge, time control, FSM phase, energy,
 damage multiplier, boost, grid state, and lower-priority metrics that are dropped
-first when space is tight. Typed input takes the space it needs from them; a
-status message takes only what they leave, so a notice never reflows the bar, and
-every message expires on wall time at `StatusMessageMaxDuration` or sooner. Its
+first when space is tight. After the mode label a fixed key cell
+(`StatusKeyWidth`) shows a pending key sequence or the last one completed; it never
+shares its cells or its time with a message. Typed input takes the space it needs
+from the right-side items; a status message takes it from the metrics only. A
+message is a notice or an alert (`parameter.StatusKinds`): the newest replaces the
+one shown unless that one is an alert younger than its minimum, and each leaves
+after its kind's wall time. Its
 colors come from one palette per color mode: the theme's in truecolor, and on a
 text console fixed entries, each apart from the items beside it and with the text
 that reads best on it. The audio state is a letter: X muted, S effects, M music,

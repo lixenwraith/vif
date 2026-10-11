@@ -1267,16 +1267,14 @@ func (c *Corrections) observeFloor() {
 	if !breached {
 		c.log.Info("converge", "msg", "authoritative world arrived inside the convergence floor",
 			"age_ticks", age)
-		c.inst.SetStatusMessage("Link recovered; the authority is arriving again",
-			parameter.StatusMessageDefaultTimeout, false)
+		c.inst.SetStatusMessage("Link recovered; the authority is arriving again", parameter.StatusAlert)
 		return
 	}
 	c.log.Warn("converge", "msg", "no authoritative world inside the convergence floor",
 		"age_ticks", age, "floor_ticks", parameter.SnapshotFloorKeyframeTicks,
 		"grace_ticks", parameter.SnapshotFloorGraceTicks)
 	c.inst.SetStatusMessage(
-		"No authoritative world within the convergence floor; this instance is predicting alone",
-		4*parameter.StatusMessageDefaultTimeout, true)
+		"No authoritative world within the convergence floor; this instance is predicting alone", parameter.StatusAlert)
 }
 
 func (c *Corrections) baselineCapture() (snapshot.SharedCapture, bool) {

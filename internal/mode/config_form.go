@@ -46,7 +46,7 @@ var configForms = map[string]configFormSpec{
 			if err := ctx.SessionCtl.AddBot(fmt.Sprintf("%d:%s", n, strings.TrimSpace(f.Value(1)))); err != nil {
 				return err
 			}
-			ctx.SetStatusMessage("Bots joining; open Configuration / Bots to remove them", parameter.StatusMessageDefaultTimeout, false)
+			ctx.SetStatusMessage("Bots joining; open Configuration / Bots to remove them", parameter.StatusNotice)
 			return nil
 		},
 	},
@@ -165,7 +165,7 @@ func botConfigOptions(ctx *engine.GameContext) []configOption {
 					return
 				}
 				r.closeOverlay()
-				r.ctx.SetStatusMessage("Bot "+b.Graph+" leaving", parameter.StatusMessageDefaultTimeout, false)
+				r.ctx.SetStatusMessage("Bot "+b.Graph+" leaving", parameter.StatusNotice)
 			}})
 	}
 	return options
@@ -205,7 +205,7 @@ func participantConfigOptions(ctx *engine.GameContext) []configOption {
 					return
 				}
 				r.closeOverlay()
-				r.ctx.SetStatusMessage(fmt.Sprintf("Slot %X leaving", p.Slot), parameter.StatusMessageDefaultTimeout, true)
+				r.ctx.SetStatusMessage(fmt.Sprintf("Slot %X leaving", p.Slot), parameter.StatusNotice)
 			}})
 	}
 	return out

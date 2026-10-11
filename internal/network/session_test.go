@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -71,6 +73,37 @@ func TestSessionRejectionReturnsTheJoinErrorUnchanged(t *testing.T) {
 	}
 	if host.PeerCount() != 0 || !host.IsRunning() {
 		t.Fatalf("rejected host state = peers %d running %t", host.PeerCount(), host.IsRunning())
+	}
+}
+
+// TestAFailedBindOrDialSaysWhatThePlayerCanDo: the common failures read as the
+// player's next step rather than the system's words, and keep their cause.
+func TestAFailedBindOrDialSaysWhatThePlayerCanDo(t *testing.T) {
+	busy, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer busy.Close()
+	host := NewSocketPort(DebugConfig(RoleHost, busy.Addr().String()))
+	defer host.Close()
+	if err := host.Start(); err == nil || !strings.Contains(err.Error(), "choose another") || !errors.Is(err, syscall.EADDRINUSE) {
+		t.Fatalf("binding a port in use: %v", err)
+	}
+	// Allowed where the system lets this user bind it; then there is nothing to say
+	low := NewSocketPort(DebugConfig(RoleHost, "127.0.0.1:1"))
+	defer low.Close()
+	if err := low.Start(); err != nil && !strings.Contains(err.Error(), "below 1024") {
+		t.Fatalf("binding a privileged port: %v", err)
+	}
+
+	gone, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := gone.Addr().String()
+	gone.Close()
+	if _, err := dial(addr, DefaultConfig()); err == nil || !strings.Contains(err.Error(), "nothing is listening") {
+		t.Fatalf("dialling a closed port: %v", err)
 	}
 }
 

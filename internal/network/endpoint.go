@@ -9,7 +9,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -98,6 +100,54 @@ func (e Endpoint) Listenable() error {
 	}
 	_, _, err = net.SplitHostPort(u.Host)
 	return err
+}
+
+// plainError is what a player is told about a network failure in place of the
+// system's words; the cause stays reachable to errors.Is and errors.As.
+type plainError struct {
+	text  string
+	cause error
+}
+
+func (e plainError) Error() string { return e.text }
+func (e plainError) Unwrap() error { return e.cause }
+
+// plainNetError names what a player can do about a bind or a dial that failed. An
+// error it does not know passes through as it is.
+func plainNetError(err error) error {
+	var (
+		op   *net.OpError
+		dns  *net.DNSError
+		ne   net.Error
+		port = -1
+		text string
+	)
+	if errors.As(err, &op) {
+		if a, ok := op.Addr.(*net.TCPAddr); ok {
+			port = a.Port
+		}
+	}
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, os.ErrPermission) && port >= 0 && port < 1024:
+		text = "ports below 1024 need root; use one above, e.g. :7777"
+	case errors.Is(err, syscall.EADDRINUSE):
+		text = "the port is in use; choose another"
+	case errors.Is(err, syscall.EADDRNOTAVAIL):
+		text = "not an address of this machine; bind :port or one of its own"
+	case errors.As(err, &dns) && dns.IsNotFound:
+		text = "host name not found"
+	case errors.Is(err, syscall.ECONNREFUSED):
+		text = "nothing is listening there; is the host running on that port?"
+	case errors.Is(err, syscall.EHOSTUNREACH), errors.Is(err, syscall.ENETUNREACH):
+		text = "unreachable from this network"
+	case errors.As(err, &ne) && ne.Timeout():
+		text = "no answer; check the address and the host's firewall or port forward"
+	default:
+		return err
+	}
+	return plainError{text, err}
 }
 
 // wsAddr names a WebSocket endpoint in the syntax -join reads.

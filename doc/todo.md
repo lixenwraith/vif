@@ -270,6 +270,21 @@ until the next keyframe: at most `SnapshotFloorKeyframeTicks` of whole-body sile
 Holding a keyframe of the next run until the guest enters it, through
 `followRunLocked`, closes that window.
 
+### Tell both ends why a join failed
+
+- Priority: P3
+- Affected files: `internal/app/session.go`, `internal/network/session.go`,
+  `internal/network/endpoint.go`, `internal/app/loop.go`
+
+A bind or dial now names the player's next step; these gaps remain:
+- A playing host never learns why a joiner was refused: accept and handshake
+  failures only reach the log, and `port.Errors()` is drained only by a lobby.
+- A refusal written after the joiner's reply goes out raw while the joiner reads
+  deflate, so it reads a stream error instead of the reason (from reading; unrun).
+- A site request can run 2 minutes, past the 5 s its "Joining" notice lasts.
+- A rejoin shows nothing for up to `SessionRejoinWindow`.
+- Windows' WSAE codes miss `plainNetError` and keep the system's words.
+
 ### Pace repairs as bodies are paced
 
 - Priority: P3

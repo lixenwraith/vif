@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -225,6 +226,10 @@ type Config struct {
 	// -host a player gave or the door a rebuilt coordinator reopens. It is not
 	// HostAddress because nothing waits in a startup lobby: guests use the mid-run gate.
 	resumeHost string
+
+	// hostListener is the first run's -host, bound before its terminal started; the
+	// run serves it once its clock runs.
+	hostListener net.Listener
 
 	// networkConfig is prepared by Run after host/join negotiation. Keeping the
 	// transport detail private leaves Config's public session surface role-neutral.
