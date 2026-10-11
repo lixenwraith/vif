@@ -302,8 +302,9 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		m.ShardsRefused.Add(1)
 		return
 	}
+	// Recorded on a relay too, for a leaf's: its own answer is the proof it reports.
 	c.publishMu.Lock()
-	p := c.peers[pending.from]
+	p := c.peerLocked(pending.from)
 	if p != nil {
 		p.silence = 0
 		p.answeredTick = req.Tick

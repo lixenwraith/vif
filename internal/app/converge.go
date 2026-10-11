@@ -21,11 +21,6 @@ func (i instance) Driven() bool          { return i.a.cfg.Mode.Driven() }
 
 func (i instance) LocalParticipant() uint32 { return i.a.localParticipant() }
 
-func (i instance) RosterSize() (n int) {
-	i.a.world.RunSafe(func() { n = i.a.world.Resources.Player.Count() })
-	return n
-}
-
 // WorldRoster reads the roster off the cursors rather than off the lobby the offer
 // described: arrivals and departures are barrier-bound crossings, so this is the
 // same list on every instance.

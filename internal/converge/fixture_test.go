@@ -61,12 +61,6 @@ func (s *stub) Driven() bool { return true }
 
 func (s *stub) LocalParticipant() uint32 { return s.local }
 
-func (s *stub) RosterSize() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.roster)
-}
-
 func (s *stub) WorldRoster() []network.RosterEntry {
 	s.mu.Lock()
 	defer s.mu.Unlock()

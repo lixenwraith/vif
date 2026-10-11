@@ -47,11 +47,18 @@ type CorrectionRequest struct {
 	// and the one this protocol exists to make cheap.
 	Sections []SectionRequest `json:"sections,omitempty"`
 
-	// Relayed names the participants this answer's sender forwarded the manifest
-	// to and holds retention for. It is how the authority learns that a
-	// participant it has no link to can nonetheless be answered — the one fact the
-	// gate needs and the only one this instance can state on its behalf.
-	Relayed []uint32 `json:"relayed,omitempty"`
+	// Relayed names the participants this answer's sender forwards the manifest to
+	// and holds retention for, each with the tick it last proved. It is how the
+	// authority counts a participant it has no link to toward the flood and the
+	// floor: only the sender can state it.
+	Relayed []RelayedLeaf `json:"relayed,omitempty"`
+}
+
+// RelayedLeaf is one participant behind a relay and the tick of its newest answer
+// that matched the authority's root, zero while its newest did not.
+type RelayedLeaf struct {
+	ID     uint32 `json:"id"`
+	Proved uint64 `json:"proved,omitempty"`
 }
 
 // Converged reports whether this request asks for nothing: the hash-only case.

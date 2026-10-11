@@ -18,10 +18,8 @@ type Instance interface {
 	Position() event.Stamp
 	Driven() bool
 
-	// LocalParticipant is this instance's session identity, zero outside a session,
-	// and RosterSize how many cursors the closed roster holds.
+	// LocalParticipant is this instance's session identity, zero outside a session.
 	LocalParticipant() uint32
-	RosterSize() int
 
 	// WorldRoster is the roster as the cursors hold it: the same list on every
 	// instance, because arrivals and departures are barrier-bound crossings. Empty

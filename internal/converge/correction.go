@@ -169,9 +169,9 @@ type peerPublisher struct {
 	converged    bool
 
 	// relayed names the participants this peer forwards the index to and holds
-	// retention for. The authority cannot see past its own links; the neighbour that
-	// can is the one that says so.
-	relayed []uint32
+	// retention for, with their proofs. The authority cannot see past its own links;
+	// the neighbour that can is the one that says so.
+	relayed []snapshot.RelayedLeaf
 
 	// wide counts the publications this peer is owed a whole body for because its
 	// last repair would have been wider than the world it was repairing toward.
@@ -324,8 +324,6 @@ func (c *Corrections) publishRound(force bool) error {
 	c.releaseLocked(port)
 
 	keyframe := (!c.haveKey || tick >= c.lastKeyTick+c.keyPeriod) && !c.allProvedLocked(ids, tick)
-	// No answer on these links proves a participant behind a relay: it keeps the floor.
-	keyframe = keyframe || c.behindRelay(ids) && tick >= c.lastKeyTick+c.bounds.FloorKeyframeTicks
 	// A link still delivering an earlier body takes no new one, and the round that
 	// finds it drained sends the newest. A keyframe the link could not deliver within
 	// SnapshotKeyframeDrain is not sent on schedule: the index and its pages lead it,
@@ -1181,13 +1179,15 @@ func (c *Corrections) holding() bool {
 	return c.haveHeld
 }
 
-// allProvedLocked reports whether every peer has proved it holds the authority's
-// world recently — a hash-only answer is that proof — so a keyframe would carry
-// nothing any of them lacks. Caller MUST hold publishMu.
+// allProvedLocked reports whether every participant has proved it holds the
+// authority's world recently — a hash-only answer is that proof, reported by its
+// relay for one behind it — so a keyframe would carry nothing any of them lacks.
+// Caller MUST hold publishMu.
 func (c *Corrections) allProvedLocked(ids []uint32, tick uint64) bool {
-	for _, id := range ids {
-		p := c.peers[id]
-		if p == nil || !p.converged || tick >= p.answeredTick+parameter.SnapshotFloorKeyframeTicks/2 {
+	proved := c.provedLocked(ids)
+	for _, id := range c.owedLocked(ids) {
+		at, ok := proved[id]
+		if !ok || at == 0 || tick >= at+parameter.SnapshotFloorKeyframeTicks/2 {
 			return false
 		}
 	}
