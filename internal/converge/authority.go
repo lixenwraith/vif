@@ -355,6 +355,13 @@ func (u *Authority) currentRoster() []network.RosterEntry {
 	return out
 }
 
+// seat reports whether this instance is a bot some participant holds.
+func (u *Authority) seat() bool {
+	local, roster := network.PeerID(u.inst.LocalParticipant()), u.currentRoster()
+	i := slices.IndexFunc(roster, func(e network.RosterEntry) bool { return e.ID == local })
+	return i >= 0 && roster[i].Holder != 0
+}
+
 // recordReport notes one survivor's loss notice, reporting whether it was new.
 // The set is what terminates the flood: a notice says one thing and says it once.
 func (u *Authority) recordReport(rep network.AuthorityReport) bool {

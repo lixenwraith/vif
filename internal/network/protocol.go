@@ -121,6 +121,14 @@ const (
 	// handoff record instead. See reach.go.
 	MsgPeerList MessageType = 0x20 // Live: the authority's confirmed address map
 
+	// MsgRelayJoin and MsgRelayAdmit admit a participant on the link of the one it
+	// dialled rather than on the coordinator's: a guest's bot joins through its
+	// holder. The holder runs the handshake and serves the world; the coordinator
+	// still decides, asked on the holder's own link at the two steps that change the
+	// roster — allocating the identity and crossing the arrival.
+	MsgRelayJoin  MessageType = 0x21 // Live: a relay asking the coordinator to decide one step
+	MsgRelayAdmit MessageType = 0x2F // Live: the coordinator's answer, on the same link
+
 	// MsgConnect and MsgAck are the peer link: two participants that already hold
 	// identities the coordinator assigned opening a stream between themselves.
 	// Deliberately not a join — nothing is allocated, offered or captured — and
@@ -138,12 +146,11 @@ const (
 	MsgStart     MessageType = 0x24 // Live: host releases the participants into tick zero
 	MsgReady     MessageType = 0x25 // Live: joiner confirms it received the start gate
 
-	// Reserved, unused: coordinator assignment beyond the startup offer, and
-	// authentication. Codes once reserved here are live above: 0x26/0x27 the state
-	// snapshot and periodic correction, 0x14/0x15 the link probe, 0x28..0x2A the
-	// selective correction, 0x2B..0x2E the unserved answer and succession, and
-	// 0x20, 0x02 and 0x04 the reachability map and peer link.
-	MsgRoleAssign   MessageType = 0x21
+	// Reserved, unused: authentication. Codes once reserved here are live above:
+	// 0x26/0x27 the state snapshot and periodic correction, 0x14/0x15 the link
+	// probe, 0x28..0x2A the selective correction, 0x2B..0x2E the unserved answer and
+	// succession, 0x20, 0x02 and 0x04 the reachability map and peer link, and 0x21
+	// the relayed admission.
 	MsgAuthRequest  MessageType = 0x30
 	MsgAuthResponse MessageType = 0x31
 )

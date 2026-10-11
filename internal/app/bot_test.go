@@ -14,6 +14,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/bot"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
@@ -302,6 +303,35 @@ func TestAGuestsBotsLeaveWithIt(t *testing.T) {
 	waitForCursors(t, host, 4)
 	leave()
 	waitForCursors(t, host, 2)
+}
+
+// TestAGuestsBotsJoinThroughIt: a guest's bot is admitted on the guest's link, not
+// the host's, the host still allocates it and crosses its arrival, and what it plays
+// reaches the host through the guest.
+func TestAGuestsBotsJoinThroughIt(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	guest, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 4)
+	waitForCursors(t, guest, 4)
+	if h, g := host.sessionTransport().PeerCount(), guest.sessionTransport().PeerCount(); h != 2 || g != 2 {
+		t.Fatalf("the host holds %d links and the guest %d, want 2 each", h, g)
+	}
+	local := network.PeerID(guest.localParticipant())
+	roster := (instance{host}).WorldRoster()
+	i := slices.IndexFunc(roster, func(e network.RosterEntry) bool { return e.Holder == local })
+	if i < 0 {
+		t.Fatalf("the host holds no bot of participant %d: %+v", local, roster)
+	}
+	var e core.Entity
+	host.world.RunSafe(func() { e = host.world.Resources.Player.Slot(roster[i].Slot) })
+	first := cursorPosition(host, e)
+	for deadline := time.Now().Add(socketWait); cursorPosition(host, e) == first; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the guest's bot never moved on the host")
+		}
+	}
 }
 
 // TestALobbyClosesOnlyOnGuestsOnItsLink: a dial is rostered before its handshake

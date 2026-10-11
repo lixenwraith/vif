@@ -164,9 +164,10 @@ func (r *Reach) Close() {
 	}
 }
 
-// drive runs between two ticks, from the same loop the succession does.
+// drive runs between two ticks, from the same loop the succession does. A bot dials
+// nobody: it shares its holder's fate, so the link it joined on is the one it needs.
 func (r *Reach) drive(contested bool) {
-	if r == nil {
+	if r == nil || r.authority.seat() {
 		return
 	}
 	r.statChain.Store(int64(len(r.authority.Chain())))

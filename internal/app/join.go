@@ -334,5 +334,6 @@ func (a *App) bindSessionHooks(r *engine.NetworkResource) {
 	r.OnAuthority = a.receiveAuthorityFrame
 	r.OnPeerLost = a.reportPeerLost
 	r.OnSessionRestart = a.receiveSessionRestart
+	r.OnRelayJoin = a.onRelayJoin
 	r.SeatsOnly = a.seatsOnly
 }

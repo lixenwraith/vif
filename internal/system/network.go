@@ -1571,6 +1571,11 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) {
 		s.receiveSelective(msg.Type, from, msg.Payload)
 	case network.MsgSessionRestart:
 		s.receiveSessionRestart(from, msg.Payload)
+	case network.MsgRelayJoin, network.MsgRelayAdmit:
+		// Neither floods: a relay asks on its own link and is answered on it.
+		if r := s.world.Resources.Network; from != 0 && r != nil && r.OnRelayJoin != nil {
+			r.OnRelayJoin(uint8(msg.Type), from, msg.Payload)
+		}
 	case network.MsgAuthorityReport, network.MsgAuthorityHandoff, network.MsgPeerList:
 		// The address map travels with the succession it exists for: same term
 		// gate, same flood, same session layer deduplicating by term and

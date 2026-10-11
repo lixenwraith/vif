@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -472,8 +473,12 @@ func (pm *PeerManager) Close() {
 	}
 }
 
-// dial connects to a target by the transport it names, TLS over TCP when configured.
+// dial connects to a target by the transport it names, TLS over TCP when configured,
+// or through the configuration's own Dial.
 func dial(target string, cfg *Config) (net.Conn, error) {
+	if cfg.Dial != nil {
+		return cfg.Dial()
+	}
 	e, err := ParseEndpoint(target)
 	if err != nil {
 		return nil, err
@@ -489,4 +494,100 @@ func dial(target string, cfg *Config) (net.Conn, error) {
 		conn, err = dialer.Dial("tcp", e.Addr)
 	}
 	return conn, plainNetError(err)
+}
+
+// Pipe is an in-process stream with a socket's receive buffering: a write completes
+// once the far end holds it, not once it reads it, so a joiner installing its world
+// does not stall, and then time out, the writer serving it.
+func Pipe() (net.Conn, net.Conn) {
+	a, b := net.Pipe()
+	return spool(a), spool(b)
+}
+
+// spooled reads its pipe end ahead into memory, as a kernel reads a socket.
+type spooled struct {
+	net.Conn
+	wake     chan struct{}
+	mu       sync.Mutex
+	buf      []byte
+	off      int
+	err      error
+	deadline time.Time
+}
+
+func spool(c net.Conn) *spooled {
+	s := &spooled{Conn: c, wake: make(chan struct{}, 1)}
+	go s.pump()
+	return s
+}
+
+func (s *spooled) pump() {
+	chunk := make([]byte, 32<<10)
+	for {
+		n, err := s.Conn.Read(chunk)
+		s.mu.Lock()
+		s.buf = append(s.buf, chunk[:n]...)
+		s.err = err
+		s.mu.Unlock()
+		s.signal()
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (s *spooled) signal() {
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
+func (s *spooled) Read(p []byte) (int, error) {
+	for {
+		s.mu.Lock()
+		n := copy(p, s.buf[s.off:])
+		if s.off += n; s.off == len(s.buf) {
+			s.buf, s.off = s.buf[:0], 0
+		}
+		err, deadline := s.err, s.deadline
+		s.mu.Unlock()
+		if n > 0 || len(p) == 0 {
+			return n, nil
+		}
+		if err != nil {
+			return 0, err
+		}
+		var expire <-chan time.Time
+		var timer *time.Timer
+		if !deadline.IsZero() {
+			wait := time.Until(deadline)
+			if wait <= 0 {
+				return 0, os.ErrDeadlineExceeded
+			}
+			timer = time.NewTimer(wait)
+			expire = timer.C
+		}
+		select {
+		case <-s.wake:
+		case <-expire:
+			return 0, os.ErrDeadlineExceeded
+		}
+		if timer != nil {
+			timer.Stop()
+		}
+	}
+}
+
+func (s *spooled) SetReadDeadline(t time.Time) error {
+	s.mu.Lock()
+	s.deadline = t
+	s.mu.Unlock()
+	s.signal()
+	return nil
+}
+
+func (s *spooled) SetDeadline(t time.Time) error {
+	_ = s.SetReadDeadline(t)
+	return s.Conn.SetWriteDeadline(t)
 }

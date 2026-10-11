@@ -100,6 +100,10 @@ type Corrections struct {
 	held     snapshot.SharedCapture
 	haveHeld bool
 
+	// proving are the joins through this instance waiting for a world it proves
+	// the authority's at or past a tick; see ProvedWorld.
+	proving []provedWait
+
 	// selective is the manifest exchange's state on whichever side this run is.
 	// selectiveMu covers the receiver's half, written by the tick that drained a
 	// frame; publishMu covers the host's, which belongs to the publication schedule.
@@ -1086,6 +1090,7 @@ func (c *Corrections) commit(cap snapshot.SharedCapture) error {
 	}
 	c.installedMu.Lock()
 	c.lastInstalled = cap.Header.Tick
+	c.offerProvedLocked(cap)
 	c.installedMu.Unlock()
 
 	// What was just installed is provably the authority's world at that tick — a
@@ -1195,6 +1200,61 @@ func (c *Corrections) proved(tick uint64) {
 	c.installedMu.Lock()
 	c.keyTick = max(c.keyTick, tick)
 	c.installedMu.Unlock()
+}
+
+// provedWait is one join waiting for a proved world at or past tick.
+type provedWait struct {
+	tick uint64
+	ch   chan snapshot.SharedCapture
+}
+
+// ProvedWorld returns the first world this instance proves the authority's at or
+// past minTick — installed whole, repaired, or matched by an index's root — which
+// is what a relay serves a participant joining through it. The header is the
+// authority's; the integrity hash is not, since owner-authored cursor cells sit
+// outside the root and this instance holds its own mirror of each.
+func (c *Corrections) ProvedWorld(minTick uint64, deadline time.Time) (snapshot.SharedCapture, error) {
+	w := provedWait{tick: minTick, ch: make(chan snapshot.SharedCapture, 1)}
+	c.installedMu.Lock()
+	c.proving = append(c.proving, w)
+	c.installedMu.Unlock()
+	timer := time.NewTimer(time.Until(deadline)) // [wall] a link bound
+	defer timer.Stop()
+	select {
+	case cap := <-w.ch:
+		return cap, nil
+	case <-timer.C:
+	case <-c.stop:
+	}
+	c.installedMu.Lock()
+	c.proving = slices.DeleteFunc(c.proving, func(o provedWait) bool { return o.ch == w.ch })
+	c.installedMu.Unlock()
+	select {
+	case cap := <-w.ch: // proved as the wait ran out
+		return cap, nil
+	default:
+	}
+	return snapshot.SharedCapture{}, fmt.Errorf("no world proved the authority's past tick %d in time", minTick)
+}
+
+// offerProved hands a world whose root matched the authority's to the joins
+// waiting; an installed one is handed over by commit.
+func (c *Corrections) offerProved(cap snapshot.SharedCapture) {
+	c.installedMu.Lock()
+	c.offerProvedLocked(cap)
+	c.installedMu.Unlock()
+}
+
+// offerProvedLocked hands a proved world to every join waiting for one this fresh.
+// Caller MUST hold installedMu.
+func (c *Corrections) offerProvedLocked(cap snapshot.SharedCapture) {
+	c.proving = slices.DeleteFunc(c.proving, func(w provedWait) bool {
+		if cap.Header.Tick < w.tick {
+			return false
+		}
+		w.ch <- cap
+		return true
+	})
 }
 
 // holdingThrough reports whether a held correction has become due by tick.
