@@ -7,8 +7,9 @@ import (
 
 // FlowFieldCache manages flow field recomputation with throttling
 type FlowFieldCache struct {
-	Field *FlowField
-	grid  []bool // passability used by this cache
+	Field   *FlowField
+	grid    []bool // passability used by this cache
+	gridGen uint64 // the generation grid was last observed at, zero for none
 
 	// Recomputation throttling
 	LastTargets            []vmath.Point // Tracks previously requested target coords
@@ -101,8 +102,14 @@ func (c *FlowFieldCache) MarkDirty() {
 }
 
 // ObserveGrid invalidates routes immediately when their passability changes.
-// The slice may describe blocked or passable cells; only equality matters.
-func (c *FlowFieldCache) ObserveGrid(grid []bool) {
+// The slice may describe blocked or passable cells; only equality matters. A nonzero
+// gen is the caller's name for grid's content, moving whenever it may have changed,
+// so a grid observed at the same gen is not compared again.
+func (c *FlowFieldCache) ObserveGrid(grid []bool, gen uint64) {
+	if gen != 0 && gen == c.gridGen {
+		return
+	}
+	c.gridGen = gen
 	if !slices.Equal(c.grid, grid) {
 		c.grid = append(c.grid[:0], grid...)
 		c.Field.Invalidate()

@@ -628,8 +628,11 @@ compressed and 9 / 65 ms to encode. The seal, the index and a keyframe now reuse
 bytes and hash of every row whose owned copy still compares equal: at 16 players,
 rounds four ticks apart and on a slower container, the seal fell from 16 to 1.8 ms
 on the tower map and from 123 to 5 ms on td, the index from 12 to 2.4 and from 64 to
-12 ms, and a keyframe from 19 to 7.6 and from 125 to 58 ms, now mostly deflate. The
-table predates that reuse. An install that
+12 ms, and a keyframe from 19 to 7.6 and from 125 to 58 ms, now mostly deflate.
+Navigation, which had become 89% of a td tick there, rebuilds its wall grid only when
+a wall moved and compares grids only when their generation moved: the td tick fell
+from 13.6 to 2.6 ms and the tower's from 1.7 to 1.1 ms. The table predates both. An
+install that
 projects nothing holds the live lock 7–10 / 40–70 ms, and each projected tick adds up
 to a simulation tick. Sealing, indexing and encoding run outside the lock, but on the
 one thread a browser guest has.

@@ -327,17 +327,19 @@ func (sc *routeScratch) penalizedShortestPath(
 	dist[start] = 0
 
 	sc.heap = sc.heap[:0]
-	sc.heap.push(heapEntry{idx: start, dist: 0})
+	sc.heap.push(heapEntry{idx: int32(start), dist: 0})
 
+	// Only a distance under CostUnreachable is pushed, which the heap's int32 holds.
 	for len(sc.heap) > 0 {
 		e := sc.heap.pop()
-		if e.dist > dist[e.idx] {
+		at, atDist := int(e.idx), int(e.dist)
+		if atDist > dist[at] {
 			continue
 		}
-		if e.idx == goal {
+		if at == goal {
 			break
 		}
-		cx, cy := e.idx%mapW, e.idx/mapW
+		cx, cy := at%mapW, at/mapW
 		for d := range int8(DirCount) {
 			dx, dy := DirVectors[d][0], DirVectors[d][1]
 			nx, ny := cx+dx, cy+dy
@@ -350,11 +352,11 @@ func (sc *routeScratch) penalizedShortestPath(
 				}
 			}
 			nIdx := ny*mapW + nx
-			nd := e.dist + dirCosts[d] + penalty[nIdx]
+			nd := atDist + int(dirCosts[d]) + penalty[nIdx]
 			if nd < dist[nIdx] {
 				dist[nIdx] = nd
-				prev[nIdx] = int32(e.idx)
-				sc.heap.push(heapEntry{idx: nIdx, dist: nd})
+				prev[nIdx] = e.idx
+				sc.heap.push(heapEntry{idx: int32(nIdx), dist: int32(nd)})
 			}
 		}
 	}

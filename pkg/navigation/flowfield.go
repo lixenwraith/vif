@@ -42,7 +42,7 @@ const (
 )
 
 // Per-direction costs matching DirVectors index order (N, NE, E, SE, S, SW, W, NW)
-var dirCosts = [8]int{
+var dirCosts = [8]int32{
 	CostY, CostDiagonal, CostX, CostDiagonal,
 	CostY, CostDiagonal, CostX, CostDiagonal,
 }
@@ -50,8 +50,8 @@ var dirCosts = [8]int{
 // --- Min-heap for Dijkstra ---
 
 type heapEntry struct {
-	idx  int // Flat grid index (y*width + x)
-	dist int // Weighted distance from target
+	idx  int32 // Flat grid index (y*width + x)
+	dist int32 // Weighted distance from target
 }
 
 type minHeap []heapEntry
@@ -100,8 +100,8 @@ func (h *minHeap) pop() heapEntry {
 // FlowField stores precomputed navigation directions toward a target
 type FlowField struct {
 	Width, Height int
-	Directions    []int8 // Per-cell direction index, DirNone if blocked
-	Distances     []int  // Aspect-weighted distance from target (X=10, Y=20, diag=22)
+	Directions    []int8  // Per-cell direction index, DirNone if blocked
+	Distances     []int32 // Aspect-weighted distance from target (X=10, Y=20, diag=22); 22 per cell fits any field under 97M cells
 
 	// Generation tracking for zero-allocation reset
 	VisitedGen []uint32
@@ -126,7 +126,7 @@ func NewFlowField(width, height int) *FlowField {
 		Width:      width,
 		Height:     height,
 		Directions: dirs,
-		Distances:  make([]int, size),
+		Distances:  make([]int32, size),
 		VisitedGen: make([]uint32, size),
 		CurrentGen: 0,
 		TargetX:    -1,
@@ -141,7 +141,7 @@ func (f *FlowField) Resize(width, height int) {
 	size := width * height
 	if cap(f.Directions) < size {
 		f.Directions = make([]int8, size)
-		f.Distances = make([]int, size)
+		f.Distances = make([]int32, size)
 		f.VisitedGen = make([]uint32, size)
 	} else {
 		f.Directions = f.Directions[:size]
@@ -190,7 +190,7 @@ func (f *FlowField) GetDistance(x, y int) int {
 	if f.VisitedGen[idx] != f.CurrentGen {
 		return -1
 	}
-	d := f.Distances[idx]
+	d := int(f.Distances[idx])
 	if d >= CostUnreachable {
 		return -1
 	}
@@ -224,7 +224,7 @@ func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
 			continue
 		}
 
-		targetIdx := t.Y*w + t.X
+		targetIdx := int32(t.Y*w + t.X)
 		if !isBlocked(t.X, t.Y) {
 			if f.VisitedGen[targetIdx] != f.CurrentGen {
 				f.Distances[targetIdx] = 0
@@ -251,8 +251,8 @@ func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
 			continue
 		}
 
-		cx := idx % w
-		cy := idx / w
+		cx := int(idx) % w
+		cy := int(idx) / w
 
 		// Each neighbour is tested once: a diagonal's corner cells are the two
 		// orthogonal neighbours beside it, in bounds whenever the diagonal is.
@@ -272,7 +272,7 @@ func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
 
 			nx := cx + DirVectors[dirIdx][0]
 			ny := cy + DirVectors[dirIdx][1]
-			nIdx := ny*w + nx
+			nIdx := int32(ny*w + nx)
 			newDist := entry.dist + dirCosts[dirIdx]
 
 			if f.VisitedGen[nIdx] != f.CurrentGen || newDist < f.Distances[nIdx] {
@@ -321,12 +321,12 @@ func (f *FlowField) seedVirtualTargets(targetX, targetY int, isBlocked WallCheck
 
 				// Seed as virtual target with distance based on manhattan distance from real target
 				// Weighted by axis costs for consistency with Dijkstra
-				cost := abs(dx)*CostX + abs(dy)*CostY
+				cost := int32(abs(dx)*CostX + abs(dy)*CostY)
 				if f.VisitedGen[nIdx] != f.CurrentGen || cost < f.Distances[nIdx] {
 					f.Distances[nIdx] = cost
 					f.VisitedGen[nIdx] = f.CurrentGen
 					f.Directions[nIdx] = DirTarget // Mark as target for direction derivation
-					f.heap.push(heapEntry{idx: nIdx, dist: cost})
+					f.heap.push(heapEntry{idx: int32(nIdx), dist: cost})
 					foundAny = true
 				}
 			}

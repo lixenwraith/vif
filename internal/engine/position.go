@@ -20,6 +20,7 @@ type Position struct {
 	dense    []component.PositionComponent
 	entities []core.Entity // Dense array for cache-friendly iteration
 	bit      uint64        // Component bit mask
+	walls    []*wallGrid   // WallTest's grid for each mask asked
 
 	statCellSaturations *atomic.Int64
 	statCellOverflows   *atomic.Int64
@@ -313,16 +314,17 @@ func (p *Position) ClearAllComponents() {
 
 // --- Wall ---
 
-// WallTest returns HasBlockingWallAt for mask as a grid read from the wall store on
-// its first call into buf, reused across calls. A derivation that probes every cell
-// several times pays one store pass instead; it is exact while walls cannot change.
+// WallTest returns HasBlockingWallAt for mask as a grid copied into buf on its first
+// call, reused across calls. A derivation that probes every cell several times pays
+// one copy instead; it is exact while walls cannot change.
 // SYNC: caller holds World.updateMutex for as long as it calls the result
 func (p *Position) WallTest(mask component.WallBlockMask, buf *[]bool) func(x, y int) bool {
 	var w, h int
 	built := false
 	return func(x, y int) bool {
 		if !built {
-			w, h = p.buildWallGrid(mask, buf)
+			g := p.wallGridFor(mask)
+			w, h, *buf = g.w, g.h, append((*buf)[:0], g.cells...)
 			built = true
 		}
 		if x < 0 || y < 0 || x >= w || y >= h {
@@ -332,33 +334,111 @@ func (p *Position) WallTest(mask component.WallBlockMask, buf *[]bool) func(x, y
 	}
 }
 
-// buildWallGrid marks every cell HasBlockingWallAt would answer true for: a wall of
-// mask that the grid holds there, which is not every stored one under soft clipping.
-func (p *Position) buildWallGrid(mask component.WallBlockMask, buf *[]bool) (w, h int) {
+// wallGrid is the cells HasBlockingWallAt answers true for under one mask, beside
+// what they were read from: the wall store's entities and masks in its order, and
+// each admitted wall's position slot and value. Membership of an unmoved wall changes
+// only where the grid's epoch moves, so while all of these stand the cells are what a
+// rebuild gives; an admitted wall that marked nothing is checked anew each time.
+type wallGrid struct {
+	mask  component.WallBlockMask
+	w, h  int
+	epoch uint64
+	walls []core.Entity
+	masks []component.WallBlockMask
+	slot  []int32 // position slot of each admitted placed wall, -1 for any other
+	at    []component.PositionComponent
+	loose []core.Entity
+	cells []bool
+}
+
+// wallGridFor returns mask's grid, rebuilt only when a wall it read from moved.
+func (p *Position) wallGridFor(mask component.WallBlockMask) *wallGrid {
 	if p.world == nil {
-		return 0, 0
+		return &wallGrid{}
 	}
+	var g *wallGrid
+	for _, c := range p.walls {
+		if c.mask == mask {
+			g = c
+		}
+	}
+	if g == nil {
+		g = &wallGrid{mask: mask, w: -1}
+		p.walls = append(p.walls, g)
+	}
+	w, h := p.wallBounds()
+	if g.current(p, w, h) {
+		return g
+	}
+	ws := p.world.Components.Wall
+	n := len(ws.entities)
+	g.w, g.h, g.epoch = w, h, p.grid.epoch
+	g.walls = append(g.walls[:0], ws.entities...)
+	g.masks, g.slot, g.at = sized(g.masks, n), sized(g.slot, n), sized(g.at, n)
+	g.loose, g.cells = g.loose[:0], sized(g.cells, w*h)
+	clear(g.cells)
+	for i, e := range g.walls {
+		g.masks[i], g.slot[i] = ws.dense[i].BlockMask, -1
+		if e.Domain() == core.DomainPlayer || (mask != 0 && g.masks[i]&mask == 0) {
+			continue
+		}
+		s, ok := p.index[e]
+		if ok {
+			g.slot[i], g.at[i] = s, p.dense[s]
+		}
+		if cell, held := p.wallCell(e, w, h); held {
+			g.cells[cell] = true
+		} else if !ok || g.at[i].X >= 0 && g.at[i].X < w && g.at[i].Y >= 0 && g.at[i].Y < h {
+			g.loose = append(g.loose, e)
+		}
+	}
+	return g
+}
+
+// current reports whether g still holds what it was built from.
+func (g *wallGrid) current(p *Position, w, h int) bool {
+	ws := p.world.Components.Wall
+	if g.w != w || g.h != h || g.epoch != p.grid.epoch || len(ws.entities) != len(g.walls) {
+		return false
+	}
+	for i, e := range ws.entities {
+		if e != g.walls[i] || ws.dense[i].BlockMask != g.masks[i] {
+			return false
+		}
+		if s := g.slot[i]; s >= 0 && (int(s) >= len(p.entities) || p.entities[s] != e || p.dense[s] != g.at[i]) {
+			return false
+		}
+	}
+	for _, e := range g.loose {
+		if _, held := p.wallCell(e, w, h); held {
+			return false
+		}
+	}
+	return true
+}
+
+// wallBounds is the part of the grid a wall test covers.
+func (p *Position) wallBounds() (w, h int) {
 	config := p.world.Resources.Config
 	w, h = min(config.MapWidth, p.grid.Width), min(config.MapHeight, p.grid.Height)
-	w, h = max(w, 0), max(h, 0)
-	if n := w * h; cap(*buf) < n {
-		*buf = make([]bool, n)
-	} else {
-		*buf = (*buf)[:n]
-		clear(*buf)
+	return max(w, 0), max(h, 0)
+}
+
+// wallCell is the cell e marks: its position, within bounds, where the grid holds
+// it, which is not every stored wall under soft clipping.
+func (p *Position) wallCell(e core.Entity, w, h int) (int, bool) {
+	pos, ok := p.GetPosition(e)
+	if !ok || pos.X < 0 || pos.X >= w || pos.Y < 0 || pos.Y >= h || !p.grid.containsEntityAt(e, pos.X, pos.Y) {
+		return 0, false
 	}
-	grid := *buf
-	p.world.Components.Wall.Each(func(e core.Entity, wall *component.WallComponent) bool {
-		if e.Domain() == core.DomainPlayer || (mask != 0 && wall.BlockMask&mask == 0) {
-			return true
-		}
-		if pos, ok := p.GetPosition(e); ok && pos.X >= 0 && pos.X < w && pos.Y >= 0 && pos.Y < h &&
-			p.grid.containsEntityAt(e, pos.X, pos.Y) {
-			grid[pos.Y*w+pos.X] = true
-		}
-		return true
-	})
-	return w, h
+	return pos.Y*w + pos.X, true
+}
+
+func sized[T any](s []T, n int) []T {
+	if cap(s) < n {
+		return make([]T, n)
+	}
+	return s[:n]
 }
 
 // HasBlockingWallAt returns true if a wall exists at (x, y) that blocks the given mask

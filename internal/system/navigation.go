@@ -42,6 +42,10 @@ type NavigationSystem struct {
 	grid      uint64
 	seenWalls []bool
 
+	// passStale is set while passability may differ from what seenWalls derive: a
+	// wall event moved part of it before the next derivation saw the walls.
+	passStale bool
+
 	// Per-tick resolved target snapshot; avoids per-entity TargetResource locking
 	targets [component.MaxTargetGroups + parameter.MaxPlayers]engine.TargetGroupState
 
@@ -249,6 +253,7 @@ func (s *NavigationSystem) recomputeCompositePassabilityROI(wallX, wallY, wallW,
 	}
 	if s.compositePassability.ComputeROI(isWall, minX, minY, maxX, maxY) {
 		s.grid++
+		s.passStale = true
 	}
 }
 
@@ -268,17 +273,21 @@ func (s *NavigationSystem) resizePassability(width, height int) {
 		s.compositePassability.Resize(width, height)
 	}
 	s.grid++
+	s.passStale = true
 	s.recomputeCompositePassability()
 }
 
 // recomputeCompositePassability derives the passability grid from the walls as they
-// stand and returns the wall test it read them through.
+// stand, unless it already holds what they derive, and returns the wall test it read
+// them through.
 func (s *NavigationSystem) recomputeCompositePassability() navigation.WallChecker {
 	isWall := s.world.Positions.WallTest(component.WallBlockKinetic, &s.walls)
 	isWall(-1, -1) // the first call builds the grid
-	s.noteWalls()
-	if s.compositePassability != nil && s.compositePassability.Compute(isWall) {
-		s.grid++
+	if moved := s.noteWalls(); s.compositePassability != nil && (moved || s.passStale) {
+		if s.compositePassability.Compute(isWall) {
+			s.grid++
+		}
+		s.passStale = false
 	}
 	return isWall
 }
@@ -319,6 +328,7 @@ func (s *NavigationSystem) Update() {
 	isBlockedPoint(-1, -1)
 	if s.noteWalls() {
 		s.compositePassability.Compute(isBlockedPoint)
+		s.passStale = false
 	}
 	s.refreshRouteGraphs()
 
@@ -340,8 +350,8 @@ func (s *NavigationSystem) Update() {
 		}
 		targetsSlice := targetsBuffer[:groupState.Count]
 
-		g.pointFlowCache.ObserveGrid(s.walls)
-		g.compositeFlowCache.ObserveGrid(s.compositePassability.Valid)
+		g.pointFlowCache.ObserveGrid(s.walls, s.grid)
+		g.compositeFlowCache.ObserveGrid(s.compositePassability.Valid, s.grid)
 		if g.pointFlowCache.Update(targetsSlice, isBlockedPoint) {
 			totalRecomputes++
 			g.pointAt = s.grid
@@ -1124,8 +1134,8 @@ func (s *NavigationSystem) LoadShared(data []byte) error {
 		if g == nil {
 			continue
 		}
-		g.pointFlowCache.ObserveGrid(s.walls)
-		g.compositeFlowCache.ObserveGrid(s.compositePassability.Valid)
+		g.pointFlowCache.ObserveGrid(s.walls, s.grid)
+		g.compositeFlowCache.ObserveGrid(s.compositePassability.Valid, s.grid)
 		g.pointAt = s.restoreField(g.pointFlowCache, g.pointAt, isBlockedPoint,
 			phase.PointTicks, phase.PointPending, phase.PointComputed, phase.PointLastTargets)
 		g.compositeAt = s.restoreField(g.compositeFlowCache, g.compositeAt, isBlockedComposite,
@@ -1162,6 +1172,7 @@ type navState struct {
 	passability       *navigation.CompositePassability
 	walls, seenWalls  []bool
 	grid              uint64
+	passStale         bool
 	targets           [component.MaxTargetGroups + parameter.MaxPlayers]engine.TargetGroupState
 	routeRebuildTicks int
 	graphs            map[uint32]*navigation.RouteGraph
@@ -1171,7 +1182,7 @@ type navState struct {
 // phase each was rebuilt in, which LoadShared re-derives as a joiner would.
 func (s *NavigationSystem) CopyState() any {
 	c := navState{groups: make(map[uint8]targetGroupNav, len(s.groups)), walls: slices.Clone(s.walls),
-		seenWalls: slices.Clone(s.seenWalls), grid: s.grid, targets: s.targets, routeRebuildTicks: s.routeRebuildTicks,
+		seenWalls: slices.Clone(s.seenWalls), grid: s.grid, passStale: s.passStale, targets: s.targets, routeRebuildTicks: s.routeRebuildTicks,
 		graphs: s.world.Resources.RouteGraph.Graphs()}
 	if s.compositePassability != nil {
 		c.passability = s.compositePassability.Clone()
@@ -1197,7 +1208,7 @@ func (s *NavigationSystem) RestoreState(v any) error {
 	if dbg := s.world.Resources.NavigationDebug; dbg != nil {
 		dbg.CompositePassability = s.compositePassability
 	}
-	s.walls, s.seenWalls, s.grid = slices.Clone(c.walls), slices.Clone(c.seenWalls), c.grid
+	s.walls, s.seenWalls, s.grid, s.passStale = slices.Clone(c.walls), slices.Clone(c.seenWalls), c.grid, c.passStale
 	s.targets, s.routeRebuildTicks = c.targets, c.routeRebuildTicks
 	s.world.Resources.RouteGraph.SetGraphs(c.graphs)
 	return nil

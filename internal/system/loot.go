@@ -328,7 +328,7 @@ func (s *LootSystem) refreshOwnerRoutes(loots []core.Entity) {
 		case r.cache.Field.Width != config.MapWidth || r.cache.Field.Height != config.MapHeight:
 			r.cache.Resize(config.MapWidth, config.MapHeight)
 		}
-		r.cache.ObserveGrid(s.walls)
+		r.cache.ObserveGrid(s.walls, 0)
 		s.routeGoal[0] = r.cell
 		if r.cache.Update(s.routeGoal[:], blocked) {
 			recomputes++

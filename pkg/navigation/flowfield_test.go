@@ -25,7 +25,7 @@ func referenceCompute(f *FlowField, targets []vmath.Point, isBlocked WallChecker
 		if t.X < 0 || t.Y < 0 || t.X >= f.Width || t.Y >= f.Height {
 			continue
 		}
-		targetIdx := t.Y*w + t.X
+		targetIdx := int32(t.Y*w + t.X)
 		if !isBlocked(t.X, t.Y) {
 			if f.VisitedGen[targetIdx] != f.CurrentGen {
 				f.Distances[targetIdx] = 0
@@ -47,7 +47,7 @@ func referenceCompute(f *FlowField, targets []vmath.Point, isBlocked WallChecker
 		if f.VisitedGen[idx] == f.CurrentGen && entry.dist > f.Distances[idx] {
 			continue
 		}
-		cx, cy := idx%w, idx/w
+		cx, cy := int(idx)%w, int(idx)/w
 		for dirIdx := int8(0); dirIdx < DirCount; dirIdx++ {
 			nx, ny := cx+DirVectors[dirIdx][0], cy+DirVectors[dirIdx][1]
 			if nx < 0 || nx >= f.Width || ny < 0 || ny >= f.Height || isBlocked(nx, ny) {
@@ -57,7 +57,7 @@ func referenceCompute(f *FlowField, targets []vmath.Point, isBlocked WallChecker
 			if dx != 0 && dy != 0 && (isBlocked(cx+dx, cy) || isBlocked(cx, cy+dy)) {
 				continue
 			}
-			nIdx := ny*w + nx
+			nIdx := int32(ny*w + nx)
 			newDist := entry.dist + dirCosts[dirIdx]
 			if f.VisitedGen[nIdx] != f.CurrentGen || newDist < f.Distances[nIdx] {
 				f.Distances[nIdx] = newDist
@@ -141,7 +141,7 @@ func TestCacheRefreshesSmallTargetMovesAndChangedWalls(t *testing.T) {
 	walls := make([]bool, 48)
 	blocked := func(x, y int) bool { return walls[y*8+x] }
 	goal := []vmath.Point{{X: 1, Y: 1}}
-	c.ObserveGrid(walls)
+	c.ObserveGrid(walls, 1)
 	c.Update(goal, blocked)
 	goal[0].X++
 	for range 3 {
@@ -151,12 +151,12 @@ func TestCacheRefreshesSmallTargetMovesAndChangedWalls(t *testing.T) {
 		t.Fatal("one-cell motion never refreshed the goal")
 	}
 	walls[1*8+3] = true
-	c.ObserveGrid(walls)
+	c.ObserveGrid(walls, 2)
 	if !c.Update(goal, blocked) || c.GetDistance(3, 1) != -1 {
 		t.Fatal("changed walls left a stale route")
 	}
 	walls[1*8+3] = false
-	c.ObserveGrid(walls)
+	c.ObserveGrid(walls, 3)
 	c.Update(goal, blocked)
 	if c.GetDistance(3, 1) < 0 {
 		t.Fatal("a removed wall stayed blocked")

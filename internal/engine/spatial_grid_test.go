@@ -84,7 +84,8 @@ func assertPartition(t *testing.T, g *SpatialGrid, x, y, wantShared, wantPlayer 
 
 // FuzzWallTestAnswersAsHasBlockingWallAt: the grid a derivation reads is the live
 // query cell for cell — any mask, either domain, soft-clipped walls, out of bounds
-// — and one built after walls are destroyed, moved, remasked or spawned sees them.
+// — and one reused across storms that destroy, move, remask, respawn, clip and
+// re-index walls sees every change.
 func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 	for seed := range uint64(16) {
 		f.Add(seed)
@@ -118,10 +119,18 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 		}
 
 		var buf []bool
-		for round := range 2 {
-			if round == 1 { // a storm between two derivations
+		var saved *WorldCopy
+		for round := range 24 {
+			if round%4 == 0 {
+				saved = w.CopyOut()
+			}
+			if round%2 == 1 { // a storm of one kind between two derivations, so none hides another
+				kind := rng.IntN(11)
 				for _, e := range walls {
-					switch rng.IntN(6) {
+					if rng.IntN(3) != 0 {
+						continue
+					}
+					switch kind {
 					case 0:
 						w.DestroyEntity(e)
 					case 1:
@@ -130,10 +139,53 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 						}
 					case 2:
 						w.Positions.SetPosition(e, component.PositionComponent{X: rng.IntN(cfg.MapWidth), Y: rng.IntN(cfg.MapHeight)})
+					case 3: // re-enters its cell once it is full, clipped, and swaps back into its slot
+						pos, ok := w.Positions.GetPosition(e)
+						if !ok {
+							break
+						}
+						slot := w.Positions.index[e]
+						w.Positions.RemoveEntity(e)
+						for range parameter.MaxEntitiesPerCell {
+							w.Positions.SetPosition(w.CreateEntity(core.DomainShared), pos)
+						}
+						w.Positions.SetPosition(e, pos)
+						if int(slot) < len(w.Positions.entities) && w.Positions.entities[slot] != e {
+							w.DestroyEntity(w.Positions.entities[slot])
+						}
+					case 4: // loses its wall and takes it back
+						if wall, ok := w.Components.Wall.GetComponent(e); ok {
+							w.Components.Wall.RemoveEntity(e)
+							w.Components.Wall.SetComponent(e, wall)
+						}
+					case 5: // a clipped wall's cell empties and the wall retries
+						pos, ok := w.Positions.GetPosition(e)
+						if !ok {
+							break
+						}
+						for _, o := range w.Positions.GetEntitiesAt(pos.X, pos.Y, ScopeBoth) {
+							if o != e && !w.Components.Wall.HasEntity(o) {
+								w.Positions.Move(o, component.PositionComponent{X: -1, Y: -1})
+							}
+						}
+						w.Positions.SetPosition(e, pos)
+					case 6:
+						w.Positions.RemoveEntity(e)
+					case 7: // an unplaced wall is placed
+						if !w.Positions.HasPosition(e) {
+							w.Positions.SetPosition(e, component.PositionComponent{X: rng.IntN(cfg.MapWidth), Y: rng.IntN(cfg.MapHeight)})
+						}
 					}
 				}
-				for range rng.IntN(20) {
-					spawn()
+				switch kind {
+				case 8:
+					for range 1 + rng.IntN(20) {
+						spawn()
+					}
+				case 9:
+					w.Positions.ResizeGrid(cfg.MapWidth, cfg.MapHeight)
+				case 10:
+					w.CopyIn(saved)
 				}
 			}
 			for _, mask := range masks {
