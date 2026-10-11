@@ -178,6 +178,7 @@ const (
 	RayWarning           = 750 * time.Millisecond
 	RayFiring            = 1000 * time.Millisecond
 	RayHitInterval       = 250 * time.Millisecond // a mount's; a cursor's strikes every tick
+	RayHold              = 2 * WeaponCooldownMain // a fire request keeps a capped ray lit this long, outlasting a late repeat
 )
 
 // Turret bullets, a cursor's and a mount's alike

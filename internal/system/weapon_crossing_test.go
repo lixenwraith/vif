@@ -237,7 +237,7 @@ func TestPlayerRayRunsThroughItsOrbAndCrossesOnlyItsImpacts(t *testing.T) {
 	w.Positions.SetPosition(orbs[component.WeaponEmitter], component.PositionComponent{X: 9, Y: 5})
 	w.Resources.Event.Queue.Consume()
 	weapon.fireLoadout(cursor, weaponComp, orbs)
-	weapon.advanceRays(cursor, weaponComp, orbs, parameter.GameUpdateInterval)
+	weapon.advanceRays(cursor, orbs, parameter.GameUpdateInterval)
 
 	var crossings int
 	struck := make(map[core.Entity]bool)
@@ -260,7 +260,7 @@ func TestPlayerRayRunsThroughItsOrbAndCrossesOnlyItsImpacts(t *testing.T) {
 	}
 
 	w.Positions.SetPosition(orbs[component.WeaponEmitter], component.PositionComponent{X: 5, Y: 9})
-	weapon.advanceRays(cursor, weaponComp, orbs, parameter.GameUpdateInterval)
+	weapon.advanceRays(cursor, orbs, parameter.GameUpdateInterval)
 	w.Resources.Event.Queue.Consume()
 	if ray, _ := w.Components.Ray.GetComponent(orbs[component.WeaponEmitter]); ray.Ray.DX != 0 || ray.Ray.DY <= 0 {
 		t.Fatalf("ray = %+v after the orb moved south, want it to follow", ray.Ray)

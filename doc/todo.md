@@ -344,6 +344,19 @@ body now waits behind one 4 KiB chunk ([Troubleshooting](troubleshooting.md) §1
 Carrying it in the correction chunk envelope through the per-peer outbox bounds that
 too. Repairs at 20 kB/s have so far been a few kilobytes.
 
+### Give the silent-peer test room under the bulk floor
+
+- Priority: P2
+- Affected files: `internal/app/correction_test.go`, `internal/network/mesh.go`
+
+`TestASilentPeerIsSentWholeBodies` keeps the guest from ticking, so nothing drains the
+loopback link and the host's backlog stands at 8188 bytes of the 8192-byte
+`SnapshotBulkQueueBytes` floor on the publish that owes the body; the loopback link
+measures no throughput, so the floor is the whole limit. Any growth of a cursor's
+snapshot entry trips `bulkHeld` and the body is withheld as if the link were
+saturated. Either have the loopback link report a throughput, so the limit scales as
+it does on a real link, or drain the guest without answering the index.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under

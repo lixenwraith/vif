@@ -25,5 +25,6 @@ type RayComponent struct {
 	HitInterval time.Duration // between strikes; zero strikes every tick
 	HitTimer    time.Duration // until the next strike
 	Scale       int           // damage multiplier, the charges a cursor fired it with
+	Hold        time.Duration // left of the hold a fire request renews on a capped ray; held, it stays at full strength
 	Palette     WeaponPalette
 }
