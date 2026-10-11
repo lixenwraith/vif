@@ -388,7 +388,8 @@ Measured with a scripted guest and the `-script` benchmark:
 - **Walls probed per cell.** Flow fields asked the spatial grid and the wall store
   about every neighbour of every cell. They now read a grid built from the store once
   per derivation (`Position.WallTest`): the `td` script runs in 28 s, from 49.5 s,
-  with identical stat records throughout.
+  with identical stat records throughout. That grid is now rebuilt only when a wall,
+  its mask, its position or its cell's membership moved.
 
 A drop then stuck inside a wall. No field has ever covered a wall cell, and
 `PushEntityFromBlocked` moved the grid cell but left the sub-cell position in the

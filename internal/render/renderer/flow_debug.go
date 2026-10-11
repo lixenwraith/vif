@@ -214,8 +214,8 @@ func (r *FlowFieldDebugRenderer) findMaxDistance(field *navigation.FlowField) in
 	maxDist := 0
 	for i, d := range field.Distances {
 		// Only count cells from current generation
-		if field.VisitedGen[i] == field.CurrentGen && d > maxDist && d < 1<<29 {
-			maxDist = d
+		if field.VisitedGen[i] == field.CurrentGen && int(d) > maxDist && d < 1<<29 {
+			maxDist = int(d)
 		}
 	}
 	return maxDist
