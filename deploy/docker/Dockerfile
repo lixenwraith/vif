@@ -18,7 +18,7 @@
 
 # Keep this pin equal to the go directive in ../../go.mod. The dependency layer
 # downloads before an older builder reports the mismatch, so drift fails late.
-ARG GO_VERSION=1.27.1
+ARG GO_VERSION=1.27.2
 
 # --- builder -------------------------------------------------------------------
 # The builder is not thin and does not need to be; nothing from it is shipped
