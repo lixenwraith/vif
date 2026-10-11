@@ -102,39 +102,64 @@ func TestCappedTurretStreamsBetweenWavesAndStopsWithTheCooldown(t *testing.T) {
 	}
 }
 
-// TestCappedEmitterSustainsItsRayAndMainFireLeavesItAlone: the last charge
-// converts a burning timed ray in place; the sustained ray outlasts any duration
-// at full strength; main fire at the cap resets no cooldown and flashes no orb.
-func TestCappedEmitterSustainsItsRayAndMainFireLeavesItAlone(t *testing.T) {
+// TestCappedEmitterSustainsItsRayWhileMainFireIsHeld: the last charge converts a
+// burning timed ray in place, held at full strength past any duration while fire
+// requests keep coming, taken by the main cooldown or not; main fire at the cap resets
+// no cooldown and flashes no orb; once requests stop the ray burns out as a timed one,
+// nothing relights it without a request, and one request does.
+func TestCappedEmitterSustainsItsRayWhileMainFireIsHeld(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	weapon := NewWeaponSystem(w).(*WeaponSystem)
 	capTarget(w, 8, 5)
 	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
+	weaponComp.Charges[component.WeaponGun] = 0
 	spec := &component.WeaponSpecs[component.WeaponEmitter]
 	weaponComp.Charges[component.WeaponEmitter] = spec.MaxCharges - 1
 	weapon.Update()
 	orb := weapon.orbsOf(cursor)[component.WeaponEmitter]
-	weapon.fireLoadout(cursor, weaponComp, weapon.orbsOf(cursor))
+	weapon.fire(cursor)
 	timed, ok := w.Components.Ray.GetPtr(orb)
 	if !ok {
 		t.Fatal("no ray fired below the cap")
 	}
 
 	weaponComp.Charges[component.WeaponEmitter] = spec.MaxCharges
-	w.Resources.Time.DeltaTime = 10 * parameter.RayDuration
-	for range 2 {
+	weaponComp.Cooldown[component.WeaponEmitter] = 0 // the timed shot's; main fire at the cap must leave it so
+	w.Resources.Time.DeltaTime = parameter.WeaponCooldownMain
+	for range int(2 * timed.Duration / parameter.WeaponCooldownMain) {
+		weapon.fire(cursor)
 		weapon.Update()
 	}
 	ray, ok := w.Components.Ray.GetPtr(orb)
 	if !ok || ray != timed || ray.Scale != spec.MaxCharges || ray.Remaining != ray.Duration {
-		t.Fatalf("ray at the cap = %+v, want the same ray outliving its duration at scale %d and full strength", ray, spec.MaxCharges)
+		t.Fatalf("held ray at the cap = %+v, want the same ray outliving its duration at scale %d and full strength", ray, spec.MaxCharges)
 	}
-
-	weaponComp.Cooldown[component.WeaponEmitter] = 0
-	weapon.fireLoadout(cursor, weaponComp, weapon.orbsOf(cursor))
 	orbComp, _ := w.Components.Orb.GetPtr(orb)
 	if weaponComp.Cooldown[component.WeaponEmitter] != 0 || orbComp.FlashRemaining != 0 {
 		t.Fatalf("cooldown %v, flash %v after main fire at the cap, want neither touched",
 			weaponComp.Cooldown[component.WeaponEmitter], orbComp.FlashRemaining)
+	}
+
+	w.Resources.Time.DeltaTime = parameter.RayHold
+	weapon.Update()
+	released, ok := w.Components.Ray.GetPtr(orb)
+	if !ok || released.Remaining >= released.Duration {
+		t.Fatalf("ray after the hold lapsed = %+v, want it burning down as a timed ray", released)
+	}
+	w.Resources.Time.DeltaTime = released.Duration
+	weapon.Update()
+	if _, ok := w.Components.Ray.GetPtr(orb); ok {
+		t.Fatal("released ray outlived its duration")
+	}
+
+	w.Resources.Time.DeltaTime = parameter.WeaponCooldownMain
+	weapon.Update()
+	if _, ok := w.Components.Ray.GetPtr(orb); ok {
+		t.Fatal("ray lit at the cap without a fire request")
+	}
+	weapon.fire(cursor)
+	weapon.Update()
+	if _, ok := w.Components.Ray.GetPtr(orb); !ok {
+		t.Fatal("no ray lit at the cap by a fire request")
 	}
 }

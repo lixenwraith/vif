@@ -56,7 +56,7 @@ type WeaponSpec struct {
 	ArcRange      float64       // cells a hit arcs to the nearest other target within
 	MaxedCooldown time.Duration // replaces Cooldown
 	Stream        int           // bullets per stream shot while a wave's cooldown runs
-	Sustained     bool          // the ray never ends
+	Sustained     bool          // the ray lasts while main fire is held
 }
 
 // CursorDamage is a hit on a cursor: energy drained through an active shield,
