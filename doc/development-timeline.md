@@ -22,7 +22,7 @@ Each line folds many commits, so dates within a section are approximate.
 - Audio playback and sound effects were added.
 - Clock handling was unified across frame and game time.
 - Pause drift and ticker lifecycle problems were fixed.
-- CI ran race tests from the first week.
+- CI ran race tests added.
 - Score semantics were replaced by energy.
 
 ## 2025-11 — ECS, events, and rendering foundations
@@ -51,11 +51,11 @@ Each line folds many commits, so dates within a section are approximate.
 ## 2025-12 — Terminal, effects, and architecture
 
 - The renderer was isolated behind a render package.
-- A dedicated terminal package replaced direct `tcell` use.
+- A dedicated terminal package replaced `tcell`.
 - Truecolor and xterm-256 modes became explicit.
 - Resize, tmux zoom, and narrow-status handling stabilized.
 - Frame-copy flushing was removed from the terminal path.
-- The external beep dependency was replaced by piped audio.
+- The external `beep` dependency was replaced by piped audio.
 - Decay, cleaners, and materializers adopted position storage.
 - High-entity queries and spatial limits were expanded.
 - Color blending and destruction-flash paths were optimized.
@@ -72,10 +72,9 @@ Each line folds many commits, so dates within a section are approximate.
 - Energy and heat migrated into ECS components.
 - Ping effects migrated into ECS components.
 - Mode handling became thread-safe.
-- Intent parsing was separated from mode routing.
+- Input intent parsing was separated from mode routing.
 - Timer components and a timekeeper system were added.
-- Focus Catalog was built for dependency exploration.
-- Hierarchy Map grew from the Lixen Map prototype.
+- Hierarchy Map was built for dependency exploration and LLM context filtering.
 - Boost and materialize behavior moved to events.
 - Destruction flash became event-driven.
 - Systems received the world instead of game context.
@@ -91,7 +90,7 @@ Each line folds many commits, so dates within a section are approximate.
 ## 2025-12 to 2026-01 — Physics and combat expansion
 
 - Blossom joined decay as a mirrored particle behavior.
-- Red-energy variants were added to cleaners and nuggets.
+- Negative-energy variants were added to cleaners and nuggets.
 - Fixed-point vector operations supported sub-cell motion.
 - Kinetic components became reusable physics state.
 - Cleaner and materializer motion adopted vector math.
@@ -115,7 +114,7 @@ Each line folds many commits, so dates within a section are approximate.
 - Vampire, buff, rod, and overload mechanics were added.
 - Visual mode, bound-aware motions, Alt keys, and mouse handling extended input.
 - Gameplay values were centralized in the parameter package.
-- Music sequencing and additional sound generation arrived.
+- Music sequencing and additional sound generation added.
 
 ## 2026-01 to 2026-02 — Weapons, species, and navigation
 
@@ -139,7 +138,7 @@ Each line folds many commits, so dates within a section are approximate.
 - Difficulty scaling moved into the FSM game cycle.
 - Transient renderer state was centralized.
 - Strobe effects became a reusable presentation layer.
-- Ember introduced heat-decay invincibility.
+- Ember introduced heat-draining invincibility.
 - Gameplay balance was adjusted around Ember.
 - Shield and Ember behavior were unified.
 - Pylon added a new component, system, and renderer.
@@ -149,7 +148,7 @@ Each line folds many commits, so dates within a section are approximate.
 - Eye added ranged behavior, rendering, and genetic tuning.
 - Composite targeting and pathfinding were corrected.
 - Tower introduced another composite enemy type.
-- Gateway moved repeated spawning out of game scripts.
+- Gateway component and system moved repeated spawning out of game scripts.
 - FSM actions learned to capture payload fields.
 - Route graphs enabled stateful path selection.
 - Genetic adaptation was separated into a bandit learner.
@@ -274,9 +273,9 @@ Each line folds many commits, so dates within a section are approximate.
 ## 2026-09 — Scenarios, browser sessions, and the vif name
 
 - The loaded map became a content-identified scenario that `:n` could change mid-session.
-- Joiners that lacked a scenario were sent it.
+- Joiners that lacked a scenario received it over net.
 - The fleet served scenarios from a node volume replaceable while live.
-- A WebSocket bridge sidecar opened the first browser route.
+- A WebSocket bridge with `websocat` sidecar opened the first browser route.
 - `web/` became the launcher the deployment serves.
 - A running game could `:join` a session.
 - The browser build moved its Go program into a Worker.
@@ -287,12 +286,12 @@ Each line folds many commits, so dates within a section are approximate.
 - Kill credit went to the engaged set or the cursor that landed the killing hit.
 - Pointer play crossed one placement per tick, and APM counted gestures and travel.
 - Music followed APM through seeded, embedded pattern groups.
-- A 256-color text-console render tier landed with console-safe glyphs.
+- 256-color text-console render tier expanded with console-safe glyphs.
 - Cursor weapons moved into one spec table.
 - Turret and beam weapons arrived, mountable on shared hosts.
 - Packaging added FreeBSD and cross-OS installs, a manual, completions, and desktop files.
 - Stable releases were drafted from version tags.
-- The repository, module, and fleet were renamed vif.
+- The repository, module, and fleet were renamed vif (formerly `vi-fighter`).
 - The debug overlay became telemetry cards, and `:debug` gained profiling.
 
 ## 2026-09 to 2026-10 — Scaling, WebSocket, and bots
@@ -305,7 +304,7 @@ Each line folds many commits, so dates within a section are approximate.
 - UDP was dropped in favor of native `wss://` joins.
 - The fleet routed sessions by name on one address.
 - `pkg/websocket` brought a standard-library RFC 6455 stream.
-- The allocator terminated the browser route, and the sidecar was removed.
+- vif-allocator terminated the browser route, and the `websocat` sidecar was removed.
 - vif could serve WebSocket sessions itself.
 - `-join https://<site>` asked a site for a new session.
 - Join and creation budgets were keyed on the player's address.
@@ -328,7 +327,7 @@ Each line folds many commits, so dates within a section are approximate.
 - Replay gained single-tick step back, seek by tick or time, and restart.
 - Checkpoint rings and journaled world digests verified every restored replay copy.
 - Replay stepping moved off the frame loop.
-- Session state was journaled, so replays reproduced pauses and session changes.
+- Session state was journaled, so replays reproduced session changes.
 - Logging moved to one handle per runtime with per-layer scopes.
 - Drop tiers moved into profiles, and all cursor contact took one strike path.
 - Corrections resumed across session resets.
