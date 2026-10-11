@@ -8,16 +8,19 @@ import (
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/pkg/tomlmacro"
 )
 
-// LoadScenario parses a scenario TOML byte slice and populates the Machine
-// Validates all references (states, guards, actions, events)
-// Clears existing graph data before loading
+// LoadScenario parses a one-document scenario, expands the macros it defines and
+// populates the Machine, replacing any graph it held
 func (m *Machine[T]) LoadScenario(data []byte) error {
 	p := toml.NewParser(data)
 	parsed, err := p.Parse()
 	if err != nil {
 		return fmt.Errorf("failed to parse scenario: %w", err)
+	}
+	if parsed, err = tomlmacro.ExpandDocument(parsed); err != nil {
+		return fmt.Errorf("failed to expand scenario: %w", err)
 	}
 	return m.LoadScenarioFromMap(parsed)
 }

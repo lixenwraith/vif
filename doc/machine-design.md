@@ -511,7 +511,8 @@ species scaffold, not in the vocabulary.
   `[behaviors] warden = { file = "behavior/warden.toml" }`). `fsm.ScenarioFiles`
   follows that table as it follows region files and strips it before the
   director decodes. `ScenarioDigest`, the size bounds and the transfer to joiners
-  then cover programs with no new mechanism.
+  then cover programs with no new mechanism, and programs expand against the
+  scenario's macros as region files do ([TOML macros](toml-macros.md)).
 - **Compiled once per run.** The scenario resolves before services and systems
   are built, and the compiled programs are delivered as a world resource. A
   scenario change already rebuilds the run.

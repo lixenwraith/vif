@@ -6,30 +6,11 @@
 [states.TdSetup]
 parent = "Root"
 on_enter = [
-    # Machine-global variable reset (persists across restarts otherwise)
-    { action = "SetVar", payload = { name = "setup_done", value = 0 } },
-    { action = "SetVar", payload = { name = "setup_failed", value = 0 } },
-    { action = "SetVar", payload = { name = "l_p1n", value = 0 } },
-    { action = "SetVar", payload = { name = "r_p1n", value = 0 } },
-    { action = "SetVar", payload = { name = "l_p2n", value = 0 } },
-    { action = "SetVar", payload = { name = "r_p2n", value = 0 } },
-    { action = "SetVar", payload = { name = "l_total", value = 0 } },
-    { action = "SetVar", payload = { name = "r_total", value = 0 } },
-    { action = "SetVar", payload = { name = "left_dead", value = 0 } },
-    { action = "SetVar", payload = { name = "right_dead", value = 0 } },
-    { action = "SetVar", payload = { name = "st_dead", value = 0 } },
-    { action = "SetVar", payload = { name = "t1_dead", value = 0 } },
-    { action = "SetVar", payload = { name = "t2_dead", value = 0 } },
-    { action = "SetVar", payload = { name = "p2l_done", value = 0 } },
-    { action = "SetVar", payload = { name = "p2r_done", value = 0 } },
-    { action = "SetVar", payload = { name = "game_won", value = 0 } },
-    { action = "SetVar", payload = { name = "st_pylon", value = 0 } },
-    { action = "SetVar", payload = { name = "t1_anchor", value = 0 } },
-    { action = "SetVar", payload = { name = "t2_anchor", value = 0 } },
-    { action = "SetVar", payload = { name = "q1_anchor", value = 0 } },
-    { action = "SetVar", payload = { name = "q2_anchor", value = 0 } },
-    { action = "SetVar", payload = { name = "q3_anchor", value = 0 } },
-    { action = "SetVar", payload = { name = "q4_anchor", value = 0 } },
+    { macro = "Zero", each = { name = [
+        "setup_done", "setup_failed", "l_p1n", "r_p1n", "l_p2n", "r_p2n", "l_total", "r_total",
+        "l_dead", "r_dead", "st_dead", "t1_dead", "t2_dead", "l_p2_done", "r_p2_done", "game_won",
+        "st_pylon", "t1_anchor", "t2_anchor", "q1_anchor", "q2_anchor", "q3_anchor", "q4_anchor",
+    ] } },
 
     # Normalize systems and trackers
     { action = "EmitEvent", event = "EventDrainResume" },
@@ -63,199 +44,43 @@ on_enter = [
     { action = "EmitEvent", event = "EventGeneticRegisterSpecies", payload = { species = 7, gene_count = 1, bounds = [{ min = 0.0, max = 1.0 }], perturbation_std_dev = 0.1, is_composite = true, probe_bins = 7 } },
 
     { action = "EmitEvent", event = "EventWallPushCheckRequest" },
-    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 255, b = 255 }, intensity = 1.0, duration_ms = 500 } },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "DEFEND THE TWIN TOWERS" } },
+    { macro = "Announce", color = { r = 255, g = 255, b = 255 }, message = "DEFEND THE TWIN TOWERS" },
 ]
 transitions = [
     { trigger = "Tick", target = "TdSpawnT1", guard = "StateTimeExceeds", guard_args = { ms = 250 } },
 ]
 
-# --- Central towers (loss condition) ---
+[states]
+# Central towers are the loss condition. A quadrant tower is a sacrificial forward
+# base: if it cannot spawn, its group feeds a central tower so the corner gateway
+# never feeds an invalid group.
+TdSpawnT1 = { macro = "Tower", id = "t1", x = 250, y = 95, group = 1, next = "TdSpawnT2", fallback = "TdAbort" }
+TdSpawnT2 = { macro = "Tower", id = "t2", x = 250, y = 155, group = 2, next = "TdSpawnQ1", fallback = "TdAbort" }
+TdSpawnQ1 = { macro = "QuadrantTower", id = "q1", x = 125, y = 62, group = 3, cover = "t1", next = "TdSpawnQ2" }
+TdSpawnQ2 = { macro = "QuadrantTower", id = "q2", x = 375, y = 62, group = 4, cover = "t1", next = "TdSpawnQ3" }
+TdSpawnQ3 = { macro = "QuadrantTower", id = "q3", x = 125, y = 188, group = 5, cover = "t2", next = "TdSpawnQ4" }
+TdSpawnQ4 = { macro = "QuadrantTower", id = "q4", x = 375, y = 188, group = 6, cover = "t2", next = "TdP1TL" }
 
-[states.TdSpawnT1]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = 250, y = 95, target_group_id = 1 }, payload_vars = { entity = "player_entity" } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TdSpawnT2", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 8 }, capture_vars = { entity = "t1_anchor" } },
-    { trigger = "EventTowerSpawnFailed", target = "TdAbort" },
-    { trigger = "Tick", target = "TdAbort", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
-]
-
-[states.TdSpawnT2]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = 250, y = 155, target_group_id = 2 }, payload_vars = { entity = "player_entity" } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TdSpawnQ1", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 8 }, capture_vars = { entity = "t2_anchor" } },
-    { trigger = "EventTowerSpawnFailed", target = "TdAbort" },
-    { trigger = "Tick", target = "TdAbort", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
-]
-
-# --- Quadrant towers (forward bases, sacrificial) ---
-# Spawn failure is non-fatal: fail path points the group at the central tower
-# so the corner gateway never feeds an invalid group
-
-[states.TdSpawnQ1]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = 125, y = 62, target_group_id = 3 }, payload_vars = { entity = "player_entity" } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TdSpawnQ2", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 8 }, capture_vars = { entity = "q1_anchor" } },
-    { trigger = "EventTowerSpawnFailed", target = "TdSpawnQ2", actions = [
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 3, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" } },
-    ] },
-    { trigger = "Tick", target = "TdSpawnQ2", guard = "StateTimeExceeds", guard_args = { ms = 500 }, actions = [
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 3, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" } },
-    ] },
-]
-
-[states.TdSpawnQ2]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = 375, y = 62, target_group_id = 4 }, payload_vars = { entity = "player_entity" } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TdSpawnQ3", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 8 }, capture_vars = { entity = "q2_anchor" } },
-    { trigger = "EventTowerSpawnFailed", target = "TdSpawnQ3", actions = [
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 4, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" } },
-    ] },
-    { trigger = "Tick", target = "TdSpawnQ3", guard = "StateTimeExceeds", guard_args = { ms = 500 }, actions = [
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 4, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" } },
-    ] },
-]
-
-[states.TdSpawnQ3]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = 125, y = 188, target_group_id = 5 }, payload_vars = { entity = "player_entity" } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TdSpawnQ4", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 8 }, capture_vars = { entity = "q3_anchor" } },
-    { trigger = "EventTowerSpawnFailed", target = "TdSpawnQ4", actions = [
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 5, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" } },
-    ] },
-    { trigger = "Tick", target = "TdSpawnQ4", guard = "StateTimeExceeds", guard_args = { ms = 500 }, actions = [
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 5, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" } },
-    ] },
-]
-
-[states.TdSpawnQ4]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = 375, y = 188, target_group_id = 6 }, payload_vars = { entity = "player_entity" } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TdP1TL", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 8 }, capture_vars = { entity = "q4_anchor" } },
-    { trigger = "EventTowerSpawnFailed", target = "TdP1TL", actions = [
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 6, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" } },
-    ] },
-    { trigger = "Tick", target = "TdP1TL", guard = "StateTimeExceeds", guard_args = { ms = 500 }, actions = [
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 6, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" } },
-    ] },
-]
-
-# --- P1 pylon chain: each corner gateway targets its quadrant tower group ---
-
-[states.TdP1TL]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 20, y = 15 } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TdGwTL", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
-    { trigger = "EventPylonSpawnFailed", target = "TdP1TR" },
-    { trigger = "Tick", target = "TdP1TR", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
-]
-
-[states.TdGwTL]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 3, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
-    { action = "IncrementVar", payload = { name = "l_p1n" } },
-]
-transitions = [
-    { trigger = "Tick", target = "TdP1TR" },
-]
-
-[states.TdP1TR]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 480, y = 15 } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TdGwTR", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
-    { trigger = "EventPylonSpawnFailed", target = "TdP1BL" },
-    { trigger = "Tick", target = "TdP1BL", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
-]
-
-[states.TdGwTR]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 4, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
-    { action = "IncrementVar", payload = { name = "r_p1n" } },
-]
-transitions = [
-    { trigger = "Tick", target = "TdP1BL" },
-]
-
-[states.TdP1BL]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 20, y = 235 } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TdGwBL", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
-    { trigger = "EventPylonSpawnFailed", target = "TdP1BR" },
-    { trigger = "Tick", target = "TdP1BR", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
-]
-
-[states.TdGwBL]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 5, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
-    { action = "IncrementVar", payload = { name = "l_p1n" } },
-]
-transitions = [
-    { trigger = "Tick", target = "TdP1BR" },
-]
-
-[states.TdP1BR]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 480, y = 235 } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TdGwBR", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
-    { trigger = "EventPylonSpawnFailed", target = "TdStPylon" },
-    { trigger = "Tick", target = "TdStPylon", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
-]
-
-[states.TdGwBR]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 6, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
-    { action = "IncrementVar", payload = { name = "r_p1n" } },
-]
-transitions = [
-    { trigger = "Tick", target = "TdStPylon" },
-]
+# P1 pylon chain: each corner gateway targets its quadrant tower group
+TdP1TL = { macro = "Pylon", x = 20, y = 15, attach = "TdGwTL", next = "TdP1TR" }
+TdGwTL = { macro = "Gateway", group = 3, count = "l_p1n", next = "TdP1TR" }
+TdP1TR = { macro = "Pylon", x = 480, y = 15, attach = "TdGwTR", next = "TdP1BL" }
+TdGwTR = { macro = "Gateway", group = 4, count = "r_p1n", next = "TdP1BL" }
+TdP1BL = { macro = "Pylon", x = 20, y = 235, attach = "TdGwBL", next = "TdP1BR" }
+TdGwBL = { macro = "Gateway", group = 5, count = "l_p1n", next = "TdP1BR" }
+TdP1BR = { macro = "Pylon", x = 480, y = 235, attach = "TdGwBR", next = "TdStPylon" }
+TdGwBR = { macro = "Gateway", group = 6, count = "r_p1n", next = "TdStPylon" }
 
 # --- ST pylon: snake spawner, storm trigger on death; 2x HP (tuning) ---
 
 [states.TdStPylon]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 250, y = 125, min_hp = 20, max_hp = 200 } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TdStGw", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "st_pylon" } },
-    { trigger = "EventPylonSpawnFailed", target = "TdArm" },
-    { trigger = "Tick", target = "TdArm", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
-]
+macro = "SpawnAwait"
+request = { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 250, y = 125, min_hp = 20, max_hp = 200 } }
+species = 5
+capture = "st_pylon"
+next = "TdStGw"
+refused = "EventPylonSpawnFailed"
+fallback = "TdArm"
 
 [states.TdStGw]
 parent = "Root"
@@ -323,12 +148,7 @@ on_exit = [
     { action = "EmitEvent", event = "EventGrayoutEnd", reconcile = true },
 ]
 transitions = [
-    { trigger = "EventSpeciesKilled", target = "TdQuasarEnd", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 3 } },
-    # Defensive: quasar died OOB without a species kill event
-    { trigger = "Tick", target = "TdQuasarEnd", guard = "And", guard_args = { guards = [
-        { name = "StateTimeExceeds", args = { ms = 2000 } },
-        { name = "StatusBoolEquals", args = { key = "quasar.active", value = false } },
-    ] } },
+    { macro = "Slain", species = 3, active = "quasar.active", target = "TdQuasarEnd" },
 ]
 
 [states.TdQuasarEnd]

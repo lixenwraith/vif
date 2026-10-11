@@ -73,7 +73,9 @@ new one loads before the old one is torn down.
 
 Region files are resolved through the same filesystem as the entry file and
 relative to its directory. They may contain only `[states]`; nested region
-declarations or other top-level keys are rejected. Circular includes and
+declarations or other top-level keys are rejected. The entry's `macro_files` resolve
+the same way and are scenario files too, so the digest covers them; every file
+expands against the entry's macros before regions merge ([TOML macros](toml-macros.md)). Circular includes and
 duplicate state names are errors, and filesystem traversal outside the config
 root is not accepted.
 
@@ -104,6 +106,7 @@ file = "boss.toml" # no initial: dynamic region
 | Field | Meaning |
 |---|---|
 | `description` | Optional short scenario summary, carried with the scenario during transfers. |
+| `macro_files`, `macros` | Macro libraries and definitions every scenario file may invoke ([TOML macros](toml-macros.md)). |
 | `systems.disabled_systems` | Systems disabled after FSM initialization. Names are validated against runtime `System.Name()` values. |
 | `regions.<name>.initial` | Initial state for a region started during machine initialization. Omit for a region spawned later. |
 | `file` | File supplying additional `[states.*]` tables. |
@@ -460,6 +463,7 @@ The loader validates at least:
 - action/guard argument decoding and event payload shapes;
 - legal internal transitions;
 - external-file cycles, illegal top-level content, and duplicate states;
+- macro definitions, argument names and types, recursion and expansion bounds;
 - state hierarchy/path validity;
 - referenced runtime system names during app-level validation.
 
@@ -505,6 +509,7 @@ event counter plus an outer tick transition.
 | Region commands and scheduler adapter | `internal/mode/commands.go`, `internal/engine/scheduler.go` |
 | TOML schema/compiler | `internal/fsm/config.go`, `loader.go`, `builder.go` |
 | External files | `internal/fsm/file_loader.go` |
+| Macro expansion | `pkg/tomlmacro` |
 | Standard actions/guards | `internal/fsm/std/*.go` |
 | Game host adapter | `internal/manifest/fsm_bridge.go` |
 | Current embedded campaign | `internal/asset/scenario/*.toml` |

@@ -2,6 +2,8 @@ description = "Defend two central towers in a sprawling maze against escalating 
 
 # Standalone tower-defense map: fixed 500x250, twin towers, escalating pylons, storm finale
 
+macro_files = ["td_macros.toml"]
+
 [regions.td_main]
 initial = "TdSetup"
 file = "td_main.toml"

@@ -50,6 +50,54 @@ and resource providers common. Touch input maps onto the semantic input bots
 already drive, and [Multi-platform](multi-platform.md) lists the terminal-shaped
 values that remain.
 
+## Authoring
+
+### Build the map and scenario editor
+
+- Priority: P2
+- Affected files: `pkg/tomlmacro`, `internal/fsm`, `internal/manifest/schema.go`,
+  `internal/mode`, `internal/render/renderer`, `internal/resource`
+- Prerequisite: the argument catalog of the dialect kernel
+  ([Behavior machines](machine-design.md) §7)
+- Design: [TOML macros](toml-macros.md)
+
+The editor writes ordinary scenarios: a directory under the user root's `scenario/`
+that loads, digests, transfers and lists like a hand-written one, so nothing at run
+time knows an editor made it.
+
+- **Documents, not a format.** It edits the parsed trees of the entry, region and
+  macro files and saves them with `toml.Marshal`, which drops comments, so it writes
+  only files it owns (a blocks file, a region file per edited region) and opens
+  hand-written ones read-only.
+- **Blocks are macros.** The palette is the scenario's macro set and a block's form
+  its parameters, defaults and `doc`. A placed block is an invocation, and one
+  placed as a state (`Name = { macro = ... }`) is a node the graph view draws. A
+  block from a shared library is copied into the scenario's macro files on first
+  use, since expansion reads nothing outside the scenario.
+- **Macro metadata still needed**, each additive to `pkg/tomlmacro`: reference kinds
+  (`state`, `region`, `var`, `event`, `status`) the expander checks as strings, so
+  the editor offers pickers and draws an edge per `state` argument; a `point` kind
+  the map canvas shows as a draggable marker for pylons, towers and spawns;
+  parameter order and per-parameter docs, since a TOML table has no order; root
+  `[[expand]]` for blocks spanning several states or a whole region; and provenance,
+  so a load error such as an unknown target lands on the block that produced it.
+- **Vocabulary.** Action, guard and event pickers read `-schema`, which lists names
+  only until the argument catalog lands.
+- **Map layer.** Geometry is generated at run time (`EventLevelSetup`, maze rooms,
+  `.vifimg` walls). A painted map needs a static form the digest covers, and
+  `.vifimg` assets come from the `image/` category, which it does not and a joiner
+  is not sent. Decide between a TOML wall encoding (rectangles or run-length rows)
+  and admitting `.vifimg` to the scenario container under its bounds.
+- **In the game.** An editor mode beside command and visual in `internal/mode` acts on
+  a paused world and draws through an overlay like `:graph`. Applying an edit
+  validates with `resource.ValidateScenario` and restarts on it as `:n` does, since
+  a run plays one scenario. Editing inside a multiplayer session is out of scope.
+
+Phases: the argument catalog; reference kinds, order and provenance; a read-only
+graph of a scenario's regions, states and blocks; placing and editing blocks into
+editor-owned files; the map layer and point markers; root `[[expand]]` blocks and
+library copies.
+
 ## Browser sessions
 
 ### Serve wss from vif's own listener

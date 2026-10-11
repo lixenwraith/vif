@@ -12,11 +12,11 @@ parent = "Root"
 transitions = [
     { trigger = "EventSpeciesKilled", internal = true, guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "dead_pylon", x = "dead_x" }, actions = [
         { action = "SetVar", payload = { name = "st_dead", value = 1 }, guard = "VarCompareVar", guard_args = { var_a = "dead_pylon", op = "eq", var_b = "st_pylon" } },
-        { action = "IncrementVar", payload = { name = "left_dead" }, guard = "And", guard_args = { guards = [
+        { action = "IncrementVar", payload = { name = "l_dead" }, guard = "And", guard_args = { guards = [
             { name = "VarCompareVar", args = { var_a = "dead_pylon", op = "neq", var_b = "st_pylon" } },
             { name = "VarCompare", args = { var = "dead_x", op = "lt", value = 250 } },
         ] } },
-        { action = "IncrementVar", payload = { name = "right_dead" }, guard = "And", guard_args = { guards = [
+        { action = "IncrementVar", payload = { name = "r_dead" }, guard = "And", guard_args = { guards = [
             { name = "VarCompareVar", args = { var_a = "dead_pylon", op = "neq", var_b = "st_pylon" } },
             { name = "VarCompare", args = { var = "dead_x", op = "gte", value = 250 } },
         ] } },
@@ -24,74 +24,17 @@ transitions = [
 
     { trigger = "EventSpeciesKilled", internal = true, guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 8 }, capture_vars = { entity = "dead_tower" }, actions = [
         # Central death flags first: retarget guards below read them post-update
-        { action = "SetVar", payload = { name = "t1_dead", value = 1 }, guard = "VarCompareVar", guard_args = { var_a = "dead_tower", op = "eq", var_b = "t1_anchor" } },
-        { action = "SetVar", payload = { name = "t2_dead", value = 1 }, guard = "VarCompareVar", guard_args = { var_a = "dead_tower", op = "eq", var_b = "t2_anchor" } },
+        { macro = "MarkFallen", each = { tower = ["t1", "t2"] } },
 
         { action = "EmitEvent", event = "EventNavigationRegraph", delay_ms = 100 },
-        # T1 fell → group 1 and top-quadrant groups to T2 (updates on live-anchor groups self-correct)
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 1, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" }, guard = "And", guard_args = { guards = [
-            { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "t1_anchor" } },
-            { name = "VarEquals", args = { var = "t2_dead", value = 0 } },
-        ] } },
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 3, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" }, guard = "And", guard_args = { guards = [
-            { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "t1_anchor" } },
-            { name = "VarEquals", args = { var = "t2_dead", value = 0 } },
-        ] } },
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 4, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" }, guard = "And", guard_args = { guards = [
-            { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "t1_anchor" } },
-            { name = "VarEquals", args = { var = "t2_dead", value = 0 } },
-        ] } },
+        # A central tower fell: its group and its quadrants' groups go to the other one
+        # (updates on live-anchor groups self-correct)
+        { macro = "RetargetOnLoss", lost = "t1", to = "t2", each = { group = [1, 3, 4] } },
+        { macro = "RetargetOnLoss", lost = "t2", to = "t1", each = { group = [2, 5, 6] } },
 
-        # T2 fell → group 2 and bottom-quadrant groups to T1
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 2, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" }, guard = "And", guard_args = { guards = [
-            { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "t2_anchor" } },
-            { name = "VarEquals", args = { var = "t1_dead", value = 0 } },
-        ] } },
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 5, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" }, guard = "And", guard_args = { guards = [
-            { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "t2_anchor" } },
-            { name = "VarEquals", args = { var = "t1_dead", value = 0 } },
-        ] } },
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 6, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" }, guard = "And", guard_args = { guards = [
-            { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "t2_anchor" } },
-            { name = "VarEquals", args = { var = "t1_dead", value = 0 } },
-        ] } },
-
-        # Quadrant tower fell → its group to nearest central, fallback to other central
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 3, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" }, guard = "And", guard_args = { guards = [
-            { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "q1_anchor" } },
-            { name = "VarEquals", args = { var = "t1_dead", value = 0 } },
-        ] } },
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 3, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" }, guard = "And", guard_args = { guards = [
-            { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "q1_anchor" } },
-            { name = "VarEquals", args = { var = "t1_dead", value = 1 } },
-            { name = "VarEquals", args = { var = "t2_dead", value = 0 } },
-        ] } },
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 4, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" }, guard = "And", guard_args = { guards = [
-            { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "q2_anchor" } },
-            { name = "VarEquals", args = { var = "t1_dead", value = 0 } },
-        ] } },
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 4, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" }, guard = "And", guard_args = { guards = [
-            { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "q2_anchor" } },
-            { name = "VarEquals", args = { var = "t1_dead", value = 1 } },
-            { name = "VarEquals", args = { var = "t2_dead", value = 0 } },
-        ] } },
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 5, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" }, guard = "And", guard_args = { guards = [
-            { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "q3_anchor" } },
-            { name = "VarEquals", args = { var = "t2_dead", value = 0 } },
-        ] } },
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 5, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" }, guard = "And", guard_args = { guards = [
-            { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "q3_anchor" } },
-            { name = "VarEquals", args = { var = "t2_dead", value = 1 } },
-            { name = "VarEquals", args = { var = "t1_dead", value = 0 } },
-        ] } },
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 6, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" }, guard = "And", guard_args = { guards = [
-            { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "q4_anchor" } },
-            { name = "VarEquals", args = { var = "t2_dead", value = 0 } },
-        ] } },
-        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 6, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" }, guard = "And", guard_args = { guards = [
-            { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "q4_anchor" } },
-            { name = "VarEquals", args = { var = "t2_dead", value = 1 } },
-            { name = "VarEquals", args = { var = "t1_dead", value = 0 } },
-        ] } },
+        { macro = "QuadrantLoss", quad = "q1", group = 3, near = "t1", far = "t2" },
+        { macro = "QuadrantLoss", quad = "q2", group = 4, near = "t1", far = "t2" },
+        { macro = "QuadrantLoss", quad = "q3", group = 5, near = "t2", far = "t1" },
+        { macro = "QuadrantLoss", quad = "q4", group = 6, near = "t2", far = "t1" },
     ] },
 ]

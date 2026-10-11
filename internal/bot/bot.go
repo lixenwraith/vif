@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/tomlmacro"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -44,6 +45,9 @@ type Graph struct {
 func ParseGraph(name string, data []byte) (*Graph, error) {
 	doc, err := toml.NewParser(data).Parse()
 	if err != nil {
+		return nil, fmt.Errorf("bot %s: %w", name, err)
+	}
+	if doc, err = tomlmacro.ExpandDocument(doc); err != nil {
 		return nil, fmt.Errorf("bot %s: %w", name, err)
 	}
 	g := &Graph{Name: name, Settings: Settings{ActionsPerSecond: DefaultActionsPerSecond}, doc: doc}

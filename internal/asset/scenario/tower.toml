@@ -119,93 +119,15 @@ transitions = [
 # Each pylon: spawn request → wait for response → capture entity → attach gateway → next
 # Failed spawns skip to next pylon (gateway not attached for that corner)
 
-# Pylon 1: Top-Left
-[states.TowerSpawnP1]
-parent = "TowerCycle"
-on_enter = [
-    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_tl_x", Y = "p_tl_y" } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TowerAttachGW1", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
-    { trigger = "EventPylonSpawnFailed", target = "TowerSpawnP2" },
-    { trigger = "Tick", target = "TowerSpawnP2", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
-]
-
-[states.TowerAttachGW1]
-parent = "TowerCycle"
-on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
-    { action = "IncrementVar", payload = { name = "pylons_spawned" } },
-]
-transitions = [
-    { trigger = "Tick", target = "TowerSpawnP2" },
-]
-
-# Pylon 2: Top-Right
-[states.TowerSpawnP2]
-parent = "TowerCycle"
-on_enter = [
-    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_tr_x", Y = "p_tr_y" } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TowerAttachGW2", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
-    { trigger = "EventPylonSpawnFailed", target = "TowerSpawnP3" },
-    { trigger = "Tick", target = "TowerSpawnP3", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
-]
-
-[states.TowerAttachGW2]
-parent = "TowerCycle"
-on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
-    { action = "IncrementVar", payload = { name = "pylons_spawned" } },
-]
-transitions = [
-    { trigger = "Tick", target = "TowerSpawnP3" },
-]
-
-# Pylon 3: Bottom-Left
-[states.TowerSpawnP3]
-parent = "TowerCycle"
-on_enter = [
-    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_bl_x", Y = "p_bl_y" } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TowerAttachGW3", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
-    { trigger = "EventPylonSpawnFailed", target = "TowerSpawnP4" },
-    { trigger = "Tick", target = "TowerSpawnP4", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
-]
-
-[states.TowerAttachGW3]
-parent = "TowerCycle"
-on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
-    { action = "IncrementVar", payload = { name = "pylons_spawned" } },
-]
-transitions = [
-    { trigger = "Tick", target = "TowerSpawnP4" },
-]
-
-# Pylon 4: Bottom-Right
-[states.TowerSpawnP4]
-parent = "TowerCycle"
-on_enter = [
-    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_br_x", Y = "p_br_y" } },
-]
-transitions = [
-    { trigger = "EventSpeciesCreated", target = "TowerAttachGW4", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
-    { trigger = "EventPylonSpawnFailed", target = "TowerActive" },
-    { trigger = "Tick", target = "TowerActive", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
-]
-
-[states.TowerAttachGW4]
-parent = "TowerCycle"
-on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
-    { action = "IncrementVar", payload = { name = "pylons_spawned" } },
-]
-transitions = [
-    { trigger = "Tick", target = "TowerActive" },
-]
+[states]
+TowerSpawnP1 = { macro = "TowerPylon", corner = "tl", attach = "TowerAttachGW1", next = "TowerSpawnP2" }
+TowerAttachGW1 = { macro = "TowerGateway", next = "TowerSpawnP2" }
+TowerSpawnP2 = { macro = "TowerPylon", corner = "tr", attach = "TowerAttachGW2", next = "TowerSpawnP3" }
+TowerAttachGW2 = { macro = "TowerGateway", next = "TowerSpawnP3" }
+TowerSpawnP3 = { macro = "TowerPylon", corner = "bl", attach = "TowerAttachGW3", next = "TowerSpawnP4" }
+TowerAttachGW3 = { macro = "TowerGateway", next = "TowerSpawnP4" }
+TowerSpawnP4 = { macro = "TowerPylon", corner = "br", attach = "TowerAttachGW4", next = "TowerActive" }
+TowerAttachGW4 = { macro = "TowerGateway", next = "TowerActive" }
 
 # --- Active: Gateways handle spawning, FSM monitors win/loss ---
 

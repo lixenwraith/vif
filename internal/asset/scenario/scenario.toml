@@ -2,6 +2,8 @@ description = "Survive escalating storms, lure Krakens through mazes, and defend
 
 # Root configuration with region definitions
 
+macro_files = ["macros.toml"]
+
 [regions.main]
 file = "main.toml"
 enabled_systems = ["glyph"]

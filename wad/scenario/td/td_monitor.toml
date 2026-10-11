@@ -15,45 +15,22 @@ transitions = [
     { trigger = "Tick", target = "MonVictory", guard = "VarEquals", guard_args = { var = "game_won", value = 1 } },
 ]
 
-[states.MonDefeat]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 500 } },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "GAME OVER - RESTARTING" } },
-]
-transitions = [
-    { trigger = "Tick", target = "MonReset", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
-]
-
-[states.MonVictory]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 0, g = 255, b = 0 }, intensity = 1.0, duration_ms = 500 } },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "TOWER DEFENSE CLEARED" } },
-]
-transitions = [
-    { trigger = "Tick", target = "MonReset", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
-]
+[states]
+MonDefeat = { macro = "Ending", color = { r = 255, g = 0, b = 0 }, message = "GAME OVER - RESTARTING" }
+MonVictory = { macro = "Ending", color = { r = 0, g = 255, b = 0 }, message = "TOWER DEFENSE CLEARED" }
 
 [states.MonReset]
 parent = "Root"
 on_enter = [
     # Entity/system teardown
-    { action = "EmitEvent", event = "EventEyeCancelRequest" },
-    { action = "EmitEvent", event = "EventSnakeCancelRequest" },
-    { action = "EmitEvent", event = "EventStormCancelRequest" },
-    { action = "EmitEvent", event = "EventQuasarCancelRequest" },
-    { action = "EmitEvent", event = "EventSwarmCancelRequest" },
-    { action = "EmitEvent", event = "EventPylonCancelRequest" },
-    { action = "EmitEvent", event = "EventTowerCancelRequest" },
-    { action = "EmitEvent", event = "EventGrayoutEnd" },
-    { action = "EmitEvent", event = "EventDrainResume" },
+    { macro = "Emit", each = { event = [
+        "EventEyeCancelRequest", "EventSnakeCancelRequest", "EventStormCancelRequest",
+        "EventQuasarCancelRequest", "EventSwarmCancelRequest", "EventPylonCancelRequest",
+        "EventTowerCancelRequest", "EventGrayoutEnd", "EventDrainResume",
+    ] } },
     { action = "ResetKillVars" },
     { action = "EmitEvent", event = "EventCycleDamageMultiplierReset" },
     # Region teardown (variable reset happens in TdSetup on respawn)
-    { action = "TerminateRegion", region = "td_main" },
-    { action = "TerminateRegion", region = "td_counter" },
-    { action = "TerminateRegion", region = "td_esc" },
-    { action = "TerminateRegion", region = "td_storm" },
+    { macro = "Terminate", each = { region = ["td_main", "td_counter", "td_esc", "td_storm"] } },
     { action = "EmitEvent", event = "EventGameResetRequest" },
 ]
