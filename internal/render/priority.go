@@ -34,8 +34,8 @@ const (
 	PrioritySwarm
 	PriorityHealthBar // Body-centered bars must compose over species geometry.
 
-	// === Cleaner ===
-	PriorityCleaner
+	// === Tracer ===
+	PriorityTracer
 
 	// === Materialize Effects ===
 	PriorityMaterialize

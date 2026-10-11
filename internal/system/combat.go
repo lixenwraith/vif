@@ -67,7 +67,7 @@ type CombatSystem struct {
 // combatAttackNames keys the damage each attack family deals, which is how a
 // weapon's effect reads in telemetry
 var combatAttackNames = [component.CombatAttackTypeCount]string{
-	component.CombatAttackProjectile:   "projectile",
+	component.CombatAttackTracer:       "tracer",
 	component.CombatAttackShield:       "shield",
 	component.CombatAttackLightning:    "lightning",
 	component.CombatAttackExplosion:    "explosion",
@@ -804,7 +804,7 @@ func (s *CombatSystem) tickStatus(e core.Entity, c *component.CombatComponent, s
 }
 
 // chainOrigin is the emitter geometry of a chained attack. The chain declares the
-// owner as its emitter, so its geometry is the owner's: a cleaner's impact cell is
+// owner as its emitter, so its geometry is the owner's: a tracer's impact cell is
 // the target's own cell, and a drain zap drawn from it has no length.
 func (s *CombatSystem) chainOrigin(owner core.Entity, x, y int, has bool) (int, int, bool) {
 	if pos, ok := s.world.Positions.GetPosition(owner); ok {

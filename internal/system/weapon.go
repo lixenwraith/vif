@@ -35,6 +35,10 @@ type WeaponSystem struct {
 
 	rng *vmath.FastRand // shot spread; a cursor's shots are this instance's alone
 
+	// Tracers in flight, read detached: one destroyed this tick frees its cells for the next
+	tracerBuf []core.Entity
+	glyphBuf  []core.Entity
+
 	// Per-cursor loadout, by weapon kind
 	statHeld [component.WeaponCount]*status.PlayerBool
 	statOrbs *status.PlayerInt
@@ -45,6 +49,12 @@ type WeaponSystem struct {
 	statOrbsReaped *atomic.Int64
 	statKind       *atomic.Int64
 	rejects        rejectionTelemetry
+
+	statTracers      *atomic.Int64
+	statTracerWalls  *atomic.Int64
+	statTracerBounds *atomic.Int64
+	statTracerSteps  *atomic.Int64
+	buffers          bufferTelemetry
 
 	toggle
 }
@@ -68,6 +78,11 @@ func NewWeaponSystem(world *engine.World) engine.System {
 	// references rather than entities.
 	s.statOrbsReaped = reg.Ints.Get("weapon.orbs_reaped")
 	s.rejects = newRejectionTelemetry(reg, "weapon")
+	s.statTracers = reg.Ints.Get("weapon.tracers")
+	s.statTracerWalls = reg.Ints.Get("weapon.tracer_wall_collisions")
+	s.statTracerBounds = reg.Ints.Get("weapon.tracer_boundary_steps")
+	s.statTracerSteps = reg.Ints.Get("weapon.tracer_grid_steps")
+	s.buffers = newBufferTelemetry(reg, "weapon", "tracers", "glyphs")
 
 	s.Init()
 	return s
@@ -88,6 +103,12 @@ func (s *WeaponSystem) Init() {
 	s.statOrbsReaped.Store(0)
 	s.statKind.Store(0)
 	s.rejects.Reset()
+	s.tracerBuf, s.glyphBuf = s.tracerBuf[:0], s.glyphBuf[:0]
+	s.statTracers.Store(0)
+	s.statTracerWalls.Store(0)
+	s.statTracerBounds.Store(0)
+	s.statTracerSteps.Store(0)
+	s.buffers.Reset()
 	s.enabled = true
 }
 
@@ -101,6 +122,7 @@ func (s *WeaponSystem) Priority() int { return parameter.PriorityWeapon }
 func (s *WeaponSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventWeaponAddRequest,
+		event.EventWeaponRemoveRequest,
 		event.EventEnergyCrossedZero,
 		event.EventWeaponFireRequest,
 		event.EventCursorDespawned,
@@ -165,10 +187,24 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 			s.addWeapon(cursor, payload.Weapon)
 		}
 
+	case event.EventWeaponRemoveRequest:
+		if payload, ok := ev.Payload.(*event.WeaponRemoveRequestPayload); ok {
+			if payload.Weapon < 0 || payload.Weapon >= component.WeaponCount {
+				s.statKind.Add(1)
+				return
+			}
+			cursor := s.world.ResolveOwnedCursor(payload.Entity)
+			if cursor == 0 {
+				s.rejects.cursor.Add(1)
+				return
+			}
+			s.removeWeapon(cursor, payload.Weapon)
+		}
+
 	case event.EventWeaponFireRequest:
 		if payload, ok := ev.Payload.(*event.WeaponFireRequestPayload); ok {
 			if cursor := s.world.ResolveOwnedCursor(payload.Entity); cursor != 0 {
-				s.handleFireMain(cursor)
+				s.fire(cursor)
 			} else {
 				s.rejects.cursor.Add(1)
 			}
@@ -224,6 +260,8 @@ func (s *WeaponSystem) Update() {
 		s.advanceStreams(cursor, weaponComp, orbs, dt)
 		return true
 	})
+
+	s.advanceTracers()
 }
 
 // advanceStreams fires a capped kind's stream shots while its wave cooldown runs,
@@ -269,7 +307,8 @@ func (s *WeaponSystem) addWeapon(cursor core.Entity, weapon component.WeaponType
 	}
 }
 
-// removeAllWeapons strips one cursor's loadout and destroys only its own orbs
+// removeAllWeapons strips the loot from one cursor's loadout and destroys only
+// its own orbs; an innate kind stays, so a zero crossing costs the gun nothing
 func (s *WeaponSystem) removeAllWeapons(cursor core.Entity) {
 	weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor)
 	if !ok {
@@ -278,14 +317,31 @@ func (s *WeaponSystem) removeAllWeapons(cursor core.Entity) {
 
 	s.destroyCursorOrbs(cursor)
 
-	weaponComp.Charges = [component.WeaponCount]int{}
-	weaponComp.Cooldown = [component.WeaponCount]time.Duration{}
-	weaponComp.Stream = [component.WeaponCount]time.Duration{}
+	for wt := range weaponComp.Charges {
+		if component.WeaponSpecs[wt].Innate {
+			continue
+		}
+		weaponComp.Charges[wt], weaponComp.Cooldown[wt], weaponComp.Stream[wt] = 0, 0, 0
+	}
 
 	s.publishLoadout(cursor, weaponComp)
 	if slot, ok := s.world.CursorSlot(cursor); ok {
 		s.statOrbs.Store(slot, 0)
 	}
+}
+
+// removeWeapon takes one kind from a cursor, its orb with it; a level takes the
+// gun away this way for a region fought without it
+func (s *WeaponSystem) removeWeapon(cursor core.Entity, weapon component.WeaponType) {
+	weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor)
+	if !ok {
+		return
+	}
+	weaponComp.Charges[weapon], weaponComp.Cooldown[weapon], weaponComp.Stream[weapon] = 0, 0, 0
+	if orb := s.orbsOf(cursor)[weapon]; orb != 0 {
+		event.EmitDeath(s.world.Resources.Event.Queue, 0, orb)
+	}
+	s.publishLoadout(cursor, weaponComp)
 }
 
 // emitterCell is the cell a weapon's shot leaves from: its orb's, or the cursor's
@@ -343,7 +399,7 @@ func (s *WeaponSystem) reapOrbs() {
 // admission is D-2's: an orb belongs to a cursor this instance simulates, and to a
 // weapon that cursor still holds a charge of.
 func (s *WeaponSystem) orbOwnership(orb *component.OrbComponent) (slot uint8, weapon component.WeaponType, ok bool) {
-	if orb.WeaponType < 0 || orb.WeaponType >= component.WeaponCount {
+	if orb.WeaponType < 0 || orb.WeaponType >= component.WeaponCount || component.WeaponSpecs[orb.WeaponType].FromCursor {
 		return 0, 0, false
 	}
 	cursor := s.world.ResolveOwnedCursor(orb.OwnerEntity)
@@ -393,7 +449,7 @@ func (s *WeaponSystem) ensureOrbs(cursor core.Entity, slot uint8, weaponComp *co
 	orbs := s.orbs[slot]
 	changed := false
 	for wt := range weaponComp.Charges {
-		if weaponComp.Charges[wt] <= 0 || orbs[wt] != 0 {
+		if weaponComp.Charges[wt] <= 0 || orbs[wt] != 0 || component.WeaponSpecs[wt].FromCursor {
 			continue
 		}
 		orbEntity := s.spawnOrbEntity(cursor, component.WeaponType(wt))
@@ -660,39 +716,20 @@ func (s *WeaponSystem) destroyAllOrbs() {
 	}
 }
 
-// handleFireMain fires one cursor's main weapon and its ready loadout
-func (s *WeaponSystem) handleFireMain(cursor core.Entity) {
+// fire discharges one cursor's loadout on a main-fire request, under main fire's cooldown
+func (s *WeaponSystem) fire(cursor core.Entity) {
 	weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor)
 	if !ok || weaponComp.MainFireCooldown > 0 {
 		return
 	}
-	// Reset cooldown
 	weaponComp.MainFireCooldown = parameter.WeaponCooldownMain
 	s.statMainFired.Add(1)
-
-	// Determine color type from this cursor's energy polarity
-	colorType := component.CleanerColorPositive
-	if energyComp, ok := s.world.Components.Energy.GetPtr(cursor); ok {
-		if energyComp.Current < 0 {
-			colorType = component.CleanerColorNegative
-		}
-	}
-
-	// Fire Main Weapon (Cleaner)
-	if pos, ok := s.world.CursorCell(cursor); ok {
-		s.world.PushLocal(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
-			Entity:    cursor,
-			OriginX:   pos.X,
-			OriginY:   pos.Y,
-			ColorType: colorType,
-		})
-	}
-
-	s.fireAllWeapons(cursor, weaponComp, s.orbsOf(cursor))
+	s.fireLoadout(cursor, weaponComp, s.orbsOf(cursor))
 }
 
-// fireAllWeapons discharges every ready weapon in one cursor's loadout, each from its orb
-func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.WeaponComponent, orbs orbSlots) {
+// fireLoadout discharges every ready kind of one cursor's loadout, each from its
+// orb or, holding none, from the cursor
+func (s *WeaponSystem) fireLoadout(cursor core.Entity, weaponComp *component.WeaponComponent, orbs orbSlots) {
 	cursorPos, ok := s.world.CursorCell(cursor)
 	if !ok {
 		return
@@ -738,6 +775,8 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 		case component.DeliveryRay:
 			// A sustained ray is advanceRays's; main fire leaves it alone
 			fired = !(capped && spec.Sustained) && len(assignments) > 0 && s.fireRay(cursor, orbs[wt], charges)
+		case component.DeliveryTracer:
+			fired = s.fireTracers(cursor, x, y, spec, charges, s.palette(cursor))
 		}
 		if !fired {
 			continue
@@ -1032,4 +1071,370 @@ func (s *WeaponSystem) clearLoadout(slot uint8) {
 func (s *WeaponSystem) clearSlot(slot uint8) {
 	s.clearLoadout(slot)
 	s.statOrbs.Store(slot, 0)
+}
+
+// fireTracers launches the gun's volley from a cell: one streak per direction the
+// kind covers and per lane its charges add, skipping a lane that starts in a wall
+// or off the map. Every tracer is this instance's own (D-6).
+func (s *WeaponSystem) fireTracers(cursor core.Entity, originX, originY int, spec *component.WeaponSpec, charges int, palette component.WeaponPalette) bool {
+	config := s.world.Resources.Config
+	minFlightX, maxFlightX := tracerFlightBounds(config.MapWidth)
+	minFlightY, maxFlightY := tracerFlightBounds(config.MapHeight)
+	ox, oy := vmath.Point{X: originX, Y: originY}.CenterF()
+
+	fired := false
+	for _, lane := range component.TracerLanes(charges) {
+		off := float64(lane)
+		for _, d := range component.TracerCardinals {
+			if spec.Directions&d == 0 {
+				continue
+			}
+			var vx, vy, sx, sy, tx, ty float64
+			switch d {
+			case component.TracerRight:
+				vx, sx, sy, tx, ty = parameter.TracerHorizontalSpeed, ox, oy+off, maxFlightX, oy+off
+			case component.TracerLeft:
+				vx, sx, sy, tx, ty = -parameter.TracerHorizontalSpeed, ox, oy+off, minFlightX, oy+off
+			case component.TracerDown:
+				vy, sx, sy, tx, ty = parameter.TracerVerticalSpeed, ox+off, oy, ox+off, maxFlightY
+			case component.TracerUp:
+				vy, sx, sy, tx, ty = -parameter.TracerVerticalSpeed, ox+off, oy, ox+off, minFlightY
+			}
+			start := vmath.PointAtF(sx, sy)
+			if s.world.Positions.IsOutOfBounds(start.X, start.Y) ||
+				s.world.Positions.HasBlockingWallAt(start.X, start.Y, component.WallBlockKinetic) {
+				continue
+			}
+			s.spawnTracer(cursor, palette, start, vx, vy, sx, sy, tx, ty)
+			fired = true
+		}
+	}
+	if fired {
+		s.world.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{ID: parameter.Sfx.Bullet})
+	}
+	return fired
+}
+
+// spawnTracer creates one streak: its cell first so the spatial index holds it, then its components
+func (s *WeaponSystem) spawnTracer(owner core.Entity, palette component.WeaponPalette, start vmath.Point, vx, vy, sx, sy, tx, ty float64) {
+	var trail [parameter.TracerTrailLength]vmath.Point
+	trail[0] = start
+	entity := s.world.CreateEntity(core.DomainPlayer)
+	s.world.Positions.SetPosition(entity, component.PositionComponent{X: start.X, Y: start.Y})
+	s.world.Components.Tracer.SetComponent(entity, component.TracerComponent{
+		OwnerEntity: owner, TargetX: tx, TargetY: ty, TrailRing: trail, TrailLen: 1, Palette: palette,
+	})
+	s.world.Components.Kinetic.SetComponent(entity, component.KineticComponent{
+		Kinetic: physics.Kinetic{PreciseX: sx, PreciseY: sy, VelX: vx, VelY: vy},
+	})
+	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
+		Mask: component.ProtectFromSpecies | component.ProtectFromDeath,
+	})
+}
+
+// advanceTracers moves every streak, sweeping each crossed cell for walls, combat
+// targets and glyphs, and drains a blocked one's trail to its stop point
+func (s *WeaponSystem) advanceTracers() {
+	config := s.world.Resources.Config
+
+	// Tracers are destroyed immediately to free their spatial cells for later
+	// tracers in this tick, so the entity order must remain detached.
+	s.tracerBuf = append(s.tracerBuf[:0], s.world.Components.Tracer.Entities()...)
+	s.buffers.Observe(0, len(s.tracerBuf))
+	s.statTracers.Store(int64(len(s.tracerBuf)))
+	if len(s.tracerBuf) == 0 {
+		return
+	}
+
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
+	gameWidth := config.MapWidth
+	gameHeight := config.MapHeight
+
+	for _, tracerEntity := range s.tracerBuf {
+		tracer, ok := s.world.Components.Tracer.GetPtr(tracerEntity)
+		if !ok {
+			continue
+		}
+
+		if tracer.Blocked {
+			tracer.DrainRemaining -= tracer.DrainSpeed * dtSec
+			if tracer.DrainRemaining <= 0 {
+				s.world.DestroyEntity(tracerEntity)
+			}
+			continue
+		}
+
+		kineticComp, ok := s.world.Components.Kinetic.GetPtr(tracerEntity)
+		if !ok {
+			continue
+		}
+		oldPos, ok := s.world.Positions.GetPosition(tracerEntity)
+		if !ok {
+			continue
+		}
+
+		prevPreciseX := kineticComp.PreciseX
+		prevPreciseY := kineticComp.PreciseY
+		physics.Integrate(&kineticComp.Kinetic, dtSec)
+		prevCell := vmath.PointAtF(prevPreciseX, prevPreciseY)
+		newCell := vmath.PointAtF(kineticComp.PreciseX, kineticComp.PreciseY)
+
+		blocked := false
+		var blockGridX, blockGridY int
+
+		if kineticComp.VelY != 0 && kineticComp.VelX == 0 {
+			fromY, toY := prevCell.Y, newCell.Y
+			x := oldPos.X
+			step := 1
+			if kineticComp.VelY < 0 {
+				step = -1
+			}
+
+			lastValidY := fromY
+			for y := fromY + step; (step > 0 && y <= toY) || (step < 0 && y >= toY); y += step {
+				s.statTracerSteps.Add(1)
+				// Skip OOB cells (the tracer flies off-screen, lifecycle handles destruction)
+				if y < 0 || y >= gameHeight {
+					s.statTracerBounds.Add(1)
+					appendTracerTrail(tracer, x, y)
+					lastValidY = y
+					continue
+				}
+
+				if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
+					s.statTracerWalls.Add(1)
+					blocked = true
+					blockGridX, blockGridY = x, lastValidY
+					break
+				}
+
+				// Combat + glyph; the combat target blocks the head at this cell.
+				if s.tracerStrike(x, y, tracerEntity, tracer.OwnerEntity,
+					kineticComp.VelX, kineticComp.VelY, tracer.Palette) {
+					blocked = true
+					blockGridX, blockGridY = x, y
+					appendTracerTrail(tracer, x, y)
+					break
+				}
+
+				appendTracerTrail(tracer, x, y)
+				lastValidY = y
+			}
+		} else if kineticComp.VelX != 0 {
+			fromX, toX := prevCell.X, newCell.X
+			y := oldPos.Y
+			step := 1
+			if kineticComp.VelX < 0 {
+				step = -1
+			}
+
+			lastValidX := fromX
+			for x := fromX + step; (step > 0 && x <= toX) || (step < 0 && x >= toX); x += step {
+				s.statTracerSteps.Add(1)
+				if x < 0 || x >= gameWidth {
+					s.statTracerBounds.Add(1)
+					appendTracerTrail(tracer, x, y)
+					lastValidX = x
+					continue
+				}
+
+				if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
+					s.statTracerWalls.Add(1)
+					blocked = true
+					blockGridX, blockGridY = lastValidX, y
+					break
+				}
+
+				if s.tracerStrike(x, y, tracerEntity, tracer.OwnerEntity,
+					kineticComp.VelX, kineticComp.VelY, tracer.Palette) {
+					blocked = true
+					blockGridX, blockGridY = x, y
+					appendTracerTrail(tracer, x, y)
+					break
+				}
+
+				appendTracerTrail(tracer, x, y)
+				lastValidX = x
+			}
+		}
+
+		if blocked {
+			tracer.Blocked = true
+
+			// Capture drain speed from current velocity (don't zero — combat events need it)
+			drainSpeed := kineticComp.VelX
+			if drainSpeed < 0 {
+				drainSpeed = -drainSpeed
+			}
+			if drainSpeed == 0 {
+				drainSpeed = kineticComp.VelY
+				if drainSpeed < 0 {
+					drainSpeed = -drainSpeed
+				}
+			}
+			tracer.DrainSpeed = drainSpeed
+
+			drainDist := float64(tracer.TrailLen)
+			tracer.DrainRemaining = drainDist
+			tracer.DrainTotal = drainDist
+
+			// Update precise position to block point (velocity preserved for combat resolution)
+			kineticComp.PreciseX, kineticComp.PreciseY = vmath.Point{X: blockGridX, Y: blockGridY}.CenterF()
+			s.world.Positions.SetPosition(tracerEntity, component.PositionComponent{X: blockGridX, Y: blockGridY})
+			continue
+		}
+
+		if newCell.X != oldPos.X || newCell.Y != oldPos.Y {
+			s.world.Positions.SetPosition(tracerEntity, component.PositionComponent{X: newCell.X, Y: newCell.Y})
+		}
+
+		reached := (kineticComp.VelX > 0 && kineticComp.PreciseX >= tracer.TargetX) ||
+			(kineticComp.VelX < 0 && kineticComp.PreciseX <= tracer.TargetX) ||
+			(kineticComp.VelY > 0 && kineticComp.PreciseY >= tracer.TargetY) ||
+			(kineticComp.VelY < 0 && kineticComp.PreciseY <= tracer.TargetY)
+		if reached {
+			s.world.DestroyEntity(tracerEntity)
+		}
+	}
+}
+
+// appendTracerTrail records every crossed cell, rather than only the final
+// cell of a tick. This keeps fast tracers visually continuous and mirrors the
+// swept collision path without allocating.
+func appendTracerTrail(tracer *component.TracerComponent, x, y int) {
+	if tracer.TrailLen > 0 {
+		last := tracer.TrailRing[tracer.TrailHead]
+		if last.X == x && last.Y == y {
+			return
+		}
+	}
+
+	tracer.TrailHead = (tracer.TrailHead + 1) % parameter.TracerTrailLength
+	tracer.TrailRing[tracer.TrailHead] = vmath.Point{X: x, Y: y}
+	if tracer.TrailLen < parameter.TracerTrailLength {
+		tracer.TrailLen++
+	}
+}
+
+// tracerFlightBounds returns cell-centered off-map targets far enough for a
+// full trail to clear the map, with no extra off-map lifetime.
+func tracerFlightBounds(size int) (negative, positive float64) {
+	margin := float64(parameter.TracerTrailLength)
+	return -margin + 0.5, float64(size) + margin - 0.5
+}
+
+// tracerStrike handles combat and glyph interactions at a single cell
+// Returns true if a combat entity was hit (blocks the tracer's head)
+func (s *WeaponSystem) tracerStrike(x, y int, selfEntity, owner core.Entity, velX, velY float64, palette component.WeaponPalette) bool {
+	var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
+	n := s.world.Positions.GetAllEntitiesAtInto(x, y, entityBuf[:])
+	if n == 0 {
+		return false
+	}
+	entities := entityBuf[:n]
+
+	blocked := false
+
+	for _, entity := range entities {
+		if entity == 0 || entity == selfEntity {
+			continue
+		}
+
+		// Fast-path: skip other tracers (frequent co-location, no combat components)
+		if s.world.Components.Tracer.HasEntity(entity) {
+			continue
+		}
+
+		target, hit, valid := ResolveTargetFromEntity(s.world, entity, selfEntity)
+		if !valid {
+			continue
+		}
+
+		// Skip cursors, their orbs, and the firing cursor's owned entities.
+		if isCursorOrOwnedOrb(s.world, target) || isOwnedBy(s.world, target, owner) {
+			continue
+		}
+
+		// Resolved by the target: a tracer hit on a shared species crosses, one on a
+		// player entity does not (D-3, D-10).
+		s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+			AttackType:   component.CombatAttackTracer,
+			OwnerEntity:  owner,
+			OriginEntity: owner,
+			TargetEntity: target,
+			HitEntity:    hit,
+			HasOrigin:    true,
+			OriginX:      x,
+			OriginY:      y,
+			HasVelocity:  true,
+			OriginVelX:   velX,
+			OriginVelY:   velY,
+		}, target.Domain())
+		blocked = true
+	}
+
+	switch palette {
+	case component.PalettePositive:
+		s.blossomRedGlyphs(entities, selfEntity)
+	case component.PaletteNegative:
+		s.decayBlueGlyphs(x, y, entities, selfEntity)
+	}
+
+	return blocked
+}
+
+// blossomRedGlyphs destroys the cell's red glyphs with a blossom particle each
+func (s *WeaponSystem) blossomRedGlyphs(targetEntities []core.Entity, selfEntity core.Entity) {
+	s.glyphBuf = s.glyphBuf[:0]
+
+	for _, targetEntity := range targetEntities {
+		if targetEntity == 0 || targetEntity == selfEntity {
+			continue
+		}
+		// Glyph mechanics are player-domain; a shared glyph is a gold member
+		if targetEntity.Domain() != core.DomainPlayer {
+			continue
+		}
+		if glyphComp, ok := s.world.Components.Glyph.GetPtr(targetEntity); ok {
+			if glyphComp.Type == component.GlyphRed {
+				s.glyphBuf = append(s.glyphBuf, targetEntity)
+			}
+		}
+	}
+	s.buffers.Observe(1, len(s.glyphBuf))
+
+	if len(s.glyphBuf) == 0 {
+		return
+	}
+
+	event.EmitParticleDeath(s.world.Resources.Event.Queue, component.ParticleBlossom, s.glyphBuf...)
+}
+
+// decayBlueGlyphs mutates the cell's blue glyphs to green with a decay particle each
+func (s *WeaponSystem) decayBlueGlyphs(x, y int, targetEntities []core.Entity, selfEntity core.Entity) {
+	for _, targetEntity := range targetEntities {
+		if targetEntity == 0 || targetEntity == selfEntity {
+			continue
+		}
+		// Glyph mechanics are player-domain; a shared glyph is a gold member
+		if targetEntity.Domain() != core.DomainPlayer {
+			continue
+		}
+
+		glyphComp, ok := s.world.Components.Glyph.GetPtr(targetEntity)
+		if !ok || glyphComp.Type != component.GlyphBlue {
+			continue
+		}
+
+		glyphComp.Type = component.GlyphGreen
+
+		// Spawn decay at same position (particle skips starting cell via LastIntX/Y)
+		s.world.PushLocal(event.EventParticleSpawnOne, &event.ParticleSpawnPayload{
+			Behavior:      component.ParticleDecay,
+			X:             x,
+			Y:             y,
+			Char:          glyphComp.Rune,
+			SkipStartCell: true,
+		})
+	}
 }

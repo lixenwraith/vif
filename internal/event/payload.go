@@ -265,16 +265,6 @@ type NuggetJumpRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
-// --- Cleaner ---
-
-// DirectionalCleanerPayload contains origin for 4-way cleaner spawn
-type DirectionalCleanerPayload struct {
-	Entity    core.Entity                `toml:"entity"`
-	OriginX   int                        `toml:"origin_x"`
-	OriginY   int                        `toml:"origin_y"`
-	ColorType component.CleanerColorType `toml:"color_type"`
-}
-
 // --- Gold ---
 
 // GoldSpawnedPayload provides information about the spawned gold sequence
@@ -380,6 +370,12 @@ type ShieldDrainRequestPayload struct {
 
 // WeaponAddRequestPayload adds a weapon to cursor
 type WeaponAddRequestPayload struct {
+	Entity core.Entity          `toml:"entity"`
+	Weapon component.WeaponType `toml:"weapon"`
+}
+
+// WeaponRemoveRequestPayload takes one kind from a cursor, the innate gun included
+type WeaponRemoveRequestPayload struct {
 	Entity core.Entity          `toml:"entity"`
 	Weapon component.WeaponType `toml:"weapon"`
 }
@@ -908,7 +904,7 @@ func (c CrossingID) Seed(salt uint64) (uint64, bool) {
 
 // CombatAttackDirectRequestPayload contains direct attack information.
 // HasOrigin/HasVelocity carry the emitter's geometry explicitly, so a player-domain
-// emitter (orb, cleaner, bullet) describes itself without naming its entity.
+// emitter (orb, tracer, bullet) describes itself without naming its entity.
 type CombatAttackDirectRequestPayload struct {
 	CrossingID
 	OwnerEntity    core.Entity                `toml:"owner_entity"`

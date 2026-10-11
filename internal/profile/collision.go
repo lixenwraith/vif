@@ -24,7 +24,7 @@ func kinetic(impactor, target Mass, mode physics.ImpulseMode, angleVar, offset f
 	}
 }
 
-// redirect sends the target off as a unit (cleaner, shield)
+// redirect sends the target off as a unit (tracer, shield)
 func redirect(impactor, target Mass, angleVar, offset float64) physics.CollisionProfile {
 	return kinetic(impactor, target, physics.ImpulseOverride, angleVar, offset)
 }
@@ -46,15 +46,15 @@ func soft(impactor, target Mass) physics.CollisionProfile {
 	}
 }
 
-// --- Cleaner (projectile) ---
+// --- Tracer ---
 var (
-	CleanerToDrain     = accumulate(MassCleaner, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
-	CleanerToSwarm     = redirect(MassCleaner, MassSwarm, parameter.SwarmDeflectAngleVar, OffsetBody)
-	CleanerToQuasar    = redirect(MassCleaner, MassQuasar, parameter.DrainDeflectAngleVar, OffsetBody)
-	CleanerToStorm     = redirect(MassCleaner, MassStorm, parameter.DrainDeflectAngleVar, OffsetBody)
-	CleanerToSnakeHead = redirect(MassCleaner, MassSnakeHead, parameter.DrainDeflectAngleVar, OffsetBody)
-	CleanerToSnakeBody = accumulate(MassCleaner, MassSnakeBody, parameter.DrainDeflectAngleVar, OffsetNone)
-	CleanerToEye       = redirect(MassCleaner, MassEye, parameter.DrainDeflectAngleVar, OffsetBody)
+	TracerToDrain     = accumulate(MassTracer, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
+	TracerToSwarm     = redirect(MassTracer, MassSwarm, parameter.SwarmDeflectAngleVar, OffsetBody)
+	TracerToQuasar    = redirect(MassTracer, MassQuasar, parameter.DrainDeflectAngleVar, OffsetBody)
+	TracerToStorm     = redirect(MassTracer, MassStorm, parameter.DrainDeflectAngleVar, OffsetBody)
+	TracerToSnakeHead = redirect(MassTracer, MassSnakeHead, parameter.DrainDeflectAngleVar, OffsetBody)
+	TracerToSnakeBody = accumulate(MassTracer, MassSnakeBody, parameter.DrainDeflectAngleVar, OffsetNone)
+	TracerToEye       = redirect(MassTracer, MassEye, parameter.DrainDeflectAngleVar, OffsetBody)
 )
 
 // --- Shield ---

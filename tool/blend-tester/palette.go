@@ -37,7 +37,7 @@ var gamePalette = []PaletteEntry{
 	{"Drain", visual.RgbDrain, "Effect"},
 	{"Materialize", visual.RgbMaterialize, "Effect"},
 	{"RemovalFlash", visual.RgbRemovalFlash, "Effect"},
-	{"CleanerBase", visual.RgbCleanerBasePositive, "Effect"},
+	{"Tracer", visual.RgbTracerPositive, "Effect"},
 	{"ShieldBase", visual.RgbQuasarShield, "Effect"},
 
 	// Cursor/Ping

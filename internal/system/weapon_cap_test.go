@@ -82,7 +82,7 @@ func TestCappedTurretStreamsBetweenWavesAndStopsWithTheCooldown(t *testing.T) {
 
 	weapon.Update()
 	w.Resources.Event.Queue.Consume()
-	weapon.fireAllWeapons(cursor, weaponComp, weapon.orbsOf(cursor))
+	weapon.fireLoadout(cursor, weaponComp, weapon.orbsOf(cursor))
 	if got := bullets(); got != weaponComp.Charges[component.WeaponTurret] {
 		t.Fatalf("wave = %d bullets, want one per charge", got)
 	}
@@ -114,7 +114,7 @@ func TestCappedEmitterSustainsItsRayAndMainFireLeavesItAlone(t *testing.T) {
 	weaponComp.Charges[component.WeaponEmitter] = spec.MaxCharges - 1
 	weapon.Update()
 	orb := weapon.orbsOf(cursor)[component.WeaponEmitter]
-	weapon.fireAllWeapons(cursor, weaponComp, weapon.orbsOf(cursor))
+	weapon.fireLoadout(cursor, weaponComp, weapon.orbsOf(cursor))
 	timed, ok := w.Components.Ray.GetPtr(orb)
 	if !ok {
 		t.Fatal("no ray fired below the cap")
@@ -131,7 +131,7 @@ func TestCappedEmitterSustainsItsRayAndMainFireLeavesItAlone(t *testing.T) {
 	}
 
 	weaponComp.Cooldown[component.WeaponEmitter] = 0
-	weapon.fireAllWeapons(cursor, weaponComp, weapon.orbsOf(cursor))
+	weapon.fireLoadout(cursor, weaponComp, weapon.orbsOf(cursor))
 	orbComp, _ := w.Components.Orb.GetPtr(orb)
 	if weaponComp.Cooldown[component.WeaponEmitter] != 0 || orbComp.FlashRemaining != 0 {
 		t.Fatalf("cooldown %v, flash %v after main fire at the cap, want neither touched",

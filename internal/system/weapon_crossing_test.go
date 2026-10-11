@@ -49,7 +49,8 @@ func TestDisruptorCrossesGeometry(t *testing.T) {
 
 	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
 	weaponComp.Charges[component.WeaponDisruptor] = 1
-	weapon.fireAllWeapons(cursor, weaponComp, orbs)
+	weaponComp.Charges[component.WeaponGun] = 0 // the pulse's artifacts alone
+	weapon.fireLoadout(cursor, weaponComp, orbs)
 
 	events := w.Resources.Event.Queue.Consume()
 	if len(events) != 3 {
@@ -230,11 +231,12 @@ func TestPlayerRayRunsThroughItsOrbAndCrossesOnlyItsImpacts(t *testing.T) {
 
 	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
 	weaponComp.Charges[component.WeaponEmitter] = 2
+	weaponComp.Charges[component.WeaponGun] = 0 // the ray's artifacts alone
 	weapon.Update()
 	orbs := weapon.orbsOf(cursor)
 	w.Positions.SetPosition(orbs[component.WeaponEmitter], component.PositionComponent{X: 9, Y: 5})
 	w.Resources.Event.Queue.Consume()
-	weapon.fireAllWeapons(cursor, weaponComp, orbs)
+	weapon.fireLoadout(cursor, weaponComp, orbs)
 	weapon.advanceRays(cursor, weaponComp, orbs, parameter.GameUpdateInterval)
 
 	var crossings int

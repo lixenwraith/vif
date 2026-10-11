@@ -34,7 +34,7 @@ var deniedSharedPrefix = []string{
 	"drain.", "dust.", "decay.", "blossom.", "bullet.", "missile.",
 	"lightning.", "flash.", "fadeout.", "splash.", "spirit.", "loot.",
 	"weapon.", "energy.", "heat.", "typing.", "ping.", "boost.",
-	"glyph.", "nugget.", "fuse.", "shield.", "cleaner.", "camera.", "transient.",
+	"glyph.", "nugget.", "fuse.", "shield.", "camera.", "transient.",
 	"effects.", // TransientSystem's overlays, scoped to this instance's cursor
 	"motion_marker.", "materialize.", "soft_collision.", "audio.", "music.",
 	"death.", "timer.",

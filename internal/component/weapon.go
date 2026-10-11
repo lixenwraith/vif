@@ -15,6 +15,7 @@ const (
 	WeaponDisruptor
 	WeaponTurret
 	WeaponEmitter
+	WeaponGun // the innate main weapon
 	WeaponCount
 )
 
@@ -27,10 +28,11 @@ const (
 	DeliveryPulse                           // area burst at the emitter, fired only on a target inside it
 	DeliveryBullet                          // linear projectile per shot, direct damage on contact
 	DeliveryRay                             // straight band to the first wall, area damage along it
+	DeliveryTracer                          // cardinal streaks from the cursor: direct damage on contact, glyph effects by polarity
 )
 
 // Aimed reports whether the delivery needs targets assigned before it fires
-func (d WeaponDelivery) Aimed() bool { return d != DeliveryPulse }
+func (d WeaponDelivery) Aimed() bool { return d != DeliveryPulse && d != DeliveryTracer }
 
 // WeaponSpec is one weapon kind's static profile, whatever carries it. A cursor's
 // discharge resolves against species through Attack; a hosted one strikes cursors.
@@ -43,6 +45,12 @@ type WeaponSpec struct {
 
 	HostedRange  float64      // cells a mounted weapon reaches, horizontally; vertical is half
 	HostedDamage CursorDamage // what a mounted weapon's hit costs a cursor
+
+	// An innate kind is held from spawn, kept through an energy zero crossing and
+	// never dropped; FromCursor fires from the cursor's cell and has no orb
+	Innate     bool
+	FromCursor bool
+	Directions TracerDirection // the cardinals a tracer volley covers
 
 	// What the kind gains at MaxCharges; a zero field changes nothing
 	ArcRange      float64       // cells a hit arcs to the nearest other target within
@@ -94,6 +102,19 @@ var WeaponSpecs = [WeaponCount]WeaponSpec{
 		HostedRange:  parameter.HostedEmitterRange,
 		HostedDamage: CursorDamage{parameter.HostedEmitterEnergy, -parameter.HostedEmitterHeat},
 		Sustained:    true},
+	WeaponGun: {Name: "gun", Delivery: DeliveryTracer, Attack: CombatAttackTracer,
+		MaxCharges: parameter.WeaponMaxChargeGun, Innate: true, FromCursor: true, Directions: TracerAllDirections},
+}
+
+// Loadout is a fresh cursor's: one charge of every innate kind
+func Loadout() WeaponComponent {
+	var w WeaponComponent
+	for wt, spec := range WeaponSpecs {
+		if spec.Innate {
+			w.Charges[wt] = 1
+		}
+	}
+	return w
 }
 
 // WeaponComponent is a cursor's loadout: charges and cooldown per kind, and main fire's cooldown.

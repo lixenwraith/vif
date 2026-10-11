@@ -74,7 +74,7 @@ func init() {
 		parameter.PlayerShieldRadiusX,
 		parameter.PlayerShieldRadiusY,
 		parameter.ShieldMaxOpacity,
-		RgbCleanerBasePositive, RgbCleanerBaseNegative,
+		RgbTracerPositive, RgbTracerNegative,
 		Shield256Positive, Shield256Negative,
 		RgbBoostGlow,
 		ShieldPlayerGlowIntensity,

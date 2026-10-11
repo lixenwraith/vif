@@ -11,7 +11,7 @@ type Mass = float64
 const (
 	MassDust      Mass = 0.1
 	MassCursor    Mass = 1.0
-	MassCleaner   Mass = 1.0
+	MassTracer    Mass = 1.0
 	MassDrain     Mass = 1.0
 	MassSwarm     Mass = 2.0
 	MassEye       Mass = 5.0

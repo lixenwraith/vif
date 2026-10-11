@@ -24,8 +24,8 @@ const (
 
 // Damage
 const (
-	// CombatDamageCleaner is damage caused by cleaner hit
-	CombatDamageCleaner = 1
+	// CombatDamageTracer is damage per tracer hit
+	CombatDamageTracer = 1
 
 	// CombatDamageRod is damage caused by lightning rod buff hit
 	CombatDamageRod = 1
@@ -54,7 +54,7 @@ const (
 	// CombatDamageImmunityDuration is the duration of immunity from damage after taking damage
 	CombatDamageImmunityDuration = 150 * time.Millisecond
 
-	// CombatHitFlashDuration is yellow flash duration and immunity window on cleaner hit
+	// CombatHitFlashDuration is the hit flash's length on any damaging hit
 	CombatHitFlashDuration = 150 * time.Millisecond
 )
 

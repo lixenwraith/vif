@@ -109,9 +109,9 @@ var (
 	RgbGtBg  = color.PaleGold
 	RgbApmBg = color.LimeGreen
 
-	// Cleaner colors
-	RgbCleanerBasePositive = color.Yellow
-	RgbCleanerBaseNegative = color.MediumPurple
+	// Tracer colours: the gun's streak, by the cursor's polarity
+	RgbTracerPositive = color.Yellow
+	RgbTracerNegative = color.MediumPurple
 
 	// Flash colors
 	RgbRemovalFlash = color.Ivory
@@ -167,10 +167,10 @@ var (
 	RgbPulseNegative = color.Orchid
 	RgbPulseHostile  = color.Vermilion
 
-	// Ray colors: a white core, sides in the cleaner's polarity colours or a mount's red
+	// Ray colors: a white core, sides in the tracer's polarity colours or a mount's red
 	RgbRayCore     = color.White
-	RgbRayPositive = RgbCleanerBasePositive
-	RgbRayNegative = RgbCleanerBaseNegative
+	RgbRayPositive = RgbTracerPositive
+	RgbRayNegative = RgbTracerNegative
 	RgbRayHostile  = color.BrightRed
 
 	// Audio indicator colors

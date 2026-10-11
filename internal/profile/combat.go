@@ -92,14 +92,14 @@ var Contact = [component.SpeciesCount]component.CursorDamage{
 // a nil entry means that defender takes no knockback (pylon is stationary)
 type collisionSet [component.CombatEntityCount]*physics.CollisionProfile
 
-var cleanerCollision = collisionSet{
-	component.CombatEntityDrain:     &CleanerToDrain,
-	component.CombatEntityQuasar:    &CleanerToQuasar,
-	component.CombatEntitySwarm:     &CleanerToSwarm,
-	component.CombatEntityStorm:     &CleanerToStorm,
-	component.CombatEntitySnakeHead: &CleanerToSnakeHead,
-	component.CombatEntitySnakeBody: &CleanerToSnakeBody,
-	component.CombatEntityEye:       &CleanerToEye,
+var tracerCollision = collisionSet{
+	component.CombatEntityDrain:     &TracerToDrain,
+	component.CombatEntityQuasar:    &TracerToQuasar,
+	component.CombatEntitySwarm:     &TracerToSwarm,
+	component.CombatEntityStorm:     &TracerToStorm,
+	component.CombatEntitySnakeHead: &TracerToSnakeHead,
+	component.CombatEntitySnakeBody: &TracerToSnakeBody,
+	component.CombatEntityEye:       &TracerToEye,
 }
 
 var shieldCollision = collisionSet{
@@ -125,7 +125,7 @@ var explosionCollision = collisionSet{
 // Backing storage: fixed arrays keep profile addresses stable for Chain
 // pointers and for the matrix
 var (
-	cleanerProfiles      [component.CombatEntityCount]AttackProfile
+	tracerProfiles       [component.CombatEntityCount]AttackProfile
 	lightningProfiles    [component.CombatEntityCount]AttackProfile
 	shieldProfiles       [component.CombatEntityCount]AttackProfile
 	explosionProfiles    [component.CombatEntityCount]AttackProfile
@@ -149,7 +149,7 @@ func withKinetic(p *AttackProfile, set *collisionSet) {
 }
 
 func init() {
-	// Lightning first: cleaner chains into it
+	// Lightning first: the tracer chains into it
 	for _, d := range cursorDefenders {
 		lightningProfiles[d] = AttackProfile{
 			AttackType:  component.CombatAttackLightning,
@@ -162,18 +162,18 @@ func init() {
 		register(&lightningProfiles[d])
 	}
 
-	// Cleaner: direct damage, knockback, chains into lightning
+	// Tracer: direct damage, knockback, chains into lightning
 	for _, d := range cursorDefenders {
-		p := &cleanerProfiles[d]
+		p := &tracerProfiles[d]
 		*p = AttackProfile{
-			AttackType:  component.CombatAttackProjectile,
+			AttackType:  component.CombatAttackTracer,
 			Attacker:    component.CombatEntityCursor,
 			Defender:    d,
 			DamageType:  component.CombatDamageDirect,
-			DamageValue: parameter.CombatDamageCleaner,
+			DamageValue: parameter.CombatDamageTracer,
 			Chain:       &lightningProfiles[d],
 		}
-		withKinetic(p, &cleanerCollision)
+		withKinetic(p, &tracerCollision)
 		register(p)
 	}
 

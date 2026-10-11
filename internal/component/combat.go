@@ -41,7 +41,7 @@ type CombatAttackType int
 const CombatAttackNone CombatAttackType = -1
 
 const (
-	CombatAttackProjectile CombatAttackType = iota
+	CombatAttackTracer CombatAttackType = iota
 	CombatAttackShield
 	CombatAttackLightning
 	CombatAttackExplosion
@@ -85,7 +85,7 @@ type Status struct {
 
 // CombatComponent tags an entity as combat-relevant for interactions.
 type CombatComponent struct {
-	// OwnerEntity indicates owner/parent of the entity with combat component (e.g. cursor is the parent of cleaner)
+	// OwnerEntity indicates owner/parent of the entity with combat component (e.g. cursor is the parent of a tracer)
 	OwnerEntity core.Entity
 
 	// LastDamagedBy identifies the cursor that most recently dealt HP damage.
