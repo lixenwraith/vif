@@ -342,7 +342,7 @@ func TestAStaleRequestIsSupersededUnlessItAsksForAWorld(t *testing.T) {
 
 // TestAPeerThatProvedTheWorldIsNotSentAKeyframe: a hash-only answer meets the
 // convergence floor as a keyframe would, so the keyframe period passing sends none.
-// A participant behind a relay proves nothing on the host's links and keeps the floor.
+// A participant behind a relay proves it in the relay's own answer.
 func TestAPeerThatProvedTheWorldIsNotSentAKeyframe(t *testing.T) {
 	t.Parallel()
 	for _, relayed := range []bool{false, true} {
@@ -351,35 +351,34 @@ func TestAPeerThatProvedTheWorldIsNotSentAKeyframe(t *testing.T) {
 			n, links = 3, [][2]int{{1, 2}, {2, 3}}
 		}
 		runs := session(t, n, links)
-		host, guest := runs[0], runs[1]
+		host := runs[0]
 		if err := host.c.PublishDue(); err != nil {
 			t.Fatalf("keyframe: %v", err)
 		}
-		deliver([]*run{guest}, 1)
+		deliver(runs[1:], 1)
 		host.c.publishMu.Lock()
 		keyTick := host.c.lastKeyTick
 		host.c.publishMu.Unlock()
 
 		for range parameter.SnapshotFloorKeyframeTicks + parameter.SnapshotCorrectionTicks {
-			host.world.advance(1)
-			guest.world.advance(1)
+			for _, r := range runs {
+				r.world.advance(1)
+			}
 			if err := host.c.Publish(); err != nil {
 				t.Fatalf("publish: %v", err)
 			}
-			deliver([]*run{guest, host}, 1)
+			deliver(runs, 1)
 		}
 		host.c.publishMu.Lock()
 		sent := host.c.lastKeyTick
 		host.c.publishMu.Unlock()
-		want := keyTick
-		if relayed {
-			want += parameter.SnapshotFloorKeyframeTicks
+		if sent != keyTick {
+			t.Fatalf("relayed=%t: the host's last keyframe is at %d, want %d", relayed, sent, keyTick)
 		}
-		if sent != want {
-			t.Fatalf("relayed=%t: the host's last keyframe is at %d, want %d", relayed, sent, want)
-		}
-		if guest.stat("snapshot.corrections_hash_only") == 0 {
-			t.Fatalf("relayed=%t: the guest never proved it held the host's world", relayed)
+		for _, r := range runs[1:] {
+			if r.stat("snapshot.corrections_hash_only") == 0 {
+				t.Fatalf("relayed=%t: participant %d never proved it held the host's world", relayed, r.world.local)
+			}
 		}
 	}
 }
