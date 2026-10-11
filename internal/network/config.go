@@ -113,9 +113,9 @@ type Config struct {
 	AcceptPeer    func(net.Conn) (PeerID, error)
 
 	// PreboundListener is a port already bound by the caller, served instead of
-	// ListenAddress. A guest declares the address it bound in its join reply, which
-	// is sent before its transport exists, so the bind has to happen first and the
-	// transport adopts it rather than repeating it.
+	// ListenAddress or a host's Address. A guest declares the address it bound in its
+	// join reply, sent before its transport exists, and a host binds before it writes
+	// anything a session needs, so the bind comes first and the transport adopts it.
 	PreboundListener net.Listener
 
 	// OnAdmit is called once an accepted stream has become a peer, on the accept

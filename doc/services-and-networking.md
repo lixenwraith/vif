@@ -144,10 +144,10 @@ start/ready gate. Two flags activate the shared composition path:
 
 | Entry point | Behavior |
 |---|---|
-| `-host <bind-address>` | Play at once and open the listener when the clock starts, exactly as `:host` does. A bind that fails leaves the game playing solo. |
+| `-host <bind-address>` | Bind before the terminal starts, so a port the run cannot have ends it with the reason on stderr, as a `-join` that cannot dial does; then play at once and serve the listener when the clock starts, exactly as `:host` does. A rebuilt run that cannot reopen its door plays on solo. |
 | `-join <addr>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. |
 | `-name <name>` | With `-host` or `-serve`, the name this session answers to, so one address can serve several. A host that sets one refuses a dial that names nothing, so it is taken with a front door that routes on the name or not at all. |
-| `:host <addr> [host\|migrate]` | Open a run that is **already playing**, under the authority policy named. The port is created, started and attached; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick. |
+| `:host <addr> [host\|migrate]` | Open a run that is **already playing**, under the authority policy named. The port is bound before anything is written, so one the run cannot have leaves it solo; then it is created, started and attached; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick. |
 | `:session` | Report the role, address, participant identity, its cursor slot, peer count and tick. |
 
 Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
