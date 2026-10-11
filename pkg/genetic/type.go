@@ -43,6 +43,9 @@ type (
 	EvaluatorFunc[S Solution, F Numeric]   func(solution S) F
 	TerminationFunc[S Solution, F Numeric] func(pool *Pool[S, F], iteration int) bool
 	DiversityFunc[S Solution, F Numeric]   func(members []Candidate[S, F]) float64
+	// EqualFunc reports whether two solutions are the same genotype; slices.Equal
+	// instantiated on the slice type is the usual choice
+	EqualFunc[S Solution] func(a, b S) bool
 )
 
 // Selector fills dst with parents drawn from members. Implementations must not allocate

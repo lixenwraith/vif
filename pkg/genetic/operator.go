@@ -40,6 +40,36 @@ func (b ParameterBounds) BinCenter(i, n int) float64 {
 	return b.Min + (float64(i)+0.5)/float64(n)*(b.Max-b.Min)
 }
 
+// GeneSpread returns a DiversityFunc for bounded real genotypes: the mean
+// per-gene standard deviation as a fraction of that gene's range. Identical
+// members score 0; a uniformly random archive scores about 0.29
+func GeneSpread[F Numeric](bounds []ParameterBounds) DiversityFunc[[]float64, F] {
+	return func(members []Candidate[[]float64, F]) float64 {
+		n := len(members)
+		if n < 2 || len(bounds) == 0 {
+			return 0
+		}
+		total := 0.0
+		for i, b := range bounds {
+			span := b.Max - b.Min
+			if span <= 0 {
+				continue
+			}
+			var mean, m2 float64
+			for k, m := range members {
+				if i >= len(m.Data) {
+					return 0
+				}
+				d := m.Data[i] - mean
+				mean += d / float64(k+1)
+				m2 += d * (m.Data[i] - mean)
+			}
+			total += math.Sqrt(m2/float64(n)) / span
+		}
+		return total / float64(len(bounds))
+	}
+}
+
 // BoundaryMode selects how an out-of-range mutation returns to the interval
 type BoundaryMode uint8
 

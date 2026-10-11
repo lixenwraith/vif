@@ -1,6 +1,11 @@
 package fitness
 
-import "github.com/lixenwraith/vif/pkg/genetic/tracking"
+import (
+	"maps"
+	"slices"
+
+	"github.com/lixenwraith/vif/pkg/genetic/tracking"
+)
 
 // WeightedAggregator calculates fitness as a weighted sum of normalized metrics
 type WeightedAggregator struct {
@@ -11,10 +16,13 @@ type WeightedAggregator struct {
 	WeightAdjuster func(key string, weight float64, ctx Context) float64
 }
 
+// Calculate sums in key order: map iteration order would change float rounding
+// between runs and break seeded reproducibility
 func (a *WeightedAggregator) Calculate(metrics tracking.MetricBundle, ctx Context) float64 {
 	var fitness float64
 
-	for key, weight := range a.Weights {
+	for _, key := range slices.Sorted(maps.Keys(a.Weights)) {
+		weight := a.Weights[key]
 		raw, ok := metrics[key]
 		if !ok {
 			continue
