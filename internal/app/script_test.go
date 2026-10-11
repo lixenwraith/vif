@@ -165,10 +165,10 @@ func TestAPacedScriptSpendsItsWallBudget(t *testing.T) {
 // TestPresentedScriptModeIsWiredForATerminal pins the mode's shape rather than its
 // output: a presented script simulates exactly what the headless one does, so it
 // must take its geometry from the script and its clock from the driver, and only
-// the terminal and the renderer may differ. The run itself needs a terminal, which
-// a test process does not have, so it must refuse cleanly rather than panic.
+// the terminal and the renderer may differ. Without a usable terminal it must refuse
+// cleanly rather than panic; TERM=dumb is refused before /dev/tty is ever opened.
 func TestPresentedScriptModeIsWiredForATerminal(t *testing.T) {
-	t.Parallel()
+	t.Setenv("TERM", "dumb")
 	if !ModeScript.Presents() {
 		t.Fatal("a presented script builds no renderer")
 	}
@@ -187,7 +187,7 @@ func TestPresentedScriptModeIsWiredForATerminal(t *testing.T) {
 		Mode: ModeScript, Resources: resource.Options{Embedded: true}, Seed: 0x5C71,
 	}, path)
 	if err == nil {
-		t.Skip("this environment has a usable terminal, so the refusal cannot be observed")
+		t.Fatal("a presented script ran without a usable terminal")
 	}
 }
 
