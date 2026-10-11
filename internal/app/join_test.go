@@ -2,6 +2,9 @@ package app
 
 import (
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -9,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
@@ -279,5 +283,64 @@ func TestReproducingJoinAdmissionAndRefusals(t *testing.T) {
 	defer late.Close()
 	if err := late.Join(host.JoinAnchor()); !errors.Is(err, ErrJoinMidRun) {
 		t.Fatalf("join with a mid-run host = %v, want ErrJoinMidRun", err)
+	}
+}
+
+// writeScenario writes a scenario named name under root's scenario/: an entry, a
+// region file and the macro library it expands against, so a transfer carries all
+// three. The description is the only line that differs between two of them.
+func writeScenario(t *testing.T, root, name, description string) string {
+	t.Helper()
+	dir := filepath.Join(root, "scenario", name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"scenario.toml": fmt.Sprintf("description = %q\nmacro_files = [\"macros.toml\"]\n"+
+			"[regions.main]\ninitial = \"MainStart\"\nfile = \"main.toml\"\n"+
+			"[regions.player]\ninitial = \"PlayerBoot\"\nbackground = true\n"+
+			"[states.PlayerBoot]\nparent = \"Root\"\non_enter = [{ action = \"EmitEvent\", "+
+			"event = \"EventCursorSpawnRequest\", payload = { center = true } }]\n", description),
+		"macros.toml": "[macros.Hold]\nparams = { next = \"string\" }\nbody = { parent = \"Root\", transitions = " +
+			"[{ trigger = \"Tick\", target = \"${next}\", guard = \"StateTimeExceeds\", guard_args = { ms = 500 } }] }\n",
+		"main.toml": "[states]\nMainStart = { macro = \"Hold\", next = \"MainRepeat\" }\n" +
+			"MainRepeat = { macro = \"Hold\", next = \"MainStart\" }\n",
+	}
+	for file, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, file), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// TestAJoinerPlaysTheHostsScenarioWhateverItsRootsHold: a joiner whose roots lack
+// the session's scenario, hold other bytes under its name, or are skipped by -d is
+// served the coordinator's bytes. The coordinator admits a joiner only on an equal
+// scenario digest, so the session running at all is the proof.
+func TestAJoinerPlaysTheHostsScenarioWhateverItsRootsHold(t *testing.T) {
+	// Not parallel: this drives a real socket against wall-clock deadlines.
+	hostRoot, otherRoot := t.TempDir(), t.TempDir()
+	writeScenario(t, hostRoot, "duel", "The session's duel.")
+	writeScenario(t, otherRoot, "duel", "Another duel.")
+	script := filepath.Join(t.TempDir(), "idle.toml")
+	if err := os.WriteFile(script, []byte("schema = 1\nticks = 3\nwidth = 80\nheight = 24\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	host := Config{Seed: 0x5C72, Resources: resource.Options{Dir: hostRoot, Scenario: "duel"}}
+	for _, tc := range []struct {
+		name  string
+		guest resource.Options
+	}{
+		{"no root holds it", resource.Options{}},
+		{"a root holds other bytes under its name", resource.Options{Dir: otherRoot}},
+		{"-d skips the roots", resource.Options{Embedded: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, guest := runScriptPair(t, host, script, Config{Resources: tc.guest}, script)
+			if guest.Ticks != 3 {
+				t.Fatalf("guest stats = %+v", guest)
+			}
+		})
 	}
 }
