@@ -38,12 +38,11 @@ continue to take precedence, including copies installed by earlier releases.
 ## 2. Installed configuration tree
 
 The user root is Go's `os.UserConfigDir` plus `vif`:
-`$XDG_CONFIG_HOME/vif` (normally `~/.config/vif`) on Linux and
-FreeBSD, `%AppData%\vif` on Windows, `~/Library/Application Support/vif`
-on macOS. `make install-config` writes that same root. A distribution package
-installs the tree under `/etc/xdg/vif`, the `XDG_CONFIG_DIRS` default, or on
-FreeBSD under `/usr/local/etc/xdg/vif`; system roots exist on Unix-like targets
-only.
+`~/.config/vif` on Linux and FreeBSD (`$XDG_CONFIG_HOME/vif` when that is set),
+`%AppData%\vif` on Windows, `~/Library/Application Support/vif` on macOS.
+`make install-config` writes that same root. `make install` writes the system
+root `$(SYSCONFDIR)/vif`: `/usr/local/etc/vif` for a source install, `/etc/vif`
+for a distribution package. System roots exist on Unix-like targets only.
 
 ```text
 vif/
@@ -74,11 +73,14 @@ resource walks the same roots in order:
 
 1. `-config-dir <root>`;
 2. the user configuration root;
-3. each root in `$XDG_CONFIG_DIRS`; unset, that is `/etc/xdg`, and on FreeBSD
-   `/usr/local/etc/xdg` then `/etc/xdg`, because ports install under `/usr/local`.
+3. the checkout's `wad/`, when the binary sits in that checkout's `bin/`, so
+   `bin/vif -s td` plays the repository uninstalled;
+4. the system roots `/usr/local/etc/vif` then `/etc/vif`; `VIF_SYSTEM_ROOTS`
+   names others in their place, separated as `PATH` is, and set empty names none.
 
 The first root holding the categorized path wins, so an older user layout still
-overrides a newer system installation. A resource absent from every root uses
+overrides a newer system installation, and an installed copy of a scenario
+shadows the checkout's; `-config-dir wad` puts the checkout first. A resource absent from every root uses
 the embedded fallback.
 
 | Resource | Path in each root | Final fallback |
@@ -125,15 +127,21 @@ creates no audio refuses them and a default must not break `-serve`.
 ## 4. Installation
 
 ```bash
-make install-config                                  # into the user root
+make install                                         # /usr/local, else ~/.local and the user root
+make install-config                                  # the user root only
 make install-config VIF_CONFIG_DIR=/path/to/stage    # into a staging root
-make install DESTDIR=/pkg PREFIX=/usr SYSCONFDIR=/etc # distribution package
+make install DESTDIR=/pkg PREFIX=/usr                # distribution package, root /etc/vif
 ```
 
-`install-config` copies `wad/` plus the embedded keymap and retains existing
-files, so an update never overwrites user edits; `install-config-force` replaces
-them. `install` stages a package: binary, `wad/` as a system configuration root,
-licence, and documentation. See [Packaging](packaging.md).
+Both copy `wad/`, the bot graphs, the keymap and `vif.toml`. A reinstall replaces
+every shipped file and keeps files a player added; the keymap and `vif.toml` are
+the player's settings and are written only when absent. `CLEAN=1` first removes
+the shipped categories (`scenario/`, `content/`, `image/`, `bot/`) and those two
+files, so the root holds only the fresh install plus `audio/` and anything else
+a player put beside them. `install` adds the binary, licence, manual, launcher,
+completion and documentation under `PREFIX` with the wad at `$(SYSCONFDIR)/vif`;
+without `DESTDIR` and without write access there, it installs the same for the
+current user under `~/.local` and the user root. See [Packaging](packaging.md).
 
 ## 5. Logs, journals, and runtime output
 

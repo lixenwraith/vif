@@ -10,7 +10,7 @@ import (
 
 func TestConfigRootsPutOverrideAndUserBeforeSystem(t *testing.T) {
 	if !isUnixLike() || runtime.GOOS == "android" {
-		t.Skip("XDG ordering is Unix-specific")
+		t.Skip("system roots are Unix-specific")
 	}
 
 	base := t.TempDir()
@@ -19,15 +19,10 @@ func TestConfigRootsPutOverrideAndUserBeforeSystem(t *testing.T) {
 	systemA := filepath.Join(base, "system-a")
 	systemB := filepath.Join(base, "system-b")
 	t.Setenv("XDG_CONFIG_HOME", user)
-	t.Setenv("XDG_CONFIG_DIRS", systemA+string(filepath.ListSeparator)+systemB)
+	t.Setenv(SystemRootsEnv, systemA+string(filepath.ListSeparator)+systemB)
 
 	got := ConfigRoots(override)
-	want := []string{
-		override,
-		filepath.Join(user, AppDirName),
-		filepath.Join(systemA, AppDirName),
-		filepath.Join(systemB, AppDirName),
-	}
+	want := []string{override, filepath.Join(user, AppDirName), systemA, systemB}
 	if len(got) != len(want) {
 		t.Fatalf("roots = %v, want %v", got, want)
 	}
@@ -57,13 +52,13 @@ func TestStateDirectoriesAreCategorized(t *testing.T) {
 // omits keeps the embedded default, and paths resolve against the file.
 func TestSettingsFileSetsOnlyWhatItNames(t *testing.T) {
 	if !isUnixLike() || runtime.GOOS == "android" {
-		t.Skip("XDG ordering is Unix-specific")
+		t.Skip("system roots are Unix-specific")
 	}
 	base, home := t.TempDir(), t.TempDir()
 	user, system := filepath.Join(base, "user"), filepath.Join(base, "system")
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", user)
-	t.Setenv("XDG_CONFIG_DIRS", system)
+	t.Setenv(SystemRootsEnv, filepath.Join(system, AppDirName))
 	write := func(root, body string) {
 		dir := filepath.Join(root, AppDirName)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -100,7 +95,7 @@ func TestSettingsFileSetsOnlyWhatItNames(t *testing.T) {
 func TestSettingsRefuseAnUnknownKey(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_DIRS", t.TempDir())
+	t.Setenv(SystemRootsEnv, t.TempDir())
 	if err := os.WriteFile(filepath.Join(root, SettingsFile), []byte("[paths]\nlogs = \"x\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

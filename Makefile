@@ -19,7 +19,7 @@ VIF_CONFIG_BASE != case "$$(uname -s)" in \
 	*) test -n "$(XDG_CONFIG_HOME)" && echo "$(XDG_CONFIG_HOME)" || echo "$(HOME)/.config" ;; \
 	esac
 VIF_CONFIG_DIR ?= $(VIF_CONFIG_BASE)/vif
-VIF_CONFIG_FORCE ?= 0
+CLEAN ?= 0
 WAD_DIR := wad
 PKG_DIR := deploy/package
 WAD_ARCHIVE ?= $(BIN_DIR)/vif-wad.tar.gz
@@ -27,10 +27,9 @@ KEYMAP_SRC := internal/asset/input/keymap.toml
 SETTINGS_SRC := internal/asset/vif.toml
 BOT_DIR := internal/asset/bot
 DESTDIR ?=
-# FreeBSD keeps everything outside the base system under /usr/local.
-PREFIX_DEFAULT != uname -s | grep -q FreeBSD && echo /usr/local || echo /usr
-PREFIX ?= $(PREFIX_DEFAULT)
-SYSCONFDIR_DEFAULT != uname -s | grep -q FreeBSD && echo /usr/local/etc || echo /etc
+PREFIX ?= /usr/local
+# A /usr package keeps its configuration in /etc; both are system roots vif reads.
+SYSCONFDIR_DEFAULT != [ '$(PREFIX)' = /usr ] && echo /etc || echo '$(PREFIX)/etc'
 SYSCONFDIR ?= $(SYSCONFDIR_DEFAULT)
 # FreeBSD packages each Go release under its own name: go.mod's 1.27 is go127.
 GO_DEFAULT != uname -s | grep -q FreeBSD && sed -n 's/^go \([0-9]*\)\.\([0-9]*\).*/go\1\2/p' go.mod 2>/dev/null | grep . || echo go
@@ -38,7 +37,7 @@ GO ?= $(GO_DEFAULT)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help generate dev release headless nolog wasm windows run test verify arch-check clean check-go tools allocator serve install install-config install-config-force wad-archive image image-check
+.PHONY: help generate dev release headless nolog wasm windows run test verify arch-check clean check-go tools allocator serve install install-config wad-archive image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -54,9 +53,10 @@ help:
 	@echo "  allocator Build the website-to-K3s session allocator"
 	@echo "  serve    Build wasm and http-server, then serve web/ directory (use PORT=8080 to change)"
 	@echo "  run      Build (dev) and run the game"
-	@echo "  install  Stage binary, wad, manual, launcher, completion and docs under DESTDIR/PREFIX"
+	@echo "  install  Install binary, wad, manual, launcher, completion and docs under $(PREFIX),"
+	@echo "           or under ~/.local and $(VIF_CONFIG_DIR) without write access there"
 	@echo "  install-config Install the wad, default keymap, bot graphs and vif.toml under $(VIF_CONFIG_DIR)"
-	@echo "  install-config-force Replace files previously installed there"
+	@echo "           (both: CLEAN=1 first removes what an earlier install put there)"
 	@echo "  wad-archive Pack the wad as the config root a player extracts ($(WAD_ARCHIVE))"
 	@echo "  image    Build the dedicated-session container image (scratch, static, non-root)"
 	@echo "  image-check Run the image's own config validation as its numeric user"
@@ -162,28 +162,24 @@ run: dev
 	./$(BIN_DIR)/$(BINARY)
 
 # The wad is the whole external payload and mirrors the installed layout, so a
-# copy is the install. Edits are never replaced by default; override
-# VIF_CONFIG_DIR for staging and use the force target only deliberately.
+# copy is the install. Shipped files are replaced and files a player added are
+# kept; vif.toml and the keymap are the player's settings, written only when
+# absent. CLEAN=1 first removes every category the install ships, and those two.
 install-config:
 	@set -eu; \
-	root='$(VIF_CONFIG_DIR)'; force='$(VIF_CONFIG_FORCE)'; \
-	copy_file() { \
-		if [ -e "$$2" ] && [ "$$force" != 1 ]; then \
-			echo "keep    $$2"; \
-		else \
-			install -d -m 0755 "$${2%/*}"; \
-			install -m 0644 "$$1" "$$2"; \
-			echo "install $$2"; \
-		fi; \
-	}; \
-	for src in $$(find $(WAD_DIR) -type f); do copy_file "$$src" "$$root/$${src#$(WAD_DIR)/}"; done; \
-	copy_file $(KEYMAP_SRC) "$$root/input/keymap.toml"; \
-	copy_file $(SETTINGS_SRC) "$$root/vif.toml"; \
-	for src in $(BOT_DIR)/*.toml; do copy_file "$$src" "$$root/bot/$${src##*/}"; done; \
+	root='$(VIF_CONFIG_DIR)'; \
+	case "$$root" in ''|/) echo "refusing to install into '$$root'" >&2; exit 1 ;; esac; \
+	if [ '$(CLEAN)' = 1 ]; then \
+		for dir in $(WAD_DIR)/*/ bot/; do dir=$${dir%/}; rm -rf "$$root/$${dir##*/}"; echo "remove  $$root/$${dir##*/}"; done; \
+		rm -f "$$root/input/keymap.toml" "$$root/vif.toml"; \
+	fi; \
+	put() { install -d -m 0755 "$${2%/*}"; install -m 0644 "$$1" "$$2"; echo "install $$2"; }; \
+	keep() { if [ -e "$$2" ]; then echo "keep    $$2"; else put "$$1" "$$2"; fi; }; \
+	for src in $$(find $(WAD_DIR) -type f); do put "$$src" "$$root/$${src#$(WAD_DIR)/}"; done; \
+	for src in $(BOT_DIR)/*.toml; do put "$$src" "$$root/bot/$${src##*/}"; done; \
+	keep $(KEYMAP_SRC) "$$root/input/keymap.toml"; \
+	keep $(SETTINGS_SRC) "$$root/vif.toml"; \
 	install -d -m 0755 "$$root/audio"
-
-install-config-force:
-	@$(MAKE) -s install-config VIF_CONFIG_FORCE=1
 
 # wad-archive is that same install as one file, so what a player extracts over a
 # config root is what install-config would have written there. The release
@@ -192,32 +188,41 @@ wad-archive: $(BIN_DIR)
 	@set -eu; \
 	stage=$$(mktemp -d); \
 	trap 'rm -rf "$$stage"' EXIT; \
-	$(MAKE) -s install-config VIF_CONFIG_DIR="$$stage" VIF_CONFIG_FORCE=1 >/dev/null; \
+	$(MAKE) -s install-config VIF_CONFIG_DIR="$$stage" >/dev/null; \
 	install -m 0644 LICENSE "$$stage/LICENSE"; \
 	tar -C "$$stage" -czf $(WAD_ARCHIVE) .; \
 	echo "packed $(WAD_ARCHIVE)"
 
-# install stages a distro package: the binary, the wad as a system config root
-# ($(SYSCONFDIR)/xdg is the XDG_CONFIG_DIRS default the resolver already
-# searches), the licence, the manual, the desktop entry and icons, shell completion,
-# and the documentation. Build first; nothing here compiles, so a packager controls
-# the build flags.
+# install puts the binary, the wad as the system config root $(SYSCONFDIR)/vif,
+# the licence, the manual, the desktop entry and icons, shell completion and the
+# documentation under PREFIX. Unstaged and without write access there, it installs
+# for this user under ~/.local and the user config root instead. Build first;
+# nothing here compiles, so a packager controls the build flags.
 install:
-	@$(MAKE) -s install-config VIF_CONFIG_DIR='$(DESTDIR)$(SYSCONFDIR)/xdg/vif' VIF_CONFIG_FORCE=1
 	@set -eu; \
+	[ -x $(BIN_DIR)/$(BINARY) ] || { echo "$(BIN_DIR)/$(BINARY) is not built; run make release" >&2; exit 1; }; \
+	prefix='$(PREFIX)'; root='$(SYSCONFDIR)/vif'; \
+	writable() { d=$$1; while [ ! -e "$$d" ]; do d=$$(dirname "$$d"); done; [ -w "$$d" ]; }; \
+	if [ -z '$(DESTDIR)' ] && ! { writable "$$prefix/bin" && writable "$$prefix/share" && writable "$$root"; }; then \
+		prefix='$(HOME)/.local'; root='$(VIF_CONFIG_DIR)'; \
+		echo "no write access under $(PREFIX) or $(SYSCONFDIR); installing for $$(id -un) under $$prefix and $$root"; \
+	fi; \
+	$(MAKE) -s install-config VIF_CONFIG_DIR='$(DESTDIR)'"$$root" CLEAN='$(CLEAN)'; \
+	dest='$(DESTDIR)'"$$prefix"; \
 	put() { install -d -m 0755 "$${3%/*}"; install -m "$$1" "$$2" "$$3"; echo "install $$3"; }; \
-	put 0755 $(BIN_DIR)/$(BINARY) '$(DESTDIR)$(PREFIX)/bin/$(BINARY)'; \
-	put 0644 LICENSE '$(DESTDIR)$(PREFIX)/share/licenses/vif/LICENSE'; \
-	put 0644 doc/vif.6 '$(DESTDIR)$(PREFIX)/share/man/man6/vif.6'; \
-	put 0644 $(PKG_DIR)/vif.desktop '$(DESTDIR)$(PREFIX)/share/applications/vif.desktop'; \
-	put 0644 $(PKG_DIR)/vif.svg '$(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/vif.svg'; \
-	put 0644 $(PKG_DIR)/vif-symbolic.svg '$(DESTDIR)$(PREFIX)/share/icons/hicolor/symbolic/apps/vif-symbolic.svg'; \
-	put 0644 $(PKG_DIR)/vif.bash '$(DESTDIR)$(PREFIX)/share/bash-completion/completions/vif'; \
-	put 0644 $(PKG_DIR)/_vif '$(DESTDIR)$(PREFIX)/share/zsh/site-functions/_vif'; \
-	put 0644 $(PKG_DIR)/vif.fish '$(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d/vif.fish'; \
+	put 0755 $(BIN_DIR)/$(BINARY) "$$dest/bin/$(BINARY)"; \
+	put 0644 LICENSE "$$dest/share/licenses/vif/LICENSE"; \
+	put 0644 doc/vif.6 "$$dest/share/man/man6/vif.6"; \
+	put 0644 $(PKG_DIR)/vif.desktop "$$dest/share/applications/vif.desktop"; \
+	put 0644 $(PKG_DIR)/vif.svg "$$dest/share/icons/hicolor/scalable/apps/vif.svg"; \
+	put 0644 $(PKG_DIR)/vif-symbolic.svg "$$dest/share/icons/hicolor/symbolic/apps/vif-symbolic.svg"; \
+	put 0644 $(PKG_DIR)/vif.bash "$$dest/share/bash-completion/completions/vif"; \
+	put 0644 $(PKG_DIR)/_vif "$$dest/share/zsh/site-functions/_vif"; \
+	put 0644 $(PKG_DIR)/vif.fish "$$dest/share/fish/vendor_completions.d/vif.fish"; \
 	for src in README.md doc/*.md; do \
-		put 0644 "$$src" "$(DESTDIR)$(PREFIX)/share/doc/vif/$${src#doc/}"; \
-	done
+		put 0644 "$$src" "$$dest/share/doc/vif/$${src#doc/}"; \
+	done; \
+	[ -n '$(DESTDIR)' ] || case ":$$PATH:" in *":$$prefix/bin:"*) ;; *) echo "note: $$prefix/bin is not on PATH" ;; esac
 
 # image builds the deployment artifact from the repository root, which is the
 # context deploy/docker/Dockerfile expects. The revision is stamped as an OCI

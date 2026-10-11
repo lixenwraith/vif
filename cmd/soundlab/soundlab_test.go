@@ -548,8 +548,8 @@ func TestAudioFilesFollowVif(t *testing.T) {
 	base := t.TempDir()
 	user, sys, dir := filepath.Join(base, "user"), filepath.Join(base, "sys"), filepath.Join(base, "dir")
 	t.Setenv("XDG_CONFIG_HOME", user)
-	t.Setenv("XDG_CONFIG_DIRS", sys)
-	installed := filepath.Join(sys, paths.AppDirName, paths.AudioDirName, paths.MusicConfigFile)
+	t.Setenv(paths.SystemRootsEnv, sys)
+	installed := filepath.Join(sys, paths.AudioDirName, paths.MusicConfigFile)
 	for _, d := range []string{filepath.Dir(installed), dir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
