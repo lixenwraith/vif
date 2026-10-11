@@ -50,6 +50,7 @@ Existing focused references remain useful:
 
 - [FSM authoring reference](fsm-reference.md) documents the TOML surface in
   detail.
+- [TOML macros](toml-macros.md) records the macro decision and its syntax.
 - [TODO](todo.md) is the running work list the packaging checklists feed.
 - [Bots](todo-bots.md) is the working plan for bots and relayed seats, and becomes
   their document as its stages land.
