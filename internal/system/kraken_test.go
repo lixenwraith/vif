@@ -442,7 +442,7 @@ func TestKrakenLegInterceptsMissilesAndSharesUnstunnableHealth(t *testing.T) {
 	combat.applyHitArea(&event.CombatAttackAreaRequestPayload{
 		AttackType: component.CombatAttackPulse, OriginEntity: cursor, OwnerEntity: cursor, TargetEntity: e, HitEntities: []core.Entity{hit},
 	})
-	if hp.HitPoints != before-parameter.CombatDamagePulse || hp.StunnedRemaining != 0 {
+	if hp.HitPoints != before-parameter.CombatDamagePulse || hp.Stunned() {
 		t.Fatalf("pulse must damage without stunning: %+v", hp)
 	}
 	for _, attack := range []component.CombatAttackType{component.CombatAttackShield, component.CombatAttackExplosion} {

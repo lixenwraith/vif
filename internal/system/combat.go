@@ -278,11 +278,13 @@ func (s *CombatSystem) Update() {
 			live[t]++
 		}
 
-		// Update stun timer
-		if combatComp.StunnedRemaining > 0 {
-			combatComp.StunnedRemaining -= dt
-			if combatComp.StunnedRemaining < 0 {
-				combatComp.StunnedRemaining = 0
+		for k := range combatComp.Status {
+			slot := &combatComp.Status[k]
+			if slot.Remaining <= 0 {
+				continue
+			}
+			if slot.Remaining -= dt; slot.Remaining <= 0 {
+				*slot = component.Status{}
 			}
 		}
 
@@ -937,7 +939,7 @@ func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatCom
 	// A running stun is not refreshed. Refreshing it made every later hit — the
 	// other participant's included — extend the lockdown, so a target under
 	// continuous fire never left it.
-	if targetCombatComp.StunnedRemaining > 0 {
+	if targetCombatComp.Stunned() {
 		return false
 	}
 
@@ -970,8 +972,7 @@ func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatCom
 		return false
 	}
 
-	// Apply stun
-	targetCombatComp.StunnedRemaining = parameter.PulseStunDuration
+	targetCombatComp.Status[component.StatusStun] = component.Status{Remaining: parameter.PulseStunDuration}
 
 	// Clear enrage state
 	targetCombatComp.IsEnraged = false

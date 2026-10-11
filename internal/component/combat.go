@@ -60,8 +60,26 @@ const CombatEffectNone CombatEffectMask = 0
 const (
 	CombatEffectEnergyDrain CombatEffectMask = 1 << iota
 	CombatEffectKinetic
-	CombatEffectStun // Future
+	CombatEffectStun
 )
+
+// StatusKind indexes CombatComponent.Status: one slot per kind, no stacking
+type StatusKind uint8
+
+const (
+	StatusStun StatusKind = iota // movement suppressed
+	StatusCount
+)
+
+// Status is one effect a hit left on a combat entity, aged by combat each tick
+type Status struct {
+	Remaining time.Duration    // zero: inactive
+	Period    time.Duration    // between ticks of a periodic effect; zero: none
+	Timer     time.Duration    // until the next tick
+	Magnitude int              // what a tick applies
+	Source    core.Entity      // crediting cursor; Shared, so capture-safe
+	Attack    CombatAttackType // family a tick records under and checks immunity against
+}
 
 // CombatComponent tags an entity as combat-relevant for interactions.
 type CombatComponent struct {
@@ -98,9 +116,11 @@ type CombatComponent struct {
 	// Records accepted displacement sources; immunity itself covers every attacker.
 	KineticImmunitySpent uint32
 
-	// StunnedRemaining is remaining stun duration (movement suppressed)
-	StunnedRemaining time.Duration
+	// Status is indexed by StatusKind
+	Status [StatusCount]Status
 }
+
+func (c *CombatComponent) Stunned() bool { return c.Status[StatusStun].Remaining > 0 }
 
 // unownedAttacker is the immunity bit for an attack no cursor owns
 const unownedAttacker = 1 << parameter.MaxPlayers

@@ -132,7 +132,7 @@ func TestDrainStunStillStopsKineticIntegration(t *testing.T) {
 	kinetic, _ := w.Components.Kinetic.GetPtr(drain)
 	kinetic.VelX = 20
 	combat, _ := w.Components.Combat.GetPtr(drain)
-	combat.StunnedRemaining = time.Second
+	combat.Status[component.StatusStun].Remaining = time.Second
 	combat.RemainingKineticImmunity = parameter.CombatKineticImmunityDuration
 	beforeX, beforeY := kinetic.PreciseX, kinetic.PreciseY
 

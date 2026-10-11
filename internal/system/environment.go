@@ -219,7 +219,7 @@ func (s *EnvironmentSystem) applyPlanarWind(forceX, forceY float64) {
 func (s *EnvironmentSystem) applyStormWind(forceX, forceY, seconds float64) {
 	s.world.WithDomain(core.DomainShared, func() {
 		for _, entity := range s.world.Components.StormCircle.Entities() {
-			if combat, ok := s.world.Components.Combat.GetComponent(entity); ok && combat.StunnedRemaining > 0 {
+			if combat, ok := s.world.Components.Combat.GetComponent(entity); ok && combat.Stunned() {
 				continue
 			}
 			if kinetic, ok := s.world.Components.Kinetic.GetPtr(entity); ok {

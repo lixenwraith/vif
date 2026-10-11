@@ -844,13 +844,13 @@ func TestKnockbackAndStunImmunityCoverAllPlayersAndWeapons(t *testing.T) {
 		}
 	}
 	area(first, component.CombatAttackPulse)
-	if state.StunnedRemaining == 0 {
+	if !state.Stunned() {
 		t.Fatal("first stun did not land")
 	}
-	state.StunnedRemaining /= 2
-	stun := state.StunnedRemaining
+	state.Status[component.StatusStun].Remaining /= 2
+	stun := state.Status[component.StatusStun].Remaining
 	area(second, component.CombatAttackPulse)
-	if state.StunnedRemaining != stun {
+	if state.Status[component.StatusStun].Remaining != stun {
 		t.Fatal("another player's pulse refreshed stun immunity")
 	}
 	w.Resources.Time.DeltaTime = max(remaining, stun)
