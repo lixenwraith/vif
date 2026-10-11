@@ -127,15 +127,21 @@ creates no audio refuses them and a default must not break `-serve`.
 ## 4. Installation
 
 ```bash
-make install-config                                  # into the user root
+make install                                         # /usr/local, else ~/.local and the user root
+make install-config                                  # the user root only
 make install-config VIF_CONFIG_DIR=/path/to/stage    # into a staging root
-make install DESTDIR=/pkg PREFIX=/usr SYSCONFDIR=/etc # distribution package
+make install DESTDIR=/pkg PREFIX=/usr                # distribution package, root /etc/vif
 ```
 
-`install-config` copies `wad/` plus the embedded keymap and retains existing
-files, so an update never overwrites user edits; `install-config-force` replaces
-them. `install` stages a package: binary, `wad/` as a system configuration root,
-licence, and documentation. See [Packaging](packaging.md).
+Both copy `wad/`, the bot graphs, the keymap and `vif.toml`. A reinstall replaces
+every shipped file and keeps files a player added; the keymap and `vif.toml` are
+the player's settings and are written only when absent. `CLEAN=1` first removes
+the shipped categories (`scenario/`, `content/`, `image/`, `bot/`) and those two
+files, so the root holds only the fresh install plus `audio/` and anything else
+a player put beside them. `install` adds the binary, licence, manual, launcher,
+completion and documentation under `PREFIX` with the wad at `$(SYSCONFDIR)/vif`;
+without `DESTDIR` and without write access there, it installs the same for the
+current user under `~/.local` and the user root. See [Packaging](packaging.md).
 
 ## 5. Logs, journals, and runtime output
 
