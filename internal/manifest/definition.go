@@ -142,7 +142,7 @@ var Systems = []SystemDef{
 		Optional: []string{"death", "energy", "weapon", "heat"}}, // rolled per participant against owner-authored inventory; reward handlers are optional (D-6)
 	{Name: "glyph", Constructor: "NewGlyphSystem", Domain: "player"}, // player stream and entities; corpus and map are its only inputs
 	{Name: "nugget", Constructor: "NewNuggetSystem", Domain: "player",
-		Optional: []string{"cleaner", "energy", "heat"}}, // personal: each participant owns its spawn, collection and reward
+		Optional: []string{"materialize", "energy", "heat"}}, // personal: each participant owns its spawn, collection and reward
 	{Name: "particle", Constructor: "NewParticleSystem", Domain: "player", Optional: []string{"glyph", "death"}}, // behavior-selected player particles; glyph and death effects are optional
 	{Name: "gold", Constructor: "NewGoldSystem", Domain: "shared", Snapshot: "state", // sequence liveness, its header, and both deadlines live outside any store
 		Requires: []string{"composite"}, Optional: []string{"nugget", "energy", "splash"}}, // contested: the composite sequence is shared, the reward owner-authored

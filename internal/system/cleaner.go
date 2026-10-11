@@ -342,12 +342,7 @@ func cleanerFlightBounds(size int) (negative, positive float64) {
 
 // checkCollisions handles combat and glyph interactions at a single cell
 // Returns true if a combat entity was hit (blocks cleaner head)
-// Nugget cleaners are visual-only; their personal beacon never mutates glyphs or combat.
 func (s *CleanerSystem) checkCollisions(x, y int, selfEntity, owner core.Entity, velX, velY float64, colorType component.CleanerColorType) bool {
-	if colorType == component.CleanerColorNugget {
-		return false
-	}
-
 	var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 	n := s.world.Positions.GetAllEntitiesAtInto(x, y, entityBuf[:])
 	if n == 0 {

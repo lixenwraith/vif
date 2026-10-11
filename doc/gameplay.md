@@ -195,7 +195,8 @@ Collision behavior still varies by attacker through combat/species profiles.
 
 At most one normal nugget is tracked by `NuggetSystem`. When absent, the system
 attempts a random free-cell spawn after the one-second spawn interval. A beacon
-periodically emits a directional cleaner cue toward it.
+periodically converges materialize beams on it, in the nugget's colour and shorter
+than a spawn's.
 
 A nugget is collected by exact cursor overlap or by entering the active
 shield/ember collection ellipse. Collection adds 10 heat. `Tab` jumps to the

@@ -44,10 +44,11 @@ var (
 	RgbGlyphGold  = color.Yellow
 	RgbGlyphWhite = color.White
 
-	RgbDecay       = color.Teal
-	RgbBlossom     = color.LightPink
-	RgbDrain       = color.VibrantCyan
-	RgbMaterialize = color.BrightCyan
+	RgbDecay             = color.Teal
+	RgbBlossom           = color.LightPink
+	RgbDrain             = color.VibrantCyan
+	RgbMaterialize       = color.BrightCyan
+	RgbMaterializeNugget = RgbNuggetOrange // the beacon's beams, the nugget's own colour
 
 	RgbDustDark   = color.DarkGray
 	RgbDustNormal = color.MidGray
@@ -111,7 +112,6 @@ var (
 	// Cleaner colors
 	RgbCleanerBasePositive = color.Yellow
 	RgbCleanerBaseNegative = color.MediumPurple
-	RgbCleanerBaseNugget   = color.Vermilion
 
 	// Flash colors
 	RgbRemovalFlash = color.Ivory

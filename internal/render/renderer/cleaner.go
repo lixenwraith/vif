@@ -19,7 +19,6 @@ type CleanerRenderer struct {
 
 	gradientPositive []color.RGB
 	gradientNegative []color.RGB
-	gradientNugget   []color.RGB
 }
 
 // NewCleanerRenderer creates cleaner renderer with gradient generation
@@ -37,7 +36,6 @@ func (r *CleanerRenderer) buildGradients() {
 
 	r.gradientPositive = make([]color.RGB, length)
 	r.gradientNegative = make([]color.RGB, length)
-	r.gradientNugget = make([]color.RGB, length)
 
 	for i := range length {
 		t := 0.0
@@ -51,7 +49,6 @@ func (r *CleanerRenderer) buildGradients() {
 			(parameter.CleanerTrailHeadIntensity-parameter.CleanerTrailTailIntensity)*fade
 		r.gradientPositive[i] = color.Scale(visual.RgbCleanerBasePositive, intensity)
 		r.gradientNegative[i] = color.Scale(visual.RgbCleanerBaseNegative, intensity)
-		r.gradientNugget[i] = color.Scale(visual.RgbCleanerBaseNugget, intensity)
 	}
 }
 
@@ -75,8 +72,6 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 			gradient = r.gradientPositive
 		case component.CleanerColorNegative:
 			gradient = r.gradientNegative
-		case component.CleanerColorNugget:
-			gradient = r.gradientNugget
 		default:
 			return true
 		}

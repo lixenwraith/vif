@@ -12,7 +12,6 @@ type CleanerColorType uint8
 const (
 	CleanerColorPositive CleanerColorType = iota // Yellow (energy >= 0)
 	CleanerColorNegative                         // Violet (energy < 0)
-	CleanerColorNugget                           // Green, targets green glyphs
 )
 
 type CleanerComponent struct {

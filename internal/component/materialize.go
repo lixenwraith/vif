@@ -1,5 +1,11 @@
 package component
 
+import (
+	"time"
+
+	"github.com/lixenwraith/vif/internal/parameter"
+)
+
 // MaterializeComponent represents a converging beam effect toward a spawn target
 type MaterializeComponent struct {
 	// Target area (beams converge to this rectangle)
@@ -18,11 +24,44 @@ type MaterializeComponent struct {
 	Type SpawnType
 }
 
-// SpawnType identifies what entity will be spawned upon materialization completion
+// SpawnType identifies what a materialization announces; its completion event
+// carries it, and a consumer acts only on its own kind
 type SpawnType int
 
 const (
 	SpawnTypeDrain SpawnType = iota
 	SpawnTypeSwarm
-	// Future: SpawnTypeQuasar, SpawnTypeBoss
+	SpawnTypeNugget // a beacon: nothing spawns when it completes
+	SpawnTypeCount
 )
+
+// MaterializeStyle is one spawn type's beam timing; a zero field takes the default
+type MaterializeStyle struct {
+	Duration time.Duration
+	FillEnd  float64 // fraction of Duration at which the fill ends and the hold begins
+	HoldEnd  float64 // fraction at which the hold ends and the recede begins
+}
+
+// MaterializeStyles is indexed by SpawnType
+var MaterializeStyles = [SpawnTypeCount]MaterializeStyle{
+	SpawnTypeNugget: {Duration: parameter.MaterializeNuggetDuration,
+		FillEnd: parameter.MaterializeNuggetFillEnd, HoldEnd: parameter.MaterializeNuggetHoldEnd},
+}
+
+// Style is the spawn type's beam timing with the defaults filled in
+func (t SpawnType) Style() MaterializeStyle {
+	var s MaterializeStyle
+	if t >= 0 && t < SpawnTypeCount {
+		s = MaterializeStyles[t]
+	}
+	if s.Duration <= 0 {
+		s.Duration = parameter.MaterializeAnimationDuration
+	}
+	if s.FillEnd <= 0 {
+		s.FillEnd = parameter.MaterializeFillEnd
+	}
+	if s.HoldEnd <= 0 {
+		s.HoldEnd = parameter.MaterializeHoldEnd
+	}
+	return s
+}
