@@ -213,11 +213,6 @@ func (s *HeatSystem) addHeat(cursor core.Entity, delta int) {
 		heatComp.EmberActive = true
 		heatComp.EmberDecayTime = s.world.Resources.Time.GameTime
 		s.world.PushLocal(event.EventHeatBurst, &event.HeatBurstPayload{Entity: cursor})
-
-		// The personal sweep cannot steer the shared FSM (D-6, D-20).
-		s.world.PushLocal(event.EventCleanerSweepingRequest, &event.CleanerSweepingRequestPayload{
-			Entity: cursor,
-		})
 	}
 
 	s.publish(cursor, heatComp)

@@ -275,11 +275,6 @@ type DirectionalCleanerPayload struct {
 	ColorType component.CleanerColorType `toml:"color_type"`
 }
 
-// CleanerSweepingRequestPayload names the cursor whose polarity drives the sweep.
-type CleanerSweepingRequestPayload struct {
-	Entity core.Entity `toml:"entity"`
-}
-
 // --- Gold ---
 
 // GoldSpawnedPayload provides information about the spawned gold sequence

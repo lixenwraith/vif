@@ -1,7 +1,6 @@
 package system
 
 import (
-	"slices"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -81,7 +80,6 @@ func (s *CleanerSystem) Priority() int {
 // EventTypes returns the event types CleanerSystem handles
 func (s *CleanerSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventCleanerSweepingRequest,
 		event.EventCleanerDirectionalRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
@@ -104,22 +102,13 @@ func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
-		if ev.Type == event.EventCleanerSweepingRequest || ev.Type == event.EventCleanerDirectionalRequest {
+		if ev.Type == event.EventCleanerDirectionalRequest {
 			s.statDisabled.Add(1)
 		}
 		return
 	}
 
 	switch ev.Type {
-	case event.EventCleanerSweepingRequest:
-		if payload, ok := ev.Payload.(*event.CleanerSweepingRequestPayload); ok {
-			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
-				s.spawnSweepingCleaners(ev.Domain, cursor)
-			} else {
-				s.statCursorRejects.Add(1)
-			}
-		}
-
 	case event.EventCleanerDirectionalRequest:
 		if payload, ok := ev.Payload.(*event.DirectionalCleanerPayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
@@ -351,87 +340,6 @@ func cleanerFlightBounds(size int) (negative, positive float64) {
 	return -margin + 0.5, float64(size) + margin - 0.5
 }
 
-// spawnSweepingCleaners generates cleaner entities for one cursor in the request's domain.
-func (s *CleanerSystem) spawnSweepingCleaners(domain core.Domain, owner core.Entity) {
-	config := s.world.Resources.Config
-
-	rows := s.scanTargetRows(owner)
-
-	spawnCount := len(rows)
-	// No rows to clean
-	if spawnCount == 0 {
-		return
-	}
-	s.statSpawned.Add(int64(spawnCount))
-
-	s.world.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{
-		ID: parameter.Sfx.Ring,
-	})
-
-	// Determine color type from energy polarity
-	colorType := component.CleanerColorPositive
-	if energyComp, ok := s.world.Components.Energy.GetPtr(owner); ok {
-		if energyComp.Current < 0 {
-			colorType = component.CleanerColorNegative
-		}
-	}
-
-	minFlightX, maxFlightX := cleanerFlightBounds(config.MapWidth)
-	baseSpeed := parameter.CleanerBaseHorizontalSpeed
-
-	// Spawn one cleaner per row with Red entities, alternating L→R and R→L direction
-	for _, row := range rows {
-		var startX, targetX, velX float64
-		// Row index -> precise Y at the cell center
-		_, rowCenterY := vmath.Point{Y: row}.CenterF()
-
-		if row%2 != 0 {
-			// Left to right
-			startX = minFlightX
-			targetX = maxFlightX
-			velX = baseSpeed
-		} else {
-			// Right to left
-			startX = maxFlightX
-			targetX = minFlightX
-			velX = -baseSpeed
-		}
-
-		startGridX := vmath.PointAtF(startX, rowCenterY).X
-		startGridY := row
-
-		// Initialize trail ring buffer with starting position
-		var trailRing [parameter.CleanerTrailLength]vmath.Point
-		trailRing[0] = vmath.Point{X: startGridX, Y: startGridY}
-
-		cleanerComp := component.CleanerComponent{
-			OwnerEntity: owner,
-			TargetX:     targetX,
-			TargetY:     rowCenterY,
-			TrailRing:   trailRing,
-			TrailHead:   0,
-			TrailLen:    1,
-			ColorType:   colorType,
-		}
-		kinetic := physics.Kinetic{
-			PreciseX: startX,
-			PreciseY: rowCenterY,
-			VelX:     velX,
-			VelY:     0,
-		}
-		kineticComp := component.KineticComponent{Kinetic: kinetic}
-
-		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
-		entity := s.world.CreateEntity(domain)
-		s.world.Positions.SetPosition(entity, component.PositionComponent{X: startGridX, Y: startGridY})
-		s.world.Components.Cleaner.SetComponent(entity, cleanerComp)
-		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
-		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-			Mask: component.ProtectFromSpecies | component.ProtectFromDeath,
-		})
-	}
-}
-
 // checkCollisions handles combat and glyph interactions at a single cell
 // Returns true if a combat entity was hit (blocks cleaner head)
 // Nugget cleaners are visual-only; their personal beacon never mutates glyphs or combat.
@@ -623,50 +531,4 @@ func (s *CleanerSystem) spawnDirectionalCleaners(domain core.Domain, owner core.
 		})
 		s.statSpawned.Add(1)
 	}
-}
-
-// scanTargetRows finds rows containing target character type based on energy polarity
-// Returns rows with TypeRed (energy >= 0) or TypeBlue (energy < 0)
-func (s *CleanerSystem) scanTargetRows(owner core.Entity) []int {
-	config := s.world.Resources.Config
-	gameHeight := config.MapHeight
-
-	// Determine target type based on energy polarity
-	targetType := component.GlyphRed
-	if energyComp, ok := s.world.Components.Energy.GetPtr(owner); ok {
-		if energyComp.Current < 0 {
-			targetType = component.GlyphBlue
-		}
-	}
-
-	targetRows := make(map[int]bool)
-
-	entities := s.world.Components.Glyph.Entities()
-
-	for _, entity := range entities {
-		if entity.Domain() != core.DomainPlayer {
-			continue
-		}
-		glyph, ok := s.world.Components.Glyph.GetPtr(entity)
-		if !ok || glyph.Type != targetType {
-			continue
-		}
-
-		pos, ok := s.world.Positions.GetPosition(entity)
-		if !ok {
-			continue
-		}
-
-		if pos.Y >= 0 && pos.Y < gameHeight {
-			targetRows[pos.Y] = true
-		}
-	}
-
-	rows := make([]int, 0, len(targetRows))
-	for row := range targetRows {
-		rows = append(rows, row)
-	}
-	// Spawn order assigns entity IDs, so map order must not reach it
-	slices.Sort(rows)
-	return rows
 }

@@ -67,25 +67,3 @@ func TestCleanerSamplesEverySweptCellBeforeCombatImpact(t *testing.T) {
 		}
 	}
 }
-
-func TestSweepingCleanerUsesFullMapBoundsWhenViewportIsSmaller(t *testing.T) {
-	w, cursor, _ := testCursorWorld(t)
-	w.SetupLevel(120, 30, false, false, false)
-
-	glyph := w.CreateEntity(core.DomainPlayer)
-	w.Positions.SetPosition(glyph, component.PositionComponent{X: 100, Y: 5})
-	w.Components.Glyph.SetComponent(glyph, component.GlyphComponent{Rune: 'x', Type: component.GlyphRed})
-
-	cleaners := NewCleanerSystem(w).(*CleanerSystem)
-	cleaners.spawnSweepingCleaners(core.DomainShared, cursor)
-	entities := w.Components.Cleaner.Entities()
-	if len(entities) != 1 {
-		t.Fatalf("sweeping cleaner count = %d, want 1", len(entities))
-	}
-	cleaner, _ := w.Components.Cleaner.GetComponent(entities[0])
-	minX, maxX := cleanerFlightBounds(w.Resources.Config.MapWidth)
-	if cleaner.TargetX != maxX || cleaner.TrailRing[0].X != int(minX-0.5) {
-		t.Fatalf("sweep bounds = start cell %d target %v, want map-wide start %v target %v",
-			cleaner.TrailRing[0].X, cleaner.TargetX, minX, maxX)
-	}
-}

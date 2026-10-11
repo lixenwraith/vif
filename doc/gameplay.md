@@ -155,7 +155,6 @@ and activates the ember phase. Ember decays heat periodically and protects
 ordinary energy penalties while active. A heat penalty also clears the
 overheat accumulation.
 
-HeatSystem requests the bursting participant's sweeping cleaner locally.
 Special-attack heat spending consumes overheat before current heat without
 resetting the remaining overheat or triggering the penalty sound.
 

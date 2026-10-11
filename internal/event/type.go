@@ -141,8 +141,6 @@ const (
 
 	// EventCleanerDirectionalRequest (DirectionalCleanerPayload) [local] spawns 4-way cleaners from origin
 	EventCleanerDirectionalRequest
-	// EventCleanerSweepingRequest (CleanerSweepingRequestPayload) [local] spawns cleaners on rows with positive/negative energy glyphs
-	EventCleanerSweepingRequest
 
 	// --- Gold ---
 
