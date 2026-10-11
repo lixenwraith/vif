@@ -275,12 +275,13 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 	}
 	local.Seed = fromAnchor.Seed
 	local.Session = fromAnchor.Session
-	// The scenario is the session's, so its name is taken as a hint for the local
-	// lookup; resolveJoinScenario compares digests and fetches the bytes when this
-	// host has something else under that name. The corpus is not taken at all: what
-	// a player types is resolved here, from this machine's roots or -d, and never
-	// reconciled with the coordinator.
-	local.Resources.Scenario = fromAnchor.Resources.Scenario
+	// The scenario's name is only a hint for the root lookup, which -d skips:
+	// resolveJoinScenario compares digests and fetches the bytes no root here holds.
+	// The corpus is not taken at all: what a player types is resolved here, from
+	// this machine's roots or -d, and never reconciled with the coordinator.
+	if !local.Resources.Embedded {
+		local.Resources.Scenario = fromAnchor.Resources.Scenario
+	}
 	// The map latch travels with identity rather than being adopted afterwards: the
 	// FSM boots inside New and spawns cursor slot zero at the centre of whatever map
 	// it finds, so a latch applied later leaves that shared cursor on this

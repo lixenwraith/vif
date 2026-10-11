@@ -193,6 +193,29 @@ func TestPresentedScriptModeIsWiredForATerminal(t *testing.T) {
 
 func TestRunScriptPairsHeadlessNetworkInstances(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
+	writeScript := func(name, motion string) string {
+		path := filepath.Join(t.TempDir(), name)
+		body := fmt.Sprintf("schema = 1\nticks = 3\nwidth = 80\nheight = 24\n[[action]]\ntick = 0\nintent = %q\n", motion)
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+		return path
+	}
+	host, guest := runScriptPair(t,
+		Config{Resources: resource.Options{Embedded: true}, Seed: 0x5C71}, writeScript("host.toml", "motion_right"),
+		Config{Resources: resource.Options{Embedded: true}}, writeScript("guest.toml", "motion_left"))
+	if guest.Executed != 1 || guest.Ticks != 3 {
+		t.Fatalf("guest stats = %+v", guest)
+	}
+	if host.Executed != 1 || host.Ticks != 3 {
+		t.Fatalf("host stats = %+v", host)
+	}
+}
+
+// runScriptPair runs host as a two-participant session on a loopback socket and
+// guest joined to it, as -script with -host and -join do, and returns their stats.
+func runScriptPair(t *testing.T, host Config, hostPath string, guest Config, guestPath string) (h, g journal.ScriptStats) {
+	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserve address: %v", err)
@@ -202,40 +225,22 @@ func TestRunScriptPairsHeadlessNetworkInstances(t *testing.T) {
 		t.Fatalf("release address: %v", err)
 	}
 
-	writeScript := func(name, motion string) string {
-		path := filepath.Join(t.TempDir(), name)
-		body := fmt.Sprintf("schema = 1\nticks = 3\nwidth = 80\nheight = 24\n[[action]]\ntick = 0\nintent = %q\n", motion)
-		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-			t.Fatalf("write %s: %v", name, err)
-		}
-		return path
-	}
-	hostPath := writeScript("host.toml", "motion_right")
-	guestPath := writeScript("guest.toml", "motion_left")
-
 	hostResult := make(chan scriptResult, 1)
+	host.HostAddress, host.Participants = address, 2
 	go func() {
-		stats, err := RunScript(Config{
-			Resources: resource.Options{Embedded: true}, Seed: 0x5C71, HostAddress: address, Participants: 2,
-		}, hostPath)
+		stats, err := RunScript(host, hostPath)
 		hostResult <- scriptResult{stats: stats, err: err}
 	}()
 
-	guestConfig := Config{Resources: resource.Options{Embedded: true}, JoinAddress: address}
-	deadline := time.Now().Add(socketWait)
-	var guest journal.ScriptStats
-	for {
-		guest, err = RunScript(guestConfig, guestPath)
+	guest.JoinAddress = address
+	for deadline := time.Now().Add(socketWait); ; time.Sleep(10 * time.Millisecond) {
+		g, err = RunScript(guest, guestPath)
 		if err == nil {
 			break
 		}
 		if !errors.Is(err, syscall.ECONNREFUSED) || time.Now().After(deadline) {
 			t.Fatalf("guest script: %v", err)
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if guest.Executed != 1 || guest.Ticks != 3 {
-		t.Fatalf("guest stats = %+v", guest)
 	}
 
 	select {
@@ -243,12 +248,11 @@ func TestRunScriptPairsHeadlessNetworkInstances(t *testing.T) {
 		if result.err != nil {
 			t.Fatalf("host script: %v", result.err)
 		}
-		if result.stats.Executed != 1 || result.stats.Ticks != 3 {
-			t.Fatalf("host stats = %+v", result.stats)
-		}
+		return result.stats, g
 	case <-time.After(socketWait):
 		t.Fatal("host script did not finish")
 	}
+	return h, g
 }
 
 // The cross-process gate: the 500-tick continuation proof with the two halves in
