@@ -2,9 +2,9 @@
 
 Working design for three linked changes: a status mechanism on combat entities
 (stun today, burn next, slow later), what each weapon kind gains at its charge cap,
-and the reshaping of the cleaner into the always-held main gun. §7 lists the
-decisions the plan waits on; the sections before it give the recommended answer
-and why. When the work lands this condenses into [Combat and weapons](combat.md).
+and the reshaping of the cleaner into the always-held main gun. §7 records the
+decisions taken; §5 is the order the work lands in. When it lands this condenses
+into [Combat and weapons](combat.md).
 
 ## 1. What the code constrains
 
@@ -74,12 +74,14 @@ Status [StatusCount]Status
 - **Expire.** The slot zeroes. Entity death takes it with the component.
 - **Readers.** `Stunned()` replaces the six `StunnedRemaining > 0` reads; stun
   still clears enrage; burn leaves it. The digest names every slot field.
-- **Profiles.** `CombatEffectBurn` joins the effect mask. Burn's figures are three
-  constants (`BurnDamage` 1, `BurnPeriod` 1 s, `BurnDuration` 3 s) until a second
-  burn source exists; the slot stores magnitude and period so the ticker has no
-  per-kind switch. Over-time is an effect of a hit, not a way the hit reaches HP,
-  so the unused `CombatDamageOverTime` resolver placeholder is deleted: the
-  profile's `DamageType` keeps choosing between the direct and the area resolver.
+- **Profiles.** A burn is its own attack family, `CombatAttackBurn`, whose profile
+  has `DamageType: CombatDamageOverTime`: `DamageValue` is the damage per tick and
+  the profile's `Period` and `Duration` are the slot's. It reaches a target as a
+  chained direct request, so the direct resolver routes an over-time profile to
+  the slot instead of to HP. Ticks record under the burn family and check
+  immunity against it: nothing spends that family, so only a sealed window
+  (species invulnerability) blocks a tick or an application. The slot stores
+  magnitude and period, so the ticker has no per-kind switch.
 - **Cursor later.** A cursor's status is owner-authored (D-13): it travels in
   `CursorStatePayload`, and its burn ticks `strikeCursor` on the owner. The slot
   layout needs no change for it.
@@ -95,18 +97,20 @@ The `WeaponSpecs` row says what a kind does at its cap; zero values mean "as bel
 the cap", so a kind opts in by filling one field:
 
 ```go
-MaxedAttack   CombatAttackType // family fired at the cap; CombatAttackNone keeps Attack
-MaxedCooldown time.Duration    // replaces Cooldown at the cap
-Stream        int              // bullets per main fire while the wave cooldown runs
-ArcRange      float64          // cells a hit arcs to the nearest other target within
-Sustained     bool             // the ray never ends
+MaxedCooldown time.Duration // replaces Cooldown at the cap
+Stream        int           // bullets per stream shot while the wave cooldown runs
+ArcRange      float64       // cells a hit arcs to the nearest other target within
+Sustained     bool          // the ray never ends
 ```
+
+A charged hit is the fifth: every delivery learns whether its weapon is at the cap
+and the pulse carries it as `Charged` on its artifact (§3.3).
 
 | Kind | Cap | At the cap | Row |
 |---|---|---|---|
 | Rod | 10 | each hit arcs to the nearest other target | `ArcRange` |
 | Launcher | 10 | cooldown halved | `MaxedCooldown` |
-| Disruptor | 1 → 2 | the pulse also burns | `MaxedAttack` |
+| Disruptor | 1 → 2 | the pulse also burns | `Charged` on the pulse, chain in the profile |
 | Turret | 5 | single shots between waves | `Stream` |
 | Emitter | 3 | the ray stays lit and sweeps with the orb | `Sustained` |
 
@@ -121,9 +125,12 @@ effect draws the zap from the origin, so the arc is a bolt from the first target
 to the second with no new visual code. It also pays the drain reward, which
 doubles the rod's energy income at the cap (§6).
 
-No roll: a range gate is deterministic and costs no stream position; a 50 % draw
-is a knob to add only if arcs prove too strong. A target hit this volley is
+No roll: a range gate is deterministic, costs no stream position, and leaves the
+outcome to positioning rather than luck. A target hit or arced to this volley is
 skipped rather than refused by its immunity window, which keeps the queue clean.
+`FindNearestTargets` lists composites before singles, so the arc keeps the rod's
+own priority; the candidate count is the volley's primaries plus one so an unhit
+candidate is always among them when one exists.
 One hop; `ChainDepth` stays 0 because the arc is a new request, not a follow-up
 of the hit. Cost: one store scan and sort per unique primary per volley, at most
 ten per 500 ms, far below the per-tick scan a ray already does. `ArcRange` starts
@@ -137,35 +144,41 @@ the row and the charge count instead of the row alone.
 ### 3.3 Disruptor: the charged pulse
 
 `MaxCharges` becomes 2; the orb shows `1` below the cap as every other kind does.
-`MaxedAttack` is `CombatAttackPulseCharged`, a new family whose profile is the
-pulse's (area, 1 damage, stun, kraken unstunnable) plus `CombatEffectBurn`. The
-explosion crossing already carries the family, so the host and every guest derive
-the same burn; telemetry gains `damage_family_pulse_charged`; the immunity array
-grows by one family. A payload flag or a `Scale` threshold was rejected: it would
-put the cap rule in combat instead of the table. The hosted disruptor is
-untouched; a mount strikes cursors with `HostedDamage`.
+At the cap the pulse's explosion artifact and the area requests derived from it
+carry `Charged`. The pulse profile gains `Charged: &burnProfiles[d]`, the chain a
+charged hit adds beside the unconditional `Chain` every profile may have; combat
+emits it per hit entity exactly as it emits `Chain`, as a direct request of the
+burn family stamped to the target's domain (D-5: derived, never transported).
+The direct resolver sees `CombatDamageOverTime` and refreshes the burn slot on
+the member an ablative hit named, or the target otherwise. The host and every
+guest derive the same burn from the same artifact; telemetry gains
+`damage_family_burn`; the immunity array grows by one family. The hosted
+disruptor is untouched; a mount strikes cursors with `HostedDamage`.
 
 ### 3.4 Turret: the stream
 
-At the cap, a main fire that finds the wave cooldown running fires `Stream`
-bullets (1) at the nearest target with the usual spread, without resetting the
-cooldown or flashing the orb; the flash stays the wave's cue. Under auto fire
-main fire repeats every 250 ms and the wave every 500 ms, so the cadence is
-5, 1, 5, 1 with no silent gap. No timer is added: main fire is the stream's
-clock. The shared target query already sizes itself to the largest ready loadout;
-a streaming turret contributes `Stream`.
+At the cap the turret streams on its own clock: `WeaponComponent.Stream`, one
+timer per kind beside `Cooldown`, armed by a wave and ticked in `Update` only
+while that wave's cooldown runs. Each `TurretStreamInterval` (250 ms) it fires
+`Stream` bullets (1) at the nearest target from the orb with the usual spread,
+without resetting the cooldown or flashing the orb; the flash stays the wave's
+cue. Waves every 500 ms give the cadence 5, 1, 5, 1 with no silent gap, and a
+player who stops firing gets at most one trailing stream shot. The timer is
+owner-authored like the cooldowns and travels with them in `CursorStatePayload`.
 
 ### 3.5 Emitter: the sustained ray
 
-`RayComponent.Sustained`. At the cap `advanceRays` lays a ray on the orb whenever
-none exists: phase firing, `Scale` the charge count, `Duration` and `Remaining`
-set to `RayDuration` and never decremented, so the renderer draws it at full
-strength. `fireRay` at the cap returns false: main fire neither resets the
-cooldown nor flashes the orb, and no target is needed. The ray leaves with the
-orb on an energy zero crossing and only then. It strikes every tick as today, and
-a crossing is pushed only while the band covers a Shared target. The todo's
-"spokes" item builds on this and stays deferred. At the cap this is 3 damage per
-covered member per immunity window, continuously (§6).
+Below the cap nothing changes: duration and damage scale with charges and the
+cooldown runs from firing. At the cap the ray is continuous. `RayComponent.
+Sustained`: `advanceRays` lays a ray on the orb whenever none exists, phase
+firing, `Scale` the charge count, `Remaining` held at `Duration` so the renderer
+draws it at full strength; a timed ray still burning when the last charge
+arrives is converted in place, so there is no gap or flicker between the last
+timed cycle and the sustained one. `fireRay` at the cap returns false: main fire
+neither resets the cooldown nor flashes the orb, and no target is needed. The ray
+leaves with the orb on an energy zero crossing and only then. It strikes every
+tick as today, and a crossing is pushed only while the band covers a Shared
+target. The todo's "spokes" item builds on this and stays deferred.
 
 ### 3.6 Presentation
 
@@ -212,10 +225,16 @@ The cleaner joins `WeaponSpecs` as the kind every cursor holds:
 - `Directions`, a cardinal mask with all four set. The scenario override (one
   direction for a side-scroller) waits on scenario authoring; the spawn takes the
   mask now so that is one field later.
-- `CleanerSystem` stays as the delivery system, as `bullet` and `missile` are for
-  theirs: the loadout fires it through `EventCleanerDirectionalRequest` and it owns
-  the projectile's lifecycle. Folding it into `weapon.go` would move 300 lines of
-  swept traversal for no gain. Its `dual` domain stays.
+- `CleanerSystem` dissolves into `weapon`, as the ray already is: the loadout
+  spawns tracers in `fireAllWeapons` and advances them in `Update`, in a second
+  file of the weapon system (`internal/system/tracer.go`) holding the swept
+  traversal and the glyph effects. One system owns every cursor discharge, the
+  manifest loses a system and an event, and a region that removes the gun has
+  nothing else to disable. Tracers are Player-domain, as the fire path already
+  made them; the `dual` stamping goes with the event.
+- Upgrades: no `LootSpecs` row yet, so lanes come from `EventWeaponAddRequest`
+  raised by a scenario (`EmitEvent` takes any authorable payload) or god mode.
+  A drop row is a later addition.
 - Mounted: no hosted range or damage; `MountSystem.attach` rejects a kind without
   them. A hostile tracer is a later row edit.
 
@@ -226,51 +245,58 @@ renames anyway; the rest are docs and telemetry keys. The rename rides the merge
 PR. Kinds are devices and deliveries are effects (rod and lightning, turret and
 bullet), so the pair should read the same way:
 
-| Kind | Delivery | Reads as |
-|---|---|---|
-| Gun | Tracer | a gun fires tracers: a fast streak with a glowing tail, which is the visual |
-| Lancer | Lance | a straight directional strike; "lance" has no trail connotation |
-| Blaster | Streak | generic; "blast" collides with the explosion vocabulary |
-
-Gun and tracer are recommended.
+Kind `Gun`, delivery `Tracer`: a gun fires tracers, a fast streak with a glowing
+tail, which is the visual. `WeaponGun`, `DeliveryTracer`, `TracerComponent`,
+`CombatAttackTracer` (today's `CombatAttackProjectile`), the `tracer` renderer,
+`Tracer*` parameters and colours, `weapon.gun*` telemetry; `:auto main` keeps
+its name and `gun` replaces the `cleaner` alias.
 
 ## 5. Plan
 
-One task, one PR. §3 rests on §2, so they are one PR with one commit per step;
-§4 is two more.
+Three branches, each starting from the one before it, merged in this order:
 
-1. **Max-charge effects** (this branch): statuses with stun migrated; the charged
-   pulse and burn; rod arcs; launcher and turret; the sustained ray; docs condensed
-   into `combat.md` and `telemetry-audit.md`. Tests, one per rule: a burn ticks
-   and credits its source; a sealed window blocks a tick and a spent one is not
-   spent; a running stun is not refreshed; the digest names the slots; an arc
-   skips this volley's targets and respects its range; a sustained ray persists
-   without a target and main fire leaves it alone; a stream shot fires between
-   waves; the charged pulse crosses as its family.
-2. **Sweep removal and nugget beacon** (§4.1, §4.2).
-3. **Main gun merge and rename** (§4.3, §4.4).
+1. **This branch**: the design.
+2. **Untangle the cleaner**, two commits: the sweep removal with its command and
+   producer (§4.1); the nugget beacon as a materialize (§4.2). After it the
+   cleaner has one producer, the gun's fire path.
+3. **Weapons**, one commit per step: statuses with stun migrated; the burn
+   profile, the charged pulse and the second disruptor charge; rod arcs; launcher
+   and turret; the sustained ray; the cleaner folded into `weapon` as the tracer
+   gun with the rename; docs condensed into `combat.md`, tuning to `todo.md`, and
+   this document deleted. Tests, one per rule: a burn ticks and credits its last
+   refresher; a sealed window blocks a tick; a running stun is not refreshed; the
+   digest names the slots; the pulse chains a burn only when charged; an arc skips
+   this volley's targets and respects its range; a stream shot fires between
+   waves and stops with the cooldown; a sustained ray persists without a target
+   and main fire leaves it alone; the gun survives an energy zero crossing and a
+   remove request takes it away.
 
 ## 6. Tuning after play tests
 
-- Arc reward: whether an arc should pay the full drain reward, half, or none.
-- Sustained ray scale: the charge count or a lower `RaySustainedScale`.
+- Arc reward: an arc pays the lightning's energy reward like any hit; halve it if
+  the cap doubles the rod's income too far.
+- Sustained ray: 3 damage per covered member per immunity window, continuously.
 - Burn figures, and whether the charged pulse's stun should shorten to offset it.
-- `ArcRange`, `Stream`, and whether a stream shot should flash the orb faintly.
+- `ArcRange`, `TurretStreamInterval`, `Stream`, lane offsets at two gun charges.
 - Chain visuals: `LightningZapDuration` is two ticks; an arc may want longer.
+- A burn tint on species renderers; the hit flash per tick is the only cue now.
 
 ## 7. Decisions
 
-Each with the recommended answer first.
+Taken, in review of the first draft.
 
-1. Burn credit on refresh: the last refresher, or the first applier.
-2. Stun moves into the slot array now, or stays a field beside it.
-3. The charged pulse is its own attack family, or a flag on the explosion payload.
-4. Arcs are range-gated only, or also rolled at 50 %; arcs pay the drain reward.
-5. Sustained ray damage scales with charges, or is fixed at 1.
-6. The turret stream rides the main-fire clock, or gets its own timer.
-7. The sweeping cleaner is removed, with the `:cleaner` command.
-8. The main gun is a weapon kind with its delivery system kept, or is folded into
-   `weapon.go`, or stays outside the loadout.
-9. Gun and tracer, lancer and lance, or blaster and streak.
-10. The split in §5, which needs two more branches after this one.
-11. An energy zero crossing keeps the gun.
+1. Burn credit on refresh goes to the last refresher.
+2. Stun moves into the slot array now.
+3. The charged pulse is a `Charged` flag on its artifact and a chained over-time
+   profile, not a second pulse family: the chain already exists for follow-ups
+   and an over-time damage type is what the placeholder was for.
+4. Arcs are range-gated only; nothing random decides a hit. Arcs pay the usual
+   lightning reward.
+5. Ray duration and damage keep scaling with charges; the cap makes it continuous.
+6. The turret stream has its own timer, at the main-fire rate but not wired to it.
+7. The sweeping cleaner goes, with the `:cleaner` command and the burst producer.
+8. The cleaner folds into the weapon system, which also lets `fireAllWeapons`
+   and its neighbours be named for what they now do.
+9. Gun and tracer.
+10. Two branches after this one, in the order of §5.
+11. An energy zero crossing keeps the gun, as it keeps the cleaner today.
