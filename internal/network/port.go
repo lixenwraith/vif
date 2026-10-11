@@ -103,6 +103,12 @@ func (p *SocketPort) ServeSession(addr string, accept func(net.Conn) (PeerID, er
 	return p.transport.serveSession(addr, accept, admitted)
 }
 
+// ServeConn runs a join handshake on one end of a stream this process opened, the
+// other end of which is a participant joining through this one.
+func (p *SocketPort) ServeConn(conn net.Conn, accept func(net.Conn) (PeerID, error), admitted func(PeerID)) error {
+	return p.transport.serveConn(conn, accept, admitted)
+}
+
 // ParticipantID is the canonical source order used by the barrier.
 func (p *SocketPort) ParticipantID() uint32 { return uint32(p.config.ParticipantID) }
 

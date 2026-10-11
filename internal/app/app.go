@@ -187,6 +187,7 @@ type App struct {
 	seats       []*seat
 	seatSerial  uint64
 	seatAddress string // extra loopback join listener after succession; world lock
+	relay       relayDesk
 }
 
 // New wires the runtime, releasing anything already started on failure. Errors are

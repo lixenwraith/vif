@@ -190,6 +190,28 @@ func (t *Transport) serveSession(addr string, accept func(net.Conn) (PeerID, err
 	return ln.Addr().String(), nil
 }
 
+// serveConn runs one admission handshake on a stream this process opened to itself,
+// as the accept loop runs one on a stream a listener took. It waits for a handshake
+// slot rather than refusing: the dialer is this process, not a flood.
+func (t *Transport) serveConn(conn net.Conn, accept func(net.Conn) (PeerID, error), admitted func(PeerID)) error {
+	select {
+	case t.handshakes <- struct{}{}:
+	case <-t.stopCh:
+		_ = conn.Close()
+		return errors.New("transport is stopped")
+	}
+	t.listenMu.Lock()
+	defer t.listenMu.Unlock()
+	if !t.running.Load() {
+		<-t.handshakes
+		_ = conn.Close()
+		return errors.New("transport is stopped")
+	}
+	t.wg.Add(1)
+	go t.handshake(conn, accept, admitted)
+	return nil
+}
+
 // acceptLoop handles incoming connections
 func (t *Transport) acceptLoop(ln net.Listener, accept func(net.Conn) (PeerID, error), admitted func(PeerID)) {
 	defer t.wg.Done()

@@ -555,26 +555,9 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 	if err != nil {
 		return err
 	}
-	offer.SnapshotTick, offer.SnapshotBytes = tick, len(body)
-	chunks, err := network.EncodeSnapshotChunks(tick, body)
+	transferStart, err := sendGate(port, offer, tick, body)
 	if err != nil {
 		return err
-	}
-	start, err := json.Marshal(offer)
-	if err != nil {
-		return err
-	}
-	if !port.Send(uint32(id), uint8(network.MsgStart), start) {
-		return fmt.Errorf("could not release participant %d", id)
-	}
-	// The transfer is the measurement, so it is timed from the first chunk to the
-	// joiner's confirmation. Nothing else on a fresh link has pushed enough bytes
-	// to say what it carries.
-	transferStart := time.Now() // [wall] a link measurement, not a game clock
-	for i, chunk := range chunks {
-		if !port.Send(uint32(id), uint8(network.MsgStateSnapshot), chunk) {
-			return fmt.Errorf("could not send capture chunk %d/%d", i+1, len(chunks))
-		}
 	}
 	if err := a.awaitJoinerReady(port, id); err != nil {
 		return err
@@ -592,6 +575,33 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 	a.log.Info("session", "msg", "mid-run participant admitted",
 		"peer", id, "slot", assignment.Slot, "snapshot_tick", tick, "bytes", len(body))
 	return nil
+}
+
+// sendGate releases the participant an offer is addressed to into the world body
+// encodes at tick, and returns when its transfer started. The transfer is the
+// measurement, so it is timed from the first chunk to the joiner's confirmation:
+// nothing else on a fresh link has pushed enough bytes to say what it carries.
+func sendGate(port *network.SocketPort, offer network.SessionOffer, tick uint64, body []byte) (time.Time, error) {
+	id := uint32(offer.Assigned)
+	offer.SnapshotTick, offer.SnapshotBytes = tick, len(body)
+	chunks, err := network.EncodeSnapshotChunks(tick, body)
+	if err != nil {
+		return time.Time{}, err
+	}
+	start, err := json.Marshal(offer)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if !port.Send(id, uint8(network.MsgStart), start) {
+		return time.Time{}, fmt.Errorf("could not release participant %d", id)
+	}
+	began := time.Now() // [wall] a link measurement, not a game clock
+	for i, chunk := range chunks {
+		if !port.Send(id, uint8(network.MsgStateSnapshot), chunk) {
+			return time.Time{}, fmt.Errorf("could not send capture chunk %d/%d", i+1, len(chunks))
+		}
+	}
+	return began, nil
 }
 
 // midRunOffer allocates nothing: the acceptor already assigned this participant, so
@@ -632,19 +642,23 @@ func (a *App) awaitJoinerReady(port *network.SocketPort, id network.PeerID) erro
 // every instance must create it at one agreed tick or their creation order diverges
 // (D-11). The coordinator is the only producer, as it is for a departure.
 func (a *App) crossParticipantArrival(id network.PeerID, slot uint8) {
-	a.world.RunSafe(func() {
-		a.sessionMu.Lock()
-		i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
-		if i < 0 {
-			a.sessionMu.Unlock()
-			return
-		}
-		holder := a.sessionRoster[i].Holder
+	a.world.RunSafe(func() { a.crossArrivalLocked(id, slot) })
+}
+
+// crossArrivalLocked is crossParticipantArrival under the world lock. Caller MUST
+// hold updateMutex.
+func (a *App) crossArrivalLocked(id network.PeerID, slot uint8) {
+	a.sessionMu.Lock()
+	i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
+	if i < 0 {
 		a.sessionMu.Unlock()
-		a.world.PushEventFull(event.EventParticipantJoined,
-			&event.ParticipantJoinedPayload{Participant: uint32(id), Slot: slot, Holder: uint32(holder)},
-			event.OriginSession, core.DomainPlayer)
-	})
+		return
+	}
+	holder := a.sessionRoster[i].Holder
+	a.sessionMu.Unlock()
+	a.world.PushEventFull(event.EventParticipantJoined,
+		&event.ParticipantJoinedPayload{Participant: uint32(id), Slot: slot, Holder: uint32(holder)},
+		event.OriginSession, core.DomainPlayer)
 }
 
 // resumeJoinedSession hands the traffic the gate held to the port and closes the gap
@@ -661,9 +675,9 @@ func (a *App) resumeJoinedSession() error {
 		return err
 	}
 	held := a.pendingJoin.Deferred()
-	host := uint32(a.pendingJoin.HostID())
+	from := uint32(a.pendingJoin.Peer())
 	for _, msg := range held {
-		port.Inject(host, uint8(msg.Type), msg.Payload)
+		port.Inject(from, uint8(msg.Type), msg.Payload)
 	}
 
 	// A tick-zero lobby has no gap by construction: the host is frozen at tick zero

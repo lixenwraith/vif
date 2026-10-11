@@ -114,8 +114,9 @@ func (a *App) seatConfigLocked() (Config, error) {
 	cfg := Config{Mode: ModeHeadless, Resources: a.cfg.Resources, Width: BotWidth, Height: BotHeight,
 		NoAdvertise: true, StatTicks: -1, RecTicks: -1}
 	if a.cfg.JoinAddress != "" && !a.world.IsSessionCoordinator() {
-		cfg.JoinAddress, cfg.SessionName = a.cfg.JoinAddress, a.cfg.SessionName
-		cfg.holder = network.PeerID(a.world.LocalParticipant())
+		local := network.PeerID(a.world.LocalParticipant())
+		cfg.JoinAddress, cfg.holder = a.cfg.JoinAddress, local
+		cfg.relay = func() (net.Conn, error) { return a.relayLink(local) }
 		return cfg, nil
 	}
 	if a.sessionTransportLocked() == nil {

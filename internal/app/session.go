@@ -333,6 +333,7 @@ func dialJoin(cfg Config) (*joinDial, error) {
 	netCfg.OnError = logSessionError
 	netCfg.Identity = buildIdentity()
 	netCfg.SessionName = cfg.SessionName
+	netCfg.Dial = cfg.relay
 	pending, offer, err := network.DialSession(cfg.JoinAddress, netCfg)
 	if err != nil {
 		return nil, fmt.Errorf("join %s: %w", cfg.JoinAddress, err)
@@ -448,7 +449,13 @@ func resolveJoinScenario(cfg *Config, pending *network.PendingJoin, o network.Se
 // One call per accepted connection: the roster is the lobby so far, and the roster a
 // participant actually builds from arrives later, at the start gate.
 func (a *App) assignParticipant() (network.SessionOffer, error) {
-	anchor := a.JoinAnchor()
+	return a.assignFor(a.JoinAnchor(), 0)
+}
+
+// assignFor is the allocation itself. holder is the participant a bot joins through,
+// recorded now because the bot never reports to this instance. Caller must not hold
+// sessionMu.
+func (a *App) assignFor(anchor event.JoinAnchor, holder network.PeerID) (network.SessionOffer, error) {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
 
@@ -483,7 +490,14 @@ func (a *App) assignParticipant() (network.SessionOffer, error) {
 		return network.SessionOffer{}, fmt.Errorf("session is full at %d participant(s)",
 			a.playerCapacity())
 	}
+	if holder != 0 {
+		i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == holder })
+		if i < 0 || a.sessionRoster[i].Holder != 0 {
+			return network.SessionOffer{}, errors.New("a bot's holder must be a participant that is not itself a bot")
+		}
+	}
 	assigned := a.nextParticipantLocked()
+	assigned.Holder = holder
 	a.sessionRoster = append(a.sessionRoster, assigned)
 
 	a.sessionOffer = a.offerLocked(anchor, assigned.ID)
@@ -580,11 +594,15 @@ func (a *App) crossDeparture(id network.PeerID, slot uint8) {
 // shared keeps it here. Both are recorded, so a replay of either reaches the same
 // world the same way.
 func (a *App) pushDeparture(id network.PeerID, slot uint8, domain core.Domain) {
-	a.world.RunSafe(func() {
-		a.world.PushEventFull(event.EventParticipantDeparted,
-			&event.ParticipantDepartedPayload{Participant: uint32(id), Slot: slot},
-			event.OriginSession, domain)
-	})
+	a.world.RunSafe(func() { a.pushDepartureLocked(id, slot, domain) })
+}
+
+// pushDepartureLocked is pushDeparture under the world lock. Caller MUST hold
+// updateMutex.
+func (a *App) pushDepartureLocked(id network.PeerID, slot uint8, domain core.Domain) {
+	a.world.PushEventFull(event.EventParticipantDeparted,
+		&event.ParticipantDepartedPayload{Participant: uint32(id), Slot: slot},
+		event.OriginSession, domain)
 	a.releaseParticipant(id)
 }
 

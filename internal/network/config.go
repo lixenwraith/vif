@@ -128,6 +128,10 @@ type Config struct {
 
 	OnError func(error)
 
+	// Dial replaces dialling the address: a guest's bot is handed one end of an
+	// in-process pipe whose other end its holder serves, since its hop is a call.
+	Dial func() (net.Conn, error)
+
 	preconnected     net.Conn
 	preconnectedPeer PeerID
 }

@@ -733,6 +733,7 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		m.HashOnly.Add(1)
 		c.proved(want.Header.Tick)
 		mine.Header = want.Header
+		c.offerProved(mine)
 		if at := c.inst.Position(); at.Run == want.Header.Run && at.Tick <= want.Header.Tick {
 			c.adoptAuthority(mine, index)
 		}

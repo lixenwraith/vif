@@ -1038,6 +1038,12 @@ type NetworkResource struct {
 	// for a frame the authority sent.
 	OnSessionRestart func(participant uint32, addr string)
 
+	// OnRelayJoin hands one step of a relayed admission — a relay's request or the
+	// coordinator's answer — to the session layer, under the world lock from the
+	// tick that drained it. The coordinator decides there; a relay only wakes the
+	// join waiting on the answer.
+	OnRelayJoin func(kind uint8, from uint32, body []byte)
+
 	// SeatsOnly reports whether every participant linked to this instance is a bot
 	// seat it holds, which stands still with its clock. Called under the world lock.
 	SeatsOnly func() bool

@@ -95,6 +95,7 @@ func (m Mode) Audio() bool {
 // (map editor, wasm entry, headless harness) that have no flag set
 type Config struct {
 	holder network.PeerID
+	relay  func() (net.Conn, error) // a guest's bot's stream to its holder; see relayLink
 	// Mode selects the runtime shape; the zero value is the interactive game
 	Mode Mode
 
