@@ -1,0 +1,153 @@
+# Building blocks the td regions are written in; syntax in doc/toml-macros.md.
+# Towers: t1 and t2 are the central pair, q1..q4 the quadrant towers, and each
+# keeps its entity in <id>_anchor. Flank sides are l and r, and each side's
+# counters are <side>_p1n, <side>_p2n, <side>_total, <side>_dead, <side>_p2_done.
+
+# --- Actions ---
+
+[macros.Zero]
+doc = "Reset a machine variable; variables outlive a restart."
+params = { name = "string" }
+body = { action = "SetVar", payload = { name = "${name}", value = 0 } }
+
+[macros.Emit]
+doc = "Emit an event with no payload."
+params = { event = "string" }
+body = { action = "EmitEvent", event = "${event}" }
+
+[macros.Terminate]
+params = { region = "string" }
+body = { action = "TerminateRegion", region = "${region}" }
+
+[macros.Announce]
+doc = "Flash the screen and show a status message."
+params = { color = "table", message = "string", duration_ms = "int" }
+defaults = { duration_ms = 500 }
+body = [
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = "${color}", intensity = 1.0, duration_ms = "${duration_ms}" } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "${message}" } },
+]
+
+[macros.Retarget]
+doc = "Point target group `group` at tower `to`."
+params = { group = "int", to = "string" }
+body = { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = "${group}", type = 1, entity = 0 }, payload_vars = { entity = "${to}_anchor" } }
+
+# --- Tower losses (td_counter, with the fallen tower in dead_tower) ---
+
+[macros.MarkFallen]
+doc = "Record that central tower `tower` fell, when it is the one in dead_tower."
+params = { tower = "string" }
+body = { action = "SetVar", payload = { name = "${tower}_dead", value = 1 }, guard = "VarCompareVar", guard_args = { var_a = "dead_tower", op = "eq", var_b = "${tower}_anchor" } }
+
+[macros.RetargetOnLoss]
+doc = "When tower `lost` fell and central tower `to` stands, point `group` at `to`."
+params = { lost = "string", group = "int", to = "string" }
+body = { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = "${group}", type = 1, entity = 0 }, payload_vars = { entity = "${to}_anchor" }, guard = "And", guard_args = { guards = [
+    { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "${lost}_anchor" } },
+    { name = "VarEquals", args = { var = "${to}_dead", value = 0 } },
+] } }
+
+[macros.QuadrantLoss]
+doc = "Quadrant tower `quad` fell: its group goes to central tower `near`, or to `far` once `near` has fallen."
+params = { quad = "string", group = "int", near = "string", far = "string" }
+body = [
+    { macro = "RetargetOnLoss", lost = "${quad}", group = "${group}", to = "${near}" },
+    { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = "${group}", type = 1, entity = 0 }, payload_vars = { entity = "${far}_anchor" }, guard = "And", guard_args = { guards = [
+        { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "${quad}_anchor" } },
+        { name = "VarEquals", args = { var = "${near}_dead", value = 1 } },
+        { name = "VarEquals", args = { var = "${far}_dead", value = 0 } },
+    ] } },
+]
+
+# --- Transitions ---
+
+[macros.Slain]
+doc = "Go to `target` when `species` dies, or once status `active` reports it gone without a kill event (it left the map)."
+params = { species = "int", active = "string", target = "string" }
+body = [
+    { trigger = "EventSpeciesKilled", target = "${target}", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = "${species}" } },
+    { trigger = "Tick", target = "${target}", guard = "And", guard_args = { guards = [
+        { name = "StateTimeExceeds", args = { ms = 2000 } },
+        { name = "StatusBoolEquals", args = { key = "${active}", value = false } },
+    ] } },
+]
+
+[macros.FlankReady]
+doc = "Escalate a flank once setup is done and every corner pylon on its side has fallen."
+params = { side = "string", target = "string" }
+body = { trigger = "Tick", target = "${target}", guard = "And", guard_args = { guards = [
+    { name = "VarEquals", args = { var = "setup_done", value = 1 } },
+    { name = "VarEquals", args = { var = "${side}_p2_done", value = 0 } },
+    { name = "VarCompareVar", args = { var_a = "${side}_dead", op = "gte", var_b = "${side}_p1n" } },
+] } }
+
+[macros.SidesCleared]
+doc = "Go to `target` once both flanks have escalated and every side pylon has fallen."
+params = { target = "string" }
+body = { trigger = "Tick", target = "${target}", guard = "And", guard_args = { guards = [
+    { name = "VarEquals", args = { var = "l_p2_done", value = 1 } },
+    { name = "VarEquals", args = { var = "r_p2_done", value = 1 } },
+    { name = "VarCompareVar", args = { var_a = "l_dead", op = "gte", var_b = "l_total" } },
+    { name = "VarCompareVar", args = { var_a = "r_dead", op = "gte", var_b = "r_total" } },
+] } }
+
+# --- States ---
+
+[macros.SpawnAwait]
+doc = "Emit `request`; once `species` exists go to `next` with its entity in `capture`, and on `refused` or after `timeout_ms` run `fallback_actions` and go to `fallback`."
+params = { request = "table", species = "int", capture = "string", next = "string", refused = "string", fallback = "string", fallback_actions = "array", timeout_ms = "int" }
+defaults = { fallback_actions = [], timeout_ms = 500 }
+body = { parent = "Root", on_enter = ["${request}"], transitions = [
+    { trigger = "EventSpeciesCreated", target = "${next}", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = "${species}" }, capture_vars = { entity = "${capture}" } },
+    { trigger = "${refused}", target = "${fallback}", actions = "${fallback_actions}" },
+    { trigger = "Tick", target = "${fallback}", guard = "StateTimeExceeds", guard_args = { ms = "${timeout_ms}" }, actions = "${fallback_actions}" },
+] }
+
+[macros.Tower]
+doc = "Spawn tower `id` for the player at (x, y), feeding target group `group`."
+params = { id = "string", x = "int", y = "int", group = "int", next = "string", fallback = "string", fallback_actions = "array" }
+defaults = { fallback_actions = [] }
+body = { macro = "SpawnAwait", species = 8, capture = "${id}_anchor", next = "${next}", refused = "EventTowerSpawnFailed", fallback = "${fallback}", fallback_actions = "${fallback_actions}", request = { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = "${x}", y = "${y}", target_group_id = "${group}" }, payload_vars = { entity = "player_entity" } } }
+
+[macros.QuadrantTower]
+doc = "A forward tower whose failure is not fatal: unspawned, its group feeds central tower `cover` instead."
+params = { id = "string", x = "int", y = "int", group = "int", cover = "string", next = "string" }
+body = { macro = "Tower", id = "${id}", x = "${x}", y = "${y}", group = "${group}", next = "${next}", fallback = "${next}", fallback_actions = [{ macro = "Retarget", group = "${group}", to = "${cover}" }] }
+
+[macros.Pylon]
+doc = "Spawn a pylon at (x, y) into gw_anchor and go to `attach`, or skip to `next` when it cannot spawn."
+params = { x = "int", y = "int", attach = "string", next = "string" }
+body = { macro = "SpawnAwait", species = 5, capture = "gw_anchor", next = "${attach}", refused = "EventPylonSpawnFailed", fallback = "${next}", request = { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = "${x}", y = "${y}" } } }
+
+[macros.Gateway]
+doc = "Attach an eye gateway feeding `group` to the pylon in gw_anchor, count it in `count`, go to `next`. Timing defaults to a corner pylon's."
+params = { group = "int", count = "string", next = "string", interval_ms = "int", rate = "float", accel_ms = "int", min_ms = "int" }
+defaults = { interval_ms = 3000, rate = 0.92, accel_ms = 15000, min_ms = 800 }
+body = { parent = "Root", on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = "${group}", base_interval_ms = "${interval_ms}", rate_multiplier = "${rate}", rate_accel_interval_ms = "${accel_ms}", min_interval_ms = "${min_ms}", use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "${count}" } },
+], transitions = [{ trigger = "Tick", target = "${next}" }] }
+
+[macros.FlankGateway]
+doc = "A flank twin's gateway: faster than a corner's, and accelerating sooner."
+params = { side = "string", group = "int", next = "string" }
+body = { macro = "Gateway", group = "${group}", count = "${side}_p2n", next = "${next}", interval_ms = 2000, rate = 0.88, accel_ms = 10000, min_ms = 500 }
+
+[macros.FlankDone]
+doc = "Close a flank's escalation: total its pylons, raise the damage multiplier, announce it."
+params = { side = "string", message = "string", next = "string" }
+body = { parent = "Root", on_enter = [
+    { action = "SetVar", payload = { name = "${side}_p2_done", value = 1 } },
+    { action = "CopyVar", payload = { name = "${side}_total", source_var = "${side}_p1n" } },
+    { action = "IncrementVar", payload = { name = "${side}_total", source_var = "${side}_p2n" } },
+    { action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease" },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "${message}" } },
+], transitions = [{ trigger = "Tick", target = "${next}" }] }
+
+[macros.Ending]
+doc = "Announce how a run ended, then reset five seconds later."
+params = { color = "table", message = "string" }
+body = { parent = "Root", on_enter = [{ macro = "Announce", color = "${color}", message = "${message}" }], transitions = [
+    { trigger = "Tick", target = "MonReset", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
+] }
