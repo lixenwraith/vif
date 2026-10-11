@@ -18,6 +18,22 @@ const (
 // every terminal font has, which says the state without its color
 var AudioText = [4]string{" X ", " S ", " M ", " O "}
 
+// StatusKind ranks a status message. One replaces the message shown unless that one
+// outranks it and has been up for less than its kind's Min; Shown is how long a
+// message stays. Both are wall time, so a message is read at the rate it was written.
+type StatusKind uint8
+
+const (
+	StatusNotice StatusKind = iota // an answer to the player, or what the run reports
+	StatusAlert                    // a failure or session change the player did not ask about
+	StatusKindCount
+)
+
+var StatusKinds = [StatusKindCount]struct{ Min, Shown time.Duration }{
+	StatusNotice: {Shown: 5 * time.Second},
+	StatusAlert:  {Min: 3 * time.Second, Shown: 8 * time.Second},
+}
+
 // Status Bar & Modes
 const (
 	// Mode indicator text (padded to ModeIndicatorWidth)
@@ -28,12 +44,9 @@ const (
 	ModeTextCommand = "  CMD   "
 	ModeTextRecord  = " REC"
 
-	// StatusMessageDefaultTimeout is how long status message on status bar lasts
-	StatusMessageDefaultTimeout = 2 * time.Second
-
-	// StatusMessageMaxDuration caps every status message, so one posted without a
-	// duration leaves the bar instead of standing there for the rest of the run.
-	StatusMessageMaxDuration = 5 * time.Second
+	// StatusKeyWidth is the key cell after the mode label: the keys of a pending
+	// sequence or the last one completed, newest last, in a place no message takes.
+	StatusKeyWidth = 5
 
 	// StatusCursorBlinkDuration is the blink duration of the cursor when visible in status bar in search and command modes
 	StatusCursorBlinkDuration = 250 * time.Millisecond

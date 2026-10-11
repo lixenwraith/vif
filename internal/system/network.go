@@ -1389,9 +1389,7 @@ func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
 	if r := s.world.Resources.Network; r != nil && r.OnPeerLost != nil {
 		r.OnPeerLost(peerID)
 	}
-	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
-		Message: message, Duration: 4 * parameter.StatusMessageDefaultTimeout, DurationOverride: true,
-	})
+	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: message, Alert: true})
 	s.world.Log().Warn("net", "msg", "peer link lost", "peer", peerID,
 		"authority_lost", authorityLost, "remaining_peers", remaining)
 }

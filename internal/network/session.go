@@ -319,9 +319,9 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 func refusalFrom(msg *Message) error {
 	var reply sessionReply
 	if err := json.Unmarshal(msg.Payload, &reply); err != nil || reply.Error == "" {
-		return errors.New("join refused with no reason given")
+		return errors.New("refused by the host with no reason given")
 	}
-	return errors.New(reply.Error)
+	return errors.New("refused by the host: " + reply.Error)
 }
 
 // serveScenario answers one scenario request with the chunked body. The deadline is
@@ -551,7 +551,7 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 	_ = conn.SetDeadline(time.Time{})
 	if err != nil {
 		_ = conn.Close()
-		return nil, SessionOffer{}, err
+		return nil, SessionOffer{}, plainError{"connected, but no vif session answered there", err}
 	}
 	if msg.Type == MsgJoinReply {
 		// Refused before an identity was allocated. The coordinator says why, and

@@ -526,7 +526,7 @@ func TestBotInputPreservesOperatorFeedback(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.ctx.SetLastCommand(":bot")
-	a.ctx.SetStatusMessage("Bots joined", parameter.StatusMessageDefaultTimeout, true)
+	a.ctx.SetStatusMessage("Bots joined", parameter.StatusNotice)
 	for range 30 {
 		if more, err := d.Step(); !more || err != nil {
 			t.Fatal(err)

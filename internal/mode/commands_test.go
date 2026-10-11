@@ -97,9 +97,6 @@ func TestAutoFireCycleRoutesOnlySelectedWeapons(t *testing.T) {
 		if ctx.AutoFire.Load() != tc.state {
 			t.Fatalf("%q selected %d, want %d", tc.command, ctx.AutoFire.Load(), tc.state)
 		}
-		if tc.state == engine.AutoFireMain && ctx.GetLastCommand() != ":auto main" {
-			t.Fatalf("main-fire command label = %q", ctx.GetLastCommand())
-		}
 	}
 	machine.SetMode(input.ModeInsert)
 	if intent := machine.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'a'}); intent == nil || intent.Type != input.IntentTextChar || intent.Char != 'a' {

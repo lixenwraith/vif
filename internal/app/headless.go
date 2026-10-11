@@ -4,6 +4,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // NewHeadless builds and starts a headless runtime: no I/O at all, and no scheduler
@@ -128,10 +129,10 @@ func (a *App) shareOperator(what string, et event.EventType, payload any) bool {
 	if a.world.LiveSession() {
 		switch {
 		case event.ClassOf(et) != event.ClassBus:
-			a.ctx.SetStatusMessage("Cannot "+what+" in a live session", 0, false)
+			a.ctx.SetStatusMessage("Cannot "+what+" in a live session", parameter.StatusNotice)
 			return false
 		case !a.world.IsSessionCoordinator():
-			a.ctx.SetStatusMessage("Only the host can "+what+" in a live session", 0, false)
+			a.ctx.SetStatusMessage("Only the host can "+what+" in a live session", parameter.StatusNotice)
 			return false
 		}
 		a.ctx.PushCrossing(et, payload)

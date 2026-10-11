@@ -36,8 +36,7 @@ func (a *App) reportAudioSpec() {
 		return
 	}
 	first, _, _ := strings.Cut(r.Engine.SpecError().Error(), "\n")
-	a.ctx.SetStatusMessage("Audio config: "+first+" (built-in used; -check lists all)",
-		parameter.StatusMessageMaxDuration, false)
+	a.ctx.SetStatusMessage("Audio config: "+first+" (built-in used; -check lists all)", parameter.StatusAlert)
 }
 
 // recordMusic starts the MusicWAV recording once the mixer runs. A failure costs
@@ -54,7 +53,7 @@ func (a *App) recordMusic() {
 	}
 	if err != nil {
 		a.log.Warn("app", "msg", "music not recorded", "path", path, "error", err.Error())
-		a.ctx.SetStatusMessage("Music not recorded: "+err.Error(), parameter.StatusMessageMaxDuration, false)
+		a.ctx.SetStatusMessage("Music not recorded: "+err.Error(), parameter.StatusAlert)
 		return
 	}
 	a.log.Info("app", "msg", "music recording started", "path", path)

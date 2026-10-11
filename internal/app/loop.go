@@ -29,10 +29,21 @@ func Run(cfg Config) error {
 	// A host with a player plays from its first tick and opens its door once the
 	// clock runs, as :host does; only a run with nobody to play waits in a lobby.
 	cfg.HostAddress, cfg.resumeHost = "", cfg.HostAddress
+	// A port the player asked for that this run cannot have ends it before the
+	// terminal starts, as a -join that cannot dial does.
+	if cfg.resumeHost != "" && buildHasSocketNetwork {
+		ln, err := network.Listen(cfg.resumeHost, network.DebugConfig(network.RoleHost, cfg.resumeHost))
+		if err != nil {
+			return fmt.Errorf("host %s: %w", cfg.resumeHost, err)
+		}
+		defer ln.Close() // the run's port closes it first; one that never served it must not keep it
+		cfg.hostListener = ln
+	}
 	rejoin := false
 	var solo *Config // what a :join that fails after its dial plays on as
 	for {
 		next, err := runScenario(cfg, rejoin)
+		cfg.hostListener = nil
 		if err != nil && solo != nil && !errors.Is(err, errSessionSignalled) {
 			vlog.Warn("session", "msg", "join failed; playing solo", "join", cfg.JoinAddress, "error", err.Error())
 			cfg, solo = *solo, nil
@@ -141,7 +152,7 @@ func (a *App) Loop() (*restartRequest, error) {
 	a.reportAudioSpec()
 	a.recordMusic()
 	if a.cfg.notice != "" {
-		a.ctx.SetStatusMessage(a.cfg.notice, parameter.StatusMessageMaxDuration, true)
+		a.ctx.SetStatusMessage(a.cfg.notice, parameter.StatusAlert)
 	}
 	if a.cfg.JoinAddress != "" {
 		a.activateNetworkSession()
@@ -161,7 +172,7 @@ func (a *App) Loop() (*restartRequest, error) {
 	if a.cfg.resume != nil {
 		if err := a.resumeWorld(*a.cfg.resume); err != nil {
 			a.log.Warn("journal", "msg", "world not resumed; playing a new game", "error", err.Error())
-			a.ctx.SetStatusMessage("Journal: world not resumed: "+err.Error(), parameter.StatusMessageMaxDuration, true)
+			a.ctx.SetStatusMessage("Journal: world not resumed: "+err.Error(), parameter.StatusAlert)
 		}
 	}
 
@@ -175,19 +186,19 @@ func (a *App) Loop() (*restartRequest, error) {
 	// a lobby of its own.
 	a.openMidRunJoins()
 	// After the clock: the mid-run gate reads a capture a playout lead ahead of a
-	// tick that has to be running. A door that cannot open costs the session, not
-	// the game.
+	// tick that has to be running. A door a rebuilt run cannot reopen costs the
+	// session, not the game.
 	if a.cfg.resumeHost != "" {
 		if err := a.BeginHosting(a.cfg.resumeHost); err != nil {
 			a.log.Warn("session", "msg", "hosting not opened; playing solo", "address", a.cfg.resumeHost, "error", err.Error())
-			a.ctx.SetStatusMessage("Host: "+err.Error()+"; playing solo", parameter.StatusMessageMaxDuration, true)
+			a.ctx.SetStatusMessage(err.Error()+"; playing solo", parameter.StatusAlert)
 		}
 	}
 	// After the door opens, for the same reason: every bot arrives through it. One
 	// that cannot be seated costs the bot, not the game.
 	if err := a.seatBots(); err != nil {
 		a.log.Warn("app", "msg", "bots not seated", "error", err.Error())
-		a.ctx.SetStatusMessage("Bots: "+err.Error(), parameter.StatusMessageMaxDuration, true)
+		a.ctx.SetStatusMessage("Bots: "+err.Error(), parameter.StatusAlert)
 	}
 
 	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
@@ -214,8 +225,13 @@ func (a *App) Loop() (*restartRequest, error) {
 			return nil, nil
 
 		case ev := <-eventChan:
-			// Dumb pipe: key event → machine → intent → router
-			if intent := a.inputMachine.Process(ev); intent != nil {
+			// Dumb pipe: key event → machine → intent → router. The key cell shows
+			// what the machine holds, pending or completed, whatever the router does.
+			intent := a.inputMachine.Process(ev)
+			if ev.Type == terminal.EventKey {
+				a.ctx.SetLastCommand(a.inputMachine.Feedback())
+			}
+			if intent != nil {
 				before := a.pushed()
 				if !a.handleIntent(intent) {
 					return nil, nil // player quit

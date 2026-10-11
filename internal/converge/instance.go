@@ -1,11 +1,10 @@
 package converge
 
 import (
-	"time"
-
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/status"
 )
@@ -60,7 +59,7 @@ type Instance interface {
 	DropAbandonedCursors(roster []network.RosterEntry, local network.PeerID)
 
 	// SetStatusMessage is the operator surface a refusal or a recovery is said on.
-	SetStatusMessage(msg string, duration time.Duration, override bool)
+	SetStatusMessage(msg string, kind parameter.StatusKind)
 }
 
 // New builds the three halves of the protocol and wires them to each other. One

@@ -211,7 +211,7 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 		switch {
 		case driver == nil && err != nil:
 			a.log.Warn("app", "msg", "bot not seated", "graph", s.graph.Name, "error", err.Error())
-			a.ctx.SetStatusMessage("Bot "+s.graph.Name+": "+err.Error(), parameter.StatusMessageMaxDuration, true)
+			a.ctx.SetStatusMessage("Bot "+s.graph.Name+": "+err.Error(), parameter.StatusAlert)
 		case driver != nil:
 			st := driver.Stats()
 			a.log.Info("app", "msg", "bot left", "graph", s.graph.Name, "participant", s.id.Load(),

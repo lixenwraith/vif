@@ -191,7 +191,6 @@ func (d *Driver) release() bool {
 			break
 		}
 		d.credit -= 1000
-		intent.Command = "" // Semantic action names are not operator feedback.
 		if !d.inst.Inject(&intent) {
 			return false
 		}

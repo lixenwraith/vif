@@ -358,16 +358,6 @@ func (r *Router) handleToggleAudioCycle() bool {
 
 // --- Motion Handlers ---
 
-// recordCommand remembers a completed command for the '.' repeat. Every motion,
-// operator and special handler ends this way, so the tail lives here rather than
-// eight times over.
-func (r *Router) recordCommand(intent *input.Intent) bool {
-	if intent.Command != "" {
-		r.ctx.SetLastCommand(intent.Command)
-	}
-	return true
-}
-
 // applyOperator hands a resolved range to the intent's operator. One arm today;
 // this is where a second operator attaches, and it is why the three call sites do
 // not each carry their own switch.
@@ -411,7 +401,7 @@ func (r *Router) handleMotion(intent *input.Intent) bool {
 	if pos, ok := r.ctx.World.LocalCursor(); ok {
 		OpMove(r.ctx, motionFn(r.ctx, pos.X, pos.Y, intent.Count))
 	}
-	return r.recordCommand(intent)
+	return true
 }
 
 func (r *Router) handleCharMotion(intent *input.Intent) bool {
@@ -427,7 +417,7 @@ func (r *Router) handleCharMotion(intent *input.Intent) bool {
 		OpMove(r.ctx, result)
 		r.rememberFind(intent, result)
 	}
-	return r.recordCommand(intent)
+	return true
 }
 
 func (r *Router) handleMotionMarkerShow(intent *input.Intent) bool {
@@ -459,7 +449,7 @@ func (r *Router) handleMotionMarkerJump(intent *input.Intent) bool {
 
 		OpMove(r.ctx, MotionColoredGlyph(r.ctx, pos.X, pos.Y, intent.Count, intent.Motion, glyphType))
 	}
-	return r.recordCommand(intent)
+	return true
 }
 
 func (r *Router) motionToDirection(motion input.MotionOp) [2]int {
@@ -487,7 +477,7 @@ func (r *Router) handleOperatorMotion(intent *input.Intent) bool {
 	if pos, ok := r.ctx.World.LocalCursor(); ok {
 		r.applyOperator(intent, motionFn(r.ctx, pos.X, pos.Y, intent.Count))
 	}
-	return r.recordCommand(intent)
+	return true
 }
 
 func (r *Router) handleOperatorLine(intent *input.Intent) bool {
@@ -500,7 +490,7 @@ func (r *Router) handleOperatorLine(intent *input.Intent) bool {
 			Valid: true,
 		})
 	}
-	return r.recordCommand(intent)
+	return true
 }
 
 func (r *Router) handleOperatorCharMotion(intent *input.Intent) bool {
@@ -514,7 +504,7 @@ func (r *Router) handleOperatorCharMotion(intent *input.Intent) bool {
 		r.applyOperator(intent, result)
 		r.rememberFind(intent, result)
 	}
-	return r.recordCommand(intent)
+	return true
 }
 
 // --- Special Command Handlers ---
@@ -544,7 +534,7 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 			r.executeRepeatFind(true)
 		}
 	}
-	return r.recordCommand(intent)
+	return true
 }
 
 func (r *Router) handleNuggetJump() bool {
@@ -874,7 +864,7 @@ func (r *Router) handleUndo(intent *input.Intent) bool {
 	}
 
 	OpJump(r.ctx, x, y)
-	return r.recordCommand(intent)
+	return true
 }
 
 // --- Command History ---

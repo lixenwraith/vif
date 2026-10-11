@@ -446,10 +446,11 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 
 // handleMessageRequest displays a message in status bar
 func (s *MetaSystem) handleMessageRequest(payload *event.MetaStatusMessagePayload) {
-	if payload.Duration < 0 {
-		payload.Duration = 0
+	kind := parameter.StatusNotice
+	if payload.Alert {
+		kind = parameter.StatusAlert
 	}
-	s.ctx.SetStatusMessage(payload.Message, payload.Duration, payload.DurationOverride)
+	s.ctx.SetStatusMessage(payload.Message, kind)
 }
 
 // handleLevelSetup reconfigures map dimensions and clears entities
@@ -647,7 +648,7 @@ func (s *MetaSystem) handleAboutRequest() {
 // the change; each system applies it to its own domain (audio → AudioSystem)
 func (s *MetaSystem) handlePauseRequest(paused bool) {
 	if session := s.world.Session(); paused && session.Live && !session.SeatsOnly {
-		s.ctx.SetStatusMessage("Pause is unavailable in a live session", parameter.StatusMessageDefaultTimeout, true)
+		s.ctx.SetStatusMessage("Pause is unavailable in a live session", parameter.StatusNotice)
 		return
 	}
 	if !s.ctx.TimeCtl.SetPaused(paused) {
@@ -660,7 +661,7 @@ func (s *MetaSystem) handlePauseRequest(paused bool) {
 // announces it; a nil or non-positive payload restores real time
 func (s *MetaSystem) handleSpeedRequest(p *event.GameSpeedPayload) {
 	if s.world.Session().Live {
-		s.ctx.SetStatusMessage("Speed control is unavailable in a live session", parameter.StatusMessageDefaultTimeout, true)
+		s.ctx.SetStatusMessage("Speed control is unavailable in a live session", parameter.StatusNotice)
 		return
 	}
 	scale := engine.ScaleNormal
@@ -680,7 +681,7 @@ func (s *MetaSystem) handleSpeedRequest(p *event.GameSpeedPayload) {
 // rate move through their single owner here
 func (s *MetaSystem) handleStepRequest(p *event.GameStepPayload) {
 	if s.world.Session().Live {
-		s.ctx.SetStatusMessage("Step control is unavailable in a live session", parameter.StatusMessageDefaultTimeout, true)
+		s.ctx.SetStatusMessage("Step control is unavailable in a live session", parameter.StatusNotice)
 		return
 	}
 	if p == nil || p.Off {
@@ -716,7 +717,7 @@ func (s *MetaSystem) handleStepRequest(p *event.GameStepPayload) {
 	case "event", "ev":
 		et, ok := event.GetEventType(p.Event)
 		if !ok || et == event.EventNone {
-			s.ctx.SetStatusMessage("Unknown event: "+p.Event, 0, true)
+			s.ctx.SetStatusMessage("Unknown event: "+p.Event, parameter.StatusNotice)
 			return
 		}
 		bs.Mode = engine.StepEvent
@@ -730,7 +731,7 @@ func (s *MetaSystem) handleStepRequest(p *event.GameStepPayload) {
 	}
 	s.ctx.TimeCtl.Arm(bs, run)
 	s.world.Log().Info("app", "msg", "break armed", "on", bs.Label, "scale", run.String(), "expiry", bs.Expiry)
-	s.ctx.SetStatusMessage("Run until "+bs.Label, 0, true)
+	s.ctx.SetStatusMessage("Run until "+bs.Label, parameter.StatusNotice)
 }
 
 // regionLabel renders an empty region filter as the wildcard it is

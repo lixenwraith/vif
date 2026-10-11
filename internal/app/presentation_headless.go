@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 type presentationState struct{}
@@ -38,7 +39,7 @@ func (a *App) lobbyEventCancels(lobbyEvent) bool { return false }
 func (a *App) pollTerminalEarly() error { return nil }
 
 func (a *App) showStartupStatus(message string) {
-	a.ctx.SetStatusMessage(message, 0, false)
+	a.ctx.SetStatusMessage(message, parameter.StatusNotice)
 }
 
 func Run(Config) error {

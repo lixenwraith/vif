@@ -19,6 +19,7 @@ reader can start with the application shape and then descend into a subsystem.
 | Document | Level | Primary questions answered |
 |---|---|---|
 | [Architecture overview](architecture.md) | High | What are the major parts, boundaries, and design constraints? |
+| [Development timeline](development-timeline.md) | High | What was built when, from the first prototype to the current release? |
 | [Package map](package-map.md) | Medium | Which Go packages own each responsibility and how may they depend on one another? |
 | [Runtime and concurrency](runtime.md) | Medium/detail | How does the process start, tick, render, pause, reset, and shut down safely? How is a replay presented, stepped back, sought and logged? |
 | [ECS and events](ecs-and-events.md) | Medium/detail | How are entities stored, systems ordered, spatial queries performed, and events settled? |

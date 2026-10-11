@@ -269,8 +269,7 @@ func (u *Authority) admit(term network.AuthorityTerm, from uint32) bool {
 	u.refuse(from, term, "names a term this instance was never handed")
 	if fork {
 		u.inst.SetStatusMessage(
-			"This instance is a local fork; the session has elected a new authority and cannot be rejoined",
-			4*parameter.StatusMessageDefaultTimeout, true)
+			"This instance is a local fork; the session has elected a new authority and cannot be rejoined", parameter.StatusAlert)
 	}
 	return false
 }
@@ -526,8 +525,7 @@ func (u *Authority) giveUp() {
 	u.log.Warn("session", "msg", "continuing locally", "held_term", uint64(u.Term()),
 		"contested_term", uint64(term), "lost", uint64(lost), "reason", why)
 	u.inst.SetStatusMessage(
-		"Host connection lost; continuing locally from the last authoritative state",
-		4*parameter.StatusMessageDefaultTimeout, true)
+		"Host connection lost; continuing locally from the last authoritative state", parameter.StatusAlert)
 }
 
 // adopt installs a handoff record: the term, the authority, and the membership
@@ -586,8 +584,7 @@ func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 		"predecessor", uint64(rec.Predecessor), "roster", len(rec.Roster),
 		"evidence_tick", rec.EvidenceTick, "local", mine)
 	u.inst.SetStatusMessage(
-		fmt.Sprintf("Authority moved to participant %d (term %d)", rec.Authority, rec.Term),
-		2*parameter.StatusMessageDefaultTimeout, false)
+		fmt.Sprintf("Authority moved to participant %d (term %d)", rec.Authority, rec.Term), parameter.StatusAlert)
 
 	if body, err := network.EncodeHandoff(rec); err == nil {
 		u.flood(network.MsgAuthorityHandoff, from, body)
@@ -795,8 +792,7 @@ func (u *Authority) onHandoff(from uint32, body []byte) {
 		u.log.Warn("session", "msg", "handoff refused",
 			"peer", from, "term", uint64(rec.Term), "authority", uint64(rec.Authority),
 			"error", err.Error())
-		u.inst.SetStatusMessage("Refused a conflicting authority handoff: "+err.Error(),
-			4*parameter.StatusMessageDefaultTimeout, true)
+		u.inst.SetStatusMessage("Refused a conflicting authority handoff: "+err.Error(), parameter.StatusAlert)
 	}
 }
 

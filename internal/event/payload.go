@@ -192,11 +192,11 @@ type DrainDefeatedPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
-// MetaStatusMessagePayload contains message to be displayed in status bar
+// MetaStatusMessagePayload is a message for the status bar: a notice, or an alert
+// when a failure or a change to the session must be seen (parameter.StatusKind).
 type MetaStatusMessagePayload struct {
-	Message          string        `toml:"message"`
-	Duration         time.Duration `toml:"duration"`
-	DurationOverride bool          `toml:"duration_override"`
+	Message string `toml:"message"`
+	Alert   bool   `toml:"alert"`
 }
 
 // MetaSystemCommandPayload contains commands to the systems (currently only enable/disable functionality)

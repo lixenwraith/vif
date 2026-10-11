@@ -214,14 +214,14 @@ func (a *App) joinSessionLocked(target string, players int, scenario string) err
 	if !a.dialling.CompareAndSwap(false, true) {
 		return errors.New("a join is already being dialled")
 	}
-	a.ctx.SetStatusMessage("Joining "+target+"...", 0, true)
+	a.ctx.SetStatusMessage("Joining "+target+"...", parameter.StatusNotice)
 	a.log.Info("session", "msg", "join requested", "target", target)
 	core.Go(func() {
 		defer a.dialling.Store(false)
 		link, err := target, error(nil)
 		if site.Scheme == network.SchemeSite {
 			if link, err = network.RequestSession(site.Addr, players, scenario); err == nil {
-				a.ctx.SetStatusMessage("Joining "+link+"...", 0, true)
+				a.ctx.SetStatusMessage("Joining "+link+"...", parameter.StatusNotice)
 				if next, err = next.joining(link); err == nil {
 					err = next.Validate()
 				}
@@ -234,7 +234,7 @@ func (a *App) joinSessionLocked(target string, players int, scenario string) err
 		switch {
 		case err != nil:
 			a.log.Warn("session", "msg", "join failed; playing on", "target", target, "error", err.Error())
-			a.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusMessageMaxDuration, true)
+			a.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusAlert)
 		case !a.restart.CompareAndSwap(nil, &restartRequest{Join: link, dialled: d}):
 			d.abandon(errors.New("the run that dialled is being replaced"))
 		}
@@ -263,7 +263,7 @@ func (a *App) hostErrorLocked() error {
 		return errors.New("host: a browser build can join a session but not host one")
 	}
 	if a.dialling.Load() {
-		return errors.New("a join is already being dialled")
+		return errors.New("host: a join is already being dialled")
 	}
 	if a.sessionTransportLocked() != nil {
 		return errors.New("host: this run is already in a session")
@@ -313,13 +313,26 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 		return fmt.Errorf("host: authority %q is not %q or %q", authority, AuthorityHost, AuthorityMigrate)
 	}
 
-	// The address is recorded before the listener exists, so every later reader —
-	// the accept goroutine's anchor, the status line — sees it already set, and
-	// nothing writes it again once a peer can arrive. The roster ceiling needs no
-	// such handling: an unset -players already means the whole roster, and a run
-	// that opens a session mid-game has no lobby for the flag's other meaning.
+	// Bound before anything is written, so a port this run cannot have leaves it as
+	// it was; a startup -host bound it before the terminal started.
+	ln := a.cfg.hostListener
+	a.cfg.hostListener = nil
+	if ln == nil {
+		if ln, err = network.Listen(addr, network.DebugConfig(network.RoleHost, addr)); err != nil {
+			a.cfg.FixedAuthority = fixed
+			return fmt.Errorf("host %s: %w", addr, err)
+		}
+	}
+
+	// The address is recorded before the port serves, so every later reader — the
+	// accept goroutine's anchor, the status line — sees it already set, and nothing
+	// writes it again once a peer can arrive. The roster ceiling needs no such
+	// handling: an unset -players already means the whole roster, and a run that
+	// opens a session mid-game has no lobby for the flag's other meaning.
 	a.cfg.HostAddress = addr
-	port := network.NewSocketPort(a.hostNetworkConfig())
+	netCfg := a.hostNetworkConfig()
+	netCfg.PreboundListener = ln
+	port := network.NewSocketPort(netCfg)
 
 	// Armed before the listener exists: a run that opens a session mid-game has no
 	// startup lobby, so every dial it ever sees is a mid-run join.
@@ -353,16 +366,7 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	a.attachTransportLocked(port)
 	a.activateNetworkSessionLocked()
 
-	if err := port.Start(); err != nil {
-		a.sessionMu.Lock()
-		a.midRunPort, a.sessionRoster = nil, nil
-		a.sessionMu.Unlock()
-		a.lateJoins.Store(false)
-		a.cfg.HostAddress, a.cfg.FixedAuthority = "", fixed
-		a.world.Resources.Network = nil
-		a.world.LatchSession()
-		return fmt.Errorf("host %s: %w", addr, err)
-	}
+	_ = port.Start() // bound above, so starting only serves it
 
 	// The authority's cadence starts with the session. Nothing is published while
 	// no peer is connected — publish returns on an empty roster — so a host waiting
@@ -380,7 +384,7 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	}
 	a.log.Info("session", "msg", "hosting opened mid-run",
 		"address", bound, "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
-	a.ctx.SetStatusMessage("Hosting on "+bound, 0, false)
+	a.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
 	return nil
 }
 

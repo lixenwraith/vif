@@ -179,8 +179,7 @@ func (c *Corrections) reportFloorLocked() {
 	if !c.breached {
 		c.log.Info("converge", "msg", "link is carrying the convergence floor again",
 			"floor_ticks", c.bounds.FloorKeyframeTicks)
-		c.inst.SetStatusMessage("Link recovered; corrections are converging again",
-			parameter.StatusMessageDefaultTimeout, false)
+		c.inst.SetStatusMessage("Link recovered; corrections are converging again", parameter.StatusAlert)
 		return
 	}
 	c.log.Warn("converge", "msg", "link cannot sustain the convergence floor",
@@ -188,6 +187,5 @@ func (c *Corrections) reportFloorLocked() {
 		"floor_bps", int64(c.tel.FloorBps.Load()),
 		"budget_bps", int64(c.tel.BudgetBps.Load()))
 	c.inst.SetStatusMessage(
-		"Link cannot carry a whole world within the convergence floor; corrections may not converge",
-		4*parameter.StatusMessageDefaultTimeout, true)
+		"Link cannot carry a whole world within the convergence floor; corrections may not converge", parameter.StatusAlert)
 }

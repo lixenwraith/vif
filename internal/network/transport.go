@@ -99,19 +99,13 @@ func (t *Transport) Start() error {
 // serveAsPeer starts this participant's own listener, from a port the caller
 // already bound or from an address to bind now.
 func (t *Transport) serveAsPeer() error {
-	if ln := t.config.PreboundListener; ln != nil {
-		t.listener = ln
-		t.wg.Add(1)
-		go t.acceptLoop(ln, t.config.AcceptPeer, t.config.OnAdmit)
-		return nil
-	}
-	if t.config.ListenAddress == "" {
+	if t.config.PreboundListener == nil && t.config.ListenAddress == "" {
 		return nil
 	}
 	return t.listen(t.config.ListenAddress, t.config.AcceptPeer)
 }
 
-// startServer binds and accepts joiners.
+// startServer accepts joiners.
 func (t *Transport) startServer() error {
 	if err := t.listen(t.config.Address, nil); err != nil {
 		t.running.Store(false)
@@ -120,32 +114,42 @@ func (t *Transport) startServer() error {
 	return nil
 }
 
-// listen binds one address and serves it. accept is the per-connection handshake;
-// nil selects the coordinator's session handshake.
+// listen serves the port the caller bound, else binds addr. accept is the
+// per-connection handshake; nil selects the coordinator's session handshake.
 func (t *Transport) listen(addr string, accept func(net.Conn) (PeerID, error)) error {
+	ln := t.config.PreboundListener
+	if ln == nil {
+		var err error
+		if ln, err = Listen(addr, t.config); err != nil {
+			return err
+		}
+	}
+	t.listener = ln
+	t.wg.Add(1)
+	go t.acceptLoop(ln, accept, t.config.OnAdmit)
+	return nil
+}
+
+// Listen binds addr as a host serves it, so a caller learns it cannot have the port
+// before anything depends on it; Config.PreboundListener then hands it to the port.
+func Listen(addr string, cfg *Config) (net.Listener, error) {
 	e, err := ParseEndpoint(addr)
+	if err == nil {
+		err = e.Listenable()
+	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var ln net.Listener
 	switch {
 	case e.Scheme == SchemeWebSocket:
-		ln, err = listenWebSocket(e.Addr, t.config.ConnectTimeout)
-	case t.config.TLS != nil:
-		ln, err = tls.Listen("tcp", e.Addr, t.config.TLS)
+		ln, err = listenWebSocket(e.Addr, cfg.ConnectTimeout)
+	case cfg.TLS != nil:
+		ln, err = tls.Listen("tcp", e.Addr, cfg.TLS)
 	default:
 		ln, err = net.Listen("tcp", e.Addr)
 	}
-	if err != nil {
-		return err
-	}
-
-	t.listener = ln
-
-	t.wg.Add(1)
-	go t.acceptLoop(ln, accept, t.config.OnAdmit)
-
-	return nil
+	return ln, plainNetError(err)
 }
 
 // DialPeer opens one outbound link to a participant that is already in this

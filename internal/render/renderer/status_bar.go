@@ -319,7 +319,8 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		})
 	}
 
-	// Priority 6-9: Metrics (lowest priority, dropped first)
+	// Priority 6-9: Metrics (lowest priority, dropped first, and all a message may take)
+	metricsAt := len(rightItems)
 	rightItems = append(rightItems,
 		r.pal.apm.with(fmt.Sprintf(" APM: %d ", r.statAPM.Load())),
 		r.pal.gt.with(fmt.Sprintf(" GT: %d ", r.statTicks.Load())),
@@ -377,18 +378,17 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		}
 	}
 
-	// Last command indicator (only in normal/visual/insert modes)
-	leftEndX := x + 1 // 1 char gap after mode indicator
-	lastCommand := r.gameCtx.GetLastCommand()
-	if lastCommand != "" && r.getActiveStatusMessage(realNow) == "" && !r.gameCtx.IsSearchMode() && !r.gameCtx.IsCommandMode() {
-		for _, ch := range lastCommand {
-			if leftEndX >= ctx.ScreenWidth {
-				return
+	// The key cell keeps its width while empty, so a message after it never moves and
+	// never shares its space or its time with the keys. Typed input starts at the gap.
+	leftEndX := x + 1
+	if !r.gameCtx.IsSearchMode() && !r.gameCtx.IsCommandMode() {
+		keys := []rune(r.gameCtx.GetLastCommand())
+		for i, ch := range keys[max(len(keys)-parameter.StatusKeyWidth, 0):] {
+			if leftEndX+i < ctx.ScreenWidth {
+				buf.SetWithBg(leftEndX+i, statusY, ch, visual.RgbLastCommandText, visual.RgbBackground)
 			}
-			buf.SetWithBg(leftEndX, statusY, ch, visual.RgbLastCommandText, visual.RgbBackground)
-			leftEndX++
 		}
-		leftEndX++ // gap after last command
+		leftEndX += parameter.StatusKeyWidth + 1
 	}
 
 	// === DETERMINE TEXT CONTENT AND NEEDED WIDTH ===
@@ -405,7 +405,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		textFg = visual.RgbCommandInputText
 		isInputMode = true
 	} else {
-		textContent = r.getActiveStatusMessage(realNow)
+		textContent = r.gameCtx.ShownStatusMessage(realNow.UnixNano())
 		textFg = visual.RgbStatusMessageText
 		isInputMode = false
 	}
@@ -436,10 +436,14 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		}
 	}
 
-	// Input the player is typing takes the space it needs from the right-side
-	// items, lowest priority first. A message takes only what they leave, so one
-	// arriving never reflows the bar; the command it follows pushes it right.
-	for isInputMode && fitCount > 0 && textNeeded > 0 {
+	// Typed input takes the space it needs from the right-side items, lowest priority
+	// first; a message takes it from the metrics only, so the bar reflows when a
+	// message arrives or leaves, never on a key.
+	floor := metricsAt
+	if isInputMode {
+		floor = 0
+	}
+	for fitCount > floor && textNeeded > 0 {
 		textAvailable := availableTotal - rightFitWidth
 		if textAvailable >= textNeeded {
 			break
@@ -600,23 +604,6 @@ func (r *StatusBarRenderer) timeItem() (statusItem, bool) {
 	return statusItem{}, false
 }
 
-// getActiveStatusMessage returns the status message while its wall-clock
-// lifetime lasts, and clears it once past: every message has one, capped at
-// StatusMessageMaxDuration, so none of them stays on the bar for the run.
-func (r *StatusBarRenderer) getActiveStatusMessage(now time.Time) string {
-	msg := r.gameCtx.GetStatusMessage()
-	if msg == "" {
-		return ""
-	}
-	if expiry := r.gameCtx.GetStatusMessageExpiry(); expiry > 0 && now.UnixNano() > expiry {
-		r.gameCtx.ClearStatusMessage()
-		return ""
-	}
-	return msg
-}
-
-// renderInputText renders search/command input with scrolling window around cursor
-// Returns screen X position where cursor should be drawn
 func (r *StatusBarRenderer) renderInputText(buf *render.RenderBuffer, y, startX, maxWidth int, text string, fg color.RGB, cursorPos int) int {
 	if maxWidth <= 0 {
 		return startX

@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/manifest"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/internal/service"
 )
@@ -93,7 +94,7 @@ func (a *App) pollTerminalEarly() error {
 }
 
 func (a *App) showStartupStatus(message string) {
-	a.ctx.SetStatusMessage(message, 0, false)
+	a.ctx.SetStatusMessage(message, parameter.StatusNotice)
 	if a.orchestrator != nil {
 		a.frame()
 	}

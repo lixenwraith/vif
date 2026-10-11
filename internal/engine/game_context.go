@@ -142,14 +142,10 @@ type GameContext struct {
 	// Status bar state (atomic pointers for lock-free access)
 	commandText   atomic.Pointer[string]
 	searchText    atomic.Pointer[string]
-	statusMessage atomic.Pointer[string]
+	statusMessage atomic.Pointer[statusLine] // nil when none was posted
 	lastCommand   atomic.Pointer[string]
 	// Command-mode cursor position (rune offset within command text)
 	commandCursorPos atomic.Int32
-	// Status message lifetime, both wall-clock Unix nano: the instant the bar
-	// stops drawing it, and the instant a lesser message may replace it.
-	statusMessageExpiry atomic.Int64
-	statusMessageHold   atomic.Int64
 
 	// Overlay state (atomic for lock-free access)
 	overlayActive  atomic.Bool
@@ -275,7 +271,6 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 	empty := ""
 	ctx.commandText.Store(&empty)
 	ctx.searchText.Store(&empty)
-	ctx.statusMessage.Store(&empty)
 	ctx.lastCommand.Store(&empty)
 	ctx.overlayTitle.Store(&empty)
 
@@ -760,51 +755,49 @@ func (ctx *GameContext) SetSearchText(text string) {
 	ctx.searchText.Store(&text)
 }
 
-// SetStatusMessage posts a status message for at most StatusMessageMaxDuration,
-// which a shorter duration shortens. The lifetime is wall time, so a message is
-// read at the rate it was written at and does not outlive a pause. A caller that
-// named a duration also holds the bar for it against a non-override write; one
-// that named none is replaced by the next message, whoever sends it.
-func (ctx *GameContext) SetStatusMessage(msg string, duration time.Duration, override bool) {
-	now := ctx.TimeCtl.RealTime().UnixNano()
-	if hold := ctx.statusMessageHold.Load(); !override && hold > now && msg != "" {
-		return
-	}
+// statusLine is one posted message: what it says, how it ranks, and when it was
+// posted, in wall-clock Unix nano. One value, so a reader never sees half of a write.
+type statusLine struct {
+	text  string
+	kind  parameter.StatusKind
+	since int64
+}
 
-	shown := min(duration, parameter.StatusMessageMaxDuration)
-	if shown <= 0 {
-		shown = parameter.StatusMessageMaxDuration
-	}
-	ctx.statusMessage.Store(&msg)
-	ctx.statusMessageExpiry.Store(now + shown.Nanoseconds())
-	if duration > 0 {
-		ctx.statusMessageHold.Store(now + shown.Nanoseconds())
-	} else {
-		ctx.statusMessageHold.Store(0)
+// SetStatusMessage posts msg, unless the message shown outranks it and has been up
+// for less than its kind's Min (parameter.StatusKinds).
+func (ctx *GameContext) SetStatusMessage(msg string, kind parameter.StatusKind) {
+	now := ctx.TimeCtl.RealTime().UnixNano()
+	next := &statusLine{text: msg, kind: kind, since: now}
+	for {
+		cur := ctx.statusMessage.Load()
+		if cur != nil && cur.kind > kind && now < cur.since+parameter.StatusKinds[cur.kind].Min.Nanoseconds() {
+			return
+		}
+		if ctx.statusMessage.CompareAndSwap(cur, next) {
+			return
+		}
 	}
 }
 
-// GetStatusMessage returns current status message
+// GetStatusMessage returns the message last posted, whether or not it is still shown
 func (ctx *GameContext) GetStatusMessage() string {
-	if p := ctx.statusMessage.Load(); p != nil {
-		return *p
+	if l := ctx.statusMessage.Load(); l != nil {
+		return l.text
 	}
 	return ""
 }
 
-// GetStatusMessageExpiry returns the wall-clock instant the bar stops drawing
-// the current message (Unix nano), 0 if there is none
-func (ctx *GameContext) GetStatusMessageExpiry() int64 {
-	return ctx.statusMessageExpiry.Load()
+// ShownStatusMessage returns the message the bar draws at now (Unix nano): the one
+// last posted, until its kind's Shown has passed.
+func (ctx *GameContext) ShownStatusMessage(now int64) string {
+	if l := ctx.statusMessage.Load(); l != nil && now < l.since+parameter.StatusKinds[l.kind].Shown.Nanoseconds() {
+		return l.text
+	}
+	return ""
 }
 
-// ClearStatusMessage forcibly clears the status message and its lifetime
-func (ctx *GameContext) ClearStatusMessage() {
-	empty := ""
-	ctx.statusMessage.Store(&empty)
-	ctx.statusMessageExpiry.Store(0)
-	ctx.statusMessageHold.Store(0)
-}
+// ClearStatusMessage removes the message, whatever its kind
+func (ctx *GameContext) ClearStatusMessage() { ctx.statusMessage.Store(nil) }
 
 func (ctx *GameContext) GetLastCommand() string {
 	if p := ctx.lastCommand.Load(); p != nil {
