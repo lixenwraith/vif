@@ -7,6 +7,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/bot"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
@@ -106,6 +107,7 @@ func continuesFromCheckpoints(t *testing.T, rec *journal.Capture, at []event.Sta
 	if err != nil {
 		t.Fatal(err)
 	}
+	var reuse *engine.WorldCopy // a checkpoint already restored, whose storage the next takes
 	for _, stamp := range at {
 		for p := src.Position(); p.Run < stamp.Run || p.Run == stamp.Run && p.Tick < stamp.Tick; p = src.Position() {
 			if more, err := d.Step(); err != nil || !more {
@@ -113,7 +115,7 @@ func continuesFromCheckpoints(t *testing.T, rec *journal.Capture, at []event.Sta
 			}
 		}
 		var ck *checkpoint
-		src.world.RunSafe(func() { ck, err = src.checkpointLocked(d) })
+		src.world.RunSafe(func() { ck, err = src.checkpointLocked(d, reuse) })
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -128,6 +130,7 @@ func continuesFromCheckpoints(t *testing.T, rec *journal.Capture, at []event.Sta
 		if err := copied.restore(ck, cd); err != nil {
 			t.Fatal(err)
 		}
+		reuse = ck.world
 		for i := range steps {
 			want, got := src.SnapshotSimulation(), copied.SnapshotSimulation()
 			if n, _, _, ok := snapshot.FirstDiff(want, got); ok {

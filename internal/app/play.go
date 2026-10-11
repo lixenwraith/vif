@@ -497,15 +497,25 @@ func (p *player) goTo(tick uint64) {
 }
 
 // seekTo moves to the first step standing at or past to: through toStep when the
-// run has reached it, by playing the presented copy on when it has not.
+// run has reached it; when it has not, by playing on from the latest checkpoint off
+// the frame loop when that stands more than a ring past the presented copy, else by
+// playing the presented copy on.
 func (p *player) seekTo(to event.Stamp, resume bool) {
-	if m, known := p.rw.stepAt(to); known {
+	rw := p.rw
+	if m, known := rw.stepAt(to); known {
 		p.toStep(m, resume)
 		return
 	}
 	p.cancelSeek()
 	p.paused = true
-	if c := p.rw.shown; !c.end && c.err == nil {
+	c := rw.shown
+	if ck := rw.nearest(len(rw.trail) - 1); ck != nil && ck.steps > c.steps+parameter.ReplayRing && rw.build != nil {
+		p.seek = &seekState{step: -1, to: &to, resume: resume, hidden: true}
+		rw.want = &move{step: -1, to: &to}
+		rw.pump()
+		return
+	}
+	if !c.end && c.err == nil {
 		p.seek = &seekState{step: -1, to: &to, resume: resume}
 		p.logSeek(p.a.Position(), to)
 	}

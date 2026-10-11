@@ -352,6 +352,31 @@ func TestAReplaySeekLandsOnTheFirstStepAtOrPastItsTick(t *testing.T) {
 	lands(first.Tick+10, event.Stamp{Run: 1, Tick: first.Tick + 10})
 }
 
+// TestAReplaySeekPastWhereItReachedPlaysOnFromTheLatestCheckpoint: a viewer who went
+// back and seeks past the furthest step the replay reached is moved there from the
+// checkpoint nearest that step, not replayed all the way from the step presented.
+func TestAReplaySeekPastWhereItReachedPlaysOnFromTheLatestCheckpoint(t *testing.T) {
+	t.Parallel()
+	rec := journal.NewCapture()
+	source, _ := playBot(t, "default", fixtureSeed, parameter.ReplayCheckpointSteps+60, rec)
+	source.Close()
+	p := replayPlayer(t, setOf(rec), nil)
+	const reached = parameter.ReplayCheckpointSteps + 40
+	playSteps(p, reached)
+	settle(t, p)
+	p.goTo(p.rw.trail[10].Tick)
+	settle(t, p)
+	target := p.rw.trail[reached].Tick + 10
+	p.goTo(target)
+	if p.seek == nil || !p.seek.hidden {
+		t.Fatal("the seek plays on from the step presented, not from the latest checkpoint")
+	}
+	settle(t, p)
+	if at, steps := p.a.Position(), p.rw.shown.steps; at.Tick < target || p.rw.trail[steps-1].Tick >= target || at != p.rw.trail[steps] {
+		t.Fatalf("the seek to tick %d presents step %d at %+v", target, steps, at)
+	}
+}
+
 // TestACopyThatLeftTheRunIsNeverPresented: a copy restored from a checkpoint that
 // does not reproduce its world, or that stands where the run did not, is replaced by
 // one replayed from the start; no checkpoint is trusted after, and the bar does not

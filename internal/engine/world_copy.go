@@ -16,6 +16,7 @@ type WorldCopy struct {
 	positions          storeCopy[component.PositionComponent]
 	gridW, gridH       int
 	cells              []occupiedCell
+	occupants          []core.Entity // every occupied cell's entities, cell after cell
 	mask               map[core.Entity]uint64
 	next               [core.DomainCount]uint64
 	created, destroyed [core.DomainCount]int64
@@ -33,28 +34,41 @@ type WorldCopy struct {
 	shared     bool
 }
 
-// occupiedCell is one grid cell holding an entity, so a copy is sized by what the
-// map holds rather than by the map.
+// occupiedCell is one grid cell holding an entity, its entities in the copy's
+// occupants, so a copy is sized by what the map holds rather than by the map or a cell.
 type occupiedCell struct {
-	index int
-	cell  Cell
+	index         int32
+	count, shared uint8
 }
 
-// CopyOut reads the world's entities. Caller MUST hold updateMutex.
-func (w *World) CopyOut() *WorldCopy {
+// CopyOut reads the world's entities. reuse, when not nil, is a copy nobody reads any
+// longer, whose storage this one takes over. Caller MUST hold updateMutex.
+func (w *World) CopyOut(reuse *WorldCopy) *WorldCopy {
 	p := w.Positions
+	if reuse == nil {
+		reuse = &WorldCopy{}
+	}
 	c := &WorldCopy{
-		components: w.copyComponentsOut(),
+		components: w.copyComponentsOut(&reuse.components),
 		positions: storeCopy[component.PositionComponent]{
-			dense: append([]component.PositionComponent(nil), p.dense...), entities: append([]core.Entity(nil), p.entities...)},
+			dense: append(reuse.positions.dense[:0], p.dense...), entities: append(reuse.positions.entities[:0], p.entities...)},
 		gridW: p.grid.Width,
 		gridH: p.grid.Height,
-		mask:  maps.Clone(w.componentMask),
+		mask:  reuse.mask,
 		next:  w.nextEntityID,
 	}
+	if c.mask == nil {
+		c.mask = maps.Clone(w.componentMask)
+	} else {
+		clear(c.mask)
+		maps.Copy(c.mask, w.componentMask)
+	}
+	// Every held entity has a position, which bounds both without a pass to count them.
+	c.cells, c.occupants = sized(reuse.cells, 0, len(p.entities)), sized(reuse.occupants, 0, len(p.entities))
 	for i := range p.grid.Cells {
-		if p.grid.Cells[i].Count > 0 {
-			c.cells = append(c.cells, occupiedCell{index: i, cell: p.grid.Cells[i]})
+		if cell := &p.grid.Cells[i]; cell.Count > 0 {
+			c.cells = append(c.cells, occupiedCell{index: int32(i), count: cell.Count, shared: cell.SharedCount})
+			c.occupants = append(c.occupants, cell.Entities[:cell.Count]...)
 		}
 	}
 	for d := range c.created {
@@ -87,8 +101,11 @@ func (w *World) CopyIn(c *WorldCopy) {
 		p.index[e] = int32(i)
 	}
 	p.grid.Resize(c.gridW, c.gridH)
+	at := 0
 	for _, oc := range c.cells {
-		p.grid.Cells[oc.index] = oc.cell
+		cell := &p.grid.Cells[oc.index]
+		cell.Count, cell.SharedCount = oc.count, oc.shared
+		at += copy(cell.Entities[:oc.count], c.occupants[at:])
 	}
 	w.componentMask = maps.Clone(c.mask)
 	w.nextEntityID = c.next

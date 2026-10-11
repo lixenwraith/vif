@@ -374,8 +374,8 @@ func (p *Position) wallGridFor(mask component.WallBlockMask) *wallGrid {
 	n := len(ws.entities)
 	g.w, g.h, g.epoch = w, h, p.grid.epoch
 	g.walls = append(g.walls[:0], ws.entities...)
-	g.masks, g.slot, g.at = sized(g.masks, n), sized(g.slot, n), sized(g.at, n)
-	g.loose, g.cells = g.loose[:0], sized(g.cells, w*h)
+	g.masks, g.slot, g.at = sized(g.masks, n, n), sized(g.slot, n, n), sized(g.at, n, n)
+	g.loose, g.cells = g.loose[:0], sized(g.cells, w*h, w*h)
 	clear(g.cells)
 	for i, e := range g.walls {
 		g.masks[i], g.slot[i] = ws.dense[i].BlockMask, -1
@@ -434,9 +434,10 @@ func (p *Position) wallCell(e core.Entity, w, h int) (int, bool) {
 	return pos.Y*w + pos.X, true
 }
 
-func sized[T any](s []T, n int) []T {
-	if cap(s) < n {
-		return make([]T, n)
+// sized is s at length n with room for c, reusing its storage when it has the room.
+func sized[T any](s []T, n, c int) []T {
+	if cap(s) < c {
+		return make([]T, n, c)
 	}
 	return s[:n]
 }

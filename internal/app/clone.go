@@ -40,9 +40,9 @@ type checkpoint struct {
 	driver    journal.Cursor
 }
 
-// checkpointLocked reads a replay copy and where its driver stands. Caller MUST
-// hold updateMutex.
-func (a *App) checkpointLocked(d *journal.ReplayDriver) (*checkpoint, error) {
+// checkpointLocked reads a replay copy and where its driver stands, into reuse's
+// storage when one is given. Caller MUST hold updateMutex.
+func (a *App) checkpointLocked(d *journal.ReplayDriver, reuse *engine.WorldCopy) (*checkpoint, error) {
 	systems, err := a.captureSystemStatesLocked()
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func (a *App) checkpointLocked(d *journal.ReplayDriver) (*checkpoint, error) {
 		return copied
 	})
 	c := &checkpoint{
-		world:     a.world.CopyOut(),
+		world:     a.world.CopyOut(reuse),
 		queue:     a.world.Resources.Event.Queue.CopyOut(),
 		scheduler: a.scheduler.CopyOut(),
 		systems:   systems,
@@ -194,9 +194,10 @@ type stepPlan struct {
 	deadline time.Time
 	cancel   *atomic.Bool
 
-	known      []event.Stamp // where the run stood after the copy's next steps
-	divergedAt int           // the step the run left its digests at, -1 none
-	ringAll    bool          // keep every step in the ring, as paced play does
+	known      []event.Stamp       // where the run stood after the copy's next steps
+	divergedAt int                 // the step the run left its digests at, -1 none
+	ringAll    bool                // keep every step in the ring, as paced play does
+	spare      []*engine.WorldCopy // storage of checkpoints nothing holds, to take before allocating
 	have       [parameter.ReplayRing]int
 	every      int // ladder spacing, 0 once checkpoints are off
 	nextLadder int
@@ -209,8 +210,9 @@ type batch struct {
 	at       int // the step that diverged, -1 none
 	saved    []*checkpoint
 	reached  bool
-	mismatch error // a step left the run; stepping stopped before it counted
-	lost     error // a checkpoint could not be taken
+	mismatch error               // a step left the run; stepping stopped before it counted
+	lost     error               // a checkpoint could not be taken
+	spare    []*engine.WorldCopy // the plan's spares it did not take
 }
 
 // tickOrder orders positions by run and tick; a boundary moves with the viewer's
@@ -224,6 +226,7 @@ func tickOrder(a, b event.Stamp) int {
 // the run did; one that does not stops the batch before it counts.
 func (c *replayCopy) advance(p stepPlan) (b batch) {
 	b.at = -1
+	defer func() { b.spare = p.spare }()
 	from, latched := c.steps, c.src.d.Stats().Diverged != nil
 	for {
 		switch {
@@ -276,7 +279,11 @@ func (c *replayCopy) advance(p stepPlan) (b batch) {
 			continue
 		}
 		var ck *checkpoint
-		c.a.world.RunSafe(func() { ck, err = c.a.checkpointLocked(c.src.d) })
+		var reuse *engine.WorldCopy
+		if n := len(p.spare); n > 0 {
+			reuse, p.spare = p.spare[n-1], p.spare[:n-1]
+		}
+		c.a.world.RunSafe(func() { ck, err = c.a.checkpointLocked(c.src.d, reuse) })
 		if err != nil {
 			b.lost, p.every = err, 0
 			continue
@@ -310,6 +317,8 @@ type rewinder struct {
 	ring   [parameter.ReplayRing]*checkpoint // the last steps taken, at step % len
 	ladder []*checkpoint                     // every `every` steps, thinned past the cap
 	every  int                               // 0 once a checkpoint failed or left the run
+	held   *checkpoint                       // the one a running move restores from
+	spare  []*engine.WorldCopy               // worlds of ring checkpoints let go, for the next to take
 
 	idle, ready   *replayCopy // fresh for the next move; a move's copy, adopted next frame
 	want, running *move
@@ -317,9 +326,11 @@ type rewinder struct {
 	closing       bool
 }
 
-// move positions a fresh copy at step count step.
+// move positions a fresh copy at step count step, or with step -1 at the first step
+// at or past to, which the run has not reached, from its latest checkpoint.
 type move struct {
 	step   int
+	to     *event.Stamp
 	cancel atomic.Bool
 }
 
@@ -353,6 +364,7 @@ func (rw *rewinder) plan(c *replayCopy) stepPlan {
 func (rw *rewinder) lend(p stepPlan, then func(batch)) {
 	c, from := rw.shown, rw.shown.steps
 	rw.lent = true
+	p.spare, rw.spare = rw.spare, nil
 	core.Go(func() {
 		b := c.advance(p)
 		rw.results <- func() {
@@ -376,6 +388,7 @@ func (rw *rewinder) learn(from int, b batch) {
 		rw.shown.a.log.Warn("journal", "msg", "replay diverged", "tick", b.diverged.At.Tick,
 			"run", b.diverged.At.Run, "error", b.diverged.Error())
 	}
+	rw.spare = append(rw.spare, b.spare...)
 	for _, ck := range b.saved {
 		rw.store(ck)
 	}
@@ -398,7 +411,11 @@ func (rw *rewinder) store(c *checkpoint) {
 	if rw.every == 0 {
 		return
 	}
-	rw.ring[c.steps%len(rw.ring)] = c
+	slot := &rw.ring[c.steps%len(rw.ring)]
+	if old := *slot; old != nil && old != rw.held && !rw.onLadder(old) {
+		rw.spare = append(rw.spare, old.world)
+	}
+	*slot = c
 	if c.steps%rw.every != 0 {
 		return
 	}
@@ -411,6 +428,12 @@ func (rw *rewinder) store(c *checkpoint) {
 		rw.every *= 2
 		rw.ladder = slices.DeleteFunc(rw.ladder, func(x *checkpoint) bool { return x.steps%rw.every != 0 })
 	}
+}
+
+// onLadder reports whether the ladder keeps c itself.
+func (rw *rewinder) onLadder(c *checkpoint) bool {
+	i, found := slices.BinarySearchFunc(rw.ladder, c.steps, func(x *checkpoint, s int) int { return cmp.Compare(x.steps, s) })
+	return found && rw.ladder[i] == c
 }
 
 // drop stops checkpointing: one failed, or a copy restored from one left the run, so
@@ -454,13 +477,18 @@ func (rw *rewinder) pump() {
 		return
 	}
 	if mv := rw.want; mv != nil && rw.idle != nil {
-		c, ck := rw.idle, rw.nearest(mv.step)
-		rw.want, rw.idle, rw.running, rw.busy = nil, nil, mv, true
+		at := mv.step
+		if mv.to != nil {
+			at = len(rw.trail) - 1
+		}
+		c, ck := rw.idle, rw.nearest(at)
+		rw.want, rw.idle, rw.running, rw.busy, rw.held = nil, nil, mv, true, ck
 		if ck != nil {
 			c.steps = ck.steps
 		}
 		p := rw.plan(c)
-		p.step, p.cancel = mv.step, &mv.cancel
+		p.step, p.to, p.cancel = mv.step, mv.to, &mv.cancel
+		p.spare, rw.spare = rw.spare, nil
 		core.Go(func() {
 			var (
 				err error
@@ -508,7 +536,7 @@ func (rw *rewinder) built(a *App, src pacedSource, err error) {
 // moved takes a move's copy back: presented next frame, or replaced by a move from
 // the start when it could not be trusted.
 func (rw *rewinder) moved(c *replayCopy, mv *move, ck *checkpoint, err error, b batch) {
-	rw.busy, rw.running = false, nil
+	rw.busy, rw.running, rw.held = false, nil, nil
 	from := 0
 	if ck != nil {
 		from = ck.steps
@@ -524,7 +552,7 @@ func (rw *rewinder) moved(c *replayCopy, mv *move, ck *checkpoint, err error, b 
 	case err != nil || b.mismatch != nil:
 		rw.retired = append(rw.retired, c.a)
 		if rw.want == nil {
-			rw.want = &move{step: mv.step}
+			rw.want = &move{step: mv.step, to: mv.to}
 		}
 	default:
 		rw.ready = c

@@ -1,8 +1,6 @@
 package engine
 
 import (
-	"slices"
-
 	"github.com/lixenwraith/vif/internal/core"
 )
 
@@ -173,8 +171,9 @@ type storeCopy[T any] struct {
 	entities []core.Entity
 }
 
-func (s *Store[T]) copyOut() storeCopy[T] {
-	c := storeCopy[T]{dense: make([]T, len(s.dense)), entities: slices.Clone(s.entities)}
+// copyOut detaches the contents into reuse's storage, which nothing may read after.
+func (s *Store[T]) copyOut(reuse storeCopy[T]) storeCopy[T] {
+	c := storeCopy[T]{dense: sized(reuse.dense, len(s.dense), len(s.dense)), entities: append(reuse.entities[:0], s.entities...)}
 	for i, v := range s.dense {
 		c.dense[i] = DetachSnapshotValue(v)
 	}
