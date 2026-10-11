@@ -9,6 +9,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vif/internal/fsm"
 )
 
 // writeScenario lays down a two-file scenario under dir and returns its root.
@@ -78,6 +81,40 @@ func TestCanonicalFormRoundTrips(t *testing.T) {
 	}
 	if _, err := UnmarshalScenario(src.Name, append(src.Marshal(), 0)); err == nil {
 		t.Error("a body with trailing bytes was accepted")
+	}
+}
+
+// TestMacroFilesAreScenarioFiles: a library the regions expand against is part of
+// what the digest covers and a transfer carries. Were it not, two peers holding
+// different libraries would agree on a digest and simulate different graphs.
+func TestMacroFilesAreScenarioFiles(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "scenario", "lib")
+	writeScenario(t, dir, "[states]\nMainStart = { macro = \"Wait\", next = \"MainStart\" }\n")
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("scenario.toml", "macro_files = [\"macros.toml\"]\n[regions.main]\ninitial = \"MainStart\"\nfile = \"main.toml\"\n")
+	library := "[macros.Wait]\nparams = { next = \"string\" }\nbody = { transitions = [{ trigger = \"Tick\", target = \"${next}\" }] }\n"
+	write("macros.toml", library)
+
+	before := read(t, dir)
+	if before.Files() != 3 {
+		t.Fatalf("scenario holds %d files, want the entry, the region and the library", before.Files())
+	}
+	merged, err := fsm.ResolveScenario(before.FS(), before.Entry())
+	if err != nil {
+		t.Fatalf("resolve from the held copy: %v", err)
+	}
+	var doc fsm.ScenarioDoc
+	if err := toml.Decode(merged, &doc); err != nil || doc.States["MainStart"].Transitions[0].Target != "MainStart" {
+		t.Fatalf("expanded state = %+v, %v", doc.States["MainStart"], err)
+	}
+
+	write("macros.toml", strings.Replace(library, "Tick", "EventGameResetRequest", 1))
+	if read(t, dir).Digest() == before.Digest() {
+		t.Error("an edited macro file kept the scenario's digest")
 	}
 }
 

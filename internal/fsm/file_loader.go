@@ -1,14 +1,17 @@
 package fsm
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
 
 	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vif/pkg/tomlmacro"
 )
 
 // LoadScenarioFromPath loads a scenario from an OS entry path
@@ -27,7 +30,7 @@ func LoadScenarioFromPath[T any](m *Machine[T], entryPath string) error {
 func LoadScenarioFromFS[T any](m *Machine[T], fsys fs.FS, entry string) error {
 	// 'stack' tracks the in-progress include chain, not every file seen
 	stack := make(map[string]bool)
-	merged, err := loadAndResolve(fsys, entry, stack, nil)
+	merged, err := loadAndResolve(fsys, entry, stack, nil, nil)
 	if err != nil {
 		return fmt.Errorf("failed to load scenario '%s': %w", entry, err)
 	}
@@ -40,30 +43,31 @@ func LoadScenarioFromFS[T any](m *Machine[T], fsys fs.FS, entry string) error {
 // see the declarations, and decoding ScenarioDoc from this map is the only way to
 // reach a transition's trigger without running the game.
 func ResolveScenario(fsys fs.FS, entry string) (map[string]any, error) {
-	merged, err := loadAndResolve(fsys, entry, make(map[string]bool), nil)
+	merged, err := loadAndResolve(fsys, entry, make(map[string]bool), nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load scenario '%s': %w", entry, err)
 	}
 	return merged, nil
 }
 
-// ScenarioFiles names every file a scenario is made of — its entry and the region
-// files that entry includes — sorted and deduplicated. A portable copy is read
+// ScenarioFiles names every file a scenario is made of — its entry, its macro
+// files and the region files it includes — sorted and deduplicated. A portable copy is read
 // through this, so it carries exactly the files the loader would have read and
 // nothing that happens to sit beside them.
 func ScenarioFiles(fsys fs.FS, entry string) ([]string, error) {
 	var visited []string
-	if _, err := loadAndResolve(fsys, entry, make(map[string]bool), &visited); err != nil {
+	if _, err := loadAndResolve(fsys, entry, make(map[string]bool), &visited, nil); err != nil {
 		return nil, fmt.Errorf("failed to load scenario '%s': %w", entry, err)
 	}
 	slices.Sort(visited)
 	return slices.Compact(visited), nil
 }
 
-// loadAndResolve recursively loads a TOML file and resolves region file includes
-// stack holds the ancestors currently being resolved; entries are popped on return
-// visited, when non-nil, collects every file read, in no particular order
-func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]string) (map[string]any, error) {
+// loadAndResolve loads a TOML file, expands its macros and resolves region file
+// includes. stack holds the ancestors being resolved, popped on return; visited,
+// when non-nil, collects every file read. macros is nil for the entry, which
+// defines the set every file of the scenario expands against.
+func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]string, macros *tomlmacro.Set) (map[string]any, error) {
 	cleanName := path.Clean(name)
 	if stack[cleanName] {
 		return nil, fmt.Errorf("circular include detected: %s", cleanName)
@@ -85,6 +89,17 @@ func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]s
 		return nil, fmt.Errorf("failed to parse %s: %w", cleanName, err)
 	}
 
+	baseDir := path.Dir(cleanName)
+	if macros == nil {
+		macros = tomlmacro.NewSet()
+		if err := defineMacros(fsys, parsed, baseDir, macros, visited); err != nil {
+			return nil, fmt.Errorf("%s: %w", cleanName, err)
+		}
+	}
+	if parsed, err = macros.Expand(parsed); err != nil {
+		return nil, fmt.Errorf("%s: %w", cleanName, err)
+	}
+
 	if parsed["states"] == nil {
 		parsed["states"] = make(map[string]any)
 	}
@@ -97,8 +112,6 @@ func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]s
 	if !ok {
 		return nil, fmt.Errorf("%s: regions must be a table", cleanName)
 	}
-
-	baseDir := path.Dir(cleanName)
 
 	for regionName, regionRaw := range regions {
 		regionCfg, ok := regionRaw.(map[string]any)
@@ -114,7 +127,7 @@ func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]s
 			return nil, fmt.Errorf("%s: region '%s' file must be a string", cleanName, regionName)
 		}
 
-		regionMap, err := loadAndResolve(fsys, path.Join(baseDir, fileStr), stack, visited)
+		regionMap, err := loadAndResolve(fsys, path.Join(baseDir, fileStr), stack, visited, macros)
 		if err != nil {
 			return nil, fmt.Errorf("region '%s': %w", regionName, err)
 		}
@@ -137,7 +150,44 @@ func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]s
 	return parsed, nil
 }
 
-// mergeStates merges addition states into base, panics on collision
+// defineMacros reads the entry's macro_files, then its own [macros], into set.
+func defineMacros(fsys fs.FS, entry map[string]any, baseDir string, set *tomlmacro.Set, visited *[]string) error {
+	if raw, ok := entry["macro_files"]; ok {
+		delete(entry, "macro_files")
+		files, ok := raw.([]any)
+		if !ok {
+			return errors.New("macro_files must be an array of file names")
+		}
+		for _, f := range files {
+			file, ok := f.(string)
+			if !ok {
+				return errors.New("macro_files must be an array of file names")
+			}
+			name := path.Join(baseDir, file)
+			if visited != nil {
+				*visited = append(*visited, name)
+			}
+			data, err := fs.ReadFile(fsys, name)
+			if err != nil {
+				return fmt.Errorf("failed to read %s: %w", name, err)
+			}
+			doc, err := toml.NewParser(data).Parse()
+			if err != nil {
+				return fmt.Errorf("failed to parse %s: %w", name, err)
+			}
+			if err := set.Define(doc); err != nil {
+				return fmt.Errorf("%s: %w", name, err)
+			}
+			if len(doc) > 0 {
+				return fmt.Errorf("macro file '%s' contains unexpected key '%s'; only [macros] allowed",
+					file, slices.Sorted(maps.Keys(doc))[0])
+			}
+		}
+	}
+	return set.Define(entry)
+}
+
+// mergeStates merges addition states into base; a name in both is an error
 func mergeStates(base, addition map[string]any, sourceFile string) error {
 	for stateName, stateConfig := range addition {
 		if _, exists := base[stateName]; exists {
