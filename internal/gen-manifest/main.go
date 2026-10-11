@@ -542,10 +542,11 @@ type componentCopies struct {
 {{- end }}
 }
 
-// copyComponentsOut detaches every component store. Caller MUST hold updateMutex
-func (w *World) copyComponentsOut() (c componentCopies) {
+// copyComponentsOut detaches every component store into reuse's storage. Caller
+// MUST hold updateMutex
+func (w *World) copyComponentsOut(reuse *componentCopies) (c componentCopies) {
 {{- range .Components }}
-	c.{{ .Field }} = w.Components.{{ .Field }}.copyOut()
+	c.{{ .Field }} = w.Components.{{ .Field }}.copyOut(reuse.{{ .Field }})
 {{- end }}
 	return c
 }

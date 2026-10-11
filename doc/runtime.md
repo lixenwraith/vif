@@ -474,13 +474,16 @@ After each step the presented copy plays, the player keeps the whole state of th
 run (`app.checkpoint`) and its world digest: the last `parameter.ReplayRing` (8)
 steps in a ring, and every `parameter.ReplayCheckpointSteps` (100) on a ladder that
 drops every other and doubles its spacing past `parameter.ReplayCheckpoints` (32).
-A checkpoint holds every store and grid cell in its own order and both domains'
-allocators (`engine.WorldCopy`), RNG streams, FSM position, scheduler and queue with
-its pending events, every registry cell, each system's FSM toggle and its private
-state (`engine.StateCopier`, or `SharedStateSaver` for a carrier without one), the
-corpus cursor, the latched session (`engine.SessionState`, from the journal) and the
-driver's place. One costs about 1 ms at 146×34, and 6 ms and 6.5 MB at the 500×250
-map limit, where a restore takes about 35 ms with the copy's construction.
+A checkpoint holds every store and occupied grid cell's entities in their own order
+and both domains' allocators (`engine.WorldCopy`), RNG streams, FSM position,
+scheduler and queue with its pending events, every registry cell, each system's FSM
+toggle and its private state (`engine.StateCopier`, or `SharedStateSaver` for a
+carrier without one), the corpus cursor, the latched session (`engine.SessionState`,
+from the journal) and the driver's place. One costs about 1 ms at 146×34, and 10 ms
+and 6.3 MB on td's 500×250 map with 16 players, where a restore takes about 35 ms
+with the copy's construction. A checkpoint the ring lets go, unless the ladder keeps
+it or a move restores from it, lends its storage to the next, which then allocates
+1.7 MB there.
 
 Every move goes to the first step at or past a tick of the run shown: `,` to the
 step before, one a frame, as `.` steps on; `:r` to the tick asked; a restart to the
@@ -488,7 +491,8 @@ start. The presented copy plays there unpaced for most of each frame when it sta
 before it and no checkpoint is more than a ring nearer, so the view keeps drawing;
 otherwise the idle copy restores the nearest checkpoint, or starts fresh, replays
 there and keeps the last ring of steps before it, and is presented the next frame.
-So `,` within the ring restores without replaying.
+So `,` within the ring restores without replaying, and a tick past the furthest step
+reached plays on from the latest checkpoint.
 
 A step that fails, such as a written world failing its integrity check once the
 replay has left its run, ends the stream there: the viewer pauses on it with the

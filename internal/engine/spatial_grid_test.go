@@ -122,7 +122,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 		var saved *WorldCopy
 		for round := range 24 {
 			if round%4 == 0 {
-				saved = w.CopyOut()
+				saved = w.CopyOut(saved)
 			}
 			if round%2 == 1 { // a storm of one kind between two derivations, so none hides another
 				kind := rng.IntN(11)

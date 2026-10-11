@@ -221,25 +221,17 @@ operator's.
 Diagnoses and what each item follows from are in
 [Troubleshooting](troubleshooting.md).
 
-### Reduce exact snapshot and navigation costs at the map limit
+### Trim what remains of a tick and a checkpoint at the map limit
 
-- Priority: P1
-- Affected files: `internal/app/clone.go`, `internal/app/play.go`, `internal/engine/world_copy.go`
+- Priority: P2
+- Affected files: `pkg/navigation/flowfield.go`, `internal/system/interaction.go`,
+  `internal/engine/world_copy.go`
 
-At td with 16 players the host spent about 1.2 of its 1.4 CPU-s/s on protocol and
-an instance averages about 250 MiB of heap, against the pod's 500m and 160 MiB
-(multi-player §6). Row reuse took about nine tenths off a round's seal and index, and
-an exact wall grid cache four fifths off a td tick; flow field derivation is now
-about 45% of that tick and cursor overlap's position lookups a quarter. What remains
-is replay. Each step below must stay exact:
-
-- Reuse a replay's ring checkpoint buffers (`engine.WorldCopy` and the store copies),
-  never one the ladder keeps or a move holds: at the limit a checkpoint per presented
-  step allocates 6.5 MB, about 130 MB/s at 1x.
-- Seek a replay past the furthest step reached from the latest checkpoint, not from
-  the presented step, which a viewer who went back replays all the way.
-
-Per-store write counters stay rejected: a cache compares values it owns.
+At td with 16 players a tick is about 2.6 ms at `GOMAXPROCS=1`: flow field derivation
+is about 45% of it and `checkCursorOverlap`'s position lookups a quarter. A
+checkpoint scans the whole grid for its occupied cells, most of its 10 ms. Each must
+stay exact; per-store write counters stay rejected, since a cache compares values it
+owns.
 
 ### Delegate convergence to relays
 
