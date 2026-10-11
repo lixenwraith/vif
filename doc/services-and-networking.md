@@ -225,7 +225,11 @@ flowchart TD
 ```
 
 Host uses `tls.Listen` when a TLS config is supplied programmatically, otherwise
-`net.Listen`; peer uses the corresponding dialer. The CLI deliberately supplies
+`net.Listen`; peer uses the corresponding dialer. A bind or dial that fails is
+reported as what the player can do (`plainNetError`): a port below 1024, a port in
+use, a name not found, nothing listening, no answer; a dial that connects to
+something that offers no session says so, and a host's refusal is prefixed as one.
+Anything else keeps the system's words. The CLI deliberately supplies
 no TLS configuration in this trusted-peer proof. `dial` is also where a WebSocket
 route diverges and stops diverging: a `ws://` or `wss://` target is opened as the
 page's own WebSocket in a browser, or with `pkg/websocket` natively, wrapped in a

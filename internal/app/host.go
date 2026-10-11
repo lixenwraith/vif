@@ -263,7 +263,7 @@ func (a *App) hostErrorLocked() error {
 		return errors.New("host: a browser build can join a session but not host one")
 	}
 	if a.dialling.Load() {
-		return errors.New("a join is already being dialled")
+		return errors.New("host: a join is already being dialled")
 	}
 	if a.sessionTransportLocked() != nil {
 		return errors.New("host: this run is already in a session")

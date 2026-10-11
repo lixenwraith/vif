@@ -821,7 +821,7 @@ func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 		authority = args[1]
 	}
 	if err := ctx.SessionCtl.BeginHosting(args[0], authority); err != nil {
-		setCommandError(ctx, "Host: "+err.Error())
+		setCommandError(ctx, err.Error())
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 	return CommandResult{Continue: true, KeepPaused: false}

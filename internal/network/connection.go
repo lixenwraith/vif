@@ -478,12 +478,15 @@ func dial(target string, cfg *Config) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	if e.Scheme == SchemeWebSocket {
-		return dialWebSocket(e.Addr, cfg.ConnectTimeout)
-	}
+	var conn net.Conn
 	dialer := &net.Dialer{Timeout: cfg.ConnectTimeout}
-	if cfg.TLS != nil {
-		return tls.DialWithDialer(dialer, "tcp", e.Addr, cfg.TLS)
+	switch {
+	case e.Scheme == SchemeWebSocket:
+		conn, err = dialWebSocket(e.Addr, cfg.ConnectTimeout)
+	case cfg.TLS != nil:
+		conn, err = tls.DialWithDialer(dialer, "tcp", e.Addr, cfg.TLS)
+	default:
+		conn, err = dialer.Dial("tcp", e.Addr)
 	}
-	return dialer.Dial("tcp", e.Addr)
+	return conn, plainNetError(err)
 }

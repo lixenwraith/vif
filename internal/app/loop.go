@@ -180,7 +180,7 @@ func (a *App) Loop() (*restartRequest, error) {
 	if a.cfg.resumeHost != "" {
 		if err := a.BeginHosting(a.cfg.resumeHost); err != nil {
 			a.log.Warn("session", "msg", "hosting not opened; playing solo", "address", a.cfg.resumeHost, "error", err.Error())
-			a.ctx.SetStatusMessage("Host: "+err.Error()+"; playing solo", parameter.StatusMessageMaxDuration, true)
+			a.ctx.SetStatusMessage(err.Error()+"; playing solo", parameter.StatusMessageMaxDuration, true)
 		}
 	}
 	// After the door opens, for the same reason: every bot arrives through it. One

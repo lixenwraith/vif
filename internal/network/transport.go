@@ -137,7 +137,7 @@ func (t *Transport) listen(addr string, accept func(net.Conn) (PeerID, error)) e
 		ln, err = net.Listen("tcp", e.Addr)
 	}
 	if err != nil {
-		return err
+		return plainNetError(err)
 	}
 
 	t.listener = ln
