@@ -16,6 +16,11 @@ const (
 
 	// Materialize visual parameters
 	MaterializeWidthFalloff = 0.5 // Side-line intensity for multi-width beams
+
+	// The nugget beacon's beams: shorter than a spawn's, with a brief hold
+	MaterializeNuggetDuration = 600 * time.Millisecond
+	MaterializeNuggetFillEnd  = 0.5
+	MaterializeNuggetHoldEnd  = 0.6
 )
 
 // Lightning Entity

@@ -644,7 +644,7 @@ func (s *DustSystem) detonateDust(cursor core.Entity) {
 	s.world.PushLocal(event.EventHeatSpendRequest, &event.HeatSpendRequestPayload{
 		Entity: cursor, Amount: parameter.SpecialAttackHeatCost,
 	})
-	strikePlayerTargets(s.world, cursor, &s.blast, component.CombatAttackExplosion)
+	strikePlayerTargets(s.world, cursor, &s.blast, component.CombatAttackExplosion, false)
 	s.world.PushLocal(event.EventExplosionVisualBatchRequest, &event.ExplosionVisualBatchRequestPayload{
 		Centers: append([]event.ExplosionCenterEntry(nil), s.centerBuf...),
 		Radius:  parameter.ExplosionFieldRadius, Duration: parameter.ExplosionFieldDuration,

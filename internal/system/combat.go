@@ -55,6 +55,8 @@ type CombatSystem struct {
 	statEffectEnergyDrain *atomic.Int64
 	statEffectKinetic     *atomic.Int64
 	statEffectStun        *atomic.Int64
+	statEffectBurn        *atomic.Int64
+	statBurnTicks         *atomic.Int64
 	statChainFollowups    *atomic.Int64
 	statChainDepthTotal   *atomic.Int64
 	statChainDepthMax     *atomic.Int64
@@ -65,7 +67,7 @@ type CombatSystem struct {
 // combatAttackNames keys the damage each attack family deals, which is how a
 // weapon's effect reads in telemetry
 var combatAttackNames = [component.CombatAttackTypeCount]string{
-	component.CombatAttackProjectile:   "projectile",
+	component.CombatAttackTracer:       "tracer",
 	component.CombatAttackShield:       "shield",
 	component.CombatAttackLightning:    "lightning",
 	component.CombatAttackExplosion:    "explosion",
@@ -74,6 +76,7 @@ var combatAttackNames = [component.CombatAttackTypeCount]string{
 	component.CombatAttackSelfDestruct: "self_destruct",
 	component.CombatAttackBullet:       "bullet",
 	component.CombatAttackRay:          "ray",
+	component.CombatAttackBurn:         "burn",
 }
 
 var combatEntityNames = [component.CombatEntityCount]string{
@@ -117,6 +120,8 @@ func NewCombatSystem(world *engine.World) engine.System {
 	s.statEffectEnergyDrain = reg.Ints.Get("combat.effect_energy_drain")
 	s.statEffectKinetic = reg.Ints.Get("combat.effect_kinetic")
 	s.statEffectStun = reg.Ints.Get("combat.effect_stun")
+	s.statEffectBurn = reg.Ints.Get("combat.effect_burn")
+	s.statBurnTicks = reg.Ints.Get("combat.burn_ticks")
 	s.statChainFollowups = reg.Ints.Get("combat.chain_followups")
 	s.statChainDepthTotal = reg.Ints.Get("combat.chain_depth_total")
 	s.statChainDepthMax = reg.Ints.Get("combat.chain_depth_max")
@@ -159,6 +164,8 @@ func (s *CombatSystem) Init() {
 		s.statEffectEnergyDrain,
 		s.statEffectKinetic,
 		s.statEffectStun,
+		s.statEffectBurn,
+		s.statBurnTicks,
 		s.statChainFollowups,
 		s.statChainDepthTotal,
 		s.statChainDepthMax,
@@ -278,11 +285,19 @@ func (s *CombatSystem) Update() {
 			live[t]++
 		}
 
-		// Update stun timer
-		if combatComp.StunnedRemaining > 0 {
-			combatComp.StunnedRemaining -= dt
-			if combatComp.StunnedRemaining < 0 {
-				combatComp.StunnedRemaining = 0
+		for k := range combatComp.Status {
+			slot := &combatComp.Status[k]
+			if slot.Remaining <= 0 {
+				continue
+			}
+			slot.Remaining -= dt
+			if slot.Period > 0 {
+				for slot.Timer -= dt; slot.Timer <= 0; slot.Timer += slot.Period {
+					s.tickStatus(combatEntity, combatComp, slot)
+				}
+			}
+			if slot.Remaining <= 0 {
+				*slot = component.Status{}
 			}
 		}
 
@@ -393,7 +408,15 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	}
 
 	attack := profile.Attack(payload.AttackType, attackerType, targetCombatComp.CombatEntityType)
-	if attack == nil || attack.DamageType != component.CombatDamageDirect {
+	if attack == nil {
+		s.statUnprofiled.Add(1)
+		return
+	}
+	if attack.DamageType == component.CombatDamageOverTime {
+		s.applyOverTime(payload, attack, targetCombatComp, headerComp, isComposite)
+		return
+	}
+	if attack.DamageType != component.CombatDamageDirect {
 		s.statUnprofiled.Add(1)
 		return
 	}
@@ -690,27 +713,13 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		}
 	}
 
-	// Chain attack for area attacks - emit per hit entity as direct attacks
-	if chainAttack := attack.Chain; chainAttack != nil {
-		depth := payload.ChainDepth + 1
-		chainX, chainY, chainHasOrigin := s.chainOrigin(payload.OwnerEntity,
-			payload.OriginX, payload.OriginY, payload.HasOrigin)
-		for _, hitEntity := range hits {
-			s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
-				CrossingID:     payload.CrossingID,
-				AttackType:     chainAttack.AttackType,
-				OwnerEntity:    payload.OwnerEntity,
-				OriginEntity:   payload.OwnerEntity,
-				TargetEntity:   targetEntity,
-				HitEntity:      hitEntity,
-				HasOrigin:      chainHasOrigin,
-				OriginX:        chainX,
-				OriginY:        chainY,
-				ChainDepth:     depth,
-				RootAttackType: weapon,
-			}, targetEntity.Domain())
-		}
-		s.recordChain(depth, len(hits))
+	// Follow-ups go to every hit entity as direct attacks; a charged hit adds its own
+	if attack.Chain != nil {
+		s.chainArea(payload, targetEntity, hits, attack.Chain, weapon)
+		resolved = len(hits) != 0 || resolved
+	}
+	if attack.Charged != nil && payload.Charged {
+		s.chainArea(payload, targetEntity, hits, attack.Charged, weapon)
 		resolved = len(hits) != 0 || resolved
 	}
 	if resolved {
@@ -718,8 +727,84 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	}
 }
 
+// chainArea emits one direct follow-up per hit entity of an area attack
+func (s *CombatSystem) chainArea(payload *event.CombatAttackAreaRequestPayload, targetEntity core.Entity, hits []core.Entity, chain *profile.AttackProfile, weapon component.CombatAttackType) {
+	depth := payload.ChainDepth + 1
+	chainX, chainY, chainHasOrigin := s.chainOrigin(payload.OwnerEntity,
+		payload.OriginX, payload.OriginY, payload.HasOrigin)
+	for _, hitEntity := range hits {
+		s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+			CrossingID:     payload.CrossingID,
+			AttackType:     chain.AttackType,
+			OwnerEntity:    payload.OwnerEntity,
+			OriginEntity:   payload.OwnerEntity,
+			TargetEntity:   targetEntity,
+			HitEntity:      hitEntity,
+			HasOrigin:      chainHasOrigin,
+			OriginX:        chainX,
+			OriginY:        chainY,
+			ChainDepth:     depth,
+			RootAttackType: weapon,
+		}, targetEntity.Domain())
+	}
+	s.recordChain(depth, len(hits))
+}
+
+// applyOverTime leaves the profile's status on the combatant the hit named: the
+// member of an ablative composite, the target otherwise. The last refresher is
+// credited, and only a sealed window refuses it: nothing spends the burn family.
+func (s *CombatSystem) applyOverTime(payload *event.CombatAttackDirectRequestPayload, attack *profile.AttackProfile, target *component.CombatComponent, header *component.HeaderComponent, composite bool) {
+	victim := target
+	if composite && header.Type == component.CompositeTypeAblative && payload.HitEntity != payload.TargetEntity {
+		member, ok := s.world.Components.Combat.GetPtr(payload.HitEntity)
+		if !ok {
+			s.statTarget.Add(1)
+			return
+		}
+		victim = member
+	}
+	source := s.world.ResolveCursor(payload.OwnerEntity)
+	if victim.HitPoints <= 0 || victim.DamageImmuneTo(s.attackerBit(source), attack.AttackType) {
+		s.statImmune.Add(1)
+		return
+	}
+	slot := &victim.Status[attack.Status]
+	slot.Remaining = max(slot.Remaining, attack.Duration)
+	slot.Magnitude = max(slot.Magnitude, attack.DamageValue)
+	if slot.Period <= 0 {
+		slot.Period, slot.Timer = attack.Period, attack.Period
+	}
+	slot.Source, slot.Attack = source, attack.AttackType
+	s.statEffectBurn.Add(1)
+	s.statDirect.Add(1)
+}
+
+// tickStatus lands one periodic tick of a status, credited to its source. A tick
+// spends no window, so a player's own burn never blocks their direct hits
+func (s *CombatSystem) tickStatus(e core.Entity, c *component.CombatComponent, slot *component.Status) {
+	if c.HitPoints <= 0 || slot.Magnitude <= 0 {
+		return
+	}
+	if c.DamageImmuneTo(s.attackerBit(slot.Source), slot.Attack) {
+		s.statImmune.Add(1)
+		s.recordDamage(slot.Attack, component.CombatEntityCursor, c.CombatEntityType, 0, slot.Magnitude)
+		return
+	}
+	dealt := min(c.HitPoints, slot.Magnitude)
+	c.HitPoints -= dealt
+	s.recordDamage(slot.Attack, component.CombatEntityCursor, c.CombatEntityType, dealt, 0)
+	c.RemainingHitFlash = parameter.CombatHitFlashDuration
+	c.LastDamagedBy = slot.Source
+	if member, ok := s.world.Components.Member.GetPtr(e); ok {
+		if header, ok := s.world.Components.Combat.GetPtr(member.HeaderEntity); ok {
+			header.LastDamagedBy = slot.Source
+		}
+	}
+	s.statBurnTicks.Add(1)
+}
+
 // chainOrigin is the emitter geometry of a chained attack. The chain declares the
-// owner as its emitter, so its geometry is the owner's: a cleaner's impact cell is
+// owner as its emitter, so its geometry is the owner's: a tracer's impact cell is
 // the target's own cell, and a drain zap drawn from it has no length.
 func (s *CombatSystem) chainOrigin(owner core.Entity, x, y int, has bool) (int, int, bool) {
 	if pos, ok := s.world.Positions.GetPosition(owner); ok {
@@ -937,7 +1022,7 @@ func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatCom
 	// A running stun is not refreshed. Refreshing it made every later hit — the
 	// other participant's included — extend the lockdown, so a target under
 	// continuous fire never left it.
-	if targetCombatComp.StunnedRemaining > 0 {
+	if targetCombatComp.Stunned() {
 		return false
 	}
 
@@ -970,8 +1055,7 @@ func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatCom
 		return false
 	}
 
-	// Apply stun
-	targetCombatComp.StunnedRemaining = parameter.PulseStunDuration
+	targetCombatComp.Status[component.StatusStun] = component.Status{Remaining: parameter.PulseStunDuration}
 
 	// Clear enrage state
 	targetCombatComp.IsEnraged = false

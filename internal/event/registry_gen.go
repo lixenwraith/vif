@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 182
+const EventTypeCount = 181
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -52,8 +52,6 @@ func InitRegistry() {
 	RegisterType("EventNuggetCollected", EventNuggetCollected, &NuggetCollectedPayload{})
 	RegisterType("EventNuggetDestroyed", EventNuggetDestroyed, &NuggetDestroyedPayload{})
 	RegisterType("EventNuggetJumpRequest", EventNuggetJumpRequest, &NuggetJumpRequestPayload{})
-	RegisterType("EventCleanerDirectionalRequest", EventCleanerDirectionalRequest, &DirectionalCleanerPayload{})
-	RegisterType("EventCleanerSweepingRequest", EventCleanerSweepingRequest, &CleanerSweepingRequestPayload{})
 	RegisterType("EventGoldSpawnRequest", EventGoldSpawnRequest, nil)
 	RegisterType("EventGoldSpawnFailed", EventGoldSpawnFailed, nil)
 	RegisterType("EventGoldSpawned", EventGoldSpawned, &GoldSpawnedPayload{})
@@ -74,6 +72,7 @@ func InitRegistry() {
 	RegisterType("EventShieldDeactivate", EventShieldDeactivate, &ShieldDeactivatePayload{})
 	RegisterType("EventShieldDrainRequest", EventShieldDrainRequest, &ShieldDrainRequestPayload{})
 	RegisterType("EventWeaponAddRequest", EventWeaponAddRequest, &WeaponAddRequestPayload{})
+	RegisterType("EventWeaponRemoveRequest", EventWeaponRemoveRequest, &WeaponRemoveRequestPayload{})
 	RegisterType("EventWeaponFireRequest", EventWeaponFireRequest, &WeaponFireRequestPayload{})
 	RegisterType("EventFireSpecialRequest", EventFireSpecialRequest, &FireSpecialRequestPayload{})
 	RegisterType("EventMountRequest", EventMountRequest, &MountRequestPayload{})
@@ -240,8 +239,6 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventNuggetCollected:                 ClassLocal,
 	EventNuggetDestroyed:                 ClassLocal,
 	EventNuggetJumpRequest:               ClassLocal,
-	EventCleanerDirectionalRequest:       ClassLocal,
-	EventCleanerSweepingRequest:          ClassLocal,
 	EventGoldSpawnRequest:                ClassShared,
 	EventGoldSpawnFailed:                 ClassShared,
 	EventGoldSpawned:                     ClassShared,
@@ -262,6 +259,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventShieldDeactivate:                ClassLocal,
 	EventShieldDrainRequest:              ClassLocal,
 	EventWeaponAddRequest:                ClassLocal,
+	EventWeaponRemoveRequest:             ClassLocal,
 	EventWeaponFireRequest:               ClassLocal,
 	EventFireSpecialRequest:              ClassLocal,
 	EventMountRequest:                    ClassShared,

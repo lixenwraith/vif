@@ -155,7 +155,6 @@ and activates the ember phase. Ember decays heat periodically and protects
 ordinary energy penalties while active. A heat penalty also clears the
 overheat accumulation.
 
-HeatSystem requests the bursting participant's sweeping cleaner locally.
 Special-attack heat spending consumes overheat before current heat without
 resetting the remaining overheat or triggering the penalty sound.
 
@@ -196,7 +195,8 @@ Collision behavior still varies by attacker through combat/species profiles.
 
 At most one normal nugget is tracked by `NuggetSystem`. When absent, the system
 attempts a random free-cell spawn after the one-second spawn interval. A beacon
-periodically emits a directional cleaner cue toward it.
+periodically converges materialize beams on it, in the nugget's colour and shorter
+than a spawn's.
 
 A nugget is collected by exact cursor overlap or by entering the active
 shield/ember collection ellipse. Collection adds 10 heat. `Tab` jumps to the
@@ -247,8 +247,9 @@ to change during tuning.
 
 ## 7. Weapons and attacks
 
-Main fire has its own cooldown. It emits a directional cleaner colored by
-energy polarity and asks every owned, ready weapon to fire. Automatic fire
+Main fire has its own cooldown. It fires every owned, ready kind of the
+loadout, the innate gun included, whose tracers take the cursor's energy
+polarity. Automatic fire
 starts with main and special enabled; `a` cycles both → off → main only.
 Main-only repeats the main-fire path without special attacks.
 
@@ -266,15 +267,19 @@ locally; only center/radius/attack geometry crosses for shared combat.
 
 | Weapon | Model |
 |---|---|
-| Main cleaner | Directional player attack/effect originating at the owning cursor. Each impact chains into the rod's lightning, so the energy drain and its zap span the firing cursor and the species rather than the impact cell. |
-| Rod | Direct lightning against unique nearest targets, rewarding energy in the attacker's current polarity. |
-| Launcher | Homing/area missiles assigned from the nearest-target set. |
-| Disruptor | Stun pulse centred on its orb; it fires only while a target is inside the ellipse. |
-| Turret | One spread bullet per charge from its orb at the nearest targets; each hit is direct damage. |
-| Emitter | A sustained ray from the cursor through its orb to the first wall, one cell wide to the orb and three past it, sweeping as the orb orbits; more charges fire longer and hit harder. |
+| Gun | Innate. One tracer per cardinal from the cursor, direct damage on contact; a positive tracer blossoms the red glyphs it crosses, a negative one decays blue ones. Each impact chains into the rod's lightning, so the energy drain and its zap span the firing cursor and the species rather than the impact cell. Two charges fire the two side lanes, three add the centre back. |
+| Rod | Direct lightning against unique nearest targets, rewarding energy in the attacker's current polarity; at the cap each hit arcs to the nearest other target in range. |
+| Launcher | Homing/area missiles assigned from the nearest-target set; at the cap its cooldown halves. |
+| Disruptor | Stun pulse centred on its orb; it fires only while a target is inside the ellipse; at two charges the pulse also burns. |
+| Turret | One spread bullet per charge from its orb at the nearest targets; each hit is direct damage; at the cap it streams single bullets between waves. |
+| Emitter | A sustained ray from the cursor through its orb to the first wall, one cell wide to the orb and three past it, sweeping as the orb orbits; more charges fire longer and hit harder, and at the cap the ray stays lit. |
 
 Weapon ownership is represented by charge count: zero means not owned. Each
-owned type has an orbiting orb entity and a separate cooldown. The combat system
+owned kind but the gun has an orbiting orb entity and its own cooldown; the gun
+fires under main fire's.
+Charges only rise, so a kind at its cap keeps its cap effect until an energy
+zero crossing clears the loot; the gun survives that and leaves only on a
+remove request. The combat system
 uses attack profiles to route attacker/defender pairs, damage types, collision
 profiles, chained attacks, and kinetic effects. This central matrix avoids
 embedding every target-specific response in projectile systems.
@@ -284,10 +289,10 @@ it under the default mapping. See source and keymap documentation when changing
 this behavior because fire requests, auto-fire, macros, and mouse repeat all
 share timing constraints.
 
-Cleaner visuals are background-only moving trails. They preserve any glyph
+Tracer visuals are background-only moving trails. They preserve any glyph
 foreground in a traversed cell, use max-background blending so overlapping
 auto-fire does not accumulate into a flash, and shrink the visible tail while
-a blocked cleaner drains to its stop point.
+a blocked tracer drains to its stop point.
 
 ## 8. Hostile and structural actors
 
@@ -375,7 +380,7 @@ declares for itself:
 |---|---|
 | Frame/player | `cursor`, `ping`, `transient`, `camera`, `energy`, `shield`, `heat`, `boost`, `weapon` |
 | Typing/world | `typing`, `composite`, `wall`, `tower`, `gateway`, `loot`, `glyph`, `nugget`, `particle`, `gold` |
-| Spawning/effects | `materialize`, `cleaner`, `fuse`, `spirit`, `lightning`, `missile` |
+| Spawning/effects | `materialize`, `fuse`, `spirit`, `lightning`, `missile` |
 | Motion/environment/combat | `navigation`, `soft_collision`, `environment`, `combat` |
 | Species | `drain`, `quasar`, `swarm`, `storm`, `pylon`, `snake`, `eye`, `mount`, `bullet` |
 | Particles | `dust`, `flash`, `fadeout`, `marker`, `explosion`, `motion_marker`, `splash` |

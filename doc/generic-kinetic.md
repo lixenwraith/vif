@@ -83,7 +83,7 @@ wind or a generic integration pass.
 
 | Entity/effect | Current motion model | Why it needs an explicit policy |
 |---|---|---|
-| Cleaner | Cardinal constant velocity, normal integration, swept wall/entity checks, then a stationary tail-drain phase | It is a weapon/effect, not a wind target; acceleration would also break the cardinal-only traversal branches. |
+| Tracer | Cardinal constant velocity, normal integration, swept wall/entity checks, then a stationary tail-drain phase | It is a weapon/effect, not a wind target; acceleration would also break the cardinal-only traversal branches. |
 | Missile | Homing or ballistic velocity, speed cap, position-only integration, swept impact, lifetime | Targeting and detonation are part of the same step; it intentionally ignores `Accel`. |
 | Bullet | Ballistic position-only integration plus swept wall/shield/cursor collision | A projectile should not inherit environmental forces merely because it stores precise motion. |
 | Loot | Owner-specific line of sight/flow homing, cornering brake or velocity bleed, swept bounce | It is Player-domain and owned; current wind scope excludes it. |
@@ -159,7 +159,7 @@ Collapsing all four into “set velocity” would make priority bugs difficult t
 
 Ordinary composite movers can share swept bounce math because the caller supplies
 the footprint offset, valid header bounds, restitution, and wall query. Drain,
-dust, cleaner, missile, bullet, and particles instead traverse the precise
+dust, tracer, missile, bullet, and particles instead traverse the precise
 segment because entering intermediate cells has gameplay consequences. Storm
 destroys walls in an ellipse while integrating. Those contact callbacks may emit
 death, damage, collection, or transformation events, so they cannot be moved
@@ -195,7 +195,7 @@ changing the shared random sequence.
 Wind writes acceleration only to the ordinary mobile species: drain, swarm,
 quasar, eye, and snake head. Storm receives an equivalent per-tick velocity delta
 on its 2D mirror for the 3D system to absorb. Pylon is typed but currently
-immobile. Tower, cursor, snake body members, cleaner, missile, bullet, loot, weapon
+immobile. Tower, cursor, snake body members, tracer, missile, bullet, loot, weapon
 orbs, dust, and particles are not affected.
 
 The environment runs after soft collision and before every ordinary species

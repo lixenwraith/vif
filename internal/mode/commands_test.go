@@ -90,7 +90,7 @@ func TestAutoFireCycleRoutesOnlySelectedWeapons(t *testing.T) {
 	}{
 		{"auto main", engine.AutoFireMain}, {"auto on", engine.AutoFireBoth},
 		{"auto off", engine.AutoFireOff}, {"auto", engine.AutoFireMain},
-		{"auto cleaner", engine.AutoFireMain},
+		{"auto gun", engine.AutoFireMain},
 		{"auto invalid", engine.AutoFireMain}, {"auto on extra", engine.AutoFireMain},
 	} {
 		mode.ExecuteCommand(ctx, tc.command)

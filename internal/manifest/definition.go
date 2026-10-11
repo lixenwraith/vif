@@ -59,7 +59,7 @@ var Components = []ComponentDef{
 
 	// --- Entity Behaviors ---
 	{"Particle", "ParticleComponent", "player"},
-	{"Cleaner", "CleanerComponent", ""},
+	{"Tracer", "TracerComponent", "player"},
 	{"Dust", "DustComponent", "player"},
 	{"Navigation", "NavigationComponent", ""},
 	{"Combat", "CombatComponent", ""},
@@ -124,7 +124,7 @@ var Systems = []SystemDef{
 	{Name: "heat", Constructor: "NewHeatSystem", Domain: "player", Requires: []string{"cursor"}},                                   // owns cursor heat
 	{Name: "boost", Constructor: "NewBoostSystem", Domain: "player", Requires: []string{"cursor"}, Optional: []string{"energy"}},   // owns cursor boost state; energy funds it
 	{Name: "weapon", Constructor: "NewWeaponSystem", Domain: "player",
-		Requires: []string{"cursor", "energy"}, Optional: []string{"combat", "cleaner"}}, // only the owner simulates a cursor's weapons (D-2, D-13)
+		Requires: []string{"cursor", "energy"}, Optional: []string{"combat", "glyph", "particle"}}, // only the owner simulates a cursor's weapons and tracers (D-2, D-13)
 
 	// --- Input Processing ---
 	{Name: "typing", Constructor: "NewTypingSystem", Domain: "player", Requires: []string{"cursor"},
@@ -142,15 +142,13 @@ var Systems = []SystemDef{
 		Optional: []string{"death", "energy", "weapon", "heat"}}, // rolled per participant against owner-authored inventory; reward handlers are optional (D-6)
 	{Name: "glyph", Constructor: "NewGlyphSystem", Domain: "player"}, // player stream and entities; corpus and map are its only inputs
 	{Name: "nugget", Constructor: "NewNuggetSystem", Domain: "player",
-		Optional: []string{"cleaner", "energy", "heat"}}, // personal: each participant owns its spawn, collection and reward
+		Optional: []string{"materialize", "energy", "heat"}}, // personal: each participant owns its spawn, collection and reward
 	{Name: "particle", Constructor: "NewParticleSystem", Domain: "player", Optional: []string{"glyph", "death"}}, // behavior-selected player particles; glyph and death effects are optional
 	{Name: "gold", Constructor: "NewGoldSystem", Domain: "shared", Snapshot: "state", // sequence liveness, its header, and both deadlines live outside any store
 		Requires: []string{"composite"}, Optional: []string{"nugget", "energy", "splash"}}, // contested: the composite sequence is shared, the reward owner-authored
 
 	// --- Spawning / Materialize ---
 	{Name: "materialize", Constructor: "NewMaterializeSystem", Domain: "dual"}, // stamped from the requester; the spawn gate is a dependency root (D-7)
-	{Name: "cleaner", Constructor: "NewCleanerSystem", Domain: "dual",
-		Optional: []string{"combat", "particle"}}, // request-stamped construction; current producers are player-domain (D-7)
 	{Name: "fuse", Constructor: "NewFuseSystem", Domain: "player", Requires: []string{"drain", "materialize", "spirit"},
 		Optional: []string{"quasar", "swarm"}}, // player stream crosses through the spawn request (D-3)
 	{Name: "spirit", Constructor: "NewSpiritSystem", Domain: "dual"}, // creates in the requesting domain, currently from the player-domain fuse (D-7)
@@ -249,8 +247,8 @@ var Renderers = []RendererDef{
 	{"storm", "NewStormRenderer", "PriorityStorm"},
 	{"kraken", "NewKrakenRenderer", "PriorityKraken"},
 
-	// --- Cleaner ---
-	{"cleaner", "NewCleanerRenderer", "PriorityCleaner"},
+	// --- Tracer ---
+	{"tracer", "NewTracerRenderer", "PriorityTracer"},
 
 	// --- Materialize ---
 	{"materialize", "NewMaterializeRenderer", "PriorityMaterialize"},

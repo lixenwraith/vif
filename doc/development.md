@@ -452,7 +452,7 @@ headless/replay application harness, clocks/scheduler/time control, event
 journaling and authored scripts, input/help/mode commands, selected gameplay-system surfaces,
 parameters, profiling, audio, genetics, `float64` vectors/geometry, cell
 mapping, and physics. Focused system/renderer tests now also cover multi-cursor
-ownership, delayed drain interactions, cleaner trail behavior, and quasar range
+ownership, delayed drain interactions, tracer trail behavior, and quasar range
 clipping at centered map edges. The app suite includes seeded soak, mutation,
 bisect, reset, journal-density, replay, operator-state comparisons, and a staged
 correction that skips a quasar's release transition. FSM unit tests distinguish

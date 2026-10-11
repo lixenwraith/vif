@@ -280,7 +280,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:emit <EventName> [{ TOML payload }]` | Construct and publish a registered event for testing. |
 | `:energy <value>`, `:heat <0-100>`, `:boost` | Directly manipulate player state for development. |
 | `:god`, `:demon` | Apply high positive/negative energy test states. |
-| `:blossom`, `:decay`, `:cleaner`, `:dust` | Trigger effect/gameplay events directly. |
+| `:blossom`, `:decay`, `:dust` | Trigger effect/gameplay events directly. |
 
 The event registry validates `:emit` names and uses generated payload type
 metadata to decode optional inline TOML. Commands below the first six rows are

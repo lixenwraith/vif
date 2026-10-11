@@ -43,7 +43,7 @@ func sharedGlyphs(a *App) (count int, bad []string) {
 }
 
 // TestSharedGlyphsAreGoldMembersOnly pins the one shared glyph population. Every
-// other glyph is player-domain, which is what lets typing, cleaner and dust consume
+// other glyph is player-domain, which is what lets typing, the gun and dust consume
 // them without a crossing, and what keeps screen noise off the wire.
 func TestSharedGlyphsAreGoldMembersOnly(t *testing.T) {
 	t.Parallel()

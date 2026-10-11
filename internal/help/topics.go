@@ -216,7 +216,7 @@ var topics = []topicDef{
 			{Keys: ":boost", Desc: "Max heat and activate boost"},
 			{Keys: ":god  :demon", Desc: "Max heat, full positive or negative energy, and every weapon"},
 			{Keys: ":blossom  :decay", Desc: "Trigger a blossom or decay wave"},
-			{Keys: ":cleaner  :dust", Desc: "Sweep cleaners, or transform every glyph to dust"},
+			{Keys: ":dust", Desc: "Transform every glyph to dust"},
 			{Keys: ":system <name> enable|disable", Desc: "Toggle one registered system; unavailable live"},
 			{Keys: ":emit <Event> [{payload}]", Desc: "Emit an event with an inline TOML payload; unavailable live"},
 			{Keys: ":flow [group]  :graph [group]", Desc: "Flow field and navigation graph overlays for a target group"},

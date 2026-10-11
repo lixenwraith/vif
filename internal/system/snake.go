@@ -176,7 +176,7 @@ func (s *SnakeSystem) Update() {
 		}
 
 		// Update head movement (stun check)
-		if headCombat.StunnedRemaining <= 0 {
+		if !headCombat.Stunned() {
 			s.updateHeadMovement(snakeComp.HeadEntity, headComp, dtSec)
 		}
 

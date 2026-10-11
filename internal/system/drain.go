@@ -180,7 +180,7 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
-		if ev.Type == event.EventMaterializeComplete {
+		if drainMaterialized(ev) {
 			s.statSpawnFailure.Add(1)
 		}
 		return
@@ -199,21 +199,28 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 		// Spawning resumes naturally in Update() based on heat
 
 	case event.EventMaterializeComplete:
+		if !drainMaterialized(ev) {
+			return
+		}
 		// Prevent race condition where drain materializes after fuse sequence started
 		if s.spawningPaused() {
 			s.statSpawnFailure.Add(1)
 			return
 		}
-		if payload, ok := ev.Payload.(*event.MaterializeCompletedPayload); ok {
-			if payload.Type == component.SpawnTypeDrain {
-				s.removeCompletedSpawn(payload.X, payload.Y)
-				// Heat may fall while the materialization is in flight.
-				if s.world.Components.Drain.CountEntities() < s.calcTargetDrainCount() {
-					s.materializeDrainAt(payload.X, payload.Y)
-				}
-			}
+		payload := ev.Payload.(*event.MaterializeCompletedPayload)
+		s.removeCompletedSpawn(payload.X, payload.Y)
+		// Heat may fall while the materialization is in flight.
+		if s.world.Components.Drain.CountEntities() < s.calcTargetDrainCount() {
+			s.materializeDrainAt(payload.X, payload.Y)
 		}
 	}
+}
+
+// drainMaterialized reports a completion announcing a drain; a beacon's or a
+// swarm's is not a spawn this system attempted
+func drainMaterialized(ev event.GameEvent) bool {
+	p, ok := ev.Payload.(*event.MaterializeCompletedPayload)
+	return ok && ev.Type == event.EventMaterializeComplete && p.Type == component.SpawnTypeDrain
 }
 
 // Update runs the drain system logic
@@ -1037,7 +1044,7 @@ func (s *DrainSystem) updateDrainMovement() {
 		}
 		// A stun freezes the drain completely. Kinetic immunity only suppresses
 		// homing and drag below: collision velocity must still displace the drain.
-		if combatComp.StunnedRemaining > 0 {
+		if combatComp.Stunned() {
 			continue
 		}
 

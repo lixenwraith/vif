@@ -879,8 +879,8 @@ configuration are exposed.
 
 Use an unmodified loadout when checking for duplicated presentation. `:god` is an
 intentional stress mode: it sets the invoking cursor's energy to 100 billion,
-grants rod, launcher and disruptor, and the default auto-fire then drives the main
-cleaners, specials and every ready weapon about four times per second. Those
+grants every weapon kind, and the default auto-fire then drives the gun's
+tracers, specials and every ready weapon about four times per second. Those
 entities and effects are the invoking peer's Player domain; they are deliberately
 visible there and are not evidence that a correction copied another participant's
 visual world.
