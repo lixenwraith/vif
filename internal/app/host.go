@@ -214,14 +214,14 @@ func (a *App) joinSessionLocked(target string, players int, scenario string) err
 	if !a.dialling.CompareAndSwap(false, true) {
 		return errors.New("a join is already being dialled")
 	}
-	a.ctx.SetStatusMessage("Joining "+target+"...", 0, true)
+	a.ctx.SetStatusMessage("Joining "+target+"...", parameter.StatusNotice)
 	a.log.Info("session", "msg", "join requested", "target", target)
 	core.Go(func() {
 		defer a.dialling.Store(false)
 		link, err := target, error(nil)
 		if site.Scheme == network.SchemeSite {
 			if link, err = network.RequestSession(site.Addr, players, scenario); err == nil {
-				a.ctx.SetStatusMessage("Joining "+link+"...", 0, true)
+				a.ctx.SetStatusMessage("Joining "+link+"...", parameter.StatusNotice)
 				if next, err = next.joining(link); err == nil {
 					err = next.Validate()
 				}
@@ -234,7 +234,7 @@ func (a *App) joinSessionLocked(target string, players int, scenario string) err
 		switch {
 		case err != nil:
 			a.log.Warn("session", "msg", "join failed; playing on", "target", target, "error", err.Error())
-			a.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusMessageMaxDuration, true)
+			a.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusAlert)
 		case !a.restart.CompareAndSwap(nil, &restartRequest{Join: link, dialled: d}):
 			d.abandon(errors.New("the run that dialled is being replaced"))
 		}
@@ -384,7 +384,7 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	}
 	a.log.Info("session", "msg", "hosting opened mid-run",
 		"address", bound, "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
-	a.ctx.SetStatusMessage("Hosting on "+bound, 0, false)
+	a.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
 	return nil
 }
 

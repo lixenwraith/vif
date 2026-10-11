@@ -131,7 +131,7 @@ func (s *stub) DropAbandonedCursors(roster []network.RosterEntry, _ network.Peer
 	s.abandoned = append(s.abandoned, roster)
 }
 
-func (s *stub) SetStatusMessage(msg string, _ time.Duration, _ bool) {
+func (s *stub) SetStatusMessage(msg string, _ parameter.StatusKind) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.said = append(s.said, msg)

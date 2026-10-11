@@ -622,7 +622,7 @@ travels the same way, produced only by the coordinator so it has one apply tick.
 `MsgStateSync` periodically copies only the D-13 owner-authored cursor set, is
 written at the tick the authority committed it to, and only when the payload's
 entity and roster slot agree and its sequence is newer than that slot's last. Disconnect drains through the same poll boundary and
-raises a local eight-second status message. While the coordinator remains
+raises a local alert on the status bar. While the coordinator remains
 reachable, its roster crossing despawns only cursors owned by that participant,
 releases that slot's sync sequence, and leaves both the barrier and the map latch
 in place: the barrier and the bounds are properties of the run, so a stretch with

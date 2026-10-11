@@ -152,7 +152,7 @@ func (a *App) Loop() (*restartRequest, error) {
 	a.reportAudioSpec()
 	a.recordMusic()
 	if a.cfg.notice != "" {
-		a.ctx.SetStatusMessage(a.cfg.notice, parameter.StatusMessageMaxDuration, true)
+		a.ctx.SetStatusMessage(a.cfg.notice, parameter.StatusAlert)
 	}
 	if a.cfg.JoinAddress != "" {
 		a.activateNetworkSession()
@@ -172,7 +172,7 @@ func (a *App) Loop() (*restartRequest, error) {
 	if a.cfg.resume != nil {
 		if err := a.resumeWorld(*a.cfg.resume); err != nil {
 			a.log.Warn("journal", "msg", "world not resumed; playing a new game", "error", err.Error())
-			a.ctx.SetStatusMessage("Journal: world not resumed: "+err.Error(), parameter.StatusMessageMaxDuration, true)
+			a.ctx.SetStatusMessage("Journal: world not resumed: "+err.Error(), parameter.StatusAlert)
 		}
 	}
 
@@ -191,14 +191,14 @@ func (a *App) Loop() (*restartRequest, error) {
 	if a.cfg.resumeHost != "" {
 		if err := a.BeginHosting(a.cfg.resumeHost); err != nil {
 			a.log.Warn("session", "msg", "hosting not opened; playing solo", "address", a.cfg.resumeHost, "error", err.Error())
-			a.ctx.SetStatusMessage(err.Error()+"; playing solo", parameter.StatusMessageMaxDuration, true)
+			a.ctx.SetStatusMessage(err.Error()+"; playing solo", parameter.StatusAlert)
 		}
 	}
 	// After the door opens, for the same reason: every bot arrives through it. One
 	// that cannot be seated costs the bot, not the game.
 	if err := a.seatBots(); err != nil {
 		a.log.Warn("app", "msg", "bots not seated", "error", err.Error())
-		a.ctx.SetStatusMessage("Bots: "+err.Error(), parameter.StatusMessageMaxDuration, true)
+		a.ctx.SetStatusMessage("Bots: "+err.Error(), parameter.StatusAlert)
 	}
 
 	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
@@ -225,8 +225,13 @@ func (a *App) Loop() (*restartRequest, error) {
 			return nil, nil
 
 		case ev := <-eventChan:
-			// Dumb pipe: key event → machine → intent → router
-			if intent := a.inputMachine.Process(ev); intent != nil {
+			// Dumb pipe: key event → machine → intent → router. The key cell shows
+			// what the machine holds, pending or completed, whatever the router does.
+			intent := a.inputMachine.Process(ev)
+			if ev.Type == terminal.EventKey {
+				a.ctx.SetLastCommand(a.inputMachine.Feedback())
+			}
+			if intent != nil {
 				before := a.pushed()
 				if !a.handleIntent(intent) {
 					return nil, nil // player quit

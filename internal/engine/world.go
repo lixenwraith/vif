@@ -987,9 +987,5 @@ func (w *World) clearNonProtectedEntities(preserveLoot bool) {
 
 // DebugPrint prints a message in status bar via meta system
 func (w *World) DebugPrint(msg string) {
-	w.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
-		Message:          msg,
-		Duration:         0,
-		DurationOverride: true,
-	})
+	w.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: msg})
 }

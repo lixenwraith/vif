@@ -49,6 +49,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 	if command == "" {
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
+	// The answer a command that says nothing else leaves; one that answers replaces it
+	ctx.SetStatusMessage(":"+command, parameter.StatusNotice)
 
 	// Parse command into parts (space-separated)
 	parts := strings.Fields(command)
@@ -182,7 +184,7 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 	switch strings.ToLower(args[0]) {
 	case "on", "start":
 		if vlog.Enabled() {
-			ctx.SetStatusMessage("Logging already active", parameter.StatusMessageDefaultTimeout, true)
+			ctx.SetStatusMessage("Logging already active", parameter.StatusNotice)
 			break
 		}
 		// Opens a file under the world lock; a deliberate operator cost
@@ -192,16 +194,16 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 			return CommandResult{Continue: true, KeepPaused: false}
 		}
 		ctx.Log.Info("app", "msg", "logging started", "path", path, "level", vlog.LevelName())
-		ctx.SetStatusMessage("Logging to "+path, parameter.StatusMessageDefaultTimeout, true)
+		ctx.SetStatusMessage("Logging to "+path, parameter.StatusNotice)
 
 	case "off", "stop":
 		if !vlog.Enabled() {
-			ctx.SetStatusMessage("Logging already stopped", parameter.StatusMessageDefaultTimeout, true)
+			ctx.SetStatusMessage("Logging already stopped", parameter.StatusNotice)
 			break
 		}
 		ctx.Log.Info("app", "msg", "logging stopped by command")
 		vlog.Stop() // drains asynchronously; never blocks the world lock
-		ctx.SetStatusMessage("Logging stopped", parameter.StatusMessageDefaultTimeout, true)
+		ctx.SetStatusMessage("Logging stopped", parameter.StatusNotice)
 
 	case "scope", "sc":
 		if len(args) < 2 {
@@ -251,7 +253,6 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 		reportLogState(ctx)
 	}
 
-	ctx.SetLastCommand(":log " + strings.Join(args, " "))
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
@@ -274,7 +275,7 @@ func handleLogRec(ctx *engine.GameContext, args []string) CommandResult {
 		// Command mode holds the world lock; the ring belongs to the tick
 		// goroutine, which owns sample. Request, do not flush here.
 		rc.Trigger(status.TrigManual)
-		ctx.SetStatusMessage("Recorder flush requested", parameter.StatusMessageDefaultTimeout, true)
+		ctx.SetStatusMessage("Recorder flush requested", parameter.StatusNotice)
 
 	case "fsm":
 		rc := reg.Recorder()
@@ -291,8 +292,7 @@ func handleLogRec(ctx *engine.GameContext, args []string) CommandResult {
 			desired = !rc.FSMTrigger()
 		}
 		rc.SetFSMTrigger(desired)
-		ctx.SetStatusMessage("Recorder FSM trigger "+toggleWord(desired),
-			parameter.StatusMessageDefaultTimeout, true)
+		ctx.SetStatusMessage("Recorder FSM trigger "+toggleWord(desired), parameter.StatusNotice)
 
 	default:
 		n, err := strconv.Atoi(args[0])
@@ -306,7 +306,6 @@ func handleLogRec(ctx *engine.GameContext, args []string) CommandResult {
 		reportLogState(ctx)
 	}
 
-	ctx.SetLastCommand(":log rec " + strings.Join(args, " "))
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
@@ -321,12 +320,11 @@ func reportLogState(ctx *engine.GameContext) {
 		vlog.LevelName(),
 		vlog.ScopeString(vlog.Scopes()),
 		ctx.World.Resources.Status.SnapshotInterval(),
-		ctx.World.Resources.Status.RecorderDepth()),
-		parameter.StatusMessageDefaultTimeout, true)
+		ctx.World.Resources.Status.RecorderDepth()), parameter.StatusNotice)
 }
 
 func setCommandError(ctx *engine.GameContext, message string) {
-	ctx.SetStatusMessage(message, parameter.StatusMessageDefaultTimeout, true)
+	ctx.SetStatusMessage(message, parameter.StatusNotice)
 }
 
 // handleQuitCommand exits the game
@@ -349,11 +347,6 @@ func handleNewCommand(ctx *engine.GameContext, args []string, purge bool) Comman
 	if !resetGame(ctx, purge) {
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
-	cmd := ":new"
-	if purge {
-		cmd = ":new!"
-	}
-	ctx.SetLastCommand(cmd)
 	return CommandResult{Continue: true, KeepPaused: true}
 }
 
@@ -387,7 +380,6 @@ func changeScenario(ctx *engine.GameContext, name string) CommandResult {
 		setCommandError(ctx, "Scenario: "+err.Error())
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
-	ctx.SetLastCommand(":n " + name)
 	if !changed {
 		// Already running these bytes, so a reset is the same new game without a
 		// restart's cost — and in a session it crosses, as a bare :n does
@@ -428,8 +420,7 @@ func handleAutoCommand(ctx *engine.GameContext, args []string) CommandResult {
 	}
 	ctx.AutoFire.Store(next)
 	word := [...]string{"off", "main", "on"}[next]
-	ctx.SetStatusMessage("Auto: "+word, parameter.StatusMessageDefaultTimeout, false)
-	ctx.SetLastCommand(":auto " + word)
+	ctx.SetStatusMessage("Auto: "+word, parameter.StatusNotice)
 	return CommandResult{Continue: true}
 }
 
@@ -449,8 +440,7 @@ func applyToggle(ctx *engine.GameContext, flag *atomic.Bool, args []string, cmd,
 	if desired {
 		state = "enabled"
 	}
-	ctx.SetStatusMessage(label+" "+state, parameter.StatusMessageDefaultTimeout, false)
-	ctx.SetLastCommand(fmt.Sprintf(":%s %s", cmd, toggleWord(desired)))
+	ctx.SetStatusMessage(label+" "+state, parameter.StatusNotice)
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
@@ -513,7 +503,6 @@ func handleSystemCommand(ctx *engine.GameContext, args []string) CommandResult {
 		Enabled:    enabledFlag,
 	})
 
-	ctx.SetLastCommand(fmt.Sprintf(":system %s %v", args[0], enabledFlag))
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
@@ -535,7 +524,7 @@ func handleMouseCommand(ctx *engine.GameContext, args []string) CommandResult {
 			ctx.MouseDisabled.Store(false)
 			msg = "Mouse enabled"
 		}
-		ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, false)
+		ctx.SetStatusMessage(msg, parameter.StatusNotice)
 
 	case "disable":
 		msg := "Mouse already disabled"
@@ -543,14 +532,13 @@ func handleMouseCommand(ctx *engine.GameContext, args []string) CommandResult {
 			ctx.MouseDisabled.Store(true)
 			msg = "Mouse disabled"
 		}
-		ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, false)
+		ctx.SetStatusMessage(msg, parameter.StatusNotice)
 
 	default:
 		setCommandError(ctx, "Usage: :mouse enable|disable|free")
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
-	ctx.SetLastCommand(":mouse " + args[0])
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
@@ -589,7 +577,6 @@ func handleEmitCommand(ctx *engine.GameContext, args []string) CommandResult {
 	}
 
 	ctx.PushEvent(eventType, payload)
-	ctx.SetLastCommand(fmt.Sprintf(":emit %s", strings.Join(args, " ")))
 
 	return CommandResult{Continue: true, KeepPaused: false}
 }
@@ -640,8 +627,7 @@ func handleTelemetryCommand(ctx *engine.GameContext, args []string) CommandResul
 			return applyToggle(ctx, &ctx.OverlayHUD, args[1:], "hud", "Telemetry HUD")
 		case "unpin", "clear":
 			ctx.ClearOverlayPins()
-			ctx.SetStatusMessage("Pins cleared", parameter.StatusMessageDefaultTimeout, false)
-			ctx.SetLastCommand(":t unpin")
+			ctx.SetStatusMessage("Pins cleared", parameter.StatusNotice)
 			return CommandResult{Continue: true, KeepPaused: false}
 		default:
 			setCommandError(ctx, "Usage: :telemetry [save|hud|unpin]")
@@ -682,10 +668,9 @@ func handleTelemetrySaveCommand(ctx *engine.GameContext) CommandResult {
 			return
 		}
 		ctx.Log.Info("app", "msg", "snapshot saved", "path", path)
-		ctx.SetStatusMessage("Snapshot saved to "+path, parameter.StatusMessageDefaultTimeout, true)
+		ctx.SetStatusMessage("Snapshot saved to "+path, parameter.StatusNotice)
 	})
 
-	ctx.SetLastCommand(":t save")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
@@ -712,8 +697,7 @@ func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 			path, err := prof.WriteHeap(dir)
 			reportCapture(ctx, "Heap profile", path, err)
 		})
-		ctx.SetStatusMessage("Writing heap profile", parameter.StatusMessageDefaultTimeout, false)
-		ctx.SetLastCommand(":d heap")
+		ctx.SetStatusMessage("Writing heap profile", parameter.StatusNotice)
 	default:
 		setCommandError(ctx, "Usage: :debug [prof [on|off]|cpu [s]|heap|mutex [s]|trace [s]]")
 	}
@@ -742,8 +726,7 @@ func handleProfCommand(ctx *engine.GameContext, args []string) {
 		msg = "Profiler on: its cards are pinned to the HUD, :d shows every module"
 	}
 	ctx.Log.Info("app", "msg", "profiler toggled", "on", on)
-	ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, false)
-	ctx.SetLastCommand(":d prof " + toggleWord(on))
+	ctx.SetStatusMessage(msg, parameter.StatusNotice)
 }
 
 // timedCaptures are the :d captures that run for a duration, by subcommand
@@ -775,8 +758,7 @@ func handleCaptureCommand(ctx *engine.GameContext, kind string, args []string) {
 		setCommandError(ctx, label+" failed: "+err.Error())
 		return
 	}
-	ctx.SetStatusMessage(fmt.Sprintf("%s for %v to %s", label, d, path), d, true)
-	ctx.SetLastCommand(fmt.Sprintf(":d %s %d", kind, int(d.Seconds())))
+	ctx.SetStatusMessage(fmt.Sprintf("%s for %v to %s", label, d, path), parameter.StatusNotice)
 }
 
 // reportCapture announces a finished capture from whichever goroutine wrote it
@@ -786,7 +768,7 @@ func reportCapture(ctx *engine.GameContext, label, path string, err error) {
 		return
 	}
 	ctx.Log.Info("app", "msg", "capture saved", "kind", label, "path", path)
-	ctx.SetStatusMessage(label+" saved to "+path, parameter.StatusMessageDefaultTimeout, true)
+	ctx.SetStatusMessage(label+" saved to "+path, parameter.StatusNotice)
 }
 
 // diagnosticsDir is where captures land: the log directory, or the platform
@@ -859,14 +841,13 @@ func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult 
 		if path := ctx.SessionCtl.JournalPath(); path != "" {
 			msg = "Journaling to " + path
 		}
-		ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, true)
+		ctx.SetStatusMessage(msg, parameter.StatusNotice)
 	case len(args) == 1 && (args[0] == "start" || args[0] == "on"):
 		if err := ctx.SessionCtl.StartJournal(); err != nil {
 			setCommandError(ctx, "Journal: "+err.Error())
 			return CommandResult{Continue: true, KeepPaused: false}
 		}
 		ctx.MacroClearFlag.Store(true)
-		ctx.SetLastCommand(":journal start")
 	default:
 		setCommandError(ctx, "Usage: :journal [start]")
 	}
@@ -879,7 +860,7 @@ func handleSessionCommand(ctx *engine.GameContext) CommandResult {
 		setCommandError(ctx, "This runtime has no session transport")
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
-	ctx.SetStatusMessage(ctx.SessionCtl.SessionSummary(), parameter.StatusMessageDefaultTimeout, true)
+	ctx.SetStatusMessage(ctx.SessionCtl.SessionSummary(), parameter.StatusNotice)
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
@@ -894,7 +875,7 @@ func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 	var err error
 	switch {
 	case len(args) == 0:
-		ctx.SetStatusMessage(ctx.SessionCtl.BotSummary(), parameter.StatusMessageDefaultTimeout, true)
+		ctx.SetStatusMessage(ctx.SessionCtl.BotSummary(), parameter.StatusNotice)
 		return CommandResult{Continue: true, KeepPaused: false}
 	case args[0] == "add" && len(args) <= 2:
 		graph := ""
@@ -902,14 +883,14 @@ func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 			graph = args[1]
 		}
 		if err = ctx.SessionCtl.AddBot(graph); err == nil {
-			ctx.SetStatusMessage("Bot joining; :bot lists this run's bots", parameter.StatusMessageDefaultTimeout, false)
+			ctx.SetStatusMessage("Bot joining; :bot lists this run's bots", parameter.StatusNotice)
 		}
 	case args[0] == "drop" && len(args) == 2:
 		slot, perr := parsePlayerSlot(args[1])
 		if err = perr; err == nil {
 			err = ctx.SessionCtl.DropBot(slot)
 			if err == nil {
-				ctx.SetStatusMessage(fmt.Sprintf("Bot %X leaving", slot), parameter.StatusMessageDefaultTimeout, true)
+				ctx.SetStatusMessage(fmt.Sprintf("Bot %X leaving", slot), parameter.StatusNotice)
 			}
 		}
 	default:
@@ -951,7 +932,7 @@ func handlePlayerCommand(ctx *engine.GameContext, args []string) CommandResult {
 			}
 			names = append(names, fmt.Sprintf("%X %s", p.Slot, kind))
 		}
-		ctx.SetStatusMessage("Players: "+strings.Join(names, ", ")+"; :player drop <slot>", parameter.StatusMessageDefaultTimeout, true)
+		ctx.SetStatusMessage("Players: "+strings.Join(names, ", ")+"; :player drop <slot>", parameter.StatusNotice)
 		return result
 	}
 	if len(args) != 2 || args[0] != "drop" {
@@ -965,7 +946,7 @@ func handlePlayerCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if err != nil {
 		setCommandError(ctx, err.Error())
 	} else {
-		ctx.SetStatusMessage(fmt.Sprintf("Slot %X and its bots leaving", slot), parameter.StatusMessageDefaultTimeout, true)
+		ctx.SetStatusMessage(fmt.Sprintf("Slot %X and its bots leaving", slot), parameter.StatusNotice)
 	}
 	return result
 }
@@ -988,8 +969,7 @@ func handleContentCommand(ctx *engine.GameContext) CommandResult {
 		reg.Ints.Get("content.served").Load(),
 		reg.Strings.Get("content.file").Load(),
 	)
-	ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, true)
-	ctx.SetLastCommand(":content")
+	ctx.SetStatusMessage(msg, parameter.StatusNotice)
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
@@ -1011,7 +991,6 @@ func handleEnergyCommand(ctx *engine.GameContext, args []string) CommandResult {
 		Value:  value,
 	})
 
-	ctx.SetLastCommand(fmt.Sprintf(":energy %d", value))
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
@@ -1039,7 +1018,6 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 		Entity: ctx.World.Resources.Player.Entity,
 		Value:  value,
 	})
-	ctx.SetLastCommand(fmt.Sprintf(":heat %d", value))
 
 	return CommandResult{Continue: true, KeepPaused: false}
 }
@@ -1056,7 +1034,6 @@ func handleBoostCommand(ctx *engine.GameContext) CommandResult {
 		Duration: parameter.BoostBaseDuration,
 	})
 
-	ctx.SetLastCommand(":boost")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
@@ -1068,25 +1045,18 @@ func handleGodCommand(ctx *engine.GameContext, sign int) CommandResult {
 	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{
 		Entity: player, Value: sign * parameter.GodEnergyAmount, Weapons: true,
 	})
-	name := ":god"
-	if sign < 0 {
-		name = ":demon"
-	}
-	ctx.SetLastCommand(name)
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleBlossomCommand triggers a blossom wave
 func handleBlossomCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushLocal(event.EventParticleWave, &event.ParticleWavePayload{Behavior: component.ParticleBlossom})
-	ctx.SetLastCommand(":blossom")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleDecayCommand triggers a decay wave
 func handleDecayCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushLocal(event.EventParticleWave, &event.ParticleWavePayload{Behavior: component.ParticleDecay})
-	ctx.SetLastCommand(":decay")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
@@ -1095,14 +1065,12 @@ func handleCleanerCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEventDomain(event.EventCleanerSweepingRequest, &event.CleanerSweepingRequestPayload{
 		Entity: ctx.World.Resources.Player.Entity,
 	}, core.DomainPlayer)
-	ctx.SetLastCommand(":cleaner")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleDustCommand triggers glyph to dust transform
 func handleDustCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushLocal(event.EventDustAllRequest, nil)
-	ctx.SetLastCommand(":dust")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
@@ -1145,7 +1113,7 @@ func handleGraphCommand(ctx *engine.GameContext, args []string) CommandResult {
 func handleSpeedCommand(ctx *engine.GameContext, args []string) CommandResult {
 	cur := ctx.TimeCtl.Scale()
 	if len(args) == 0 {
-		ctx.SetStatusMessage("Speed "+cur.String()+"x", parameter.StatusMessageDefaultTimeout, true)
+		ctx.SetStatusMessage("Speed "+cur.String()+"x", parameter.StatusNotice)
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
@@ -1167,8 +1135,7 @@ func handleSpeedCommand(ctx *engine.GameContext, args []string) CommandResult {
 	}
 
 	ctx.PushLocal(event.EventGameSpeedRequest, &event.GameSpeedPayload{Num: next.Num, Den: next.Den})
-	ctx.SetStatusMessage("Speed "+next.String()+"x", parameter.StatusMessageDefaultTimeout, true)
-	ctx.SetLastCommand(":speed " + next.String())
+	ctx.SetStatusMessage("Speed "+next.String()+"x", parameter.StatusNotice)
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
@@ -1205,7 +1172,6 @@ func handleStepCommand(ctx *engine.GameContext, args []string) CommandResult {
 	}
 
 	ctx.PushLocal(event.EventGameStepRequest, p)
-	ctx.SetLastCommand(":step " + strings.Join(args, " "))
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
@@ -1328,6 +1294,5 @@ func handleRegionCommand(ctx *engine.GameContext, args []string) CommandResult {
 	}
 
 	ctx.PushEvent(event.EventFSMRegionRequest, p)
-	ctx.SetLastCommand(":region " + strings.Join(args, " "))
 	return res
 }

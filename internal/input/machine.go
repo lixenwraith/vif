@@ -21,8 +21,9 @@ type Machine struct {
 	// Marker state - direction pending color selection
 	markerDirection MotionOp
 
-	// Command buffer for visual feedback
+	// Command buffer for visual feedback, and the last sequence it completed
 	cmdBuffer []rune
+	last      string
 }
 
 // NewMachine creates a new input machine
@@ -44,10 +45,11 @@ func (m *Machine) SetMode(mode InputMode) {
 	}
 }
 
-// GetPendingCommand returns the current command buffer for UI display
-func (m *Machine) GetPendingCommand() string {
+// Feedback is what the status bar's key cell shows: the keys of a sequence still
+// pending, else the last one completed.
+func (m *Machine) Feedback() string {
 	if len(m.cmdBuffer) == 0 {
-		return ""
+		return m.last
 	}
 	return string(m.cmdBuffer)
 }
@@ -773,7 +775,11 @@ func (m *Machine) effectiveCount() int {
 }
 
 func (m *Machine) captureCommand() string {
-	return string(m.cmdBuffer)
+	cmd := string(m.cmdBuffer)
+	if cmd != "" {
+		m.last = cmd
+	}
+	return cmd
 }
 
 func (m *Machine) accumulateCount1(key rune) {

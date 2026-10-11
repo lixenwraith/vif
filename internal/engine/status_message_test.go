@@ -2,7 +2,6 @@ package engine
 
 import (
 	"testing"
-	"time"
 
 	"github.com/lixenwraith/vif/internal/parameter"
 )
@@ -13,50 +12,29 @@ func newMessageContext(t *testing.T) (*GameContext, *ManualClock) {
 	return NewGameContextWithClock(NewWorld(), 80, 24, clock), clock
 }
 
-// TestStatusMessageExpiresAtItsCap is the rule a message posted by a script
-// relied on not existing: without a duration it used to sit on the bar for the
-// rest of the run, and a long one outstayed the event it described.
-func TestStatusMessageExpiresAtItsCap(t *testing.T) {
+// TestAStatusMessageYieldsOnlyToItsRankOrItsMinimum: a message the one shown
+// outranks is refused until that one has been up for its kind's minimum, one that
+// ranks as high replaces it at once, and each leaves the bar after its kind's time.
+func TestAStatusMessageYieldsOnlyToItsRankOrItsMinimum(t *testing.T) {
 	ctx, clock := newMessageContext(t)
 
-	ctx.SetStatusMessage("SPECIES DAMAGE INCREASED", 0, false)
-	want := clock.Now().Add(parameter.StatusMessageMaxDuration).UnixNano()
-	if got := ctx.GetStatusMessageExpiry(); got != want {
-		t.Fatalf("a message with no duration expires at %d, want the cap at %d", got, want)
+	ctx.SetStatusMessage("Host connection lost", parameter.StatusAlert)
+	ctx.SetStatusMessage("Auto: on", parameter.StatusNotice)
+	if got := ctx.GetStatusMessage(); got != "Host connection lost" {
+		t.Fatalf("the bar reads %q inside the alert's minimum", got)
+	}
+	ctx.SetStatusMessage("Authority moved to participant 2", parameter.StatusAlert)
+	if got := ctx.GetStatusMessage(); got != "Authority moved to participant 2" {
+		t.Fatalf("the bar reads %q after an alert of the same rank", got)
 	}
 
-	ctx.SetStatusMessage("Refused a conflicting authority handoff", 4*parameter.StatusMessageMaxDuration, true)
-	if got := ctx.GetStatusMessageExpiry(); got != want {
-		t.Fatalf("a message asking for four caps expires at %d, want %d", got, want)
-	}
-
-	clock.Step(parameter.StatusMessageMaxDuration + time.Millisecond)
-	if ctx.GetStatusMessageExpiry() >= clock.Now().UnixNano() {
-		t.Fatal("the message outlived its cap")
-	}
-}
-
-// TestOnlyADurationHoldsTheStatusBar separates the two things a duration says.
-// A caller that named one is asking to be read before it is replaced; one that
-// named none is a notice, and the next notice takes the space.
-func TestOnlyADurationHoldsTheStatusBar(t *testing.T) {
-	ctx, clock := newMessageContext(t)
-
-	ctx.SetStatusMessage("QUASAR FORMING", 0, false)
-	ctx.SetStatusMessage("TOWER DESTROYED", 0, false)
+	clock.Step(parameter.StatusKinds[parameter.StatusAlert].Min)
+	ctx.SetStatusMessage("TOWER DESTROYED", parameter.StatusNotice)
 	if got := ctx.GetStatusMessage(); got != "TOWER DESTROYED" {
-		t.Fatalf("the bar reads %q, want the newer notice", got)
+		t.Fatalf("the bar reads %q once the alert's minimum has passed", got)
 	}
-
-	ctx.SetStatusMessage("Link recovered", parameter.StatusMessageDefaultTimeout, false)
-	ctx.SetStatusMessage("TOWER DEFENSE CLEARED", 0, false)
-	if got := ctx.GetStatusMessage(); got != "Link recovered" {
-		t.Fatalf("the bar reads %q inside the held message's duration", got)
-	}
-
-	clock.Step(parameter.StatusMessageDefaultTimeout)
-	ctx.SetStatusMessage("TOWER DEFENSE CLEARED", 0, false)
-	if got := ctx.GetStatusMessage(); got != "TOWER DEFENSE CLEARED" {
-		t.Fatalf("the bar reads %q once the hold has passed", got)
+	shown := clock.Now().Add(parameter.StatusKinds[parameter.StatusNotice].Shown)
+	if ctx.ShownStatusMessage(shown.UnixNano()-1) == "" || ctx.ShownStatusMessage(shown.UnixNano()) != "" {
+		t.Fatal("the notice is not shown for exactly its kind's time")
 	}
 }

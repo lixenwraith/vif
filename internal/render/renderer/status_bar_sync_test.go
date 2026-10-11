@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -160,6 +161,35 @@ func TestStatusBarNetworkCellHoldsItsWidth(t *testing.T) {
 	clock.Step(parameter.StatusNetworkHoldDuration)
 	if item, _ := r.networkItem(); item.text != " 2P:0 42ms desync 7 " {
 		t.Fatalf("the cell is %q after its hold, want the current reading", item.text)
+	}
+}
+
+// TestStatusBarKeysAndAMessageKeepTheirOwnCells is the split: the keys and a message
+// are drawn together, the message starts where it always does whatever the keys say,
+// and at 80 columns the metrics make room for it.
+func TestStatusBarKeysAndAMessageKeepTheirOwnCells(t *testing.T) {
+	r, _ := newStatusBar(t)
+	rc := render.RenderContext{ScreenWidth: 80, ScreenHeight: 24, ViewportWidth: 80, ViewportHeight: 22}
+	msg := "host :777: ports below 1024 need root"
+	r.gameCtx.SetStatusMessage(msg, parameter.StatusAlert)
+	at := -1
+	for _, keys := range []string{"", "2d", "d3fwx"} {
+		r.gameCtx.SetLastCommand(keys)
+		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 80, 24)
+		r.Render(rc, buf)
+		var line strings.Builder
+		for x := range 80 {
+			line.WriteRune(buf.CellAt(x, 23).Rune)
+		}
+		bar := line.String()
+		i := strings.Index(bar, msg)
+		switch {
+		case i < 0 || !strings.Contains(bar[:max(i, 0)], keys):
+			t.Fatalf("with keys %q the bar reads %q", keys, bar)
+		case at >= 0 && i != at:
+			t.Fatalf("the message moved from %d to %d with keys %q", at, i, keys)
+		}
+		at = i
 	}
 }
 

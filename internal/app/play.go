@@ -325,7 +325,7 @@ func (p *player) tickOnce() bool {
 		p.a.log.Error("app", "msg", "presented run failed", "error", err.Error())
 		p.done = true
 		p.err = err
-		p.a.ctx.SetStatusMessage("ERROR: "+err.Error(), 0, true)
+		p.a.ctx.SetStatusMessage("ERROR: "+err.Error(), parameter.StatusAlert)
 		return false
 	}
 	if !more {
@@ -353,7 +353,7 @@ func (p *player) advanceReplay(elapsed time.Duration) {
 	case s != nil && s.hidden:
 		if rw.build == nil {
 			p.seek, p.backs = nil, 0
-			p.a.ctx.SetStatusMessage("Step back failed: "+rw.lost.Error(), 0, true)
+			p.a.ctx.SetStatusMessage("Step back failed: "+rw.lost.Error(), parameter.StatusAlert)
 		}
 	case s != nil:
 		pl.step, pl.to = s.step, s.to
@@ -534,7 +534,7 @@ func (p *player) moveOff(m int, resume bool) {
 	rw := p.rw
 	if rw.build == nil {
 		p.backs = 0
-		p.a.ctx.SetStatusMessage("Step back failed: "+rw.lost.Error(), 0, true)
+		p.a.ctx.SetStatusMessage("Step back failed: "+rw.lost.Error(), parameter.StatusAlert)
 		return
 	}
 	p.seek = &seekState{step: m, resume: resume, hidden: true}
@@ -776,5 +776,5 @@ func (p *player) report() {
 			keys = ":h for keys"
 		}
 	}
-	p.a.ctx.SetStatusMessage(fmt.Sprintf("%s %sx | %s | %s", state, p.scale.String(), progress, keys), 0, true)
+	p.a.ctx.SetStatusMessage(fmt.Sprintf("%s %sx | %s | %s", state, p.scale.String(), progress, keys), parameter.StatusNotice)
 }
