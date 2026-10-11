@@ -199,6 +199,8 @@ remainder is mostly the static wall positions. Each step below must stay exact:
 - Reuse a replay's ring checkpoint buffers (`engine.WorldCopy` and the store copies),
   never one the ladder keeps or a move holds: at the limit a checkpoint per presented
   step allocates 6.5 MB, about 130 MB/s at 1x.
+- Seek a replay past the furthest step reached from the latest checkpoint, not from
+  the presented step, which a viewer who went back replays all the way.
 
 Per-store write counters stay rejected: a cache compares values it owns.
 
@@ -256,6 +258,17 @@ Any out-of-lock or incremental design must keep §3.3: fence membership, pending
 barrier crossings not fed, the ledger settled before projection, the journal's place
 and mark, and no live tick between the final projection and the write. WASM gains
 scheduling time, not parallel CPU.
+
+### Hold the next run's keyframe through a reset
+
+- Priority: P3
+- Affected files: `internal/converge/correction.go`
+
+A guest still behind its host at a reset, by up to the barrier lead, refuses the
+host's first keyframe of the new run as another run's, and every delta against it,
+until the next keyframe: at most `SnapshotFloorKeyframeTicks` of whole-body silence.
+Holding a keyframe of the next run until the guest enters it, through
+`followRunLocked`, closes that window.
 
 ### Pace repairs as bodies are paced
 
