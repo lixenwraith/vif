@@ -40,9 +40,14 @@ func PlayJournal(viewer Config, paths ...string) error {
 	if err != nil {
 		return err
 	}
+	var rw *rewinder
 	defer func() {
+		// The crash flushes first: closing the rewinder leaves the lender an empty recorder
 		if r := recover(); r != nil {
 			core.HandleCrash(r) // does not return under unix
+		}
+		if rw != nil {
+			rw.close()
 		}
 		a.Close()
 	}()
@@ -61,9 +66,9 @@ func PlayJournal(viewer Config, paths ...string) error {
 	shown := &replayCopy{a: a, src: journalSource{d, a.log}}
 	p := &player{a: a, src: shown.src, interval: time.Duration(an.TickInterval),
 		rec: parseSpeed(an.Speed), scale: engine.ScaleNormal}
-	p.rw = newRewinder(shown, a, replayCopies(a, cfg, stream, NewReplay))
+	rw = newRewinder(shown, a, replayCopies(a, cfg, stream, NewReplay))
+	p.rw = rw
 	a.ctx.ReplaySeek = p.seekLater
-	defer p.rw.close()
 	return p.run()
 }
 
