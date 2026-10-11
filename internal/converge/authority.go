@@ -24,9 +24,13 @@ type Authority struct {
 	log  *vlog.Log
 
 	// slow is the eviction policy and watch the window each participant is being
-	// judged over; see driveEviction. Touched only by the correction loop.
+	// judged over; see driveEviction. ingress is each link's budget per participant
+	// it carries and metered its window; see driveIngress. Touched only by the
+	// correction loop.
 	slow      SlowPolicy
 	watch     map[network.PeerID]slowWatch
+	ingress   float64
+	metered   map[network.PeerID]slowWatch
 	statEvict *atomic.Int64
 
 	// corrections is what authorship produces, and reach the links it needs to
@@ -108,6 +112,8 @@ func newAuthority(inst Instance, tel snapshot.Telemetry, reg *status.Registry) *
 		statMigrating:  reg.Bools.Get("network.migrating"),
 		statHostLost:   reg.Bools.Get("network.host_lost"),
 		watch:          make(map[network.PeerID]slowWatch),
+		ingress:        parameter.NetworkIngressBytesPerSecond,
+		metered:        make(map[network.PeerID]slowWatch),
 		statEvict:      reg.Ints.Get("network.evicted"),
 		slow: SlowPolicy{
 			Window:         parameter.NetworkSlowWindow,
@@ -131,11 +137,11 @@ func (p SlowPolicy) enabled() bool {
 	return p.Window > 0 && (p.LatePerSecond > 0 || p.BytesPerSecond > 0)
 }
 
-// slowWatch is one participant's current window: where it started, the late count
-// it started from, and whether it is the grace window after the participant arrived.
+// slowWatch is one participant's current window: where it started, the count it
+// started from, and whether it is the grace window after the participant arrived.
 type slowWatch struct {
 	since time.Time
-	late  uint64
+	from  uint64
 	grace bool
 }
 
@@ -161,16 +167,16 @@ func (u *Authority) driveEviction(now time.Time) {
 		seen[e.ID] = true
 		late := u.inst.CommitLate(uint32(e.ID))
 		w, ok := u.watch[e.ID]
-		if !ok || late < w.late {
-			u.watch[e.ID] = slowWatch{since: now, late: late, grace: true}
+		if !ok || late < w.from {
+			u.watch[e.ID] = slowWatch{since: now, from: late, grace: true}
 			continue
 		}
 		elapsed := now.Sub(w.since)
 		if elapsed < u.slow.Window {
 			continue
 		}
-		u.watch[e.ID] = slowWatch{since: now, late: late}
-		rate := float64(late-w.late) / elapsed.Seconds()
+		u.watch[e.ID] = slowWatch{since: now, from: late}
+		rate := float64(late-w.from) / elapsed.Seconds()
 		var bps float64
 		if link != nil {
 			bps = link.LinkMetric(uint32(e.ID)).Throughput
@@ -188,6 +194,63 @@ func (u *Authority) driveEviction(now time.Time) {
 	for id := range u.watch {
 		if !seen[id] {
 			delete(u.watch, id)
+		}
+	}
+}
+
+// driveIngress budgets each link's ingress per participant it carries, itself and
+// the bots it holds, so a relay that floods leaves with its subtree and stalls
+// nobody else. A held bot is judged through its holder's link; a person on none of
+// this authority's links may reach it through any, so every link carries them too.
+func (u *Authority) driveIngress(now time.Time) {
+	link, ok := u.inst.Transport().(engine.LinkMeasuringPort)
+	if u.slow.Window <= 0 || u.ingress <= 0 || !u.isAuthority() || !ok {
+		clear(u.metered)
+		return
+	}
+	roster, local, peers := u.currentRoster(), network.PeerID(u.inst.LocalParticipant()), link.Peers()
+	unlinked := func(e network.RosterEntry) bool {
+		return e.ID != local && e.Holder == 0 && !slices.Contains(peers, uint32(e.ID))
+	}
+	behind := 0
+	for _, e := range roster {
+		if unlinked(e) {
+			behind++
+		}
+	}
+	seen := make(map[network.PeerID]bool, len(roster))
+	for _, e := range roster {
+		if e.ID == local || e.Holder != 0 || unlinked(e) {
+			continue
+		}
+		seen[e.ID] = true
+		in := u.inst.Ingress(uint32(e.ID))
+		w, ok := u.metered[e.ID]
+		if !ok || in < w.from {
+			u.metered[e.ID] = slowWatch{since: now, from: in}
+			continue
+		}
+		elapsed := now.Sub(w.since)
+		if elapsed < u.slow.Window {
+			continue
+		}
+		u.metered[e.ID] = slowWatch{since: now, from: in}
+		carried := 1 + behind
+		for _, o := range roster {
+			if o.Holder == e.ID {
+				carried++
+			}
+		}
+		rate := float64(in-w.from) / elapsed.Seconds()
+		if rate > u.ingress*float64(carried) && u.inst.DropParticipant(uint32(e.ID)) {
+			u.statEvict.Add(1)
+			u.log.Warn("session", "msg", "participant evicted for what its link sends",
+				"participant", e.ID, "bytes_per_s", rate, "carried", carried, "window", u.slow.Window.String())
+		}
+	}
+	for id := range u.metered {
+		if !seen[id] {
+			delete(u.metered, id)
 		}
 	}
 }
@@ -403,6 +466,7 @@ func (u *Authority) drive() {
 	// between two ticks, on every instance, whichever half of the protocol it is.
 	u.reach.drive(contested != 0)
 	u.driveEviction(time.Now()) // [wall] a policy over the link, not the game
+	u.driveIngress(time.Now())  // [wall] likewise
 	if contested == 0 {
 		return
 	}

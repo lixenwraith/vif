@@ -181,6 +181,32 @@ func TestAGuestAdmitsAPeerLink(t *testing.T) {
 	}
 }
 
+// TestALinkIsBudgetedPerParticipantItCarries: over a window a link may send the
+// ingress budget for itself, each bot it holds and each person the authority has no
+// link to; past that it is evicted.
+func TestALinkIsBudgetedPerParticipantItCarries(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	mesh.Link(1, 4)
+	mesh.Link(2, 5)
+	host := newRun(t, 1, mesh.Node(1), []network.RosterEntry{
+		{ID: 1}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2, Holder: 2}, {ID: 4, Slot: 3}, {ID: 5, Slot: 4},
+	})
+	host.open(1, nil, true)
+	host.u.SetSlowPolicy(SlowPolicy{Window: time.Second})
+	host.u.ingress = 100
+	host.world.ingress = map[uint32]uint64{}
+	start := time.Unix(1_000_000, 0)
+
+	host.u.driveIngress(start)
+	host.world.ingress[2], host.world.ingress[4] = 250, 250
+	host.u.driveIngress(start.Add(time.Second))
+	if len(host.world.dropped) != 1 || host.world.dropped[0] != 4 {
+		t.Fatalf("evicted %v, want only participant 4, which holds no bot", host.world.dropped)
+	}
+}
+
 // TestOnlyTheParticipantThatStaysLateIsEvicted: the first window after arrival is
 // grace, a participant whose own crossings keep landing late is dropped at the end
 // of a window, and one that is never late is kept whatever the session costs it.

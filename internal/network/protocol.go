@@ -64,6 +64,11 @@ const (
 	// reopen.
 	MsgSessionRestart MessageType = 0x18 // Live: the authority is rebuilding the session
 
+	// MsgBundle is a tick's raw epochs and syncs for the authority as one frame: a
+	// guest's own and those it carries for the participants behind it. Each entry is
+	// [type:1][len:2][payload]; see Bundle.
+	MsgBundle MessageType = 0x19 // Live: several frames for the authority, packed into one
+
 	// MsgStateSnapshot carries one chunk of an authoritative shared-world capture
 	// (D-19). It is the only message whose total size is a function of the world
 	// rather than of the format, so it is the only one that is split; see
@@ -253,6 +258,51 @@ func decode(r io.Reader, limit int) (*Message, error) {
 	}
 
 	return m, nil
+}
+
+// Bundle packs frames bound for one peer into as few MsgBundle payloads as the frame
+// bound allows; a frame too large to share one travels alone.
+type Bundle struct{ out []Message }
+
+// Add appends one frame.
+func (b *Bundle) Add(kind MessageType, payload []byte) {
+	entry := 3 + len(payload)
+	if entry > MaxPayloadSize {
+		b.out = append(b.out, Message{Type: kind, Payload: payload})
+		return
+	}
+	n := len(b.out)
+	if n == 0 || b.out[n-1].Type != MsgBundle || len(b.out[n-1].Payload)+entry > MaxPayloadSize {
+		b.out = append(b.out, Message{Type: MsgBundle})
+		n++
+	}
+	last := &b.out[n-1]
+	last.Payload = binary.BigEndian.AppendUint16(append(last.Payload, byte(kind)), uint16(len(payload)))
+	last.Payload = append(last.Payload, payload...)
+}
+
+// Take returns the frames packed so far and empties the bundle.
+func (b *Bundle) Take() []Message {
+	out := b.out
+	b.out = nil
+	return out
+}
+
+// Unbundle calls each for every frame a MsgBundle payload carries, in order, and
+// stops at the first malformed entry.
+func Unbundle(body []byte, each func(MessageType, []byte)) error {
+	for len(body) > 0 {
+		if len(body) < 3 {
+			return errors.New("bundle entry header truncated")
+		}
+		n := 3 + int(binary.BigEndian.Uint16(body[1:3]))
+		if len(body) < n {
+			return errors.New("bundle entry truncated")
+		}
+		each(MessageType(body[0]), body[3:n])
+		body = body[n:]
+	}
+	return nil
 }
 
 // NewMessage creates a message with the given type and payload
