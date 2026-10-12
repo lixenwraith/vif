@@ -85,8 +85,8 @@ Target `vif` (release) with `vif-git` optional.
    (`pulseaudio`/`pipewire-pulse` for `pacat`, `alsa-utils` for `aplay`).
 2. `build()` uses the repository's flags plus Arch's hardening:
    `go build -trimpath -buildmode=pie -mod=readonly -modcacherw`.
-   Do not call `make release` — it sets `-s -w`, which Arch's debug packaging
-   wants to control.
+   `make release GO_LDFLAGS=` does the same with Arch's `GOFLAGS` exported: plain
+   `make release` sets `-s -w`, which Arch's debug packaging wants to control.
 3. `package()` runs `make install DESTDIR="$pkgdir" PREFIX=/usr SYSCONFDIR=/etc`.
    Confirm the licence lands in `/usr/share/licenses/vif/`.
 4. `check()` runs `go test ./...`. `script/test.sh` binds ports and must not

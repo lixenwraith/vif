@@ -50,12 +50,16 @@ The Makefile targets are:
 | `allocator` | Build the website-to-K3s session allocator as `bin/vif-allocator`. |
 | `serve` | Build WASM and the small HTTP server, then serve `web/`. |
 | `install-config` | Copy `wad/`, bot graphs, keymap and `vif.toml` into the user config root; `CLEAN=1` removes the previous install first. |
-| `install` | Install binary, `wad/` as the system config root, licence, docs under `PREFIX`; a user without write access there gets `~/.local` and the user root. |
+| `install` | Install binary, `wad/` as the system config root, licence, docs under `PREFIX`; a user who cannot write `/usr/local/bin` gets `~/.local` and the user root. Compiles nothing: `make release install` builds first. |
+| `uninstall` | Remove what `install` put under `PREFIX`, keeping the config root. |
 | `image` | Build the dedicated-session container image from `deploy/docker/Dockerfile`. |
 | `image-check` | Run the built image's own `-check` as its numeric user, read-only and with no network. |
 | `clean` | Remove `bin/`. |
 
 `TAGS` appends native build tags and `PORT` changes the WASM server port.
+`GO_BUILDFLAGS` (default `-trimpath`) and `GO_LDFLAGS` (default `-s -w`) are the
+release-style flags; they are not `GOFLAGS` and `LDFLAGS`, which the go command
+and the C linker read from the environment themselves.
 `VIF_CONFIG_DIR` retargets `install-config`; `DESTDIR`, `PREFIX` (default
 `/usr/local`) and `SYSCONFDIR` (`/etc` for `PREFIX=/usr`, else `$(PREFIX)/etc`)
 retarget `install`. See [Packaging](packaging.md).
