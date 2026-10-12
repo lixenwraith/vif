@@ -18,12 +18,12 @@ kube() {
 }
 
 usage() {
-	echo "usage: $0 allocate [PLAYERS] [LOG_LEVEL] [SCENARIO]" >&2
+	echo "usage: $0 allocate [PLAYERS] [LOG_LEVEL] [SCENARIO] [BOTS]" >&2
 	echo "                                          ask the allocator; prints the id" >&2
 	echo "       $0 state SESSION_ID                 one line of what the fleet reports" >&2
 	echo "       $0 delete SESSION_ID                remove one session and its log files" >&2
 	echo "       $0 create SESSION_ID [GAME_NODEPORT] [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
-	echo "                                          SCENARIO= and LOG_LEVEL= override" >&2
+	echo "                                          SCENARIO=, LOG_LEVEL= and BOTS= override" >&2
 	echo "       $0 list" >&2
 	echo "       $0 status" >&2
 	echo "       $0 blockers" >&2
@@ -197,12 +197,13 @@ case "$command" in
 	allocate)
 		# Through the allocator rather than through `create`, because that is the
 		# path a player takes and the only one that answers with a join target.
-		[ "$#" -le 4 ] || usage
+		[ "$#" -le 5 ] || usage
 		request=$(jq -nc --arg players "${2:-}" --arg level "${3:-}" \
-			--arg scenario "${4:-}" '
+			--arg scenario "${4:-}" --arg bots "${5:-}" '
 			(if $players == "" then {} else {players: ($players | tonumber)} end) +
 			(if $level == "" then {} else {log_level: $level} end) +
-			(if $scenario == "" then {} else {scenario: $scenario} end)')
+			(if $scenario == "" then {} else {scenario: $scenario} end) +
+			(if $bots == "" then {} else {bots: ($bots | tonumber)} end)')
 		answer=$(curl -fsS -X POST -H 'Content-Type: application/json' \
 			-d "$request" "$allocator/vif/api/sessions") || {
 			echo "$0: the allocator refused $request" >&2
@@ -220,6 +221,7 @@ case "$command" in
 		reported=$(curl -fsS "$allocator/vif/api/sessions" |
 			jq -r --arg id "$2" '.sessions[] | select(.id == $id) |
 				"phase=\(.state.phase) guests=\(.state.guests)/\(.state.capacity)" +
+				" bots=\(.state.bots // 0)" +
 				" clock=\(.state.clock // "none") ready=\(.state.ready)" +
 				" tick=\(.state.tick) expires=\(.state.expires_in // "none")" +
 				" join=\(.join_target)" +

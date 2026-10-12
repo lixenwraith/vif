@@ -33,7 +33,7 @@ complete -c vif -o script -r -F -d 'Run an authored deterministic TOML tick scri
 complete -c vif -o headless -d 'With -bot, run bots without a human player or terminal; solo runs are unpaced. With -replay, verify the journal\'s digests unattended'
 complete -c vif -o watch -d 'Watch the first bot or a script on this terminal, with no human player'
 complete -c vif -o r -o replay -r -F -d 'Replay a recorded journal instead of playing'
-complete -c vif -o check -d 'Validate the resolved scenario, keymap, audio and content, then exit'
+complete -c vif -o check -d 'Validate the resolved scenario, keymap, audio, content and bot graphs, then exit'
 complete -c vif -o schema -d 'Print the FSM schema as JSON, then exit'
 complete -c vif -o l -o log -d 'Enable logging; DIR overrides $XDG_STATE_HOME/vif/log'
 complete -c vif -o lv -o log-level -x -d 'trace, debug, info, warn or error; implies -l'

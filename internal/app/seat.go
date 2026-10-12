@@ -24,7 +24,7 @@ import (
 // DefaultBotGraph is the graph a bot seat plays when none is named.
 const DefaultBotGraph = "default"
 
-// BotSpecs is shared by CLI flags and :bot add; empty means no request.
+// BotSpecs is shared by CLI flags and :bot add; empty or a zero count means no request.
 func BotSpecs(spec string) ([]string, error) {
 	if spec == "" {
 		return nil, nil
@@ -34,8 +34,8 @@ func BotSpecs(spec string) ([]string, error) {
 	if err != nil && !counted {
 		return []string{spec}, nil
 	}
-	if err != nil || n < 1 || n > parameter.MaxPlayers {
-		return nil, fmt.Errorf("%q: use a graph or N[:graph], with N in 1..%d", spec, parameter.MaxPlayers)
+	if err != nil || n < 0 || n > parameter.MaxPlayers {
+		return nil, fmt.Errorf("%q: use a graph or N[:graph], with N in 0..%d", spec, parameter.MaxPlayers)
 	}
 	return slices.Repeat([]string{cmp.Or(graph, DefaultBotGraph)}, n), nil
 }
@@ -108,8 +108,11 @@ func (a *App) addSeatLocked(spec string) error {
 	return nil
 }
 
-// A successor admits local seats on its existing transport; its peer listener
-// only accepts already-rostered identities. Caller holds updateMutex.
+// seatConfigLocked is how a new seat reaches this run's session: a still-guest
+// relays it on its own link, a run in no session first hosts one on loopback, and
+// an authority is dialled on loopback, a successor on an admission listener of its
+// own because its peer listener accepts only already-rostered identities.
+// Caller holds updateMutex.
 func (a *App) seatConfigLocked() (Config, error) {
 	cfg := Config{Mode: ModeHeadless, Resources: a.cfg.Resources, Width: BotWidth, Height: BotHeight,
 		NoAdvertise: true, StatTicks: -1, RecTicks: -1}
@@ -203,7 +206,7 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 				s.id.Store(uint32(entry.ID))
 				a.log.Info("app", "msg", "bot seated", "graph", s.graph.Name,
 					"participant", s.id.Load(), "slot", s.slot.Load(), "joined", cfg.JoinAddress)
-				return seatSource{botSource{d}, forkCell(b), forkCell(a)}, nil
+				return seatSource{botSource{d}, forkCell(a)}, nil
 			})
 		if driver == nil && err != nil && retryableJoin(err) && time.Now().Before(deadline) &&
 			waitScriptTick(s.stop, parameter.SessionRejoinInterval) {
@@ -216,7 +219,8 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 		case driver != nil:
 			st := driver.Stats()
 			a.log.Info("app", "msg", "bot left", "graph", s.graph.Name, "participant", s.id.Load(),
-				"finished", finished, "ticks", st.Ticks, "injected", st.Injected, "error", fmt.Sprint(err))
+				"finished", finished, "ticks", st.Ticks, "injected", st.Injected, "dropped", st.Dropped,
+				"score", st.Score, "state", st.State, "error", fmt.Sprint(err))
 		}
 		return
 	}
@@ -233,15 +237,15 @@ func retryableJoin(err error) bool {
 // nobody took the session over.
 func forkCell(a *App) *atomic.Bool { return a.world.Resources.Status.Bools.Get("network.fork") }
 
-// seatSource ends a seat once its session has, for it or for its holder. A seat left
-// alone plays for nobody, and a holder that left its session takes its bots along.
+// seatSource ends a seat once its holder is left with no session: a holder that
+// left its session takes its bots along.
 type seatSource struct {
 	botSource
-	own, holder *atomic.Bool
+	holder *atomic.Bool
 }
 
 func (s seatSource) Step() (bool, error) {
-	if s.own.Load() || s.holder.Load() {
+	if s.holder.Load() {
 		return false, nil
 	}
 	return s.botSource.Step()

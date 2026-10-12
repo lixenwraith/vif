@@ -1,7 +1,7 @@
 // Package bot drives one participant from an internal/fsm graph instead of a
 // terminal. The graph reads its own instance's world and queues intents, which a
 // Driver releases through that instance's mode router at the graph's rate, so a
-// bot is bound by everything that binds a person. See doc/todo-bots.md.
+// bot is bound by everything that binds a person. See doc/bots.md.
 package bot
 
 import (
@@ -10,10 +10,13 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/internal/fsm/std"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/tomlmacro"
@@ -41,8 +44,10 @@ type Graph struct {
 	doc      map[string]any
 }
 
-// ParseGraph parses and validates one bot document.
+// ParseGraph parses and validates one bot document. A startup graph parses before
+// any App has built the event catalogue its triggers name.
 func ParseGraph(name string, data []byte) (*Graph, error) {
+	event.EnsureRegistry()
 	doc, err := toml.NewParser(data).Parse()
 	if err != nil {
 		return nil, fmt.Errorf("bot %s: %w", name, err)
@@ -83,8 +88,13 @@ func (g *Graph) validate() error {
 	}
 	regions, _ := g.doc["regions"].(map[string]any)
 	for name, raw := range regions {
-		if region, ok := raw.(map[string]any); ok && region["file"] != nil {
+		region, _ := raw.(map[string]any)
+		if region["file"] != nil {
 			return fmt.Errorf("region %q names a file; a bot graph is one document", name)
+		}
+		// System toggles would write the world, and background only shapes game telemetry
+		if key := unknownKey(region, "initial"); key != "" {
+			return fmt.Errorf("region %q: %q does nothing in a bot graph", name, key)
 		}
 	}
 	return nil
@@ -117,11 +127,12 @@ func unknownKey(table map[string]any, allowed ...string) string {
 }
 
 // Instance is the surface of the participant a driver plays: the same calls an
-// authored script and the fuzz driver make.
+// authored script and the fuzz driver make, and the tap its dispatch reports through.
 type Instance interface {
 	Tick(int)
 	Inject(...*input.Intent) bool
 	InputTick() bool
+	SetDispatchTap(func(event.GameEvent))
 }
 
 // Stats reports one bot's progress.
@@ -129,7 +140,26 @@ type Stats struct {
 	Ticks    uint64
 	Injected uint64
 	Dropped  uint64
+	Score    int64
 	State    string // each region's active state, region:state, space separated
+}
+
+// scoring is indexed by row: an event the bot's own step dispatched, the payload
+// field that must name its cursor (empty for any), a bool payload field that must
+// hold (empty for none), and the weight. A correct character is the boost it earns
+// and an error the boost it ends; a predicted death scores once confirmed.
+var scoring = [...]struct {
+	event  event.EventType
+	owner  string
+	when   string
+	weight int64
+}{
+	{event.EventBoostReward, "entity", "", 1},
+	{event.EventBoostDeactivate, "entity", "", -1},
+	{event.EventSpeciesKilled, "killer_entity", "", 5},
+	{event.EventSpeciesKillConfirmed, "killer_entity", "", 5},
+	{event.EventGoldCompleted, "entity", "", 25},
+	{event.EventCursorDefeatState, "entity", "defeated", -100},
 }
 
 // Driver plays one graph on one instance, a tick at a time.
@@ -144,6 +174,14 @@ type Driver struct {
 	credit  int64 // intents owed, in thousandths
 	started bool
 	stats   Stats
+
+	// seen is what the instance dispatched during the last step that the graph
+	// reacts to, in order, and score what all it dispatched was worth; both are
+	// written inside dispatch and read under the world lock. observing is set only
+	// while the driver itself plays.
+	seen      []event.GameEvent
+	score     int64
+	observing atomic.Bool
 }
 
 // NewDriver builds a driver for one instance. The graph's draws come from its own
@@ -157,12 +195,40 @@ func NewDriver(inst Instance, ctx *engine.GameContext, g *Graph, seed uint64, pa
 		rate: int64(g.Settings.ActionsPerSecond)}
 	d.mind = mind{ctx: ctx, queue: &d.queue,
 		rng: vmath.NewSeededRand(seed, "bot."+strconv.FormatUint(uint64(participant), 10))}
+	inst.SetDispatchTap(d.observe)
 	return d, nil
 }
 
-// Step updates the graph at the completed tick, releases what the rate allows,
-// advances input-driven work and ticks once. False means an intent quit the game.
-// Credit left idle is capped at one second's worth, so a quiet bot bursts no further.
+// observe scores an event and keeps a copy of one the graph reacts to, as dispatch
+// recycles a pooled payload; what an operator drives while the graph is suspended
+// is not the bot's.
+func (d *Driver) observe(ev event.GameEvent) {
+	if !d.observing.Load() {
+		return
+	}
+	if ev.Phase != event.PhasePredicted {
+		for _, row := range scoring {
+			if row.event == ev.Type && (row.owner == "" || d.mind.owns(ev.Payload, row.owner)) &&
+				(row.when == "" || payloadTrue(ev.Payload, row.when)) {
+				d.score += row.weight
+			}
+		}
+	}
+	if d.machine.Reacts(ev.Type) {
+		ev.Payload = event.ClonePayload(ev.Payload)
+		d.seen = append(d.seen, ev)
+	}
+}
+
+func payloadTrue(payload any, field string) bool {
+	v, ok := std.ExtractBoolField(payload, field)
+	return ok && v
+}
+
+// Step updates the graph at the completed tick, after the events the last step
+// dispatched, then releases what the rate allows, advances input-driven work and
+// ticks once. False means an intent quit the game. Credit left idle is capped at
+// one second's worth, so a quiet bot bursts no further.
 func (d *Driver) Step() (bool, error) {
 	d.credit = min(d.credit+d.rate*parameter.GameUpdateInterval.Milliseconds(), d.rate*1000)
 	var err error
@@ -174,11 +240,18 @@ func (d *Driver) Step() (bool, error) {
 			err = d.machine.Init(&d.mind)
 			return
 		}
+		for _, ev := range d.seen {
+			d.machine.HandleEvent(&d.mind, ev)
+		}
+		clear(d.seen)
+		d.seen = d.seen[:0]
 		d.machine.Update(&d.mind, parameter.GameUpdateInterval)
 	})
 	if err != nil {
 		return false, err
 	}
+	d.observing.Store(true)
+	defer d.observing.Store(false)
 	if !d.release() || !d.inst.InputTick() {
 		return false, nil
 	}
@@ -209,6 +282,7 @@ func (d *Driver) Stats() Stats {
 	st.Dropped = d.queue.dropped
 	states := make([]string, 0, len(d.regions))
 	d.ctx.World.RunSafe(func() {
+		st.Score = d.score
 		for _, name := range d.regions {
 			if r := d.machine.RegionTelemetry(name); r.Active {
 				states = append(states, name+":"+r.State)

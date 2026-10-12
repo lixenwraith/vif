@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 )
 
@@ -21,6 +22,11 @@ func TestABrokenGraphFailsAtLoadNamingTheFault(t *testing.T) {
 		{"[bot]\nactions_per_minute = 1" + region + "[states.A]", `unknown [bot] setting "actions_per_minute"`},
 		{"[bot]\nactions_per_second = 0" + region + "[states.A]", "actions_per_second must be positive"},
 		{region + "file = \"more.toml\"\n[states.A]", "names a file"},
+		{region + "enabled_systems = [\"gold\"]\n[states.A]", `"enabled_systems" does nothing in a bot graph`},
+		{region + `[states.A]
+on_enter = [{ action = "SetStatusInt", payload = { key = "typing.correct", value = 1 } }]`, "a bot acts only through intents"},
+		{region + `[states.A]
+transitions = [{ trigger = "Tick", target = "A", guard = "HasTarget", guard_args = { target = "glyph", whithin = 5 } }]`, `unknown guard arg "whithin"`},
 		{region + `[states.A]
 on_enter = [{ action = "Intent", payload = { name = "motion_nowhere" } }]`, `unknown intent action "motion_nowhere"`},
 		{region + `[states.A]
@@ -30,7 +36,13 @@ on_update = [{ action = "PointAt", payload = { target = "treasure" } }]`, `unkno
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "OnTarget", guard_args = { target = "random" } }]`, `unknown target "random"`},
 		{region + `[states.A]
+on_update = [{ action = "PointAt", payload = { target = "random", away = true } }]`, `unknown target "random"`},
+		{region + `[states.A]
+on_update = [{ action = "PointAt", payload = { target = "threat", away = true, fire = true } }]`, "fire and away do not combine"},
+		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "InMode", guard_args = { mode = "replace" } }]`, `unknown mode "replace"`},
+		{region + `[states.A]
+on_enter = [{ action = "Command", payload = { text = " : " } }]`, "command must not be empty"},
 		{region + `[states.A]
 on_enter = [{ action = "Intent", payload = { name = "motion_left", count = [] } }]`, "count range must be [min, max]"},
 		{region + `[states.A]
@@ -47,11 +59,62 @@ transitions = [{ trigger = "Tick", target = "A", guard = "Not", guard_args = {} 
 	}
 }
 
-// recorder is an instance that keeps what reaches it
-type recorder struct{ got []input.Intent }
+// soloWorld is an 80x24 instance whose own cursor stands at x, y
+func soloWorld(x, y int) (*engine.World, *engine.GameContext) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
+	cursor := w.CreateEntity(core.DomainShared)
+	w.Components.Cursor.SetComponent(cursor, component.CursorComponent{Slot: 0})
+	w.Resources.Player.Bind(0, cursor)
+	w.Resources.Player.SetLocal(0)
+	w.Positions.SetPosition(cursor, component.PositionComponent{X: x, Y: y})
+	return w, ctx
+}
 
-func (r *recorder) Tick(int)        {}
-func (r *recorder) InputTick() bool { return true }
+// place puts a new entity at x, y, set giving it its components
+func place(w *engine.World, d core.Domain, x, y int, set func(core.Entity)) core.Entity {
+	e := w.CreateEntity(d)
+	set(e)
+	w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+	return e
+}
+
+// botFor drives a graph on ctx's instance, stepping it n times
+func botFor(t *testing.T, ctx *engine.GameContext, doc string, n int) (*Driver, *recorder) {
+	t.Helper()
+	g, err := ParseGraph("test", []byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := &recorder{}
+	d, err := NewDriver(rec, ctx, g, 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range n {
+		if _, err := d.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return d, rec
+}
+
+// recorder is an instance that keeps what reaches it and dispatches the next of
+// dispatch on each tick
+type recorder struct {
+	got      []input.Intent
+	tap      func(event.GameEvent)
+	dispatch []event.GameEvent
+}
+
+func (r *recorder) Tick(int) {
+	if len(r.dispatch) > 0 {
+		r.tap(r.dispatch[0])
+		r.dispatch = r.dispatch[1:]
+	}
+}
+func (r *recorder) SetDispatchTap(fn func(event.GameEvent)) { r.tap = fn }
+func (r *recorder) InputTick() bool                         { return true }
 func (r *recorder) Inject(intents ...*input.Intent) bool {
 	for _, intent := range intents {
 		r.got = append(r.got, *intent)
@@ -80,8 +143,7 @@ on_enter = [
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := engine.NewWorld()
-	ctx := engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
+	_, ctx := soloWorld(0, 0)
 	inst := &recorder{}
 	d, err := NewDriver(inst, ctx, g, 1, 0)
 	if err != nil {
@@ -103,13 +165,7 @@ on_enter = [
 }
 
 func TestDefaultSeeksRunStartsAndPatrolsForNuggetsWithoutText(t *testing.T) {
-	w := engine.NewWorld()
-	ctx := engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
-	cursor := w.CreateEntity(core.DomainShared)
-	w.Components.Cursor.SetComponent(cursor, component.CursorComponent{Slot: 0})
-	w.Resources.Player.Bind(0, cursor)
-	w.Resources.Player.SetLocal(0)
-	w.Positions.SetPosition(cursor, component.PositionComponent{X: 12, Y: 3})
+	w, ctx := soloWorld(12, 3)
 	var glyphs []core.Entity
 	for x := 5; x <= 9; x++ {
 		e := w.CreateEntity(core.DomainPlayer)
@@ -169,4 +225,143 @@ func TestDefaultSeeksRunStartsAndPatrolsForNuggetsWithoutText(t *testing.T) {
 		}
 	}
 	t.Fatal("ignored a distant nugget between patrol movements")
+}
+
+// TestAPointerAimedPastTheViewportLandsOnTheNearestOpenCell: the router refuses a
+// move onto a wall, so a goal clamped onto one lands on the open cell nearest it.
+func TestAPointerAimedPastTheViewportLandsOnTheNearestOpenCell(t *testing.T) {
+	w, ctx := soloWorld(10, 5)
+	cfg := w.Resources.Config
+	cfg.MapWidth = 200
+	w.Positions.ResizeGrid(cfg.MapWidth, cfg.MapHeight)
+	_, _, maxX, _, _ := cfg.VisibleMapRect()
+	place(w, core.DomainPlayer, 150, 5, func(e core.Entity) {
+		w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'a', Type: component.GlyphGreen})
+	})
+	for y := 4; y <= 5; y++ {
+		place(w, core.DomainShared, maxX, y, func(e core.Entity) {
+			w.Components.Wall.SetComponent(e, component.WallComponent{BlockMask: component.WallBlockCursor})
+		})
+	}
+	_, rec := botFor(t, ctx, `
+[regions.play]
+initial = "A"
+
+[states.A]
+on_update = [{ action = "PointAt", payload = { target = "glyph" } }]
+`, 4)
+	if len(rec.got) == 0 {
+		t.Fatal("pointed nowhere")
+	}
+	for _, intent := range rec.got {
+		if intent.Type != input.IntentMouseMove || intent.X != maxX || intent.Y != 6 {
+			t.Fatalf("pointed at %+v, want a move to the open edge cell (%d, 6)", intent, maxX)
+		}
+	}
+}
+
+// TestAGraphTransitionsOnEventsItsInstanceDispatchedLastStep: what the bot's own
+// step dispatched is a present fact at its next update, and Own keeps another
+// cursor's event from counting as the bot's.
+func TestAGraphTransitionsOnEventsItsInstanceDispatchedLastStep(t *testing.T) {
+	w, ctx := soloWorld(0, 0)
+	d, rec := botFor(t, ctx, `
+[regions.play]
+initial = "A"
+
+[states.A]
+transitions = [{ trigger = "EventCursorDefeatState", target = "B", guard = "Own", guard_args = { field = "entity" } }]
+
+[states.B]
+on_enter = [{ action = "Intent", payload = { name = "motion_left" } }]
+`, 0)
+	defeat := func(e core.Entity) event.GameEvent {
+		return event.GameEvent{Type: event.EventCursorDefeatState,
+			Payload: &event.CursorDefeatStatePayload{Entity: e, Defeated: true}}
+	}
+	own := w.Resources.Player.Entity
+	rec.dispatch = []event.GameEvent{defeat(own + 1), defeat(own)}
+	for step, want := range []int{0, 0, 1} {
+		if _, err := d.Step(); err != nil {
+			t.Fatal(err)
+		}
+		if len(rec.got) != want {
+			t.Fatalf("after step %d released %d intents, want %d", step+1, len(rec.got), want)
+		}
+	}
+}
+
+// TestEvasionPointsAwayFromTheNearestThreatOntoAnOpenCell: away aims at the nearest
+// hostile thing's mirror through the cursor, and a friendly bullet is no threat.
+func TestEvasionPointsAwayFromTheNearestThreatOntoAnOpenCell(t *testing.T) {
+	w, ctx := soloWorld(40, 10)
+	place(w, core.DomainShared, 35, 10, func(e core.Entity) {
+		w.Components.Bullet.SetComponent(e, component.BulletComponent{Hostile: true})
+	})
+	place(w, core.DomainShared, 42, 10, func(e core.Entity) {
+		w.Components.Bullet.SetComponent(e, component.BulletComponent{})
+	})
+	place(w, core.DomainShared, 45, 10, func(e core.Entity) {
+		w.Components.Wall.SetComponent(e, component.WallComponent{BlockMask: component.WallBlockCursor})
+	})
+	_, rec := botFor(t, ctx, `
+[regions.play]
+initial = "A"
+
+[states.A]
+on_update = [{ action = "PointAt", payload = { target = "threat", away = true } }]
+`, 3)
+	if len(rec.got) == 0 {
+		t.Fatal("did not evade")
+	}
+	for _, intent := range rec.got {
+		if intent.Type != input.IntentMouseMove || intent.X <= 40 || intent.X == 45 && intent.Y == 10 {
+			t.Fatalf("evaded to %+v, want a move right of the cursor off the wall at (45, 10)", intent)
+		}
+	}
+}
+
+// TestAGraphWaitingOnIdleNeverDrops: Intent queues whatever the rate, so a graph
+// that waits for its queue to empty is one that loses nothing.
+func TestAGraphWaitingOnIdleNeverDrops(t *testing.T) {
+	_, ctx := soloWorld(0, 0)
+	d, _ := botFor(t, ctx, `
+[bot]
+actions_per_second = 1
+
+[regions.play]
+initial = "A"
+
+[states.A]
+on_update = [{ action = "Intent", payload = { name = "motion_left" }, guard = "Idle" }]
+`, 400)
+	if st := d.Stats(); st.Injected == 0 || st.Dropped != 0 {
+		t.Fatalf("released %d and dropped %d, want some released and none dropped", st.Injected, st.Dropped)
+	}
+}
+
+// TestABotScoresOnlyItsOwnEvents: a bot is scored on what its own steps dispatched
+// for its own cursor, a predicted death only once confirmed.
+func TestABotScoresOnlyItsOwnEvents(t *testing.T) {
+	w, ctx := soloWorld(0, 0)
+	d, rec := botFor(t, ctx, "[regions.play]\ninitial = \"A\"\n[states.A]\n", 0)
+	own := w.Resources.Player.Entity
+	killed := &event.SpeciesKilledPayload{KillerEntity: own}
+	rec.dispatch = []event.GameEvent{
+		{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: own}},
+		{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: own + 1}},
+		{Type: event.EventSpeciesKilled, Payload: killed, Phase: event.PhasePredicted},
+		{Type: event.EventSpeciesKillConfirmed, Payload: killed},
+		{Type: event.EventCursorDefeatState, Payload: &event.CursorDefeatStatePayload{Entity: own}},
+		{Type: event.EventCursorDefeatState, Payload: &event.CursorDefeatStatePayload{Entity: own, Defeated: true}},
+	}
+	for range rec.dispatch {
+		if _, err := d.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec.tap(event.GameEvent{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: own}})
+	if got, want := d.Stats().Score, int64(1+5-100); got != want {
+		t.Fatalf("scored %d, want %d", got, want)
+	}
 }

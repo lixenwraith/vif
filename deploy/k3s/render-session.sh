@@ -9,6 +9,7 @@
 #   ./render-session.sh 7f3c1a 31707 > /tmp/7f3c1a.yaml
 #   FIRST_JOIN=20m EMPTY_GRACE=20m ./render-session.sh 7f3c1a 31707
 #   SCENARIO=td LOG_LEVEL=debug ./render-session.sh 7f3c1a 31707
+#   BOTS=2 ./render-session.sh 7f3c1a 31707
 #   JOB_UID=<uid> ./render-session.sh 7f3c1a 31707
 #
 # The one session container writes directly to the shared tmpfs-backed local PVC.
@@ -21,7 +22,7 @@ set -eu
 
 usage() {
 	echo "usage: $0 SESSION_ID GAME_NODEPORT [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
-	echo "       SCENARIO and LOG_LEVEL override the defaults from the environment" >&2
+	echo "       SCENARIO, LOG_LEVEL and BOTS override the defaults from the environment" >&2
 	exit 2
 }
 
@@ -36,6 +37,7 @@ FIRST_JOIN=${FIRST_JOIN:-90s}
 EMPTY_GRACE=${EMPTY_GRACE:-90s}
 SCENARIO=${SCENARIO:-main}
 LOG_LEVEL=${LOG_LEVEL:-info}
+BOTS=${BOTS:-0}
 JOB_UID=${JOB_UID:-}
 
 case "$SESSION_ID" in
@@ -53,10 +55,18 @@ case "$LOG_LEVEL" in
 	trace|debug|info|warn|error ) ;;
 	* ) echo "$0: LOG_LEVEL must be trace, debug, info, warn or error" >&2; exit 2 ;;
 esac
+case "$BOTS" in
+	'' | *[!0-9]* ) echo "$0: BOTS must be a number" >&2; exit 2 ;;
+esac
 if [ "$GAME_NODEPORT" -lt 31700 ] || [ "$GAME_NODEPORT" -gt 31709 ]; then
 	echo "$0: GAME_NODEPORT $GAME_NODEPORT is outside the fleet range 31700-31709" >&2
 	exit 2
 fi
+# The allocator's envelope: each bot adds a seat's cost (tool/vif-allocator/manifest.go).
+CPU_REQUEST=$((100 + 64 * BOTS))m
+MEMORY_REQUEST=$((96 + 32 * BOTS))Mi
+MEMORY_LIMIT=$((192 + 32 * BOTS))Mi
+GOMEMLIMIT=$((160 + 32 * BOTS))MiB
 
 template=$(dirname "$0")/30-session.yaml
 [ -r "$template" ] || { echo "$0: cannot read $template" >&2; exit 1; }
@@ -68,6 +78,11 @@ rendered=$(sed \
 	-e "s|\${GAME_NODEPORT}|$GAME_NODEPORT|g" \
 	-e "s|\${IMAGE}|$IMAGE|g" \
 	-e "s|\${PLAYERS}|$PLAYERS|g" \
+	-e "s|\${BOTS}|$BOTS|g" \
+	-e "s|\${CPU_REQUEST}|$CPU_REQUEST|g" \
+	-e "s|\${MEMORY_REQUEST}|$MEMORY_REQUEST|g" \
+	-e "s|\${MEMORY_LIMIT}|$MEMORY_LIMIT|g" \
+	-e "s|\${GOMEMLIMIT}|$GOMEMLIMIT|g" \
 	-e "s|\${MAP_SIZE}|$MAP_SIZE|g" \
 	-e "s|\${FIRST_JOIN}|$FIRST_JOIN|g" \
 	-e "s|\${EMPTY_GRACE}|$EMPTY_GRACE|g" \

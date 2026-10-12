@@ -111,7 +111,7 @@ func RunBot(cfg Config, spec string) (bot.Stats, error) {
 	stats := driver.Stats()
 	reg := played.world.Resources.Status
 	played.log.Info("app", "msg", "bot stopped", "name", name, "quit", quit, "ticks", stats.Ticks,
-		"injected", stats.Injected, "dropped", stats.Dropped, "state", stats.State,
+		"injected", stats.Injected, "dropped", stats.Dropped, "score", stats.Score, "state", stats.State,
 		"typed", reg.Ints.Get("typing.correct").Load(), "errors", reg.Ints.Get("typing.errors").Load())
 	return stats, err
 }
@@ -181,7 +181,9 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 			return false, nil
 		default:
 		}
-		if a.dismissed.Load() {
+		// A headless bot left with no session plays for nobody; a watched one plays
+		// on, as a person does.
+		if a.dismissed.Load() || kind == "bot" && forkCell(a).Load() {
 			return false, nil
 		}
 		if hold != nil && hold() {

@@ -85,7 +85,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"headless"}, hint: "With -bot, run bots without a human player or terminal; solo runs are unpaced. With -replay, verify the journal's digests unattended"},
 			{names: []string{"watch"}, hint: "Watch the first bot or a script on this terminal, with no human player"},
 			{names: []string{"r", "replay"}, arg: "<path>", hint: "Replay a recorded journal instead of playing"},
-			{names: []string{"check"}, hint: "Validate the resolved scenario, keymap, audio and content, then exit"},
+			{names: []string{"check"}, hint: "Validate the resolved scenario, keymap, audio, content and bot graphs, then exit"},
 			{names: []string{"schema"}, hint: "Print the FSM schema as JSON, then exit"},
 		},
 	}, {
@@ -262,6 +262,7 @@ Home/End and PageUp/PageDown navigate longer pages.
 .PP
 Bots adds local bots by count and policy graph, and removes this run's admitted
 bots by cursor slot, or cancels a joining bot. Leaving bots show their state.
+:bot lists this run's bots; :bot add [N[:graph]|graph] seats more.
 Host before adding bots to solo play if remote players should join; otherwise
 bots open a loopback session.
 .PP
@@ -299,6 +300,10 @@ User configuration root, normally
 .I vif.toml
 Settings at the top of a configuration root: another root, the log, journal,
 music, scenario, content and keymap paths, and the audio mixer buffer.
+.TP
+.I bot/<name>.toml
+Bot graphs that \-bot, \-bots and :bot add name; a path also works. The default
+graph is compiled in and resolves last.
 .TP
 .IR /usr/local/etc/vif ", " /etc/vif
 System configuration roots, in that order;

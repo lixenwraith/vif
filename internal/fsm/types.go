@@ -75,6 +75,9 @@ type Machine[T any] struct {
 	// rejects an unmatched event with one probe and no graph walk
 	active triggerMask
 
+	// reacts is the union of every node's trigger set, active or not
+	reacts triggerMask
+
 	// OnTransition observes committed state changes. Fires before the exit
 	// phase, so a transition record precedes the records its actions emit.
 	// trigger is EventNone for tick transitions. nil disables.

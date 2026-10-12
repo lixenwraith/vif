@@ -68,6 +68,8 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	set.IntVar(&cfg.Allocator.Workload.Players, "players", 4, "default session guest ceiling")
 	set.IntVar(&cfg.Allocator.PlayersMax, "players-max", 0,
 		"highest guest ceiling a request may select; 0 keeps -players as the only one")
+	set.IntVar(&cfg.Allocator.BotsMax, "bots-max", 0,
+		"most bots a request may seat beside its players; 0 offers none")
 	set.StringVar(&cfg.Allocator.Workload.LogLevel, "log-level", "info", "default session log level")
 	set.StringVar(&logLevelMin, "log-level-min", "debug",
 		"most verbose session log level a request may select")
@@ -175,6 +177,9 @@ func validateConfig(cfg runtimeConfig) error {
 	if cfg.Allocator.PlayersMax < cfg.Allocator.Workload.Players || cfg.Allocator.PlayersMax > 16 {
 		return fmt.Errorf("-players-max must be between -players (%d) and 16",
 			cfg.Allocator.Workload.Players)
+	}
+	if cfg.Allocator.BotsMax < 0 || cfg.Allocator.BotsMax > sessionBotsMax {
+		return fmt.Errorf("-bots-max must be between 0 and %d", sessionBotsMax)
 	}
 	if !slices.Contains(cfg.Allocator.LogLevels, cfg.Allocator.Workload.LogLevel) {
 		return fmt.Errorf("-log-level %q is more verbose than -log-level-min allows",

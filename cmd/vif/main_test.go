@@ -225,7 +225,10 @@ func TestSessionFlags(t *testing.T) {
 	if bots, err := app.BotSpecs("1:patrol"); err != nil || !slices.Equal(bots, []string{"patrol"}) {
 		t.Fatalf("-bots 1:patrol seats %v, %v", bots, err)
 	}
-	for _, spec := range []string{"0", "17", "-1", ":roam"} {
+	if bots, err := app.BotSpecs("0"); err != nil || len(bots) != 0 {
+		t.Fatalf("-bots 0 seats %v, %v", bots, err)
+	}
+	for _, spec := range []string{"17", "-1", ":roam"} {
 		if err := (sessionFlags{bots: spec}).validateInvocation(false, false, ""); err == nil {
 			t.Fatalf("-bots %s was accepted", spec)
 		}
@@ -300,8 +303,10 @@ func TestScriptInvocation(t *testing.T) {
 	if err := validateInvocation(false, false, "", "", "roam", false, sessionFlags{serve: ":7777"}); err != nil {
 		t.Fatalf("-serve cannot seat bots: %v", err)
 	}
-	if err := validateInvocation(false, false, "", "", "", true, sessionFlags{}); err == nil {
-		t.Fatal("-watch was accepted without a script or bot to present")
+	for _, none := range []sessionFlags{{}, {bots: "0"}} {
+		if err := validateInvocation(false, false, "", "", "", true, none); err == nil {
+			t.Fatalf("-watch was accepted without a script or bot to present: %+v", none)
+		}
 	}
 }
 

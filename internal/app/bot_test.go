@@ -293,8 +293,8 @@ func TestAnAuthorityPausesOnlyWhileItsOtherParticipantsAreItsBots(t *testing.T) 
 	}
 }
 
-// TestAGuestsBotsLeaveWithIt: a guest's bots dial the session it joined and go when
-// it does, while the host's own bots stay.
+// TestAGuestsBotsLeaveWithIt: a guest's bots join through it and go when it does,
+// while the host's own bots stay.
 func TestAGuestsBotsLeaveWithIt(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
@@ -303,6 +303,39 @@ func TestAGuestsBotsLeaveWithIt(t *testing.T) {
 	waitForCursors(t, host, 4)
 	leave()
 	waitForCursors(t, host, 2)
+}
+
+// TestAHeadlessBotEndsWhenItsSessionDoes: a guest bot whose pinned host leaves is
+// left with no session, and stops rather than playing its fork for nobody.
+func TestAHeadlessBotEndsWhenItsSessionDoes(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host, leave := driveBot(t, Config{FixedAuthority: true, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	cfg := Config{JoinAddress: host.HostAddr(), Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
+		Resources: resource.Options{Embedded: true}}
+	g, err := loadBotGraph(cfg.Resources, "patrol")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop, ended := make(chan os.Signal), make(chan error, 1)
+	t.Cleanup(func() { close(stop) })
+	go func() {
+		_, err := drive(cfg, "bot", g.Name, stop, nil, func(a *App) (pacedSource, error) {
+			d, err := bot.NewDriver(a, a.ctx, g, a.Seed(), a.localParticipant())
+			return botSource{d}, err
+		})
+		ended <- err
+	}()
+	waitForCursors(t, host, 3)
+	leave()
+	select {
+	case err := <-ended:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(socketWait):
+		t.Fatal("a headless bot played on after its session ended")
+	}
 }
 
 // TestAGuestsBotsJoinThroughIt: a guest's bot is admitted on the guest's link, not

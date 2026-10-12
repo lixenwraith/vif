@@ -210,7 +210,7 @@ func compileScriptAction(index int, spec ScriptAction) (compiledScriptAction, er
 	case spec.Text != "":
 		a.kind, a.text = scriptText, spec.Text
 	case spec.Command != "":
-		cmd := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(spec.Command), ":"))
+		cmd := input.CommandLine(spec.Command)
 		if cmd == "" {
 			return a, errors.New("command must not be empty")
 		}

@@ -38,7 +38,7 @@ atomically without restarting the allocator. See
 
 | Request | Result |
 |---|---|
-| `POST /vif/api/sessions` with an empty body, `{}`, or `{"players":N,"log_level":"info","scenario":"td"}` | `201` and one created session. Those three fields are the whole of what a caller may choose; an omitted one takes the deployment default, an unknown one is a `400`. |
+| `POST /vif/api/sessions` with an empty body, `{}`, or `{"players":N,"bots":K,"log_level":"info","scenario":"td"}` | `201` and one created session. Those four fields are the whole of what a caller may choose; an omitted one takes the deployment default (no bots), an unknown one is a `400`. |
 | `GET /vif/api/sessions` | `200` and `{ "sessions": [...], "limits": {...} }` for live, non-completed Jobs. |
 | `GET /healthz` | Process liveness. |
 | `GET /readyz` | Verifies that the current token can reach the Kubernetes API. |
@@ -60,6 +60,7 @@ One session row has this shape:
   "state": {
     "live": true,
     "ready": true,
+    "bots": 0,
     "capacity": 4,
     "clock": "stopped",
     "expires_in": "1m27s",
@@ -72,16 +73,18 @@ One session row has this shape:
 
 `state` is the pod's `/health` body, except that `expires_in` is the sooner of the
 game's countdown and the Job's `activeDeadlineSeconds`. An occupied game runs no
-countdown, so the Job's deadline is what it reports.
+countdown, so the Job's deadline is what it reports. `guests` counts the session's
+own bots too, since each holds a seat; `bots` is how many of them are bots.
 
-`limits` names what this deployment will accept — `players_max`, the allowed
-`log_levels`, most verbose first, and the installed `scenarios`, default first — so
-a caller offers only choices that would be granted rather than discovering them by
-refusal:
+`limits` names what this deployment will accept — `players_max`, `bots_max`, the
+allowed `log_levels`, most verbose first, and the installed `scenarios`, default
+first — so a caller offers only choices that would be granted rather than
+discovering them by refusal:
 
 ```json
 {
   "players_max": 4,
+  "bots_max": 0,
   "log_levels": ["debug", "info", "warn", "error"],
   "scenarios": ["main", "blank", "kraken", "td"],
   "scenario_descriptions": {
@@ -96,10 +99,18 @@ refusal:
 game's embedded fallback, described by that. A scenario that states none, or whose
 description is not in the file's first 4 KiB ahead of any table, is absent from the
 object and still offered; with none at all the key is omitted. `-players-max` defaults to
-`-players`, and `-log-level-min` defaults to `debug`: publishing the API must not
-hand an anonymous caller a sixteen-player world or the fleet's shared log rate, so
-both open only as far as an operator sets them. A value outside them is refused with
-`400 invalid_request` naming the bound, never clamped.
+`-players`, `-bots-max` to `0` and `-log-level-min` to `debug`: publishing the API
+must not hand an anonymous caller a sixteen-player world, the fleet's CPU or its
+shared log rate, so each opens only as far as an operator sets it. A value outside
+them is refused with `400 invalid_request` naming the bound, never clamped.
+
+`bots` seats that many of the session's own bots, each a roster guest playing the
+embedded `default` graph. A session is ready only while a seat is free, so a request
+is also refused bots that leave no seat for a person: at most `players - 1`. The
+bots occupy the session as people do, so one nobody else joins plays on until a
+drain or the Job's one-hour `activeDeadlineSeconds` ends it.
+`-bots-max` is at most 6, the most whose pod envelope fits the namespace's
+`LimitRange`.
 
 `id` is the session's stable public identifier and the name its pod answers to.
 `join_target`, `direct_target` and `ws_url` are opaque strings this allocator

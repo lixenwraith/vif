@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 
@@ -42,6 +43,7 @@ const (
 	targetNugget
 	targetSpecies
 	targetCursor
+	targetThreat
 	targetRandom
 	targetCount
 )
@@ -74,14 +76,7 @@ var targets = [targetCount]struct {
 			visit(e)
 		}
 	}},
-	targetSpecies: {"species", func(m *mind, visit func(core.Entity)) {
-		m.ctx.World.Components.Combat.Each(func(e core.Entity, c *component.CombatComponent) bool {
-			if c.CombatEntityType != component.CombatEntityCursor && c.CombatEntityType != component.CombatEntityTower {
-				visit(e)
-			}
-			return true
-		})
-	}},
+	targetSpecies: {"species", scanSpecies},
 	targetCursor: {"cursor", func(m *mind, visit func(core.Entity)) {
 		own := m.ctx.World.Resources.Player.Entity
 		for _, e := range m.ctx.World.Components.Cursor.Entities() {
@@ -90,7 +85,33 @@ var targets = [targetCount]struct {
 			}
 		}
 	}},
+	targetThreat: {"threat", func(m *mind, visit func(core.Entity)) {
+		scanSpecies(m, visit)
+		c := m.ctx.World.Components
+		c.Bullet.Each(func(e core.Entity, b *component.BulletComponent) bool {
+			if b.Hostile {
+				visit(e)
+			}
+			return true
+		})
+		c.Missile.Each(func(e core.Entity, missile *component.MissileComponent) bool {
+			if missile.Hostile {
+				visit(e)
+			}
+			return true
+		})
+	}},
 	targetRandom: {name: "random"},
+}
+
+// scanSpecies visits every combat entity but a cursor or a tower
+func scanSpecies(m *mind, visit func(core.Entity)) {
+	m.ctx.World.Components.Combat.Each(func(e core.Entity, c *component.CombatComponent) bool {
+		if c.CombatEntityType != component.CombatEntityCursor && c.CombatEntityType != component.CombatEntityTower {
+			visit(e)
+		}
+		return true
+	})
 }
 
 // parseTarget resolves a graph's target name; a random cell is refused where an
@@ -182,18 +203,26 @@ func (m *mind) pointAt(p pointArgs) {
 		x, y = minX+m.rng.Intn(maxX-minX+1), minY+m.rng.Intn(maxY-minY+1)
 	} else {
 		s := m.nearest(p.target)
-		if !s.found {
+		if !s.found || p.away && s.dist2 == 0 {
 			return
 		}
-		x, y = min(max(s.x, minX), maxX), min(max(s.y, minY), maxY)
+		goalX, goalY := s.x, s.y
+		if p.away {
+			from, _ := m.ctx.World.LocalCursor()
+			goalX, goalY = 2*from.X-s.x, 2*from.Y-s.y
+		}
+		x, y = min(max(goalX, minX), maxX), min(max(goalY, minY), maxY)
 		// Start a newly acquired text run at its left edge instead of eating it backwards.
-		if p.target == targetGlyph {
+		if p.target == targetGlyph && !p.away {
 			for x > minX {
 				if _, ok := m.glyphAt(x-1, y, true); !ok {
 					break
 				}
 				x--
 			}
+		}
+		if x, y, ok = m.land(x, y, goalX, goalY); !ok {
+			return
 		}
 	}
 	if p.fire {
@@ -207,10 +236,32 @@ func (m *mind) pointAt(p pointArgs) {
 	m.push(input.Intent{Type: input.IntentMouseMove, X: x, Y: y, MapCell: true})
 }
 
-// pointArgs is a compiled PointAt payload
+// land keeps x, y unless the cursor may not enter it, as the router refuses that
+// move and the bot would re-queue it every update; it then takes the shown open cell
+// nearest the goal, measured as nearest does, ties to the first in row order.
+func (m *mind) land(x, y, goalX, goalY int) (int, int, bool) {
+	blocked := func(x, y int) bool { return m.ctx.World.Positions.IsBlocked(x, y, component.WallBlockCursor) }
+	if !blocked(x, y) {
+		return x, y, true
+	}
+	minX, minY, maxX, maxY, _ := m.ctx.World.Resources.Config.VisibleMapRect()
+	best, found := 0, false
+	for cy := minY; cy <= maxY; cy++ {
+		for cx := minX; cx <= maxX; cx++ {
+			dx, dy := cx-goalX, 2*(cy-goalY)
+			if d := dx*dx + dy*dy; (!found || d < best) && !blocked(cx, cy) {
+				x, y, best, found = cx, cy, d, true
+			}
+		}
+	}
+	return x, y, found
+}
+
+// pointArgs is a compiled PointAt payload; away aims at the target's mirror
+// through the cursor
 type pointArgs struct {
-	target target
-	fire   bool
+	target     target
+	fire, away bool
 }
 
 // register installs std's generic vocabulary, its status guards reading the bot's
@@ -265,6 +316,9 @@ func register(m *fsm.Machine[*mind]) {
 	m.RegisterAction("Command", queueAll)
 	m.RegisterActionArgs("Command", func(_ *fsm.Machine[*mind], cfg fsm.ActionConfig, _ fsm.StateResolver) (any, error) {
 		text, err := textPayload(cfg.Payload)
+		if text = input.CommandLine(text); err == nil && text == "" {
+			err = errors.New("command must not be empty")
+		}
 		return input.AppendCommand(nil, text), err
 	})
 	m.RegisterAction("TypeGlyph", func(m *mind, _ any) {
@@ -283,15 +337,35 @@ func register(m *fsm.Machine[*mind]) {
 		var p struct {
 			Target string `toml:"target"`
 			Fire   bool   `toml:"fire"`
+			Away   bool   `toml:"away"`
 		}
-		if err := decodePayload(cfg.Payload, &p, "target", "fire"); err != nil {
+		if err := decodePayload(cfg.Payload, &p, "target", "fire", "away"); err != nil {
 			return nil, err
 		}
-		t, err := parseTarget(p.Target, false)
-		return pointArgs{target: t, fire: p.Fire}, err
+		if p.Fire && p.Away {
+			return nil, errors.New("fire and away do not combine")
+		}
+		t, err := parseTarget(p.Target, p.Away)
+		return pointArgs{target: t, fire: p.Fire, away: p.Away}, err
 	})
 
-	m.RegisterGuardFactory("HasTarget", func(_ *fsm.Machine[*mind], args map[string]any) (fsm.GuardFunc[*mind], error) {
+	// std's world-writing actions would load and do nothing, as the Host gives them no way out
+	for _, name := range []string{"EmitEvent", "EnableSystem", "DisableSystem", "ApplyGlobalSystemConfig",
+		"ApplyRegionSystemConfigs", "SetStatusInt", "ResetStatusInt"} {
+		m.RegisterActionArgs(name, func(*fsm.Machine[*mind], fsm.ActionConfig, fsm.StateResolver) (any, error) {
+			return nil, errors.New("writes the world; a bot acts only through intents")
+		})
+	}
+
+	guard := func(name string, args []string, build func(map[string]any) (fsm.GuardFunc[*mind], error)) {
+		m.RegisterGuardFactory(name, func(_ *fsm.Machine[*mind], given map[string]any) (fsm.GuardFunc[*mind], error) {
+			if key := unknownKey(given, args...); key != "" {
+				return nil, fmt.Errorf("unknown guard arg %q", key)
+			}
+			return build(given)
+		})
+	}
+	guard("HasTarget", []string{"target", "within"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
 		t, err := parseTarget(args["target"], true)
 		within := std.ParseIntArg(args, "within")
 		return func(m *mind, _ *fsm.RegionState, _ any) bool {
@@ -299,14 +373,14 @@ func register(m *fsm.Machine[*mind]) {
 			return s.found && (within <= 0 || s.dist2 <= int(within*within))
 		}, err
 	})
-	m.RegisterGuardFactory("OnTarget", func(_ *fsm.Machine[*mind], args map[string]any) (fsm.GuardFunc[*mind], error) {
+	guard("OnTarget", []string{"target"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
 		t, err := parseTarget(args["target"], true)
 		return func(m *mind, _ *fsm.RegionState, _ any) bool {
 			s := m.nearest(t)
 			return s.found && s.dist2 == 0
 		}, err
 	})
-	m.RegisterGuardFactory("InMode", func(_ *fsm.Machine[*mind], args map[string]any) (fsm.GuardFunc[*mind], error) {
+	guard("InMode", []string{"mode"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
 		name, _ := args["mode"].(string)
 		mode := slices.Index(core.ModeNames[:], name)
 		if mode < 0 {
@@ -316,7 +390,7 @@ func register(m *fsm.Machine[*mind]) {
 			return m.ctx.GetMode() == core.GameMode(mode)
 		}, nil
 	})
-	m.RegisterGuardFactory("Chance", func(_ *fsm.Machine[*mind], args map[string]any) (fsm.GuardFunc[*mind], error) {
+	guard("Chance", []string{"percent"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
 		percent := int(std.ParseIntArg(args, "percent"))
 		if percent < 1 || percent > 100 {
 			return nil, fmt.Errorf("Chance: percent must be 1..100, got %d", percent)
@@ -325,6 +399,24 @@ func register(m *fsm.Machine[*mind]) {
 			return m.rng.Intn(100) < percent
 		}, nil
 	})
+	// Idle lets a graph wait for what it queued instead of overflowing the queue
+	guard("Idle", nil, func(map[string]any) (fsm.GuardFunc[*mind], error) {
+		return func(m *mind, _ *fsm.RegionState, _ any) bool { return m.queue.n == 0 }, nil
+	})
+	guard("Own", []string{"field"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
+		field, _ := args["field"].(string)
+		if field == "" {
+			return nil, errors.New("Own: field must name a payload field")
+		}
+		return func(m *mind, _ *fsm.RegionState, payload any) bool { return m.owns(payload, field) }, nil
+	})
+}
+
+// owns reports whether an event payload's field names the bot's own cursor
+func (m *mind) owns(payload any, field string) bool {
+	own := m.ctx.World.Resources.Player.Entity
+	v, ok := std.ExtractIntField(payload, field)
+	return ok && own != 0 && v == int64(own)
 }
 
 // intentChoice is a compiled Intent payload: one keymap action or a list drawn

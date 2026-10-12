@@ -268,6 +268,10 @@ func (m *Machine[T]) processDelayedActions(ctx T, region *RegionState, dt time.D
 	m.delayedActions[region.Name] = remaining
 }
 
+// Reacts reports whether some state's transition triggers on et, whichever regions
+// are active, for an embedder choosing what to deliver ahead of HandleEvent.
+func (m *Machine[T]) Reacts(et event.EventType) bool { return m.reacts.has(et) }
+
 // HandleEvent routes an external event through all active regions.
 // Returns true if some region consumed it via a transition or internal action.
 // The machine-wide mask rejects unmatched types before any graph walk.

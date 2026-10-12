@@ -2,10 +2,20 @@ package main
 
 import "strconv"
 
+// Each bot grows the session container by a seat's measured cost at 120x40, about
+// 28 MB resident and 60 ms of CPU a second (doc/kubernetes-fleet.md §6).
+const (
+	botMemoryMi = 32
+	botCPUMilli = 64
+	// The most bots whose 192Mi-based limit fits the LimitRange's 384Mi container ceiling.
+	sessionBotsMax = (384 - 192) / botMemoryMi
+)
+
 type workloadConfig struct {
 	Namespace string
 	Image     string
 	Players   int
+	Bots      int
 	LogLevel  string
 	MapSize   string
 	Scenario  string
@@ -35,6 +45,7 @@ func wadMounts() []any {
 
 func buildJob(id string, cfg workloadConfig) map[string]any {
 	labels := sessionLabels(id)
+	perBot := func(base, step int) string { return strconv.Itoa(base + step*cfg.Bots) }
 	containerSecurity := map[string]any{
 		"allowPrivilegeEscalation": false,
 		"privileged":               false,
@@ -75,7 +86,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 			"backoffLimit":            0,
 			"completions":             1,
 			"parallelism":             1,
-			"activeDeadlineSeconds":   14400,
+			"activeDeadlineSeconds":   3600,
 			"ttlSecondsAfterFinished": 120,
 			"template": map[string]any{
 				"metadata": map[string]any{"labels": labels},
@@ -115,6 +126,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 								"-s", cfg.Scenario,
 								"-size", cfg.MapSize,
 								"-players", strconv.Itoa(cfg.Players),
+								"-bots", strconv.Itoa(cfg.Bots),
 								"-first-join", cfg.FirstJoin,
 								"-empty", cfg.Empty,
 								"-drain", cfg.Drain,
@@ -132,7 +144,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 							},
 							// After envFrom, so the fleet's own envelope wins.
 							"env": []any{
-								map[string]any{"name": "GOMEMLIMIT", "value": "160MiB"},
+								map[string]any{"name": "GOMEMLIMIT", "value": perBot(160, botMemoryMi) + "MiB"},
 							},
 							"securityContext": containerSecurity,
 							"volumeMounts": append([]any{
@@ -142,8 +154,9 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 								},
 							}, wadMounts()...),
 							"resources": map[string]any{
-								"requests": map[string]string{"cpu": "100m", "memory": "96Mi"},
-								"limits":   map[string]string{"cpu": "500m", "memory": "192Mi"},
+								"requests": map[string]string{
+									"cpu": perBot(100, botCPUMilli) + "m", "memory": perBot(96, botMemoryMi) + "Mi"},
+								"limits": map[string]string{"cpu": "500m", "memory": perBot(192, botMemoryMi) + "Mi"},
 							},
 							"startupProbe": map[string]any{
 								"httpGet":          map[string]any{"path": "/health", "port": "probe"},

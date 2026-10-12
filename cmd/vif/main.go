@@ -120,8 +120,9 @@ func main() {
 	setupDiagnostics()
 
 	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, *flagBot, *flagWatch, flagSession)
-	if sessionErr == nil && *flagHeadless && (*flagWatch || *flagBot == "" && flagSession.bots == "" && *flagReplay == "" || flagSession.serve != "") {
-		sessionErr = errors.New("-headless requires -bot or -replay and cannot combine with -watch or -serve")
+	bots := botCount(*flagBot, flagSession.bots)
+	if sessionErr == nil && *flagHeadless && (*flagWatch || bots == 0 && *flagReplay == "" || flagSession.serve != "") {
+		sessionErr = errors.New("-headless requires -bot, -bots or -replay and cannot combine with -watch or -serve")
 	}
 	if sessionErr == nil {
 		sessionErr = requestSiteSession(requested)
@@ -144,7 +145,7 @@ func main() {
 			cfg.Mode = app.ModeScript
 		}
 		_, err = app.RunScript(cfg, *flagScript)
-	case (*flagWatch || *flagHeadless) && (*flagBot != "" || flagSession.bots != ""):
+	case (*flagWatch || *flagHeadless) && bots > 0:
 		cfg := buildConfig()
 		graph := cfg.Bots[0]
 		cfg.Bots = cfg.Bots[1:]
@@ -155,7 +156,7 @@ func main() {
 		}
 		var st bot.Stats
 		if st, err = app.RunBot(cfg, graph); err == nil && !*flagWatch {
-			fmt.Printf("Bot stopped: %d ticks, %d actions\n", st.Ticks, st.Injected)
+			fmt.Printf("Bot stopped: %d ticks, %d actions, score %d\n", st.Ticks, st.Injected, st.Score)
 		}
 	case flagSession.serve != "":
 		err = app.RunServer(buildConfig())
@@ -643,16 +644,26 @@ func validateInvocation(schema, check bool, replay, script, bot string, watch bo
 	if modes > 1 {
 		return fmt.Errorf("-schema, -check, -replay, -script and -bot are mutually exclusive")
 	}
-	if watch && script == "" && bot == "" && session.bots == "" {
+	if _, err := app.BotSpecs(bot); err != nil {
+		return err
+	}
+	if err := session.validateInvocation(schema, check, replay); err != nil {
+		return err
+	}
+	if watch && script == "" && botCount(bot, session.bots) == 0 {
 		return fmt.Errorf("-watch presents a -script or -bot run and has no other subject")
 	}
 	if watch && session.serve != "" {
 		return errors.New("-serve has no terminal; use -host with -watch to watch bots")
 	}
-	if _, err := app.BotSpecs(bot); err != nil {
-		return err
-	}
-	return session.validateInvocation(schema, check, replay)
+	return nil
+}
+
+// botCount is how many bots -bot and -bots ask for together, once both are valid.
+func botCount(bot, bots string) int {
+	a, _ := app.BotSpecs(bot)
+	b, _ := app.BotSpecs(bots)
+	return len(a) + len(b)
 }
 
 // Go's flag parser has no optional string operand; preserve the next option.

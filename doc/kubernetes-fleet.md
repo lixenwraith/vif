@@ -18,7 +18,7 @@ in [`script/`](../script/README.md).
 | First-guest window | 90 s. A session nobody reaches exits 0 and is removed. |
 | Empty grace | 90 s after the last guest leaves; also the window a dropped player has to reclaim their slot. |
 | Drain | 20 s on `SIGTERM`, inside a 30 s termination grace period. A second signal exits at once. |
-| Trigger | `tool/vif-allocator`, a hardened node service, is the website-facing control-plane boundary. A caller selects roster size, log level and scenario from what it advertises in `limits`; everything else in the workload is the deployment's. `deploy/k3s/session.sh` drives it from a shell and can also render the template directly. No session pod runs between requests. |
+| Trigger | `tool/vif-allocator`, a hardened node service, is the website-facing control-plane boundary. A caller selects roster size, the session's own bots, log level and scenario from what it advertises in `limits`; everything else in the workload is the deployment's. `deploy/k3s/session.sh` drives it from a shell and can also render the template directly. No session pod runs between requests. |
 | Image | `scratch` plus the static `vif_headless` binary (about 12 MiB in the reference build), non-root, read-only root filesystem, no shell. It carries no scenarios: those come off a node volume, so what the fleet serves changes without a rebuild. |
 | Scenario | Chosen per session from the allocator's advertised list, served from a read-only node directory (`/var/db/vif/wad`) mounted `scenario/` and `image/` only. The corpus and keymap stay embedded, so a native guest running `-d` can still join. |
 | Transport | Raw framed TCP, for every participant. A WebSocket route carries the same bytes for a browser, or for a terminal whose network blocks 7777: the allocator terminates it with the repository's standard-library `pkg/websocket` and splices it to the pod (§9). Unauthenticated initially (§4). |
@@ -49,7 +49,7 @@ flowchart LR
 | Session unit | One process owns one match timeline. The world is in memory; no replacement pod inherits it. |
 | Authority | The dedicated host's Shared world is canonical; guests predict and accept corrections. |
 | Capacity | `-players` is a ceiling on guests. At capacity the health body reports `ready=false`; the process stays healthy. |
-| Allocated lifetime | `-first-join`, `-empty` and `-drain` are enforced by `internal/lifecycle` over roster observations, and published on `/health`. |
+| Allocated lifetime | `-first-join`, `-empty` and `-drain` are enforced by `internal/lifecycle` over roster observations, and published on `/health`. The session's own bots count as occupancy, so a session only they occupy runs until a drain or the Job's one-hour `activeDeadlineSeconds`. |
 | Join identity | The coordinator refuses a peer whose protocol, simulation fingerprint, capture schema, journal schema, tick interval, seed or config differs from the offer it made. The corpus is not among them: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
 | Session name | Optional. `-name` makes one address able to serve several sessions: the dialer sends it before the handshake, so a front door can route on it, and the session refuses a name that is not its own. A routing key, not a credential. Every fleet pod answers to its session ID, on every route (§9). |
 | Crossing ordering | Ordinary crossings are judged by the capture's per-source sequence fence, not by their apply tick, so a link that misses the playout lead costs freshness rather than the player's action (§5). |
@@ -74,7 +74,7 @@ it does not move an in-memory session into an unrelated pod.
 | H1 | partly done | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do has to be bounded. The two startup holes are closed: the tick-zero gate is bounded by one world install, a peer that leaves or goes silent costs the lobby rather than the session, and a confirmation is keyed to the link it arrived on. | Remaining: a handshake fuzz target for malformed, oversized, replayed and half-open cases, which `internal/network` has no equivalent of. |
 | H16 | partly done | **Automate image delivery.** Nightly CI publishes the final headless Dockerfile to GHCR under moving and commit-addressed tags; `deploy/guest/update-vif-image.sh` still provides the checked local build/import boundary. | Choose the node's registry/promotion policy, authenticate pulls without a long-lived off-node deployment credential, and move new sessions to a verified digest while existing matches finish. |
 | H4 | partly done | **Server-only and renderer-neutral builds.** `vif_headless` removes renderer and audio packages and is used by the image. Terminal-shaped key, color, cell, and image values remain in common simulation/configuration packages. | Extract renderer-neutral values for a minimally polished Android host within one month of development time; keep the simulation fingerprint shared with clients. |
-| H5 | later | **Spatial grid right-sizing.** ~30.5 MiB reserved per world at the current maximum. | Deferred until density matters; needs resize/play regression coverage. |
+| H5 | later | **Spatial grid on ceiling-sized maps.** The grid is sized to the map, so only a ceiling-sized one such as `td` (500×250) reserves about 32 MiB per world, and a guest's staging world a second. | Deferred until density matters; on `td` the grid is a minority of what a session was measured to cost. |
 
 ### What the deployment batches established
 
@@ -226,6 +226,7 @@ What the manifest asks for:
 | memory request / limit | 96 / 192 MiB | Single-guest measurement plus headroom for a staging world after an authority change. |
 | `GOMEMLIMIT` | 160 MiB | An earlier collection target than the limit, so the runtime collects instead of the kernel killing. |
 | CPU request / limit | 100m / 500m | One guest was about 0.05 core in early measurement; the ceiling is wide until a storm is measured. |
+| per bot | +32 MiB memory request, limit and `GOMEMLIMIT`; +64m CPU request | A seat at 120×40 measured about 28 MB resident and 60 ms of CPU a second (`vif_headless`, a sandbox, not the node). `-bots-max` stops at 6, where the limit meets the `LimitRange`'s 384 MiB. The quota counts the larger requests: three sessions of three bots fill its 1000m of CPU. |
 | termination grace | 30 s | Above the 20 s drain, so the process decides when the match ends. |
 
 What one session actually cost, measured on the node with one guest on `wad`
@@ -247,7 +248,8 @@ init container counts only against its own peak.
 Historical baseline worth keeping: server in lobby 12.0 MB RSS; embedded game with
 one guest 61.75 MB peak; server after a guest left 40.1 MB; headless joiner with a
 staging world 95.5 MB peak; two staggered guests 63.5 MB plateau; spatial grid about
-30.5 MiB per world. Repeated resets plateaued rather than growing, so the RSS lag
+30.5 MiB per world, which the grid now reserves only on a ceiling-sized map. Repeated
+resets plateaued rather than growing, so the RSS lag
 was runtime scavenging, not a per-match leak.
 
 ## 7. Verification
@@ -265,6 +267,7 @@ By hand, on a dev machine — see [`script/README.md`](../script/README.md):
 ./script/test.sh all          # check, lifetime, drain, identity
 ./script/test.sh serve-fleet  # the flag set the containers run
 ./script/test.sh probe        # /health and /metrics
+./script/test.sh load 2 3 60  # hosts with their own bots and a bot joiner: cost, slips, evictions
 ```
 
 Against a cluster, [§13 of the procedure](kube-docker-deploy.md#13-first-session) is
