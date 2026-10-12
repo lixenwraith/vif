@@ -100,6 +100,31 @@ disabled_systems = ["cursor","camera","energy","heat","ping","shield","boost","w
 	}
 }
 
+// TestCheckSystemsHoldsOnlySystemsClosed asserts an only_systems list must name
+// every system its members require, and passes once it does
+func TestCheckSystemsHoldsOnlySystemsClosed(t *testing.T) {
+	open := loadSystemsConfig(t, `
+[systems]
+only_systems = ["typing"]
+
+[regions.main]
+initial = "Root"
+`)
+	if err := checkSystems(open); err == nil || !strings.Contains(err.Error(), "[systems]: typing requires cursor") {
+		t.Fatalf("an only_systems list missing a requirement: %v", err)
+	}
+	closed := loadSystemsConfig(t, `
+[systems]
+only_systems = ["cursor", "typing"]
+
+[regions.main]
+initial = "Root"
+`)
+	if err := checkSystems(closed); err != nil {
+		t.Fatalf("checkSystems rejected a closed only_systems list: %v", err)
+	}
+}
+
 // TestCheckSystemsRejectsUnknownName asserts name validation still runs first,
 // and that the message names the entry it rejected
 func TestCheckSystemsRejectsUnknownName(t *testing.T) {

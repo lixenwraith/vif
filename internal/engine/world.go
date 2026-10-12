@@ -33,6 +33,10 @@ type World struct {
 	systems []systemEntry
 	sealed  atomic.Bool
 
+	// systemOn is the scenario's [systems] baseline, set once at load; nil leaves
+	// every system on. A dependent it leaves off holds no dependency on.
+	systemOn func(name string) bool
+
 	// === Update-mutex guarded ===
 	// Entity ids, component stores, positions and masks.
 	// The tick, event, input and render paths all acquire it.
@@ -279,11 +283,17 @@ func (w *World) SystemInitOrder() ([]string, error) {
 	return core.TopoSort(deps)
 }
 
-// SystemsRequiring returns the registered systems declaring name at the given
-// strength, sorted. Callers use it to refuse or report a disable request.
+// SetSystemBaseline installs the scenario's [systems] baseline before the first tick
+func (w *World) SetSystemBaseline(on func(name string) bool) { w.systemOn = on }
+
+// SystemsRequiring returns the systems the baseline leaves on that declare name at
+// the given strength, sorted. Callers use it to refuse or report a disable request.
 func (w *World) SystemsRequiring(name string, strength DependencyStrength) []string {
 	var dependents []string
 	for i := range w.systems {
+		if w.systemOn != nil && !w.systemOn(w.systems[i].sys.Name()) {
+			continue
+		}
 		for _, d := range w.systems[i].profile.Requires {
 			if d.Name == name && d.Strength == strength {
 				dependents = append(dependents, w.systems[i].sys.Name())
@@ -337,8 +347,8 @@ func (w *World) Seal() {
 	}
 }
 
-// AllowSystemDisable reports whether name may be disabled. A system declaring
-// it required refuses the request; an optional dependent is reported once.
+// AllowSystemDisable reports whether name may be disabled. A system the baseline
+// leaves on declaring it required refuses the request; an optional one is reported once.
 // Region configs are checked at load time; this covers the runtime commands and
 // FSM actions that validation cannot see.
 func (w *World) AllowSystemDisable(name string) bool {

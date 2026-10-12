@@ -122,10 +122,10 @@ func checkSystems(m *fsm.Machine[*engine.World]) error {
 		}
 	}
 
-	var globalDisabled []string
-	if sc := m.GetSystemsConfig(); sc != nil {
-		globalDisabled = sc.DisabledSystems
-		check("[systems]", globalDisabled)
+	global := m.GetSystemsConfig()
+	if global != nil {
+		check("[systems]", global.DisabledSystems)
+		check("[systems]", global.OnlySystems)
 	}
 	for _, r := range m.DeclaredRegions() {
 		cfg := m.GetRegionConfig(r)
@@ -139,7 +139,7 @@ func checkSystems(m *fsm.Machine[*engine.World]) error {
 		return fmt.Errorf("unknown system names:\n  %s", strings.Join(unknown, "\n  "))
 	}
 
-	return checkSystemDependencies(m, profiles, globalDisabled)
+	return checkSystemDependencies(m, profiles, global)
 }
 
 // checkSystemDependencies reports every enabled system whose required
@@ -147,14 +147,11 @@ func checkSystems(m *fsm.Machine[*engine.World]) error {
 // baseline alone, which is the set ApplyRegionSystemConfigs leaves behind when
 // that region spawns or resumes.
 func checkSystemDependencies(m *fsm.Machine[*engine.World], profiles []manifest.SystemProfile,
-	globalDisabled []string) error {
+	global *fsm.SystemsConfig) error {
 
 	base := make(map[string]bool, len(profiles))
 	for _, p := range profiles {
-		base[p.Name] = true
-	}
-	for _, n := range globalDisabled {
-		base[n] = false
+		base[p.Name] = global.Enabled(p.Name)
 	}
 
 	var broken []string

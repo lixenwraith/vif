@@ -38,6 +38,9 @@ func (m *Machine[T]) LoadScenarioFromMap(doc map[string]any) error {
 	if len(config.Regions) == 0 {
 		return fmt.Errorf("at least one region must be defined in [regions]")
 	}
+	if c := config.Systems; c != nil && c.OnlySystems != nil && len(c.DisabledSystems) > 0 {
+		return fmt.Errorf("[systems]: only_systems already disables every system it does not name; drop disabled_systems")
+	}
 
 	// 2. Clear existing graph
 	m.nodes = make(map[StateID]*Node[T])

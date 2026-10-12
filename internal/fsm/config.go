@@ -1,5 +1,7 @@
 package fsm
 
+import "slices"
+
 // ScenarioDoc is a scenario's top-level document: global toggles, the regions it
 // declares, and every state they resolve against
 type ScenarioDoc struct {
@@ -9,9 +11,22 @@ type ScenarioDoc struct {
 	States      map[string]*StateConfig `toml:"states"`
 }
 
-// SystemsConfig defines global system enable/disable
+// SystemsConfig is the baseline system set regions toggle on top of: everything
+// but DisabledSystems, or only OnlySystems when that list is present
 type SystemsConfig struct {
 	DisabledSystems []string `toml:"disabled_systems,omitempty"`
+	OnlySystems     []string `toml:"only_systems,omitempty"`
+}
+
+// Enabled reports whether the baseline leaves name on
+func (c *SystemsConfig) Enabled(name string) bool {
+	switch {
+	case c == nil:
+		return true
+	case c.OnlySystems != nil:
+		return slices.Contains(c.OnlySystems, name)
+	}
+	return !slices.Contains(c.DisabledSystems, name)
 }
 
 // RegionConfig defines a parallel region

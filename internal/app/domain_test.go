@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/input"
@@ -232,6 +233,35 @@ func TestAnInstalledPositionReconcilesItsRegionsSystems(t *testing.T) {
 	if !glyph() {
 		t.Fatal("the installed position left glyph as this instance had it, not as its region declares")
 	}
+}
+
+// TestOnlySystemsRunsOnlyWhatTheScenarioNames: the baseline turns off every toggled
+// system the list omits, a dependency included once nothing it keeps requires it,
+// and a region still enables on top of it. Network carries no toggle and runs.
+func TestOnlySystemsRunsOnlyWhatTheScenarioNames(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	doc := "[systems]\nonly_systems = [\"cursor\", \"typing\"]\n" +
+		"[regions.main]\ninitial = \"Main\"\nenabled_systems = [\"glyph\"]\n[states.Main]\nparent = \"Root\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "scenario.toml"), []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 80, Height: 24,
+		Resources: resource.Options{Scenario: dir}})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+	a.Settle()
+
+	on := map[string]bool{"typing": true, "glyph": true, "network": true}
+	a.World().RunSafe(func() {
+		for _, sys := range a.World().Systems() {
+			if tg, ok := sys.(engine.Toggled); ok && tg.Enabled() != on[sys.Name()] {
+				t.Errorf("%s enabled = %v, want %v", sys.Name(), tg.Enabled(), on[sys.Name()])
+			}
+		}
+	})
 }
 
 // TestBusPayloadsNameOnlySharedEntities asserts D-4 over a soak: a record that
