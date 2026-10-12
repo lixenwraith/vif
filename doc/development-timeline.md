@@ -317,7 +317,7 @@ Each line folds many commits, so dates within a section are approximate.
 - Bots carried their holder's identity, and `:player drop` removed a player with its bots.
 - A guest's bots joined and played through the guest's own link.
 - Bot graphs reacted to their own events, saw and evaded threats, landed the pointer
-  on open cells, and kept a score.
+  on open cells, and were weighed by fitness.
 - `-check` validated bot graphs.
 - Fleet sessions could request bots, closed by default, and a session Job ended
   after one hour.

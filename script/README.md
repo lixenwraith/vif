@@ -40,7 +40,7 @@ guest needs, because an authored script can only enter a session at tick zero.
 
 These run a scenario and print what happened, and are not part of `all`. Most
 assert nothing, because what they show is a design choice rather than a promise;
-`botscore` and `load` fail on what their rows name.
+`botfitness` and `load` fail on what their rows name.
 
 | Scenario | What it shows |
 |---|---|

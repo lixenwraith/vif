@@ -70,12 +70,12 @@ The allocator takes `bots`, but `bots_max` stays 0 until these hold:
 - Priority: P2
 - Affected files: `internal/bot`, `internal/asset/bot/default.toml`,
   `internal/system/nugget.go`, `script/test.sh`
-- Guide: [Bots](bots.md#scoring-and-comparing-graphs)
+- Guide: [Bots](bots.md#fitness-and-comparing-graphs)
 
-Exit: a graph outscores `default` under `./script/test.sh botscore` over seeds 1–8
+Exit: a graph beats `default` under `./script/test.sh botfitness` over seeds 1–8
 on the embedded scenario, td and kraken. Baseline, `default` over 4 seeds of 60 s:
 embedded 3493, td 1479, kraken −4800 (kraken has no text, gold or nuggets, so
-`default` scores only its defeats there). Candidates:
+`default` is weighed only on its defeats there). Candidates:
 - a `Best` utility guard, added once a graph uses it: a weight per target class,
   utility `weight*1024/(1+isqrt(dist²))` in integers, ties to the lower class;
 - threat evasion in `default` (`HasTarget threat`, `PointAt away`);
@@ -84,7 +84,7 @@ embedded 3493, td 1479, kraken −4800 (kraken has no text, gold or nuggets, so
   `pkg/navigation` route rather than the clamp.
 
 Decide whether an improved graph replaces `default`, keeping a pinned copy as the
-baseline, or ships beside it. A collected nugget cannot score: nothing pushes
+baseline, or ships beside it. A collected nugget weighs nothing: nothing pushes
 `EventNuggetCollected`; push it in `NuggetSystem.collectNugget` and drop the
 duplicate `statCollected` increment there. Threats are unweighted; weighting them
 by `profile.Contact` needs a `CombatEntityType`-to-`SpeciesType` table.
@@ -194,7 +194,7 @@ First decide how a graph declares bounded tunable numbers: a `[bot.params]` tabl
 or bounded macro parameters shared with the editor's macro metadata. A genome is
 those numbers as a bounded vector; `pkg/genetic`'s `Engine` evaluates whole
 headless runs over a matrix of scenarios and seeds, and `pkg/genetic/fitness`
-scalarises the score. A solo run depends only on its seed, so evaluation needs no
+scalarises the result. A solo run depends only on its seed, so evaluation needs no
 mesh. Decide where trained values ship. Bot genomes never enter the in-game
 genetic registry, which captures carry.
 
