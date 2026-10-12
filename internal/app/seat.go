@@ -216,7 +216,8 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 		case driver != nil:
 			st := driver.Stats()
 			a.log.Info("app", "msg", "bot left", "graph", s.graph.Name, "participant", s.id.Load(),
-				"finished", finished, "ticks", st.Ticks, "injected", st.Injected, "error", fmt.Sprint(err))
+				"finished", finished, "ticks", st.Ticks, "injected", st.Injected, "dropped", st.Dropped,
+				"score", st.Score, "state", st.State, "error", fmt.Sprint(err))
 		}
 		return
 	}

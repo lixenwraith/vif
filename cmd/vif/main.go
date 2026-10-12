@@ -155,7 +155,7 @@ func main() {
 		}
 		var st bot.Stats
 		if st, err = app.RunBot(cfg, graph); err == nil && !*flagWatch {
-			fmt.Printf("Bot stopped: %d ticks, %d actions\n", st.Ticks, st.Injected)
+			fmt.Printf("Bot stopped: %d ticks, %d actions, score %d\n", st.Ticks, st.Injected, st.Score)
 		}
 	case flagSession.serve != "":
 		err = app.RunServer(buildConfig())

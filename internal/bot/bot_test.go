@@ -339,3 +339,29 @@ on_update = [{ action = "Intent", payload = { name = "motion_left" }, guard = "I
 		t.Fatalf("released %d and dropped %d, want some released and none dropped", st.Injected, st.Dropped)
 	}
 }
+
+// TestABotScoresOnlyItsOwnEvents: a bot is scored on what its own steps dispatched
+// for its own cursor, a predicted death only once confirmed.
+func TestABotScoresOnlyItsOwnEvents(t *testing.T) {
+	w, ctx := soloWorld(0, 0)
+	d, rec := botFor(t, ctx, "[regions.play]\ninitial = \"A\"\n[states.A]\n", 0)
+	own := w.Resources.Player.Entity
+	killed := &event.SpeciesKilledPayload{KillerEntity: own}
+	rec.dispatch = []event.GameEvent{
+		{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: own}},
+		{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: own + 1}},
+		{Type: event.EventSpeciesKilled, Payload: killed, Phase: event.PhasePredicted},
+		{Type: event.EventSpeciesKillConfirmed, Payload: killed},
+		{Type: event.EventCursorDefeatState, Payload: &event.CursorDefeatStatePayload{Entity: own}},
+		{Type: event.EventCursorDefeatState, Payload: &event.CursorDefeatStatePayload{Entity: own, Defeated: true}},
+	}
+	for range rec.dispatch {
+		if _, err := d.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec.tap(event.GameEvent{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: own}})
+	if got, want := d.Stats().Score, int64(1+5-100); got != want {
+		t.Fatalf("scored %d, want %d", got, want)
+	}
+}
