@@ -611,7 +611,7 @@ func (s *EyeSystem) despawnEye(headerEntity core.Entity) {
 		return
 	}
 
-	// Latch: destruction is deferred to the event loop; drop the tag so a
+	// Latch: destruction waits for the tick's closing settle; drop the tag so a
 	// re-entrant Update cannot emit SpeciesKilled twice.
 	s.world.Components.Eye.RemoveEntity(headerEntity)
 

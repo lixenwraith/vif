@@ -111,7 +111,7 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload, domain co
 	})
 	// One flight time for every spirit so they arrive together; Lerp handles
 	// distance. The lifetime holds one tick past arrival so the arrival frame draws
-	// before the death batch settles between ticks.
+	// before the tick that expires it settles the death batch.
 	armTimer(s.world, entity, component.TimerLifetime, parameter.SpiritAnimationDuration+parameter.GameUpdateInterval)
 }
 

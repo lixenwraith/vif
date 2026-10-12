@@ -96,7 +96,7 @@ func TestChainedEnergyDrainZapsBetweenOwnerAndTarget(t *testing.T) {
 		}
 		tick.open()
 		if w.Components.Lightning.CountEntities() != 0 {
-			t.Fatal("an expired zap outlived the next tick's pre-dispatch")
+			t.Fatal("an expired zap outlived the settle that closes its tick")
 		}
 		return
 	}

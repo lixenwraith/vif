@@ -116,9 +116,9 @@ func runScript(t *testing.T, a *App) int {
 	if !a.Context().TimeCtl.IsPaused() {
 		t.Fatal("command mode did not pause: the script no longer covers paused-tick replay")
 	}
-	// Two ticks: EnergySystem.Update pushes EventShieldActivate on the first,
-	// ShieldSystem applies it on the second
-	r.step(2, intentCommandBody("energy 500")...)
+	// EnergySystem.Update pushes EventShieldActivate and the tick's closing settle
+	// applies it
+	r.step(1, intentCommandBody("energy 500")...)
 
 	r.step(1, intentModeSwitch(input.ModeTargetVisual))
 	player := a.World().Resources.Player.Entity

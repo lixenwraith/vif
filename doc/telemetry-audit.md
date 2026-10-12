@@ -242,6 +242,7 @@ the effect's current name; death API unification removed the two obsolete
 | `energy.missing_energy_rejects` (int) | Resolved cursor requests rejected because the cursor lacked an energy component. |
 | `energy.penalty_rejects` (int) | Energy penalties rejected by boost or ember protection. |
 | `event.invalid` (int) | Dispatched events whose type was outside the declared event-type range. |
+| `event.settle_close` (int) | Nonempty event settle passes attributed to source label `close`. |
 | `event.settle_exhausted` (int) | Settle operations that reached the pass cap with events still queued. |
 | `event.settle_input` (int) | Nonempty event settle passes attributed to source label `input`. |
 | `event.settle_loop` (int) | Nonempty event settle passes attributed to source label `loop`. |
@@ -249,6 +250,7 @@ the effect's current name; death API unification removed the two obsolete
 | `event.settle_pre` (int) | Nonempty event settle passes attributed to source label `pre`. |
 | `event.settle_reset` (int) | Nonempty event settle passes attributed to source label `reset`. |
 | `event.settle_settle` (int) | Nonempty event settle passes attributed to source label `settle`. |
+| `event.settle_wire` (int) | Nonempty event settle passes attributed to source label `wire`. |
 | `explosion.buf_centers_hwm` (int) | High-water live length of the reusable centers buffer/state collection. |
 | `explosion.buf_composite_index_hwm` (int) | High-water live length of the reusable composite index buffer/state collection. |
 | `explosion.buf_composites_hwm` (int) | High-water live length of the reusable composites buffer/state collection. |

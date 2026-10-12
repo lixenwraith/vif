@@ -84,6 +84,7 @@ type World struct {
 	// path and released from an install that already holds the update mutex.
 	predictionMu            sync.Mutex
 	predicted               []predictedDeath
+	overdue                 []event.SpeciesKilledPayload // evicted past the bound, paid at tick close
 	session                 atomic.Pointer[SessionState] // latched; see LatchSession
 	followJournal           atomic.Bool                  // a replay: session state and settlements are records
 	statPredictionPending   *atomic.Int64

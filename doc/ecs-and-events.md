@@ -262,17 +262,16 @@ must not retain a pooled payload after its handler returns.
 `TimerComponent` gives an entity three countdowns, indexed by `TimerSlot`: a
 lifetime, a deadline and a cooldown. `TimerSystem` runs right after
 `NetworkSystem`, before any owner, and ages every armed slot by the tick. An
-expired lifetime ends its entity through a silent death batch that settles
-before the next tick's systems. A capture taken before that settle carries the
-expired slot without its batch, so the install queues the batch again and the
-entity ends in the same settle as on the sender. The timer also collects expired
-lifetimes by state on every pass, so a lost batch is retried; a death-protected
-entity's lifetime just stops. A deadline or cooldown stays
-expired until its owner acts and re-arms or stops it. Owners and renderers read
-`Progress` and `Elapsed` instead of keeping their own clock.
+expired lifetime ends its entity through a silent death batch that settles as
+the tick closes. The timer collects expired lifetimes by state on every pass, so
+a batch that never settled is retried; a death-protected entity's lifetime just
+stops. A deadline or cooldown stays expired until its owner acts and re-arms or
+stops it. Owners and renderers read `Progress` and `Elapsed` instead of keeping
+their own clock.
 
-A slot armed in an event handler counts its arming tick, because the pass runs
-after dispatch; one armed in an owner's `Update` starts counting on the next
+A slot armed by a handler settled before the systems (pre or post) counts its
+arming tick, because the pass runs after that dispatch; one armed in an owner's
+`Update`, or by a handler the closing settle runs, starts counting on the next
 tick. Systems whose entities end or act on a slot declare `Requires: timer`.
 Cursor countdowns stay in their owner-authored stores (D-13), and species phase
 timers stay with their state machines (see [Machine design](machine-design.md)).
@@ -314,9 +313,11 @@ Each event is offered to the HFSM before registered system handlers. This makes
 state transitions and captures part of the same deterministic event-settling
 phase as gameplay reactions. Immediate settling paths drain events in rounds,
 up to 16 rounds, so reactions can publish follow-up work without unbounded
-recursion. These paths run before a tick, after the FSM phase, and after
-input/reset work—not after the systems phase itself. The independent 4 ms event
-loop settles system-emitted and other asynchronous requests between 50 ms game
+recursion. These paths run before a tick, after the FSM phase, after the systems
+phase and after input/reset work. The one after the systems closes the tick, so
+an outcome a system applies through a queued event is part of the tick that
+decided it on every reader. The independent 4 ms event loop settles what was
+pushed outside a tick, such as the session layer's records, between 50 ms game
 ticks.
 
 ### Replay capture

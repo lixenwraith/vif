@@ -110,13 +110,13 @@ flowchart TD
 ```
 
 Queued events are not simply processed once per frame. The scheduler performs
-bounded settling passes before the FSM update and again after it. Input can
-request immediate settling, and a separate event loop handles inter-tick work.
-This lets pre-tick, FSM, input, and reset cascades converge before their next
-dependent phase. Events emitted by systems are normally picked up by the
-inter-tick loop before the next frame; the next tick's initial settling is the
-fallback. An iteration cap prevents an accidental event cycle from
-monopolizing a thread.
+bounded settling passes before the FSM update, after it, and after the systems.
+Input can request immediate settling, and a separate event loop handles
+inter-tick work. This lets pre-tick, FSM, system, input, and reset cascades
+converge before their next dependent phase. The pass after the systems closes
+the tick, so nothing its systems produced is still queued when its crossings are
+sent, its world is captured or its digest is taken. An iteration cap prevents an
+accidental event cycle from monopolizing a thread.
 
 An optional replay journal copies every non-system-origin event synchronously
 at queue push. It uses a dedicated JSONL sink outside diagnostic level/scope

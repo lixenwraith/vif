@@ -31,7 +31,8 @@ const (
 	LightningZapDuration = 2 * GameUpdateInterval
 
 	// LightningTrackedLease retires a tracked bolt its owner stopped renewing; a
-	// renewal raised in one tick is dispatched in the next, so it spans several
+	// renewal settles as the tick that raised it closes, after that tick's timer
+	// pass, so the lease must outlast one pass
 	LightningTrackedLease = 4 * GameUpdateInterval
 )
 

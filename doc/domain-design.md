@@ -394,9 +394,8 @@ Snapshot schema 5 carries the complete simulation checkpoint plus one applied
 crossing fence per participant. Delayed FSM work names its deterministic compiled
 action identity, so transition-delayed actions restore independently of their
 queue position. An install preserves receiver-owned cursor values, rebuilds
-roster/control binding, derives spatial/navigation caches, re-queues the death
-batch of every expired Shared lifetime, and restores status only after carriers
-have loaded.
+roster/control binding, derives spatial/navigation caches, and restores status
+only after carriers have loaded.
 
 Persistent Player-domain effects controlled by Shared FSM state are re-derived by
 the install itself. Only immediate, unguarded `ClassLocal` lifecycle events marked

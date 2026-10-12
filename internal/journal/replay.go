@@ -342,7 +342,7 @@ func (d *ReplayDriver) RunAll() error {
 }
 
 // settleTo settles once when the recorded run had settled past where the replay
-// stands: what it held then, a fresh run's boot or a tick's leftovers among it,
+// stands: what it held then, a fresh run's boot or a breakpoint's pause among it,
 // was no record, and only the boundary says the settle happened.
 func (d *ReplayDriver) settleTo(boundary uint64) {
 	if d.target.Position().Boundary < boundary {
