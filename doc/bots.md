@@ -144,8 +144,10 @@ counted. Allowance left idle builds up to one second's worth.
 run. `PointAt` aims at the nearest target of its class, clamped to the cells the
 view shows, and for `glyph` at the left edge of that text run. If the cursor may
 not enter the cell, it lands on the nearest shown cell it may enter, and does
-nothing when none is shown. `away` aims at the target's mirror through the cursor;
-it refuses `fire` and `random`, and does nothing while the target is on the cursor.
+nothing when none is shown. `away` aims at the target's mirror through the cursor,
+or, when the view's edge pins the cursor in line with it, at the shown open cell
+farthest from it; it refuses `fire` and `random`, and does nothing while the target
+is on the cursor or no cell gains ground.
 
 ### Guards
 
