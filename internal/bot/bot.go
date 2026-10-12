@@ -140,15 +140,15 @@ type Stats struct {
 	Ticks    uint64
 	Injected uint64
 	Dropped  uint64
-	Score    int64
+	Fitness  int64
 	State    string // each region's active state, region:state, space separated
 }
 
-// scoring is indexed by row: an event the bot's own step dispatched, the payload
+// fitness is indexed by row: an event the bot's own step dispatched, the payload
 // field that must name its cursor (empty for any), a bool payload field that must
 // hold (empty for none), and the weight. A correct character is the boost it earns
-// and an error the boost it ends; a predicted death scores once confirmed.
-var scoring = [...]struct {
+// and an error the boost it ends; a predicted death counts once confirmed.
+var fitness = [...]struct {
 	event  event.EventType
 	owner  string
 	when   string
@@ -176,11 +176,11 @@ type Driver struct {
 	stats   Stats
 
 	// seen is what the instance dispatched during the last step that the graph
-	// reacts to, in order, and score what all it dispatched was worth; both are
+	// reacts to, in order, and fitness what all it dispatched was worth; both are
 	// written inside dispatch and read under the world lock. observing is set only
 	// while the driver itself plays.
 	seen      []event.GameEvent
-	score     int64
+	fitness   int64
 	observing atomic.Bool
 }
 
@@ -199,7 +199,7 @@ func NewDriver(inst Instance, ctx *engine.GameContext, g *Graph, seed uint64, pa
 	return d, nil
 }
 
-// observe scores an event and keeps a copy of one the graph reacts to, as dispatch
+// observe weighs an event and keeps a copy of one the graph reacts to, as dispatch
 // recycles a pooled payload; what an operator drives while the graph is suspended
 // is not the bot's.
 func (d *Driver) observe(ev event.GameEvent) {
@@ -207,10 +207,10 @@ func (d *Driver) observe(ev event.GameEvent) {
 		return
 	}
 	if ev.Phase != event.PhasePredicted {
-		for _, row := range scoring {
+		for _, row := range fitness {
 			if row.event == ev.Type && (row.owner == "" || d.mind.owns(ev.Payload, row.owner)) &&
 				(row.when == "" || payloadTrue(ev.Payload, row.when)) {
-				d.score += row.weight
+				d.fitness += row.weight
 			}
 		}
 	}
@@ -282,7 +282,7 @@ func (d *Driver) Stats() Stats {
 	st.Dropped = d.queue.dropped
 	states := make([]string, 0, len(d.regions))
 	d.ctx.World.RunSafe(func() {
-		st.Score = d.score
+		st.Fitness = d.fitness
 		for _, name := range d.regions {
 			if r := d.machine.RegionTelemetry(name); r.Active {
 				states = append(states, name+":"+r.State)

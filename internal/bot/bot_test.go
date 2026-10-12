@@ -340,9 +340,9 @@ on_update = [{ action = "Intent", payload = { name = "motion_left" }, guard = "I
 	}
 }
 
-// TestABotScoresOnlyItsOwnEvents: a bot is scored on what its own steps dispatched
+// TestABotIsWeighedOnlyOnItsOwnEvents: a bot is weighed on what its own steps dispatched
 // for its own cursor, a predicted death only once confirmed.
-func TestABotScoresOnlyItsOwnEvents(t *testing.T) {
+func TestABotIsWeighedOnlyOnItsOwnEvents(t *testing.T) {
 	w, ctx := soloWorld(0, 0)
 	d, rec := botFor(t, ctx, "[regions.play]\ninitial = \"A\"\n[states.A]\n", 0)
 	own := w.Resources.Player.Entity
@@ -361,7 +361,7 @@ func TestABotScoresOnlyItsOwnEvents(t *testing.T) {
 		}
 	}
 	rec.tap(event.GameEvent{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: own}})
-	if got, want := d.Stats().Score, int64(1+5-100); got != want {
-		t.Fatalf("scored %d, want %d", got, want)
+	if got, want := d.Stats().Fitness, int64(1+5-100); got != want {
+		t.Fatalf("fitness %d, want %d", got, want)
 	}
 }
