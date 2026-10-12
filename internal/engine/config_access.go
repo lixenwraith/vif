@@ -99,8 +99,15 @@ func ConfigBoolAccessor(field string) (func(*World) bool, bool) {
 }
 
 // PrivateConfigIntAccessor is ConfigIntAccessor for a machine no other instance
-// runs, such as a bot's graph: its own terminal's fields are what it means to read.
+// runs, such as a bot's graph: its own terminal's fields are what it means to read,
+// so its viewport is the area it sees, never the extent a map script draws on.
 func PrivateConfigIntAccessor(field string) (func(*World) int64, bool) {
+	switch field {
+	case "viewport_width":
+		return func(w *World) int64 { return int64(w.Resources.Config.ViewportWidth) }, true
+	case "viewport_height":
+		return func(w *World) int64 { return int64(w.Resources.Config.ViewportHeight) }, true
+	}
 	fn, ok := configIntAccessors[field]
 	return fn, ok
 }
