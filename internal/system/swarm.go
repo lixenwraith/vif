@@ -196,11 +196,11 @@ func (s *SwarmSystem) Update() {
 			continue
 		}
 
-		// Lifetime check → despawn the whole composite; a lifetime ending the header
+		// Lifetime check → end the whole composite; a lifetime ending the header
 		// alone would leave its members behind
 		if timer, ok := s.world.Components.Timer.GetPtr(headerEntity); ok && timer.Expired(component.TimerDeadline) {
 			s.lifecycle.killedLifecycle.Add(1)
-			s.despawnSwarm(headerEntity)
+			s.expireSwarm(headerEntity)
 			continue
 		}
 
@@ -774,6 +774,20 @@ func (s *SwarmSystem) syncMemberPositions(headerEntity core.Entity, headerX, hea
 
 		s.world.Positions.SetPosition(member.Entity, component.PositionComponent{X: memberX, Y: memberY})
 	}
+}
+
+// expireSwarm tags the header and its members for DeathSystem later in this
+// tick. A queued despawn would settle after the tick, so a capture read before
+// that settle would let a receiver run the swarm and count its end again.
+func (s *SwarmSystem) expireSwarm(headerEntity core.Entity) {
+	if header, ok := s.world.Components.Header.GetPtr(headerEntity); ok {
+		for _, m := range header.MemberEntries {
+			if m.Entity != 0 {
+				s.world.Components.Death.SetComponent(m.Entity, component.DeathComponent{})
+			}
+		}
+	}
+	s.world.Components.Death.SetComponent(headerEntity, component.DeathComponent{})
 }
 
 // despawnSwarm delegates destruction to CompositeSystem.

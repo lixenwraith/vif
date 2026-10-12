@@ -181,24 +181,32 @@ func TestSwarmLeavesLockWhenChargeCannotResolve(t *testing.T) {
 	}
 }
 
-// TestSwarmLifetimeDespawnsTheWholeComposite: an expired lifetime ends the swarm
-// through the composite, as the charge limit does, so its members go with the
-// header; a lifetime ending the header alone left them behind. A stunned swarm
-// still expires.
-func TestSwarmLifetimeDespawnsTheWholeComposite(t *testing.T) {
+// TestSwarmLifetimeEndsTheWholeCompositeInItsTick: an expired lifetime ends the
+// header and its members, where ending the header alone left them behind, and
+// ends them before the tick closes, so no capture holds a swarm already counted
+// as expired. A stunned swarm still expires.
+func TestSwarmLifetimeEndsTheWholeCompositeInItsTick(t *testing.T) {
 	w, s, header := newStalledSwarm(t)
 	combat, _ := w.Components.Combat.GetPtr(header)
 	combat.Status[component.StatusStun].Remaining = time.Second
-	timers := NewTimerSystem(w)
+	timers, deaths := NewTimerSystem(w), NewDeathSystem(w)
 	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
 	armTimer(w, header, component.TimerDeadline, parameter.GameUpdateInterval)
+	composite := []core.Entity{header}
+	h, _ := w.Components.Header.GetPtr(header)
+	for range 2 {
+		m := w.CreateEntity(core.DomainShared)
+		w.Components.Member.SetComponent(m, component.MemberComponent{HeaderEntity: header})
+		h.MemberEntries = append(h.MemberEntries, component.MemberEntry{Entity: m})
+		composite = append(composite, m)
+	}
 
 	timers.Update()
 	s.Update()
-	for _, ev := range w.Resources.Event.Queue.Consume() {
-		if p, ok := ev.Payload.(*event.CompositeDestroyRequestPayload); ok && p.HeaderEntity == header {
-			return
+	deaths.Update()
+	for _, e := range composite {
+		if _, alive := w.GetComponentMask(e); alive {
+			t.Fatalf("entity %d of an expired swarm outlived its tick", e)
 		}
 	}
-	t.Fatal("an expired swarm lifetime did not despawn its composite")
 }
