@@ -138,8 +138,11 @@ nolog: generate $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -tags "novlog $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # wasm selects vlog/stub.go and the audio-free system manifest automatically.
+# wasm_exec.js is the loader of the Go that built the binary, so it is copied
+# from that toolchain on every build rather than kept as it was committed.
 wasm: generate $(WEB_DIR)
 	GOOS=js GOARCH=wasm $(GO) build $(GO_BUILDFLAGS) -tags "vif_noaudio $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
+	install -m 0644 "$$($(GO) env GOROOT)/lib/wasm/wasm_exec.js" $(WEB_DIR)/
 
 # windows is experimental and untested
 windows: generate $(BIN_DIR)

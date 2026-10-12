@@ -266,8 +266,19 @@ Go's browser support already accepts an argument vector through `Go.argv` in
 
 `web/` is the launcher, and it is copied to a deployment as it stands: the same
 page, the same script, the same vendor tree at `/vendor/xterm-5.5/`, the same
-`vif.wasm` the Makefile writes. A deployment that edits any of them has
-forked the launcher, and the fork is only visible the next time one side changes.
+`vif.wasm` and `wasm_exec.js` the Makefile writes, from one Go. A deployment that
+edits any of them has forked the launcher, and the fork is only visible the next
+time one side changes.
+
+A deployment that publishes the files under other names, as content-hashed ones
+for long caching, names them on the `terminal.js` script element instead of
+editing a script: `data-wasm` for `vif.wasm`, `data-worker` for `worker.js` and
+`data-exec` for `wasm_exec.js`. Each one unnamed is the file beside the page.
+
+```html
+<script src="/vif/wasm/terminal.4f1c….js" data-wasm="/vif/vif.9a2e….wasm"
+        data-worker="/vif/wasm/worker.07bd….js" data-exec="/js/wasm_exec.0c94….js"></script>
+```
 
 ```html
 <script src="vif-config.js"></script>

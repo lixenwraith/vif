@@ -332,7 +332,9 @@ fourth keys the per-player budgets: `X-Real-IP` overwritten with
 page's `connect-src 'self'` is what permits the same-origin socket.
 
 The launcher is [`web/`](../web), copied to the site as it stands together with the
-`vif.wasm` that `make wasm` writes; editing a path in it forks the launcher.
+`vif.wasm` and `wasm_exec.js` that `make wasm` writes; editing a path in it forks
+the launcher. A site that renames the files names them on the script element
+([multi-platform §6](multi-platform.md#6-browser-launch-arguments)).
 
 ## 13. First session
 
