@@ -26,7 +26,7 @@ vif -serve :7777 -size 120x40 -bot 2  # dedicated host with two bots and room fo
 | `-bot [N[:graph]\|graph]` | Add N bots playing graph. N is 0..16 and 0 adds none; omitted operands mean `1:default`. |
 | `-bots [N[:graph]\|graph]` | The same grammar; requests from both flags add together. |
 | `-watch` | Show the first bot on this terminal in place of a player; any further bots are seated beside it. Not with `-serve`. |
-| `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, score S`. Not with `-watch` or `-serve`. |
+| `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`. Not with `-watch` or `-serve`. |
 | `-speed <rate>` | A watched or headless bot's pace: `1/8`..`8`, or `max` for no pacing. A watched bot defaults to `1`; a solo headless bot runs flat out unless set. |
 | `-size <WxH>` | A headless bot's view, default 120x40; a watched bot takes the terminal's. Seats always take 120x40. With `-serve` it sizes the map, which otherwise the first joiner sets. |
 | `-seed <n>` | Root seed. A solo bot run depends only on it and the configuration. |
@@ -199,7 +199,7 @@ over the bot's own machine, status guards over the bot's own registry (bare keys
 such as `heat.current` are its own slot, `player.<n>.*` any slot), and config
 guards over its own view. Actions that write the world are refused at load:
 `EmitEvent`, `EnableSystem`, `DisableSystem`, `ApplyGlobalSystemConfig`,
-`ApplyRegionSystemConfigs`, `SetStatusInt`, `ResetStatusInt`.
+`ApplyRegionSystemConfigs`.
 
 ### Timing and randomness
 
@@ -250,11 +250,12 @@ Run `vif -check` after editing: it prints `bot ok: <path>` for each graph that
 loads and fails naming each that does not. A graph outside every root is checked
 by putting it under `<dir>/bot/` and running `vif -check -config-dir <dir>`.
 
-## Scoring and comparing graphs
+## Fitness and comparing graphs
 
-A bot scores the events its own steps dispatched:
+A bot's fitness weighs the events its own steps dispatched. It measures the graph;
+players have no score.
 
-| Event | Score |
+| Event | Weight |
 |---|---|
 | a correctly typed character (`EventBoostReward`) | +1 |
 | a typing error (`EventBoostDeactivate`) | -1 |
@@ -262,12 +263,12 @@ A bot scores the events its own steps dispatched:
 | a gold sequence it completed (`EventGoldCompleted`) | +25 |
 | its cursor defeated (`EventCursorDefeatState`) | -100 |
 
-The score is in the `-headless` summary, the `bot stopped` log record and a seat's
+Fitness is in the `-headless` summary, the `bot stopped` log record and a seat's
 `bot left` record. From a checkout with `bin/vif` built,
-`./script/test.sh botscore [graph-file] [seeds] [secs]` plays `default` headless
+`./script/test.sh botfitness [graph-file] [seeds] [secs]` plays `default` headless
 and flat out at 120x40 for `secs` (60) over seeds 1..`seeds` (4) on the embedded
 scenario, `td` and `kraken`, and prints each scenario's sum. Given a graph file, it
-fails unless that graph outscores `default` on every scenario; with none, the sums
+fails unless that graph beats `default` on every scenario; with none, the sums
 are the baseline to beat. It appends a `stop` region (states `StopWait` and
 `StopQuit`), so a graph cannot use those names.
 
