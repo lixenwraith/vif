@@ -147,7 +147,7 @@ var Systems = []SystemDef{
 		Requires: []string{"composite", "timer"}, Optional: []string{"nugget", "energy", "splash"}}, // contested: the composite sequence is shared, the reward owner-authored
 
 	// --- Spawning / Materialize ---
-	{Name: "materialize", Constructor: "NewMaterializeSystem", Domain: "dual", Requires: []string{"timer"}}, // stamped from the requester; the spawn gate is a dependency root (D-7)
+	{Name: "materialize", Constructor: "NewMaterializeSystem", Domain: "dual", Requires: []string{"timer"}}, // stamped from the requester (D-7); every spawn passes this gate, timed by its beam deadline
 	{Name: "fuse", Constructor: "NewFuseSystem", Domain: "player", Requires: []string{"drain", "materialize", "spirit"},
 		Optional: []string{"quasar", "swarm"}}, // player stream crosses through the spawn request (D-3)
 	{Name: "spirit", Constructor: "NewSpiritSystem", Domain: "dual", Requires: []string{"timer"}}, // creates in the requesting domain, currently from the player-domain fuse (D-7)
