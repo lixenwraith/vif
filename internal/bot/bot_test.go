@@ -320,3 +320,22 @@ on_update = [{ action = "PointAt", payload = { target = "threat", away = true } 
 		}
 	}
 }
+
+// TestAGraphWaitingOnIdleNeverDrops: Intent queues whatever the rate, so a graph
+// that waits for its queue to empty is one that loses nothing.
+func TestAGraphWaitingOnIdleNeverDrops(t *testing.T) {
+	_, ctx := soloWorld(0, 0)
+	d, _ := botFor(t, ctx, `
+[bot]
+actions_per_second = 1
+
+[regions.play]
+initial = "A"
+
+[states.A]
+on_update = [{ action = "Intent", payload = { name = "motion_left" }, guard = "Idle" }]
+`, 400)
+	if st := d.Stats(); st.Injected == 0 || st.Dropped != 0 {
+		t.Fatalf("released %d and dropped %d, want some released and none dropped", st.Injected, st.Dropped)
+	}
+}

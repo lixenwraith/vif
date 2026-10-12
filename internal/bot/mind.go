@@ -399,6 +399,10 @@ func register(m *fsm.Machine[*mind]) {
 			return m.rng.Intn(100) < percent
 		}, nil
 	})
+	// Idle lets a graph wait for what it queued instead of overflowing the queue
+	guard("Idle", nil, func(map[string]any) (fsm.GuardFunc[*mind], error) {
+		return func(m *mind, _ *fsm.RegionState, _ any) bool { return m.queue.n == 0 }, nil
+	})
 	guard("Own", []string{"field"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
 		field, _ := args["field"].(string)
 		if field == "" {
