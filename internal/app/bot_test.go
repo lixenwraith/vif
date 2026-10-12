@@ -293,8 +293,8 @@ func TestAnAuthorityPausesOnlyWhileItsOtherParticipantsAreItsBots(t *testing.T) 
 	}
 }
 
-// TestAGuestsBotsLeaveWithIt: a guest's bots dial the session it joined and go when
-// it does, while the host's own bots stay.
+// TestAGuestsBotsLeaveWithIt: a guest's bots join through it and go when it does,
+// while the host's own bots stay.
 func TestAGuestsBotsLeaveWithIt(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)

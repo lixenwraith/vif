@@ -15,7 +15,6 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// RosterEntry is one coordinator-assigned participant and roster slot.
 // RosterEntry is one identity the coordinator has admitted, and the cursor slot it
 // drives. NoPlayerSlot means it drives none, which is what a dedicated coordinator
 // holds: in the roster, and not one of the session's participants.
