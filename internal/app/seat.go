@@ -108,8 +108,11 @@ func (a *App) addSeatLocked(spec string) error {
 	return nil
 }
 
-// A successor admits local seats on its existing transport; its peer listener
-// only accepts already-rostered identities. Caller holds updateMutex.
+// seatConfigLocked is how a new seat reaches this run's session: a still-guest
+// relays it on its own link, a run in no session first hosts one on loopback, and
+// an authority is dialled on loopback, a successor on an admission listener of its
+// own because its peer listener accepts only already-rostered identities.
+// Caller holds updateMutex.
 func (a *App) seatConfigLocked() (Config, error) {
 	cfg := Config{Mode: ModeHeadless, Resources: a.cfg.Resources, Width: BotWidth, Height: BotHeight,
 		NoAdvertise: true, StatTicks: -1, RecTicks: -1}
