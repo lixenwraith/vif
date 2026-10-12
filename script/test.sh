@@ -105,6 +105,16 @@ pty_bg() {
 	PTY_PID=$!
 }
 
+# stop prints a region that quits a bot graph after $1 ms of game time, appended to
+# a graph so a run ends on its own. botstat reads one field of the "bot stopped"
+# record a graph that quit left in log $1.
+stop() {
+	printf '\n[regions.stop]\ninitial = "StopWait"\n\n[states.StopWait]\n'
+	printf 'transitions = [{ trigger = "Tick", target = "StopQuit", guard = "StateTimeExceeds", guard_args = { ms = %s } }]\n' "$1"
+	printf '\n[states.StopQuit]\non_enter = [{ action = "Intent", payload = { name = "quit" } }]\n'
+}
+botstat() { sed -n "s/.*\"msg\":\"bot stopped\",.*\"quit\":true.*\"$2\":\(-*[0-9]*\).*/\1/p" "$1"; }
+
 # Every line here has to succeed: under `set -e` a failing command in an EXIT trap
 # becomes the script's exit status, and a process that already ended is the normal
 # case rather than an error.
@@ -136,6 +146,9 @@ Observed (runs a scenario and prints what happened; asserts nothing)
   host-loss [n]     scripted host + n scripted guests, then kill the host and
                     report what each guest concluded  (AUTHORITY=migrate|host)
   vacant            watch a dedicated host park when its last guest leaves
+  botscore [graph] [seeds] [secs]
+                    sum default's score per scenario over seeds 1..N (4) of secs
+                    (60) each; given a graph file, fail unless it beats default
 
 Automated (assert, and used by `all`)
   check             validate every shipped resource tree
@@ -310,6 +323,59 @@ vacant)
 	note "tick after 3s parked: $first -> $second"
 	;;
 
+botscore)
+	# A graph's score is summed per scenario over a fixed seed set, flat out at one
+	# size. blank is left out: it disables glyph, nugget and gold, so nothing there
+	# separates two graphs. A graph given is also measured against default.
+	need_bin
+	graph=${2:-}
+	seeds=${3:-4}
+	secs=${4:-60}
+	dir=$(mktemp -d)
+	{ cat internal/asset/bot/default.toml; stop $((secs * 1000)); } >"$dir/default.toml"
+	if [ -n "$graph" ]; then
+		[ -f "$graph" ] || fail "no graph file $graph"
+		{ cat "$graph"; stop $((secs * 1000)); } >"$dir/graph.toml"
+	fi
+	# score plays one graph on one scenario and seed and prints its score
+	score() {
+		# shellcheck disable=SC2086 # $2 is a flag list
+		"$BIN" -headless -bot "$1" $2 -seed "$3" -speed max -size 120x40 -log-stdout -lv info \
+			>"$dir/run.log" 2>&1 || fail "$1 did not end cleanly on $2 seed $3: $dir/run.log"
+		v=$(botstat "$dir/run.log" score)
+		[ -n "$v" ] || fail "$1 left no score on $2 seed $3: $dir/run.log"
+		echo "$v"
+	}
+	lost=
+	for scenario in embedded td kraken; do
+		case $scenario in
+		embedded) flags=-d ;;
+		*) flags="-config-dir wad -s $scenario" ;;
+		esac
+		note "$scenario, $seeds seeds of ${secs}s"
+		printf '%-6s %10s %10s\n' seed default "${graph:+$(basename "$graph" .toml)}"
+		base=0 mine=0 s=1
+		while [ "$s" -le "$seeds" ]; do
+			b=$(score "$dir/default.toml" "$flags" "$s") || exit 1
+			m=
+			if [ -n "$graph" ]; then
+				m=$(score "$dir/graph.toml" "$flags" "$s") || exit 1
+				mine=$((mine + m))
+			fi
+			base=$((base + b))
+			printf '%-6s %10s %10s\n' "$s" "$b" "$m"
+			s=$((s + 1))
+		done
+		printf '%-6s %10s %10s\n' sum "$base" "${graph:+$mine}"
+		if [ -n "$graph" ] && [ "$mine" -le "$base" ]; then lost="$lost $scenario"; fi
+	done
+	rm -rf "$dir"
+	if [ -n "$graph" ]; then
+		[ -z "$lost" ] || fail "$graph did not outscore default on:$lost"
+		pass "$graph outscored default on every scenario"
+	fi
+	;;
+
 check)
 	need_bin
 	for tree in "-d" "-config-dir wad" "-config-dir wad -s td"; do
@@ -368,12 +434,6 @@ bot)
 	# joins a dedicated host with two bots of its own, and a host seats its own.
 	need_bin
 	dir=$(mktemp -d)
-	stop() {
-		printf '\n[regions.stop]\ninitial = "StopWait"\n\n[states.StopWait]\n'
-		printf 'transitions = [{ trigger = "Tick", target = "StopQuit", guard = "StateTimeExceeds", guard_args = { ms = %s } }]\n' "$1"
-		printf '\n[states.StopQuit]\non_enter = [{ action = "Intent", payload = { name = "quit" } }]\n'
-	}
-	botstat() { sed -n "s/.*\"msg\":\"bot stopped\",.*\"quit\":true.*\"$2\":\([0-9]*\).*/\1/p" "$1"; }
 	for graph in internal/asset/bot/*.toml; do
 		name=$(basename "$graph" .toml)
 		{ cat "$graph"; stop 60000; } >"$dir/$name.toml"

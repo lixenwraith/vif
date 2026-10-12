@@ -47,6 +47,7 @@ they show is a design choice rather than a promise.
 | `guests <n> [addr]` | n scripted guests against one address, for a roster wider than the terminals to hand |
 | `host-loss [n]` | host + n guests, then the host goes; prints what each guest concluded. `AUTHORITY=migrate` (default) or `AUTHORITY=host` |
 | `vacant` | a dedicated host parking its clock when its last guest leaves |
+| `botscore [graph] [seeds] [secs]` | default's score summed per scenario (embedded, td, kraken) over seeds 1..N, flat out; given a graph file, it fails unless that graph outscores default on every scenario |
 
 `host-loss` is the one to read carefully. A successor authors but does not listen,
 and the handoff never reaches a guest that had no link to it, so in a star each
