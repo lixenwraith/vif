@@ -107,6 +107,9 @@ func (c sessionControl) AddBot(graph string) error {
 	if err != nil {
 		return err
 	}
+	if len(specs) == 0 {
+		return errors.New("no bots to add; name a count of 1 or more")
+	}
 	for _, spec := range specs {
 		if err := c.a.addSeatLocked(spec); err != nil {
 			return err
