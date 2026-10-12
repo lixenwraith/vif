@@ -262,14 +262,12 @@ must not retain a pooled payload after its handler returns.
 `TimerComponent` gives an entity three countdowns, indexed by `TimerSlot`: a
 lifetime, a deadline and a cooldown. `TimerSystem` runs right after
 `NetworkSystem`, before any owner, and ages every armed slot by the tick. An
-expired lifetime ends its entity through a silent death batch that settles
-before the next tick's systems. A capture taken before that settle carries the
-expired slot without its batch, so the install queues the batch again and the
-entity ends in the same settle as on the sender. The timer also collects expired
-lifetimes by state on every pass, so a lost batch is retried; a death-protected
-entity's lifetime just stops. A deadline or cooldown stays
-expired until its owner acts and re-arms or stops it. Owners and renderers read
-`Progress` and `Elapsed` instead of keeping their own clock.
+expired lifetime ends its entity through a silent death batch that settles as
+the tick closes. The timer collects expired lifetimes by state on every pass, so
+a batch that never settled is retried; a death-protected entity's lifetime just
+stops. A deadline or cooldown stays expired until its owner acts and re-arms or
+stops it. Owners and renderers read `Progress` and `Elapsed` instead of keeping
+their own clock.
 
 A slot armed in an event handler counts its arming tick, because the pass runs
 after dispatch; one armed in an owner's `Update` starts counting on the next

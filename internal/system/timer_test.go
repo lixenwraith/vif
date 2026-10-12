@@ -185,35 +185,25 @@ func TestDeadlinesEndOnTheirLastTick(t *testing.T) {
 	}
 }
 
-// TestCapturedExpiredLifetimesEndInTheFirstSettle: a capture taken between the
-// pass that expired a lifetime and its batch's settle installs the slot alone.
-// The install queues the batch, so a shared entity ends in the first settle as
-// on the sender; any other expired lifetime is still ended by the next pass, and
-// a death-protected one keeps living.
-func TestCapturedExpiredLifetimesEndInTheFirstSettle(t *testing.T) {
+// TestTimerCollectsAnExpiredLifetimeByState: an expired slot whose batch never
+// settled is still ended by the next pass; a death-protected one keeps living.
+func TestTimerCollectsAnExpiredLifetimeByState(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	tick := newTimerTick(w)
 
 	installed := w.CreateEntity(core.DomainShared)
-	unbatched := w.CreateEntity(core.DomainPlayer)
 	protected := w.CreateEntity(core.DomainShared)
-	for _, e := range []core.Entity{installed, unbatched, protected} {
+	for _, e := range []core.Entity{installed, protected} {
 		w.Components.Timer.SetComponent(e, component.TimerComponent{
 			Slots: [component.TimerSlotCount]component.Countdown{component.TimerLifetime: {Duration: time.Second}},
 		})
 	}
 	w.Components.Protection.SetComponent(protected, component.ProtectionComponent{Mask: component.ProtectFromDeath})
 
-	QueueCapturedExpiries(w)
 	tick.open()
-	_, installedAlive := w.GetComponentMask(installed)
-	_, unbatchedAlive := w.GetComponentMask(unbatched)
-	if installedAlive || !unbatchedAlive {
-		t.Fatalf("after the first settle: installed alive %v, unbatched alive %v", installedAlive, unbatchedAlive)
-	}
 	tick.open()
-	if _, alive := w.GetComponentMask(unbatched); alive {
+	if _, alive := w.GetComponentMask(installed); alive {
 		t.Fatal("an expired lifetime without its batch was never collected")
 	}
 	timer, ok := w.Components.Timer.GetPtr(protected)
