@@ -1411,7 +1411,7 @@ func equalGenotype(a, b *component.GenotypeComponent) bool {
 			}
 		}
 		return true
-	}() && a.EvalID == b.EvalID && a.Species == b.Species && a.SubType == b.SubType && a.SpawnTime == b.SpawnTime && a.TicksAlive == b.TicksAlive && math.Float64bits(float64(a.CumulativeDistSq)) == math.Float64bits(float64(b.CumulativeDistSq)) && a.DistSamples == b.DistSamples && a.TimeInShield == b.TimeInShield
+	}() && a.EvalID == b.EvalID && a.Species == b.Species && a.SubType == b.SubType && math.Float64bits(float64(a.CumulativeDistSq)) == math.Float64bits(float64(b.CumulativeDistSq)) && a.DistSamples == b.DistSamples
 }
 
 func equalLightning(a, b *component.LightningComponent) bool {

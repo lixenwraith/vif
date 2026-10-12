@@ -1,11 +1,8 @@
 package component
 
-import "time"
-
 // NuggetComponent represents one participant's personal collectible.
-// It spawns from the player stream and never participates in shared state.
+// It spawns from the player stream and never participates in shared state;
+// its cooldown timer spaces the beacon's beams.
 type NuggetComponent struct {
-	Char            rune          // Character for visual display
-	SpawnTime       time.Time     // When this nugget was spawned
-	BeaconRemaining time.Duration // Time until the beacon's next beams
+	Char rune // Character for visual display
 }

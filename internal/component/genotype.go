@@ -1,20 +1,15 @@
 package component
 
-import "time"
-
 // GenotypeComponent stores evolution data for tracked entities
 type GenotypeComponent struct {
-	Genes     []float64
-	EvalID    uint64
-	Species   SpeciesType
-	SubType   uint8
-	SpawnTime time.Time
+	Genes   []float64
+	EvalID  uint64
+	Species SpeciesType
+	SubType uint8
 
 	// Observed metrics (updated by GeneticSystem)
-	TicksAlive       int
 	CumulativeDistSq float64
 	DistSamples      int
-	TimeInShield     time.Duration
 }
 
 // GeneticStats holds telemetry for a species population
