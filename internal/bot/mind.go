@@ -43,6 +43,7 @@ const (
 	targetNugget
 	targetSpecies
 	targetCursor
+	targetThreat
 	targetRandom
 	targetCount
 )
@@ -75,14 +76,7 @@ var targets = [targetCount]struct {
 			visit(e)
 		}
 	}},
-	targetSpecies: {"species", func(m *mind, visit func(core.Entity)) {
-		m.ctx.World.Components.Combat.Each(func(e core.Entity, c *component.CombatComponent) bool {
-			if c.CombatEntityType != component.CombatEntityCursor && c.CombatEntityType != component.CombatEntityTower {
-				visit(e)
-			}
-			return true
-		})
-	}},
+	targetSpecies: {"species", scanSpecies},
 	targetCursor: {"cursor", func(m *mind, visit func(core.Entity)) {
 		own := m.ctx.World.Resources.Player.Entity
 		for _, e := range m.ctx.World.Components.Cursor.Entities() {
@@ -91,7 +85,33 @@ var targets = [targetCount]struct {
 			}
 		}
 	}},
+	targetThreat: {"threat", func(m *mind, visit func(core.Entity)) {
+		scanSpecies(m, visit)
+		c := m.ctx.World.Components
+		c.Bullet.Each(func(e core.Entity, b *component.BulletComponent) bool {
+			if b.Hostile {
+				visit(e)
+			}
+			return true
+		})
+		c.Missile.Each(func(e core.Entity, missile *component.MissileComponent) bool {
+			if missile.Hostile {
+				visit(e)
+			}
+			return true
+		})
+	}},
 	targetRandom: {name: "random"},
+}
+
+// scanSpecies visits every combat entity but a cursor or a tower
+func scanSpecies(m *mind, visit func(core.Entity)) {
+	m.ctx.World.Components.Combat.Each(func(e core.Entity, c *component.CombatComponent) bool {
+		if c.CombatEntityType != component.CombatEntityCursor && c.CombatEntityType != component.CombatEntityTower {
+			visit(e)
+		}
+		return true
+	})
 }
 
 // parseTarget resolves a graph's target name; a random cell is refused where an
@@ -183,12 +203,17 @@ func (m *mind) pointAt(p pointArgs) {
 		x, y = minX+m.rng.Intn(maxX-minX+1), minY+m.rng.Intn(maxY-minY+1)
 	} else {
 		s := m.nearest(p.target)
-		if !s.found {
+		if !s.found || p.away && s.dist2 == 0 {
 			return
 		}
-		x, y = min(max(s.x, minX), maxX), min(max(s.y, minY), maxY)
+		goalX, goalY := s.x, s.y
+		if p.away {
+			from, _ := m.ctx.World.LocalCursor()
+			goalX, goalY = 2*from.X-s.x, 2*from.Y-s.y
+		}
+		x, y = min(max(goalX, minX), maxX), min(max(goalY, minY), maxY)
 		// Start a newly acquired text run at its left edge instead of eating it backwards.
-		if p.target == targetGlyph {
+		if p.target == targetGlyph && !p.away {
 			for x > minX {
 				if _, ok := m.glyphAt(x-1, y, true); !ok {
 					break
@@ -196,7 +221,7 @@ func (m *mind) pointAt(p pointArgs) {
 				x--
 			}
 		}
-		if x, y, ok = m.land(x, y, s.x, s.y); !ok {
+		if x, y, ok = m.land(x, y, goalX, goalY); !ok {
 			return
 		}
 	}
@@ -232,10 +257,11 @@ func (m *mind) land(x, y, goalX, goalY int) (int, int, bool) {
 	return x, y, found
 }
 
-// pointArgs is a compiled PointAt payload
+// pointArgs is a compiled PointAt payload; away aims at the target's mirror
+// through the cursor
 type pointArgs struct {
-	target target
-	fire   bool
+	target     target
+	fire, away bool
 }
 
 // register installs std's generic vocabulary, its status guards reading the bot's
@@ -311,12 +337,16 @@ func register(m *fsm.Machine[*mind]) {
 		var p struct {
 			Target string `toml:"target"`
 			Fire   bool   `toml:"fire"`
+			Away   bool   `toml:"away"`
 		}
-		if err := decodePayload(cfg.Payload, &p, "target", "fire"); err != nil {
+		if err := decodePayload(cfg.Payload, &p, "target", "fire", "away"); err != nil {
 			return nil, err
 		}
-		t, err := parseTarget(p.Target, false)
-		return pointArgs{target: t, fire: p.Fire}, err
+		if p.Fire && p.Away {
+			return nil, errors.New("fire and away do not combine")
+		}
+		t, err := parseTarget(p.Target, p.Away)
+		return pointArgs{target: t, fire: p.Fire, away: p.Away}, err
 	})
 
 	// std's world-writing actions would load and do nothing, as the Host gives them no way out
