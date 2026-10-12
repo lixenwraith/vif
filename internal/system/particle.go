@@ -30,6 +30,7 @@ type particleAnchor uint8
 const (
 	anchorNone   particleAnchor = iota
 	anchorCursor                // the local cursor while its energy is nonzero
+	anchorKraken                // the nearest Kraken while it spins or charges
 )
 
 // particleOrbit tunes the spring holding a particle on its orbit
@@ -62,6 +63,12 @@ var particleProfiles = [component.ParticleBehaviorCount]particleProfile{
 		fall:     1,
 		color:    [3]color.RGB{visual.RgbDecay, visual.RgbDecay, visual.RgbDecay},
 		runeSwap: parameter.ParticleChangeChance,
+		anchor:   anchorKraken,
+		orbit: particleOrbit{
+			stiffness: parameter.DecayOrbitStiffness,
+			radiusMin: parameter.DecayOrbitRadiusMin, radiusMax: parameter.DecayOrbitRadiusMax,
+			damping: parameter.DecayOrbitDamping, drag: parameter.DecayOrbitDrag, speed: parameter.DecayOrbitSpeed,
+		},
 	},
 	component.ParticleBlossom: {
 		fall:     -1,
@@ -583,6 +590,18 @@ func (s *ParticleSystem) anchors(anchor particleAnchor) (centers []orbitCenter, 
 		if energy, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Player.Entity); ok && energy.Current != 0 {
 			x, y := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.CenterF()
 			s.centers = append(s.centers, orbitCenter{x: x, y: y})
+		}
+	case anchorKraken:
+		for _, e := range s.world.Components.Kraken.Entities() {
+			kraken, ok := s.world.Components.Kraken.GetComponent(e)
+			if !ok || (kraken.State != component.KrakenSpin && kraken.State != component.KrakenMove) {
+				continue
+			}
+			body, ok := s.world.Components.Kinetic.GetComponent(e)
+			if !ok {
+				continue
+			}
+			s.centers = append(s.centers, orbitCenter{x: body.PreciseX, y: body.PreciseY, spin: kraken.TurnDir})
 		}
 	}
 	return s.centers, chase

@@ -54,3 +54,18 @@ const (
 	// DustWallRestitution is velocity retained on wall/boundary bounce
 	DustWallRestitution = 0.5
 )
+
+// Decay particles orbiting a spinning or charging Kraken
+const (
+	// DecayOrbitStiffness pulls toward the orbit radius (1/s²); it keeps pace with a charge
+	DecayOrbitStiffness = 30.0
+	// DecayOrbitRadiusMin/Max sit inside the leg span, where the legs have cleared walls (cells)
+	DecayOrbitRadiusMin = 12.0
+	DecayOrbitRadiusMax = 26.0
+	// DecayOrbitDamping circularizes the orbit (1/sec)
+	DecayOrbitDamping = 2.0
+	// DecayOrbitSpeed is the tangential speed a particle takes on entering orbit (cells/sec)
+	DecayOrbitSpeed = 40.0
+	// DecayOrbitDrag is quadratic drag while orbiting (1/cell); a falling particle has none
+	DecayOrbitDrag = 0.005
+)
