@@ -131,9 +131,24 @@ func TestDeadlinesEndOnTheirLastTick(t *testing.T) {
 		Payload: &event.MissileSpawnRequestPayload{OriginX: 20, OriginY: 12, Count: 1}})
 	missile := w.Components.Missile.Entities()[0]
 	kinetic, _ := w.Components.Kinetic.GetPtr(missile)
-	kinetic.VelX, kinetic.VelY = 0, 0 // an orphan holding still, so only its deadline ends it
-	if got, want := actsOn(missiles.Update, has(event.EventExplosionVisualRequest)), ticks(parameter.MissileMaxLifetime); got != want {
+	// An orphan slow enough that only its deadline ends it, crossing into cell 21
+	// on exactly its 60th move: 20.5 + 60 * 0.05s * 0.168
+	kinetic.VelX, kinetic.VelY = 0.168, 0
+	var blast *event.ExplosionVisualRequestPayload
+	detonated := func(events []event.GameEvent) bool {
+		for _, ev := range events {
+			if ev.Type == event.EventExplosionVisualRequest {
+				blast, _ = ev.Payload.(*event.ExplosionVisualRequestPayload)
+				return true
+			}
+		}
+		return false
+	}
+	if got, want := actsOn(missiles.Update, detonated), ticks(parameter.MissileMaxLifetime); got != want {
 		t.Fatalf("orphaned missile detonated on tick %d, want %d", got, want)
+	}
+	if blast == nil || blast.X != 21 || blast.Y != 12 {
+		t.Fatalf("orphaned missile detonated at %+v, want (21,12) where its 60th move left it", blast)
 	}
 
 	gold := NewGoldSystem(w).(*GoldSystem)
