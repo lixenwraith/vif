@@ -28,7 +28,6 @@ on_enter = [
         "EventQuasarCancelRequest", "EventSwarmCancelRequest", "EventPylonCancelRequest",
         "EventTowerCancelRequest", "EventGrayoutEnd", "EventDrainResume",
     ] } },
-    { action = "ResetKillVars" },
     { action = "EmitEvent", event = "EventCycleDamageMultiplierReset" },
     # Region teardown (variable reset happens in TdSetup on respawn)
     { macro = "Terminate", each = { region = ["td_main", "td_counter", "td_esc", "td_storm"] } },

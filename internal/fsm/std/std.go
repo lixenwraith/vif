@@ -28,9 +28,8 @@ type Host[T any] struct {
 	SetSystem func(ctx T, name string, enabled bool)
 
 	// Status keys are an open runtime set, resolved per evaluation
-	StatusInt    func(ctx T, key string) (int64, bool)
-	SetStatusInt func(ctx T, key string, v int64)
-	StatusBool   func(ctx T, key string) (bool, bool)
+	StatusInt  func(ctx T, key string) (int64, bool)
+	StatusBool func(ctx T, key string) (bool, bool)
 
 	// Config fields are a closed compile-time set: these return an accessor
 	// resolved once at load, so evaluation is a direct call and an unknown

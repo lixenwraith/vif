@@ -348,11 +348,13 @@ elements. Flat keys (no dots) behave identically to the original implementation.
 ### Status Registry Actions
 
 ```toml
-{ action = "SetStatusInt", payload = { key = "status.key", value = 100 } }
-{ action = "ResetStatusInt", payload = { key = "status.key" } }
+{ action = "StatusToVar", payload = { key = "kills.storm", name = "storm_mark" } }
 ```
 
-`ResetStatusInt` sets the value to 0.
+Scripts read the status registry and never write it. `StatusToVar` marks where a
+count starts, and `StatusIntCompare` with `since = "storm_mark"` compares the value
+minus that mark, so a scenario counts kills since its own escalation while
+`kills.*` keeps the game's totals.
 
 ### Action Modifiers
 
@@ -442,7 +444,7 @@ Occurrence counters stay roster-wide totals: `typing.correct`, `typing.errors`,
 |---------------------|------------------------|--------------------------------------|
 | `StateTimeExceeds`  | `ms`                   | Time in current state ≥ ms           |
 | `StatusBoolEquals`  | `key`, `value`         | Status registry bool equals value    |
-| `StatusIntCompare`  | `key`, `op`, `value`   | Status registry int comparison       |
+| `StatusIntCompare`  | `key`, `op`, `value`, `since` | Status registry int comparison; `since` subtracts a variable |
 | `RegionExists`      | `region`               | Region is currently active           |
 | `VarEquals`         | `var`, `value`         | FSM variable equals value            |
 | `VarCompare`        | `var`, `op`, `value`   | FSM variable comparison              |

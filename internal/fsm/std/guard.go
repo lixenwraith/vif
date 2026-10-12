@@ -274,6 +274,8 @@ func registerStatusGuards[T any](m *fsm.Machine[T], h Host[T]) {
 		}, nil
 	})
 
+	// since names a variable StatusToVar filled, so a script counts from its own
+	// mark while the status key keeps its owner's total
 	m.RegisterGuardFactory("StatusIntCompare", func(machine *fsm.Machine[T], args map[string]any) (fsm.GuardFunc[T], error) {
 		key, _ := args["key"].(string)
 		if key == "" {
@@ -281,6 +283,7 @@ func registerStatusGuards[T any](m *fsm.Machine[T], h Host[T]) {
 		}
 		op, _ := args["op"].(string)
 		value := ParseIntArg(args, "value")
+		since, _ := args["since"].(string)
 		if h.StatusInt == nil {
 			return alwaysFalse[T](), nil
 		}
@@ -289,6 +292,9 @@ func registerStatusGuards[T any](m *fsm.Machine[T], h Host[T]) {
 			current, ok := h.StatusInt(ctx, key)
 			if !ok {
 				return false
+			}
+			if since != "" {
+				current -= machine.GetVar(since)
 			}
 			return CompareInt(current, op, value)
 		}, nil

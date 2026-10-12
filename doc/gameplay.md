@@ -356,7 +356,8 @@ it spawns and arms the cursor before opening `main`.
    in-map cells interact.
 5. The first Kraken kill returns to `main`; another three storm kills open the
    second Kraken encounter. Its defeat starts tower defense. Thus the escalation
-   is **3 storms → 1 Kraken → 3 storms → 1 Kraken → tower**.
+   is **3 storms → 1 Kraken → 3 storms → 1 Kraken → tower**. Each threshold counts
+   kills since the escalation before it; `kills.*` keeps the game's totals.
 6. Destroying the tower's pylons resumes `main`; losing the tower fails the run.
    Encounter transitions preserve uncollected loot. Snakes keep one cursor target
    and its route until it disappears, becomes unreachable, or another route is

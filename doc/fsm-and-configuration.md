@@ -20,7 +20,7 @@ flowchart TD
 `internal/fsm` is generic over its context type and imports no gameplay
 systems. `internal/fsm/std` defines reusable actions/guards against a capability
 `Host[T]`. `internal/manifest/fsm_bridge.go` supplies those capabilities for
-`*engine.World` and registers the small game-specific `ResetKillVars` action.
+`*engine.World`.
 
 The result is a strict policy/mechanism split:
 
@@ -247,8 +247,7 @@ action supports an optional guard and `delay_ms`.
 | Regions | `SpawnRegion`, `TerminateRegion`, `PauseRegion`, `ResumeRegion` |
 | Systems | `EnableSystem`, `DisableSystem`, `ApplyRegionSystemConfigs` |
 | Game bridge | `EmitEvent` |
-| Status/config | `SetStatusInt`, `ResetStatusInt`, `ConfigToVar` |
-| Game-specific | `ResetKillVars` |
+| Status/config | `StatusToVar`, `ConfigToVar` |
 
 Variable arithmetic can use literal `value`/`delta` or `source_var`, and can
 apply optional `min`/`max` clamps. Division and modulo by zero are no-ops.
@@ -300,7 +299,7 @@ Comparison operators are `eq`, `neq`, `gt`, `gte`, `lt`, and `lte`.
 | `VarCompare` | `var`, `op`, `value` | Variable/literal comparison. |
 | `VarCompareVar` | `var_a`, `op`, `var_b` | Variable/variable comparison. |
 | `StatusBoolEquals` | `key`, `value` | Live boolean status metric comparison. |
-| `StatusIntCompare` | `key`, `op`, `value` | Live integer status metric comparison. |
+| `StatusIntCompare` | `key`, `op`, `value`, `since` | Live integer status metric comparison; `since` counts from a variable `StatusToVar` set. |
 | `ConfigIntCompare` | `field`, `op`, `value` | Supported integer config field comparison. |
 | `ConfigBoolCompare` | `field`, `value` | Supported boolean config field comparison. |
 | `PayloadIntCompare` | `field`, `op`, `value` | Event payload numeric field comparison. |

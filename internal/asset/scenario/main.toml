@@ -8,7 +8,7 @@ on_exit = [
 transitions = [
     # FSM sees the crossing before MetaSystem increments the shared counter, so
     # nine prior defeats plus this event selects its causal participant.
-    { trigger = "EventDrainDefeated", target = "MainEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.drain", op = "gte", value = 9 }, capture_vars = { entity = "fuse_owner" } },
+    { trigger = "EventDrainDefeated", target = "MainEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.drain", since = "drain_mark", op = "gte", value = 9 }, capture_vars = { entity = "fuse_owner" } },
 ]
 
 # --- Gold Spawn ---
@@ -84,8 +84,8 @@ transitions = [
 [states.MainEscalate]
 parent = "Root"
 on_exit = [
-    # Reset after the triggering EventDrainDefeated has reached MetaSystem.
-    { action = "ResetStatusInt", payload = { key = "kills.drain" } },
+    # Mark after the triggering EventDrainDefeated has reached MetaSystem.
+    { action = "StatusToVar", payload = { key = "kills.drain", name = "drain_mark" } },
 ]
 on_enter = [
     { action = "SpawnRegion", region = "quasar", initial_state = "QuasarFuse" },

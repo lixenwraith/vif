@@ -39,10 +39,11 @@ type SystemControlArgs struct {
 	Enabled    bool   `toml:"enabled"`
 }
 
-// StatusIntArgs holds args for status registry int manipulation
-type StatusIntArgs struct {
-	Key   string `toml:"key"`
-	Value int64  `toml:"value"`
+// StatusToVarArgs copies a status int into a variable; the registry is read-only
+// to scripts, so a scenario marks where a count starts instead of zeroing it
+type StatusToVarArgs struct {
+	Key  string `toml:"key"`
+	Name string `toml:"name"`
 }
 
 // ConfigToVarArgs carries a resolved config accessor and its target variable

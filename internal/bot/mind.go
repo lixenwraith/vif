@@ -351,7 +351,7 @@ func register(m *fsm.Machine[*mind]) {
 
 	// std's world-writing actions would load and do nothing, as the Host gives them no way out
 	for _, name := range []string{"EmitEvent", "EnableSystem", "DisableSystem", "ApplyGlobalSystemConfig",
-		"ApplyRegionSystemConfigs", "SetStatusInt", "ResetStatusInt"} {
+		"ApplyRegionSystemConfigs"} {
 		m.RegisterActionArgs(name, func(*fsm.Machine[*mind], fsm.ActionConfig, fsm.StateResolver) (any, error) {
 			return nil, errors.New("writes the world; a bot acts only through intents")
 		})

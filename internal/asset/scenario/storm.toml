@@ -47,14 +47,14 @@ on_enter = [
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "SPECIES DAMAGE INCREASED" } },
 ]
 transitions = [
-    { trigger = "Tick", target = "StormEscalateKraken", guard = "StatusIntCompare", guard_args = { key = "kills.storm", op = "gte", value = 3 } },
+    { trigger = "Tick", target = "StormEscalateKraken", guard = "StatusIntCompare", guard_args = { key = "kills.storm", since = "storm_mark", op = "gte", value = 3 } },
     { trigger = "Tick", target = "StormVictory" },
 ]
 
 [states.StormEscalateKraken]
 parent = "Root"
 on_enter = [
-    { action = "ResetStatusInt", payload = { key = "kills.storm" } },
+    { action = "StatusToVar", payload = { key = "kills.storm", name = "storm_mark" } },
     { action = "EmitEvent", event = "EventStormCancelRequest" },
     { action = "SpawnRegion", region = "kraken", initial_state = "KrakenSetup" },
     { action = "TerminateRegion", region = "storm" },

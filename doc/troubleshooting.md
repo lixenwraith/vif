@@ -19,7 +19,7 @@ what every one of these defects is made of.
 **A — an installed state runs no entry action.** `ImportFSM` replays only the
 `reconcile = true` `ClassLocal` lifecycle actions of a crossed state path.
 Everything else an `on_enter` would have done — a spawn request, a
-`ResetStatusInt`, a splash request, a status message, the cycle damage multiplier
+`StatusToVar`, a splash request, a status message, the cycle damage multiplier
 — is skipped on the instance that arrived by install. That is deliberate: re-running
 `EmitEvent EventGoldSpawnRequest` would spawn a second gold. The consequence is
 not: whatever the action established has to be in the capture instead, and

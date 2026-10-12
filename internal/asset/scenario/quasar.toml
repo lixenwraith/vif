@@ -40,10 +40,10 @@ transitions = [
     # quasar kills plus this payload reaches the three-kill escalation gate.
     { trigger = "EventSpeciesKilled", target = "QuasarEscalate", guard = "And", guard_args = { guards = [
         { name = "PayloadIntCompare", args = { field = "species", op = "eq", value = 3 } },
-        { name = "StatusIntCompare", args = { key = "kills.quasar", op = "gte", value = 2 } },
+        { name = "StatusIntCompare", args = { key = "kills.quasar", since = "quasar_mark", op = "gte", value = 2 } },
     ] } },
     { trigger = "EventSpeciesKilled", target = "QuasarExit", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 3 } },
-    { trigger = "Tick", target = "QuasarEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.quasar", op = "gte", value = 3 } },
+    { trigger = "Tick", target = "QuasarEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.quasar", since = "quasar_mark", op = "gte", value = 3 } },
     { macro = "LeftMap", active = "quasar.active", target = "QuasarExit" },
 ]
 
@@ -122,7 +122,7 @@ on_enter = [
 [states.QuasarEscalate]
 parent = "Root"
 on_enter = [
-    { action = "ResetStatusInt", payload = { key = "kills.quasar" } },
+    { action = "StatusToVar", payload = { key = "kills.quasar", name = "quasar_mark" } },
     { action = "EmitEvent", event = "EventQuasarCancelRequest" },
     { action = "SpawnRegion", region = "storm", initial_state = "StormSetup" },
     { action = "TerminateRegion", region = "quasar" },
