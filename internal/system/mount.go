@@ -118,8 +118,12 @@ func (s *MountSystem) attach(p *event.MountRequestPayload) {
 		Lane:     uint8(p.Lane),
 		Width:    width,
 	})
-	// A ray the replaced mount had in flight would have nothing left to end it
+	// A ray the replaced mount had in flight would have nothing left to end it, and
+	// the new weapon starts ready
 	s.world.Components.Ray.RemoveEntity(p.Host, false)
+	if timer, ok := s.world.Components.Timer.GetPtr(p.Host); ok {
+		timer.Stop(component.TimerCooldown)
+	}
 }
 
 func (s *MountSystem) Update() {
@@ -136,7 +140,6 @@ func (s *MountSystem) Update() {
 		if !ok {
 			continue
 		}
-		m.Cooldown = max(m.Cooldown-dt, 0)
 		pos, ok := s.world.Positions.GetPosition(host)
 		if !ok {
 			continue
@@ -146,11 +149,11 @@ func (s *MountSystem) Update() {
 			s.cycleRay(host, cursor, m, pos, dt)
 			continue
 		}
-		if cursor == 0 || m.Cooldown > 0 || (m.Trigger == component.MountArmed && !m.Armed) {
+		if cursor == 0 || timerRunning(s.world, host, component.TimerCooldown) || (m.Trigger == component.MountArmed && !m.Armed) {
 			continue
 		}
 		s.fire(host, cursor, m, pos)
-		m.Cooldown = m.Interval
+		armTimer(s.world, host, component.TimerCooldown, m.Interval)
 		s.statFired.Add(1)
 	}
 }
@@ -260,7 +263,7 @@ func (s *MountSystem) cycleRay(host, cursor core.Entity, m *component.MountCompo
 	rays := s.world.Components.Ray
 	ray, ok := rays.GetPtr(host)
 	if !ok {
-		if m.Cooldown > 0 || (m.Trigger == component.MountArmed && !m.Armed) {
+		if timerRunning(s.world, host, component.TimerCooldown) || (m.Trigger == component.MountArmed && !m.Armed) {
 			return
 		}
 		lane, ok := layLane(s.world, m, pos, cursor)
@@ -285,7 +288,7 @@ func (s *MountSystem) cycleRay(host, cursor core.Entity, m *component.MountCompo
 		return
 	case ray.Remaining <= 0:
 		rays.RemoveEntity(host, false)
-		m.Cooldown = m.Interval
+		armTimer(s.world, host, component.TimerCooldown, m.Interval)
 		return
 	}
 	if ray.HitTimer -= dt; ray.HitTimer <= 0 {

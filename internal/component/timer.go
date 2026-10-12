@@ -33,6 +33,11 @@ func (t *TimerComponent) Stop(s TimerSlot) {
 	t.Slots[s] = Countdown{}
 }
 
+// Running reports slot s counting down; an idle or expired slot is not
+func (t *TimerComponent) Running(s TimerSlot) bool {
+	return t.Slots[s].Remaining > 0
+}
+
 func (t *TimerComponent) Expired(s TimerSlot) bool {
 	return t.Slots[s].Duration > 0 && t.Slots[s].Remaining <= 0
 }

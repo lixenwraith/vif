@@ -28,6 +28,7 @@ func TestStormRedTurretTracksTheNearestCursor(t *testing.T) {
 	w, first, second := testCursorWorld(t)
 	storm := NewStormSystem(w).(*StormSystem)
 	mounts := NewMountSystem(w).(*MountSystem)
+	timers := NewTimerSystem(w)
 
 	root := w.CreateEntity(core.DomainShared)
 	circle := storm.createCircleHeader(root, int(component.StormCircleRed),
@@ -41,6 +42,7 @@ func TestStormRedTurretTracksTheNearestCursor(t *testing.T) {
 	w.Resources.Event.Queue.Consume()
 
 	tick := func() []event.GameEvent {
+		timers.Update()
 		storm.updateCircleAttacks(&stormComp, parameter.GameUpdateInterval)
 		mounts.Update()
 		return w.Resources.Event.Queue.Consume()
