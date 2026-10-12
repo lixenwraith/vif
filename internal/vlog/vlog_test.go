@@ -279,3 +279,24 @@ func TestAHandleWritesItsOwnStampAndTagAndMutedOnlyItsFailures(t *testing.T) {
 		t.Fatalf("records = %q, want %q", got, want)
 	}
 }
+
+// TestAJournalNeverAppendsToTheOneBeforeIt: a run replaced within the second it
+// started journals to a file of its own.
+func TestAJournalNeverAppendsToTheOneBeforeIt(t *testing.T) {
+	Configure(Config{Dir: t.TempDir(), JournalDir: t.TempDir()})
+	first, err := StartJournal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := StopJournal(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := StartJournal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = StopJournal() })
+	if first == second {
+		t.Fatalf("both runs journal to %s", first)
+	}
+}

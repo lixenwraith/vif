@@ -455,7 +455,13 @@ func StartJournal() (string, error) {
 		return "", fmt.Errorf("vlog: no directory configured")
 	}
 
-	name := journalPrefix + time.Now().Format(fileTimeFormat)
+	// A run replacing another inside one second must not append to its file: a
+	// reader keeps one record per jseq, so the second run's would be dropped.
+	base := journalPrefix + time.Now().Format(fileTimeFormat)
+	name := base
+	for n := 2; journalTaken(name); n++ {
+		name = fmt.Sprintf("%s-%d", base, n)
+	}
 	l, p, err := buildLogger(cfg.JournalDir, name, journalLevel, false)
 	if err != nil {
 		return "", err
@@ -473,6 +479,20 @@ func StartJournal() (string, error) {
 	jpath.Store(&p)
 	jsink.Store(l)
 	return p, nil
+}
+
+// journalTaken reports whether a journal named name already exists, on disk or as
+// the file this process last wrote. Caller MUST hold mu.
+func journalTaken(name string) bool {
+	p, err := filepath.Abs(filepath.Join(cfg.JournalDir, name+"."+fileExtension))
+	if err != nil {
+		return false
+	}
+	if last := jlast.Load(); last != nil && *last == p {
+		return true
+	}
+	_, err = os.Stat(p)
+	return err == nil
 }
 
 // StopJournal drains and closes the journal file
