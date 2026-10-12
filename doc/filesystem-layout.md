@@ -127,10 +127,11 @@ creates no audio refuses them and a default must not break `-serve`.
 ## 4. Installation
 
 ```bash
-make install                                         # /usr/local, else ~/.local and the user root
+make release install                                 # build, then /usr/local, else ~/.local and the user root
 make install-config                                  # the user root only
 make install-config VIF_CONFIG_DIR=/path/to/stage    # into a staging root
 make install DESTDIR=/pkg PREFIX=/usr                # distribution package, root /etc/vif
+make uninstall                                       # what install put under PREFIX
 ```
 
 Both copy `wad/`, the bot graphs, the keymap and `vif.toml`. A reinstall replaces
@@ -139,9 +140,13 @@ the player's settings and are written only when absent. `CLEAN=1` first removes
 the shipped categories (`scenario/`, `content/`, `image/`, `bot/`) and those two
 files, so the root holds only the fresh install plus `audio/` and anything else
 a player put beside them. `install` adds the binary, licence, manual, launcher,
-completion and documentation under `PREFIX` with the wad at `$(SYSCONFDIR)/vif`;
-without `DESTDIR` and without write access there, it installs the same for the
-current user under `~/.local` and the user root. See [Packaging](packaging.md).
+completion and documentation under `PREFIX` with the wad at `$(SYSCONFDIR)/vif`.
+A user who cannot write `/usr/local/bin` gets, unstaged, `PREFIX=~/.local` and the
+user root as the defaults; `sudo make install` installs system-wide, and `make
+help` prints the values in effect. `install` writes nothing until it can write
+all of `PREFIX` and the root, and leaves the mode of existing directories alone.
+`uninstall` keeps the root, which in a user install holds the player's settings.
+See [Packaging](packaging.md).
 
 ## 5. Logs, journals, and runtime output
 

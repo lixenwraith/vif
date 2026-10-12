@@ -2,8 +2,9 @@ BINARY := vif
 SRC := ./cmd/vif
 BIN_DIR := bin
 WEB_DIR := web
-GOFLAGS := -trimpath
-LDFLAGS := -s -w
+# Not GOFLAGS/LDFLAGS: the go command and the C linker read those themselves.
+GO_BUILDFLAGS ?= -trimpath
+GO_LDFLAGS ?= -s -w
 TAGS ?=
 PORT ?= 8080
 CONTAINER_ENGINE ?= docker
@@ -27,17 +28,24 @@ KEYMAP_SRC := internal/asset/input/keymap.toml
 SETTINGS_SRC := internal/asset/vif.toml
 BOT_DIR := internal/asset/bot
 DESTDIR ?=
-PREFIX ?= /usr/local
+# Unstaged, a user who cannot write /usr/local/bin installs for itself: under
+# ~/.local, with the user root as the config root. sudo make install is system-wide.
+USER_INSTALL != [ -z '$(DESTDIR)' ] && [ "$$(id -u)" != 0 ] && [ ! -w /usr/local/bin ] && echo yes || echo no
+PREFIX_DEFAULT != [ '$(USER_INSTALL)' = yes ] && echo "$$HOME/.local" || echo /usr/local
+PREFIX ?= $(PREFIX_DEFAULT)
 # A /usr package keeps its configuration in /etc; both are system roots vif reads.
-SYSCONFDIR_DEFAULT != [ '$(PREFIX)' = /usr ] && echo /etc || echo '$(PREFIX)/etc'
+SYSCONFDIR_DEFAULT != if [ '$(USER_INSTALL)' = yes ] && [ '$(PREFIX)' = '$(PREFIX_DEFAULT)' ]; then echo '$(VIF_CONFIG_BASE)'; \
+	elif [ '$(PREFIX)' = /usr ]; then echo /etc; else echo '$(PREFIX)/etc'; fi
 SYSCONFDIR ?= $(SYSCONFDIR_DEFAULT)
 # FreeBSD packages each Go release under its own name: go.mod's 1.27 is go127.
 GO_DEFAULT != uname -s | grep -q FreeBSD && sed -n 's/^go \([0-9]*\)\.\([0-9]*\).*/go\1\2/p' go.mod 2>/dev/null | grep . || echo go
 GO ?= $(GO_DEFAULT)
 
 .DEFAULT_GOAL := help
+# Goals run in the order given, so make release install installs what it built.
+.NOTPARALLEL:
 
-.PHONY: help generate dev release headless nolog wasm windows run test verify arch-check clean check-go tools allocator serve install install-config wad-archive image image-check
+.PHONY: help generate dev release headless nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -53,8 +61,11 @@ help:
 	@echo "  allocator Build the website-to-K3s session allocator"
 	@echo "  serve    Build wasm and http-server, then serve web/ directory (use PORT=8080 to change)"
 	@echo "  run      Build (dev) and run the game"
-	@echo "  install  Install binary, wad, manual, launcher, completion and docs under $(PREFIX),"
-	@echo "           or under ~/.local and $(VIF_CONFIG_DIR) without write access there"
+	@echo "  test     Run the Go tests with the race detector"
+	@echo "  install  Install binary, manual, launcher, completion and docs under $(PREFIX) and the"
+	@echo "           wad as $(SYSCONFDIR)/vif; build first, as in make release install. A user who"
+	@echo "           cannot write /usr/local/bin gets ~/.local and the user root"
+	@echo "  uninstall Remove what install put under $(PREFIX), keeping $(SYSCONFDIR)/vif"
 	@echo "  install-config Install the wad, default keymap, bot graphs and vif.toml under $(VIF_CONFIG_DIR)"
 	@echo "           (both: CLEAN=1 first removes what an earlier install put there)"
 	@echo "  wad-archive Pack the wad as the config root a player extracts ($(WAD_ARCHIVE))"
@@ -73,6 +84,9 @@ $(WEB_DIR):
 check-go:
 	@if ! command -v $(GO) >/dev/null 2>&1; then \
 		echo "Go compiler ($(GO)) not found."; \
+		if [ -n "$${SUDO_USER:-}" ]; then \
+			echo "sudo may reset PATH: make release as $$SUDO_USER, then sudo make install"; exit 1; \
+		fi; \
 		CMD=""; \
 		if [ -f /etc/arch-release ]; then \
 			CMD="sudo pacman -S go"; \
@@ -93,7 +107,7 @@ check-go:
 			esac; \
 		else \
 			echo "Automatic installation unavailable (or apt packages outdated)."; \
-			echo "Install Go 1.27.2+ manually:"; \
+			echo "Install Go $$(sed -n 's/^go //p' go.mod)+ manually:"; \
 			echo "  1. Download: https://go.dev/dl/"; \
 			echo "  2. Extract to /usr/local"; \
 			echo "  3. Add /usr/local/go/bin to PATH"; \
@@ -108,34 +122,34 @@ dev: generate $(BIN_DIR)
 	$(GO) build -race -tags "$(TAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 serve: wasm $(BIN_DIR)
-	$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/http-server ./tool/http-server
+	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/http-server ./tool/http-server
 	./$(BIN_DIR)/http-server -dir $(WEB_DIR) -port $(PORT)
 
 release: generate $(BIN_DIR)
-	$(GO) build $(GOFLAGS) -tags "$(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
+	$(GO) build $(GO_BUILDFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # headless is a build profile, not merely -serve at runtime: renderer and audio
 # constructors are absent from the dependency graph.
 headless: generate $(BIN_DIR)
-	$(GO) build $(GOFLAGS) -tags "vif_headless $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-headless $(SRC)
+	$(GO) build $(GO_BUILDFLAGS) -tags "vif_headless $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-headless $(SRC)
 
 # nolog strips logging; internal/vlog is not linked
 nolog: generate $(BIN_DIR)
-	$(GO) build $(GOFLAGS) -tags "novlog $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
+	$(GO) build $(GO_BUILDFLAGS) -tags "novlog $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # wasm selects vlog/stub.go and the audio-free system manifest automatically.
 wasm: generate $(WEB_DIR)
-	GOOS=js GOARCH=wasm $(GO) build $(GOFLAGS) -tags "vif_noaudio $(TAGS)" -ldflags="$(LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
+	GOOS=js GOARCH=wasm $(GO) build $(GO_BUILDFLAGS) -tags "vif_noaudio $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
 
 # windows is experimental and untested
 windows: generate $(BIN_DIR)
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GO_BUILDFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
 
-tools: $(BIN_DIR)
-	$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/ ./cmd/ascimage ./cmd/soundlab ./tool/...
+tools: check-go $(BIN_DIR)
+	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/ ./cmd/ascimage ./cmd/soundlab ./tool/...
 
-allocator: $(BIN_DIR)
-	$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/vif-allocator ./tool/vif-allocator
+allocator: check-go $(BIN_DIR)
+	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/vif-allocator ./tool/vif-allocator
 
 test: generate
 	$(GO) test -race ./...
@@ -161,55 +175,55 @@ verify: generate test
 run: dev
 	./$(BIN_DIR)/$(BINARY)
 
+# put creates only missing directories, so an install changes no existing mode.
+INSTALL_FUNCS = put() { [ -d "$${3%/*}" ] || install -d -m 0755 "$${3%/*}"; install -m "$$1" "$$2" "$$3"; echo "install $$3"; }; \
+	keep() { if [ -e "$$3" ]; then echo "keep    $$3"; else put "$$@"; fi; }
 # The wad is the whole external payload and mirrors the installed layout, so a
-# copy is the install. Shipped files are replaced and files a player added are
-# kept; vif.toml and the keymap are the player's settings, written only when
-# absent. CLEAN=1 first removes every category the install ships, and those two.
-install-config:
-	@set -eu; \
-	root='$(VIF_CONFIG_DIR)'; \
-	case "$$root" in ''|/) echo "refusing to install into '$$root'" >&2; exit 1 ;; esac; \
+# copy is the install: shipped files are replaced, files a player added kept,
+# and vif.toml and the keymap, the player's settings, written only when absent.
+# CLEAN=1 first removes every shipped category and those two. A variable, not
+# a sub-make, which make -n would run: install and wad-archive share it.
+INSTALL_ROOT = case "$$root" in ''|/) echo "refusing to install into '$$root'" >&2; exit 1 ;; esac; \
 	if [ '$(CLEAN)' = 1 ]; then \
-		for dir in $(WAD_DIR)/*/ bot/; do dir=$${dir%/}; rm -rf "$$root/$${dir##*/}"; echo "remove  $$root/$${dir##*/}"; done; \
+		for dir in $(WAD_DIR)/*/ bot/; do dir=$${dir%/}; rm -rf "$$root/$${dir\#\#*/}"; echo "remove  $$root/$${dir\#\#*/}"; done; \
 		rm -f "$$root/input/keymap.toml" "$$root/vif.toml"; \
 	fi; \
-	put() { install -d -m 0755 "$${2%/*}"; install -m 0644 "$$1" "$$2"; echo "install $$2"; }; \
-	keep() { if [ -e "$$2" ]; then echo "keep    $$2"; else put "$$1" "$$2"; fi; }; \
-	for src in $$(find $(WAD_DIR) -type f); do put "$$src" "$$root/$${src#$(WAD_DIR)/}"; done; \
-	for src in $(BOT_DIR)/*.toml; do put "$$src" "$$root/bot/$${src##*/}"; done; \
-	keep $(KEYMAP_SRC) "$$root/input/keymap.toml"; \
-	keep $(SETTINGS_SRC) "$$root/vif.toml"; \
-	install -d -m 0755 "$$root/audio"
+	for src in $$(find $(WAD_DIR) -type f); do put 0644 "$$src" "$$root/$${src\#$(WAD_DIR)/}"; done; \
+	for src in $(BOT_DIR)/*.toml; do put 0644 "$$src" "$$root/bot/$${src\#\#*/}"; done; \
+	keep 0644 $(KEYMAP_SRC) "$$root/input/keymap.toml"; \
+	keep 0644 $(SETTINGS_SRC) "$$root/vif.toml"; \
+	[ -d "$$root/audio" ] || install -d -m 0755 "$$root/audio"
+
+install-config:
+	@set -eu; $(INSTALL_FUNCS); root='$(VIF_CONFIG_DIR)'; $(INSTALL_ROOT)
 
 # wad-archive is that same install as one file, so what a player extracts over a
 # config root is what install-config would have written there. The release
 # publishes it because a binary alone resolves only the embedded scenario.
 wad-archive: $(BIN_DIR)
-	@set -eu; \
-	stage=$$(mktemp -d); \
-	trap 'rm -rf "$$stage"' EXIT; \
-	$(MAKE) -s install-config VIF_CONFIG_DIR="$$stage" >/dev/null; \
-	install -m 0644 LICENSE "$$stage/LICENSE"; \
-	tar -C "$$stage" -czf $(WAD_ARCHIVE) .; \
+	@set -eu; $(INSTALL_FUNCS); \
+	root=$$(mktemp -d); \
+	trap 'rm -rf "$$root"' EXIT; \
+	{ $(INSTALL_ROOT); } >/dev/null; \
+	install -m 0644 LICENSE "$$root/LICENSE"; \
+	tar -C "$$root" -czf $(WAD_ARCHIVE) .; \
 	echo "packed $(WAD_ARCHIVE)"
 
-# install puts the binary, the wad as the system config root $(SYSCONFDIR)/vif,
-# the licence, the manual, the desktop entry and icons, shell completion and the
-# documentation under PREFIX. Unstaged and without write access there, it installs
-# for this user under ~/.local and the user config root instead. Build first;
-# nothing here compiles, so a packager controls the build flags.
+# install puts the binary, the wad as the config root $(SYSCONFDIR)/vif, the
+# licence, the manual, the desktop entry and icons, shell completion and the
+# documentation under PREFIX, once it can write all three places. Nothing here
+# compiles, so a packager controls the build flags.
 install:
 	@set -eu; \
-	[ -x $(BIN_DIR)/$(BINARY) ] || { echo "$(BIN_DIR)/$(BINARY) is not built; run make release" >&2; exit 1; }; \
-	prefix='$(PREFIX)'; root='$(SYSCONFDIR)/vif'; \
-	writable() { d=$$1; while [ ! -e "$$d" ]; do d=$$(dirname "$$d"); done; [ -w "$$d" ]; }; \
-	if [ -z '$(DESTDIR)' ] && ! { writable "$$prefix/bin" && writable "$$prefix/share" && writable "$$root"; }; then \
-		prefix='$(HOME)/.local'; root='$(VIF_CONFIG_DIR)'; \
-		echo "no write access under $(PREFIX) or $(SYSCONFDIR); installing for $$(id -un) under $$prefix and $$root"; \
-	fi; \
-	$(MAKE) -s install-config VIF_CONFIG_DIR='$(DESTDIR)'"$$root" CLEAN='$(CLEAN)'; \
-	dest='$(DESTDIR)'"$$prefix"; \
-	put() { install -d -m 0755 "$${3%/*}"; install -m "$$1" "$$2" "$$3"; echo "install $$3"; }; \
+	[ -x $(BIN_DIR)/$(BINARY) ] || { echo "$(BIN_DIR)/$(BINARY) is not built: make release first, as in make release install" >&2; exit 1; }; \
+	for d in '$(PREFIX)/bin' '$(PREFIX)/share' '$(SYSCONFDIR)/vif'; do d='$(DESTDIR)'"$$d"; \
+		while [ ! -e "$$d" ]; do d=$$(dirname "$$d"); done; \
+		[ -w "$$d" ] || { echo "no write access to $$d: sudo make install, or set PREFIX and SYSCONFDIR" >&2; exit 1; }; \
+	done; \
+	if [ '$(USER_INSTALL)' = yes ] && [ '$(PREFIX)' = '$(PREFIX_DEFAULT)' ]; then \
+		echo "/usr/local/bin is not writable: installing for $$(id -un) under $(PREFIX) and $(SYSCONFDIR)/vif (sudo make install: system-wide)"; fi; \
+	$(INSTALL_FUNCS); root='$(DESTDIR)$(SYSCONFDIR)/vif'; $(INSTALL_ROOT); \
+	dest='$(DESTDIR)$(PREFIX)'; \
 	put 0755 $(BIN_DIR)/$(BINARY) "$$dest/bin/$(BINARY)"; \
 	put 0644 LICENSE "$$dest/share/licenses/vif/LICENSE"; \
 	put 0644 doc/vif.6 "$$dest/share/man/man6/vif.6"; \
@@ -219,10 +233,22 @@ install:
 	put 0644 $(PKG_DIR)/vif.bash "$$dest/share/bash-completion/completions/vif"; \
 	put 0644 $(PKG_DIR)/_vif "$$dest/share/zsh/site-functions/_vif"; \
 	put 0644 $(PKG_DIR)/vif.fish "$$dest/share/fish/vendor_completions.d/vif.fish"; \
-	for src in README.md doc/*.md; do \
-		put 0644 "$$src" "$$dest/share/doc/vif/$${src#doc/}"; \
+	for src in README.md doc/*.md; do put 0644 "$$src" "$$dest/share/doc/vif/$$src"; done; \
+	[ -n '$(DESTDIR)' ] || case ":$$PATH:" in *':$(PREFIX)/bin:'*) ;; *) echo "note:   $(PREFIX)/bin is not on PATH" ;; esac
+
+# uninstall removes what install put under PREFIX. It keeps the config root:
+# a user install's holds the player's settings.
+uninstall:
+	@set -eu; dest='$(DESTDIR)$(PREFIX)'; \
+	if [ '$(USER_INSTALL)' = yes ] && [ '$(PREFIX)' = '$(PREFIX_DEFAULT)' ]; then \
+		echo "/usr/local/bin is not writable: uninstalling under $(PREFIX) (sudo make uninstall: system-wide)"; fi; \
+	for f in bin/$(BINARY) share/man/man6/vif.6 share/applications/vif.desktop \
+		share/icons/hicolor/scalable/apps/vif.svg share/icons/hicolor/symbolic/apps/vif-symbolic.svg \
+		share/bash-completion/completions/vif share/zsh/site-functions/_vif \
+		share/fish/vendor_completions.d/vif.fish share/doc/vif share/licenses/vif; do \
+		if [ -e "$$dest/$$f" ]; then rm -rf "$$dest/$$f"; echo "remove  $$dest/$$f"; fi; \
 	done; \
-	[ -n '$(DESTDIR)' ] || case ":$$PATH:" in *":$$prefix/bin:"*) ;; *) echo "note: $$prefix/bin is not on PATH" ;; esac
+	root='$(DESTDIR)$(SYSCONFDIR)/vif'; [ ! -d "$$root" ] || echo "keep    $$root (the wad and settings)"
 
 # image builds the deployment artifact from the repository root, which is the
 # context deploy/docker/Dockerfile expects. The revision is stamped as an OCI
