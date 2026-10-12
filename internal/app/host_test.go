@@ -836,42 +836,32 @@ func TestSessionRosterStartsAndRestartsEveryParticipant(t *testing.T) {
 		a.Settle()
 	}
 
-	resets := make([]uint64, len(apps))
-	for tick := range 12 {
-		tickAll(apps)
-		for i, a := range apps {
-			if monitorRegion(a) == "MonitorGlobalReset" {
-				if resets[i] != 0 {
-					t.Fatalf("participant %d reset twice, at tick %d and %d",
-						i+1, resets[i], tick+1)
-				}
-				resets[i] = uint64(tick + 1)
+	// A defeat starts a new game, so the reset is the request :n makes.
+	resets := make([][]int, len(apps))
+	tick := 0
+	for i, a := range apps {
+		a.SetDispatchTap(func(ev event.GameEvent) {
+			if ev.Type == event.EventGameResetRequest {
+				resets[i] = append(resets[i], tick)
 			}
-		}
+		})
+	}
+	for tick = 1; tick <= 12; tick++ {
+		tickAll(apps)
 	}
 	for i, at := range resets {
-		if at == 0 {
-			t.Fatalf("participant %d never reset; every owner had reported defeat", i+1)
+		if len(at) != 1 {
+			t.Fatalf("participant %d reset at ticks %v, want exactly once", i+1, at)
 		}
-		if at != resets[0] {
+		if at[0] != resets[0][0] {
 			t.Fatalf("participant %d rebuilt the world at tick %d and participant 1 at %d",
-				i+1, at, resets[0])
+				i+1, at[0], resets[0][0])
 		}
 	}
 
+	local = localCursors(t, apps)
 	assertArmed("global reset")
 	assertMeshParity(t, apps, 6)
-}
-
-// monitorRegion is the monitor region's active state, which is where the session's
-// lifecycle and its reset live.
-func monitorRegion(a *App) string {
-	for _, r := range a.scheduler.ExportFSM().Regions {
-		if r.Name == "monitor" {
-			return r.ActiveState
-		}
-	}
-	return ""
 }
 
 // TestLiveSessionRefusesAnInstanceLocalPause pins the operator policy: entering a

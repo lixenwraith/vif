@@ -298,6 +298,7 @@ func TestReplayReproducesRecordedRuns(t *testing.T) {
 		"overlay":      runOverlayScript,
 		"split-settle": runSplitSettleScript,
 		"reset":        runResetScript,
+		"defeat":       runDefeatScript,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -923,6 +924,25 @@ func runResetScript(t *testing.T, a *App) int {
 	if got := a.World().Resources.Event.Queue.Stamp().Run; got != 2 {
 		t.Fatalf("run %d after Reset, want 2", got)
 	}
+	return r.done()
+}
+
+// runDefeatScript ends a run the way the scenario does: the monitor answers a
+// defeat with a new game, and no record carries that reset.
+func runDefeatScript(t *testing.T, a *App) int {
+	t.Helper()
+	r := newScriptRunner(t, a)
+	r.step(1, intentMotion(input.MotionRight, 6))
+	cursor := localCursorEntity(a)
+	a.Context().PushEventOrigin(event.EventEnergySetRequest,
+		&event.EnergySetPayload{Entity: cursor, Value: 0}, event.OriginDebug)
+	a.Context().PushEventOrigin(event.EventHeatSetRequest,
+		&event.HeatSetRequestPayload{Entity: cursor, Value: 0}, event.OriginDebug)
+	r.step(4)
+	if got := a.World().Resources.Event.Queue.Stamp().Run; got != 1 {
+		t.Fatalf("run %d after a defeat, want 1", got)
+	}
+	r.step(2, intentMotion(input.MotionDown, 2))
 	return r.done()
 }
 

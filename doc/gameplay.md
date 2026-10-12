@@ -362,9 +362,10 @@ it spawns and arms the cursor before opening `main`.
    and its route until it disappears, becomes unreachable, or another route is
    over one-third shorter.
 7. Any participant reaching zero heat **and** zero energy ends the run. The shared
-   monitor consumes owner-authored defeat state, cancels encounters, clears the
-   level and loot, then rearms the roster. Every shipped scenario uses this defeat
-   rule; tower defense also retains its objective-failure and victory conditions.
+   monitor consumes owner-authored defeat state and starts a new game, as `:n`
+   does: the world, the kill tallies and every other statistic start over and the
+   roster is rearmed. Every shipped scenario uses this defeat rule; tower defense
+   also retains its objective-failure and victory conditions.
 
 `wad/scenario/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
 scaffold, and `kraken` is a repeating combat arena. Each entry has a short
