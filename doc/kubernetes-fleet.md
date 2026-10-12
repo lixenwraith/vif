@@ -70,7 +70,7 @@ it does not move an in-memory session into an unrelated pod.
 | G | next | **Hand off a deployment a stranger can install.** The documentation reduction is done: the procedure, this plan, the artifact indexes and the runbook describe the deployed design rather than the batches that produced it. | Both rehearsals below reach a first session with no undocumented step, and every resource value in `deploy/k3s/30-session.yaml` cites a number from H3. |
 | G1 | next | **Rehearse from bare Arch Linux and from bare Ubuntu.** Record package and service differences, and fix every command that assumes the production node. | A second node reaches [§13 of the procedure](kube-docker-deploy.md#13-first-session) without a step its operator had to invent. |
 | W1 | partly done | **Commission the browser path.** A browser has played beside a terminal guest, a closed tab reopened on the same link rejoined with a fresh player state, and a `vif -join wss://…` terminal plays at the front door's latency (§9). A hidden tab draws nothing and repaints once on return ([multi-platform §5](multi-platform.md#a-hidden-tab)). | A tab hidden or suspended for five minutes costs the other players nothing and resumes or rejoins on return, and a session whose last guest was a browser ends on its own grace. |
-| H3 | next | **Measure a full roster.** Nine sessions driven by headless joiners for the fleet-level readings — CPU, memory, tmpfs, log rate, rotations — plus one real four-player session over real links, through a tower and a storm and on `wad/scenario/td`, for the hour that tick slips and correction magnitude need. | Requests and limits in `30-session.yaml`, and the quota totals, come from the four-player measurement rather than from single-guest history and estimates. |
+| H3 | next | **Measure a full roster.** Nine sessions driven by headless joiners for the fleet-level readings — CPU, memory, tmpfs, log rate, rotations — plus one real four-player session over real links, through a tower and a storm and on `wad/scenario/td`, for the hour the Job's deadline allows, which tick slips and correction magnitude need. | Requests and limits in `30-session.yaml`, and the quota totals, come from the four-player measurement rather than from single-guest history and estimates. |
 | H1 | partly done | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do has to be bounded. The two startup holes are closed: the tick-zero gate is bounded by one world install, a peer that leaves or goes silent costs the lobby rather than the session, and a confirmation is keyed to the link it arrived on. | Remaining: a handshake fuzz target for malformed, oversized, replayed and half-open cases, which `internal/network` has no equivalent of. |
 | H16 | partly done | **Automate image delivery.** Nightly CI publishes the final headless Dockerfile to GHCR under moving and commit-addressed tags; `deploy/guest/update-vif-image.sh` still provides the checked local build/import boundary. | Choose the node's registry/promotion policy, authenticate pulls without a long-lived off-node deployment credential, and move new sessions to a verified digest while existing matches finish. |
 | H4 | partly done | **Server-only and renderer-neutral builds.** `vif_headless` removes renderer and audio packages and is used by the image. Terminal-shaped key, color, cell, and image values remain in common simulation/configuration packages. | Extract renderer-neutral values for a minimally polished Android host within one month of development time; keep the simulation fingerprint shared with clients. |
@@ -226,7 +226,7 @@ What the manifest asks for:
 | memory request / limit | 96 / 192 MiB | Single-guest measurement plus headroom for a staging world after an authority change. |
 | `GOMEMLIMIT` | 160 MiB | An earlier collection target than the limit, so the runtime collects instead of the kernel killing. |
 | CPU request / limit | 100m / 500m | One guest was about 0.05 core in early measurement; the ceiling is wide until a storm is measured. |
-| per bot | +32 MiB memory request, limit and `GOMEMLIMIT`; +64m CPU request | A seat at 120×40 measured about 28 MB resident and 60 ms of CPU a second (`vif_headless`, a sandbox, not the node). `-bots-max` stops at 6, where the limit meets the `LimitRange`'s 384 MiB. The quota counts the larger requests: three sessions of three bots fill its 1000m of CPU. |
+| per bot | +32 MiB memory request, limit and `GOMEMLIMIT`; +64m CPU request | A seat at 120×40 measured about 28 MB resident and 60 ms of CPU a second (`vif_headless`, a sandbox, not the node). `-bots-max` stops at 6, where the limit meets the `LimitRange`'s 384 MiB. |
 | termination grace | 30 s | Above the 20 s drain, so the process decides when the match ends. |
 
 What one session actually cost, measured on the node with one guest on `wad`
@@ -242,8 +242,8 @@ defaults:
 Ten of these is roughly 30 KiB/s into the 256 MiB tmpfs, which the 8 MB rotation and
 the cleanup timer carry. Do not scale the CPU and memory figures from here; H3
 measures a four-player world, which is the shape the manifest's values are for. The
-quota totals in `10-quota.yaml` are ten times the game container; the config-check
-init container counts only against its own peak.
+quota totals in `10-quota.yaml` are ten times the game container without bots; the
+config-check init container counts only against its own peak.
 
 Historical baseline worth keeping: server in lobby 12.0 MB RSS; embedded game with
 one guest 61.75 MB peak; server after a guest left 40.1 MB; headless joiner with a
@@ -282,7 +282,7 @@ What a cluster has not yet been asked:
 
 | Check | Expected |
 |---|---|
-| 60-minute full roster (H3) | No OOM, liveness restart, sustained tick slips, or growing correction magnitude. |
+| Full roster until the Job's one-hour deadline (H3) | No OOM, liveness restart, sustained tick slips, or growing correction magnitude, and the deadline ends each session. |
 | `tc netem` latency, loss, reordering | Recovers at the next bounded correction or keyframe. |
 | Pod delete / node failure | Connected-client behaviour is recorded; no replacement is advertised as the same match. |
 | A full tmpfs | Bounded log loss without ending a game. |

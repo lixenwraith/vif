@@ -62,8 +62,9 @@ A bot belongs to the run that started it, its holder.
   `:player drop <slot>` (host only) drops a player with all its bots, or one bot.
 - A dropped person starts a new local game without its bots; a dropped watched or
   headless run stops. Dropping ends membership; it is not a ban.
-- A headless bot ends once its session is gone (its host left and nobody took
-  over); a watched bot plays on alone, as a person does.
+- A headless bot ends once its host leaves and no participant, itself included,
+  takes over; one that takes over plays on with its own bots, as any session only
+  bots occupy does. A watched bot plays on alone, as a person does.
 
 ## Commands and the menu
 
