@@ -88,6 +88,7 @@ never enters the replay suffix (D-9).
 | Pointer placement | cursor and the newest cell the pointer named that tick |
 | Owned shield or ray striking shared species | target/member set and owner cursor |
 | Cursor entering or leaving combined defeat state | cursor and state |
+| Scenario-captured key pressed | cursor and key |
 
 Effects on Player targets do not cross. Shared follow-up events derived from a
 crossing do not cross again (D-5).

@@ -29,6 +29,15 @@ cell in terminal coordinates, captured command text, and a flag identifying macr
 playback. This boundary makes the
 parser testable without constructing an ECS world.
 
+A scenario can take printable ASCII keys away from the play grammar, for a game
+whose buttons are keys. An FSM state emits `EventKeyCaptureRequest { keys = "12345" }`
+(empty `keys` releases them; `entity` scopes the capture to one cursor's instance)
+and `MetaSystem` stores the set in `GameContext.KeyCapture`, which the parser reads
+without the world lock. In Normal, Visual and Insert a captured key cancels any
+pending count or operator and becomes `IntentKeyPress`, which the router crosses as
+`EventKeyPressed { entity, key }` so the shared FSM sees it on every instance. Text
+entry, Escape and mode switches are untouched, and a reset releases the capture.
+
 ## 2. Modes
 
 ```mermaid
