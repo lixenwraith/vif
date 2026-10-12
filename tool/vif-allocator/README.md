@@ -60,6 +60,7 @@ One session row has this shape:
   "state": {
     "live": true,
     "ready": true,
+    "bots": 0,
     "capacity": 4,
     "clock": "stopped",
     "expires_in": "1m27s",
@@ -72,7 +73,8 @@ One session row has this shape:
 
 `state` is the pod's `/health` body, except that `expires_in` is the sooner of the
 game's countdown and the Job's `activeDeadlineSeconds`. An occupied game runs no
-countdown, so the Job's deadline is what it reports.
+countdown, so the Job's deadline is what it reports. `guests` counts the session's
+own bots too, since each holds a seat; `bots` is how many of them are bots.
 
 `limits` names what this deployment will accept — `players_max`, `bots_max`, the
 allowed `log_levels`, most verbose first, and the installed `scenarios`, default

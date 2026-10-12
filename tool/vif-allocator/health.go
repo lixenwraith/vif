@@ -23,6 +23,7 @@ type sessionHealth struct {
 	Clock     string `json:"clock,omitempty"`
 	ExpiresIn string `json:"expires_in,omitempty"`
 	Guests    int    `json:"guests"`
+	Bots      int    `json:"bots"`
 	Phase     string `json:"phase,omitempty"`
 	Tick      uint64 `json:"tick"`
 	Reason    string `json:"reason,omitempty"`
@@ -150,6 +151,12 @@ func parseHealth(data []byte) (sessionHealth, error) {
 					return sessionHealth{}, fmt.Errorf("parse guests %q", value)
 				}
 				result.Guests = parsed
+			case "bots":
+				parsed, err := strconv.Atoi(value)
+				if err != nil || parsed < 0 {
+					return sessionHealth{}, fmt.Errorf("parse bots %q", value)
+				}
+				result.Bots = parsed
 			case "phase":
 				result.Phase = value
 			case "tick":
