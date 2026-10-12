@@ -211,13 +211,21 @@ func (a *App) playerCapacity() int {
 // consisting only of its coordinator is an empty one, which is the reading both the
 // readiness probe and the lifetime policy need.
 func (a *App) guestCount() int {
+	guests, _ := a.rosterGuests()
+	return guests
+}
+
+// rosterGuests is guestCount and, from the same read, how many of those guests are
+// bots: entries a participant holds.
+func (a *App) rosterGuests() (guests, bots int) {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
-	n := len(a.sessionRoster)
-	if n > 0 {
-		n--
+	for _, p := range a.sessionRoster {
+		if p.Holder != 0 {
+			bots++
+		}
 	}
-	return n
+	return max(len(a.sessionRoster)-1, 0), bots
 }
 
 // lobbyQuorum is how many guests the start gate waits for before it closes the lobby

@@ -49,7 +49,7 @@ func (a *App) probeSnapshot() probe.Snapshot {
 
 	live, clock := a.observeTick(tick, now, running, paused)
 
-	guests := a.guestCount()
+	guests, bots := a.rosterGuests()
 	capacity := a.sessionCapacity()
 	closing := a.lobbyClosing.Load()
 	// The lifetime policy is read rather than folded here: a probe is a read of the
@@ -78,6 +78,7 @@ func (a *App) probeSnapshot() probe.Snapshot {
 		"tick":     strconv.FormatUint(tick, 10),
 		"clock":    clock,
 		"guests":   strconv.Itoa(guests),
+		"bots":     strconv.Itoa(bots), // of the guests, so a bot-filled session does not read as people
 		"capacity": strconv.Itoa(capacity),
 		"address":  a.cfg.HostAddress,
 		"phase":    life.Phase.String(),

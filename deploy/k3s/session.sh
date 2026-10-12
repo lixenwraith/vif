@@ -221,6 +221,7 @@ case "$command" in
 		reported=$(curl -fsS "$allocator/vif/api/sessions" |
 			jq -r --arg id "$2" '.sessions[] | select(.id == $id) |
 				"phase=\(.state.phase) guests=\(.state.guests)/\(.state.capacity)" +
+				" bots=\(.state.bots // 0)" +
 				" clock=\(.state.clock // "none") ready=\(.state.ready)" +
 				" tick=\(.state.tick) expires=\(.state.expires_in // "none")" +
 				" join=\(.join_target)" +
