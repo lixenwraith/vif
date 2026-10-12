@@ -121,7 +121,7 @@ func main() {
 
 	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, *flagBot, *flagWatch, flagSession)
 	if sessionErr == nil && *flagHeadless && (*flagWatch || *flagBot == "" && flagSession.bots == "" && *flagReplay == "" || flagSession.serve != "") {
-		sessionErr = errors.New("-headless requires -bot or -replay and cannot combine with -watch or -serve")
+		sessionErr = errors.New("-headless requires -bot, -bots or -replay and cannot combine with -watch or -serve")
 	}
 	if sessionErr == nil {
 		sessionErr = requestSiteSession(requested)
