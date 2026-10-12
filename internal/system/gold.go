@@ -192,9 +192,11 @@ func (s *GoldSystem) Update() {
 		s.requestTimerSplash(remaining)
 	}
 
-	// Timeout check only - integrity handled via event; a header without its
+	// Timeout check only - integrity handled via event. A header the composite
+	// destroyed this tick ends through its breach; a live one without its
 	// deadline has no time left
-	if !timed || timer.Expired(component.TimerDeadline) {
+	if timed && timer.Expired(component.TimerDeadline) ||
+		!timed && s.world.Components.Header.HasEntity(s.headerEntity) {
 		s.handleGoldTimeout()
 	}
 }
