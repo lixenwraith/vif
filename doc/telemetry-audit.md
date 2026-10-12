@@ -29,7 +29,7 @@ Every metric is consumed generically by the status snapshot, telemetry overlay, 
 | Gold | `gold.{active,header_entity,timer,spawn_failures,cursor_rejects,disabled_rejects}` | `NewGoldSystem` | Resolved sequence handlers/update | `Init` | Generic only |
 | Materialize | None | — | — | — | — |
 | Fuse | `fuse.{spawn_failures,disabled_rejects,buf_pending_hwm}` | `NewFuseSystem` | Fuse request/update failure paths and buffer observation | `Init` | Generic only |
-| Spirit | `spirit.buf_destroy_next_tick_hwm` | `NewSpiritSystem` | Deferred-destroy buffer observation | `Init` | Generic only |
+| Spirit | None | — | — | — | — |
 | Lightning | None | — | — | — | — |
 | Missile | `missile.{count,spawned,impacts,expired,wall_collisions,boundary_hits,grid_steps,disabled_rejects}` | `NewMissileSystem` | Resolved spawn/impact/expiry and swept update | `Init` | Generic only |
 | Navigation | `nav.{entities,recomputes,roi_cells,buf_groups_hwm}` | `NewNavigationSystem` | Recompute/update paths and group observation | `Init` | Generic only |
@@ -469,7 +469,6 @@ the effect's current name; death API unification removed the two obsolete
 | `spatial.position_batch_hwm` (int) | Largest pending position batch committed during the session. |
 | `spatial.positions_hwm` (int) | Highest live length of the dense position store. |
 | `spatial.unindexed` (int) | Snapshot-cadence gauge of positioned entities the grid holds no cell for: outside the map after a crop, or dropped by a full cell. Nothing renders them and no grid query reaches them. |
-| `spirit.buf_destroy_next_tick_hwm` (int) | High-water live length of the reusable destroy next tick buffer/state collection. |
 | `storm.boundary_reflections` (int) | Resolved storm reflections at simulation bounds. |
 | `storm.buf_ellipse_offsets_hwm` (int) | High-water live length of the reusable ellipse offsets buffer/state collection. |
 | `storm.buf_member_excludes_hwm` (int) | High-water live length of the reusable member excludes buffer/state collection. |

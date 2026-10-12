@@ -257,6 +257,24 @@ The optimized one-entity death event packs the effect ID into the high 16 bits
 and the entity ID into the low 48 bits. Batch payloads can come from pools. Code
 must not retain a pooled payload after its handler returns.
 
+### Timers
+
+`TimerComponent` gives an entity three countdowns, indexed by `TimerSlot`: a
+lifetime, a deadline and a cooldown. `TimerSystem` runs right after
+`NetworkSystem`, before any owner, and ages every armed slot by the tick. An
+expired lifetime ends its entity through a silent death batch that settles
+before the next tick's systems. The timer collects expired lifetimes by state on
+every pass, so a capture that carries one still ends the entity on the joiner; a
+death-protected entity's lifetime just stops. A deadline or cooldown stays
+expired until its owner acts and re-arms or stops it. Owners and renderers read
+`Progress` and `Elapsed` instead of keeping their own clock.
+
+A slot armed in an event handler counts its arming tick, because the pass runs
+after dispatch; one armed in an owner's `Update` starts counting on the next
+tick. Systems whose entities end or act on a slot declare `Requires: timer`.
+Cursor countdowns stay in their owner-authored stores (D-13), and species phase
+timers stay with their state machines (see [Machine design](machine-design.md)).
+
 ## 8. Event transport
 
 Systems do not call peer systems. They publish `event.GameEvent` values:
@@ -380,3 +398,4 @@ the fields it owns into a component, resource, or new value.
 | Events and producer origins | `internal/event/type.go`, `payload.go`, `origin.go`, `queue.go`, `router.go` |
 | Replay record and anchor schema | `internal/event/journal.go`, `journal_sink.go` |
 | Destruction | `internal/system/death.go` |
+| Timers | `internal/component/timer.go`, `internal/system/timer.go` |
