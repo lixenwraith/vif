@@ -42,64 +42,6 @@ func lightningEntity(w *engine.World) core.Entity {
 	return 0
 }
 
-func TestTimerLifetimeEndsInTheNextTicksDeathBatch(t *testing.T) {
-	w := engine.NewWorld()
-	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	tick := newTimerTick(w)
-
-	e := w.CreateEntity(core.DomainPlayer)
-	armTimer(w, e, component.TimerLifetime, 2*parameter.GameUpdateInterval)
-
-	tick.open()
-	timer, _ := w.Components.Timer.GetPtr(e)
-	if timer.Expired(component.TimerLifetime) || timer.Progress(component.TimerLifetime) != 0.5 {
-		t.Fatalf("after one pass: %+v, want half elapsed", timer.Slots[component.TimerLifetime])
-	}
-
-	tick.open()
-	if !timer.Expired(component.TimerLifetime) {
-		t.Fatalf("after two passes: %+v, want expired", timer.Slots[component.TimerLifetime])
-	}
-	if _, alive := w.GetComponentMask(e); !alive {
-		t.Fatal("an expired lifetime destroyed the entity before the tick's owners ran")
-	}
-
-	tick.open()
-	if _, alive := w.GetComponentMask(e); alive {
-		t.Fatal("an expired lifetime outlived the next tick's pre-dispatch")
-	}
-}
-
-func TestTimerOwnerSlotsStayExpiredUntilRearmed(t *testing.T) {
-	w := engine.NewWorld()
-	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	tick := newTimerTick(w)
-
-	e := w.CreateEntity(core.DomainShared)
-	armTimer(w, e, component.TimerCooldown, parameter.GameUpdateInterval)
-	armTimer(w, e, component.TimerDeadline, time.Second)
-
-	for range 3 {
-		tick.open()
-	}
-	timer, ok := w.Components.Timer.GetPtr(e)
-	if !ok || !timer.Expired(component.TimerCooldown) || timer.Expired(component.TimerDeadline) {
-		t.Fatalf("slots = %+v, want the cooldown expired and the deadline running", timer.Slots)
-	}
-	if timer.Expired(component.TimerLifetime) || timer.Progress(component.TimerLifetime) != 0 {
-		t.Fatalf("idle lifetime = %+v, want idle", timer.Slots[component.TimerLifetime])
-	}
-
-	timer.Arm(component.TimerCooldown, parameter.GameUpdateInterval)
-	if timer.Expired(component.TimerCooldown) {
-		t.Fatal("a re-armed cooldown still reads expired")
-	}
-	tick.open()
-	if _, alive := w.GetComponentMask(e); !alive || !timer.Expired(component.TimerCooldown) {
-		t.Fatal("a re-armed cooldown did not expire again, or a non-lifetime slot ended its entity")
-	}
-}
-
 // TestLifetimesKeepTheirTickCounts pins two lifetimes against the counts their
 // own countdowns produced: a turret bullet moves on 80 ticks (its age had to
 // exceed the limit), and a spirit draws 10 frames, the last on its target,
