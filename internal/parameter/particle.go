@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-// Particle entities (decay and blossom behaviors)
+// Falling particles (decay and blossom behaviors)
 const (
 	// ParticleMinSpeed is the minimum initial particle velocity in cells per second
 	ParticleMinSpeed = 8.0
@@ -16,7 +16,7 @@ const (
 	ParticleChangeChance = 0.4
 )
 
-// Dust Entity
+// Dust particles orbiting the local cursor
 const (
 	// DustAttractionBase is orbital attraction strength (cells/sec²)
 	DustAttractionBase = 60.0
@@ -46,11 +46,26 @@ const (
 	// DustJitter - constant random velocity added per frame (cells/sec)
 	DustJitter = 2.0
 
-	// Timers are the lifetime of each dust type (dark is disabled for now)
+	// Lifetime of dust by glyph level; dark glyphs make no dust, so dark is only a fade step
 	DustTimerDark   = 2 * time.Second
 	DustTimerNormal = 4 * time.Second
 	DustTimerBright = 8 * time.Second
 
 	// DustWallRestitution is velocity retained on wall/boundary bounce
 	DustWallRestitution = 0.5
+)
+
+// Decay particles orbiting a spinning or charging Kraken
+const (
+	// DecayOrbitStiffness pulls toward the orbit radius (1/s²); it keeps pace with a charge
+	DecayOrbitStiffness = 30.0
+	// DecayOrbitRadiusMin/Max sit inside the leg span, where the legs have cleared walls (cells)
+	DecayOrbitRadiusMin = 12.0
+	DecayOrbitRadiusMax = 26.0
+	// DecayOrbitDamping circularizes the orbit (1/sec)
+	DecayOrbitDamping = 2.0
+	// DecayOrbitSpeed is the tangential speed a particle takes on entering orbit (cells/sec)
+	DecayOrbitSpeed = 40.0
+	// DecayOrbitDrag is quadratic drag while orbiting (1/cell); a falling particle has none
+	DecayOrbitDrag = 0.005
 )

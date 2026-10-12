@@ -91,7 +91,7 @@ func TestWindAppliesBySpeciesMassAndExcludesOtherKinetics(t *testing.T) {
 		w.Components.Orb.SetComponent(e, component.OrbComponent{})
 	})
 	addExcluded("dust", core.DomainPlayer, func(e core.Entity) {
-		w.Components.Dust.SetComponent(e, component.DustComponent{})
+		w.Components.Particle.SetComponent(e, component.ParticleComponent{Behavior: component.ParticleDust})
 	})
 	addExcluded("decay", core.DomainPlayer, func(e core.Entity) {
 		w.Components.Particle.SetComponent(e, component.ParticleComponent{Behavior: component.ParticleDecay})

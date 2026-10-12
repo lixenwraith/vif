@@ -3,7 +3,6 @@ package event
 import "sync"
 
 // BatchPayload is the canonical pooled payload for batch effect events
-// Replaces per-type batch payload structs (DustSpawnBatchRequestPayload, etc.)
 type BatchPayload[T any] struct {
 	Entries []T
 }
@@ -46,7 +45,6 @@ func (p *BatchPool[T]) Release(bp *BatchPayload[T]) {
 
 var (
 	FlashBatchPool    = NewBatchPool[FlashSpawnEntry](512)
-	ParticleBatchPool = NewBatchPool[ParticleSpawnEntry](128)
-	DustBatchPool     = NewBatchPool[DustSpawnEntry](2048)
+	ParticleBatchPool = NewBatchPool[ParticleSpawnEntry](2048)
 	FadeoutBatchPool  = NewBatchPool[FadeoutSpawnEntry](512)
 )

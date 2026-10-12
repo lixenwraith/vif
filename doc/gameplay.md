@@ -111,13 +111,19 @@ Spawn pacing adapts to screen occupancy: sparse maps receive text faster while
 dense maps sharply reduce new placement. Placement excludes a region around the
 cursor and retries only a bounded number of positions.
 
-Decay is an explicit wave mechanic. `ParticleSystem` selects decay or blossom
-rules from `ParticleComponent.Behavior`: decay marks eligible glyphs and removes
-them over time while blossom spreads the inverse level transformation. Both
-respect `ProtectFromParticle`, share a deterministic Player-domain RNG stream and
-the same wall/boundary destruction rules, and remain Player-domain. Dust, flash,
-fade, splash, marker, explosion, and motion-marker systems are transient feedback
-rather than durable text state.
+Decay is an explicit wave mechanic. `ParticleSystem` selects dust, decay or
+blossom rules from `ParticleComponent.Behavior`, and everything that differs
+between them is one row of its profile table: decay marks eligible glyphs and
+removes them over time while blossom spreads the inverse level transformation.
+Both respect `ProtectFromParticle`, die on walls and bounds, and have no lifetime.
+Dust bounces instead, nudges the drains it crosses, and lives 2/4/8 s by glyph
+level through `TimerComponent`, fading a level as it runs down. All three share
+one deterministic Player-domain RNG stream. Dust orbits the local cursor while its
+energy is nonzero. Every decay particle on the map orbits the nearest Kraken while
+it spins or charges, entering with a kick in its spin; when the Kraken stands
+still, they drop straight down at fresh decay speed. Flash, fade, splash, marker,
+explosion, and motion-marker systems are transient feedback rather than durable
+text state.
 
 ## 5. Energy, heat, boost, and shield
 
@@ -354,7 +360,8 @@ it spawns and arms the cursor before opening `main`.
    a full-map maze without rooms and spawn one Kraken at its center.
 4. Kraken contact destroys walls, and each charge locks on to the farthest cursor.
    Its body stays within the map; tentacles can extend beyond it, but only their
-   in-map cells interact.
+   in-map cells interact. The glyphs it covers become decay, which swirls around it
+   while it spins or charges and drops away when it stands still.
 5. The first Kraken kill returns to `main`; another three storm kills open the
    second Kraken encounter. Its defeat starts tower defense. Thus the escalation
    is **3 storms → 1 Kraken → 3 storms → 1 Kraken → tower**. Each threshold counts
@@ -386,7 +393,7 @@ declares for itself:
 | Spawning/effects | `materialize`, `fuse`, `spirit`, `lightning`, `missile` |
 | Motion/environment/combat | `navigation`, `soft_collision`, `environment`, `combat` |
 | Species | `drain`, `quasar`, `swarm`, `storm`, `pylon`, `snake`, `eye`, `mount`, `bullet` |
-| Particles | `dust`, `flash`, `fadeout`, `marker`, `explosion`, `motion_marker`, `splash` |
+| Particles | `flash`, `fadeout`, `marker`, `explosion`, `motion_marker`, `splash` |
 | Lifecycle/learning | `death`, `timer`, `adaptation`, `genetic` |
 | Sound | `audio`, `music` |
 

@@ -17,8 +17,7 @@ const (
 	PriorityGlyph
 	PriorityNugget
 	PriorityGold
-	PriorityDust       // Before Explosion
-	PriorityExplosion  // After Dust
+	PriorityExplosion
 	PriorityFuse       // After Explosion, before Drain
 	PrioritySpirit     // After Fuse, before Drain
 	PriorityNavigation // Before systems that move entities
@@ -38,8 +37,8 @@ const (
 	PriorityEye     // After Gateway
 	PriorityMount   // After every host species: a host arms its mount before the mount fires
 	PriorityCombat
-	PriorityLoot // After species entities and combat
-	PriorityParticle
+	PriorityLoot      // After species entities and combat
+	PriorityParticle  // After Kraken, whose spin and charge pull decay particles
 	PriorityLightning // After Quasar
 	PriorityMissile   // After Weapon
 	PriorityBullet    // After Mount and Storm, which request bullets

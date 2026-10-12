@@ -56,7 +56,6 @@ type SharedWorldState struct {
 	CursorView   []StoreEntry[component.CursorViewComponent]   `json:"cursorview,omitempty"`
 	Particle     []StoreEntry[component.ParticleComponent]     `json:"particle,omitempty"`
 	Tracer       []StoreEntry[component.TracerComponent]       `json:"tracer,omitempty"`
-	Dust         []StoreEntry[component.DustComponent]         `json:"dust,omitempty"`
 	Navigation   []StoreEntry[component.NavigationComponent]   `json:"navigation,omitempty"`
 	Combat       []StoreEntry[component.CombatComponent]       `json:"combat,omitempty"`
 	Genotype     []StoreEntry[component.GenotypeComponent]     `json:"genotype,omitempty"`
@@ -262,14 +261,6 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 		}
 		if v, ok := w.Components.Tracer.GetComponent(e); ok {
 			s.Tracer = append(s.Tracer, StoreEntry[component.TracerComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Dust.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Dust.GetComponent(e); ok {
-			s.Dust = append(s.Dust, StoreEntry[component.DustComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Navigation.Entities() {
@@ -607,9 +598,6 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	for _, en := range s.Tracer {
 		w.Components.Tracer.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
-	for _, en := range s.Dust {
-		w.Components.Dust.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
-	}
 	for _, en := range s.Navigation {
 		w.Components.Navigation.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
@@ -754,7 +742,6 @@ type SharedWorldDelta struct {
 	CursorView   StoreDelta[component.CursorViewComponent]   `json:"cursorview,omitzero"`
 	Particle     StoreDelta[component.ParticleComponent]     `json:"particle,omitzero"`
 	Tracer       StoreDelta[component.TracerComponent]       `json:"tracer,omitzero"`
-	Dust         StoreDelta[component.DustComponent]         `json:"dust,omitzero"`
 	Navigation   StoreDelta[component.NavigationComponent]   `json:"navigation,omitzero"`
 	Combat       StoreDelta[component.CombatComponent]       `json:"combat,omitzero"`
 	Genotype     StoreDelta[component.GenotypeComponent]     `json:"genotype,omitzero"`
@@ -819,7 +806,6 @@ func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
 	d.CursorView = diffStore(base.CursorView, next.CursorView, equalCursorView)
 	d.Particle = diffStore(base.Particle, next.Particle, equalParticle)
 	d.Tracer = diffStore(base.Tracer, next.Tracer, equalTracer)
-	d.Dust = diffStore(base.Dust, next.Dust, equalDust)
 	d.Navigation = diffStore(base.Navigation, next.Navigation, equalNavigation)
 	d.Combat = diffStore(base.Combat, next.Combat, equalCombat)
 	d.Genotype = diffStore(base.Genotype, next.Genotype, equalGenotype)
@@ -880,7 +866,6 @@ func ApplySharedWorldDelta(base SharedWorldState, d SharedWorldDelta) SharedWorl
 	s.CursorView = applyStore(base.CursorView, d.CursorView)
 	s.Particle = applyStore(base.Particle, d.Particle)
 	s.Tracer = applyStore(base.Tracer, d.Tracer)
-	s.Dust = applyStore(base.Dust, d.Dust)
 	s.Navigation = applyStore(base.Navigation, d.Navigation)
 	s.Combat = applyStore(base.Combat, d.Combat)
 	s.Genotype = applyStore(base.Genotype, d.Genotype)
@@ -940,7 +925,6 @@ func (d SharedWorldDelta) DeltaEntries() int {
 	n += d.CursorView.Entries()
 	n += d.Particle.Entries()
 	n += d.Tracer.Entries()
-	n += d.Dust.Entries()
 	n += d.Navigation.Entries()
 	n += d.Combat.Entries()
 	n += d.Genotype.Entries()
@@ -1003,7 +987,6 @@ func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
 	w.Entries += countStoreDifference(a.CursorView, b.CursorView, touched, equalCursorView)
 	w.Entries += countStoreDifference(a.Particle, b.Particle, touched, equalParticle)
 	w.Entries += countStoreDifference(a.Tracer, b.Tracer, touched, equalTracer)
-	w.Entries += countStoreDifference(a.Dust, b.Dust, touched, equalDust)
 	w.Entries += countStoreDifference(a.Navigation, b.Navigation, touched, equalNavigation)
 	w.Entries += countStoreDifference(a.Combat, b.Combat, touched, equalCombat)
 	w.Entries += countStoreDifference(a.Genotype, b.Genotype, touched, equalGenotype)
@@ -1125,9 +1108,6 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 		target[en.Entity] = struct{}{}
 	}
 	for _, en := range s.Tracer {
-		target[en.Entity] = struct{}{}
-	}
-	for _, en := range s.Dust {
 		target[en.Entity] = struct{}{}
 	}
 	for _, en := range s.Navigation {
@@ -1266,7 +1246,6 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	reconcileStore(w.Components.CursorView, s.CursorView)
 	reconcileStore(w.Components.Particle, s.Particle)
 	reconcileStore(w.Components.Tracer, s.Tracer)
-	reconcileStore(w.Components.Dust, s.Dust)
 	reconcileStore(w.Components.Navigation, s.Navigation)
 	reconcileStore(w.Components.Combat, s.Combat)
 	reconcileStore(w.Components.Genotype, s.Genotype)
@@ -1409,15 +1388,11 @@ func equalCursorView(a, b *component.CursorViewComponent) bool {
 }
 
 func equalParticle(a, b *component.ParticleComponent) bool {
-	return *a == *b
+	return a.LastIntX == b.LastIntX && a.LastIntY == b.LastIntY && a.Rune == b.Rune && a.Behavior == b.Behavior && a.Orbiting == b.Orbiting && math.Float64bits(float64(a.OrbitRadius)) == math.Float64bits(float64(b.OrbitRadius)) && math.Float64bits(float64(a.ChaseBoost)) == math.Float64bits(float64(b.ChaseBoost)) && a.ResponseGroup == b.ResponseGroup
 }
 
 func equalTracer(a, b *component.TracerComponent) bool {
 	return a.OwnerEntity == b.OwnerEntity && math.Float64bits(float64(a.TargetX)) == math.Float64bits(float64(b.TargetX)) && math.Float64bits(float64(a.TargetY)) == math.Float64bits(float64(b.TargetY)) && a.TrailRing == b.TrailRing && a.TrailHead == b.TrailHead && a.TrailLen == b.TrailLen && a.Palette == b.Palette && a.Blocked == b.Blocked && math.Float64bits(float64(a.DrainSpeed)) == math.Float64bits(float64(b.DrainSpeed)) && math.Float64bits(float64(a.DrainRemaining)) == math.Float64bits(float64(b.DrainRemaining)) && math.Float64bits(float64(a.DrainTotal)) == math.Float64bits(float64(b.DrainTotal))
-}
-
-func equalDust(a, b *component.DustComponent) bool {
-	return math.Float64bits(float64(a.OrbitRadius)) == math.Float64bits(float64(b.OrbitRadius)) && math.Float64bits(float64(a.ChaseBoost)) == math.Float64bits(float64(b.ChaseBoost)) && a.LastIntX == b.LastIntX && a.LastIntY == b.LastIntY && a.ResponseGroup == b.ResponseGroup
 }
 
 func equalNavigation(a, b *component.NavigationComponent) bool {

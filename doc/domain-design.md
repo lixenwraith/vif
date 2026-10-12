@@ -138,7 +138,7 @@ per-target combat requests derived from that geometry do not.
 ### D-6 — Presentation and personal effects are Player-domain
 
 Lightning, flash, fadeout, splash, motion markers, explosion smoke, pulse rings,
-materialise beams, dust, particles (decay and blossom), orbs, bullets, missiles,
+materialise beams, particles (dust, decay and blossom), orbs, bullets, missiles,
 and loot are Player-domain. Encounter level clears explicitly preserve loot; run
 resets clear it. Shared corrections retain each receiver's drops and ownership,
 and loot revalidates its bounds and walls after an install. Collected weapon
@@ -504,7 +504,7 @@ is the Shared placement gate.
 | Domain | Entities |
 |---|---|
 | **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, kraken, tower, gateway, wall, gold, marker, FSM, time |
-| **Player** | glyph, nugget, dust, drain, particle (decay/blossom), tracer, bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, explosion presentation, loot |
+| **Player** | glyph, nugget, drain, particle (dust/decay/blossom), tracer, bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, explosion presentation, loot |
 | **Stamped** | materialise, spirit; domain is resolved per request |
 
 Gold is contested Shared state: typing contribution is tallied per roster slot and
