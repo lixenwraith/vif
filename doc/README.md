@@ -45,6 +45,8 @@ reader can start with the application shape and then descend into a subsystem.
 | [Session fleet plan](kubernetes-fleet.md) | Operational detail | What is the design, what did it cost when measured, what is still open, and what was decided against? Holds the work list. |
 | [Node runbook](../deploy/runbook.md) | Operational detail | What do you run on a node that is already up — status, draining, the updaters, and what each refusal means? |
 | [End-to-end setups](../script/README.md) | Operational detail | Which command runs which game setup, and which ones assert? |
+| [Bots](bots.md) | User guide | How do you play beside, watch or host bots, remove them, write a graph and compare graphs? |
+| [Configuration menu](config-menu.md) | User guide | What does each page of the Ctrl-G menu control? |
 
 Existing focused references remain useful:
 
@@ -52,8 +54,6 @@ Existing focused references remain useful:
   detail.
 - [TOML macros](toml-macros.md) records the macro decision and its syntax.
 - [TODO](todo.md) is the running work list the packaging checklists feed.
-- [Bots](todo-bots.md) is the working plan for bots and relayed seats, and becomes
-  their document as its stages land.
 - [Behavior machines](machine-design.md) is the working design for per-entity
   species state machines and data-driven species behavior.
 - [Keymap example](../internal/input/README.md) shows sparse key overrides.

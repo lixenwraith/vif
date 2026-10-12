@@ -1,0 +1,327 @@
+# Bots
+
+A bot is a participant driven by a graph instead of a terminal. It holds a roster
+slot and a cursor, and its intents (keys and mouse alike) pass through the same mode
+router as a person's, under the same session rules. Bots are cooperative: they
+play beside people against the environment.
+
+## Quick start
+
+```sh
+vif -bot                              # you and one default bot
+vif -bot 2:default                    # you and two bots
+vif -host :7777 -bot 2                # host with two bots; others may join
+vif -join 127.0.0.1:7777              #   joining it from another terminal
+vif -join 127.0.0.1:7777 -bot 2       # join with two bots of your own
+vif -bot -watch                       # watch one bot play; no player of yours
+vif -bot default -headless -speed max -j   # record a solo bot flat out; Ctrl-C ends it
+vif -replay <journal>                 # replay what it recorded
+vif -serve :7777 -size 120x40 -bot 2  # dedicated host with two bots and room for people
+```
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `-bot [N[:graph]\|graph]` | Add N bots playing graph. N is 0..16 and 0 adds none; omitted operands mean `1:default`. |
+| `-bots [N[:graph]\|graph]` | The same grammar; requests from both flags add together. |
+| `-watch` | Show the first bot on this terminal in place of a player; any further bots are seated beside it. Not with `-serve`. |
+| `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, score S`. Not with `-watch` or `-serve`. |
+| `-speed <rate>` | A watched or headless bot's pace: `1/8`..`8`, or `max` for no pacing. A watched bot defaults to `1`; a solo headless bot runs flat out unless set. |
+| `-size <WxH>` | A headless bot's view, default 120x40; a watched bot takes the terminal's. Seats always take 120x40. With `-serve` it sizes the map, which otherwise the first joiner sets. |
+| `-seed <n>` | Root seed. A solo bot run depends only on it and the configuration. |
+| `-serve <addr>` | A dedicated host with no player of its own; `-bot` seats its bots. |
+| `-host`, `-join` | Keep your player; bots join beside you. |
+| `-config-dir <dir>` | The first root searched for `bot/<name>.toml`. |
+| `-j` | Journal this process's front instance: your player, or the watched or headless bot. |
+| `-check` | Validate every bot graph in the configuration roots and the embedded ones, with the rest of the configuration. |
+
+## Compositions
+
+| | On the host | On a guest |
+|---|---|---|
+| A person | `vif`, or `vif -host <addr>` | `vif -join <addr>` |
+| A person with bots | `vif -bot N`, `vif -host <addr> -bot N`, or `:bot add` | `vif -join <addr> -bot N`, or `:bot add` |
+| Bots alone | `vif -serve <addr> -bot N`, or `-bot N -watch` / `-headless`, with `-host <addr>` to let others in | `vif -join <addr> -bot N -watch` / `-headless` |
+
+## Ownership and leaving
+
+A bot belongs to the run that started it, its holder.
+
+| Bot of | Joins | Leaves when |
+|---|---|---|
+| the host | its holder's listener over loopback; a run in no session opens one on loopback first | the host ends, it is dropped, or a `-serve` host begins its drain |
+| a guest | through the guest's own link, on an in-process stream the guest serves | the guest leaves or loses its session, or it is dropped |
+
+- After a hand-off, a holder that inherited authority admits new bots on a
+  loopback listener of its own; a guest keeps seating bots through whoever holds
+  authority.
+- A seated bot never advertises, so it is never elected. A watched or headless bot
+  is an independent participant and follows `-no-advertise` like any other.
+- `:bot drop <slot>` drops one of your bots; the host may drop any bot.
+  `:player drop <slot>` (host only) drops a player with all its bots, or one bot.
+- A dropped person starts a new local game without its bots; a dropped watched or
+  headless run stops. Dropping ends membership; it is not a ban.
+- A headless bot ends once its session is gone (its host left and nobody took
+  over); a watched bot plays on alone, as a person does.
+
+## Commands and the menu
+
+| Command | Effect |
+|---|---|
+| `:bot` | List this run's bots: slot, graph, joining or leaving. |
+| `:bot add [N[:graph]\|graph]` | Seat more bots; a solo run first opens a loopback session. A count of 0 is refused. |
+| `:bot drop <slot>` | Drop one of your bots, or as host any bot. |
+| `:player` | List the slots: `3 player` or `4 bot of 3`. |
+| `:player drop <slot>` | Host only: drop a player and its bots, or one bot. |
+
+Slots accept `10`, `A` or `0xA` for the cursor marked `A`. The
+[configuration menu](config-menu.md#bots) offers the same operations.
+
+A watched bot takes `:` and Ctrl-G. While you hold its command line or the menu,
+its graph supplies no input: a run in a session keeps ticking, a solo run waits.
+`:n`, `:bot add`, `:bot drop` and `:player` work there.
+
+## Telling cursors apart
+
+Every other cursor is marked with its slot, `0` to `F`; yours is unmarked. The
+status bar's `4P:1` means four cursors, yours in slot 1. `:player` tells players
+from bots and names each bot's holder. Slots identify cursors for this session
+only, and a departed slot may be reused.
+
+## Pause, speed and session lifetime
+
+- A host may pause only while every other participant is its own bot; its bots
+  stand still with it, and anyone joining ends the pause. A guest, a host with
+  other people in, or a watched bot in a session cannot pause.
+- Speed changes are refused in a live session, one only your bots share included.
+  `-speed max` is for one solo watched or headless bot.
+- Bots count as occupancy. A `-serve` session only its own bots occupy plays on
+  until a termination signal, which sends them away at once; in the fleet, also
+  until the session Job's one-hour deadline. A guest's bots count only while the
+  guest is in the session.
+- The fleet allocator takes a `bots` count, closed by default (`bots_max` 0); see
+  [Session fleet plan](kubernetes-fleet.md). Neither `-join <site>` nor the menu's
+  request form asks for bots yet.
+- A browser build seats bots only as a guest of a session it joined; it cannot
+  host, so it cannot add bots to a solo run.
+
+## Writing a graph
+
+A graph resolves as a path, then as `bot/<name>.toml` under `-config-dir`, the user
+root, the checkout's `wad/` beside a `bin/` binary, `/usr/local/etc/vif` and
+`/etc/vif`, then as the embedded copy. `make install-config` installs the embedded
+`default` into the user root. `roam` and `patrol` load `default` unless a root holds
+a file of that name. `-d` does not pin bot graphs.
+
+### Document
+
+One self-contained TOML file in the [FSM dialect](fsm-reference.md):
+
+| Table | Holds |
+|---|---|
+| `[bot]` | `actions_per_second`: intents released per second of game time, default 12. |
+| `[regions.<name>]` | `initial` only. |
+| `[states.<name>]` | States as in a scenario: hooks, transitions, `parent`. |
+| `[macros]` | Inline macros, expanded at load. |
+
+Anything else is refused at load: `description`, `[systems]`, `macro_files`, and a
+region's `file`, `enabled_systems`, `disabled_systems` or `background`. Queued
+intents wait in a queue of 256; an intent that finds it full is dropped and
+counted. Allowance left idle builds up to one second's worth.
+
+### Actions
+
+| Action | Payload | Queues |
+|---|---|---|
+| `Intent` | `name`: an action of the [default keymap](../internal/asset/input/keymap.toml), or a list drawn from; `count`: a number or a `[min, max]` range drawn from; `char` for a char-wait action | one key press |
+| `Text` | `text` | one character per rune |
+| `Command` | `text`: an ex-command, the leading `:` optional, not empty | the command-line round trip |
+| `TypeGlyph` | none | the glyph under the cursor, switching to Insert first; nothing when there is none |
+| `PointAt` | `target`; `fire = true` clicks instead of moving; `away = true` aims away | a pointer move or click |
+
+`Intent` refuses operators, prefixes, marker jumps and macro keys; `quit` ends the
+run. `PointAt` aims at the nearest target of its class, clamped to the cells the
+view shows, and for `glyph` at the left edge of that text run. If the cursor may
+not enter the cell, it lands on the nearest shown cell it may enter, and does
+nothing when none is shown. `away` aims at the target's mirror through the cursor;
+it refuses `fire` and `random`, and does nothing while the target is on the cursor.
+
+### Guards
+
+| Guard | Args | Passes when |
+|---|---|---|
+| `HasTarget` | `target`, `within` | a target of the class exists, within `within` cells when non-zero |
+| `OnTarget` | `target` | the cursor's cell holds one |
+| `InMode` | `mode`: `normal`, `visual`, `insert`, `search`, `command`, `overlay` | the router is in that mode |
+| `Chance` | `percent`, 1..100 | a draw from the bot's own stream |
+| `Idle` | none | the intent queue is empty |
+| `Own` | `field` | that event payload field names the bot's own cursor |
+
+A guard refuses an argument it does not read.
+
+### Targets
+
+| Target | Is |
+|---|---|
+| `glyph` | typeable text: a glyph neither gold nor part of a composite |
+| `gold` | a gold sequence member |
+| `nugget` | a nugget |
+| `species` | a combat entity other than a cursor or a tower |
+| `threat` | a species, a hostile bullet or a hostile missile, all weighted alike |
+| `cursor` | another participant's cursor |
+| `random` | a cell the view shows; `PointAt` only |
+
+Distance counts rows twice, as the terminal draws them. `HasTarget` and `OnTarget`
+see the whole local world; `PointAt` reaches only what the view shows.
+
+### Events
+
+A transition may name an event as its trigger. A bot sees the events its own
+instance dispatched during its previous step, in dispatch order, before this
+update's `Tick` transitions. Payload guards, `Own` and `capture_vars` read them:
+
+```toml
+{ trigger = "EventCursorDefeatState", target = "Down", guard = "And", guard_args = { guards = [
+    { name = "Own", args = { field = "entity" } },
+    { name = "PayloadBoolEquals", args = { field = "defeated" } },
+] } },
+```
+
+It does not see the event queue, crossings the session has not yet released, or
+ticks run while you hold a watched bot's command line.
+
+### Shared vocabulary
+
+The [FSM reference](fsm-reference.md)'s generic actions and guards work too:
+variables, `StateTimeExceeds`, `And`, `Or`, `Not`, payload guards, region control
+over the bot's own machine, status guards over the bot's own registry (bare keys
+such as `heat.current` are its own slot, `player.<n>.*` any slot), and config
+guards over its own view. Actions that write the world are refused at load:
+`EmitEvent`, `EnableSystem`, `DisableSystem`, `ApplyGlobalSystemConfig`,
+`ApplyRegionSystemConfigs`, `SetStatusInt`, `ResetStatusInt`.
+
+### Timing and randomness
+
+- A graph updates once a tick, every 50 ms of game time.
+- `PointAt` and `TypeGlyph` read the world, so each acts only when all it queues
+  is released before the next tick. `Intent`, `Text` and `Command` queue
+  regardless; wait for them with `Idle`.
+- Draws come from the bot's own stream, seeded from the session seed and its
+  participant. A payload with no choice draws nothing, so a fixed sequence leaves
+  the stream alone.
+
+### Examples
+
+A fixed sequence:
+
+```toml
+[bot]
+actions_per_second = 8
+
+[regions.play]
+initial = "Out"
+
+[states.Out]
+on_enter = [
+    { action = "Intent", payload = { name = "motion_right", count = 12 } },
+    { action = "Intent", payload = { name = "fire_main" }, delay_ms = 500 },
+]
+transitions = [{ trigger = "Tick", target = "Back", guard = "StateTimeExceeds", guard_args = { ms = 1500 } }]
+
+[states.Back]
+on_enter = [{ action = "Intent", payload = { name = "motion_left", count = 12 } }]
+transitions = [{ trigger = "Tick", target = "Out", guard = "StateTimeExceeds", guard_args = { ms = 1500 } }]
+```
+
+The shipped [`default`](../internal/asset/bot/default.toml) types text left to
+right and collects nuggets between patrols:
+
+| State | Does | Moves on |
+|---|---|---|
+| `Seek` | points at the nearest glyph | to `Gold` if gold exists, `Nugget` if one is within 12, `Type` on a glyph, `Walk` with no glyph |
+| `Type` | types the glyph under the cursor | to `Seek` once off text |
+| `Gold` | jumps to gold and types it | to `Seek` when off gold, 1.5 s after entering |
+| `Walk` | now and then moves 2 to 10 cells | to `Seek`, `Gold` or `Nugget` once one exists; at 1% an update to `Leap` |
+| `Leap` | clicks a random shown cell | to `Walk` after 0.4 s |
+| `Nugget` | jumps to the nugget | to `Seek` after 0.3 s |
+
+Run `vif -check` after editing: it prints `bot ok: <path>` for each graph that
+loads and fails naming each that does not. A graph outside every root is checked
+by putting it under `<dir>/bot/` and running `vif -check -config-dir <dir>`.
+
+## Scoring and comparing graphs
+
+A bot scores the events its own steps dispatched:
+
+| Event | Score |
+|---|---|
+| a correctly typed character (`EventBoostReward`) | +1 |
+| a typing error (`EventBoostDeactivate`) | -1 |
+| a species it killed (`EventSpeciesKilled`, or `EventSpeciesKillConfirmed` once a predicted kill is proved) | +5 |
+| a gold sequence it completed (`EventGoldCompleted`) | +25 |
+| its cursor defeated (`EventCursorDefeatState`) | -100 |
+
+The score is in the `-headless` summary, the `bot stopped` log record and a seat's
+`bot left` record. From a checkout with `bin/vif` built,
+`./script/test.sh botscore [graph-file] [seeds] [secs]` plays `default` headless
+and flat out at 120x40 for `secs` (60) over seeds 1..`seeds` (4) on the embedded
+scenario, `td` and `kraken`, and prints each scenario's sum. Given a graph file, it
+fails unless that graph outscores `default` on every scenario; with none, the sums
+are the baseline to beat. It appends a `stop` region (states `StopWait` and
+`StopQuit`), so a graph cannot use those names.
+
+## Recording and replaying
+
+`-j` journals the front instance; seats write no journal. The journal records what
+the router produced, so `vif -replay <journal>` needs no graph and never restarts
+one. Playback runs to the recorded end, quiet trailing ticks included, and shows
+`END`. `vif -replay <journal> -headless` verifies its digests unattended.
+
+## Limits
+
+- A bot perceives its own instance's present state and its last step's events,
+  never the event queue, crossings the session still holds, RNG positions,
+  pending delayed actions, the prediction ledger or network state. A keystroke can
+  miss, as a person's can.
+- Nothing limits which commands a graph may issue, `:q` and `:bot add` included.
+- It reaches only what its view shows, and a seat's view is 120x40.
+- It plays cooperatively: cursor weapons do not strike cursors.
+- A solo bot run is reproducible from its seed. In a session only a journal
+  reproduces a run, and only the front instance has one.
+- Graph state is in no capture: a correction or a reset reaches a graph only
+  through the world it reads next.
+- A guest's bot is judged for lateness only through its holder's link.
+- Links are unauthenticated, and every participant needs the same build.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `bot graph "x" not found as a path, in a configuration root or embedded` | Check the name and `-config-dir`, or give a path. |
+| `bot <name>: …` at start or on `:bot add` | The load error names the graph and its fault; fix it and run `vif -check`. |
+| A `roam` or `patrol` bot plays an old policy | An installed file of that name shadows `default`: use `-bot default` or update the file. |
+| `dropped` above 0 in `bot stopped` or `bot left` | The graph queues faster than its rate; guard its actions with `Idle` or raise `actions_per_second`. |
+| `-speed max cannot pace a session` | Run one bot alone, without `-host`, `-join` or further bots. |
+| `-headless requires -bot, -bots or -replay …` | Give it a bot; `-watch` and `-serve` do not combine with it. |
+| `Bot <graph>: …` on the status bar | The seat failed to join; the log has `bot not seated` with the error. |
+
+The holder logs `bot seated`, `bot left` and `bot not seated` for each seat, whose
+own instance logs under `instance` `seat N`; a watched or headless bot logs
+`bot stopped`.
+
+## Not built yet
+
+- [Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots)
+- [Beat the default graph](todo.md#beat-the-default-graph)
+- [Let a bot graph use operators and marks](todo.md#let-a-bot-graph-use-operators-and-marks)
+- [Limit the commands a bot graph may issue](todo.md#limit-the-commands-a-bot-graph-may-issue)
+- [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
+- [Decide a seat's geometry](todo.md#decide-a-seats-geometry)
+- [Journal a seat's play](todo.md#journal-a-seats-play)
+- [Judge a relayed bot's lateness](todo.md#judge-a-relayed-bots-lateness)
+- [Seat a host's bots without a listener](todo.md#seat-a-hosts-bots-without-a-listener)
+- [Let a watched holder pause with only its own bots](todo.md#let-a-watched-holder-pause-with-only-its-own-bots)
+- [Name participants beyond their slot](todo.md#name-participants-beyond-their-slot)
+- [Train bot graphs offline](todo.md#train-bot-graphs-offline)
+- [Adapt bots to the session's players](todo.md#adapt-bots-to-the-sessions-players)

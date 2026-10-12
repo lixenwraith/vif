@@ -39,7 +39,7 @@ from the journal anchor, and `-script <file>` constructs a caller-driven
 `-bot [N[:graph]|graph]` adds bots beside the human, including with `-host`
 and `-join`; `-bots` accepts the same grammar. `-watch` uses the first bot's view
 with no human, and `-headless` runs it without a terminal. Each additional bot is
-its own instance in the same process. See [Bots](todo-bots.md).
+its own instance in the same process (§4, Bot seats). See [Bots](bots.md).
 
 | Tool path | Entry | Terminal initialized? | Result |
 |---|---|---:|---|
@@ -94,7 +94,7 @@ things about how one is *run* are policy rather than content:
 |---|---|
 | unset | Real time in a session, unpaced when solo. A solo script that opens a session with `:host` starts pacing at that tick and re-anchors its clock there. |
 | `1`, `2`, `1/2`, … | One tick occupies that multiple of the game interval. `2` is twice real time, `1/2` is half. |
-| `max` | No wall pacing at all. Refused when `-host` or `-join` is present: a participant that outruns its peers is not simulating the session it is in. |
+| `max` | No wall pacing at all. Refused with `-host`, `-join` or seated bots: a participant that outruns its peers is not simulating the session it is in. |
 
 Every participant of one session must use the same rate. The runtime cannot see a
 peer's pace, so it enforces only the `max` case: a participant running faster than
@@ -370,11 +370,20 @@ For a solo driven App, the resulting run is a pure function of seed, resolved
 config, and injected event groups. A headless TCP script additionally consumes
 the peer's ordered stream; the authored driver paces those sessions at the fixed
 50 ms tick interval so one process cannot race thousands of ticks ahead of the
-other. Concurrent Apps in one process are still
-not fully isolated: the status recorder trigger hook, navigation debug
-pointers, help key table, and vlog correlation stamp are package/process-wide.
-They do not enter a simulation snapshot, but harnesses should run Apps
-sequentially unless those observer surfaces are deliberately coordinated.
+other.
+
+A process may hold several Apps, a holder and its bot seats. What they share and
+what they do not; none of it enters a simulation snapshot:
+
+| State | Scope | With seats |
+|---|---|---|
+| `status.active` flight recorder hook | the last registry to enable a recorder | seats enable none and take no status snapshots |
+| `vlog` sink and scopes | one per process; each App logs through its own handle | a seat's records carry its own run, tick and `instance` `seat N` |
+| `vlog` journal | one per process | only the front App journals; seats write none |
+| `engine.divergentReads` | one warning latch per config key | harmless across Apps |
+| `internal/prof` captures | the process | a profile covers the holder and its seats |
+| signals, terminal, audio, probe | the front App only | seats are headless and stop when their holder halts them |
+| corpus, scenario, keymap, graph parse | per App | per seat |
 
 ## 4. Play, playback, and authored-script loops
 
@@ -542,6 +551,41 @@ targets the host's local participant and another targets the guest's.
 Unknown top-level/action fields are rejected rather than ignored; action fields
 that apply only to intents or events are rejected on the other forms.
 
+### Bot seats
+
+`app.RunBot` and each seat drive a `bot.Driver`, the authored-script loop with a
+graph in place of a schedule. One `Step`:
+
+```mermaid
+flowchart LR
+    Earn["earn allowance"] --> Feed["feed the last step's events"]
+    Feed --> Update["graph update under the world lock"]
+    Update -->|"actions queue intents"| Release["release at the rate via App.Inject"]
+    Release --> Input["App.InputTick, Tick(1)"]
+    Input -->|"dispatch tap copies and scores"| Feed
+```
+
+- Allowance is earned before the update, `actions_per_second` a second capped at
+  one second's worth, so a world-reading action acts only when all it queues lands
+  before the tick. The queue holds 256; a full one drops and counts.
+- Under the world lock the machine handles, in dispatch order, the events its
+  instance dispatched during the previous step that some state triggers on, then
+  updates by one tick. Guards and actions read the world and never write it.
+- After the lock, `App.Inject` releases what the allowance covers, `App.InputTick`
+  advances auto-fire and held buttons, and the instance ticks. Its dispatch tap,
+  live only while the driver plays, copies each event a trigger names and checks
+  every one against the score table. `Step` returns false once an intent quits.
+- Draws come from `vmath.NewSeededRand(seed, "bot.<participant>")`. Graph state is
+  in no capture, journal or fingerprint.
+
+A seat (`internal/app/seat.go`) is that driver on another headless instance in the
+holder's process, on its own goroutine and paced against the authority like any
+guest. `seatConfigLocked` routes its join: a still-guest relays it on its own link,
+a run in no session first hosts on loopback, an authority is dialled on loopback,
+and a successor opens an admission listener of its own. A play-mode holder's seats
+stand still while it is paused; a driven holder's step on. A headless bot or seat
+ends once its instance forks, and a seat also once its holder does.
+
 ## 5. Simulation tick steps
 
 ```mermaid
@@ -698,7 +742,9 @@ pause gate. It does not freeze the whole process:
 events aligned. It refuses a request to enter pause while a transport has a live
 peer: stopping one participant would also stop its barrier production and apply
 loop while every peer continued. Command and overlay modes still open, but do not
-pause a live network session.
+pause a live network session. The exception is an authority whose every linked
+participant is a seat it holds (`SessionState.SeatsOnly`): its seats stand still
+with it, and a late joiner's admission unpauses it.
 
 In a driven App, pause remains observable/operator state but never revokes the
 caller's authority: `App.Tick` uses the stepped tick path and still advances.

@@ -34,8 +34,9 @@ The world starts with an empty, 16-slot cursor roster. The playable shipped FSM
 configurations request a protected cursor at the map center; `CursorSystem`
 then creates the entity and attaches cursor, ping, energy, heat, shield, boost,
 weapon, and combat components. Each cursor owns an independent copy of that
-state. A roster slot identifies its human, bot, or remote control source, while
-one selected local slot receives terminal input and anchors the camera/UI.
+state. A roster slot records whether this instance or a remote peer drives the
+cursor and, for a bot, which participant holds it. One selected local slot
+receives this instance's input and anchors the camera/UI.
 
 Ordinary startup spawns one human-controlled local cursor. With `-host` and
 `-join`, the startup gate assigns up to `parameter.MaxPlayers` slots and every

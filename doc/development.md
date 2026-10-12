@@ -163,11 +163,11 @@ line wins.
 | `-seed <n>` | Root RNG seed; zero draws one and logs it. |
 | `-speed <rate>` | Initial play-mode rate: `1/8`, `1/4`, `1/2`, `1`, `2`, `4`, `8`. With `-script` or autonomous bots it is the run's wall pace instead and additionally accepts `max`. |
 | `-script <path>` | Run a bounded authored TOML tick schedule; may be combined with `-host` or `-join`. |
-| `-bot [N[:graph]\|graph]` | Add bots beside the human, including with `-host` or `-join`; omitted operands mean `1:default`. |
+| `-bot [N[:graph]\|graph]` | Add bots beside the human, including with `-host` or `-join`; omitted operands mean `1:default`, and a count of 0 adds none. |
 | `-headless` | With bots, run without a human or terminal; solo runs are unpaced. |
 | `-watch` | Present a script or the first bot, with no human player. |
 | `-r`, `-replay <path>` | Present a recorded journal instead of starting interactive play. |
-| `-check` | Resolve and validate FSM, keymap, audio and content; print the result and exit. |
+| `-check` | Resolve and validate FSM, keymap, audio, content and bot graphs; print the result and exit. |
 | `-schema` | Print the FSM and event schema as JSON, then exit. |
 
 ### Diagnostics
@@ -402,21 +402,9 @@ values. Session logging and `-dev` are still applied before playback starts;
 
 ### Bots beside a run
 
-`-bot [N[:graph]|graph]` and `-bots` add bots to the session; bare flags add one
-`default` bot beside the human. Each is a headless
-instance in the same process that joins as any guest does: over loopback to its
-holder's own listener, or to the address its holder joined. A solo run with bots
-hosts on loopback and still pauses, since every other participant is its own; a
-guest's bots leave with it. After takeover, new bots join a local admission
-listener. `:bot add [N[:graph]|graph]` adds them; `:bot drop <slot>` removes one. Slots accept decimal or hex. Hosts can use
-`:player drop <slot>` to remove a player with its bots, or any bot alone.
-`-bot default -watch` permits these commands and `:n`. See [Bots](todo-bots.md) §4.
-
-```bash
-./bin/vif -bots 2                             # play beside two default bots
-./bin/vif -serve 127.0.0.1:7777 -d -bots 3    # a session of three bots to join
-./bin/vif -join 127.0.0.1:7777 -bots 1:default # bring your own bot
-```
+`-bot` and `-bots` seat bots as participants, each a headless instance in the same
+process; a host's bots join over loopback, a guest's through its own link.
+Commands, compositions and examples are in [Bots](bots.md).
 
 ### End-to-end setups
 

@@ -55,9 +55,9 @@ outside this list.
 
 Adding bots to a solo run opens a loopback session. To invite remote players,
 **host at the intended listening address before adding bots**. An existing
-session cannot be rebound through the menu. The same operations are available
-as `:bot add [N[:graph]|graph]` and `:bot drop <slot>`.
-See [Bots](todo-bots.md) for current development and lifecycle details.
+session cannot be rebound through the menu. A browser build cannot host, so it
+adds bots only as a guest of a session it joined. The same operations are
+`:bot add [N[:graph]|graph]` and `:bot drop <slot>`; see [Bots](bots.md).
 
 ### Multiplayer
 
@@ -88,9 +88,8 @@ session, a pending join, or a driven run without a restart loop disables joining
 
 Submitting sends `POST /vif/api/sessions` and joins the returned link. The
 server controls capacity, scenarios, quotas and availability; refusals appear
-in the status bar and preserve the current run. Allocator-side bot provisioning
-is still planned: this form requests a session, and the Bots page adds bots
-held by your local run after joining.
+in the status bar and preserve the current run. The form cannot ask for the
+session's own bots; the Bots page adds bots held by your run after joining.
 
 ## Key binding and persistence
 
