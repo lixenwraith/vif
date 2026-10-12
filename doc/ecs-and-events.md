@@ -314,10 +314,11 @@ Each event is offered to the HFSM before registered system handlers. This makes
 state transitions and captures part of the same deterministic event-settling
 phase as gameplay reactions. Immediate settling paths drain events in rounds,
 up to 16 rounds, so reactions can publish follow-up work without unbounded
-recursion. These paths run before a tick, after the FSM phase, and after
-input/reset work—not after the systems phase itself. The independent 4 ms event
-loop settles system-emitted and other asynchronous requests between 50 ms game
-ticks.
+recursion. These paths run before a tick, after the FSM phase, after the systems
+phase and after input/reset work. The one after the systems closes the tick, so
+an outcome a system applies through a queued event is part of the tick that
+decided it on every reader. The independent 4 ms event loop settles input and
+other asynchronous requests between 50 ms game ticks.
 
 ### Replay capture
 

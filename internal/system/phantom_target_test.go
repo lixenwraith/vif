@@ -162,7 +162,7 @@ func TestTrackedLightningRetiresWhenItsLeaseLapses(t *testing.T) {
 		t.Fatalf("bolts under a renewing owner = %d, want 1", n)
 	}
 
-	// The lease runs out on its last pass and the bolt leaves as the next tick opens
+	// The lease runs out on its last pass and the bolt leaves as that tick closes
 	for range lease + 1 {
 		tick.open()
 		lightning.Update()

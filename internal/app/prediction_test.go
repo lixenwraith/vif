@@ -139,9 +139,9 @@ func TestAPredictedSharedDeathRewardsItsPlayerOnce(t *testing.T) {
 	})
 	defer guest.SetDispatchTap(nil)
 
-	// A species system raises the death in its own Update and the queue dispatches
-	// it at the next tick's settle, so one derivation takes two ticks.
-	derive := func() { advance(); advance() }
+	// A species system raises the death in its own Update and the tick's closing
+	// settle dispatches it, so one derivation takes one tick.
+	derive := advance
 
 	// The guest predicts the death; the authority still holds the swarm.
 	zeroHitPoints(guest, header, cursor)

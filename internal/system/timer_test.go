@@ -12,7 +12,7 @@ import (
 )
 
 // timerTick opens a tick the way the scheduler does: the death batches the
-// previous tick queued settle in pre-dispatch, then the timer ages every slot.
+// previous tick queued settle as it closes, then the timer ages every slot.
 // Other queued events are dropped.
 type timerTick struct {
 	w      *engine.World

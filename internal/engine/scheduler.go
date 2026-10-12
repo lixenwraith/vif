@@ -131,10 +131,11 @@ const (
 	settleSourceInput
 	settleSourceManual
 	settleSourceWire
+	settleSourceClose
 	settleSourceCount
 )
 
-var settleSourceNames = [settleSourceCount]string{"pre", "post", "loop", "reset", "input", "settle", "wire"}
+var settleSourceNames = [settleSourceCount]string{"pre", "post", "loop", "reset", "input", "settle", "wire", "close"}
 
 // NewScheduler creates a scheduler on the given tick interval
 // Receives frameReady sync (receive) channel and returns game updateDone (send) and resetRequest (send) channels
@@ -1034,6 +1035,8 @@ func (s *Scheduler) recordSettlePass(src string) {
 		index = settleSourceManual
 	case "wire":
 		index = settleSourceWire
+	case "close":
+		index = settleSourceClose
 	default:
 		return
 	}
@@ -1248,9 +1251,9 @@ func (s *Scheduler) processTick() {
 		tick := s.world.Resources.Game.State.GetGameTicks() + 1
 
 		// Settled on every tick of a session, not only one that delivered something:
-		// arrivals are this instance's own traffic, and settling on them gave the last
-		// tick's leftovers a different phase and GameTime on each instance. A reset
-		// crossing among them re-bases the counter, so the tick that opens is re-read.
+		// arrivals are this instance's own traffic, and settling on them gave what was
+		// pushed since the last tick a different phase and GameTime on each instance. A
+		// reset crossing among them re-bases the counter, so the tick that opens is re-read.
 		if s.world.Resources.Event.Queue.ReceiveWire(tick) {
 			s.settleLocked("wire")
 			tick = s.world.Resources.Game.State.GetGameTicks() + 1
@@ -1304,7 +1307,12 @@ func (s *Scheduler) processTick() {
 		// 7. System Execution: Systems run on the final, settled state for this tick
 		s.world.UpdateLocked()
 
-		// 8. Commit the tick and every registry write while the world is stable.
+		// 8. Closing Settling: Resolve what the systems queued, so every capture,
+		// crossing and digest that reads this tick reads its outcomes, not their
+		// pending events. A tick phase like pre and post: no group of its own.
+		s.dispatchAndProcessEvents("close")
+
+		// 9. Commit the tick and every registry write while the world is stable.
 		gs := s.world.Resources.Game.State
 		ticks = gs.IncrementGameTicks()
 		gs.UpdateAPM(tickTime)
