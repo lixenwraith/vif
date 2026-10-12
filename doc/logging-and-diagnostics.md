@@ -957,7 +957,7 @@ or not the profiler is on:
 | `-j`, `-journal` | Capture replay input in the user-state journal directory; does not imply a session log |
 | `-j=DIR`, `-journal=DIR` | Capture replay input in `DIR`; the space form is not supported |
 | `-script <file>` | Execute an authored headless tick schedule; may also host/join and may be journaled with `-j` |
-| `-bot [N[:graph]\|graph]` | Add bots beside the human; `-watch` or `-headless` selects autonomous play. `-j` records the viewed instance and its final tick, so replay needs no graph |
+| `-bot [N[:graph]\|graph]` | Add bots beside the human; `-watch` or `-headless` selects autonomous play. `-j` records the viewed instance and its final tick, so replay needs no graph. See [Bots](bots.md) |
 | `-dev[=bool]` | Runtime stderr capture; defaults on for race builds |
 | `-host <bind-address>` | Host a TCP session |
 | `-join <host:port>` | Join a session and adopt the host anchor before world construction |
@@ -967,9 +967,8 @@ or not the profiler is on:
 | `-players <n>` | Participants a `-host` lobby waits for, itself included; with `-serve`, a ceiling on guests |
 
 Log setup failure is **fatal**: a run that was asked to log and could not exits
-immediately with `73` (`EX_CANTCREAT`). It used to play the whole session unlogged
-and report the failure at exit, which for a supervised process is a silent
-failure — the record it was started to produce is the thing that went missing.
+immediately with `73` (`EX_CANTCREAT`): a supervised process that played on
+unlogged would lose the very record it was started to produce.
 
 `-log-stdout` writes the session log to stdout as JSON instead of to a file, and
 implies `-l`. The two sinks are exclusive: a run that wants its log on stdout is

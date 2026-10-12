@@ -38,8 +38,9 @@ guest needs, because an authored script can only enter a session at tick zero.
 
 ## Observed
 
-These run a scenario and print what happened. They assert nothing, because what
-they show is a design choice rather than a promise.
+These run a scenario and print what happened, and are not part of `all`. Most
+assert nothing, because what they show is a design choice rather than a promise;
+`botscore` and `load` fail on what their rows name.
 
 | Scenario | What it shows |
 |---|---|
@@ -48,6 +49,7 @@ they show is a design choice rather than a promise.
 | `host-loss [n]` | host + n guests, then the host goes; prints what each guest concluded. `AUTHORITY=migrate` (default) or `AUTHORITY=host` |
 | `vacant` | a dedicated host parking its clock when its last guest leaves |
 | `botfitness [graph] [seeds] [secs]` | default's fitness summed per scenario (embedded, td, kraken) over seeds 1..N, flat out; given a graph file, it fails unless that graph beats default on every scenario |
+| `load [sessions] [bots] [secs]` | per session a `-serve` host seating its own bots at 120x40 and a headless bot joining it (`GUEST_BOTS` of its own; `SCENARIO` serves a wad scenario); prints each host's memory, CPU, tick, guests, peers, evictions and digest mismatches, and fails on a slipping clock, an eviction, a short roster or a peak past `LIMIT_MB` (default the pod's limit for its bots) |
 
 `host-loss` is the one to read carefully. A successor authors but does not listen,
 and the handoff never reaches a guest that had no link to it, so in a star each
@@ -61,7 +63,8 @@ them believes it is hosting one. See
 
 | Scenario | Asserts |
 |---|---|
-| `check` | embedded/main fallback and named `wad/scenario/td` all resolve |
+| `check` | embedded/main fallback and named `wad/scenario/td` all resolve, with every bot graph they reach |
+| `bundle` | the release wad archive extracts to a config root that resolves and carries a corpus |
 | `scenario` | `:n td` then `:n main` each rebuild the run: three scenario records, the last matching the first. Needs a `script(1)` that can give it a pty, and skips rather than fails without one |
 | `transfer` | a guest joins a host playing a nonce-stamped copy of the wad's scenario, which no root on the machine can hold: the host serves it, the guest receives it and installs the session world on it |
 | `follow` | a host with a guest types `:n blank`: the guest is told, rebuilds, redials, receives the new scenario off the wire and installs the session world again. Two terminals, so it needs a pty like `scenario` |
