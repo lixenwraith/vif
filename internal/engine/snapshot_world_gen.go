@@ -1430,7 +1430,7 @@ func equalMissile(a, b *component.MissileComponent) bool {
 }
 
 func equalMount(a, b *component.MountComponent) bool {
-	return a.Weapon == b.Weapon && a.Trigger == b.Trigger && a.Armed == b.Armed && a.Interval == b.Interval && a.Cooldown == b.Cooldown && math.Float64bits(float64(a.Range)) == math.Float64bits(float64(b.Range)) && math.Float64bits(float64(a.Muzzle)) == math.Float64bits(float64(b.Muzzle)) && a.AimX == b.AimX && a.AimY == b.AimY && a.HasAim == b.HasAim && a.Lane == b.Lane && a.Width == b.Width
+	return a.Weapon == b.Weapon && a.Trigger == b.Trigger && a.Armed == b.Armed && a.Interval == b.Interval && math.Float64bits(float64(a.Range)) == math.Float64bits(float64(b.Range)) && math.Float64bits(float64(a.Muzzle)) == math.Float64bits(float64(b.Muzzle)) && a.AimX == b.AimX && a.AimY == b.AimY && a.HasAim == b.HasAim && a.Lane == b.Lane && a.Width == b.Width
 }
 
 func equalRay(a, b *component.RayComponent) bool {

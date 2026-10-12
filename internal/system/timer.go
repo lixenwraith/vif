@@ -94,6 +94,13 @@ func (s *TimerSystem) Update() {
 	event.EmitDeath(s.world.Resources.Event.Queue, 0, s.expired...)
 }
 
+// timerRunning reports one of e's countdowns still running; an entity without a
+// timer runs none
+func timerRunning(w *engine.World, e core.Entity, slot component.TimerSlot) bool {
+	timer, ok := w.Components.Timer.GetPtr(e)
+	return ok && timer.Running(slot)
+}
+
 // armTimer starts one of e's countdowns, attaching its timer on first use
 func armTimer(w *engine.World, e core.Entity, slot component.TimerSlot, d time.Duration) {
 	if timer, ok := w.Components.Timer.GetPtr(e); ok {

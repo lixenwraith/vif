@@ -17,8 +17,7 @@ type MountComponent struct {
 	Weapon   WeaponType
 	Trigger  MountTrigger
 	Armed    bool          // the host's fire window, read under MountArmed
-	Interval time.Duration // between discharges
-	Cooldown time.Duration // until the next discharge
+	Interval time.Duration // between discharges, counted on the host's cooldown timer
 	Range    float64       // cells a target may be, horizontally; zero is unbounded
 	Muzzle   float64       // cells from the host a shot leaves at, toward the aim
 
