@@ -36,6 +36,10 @@ on_update = [{ action = "PointAt", payload = { target = "treasure" } }]`, `unkno
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "OnTarget", guard_args = { target = "random" } }]`, `unknown target "random"`},
 		{region + `[states.A]
+on_update = [{ action = "PointAt", payload = { target = "random", away = true } }]`, `unknown target "random"`},
+		{region + `[states.A]
+on_update = [{ action = "PointAt", payload = { target = "threat", away = true, fire = true } }]`, "fire and away do not combine"},
+		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "InMode", guard_args = { mode = "replace" } }]`, `unknown mode "replace"`},
 		{region + `[states.A]
 on_enter = [{ action = "Command", payload = { text = " : " } }]`, "command must not be empty"},
@@ -283,6 +287,36 @@ on_enter = [{ action = "Intent", payload = { name = "motion_left" } }]
 		}
 		if len(rec.got) != want {
 			t.Fatalf("after step %d released %d intents, want %d", step+1, len(rec.got), want)
+		}
+	}
+}
+
+// TestEvasionPointsAwayFromTheNearestThreatOntoAnOpenCell: away aims at the nearest
+// hostile thing's mirror through the cursor, and a friendly bullet is no threat.
+func TestEvasionPointsAwayFromTheNearestThreatOntoAnOpenCell(t *testing.T) {
+	w, ctx := soloWorld(40, 10)
+	place(w, core.DomainShared, 35, 10, func(e core.Entity) {
+		w.Components.Bullet.SetComponent(e, component.BulletComponent{Hostile: true})
+	})
+	place(w, core.DomainShared, 42, 10, func(e core.Entity) {
+		w.Components.Bullet.SetComponent(e, component.BulletComponent{})
+	})
+	place(w, core.DomainShared, 45, 10, func(e core.Entity) {
+		w.Components.Wall.SetComponent(e, component.WallComponent{BlockMask: component.WallBlockCursor})
+	})
+	_, rec := botFor(t, ctx, `
+[regions.play]
+initial = "A"
+
+[states.A]
+on_update = [{ action = "PointAt", payload = { target = "threat", away = true } }]
+`, 3)
+	if len(rec.got) == 0 {
+		t.Fatal("did not evade")
+	}
+	for _, intent := range rec.got {
+		if intent.Type != input.IntentMouseMove || intent.X <= 40 || intent.X == 45 && intent.Y == 10 {
+			t.Fatalf("evaded to %+v, want a move right of the cursor off the wall at (45, 10)", intent)
 		}
 	}
 }
