@@ -1,6 +1,7 @@
 package system
 
 import (
+	"slices"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -96,6 +97,9 @@ func (s *TimerSystem) Update() {
 		s.expired = append(s.expired, entity)
 	}
 
+	// Store order may differ between instances after a correction (D-8); the
+	// batch must not carry that difference into destruction order
+	slices.Sort(s.expired)
 	event.EmitDeath(s.world.Resources.Event.Queue, 0, s.expired...)
 }
 
