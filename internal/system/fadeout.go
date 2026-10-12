@@ -81,39 +81,17 @@ func (s *FadeoutSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-func (s *FadeoutSystem) Update() {
-	if !s.enabled {
-		return
-	}
-
-	dt := s.world.Resources.Time.DeltaTime
-	fadeouts := s.world.Components.Fadeout
-	var toDestroy []core.Entity
-
-	for _, entity := range fadeouts.Entities() {
-		fadeout, ok := fadeouts.GetPtr(entity)
-		if !ok {
-			continue
-		}
-
-		fadeout.Remaining -= dt
-		if fadeout.Remaining <= 0 {
-			toDestroy = append(toDestroy, entity)
-		}
-	}
-
-	s.world.DestroyEntitiesBatch(toDestroy)
-}
+// Update is empty: a fadeout's lifetime timer ends it
+func (s *FadeoutSystem) Update() {}
 
 func (s *FadeoutSystem) spawnFadeout(x, y int, char rune, fgColor, bgColor color.RGB) {
 	entity := s.world.CreateEntity(core.DomainPlayer)
 	s.world.Components.Fadeout.SetComponent(entity, component.FadeoutComponent{
-		Char:      char,
-		FgColor:   fgColor,
-		BgColor:   bgColor,
-		Remaining: parameter.FadeoutDuration,
-		Duration:  parameter.FadeoutDuration,
+		Char:    char,
+		FgColor: fgColor,
+		BgColor: bgColor,
 	})
+	armTimer(s.world, entity, component.TimerLifetime, parameter.FadeoutDuration)
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
 	s.world.Components.Protection.SetComponent(entity,
 		component.ProtectionComponent{Mask: component.ProtectFromParticle})

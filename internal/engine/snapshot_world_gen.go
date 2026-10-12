@@ -1438,7 +1438,7 @@ func equalRay(a, b *component.RayComponent) bool {
 }
 
 func equalSpirit(a, b *component.SpiritComponent) bool {
-	return math.Float64bits(float64(a.StartX)) == math.Float64bits(float64(b.StartX)) && math.Float64bits(float64(a.StartY)) == math.Float64bits(float64(b.StartY)) && math.Float64bits(float64(a.TargetX)) == math.Float64bits(float64(b.TargetX)) && math.Float64bits(float64(a.TargetY)) == math.Float64bits(float64(b.TargetY)) && math.Float64bits(float64(a.Progress)) == math.Float64bits(float64(b.Progress)) && a.Pattern == b.Pattern && math.Float64bits(float64(a.Amplitude)) == math.Float64bits(float64(b.Amplitude)) && math.Float64bits(float64(a.Frequency)) == math.Float64bits(float64(b.Frequency)) && math.Float64bits(float64(a.Speed)) == math.Float64bits(float64(b.Speed)) && math.Float64bits(float64(a.Spin)) == math.Float64bits(float64(b.Spin)) && a.Rune == b.Rune && a.BaseColor == b.BaseColor && a.BlinkColor == b.BlinkColor
+	return math.Float64bits(float64(a.StartX)) == math.Float64bits(float64(b.StartX)) && math.Float64bits(float64(a.StartY)) == math.Float64bits(float64(b.StartY)) && math.Float64bits(float64(a.TargetX)) == math.Float64bits(float64(b.TargetX)) && math.Float64bits(float64(a.TargetY)) == math.Float64bits(float64(b.TargetY)) && a.Pattern == b.Pattern && math.Float64bits(float64(a.Amplitude)) == math.Float64bits(float64(b.Amplitude)) && math.Float64bits(float64(a.Frequency)) == math.Float64bits(float64(b.Frequency)) && math.Float64bits(float64(a.Spin)) == math.Float64bits(float64(b.Spin)) && a.Rune == b.Rune && a.BaseColor == b.BaseColor && a.BlinkColor == b.BlinkColor
 }
 
 func equalMaterialize(a, b *component.MaterializeComponent) bool {

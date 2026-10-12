@@ -81,38 +81,14 @@ func (s *FlashSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-func (s *FlashSystem) Update() {
-	if !s.enabled {
-		return
-	}
-
-	dt := s.world.Resources.Time.DeltaTime
-	flashes := s.world.Components.Flash
-	var toDestroy []core.Entity
-	for _, entity := range flashes.Entities() {
-		flash, ok := flashes.GetPtr(entity)
-		if !ok {
-			continue
-		}
-
-		flash.Remaining -= dt
-		if flash.Remaining <= 0 {
-			toDestroy = append(toDestroy, entity)
-		}
-	}
-
-	s.world.DestroyEntitiesBatch(toDestroy)
-}
+// Update is empty: a flash's lifetime timer ends it
+func (s *FlashSystem) Update() {}
 
 // spawnDestructionFlash creates a flash effect at the given position
 func (s *FlashSystem) spawnDestructionFlash(x, y int, char rune) {
 	entity := s.world.CreateEntity(core.DomainPlayer)
-	s.world.Components.Flash.SetComponent(entity,
-		component.FlashComponent{
-			Rune:      char,
-			Remaining: parameter.DestructionFlashDuration,
-			Duration:  parameter.DestructionFlashDuration,
-		})
+	s.world.Components.Flash.SetComponent(entity, component.FlashComponent{Rune: char})
+	armTimer(s.world, entity, component.TimerLifetime, parameter.DestructionFlashDuration)
 	s.world.Positions.SetPosition(entity,
 		component.PositionComponent{X: x, Y: y})
 	s.world.Components.Protection.SetComponent(entity,

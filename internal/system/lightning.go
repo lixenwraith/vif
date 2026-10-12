@@ -1,6 +1,8 @@
 package system
 
 import (
+	"time"
+
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -48,32 +50,11 @@ func (s *LightningSystem) Update() {
 	}
 
 	lightnings := s.world.Components.Lightning
-	if lightnings.CountEntities() == 0 {
-		return
-	}
-
-	deltaTime := s.world.Resources.Time.DeltaTime
-	var toDestroy []core.Entity
-
 	for _, e := range lightnings.Entities() {
-		lc, ok := lightnings.GetPtr(e)
-		if !ok {
-			continue
-		}
-
-		// A tracked bolt lives on a lease its owner renews each tick it updates the
-		// target: an install that removes the owner or ends its zap writes the shared
-		// world without the despawn (D-6), and the lapsed lease retires the bolt.
-		if lc.Duration == 0 {
+		if lc, ok := lightnings.GetPtr(e); ok && lc.Tracked {
 			lc.AnimFrame++
 		}
-		lc.Remaining -= deltaTime
-		if lc.Remaining <= 0 {
-			toDestroy = append(toDestroy, e)
-		}
 	}
-
-	s.world.DestroyEntitiesBatch(toDestroy)
 }
 
 func (s *LightningSystem) EventTypes() []event.EventType {
@@ -142,18 +123,19 @@ func (s *LightningSystem) spawnLightning(p *event.LightningSpawnRequestPayload) 
 		TargetEntity: p.TargetEntity,
 		ColorType:    p.ColorType,
 		PathSeed:     pathSeed,
-		AnimFrame:    0,
-		Duration:     p.Duration,
-		Remaining:    p.Duration,
+		Tracked:      p.Tracked,
 	}
-
-	// Tracked mode: Duration=0 signals a lease renewed by updateTarget
-	if p.Tracked {
-		lc.Duration = 0
-		lc.Remaining = parameter.LightningTrackedLease
-	}
-
 	s.world.Components.Lightning.SetComponent(e, lc)
+
+	// A tracked bolt lives on a lease its owner renews each tick it updates the
+	// target: an install that removes the owner or ends its zap writes the shared
+	// world without the despawn (D-6), and the lapsed lease retires the bolt.
+	life := p.Duration
+	if p.Tracked {
+		life = parameter.LightningTrackedLease
+	}
+	// An unset duration still retires the bolt on the first pass instead of leaving it idle
+	armTimer(s.world, e, component.TimerLifetime, max(life, time.Nanosecond))
 }
 
 func (s *LightningSystem) updateTarget(p *event.LightningUpdateRequestPayload) {
@@ -166,8 +148,8 @@ func (s *LightningSystem) updateTarget(p *event.LightningUpdateRequestPayload) {
 		}
 		lc.TargetX = p.TargetX
 		lc.TargetY = p.TargetY
-		if lc.Duration == 0 {
-			lc.Remaining = parameter.LightningTrackedLease
+		if lc.Tracked {
+			armTimer(s.world, e, component.TimerLifetime, parameter.LightningTrackedLease)
 		}
 		return
 	}
