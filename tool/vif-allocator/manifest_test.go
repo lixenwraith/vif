@@ -7,7 +7,7 @@ import (
 )
 
 func TestBuildJobUsesFixedSessionShape(t *testing.T) {
-	object := buildJob("abc123", workloadConfig{
+	cfg := workloadConfig{
 		Namespace: "vif",
 		Image:     "docker.io/library/vif:revision",
 		Players:   4,
@@ -16,8 +16,8 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 		FirstJoin: "90s",
 		Empty:     "90s",
 		Drain:     "20s",
-	})
-	encoded, err := json.Marshal(object)
+	}
+	encoded, err := json.Marshal(buildJob("abc123", cfg))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,6 +55,24 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 	}
 	if got := strings.Count(text, `"mountPath":"/var/log/vif-fleet"`); got != 1 {
 		t.Errorf("fleet log volume is mounted %d times, want exactly once", got)
+	}
+	// A bot grows the session container by a seat's cost; none leaves it as it was.
+	for bots, want := range map[int][]string{
+		0: {`{"name":"GOMEMLIMIT","value":"160MiB"}`,
+			`"resources":{"limits":{"cpu":"500m","memory":"192Mi"},"requests":{"cpu":"100m","memory":"96Mi"}}`},
+		3: {`{"name":"GOMEMLIMIT","value":"256MiB"}`,
+			`"resources":{"limits":{"cpu":"500m","memory":"288Mi"},"requests":{"cpu":"292m","memory":"192Mi"}}`},
+	} {
+		cfg.Bots = bots
+		encoded, err := json.Marshal(buildJob("abc123", cfg))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, envelope := range want {
+			if !strings.Contains(string(encoded), envelope) {
+				t.Errorf("a Job with %d bots does not contain %s", bots, envelope)
+			}
+		}
 	}
 }
 

@@ -10,6 +10,10 @@
 #   ${JOB_UID}         the created Job UID used to own the Service
 #   ${PLAYERS}         the guest ceiling for this session (1-16)
 #   ${BOTS}            the session's own bots, roster guests (0 for none, below PLAYERS)
+#   ${CPU_REQUEST}     100m, and 64m more a bot
+#   ${MEMORY_REQUEST}  96Mi, and 32Mi more a bot
+#   ${MEMORY_LIMIT}    192Mi, and 32Mi more a bot
+#   ${GOMEMLIMIT}      160MiB, and 32MiB more a bot
 #   ${MAP_SIZE}        the shared map geometry, WxH (e.g. 120x40)
 #   ${SCENARIO}        the installed scenario name to serve (e.g. main)
 #   ${LOG_LEVEL}       the session log level (trace..error; the allocator picks it)
@@ -177,14 +181,12 @@ spec:
                 name: vif-session-env
                 optional: true
           env:
-            # An earlier collection target than the memory limit, so the runtime
-            # collects instead of the kernel killing. GOMAXPROCS is deliberately
-            # unset: the Go runtime derives it from the cgroup CPU limit.
-            #
-            # After envFrom, so it wins: the fleet's own envelope is not something
-            # a ConfigMap should be able to move out from under the memory limit.
+            # A collection target 32MiB under the memory limit, so the runtime
+            # collects instead of the kernel killing; after envFrom, so a ConfigMap
+            # cannot move it. GOMAXPROCS is deliberately unset: the Go runtime
+            # derives it from the cgroup CPU limit.
             - name: GOMEMLIMIT
-              value: "160MiB"
+              value: "${GOMEMLIMIT}"
           securityContext: *container_security
           volumeMounts:
             - name: fleet-logs
@@ -199,11 +201,11 @@ spec:
               readOnly: true
           resources:
             requests:
-              cpu: 100m
-              memory: 96Mi
+              cpu: ${CPU_REQUEST}
+              memory: ${MEMORY_REQUEST}
             limits:
               cpu: 500m
-              memory: 192Mi
+              memory: ${MEMORY_LIMIT}
           # There is one health path, and its code answers one question: should
           # this process still be running. Startup suppresses liveness while the
           # world is being built, so a slow start is not a restart loop.

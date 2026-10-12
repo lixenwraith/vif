@@ -74,7 +74,7 @@ it does not move an in-memory session into an unrelated pod.
 | H1 | partly done | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do has to be bounded. The two startup holes are closed: the tick-zero gate is bounded by one world install, a peer that leaves or goes silent costs the lobby rather than the session, and a confirmation is keyed to the link it arrived on. | Remaining: a handshake fuzz target for malformed, oversized, replayed and half-open cases, which `internal/network` has no equivalent of. |
 | H16 | partly done | **Automate image delivery.** Nightly CI publishes the final headless Dockerfile to GHCR under moving and commit-addressed tags; `deploy/guest/update-vif-image.sh` still provides the checked local build/import boundary. | Choose the node's registry/promotion policy, authenticate pulls without a long-lived off-node deployment credential, and move new sessions to a verified digest while existing matches finish. |
 | H4 | partly done | **Server-only and renderer-neutral builds.** `vif_headless` removes renderer and audio packages and is used by the image. Terminal-shaped key, color, cell, and image values remain in common simulation/configuration packages. | Extract renderer-neutral values for a minimally polished Android host within one month of development time; keep the simulation fingerprint shared with clients. |
-| H5 | later | **Spatial grid right-sizing.** ~30.5 MiB reserved per world at the current maximum. | Deferred until density matters; needs resize/play regression coverage. |
+| H5 | later | **Spatial grid on ceiling-sized maps.** The grid is sized to the map, so only a ceiling-sized one such as `td` (500×250) reserves about 32 MiB per world, and a guest's staging world a second. | Deferred until density matters; on `td` the grid is a minority of what a session was measured to cost. |
 
 ### What the deployment batches established
 
@@ -226,6 +226,7 @@ What the manifest asks for:
 | memory request / limit | 96 / 192 MiB | Single-guest measurement plus headroom for a staging world after an authority change. |
 | `GOMEMLIMIT` | 160 MiB | An earlier collection target than the limit, so the runtime collects instead of the kernel killing. |
 | CPU request / limit | 100m / 500m | One guest was about 0.05 core in early measurement; the ceiling is wide until a storm is measured. |
+| per bot | +32 MiB memory request, limit and `GOMEMLIMIT`; +64m CPU request | A seat at 120×40 measured about 28 MB resident and 60 ms of CPU a second (`vif_headless`, a sandbox, not the node). `-bots-max` stops at 6, where the limit meets the `LimitRange`'s 384 MiB. The quota counts the larger requests: three sessions of three bots fill its 1000m of CPU. |
 | termination grace | 30 s | Above the 20 s drain, so the process decides when the match ends. |
 
 What one session actually cost, measured on the node with one guest on `wad`
@@ -247,7 +248,8 @@ init container counts only against its own peak.
 Historical baseline worth keeping: server in lobby 12.0 MB RSS; embedded game with
 one guest 61.75 MB peak; server after a guest left 40.1 MB; headless joiner with a
 staging world 95.5 MB peak; two staggered guests 63.5 MB plateau; spatial grid about
-30.5 MiB per world. Repeated resets plateaued rather than growing, so the RSS lag
+30.5 MiB per world, which the grid now reserves only on a ceiling-sized map. Repeated
+resets plateaued rather than growing, so the RSS lag
 was runtime scavenging, not a per-match leak.
 
 ## 7. Verification

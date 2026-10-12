@@ -62,6 +62,11 @@ if [ "$GAME_NODEPORT" -lt 31700 ] || [ "$GAME_NODEPORT" -gt 31709 ]; then
 	echo "$0: GAME_NODEPORT $GAME_NODEPORT is outside the fleet range 31700-31709" >&2
 	exit 2
 fi
+# The allocator's envelope: each bot adds a seat's cost (tool/vif-allocator/manifest.go).
+CPU_REQUEST=$((100 + 64 * BOTS))m
+MEMORY_REQUEST=$((96 + 32 * BOTS))Mi
+MEMORY_LIMIT=$((192 + 32 * BOTS))Mi
+GOMEMLIMIT=$((160 + 32 * BOTS))MiB
 
 template=$(dirname "$0")/30-session.yaml
 [ -r "$template" ] || { echo "$0: cannot read $template" >&2; exit 1; }
@@ -74,6 +79,10 @@ rendered=$(sed \
 	-e "s|\${IMAGE}|$IMAGE|g" \
 	-e "s|\${PLAYERS}|$PLAYERS|g" \
 	-e "s|\${BOTS}|$BOTS|g" \
+	-e "s|\${CPU_REQUEST}|$CPU_REQUEST|g" \
+	-e "s|\${MEMORY_REQUEST}|$MEMORY_REQUEST|g" \
+	-e "s|\${MEMORY_LIMIT}|$MEMORY_LIMIT|g" \
+	-e "s|\${GOMEMLIMIT}|$GOMEMLIMIT|g" \
 	-e "s|\${MAP_SIZE}|$MAP_SIZE|g" \
 	-e "s|\${FIRST_JOIN}|$FIRST_JOIN|g" \
 	-e "s|\${EMPTY_GRACE}|$EMPTY_GRACE|g" \
