@@ -1216,15 +1216,8 @@ func (s *NetworkSystem) Update() {
 	p := s.port()
 	s.refreshLink(p)
 	s.publishConnectionTelemetry(p)
-	// An instance nothing will correct any more owns what it predicted, so the
-	// rewards it is holding are due. Cheap and silent while the ledger is empty,
-	// which is every tick of a host and of a run with no session.
-	s.world.SettlePredictedDeaths()
 	if r := s.world.Resources.Network; r != nil && s.isCoordinator() {
 		r.Pace.Store(0) // the authority is the clock the others pace against
-	}
-	if s.enabled {
-		s.driveOwnLead(p)
 	}
 	if s.enabled && p != nil && p.IsRunning() {
 		s.ticks++
@@ -1250,6 +1243,7 @@ func (s *NetworkSystem) Receive(nextTick uint64) (live bool) {
 func (s *NetworkSystem) Flush(completedTick uint64) {
 	p := s.port()
 	active := s.refreshLink(p)
+	s.pushSessionRecords(p)
 	s.flushCrossings(p, completedTick, active)
 	if s.enabled && p != nil && p.IsRunning() && s.ticks%parameter.NetworkSyncTicks == 0 {
 		s.sendCursorState(p)
@@ -1259,6 +1253,20 @@ func (s *NetworkSystem) Flush(completedTick uint64) {
 	s.publishLinkMeasurement(p, completedTick)
 	if r := s.world.Resources.Network; r != nil && r.OnTickClosed != nil && s.enabled {
 		r.OnTickClosed(completedTick)
+	}
+}
+
+// pushSessionRecords raises the journaled session events this instance derives
+// from its own transport. They are pushed once the tick body has settled, so a
+// reproduction, which injects a tick's records after the tick, dispatches them
+// where this run does: between ticks.
+func (s *NetworkSystem) pushSessionRecords(p engine.NetworkPort) {
+	// An instance nothing will correct any more owns what it predicted, so the
+	// rewards it is holding are due. Cheap and silent while the ledger is empty,
+	// which is every tick of a host and of a run with no session.
+	s.world.SettlePredictedDeaths()
+	if s.enabled {
+		s.driveOwnLead(p)
 	}
 }
 
