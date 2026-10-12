@@ -21,6 +21,11 @@ func TestABrokenGraphFailsAtLoadNamingTheFault(t *testing.T) {
 		{"[bot]\nactions_per_minute = 1" + region + "[states.A]", `unknown [bot] setting "actions_per_minute"`},
 		{"[bot]\nactions_per_second = 0" + region + "[states.A]", "actions_per_second must be positive"},
 		{region + "file = \"more.toml\"\n[states.A]", "names a file"},
+		{region + "enabled_systems = [\"gold\"]\n[states.A]", `"enabled_systems" does nothing in a bot graph`},
+		{region + `[states.A]
+on_enter = [{ action = "SetStatusInt", payload = { key = "typing.correct", value = 1 } }]`, "a bot acts only through intents"},
+		{region + `[states.A]
+transitions = [{ trigger = "Tick", target = "A", guard = "HasTarget", guard_args = { target = "glyph", whithin = 5 } }]`, `unknown guard arg "whithin"`},
 		{region + `[states.A]
 on_enter = [{ action = "Intent", payload = { name = "motion_nowhere" } }]`, `unknown intent action "motion_nowhere"`},
 		{region + `[states.A]

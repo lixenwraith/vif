@@ -83,8 +83,13 @@ func (g *Graph) validate() error {
 	}
 	regions, _ := g.doc["regions"].(map[string]any)
 	for name, raw := range regions {
-		if region, ok := raw.(map[string]any); ok && region["file"] != nil {
+		region, _ := raw.(map[string]any)
+		if region["file"] != nil {
 			return fmt.Errorf("region %q names a file; a bot graph is one document", name)
+		}
+		// System toggles would write the world, and background only shapes game telemetry
+		if key := unknownKey(region, "initial"); key != "" {
+			return fmt.Errorf("region %q: %q does nothing in a bot graph", name, key)
 		}
 	}
 	return nil

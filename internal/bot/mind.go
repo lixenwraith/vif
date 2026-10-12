@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 
@@ -315,7 +316,23 @@ func register(m *fsm.Machine[*mind]) {
 		return pointArgs{target: t, fire: p.Fire}, err
 	})
 
-	m.RegisterGuardFactory("HasTarget", func(_ *fsm.Machine[*mind], args map[string]any) (fsm.GuardFunc[*mind], error) {
+	// std's world-writing actions would load and do nothing, as the Host gives them no way out
+	for _, name := range []string{"EmitEvent", "EnableSystem", "DisableSystem", "ApplyGlobalSystemConfig",
+		"ApplyRegionSystemConfigs", "SetStatusInt", "ResetStatusInt"} {
+		m.RegisterActionArgs(name, func(*fsm.Machine[*mind], fsm.ActionConfig, fsm.StateResolver) (any, error) {
+			return nil, errors.New("writes the world; a bot acts only through intents")
+		})
+	}
+
+	guard := func(name string, args []string, build func(map[string]any) (fsm.GuardFunc[*mind], error)) {
+		m.RegisterGuardFactory(name, func(_ *fsm.Machine[*mind], given map[string]any) (fsm.GuardFunc[*mind], error) {
+			if key := unknownKey(given, args...); key != "" {
+				return nil, fmt.Errorf("unknown guard arg %q", key)
+			}
+			return build(given)
+		})
+	}
+	guard("HasTarget", []string{"target", "within"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
 		t, err := parseTarget(args["target"], true)
 		within := std.ParseIntArg(args, "within")
 		return func(m *mind, _ *fsm.RegionState, _ any) bool {
@@ -323,14 +340,14 @@ func register(m *fsm.Machine[*mind]) {
 			return s.found && (within <= 0 || s.dist2 <= int(within*within))
 		}, err
 	})
-	m.RegisterGuardFactory("OnTarget", func(_ *fsm.Machine[*mind], args map[string]any) (fsm.GuardFunc[*mind], error) {
+	guard("OnTarget", []string{"target"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
 		t, err := parseTarget(args["target"], true)
 		return func(m *mind, _ *fsm.RegionState, _ any) bool {
 			s := m.nearest(t)
 			return s.found && s.dist2 == 0
 		}, err
 	})
-	m.RegisterGuardFactory("InMode", func(_ *fsm.Machine[*mind], args map[string]any) (fsm.GuardFunc[*mind], error) {
+	guard("InMode", []string{"mode"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
 		name, _ := args["mode"].(string)
 		mode := slices.Index(core.ModeNames[:], name)
 		if mode < 0 {
@@ -340,7 +357,7 @@ func register(m *fsm.Machine[*mind]) {
 			return m.ctx.GetMode() == core.GameMode(mode)
 		}, nil
 	})
-	m.RegisterGuardFactory("Chance", func(_ *fsm.Machine[*mind], args map[string]any) (fsm.GuardFunc[*mind], error) {
+	guard("Chance", []string{"percent"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
 		percent := int(std.ParseIntArg(args, "percent"))
 		if percent < 1 || percent > 100 {
 			return nil, fmt.Errorf("Chance: percent must be 1..100, got %d", percent)
