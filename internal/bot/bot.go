@@ -1,7 +1,7 @@
 // Package bot drives one participant from an internal/fsm graph instead of a
 // terminal. The graph reads its own instance's world and queues intents, which a
 // Driver releases through that instance's mode router at the graph's rate, so a
-// bot is bound by everything that binds a person. See doc/todo-bots.md.
+// bot is bound by everything that binds a person. See doc/bots.md.
 package bot
 
 import (
