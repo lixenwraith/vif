@@ -47,6 +47,46 @@ transitions = [{ trigger = "Tick", target = "A", guard = "Not", guard_args = {} 
 	}
 }
 
+// soloWorld is an 80x24 instance whose own cursor stands at x, y
+func soloWorld(x, y int) (*engine.World, *engine.GameContext) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
+	cursor := w.CreateEntity(core.DomainShared)
+	w.Components.Cursor.SetComponent(cursor, component.CursorComponent{Slot: 0})
+	w.Resources.Player.Bind(0, cursor)
+	w.Resources.Player.SetLocal(0)
+	w.Positions.SetPosition(cursor, component.PositionComponent{X: x, Y: y})
+	return w, ctx
+}
+
+// place puts a new entity at x, y, set giving it its components
+func place(w *engine.World, d core.Domain, x, y int, set func(core.Entity)) core.Entity {
+	e := w.CreateEntity(d)
+	set(e)
+	w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+	return e
+}
+
+// botFor drives a graph on ctx's instance, stepping it n times
+func botFor(t *testing.T, ctx *engine.GameContext, doc string, n int) (*Driver, *recorder) {
+	t.Helper()
+	g, err := ParseGraph("test", []byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := &recorder{}
+	d, err := NewDriver(rec, ctx, g, 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range n {
+		if _, err := d.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return d, rec
+}
+
 // recorder is an instance that keeps what reaches it
 type recorder struct{ got []input.Intent }
 
@@ -80,8 +120,7 @@ on_enter = [
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := engine.NewWorld()
-	ctx := engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
+	_, ctx := soloWorld(0, 0)
 	inst := &recorder{}
 	d, err := NewDriver(inst, ctx, g, 1, 0)
 	if err != nil {
@@ -103,13 +142,7 @@ on_enter = [
 }
 
 func TestDefaultSeeksRunStartsAndPatrolsForNuggetsWithoutText(t *testing.T) {
-	w := engine.NewWorld()
-	ctx := engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
-	cursor := w.CreateEntity(core.DomainShared)
-	w.Components.Cursor.SetComponent(cursor, component.CursorComponent{Slot: 0})
-	w.Resources.Player.Bind(0, cursor)
-	w.Resources.Player.SetLocal(0)
-	w.Positions.SetPosition(cursor, component.PositionComponent{X: 12, Y: 3})
+	w, ctx := soloWorld(12, 3)
 	var glyphs []core.Entity
 	for x := 5; x <= 9; x++ {
 		e := w.CreateEntity(core.DomainPlayer)
@@ -169,4 +202,37 @@ func TestDefaultSeeksRunStartsAndPatrolsForNuggetsWithoutText(t *testing.T) {
 		}
 	}
 	t.Fatal("ignored a distant nugget between patrol movements")
+}
+
+// TestAPointerAimedPastTheViewportLandsOnTheNearestOpenCell: the router refuses a
+// move onto a wall, so a goal clamped onto one lands on the open cell nearest it.
+func TestAPointerAimedPastTheViewportLandsOnTheNearestOpenCell(t *testing.T) {
+	w, ctx := soloWorld(10, 5)
+	cfg := w.Resources.Config
+	cfg.MapWidth = 200
+	w.Positions.ResizeGrid(cfg.MapWidth, cfg.MapHeight)
+	_, _, maxX, _, _ := cfg.VisibleMapRect()
+	place(w, core.DomainPlayer, 150, 5, func(e core.Entity) {
+		w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'a', Type: component.GlyphGreen})
+	})
+	for y := 4; y <= 5; y++ {
+		place(w, core.DomainShared, maxX, y, func(e core.Entity) {
+			w.Components.Wall.SetComponent(e, component.WallComponent{BlockMask: component.WallBlockCursor})
+		})
+	}
+	_, rec := botFor(t, ctx, `
+[regions.play]
+initial = "A"
+
+[states.A]
+on_update = [{ action = "PointAt", payload = { target = "glyph" } }]
+`, 4)
+	if len(rec.got) == 0 {
+		t.Fatal("pointed nowhere")
+	}
+	for _, intent := range rec.got {
+		if intent.Type != input.IntentMouseMove || intent.X != maxX || intent.Y != 6 {
+			t.Fatalf("pointed at %+v, want a move to the open edge cell (%d, 6)", intent, maxX)
+		}
+	}
 }
