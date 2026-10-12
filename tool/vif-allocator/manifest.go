@@ -2,10 +2,15 @@ package main
 
 import "strconv"
 
+// sessionBotsMax is the most bots whose session envelope still fits the namespace
+// LimitRange's 384Mi container ceiling (deploy/k3s/10-quota.yaml).
+const sessionBotsMax = 6
+
 type workloadConfig struct {
 	Namespace string
 	Image     string
 	Players   int
+	Bots      int
 	LogLevel  string
 	MapSize   string
 	Scenario  string
@@ -115,6 +120,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 								"-s", cfg.Scenario,
 								"-size", cfg.MapSize,
 								"-players", strconv.Itoa(cfg.Players),
+								"-bots", strconv.Itoa(cfg.Bots),
 								"-first-join", cfg.FirstJoin,
 								"-empty", cfg.Empty,
 								"-drain", cfg.Drain,

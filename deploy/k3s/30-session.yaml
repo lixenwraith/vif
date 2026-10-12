@@ -9,6 +9,7 @@
 #   ${GAME_NODEPORT}   the node port this session is directly reachable on (31700-31709)
 #   ${JOB_UID}         the created Job UID used to own the Service
 #   ${PLAYERS}         the guest ceiling for this session (1-16)
+#   ${BOTS}            the session's own bots, roster guests (0 for none, below PLAYERS)
 #   ${MAP_SIZE}        the shared map geometry, WxH (e.g. 120x40)
 #   ${SCENARIO}        the installed scenario name to serve (e.g. main)
 #   ${LOG_LEVEL}       the session log level (trace..error; the allocator picks it)
@@ -144,6 +145,9 @@ spec:
             - "${MAP_SIZE}"
             - "-players"
             - "${PLAYERS}"
+            # Seated over loopback before the lobby opens; each takes a roster seat.
+            - "-bots"
+            - "${BOTS}"
             # The allocated lifetime. The first is the window the player who
             # triggered this container has to arrive; the second is how long the
             # session survives after the last of them leaves, which is also the
