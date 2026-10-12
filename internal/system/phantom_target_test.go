@@ -140,7 +140,7 @@ func TestOffMapEntityIsNotATarget(t *testing.T) {
 func TestTrackedLightningRetiresWhenItsLeaseLapses(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
-	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
+	tick := newTimerTick(w)
 	lightning := NewLightningSystem(w).(*LightningSystem)
 
 	owner := w.CreateEntity(core.DomainShared)
@@ -155,13 +155,16 @@ func TestTrackedLightningRetiresWhenItsLeaseLapses(t *testing.T) {
 			Type:    event.EventLightningUpdateRequest,
 			Payload: &event.LightningUpdateRequestPayload{Owner: owner},
 		})
+		tick.open()
 		lightning.Update()
 	}
 	if n := w.Components.Lightning.CountEntities(); n != 1 {
 		t.Fatalf("bolts under a renewing owner = %d, want 1", n)
 	}
 
-	for range lease {
+	// The lease runs out on its last pass and the bolt leaves as the next tick opens
+	for range lease + 1 {
+		tick.open()
 		lightning.Update()
 	}
 	if n := w.Components.Lightning.CountEntities(); n != 0 {

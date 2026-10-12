@@ -1,8 +1,6 @@
 package component
 
 import (
-	"time"
-
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -31,8 +29,7 @@ type SplashComponent struct {
 	OffsetX                                          int // Calculated offset from entity position (ignored if AnchorEntity == 0)
 	OffsetY                                          int
 
-	// Lifecycle & Animation
-	Slot      SplashSlot    // Visual purpose and uniqueness enforcement
-	Remaining time.Duration // Time remaining until expiration (Delta-based)
-	Duration  time.Duration // Total initial duration (for progress/animations)
+	// Visual purpose and uniqueness enforcement; a timer splash counts down on its
+	// lifetime timer, a magnifier persists while the cursor rests on a glyph
+	Slot SplashSlot
 }

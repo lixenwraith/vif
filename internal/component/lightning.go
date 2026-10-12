@@ -1,10 +1,6 @@
 package component
 
-import (
-	"time"
-
-	"github.com/lixenwraith/vif/internal/core"
-)
+import "github.com/lixenwraith/vif/internal/core"
 
 // LightningColorType defines the visual color variant of a lightning bolt, indexed to renderer color LUT
 type LightningColorType uint8
@@ -34,9 +30,8 @@ type LightningComponent struct {
 	PathSeed  uint64 // Seed for fractal path generation
 	AnimFrame uint32 // Incremented each tick for tracked mode dancing
 
-	// Animation state
-	Remaining time.Duration
-	Duration  time.Duration
+	// Tracked bolts live on a lifetime lease their owner renews; others on a fixed lifetime
+	Tracked bool
 
 	Owner core.Entity // Source entity for lifecycle management (despawn lookup)
 }

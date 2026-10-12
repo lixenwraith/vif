@@ -83,14 +83,20 @@ func TestChainedEnergyDrainZapsBetweenOwnerAndTarget(t *testing.T) {
 		}
 		lightning := NewLightningSystem(w).(*LightningSystem)
 		lightning.HandleEvent(ev)
-		w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
+		tick := newTimerTick(w)
+		tick.open()
 		lightning.Update()
-		if w.Components.Lightning.CountEntities() != 1 {
+		if timer, ok := w.Components.Timer.GetPtr(lightningEntity(w)); !ok || timer.Expired(component.TimerLifetime) {
 			t.Fatal("a zap settled before a driven tick disappeared before presentation")
 		}
+		tick.open()
 		lightning.Update()
-		if w.Components.Lightning.CountEntities() != 0 {
+		if timer, ok := w.Components.Timer.GetPtr(lightningEntity(w)); !ok || !timer.Expired(component.TimerLifetime) {
 			t.Fatal("a transient zap outlived its duration")
+		}
+		tick.open()
+		if w.Components.Lightning.CountEntities() != 0 {
+			t.Fatal("an expired zap outlived the next tick's pre-dispatch")
 		}
 		return
 	}

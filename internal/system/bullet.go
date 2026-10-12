@@ -2,6 +2,7 @@ package system
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -123,12 +124,6 @@ func (s *BulletSystem) Update() {
 			continue
 		}
 
-		bullet.Lifetime += dt
-		if bullet.Lifetime > bullet.MaxLifetime {
-			toDestroy = append(toDestroy, e)
-			continue
-		}
-
 		prevX, prevY := kinetic.PreciseX, kinetic.PreciseY
 		gridX, gridY := physics.IntegratePosition(&kinetic.Kinetic, dtSec)
 
@@ -206,12 +201,13 @@ func (s *BulletSystem) spawnBullet(p *event.BulletSpawnRequestPayload) {
 	e := s.world.CreateEntity(core.DomainPlayer)
 
 	s.world.Components.Bullet.SetComponent(e, component.BulletComponent{
-		Owner:       p.Owner,
-		MaxLifetime: p.MaxLifetime,
-		Hostile:     p.Hostile,
-		Damage:      p.Damage,
-		Attack:      p.Attack,
+		Owner:   p.Owner,
+		Hostile: p.Hostile,
+		Damage:  p.Damage,
+		Attack:  p.Attack,
 	})
+	// An unset lifetime still ends the bullet on the first pass instead of leaving it idle
+	armTimer(s.world, e, component.TimerLifetime, max(p.MaxLifetime, time.Nanosecond))
 
 	s.world.Components.Kinetic.SetComponent(e, component.KineticComponent{
 		Kinetic: physics.Kinetic{

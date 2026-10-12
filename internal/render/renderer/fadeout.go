@@ -29,8 +29,10 @@ func (r *FadeoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 
 	buf.SetWriteMask(visual.MaskTransient)
 
+	timers := r.gameCtx.World.Components.Timer
 	fadeouts.Each(func(fadeoutEntity core.Entity, fadeoutComp *component.FadeoutComponent) bool {
-		if fadeoutComp.Remaining <= 0 {
+		timer, ok := timers.GetPtr(fadeoutEntity)
+		if !ok || timer.Slots[component.TimerLifetime].Remaining <= 0 {
 			return true
 		}
 
@@ -46,10 +48,7 @@ func (r *FadeoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		}
 
 		// Opacity fades from 1.0 to 0.0 over duration
-		opacity := float64(fadeoutComp.Remaining) / float64(fadeoutComp.Duration)
-		if opacity < 0.0 {
-			opacity = 0.0
-		}
+		opacity := 1 - timer.Progress(component.TimerLifetime)
 
 		// Scale colors by opacity
 		scaledBg := color.Scale(fadeoutComp.BgColor, opacity)

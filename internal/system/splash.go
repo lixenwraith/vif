@@ -112,8 +112,6 @@ func (s *SplashSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
-
 	// Cache timer bboxes for magnifier collision checks to avoid alloc inside loop if not needed
 	var cachedTimerBBoxes []BBox
 	timersCached := false
@@ -128,9 +126,6 @@ func (s *SplashSystem) Update() {
 			continue
 		}
 
-		// Delta-based time tracking (Robust against clock jumps/resets)
-		splashComp.Remaining -= dt
-
 		switch splashComp.Slot {
 		case component.SlotTimer:
 			anchorEntity := splashComp.AnchorEntity
@@ -140,13 +135,13 @@ func (s *SplashSystem) Update() {
 				continue
 			}
 
-			if splashComp.Remaining <= 0 {
-				// Timer expired - destroy splash
-				event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
+			// An expired countdown is already leaving through the timer's death batch
+			timer, ok := s.world.Components.Timer.GetPtr(splashEntity)
+			if !ok || timer.Expired(component.TimerLifetime) {
 				continue
 			}
 
-			setTimerContent(&splashComp)
+			setTimerContent(&splashComp, timer.Slots[component.TimerLifetime].Remaining)
 
 			// Recalculate offset with inter-timer collision (exclude self)
 			timerBBoxes := s.getTimerBBoxes(splashEntity)
@@ -255,10 +250,8 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 		MarginTop:    payload.MarginTop,
 		MarginBottom: payload.MarginBottom,
 		Slot:         component.SlotTimer,
-		Remaining:    payload.Duration,
-		Duration:     payload.Duration,
 	}
-	setTimerContent(&splashComp)
+	setTimerContent(&splashComp, payload.Duration)
 
 	// Get existing timer bboxes (new timer not yet created, no exclusion needed)
 	timerBBoxes := s.getTimerBBoxes(0)
@@ -269,6 +262,8 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 	s.world.Components.Protection.SetComponent(splashEntity, component.ProtectionComponent{
 		Mask: component.ProtectFromSpecies,
 	})
+	// A countdown already at zero still ends on the first pass instead of leaving it idle
+	armTimer(s.world, splashEntity, component.TimerLifetime, max(payload.Duration, time.Nanosecond))
 }
 
 // setTimerContent is the single representation boundary for a countdown. A
@@ -276,9 +271,9 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 // saturating that exceptional value preserves the component invariant and makes
 // both layout and rendering safe. Positive fractional seconds round up so "1"
 // remains visible until expiry.
-func setTimerContent(splash *component.SplashComponent) {
-	seconds := int64(splash.Remaining / time.Second)
-	if splash.Remaining > 0 && splash.Remaining%time.Second != 0 {
+func setTimerContent(splash *component.SplashComponent, remaining time.Duration) {
+	seconds := int64(remaining / time.Second)
+	if remaining > 0 && remaining%time.Second != 0 {
 		seconds++
 	}
 	if seconds < 0 {
@@ -401,13 +396,11 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 
 	// Create new magnifier (persistent - no expiry while on char)
 	splashComp := component.SplashComponent{
-		Length:    1,
-		Color:     color,
-		AnchorX:   anchorX,
-		AnchorY:   anchorY,
-		Slot:      component.SlotMagnifier,
-		Remaining: 0, // Persistent - managed by cursor movement
-		Duration:  0,
+		Length:  1,
+		Color:   color,
+		AnchorX: anchorX,
+		AnchorY: anchorY,
+		Slot:    component.SlotMagnifier,
 	}
 	splashComp.Content[0] = glyphComp.Rune
 

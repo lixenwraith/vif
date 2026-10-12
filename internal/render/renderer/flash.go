@@ -31,8 +31,10 @@ func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 
 	buf.SetWriteMask(visual.MaskTransient)
 
+	timers := r.gameCtx.World.Components.Timer
 	flashes.Each(func(flashEntity core.Entity, flashComp *component.FlashComponent) bool {
-		if flashComp.Remaining <= 0 {
+		timer, ok := timers.GetPtr(flashEntity)
+		if !ok || timer.Slots[component.TimerLifetime].Remaining <= 0 {
 			return true
 		}
 
@@ -48,10 +50,7 @@ func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		}
 
 		// Opacity fades from 1.0 to 0.0 over duration (bright to transparent)
-		opacity := (float64(flashComp.Remaining) / float64(flashComp.Duration))
-		if opacity < 0.0 {
-			opacity = 0.0
-		}
+		opacity := 1 - timer.Progress(component.TimerLifetime)
 
 		flashColor := color.Scale(visual.RgbRemovalFlash, opacity)
 

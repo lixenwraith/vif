@@ -1,0 +1,139 @@
+package system
+
+import (
+	"testing"
+	"time"
+
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
+)
+
+// timerTick opens a tick the way the scheduler does: the death batches the
+// previous tick queued settle in pre-dispatch, then the timer ages every slot.
+// Other queued events are dropped.
+type timerTick struct {
+	w      *engine.World
+	timer  engine.System
+	deaths *DeathSystem
+}
+
+func newTimerTick(w *engine.World) *timerTick {
+	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
+	return &timerTick{w: w, timer: NewTimerSystem(w), deaths: NewDeathSystem(w).(*DeathSystem)}
+}
+
+func (tt *timerTick) open() {
+	for _, ev := range tt.w.Resources.Event.Queue.Consume() {
+		if ev.Type == event.EventDeathBatch {
+			tt.deaths.HandleEvent(ev)
+		}
+	}
+	tt.timer.Update()
+}
+
+// lightningEntity is the world's only bolt, zero when there is none
+func lightningEntity(w *engine.World) core.Entity {
+	if bolts := w.Components.Lightning.Entities(); len(bolts) == 1 {
+		return bolts[0]
+	}
+	return 0
+}
+
+func TestTimerLifetimeEndsInTheNextTicksDeathBatch(t *testing.T) {
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	tick := newTimerTick(w)
+
+	e := w.CreateEntity(core.DomainPlayer)
+	armTimer(w, e, component.TimerLifetime, 2*parameter.GameUpdateInterval)
+
+	tick.open()
+	timer, _ := w.Components.Timer.GetPtr(e)
+	if timer.Expired(component.TimerLifetime) || timer.Progress(component.TimerLifetime) != 0.5 {
+		t.Fatalf("after one pass: %+v, want half elapsed", timer.Slots[component.TimerLifetime])
+	}
+
+	tick.open()
+	if !timer.Expired(component.TimerLifetime) {
+		t.Fatalf("after two passes: %+v, want expired", timer.Slots[component.TimerLifetime])
+	}
+	if _, alive := w.GetComponentMask(e); !alive {
+		t.Fatal("an expired lifetime destroyed the entity before the tick's owners ran")
+	}
+
+	tick.open()
+	if _, alive := w.GetComponentMask(e); alive {
+		t.Fatal("an expired lifetime outlived the next tick's pre-dispatch")
+	}
+}
+
+func TestTimerOwnerSlotsStayExpiredUntilRearmed(t *testing.T) {
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	tick := newTimerTick(w)
+
+	e := w.CreateEntity(core.DomainShared)
+	armTimer(w, e, component.TimerCooldown, parameter.GameUpdateInterval)
+	armTimer(w, e, component.TimerDeadline, time.Second)
+
+	for range 3 {
+		tick.open()
+	}
+	timer, ok := w.Components.Timer.GetPtr(e)
+	if !ok || !timer.Expired(component.TimerCooldown) || timer.Expired(component.TimerDeadline) {
+		t.Fatalf("slots = %+v, want the cooldown expired and the deadline running", timer.Slots)
+	}
+	if timer.Expired(component.TimerLifetime) || timer.Progress(component.TimerLifetime) != 0 {
+		t.Fatalf("idle lifetime = %+v, want idle", timer.Slots[component.TimerLifetime])
+	}
+
+	timer.Arm(component.TimerCooldown, parameter.GameUpdateInterval)
+	if timer.Expired(component.TimerCooldown) {
+		t.Fatal("a re-armed cooldown still reads expired")
+	}
+	tick.open()
+	if _, alive := w.GetComponentMask(e); !alive || !timer.Expired(component.TimerCooldown) {
+		t.Fatal("a re-armed cooldown did not expire again, or a non-lifetime slot ended its entity")
+	}
+}
+
+// TestLifetimesKeepTheirTickCounts pins two lifetimes against the counts their
+// own countdowns produced: a turret bullet moves on 80 ticks (its age had to
+// exceed the limit), and a spirit draws 10 frames ending on its target.
+func TestLifetimesKeepTheirTickCounts(t *testing.T) {
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
+	tick := newTimerTick(w)
+	bullets := NewBulletSystem(w).(*BulletSystem)
+	spirits := NewSpiritSystem(w).(*SpiritSystem)
+
+	bullets.HandleEvent(event.GameEvent{Type: event.EventBulletSpawnRequest, Payload: &event.BulletSpawnRequestPayload{
+		OriginX: 2.5, OriginY: 5.5, VelX: 1, MaxLifetime: parameter.TurretBulletLifetime,
+	}})
+	spirits.HandleEvent(event.GameEvent{Type: event.EventSpiritSpawnRequest, Domain: core.DomainPlayer,
+		Payload: &event.SpiritSpawnRequestPayload{StartX: 2, StartY: 2, TargetX: 30, TargetY: 10, Char: 'x'}})
+	bullet, spirit := w.Components.Bullet.Entities()[0], w.Components.Spirit.Entities()[0]
+
+	alive := func(e core.Entity) bool { _, ok := w.GetComponentMask(e); return ok }
+	moves, frames, lastProgress := 0, 0, 0.0
+	for range 100 {
+		tick.open()
+		if alive(bullet) {
+			bullets.Update()
+			moves++
+		}
+		if timer, ok := w.Components.Timer.GetPtr(spirit); ok {
+			frames++
+			lastProgress = timer.Progress(component.TimerLifetime)
+		}
+	}
+	if want := int(parameter.TurretBulletLifetime / parameter.GameUpdateInterval); moves != want {
+		t.Fatalf("bullet moved on %d ticks, want %d", moves, want)
+	}
+	if want := int(parameter.SpiritAnimationDuration / parameter.GameUpdateInterval); frames != want || lastProgress != 1 {
+		t.Fatalf("spirit drew %d frames ending at %v, want %d ending at 1", frames, lastProgress, want)
+	}
+}
