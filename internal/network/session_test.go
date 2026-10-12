@@ -296,7 +296,8 @@ func TestAdmissionIgnoresThePort(t *testing.T) {
 func TestAdmissionRefillsWithItsWindow(t *testing.T) {
 	t.Parallel()
 	l := NewAdmissionLimiter()
-	l.window = time.Millisecond
+	// Wide enough that a loaded race-detector run spends the burst inside one window
+	l.window = 100 * time.Millisecond
 
 	for range l.burst {
 		if err := l.Admit(admitFrom("10.0.0.4", 7777)); err != nil {
@@ -306,7 +307,7 @@ func TestAdmissionRefillsWithItsWindow(t *testing.T) {
 	if err := l.Admit(admitFrom("10.0.0.4", 7777)); err == nil {
 		t.Fatal("the budget did not run out")
 	}
-	time.Sleep(3 * time.Millisecond)
+	time.Sleep(l.window + 10*time.Millisecond)
 	if err := l.Admit(admitFrom("10.0.0.4", 7777)); err != nil {
 		t.Fatalf("the window did not refill: %v", err)
 	}
