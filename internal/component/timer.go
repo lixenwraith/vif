@@ -42,6 +42,12 @@ func (t *TimerComponent) Expired(s TimerSlot) bool {
 	return t.Slots[s].Duration > 0 && t.Slots[s].Remaining <= 0
 }
 
+// Elapsed is how long slot s has run since it was armed
+func (t *TimerComponent) Elapsed(s TimerSlot) time.Duration {
+	c := t.Slots[s]
+	return c.Duration - max(c.Remaining, 0)
+}
+
 // Progress is the elapsed fraction of slot s, zero while idle
 func (t *TimerComponent) Progress(s TimerSlot) float64 {
 	c := t.Slots[s]

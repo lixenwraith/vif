@@ -137,3 +137,68 @@ func TestLifetimesKeepTheirTickCounts(t *testing.T) {
 		t.Fatalf("spirit drew %d frames ending at %v, want %d ending at 1", frames, lastProgress, want)
 	}
 }
+
+// TestDeadlinesEndOnTheirLastTick pins each deadline to the tick its owner acts:
+// a drain beam completes on its 20th tick and a nugget beacon on its 12th, as
+// their summed progress did; a missile detonates on its 60th tick, where its 60th
+// move left it, and a gold sequence times out on the tick its countdown reaches
+// zero.
+func TestDeadlinesEndOnTheirLastTick(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	tick := newTimerTick(w)
+	ticks := func(d time.Duration) int { return int(d / parameter.GameUpdateInterval) }
+
+	// actsOn runs ticks until done reports the owner acted, returning that tick
+	actsOn := func(update func(), done func([]event.GameEvent) bool) int {
+		for n := 1; n <= 1000; n++ {
+			tick.open()
+			update()
+			if done(w.Resources.Event.Queue.Consume()) {
+				return n
+			}
+		}
+		return 0
+	}
+	has := func(typ event.EventType) func([]event.GameEvent) bool {
+		return func(events []event.GameEvent) bool {
+			for _, ev := range events {
+				if ev.Type == typ {
+					return true
+				}
+			}
+			return false
+		}
+	}
+
+	materialize := NewMaterializeSystem(w).(*MaterializeSystem)
+	for _, spawn := range []component.SpawnType{component.SpawnTypeDrain, component.SpawnTypeNugget} {
+		materialize.HandleEvent(event.GameEvent{Type: event.EventMaterializeRequest, Domain: core.DomainPlayer,
+			Payload: &event.MaterializeRequestPayload{X: 10, Y: 10, Type: spawn}})
+		if got, want := actsOn(materialize.Update, has(event.EventMaterializeComplete)), ticks(spawn.Style().Duration); got != want {
+			t.Fatalf("spawn type %d beam completed on tick %d, want %d", spawn, got, want)
+		}
+		if n := w.Components.Materialize.CountEntities(); n != 0 {
+			t.Fatalf("completed beams left = %d, want none", n)
+		}
+	}
+
+	missiles := NewMissileSystem(w).(*MissileSystem)
+	missiles.HandleEvent(event.GameEvent{Type: event.EventMissileSpawnRequest,
+		Payload: &event.MissileSpawnRequestPayload{OriginX: 20, OriginY: 12, Count: 1}})
+	missile := w.Components.Missile.Entities()[0]
+	kinetic, _ := w.Components.Kinetic.GetPtr(missile)
+	kinetic.VelX, kinetic.VelY = 0, 0 // an orphan holding still, so only its deadline ends it
+	if got, want := actsOn(missiles.Update, has(event.EventExplosionVisualRequest)), ticks(parameter.MissileMaxLifetime); got != want {
+		t.Fatalf("orphaned missile detonated on tick %d, want %d", got, want)
+	}
+
+	gold := NewGoldSystem(w).(*GoldSystem)
+	gold.HandleEvent(event.GameEvent{Type: event.EventGoldSpawnRequest})
+	if !gold.active {
+		t.Fatal("gold sequence did not spawn")
+	}
+	w.Resources.Event.Queue.Consume()
+	if got, want := actsOn(gold.Update, has(event.EventGoldTimeout)), ticks(parameter.GoldDuration); got != want {
+		t.Fatalf("gold sequence timed out on tick %d, want %d", got, want)
+	}
+}
