@@ -24,7 +24,7 @@ func TestABrokenGraphFailsAtLoadNamingTheFault(t *testing.T) {
 		{region + "file = \"more.toml\"\n[states.A]", "names a file"},
 		{region + "enabled_systems = [\"gold\"]\n[states.A]", `"enabled_systems" does nothing in a bot graph`},
 		{region + `[states.A]
-on_enter = [{ action = "SetStatusInt", payload = { key = "typing.correct", value = 1 } }]`, "a bot acts only through intents"},
+on_enter = [{ action = "EmitEvent", event = "EventGoldCancel" }]`, "a bot acts only through intents"},
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "HasTarget", guard_args = { target = "glyph", whithin = 5 } }]`, `unknown guard arg "whithin"`},
 		{region + `[states.A]

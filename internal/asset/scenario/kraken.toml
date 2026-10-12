@@ -48,7 +48,7 @@ transitions = [
 [states.KrakenDecision]
 parent = "KrakenHold"
 transitions = [
-    { trigger = "Tick", target = "KrakenEscalateTower", guard = "StatusIntCompare", guard_args = { key = "kills.kraken", op = "gte", value = 2 } },
+    { trigger = "Tick", target = "KrakenEscalateTower", guard = "StatusIntCompare", guard_args = { key = "kills.kraken", since = "kraken_mark", op = "gte", value = 2 } },
     { trigger = "Tick", target = "KrakenVictory" },
 ]
 
@@ -61,7 +61,7 @@ transitions = [
 [states.KrakenEscalateTower]
 parent = "Root"
 on_enter = [
-    { action = "ResetStatusInt", payload = { key = "kills.kraken" } },
+    { action = "StatusToVar", payload = { key = "kills.kraken", name = "kraken_mark" } },
     { action = "SpawnRegion", region = "tower", initial_state = "TowerSetup" },
     { action = "TerminateRegion", region = "kraken" },
 ]

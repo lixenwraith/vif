@@ -274,24 +274,17 @@ func registerCoreActions[T any](m *fsm.Machine[T], h Host[T]) {
 // === Status Actions ===
 
 func registerStatusActions[T any](m *fsm.Machine[T], h Host[T]) {
-	m.RegisterActionArgs("SetStatusInt", decodePayload[T, StatusIntArgs])
-	m.RegisterActionArgs("ResetStatusInt", decodePayload[T, StatusIntArgs])
+	m.RegisterActionArgs("StatusToVar", decodePayload[T, StatusToVarArgs])
 	m.RegisterActionArgs("ConfigToVar", compileConfigToVar(h))
 
-	m.RegisterAction("SetStatusInt", func(ctx T, args any) {
-		sa, ok := args.(*StatusIntArgs)
-		if !ok || sa.Key == "" || h.SetStatusInt == nil {
+	m.RegisterAction("StatusToVar", func(ctx T, args any) {
+		sa, ok := args.(*StatusToVarArgs)
+		if !ok || sa.Key == "" || sa.Name == "" || h.StatusInt == nil {
 			return
 		}
-		h.SetStatusInt(ctx, sa.Key, sa.Value)
-	})
-
-	m.RegisterAction("ResetStatusInt", func(ctx T, args any) {
-		sa, ok := args.(*StatusIntArgs)
-		if !ok || sa.Key == "" || h.SetStatusInt == nil {
-			return
+		if v, ok := h.StatusInt(ctx, sa.Key); ok {
+			m.SetVar(sa.Name, v)
 		}
-		h.SetStatusInt(ctx, sa.Key, 0)
 	})
 
 	m.RegisterAction("ConfigToVar", func(ctx T, args any) {

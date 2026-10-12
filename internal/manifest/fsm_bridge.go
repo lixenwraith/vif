@@ -1,18 +1,15 @@
 package manifest
 
 import (
-	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/fsm/std"
 )
 
-// RegisterFSMComponents installs the FSM standard library bound to the ECS world,
-// plus game-specific actions that have no generic form
+// RegisterFSMComponents installs the FSM standard library bound to the ECS world
 func RegisterFSMComponents(m *fsm.Machine[*engine.World]) {
 	std.Register(m, worldHost())
-	registerGameActions(m)
 }
 
 // worldHost binds std.Host capabilities to the ECS world
@@ -51,9 +48,6 @@ func worldHost() std.Host[*engine.World] {
 			}
 			return w.Resources.Status.Ints.Get(key).Load(), true
 		},
-		SetStatusInt: func(w *engine.World, key string, v int64) {
-			w.Resources.Status.Ints.Get(key).Store(v)
-		},
 		StatusBool: func(w *engine.World, key string) (bool, bool) {
 			if !w.Resources.Status.Bools.Has(key) {
 				return false, false
@@ -64,17 +58,4 @@ func worldHost() std.Host[*engine.World] {
 		ConfigInt:  engine.ConfigIntAccessor,
 		ConfigBool: engine.ConfigBoolAccessor,
 	}
-}
-
-// registerGameActions installs actions with no generic equivalent
-func registerGameActions(m *fsm.Machine[*engine.World]) {
-	// ResetKillVars zeroes every per-cycle kill counter.
-	// MetaSystem registers these keys before Freeze, so Get is a lookup here.
-	m.RegisterAction("ResetKillVars", func(w *engine.World, args any) {
-		ints := w.Resources.Status.Ints
-		for i := component.SpeciesType(1); i < component.SpeciesCount; i++ {
-			ints.Get("kills." + component.SpeciesNames[i]).Store(0)
-		}
-		ints.Get("kills.total").Store(0)
-	})
 }
