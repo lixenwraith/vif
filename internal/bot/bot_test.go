@@ -37,6 +37,8 @@ transitions = [{ trigger = "Tick", target = "A", guard = "OnTarget", guard_args 
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "InMode", guard_args = { mode = "replace" } }]`, `unknown mode "replace"`},
 		{region + `[states.A]
+on_enter = [{ action = "Command", payload = { text = " : " } }]`, "command must not be empty"},
+		{region + `[states.A]
 on_enter = [{ action = "Intent", payload = { name = "motion_left", count = [] } }]`, "count range must be [min, max]"},
 		{region + `[states.A]
 on_enter = [{ action = "Intent", payload = { name = "motion_left", count = [9, 2] } }]`, "count range must be [min, max]"},

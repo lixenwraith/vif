@@ -290,6 +290,9 @@ func register(m *fsm.Machine[*mind]) {
 	m.RegisterAction("Command", queueAll)
 	m.RegisterActionArgs("Command", func(_ *fsm.Machine[*mind], cfg fsm.ActionConfig, _ fsm.StateResolver) (any, error) {
 		text, err := textPayload(cfg.Payload)
+		if text = input.CommandLine(text); err == nil && text == "" {
+			err = errors.New("command must not be empty")
+		}
 		return input.AppendCommand(nil, text), err
 	})
 	m.RegisterAction("TypeGlyph", func(m *mind, _ any) {
