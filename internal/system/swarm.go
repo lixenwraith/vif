@@ -196,6 +196,14 @@ func (s *SwarmSystem) Update() {
 			continue
 		}
 
+		// Lifetime check → despawn the whole composite; a lifetime ending the header
+		// alone would leave its members behind
+		if timer, ok := s.world.Components.Timer.GetPtr(headerEntity); ok && timer.Expired(component.TimerDeadline) {
+			s.lifecycle.killedLifecycle.Add(1)
+			s.despawnSwarm(headerEntity)
+			continue
+		}
+
 		// Stun check: skip movement, reset state machine
 		if combatComp.Stunned() {
 			// Reset state machine on first stunned tick
@@ -333,7 +341,7 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 		HitPoints:        parameter.CombatInitialHPSwarm,
 	})
 
-	armTimer(s.world, headerEntity, component.TimerLifetime, parameter.SwarmLifetime)
+	armTimer(s.world, headerEntity, component.TimerDeadline, parameter.SwarmLifetime)
 
 	// Build member entities (pre-allocate all 8 positions)
 	members := make([]component.MemberEntry, 0, parameter.SwarmWidth*parameter.SwarmHeight)

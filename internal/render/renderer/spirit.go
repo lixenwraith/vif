@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/vmath"
@@ -33,10 +34,10 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	timers := r.gameCtx.World.Components.Timer
 	spirits.Each(func(e core.Entity, spiritComp *component.SpiritComponent) bool {
 		timer, ok := timers.GetPtr(e)
-		if !ok {
+		if !ok || timer.Expired(component.TimerLifetime) {
 			return true
 		}
-		progress := timer.Progress(component.TimerLifetime)
+		progress := min(float64(timer.Elapsed(component.TimerLifetime))/float64(parameter.SpiritAnimationDuration), 1)
 
 		// Pre-calculate invariant vector and aspect-corrected Y for spiral math
 		relX := spiritComp.StartX - spiritComp.TargetX

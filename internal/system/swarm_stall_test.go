@@ -180,3 +180,25 @@ func TestSwarmLeavesLockWhenChargeCannotResolve(t *testing.T) {
 		t.Fatal("swarm latched enraged in a state it cannot leave")
 	}
 }
+
+// TestSwarmLifetimeDespawnsTheWholeComposite: an expired lifetime ends the swarm
+// through the composite, as the charge limit does, so its members go with the
+// header; a lifetime ending the header alone left them behind. A stunned swarm
+// still expires.
+func TestSwarmLifetimeDespawnsTheWholeComposite(t *testing.T) {
+	w, s, header := newStalledSwarm(t)
+	combat, _ := w.Components.Combat.GetPtr(header)
+	combat.Status[component.StatusStun].Remaining = time.Second
+	timers := NewTimerSystem(w)
+	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
+	armTimer(w, header, component.TimerDeadline, parameter.GameUpdateInterval)
+
+	timers.Update()
+	s.Update()
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if p, ok := ev.Payload.(*event.CompositeDestroyRequestPayload); ok && p.HeaderEntity == header {
+			return
+		}
+	}
+	t.Fatal("an expired swarm lifetime did not despawn its composite")
+}

@@ -141,20 +141,20 @@ var Systems = []SystemDef{
 		Optional: []string{"death", "energy", "weapon", "heat"}}, // rolled per participant against owner-authored inventory; reward handlers are optional (D-6)
 	{Name: "glyph", Constructor: "NewGlyphSystem", Domain: "player"}, // player stream and entities; corpus and map are its only inputs
 	{Name: "nugget", Constructor: "NewNuggetSystem", Domain: "player",
-		Optional: []string{"materialize", "energy", "heat"}}, // personal: each participant owns its spawn, collection and reward
-	{Name: "particle", Constructor: "NewParticleSystem", Domain: "player", Optional: []string{"glyph", "death", "explosion"}}, // behavior-selected player particles; dust detonation optionally crosses through explosion
+		Requires: []string{"timer"}, Optional: []string{"materialize", "energy", "heat"}}, // personal: each participant owns its spawn, collection and reward
+	{Name: "particle", Constructor: "NewParticleSystem", Domain: "player", Requires: []string{"timer"}, Optional: []string{"glyph", "death", "explosion"}}, // behavior-selected player particles; dust detonation optionally crosses through explosion
 	{Name: "gold", Constructor: "NewGoldSystem", Domain: "shared", Snapshot: "state", // sequence liveness and its header live outside any store; its deadline rides the header's timer
-		Requires: []string{"composite"}, Optional: []string{"nugget", "energy", "splash"}}, // contested: the composite sequence is shared, the reward owner-authored
+		Requires: []string{"composite", "timer"}, Optional: []string{"nugget", "energy", "splash"}}, // contested: the composite sequence is shared, the reward owner-authored
 
 	// --- Spawning / Materialize ---
-	{Name: "materialize", Constructor: "NewMaterializeSystem", Domain: "dual"}, // stamped from the requester; the spawn gate is a dependency root (D-7)
+	{Name: "materialize", Constructor: "NewMaterializeSystem", Domain: "dual", Requires: []string{"timer"}}, // stamped from the requester; the spawn gate is a dependency root (D-7)
 	{Name: "fuse", Constructor: "NewFuseSystem", Domain: "player", Requires: []string{"drain", "materialize", "spirit"},
 		Optional: []string{"quasar", "swarm"}}, // player stream crosses through the spawn request (D-3)
-	{Name: "spirit", Constructor: "NewSpiritSystem", Domain: "dual"}, // creates in the requesting domain, currently from the player-domain fuse (D-7)
+	{Name: "spirit", Constructor: "NewSpiritSystem", Domain: "dual", Requires: []string{"timer"}}, // creates in the requesting domain, currently from the player-domain fuse (D-7)
 
 	// --- Projectiles ---
-	{Name: "lightning", Constructor: "NewLightningSystem", Domain: "player", Optional: []string{"combat"}}, // player stream and request-created entities; combat is optional (D-8)
-	{Name: "missile", Constructor: "NewMissileSystem", Domain: "player", Requires: []string{"weapon"},
+	{Name: "lightning", Constructor: "NewLightningSystem", Domain: "player", Requires: []string{"timer"}, Optional: []string{"combat"}}, // player stream and request-created entities; combat is optional (D-8)
+	{Name: "missile", Constructor: "NewMissileSystem", Domain: "player", Requires: []string{"weapon", "timer"},
 		Optional: []string{"explosion", "combat"}}, // player missile impact crosses through an explosion request (D-3)
 
 	// --- Movement / Collision ---
@@ -165,11 +165,11 @@ var Systems = []SystemDef{
 	{Name: "combat", Constructor: "NewCombatSystem", Domain: "dual", Requires: []string{"death"}}, // one knockback stream per target domain; every kill routes through death (D-8)
 
 	// --- Species ---
-	{Name: "drain", Constructor: "NewDrainSystem", Domain: "player", Requires: []string{"materialize"},
+	{Name: "drain", Constructor: "NewDrainSystem", Domain: "player", Requires: []string{"materialize", "timer"},
 		Optional: []string{"heat", "navigation", "combat"}}, // player stream and entities; materialize gates every spawn and heat sets population
 	{Name: "quasar", Constructor: "NewQuasarSystem", Domain: "shared", Requires: []string{"composite"},
 		Optional: []string{"navigation", "combat", "lightning"}}, // shared stream and composite species with a D-12 footprint sweep
-	{Name: "swarm", Constructor: "NewSwarmSystem", Domain: "shared", Requires: []string{"composite"},
+	{Name: "swarm", Constructor: "NewSwarmSystem", Domain: "shared", Requires: []string{"composite", "timer"},
 		Optional: []string{"navigation", "combat"}}, // shared stream and composite species with a D-12 footprint sweep
 	{Name: "storm", Constructor: "NewStormSystem", Domain: "shared", Snapshot: "state", Requires: []string{"composite"}, // the live root and pending blue spawns live outside any store
 		Optional: []string{"navigation", "combat", "mount", "particle", "wall"}}, // shared stream and composite species with a D-12 footprint sweep
@@ -181,17 +181,17 @@ var Systems = []SystemDef{
 		Optional: []string{"navigation", "combat"}}, // shared stream and composite species with a D-12 footprint sweep
 	{Name: "eye", Constructor: "NewEyeSystem", Domain: "shared", Requires: []string{"composite"},
 		Optional: []string{"navigation", "combat"}}, // shared stream and composite species with a D-12 footprint sweep
-	{Name: "mount", Constructor: "NewMountSystem", Domain: "shared",
+	{Name: "mount", Constructor: "NewMountSystem", Domain: "shared", Requires: []string{"timer"},
 		Optional: []string{"bullet", "missile", "lightning", "transient", "shield", "heat"}}, // mounts are shared host state; their shots and cursor hits are per-instance (D-2, D-6)
-	{Name: "bullet", Constructor: "NewBulletSystem", Domain: "player", Optional: []string{"combat"}}, // player bullets; combat optionally resolves their hits
+	{Name: "bullet", Constructor: "NewBulletSystem", Domain: "player", Requires: []string{"timer"}, Optional: []string{"combat"}}, // player bullets; combat optionally resolves their hits
 
 	// --- Particles / Effects: player-domain by D-6 ---
-	{Name: "flash", Constructor: "NewFlashSystem", Domain: "player"},                                              // request-created player effect
-	{Name: "fadeout", Constructor: "NewFadeoutSystem", Domain: "player"},                                          // request-created player effect
-	{Name: "marker", Constructor: "NewMarkerSystem", Domain: "shared"},                                            // request-created shared marker
+	{Name: "flash", Constructor: "NewFlashSystem", Domain: "player", Requires: []string{"timer"}},                 // request-created player effect
+	{Name: "fadeout", Constructor: "NewFadeoutSystem", Domain: "player", Requires: []string{"timer"}},             // request-created player effect
+	{Name: "marker", Constructor: "NewMarkerSystem", Domain: "shared", Requires: []string{"timer"}},               // request-created shared marker
 	{Name: "explosion", Constructor: "NewExplosionSystem", Domain: "shared", Requires: []string{"combat"}},        // combat-only consumer of crossed geometry; presentation is transient (D-3, D-6)
 	{Name: "motion_marker", Constructor: "NewMotionMarkerSystem", Domain: "player", Requires: []string{"cursor"}}, // local-cursor marker (D-6)
-	{Name: "splash", Constructor: "NewSplashSystem", Domain: "player", Requires: []string{"cursor"}},              // local-cursor viewport overlay (D-6)
+	{Name: "splash", Constructor: "NewSplashSystem", Domain: "player", Requires: []string{"cursor", "timer"}},     // local-cursor viewport overlay (D-6)
 
 	// --- Environment ---
 	{Name: "environment", Constructor: "NewEnvironmentSystem", Domain: "dual", Snapshot: "state"}, // one shared wind stream/state, applied explicitly to player drains and shared species

@@ -53,7 +53,7 @@ func (r *BulletRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			return true
 		}
 		timer, ok := timers.GetPtr(e)
-		if !ok {
+		if !ok || timer.Expired(component.TimerLifetime) {
 			return true
 		}
 		r.renderBullet(ctx, buf, pos.X, pos.Y, kinetic, bullet, timer.Progress(component.TimerLifetime))

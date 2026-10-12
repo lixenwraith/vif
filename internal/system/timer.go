@@ -61,8 +61,10 @@ func (s *TimerSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// Update ages every armed slot; a lifetime that runs out leaves through a death
-// batch, settled before the next tick's systems run
+// Update ages every armed slot; an expired lifetime leaves through a death batch,
+// settled before the next tick's systems run. Collection is by state, not by the
+// pass that expired it: a capture taken before the batch settled installs the
+// expired slot without the batch, and the next pass ends the entity there too.
 func (s *TimerSystem) Update() {
 	if !s.enabled {
 		return
@@ -78,17 +80,20 @@ func (s *TimerSystem) Update() {
 			continue
 		}
 		for slot := range timer.Slots {
-			c := &timer.Slots[slot]
-			if c.Remaining <= 0 {
-				continue
-			}
-			if c.Remaining -= dt; c.Remaining <= 0 {
-				c.Remaining = 0
-				if component.TimerSlot(slot) == component.TimerLifetime {
-					s.expired = append(s.expired, entity)
-				}
+			if c := &timer.Slots[slot]; c.Remaining > 0 {
+				c.Remaining = max(c.Remaining-dt, 0)
 			}
 		}
+		if !timer.Expired(component.TimerLifetime) {
+			continue
+		}
+		// Death refuses a protected entity; its lifetime ends without it, as the
+		// Death tag's did
+		if prot, ok := s.world.Components.Protection.GetPtr(entity); ok && prot.Mask&component.ProtectFromDeath != 0 {
+			timer.Stop(component.TimerLifetime)
+			continue
+		}
+		s.expired = append(s.expired, entity)
 	}
 
 	event.EmitDeath(s.world.Resources.Event.Queue, 0, s.expired...)

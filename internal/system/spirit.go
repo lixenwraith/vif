@@ -109,8 +109,10 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload, domain co
 		Rune:      p.Char,
 		BaseColor: p.BaseColor,
 	})
-	// One lifetime for every spirit so they arrive together; Lerp handles distance
-	armTimer(s.world, entity, component.TimerLifetime, parameter.SpiritAnimationDuration)
+	// One flight time for every spirit so they arrive together; Lerp handles
+	// distance. The lifetime holds one tick past arrival so the arrival frame draws
+	// before the death batch settles between ticks.
+	armTimer(s.world, entity, component.TimerLifetime, parameter.SpiritAnimationDuration+parameter.GameUpdateInterval)
 }
 
 func (s *SpiritSystem) destroyAllSpirits() {
