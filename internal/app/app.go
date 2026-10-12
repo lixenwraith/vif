@@ -389,8 +389,8 @@ func (a *App) initWorld() {
 	}
 	// The host can wait in the lobby much longer than a joiner. Freeze both clocks
 	// before the FSM creates any game-time deadline, then release them only after
-	// the common start gate. Otherwise the lobby wait ages the host's gold timer and
-	// every other absolute deadline before tick one.
+	// the common start gate. Otherwise the lobby wait ages every absolute deadline
+	// before tick one.
 	if a.cfg.HostAddress != "" || a.cfg.JoinAddress != "" {
 		a.ctx.TimeCtl.SetPaused(true)
 	}

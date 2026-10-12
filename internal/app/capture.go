@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/service"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	"github.com/lixenwraith/vif/internal/system"
 )
 
 // captureStatusLocked reads every shared-surface registry cell, through
@@ -346,6 +347,7 @@ func (a *App) writeSharedLocked(cap snapshot.SharedCapture, held *snapshot.Share
 		// The barrier is rebased with the world. Tick classifies barrier-bound
 		// artifacts; each source's fence classifies its ordinary stream.
 		a.adoptSnapshotBarrierLocked(cap.Header)
+		system.QueueCapturedExpiries(a.world)
 
 		// Last, so a carrier that publishes on load does not overwrite the
 		// captured surface with a value derived from this instance's own history.

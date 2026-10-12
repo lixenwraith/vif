@@ -85,22 +85,46 @@ func (s *TimerSystem) Update() {
 				c.Remaining = max(c.Remaining-dt, 0)
 			}
 		}
-		if !timer.Expired(component.TimerLifetime) {
-			continue
+		if lifetimeEnded(s.world, entity, timer) {
+			s.expired = append(s.expired, entity)
 		}
-		// Death refuses a protected entity; its lifetime ends without it, as the
-		// Death tag's did
-		if prot, ok := s.world.Components.Protection.GetPtr(entity); ok && prot.Mask&component.ProtectFromDeath != 0 {
-			timer.Stop(component.TimerLifetime)
-			continue
-		}
-		s.expired = append(s.expired, entity)
 	}
+	emitLifetimeDeaths(s.world, s.expired)
+}
 
-	// Store order may differ between instances after a correction (D-8); the
-	// batch must not carry that difference into destruction order
-	slices.Sort(s.expired)
-	event.EmitDeath(s.world.Resources.Event.Queue, 0, s.expired...)
+// QueueCapturedExpiries queues the death batch a capture cannot carry: one taken
+// between a shared lifetime's expiry and its batch's settle installs the expired
+// slot alone. Queued at install, the entity ends in the settle it ends in on the
+// sender, rather than a tick later through the next pass (D-19).
+func QueueCapturedExpiries(w *engine.World) {
+	var expired []core.Entity
+	for _, e := range w.Components.Timer.Entities() {
+		timer, ok := w.Components.Timer.GetPtr(e)
+		if ok && e.Domain() == core.DomainShared && lifetimeEnded(w, e, timer) {
+			expired = append(expired, e)
+		}
+	}
+	emitLifetimeDeaths(w, expired)
+}
+
+// lifetimeEnded reports e's lifetime expired. Death refuses a protected entity,
+// so its lifetime just stops, as the Death tag's did.
+func lifetimeEnded(w *engine.World, e core.Entity, timer *component.TimerComponent) bool {
+	if !timer.Expired(component.TimerLifetime) {
+		return false
+	}
+	if prot, ok := w.Components.Protection.GetPtr(e); ok && prot.Mask&component.ProtectFromDeath != 0 {
+		timer.Stop(component.TimerLifetime)
+		return false
+	}
+	return true
+}
+
+// emitLifetimeDeaths sorts first: store order may differ between instances after
+// a correction (D-8), and the batch must not carry it into destruction order.
+func emitLifetimeDeaths(w *engine.World, expired []core.Entity) {
+	slices.Sort(expired)
+	event.EmitDeath(w.Resources.Event.Queue, 0, expired...)
 }
 
 // timerRunning reports one of e's countdowns still running; an entity without a

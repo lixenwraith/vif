@@ -263,9 +263,11 @@ must not retain a pooled payload after its handler returns.
 lifetime, a deadline and a cooldown. `TimerSystem` runs right after
 `NetworkSystem`, before any owner, and ages every armed slot by the tick. An
 expired lifetime ends its entity through a silent death batch that settles
-before the next tick's systems. The timer collects expired lifetimes by state on
-every pass, so a capture that carries one still ends the entity on the joiner; a
-death-protected entity's lifetime just stops. A deadline or cooldown stays
+before the next tick's systems. A capture taken before that settle carries the
+expired slot without its batch, so the install queues the batch again and the
+entity ends in the same settle as on the sender. The timer also collects expired
+lifetimes by state on every pass, so a lost batch is retried; a death-protected
+entity's lifetime just stops. A deadline or cooldown stays
 expired until its owner acts and re-arms or stops it. Owners and renderers read
 `Progress` and `Elapsed` instead of keeping their own clock.
 
