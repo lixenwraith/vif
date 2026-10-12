@@ -102,7 +102,8 @@ func TestTimerOwnerSlotsStayExpiredUntilRearmed(t *testing.T) {
 
 // TestLifetimesKeepTheirTickCounts pins two lifetimes against the counts their
 // own countdowns produced: a turret bullet moves on 80 ticks (its age had to
-// exceed the limit), and a spirit draws 10 frames ending on its target.
+// exceed the limit), and a spirit draws 10 frames, the last on its target,
+// however soon the death batch settles after its lifetime ends.
 func TestLifetimesKeepTheirTickCounts(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
@@ -125,9 +126,10 @@ func TestLifetimesKeepTheirTickCounts(t *testing.T) {
 			bullets.Update()
 			moves++
 		}
-		if timer, ok := w.Components.Timer.GetPtr(spirit); ok {
+		// Drawn as the spirit renderer draws it
+		if timer, ok := w.Components.Timer.GetPtr(spirit); ok && !timer.Expired(component.TimerLifetime) {
 			frames++
-			lastProgress = timer.Progress(component.TimerLifetime)
+			lastProgress = min(float64(timer.Elapsed(component.TimerLifetime))/float64(parameter.SpiritAnimationDuration), 1)
 		}
 	}
 	if want := int(parameter.TurretBulletLifetime / parameter.GameUpdateInterval); moves != want {
@@ -200,5 +202,33 @@ func TestDeadlinesEndOnTheirLastTick(t *testing.T) {
 	w.Resources.Event.Queue.Consume()
 	if got, want := actsOn(gold.Update, has(event.EventGoldTimeout)), ticks(parameter.GoldDuration); got != want {
 		t.Fatalf("gold sequence timed out on tick %d, want %d", got, want)
+	}
+}
+
+// TestTimerCollectsAnExpiredLifetimeByState: a capture taken between the pass that
+// expired a lifetime and the settle of its batch installs the expired slot alone,
+// and the next pass still ends the entity; a death-protected one keeps living.
+func TestTimerCollectsAnExpiredLifetimeByState(t *testing.T) {
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	tick := newTimerTick(w)
+
+	installed := w.CreateEntity(core.DomainShared)
+	protected := w.CreateEntity(core.DomainShared)
+	for _, e := range []core.Entity{installed, protected} {
+		w.Components.Timer.SetComponent(e, component.TimerComponent{
+			Slots: [component.TimerSlotCount]component.Countdown{component.TimerLifetime: {Duration: time.Second}},
+		})
+	}
+	w.Components.Protection.SetComponent(protected, component.ProtectionComponent{Mask: component.ProtectFromDeath})
+
+	tick.open()
+	tick.open()
+	if _, alive := w.GetComponentMask(installed); alive {
+		t.Fatal("an installed expired lifetime was never collected")
+	}
+	timer, ok := w.Components.Timer.GetPtr(protected)
+	if _, alive := w.GetComponentMask(protected); !alive || !ok || timer.Expired(component.TimerLifetime) {
+		t.Fatal("a death-protected entity died, or kept an expired lifetime to collect every pass")
 	}
 }

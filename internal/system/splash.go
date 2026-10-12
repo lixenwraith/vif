@@ -128,16 +128,16 @@ func (s *SplashSystem) Update() {
 
 		switch splashComp.Slot {
 		case component.SlotTimer:
+			// An expired countdown is already leaving through the timer's death batch
+			timer, ok := s.world.Components.Timer.GetPtr(splashEntity)
+			if !ok || timer.Expired(component.TimerLifetime) {
+				continue
+			}
+
 			anchorEntity := splashComp.AnchorEntity
 			if anchorEntity != 0 && !s.world.Components.Header.HasEntity(anchorEntity) {
 				// Anchored to entity and anchor entity destroyed
 				event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
-				continue
-			}
-
-			// An expired countdown is already leaving through the timer's death batch
-			timer, ok := s.world.Components.Timer.GetPtr(splashEntity)
-			if !ok || timer.Expired(component.TimerLifetime) {
 				continue
 			}
 

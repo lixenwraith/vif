@@ -691,7 +691,7 @@ func (s *ParticleSystem) touch(behavior component.ParticleBehavior, state *parti
 // falls below the lower level's lifetime
 func (s *ParticleSystem) fade(prof *particleProfile, entity core.Entity) {
 	timer, ok := s.world.Components.Timer.GetPtr(entity)
-	if !ok {
+	if !ok || !timer.Running(component.TimerLifetime) {
 		return
 	}
 	sigil, ok := s.world.Components.Sigil.GetPtr(entity)
