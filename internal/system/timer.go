@@ -1,6 +1,8 @@
 package system
 
 import (
+	"time"
+
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -8,15 +10,15 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// TimerSystem manages lifecycle timers for entities
-// It runs before cleanup to tag expired entities for destruction
+// TimerSystem ages every entity's countdowns before any owner reads them, so a
+// countdown expires on the tick its owner would have counted it down to zero
 type TimerSystem struct {
-	world *engine.World
+	world   *engine.World
+	expired []core.Entity
 
 	toggle
 }
 
-// NewTimerSystem creates a new timer system
 func NewTimerSystem(world *engine.World) engine.System {
 	s := &TimerSystem{
 		world: world,
@@ -25,31 +27,25 @@ func NewTimerSystem(world *engine.World) engine.System {
 	return s
 }
 
-// Init resets session state for new game
 func (s *TimerSystem) Init() {
 	s.enabled = true
 }
 
-// Name returns system's name
 func (s *TimerSystem) Name() string {
 	return "timer"
 }
 
-// Priority returns the system's priority (runs just before CullSystem)
 func (s *TimerSystem) Priority() int {
-	return parameter.PriorityTimekeeper
+	return parameter.PriorityTimer
 }
 
-// EventTypes returns the event types TimerSystem handles
 func (s *TimerSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventTimerStart,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
 }
 
-// HandleEvent processes timer registration events
 func (s *TimerSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameResetRequest {
 		s.Init()
@@ -63,43 +59,48 @@ func (s *TimerSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
-
-	if !s.enabled {
-		return
-	}
-
-	if ev.Type == event.EventTimerStart {
-		if payload, ok := ev.Payload.(*event.TimerStartPayload); ok {
-			s.world.Components.Timer.SetComponent(payload.Entity, component.TimerComponent{
-				Remaining: payload.Duration,
-			})
-		}
-	}
 }
 
-// Update decrements timers and handles expiration
+// Update ages every armed slot; a lifetime that runs out leaves through a death
+// batch, settled before the next tick's systems run
 func (s *TimerSystem) Update() {
 	if !s.enabled {
 		return
 	}
 
-	timers := s.world.Components.Timer
 	dt := s.world.Resources.Time.DeltaTime
-	var expired []core.Entity
+	timers := s.world.Components.Timer
+	s.expired = s.expired[:0]
 
 	for _, entity := range timers.Entities() {
 		timer, ok := timers.GetPtr(entity)
 		if !ok {
 			continue
 		}
-
-		timer.Remaining -= dt
-
-		if timer.Remaining <= 0 {
-			s.world.Components.Death.SetComponent(entity, component.DeathComponent{})
-			expired = append(expired, entity)
+		for slot := range timer.Slots {
+			c := &timer.Slots[slot]
+			if c.Remaining <= 0 {
+				continue
+			}
+			if c.Remaining -= dt; c.Remaining <= 0 {
+				c.Remaining = 0
+				if component.TimerSlot(slot) == component.TimerLifetime {
+					s.expired = append(s.expired, entity)
+				}
+			}
 		}
 	}
 
-	timers.RemoveBatch(expired)
+	event.EmitDeath(s.world.Resources.Event.Queue, 0, s.expired...)
+}
+
+// armTimer starts one of e's countdowns, attaching its timer on first use
+func armTimer(w *engine.World, e core.Entity, slot component.TimerSlot, d time.Duration) {
+	if timer, ok := w.Components.Timer.GetPtr(e); ok {
+		timer.Arm(slot, d)
+		return
+	}
+	var timer component.TimerComponent
+	timer.Arm(slot, d)
+	w.Components.Timer.SetComponent(e, timer)
 }

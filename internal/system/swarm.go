@@ -333,10 +333,7 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 		HitPoints:        parameter.CombatInitialHPSwarm,
 	})
 
-	// Lifetime timer for automatic despawn
-	s.world.Components.Timer.SetComponent(headerEntity, component.TimerComponent{
-		Remaining: parameter.SwarmLifetime,
-	})
+	armTimer(s.world, headerEntity, component.TimerLifetime, parameter.SwarmLifetime)
 
 	// Build member entities (pre-allocate all 8 positions)
 	members := make([]component.MemberEntry, 0, parameter.SwarmWidth*parameter.SwarmHeight)

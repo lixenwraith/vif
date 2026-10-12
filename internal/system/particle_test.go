@@ -304,11 +304,12 @@ func TestParticleLifetimeFollowsProfile(t *testing.T) {
 		}
 	}
 	dust := entities[2]
-	if timer, ok := w.Components.Timer.GetComponent(dust); !ok || timer.Remaining != parameter.DustTimerBright {
+	timer, ok := w.Components.Timer.GetPtr(dust)
+	if !ok || timer.Slots[component.TimerLifetime].Remaining != parameter.DustTimerBright {
 		t.Fatalf("bright dust timer = %+v, want %v", timer, parameter.DustTimerBright)
 	}
 
-	w.Components.Timer.SetComponent(dust, component.TimerComponent{Remaining: parameter.DustTimerNormal - time.Millisecond})
+	timer.Slots[component.TimerLifetime].Remaining = parameter.DustTimerNormal - time.Millisecond
 	w.Resources.Time.DeltaTime = 0
 	particles.Update()
 	if sigil, _ := w.Components.Sigil.GetComponent(dust); sigil.Color != visual.RgbDustNormal {
