@@ -283,6 +283,7 @@ type pointArgs struct {
 // bot's own view, and the bot's actions and guards.
 func register(m *fsm.Machine[*mind]) {
 	std.Register(m, std.Host[*mind]{
+		Refuse: "writes the world; a bot acts only through intents",
 		ConfigInt: func(field string) (func(*mind) int64, bool) {
 			read, ok := engine.PrivateConfigIntAccessor(field)
 			if !ok {
@@ -362,14 +363,6 @@ func register(m *fsm.Machine[*mind]) {
 		t, err := parseTarget(p.Target, p.Away)
 		return pointArgs{target: t, fire: p.Fire, away: p.Away}, err
 	})
-
-	// std's world-writing actions would load and do nothing, as the Host gives them no way out
-	for _, name := range []string{"EmitEvent", "EnableSystem", "DisableSystem", "ApplyGlobalSystemConfig",
-		"ApplyRegionSystemConfigs"} {
-		m.RegisterActionArgs(name, func(*fsm.Machine[*mind], fsm.ActionConfig, fsm.StateResolver) (any, error) {
-			return nil, errors.New("writes the world; a bot acts only through intents")
-		})
-	}
 
 	guard := func(name string, args []string, build func(map[string]any) (fsm.GuardFunc[*mind], error)) {
 		m.RegisterGuardFactory(name, func(_ *fsm.Machine[*mind], given map[string]any) (fsm.GuardFunc[*mind], error) {

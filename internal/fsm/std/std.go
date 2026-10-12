@@ -36,6 +36,10 @@ type Host[T any] struct {
 	// field fails the load rather than silently comparing against zero
 	ConfigInt  func(field string) (func(ctx T) int64, bool)
 	ConfigBool func(field string) (func(ctx T) bool, bool)
+
+	// Refuse, when set, fails the load of an action whose hook is nil with this
+	// reason, for an embedder whose scripts must not name what does nothing
+	Refuse string
 }
 
 // Register installs the standard actions and guards on m
