@@ -24,7 +24,7 @@ import (
 // DefaultBotGraph is the graph a bot seat plays when none is named.
 const DefaultBotGraph = "default"
 
-// BotSpecs is shared by CLI flags and :bot add; empty means no request.
+// BotSpecs is shared by CLI flags and :bot add; empty or a zero count means no request.
 func BotSpecs(spec string) ([]string, error) {
 	if spec == "" {
 		return nil, nil
@@ -34,8 +34,8 @@ func BotSpecs(spec string) ([]string, error) {
 	if err != nil && !counted {
 		return []string{spec}, nil
 	}
-	if err != nil || n < 1 || n > parameter.MaxPlayers {
-		return nil, fmt.Errorf("%q: use a graph or N[:graph], with N in 1..%d", spec, parameter.MaxPlayers)
+	if err != nil || n < 0 || n > parameter.MaxPlayers {
+		return nil, fmt.Errorf("%q: use a graph or N[:graph], with N in 0..%d", spec, parameter.MaxPlayers)
 	}
 	return slices.Repeat([]string{cmp.Or(graph, DefaultBotGraph)}, n), nil
 }
