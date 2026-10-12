@@ -210,6 +210,7 @@ func testAllocatorConfig(t *testing.T) allocatorConfig {
 		PortFirst:      31700,
 		PortLast:       31709,
 		PlayersMax:     8,
+		BotsMax:        3,
 		LogLevels:      []string{"debug", "info", "warn", "error"},
 		WadDir:         testWad(t),
 		ReadyTimeout:   100 * time.Millisecond,
@@ -383,8 +384,8 @@ func TestASessionExpiresOnTheSoonerOfItsCountdownAndItsJobDeadline(t *testing.T)
 	}
 }
 
-// TestARequestedRosterAndLevelReachTheJob is the point of accepting them: a choice
-// the pod did not run would make the page's controls decoration.
+// TestARequestedRosterLevelAndScenarioReachTheJob is the point of accepting them: a
+// choice the pod did not run would make the page's controls decoration.
 func TestARequestedRosterLevelAndScenarioReachTheJob(t *testing.T) {
 	kube := &fakeKube{}
 	controller := newAllocator(kube, fakeHealth{state: sessionHealth{
@@ -393,7 +394,7 @@ func TestARequestedRosterLevelAndScenarioReachTheJob(t *testing.T) {
 	controller.newID = func() (string, error) { return "chosen", nil }
 
 	if _, err := controller.createSession(context.Background(),
-		sessionRequest{Players: 2, LogLevel: "debug", Scenario: "td"}); err != nil {
+		sessionRequest{Players: 2, Bots: 1, LogLevel: "debug", Scenario: "td"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(kube.jobObjects) != 1 {
@@ -403,7 +404,7 @@ func TestARequestedRosterLevelAndScenarioReachTheJob(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"-players","2"`, `"-lv","debug"`,
+	for _, want := range []string{`"-players","2","-bots","1"`, `"-lv","debug"`,
 		`"-config-dir","/wad","-s","td"`, `"-check","-config-dir","/wad","-s","td"`} {
 		if !strings.Contains(string(encoded), want) {
 			t.Fatalf("the Job does not carry %s: %s", want, encoded)
@@ -419,6 +420,9 @@ func TestASessionRequestOutsideTheOpenedBoundsIsRefused(t *testing.T) {
 	for _, request := range []sessionRequest{
 		{Players: 9},
 		{Players: -1},
+		{Bots: -1},
+		{Players: 8, Bots: 4}, // past bots_max
+		{Players: 2, Bots: 2}, // no seat left for a person
 		{LogLevel: "trace"},
 		{LogLevel: "shout"},
 		{Scenario: "blank"},

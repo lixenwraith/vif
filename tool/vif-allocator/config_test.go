@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -86,9 +87,14 @@ func TestRequestBoundsFailClosed(t *testing.T) {
 	if slices.Contains(cfg.Allocator.LogLevels, "trace") {
 		t.Fatalf("trace is selectable by default: %v", cfg.Allocator.LogLevels)
 	}
+	if cfg.Allocator.BotsMax != 0 {
+		t.Fatalf("bots-max = %d by default, want 0", cfg.Allocator.BotsMax)
+	}
 	for _, extra := range [][]string{
 		{"-players", "8", "-players-max", "4"},
 		{"-players-max", "17"},
+		{"-bots-max", "-1"},
+		{"-bots-max", strconv.Itoa(sessionBotsMax + 1)},
 		{"-log-level-min", "shout"},
 		{"-log-level", "trace"},
 	} {
@@ -116,7 +122,7 @@ func TestAnUnsetUnitVariableKeepsTheDefault(t *testing.T) {
 		unset(),
 		unset("-scenario", "", "-wad", ""),
 		unset("-scenario=", "-wad="),
-		unset("-listen", "", "-route-listen", "", "-route-max", "", "-players-max", "",
+		unset("-listen", "", "-route-listen", "", "-route-max", "", "-players-max", "", "-bots-max", "",
 			"-log-level-min", "", "-scenario", "", "-wad", "",
 			"-client-address-header", "", "-client-joins", "", "-client-creates", ""),
 	} {

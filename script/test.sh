@@ -661,7 +661,7 @@ fleet)
 	# broken" stop being separable questions. Compares the arguments, the mounts and
 	# the claims rather than the whole document, which carries a session id.
 	command -v go >/dev/null 2>&1 || fail "go not found"
-	rendered=$(SCENARIO=td LOG_LEVEL=debug PLAYERS=4 \
+	rendered=$(SCENARIO=td LOG_LEVEL=debug PLAYERS=4 BOTS=2 \
 		./deploy/k3s/render-session.sh fleetcheck 31700 vif:dev 4 120x40)
 	for want in \
 		'"-name"' '"-config-dir"' '"-s"' '"td"' '"debug"' \
@@ -671,6 +671,8 @@ fleet)
 		printf '%s' "$rendered" | grep -q -- "$want" \
 			|| fail "the rendered template is missing $want"
 	done
+	printf '%s\n' "$rendered" | grep -A1 -- '"-bots"' | grep -q '"2"' \
+		|| fail "the rendered template does not seat the bots it was given"
 	go test ./tool/vif-allocator/ >/dev/null || fail "allocator tests"
 	pass "the session template and the allocator agree on the fleet's workload"
 	;;

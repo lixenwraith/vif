@@ -21,6 +21,7 @@ ExecStart=/usr/local/bin/vif-allocator \
     -image ${VIF_ALLOCATOR_IMAGE} \
     -join-host ${VIF_ALLOCATOR_JOIN_HOST} \
     -players-max ${VIF_ALLOCATOR_PLAYERS_MAX} \
+    -bots-max ${VIF_ALLOCATOR_BOTS_MAX} \
     -log-level-min ${VIF_ALLOCATOR_LOG_LEVEL_MIN} \
     -scenario ${VIF_ALLOCATOR_SCENARIO} \
     -wad ${VIF_ALLOCATOR_WAD} \

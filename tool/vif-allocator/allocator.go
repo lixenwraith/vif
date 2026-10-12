@@ -41,6 +41,7 @@ type allocatorConfig struct {
 	PortFirst  int
 	PortLast   int
 	PlayersMax int
+	BotsMax    int
 	LogLevels  []string
 	WadDir     string
 
@@ -67,6 +68,7 @@ type allocatorConfig struct {
 // the deployment's.
 type sessionRequest struct {
 	Players  int    `json:"players,omitempty"`
+	Bots     int    `json:"bots,omitempty"`
 	LogLevel string `json:"log_level,omitempty"`
 	Scenario string `json:"scenario,omitempty"`
 }
@@ -78,6 +80,7 @@ type sessionRequest struct {
 // than inside it so a caller that reads the names alone is unaffected.
 type fleetLimits struct {
 	PlayersMax   int               `json:"players_max"`
+	BotsMax      int               `json:"bots_max"`
 	LogLevels    []string          `json:"log_levels"`
 	Scenarios    []string          `json:"scenarios"`
 	Descriptions map[string]string `json:"scenario_descriptions,omitempty"`
@@ -127,7 +130,7 @@ func newAllocator(kube kubeAPI, health healthProbe, cfg allocatorConfig) *alloca
 
 func (a *allocator) limits() fleetLimits {
 	names := a.scenarios()
-	return fleetLimits{PlayersMax: a.cfg.PlayersMax, LogLevels: a.cfg.LogLevels,
+	return fleetLimits{PlayersMax: a.cfg.PlayersMax, BotsMax: a.cfg.BotsMax, LogLevels: a.cfg.LogLevels,
 		Scenarios: names, Descriptions: a.describe(names)}
 }
 
@@ -240,6 +243,13 @@ func (a *allocator) resolve(req sessionRequest) (workloadConfig, error) {
 		}
 		workload.Players = req.Players
 	}
+	// Bots are roster guests and a session is ready only while a seat is free, so
+	// they leave at least one for the person who asked.
+	if most := min(a.cfg.BotsMax, workload.Players-1); req.Bots < 0 || req.Bots > most {
+		return workloadConfig{}, fmt.Errorf("%w: bots must be between 0 and %d for %d players",
+			errRequestRefused, most, workload.Players)
+	}
+	workload.Bots = req.Bots
 	if req.LogLevel != "" {
 		if !slices.Contains(a.cfg.LogLevels, req.LogLevel) {
 			return workloadConfig{}, fmt.Errorf("%w: log_level must be one of %s",
