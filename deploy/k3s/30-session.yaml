@@ -1,31 +1,7 @@
-# One allocated session: one Job, one pod, one Service.
-#
-# This is a template, not an object to apply as it stands. The allocator renders
-# the placeholders below and creates the result; deploy/k3s/render-session.sh does
-# the same thing from a shell for a manual test.
-#
-#   ${SESSION_ID}      a short, unique, DNS-safe session name (e.g. 7f3c1a)
-#   ${IMAGE}           the image, pinned by digest in anything but a lab
-#   ${GAME_NODEPORT}   the node port this session is directly reachable on (31700-31709)
-#   ${JOB_UID}         the created Job UID used to own the Service
-#   ${PLAYERS}         the guest ceiling for this session (1-16)
-#   ${BOTS}            the session's own bots, roster guests (0 for none, below PLAYERS)
-#   ${CPU_REQUEST}     100m, and 64m more a bot
-#   ${MEMORY_REQUEST}  96Mi, and 32Mi more a bot
-#   ${MEMORY_LIMIT}    192Mi, and 32Mi more a bot
-#   ${GOMEMLIMIT}      160MiB, and 32MiB more a bot
-#   ${MAP_SIZE}        the shared map geometry, WxH (e.g. 120x40)
-#   ${SCENARIO}        the installed scenario name to serve (e.g. main)
-#   ${LOG_LEVEL}       the session log level (trace..error; the allocator picks it)
-#   ${FIRST_JOIN}      the first-guest deadline (normally 90s)
-#   ${EMPTY_GRACE}     the empty-roster grace (normally 90s)
-#
-# Why a Job rather than a Deployment: an allocated session is a thing that ends.
-# It ends when nobody claimed it, when everybody left, or when it was asked to go,
-# and in every case the process exits zero and the match is over — the world was in
-# memory and no replacement pod inherits it. A Deployment would restart it into a
-# session nobody is in; a Job records that it completed and lets the TTL controller
-# remove the object.
+# One allocated session: one Job, one pod, one Service. A template: its ${...}
+# placeholders are what tool/vif-allocator/manifest.go and render-session.sh fill.
+# A Job, not a Deployment: a session ends with its process exiting zero, and no
+# replacement pod could inherit the world it held in memory.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -220,12 +196,9 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 3
-          # No readiness probe, deliberately. Readiness would take the pod out of a
-          # Service, and this Service has exactly one backend that the allocator
-          # chose on purpose — removing it would break the session rather than
-          # reroute it. The application refuses a dial at the handshake; the
-          # allocator reads the same answer from the health body's `ready` and
-          # `phase` fields when choosing where to send the next player.
+          # No readiness probe: the Service's one backend is the session, so taking it
+          # out would break the session rather than reroute it. The handshake refuses
+          # a dial, and the allocator reads `ready` and `phase` from the health body.
       volumes:
         # This claim exposes only the node-affine, tmpfs-backed local PV. The pod
         # remains Restricted and never mounts a direct hostPath.
@@ -239,16 +212,9 @@ spec:
             claimName: vif-fleet-wad
             readOnly: true
 ---
-# The session's endpoint.
-#
-# One Service per session, not one Service in front of many: players joining the
-# same match must reach the same process, and an ordinary load-balanced Service
-# over several session pods would scatter them across unrelated worlds.
-#
-# The probe and WebSocket ports are deliberately absent. Both stay reachable inside
-# the cluster through the pod IP — the kubelet and Prometheus find the first, the
-# node's allocator finds the second — and nothing outside the node can route to
-# either. The browser path publishes no second NodePort by design.
+# The session's endpoint, one per session: players of one match must reach one
+# process. The probe and WebSocket ports stay off it, reachable only inside the
+# cluster through the pod IP (the kubelet and Prometheus, the node's allocator).
 apiVersion: v1
 kind: Service
 metadata:

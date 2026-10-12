@@ -206,7 +206,7 @@ not releases: Linux, FreeBSD, browser, headless server and experimental Windows
 archives plus the headless container image; see [doc/packaging.md](doc/packaging.md).
 
 `script/test.sh` runs named setups for verifying behaviour by hand —
-`solo`, `host`/`join`, `serve`, `serve-fleet`, `probe`, bot scoring and load, and
+`solo`, `host`/`join`, `serve`, `serve-fleet`, `probe`, bot fitness and load, and
 automated checks for the session lifetime, the drain, and join-identity refusal. See
 [script/README.md](script/README.md).
 

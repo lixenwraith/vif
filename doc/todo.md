@@ -48,7 +48,7 @@ values that remain.
 
 - Priority: P2
 - Affected files: the Hugo site's `vif-fleet.js`, `internal/network/endpoint.go`,
-  `internal/mode/config_form.go`, `deploy/guest/vif-allocator.env`,
+  `internal/mode/config_form.go`, `tool/vif-allocator`, `deploy/guest/vif-allocator.env`,
   `deploy/k3s/10-quota.yaml`
 - Guide: [Session fleet plan](kubernetes-fleet.md) §6
 
@@ -56,7 +56,12 @@ The allocator takes `bots`, but `bots_max` stays 0 until these hold:
 - The site's `vif-fleet.js` sends `bots` and reads `bots_max`; the native client
   (`network.RequestSession`, the menu's request form) sends `bots`.
 - The quota's 1000m of CPU fills at three sessions of three bots: raise it, or
-  accept fewer sessions.
+  accept fewer sessions. A create the quota cannot hold waits 75 s for a pod that
+  never schedules and answers 504 `session_not_ready`; sum the live sessions'
+  requests against the quota and refuse it as `fleet_full` instead.
+- The CPU limit stays 500m while each bot adds 64m of request, and six bots with
+  one person use about 0.5 core: grow the limit with bots (the `LimitRange` allows
+  1 CPU), or bound `bots_max` by CPU as well as memory.
 - td: refuse bots on ceiling-sized maps by map cells, or leave td off the offered
   scenarios, until the map-limit trim below lands.
 - K=3 measured on the node with `./script/test.sh load` or the deploy guide,

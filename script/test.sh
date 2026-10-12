@@ -1,11 +1,7 @@
 #!/bin/sh
-# End-to-end setups, for verifying behaviour by hand on a dev machine.
-#
-#   ./script/test.sh <name> [args...]
-#   ./script/test.sh list
-#
-# Scenarios marked (auto) assert and print PASS/FAIL; the rest launch something and
-# leave it in the foreground. See script/README.md.
+# End-to-end setups for verifying behaviour by hand: ./script/test.sh <name> [args]
+# or list. Scenarios marked (auto) assert and print PASS/FAIL; the rest launch
+# something and leave it in the foreground. See script/README.md.
 set -eu
 
 BIN=${BIN:-./bin/vif}
@@ -262,17 +258,10 @@ pair)
 	;;
 
 host-loss)
-	# The authority question, run end to end: a host and n guests, then the host
-	# goes. What each guest concludes is the whole output, because the two answers
-	# are legitimate and which one is right is a deployment decision.
-	#
-	#   AUTHORITY=migrate  the roster's next survivor takes the term
-	#   AUTHORITY=host     nobody does; every survivor plays on alone
-	#
-	# Read the result knowing what migration can and cannot do: a successor authors
-	# but does not listen, and the handoff never reaches a guest that had no link to
-	# it — so in a star each survivor ends up in a game of its own either way, and
-	# the difference is only which of them believes it is hosting one.
+	# A host and n guests, then the host goes; what each guest concludes is the
+	# output, as which answer is right is a deployment decision. AUTHORITY=migrate
+	# hands the term to the roster's next survivor, AUTHORITY=host to nobody;
+	# script/README.md says what migration can and cannot do.
 	need_bin
 	n=${2:-2}
 	auth=${AUTHORITY:-migrate}
@@ -384,15 +373,17 @@ botfitness)
 load)
 	# Networked bots at the fleet's shape: per session a dedicated host seating its
 	# own bots on PORT and PROBE_PORT stepped by two, and a headless bot joining it as
-	# a person would, relaying GUEST_BOTS of its own. Each host is read every few
-	# seconds; LIMIT_MB (MiB) defaults to the pod's memory limit for its bots. Digest
-	# mismatches are reported, not failed: a guest differs between corrections by design.
+	# a person would, relaying GUEST_BOTS of its own. Each host runs under the pod's
+	# GOMEMLIMIT and is held to its memory limit (LIMIT_MB), both as the session
+	# template renders them. Digest mismatches are reported, not failed.
 	need_bin
 	[ -r /proc/self/stat ] || fail "load reads /proc; run it on Linux"
 	sessions=${2:-2} bots=${3:-2} secs=${4:-60}
 	guest_bots=${GUEST_BOTS:-0}
 	want=$((bots + 1 + guest_bots))
-	limit=${LIMIT_MB:-$((192 + 32 * bots))}
+	pod=$(BOTS=$bots deploy/k3s/render-session.sh load 31700 vif:dev "$want") || fail "no pod renders for $bots bot(s)"
+	limit=${LIMIT_MB:-$(printf '%s\n' "$pod" | sed -n 's/^ *memory: \([0-9]*\)Mi$/\1/p' | tail -1)}
+	gomem=${GOMEMLIMIT:-$(printf '%s\n' "$pod" | sed -n '/name: GOMEMLIMIT/{n;s/^ *value: "\(.*\)"$/\1/p;}')}
 	rate=20 # ticks a second: parameter.GameUpdateInterval
 	every=5
 	hz=$(getconf CLK_TCK)
@@ -409,7 +400,7 @@ load)
 			fail "something already answers on $HOST:$probe; set PORT and PROBE_PORT"
 		fi
 		# shellcheck disable=SC2086
-		"$BIN" -serve "$HOST:$((PORT + 2 * n))" -probe "$HOST:$probe" $config -size 120x40 \
+		GOMEMLIMIT=$gomem "$BIN" -serve "$HOST:$((PORT + 2 * n))" -probe "$HOST:$probe" $config -size 120x40 \
 			-players "$want" -bots "$bots" -log-stdout -lv info >"$D/host$n.log" 2>&1 &
 		eval "host$n=\$!"
 		LOAD_PIDS="${LOAD_PIDS:-} $!"
@@ -428,6 +419,8 @@ load)
 		n=$((n + 1))
 	done
 
+	# since is how far counter $1 moved from $2, counting from zero across a reset
+	since() { if [ "$1" -ge "$2" ]; then echo $(($1 - $2)); else echo "$1"; fi; }
 	# loadsample reads host $1's process and probe into the r_ variables.
 	loadsample() {
 		eval "pid=\$host$1"
@@ -448,7 +441,7 @@ load)
 	n=0
 	while [ "$n" -lt "$sessions" ]; do
 		loadsample "$n"
-		eval "tick0_$n=$r_tick cpu0_$n=$r_cpu cpu_$n=$r_cpu mismatch0_$n=${r_mismatch:-0}"
+		eval "tick_$n=$r_tick ticks_$n=0 cpu0_$n=$r_cpu cpu_$n=$r_cpu mismatch_$n=${r_mismatch:-0} grew_$n=0"
 		n=$((n + 1))
 	done
 	printf '\n%5s %4s %8s %8s %9s %7s %6s %5s %7s %9s\n' \
@@ -471,6 +464,8 @@ load)
 				"${r_peers:-?}" "${r_evicted:-0}" "${r_mismatch:-0}"
 			[ "$r_guests" = "$want" ] || problems="$problems
 host $n held $r_guests guests at ${elapsed}s, want $want"
+			# A reset restarts the tick and the mismatch count, so both are summed per sample
+			eval "ticks_$n=\$((ticks_$n + \$(since $r_tick \$tick_$n))) grew_$n=\$((grew_$n + \$(since ${r_mismatch:-0} \$mismatch_$n)))"
 			eval "cpu_$n=$r_cpu tick_$n=$r_tick hwm_$n=$r_hwm evicted_$n=${r_evicted:-0} mismatch_$n=${r_mismatch:-0}"
 			n=$((n + 1))
 		done
@@ -480,8 +475,8 @@ host $n held $r_guests guests at ${elapsed}s, want $want"
 	note "each host over ${elapsed}s"
 	n=0
 	while [ "$n" -lt "$sessions" ]; do
-		eval "ticks=\$((tick_$n - tick0_$n)) cpu=\$(( (cpu_$n - cpu0_$n) * 1000 / hz / elapsed ))"
-		eval "hwm=\$((hwm_$n / 1024)) evicted=\$evicted_$n grew=\$((mismatch_$n - mismatch0_$n))"
+		eval "ticks=\$ticks_$n cpu=\$(( (cpu_$n - cpu0_$n) * 1000 / hz / elapsed ))"
+		eval "hwm=\$((hwm_$n / 1024)) evicted=\$evicted_$n grew=\$grew_$n"
 		printf 'host %s: %s ticks, %s ms of CPU a second, peak %s MiB, %s new digest mismatch(es)\n' \
 			"$n" "$ticks" "$cpu" "$hwm" "$grew"
 		[ "$ticks" -ge $((secs * rate * 9 / 10)) ] || problems="$problems
@@ -762,12 +757,8 @@ follow)
 		|| fail "the guest ended on $ends, the host on $want"
 	[ "$(grep -c '"msg":"join installed the session world"' "$GL"/*.jsonl 2>/dev/null)" -ge 2 ] \
 		|| fail "the guest did not install the session world a second time: $GL"
-	# The host's own player after the change, not before it. One process writes one
-	# log across both runs, and the guest's arrival spawns a cursor too, so the
-	# count only means something from the restart onward. A scenario that spawns no
-	# cursor leaves the host watching its guests play, which is what blank used to do.
-	# Slot 0 is the host's own; the guest's arrival spawns one too, so the count
-	# alone says nothing.
+	# The host's own cursor (slot 0) after the change: one process logs both runs and
+	# the guest's arrival spawns a cursor too, so only slot 0 from the restart counts.
 	own=$(cat "$HL"/*.jsonl 2>/dev/null | awk '
 		/"msg":"run restarting"/ { seen = 1; n = 0; next }
 		seen && /"msg":"cursor spawned"/ && /"slot":0/ { n++ }
