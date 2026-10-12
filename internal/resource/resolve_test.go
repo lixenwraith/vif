@@ -99,11 +99,12 @@ func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 }
 
 // TestCheckRefusesABrokenBotGraph: -check parses every graph a name could resolve
-// to, so an installed one that would fail only when seated fails the check.
+// to, so an installed one that would fail only when seated fails the check, whatever
+// characters its root's path holds.
 func TestCheckRefusesABrokenBotGraph(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv(paths.SystemRootsEnv, "")
-	root := t.TempDir()
+	root := filepath.Join(t.TempDir(), "games[old]")
 	bad := filepath.Join(root, paths.BotDirName, "bad.toml")
 	if err := os.MkdirAll(filepath.Dir(bad), 0o755); err != nil {
 		t.Fatal(err)

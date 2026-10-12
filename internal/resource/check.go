@@ -224,27 +224,25 @@ func checkContent(o Options, w io.Writer) error {
 // a broken one fails here rather than when -bot or :bot add first loads it.
 func checkBots(o Options, w io.Writer) error {
 	var faults []error
-	parse := func(where string, data []byte, err error) {
-		if err == nil {
-			_, err = bot.ParseGraph(where, data)
+	// Globbed inside the directory, so a root's own path is never read as a pattern
+	parse := func(fsys fs.FS, where func(file string) string) {
+		files, _ := fs.Glob(fsys, "*.toml")
+		for _, file := range files {
+			data, err := fs.ReadFile(fsys, file)
+			if err == nil {
+				_, err = bot.ParseGraph(where(file), data)
+			}
+			if err != nil {
+				faults = append(faults, err)
+				continue
+			}
+			fmt.Fprintln(w, "bot ok:", where(file))
 		}
-		if err != nil {
-			faults = append(faults, err)
-			return
-		}
-		fmt.Fprintln(w, "bot ok:", where)
 	}
 	for _, root := range newResolver(o).roots {
-		files, _ := filepath.Glob(filepath.Join(root, paths.BotDirName, "*.toml"))
-		for _, file := range files {
-			data, err := os.ReadFile(file)
-			parse(file, data, err)
-		}
+		dir := filepath.Join(root, paths.BotDirName)
+		parse(os.DirFS(dir), func(file string) string { return filepath.Join(dir, file) })
 	}
-	files, _ := fs.Glob(asset.DefaultBots, "*.toml")
-	for _, file := range files {
-		data, err := fs.ReadFile(asset.DefaultBots, file)
-		parse("embedded "+strings.TrimSuffix(file, ".toml"), data, err)
-	}
+	parse(asset.DefaultBots, func(file string) string { return "embedded " + strings.TrimSuffix(file, ".toml") })
 	return errors.Join(faults...)
 }

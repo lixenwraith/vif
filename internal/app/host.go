@@ -447,9 +447,7 @@ func (a *App) sessionSummaryLocked() string {
 		cursor = "no cursor"
 	}
 	reg := a.world.Resources.Status
-	// The D-14 latch used to sit in the status bar beside every connection state,
-	// where it was a constant: on for every session and off for every solo run. It
-	// is a fact about the run rather than a thing to watch, so it is named here.
+	// The D-14 latch is a fact about the run rather than a thing to watch
 	latch := "map open"
 	if reg.Bools.Get("network.map_latched").Load() {
 		latch = "map latched"
