@@ -77,6 +77,8 @@ jobs:
           cp README.md LICENSE stage/windows-amd64/
           (cd stage/windows-amd64 && zip -qX "../../dist/vif-$label-windows-amd64.zip" vif.exe README.md LICENSE)
           cp -R web/. stage/web/
+          # The loader of the Go that built vif.wasm above, not the committed copy.
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" stage/web/
           tar -C stage/web -czf "dist/vif-$label-web.tar.gz" .
 
           # One archive rather than a copy in each target's: the wad is the same
