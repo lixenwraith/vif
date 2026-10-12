@@ -79,6 +79,10 @@ type SpatialGrid struct {
 	Cells  []Cell // 1D array: index = y*Width + x
 	Width  int
 	Height int
+
+	// epoch moves wherever membership can change with no position changing: a clear,
+	// a resize, and a shared insertion the cell refused.
+	epoch uint64
 }
 
 // NewSpatialGrid creates a new grid with the specified dimensions
@@ -101,6 +105,9 @@ func (g *SpatialGrid) Set(e core.Entity, x, y int) bool {
 
 	cell := &g.Cells[y*g.Width+x]
 	if cell.Count >= parameter.MaxEntitiesPerCell {
+		if e.Domain() != core.DomainPlayer {
+			g.epoch++
+		}
 		return false
 	}
 
@@ -218,6 +225,7 @@ func (g *SpatialGrid) HasAnyEntityInArea(x, y, width, height int, scope DomainSc
 
 // Clear removes all entities from all cells
 func (g *SpatialGrid) Clear() {
+	g.epoch++
 	for i := range g.Cells {
 		g.Cells[i].Count = 0
 		g.Cells[i].SharedCount = 0
@@ -237,6 +245,7 @@ func (g *SpatialGrid) Resize(newWidth, newHeight int) {
 	// grid recording bounds that disagree with the cells it holds answers Set and
 	// every enumeration from two different maps.
 	newWidth, newHeight = max(newWidth, 0), max(newHeight, 0)
+	g.epoch++
 	need := newWidth * newHeight
 	if need <= cap(g.Cells) {
 		g.Cells = g.Cells[:need]

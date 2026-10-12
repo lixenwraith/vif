@@ -22,9 +22,10 @@ Use these terms consistently:
   which is participant 1 until a handoff moves authorship.
 - A **game guest** runs the same Shared simulation as a predictor and adopts host
   corrections. It is not a thin renderer.
-- A **relay** forwards authoritative artifacts for participants behind it and
+- A **relay** forwards authoritative artifacts for participants behind it,
   retains authoritative captures so it can answer their selective repair
-  requests. It authors nothing.
+  requests, and reports their proofs upstream. It authors nothing. A guest is
+  the relay of its own bots.
 - The **authority term** is a monotonically increasing session generation.
   Authoritative artifacts carry it; a term advances once per successful handoff
   and never moves backwards on an instance.
@@ -66,7 +67,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
 | Playout lead | Per participant (§3.5): a guest's own round trip to the authority plus a jitter allowance and a relay tick, less how late the authority's epochs land on it; behind a relay, the round trip is how long its own epochs take to come back committed. The authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
 | Commit and pacing | The authority commits every guest crossing — as stamped, late at its next tick, or void past `NetworkCommitLateTicks` — and relays only the committed copy. Every guest paces its tick interval so the authority's epochs land inside its band. A participant whose own crossings stay late is evicted by policy (§3.5). |
-| Mesh and relay | Committed epochs, owner state, corrections, and authority records flood with per-source duplicate suppression; a raw epoch travels only toward the authority, and its committed copy floods back through every relay it crossed. A relay serves selective repair to the participants behind it from retained authority content, and forwards its own committed copies to them; the authority keeps the keyframe floor while anyone is behind a relay, since no answer on its own links proves them current. |
+| Mesh and relay | Committed epochs, owner state, corrections, and authority records flood with per-source duplicate suppression; a raw epoch travels only toward the authority, and its committed copy floods back through every relay it crossed. A relay serves selective repair to the participants behind it from retained authority content, forwards its own committed copies to them, and names each with the tick it last proved in its own answer, which the authority's floor and flood count as a direct answer. A guest linked to the authority sends it alone its raw epochs and syncs and those it carries, one bundle a tick; the authority takes a participant's raw artifacts only on its own link or its holder's. |
 | Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is never elected (§5.3). |
 | Host loss | `-authority migrate` (default off `-serve`): **the first survivor in the succession chain** takes the next term, with no vote, because every survivor computes it from state it already holds identically. `-authority host` (default on `-serve`): nobody takes it and every survivor continues alone. |
 | Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, and tick interval, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted rather than compared — `PeerIdentity.SessionFrom` takes the coordinator's, and a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
@@ -317,8 +318,10 @@ While authoring, the authority evicts a participant whose epochs, over
 carried at least `-slow-bytes` a second (`driveEviction`). Epochs rather than
 crossings: a player sweeping the pointer is not a slower link than one standing still. The first window after
 arrival is grace, and only a participant's own raw epochs count, so its actions
-relayed to the others never mark them. On a handoff a guest drops its own
-uncommitted crossings, scheduled and retained: the authority they went to is gone.
+relayed to the others never mark them. A link is evicted with the bots it holds once
+what it sends over the window passes `NetworkIngressBytesPerSecond` for itself, each
+bot it holds and each person the authority has no link to (`driveIngress`). On a handoff a guest drops its own uncommitted
+crossings, scheduled and retained: the authority they went to is gone.
 
 ## 4. Correction pipeline
 
@@ -332,8 +335,7 @@ each direct peer according to that link's cadence:
    install the authority header without transferring state. That answer proves the
    receiver holds the authority's world, so while every peer has proved it within
    half the convergence floor the keyframe cadence sends none. A participant behind
-   a relay proves nothing on the authority's links, so while one is present the
-   floor sends a whole world regardless.
+   a relay proves it in the relay's own answer.
 4. Otherwise the receiver asks for the section summaries, compares page hashes only
    in differing sections, and the authority returns the pages that differ. A repair
    wider than one frame or than the keyframe it stands in for is not sent: the peer
@@ -422,7 +424,11 @@ forwarded to every neighbour except the arrival edge. Corrections retain the
 authority's term, tick, hashes, and chunks across relays.
 
 Bot admission declares an independent holder. That identity is retained in the
-roster and Shared cursor across captures, resets and succession. A holder
+roster and Shared cursor across captures, resets and succession. A host's bots dial
+its listener over loopback; a guest's join on an in-process stream the guest serves
+(`relayLink`): it asks the authority on its own link to allocate the identity and,
+once the bot installed the world the guest last proved, to cross its arrival
+(`MsgRelayJoin`). A bot dials no peer links, since it shares its holder's fate. A holder
 departure retires its bot group at the same crossing. Hosts may remove any remote
 slot with `:player drop`; removing a bot alone leaves its holder and siblings.
 `:bot drop` also lets a guest remove its own bot. Both accept decimal or hex slots.
@@ -623,8 +629,16 @@ to plan by. Tower is the 239×64 tower region, td the 500×250 `td` scenario.
 | Heap in use per instance | 70 MiB | 90 MiB | 210 MiB | 250 MiB |
 
 Per round the host captures under the world lock (about 1.2 ms tower, 14 ms td),
-seals the capture (9 / 65 ms) and indexes it (4.5 / 30 ms with the wall section
-reused). A keyframe is 80 / 516 kB compressed and 9 / 65 ms to encode. An install that
+seals the capture (9 / 65 ms) and indexes it (4.5 / 30 ms). A keyframe is 80 / 516 kB
+compressed and 9 / 65 ms to encode. The seal, the index and a keyframe now reuse the
+bytes and hash of every row whose owned copy still compares equal: at 16 players,
+rounds four ticks apart and on a slower container, the seal fell from 16 to 1.8 ms
+on the tower map and from 123 to 5 ms on td, the index from 12 to 2.4 and from 64 to
+12 ms, and a keyframe from 19 to 7.6 and from 125 to 58 ms, now mostly deflate.
+Navigation, which had become 89% of a td tick there, rebuilds its wall grid only when
+a wall moved and compares grids only when their generation moved: the td tick fell
+from 13.6 to 2.6 ms and the tower's from 1.7 to 1.1 ms. The table predates both. An
+install that
 projects nothing holds the live lock 7–10 / 40–70 ms, and each projected tick adds up
 to a simulation tick. Sealing, indexing and encoding run outside the lock, but on the
 one thread a browser guest has.
@@ -638,11 +652,12 @@ participant's epochs and owner syncs to every other, (N−1)² of each: at 16 pl
 
 What that means for scaling:
 
-- **Protocol, not simulation, bounds the map limit.** At td with 16 players the host
-  needs about 1.4 cores, 86% of it protocol: rounds of capture, seal and index cost
-  about 100 ms each, 0.7 CPU-s/s at 7.2 rounds, and whole bodies most of the rest. The
-  seal now costs twice the index. The fleet pod's 500m CPU and 160 MiB `GOMEMLIMIT`
-  hold the tower map at 16 players and not td.
+- **Protocol, not simulation, bounded the map limit.** At td with 16 players the host
+  needed about 1.4 cores, 86% of it protocol: rounds of capture, seal and index cost
+  about 100 ms each, 0.7 CPU-s/s at 7.2 rounds, and whole bodies most of the rest.
+  Row reuse takes about nine tenths off the seal and index, which leaves the capture
+  under the lock the largest part of a round. The fleet pod's 500m CPU and 160 MiB
+  `GOMEMLIMIT` held the tower map at 16 players and not td.
 - **A td guest costs 0.4–0.5 CPU-s/s natively,** which a browser's single WASM thread
   cannot hold; the tower map costs a guest about 0.1.
 - **Bandwidth is quadratic before it is anything else.** Epoch and owner-sync fan-out

@@ -1,6 +1,7 @@
 package network
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,6 +50,10 @@ type SessionOffer struct {
 	// FixedAuthority pins authorship to the opening participant. The session-wide
 	// policy keeps guests from interpreting one host loss in different ways.
 	FixedAuthority bool `json:"fixed_authority,omitempty"`
+
+	// Relay is the participant on the far end of the joiner's stream when that is not
+	// the host: the holder a bot joined through. Zero on a dial to the coordinator.
+	Relay PeerID `json:"relay,omitempty"`
 
 	// SnapshotTick names the tick of the capture that follows the start gate, and
 	// SnapshotBytes its encoded length. A joiner reads them before the transfer so a
@@ -114,6 +119,32 @@ type JoinerReport struct {
 // Sized reports whether this report names a usable geometry.
 func (r JoinerReport) Sized() bool { return r.Width > 0 && r.Height > 0 }
 
+// RelayStep is one decision a relay asks of the coordinator for a participant
+// joining through it, in the order a join takes them.
+type RelayStep uint8
+
+const (
+	RelayAssign  RelayStep = iota + 1 // allocate an identity and a slot the relay holds
+	RelayReady                        // the participant installed the relay's world: cross its arrival
+	RelayAbandon                      // the join failed: retire the participant, unanswered
+)
+
+// RelayJoin is a relay's request. Nonce pairs it with its answer; Leaf names the
+// participant once Assign has. The relay checked the participant's identity against
+// the offer, as a coordinator checks a dial's reply.
+type RelayJoin struct {
+	Step  RelayStep `json:"step"`
+	Nonce uint32    `json:"nonce"`
+	Leaf  PeerID    `json:"leaf,omitempty"`
+}
+
+// RelayAdmit answers one RelayJoin: the offer Assign allocated, or why not.
+type RelayAdmit struct {
+	Nonce uint32       `json:"nonce"`
+	Offer SessionOffer `json:"offer,omitzero"`
+	Error string       `json:"error,omitempty"`
+}
+
 // Validate rejects transport-level ambiguity before App.Join checks identity.
 func (o SessionOffer) Validate() error {
 	if o.Host == 0 || o.Assigned == 0 || o.Host == o.Assigned {
@@ -160,6 +191,9 @@ func (o SessionOffer) Validate() error {
 	}
 	if !ids[o.Host] || !ids[o.Assigned] {
 		return errors.New("join offer roster omits host or assigned participant")
+	}
+	if o.Relay != 0 && (!ids[o.Relay] || o.Relay == o.Host || o.Relay == o.Assigned) {
+		return errors.New("join offer names a relay outside the roster, or the host, or the joiner")
 	}
 	return nil
 }
@@ -447,12 +481,13 @@ func (p *PendingJoin) RequestScenario(digest string) ([]byte, error) {
 }
 
 // Deferred returns the session traffic read off the stream during the gate, oldest
-// first. Every frame came from the coordinator, which is the only peer this stream
-// has. Valid after Ready; the slice is not reused.
+// first. Every frame came from Peer, the only one this stream has. Valid after
+// Ready; the slice is not reused.
 func (p *PendingJoin) Deferred() []*Message { return p.deferred }
 
-// HostID names the coordinator on the other end of this stream.
-func (p *PendingJoin) HostID() PeerID { return p.offer.Host }
+// Peer names the participant on the other end of this stream: the coordinator, or
+// the relay the offer came through.
+func (p *PendingJoin) Peer() PeerID { return cmp.Or(p.offer.Relay, p.offer.Host) }
 
 // hold buffers one session frame that arrived out of the handshake's turn, and
 // reports whether it was one. Anything the handshake itself expects is left to the
@@ -590,7 +625,8 @@ func (p *PendingJoin) TransportConfig() *Config {
 	cfg.Role = RolePeer
 	cfg.ParticipantID = p.offer.Assigned
 	cfg.preconnected = p.conn
-	cfg.preconnectedPeer = p.offer.Host
+	cfg.preconnectedPeer = p.Peer()
+	cfg.Dial = nil // the join's own stream; a later peer link dials its address
 	return &cfg
 }
 

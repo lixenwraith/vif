@@ -388,7 +388,8 @@ Measured with a scripted guest and the `-script` benchmark:
 - **Walls probed per cell.** Flow fields asked the spatial grid and the wall store
   about every neighbour of every cell. They now read a grid built from the store once
   per derivation (`Position.WallTest`): the `td` script runs in 28 s, from 49.5 s,
-  with identical stat records throughout.
+  with identical stat records throughout. That grid is now rebuilt only when a wall,
+  its mask, its position or its cell's membership moved.
 
 A drop then stuck inside a wall. No field has ever covered a wall cell, and
 `PushEntityFromBlocked` moved the grid cell but left the sub-cell position in the
@@ -515,7 +516,8 @@ the operating point (multi-player §6) and fixed what it found.
   owned copy of every wall entry compares equal, and a reflect guard refuses a wall
   field whose `==` could disagree with its JSON. Warm builds fell from about 10 to
   4 ms on the tower map and from about 120 to 30 ms on td, and combined CPU by about
-  a quarter and a sixth, with identical roots and hash-only counts.
+  a quarter and a sixth, with identical roots and hash-only counts. Every store now
+  reuses its rows this way, under generated comparisons in place of the guard.
 - **Body reuse.** A baseline keeps its correction envelope for every fallback
   recipient. Its join body now follows the same rule, which a successor's baseline
   had broken by keeping its predecessor's.

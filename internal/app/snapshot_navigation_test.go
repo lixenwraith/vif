@@ -351,6 +351,49 @@ func TestAnInstallKeepsNavigationOnlyOverUnmovedWalls(t *testing.T) {
 	}
 }
 
+// TestAnInstallDerivesPassabilityFromTheWallsItInstalls: a wall event between ticks
+// moves passability before the walls are next read, so an install restoring the
+// walls that were last read derives passability again rather than keeping the event's.
+func TestAnInstallDerivesPassabilityFromTheWallsItInstalls(t *testing.T) {
+	t.Parallel()
+	origin, cap := navRouteOrigin(t)
+	defer origin.Close()
+	passability := func() *navigation.CompositePassability {
+		return origin.World().Resources.NavigationDebug.CompositePassability
+	}
+	hx, hy := -1, -1
+	origin.World().RunSafe(func() {
+		p := passability()
+		for i := range p.Valid {
+			if x, y := i%p.Width, i/p.Width; hx < 0 && p.Valid[i] && !origin.World().Positions.HasAnyEntityAt(x, y) {
+				hx, hy = x, y
+			}
+		}
+	})
+	if hx < 0 {
+		t.Fatal("no empty cell an eye can stand on")
+	}
+	origin.Context().PushEventOrigin(event.EventWallSpawnRequest, &event.WallSpawnRequestPayload{
+		X: hx, Y: hy, Char: '#', BlockMask: component.WallBlockKinetic}, event.OriginDebug)
+	origin.Settle()
+	var moved bool
+	origin.World().RunSafe(func() { moved = !passability().IsValid(hx, hy) })
+	if !moved {
+		t.Fatal("the wall event left passability where it was; an install has nothing to restore")
+	}
+	if err := origin.InstallShared(cap); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	origin.World().RunSafe(func() {
+		w, got := origin.World(), passability()
+		want := navigation.NewCompositePassability(got.Width, got.Height, got.FootprintW, got.FootprintH, got.HeaderOffX, got.HeaderOffY)
+		want.Compute(func(x, y int) bool { return w.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) })
+		if !slices.Equal(got.Valid, want.Valid) {
+			t.Fatal("the installed world's passability is not what its walls derive")
+		}
+	})
+}
+
 // routeGraphs is every gateway route graph a world holds, by graph ID.
 func routeGraphs(a *App) map[uint32]*navigation.RouteGraph {
 	out := make(map[uint32]*navigation.RouteGraph)

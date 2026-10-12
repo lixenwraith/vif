@@ -53,6 +53,11 @@ func DiffCapture(base, next SharedCapture) SharedCaptureDelta {
 // reconstruction is byte for byte what the sender held; without both, a delta on
 // the wrong baseline would install cleanly as a world nobody has.
 func ApplyCaptureDelta(base SharedCapture, d SharedCaptureDelta) (SharedCapture, error) {
+	return new(Encoder).ApplyCaptureDelta(base, d)
+}
+
+// ApplyCaptureDelta is the package function, proving the reconstruction with e's encodings.
+func (e *Encoder) ApplyCaptureDelta(base SharedCapture, d SharedCaptureDelta) (SharedCapture, error) {
 	if base.Header.Tick != d.BaselineTick {
 		return SharedCapture{}, fmt.Errorf(
 			"correction delta names baseline tick %d, this instance holds %d",
@@ -66,11 +71,7 @@ func ApplyCaptureDelta(base SharedCapture, d SharedCaptureDelta) (SharedCapture,
 		Status:  d.Status,
 		FSM:     d.FSM,
 	}
-	want, err := Integrity(out)
-	if err != nil {
-		return SharedCapture{}, err
-	}
-	if want != out.Header.Integrity {
+	if !e.Verify(out) {
 		return SharedCapture{}, errors.New(
 			"correction delta reconstructed a body its header does not describe")
 	}
@@ -95,9 +96,7 @@ type correctionEnvelope struct {
 }
 
 // EncodeCorrection renders a keyframe for transport.
-func EncodeCorrection(cap SharedCapture) ([]byte, error) {
-	return EncodeJSON(correctionEnvelope{Full: &cap})
-}
+func EncodeCorrection(cap SharedCapture) ([]byte, error) { return new(Encoder).EncodeCorrection(cap) }
 
 // EncodeCorrectionDelta renders a delta for transport.
 func EncodeCorrectionDelta(d SharedCaptureDelta) ([]byte, error) {
@@ -150,7 +149,12 @@ const (
 // DiffWritten expresses written against before, sealing written's integrity so a
 // rebuild can be proved rather than trusted.
 func DiffWritten(before, written SharedCapture) (WrittenDelta, error) {
-	sum, err := Integrity(written)
+	return new(Encoder).DiffWritten(before, written)
+}
+
+// DiffWritten is the package function, sealing with e's encodings.
+func (e *Encoder) DiffWritten(before, written SharedCapture) (WrittenDelta, error) {
+	sum, err := e.Integrity(written)
 	if err != nil {
 		return WrittenDelta{}, err
 	}
@@ -204,6 +208,11 @@ func diffParts(before, written SharedCapture) WrittenDelta {
 // the write. A rebuild whose integrity does not match means the world it started
 // from was not the one the recorded run held: the replay diverged before here.
 func ApplyWritten(before SharedCapture, d WrittenDelta) (SharedCapture, error) {
+	return new(Encoder).ApplyWritten(before, d)
+}
+
+// ApplyWritten is the package function, proving the rebuild with e's encodings.
+func (e *Encoder) ApplyWritten(before SharedCapture, d WrittenDelta) (SharedCapture, error) {
 	out := SharedCapture{
 		Header:  d.Header,
 		World:   engine.ApplySharedWorldDelta(before.World, d.World),
@@ -233,11 +242,7 @@ func ApplyWritten(before SharedCapture, d WrittenDelta) (SharedCapture, error) {
 			out.Systems[i] = r
 		}
 	}
-	sum, err := Integrity(out)
-	if err != nil {
-		return SharedCapture{}, err
-	}
-	if sum != d.Header.Integrity {
+	if !e.Verify(out) {
 		return SharedCapture{}, errors.New("the rebuilt world is not the one written: the world before it differed")
 	}
 	return out, nil

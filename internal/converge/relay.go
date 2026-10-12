@@ -1,6 +1,7 @@
 package converge
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/lixenwraith/vif/internal/engine"
@@ -73,15 +74,62 @@ func behindLinks(peers []uint32, from uint32) []uint32 {
 }
 
 // relayedParticipants is who this instance can answer for, carried upstream in its
-// own answer. A statement of capability rather than a record of what was forwarded:
-// the authority withholds the index while a participant is unanswerable, so a relay
-// reporting only past forwards could never forward anything to report.
-func (c *Corrections) relayedParticipants() []uint32 {
+// own answer with each one's proof, and what they relay in turn. A statement of
+// capability rather than a record of what was forwarded: the authority withholds the
+// index while a participant is unanswerable, so a relay reporting only past forwards
+// could never forward anything to report.
+func (c *Corrections) relayedParticipants() []snapshot.RelayedLeaf {
 	_, peers := c.links()
 	if !c.canRelay(peers) {
 		return nil
 	}
-	return behindLinks(peers, c.selectiveSource())
+	behind := behindLinks(peers, c.selectiveSource())
+	out := make([]snapshot.RelayedLeaf, 0, len(behind))
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+	for _, id := range behind {
+		leaf := snapshot.RelayedLeaf{ID: id}
+		if p := c.peers[id]; p != nil {
+			if p.converged {
+				leaf.Proved = p.answeredTick
+			}
+			out = append(out, p.relayed...)
+		}
+		out = append(out, leaf)
+	}
+	return out
+}
+
+// provedLocked maps every participant this instance can answer, on a link of its
+// own or through a relay that reported it, to the tick its newest matching answer
+// proved, zero while its newest did not match. Caller MUST hold publishMu.
+func (c *Corrections) provedLocked(ids []uint32) map[uint32]uint64 {
+	out := make(map[uint32]uint64, len(ids))
+	for _, id := range ids {
+		var at uint64
+		if p := c.peers[id]; p != nil {
+			if p.converged {
+				at = p.answeredTick
+			}
+			for _, leaf := range p.relayed {
+				out[leaf.ID] = max(out[leaf.ID], leaf.Proved)
+			}
+		}
+		out[id] = max(out[id], at)
+	}
+	return out
+}
+
+// owedLocked is everyone corrections are owed to: the direct links, and every
+// participant the world's roster holds but this one. Caller MUST hold publishMu.
+func (c *Corrections) owedLocked(ids []uint32) []uint32 {
+	out, local := slices.Clone(ids), c.inst.LocalParticipant()
+	for _, e := range c.inst.WorldRoster() {
+		if id := uint32(e.ID); id != local && !slices.Contains(out, id) {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // canAnswerEveryParticipantLocked reports whether every participant can be
@@ -90,38 +138,20 @@ func (c *Corrections) relayedParticipants() []uint32 {
 // Otherwise the session keeps the whole-body flood, and says why.
 // Caller MUST hold publishMu.
 func (c *Corrections) canAnswerEveryParticipantLocked(ids []uint32) bool {
-	if !c.behindRelay(ids) {
-		return true
-	}
-	roster := c.inst.RosterSize()
-	covered := make(map[uint32]struct{}, roster)
-	for _, id := range ids {
-		covered[id] = struct{}{}
-	}
-	for _, id := range ids {
-		p := c.peers[id]
-		if p == nil {
-			continue
-		}
-		for _, behind := range p.relayed {
-			covered[behind] = struct{}{}
-		}
-	}
-	if len(covered)+1 >= roster {
+	proved := c.provedLocked(ids)
+	unanswerable := slices.DeleteFunc(c.owedLocked(ids), func(id uint32) bool {
+		_, ok := proved[id]
+		return ok
+	})
+	if len(unanswerable) == 0 {
 		return true
 	}
 	if !c.saidUnrelayed {
 		c.saidUnrelayed = true
 		c.log.Info("converge", "msg", "selective correction withheld; a participant cannot be answered",
-			"roster", roster, "direct", len(ids), "answerable", len(covered))
+			"direct", len(ids), "unanswerable", fmt.Sprint(unanswerable))
 	}
 	return false
-}
-
-// behindRelay reports whether the roster holds a participant this instance has no
-// link to, given its links ids. A roster not yet closed holds none.
-func (c *Corrections) behindRelay(ids []uint32) bool {
-	return c.inst.RosterSize() > len(ids)+1
 }
 
 // serveRelayed answers one request from this instance's retention rather than from a

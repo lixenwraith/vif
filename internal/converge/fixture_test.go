@@ -29,6 +29,7 @@ type stub struct {
 	roster []network.RosterEntry
 	port   engine.NetworkPort
 	world  snapshot.SharedCapture
+	enc    snapshot.Encoder
 
 	installed []snapshot.SharedCapture
 	adopted   []snapshot.CaptureHeader
@@ -38,6 +39,7 @@ type stub struct {
 
 	// What the eviction policy reads, and what it decided.
 	late    map[uint32]uint64
+	ingress map[uint32]uint64
 	dropped []uint32
 }
 
@@ -59,12 +61,6 @@ func (s *stub) Position() event.Stamp {
 func (s *stub) Driven() bool { return true }
 
 func (s *stub) LocalParticipant() uint32 { return s.local }
-
-func (s *stub) RosterSize() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.roster)
-}
 
 func (s *stub) WorldRoster() []network.RosterEntry {
 	s.mu.Lock()
@@ -98,6 +94,8 @@ func (s *stub) InstallCapture(cap snapshot.SharedCapture) (engine.WorldDifferenc
 
 func (s *stub) VerifyCaptureIdentity(snapshot.CaptureHeader) error { return nil }
 
+func (s *stub) Encoder() *snapshot.Encoder { return &s.enc }
+
 // AdoptAuthority records a header this instance's world already equals.
 func (s *stub) AdoptAuthority(h snapshot.CaptureHeader) {
 	s.mu.Lock()
@@ -109,6 +107,12 @@ func (s *stub) CommitLate(id uint32) uint64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.late[id]
+}
+
+func (s *stub) Ingress(id uint32) uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ingress[id]
 }
 
 func (s *stub) DropParticipant(id uint32) bool {

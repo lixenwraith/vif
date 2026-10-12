@@ -58,6 +58,11 @@ func encodeJSON(v any, codec byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return encodePlain(plain, codec)
+}
+
+// encodePlain wraps a marshalled body in the envelope.
+func encodePlain(plain []byte, codec byte) ([]byte, error) {
 	if len(plain) == 0 || len(plain) > network.MaxSnapshotPlainBytes {
 		return nil, fmt.Errorf("snapshot encode: %d plain bytes is outside 1..%d",
 			len(plain), network.MaxSnapshotPlainBytes)

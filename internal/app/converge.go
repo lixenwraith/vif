@@ -21,11 +21,6 @@ func (i instance) Driven() bool          { return i.a.cfg.Mode.Driven() }
 
 func (i instance) LocalParticipant() uint32 { return i.a.localParticipant() }
 
-func (i instance) RosterSize() (n int) {
-	i.a.world.RunSafe(func() { n = i.a.world.Resources.Player.Count() })
-	return n
-}
-
 // WorldRoster reads the roster off the cursors rather than off the lobby the offer
 // described: arrivals and departures are barrier-bound crossings, so this is the
 // same list on every instance.
@@ -90,6 +85,7 @@ func (i instance) InstallCapture(cap snapshot.SharedCapture) (engine.WorldDiffer
 	return staged.Difference(), nil
 }
 
+func (i instance) Encoder() *snapshot.Encoder { return &i.a.encoder }
 func (i instance) VerifyCaptureIdentity(h snapshot.CaptureHeader) error {
 	return i.a.verifyCaptureIdentity(h)
 }
@@ -114,6 +110,15 @@ func (i instance) CommitLate(id uint32) (n uint64) {
 	i.a.world.RunSafe(func() {
 		if r := i.a.world.Resources.Network; r != nil && int(id) < len(r.CommitLate) {
 			n = r.CommitLate[id].Load()
+		}
+	})
+	return n
+}
+
+func (i instance) Ingress(id uint32) (n uint64) {
+	i.a.world.RunSafe(func() {
+		if r := i.a.world.Resources.Network; r != nil && int(id) < len(r.Ingress) {
+			n = r.Ingress[id].Load()
 		}
 	})
 	return n

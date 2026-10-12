@@ -1038,6 +1038,12 @@ type NetworkResource struct {
 	// for a frame the authority sent.
 	OnSessionRestart func(participant uint32, addr string)
 
+	// OnRelayJoin hands one step of a relayed admission — a relay's request or the
+	// coordinator's answer — to the session layer, under the world lock from the
+	// tick that drained it. The coordinator decides there; a relay only wakes the
+	// join waiting on the answer.
+	OnRelayJoin func(kind uint8, from uint32, body []byte)
+
 	// SeatsOnly reports whether every participant linked to this instance is a bot
 	// seat it holds, which stands still with its clock. Called under the world lock.
 	SeatsOnly func() bool
@@ -1066,6 +1072,10 @@ type NetworkResource struct {
 	// CommitLate counts, per source, the epochs that reached this instance with a
 	// crossing past the tick it named while it was authoring: the eviction input.
 	CommitLate [parameter.MaxPlayers + 2]atomic.Uint64
+
+	// Ingress counts, per link, the frame bytes this instance drained from it: what
+	// the authority budgets a link by, per participant it carries.
+	Ingress [parameter.MaxPlayers + 2]atomic.Uint64
 
 	// OnTickClosed runs under the world lock after every completed tick, so the
 	// session layer can read a world at exactly the tick a held manifest names. It

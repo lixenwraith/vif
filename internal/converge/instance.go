@@ -18,10 +18,8 @@ type Instance interface {
 	Position() event.Stamp
 	Driven() bool
 
-	// LocalParticipant is this instance's session identity, zero outside a session,
-	// and RosterSize how many cursors the closed roster holds.
+	// LocalParticipant is this instance's session identity, zero outside a session.
 	LocalParticipant() uint32
-	RosterSize() int
 
 	// WorldRoster is the roster as the cursors hold it: the same list on every
 	// instance, because arrivals and departures are barrier-bound crossings. Empty
@@ -38,6 +36,8 @@ type Instance interface {
 	// projection, and reports how far the live world had drifted from it.
 	// AdoptAuthority takes a header whose world this instance provably holds already.
 	// VerifyCaptureIdentity answers whether a header describes this session.
+	// Encoder is this instance's capture encodings, which every seal, index and
+	// body here shares.
 	CaptureShared() (snapshot.SharedCapture, error)
 	// CaptureSharedLocked is the read without its seal, for TickClosed, which runs
 	// under the world lock; a comparison needs no integrity hash, only the index.
@@ -45,12 +45,16 @@ type Instance interface {
 	InstallCapture(snapshot.SharedCapture) (engine.WorldDifference, error)
 	AdoptAuthority(snapshot.CaptureHeader)
 	VerifyCaptureIdentity(snapshot.CaptureHeader) error
+	Encoder() *snapshot.Encoder
 
 	// DropParticipant closes one participant's link; the departure that follows is
 	// the ordinary one. CommitLate is how many of a participant's crossings reached
 	// this instance late while it authored.
 	DropParticipant(id uint32) bool
 	CommitLate(id uint32) uint64
+
+	// Ingress is how many frame bytes this instance has drained from a link.
+	Ingress(id uint32) uint64
 
 	// AuthorityChanged moves the membership a handoff carries into the places the
 	// run reads it from; DropAbandonedCursors removes the participants an instance

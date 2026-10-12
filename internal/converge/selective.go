@@ -249,7 +249,7 @@ func (c *Corrections) retainInstalled(cap snapshot.SharedCapture) {
 	if cap.Header.Term == 0 || c.holdsRetention(cap.Header.Tick) {
 		return // not an authoritative artifact, or already answered for
 	}
-	index, err := c.manifest.Build(cap, cap.Header.Authority)
+	index, err := c.inst.Encoder().Build(cap, cap.Header.Authority)
 	if err != nil {
 		return
 	}
@@ -302,8 +302,9 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		m.ShardsRefused.Add(1)
 		return
 	}
+	// Recorded on a relay too, for a leaf's: its own answer is the proof it reports.
 	c.publishMu.Lock()
-	p := c.peers[pending.from]
+	p := c.peerLocked(pending.from)
 	if p != nil {
 		p.silence = 0
 		p.answeredTick = req.Tick
@@ -469,7 +470,7 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 	cap, body := c.baseline, c.keyCorrection
 	if body == nil {
 		var err error
-		body, err = snapshot.EncodeCorrection(cap)
+		body, err = c.inst.Encoder().EncodeCorrection(cap)
 		if err != nil {
 			c.publishMu.Unlock()
 			c.log.Warn("converge", "msg", "keyframe fallback not encoded", "error", err.Error())
@@ -705,7 +706,7 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		// Compared under the authority's term, so a capture stamped just before a
 		// handoff was adopted does not differ from the index for that reason alone.
 		mine.Header.Term = want.Header.Term
-		if index, err = c.manifest.Build(mine, want.Authority); err != nil {
+		if index, err = c.inst.Encoder().Build(mine, want.Authority); err != nil {
 			c.log.Warn("converge", "msg", "manifest comparison not indexed", "error", err.Error())
 			return 0
 		}
@@ -733,6 +734,7 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		m.HashOnly.Add(1)
 		c.proved(want.Header.Tick)
 		mine.Header = want.Header
+		c.offerProved(mine)
 		if at := c.inst.Position(); at.Run == want.Header.Run && at.Tick <= want.Header.Tick {
 			c.adoptAuthority(mine, index)
 		}

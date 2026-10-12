@@ -104,6 +104,7 @@ type RendererDef struct {
 
 type Definitions struct {
 	Components     []ComponentDef
+	Equal          []EqualFunc
 	Systems        []SystemDef
 	ContextSystems []SystemDef
 	Renderers      []RendererDef
@@ -163,6 +164,7 @@ var eventClasses = map[string]string{
 
 func main() {
 	defs := parseDefinitions("definition.go") // cwd is 'manifest/'
+	defs.Equal = equalFuncs(defs)
 
 	generateFile("../engine/component_store_gen.go", componentStoreTemplate, defs)
 	generateFile("../engine/component_domain_gen.go", componentDomainTemplate, defs)
@@ -540,10 +542,11 @@ type componentCopies struct {
 {{- end }}
 }
 
-// copyComponentsOut detaches every component store. Caller MUST hold updateMutex
-func (w *World) copyComponentsOut() (c componentCopies) {
+// copyComponentsOut detaches every component store into reuse's storage. Caller
+// MUST hold updateMutex
+func (w *World) copyComponentsOut(reuse *componentCopies) (c componentCopies) {
 {{- range .Components }}
-	c.{{ .Field }} = w.Components.{{ .Field }}.copyOut()
+	c.{{ .Field }} = w.Components.{{ .Field }}.copyOut(reuse.{{ .Field }})
 {{- end }}
 	return c
 }
@@ -1014,6 +1017,7 @@ var snapshotWorldTemplate = template.Must(template.New("snapshotWorld").Funcs(te
 package engine
 
 import (
+	"math"
 	"slices"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -1141,9 +1145,9 @@ type SharedWorldDelta struct {
 func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
 	var d SharedWorldDelta
 	d.NextEntity, d.Created, d.Destroyed = next.NextEntity, next.Created, next.Destroyed
-	d.Positions = diffStore(base.Positions, next.Positions)
+	d.Positions = diffStore(base.Positions, next.Positions, equalPositions)
 {{- range .Components }}
-	d.{{ .Field }} = diffStore(base.{{ .Field }}, next.{{ .Field }})
+	d.{{ .Field }} = diffStore(base.{{ .Field }}, next.{{ .Field }}, equal{{ .Field }})
 {{- end }}
 	return d
 }
@@ -1175,9 +1179,9 @@ func (d SharedWorldDelta) DeltaEntries() int {
 func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
 	touched := make(map[core.Entity]struct{}, 64)
 	var w WorldDifference
-	w.Entries = countStoreDifference(a.Positions, b.Positions, touched)
+	w.Entries = countStoreDifference(a.Positions, b.Positions, touched, equalPositions)
 {{- range .Components }}
-	w.Entries += countStoreDifference(a.{{ .Field }}, b.{{ .Field }}, touched)
+	w.Entries += countStoreDifference(a.{{ .Field }}, b.{{ .Field }}, touched, equal{{ .Field }})
 {{- end }}
 	w.Entities = len(touched)
 	w.CellShift = positionShift(a.Positions, b.Positions)
@@ -1269,6 +1273,16 @@ func (w *World) clearSharedEntities() {
 		w.removeEntity(e)
 	}
 }
+
+// The equal functions report whether two values of one store encode to the same
+// JSON: what a delta may omit and an encoding may be reused for. They compare floats
+// by bits, so a zero that changed sign is a change, and slices by nil-ness.
+{{- range .Equal }}
+
+func {{ .Name }}(a, b *component.{{ .Type }}) bool {
+	return {{ .Body }}
+}
+{{- end }}
 `))
 
 // snapshotPagesTemplate emits the page-level view of a capture's component stores.
@@ -1296,17 +1310,19 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
-	"slices"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 )
 
 // StoreRow is one component cell in the manifest's canonical form: the entity it
 // belongs to and the exact bytes its value marshals to. The bytes are the hashed
 // content and the repaired content both, so a row that hashes equal decodes equal.
+// Hash is the row hash a RowEncoder computed, zero on a row it did not encode.
 type StoreRow struct {
 	Entity core.Entity     ` + "`json:\"e\"`" + `
 	Value  json.RawMessage ` + "`json:\"v\"`" + `
+	Hash   uint64          ` + "`json:\"-\"`" + `
 }
 
 // SharedWorldStoreNames are the wire-stable section ids of the capture's component
@@ -1322,21 +1338,20 @@ var SharedWorldStoreNames = []string{
 // SharedWorldStoreCount is how many component stores a capture carries.
 var SharedWorldStoreCount = len(SharedWorldStoreNames)
 
-// SharedWorldStoreRows appends store i's cells to dst in entity-ascending order.
-//
-// Marshalling per cell rather than per store is what makes a page independently
-// hashable and independently repairable; it runs on the correction goroutine,
-// outside the world lock, on a capture that has already been taken.
-func SharedWorldStoreRows(s *SharedWorldState, i int, dst []StoreRow) ([]StoreRow, error) {
-	switch i {
-	case 0:
-		return appendStoreRows(dst, s.Positions)
-{{- range $i, $c := .Components }}
-	case {{ add1 $i }}:
-		return appendStoreRows(dst, s.{{ $c.Field }})
+// newStoreEncoders builds one row encoder per store, in SharedWorldStoreNames order.
+func newStoreEncoders() []storeEncoder {
+	return []storeEncoder{
+		&rowEncoder[component.PositionComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.PositionComponent] { return s.Positions },
+			equal: equalPositions,
+		},
+{{- range .Components }}
+		&rowEncoder[component.{{ .Type }}]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.{{ .Type }}] { return s.{{ .Field }} },
+			equal: equal{{ .Field }},
+		},
 {{- end }}
 	}
-	return nil, fmt.Errorf("capture holds no store %d", i)
 }
 
 // SharedWorldApplyStoreRows replaces every cell of store i the page owns with rows.
@@ -1366,34 +1381,11 @@ func SharedWorldApplyStoreRows(s *SharedWorldState, i int, owns func(core.Entity
 	return fmt.Errorf("capture holds no store %d", i)
 }
 
-// appendStoreRows renders one store's entries in the manifest's canonical order.
-func appendStoreRows[T any](dst []StoreRow, entries []StoreEntry[T]) ([]StoreRow, error) {
-	start := len(dst)
-	for _, en := range entries {
-		v, err := json.Marshal(en.Value)
-		if err != nil {
-			return nil, err
-		}
-		dst = append(dst, StoreRow{Entity: en.Entity, Value: v})
-	}
-	rows := dst[start:]
-	slices.SortFunc(rows, func(a, b StoreRow) int {
-		switch {
-		case a.Entity < b.Entity:
-			return -1
-		case a.Entity > b.Entity:
-			return 1
-		}
-		return 0
-	})
-	return dst, nil
-}
-
 // applyStoreRows rebuilds one store with the page's cells replaced.
 //
 // The result keeps the entries the page does not own in their existing order and
 // appends the page's in canonical order. Store order is not compared and is not in
-// the manifest's hashed surface — see SharedWorldStoreRows — so what matters here
+// the manifest's hashed surface, so what matters here
 // is only that the set and the values are the authority's.
 func applyStoreRows[T any](entries []StoreEntry[T], owns func(core.Entity) bool, rows []StoreRow) ([]StoreEntry[T], error) {
 	out := make([]StoreEntry[T], 0, len(entries)+len(rows))

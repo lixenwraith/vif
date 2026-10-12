@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"math"
 	"slices"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -798,60 +799,60 @@ type SharedWorldDelta struct {
 func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
 	var d SharedWorldDelta
 	d.NextEntity, d.Created, d.Destroyed = next.NextEntity, next.Created, next.Destroyed
-	d.Positions = diffStore(base.Positions, next.Positions)
-	d.Glyph = diffStore(base.Glyph, next.Glyph)
-	d.Sigil = diffStore(base.Sigil, next.Sigil)
-	d.Nugget = diffStore(base.Nugget, next.Nugget)
-	d.Cursor = diffStore(base.Cursor, next.Cursor)
-	d.Protection = diffStore(base.Protection, next.Protection)
-	d.Kinetic = diffStore(base.Kinetic, next.Kinetic)
-	d.Wall = diffStore(base.Wall, next.Wall)
-	d.Loot = diffStore(base.Loot, next.Loot)
-	d.Gateway = diffStore(base.Gateway, next.Gateway)
-	d.Energy = diffStore(base.Energy, next.Energy)
-	d.Heat = diffStore(base.Heat, next.Heat)
-	d.Shield = diffStore(base.Shield, next.Shield)
-	d.Boost = diffStore(base.Boost, next.Boost)
-	d.Weapon = diffStore(base.Weapon, next.Weapon)
-	d.Orb = diffStore(base.Orb, next.Orb)
-	d.Ping = diffStore(base.Ping, next.Ping)
-	d.CursorView = diffStore(base.CursorView, next.CursorView)
-	d.Particle = diffStore(base.Particle, next.Particle)
-	d.Tracer = diffStore(base.Tracer, next.Tracer)
-	d.Dust = diffStore(base.Dust, next.Dust)
-	d.Navigation = diffStore(base.Navigation, next.Navigation)
-	d.Combat = diffStore(base.Combat, next.Combat)
-	d.Genotype = diffStore(base.Genotype, next.Genotype)
-	d.Lightning = diffStore(base.Lightning, next.Lightning)
-	d.Missile = diffStore(base.Missile, next.Missile)
-	d.Mount = diffStore(base.Mount, next.Mount)
-	d.Ray = diffStore(base.Ray, next.Ray)
-	d.Spirit = diffStore(base.Spirit, next.Spirit)
-	d.Materialize = diffStore(base.Materialize, next.Materialize)
-	d.Target = diffStore(base.Target, next.Target)
-	d.TargetAnchor = diffStore(base.TargetAnchor, next.TargetAnchor)
-	d.Drain = diffStore(base.Drain, next.Drain)
-	d.Quasar = diffStore(base.Quasar, next.Quasar)
-	d.Swarm = diffStore(base.Swarm, next.Swarm)
-	d.Storm = diffStore(base.Storm, next.Storm)
-	d.StormCircle = diffStore(base.StormCircle, next.StormCircle)
-	d.Bullet = diffStore(base.Bullet, next.Bullet)
-	d.Pylon = diffStore(base.Pylon, next.Pylon)
-	d.Snake = diffStore(base.Snake, next.Snake)
-	d.SnakeHead = diffStore(base.SnakeHead, next.SnakeHead)
-	d.SnakeBody = diffStore(base.SnakeBody, next.SnakeBody)
-	d.SnakeMember = diffStore(base.SnakeMember, next.SnakeMember)
-	d.Eye = diffStore(base.Eye, next.Eye)
-	d.Tower = diffStore(base.Tower, next.Tower)
-	d.Kraken = diffStore(base.Kraken, next.Kraken)
-	d.Header = diffStore(base.Header, next.Header)
-	d.Member = diffStore(base.Member, next.Member)
-	d.Flash = diffStore(base.Flash, next.Flash)
-	d.Fadeout = diffStore(base.Fadeout, next.Fadeout)
-	d.Splash = diffStore(base.Splash, next.Splash)
-	d.Marker = diffStore(base.Marker, next.Marker)
-	d.Death = diffStore(base.Death, next.Death)
-	d.Timer = diffStore(base.Timer, next.Timer)
+	d.Positions = diffStore(base.Positions, next.Positions, equalPositions)
+	d.Glyph = diffStore(base.Glyph, next.Glyph, equalGlyph)
+	d.Sigil = diffStore(base.Sigil, next.Sigil, equalSigil)
+	d.Nugget = diffStore(base.Nugget, next.Nugget, equalNugget)
+	d.Cursor = diffStore(base.Cursor, next.Cursor, equalCursor)
+	d.Protection = diffStore(base.Protection, next.Protection, equalProtection)
+	d.Kinetic = diffStore(base.Kinetic, next.Kinetic, equalKinetic)
+	d.Wall = diffStore(base.Wall, next.Wall, equalWall)
+	d.Loot = diffStore(base.Loot, next.Loot, equalLoot)
+	d.Gateway = diffStore(base.Gateway, next.Gateway, equalGateway)
+	d.Energy = diffStore(base.Energy, next.Energy, equalEnergy)
+	d.Heat = diffStore(base.Heat, next.Heat, equalHeat)
+	d.Shield = diffStore(base.Shield, next.Shield, equalShield)
+	d.Boost = diffStore(base.Boost, next.Boost, equalBoost)
+	d.Weapon = diffStore(base.Weapon, next.Weapon, equalWeapon)
+	d.Orb = diffStore(base.Orb, next.Orb, equalOrb)
+	d.Ping = diffStore(base.Ping, next.Ping, equalPing)
+	d.CursorView = diffStore(base.CursorView, next.CursorView, equalCursorView)
+	d.Particle = diffStore(base.Particle, next.Particle, equalParticle)
+	d.Tracer = diffStore(base.Tracer, next.Tracer, equalTracer)
+	d.Dust = diffStore(base.Dust, next.Dust, equalDust)
+	d.Navigation = diffStore(base.Navigation, next.Navigation, equalNavigation)
+	d.Combat = diffStore(base.Combat, next.Combat, equalCombat)
+	d.Genotype = diffStore(base.Genotype, next.Genotype, equalGenotype)
+	d.Lightning = diffStore(base.Lightning, next.Lightning, equalLightning)
+	d.Missile = diffStore(base.Missile, next.Missile, equalMissile)
+	d.Mount = diffStore(base.Mount, next.Mount, equalMount)
+	d.Ray = diffStore(base.Ray, next.Ray, equalRay)
+	d.Spirit = diffStore(base.Spirit, next.Spirit, equalSpirit)
+	d.Materialize = diffStore(base.Materialize, next.Materialize, equalMaterialize)
+	d.Target = diffStore(base.Target, next.Target, equalTarget)
+	d.TargetAnchor = diffStore(base.TargetAnchor, next.TargetAnchor, equalTargetAnchor)
+	d.Drain = diffStore(base.Drain, next.Drain, equalDrain)
+	d.Quasar = diffStore(base.Quasar, next.Quasar, equalQuasar)
+	d.Swarm = diffStore(base.Swarm, next.Swarm, equalSwarm)
+	d.Storm = diffStore(base.Storm, next.Storm, equalStorm)
+	d.StormCircle = diffStore(base.StormCircle, next.StormCircle, equalStormCircle)
+	d.Bullet = diffStore(base.Bullet, next.Bullet, equalBullet)
+	d.Pylon = diffStore(base.Pylon, next.Pylon, equalPylon)
+	d.Snake = diffStore(base.Snake, next.Snake, equalSnake)
+	d.SnakeHead = diffStore(base.SnakeHead, next.SnakeHead, equalSnakeHead)
+	d.SnakeBody = diffStore(base.SnakeBody, next.SnakeBody, equalSnakeBody)
+	d.SnakeMember = diffStore(base.SnakeMember, next.SnakeMember, equalSnakeMember)
+	d.Eye = diffStore(base.Eye, next.Eye, equalEye)
+	d.Tower = diffStore(base.Tower, next.Tower, equalTower)
+	d.Kraken = diffStore(base.Kraken, next.Kraken, equalKraken)
+	d.Header = diffStore(base.Header, next.Header, equalHeader)
+	d.Member = diffStore(base.Member, next.Member, equalMember)
+	d.Flash = diffStore(base.Flash, next.Flash, equalFlash)
+	d.Fadeout = diffStore(base.Fadeout, next.Fadeout, equalFadeout)
+	d.Splash = diffStore(base.Splash, next.Splash, equalSplash)
+	d.Marker = diffStore(base.Marker, next.Marker, equalMarker)
+	d.Death = diffStore(base.Death, next.Death, equalDeath)
+	d.Timer = diffStore(base.Timer, next.Timer, equalTimer)
 	return d
 }
 
@@ -982,60 +983,60 @@ func (d SharedWorldDelta) DeltaEntries() int {
 func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
 	touched := make(map[core.Entity]struct{}, 64)
 	var w WorldDifference
-	w.Entries = countStoreDifference(a.Positions, b.Positions, touched)
-	w.Entries += countStoreDifference(a.Glyph, b.Glyph, touched)
-	w.Entries += countStoreDifference(a.Sigil, b.Sigil, touched)
-	w.Entries += countStoreDifference(a.Nugget, b.Nugget, touched)
-	w.Entries += countStoreDifference(a.Cursor, b.Cursor, touched)
-	w.Entries += countStoreDifference(a.Protection, b.Protection, touched)
-	w.Entries += countStoreDifference(a.Kinetic, b.Kinetic, touched)
-	w.Entries += countStoreDifference(a.Wall, b.Wall, touched)
-	w.Entries += countStoreDifference(a.Loot, b.Loot, touched)
-	w.Entries += countStoreDifference(a.Gateway, b.Gateway, touched)
-	w.Entries += countStoreDifference(a.Energy, b.Energy, touched)
-	w.Entries += countStoreDifference(a.Heat, b.Heat, touched)
-	w.Entries += countStoreDifference(a.Shield, b.Shield, touched)
-	w.Entries += countStoreDifference(a.Boost, b.Boost, touched)
-	w.Entries += countStoreDifference(a.Weapon, b.Weapon, touched)
-	w.Entries += countStoreDifference(a.Orb, b.Orb, touched)
-	w.Entries += countStoreDifference(a.Ping, b.Ping, touched)
-	w.Entries += countStoreDifference(a.CursorView, b.CursorView, touched)
-	w.Entries += countStoreDifference(a.Particle, b.Particle, touched)
-	w.Entries += countStoreDifference(a.Tracer, b.Tracer, touched)
-	w.Entries += countStoreDifference(a.Dust, b.Dust, touched)
-	w.Entries += countStoreDifference(a.Navigation, b.Navigation, touched)
-	w.Entries += countStoreDifference(a.Combat, b.Combat, touched)
-	w.Entries += countStoreDifference(a.Genotype, b.Genotype, touched)
-	w.Entries += countStoreDifference(a.Lightning, b.Lightning, touched)
-	w.Entries += countStoreDifference(a.Missile, b.Missile, touched)
-	w.Entries += countStoreDifference(a.Mount, b.Mount, touched)
-	w.Entries += countStoreDifference(a.Ray, b.Ray, touched)
-	w.Entries += countStoreDifference(a.Spirit, b.Spirit, touched)
-	w.Entries += countStoreDifference(a.Materialize, b.Materialize, touched)
-	w.Entries += countStoreDifference(a.Target, b.Target, touched)
-	w.Entries += countStoreDifference(a.TargetAnchor, b.TargetAnchor, touched)
-	w.Entries += countStoreDifference(a.Drain, b.Drain, touched)
-	w.Entries += countStoreDifference(a.Quasar, b.Quasar, touched)
-	w.Entries += countStoreDifference(a.Swarm, b.Swarm, touched)
-	w.Entries += countStoreDifference(a.Storm, b.Storm, touched)
-	w.Entries += countStoreDifference(a.StormCircle, b.StormCircle, touched)
-	w.Entries += countStoreDifference(a.Bullet, b.Bullet, touched)
-	w.Entries += countStoreDifference(a.Pylon, b.Pylon, touched)
-	w.Entries += countStoreDifference(a.Snake, b.Snake, touched)
-	w.Entries += countStoreDifference(a.SnakeHead, b.SnakeHead, touched)
-	w.Entries += countStoreDifference(a.SnakeBody, b.SnakeBody, touched)
-	w.Entries += countStoreDifference(a.SnakeMember, b.SnakeMember, touched)
-	w.Entries += countStoreDifference(a.Eye, b.Eye, touched)
-	w.Entries += countStoreDifference(a.Tower, b.Tower, touched)
-	w.Entries += countStoreDifference(a.Kraken, b.Kraken, touched)
-	w.Entries += countStoreDifference(a.Header, b.Header, touched)
-	w.Entries += countStoreDifference(a.Member, b.Member, touched)
-	w.Entries += countStoreDifference(a.Flash, b.Flash, touched)
-	w.Entries += countStoreDifference(a.Fadeout, b.Fadeout, touched)
-	w.Entries += countStoreDifference(a.Splash, b.Splash, touched)
-	w.Entries += countStoreDifference(a.Marker, b.Marker, touched)
-	w.Entries += countStoreDifference(a.Death, b.Death, touched)
-	w.Entries += countStoreDifference(a.Timer, b.Timer, touched)
+	w.Entries = countStoreDifference(a.Positions, b.Positions, touched, equalPositions)
+	w.Entries += countStoreDifference(a.Glyph, b.Glyph, touched, equalGlyph)
+	w.Entries += countStoreDifference(a.Sigil, b.Sigil, touched, equalSigil)
+	w.Entries += countStoreDifference(a.Nugget, b.Nugget, touched, equalNugget)
+	w.Entries += countStoreDifference(a.Cursor, b.Cursor, touched, equalCursor)
+	w.Entries += countStoreDifference(a.Protection, b.Protection, touched, equalProtection)
+	w.Entries += countStoreDifference(a.Kinetic, b.Kinetic, touched, equalKinetic)
+	w.Entries += countStoreDifference(a.Wall, b.Wall, touched, equalWall)
+	w.Entries += countStoreDifference(a.Loot, b.Loot, touched, equalLoot)
+	w.Entries += countStoreDifference(a.Gateway, b.Gateway, touched, equalGateway)
+	w.Entries += countStoreDifference(a.Energy, b.Energy, touched, equalEnergy)
+	w.Entries += countStoreDifference(a.Heat, b.Heat, touched, equalHeat)
+	w.Entries += countStoreDifference(a.Shield, b.Shield, touched, equalShield)
+	w.Entries += countStoreDifference(a.Boost, b.Boost, touched, equalBoost)
+	w.Entries += countStoreDifference(a.Weapon, b.Weapon, touched, equalWeapon)
+	w.Entries += countStoreDifference(a.Orb, b.Orb, touched, equalOrb)
+	w.Entries += countStoreDifference(a.Ping, b.Ping, touched, equalPing)
+	w.Entries += countStoreDifference(a.CursorView, b.CursorView, touched, equalCursorView)
+	w.Entries += countStoreDifference(a.Particle, b.Particle, touched, equalParticle)
+	w.Entries += countStoreDifference(a.Tracer, b.Tracer, touched, equalTracer)
+	w.Entries += countStoreDifference(a.Dust, b.Dust, touched, equalDust)
+	w.Entries += countStoreDifference(a.Navigation, b.Navigation, touched, equalNavigation)
+	w.Entries += countStoreDifference(a.Combat, b.Combat, touched, equalCombat)
+	w.Entries += countStoreDifference(a.Genotype, b.Genotype, touched, equalGenotype)
+	w.Entries += countStoreDifference(a.Lightning, b.Lightning, touched, equalLightning)
+	w.Entries += countStoreDifference(a.Missile, b.Missile, touched, equalMissile)
+	w.Entries += countStoreDifference(a.Mount, b.Mount, touched, equalMount)
+	w.Entries += countStoreDifference(a.Ray, b.Ray, touched, equalRay)
+	w.Entries += countStoreDifference(a.Spirit, b.Spirit, touched, equalSpirit)
+	w.Entries += countStoreDifference(a.Materialize, b.Materialize, touched, equalMaterialize)
+	w.Entries += countStoreDifference(a.Target, b.Target, touched, equalTarget)
+	w.Entries += countStoreDifference(a.TargetAnchor, b.TargetAnchor, touched, equalTargetAnchor)
+	w.Entries += countStoreDifference(a.Drain, b.Drain, touched, equalDrain)
+	w.Entries += countStoreDifference(a.Quasar, b.Quasar, touched, equalQuasar)
+	w.Entries += countStoreDifference(a.Swarm, b.Swarm, touched, equalSwarm)
+	w.Entries += countStoreDifference(a.Storm, b.Storm, touched, equalStorm)
+	w.Entries += countStoreDifference(a.StormCircle, b.StormCircle, touched, equalStormCircle)
+	w.Entries += countStoreDifference(a.Bullet, b.Bullet, touched, equalBullet)
+	w.Entries += countStoreDifference(a.Pylon, b.Pylon, touched, equalPylon)
+	w.Entries += countStoreDifference(a.Snake, b.Snake, touched, equalSnake)
+	w.Entries += countStoreDifference(a.SnakeHead, b.SnakeHead, touched, equalSnakeHead)
+	w.Entries += countStoreDifference(a.SnakeBody, b.SnakeBody, touched, equalSnakeBody)
+	w.Entries += countStoreDifference(a.SnakeMember, b.SnakeMember, touched, equalSnakeMember)
+	w.Entries += countStoreDifference(a.Eye, b.Eye, touched, equalEye)
+	w.Entries += countStoreDifference(a.Tower, b.Tower, touched, equalTower)
+	w.Entries += countStoreDifference(a.Kraken, b.Kraken, touched, equalKraken)
+	w.Entries += countStoreDifference(a.Header, b.Header, touched, equalHeader)
+	w.Entries += countStoreDifference(a.Member, b.Member, touched, equalMember)
+	w.Entries += countStoreDifference(a.Flash, b.Flash, touched, equalFlash)
+	w.Entries += countStoreDifference(a.Fadeout, b.Fadeout, touched, equalFadeout)
+	w.Entries += countStoreDifference(a.Splash, b.Splash, touched, equalSplash)
+	w.Entries += countStoreDifference(a.Marker, b.Marker, touched, equalMarker)
+	w.Entries += countStoreDifference(a.Death, b.Death, touched, equalDeath)
+	w.Entries += countStoreDifference(a.Timer, b.Timer, touched, equalTimer)
 	w.Entities = len(touched)
 	w.CellShift = positionShift(a.Positions, b.Positions)
 	return w
@@ -1329,4 +1330,252 @@ func (w *World) clearSharedEntities() {
 	for _, e := range shared {
 		w.removeEntity(e)
 	}
+}
+
+// The equal functions report whether two values of one store encode to the same
+// JSON: what a delta may omit and an encoding may be reused for. They compare floats
+// by bits, so a zero that changed sign is a change, and slices by nil-ness.
+
+func equalPositions(a, b *component.PositionComponent) bool {
+	return *a == *b
+}
+
+func equalGlyph(a, b *component.GlyphComponent) bool {
+	return *a == *b
+}
+
+func equalSigil(a, b *component.SigilComponent) bool {
+	return *a == *b
+}
+
+func equalNugget(a, b *component.NuggetComponent) bool {
+	return *a == *b
+}
+
+func equalCursor(a, b *component.CursorComponent) bool {
+	return *a == *b
+}
+
+func equalProtection(a, b *component.ProtectionComponent) bool {
+	return *a == *b
+}
+
+func equalKinetic(a, b *component.KineticComponent) bool {
+	return math.Float64bits(float64(a.Kinetic.PreciseX)) == math.Float64bits(float64(b.Kinetic.PreciseX)) && math.Float64bits(float64(a.Kinetic.PreciseY)) == math.Float64bits(float64(b.Kinetic.PreciseY)) && math.Float64bits(float64(a.Kinetic.VelX)) == math.Float64bits(float64(b.Kinetic.VelX)) && math.Float64bits(float64(a.Kinetic.VelY)) == math.Float64bits(float64(b.Kinetic.VelY)) && math.Float64bits(float64(a.Kinetic.AccelX)) == math.Float64bits(float64(b.Kinetic.AccelX)) && math.Float64bits(float64(a.Kinetic.AccelY)) == math.Float64bits(float64(b.Kinetic.AccelY))
+}
+
+func equalWall(a, b *component.WallComponent) bool {
+	return *a == *b
+}
+
+func equalLoot(a, b *component.LootComponent) bool {
+	return *a == *b
+}
+
+func equalGateway(a, b *component.GatewayComponent) bool {
+	return a.AnchorEntity == b.AnchorEntity && a.Species == b.Species && a.SubType == b.SubType && a.GroupID == b.GroupID && a.PopulationID == b.PopulationID && a.BaseInterval == b.BaseInterval && a.Accumulated == b.Accumulated && a.Active == b.Active && math.Float64bits(float64(a.RateMultiplier)) == math.Float64bits(float64(b.RateMultiplier)) && a.RateAccelInterval == b.RateAccelInterval && a.RateAccelElapsed == b.RateAccelElapsed && a.MinInterval == b.MinInterval && a.OffsetX == b.OffsetX && a.OffsetY == b.OffsetY && a.RouteDistID == b.RouteDistID && a.SpawnPoolSize == b.SpawnPoolSize
+}
+
+func equalEnergy(a, b *component.EnergyComponent) bool {
+	return *a == *b
+}
+
+func equalHeat(a, b *component.HeatComponent) bool {
+	return *a == *b
+}
+
+func equalShield(a, b *component.ShieldComponent) bool {
+	return a.LastDrainTime == b.LastDrainTime && math.Float64bits(float64(a.RadiusX)) == math.Float64bits(float64(b.RadiusX)) && math.Float64bits(float64(a.RadiusY)) == math.Float64bits(float64(b.RadiusY)) && math.Float64bits(float64(a.InvRxSq)) == math.Float64bits(float64(b.InvRxSq)) && math.Float64bits(float64(a.InvRySq)) == math.Float64bits(float64(b.InvRySq)) && a.Type == b.Type && a.Active == b.Active
+}
+
+func equalBoost(a, b *component.BoostComponent) bool {
+	return *a == *b
+}
+
+func equalWeapon(a, b *component.WeaponComponent) bool {
+	return *a == *b
+}
+
+func equalOrb(a, b *component.OrbComponent) bool {
+	return a.WeaponType == b.WeaponType && a.OwnerEntity == b.OwnerEntity && math.Float64bits(float64(a.OrbitAngle)) == math.Float64bits(float64(b.OrbitAngle)) && math.Float64bits(float64(a.TargetAngle)) == math.Float64bits(float64(b.TargetAngle)) && math.Float64bits(float64(a.OrbitRadiusX)) == math.Float64bits(float64(b.OrbitRadiusX)) && math.Float64bits(float64(a.OrbitRadiusY)) == math.Float64bits(float64(b.OrbitRadiusY)) && math.Float64bits(float64(a.OrbitSpeed)) == math.Float64bits(float64(b.OrbitSpeed)) && a.RedistributeRemaining == b.RedistributeRemaining && math.Float64bits(float64(a.StartAngle)) == math.Float64bits(float64(b.StartAngle)) && a.FlashRemaining == b.FlashRemaining
+}
+
+func equalPing(a, b *component.PingComponent) bool {
+	return *a == *b
+}
+
+func equalCursorView(a, b *component.CursorViewComponent) bool {
+	return *a == *b
+}
+
+func equalParticle(a, b *component.ParticleComponent) bool {
+	return *a == *b
+}
+
+func equalTracer(a, b *component.TracerComponent) bool {
+	return a.OwnerEntity == b.OwnerEntity && math.Float64bits(float64(a.TargetX)) == math.Float64bits(float64(b.TargetX)) && math.Float64bits(float64(a.TargetY)) == math.Float64bits(float64(b.TargetY)) && a.TrailRing == b.TrailRing && a.TrailHead == b.TrailHead && a.TrailLen == b.TrailLen && a.Palette == b.Palette && a.Blocked == b.Blocked && math.Float64bits(float64(a.DrainSpeed)) == math.Float64bits(float64(b.DrainSpeed)) && math.Float64bits(float64(a.DrainRemaining)) == math.Float64bits(float64(b.DrainRemaining)) && math.Float64bits(float64(a.DrainTotal)) == math.Float64bits(float64(b.DrainTotal))
+}
+
+func equalDust(a, b *component.DustComponent) bool {
+	return math.Float64bits(float64(a.OrbitRadius)) == math.Float64bits(float64(b.OrbitRadius)) && math.Float64bits(float64(a.ChaseBoost)) == math.Float64bits(float64(b.ChaseBoost)) && a.LastIntX == b.LastIntX && a.LastIntY == b.LastIntY && a.ResponseGroup == b.ResponseGroup
+}
+
+func equalNavigation(a, b *component.NavigationComponent) bool {
+	return a.LockedTarget == b.LockedTarget && a.HasDirectPath == b.HasDirectPath && math.Float64bits(float64(a.FlowX)) == math.Float64bits(float64(b.FlowX)) && math.Float64bits(float64(a.FlowY)) == math.Float64bits(float64(b.FlowY)) && a.Width == b.Width && a.Height == b.Height && math.Float64bits(float64(a.FlowLookahead)) == math.Float64bits(float64(b.FlowLookahead)) && a.UseRouteGraph == b.UseRouteGraph && a.RouteGraphID == b.RouteGraphID && a.RouteID == b.RouteID
+}
+
+func equalCombat(a, b *component.CombatComponent) bool {
+	return *a == *b
+}
+
+func equalGenotype(a, b *component.GenotypeComponent) bool {
+	return (a.Genes == nil) == (b.Genes == nil) && len(a.Genes) == len(b.Genes) && func() bool {
+		for i0 := range a.Genes {
+			if !(math.Float64bits(float64(a.Genes[i0])) == math.Float64bits(float64(b.Genes[i0]))) {
+				return false
+			}
+		}
+		return true
+	}() && a.EvalID == b.EvalID && a.Species == b.Species && a.SubType == b.SubType && a.SpawnTime == b.SpawnTime && a.TicksAlive == b.TicksAlive && math.Float64bits(float64(a.CumulativeDistSq)) == math.Float64bits(float64(b.CumulativeDistSq)) && a.DistSamples == b.DistSamples && a.TimeInShield == b.TimeInShield
+}
+
+func equalLightning(a, b *component.LightningComponent) bool {
+	return *a == *b
+}
+
+func equalMissile(a, b *component.MissileComponent) bool {
+	return a.Owner == b.Owner && a.Hostile == b.Hostile && a.Damage == b.Damage && a.TargetEntity == b.TargetEntity && a.HitEntity == b.HitEntity && a.Lifetime == b.Lifetime && a.LastTrailEmit == b.LastTrailEmit && func() bool {
+		for i0 := range a.Trail {
+			if !(math.Float64bits(float64(a.Trail[i0].X)) == math.Float64bits(float64(b.Trail[i0].X)) && math.Float64bits(float64(a.Trail[i0].Y)) == math.Float64bits(float64(b.Trail[i0].Y)) && a.Trail[i0].Age == b.Trail[i0].Age) {
+				return false
+			}
+		}
+		return true
+	}() && a.TrailHead == b.TrailHead && a.TrailLen == b.TrailLen
+}
+
+func equalMount(a, b *component.MountComponent) bool {
+	return a.Weapon == b.Weapon && a.Trigger == b.Trigger && a.Armed == b.Armed && a.Interval == b.Interval && a.Cooldown == b.Cooldown && math.Float64bits(float64(a.Range)) == math.Float64bits(float64(b.Range)) && math.Float64bits(float64(a.Muzzle)) == math.Float64bits(float64(b.Muzzle)) && a.AimX == b.AimX && a.AimY == b.AimY && a.HasAim == b.HasAim && a.Lane == b.Lane && a.Width == b.Width
+}
+
+func equalRay(a, b *component.RayComponent) bool {
+	return a.Ray.X == b.Ray.X && a.Ray.Y == b.Ray.Y && math.Float64bits(float64(a.Ray.DX)) == math.Float64bits(float64(b.Ray.DX)) && math.Float64bits(float64(a.Ray.DY)) == math.Float64bits(float64(b.Ray.DY)) && a.Ray.Length == b.Ray.Length && a.Ray.Knee == b.Ray.Knee && a.Ray.Near == b.Ray.Near && a.Ray.Far == b.Ray.Far && a.Phase == b.Phase && a.Remaining == b.Remaining && a.Duration == b.Duration && a.HitInterval == b.HitInterval && a.HitTimer == b.HitTimer && a.Scale == b.Scale && a.Hold == b.Hold && a.Palette == b.Palette
+}
+
+func equalSpirit(a, b *component.SpiritComponent) bool {
+	return math.Float64bits(float64(a.StartX)) == math.Float64bits(float64(b.StartX)) && math.Float64bits(float64(a.StartY)) == math.Float64bits(float64(b.StartY)) && math.Float64bits(float64(a.TargetX)) == math.Float64bits(float64(b.TargetX)) && math.Float64bits(float64(a.TargetY)) == math.Float64bits(float64(b.TargetY)) && math.Float64bits(float64(a.Progress)) == math.Float64bits(float64(b.Progress)) && a.Pattern == b.Pattern && math.Float64bits(float64(a.Amplitude)) == math.Float64bits(float64(b.Amplitude)) && math.Float64bits(float64(a.Frequency)) == math.Float64bits(float64(b.Frequency)) && math.Float64bits(float64(a.Speed)) == math.Float64bits(float64(b.Speed)) && math.Float64bits(float64(a.Spin)) == math.Float64bits(float64(b.Spin)) && a.Rune == b.Rune && a.BaseColor == b.BaseColor && a.BlinkColor == b.BlinkColor
+}
+
+func equalMaterialize(a, b *component.MaterializeComponent) bool {
+	return a.TargetX == b.TargetX && a.TargetY == b.TargetY && a.AreaWidth == b.AreaWidth && a.AreaHeight == b.AreaHeight && math.Float64bits(float64(a.Progress)) == math.Float64bits(float64(b.Progress)) && a.BeamWidth == b.BeamWidth && a.Type == b.Type
+}
+
+func equalTarget(a, b *component.TargetComponent) bool {
+	return *a == *b
+}
+
+func equalTargetAnchor(a, b *component.TargetAnchorComponent) bool {
+	return *a == *b
+}
+
+func equalDrain(a, b *component.DrainComponent) bool {
+	return *a == *b
+}
+
+func equalQuasar(a, b *component.QuasarComponent) bool {
+	return a.LastSpeedIncreaseAt == b.LastSpeedIncreaseAt && math.Float64bits(float64(a.SpeedMultiplier)) == math.Float64bits(float64(b.SpeedMultiplier)) && a.IsZapping == b.IsZapping && a.IsCharging == b.IsCharging && a.IsShielded == b.IsShielded && a.ChargeRemaining == b.ChargeRemaining && math.Float64bits(float64(a.ZapRadius)) == math.Float64bits(float64(b.ZapRadius))
+}
+
+func equalSwarm(a, b *component.SwarmComponent) bool {
+	return a.State == b.State && a.PatternIndex == b.PatternIndex && a.PatternRemaining == b.PatternRemaining && a.ChargeIntervalRemaining == b.ChargeIntervalRemaining && a.LockRemaining == b.LockRemaining && a.LockedTargetX == b.LockedTargetX && a.LockedTargetY == b.LockedTargetY && a.ChargeRemaining == b.ChargeRemaining && math.Float64bits(float64(a.ChargeStartX)) == math.Float64bits(float64(b.ChargeStartX)) && math.Float64bits(float64(a.ChargeStartY)) == math.Float64bits(float64(b.ChargeStartY)) && math.Float64bits(float64(a.ChargeTargetX)) == math.Float64bits(float64(b.ChargeTargetX)) && math.Float64bits(float64(a.ChargeTargetY)) == math.Float64bits(float64(b.ChargeTargetY)) && a.DecelRemaining == b.DecelRemaining && a.TeleportRemaining == b.TeleportRemaining && a.TeleportStartX == b.TeleportStartX && a.TeleportStartY == b.TeleportStartY && a.TeleportTargetX == b.TeleportTargetX && a.TeleportTargetY == b.TeleportTargetY && a.ChargesCompleted == b.ChargesCompleted
+}
+
+func equalStorm(a, b *component.StormComponent) bool {
+	return *a == *b
+}
+
+func equalStormCircle(a, b *component.StormCircleComponent) bool {
+	return math.Float64bits(float64(a.Pos3D.X)) == math.Float64bits(float64(b.Pos3D.X)) && math.Float64bits(float64(a.Pos3D.Y)) == math.Float64bits(float64(b.Pos3D.Y)) && math.Float64bits(float64(a.Pos3D.Z)) == math.Float64bits(float64(b.Pos3D.Z)) && math.Float64bits(float64(a.Vel3D.X)) == math.Float64bits(float64(b.Vel3D.X)) && math.Float64bits(float64(a.Vel3D.Y)) == math.Float64bits(float64(b.Vel3D.Y)) && math.Float64bits(float64(a.Vel3D.Z)) == math.Float64bits(float64(b.Vel3D.Z)) && a.Index == b.Index && a.IsInvulnerable == b.IsInvulnerable && a.InvulnerableElapsed == b.InvulnerableElapsed && a.AttackState == b.AttackState && a.CooldownRemaining == b.CooldownRemaining && a.AttackRemaining == b.AttackRemaining && a.AttackTargetX == b.AttackTargetX && a.AttackTargetY == b.AttackTargetY && math.Float64bits(float64(a.AttackProgress)) == math.Float64bits(float64(b.AttackProgress))
+}
+
+func equalBullet(a, b *component.BulletComponent) bool {
+	return *a == *b
+}
+
+func equalPylon(a, b *component.PylonComponent) bool {
+	return *a == *b
+}
+
+func equalSnake(a, b *component.SnakeComponent) bool {
+	return *a == *b
+}
+
+func equalSnakeHead(a, b *component.SnakeHeadComponent) bool {
+	return a.Trail == b.Trail && a.TrailHead == b.TrailHead && a.TrailLen == b.TrailLen && math.Float64bits(float64(a.FacingX)) == math.Float64bits(float64(b.FacingX)) && math.Float64bits(float64(a.FacingY)) == math.Float64bits(float64(b.FacingY)) && a.GrowthPending == b.GrowthPending && a.LastTrailX == b.LastTrailX && a.LastTrailY == b.LastTrailY
+}
+
+func equalSnakeBody(a, b *component.SnakeBodyComponent) bool {
+	return (a.Segments == nil) == (b.Segments == nil) && len(a.Segments) == len(b.Segments) && func() bool {
+		for i0 := range a.Segments {
+			if !(math.Float64bits(float64(a.Segments[i0].RestX)) == math.Float64bits(float64(b.Segments[i0].RestX)) && math.Float64bits(float64(a.Segments[i0].RestY)) == math.Float64bits(float64(b.Segments[i0].RestY)) && a.Segments[i0].Connected == b.Segments[i0].Connected) {
+				return false
+			}
+		}
+		return true
+	}()
+}
+
+func equalSnakeMember(a, b *component.SnakeMemberComponent) bool {
+	return *a == *b
+}
+
+func equalEye(a, b *component.EyeComponent) bool {
+	return *a == *b
+}
+
+func equalTower(a, b *component.TowerComponent) bool {
+	return *a == *b
+}
+
+func equalKraken(a, b *component.KrakenComponent) bool {
+	return a.State == b.State && a.StateRemaining == b.StateRemaining && a.IdleTurnRemaining == b.IdleTurnRemaining && a.LastAction == b.LastAction && a.ActionStreak == b.ActionStreak && a.AttackLegs == b.AttackLegs && math.Float64bits(float64(a.TargetX)) == math.Float64bits(float64(b.TargetX)) && math.Float64bits(float64(a.TargetY)) == math.Float64bits(float64(b.TargetY)) && math.Float64bits(float64(a.TurnDir)) == math.Float64bits(float64(b.TurnDir)) && math.Float64bits(float64(a.Angle)) == math.Float64bits(float64(b.Angle)) && math.Float64bits(float64(a.Time)) == math.Float64bits(float64(b.Time)) && math.Float64bits(float64(a.RotSpeed)) == math.Float64bits(float64(b.RotSpeed)) && math.Float64bits(float64(a.MoveBlend)) == math.Float64bits(float64(b.MoveBlend)) && math.Float64bits(float64(a.AttackT)) == math.Float64bits(float64(b.AttackT))
+}
+
+func equalHeader(a, b *component.HeaderComponent) bool {
+	return a.Behavior == b.Behavior && a.Type == b.Type && (a.MemberEntries == nil) == (b.MemberEntries == nil) && len(a.MemberEntries) == len(b.MemberEntries) && func() bool {
+		for i0 := range a.MemberEntries {
+			if !(a.MemberEntries[i0] == b.MemberEntries[i0]) {
+				return false
+			}
+		}
+		return true
+	}() && a.ParentHeader == b.ParentHeader && a.Dirty == b.Dirty && a.SkipPositionSync == b.SkipPositionSync
+}
+
+func equalMember(a, b *component.MemberComponent) bool {
+	return *a == *b
+}
+
+func equalFlash(a, b *component.FlashComponent) bool {
+	return *a == *b
+}
+
+func equalFadeout(a, b *component.FadeoutComponent) bool {
+	return *a == *b
+}
+
+func equalSplash(a, b *component.SplashComponent) bool {
+	return *a == *b
+}
+
+func equalMarker(a, b *component.MarkerComponent) bool {
+	return a.X == b.X && a.Y == b.Y && a.Width == b.Width && a.Height == b.Height && a.Shape == b.Shape && a.Color == b.Color && math.Float64bits(float64(a.Intensity)) == math.Float64bits(float64(b.Intensity)) && math.Float64bits(float64(a.PulseRate)) == math.Float64bits(float64(b.PulseRate)) && a.FadeMode == b.FadeMode
+}
+
+func equalDeath(a, b *component.DeathComponent) bool {
+	return *a == *b
+}
+
+func equalTimer(a, b *component.TimerComponent) bool {
+	return *a == *b
 }

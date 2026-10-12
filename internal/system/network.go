@@ -189,6 +189,10 @@ type NetworkSystem struct {
 	// reached this authority through it; see relaysFor.
 	relayingAt [participantSlots]uint64
 
+	// upstream is this tick's raw artifacts for the authority on a guest linked to
+	// it, its own and those it carries; Flush sends them as one frame.
+	upstream network.Bundle
+
 	// leadLowSince and leadPushed are driveOwnLead's hysteresis: when a lower
 	// target first held, and the change already pushed and not yet dispatched.
 	leadLowSince  uint64
@@ -1253,6 +1257,7 @@ func (s *NetworkSystem) Flush(completedTick uint64) {
 	if s.enabled && p != nil && p.IsRunning() && s.ticks%parameter.NetworkSyncTicks == 0 {
 		s.sendCursorState(p)
 	}
+	s.flushUpstream(p)
 	s.publishTransportLoss(p)
 	s.publishLinkMeasurement(p, completedTick)
 	if r := s.world.Resources.Network; r != nil && r.OnTickClosed != nil && s.enabled {
@@ -1361,6 +1366,9 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 			s.forgetDigestPeer(uint32(in.Peer))
 			s.noticeDeparture(uint32(in.Peer))
 		case network.InboundMessage:
+			if r := s.world.Resources.Network; r != nil && in.Msg != nil && int(in.Peer) < len(r.Ingress) {
+				r.Ingress[in.Peer].Add(uint64(network.HeaderSize + len(in.Msg.Payload)))
+			}
 			s.dispatchMessage(uint32(in.Peer), in.Msg)
 		}
 	}
@@ -1560,6 +1568,17 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) {
 		s.scheduleCrossings(from, msg.Payload)
 	case network.MsgStateSync:
 		s.scheduleCursorState(from, msg.Payload)
+	case network.MsgBundle:
+		err := network.Unbundle(msg.Payload, func(kind network.MessageType, body []byte) {
+			if kind == network.MsgEvent || kind == network.MsgStateSync {
+				s.dispatchMessage(from, &network.Message{Type: kind, Payload: body})
+			} else {
+				s.statDrop.Add(1)
+			}
+		})
+		if err != nil {
+			s.statDrop.Add(1)
+		}
 	case network.MsgStateDigest:
 		s.receiveStateDigest(from, msg.Payload)
 	case network.MsgDisconnect:
@@ -1571,6 +1590,11 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) {
 		s.receiveSelective(msg.Type, from, msg.Payload)
 	case network.MsgSessionRestart:
 		s.receiveSessionRestart(from, msg.Payload)
+	case network.MsgRelayJoin, network.MsgRelayAdmit:
+		// Neither floods: a relay asks on its own link and is answered on it.
+		if r := s.world.Resources.Network; from != 0 && r != nil && r.OnRelayJoin != nil {
+			r.OnRelayJoin(uint8(msg.Type), from, msg.Payload)
+		}
 	case network.MsgAuthorityReport, network.MsgAuthorityHandoff, network.MsgPeerList:
 		// The address map travels with the succession it exists for: same term
 		// gate, same flood, same session layer deduplicating by term and
@@ -1742,7 +1766,7 @@ func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint6
 		s.world.Log().Warn("net", "msg", "frames not encoded", "frames", len(pending), "error", err.Error())
 		return
 	}
-	p.Broadcast(uint8(network.MsgEvent), body)
+	s.sendOwn(p, network.MsgEvent, body)
 	s.statSent.Add(int64(len(pending)))
 	if completedTick%parameter.NetworkDigestTicks == 0 {
 		s.sendStateDigest(p, completedTick)
@@ -1870,9 +1894,10 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 			s.relayBatch(from, network.MsgEvent, batch)
 		}
 		return
-	case committing && batch.Source != from && s.linked(batch.Source):
-		// A raw epoch from a producer on a link of its own arrives on that link. A
-		// relayed copy of one already admitted is a duplicate; any other is claimed.
+	case committing && from != s.ingress(batch.Source, from):
+		// A raw epoch arrives on its producer's own link, or on its holder's for a bot
+		// behind one. A copy on another of one already admitted is a duplicate; any
+		// other is claimed.
 		s.mu.Lock()
 		dup := s.epochs[batch.Source].has(batch.ProducedTick)
 		s.mu.Unlock()
@@ -2029,18 +2054,59 @@ func (s *NetworkSystem) relaysFor(id uint32) bool {
 	return s.localTick() <= s.relayingAt[id]+parameter.NetworkEpochWindow
 }
 
-// relayRaw passes a raw epoch on toward the authority: straight to it when this
-// instance has a link to it, else onward through the mesh.
+// relayRaw passes a raw epoch on toward the authority: in this tick's bundle when
+// this instance has a link to it, else onward through the mesh.
 func (s *NetworkSystem) relayRaw(from, authority uint32, kind network.MessageType, batch event.WireBatch) {
-	p := s.port()
-	if p == nil || !s.linked(authority) {
+	if s.port() == nil || !s.linked(authority) {
 		s.relayBatch(from, kind, batch)
 		return
 	}
 	batch.Hops++
 	if body, err := event.EncodeWireBatch(batch); err == nil && batch.Hops < parameter.NetworkRelayHopLimit {
-		p.Send(authority, uint8(kind), body)
+		s.upstream.Add(kind, body)
 	}
+}
+
+// sendOwn sends one of this instance's own artifacts. Nobody but the authority does
+// more with a raw one than pass it on, so a guest linked to it bundles it for it
+// alone; the authority's own, and a guest's with no such link, flood.
+func (s *NetworkSystem) sendOwn(p engine.NetworkPort, kind network.MessageType, body []byte) {
+	if authority := s.authorityParticipant(); authority != s.participantID() && s.linked(authority) {
+		s.upstream.Add(kind, body)
+		return
+	}
+	p.Broadcast(uint8(kind), body)
+}
+
+// flushUpstream sends this tick's bundle. One whose link to the authority went
+// with a handoff is lost, as an epoch in flight to a departed authority is.
+func (s *NetworkSystem) flushUpstream(p engine.NetworkPort) {
+	for _, m := range s.upstream.Take() {
+		if p == nil || !p.Send(s.authorityParticipant(), uint8(m.Type), m.Payload) {
+			s.statDrop.Add(1)
+		}
+	}
+}
+
+// ingress is the link a participant's raw artifacts must reach the authority on: its
+// own, else its holder's, so a relay answers for its subtree and nobody else can
+// speak for it; else whichever link carried them. Caller MUST hold updateMutex.
+func (s *NetworkSystem) ingress(source, from uint32) uint32 {
+	if s.linked(source) {
+		return source
+	}
+	var holder uint32
+	s.world.Components.Cursor.Each(func(_ core.Entity, c *component.CursorComponent) bool {
+		if c.PeerID == source {
+			holder = c.Holder
+			return false
+		}
+		return true
+	})
+	if holder != 0 && s.linked(holder) {
+		return holder
+	}
+	return from
 }
 
 // linked reports whether a participant is on a direct link of this instance.
@@ -2398,7 +2464,7 @@ func (s *NetworkSystem) sendCursorState(p engine.NetworkPort) {
 			s.statDrop.Add(1)
 			continue
 		}
-		p.Broadcast(uint8(network.MsgStateSync), body)
+		s.sendOwn(p, network.MsgStateSync, body)
 	}
 }
 
@@ -2467,7 +2533,7 @@ func (s *NetworkSystem) scheduleCursorState(from uint32, body []byte) {
 	switch {
 	case own && !batch.Committed:
 		return
-	case committing && batch.Source != from && s.linked(batch.Source):
+	case committing && from != s.ingress(batch.Source, from):
 		s.statForged.Add(1)
 		return
 	}

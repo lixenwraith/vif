@@ -71,6 +71,11 @@ const (
 	NetworkSlowLatePerSecond  = 5.0
 	NetworkSlowBytesPerSecond = 8 << 10
 
+	// NetworkIngressBytesPerSecond is what the authority accepts from a link over
+	// the same window, per participant the link carries. A guest drains about a
+	// sixth of it while playing; past it, the link and its subtree are evicted.
+	NetworkIngressBytesPerSecond = 64 << 10
+
 	// NetworkSyncTicks is the period between owner-authored state syncs (D-13).
 	// One cursor's payload is small; this keeps remote presentation responsive.
 	NetworkSyncTicks = 6
