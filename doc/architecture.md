@@ -187,9 +187,10 @@ route populations, the genetic registry, transient effects, telemetry, and
 capabilities contributed by services. The cursors themselves are ordinary ECS
 entities created and removed by `CursorSystem`; each owns its energy, heat,
 shield, boost, weapon, ping, and combat components. A roster slot also records
-whether a human, in-simulation bot, or remote peer controls that cursor. The
-mode router and camera follow the selected local slot, while gameplay systems
-can iterate or address every cursor through the same event-driven path.
+whether this instance or a remote peer drives that cursor and, for a bot, which
+participant holds it. The mode router and camera follow the selected local slot,
+while gameplay systems can iterate or address every cursor through the same
+event-driven path.
 
 Every entity, event and RNG stream carries a replication domain. Shared state
 is identical on every instance and replicated; player state is this instance's
@@ -235,7 +236,7 @@ close/error events. `internal/input.Machine` converts them into pure-data
 `Intent` values. It understands counts, operators, motions, character waits,
 `g` prefixes, search/command text, overlays, and macro control. It has no ECS
 dependency. A bot's graph produces the same intents, keys and mouse alike, and
-reaches the world through the same router ([Bots](todo-bots.md)).
+reaches the world through the same router ([Bots](bots.md)).
 
 `internal/mode.Router` is the authoritative owner of game mode. Under the world
 lock, it interprets intents against the current map and components, requests

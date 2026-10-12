@@ -399,7 +399,7 @@ Per-cursor state is published under `player.<slot>.<metric>`:
 | Key                              | Description                |
 |----------------------------------|----------------------------|
 | `player.<n>.entity`              | Entity id, 0 when empty    |
-| `player.<n>.control`             | 0=human, 1=bot, 2=remote   |
+| `player.<n>.control`             | 0=this instance drives it (a person or a bot), 2=remote, -1=empty |
 | `player.<n>.x`, `player.<n>.y`   | Position, -1 when empty    |
 | `player.<n>.energy.current`      | Energy                     |
 | `player.<n>.heat.current`        | Heat                       |
@@ -428,7 +428,9 @@ They are therefore **instance-local by construction and must not be a guard key
 in a shared region** — a shared region has to take the same transition on every
 instance (D-20), and a guard that names a cursor names its slot:
 `player.0.energy.current`. A participant that drives no cursor — a dedicated
-host — mirrors nothing and the bare keys read as reset.
+host — mirrors nothing and the bare keys read as reset. A bot graph reads its own
+instance, where the bare keys are the bot's slot; see
+[Bots](bots.md#writing-a-graph).
 
 Occurrence counters stay roster-wide totals: `typing.correct`, `typing.errors`,
 `shield.shield_hit`, `energy.spend_count`, `energy.crossed_zero_count`,
