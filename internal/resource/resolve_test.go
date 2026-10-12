@@ -3,6 +3,7 @@ package resource
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/paths"
@@ -94,6 +95,28 @@ func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 	}
 	if _, _, err := BotGraph(o, "missing"); err == nil {
 		t.Fatal("a bot graph no root or binary holds was resolved")
+	}
+}
+
+// TestCheckRefusesABrokenBotGraph: -check parses every graph a name could resolve
+// to, so an installed one that would fail only when seated fails the check.
+func TestCheckRefusesABrokenBotGraph(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(paths.SystemRootsEnv, "")
+	root := t.TempDir()
+	bad := filepath.Join(root, paths.BotDirName, "bad.toml")
+	if err := os.MkdirAll(filepath.Dir(bad), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bad, []byte("[nope]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if err := Check(Options{Dir: root}, &out); err == nil || !strings.Contains(err.Error(), bad) {
+		t.Fatalf("check = %v, want a fault naming %s", err, bad)
+	}
+	if !strings.Contains(out.String(), "bot ok: embedded default") {
+		t.Fatalf("the shipped graph was not reported ok beside the broken one:\n%s", out.String())
 	}
 }
 

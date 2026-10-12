@@ -34,7 +34,7 @@ _arguments \
   '-headless[With -bot, run bots without a human player or terminal; solo runs are unpaced. With -replay, verify the journal'\''s digests unattended]' \
   '-watch[Watch the first bot or a script on this terminal, with no human player]' \
   '(-r -replay)'{-r,-replay}'[Replay a recorded journal instead of playing]:path:_files' \
-  '-check[Validate the resolved scenario, keymap, audio and content, then exit]' \
+  '-check[Validate the resolved scenario, keymap, audio, content and bot graphs, then exit]' \
   '-schema[Print the FSM schema as JSON, then exit]' \
   '(-l -log)'{-l,-log}'[Enable logging; DIR overrides $XDG_STATE_HOME/vif/log]' \
   '(-lv -log-level)'{-lv,-log-level}'[trace, debug, info, warn or error; implies -l]:level: ' \
