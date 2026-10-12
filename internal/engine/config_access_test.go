@@ -69,6 +69,21 @@ func TestTheDrawableExtentFollowsTheLatch(t *testing.T) {
 	}
 }
 
+// TestAPrivateMachineReadsItsOwnViewport: a bot's graph aims at what its own
+// terminal shows, which the latch does not make everyone's.
+func TestAPrivateMachineReadsItsOwnViewport(t *testing.T) {
+	w := NewWorld()
+	NewGameContextWithClock(w, 200, 60, NewManualClock())
+	w.Resources.Config.MapWidth, w.Resources.Config.MapHeight = 200, 60
+	w.Resources.Config.ViewportWidth, w.Resources.Config.ViewportHeight = 120, 40
+	w.MarkSessionShared()
+	width, _ := PrivateConfigIntAccessor("viewport_width")
+	height, _ := PrivateConfigIntAccessor("viewport_height")
+	if got, got2 := width(w), height(w); got != 120 || got2 != 40 {
+		t.Fatalf("a private machine under the latch reads %dx%d, want its terminal's 120x40", got, got2)
+	}
+}
+
 // TestConfigAccessorsWatchEveryNonReplicatedKey asserts the warning covers the
 // whole non-replicated surface, so adding a key cannot quietly escape it.
 func TestConfigAccessorsWatchEveryNonReplicatedKey(t *testing.T) {
