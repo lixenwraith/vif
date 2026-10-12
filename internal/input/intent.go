@@ -1,5 +1,7 @@
 package input
 
+import "strings"
+
 // IntentType discriminates semantic actions
 type IntentType uint8
 
@@ -189,4 +191,10 @@ func AppendCommand(dst []Intent, command string) []Intent {
 		dst = append(dst, Intent{Type: IntentTextChar, Char: char, Count: 1})
 	}
 	return append(dst, Intent{Type: IntentTextConfirm, Count: 1})
+}
+
+// CommandLine is the command a written ex command runs: its leading ':' is the key
+// that opens the command line, not part of what is typed there.
+func CommandLine(text string) string {
+	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(text), ":"))
 }
