@@ -922,13 +922,23 @@ func handlePlayerCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return result
 	}
 	if len(args) == 0 {
-		var names []string
-		for _, p := range ctx.SessionCtl.Participants() {
-			kind := "player"
-			if p.Holder != 0 {
-				kind = "bot"
+		participants := ctx.SessionCtl.Participants()
+		slots := make(map[uint32]uint8, len(participants)) // participant to slot, to name a bot's holder
+		for _, p := range participants {
+			if c, ok := ctx.World.Components.Cursor.GetComponent(p.Entity); ok {
+				slots[c.PeerID] = p.Slot
 			}
-			names = append(names, fmt.Sprintf("%X %s", p.Slot, kind))
+		}
+		var names []string
+		for _, p := range participants {
+			name := fmt.Sprintf("%X player", p.Slot)
+			if p.Holder != 0 {
+				name = fmt.Sprintf("%X bot", p.Slot)
+				if holder, ok := slots[p.Holder]; ok {
+					name += fmt.Sprintf(" of %X", holder)
+				}
+			}
+			names = append(names, name)
 		}
 		ctx.SetStatusMessage("Players: "+strings.Join(names, ", ")+"; :player drop <slot>", parameter.StatusNotice)
 		return result
