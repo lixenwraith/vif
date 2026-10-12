@@ -22,11 +22,10 @@ need_bin() {
 	[ -x "$BIN" ] || fail "$BIN not built; run: make dev"
 }
 
-# probe_get fetches one probe path, preferring curl and falling back to the Go
-# binary's own toolchain-free reach. A dev box has one of the two.
+# probe_get fetches one probe path, from PROBE_PORT unless a port is given.
 probe_get() {
 	if command -v curl >/dev/null 2>&1; then
-		curl -sS --max-time 5 "http://$HOST:$PROBE_PORT$1"
+		curl -sS --max-time 5 "http://$HOST:${2:-$PROBE_PORT}$1"
 	else
 		fail "curl not found; install it or read the probe by hand"
 	fi
@@ -121,6 +120,7 @@ botstat() { sed -n "s/.*\"msg\":\"bot stopped\",.*\"quit\":true.*\"$2\":\(-*[0-9
 cleanup() {
 	if [ -n "${GUEST_PID:-}" ]; then kill -9 "$GUEST_PID" 2>/dev/null || true; fi
 	if [ -n "${SERVE_PID:-}" ]; then kill -9 "$SERVE_PID" 2>/dev/null || true; fi
+	for pid in ${LOAD_PIDS:-}; do kill -9 "$pid" 2>/dev/null || true; done
 	return 0
 }
 trap cleanup EXIT INT TERM
@@ -140,7 +140,7 @@ Interactive (runs in the foreground until you stop it)
   pair              scripted host + scripted guest, both headless
   watch             scripted host presented on this terminal; join it by hand
 
-Observed (runs a scenario and prints what happened; asserts nothing)
+Observed (runs a scenario and prints what happened; not part of `all`)
   probe             read /health and /metrics of a running -serve
   guests <n> [addr] launch n scripted guests against an address
   host-loss [n]     scripted host + n scripted guests, then kill the host and
@@ -149,6 +149,11 @@ Observed (runs a scenario and prints what happened; asserts nothing)
   botscore [graph] [seeds] [secs]
                     sum default's score per scenario over seeds 1..N (4) of secs
                     (60) each; given a graph file, fail unless it beats default
+  load [sessions] [bots] [secs]
+                    per session a host seating its own bots and a networked bot
+                    joiner; prints each host's cost and fails on a slipping clock,
+                    an eviction, a short roster or a peak past LIMIT_MB
+                    (SCENARIO=name, GUEST_BOTS=n for the joiner's own)
 
 Automated (assert, and used by `all`)
   check             validate every shipped resource tree
@@ -374,6 +379,123 @@ botscore)
 		[ -z "$lost" ] || fail "$graph did not outscore default on:$lost"
 		pass "$graph outscored default on every scenario"
 	fi
+	;;
+
+load)
+	# Networked bots at the fleet's shape: per session a dedicated host seating its
+	# own bots on PORT and PROBE_PORT stepped by two, and a headless bot joining it as
+	# a person would, relaying GUEST_BOTS of its own. Each host is read every few
+	# seconds; LIMIT_MB (MiB) defaults to the pod's memory limit for its bots. Digest
+	# mismatches are reported, not failed: a guest differs between corrections by design.
+	need_bin
+	[ -r /proc/self/stat ] || fail "load reads /proc; run it on Linux"
+	sessions=${2:-2} bots=${3:-2} secs=${4:-60}
+	guest_bots=${GUEST_BOTS:-0}
+	want=$((bots + 1 + guest_bots))
+	limit=${LIMIT_MB:-$((192 + 32 * bots))}
+	rate=20 # ticks a second: parameter.GameUpdateInterval
+	every=5
+	hz=$(getconf CLK_TCK)
+	config=-d
+	[ -z "${SCENARIO:-}" ] || config="-config-dir wad -s $SCENARIO"
+	relayed=
+	[ "$guest_bots" = 0 ] || relayed="-bots $guest_bots"
+	D=$(mktemp -d)
+	note "$sessions session(s) of $bots host bot(s) and a joiner with $guest_bots for ${secs}s; logs in $D"
+	n=0
+	while [ "$n" -lt "$sessions" ]; do
+		probe=$((PROBE_PORT + 2 * n))
+		if probe_get /health "$probe" >/dev/null 2>&1; then
+			fail "something already answers on $HOST:$probe; set PORT and PROBE_PORT"
+		fi
+		# shellcheck disable=SC2086
+		"$BIN" -serve "$HOST:$((PORT + 2 * n))" -probe "$HOST:$probe" $config -size 120x40 \
+			-players "$want" -bots "$bots" -log-stdout -lv info >"$D/host$n.log" 2>&1 &
+		eval "host$n=\$!"
+		LOAD_PIDS="${LOAD_PIDS:-} $!"
+		n=$((n + 1))
+	done
+	n=0
+	while [ "$n" -lt "$sessions" ]; do
+		probe=$((PROBE_PORT + 2 * n))
+		wait_for 20 "probe_get /health $probe" || fail "host $n never answered: $D/host$n.log"
+		# shellcheck disable=SC2086
+		"$BIN" -headless -bot default -join "$HOST:$((PORT + 2 * n))" $relayed \
+			-log-stdout -lv info >"$D/join$n.log" 2>&1 &
+		LOAD_PIDS="$LOAD_PIDS $!"
+		wait_for 60 "probe_get /health $probe | grep -qx guests=$want" \
+			|| fail "host $n never held its $want guests: $D/host$n.log $D/join$n.log"
+		n=$((n + 1))
+	done
+
+	# loadsample reads host $1's process and probe into the r_ variables.
+	loadsample() {
+		eval "pid=\$host$1"
+		alive "$pid" || fail "host $1 exited: $D/host$1.log"
+		r_rss=$(sed -n 's/^VmRSS:[^0-9]*\([0-9]*\).*/\1/p' "/proc/$pid/status")
+		r_hwm=$(sed -n 's/^VmHWM:[^0-9]*\([0-9]*\).*/\1/p' "/proc/$pid/status")
+		r_cpu=$(awk '{ print $14 + $15 }' "/proc/$pid/stat")
+		body=$(probe_get /health "$((PROBE_PORT + 2 * $1))") || fail "host $1 stopped answering its probe"
+		r_tick=$(printf '%s\n' "$body" | sed -n 's/^tick=//p')
+		r_guests=$(printf '%s\n' "$body" | sed -n 's/^guests=//p')
+		body=$(probe_get /metrics "$((PROBE_PORT + 2 * $1))") || fail "host $1 stopped answering its probe"
+		r_peers=$(printf '%s\n' "$body" | sed -n 's/^vif_network_peers //p')
+		r_evicted=$(printf '%s\n' "$body" | sed -n 's/^vif_network_evicted //p')
+		r_mismatch=$(printf '%s\n' "$body" | sed -n 's/^vif_network_digest_mismatches //p')
+	}
+	start=$(date +%s)
+	last=$start
+	n=0
+	while [ "$n" -lt "$sessions" ]; do
+		loadsample "$n"
+		eval "tick0_$n=$r_tick cpu0_$n=$r_cpu cpu_$n=$r_cpu mismatch0_$n=${r_mismatch:-0}"
+		n=$((n + 1))
+	done
+	printf '\n%5s %4s %8s %8s %9s %7s %6s %5s %7s %9s\n' \
+		secs host rss_mib hwm_mib cpu_ms/s tick guests peers evicted mismatch
+	problems=
+	elapsed=0
+	while [ "$elapsed" -lt "$secs" ]; do
+		step=$((secs - elapsed))
+		[ "$step" -le "$every" ] || step=$every
+		sleep "$step"
+		now=$(date +%s)
+		elapsed=$((now - start))
+		n=0
+		while [ "$n" -lt "$sessions" ]; do
+			loadsample "$n"
+			eval "cpu=\$cpu_$n"
+			printf '%5s %4s %8s %8s %9s %7s %6s %5s %7s %9s\n' "$elapsed" "$n" \
+				"$((r_rss / 1024))" "$((r_hwm / 1024))" \
+				"$(( (r_cpu - cpu) * 1000 / hz / (now - last) ))" "$r_tick" "$r_guests" \
+				"${r_peers:-?}" "${r_evicted:-0}" "${r_mismatch:-0}"
+			[ "$r_guests" = "$want" ] || problems="$problems
+host $n held $r_guests guests at ${elapsed}s, want $want"
+			eval "cpu_$n=$r_cpu tick_$n=$r_tick hwm_$n=$r_hwm evicted_$n=${r_evicted:-0} mismatch_$n=${r_mismatch:-0}"
+			n=$((n + 1))
+		done
+		last=$now
+	done
+
+	note "each host over ${elapsed}s"
+	n=0
+	while [ "$n" -lt "$sessions" ]; do
+		eval "ticks=\$((tick_$n - tick0_$n)) cpu=\$(( (cpu_$n - cpu0_$n) * 1000 / hz / elapsed ))"
+		eval "hwm=\$((hwm_$n / 1024)) evicted=\$evicted_$n grew=\$((mismatch_$n - mismatch0_$n))"
+		printf 'host %s: %s ticks, %s ms of CPU a second, peak %s MiB, %s new digest mismatch(es)\n' \
+			"$n" "$ticks" "$cpu" "$hwm" "$grew"
+		[ "$ticks" -ge $((secs * rate * 9 / 10)) ] || problems="$problems
+host $n advanced $ticks ticks in ${secs}s, under 90% of $rate a second"
+		[ "$evicted" = 0 ] || problems="$problems
+host $n evicted $evicted participant(s)"
+		[ "$hwm" -le "$limit" ] || problems="$problems
+host $n peaked at $hwm MiB, past $limit"
+		n=$((n + 1))
+	done
+	[ -z "$problems" ] || fail "networked bots under load:$problems
+logs in $D"
+	rm -rf "$D"
+	pass "$sessions session(s) held $bots host bot(s) and a joiner with $guest_bots for ${secs}s"
 	;;
 
 check)

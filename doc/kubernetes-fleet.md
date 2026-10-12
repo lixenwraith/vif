@@ -267,6 +267,7 @@ By hand, on a dev machine — see [`script/README.md`](../script/README.md):
 ./script/test.sh all          # check, lifetime, drain, identity
 ./script/test.sh serve-fleet  # the flag set the containers run
 ./script/test.sh probe        # /health and /metrics
+./script/test.sh load 2 3 60  # hosts with their own bots and a bot joiner: cost, slips, evictions
 ```
 
 Against a cluster, [§13 of the procedure](kube-docker-deploy.md#13-first-session) is
