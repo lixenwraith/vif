@@ -179,7 +179,7 @@ func navGateOrigin(t *testing.T) (*App, snapshot.SharedCapture) {
 	t.Helper()
 	a := mustHeadless(t, navGateSeed, 120, 40)
 	tickUntilCursor(t, a)
-	a.Tick(400)
+	a.Tick(300)
 	quiescePlayerDomain(t, a)
 	tickToStatBoundary(a)
 	spawnSharedSpecies(t, a)
