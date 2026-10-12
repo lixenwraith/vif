@@ -195,6 +195,9 @@ func (m *mind) pointAt(p pointArgs) {
 				x--
 			}
 		}
+		if x, y, ok = m.land(x, y, s.x, s.y); !ok {
+			return
+		}
 	}
 	if p.fire {
 		m.push(input.Intent{Type: input.IntentMouseLeftDown, X: x, Y: y, MapCell: true},
@@ -205,6 +208,27 @@ func (m *mind) pointAt(p pointArgs) {
 		return
 	}
 	m.push(input.Intent{Type: input.IntentMouseMove, X: x, Y: y, MapCell: true})
+}
+
+// land keeps x, y unless the cursor may not enter it, as the router refuses that
+// move and the bot would re-queue it every update; it then takes the shown open cell
+// nearest the goal, measured as nearest does, ties to the first in row order.
+func (m *mind) land(x, y, goalX, goalY int) (int, int, bool) {
+	blocked := func(x, y int) bool { return m.ctx.World.Positions.IsBlocked(x, y, component.WallBlockCursor) }
+	if !blocked(x, y) {
+		return x, y, true
+	}
+	minX, minY, maxX, maxY, _ := m.ctx.World.Resources.Config.VisibleMapRect()
+	best, found := 0, false
+	for cy := minY; cy <= maxY; cy++ {
+		for cx := minX; cx <= maxX; cx++ {
+			dx, dy := cx-goalX, 2*(cy-goalY)
+			if d := dx*dx + dy*dy; (!found || d < best) && !blocked(cx, cy) {
+				x, y, best, found = cx, cy, d, true
+			}
+		}
+	}
+	return x, y, found
 }
 
 // pointArgs is a compiled PointAt payload
