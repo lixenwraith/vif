@@ -86,7 +86,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 			"backoffLimit":            0,
 			"completions":             1,
 			"parallelism":             1,
-			"activeDeadlineSeconds":   14400,
+			"activeDeadlineSeconds":   3600,
 			"ttlSecondsAfterFinished": 120,
 			"template": map[string]any{
 				"metadata": map[string]any{"labels": labels},
