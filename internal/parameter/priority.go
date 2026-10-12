@@ -4,6 +4,7 @@ package parameter
 // first. Inline comments call out the non-obvious producer/consumer constraints.
 const (
 	PriorityNetwork int = iota // Before every consumer: a peer's crossing must be queued for this tick's settle
+	PriorityTimer              // Before every owner reads a countdown it armed
 	PriorityCursor
 	PriorityCamera
 	PriorityShield
@@ -49,9 +50,8 @@ const (
 	PriorityMarker       // Before splash, after game logic
 	PrioritySplash       // After game logic, before rendering
 	PriorityMotionMarker // After game logic and splash, before rendering
-	PriorityDeath        // After game logic, before TimeKeeper
-	PriorityTimekeeper   // After game logic
+	PriorityDeath        // After game logic
 	PriorityAdaptation   // Before genetic
-	PriorityGenetic      // After death and timer, observes entity lifecycle
+	PriorityGenetic      // After death, observes entity lifecycle
 	PriorityDiagnostics  // After all others, telemetry collection
 )

@@ -280,11 +280,6 @@ const (
 	// EventDeathBatch (DeathRequestPayload) [stamped] signals intent to destroy one or more entities with an optional effect
 	EventDeathBatch
 
-	// --- Timer ---
-
-	// EventTimerStart (TimerStartPayload) [stamped] signals creation of a lifecycle timer for an entity
-	EventTimerStart
-
 	// --- Composite ---
 
 	// EventCompositeMemberDestroyed (CompositeMemberDestroyedPayload) [bus] signals a composite member was successfully typed

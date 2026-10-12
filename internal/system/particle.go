@@ -412,7 +412,7 @@ func (s *ParticleSystem) spawnOne(e event.ParticleSpawnEntry, cx, cy int) {
 		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{Mask: prof.protect})
 	}
 	if life := prof.lifetime[level]; life > 0 {
-		s.world.Components.Timer.SetComponent(entity, component.TimerComponent{Remaining: life})
+		armTimer(s.world, entity, component.TimerLifetime, life)
 	}
 }
 
@@ -690,7 +690,7 @@ func (s *ParticleSystem) touch(behavior component.ParticleBehavior, state *parti
 // fade steps a timed particle's colour down one level once its remaining life
 // falls below the lower level's lifetime
 func (s *ParticleSystem) fade(prof *particleProfile, entity core.Entity) {
-	timer, ok := s.world.Components.Timer.GetComponent(entity)
+	timer, ok := s.world.Components.Timer.GetPtr(entity)
 	if !ok {
 		return
 	}
@@ -698,8 +698,9 @@ func (s *ParticleSystem) fade(prof *particleProfile, entity core.Entity) {
 	if !ok {
 		return
 	}
+	remaining := timer.Slots[component.TimerLifetime].Remaining
 	for level := component.GlyphBright; level > component.GlyphDark; level-- {
-		if sigil.Color == prof.color[level] && timer.Remaining < prof.lifetime[level-1] {
+		if sigil.Color == prof.color[level] && remaining < prof.lifetime[level-1] {
 			sigil.Color = prof.color[level-1]
 			return
 		}
