@@ -42,11 +42,11 @@ spec:
   backoffLimit: 0
   completions: 1
   parallelism: 1
-  # The absolute ceiling, well above any real match. The application's own bounds
-  # (-first-join, -empty) end an idle session in ninety seconds; this ends one that
-  # is somehow neither idle nor finished, which is the shape a wedged or abused
-  # session takes.
-  activeDeadlineSeconds: 14400
+  # The absolute ceiling, well above a match, which runs minutes unless reset. The
+  # application's own bounds (-first-join, -empty) end an idle session in ninety
+  # seconds; this ends one they never do: a wedged or abused session, or one its
+  # own bots occupy with nobody else in it.
+  activeDeadlineSeconds: 3600
   # Long enough for an allocator or an operator to read why the session ended,
   # short enough that finished objects do not accumulate against count/jobs.
   ttlSecondsAfterFinished: 120

@@ -106,7 +106,9 @@ them is refused with `400 invalid_request` naming the bound, never clamped.
 
 `bots` seats that many of the session's own bots, each a roster guest playing the
 embedded `default` graph. A session is ready only while a seat is free, so a request
-is also refused bots that leave no seat for a person: at most `players - 1`.
+is also refused bots that leave no seat for a person: at most `players - 1`. The
+bots occupy the session as people do, so one nobody else joins plays on until a
+drain or the Job's one-hour `activeDeadlineSeconds` ends it.
 `-bots-max` is at most 6, the most whose pod envelope fits the namespace's
 `LimitRange`.
 
