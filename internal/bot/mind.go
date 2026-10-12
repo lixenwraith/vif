@@ -148,8 +148,7 @@ func (m *mind) nearest(t target) sighting {
 			if !ok {
 				return
 			}
-			dx, dy := pos.X-from.X, 2*(pos.Y-from.Y)
-			if d := dx*dx + dy*dy; !s.found || d < s.dist2 {
+			if d := dist2(pos.X-from.X, pos.Y-from.Y); !s.found || d < s.dist2 {
 				s = sighting{x: pos.X, y: pos.Y, dist2: d, found: true}
 			}
 		})
@@ -206,9 +205,9 @@ func (m *mind) pointAt(p pointArgs) {
 		if !s.found || p.away && s.dist2 == 0 {
 			return
 		}
+		from, _ := m.ctx.World.LocalCursor()
 		goalX, goalY := s.x, s.y
 		if p.away {
-			from, _ := m.ctx.World.LocalCursor()
 			goalX, goalY = 2*from.X-s.x, 2*from.Y-s.y
 		}
 		x, y = min(max(goalX, minX), maxX), min(max(goalY, minY), maxY)
@@ -224,6 +223,14 @@ func (m *mind) pointAt(p pointArgs) {
 		if x, y, ok = m.land(x, y, goalX, goalY); !ok {
 			return
 		}
+		// Pinned to the view's edge in line with the threat, the mirror is the cursor's
+		// own cell; flee to the shown open cell farthest from it, if that gains ground.
+		if p.away && x == from.X && y == from.Y {
+			x, y, ok = m.openCell(func(cx, cy int) int { return -dist2(cx-s.x, cy-s.y) })
+			if !ok || dist2(x-s.x, y-s.y) <= s.dist2 {
+				return
+			}
+		}
 	}
 	if p.fire {
 		m.push(input.Intent{Type: input.IntentMouseLeftDown, X: x, Y: y, MapCell: true},
@@ -238,24 +245,31 @@ func (m *mind) pointAt(p pointArgs) {
 
 // land keeps x, y unless the cursor may not enter it, as the router refuses that
 // move and the bot would re-queue it every update; it then takes the shown open cell
-// nearest the goal, measured as nearest does, ties to the first in row order.
+// nearest the goal.
 func (m *mind) land(x, y, goalX, goalY int) (int, int, bool) {
-	blocked := func(x, y int) bool { return m.ctx.World.Positions.IsBlocked(x, y, component.WallBlockCursor) }
-	if !blocked(x, y) {
+	if !m.ctx.World.Positions.IsBlocked(x, y, component.WallBlockCursor) {
 		return x, y, true
 	}
+	return m.openCell(func(cx, cy int) int { return dist2(cx-goalX, cy-goalY) })
+}
+
+// openCell is the shown cell the cursor may enter that ranks lowest, ties to the
+// first in row order.
+func (m *mind) openCell(rank func(x, y int) int) (x, y int, found bool) {
 	minX, minY, maxX, maxY, _ := m.ctx.World.Resources.Config.VisibleMapRect()
-	best, found := 0, false
+	best := 0
 	for cy := minY; cy <= maxY; cy++ {
 		for cx := minX; cx <= maxX; cx++ {
-			dx, dy := cx-goalX, 2*(cy-goalY)
-			if d := dx*dx + dy*dy; (!found || d < best) && !blocked(cx, cy) {
-				x, y, best, found = cx, cy, d, true
+			if r := rank(cx, cy); (!found || r < best) && !m.ctx.World.Positions.IsBlocked(cx, cy, component.WallBlockCursor) {
+				x, y, best, found = cx, cy, r, true
 			}
 		}
 	}
 	return x, y, found
 }
+
+// dist2 is a squared cell distance with rows counted twice, as the terminal draws them
+func dist2(dx, dy int) int { return dx*dx + 4*dy*dy }
 
 // pointArgs is a compiled PointAt payload; away aims at the target's mirror
 // through the cursor
@@ -269,6 +283,7 @@ type pointArgs struct {
 // bot's own view, and the bot's actions and guards.
 func register(m *fsm.Machine[*mind]) {
 	std.Register(m, std.Host[*mind]{
+		Refuse: "writes the world; a bot acts only through intents",
 		ConfigInt: func(field string) (func(*mind) int64, bool) {
 			read, ok := engine.PrivateConfigIntAccessor(field)
 			if !ok {
@@ -349,14 +364,6 @@ func register(m *fsm.Machine[*mind]) {
 		return pointArgs{target: t, fire: p.Fire, away: p.Away}, err
 	})
 
-	// std's world-writing actions would load and do nothing, as the Host gives them no way out
-	for _, name := range []string{"EmitEvent", "EnableSystem", "DisableSystem", "ApplyGlobalSystemConfig",
-		"ApplyRegionSystemConfigs", "SetStatusInt", "ResetStatusInt"} {
-		m.RegisterActionArgs(name, func(*fsm.Machine[*mind], fsm.ActionConfig, fsm.StateResolver) (any, error) {
-			return nil, errors.New("writes the world; a bot acts only through intents")
-		})
-	}
-
 	guard := func(name string, args []string, build func(map[string]any) (fsm.GuardFunc[*mind], error)) {
 		m.RegisterGuardFactory(name, func(_ *fsm.Machine[*mind], given map[string]any) (fsm.GuardFunc[*mind], error) {
 			if key := unknownKey(given, args...); key != "" {
@@ -412,11 +419,12 @@ func register(m *fsm.Machine[*mind]) {
 	})
 }
 
-// owns reports whether an event payload's field names the bot's own cursor
+// owns reports whether an event payload's field names the bot's own cursor. Until a
+// joiner's slot binds, Player.Entity names another's cursor, which it does not drive.
 func (m *mind) owns(payload any, field string) bool {
 	own := m.ctx.World.Resources.Player.Entity
 	v, ok := std.ExtractIntField(payload, field)
-	return ok && own != 0 && v == int64(own)
+	return ok && own != 0 && v == int64(own) && m.ctx.World.SimulatesLocally(own)
 }
 
 // intentChoice is a compiled Intent payload: one keymap action or a list drawn

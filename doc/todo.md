@@ -18,23 +18,15 @@ define first; doing Android first would define it without a second consumer.
 
 ### Add bots that play as participants
 
-- Priority: P1, leading the push; its P0 phases have landed
-- Affected files: `internal/network`, `internal/app`, `internal/render/renderer`,
-  `tool/vif-allocator`, `internal/bot`
-- Plan: [Bots](todo-bots.md)
+- Priority: P1, leading the push
+- Affected files: `internal/bot`, `internal/app`, `internal/network`,
+  `tool/vif-allocator`
+- Guide: [Bots](bots.md)
 
-A bot is its own headless instance whose FSM graph drives its router with intents,
-keys and mouse alike, bound by the same barrier, admission and eviction as a person.
-Bots belong to the instance that started them: a host's stay as participants, a
-guest's leave with it, and every composition of people and bots joins through the
-ordinary handshake. Phases 1–3, hexadecimal cursor slots and the merged `default`
-policy landed. Holder ownership, slot removal, explicit bot run modes and bounded
-replay landed in the next pass, and a guest's bots now join and play through it
-(phase 6, R1–R4). People behind relays (R5) precede fleet work (4), richer
-decision logic (5), and learning.
-Whether seats should inherit their holder's terminal geometry remains open.
-The overlapping host-and-bot departure defect is covered by the holder-subtree
-handoff rule and socket regression in troubleshooting §13.
+Bots play beside a person, in place of one, or alone on a dedicated host, and a
+guest's bots join and play through its own link. What remains is under
+[Bots](#bots); people behind relays are
+[Delegate convergence to relays](#delegate-convergence-to-relays).
 
 ### Extract the renderer-neutral Android host model
 
@@ -49,6 +41,176 @@ adapters, add a library entry point, and keep lifecycle, simulation, networking,
 and resource providers common. Touch input maps onto the semantic input bots
 already drive, and [Multi-platform](multi-platform.md) lists the terminal-shaped
 values that remain.
+
+## Bots
+
+### Open fleet sessions to bots
+
+- Priority: P2
+- Affected files: the Hugo site's `vif-fleet.js`, `internal/network/endpoint.go`,
+  `internal/mode/config_form.go`, `tool/vif-allocator`, `deploy/guest/vif-allocator.env`,
+  `deploy/k3s/10-quota.yaml`
+- Guide: [Session fleet plan](kubernetes-fleet.md) §6
+
+The allocator takes `bots`, but `bots_max` stays 0 until these hold:
+- The site's `vif-fleet.js` sends `bots` and reads `bots_max`; the native client
+  (`network.RequestSession`, the menu's request form) sends `bots`.
+- The quota's 1000m of CPU fills at three sessions of three bots: raise it, or
+  accept fewer sessions. A create the quota cannot hold waits 75 s for a pod that
+  never schedules and answers 504 `session_not_ready`; sum the live sessions'
+  requests against the quota and refuse it as `fleet_full` instead.
+- The CPU limit stays 500m while each bot adds 64m of request, and six bots with
+  one person use about 0.5 core: grow the limit with bots (the `LimitRange` allows
+  1 CPU), or bound `bots_max` by CPU as well as memory.
+- td: refuse bots on ceiling-sized maps by map cells, or leave td off the offered
+  scenarios, until the map-limit trim below lands.
+- K=3 measured on the node with `./script/test.sh load` or the deploy guide,
+  replacing the sandbox figures (2 sessions of 2 bots for 30 s: about 190–200 ms
+  of CPU a second and 90–95 MiB peak per host, no evictions).
+- Digest mismatches watched as networked bot load grows; that run counted 0–5 per
+  host.
+
+### Beat the default graph
+
+- Priority: P2
+- Affected files: `internal/bot`, `internal/asset/bot/default.toml`,
+  `internal/system/nugget.go`, `script/test.sh`
+- Guide: [Bots](bots.md#fitness-and-comparing-graphs)
+
+Exit: a graph beats `default` under `./script/test.sh botfitness` over seeds 1–8
+on the embedded scenario, td and kraken. Baseline, `default` over 4 seeds of 60 s:
+embedded 3493, td 1479, kraken −4800 (kraken has no text, gold or nuggets, so
+`default` is weighed only on its defeats there). Candidates:
+- a `Best` utility guard, added once a graph uses it: a weight per target class,
+  utility `weight*1024/(1+isqrt(dist²))` in integers, ties to the lower class;
+- threat evasion in `default` (`HasTarget threat`, `PointAt away`);
+- kill engagement on kraken;
+- a motor layer: a goal the view does not show reached by clicks along a
+  `pkg/navigation` route rather than the clamp.
+
+Decide whether an improved graph replaces `default`, keeping a pinned copy as the
+baseline, or ships beside it. A collected nugget weighs nothing: nothing pushes
+`EventNuggetCollected`; push it in `NuggetSystem.collectNugget` and drop the
+duplicate `statCollected` increment there. Threats are unweighted; weighting them
+by `profile.Contact` needs a `CombatEntityType`-to-`SpeciesType` table.
+
+### Let a bot graph use operators and marks
+
+- Priority: P3
+- Affected files: `internal/input/actionnames.go`, `internal/bot/mind.go`
+
+`input.IntentFor` refuses operators, prefixes, marker jumps and macro keys, so a
+graph cannot delete a word or jump to a coloured glyph. Options: a `motion` operand
+on `Intent` that applies an operator to a named motion, which keeps graphs
+semantic; or a `Keys` action parsed through the keymap, which reaches everything a
+keymap binds but depends on the bindings. A right press carries no position, so
+special fire stays `Intent fire_special` where the cursor stands.
+
+### Limit the commands a bot graph may issue
+
+- Priority: P3
+- Affected files: `internal/bot/mind.go`
+
+`Command` accepts any ex-command, `:bot add`, `:host`, `:q` and `:d cpu` included,
+so a graph from elsewhere can seat bots, open a listener or profile its holder's
+process. Decide an allowlist (the commands play needs, such as `:n`) or a refusal
+set (session, bot, journal and diagnostic commands), checked at load as the
+world-writing actions are.
+
+### Expose a bot difficulty knob
+
+- Priority: P3
+- Affected files: `internal/app/seat.go`, `cmd/vif`, `internal/mode/config_form.go`,
+  `tool/vif-allocator`
+
+`actions_per_second` is the only knob, and nothing caps it. Options: a rate suffix
+such as `-bot 2:default@6` that `BotSpecs` parses, so `-bots`, `:bot add` and the
+menu share it; graph variants per level; or a ceiling the driver clamps every
+graph to. The fleet request carries it once the site exposes one.
+
+### Decide a seat's geometry
+
+- Priority: P3
+- Affected files: `internal/app/seat.go`, `internal/app/config.go`
+
+Seats take 120x40, so a `-serve` with no `-size` whose first joiner is its own bot
+serves that map. A person's seats could take the holder's terminal instead, with
+120x40 left for a `-serve` with defaulted geometry: perception parity with the
+person beside them, against bot behaviour that reproduces across terminals.
+
+### Journal a seat's play
+
+- Priority: P3
+- Affected files: `internal/app/seat.go`, `internal/vlog`
+
+Under `-j` only the front instance is journaled, since the vlog journal is one per
+process, so a seat's play cannot be replayed. Option: named journal sessions, one
+per seat.
+
+### Judge a relayed bot's lateness
+
+- Priority: P3
+- Affected files: `internal/converge/authority.go`, `internal/app/converge.go`
+
+A guest's bot is never evicted as slow on its own: it has no link to the
+authority, so `LinkMetric` reads zero throughput for it, and `DropParticipant` is
+a disconnect, which would take its holder. Options: charge its lateness to the
+holder's link; evict the bot alone through a dismissal crossing; or keep this
+and document it.
+
+### Seat a host's bots without a listener
+
+- Priority: P3
+- Affected files: `internal/app/seat.go`, `internal/app/relay.go`, `internal/network`
+
+A host's bots dial a loopback listener, which a run in no session opens first.
+Serving them on the in-process stream a guest's bots use would remove that
+listener and the loopback exemption from the join budget (which also exempts local
+people), let `:host` add a listener to a session opened only for bots instead of
+refusing, and let a browser seat bots solo.
+
+### Let a watched holder pause with only its own bots
+
+- Priority: P3
+- Affected files: `internal/app/play.go`, `internal/app/seat.go`
+
+A watched bot with seats is in a session, so the viewer forces it unpaused and
+ignores pause keys, and a driven holder's seats get no hold. A person's run pauses
+with only its own bots; let the viewer pause while `SessionState.SeatsOnly` holds,
+and give a driven holder's seats the same hold.
+
+### Name participants beyond their slot
+
+- Priority: P3
+- Affected files: `internal/network/session.go`, `internal/snapshot`,
+  `internal/render/renderer`
+
+A hexadecimal slot identifies a cursor for one session, and participants have no
+names. A label needs a roster and join-reply field, a capture schema change to
+reach late joiners, and a trust decision, since each peer would choose its own.
+
+### Train bot graphs offline
+
+- Priority: P3
+- Affected files: `internal/bot`, `pkg/genetic`
+- Prerequisite: [Beat the default graph](#beat-the-default-graph)'s harness
+
+First decide how a graph declares bounded tunable numbers: a `[bot.params]` table,
+or bounded macro parameters shared with the editor's macro metadata. A genome is
+those numbers as a bounded vector; `pkg/genetic`'s `Engine` evaluates whole
+headless runs over a matrix of scenarios and seeds, and `pkg/genetic/fitness`
+scalarises the result. A solo run depends only on its seed, so evaluation needs no
+mesh. Decide where trained values ship. Bot genomes never enter the in-game
+genetic registry, which captures carry.
+
+### Adapt bots to the session's players
+
+- Priority: P3
+- Prerequisite: [Train bot graphs offline](#train-bot-graphs-offline)
+
+A small model of each other participant from Shared state, keyed by participant
+for the session and dropped at its end, and a bandit over trained genomes. Decide
+what is modelled and whether players see it; nothing is persisted.
 
 ## Authoring
 
@@ -221,6 +383,22 @@ operator's.
 Diagnoses and what each item follows from are in
 [Troubleshooting](troubleshooting.md).
 
+### End the tick at a reset a scenario requests
+
+- Priority: P0
+- Affected files: `internal/engine/scheduler.go`, `internal/system/meta.go`,
+  `internal/journal/replay.go`
+
+A reset a scenario requests (a defeat's `MonitorGlobalReset`, td's `MonReset`) is
+dispatched in `processTick`'s post-FSM settle: `MetaSystem` clears the world and
+opens the next run, then the same tick runs every system on the cleared world and
+counts itself as the new run's tick 1, before `executeReset` resets the FSM. The
+first tick the new run plays whole is 2, where `:n`'s is 1. The journal does not record such a reset, so a
+replay waits for it (`awaitRun`) and reads each tick back instead of counting.
+Ending the tick at the reset, as `:n` does, removes both; the skipped remainder
+carries the wire flush and the tick-0 digest and anchor, and every participant must
+end that tick alike.
+
 ### Trim what remains of a tick and a checkpoint at the map limit
 
 - Priority: P2
@@ -233,32 +411,38 @@ checkpoint scans the whole grid for its occupied cells, most of its 10 ms. Each 
 stay exact; per-store write counters stay rejected, since a cache compares values it
 owns.
 
+A td participant costs about 300 MB, of which the 32 MB spatial grid is a minority;
+whole-world captures and the staging world dominate. In a sandbox a `-serve` host
+with one seat held 672 MB resident and 1255 MB with two more, its ticks slipped from
+two seats on, and networked joiners stalled ("no authoritative world inside the
+convergence floor") or lost their links within seconds.
+
 ### Delegate convergence to relays
 
-- Priority: P1; bots phase 6 (R5), ahead of fleet (4) and decision logic (5)
+- Priority: P1
 - Affected files: `internal/app/relay.go`, `internal/converge/relay.go`,
   `internal/converge/authority.go`, `internal/system/network.go`, `internal/network`
-- Plan: [Bots](todo-bots.md) §4
 
-Goal: a player who cannot reach the host joins through another player, and a player
-who relays lends the session uplink and CPU without becoming its host, though it
-stays a succession candidate. The host commits alone and the relay owns its
-subtree's convergence. A guest's bots already work that way (R1–R4): they join on
-its in-process stream and install its proved world, their proofs ride its manifest
-answer, their epochs its one bundle a tick, and the authority takes their traffic
-only on its link, budgeted per participant it carries.
+Goal: a person who cannot reach the host joins through another, who lends the
+session uplink and CPU without becoming its host. The host commits alone and each
+relay owns its subtree's convergence: sixteen players as four relays of three cut
+the host's epoch fan-out from (N−1)² to about 4N copies a tick, while each relay
+pays its leaves' share.
 
-What remains is people behind a relay (R5). A person does not share a relay's fate,
-so the relation needs a parent other than `Holder`, which a relay's departure
-re-parents rather than retires. A relay for people is native and serves the same
-relayed admission on a declared port, with a way through NAT; a browser relays only
-its own bots. A leaf's lead is advertised along its path instead of sampled from
-returned commits.
+A guest's own bots already join and play that way. Already generic:
+`SessionOffer.Relay`, `PendingJoin.Peer`, the `Relayed` proofs a manifest answer
+carries, counting a participant as answered through its relay, and the mesh
+fixtures. Restricted to bots: `relayReport` refuses a joiner with a foreign holder
+or a listener; `assignFor` stamps the relay as the joiner's `Holder`, whose
+departure retires its subtree; `relayLink` serves only an in-process pipe.
 
-Expected: the host's correction work and fan-out follow its direct links: sixteen
-players as four relays of three cut its epoch fan-out from (N−1)² to about 4N copies
-a tick, while each relay pays its leaves' share. Verified by relayed topologies under
-link shapes, asserting hash-only convergence and the authority's per-link fan-out.
+Decide: how a person's parent is represented and where it travels on the wire,
+since a relay's departure re-parents a person rather than retiring it; the relay's
+port and flag; discovery; re-parenting or rejoining when a relay leaves; whether a
+relay stays eligible for succession; a way through NAT. A browser relays only its
+own bots. Verify with relayed topologies under `LinkShape`s, asserting hash-only
+convergence and the authority's per-link fan-out. Optional: advertise a leaf's lead
+along its path instead of sampling it from returned commits, a protocol bump.
 
 ### Decide the authority's fan-out and publication cadence
 
@@ -324,19 +508,6 @@ body now waits behind one 4 KiB chunk ([Troubleshooting](troubleshooting.md) §1
 Carrying it in the correction chunk envelope through the per-peer outbox bounds that
 too. Repairs at 20 kB/s have so far been a few kilobytes.
 
-### Give the silent-peer test room under the bulk floor
-
-- Priority: P2
-- Affected files: `internal/app/correction_test.go`, `internal/network/mesh.go`
-
-`TestASilentPeerIsSentWholeBodies` keeps the guest from ticking, so nothing drains the
-loopback link and the host's backlog stands at 8188 bytes of the 8192-byte
-`SnapshotBulkQueueBytes` floor on the publish that owes the body; the loopback link
-measures no throughput, so the floor is the whole limit. Any growth of a cursor's
-snapshot entry trips `bulkHeld` and the body is withheld as if the link were
-saturated. Either have the loopback link report a throughput, so the limit scales as
-it does on a real link, or drain the guest without answering the index.
-
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
@@ -372,12 +543,15 @@ guests to rejoin.
 ### Let an authority drop a participant
 
 - Priority: P2
-- Affected files: `internal/network`, `internal/app`, `internal/mode/commands.go`
+- Affected files: `internal/network`, `internal/app`, `internal/mode/commands.go`,
+  `tool/vif-allocator`
 
-`:drop <participant>` closes that participant's link with a reason its client prints,
-and the dropped instance plays on alone as after `:leave`. A dedicated host has no
-console, so a fleet drop is a later operator route on the allocator. Keeping a dropped
-player out is a separate decision: the session name is a routing key, not an identity.
+`:player drop <slot>` lets a host drop a player with its bots, or one bot, and the
+dropped person starts a new local game. What remains: a reason the dropped client
+prints, playing on alone as after `:leave` instead of starting over, and an
+operator route on the allocator, since a dedicated host has no console. Keeping a
+dropped player out is a separate decision: the session name is a routing key, not
+an identity.
 
 ### Merge two sessions
 

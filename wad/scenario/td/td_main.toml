@@ -16,7 +16,6 @@ on_enter = [
     { action = "EmitEvent", event = "EventDrainResume" },
     { action = "EmitEvent", event = "EventGrayoutEnd" },
     { action = "EmitEvent", event = "EventCycleDamageMultiplierReset" },
-    { action = "ResetKillVars" },
     { action = "EmitEvent", event = "EventWallDespawnAll" },
 
     # Fixed map
@@ -113,7 +112,7 @@ on_enter = [
 [states.TdCalm]
 parent = "Root"
 transitions = [
-    { trigger = "Tick", target = "TdQuasarFuse", guard = "StatusIntCompare", guard_args = { key = "kills.drain", op = "gte", value = 10 } },
+    { trigger = "Tick", target = "TdQuasarFuse", guard = "StatusIntCompare", guard_args = { key = "kills.drain", since = "drain_mark", op = "gte", value = 10 } },
 ]
 
 [states.TdQuasarPause]
@@ -128,7 +127,7 @@ on_exit = [
 [states.TdQuasarFuse]
 parent = "TdQuasarPause"
 on_enter = [
-    { action = "ResetStatusInt", payload = { key = "kills.drain" } },
+    { action = "StatusToVar", payload = { key = "kills.drain", name = "drain_mark" } },
     { action = "EmitEvent", event = "EventFuseQuasarRequest" },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "QUASAR FORMING" } },
 ]

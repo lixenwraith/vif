@@ -28,15 +28,18 @@ type Host[T any] struct {
 	SetSystem func(ctx T, name string, enabled bool)
 
 	// Status keys are an open runtime set, resolved per evaluation
-	StatusInt    func(ctx T, key string) (int64, bool)
-	SetStatusInt func(ctx T, key string, v int64)
-	StatusBool   func(ctx T, key string) (bool, bool)
+	StatusInt  func(ctx T, key string) (int64, bool)
+	StatusBool func(ctx T, key string) (bool, bool)
 
 	// Config fields are a closed compile-time set: these return an accessor
 	// resolved once at load, so evaluation is a direct call and an unknown
 	// field fails the load rather than silently comparing against zero
 	ConfigInt  func(field string) (func(ctx T) int64, bool)
 	ConfigBool func(field string) (func(ctx T) bool, bool)
+
+	// Refuse, when set, fails the load of an action whose hook is nil with this
+	// reason, for an embedder whose scripts must not name what does nothing
+	Refuse string
 }
 
 // Register installs the standard actions and guards on m

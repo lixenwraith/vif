@@ -1,28 +1,14 @@
 #!/bin/sh
-# Render one session manifest from the template, for a manual test.
-#
-# The allocator does this itself against the Kubernetes API; this exists so a
-# person can create the same objects by hand and get the same result — which is
-# what makes "the allocator is broken" and "the workload is broken" separable
-# questions.
-#
-#   ./render-session.sh 7f3c1a 31707 > /tmp/7f3c1a.yaml
-#   FIRST_JOIN=20m EMPTY_GRACE=20m ./render-session.sh 7f3c1a 31707
-#   SCENARIO=td LOG_LEVEL=debug ./render-session.sh 7f3c1a 31707
-#   BOTS=2 ./render-session.sh 7f3c1a 31707
-#   JOB_UID=<uid> ./render-session.sh 7f3c1a 31707
-#
-# The one session container writes directly to the shared tmpfs-backed local PVC.
-# No allocator log follower or per-session LogWisp sidecar exists. One standalone
-# node service reads the files; the allocator only proxies its SSE bytes.
-#
-# Without JOB_UID the Service owner reference is omitted because the Job does not
-# exist yet. deploy/k3s/session.sh performs the two-stage create and cleanup.
+# Render one session manifest from the template, as the allocator builds it, so a
+# person can create the same objects by hand and tell an allocator fault from a
+# workload one. Without JOB_UID the Service has no owner reference, as the Job does
+# not exist yet; deploy/k3s/session.sh performs the two-stage create and cleanup.
 set -eu
 
 usage() {
 	echo "usage: $0 SESSION_ID GAME_NODEPORT [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
-	echo "       SCENARIO, LOG_LEVEL and BOTS override the defaults from the environment" >&2
+	echo "       SCENARIO, LOG_LEVEL, BOTS, FIRST_JOIN, EMPTY_GRACE and JOB_UID override" >&2
+	echo "       the defaults from the environment" >&2
 	exit 2
 }
 
@@ -58,6 +44,16 @@ esac
 case "$BOTS" in
 	'' | *[!0-9]* ) echo "$0: BOTS must be a number" >&2; exit 2 ;;
 esac
+case "$PLAYERS" in
+	'' | *[!0-9]* ) echo "$0: PLAYERS must be a number" >&2; exit 2 ;;
+esac
+# The allocator's bound: a bot is a roster guest, and six fill the LimitRange
+most=$((PLAYERS - 1))
+[ "$most" -le 6 ] || most=6
+if [ "$BOTS" -gt "$most" ]; then
+	echo "$0: bots must be between 0 and $most for $PLAYERS players" >&2
+	exit 2
+fi
 if [ "$GAME_NODEPORT" -lt 31700 ] || [ "$GAME_NODEPORT" -gt 31709 ]; then
 	echo "$0: GAME_NODEPORT $GAME_NODEPORT is outside the fleet range 31700-31709" >&2
 	exit 2

@@ -13,24 +13,15 @@ const (
 	RoleNone Role = iota // Network disabled
 	RoleHost             // Binds and accepts participants
 	RolePeer             // Dials the coordinator
-	// RoleRelay is a participant that forwards the authority's artifacts to the
-	// participants behind it and retains what it forwards, so it can answer their
-	// selective requests from its own retention rather than leaving them on the
-	// whole-body flood.
-	//
-	// It is a *session* role rather than a transport mode, which is the whole point
-	// of it: nothing about the flood changes, nothing about who authors changes,
-	// and the transport still dials or binds exactly as it did. What changes is
-	// that a relayed participant has somewhere to send a request that can answer
-	// it. The transport therefore treats it as RolePeer; SessionRole below is what
+	// RoleRelay forwards the authority's artifacts to the participants behind it and
+	// answers their selective requests from what it retained. It is a session role,
+	// not a transport mode: the transport dials as RolePeer, and SessionRole is what
 	// the protocol reads.
 	RoleRelay
 )
 
-// SessionRole is the role a participant holds in the protocol, as a function of
-// what it is rather than of how it connected: the instance authoring is the host,
-// a participant with more than one link is relaying for the ones behind it, and
-// everything else is a peer.
+// SessionRole is a participant's protocol role from what it is, not how it
+// connected: the author hosts, one with more than one link relays, others are peers.
 func SessionRole(authoring bool, links int) Role {
 	switch {
 	case authoring:
@@ -57,12 +48,8 @@ type Config struct {
 	MaxPeers int
 
 	// MaxHandshakes bounds the accepted connections whose session handshake may be
-	// in flight at once. The handshake reads from a socket the far end controls, so
-	// running it on the accept goroutine let one dialer that never writes stall
-	// every other join for a whole ConnectTimeout. Running them concurrently moves
-	// that cost off the accept path and this bounds what a flood of such dialers
-	// costs instead: a goroutine and two buffered readers each, and no more than
-	// this many at once.
+	// in flight at once. Handshakes run off the accept path, as each reads a socket
+	// the far end controls; this bounds what a flood of silent dialers costs.
 	MaxHandshakes int
 
 	// Session identity is agreed by the join handshake.
@@ -73,14 +60,9 @@ type Config struct {
 	// serves several sessions. Empty dials an address that serves one.
 	SessionName string
 
-	// Identity is the build half of what this peer is: the wire contract, the
-	// simulation its manifest assembles, and the two layout schemas. A dialer
-	// compares it against the offer before constructing a world from that offer, so
-	// a peer that cannot be in the session finds out before paying for the attempt.
-	// The session half is not here because it does not exist yet; see PeerIdentity.
-	//
-	// A zero Protocol disables the check, which leaves a harness free to dial a
-	// hand-built fixture.
+	// Identity is the build half of what this peer is (wire contract, manifest and
+	// layout schemas), compared against the offer before a world is built from it.
+	// A zero Protocol disables the check, so a harness can dial a hand-built fixture.
 	Identity PeerIdentity
 
 	// Timing
@@ -103,27 +85,21 @@ type Config struct {
 	// loop.
 	AcceptSession func(net.Conn) (PeerID, error)
 
-	// ListenAddress and AcceptPeer are the other half of the accept path: a
-	// participant that is not the coordinator binding a port of its own, so the
-	// session can reach it after a handoff (see reach.go). A guest never runs
-	// AcceptSession — it has no roster to assign from and no world to capture —
-	// and a coordinator never runs AcceptPeer, because everyone already dials it.
-	// Empty leaves a participant a leaf, which is what it was before this existed.
+	// ListenAddress and AcceptPeer let a participant that is not the coordinator
+	// bind a port of its own, so the session can reach it after a handoff (reach.go).
+	// A guest never runs AcceptSession, having no roster to assign from, and a
+	// coordinator never runs AcceptPeer. Empty leaves a participant a leaf.
 	ListenAddress string
 	AcceptPeer    func(net.Conn) (PeerID, error)
 
-	// PreboundListener is a port already bound by the caller, served instead of
-	// ListenAddress or a host's Address. A guest declares the address it bound in its
-	// join reply, sent before its transport exists, and a host binds before it writes
-	// anything a session needs, so the bind comes first and the transport adopts it.
+	// PreboundListener is a port the caller bound, served instead of ListenAddress or
+	// a host's Address: the bound address is declared before the transport exists.
 	PreboundListener net.Listener
 
-	// OnAdmit is called once an accepted stream has become a peer, on the accept
-	// goroutine. It is where a mid-run join sends its start gate and its capture,
-	// and the ordering is the reason it exists rather than being folded into
-	// AcceptSession: a participant has to be receiving this instance's crossings
-	// before the world it is about to install is read, or the epochs produced
-	// between the two are lost to it and to nothing else.
+	// OnAdmit runs once an accepted stream is a peer, on the accept goroutine, and
+	// sends a mid-run join its start gate and capture. It is apart from AcceptSession
+	// because the peer must receive crossings before its world is read, or the epochs
+	// between the two are lost to it.
 	OnAdmit func(PeerID)
 
 	OnError func(error)

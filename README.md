@@ -49,6 +49,9 @@ configuration, audio policy, and reusable simulation libraries.
   rational time controls,
   per-region FSM telemetry, structured logs, status snapshots, and a triggered
   flight recorder for reproduction and diagnosis.
+- Bots that play as participants: a TOML state-machine graph holds a slot and a
+  cursor and acts through the same input router as a person, beside you, in your
+  place, or alone on a dedicated host.
 - Multi-participant play over framed TCP, with deterministic shared simulation,
   owner-authored cursor state, a fixed-delay crossing barrier that relays
   artifacts to participants a producer never linked to, roster changes that land
@@ -122,8 +125,8 @@ settings explain why. Rebind the `config_menu` action in the keymap.
 - `-k <keymap.toml>` applies sparse key overrides.
 - `-config-dir <root>` puts one categorized config tree ahead of user/system
   discovery; `-config-music` and `-config-sounds` select audio overrides.
-- `-check` validates the resolved scenario, keymap, audio, and content without
-  opening the game.
+- `-check` validates the resolved scenario, keymap, audio, content, and every bot
+  graph without opening the game.
 - `-schema` exports the current event/action/guard schema as JSON.
 - `-version` prints the module version and commit a package should report.
 - `-seed <n>` selects the root RNG seed and `-speed <rate>` selects an exact
@@ -132,6 +135,10 @@ settings explain why. Rebind the `config_menu` action in the keymap.
   presents a journal on the terminal with fixed playback controls.
 - `-script <file>` runs a bounded authored TOML input/event schedule headlessly;
   it can be combined with `-host` or `-join` for repeatable two-process runs.
+- `-bot [N[:graph]|graph]` seats N bots playing a graph name or file (bare, one
+  `default`; `0`, none), and `-bots` adds more the same way. You play beside them;
+  `-watch` puts the first in your place on this terminal, and `-headless` runs
+  them with no terminal. See [Bots](doc/bots.md).
 - `-host <bind-address>` hosts a session, `ws://:7777` serving it over WebSocket
   instead of TCP, and `-players <n>` sets the lobby size; `-join <addr>` joins one
   and adopts the host's seed/config/content identity, where `<addr>` is
@@ -199,8 +206,8 @@ not releases: Linux, FreeBSD, browser, headless server and experimental Windows
 archives plus the headless container image; see [doc/packaging.md](doc/packaging.md).
 
 `script/test.sh` runs named setups for verifying behaviour by hand —
-`solo`, `host`/`join`, `serve`, `serve-fleet`, `probe`, and automated checks for the
-session lifetime, the drain, and join-identity refusal. See
+`solo`, `host`/`join`, `serve`, `serve-fleet`, `probe`, bot fitness and load, and
+automated checks for the session lifetime, the drain, and join-identity refusal. See
 [script/README.md](script/README.md).
 
 ## Documentation
@@ -209,7 +216,7 @@ Start with the [engineering documentation index](doc/README.md). It links the
 high-level architecture, medium-level package/runtime diagrams, and detailed
 references for gameplay, ECS/events, input, FSM configuration, rendering,
 audio, navigation/evolution, content/assets, services/networking, and
-development.
+development. Players and operators running bots start with [Bots](doc/bots.md).
 
 ## License
 

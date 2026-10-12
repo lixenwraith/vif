@@ -35,7 +35,7 @@ func BotSpecs(spec string) ([]string, error) {
 		return []string{spec}, nil
 	}
 	if err != nil || n < 0 || n > parameter.MaxPlayers {
-		return nil, fmt.Errorf("%q: use a graph or N[:graph], with N in 0..%d", spec, parameter.MaxPlayers)
+		return nil, fmt.Errorf("%q: use a graph or N[:graph], with N at most %d", spec, parameter.MaxPlayers)
 	}
 	return slices.Repeat([]string{cmp.Or(graph, DefaultBotGraph)}, n), nil
 }
@@ -220,7 +220,7 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 			st := driver.Stats()
 			a.log.Info("app", "msg", "bot left", "graph", s.graph.Name, "participant", s.id.Load(),
 				"finished", finished, "ticks", st.Ticks, "injected", st.Injected, "dropped", st.Dropped,
-				"score", st.Score, "state", st.State, "error", fmt.Sprint(err))
+				"fitness", st.Fitness, "state", st.State, "error", fmt.Sprint(err))
 		}
 		return
 	}

@@ -44,32 +44,12 @@ transitions = [
 
 [states.MonitorGlobalReset]
 parent = "Root"
+# A defeat starts a new game, the same reset :n requests, so every tally restarts
+# with the run. The reset re-initializes systems before it exits this state, so the
+# flash lands on the new game instead of being cleared with the old one.
 on_enter = [
-    # Protected roster cursors survive level setup; MonitorArm restores each owner's resources.
-    # Cancel active sequences
-    { action = "EmitEvent", event = "EventGoldCancel" },
-    { action = "EmitEvent", event = "EventGrayoutEnd" },
-    { action = "EmitEvent", event = "EventDrainResume" },
-    # Cancel species entities
-    { action = "EmitEvent", event = "EventQuasarCancelRequest" },
-    { action = "EmitEvent", event = "EventStormCancelRequest" },
-    { action = "EmitEvent", event = "EventKrakenCancelRequest" },
-    { action = "EmitEvent", event = "EventSwarmCancelRequest" },
-    # Reset tracking
-    { action = "ResetKillVars" },
-    { action = "EmitEvent", event = "EventCycleDamageMultiplierReset" },
-    { action = "SetVar", payload = { name = "level_failed", value = 0 } },
-    # Terminate all gameplay regions
-    { action = "TerminateRegion", region = "quasar" },
-    { action = "TerminateRegion", region = "storm" },
-    { action = "TerminateRegion", region = "kraken" },
-    { action = "TerminateRegion", region = "tower" },
-    { action = "TerminateRegion", region = "main" },
-    # Reset visual cue
-    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 250 } },
-    # Level setup: map = viewport, cropped, clear entities
-    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, clear_entities = true, crop_on_resize = true } },
+    { action = "EmitEvent", event = "EventGameResetRequest" },
 ]
-transitions = [
-    { trigger = "Tick", target = "MonitorArm" },
+on_exit = [
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 250 } },
 ]

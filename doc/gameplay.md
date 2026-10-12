@@ -34,8 +34,9 @@ The world starts with an empty, 16-slot cursor roster. The playable shipped FSM
 configurations request a protected cursor at the map center; `CursorSystem`
 then creates the entity and attaches cursor, ping, energy, heat, shield, boost,
 weapon, and combat components. Each cursor owns an independent copy of that
-state. A roster slot identifies its human, bot, or remote control source, while
-one selected local slot receives terminal input and anchors the camera/UI.
+state. A roster slot records whether this instance or a remote peer drives the
+cursor and, for a bot, which participant holds it. One selected local slot
+receives this instance's input and anchors the camera/UI.
 
 Ordinary startup spawns one human-controlled local cursor. With `-host` and
 `-join`, the startup gate assigns up to `parameter.MaxPlayers` slots and every
@@ -356,15 +357,17 @@ it spawns and arms the cursor before opening `main`.
    in-map cells interact.
 5. The first Kraken kill returns to `main`; another three storm kills open the
    second Kraken encounter. Its defeat starts tower defense. Thus the escalation
-   is **3 storms → 1 Kraken → 3 storms → 1 Kraken → tower**.
+   is **3 storms → 1 Kraken → 3 storms → 1 Kraken → tower**. Each threshold counts
+   kills since the escalation before it; `kills.*` keeps the game's totals.
 6. Destroying the tower's pylons resumes `main`; losing the tower fails the run.
    Encounter transitions preserve uncollected loot. Snakes keep one cursor target
    and its route until it disappears, becomes unreachable, or another route is
    over one-third shorter.
 7. Any participant reaching zero heat **and** zero energy ends the run. The shared
-   monitor consumes owner-authored defeat state, cancels encounters, clears the
-   level and loot, then rearms the roster. Every shipped scenario uses this defeat
-   rule; tower defense also retains its objective-failure and victory conditions.
+   monitor consumes owner-authored defeat state and starts a new game, as `:n`
+   does: the world, the kill tallies and every other statistic start over and the
+   roster is rearmed. Every shipped scenario uses this defeat rule; tower defense
+   also retains its objective-failure and victory conditions.
 
 `wad/scenario/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
 scaffold, and `kraken` is a repeating combat arena. Each entry has a short

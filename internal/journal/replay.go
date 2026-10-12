@@ -191,6 +191,21 @@ func (d *ReplayDriver) tick() {
 	}
 }
 
+// derivedResetTicks bounds how long awaitRun plays an old run on; only a replay
+// that left its run waits this long for a reset it will never derive.
+const derivedResetTicks = 1 << 16
+
+// awaitRun ticks the old run toward run. A scenario's own reset is derived from
+// what the replay already holds, so no record opens the run it starts.
+func (d *ReplayDriver) awaitRun(run uint64) bool {
+	at := d.target.Position()
+	if at.Run >= run || at.Tick >= d.cur.tick+derivedResetTicks {
+		return false
+	}
+	d.tick()
+	return true
+}
+
 func (d *ReplayDriver) streamDone() bool {
 	return d.next >= len(d.s.records) && d.nextCap >= len(d.s.captures)
 }
@@ -208,6 +223,9 @@ func (d *ReplayDriver) dueCapture() bool {
 func (d *ReplayDriver) install() (bool, error) {
 	c := d.s.captures[d.nextCap]
 	at := d.target.Position()
+	if d.awaitRun(c.Run) {
+		return true, nil
+	}
 	if at.Run != c.Run || at.Tick > c.Tick {
 		return false, fmt.Errorf("replay: capture after jseq %d was written at run %d tick %d, the replay is at run %d tick %d",
 			c.JSeq, c.Run, c.Tick, at.Run, at.Tick)
@@ -254,6 +272,9 @@ func (d *ReplayDriver) Step() (bool, error) {
 		if end == nil {
 			return false, nil
 		}
+		if d.awaitRun(end.Run) {
+			return true, nil
+		}
 		at := d.target.Position()
 		if at.Run != end.Run || at.Tick > end.Tick {
 			return false, fmt.Errorf("replay: position %v exceeds recorded end %v", at, *end)
@@ -279,6 +300,9 @@ func (d *ReplayDriver) Step() (bool, error) {
 	d.landed = false
 
 	if k.run != d.cur.run {
+		if d.awaitRun(k.run) {
+			return true, nil
+		}
 		if got := d.target.Position().Run; got != k.run {
 			return false, fmt.Errorf("replay: jseq %d opens run %d, the replay is in run %d",
 				d.s.records[d.next].JSeq, k.run, got)
@@ -288,7 +312,8 @@ func (d *ReplayDriver) Step() (bool, error) {
 
 	if k.tick > d.cur.tick {
 		d.tick()
-		d.cur.tick++
+		// Read back, not counted: a run a reset opened inside a tick starts at tick 2
+		d.cur.tick = d.target.Position().Tick
 		if k.tick > d.cur.tick {
 			return true, nil
 		}

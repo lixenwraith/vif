@@ -24,7 +24,7 @@ func TestABrokenGraphFailsAtLoadNamingTheFault(t *testing.T) {
 		{region + "file = \"more.toml\"\n[states.A]", "names a file"},
 		{region + "enabled_systems = [\"gold\"]\n[states.A]", `"enabled_systems" does nothing in a bot graph`},
 		{region + `[states.A]
-on_enter = [{ action = "SetStatusInt", payload = { key = "typing.correct", value = 1 } }]`, "a bot acts only through intents"},
+on_enter = [{ action = "EmitEvent", event = "EventGoldCancel" }]`, "a bot acts only through intents"},
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "HasTarget", guard_args = { target = "glyph", whithin = 5 } }]`, `unknown guard arg "whithin"`},
 		{region + `[states.A]
@@ -291,32 +291,32 @@ on_enter = [{ action = "Intent", payload = { name = "motion_left" } }]
 	}
 }
 
-// TestEvasionPointsAwayFromTheNearestThreatOntoAnOpenCell: away aims at the nearest
-// hostile thing's mirror through the cursor, and a friendly bullet is no threat.
-func TestEvasionPointsAwayFromTheNearestThreatOntoAnOpenCell(t *testing.T) {
-	w, ctx := soloWorld(40, 10)
-	place(w, core.DomainShared, 35, 10, func(e core.Entity) {
-		w.Components.Bullet.SetComponent(e, component.BulletComponent{Hostile: true})
-	})
-	place(w, core.DomainShared, 42, 10, func(e core.Entity) {
-		w.Components.Bullet.SetComponent(e, component.BulletComponent{})
-	})
-	place(w, core.DomainShared, 45, 10, func(e core.Entity) {
-		w.Components.Wall.SetComponent(e, component.WallComponent{BlockMask: component.WallBlockCursor})
-	})
-	_, rec := botFor(t, ctx, `
+// TestEvasionGainsGroundOnTheNearestThreat: away aims at the nearest hostile thing's
+// mirror through the cursor, a friendly bullet is no threat, and a cursor pinned to
+// the view's edge in line with the threat still moves farther from it.
+func TestEvasionGainsGroundOnTheNearestThreat(t *testing.T) {
+	for _, c := range []struct{ cursorX, threatX int }{{40, 35}, {0, 3}} {
+		w, ctx := soloWorld(c.cursorX, 10)
+		place(w, core.DomainShared, c.threatX, 10, func(e core.Entity) {
+			w.Components.Bullet.SetComponent(e, component.BulletComponent{Hostile: true})
+		})
+		place(w, core.DomainShared, c.cursorX+2, 10, func(e core.Entity) {
+			w.Components.Bullet.SetComponent(e, component.BulletComponent{})
+		})
+		_, rec := botFor(t, ctx, `
 [regions.play]
 initial = "A"
 
 [states.A]
 on_update = [{ action = "PointAt", payload = { target = "threat", away = true } }]
 `, 3)
-	if len(rec.got) == 0 {
-		t.Fatal("did not evade")
-	}
-	for _, intent := range rec.got {
-		if intent.Type != input.IntentMouseMove || intent.X <= 40 || intent.X == 45 && intent.Y == 10 {
-			t.Fatalf("evaded to %+v, want a move right of the cursor off the wall at (45, 10)", intent)
+		if len(rec.got) == 0 {
+			t.Fatalf("cursor at %d did not evade a threat at %d", c.cursorX, c.threatX)
+		}
+		for _, intent := range rec.got {
+			if intent.Type != input.IntentMouseMove || dist2(intent.X-c.threatX, intent.Y-10) <= dist2(c.cursorX-c.threatX, 0) {
+				t.Fatalf("cursor at %d evaded a threat at %d to %+v, no farther from it", c.cursorX, c.threatX, intent)
+			}
 		}
 	}
 }
@@ -340,9 +340,9 @@ on_update = [{ action = "Intent", payload = { name = "motion_left" }, guard = "I
 	}
 }
 
-// TestABotScoresOnlyItsOwnEvents: a bot is scored on what its own steps dispatched
-// for its own cursor, a predicted death only once confirmed.
-func TestABotScoresOnlyItsOwnEvents(t *testing.T) {
+// TestABotIsWeighedOnlyOnItsOwnEvents: a bot is weighed on what its own steps dispatched
+// for the cursor it drives, a predicted kill only once confirmed.
+func TestABotIsWeighedOnlyOnItsOwnEvents(t *testing.T) {
 	w, ctx := soloWorld(0, 0)
 	d, rec := botFor(t, ctx, "[regions.play]\ninitial = \"A\"\n[states.A]\n", 0)
 	own := w.Resources.Player.Entity
@@ -355,13 +355,29 @@ func TestABotScoresOnlyItsOwnEvents(t *testing.T) {
 		{Type: event.EventCursorDefeatState, Payload: &event.CursorDefeatStatePayload{Entity: own}},
 		{Type: event.EventCursorDefeatState, Payload: &event.CursorDefeatStatePayload{Entity: own, Defeated: true}},
 	}
-	for range rec.dispatch {
-		if _, err := d.Step(); err != nil {
-			t.Fatal(err)
+	step := func() {
+		for range rec.dispatch {
+			if _, err := d.Step(); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
+	step()
 	rec.tap(event.GameEvent{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: own}})
-	if got, want := d.Stats().Score, int64(1+5-100); got != want {
-		t.Fatalf("scored %d, want %d", got, want)
+	// A joiner's Player.Entity names another participant's cursor until its slot binds.
+	w.Components.Cursor.SetComponent(own, component.CursorComponent{Control: component.ControlRemote})
+	rec.dispatch = []event.GameEvent{{Type: event.EventBoostReward, Payload: &event.BoostRewardPayload{Entity: own}}}
+	step()
+	weight := func(t event.EventType) (sum int64) {
+		for _, row := range fitness {
+			if row.event == t {
+				sum += row.weight
+			}
+		}
+		return sum
+	}
+	want := weight(event.EventBoostReward) + weight(event.EventSpeciesKillConfirmed) + weight(event.EventCursorDefeatState)
+	if got := d.Stats().Fitness; got != want {
+		t.Fatalf("fitness %d, want %d", got, want)
 	}
 }

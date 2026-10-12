@@ -1,6 +1,10 @@
 package std
 
-import "github.com/lixenwraith/vif/internal/fsm"
+import (
+	"errors"
+
+	"github.com/lixenwraith/vif/internal/fsm"
+)
 
 // === Variable Actions ===
 
@@ -206,8 +210,11 @@ func applyRegionSystemConfig[T any](ctx T, m *fsm.Machine[T], h Host[T], regionN
 // === System Control Actions ===
 
 func registerSystemActions[T any](m *fsm.Machine[T], h Host[T]) {
-	m.RegisterActionArgs("EnableSystem", decodePayload[T, SystemControlArgs])
-	m.RegisterActionArgs("DisableSystem", decodePayload[T, SystemControlArgs])
+	unhooked := h.SetSystem == nil
+	hooked(m, h, unhooked, "EnableSystem", decodePayload[T, SystemControlArgs])
+	hooked(m, h, unhooked, "DisableSystem", decodePayload[T, SystemControlArgs])
+	hooked(m, h, unhooked, "ApplyGlobalSystemConfig", nil)
+	hooked(m, h, unhooked, "ApplyRegionSystemConfigs", nil)
 
 	m.RegisterAction("EnableSystem", func(ctx T, args any) {
 		sysArgs, ok := args.(*SystemControlArgs)
@@ -256,8 +263,21 @@ func registerSystemActions[T any](m *fsm.Machine[T], h Host[T]) {
 
 // === Core Actions ===
 
+// hooked registers name's compiler, or one refusing the load when the action's hook
+// is missing and the host refuses inert actions
+func hooked[T any](m *fsm.Machine[T], h Host[T], unhooked bool, name string, compile fsm.ArgCompiler[T]) {
+	if unhooked && h.Refuse != "" {
+		compile = func(*fsm.Machine[T], fsm.ActionConfig, fsm.StateResolver) (any, error) {
+			return nil, errors.New(h.Refuse)
+		}
+	}
+	if compile != nil {
+		m.RegisterActionArgs(name, compile)
+	}
+}
+
 func registerCoreActions[T any](m *fsm.Machine[T], h Host[T]) {
-	m.RegisterActionArgs("EmitEvent", compileEmitEvent[T])
+	hooked(m, h, h.Emit == nil, "EmitEvent", compileEmitEvent[T])
 	m.RegisterAction("EmitEvent", func(ctx T, args any) {
 		emitArgs, ok := args.(*EmitEventArgs)
 		if !ok || h.Emit == nil {
@@ -274,24 +294,17 @@ func registerCoreActions[T any](m *fsm.Machine[T], h Host[T]) {
 // === Status Actions ===
 
 func registerStatusActions[T any](m *fsm.Machine[T], h Host[T]) {
-	m.RegisterActionArgs("SetStatusInt", decodePayload[T, StatusIntArgs])
-	m.RegisterActionArgs("ResetStatusInt", decodePayload[T, StatusIntArgs])
+	m.RegisterActionArgs("StatusToVar", decodePayload[T, StatusToVarArgs])
 	m.RegisterActionArgs("ConfigToVar", compileConfigToVar(h))
 
-	m.RegisterAction("SetStatusInt", func(ctx T, args any) {
-		sa, ok := args.(*StatusIntArgs)
-		if !ok || sa.Key == "" || h.SetStatusInt == nil {
+	m.RegisterAction("StatusToVar", func(ctx T, args any) {
+		sa, ok := args.(*StatusToVarArgs)
+		if !ok || sa.Key == "" || sa.Name == "" || h.StatusInt == nil {
 			return
 		}
-		h.SetStatusInt(ctx, sa.Key, sa.Value)
-	})
-
-	m.RegisterAction("ResetStatusInt", func(ctx T, args any) {
-		sa, ok := args.(*StatusIntArgs)
-		if !ok || sa.Key == "" || h.SetStatusInt == nil {
-			return
+		if v, ok := h.StatusInt(ctx, sa.Key); ok {
+			m.SetVar(sa.Name, v)
 		}
-		h.SetStatusInt(ctx, sa.Key, 0)
 	})
 
 	m.RegisterAction("ConfigToVar", func(ctx T, args any) {

@@ -1,7 +1,7 @@
 # vif Development Timeline
 
 High-level progress collapsed from commit messages and `doc/`, April 2025 through
-2026-10-11. The project was vi-fighter until it was renamed vif in September 2026.
+2026-10-12. The project was vi-fighter until it was renamed vif in September 2026.
 Each line folds many commits, so dates within a section are approximate.
 
 ## 2025-04 to 2025-11 — Prototype and core game
@@ -313,6 +313,14 @@ Each line folds many commits, so dates within a section are approximate.
 - `vif -bot` and `:bot` seated bots in the run's session.
 - Named actions and ex commands resolved in one input layer.
 - A live configuration overlay added bot and multiplayer actions.
+- Cursors were marked by session slot, and roam and patrol merged into `default`.
+- Bots carried their holder's identity, and `:player drop` removed a player with its bots.
+- A guest's bots joined and played through the guest's own link.
+- Bot graphs reacted to their own events, saw and evaded threats, landed the pointer
+  on open cells, and were weighed by fitness.
+- `-check` validated bot graphs.
+- Fleet sessions could request bots, closed by default, and a session Job ended
+  after one hour.
 
 ## 2026-10 — Kraken, replay navigation, and refresh
 

@@ -1118,6 +1118,7 @@ func TestASilentPeerIsSentWholeBodies(t *testing.T) {
 
 	// The guest stops answering: its ticks still run, but nothing drains or replies
 	// to the index. Publishing is driven, so each round is one manifest.
+	before := statOf(host, "snapshot.correction_bytes_sent")
 	for range parameter.SnapshotManifestSilenceCorrections + 1 {
 		if err := host.corrections.Publish(); err != nil {
 			t.Fatalf("publish: %v", err)
@@ -1133,9 +1134,9 @@ func TestASilentPeerIsSentWholeBodies(t *testing.T) {
 		t.Fatalf("a peer that answered nothing recorded %d unanswered manifests", peer.Silence)
 	}
 
-	// The next publish carries a whole body again, and the guest — still ticking —
-	// takes it through the ordinary correction path.
-	before := statOf(host, "snapshot.correction_bytes_sent")
+	// A round that finds the peer silent carries a whole body again, while the link
+	// may still be delivering it, and the guest — still ticking — takes it through
+	// the ordinary correction path.
 	if err := host.corrections.Publish(); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
