@@ -1411,7 +1411,7 @@ func equalGenotype(a, b *component.GenotypeComponent) bool {
 			}
 		}
 		return true
-	}() && a.EvalID == b.EvalID && a.Species == b.Species && a.SubType == b.SubType && a.SpawnTime == b.SpawnTime && a.TicksAlive == b.TicksAlive && math.Float64bits(float64(a.CumulativeDistSq)) == math.Float64bits(float64(b.CumulativeDistSq)) && a.DistSamples == b.DistSamples && a.TimeInShield == b.TimeInShield
+	}() && a.EvalID == b.EvalID && a.Species == b.Species && a.SubType == b.SubType && math.Float64bits(float64(a.CumulativeDistSq)) == math.Float64bits(float64(b.CumulativeDistSq)) && a.DistSamples == b.DistSamples
 }
 
 func equalLightning(a, b *component.LightningComponent) bool {
@@ -1419,7 +1419,7 @@ func equalLightning(a, b *component.LightningComponent) bool {
 }
 
 func equalMissile(a, b *component.MissileComponent) bool {
-	return a.Owner == b.Owner && a.Hostile == b.Hostile && a.Damage == b.Damage && a.TargetEntity == b.TargetEntity && a.HitEntity == b.HitEntity && a.Lifetime == b.Lifetime && a.LastTrailEmit == b.LastTrailEmit && func() bool {
+	return a.Owner == b.Owner && a.Hostile == b.Hostile && a.Damage == b.Damage && a.TargetEntity == b.TargetEntity && a.HitEntity == b.HitEntity && a.LastTrailEmit == b.LastTrailEmit && func() bool {
 		for i0 := range a.Trail {
 			if !(math.Float64bits(float64(a.Trail[i0].X)) == math.Float64bits(float64(b.Trail[i0].X)) && math.Float64bits(float64(a.Trail[i0].Y)) == math.Float64bits(float64(b.Trail[i0].Y)) && a.Trail[i0].Age == b.Trail[i0].Age) {
 				return false
@@ -1430,7 +1430,7 @@ func equalMissile(a, b *component.MissileComponent) bool {
 }
 
 func equalMount(a, b *component.MountComponent) bool {
-	return a.Weapon == b.Weapon && a.Trigger == b.Trigger && a.Armed == b.Armed && a.Interval == b.Interval && a.Cooldown == b.Cooldown && math.Float64bits(float64(a.Range)) == math.Float64bits(float64(b.Range)) && math.Float64bits(float64(a.Muzzle)) == math.Float64bits(float64(b.Muzzle)) && a.AimX == b.AimX && a.AimY == b.AimY && a.HasAim == b.HasAim && a.Lane == b.Lane && a.Width == b.Width
+	return a.Weapon == b.Weapon && a.Trigger == b.Trigger && a.Armed == b.Armed && a.Interval == b.Interval && math.Float64bits(float64(a.Range)) == math.Float64bits(float64(b.Range)) && math.Float64bits(float64(a.Muzzle)) == math.Float64bits(float64(b.Muzzle)) && a.AimX == b.AimX && a.AimY == b.AimY && a.HasAim == b.HasAim && a.Lane == b.Lane && a.Width == b.Width
 }
 
 func equalRay(a, b *component.RayComponent) bool {
@@ -1438,11 +1438,11 @@ func equalRay(a, b *component.RayComponent) bool {
 }
 
 func equalSpirit(a, b *component.SpiritComponent) bool {
-	return math.Float64bits(float64(a.StartX)) == math.Float64bits(float64(b.StartX)) && math.Float64bits(float64(a.StartY)) == math.Float64bits(float64(b.StartY)) && math.Float64bits(float64(a.TargetX)) == math.Float64bits(float64(b.TargetX)) && math.Float64bits(float64(a.TargetY)) == math.Float64bits(float64(b.TargetY)) && math.Float64bits(float64(a.Progress)) == math.Float64bits(float64(b.Progress)) && a.Pattern == b.Pattern && math.Float64bits(float64(a.Amplitude)) == math.Float64bits(float64(b.Amplitude)) && math.Float64bits(float64(a.Frequency)) == math.Float64bits(float64(b.Frequency)) && math.Float64bits(float64(a.Speed)) == math.Float64bits(float64(b.Speed)) && math.Float64bits(float64(a.Spin)) == math.Float64bits(float64(b.Spin)) && a.Rune == b.Rune && a.BaseColor == b.BaseColor && a.BlinkColor == b.BlinkColor
+	return math.Float64bits(float64(a.StartX)) == math.Float64bits(float64(b.StartX)) && math.Float64bits(float64(a.StartY)) == math.Float64bits(float64(b.StartY)) && math.Float64bits(float64(a.TargetX)) == math.Float64bits(float64(b.TargetX)) && math.Float64bits(float64(a.TargetY)) == math.Float64bits(float64(b.TargetY)) && a.Pattern == b.Pattern && math.Float64bits(float64(a.Amplitude)) == math.Float64bits(float64(b.Amplitude)) && math.Float64bits(float64(a.Frequency)) == math.Float64bits(float64(b.Frequency)) && math.Float64bits(float64(a.Spin)) == math.Float64bits(float64(b.Spin)) && a.Rune == b.Rune && a.BaseColor == b.BaseColor && a.BlinkColor == b.BlinkColor
 }
 
 func equalMaterialize(a, b *component.MaterializeComponent) bool {
-	return a.TargetX == b.TargetX && a.TargetY == b.TargetY && a.AreaWidth == b.AreaWidth && a.AreaHeight == b.AreaHeight && math.Float64bits(float64(a.Progress)) == math.Float64bits(float64(b.Progress)) && a.BeamWidth == b.BeamWidth && a.Type == b.Type
+	return *a == *b
 }
 
 func equalTarget(a, b *component.TargetComponent) bool {

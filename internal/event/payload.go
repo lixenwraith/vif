@@ -614,14 +614,6 @@ type DeathRequestPayload struct {
 	Behavior    component.ParticleBehavior `toml:"behavior"`
 }
 
-// --- Timer ---
-
-// TimerStartPayload configuration for a new lifecycle timer
-type TimerStartPayload struct {
-	Entity   core.Entity   `toml:"entity"`
-	Duration time.Duration `toml:"duration"`
-}
-
 // --- Composite ---
 
 // CompositeMemberDestroyedPayload signals a composite member was typed

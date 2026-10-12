@@ -742,7 +742,6 @@ func (s *DrainSystem) despawnExcessDrains(count int) {
 // materializeDrainAt creates a drain entity at the specified position
 func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	config := s.world.Resources.Config
-	now := s.world.Resources.Time.GameTime
 
 	// Clamp to bounds
 	spawnX = max(min(spawnX, config.MapWidth-1), 0)
@@ -768,10 +767,9 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	// Initialize Kinetic with centered spawn position, zero velocity
 	preciseX, preciseY := vmath.Point{X: spawnX, Y: spawnY}.CenterF()
 	drainComp := component.DrainComponent{
-		LastDrainTime: now,
-		SpawnOrder:    s.nextSpawnOrder,
-		LastIntX:      spawnX,
-		LastIntY:      spawnY,
+		SpawnOrder: s.nextSpawnOrder,
+		LastIntX:   spawnX,
+		LastIntY:   spawnY,
 	}
 	kinetic := physics.Kinetic{
 		PreciseX: preciseX,
@@ -795,6 +793,8 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	s.world.Positions.SetPosition(entity, pos)
 	s.world.Components.Drain.SetComponent(entity, drainComp)
 	s.world.Components.Kinetic.SetComponent(entity, kineticComp)
+	// A fresh drain waits one interval before its first energy drain
+	armTimer(s.world, entity, component.TimerCooldown, parameter.DrainEnergyDrainInterval)
 
 	// Navigation component with defaults (GA will override via event)
 	navComp := component.NavigationComponent{
@@ -861,8 +861,6 @@ func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 // handleDrainInteractions processes all drain interactions per tick.
 // Caller MUST have populated drainCache via cacheDrainData this tick.
 func (s *DrainSystem) handleDrainInteractions() {
-	now := s.world.Resources.Time.GameTime
-
 	// Integration moved drains after cacheDrainData, so the snapshot is stale here
 	s.refreshCachePositions()
 
@@ -875,13 +873,12 @@ func (s *DrainSystem) handleDrainInteractions() {
 		if entry.dying {
 			continue
 		}
-		drain, ok := s.world.Components.Drain.GetPtr(entry.entity)
-		if !ok {
+		if !s.world.Components.Drain.HasEntity(entry.entity) {
 			continue
 		}
 
 		overlaps := CheckCursorOverlaps(s.world, entry.entity)
-		drainReady := now.Sub(drain.LastDrainTime) >= parameter.DrainEnergyDrainInterval
+		drainReady := !timerRunning(s.world, entry.entity, component.TimerCooldown)
 		drainedShield := false
 		destroyDrain := false
 
@@ -910,7 +907,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 			}
 		}
 		if drainedShield {
-			drain.LastDrainTime = now
+			armTimer(s.world, entry.entity, component.TimerCooldown, parameter.DrainEnergyDrainInterval)
 		}
 		if destroyDrain {
 			entry.dying = true

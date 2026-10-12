@@ -26,7 +26,8 @@ const (
 
 // SpiritComponent represents a converging visual effect entity
 // Positions presence is at StartX/StartY to avoid target saturation
-// Actual render position is calculated via Lerp from Start to Target
+// Actual render position is calculated via Lerp from Start to Target at the
+// progress of its lifetime timer
 type SpiritComponent struct {
 	// Starting precise position in cells (where the spirit spawned)
 	StartX, StartY float64
@@ -34,15 +35,9 @@ type SpiritComponent struct {
 	// Target precise position in cells (convergence point)
 	TargetX, TargetY float64
 
-	// Animation progress: 0.0 = start, 1.0 = complete
-	Progress float64
-
 	Pattern   SpiritPattern
 	Amplitude float64 // Wave/bounce magnitude in cells
 	Frequency float64 // Oscillation rate
-
-	// Progress increment per tick (distance-independent)
-	Speed float64
 
 	// Total rotation angle in radians
 	// Positive = CW, Negative = CCW

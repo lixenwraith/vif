@@ -289,11 +289,10 @@ func (s *GeneticSystem) handleSpeciesCreated(entity core.Entity, speciesType com
 	s.buffers.Observe(3, len(s.tracking))
 
 	s.world.Components.Genotype.SetComponent(entity, component.GenotypeComponent{
-		Genes:     genes,
-		EvalID:    evalID,
-		Species:   speciesType,
-		SubType:   subType,
-		SpawnTime: s.world.Resources.Time.GameTime,
+		Genes:   genes,
+		EvalID:  evalID,
+		Species: speciesType,
+		SubType: subType,
 	})
 }
 

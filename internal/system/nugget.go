@@ -140,7 +140,6 @@ func (s *NuggetSystem) Update() {
 	}
 
 	now := s.world.Resources.Time.GameTime
-	dt := s.world.Resources.Time.DeltaTime
 
 	// Validate active nugget still exists
 	if s.activeNuggetEntity != 0 && !s.world.Components.Nugget.HasEntity(s.activeNuggetEntity) {
@@ -168,15 +167,11 @@ func (s *NuggetSystem) Update() {
 	}
 
 	// Emit beacon when interval elapses
-	nugget, ok := s.world.Components.Nugget.GetPtr(s.activeNuggetEntity)
-	if ok {
-		nugget.BeaconRemaining -= dt
-		if nugget.BeaconRemaining <= 0 {
-			if nuggetPos, posOk := s.world.Positions.GetPosition(s.activeNuggetEntity); posOk {
-				s.emitBeacon(nuggetPos.X, nuggetPos.Y)
-			}
-			nugget.BeaconRemaining = parameter.NuggetBeaconInterval
+	if !timerRunning(s.world, s.activeNuggetEntity, component.TimerCooldown) {
+		if nuggetPos, posOk := s.world.Positions.GetPosition(s.activeNuggetEntity); posOk {
+			s.emitBeacon(nuggetPos.X, nuggetPos.Y)
 		}
+		armTimer(s.world, s.activeNuggetEntity, component.TimerCooldown, parameter.NuggetBeaconInterval)
 	}
 
 	s.statActive.Store(true)
@@ -228,7 +223,6 @@ func (s *NuggetSystem) emitBeacon(x, y int) {
 
 // spawnNugget creates a personal nugget at a random valid position.
 func (s *NuggetSystem) spawnNugget() {
-	now := s.world.Resources.Time.GameTime
 	x, y := s.findValidPosition()
 	if x < 0 || y < 0 {
 		s.statSpawnFailures.Add(1)
@@ -243,11 +237,7 @@ func (s *NuggetSystem) spawnNugget() {
 	}
 
 	randomChar := parameter.AlphanumericRunes[s.rng.Intn(len(parameter.AlphanumericRunes))]
-	nugget := component.NuggetComponent{
-		Char:            randomChar,
-		SpawnTime:       now,
-		BeaconRemaining: parameter.NuggetBeaconInterval,
-	}
+	nugget := component.NuggetComponent{Char: randomChar}
 
 	// Use batch for atomic position validation
 	batch := s.world.Positions.BeginBatch()
@@ -271,8 +261,9 @@ func (s *NuggetSystem) spawnNugget() {
 
 	s.statSpawned.Add(1)
 
-	// The beacon announces the spawn
+	// The beacon announces the spawn and repeats each interval
 	s.emitBeacon(x, y)
+	armTimer(s.world, entity, component.TimerCooldown, parameter.NuggetBeaconInterval)
 }
 
 // findValidPosition finds a valid random position for a nugget

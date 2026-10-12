@@ -22,10 +22,8 @@ type GoldSystem struct {
 
 	rng *vmath.FastRand
 
-	// Internal state
-	headerEntity core.Entity // Phantom Head
-	startTime    time.Time
-	timeoutTime  time.Time
+	// Internal state; the sequence's deadline rides its header's timer
+	headerEntity core.Entity               // Phantom Head
 	contrib      [parameter.MaxPlayers]int // Members typed per roster slot, for completion credit
 	active       bool
 	spawnEnabled bool
@@ -68,8 +66,6 @@ func (s *GoldSystem) Init() {
 	s.active = false
 	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.headerEntity = 0
-	s.startTime = time.Time{}
-	s.timeoutTime = time.Time{}
 	s.contrib = [parameter.MaxPlayers]int{}
 	s.spawnEnabled = true
 	s.splashDue = false
@@ -177,28 +173,30 @@ func (s *GoldSystem) Update() {
 		return
 	}
 
-	now := s.world.Resources.Time.GameTime
-
 	s.statActive.Store(s.active)
-	if s.active {
-		remaining := s.timeoutTime.Sub(now)
-		if remaining < 0 {
-			remaining = 0
-		}
-		s.statTimer.Store(int64(remaining))
-		s.stateHeaderEntity.Store(int64(s.headerEntity))
-		if s.splashDue {
-			s.splashDue = false
-			s.requestTimerSplash(remaining)
-		}
-	} else {
+	if !s.active {
 		s.statTimer.Store(0)
 		s.splashDue = false
 		return
 	}
 
-	// Timeout check only - integrity handled via event
-	if now.After(s.timeoutTime) {
+	timer, timed := s.world.Components.Timer.GetPtr(s.headerEntity)
+	var remaining time.Duration
+	if timed {
+		remaining = timer.Slots[component.TimerDeadline].Remaining
+	}
+	s.statTimer.Store(int64(remaining))
+	s.stateHeaderEntity.Store(int64(s.headerEntity))
+	if s.splashDue {
+		s.splashDue = false
+		s.requestTimerSplash(remaining)
+	}
+
+	// Timeout check only - integrity handled via event. A header the composite
+	// destroyed this tick ends through its breach; a live one without its
+	// deadline has no time left
+	if timed && timer.Expired(component.TimerDeadline) ||
+		!timed && s.world.Components.Header.HasEntity(s.headerEntity) {
 		s.handleGoldTimeout()
 	}
 }
@@ -256,8 +254,6 @@ func (s *GoldSystem) handleJumpRequest(cursorEntity core.Entity) {
 
 // spawnGold creates a new gold sequence
 func (s *GoldSystem) spawnGold() bool {
-	now := s.world.Resources.Time.GameTime
-
 	// Generate random 10-character sequence
 	sequence := make([]rune, parameter.GoldSequenceLength)
 	for i := range parameter.GoldSequenceLength {
@@ -352,8 +348,7 @@ func (s *GoldSystem) spawnGold() bool {
 	// 7. Activate internal state
 	s.active = true
 	s.headerEntity = headerEntity
-	s.startTime = now
-	s.timeoutTime = now.Add(parameter.GoldDuration)
+	armTimer(s.world, headerEntity, component.TimerDeadline, parameter.GoldDuration)
 
 	// Emit spawn event
 	s.world.PushEvent(event.EventGoldSpawned, &event.GoldSpawnedPayload{
@@ -511,8 +506,6 @@ func (s *GoldSystem) cancelGold() {
 func (s *GoldSystem) clearState() {
 	s.active = false
 	s.headerEntity = 0
-	s.startTime = time.Time{}
-	s.timeoutTime = time.Time{}
 	s.contrib = [parameter.MaxPlayers]int{}
 	s.statActive.Store(false)
 	s.statTimer.Store(0)
@@ -571,49 +564,34 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 }
 
 // goldSnapshot is this system's D-19 record. The gold sequence is shared state
-// that lives almost entirely outside the component stores: whether a sequence is
-// running, which header it belongs to, when it started and when it expires, and
-// which participant has typed how much of it.
-//
-// The two instants are written as ages relative to the capture's tick rather than
-// as absolute times (§4.2). Since engine.SimTime the two forms agree, but the
-// relative one stays correct if a capture is ever rebased onto a different tick,
-// and it is what the rule asks for.
+// that lives mostly outside the component stores: whether a sequence is
+// running, which header it belongs to, and which participant has typed how much
+// of it. Its deadline is the header's timer, which the stores carry.
 type goldSnapshot struct {
 	Active       bool                      `json:"active"`
 	SpawnEnabled bool                      `json:"spawn_enabled"`
 	HeaderEntity core.Entity               `json:"header_entity"`
-	StartedAgo   time.Duration             `json:"started_ago"`
-	ExpiresIn    time.Duration             `json:"expires_in"`
 	Contrib      [parameter.MaxPlayers]int `json:"contrib"`
 }
 
 // SaveShared carries the gold sequence's private state (D-19).
 func (s *GoldSystem) SaveShared() ([]byte, error) {
-	now := s.world.Resources.Time.GameTime
 	snap := goldSnapshot{
 		Active:       s.active,
 		SpawnEnabled: s.spawnEnabled,
 		HeaderEntity: s.headerEntity,
 		Contrib:      s.contrib,
 	}
-	if !s.startTime.IsZero() {
-		snap.StartedAgo = now.Sub(s.startTime)
-	}
-	if !s.timeoutTime.IsZero() {
-		snap.ExpiresIn = s.timeoutTime.Sub(now)
-	}
 	return json.Marshal(snap)
 }
 
-// LoadShared installs a captured sequence, rebasing both instants onto this
-// world's tick and republishing the cells derived from them.
+// LoadShared installs a captured sequence and republishes the cells derived from
+// it; the store pass has already installed the header and its timer.
 func (s *GoldSystem) LoadShared(data []byte) error {
 	var snap goldSnapshot
 	if err := json.Unmarshal(data, &snap); err != nil {
 		return fmt.Errorf("gold: %w", err)
 	}
-	now := s.world.Resources.Time.GameTime
 	// A header this instance did not spawn arrived with the capture rather than
 	// through spawnGold, so its timer splash was never raised here. The one it
 	// replaces loses its timer: an install can hand that id to another composite,
@@ -626,26 +604,18 @@ func (s *GoldSystem) LoadShared(data []byte) error {
 	s.spawnEnabled = snap.SpawnEnabled
 	s.headerEntity = snap.HeaderEntity
 	s.contrib = snap.Contrib
-	s.startTime = time.Time{}
-	s.timeoutTime = time.Time{}
-	if snap.Active {
-		s.startTime = now.Add(-snap.StartedAgo)
-		s.timeoutTime = now.Add(snap.ExpiresIn)
-	}
 
 	s.statActive.Store(s.active)
 	s.stateHeaderEntity.Store(int64(s.headerEntity))
-	if s.active {
-		s.statTimer.Store(int64(max(snap.ExpiresIn, 0)))
-	} else {
-		s.statTimer.Store(0)
+	s.statTimer.Store(0)
+	if timer, ok := s.world.Components.Timer.GetPtr(s.headerEntity); ok && s.active {
+		s.statTimer.Store(int64(timer.Slots[component.TimerDeadline].Remaining))
 	}
 	return nil
 }
 
 type goldState struct {
 	header                core.Entity
-	startTime, timeout    time.Time
 	contrib               [parameter.MaxPlayers]int
 	active, spawn, splash bool
 }
@@ -653,12 +623,12 @@ type goldState struct {
 // CopyState carries the sequence as it stands, including the timer splash still
 // owed, which LoadShared re-derives as a joiner would.
 func (s *GoldSystem) CopyState() any {
-	return goldState{s.headerEntity, s.startTime, s.timeoutTime, s.contrib, s.active, s.spawnEnabled, s.splashDue}
+	return goldState{s.headerEntity, s.contrib, s.active, s.spawnEnabled, s.splashDue}
 }
 
 func (s *GoldSystem) RestoreState(v any) error {
 	c := v.(goldState)
-	s.headerEntity, s.startTime, s.timeoutTime, s.contrib = c.header, c.startTime, c.timeout, c.contrib
+	s.headerEntity, s.contrib = c.header, c.contrib
 	s.active, s.spawnEnabled, s.splashDue = c.active, c.spawn, c.splash
 	return nil
 }

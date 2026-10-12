@@ -50,8 +50,9 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	// MaskNone keeps OcclusionDim off the background under a TrueColor bolt
 	buf.SetWriteMask(visual.MaskNone)
 
-	lightnings.Each(func(_ core.Entity, l *component.LightningComponent) bool {
-		if l.Remaining <= 0 {
+	timers := r.gameCtx.World.Components.Timer
+	lightnings.Each(func(e core.Entity, l *component.LightningComponent) bool {
+		if timer, ok := timers.GetPtr(e); !ok || timer.Slots[component.TimerLifetime].Remaining <= 0 {
 			return true
 		}
 

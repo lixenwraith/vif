@@ -439,14 +439,17 @@ func (s *DeathSystem) destroyCollected() {
 	if len(s.destroyBuf) == 0 {
 		return
 	}
-	killed := int64(0)
+	// An owner may destroy an entity whose death batch is already queued (a bullet
+	// striking on its expiry tick); destroying it again would count it twice
+	live := s.destroyBuf[:0]
 	for _, entity := range s.destroyBuf {
 		if _, ok := s.world.GetComponentMask(entity); ok {
-			killed++
+			live = append(live, entity)
 		} else {
 			s.statMissingEntities.Add(1)
 		}
 	}
+	s.destroyBuf = live
 	s.world.DestroyEntitiesBatch(s.destroyBuf)
-	s.statKilled.Add(killed)
+	s.statKilled.Add(int64(len(s.destroyBuf)))
 }

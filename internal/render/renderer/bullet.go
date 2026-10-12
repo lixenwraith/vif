@@ -16,6 +16,7 @@ type bulletRenderFunc func(
 	mapX, mapY int,
 	kinetic *component.KineticComponent,
 	bullet *component.BulletComponent,
+	lifetimeRatio float64,
 )
 
 type BulletRenderer struct {
@@ -41,6 +42,7 @@ func (r *BulletRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 	buf.SetWriteMask(visual.MaskTransient)
 
+	timers := r.gameCtx.World.Components.Timer
 	bullets.Each(func(e core.Entity, bullet *component.BulletComponent) bool {
 		pos, ok := r.gameCtx.World.Positions.GetPosition(e)
 		if !ok {
@@ -50,7 +52,11 @@ func (r *BulletRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		if !ok {
 			return true
 		}
-		r.renderBullet(ctx, buf, pos.X, pos.Y, kinetic, bullet)
+		timer, ok := timers.GetPtr(e)
+		if !ok || timer.Expired(component.TimerLifetime) {
+			return true
+		}
+		r.renderBullet(ctx, buf, pos.X, pos.Y, kinetic, bullet, timer.Progress(component.TimerLifetime))
 		return true
 	})
 }
@@ -61,16 +67,12 @@ func (r *BulletRenderer) renderBulletTrueColor(
 	mapX, mapY int,
 	kinetic *component.KineticComponent,
 	bullet *component.BulletComponent,
+	lifetimeRatio float64,
 ) {
 	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 	if !visible {
 		return
 	}
-
-	if bullet.MaxLifetime <= 0 {
-		return
-	}
-	lifetimeRatio := float64(bullet.Lifetime) / float64(bullet.MaxLifetime)
 
 	// Fade alpha in final 30%
 	alpha := 1.0
@@ -99,6 +101,7 @@ func (r *BulletRenderer) renderBullet256(
 	mapX, mapY int,
 	kinetic *component.KineticComponent,
 	bullet *component.BulletComponent,
+	lifetimeRatio float64,
 ) {
 	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 	if !visible {
@@ -106,10 +109,6 @@ func (r *BulletRenderer) renderBullet256(
 	}
 
 	// Binary visibility: hide in final 20%
-	if bullet.MaxLifetime <= 0 {
-		return
-	}
-	lifetimeRatio := float64(bullet.Lifetime) / float64(bullet.MaxLifetime)
 	if lifetimeRatio > 0.8 {
 		return
 	}

@@ -97,9 +97,6 @@ func (s *MaterializeSystem) Update() {
 		return
 	}
 
-	// Cap delta time to prevent tunneling on lag spikes
-	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
-
 	materializes := s.world.Components.Materialize
 	if materializes.CountEntities() == 0 {
 		return
@@ -112,9 +109,8 @@ func (s *MaterializeSystem) Update() {
 			continue
 		}
 
-		matComp.Progress += dtSec / matComp.Type.Style().Duration.Seconds()
-
-		if matComp.Progress >= 1.0 {
+		// The beam runs on its deadline timer, armed with its style's duration
+		if timer, ok := s.world.Components.Timer.GetPtr(matEntity); ok && timer.Expired(component.TimerDeadline) {
 			// The completion carries the domain of the entity it completes, so a
 			// gated shared spawn and a drain materialize stay distinguishable (D-7).
 			s.world.PushEventDomain(event.EventMaterializeComplete, &event.MaterializeCompletedPayload{
@@ -156,8 +152,8 @@ func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, targetX, 
 		TargetY:    targetY,
 		AreaWidth:  areaWidth,
 		AreaHeight: areaHeight,
-		Progress:   0,
 		BeamWidth:  beamWidth,
 		Type:       spawnType,
 	})
+	armTimer(s.world, entity, component.TimerDeadline, spawnType.Style().Duration)
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/vmath"
@@ -30,7 +31,14 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	spirits.Each(func(_ core.Entity, spiritComp *component.SpiritComponent) bool {
+	timers := r.gameCtx.World.Components.Timer
+	spirits.Each(func(e core.Entity, spiritComp *component.SpiritComponent) bool {
+		timer, ok := timers.GetPtr(e)
+		if !ok || timer.Expired(component.TimerLifetime) {
+			return true
+		}
+		progress := min(float64(timer.Elapsed(component.TimerLifetime))/float64(parameter.SpiritAnimationDuration), 1)
+
 		// Pre-calculate invariant vector and aspect-corrected Y for spiral math
 		relX := spiritComp.StartX - spiritComp.TargetX
 		relY := spiritComp.StartY - spiritComp.TargetY
@@ -39,7 +47,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		// Render loop: Draw head (i=0) and trailing segments (i>0)
 		for i := range visual.SpiritTrailSteps {
 			// Calculate progress for this segment
-			p := spiritComp.Progress - float64(i)*visual.SpiritTrailLag
+			p := progress - float64(i)*visual.SpiritTrailLag
 			if p < 0 {
 				continue // Segment hasn't spawned yet
 			}

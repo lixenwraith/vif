@@ -93,21 +93,11 @@ func (s *MarkerSystem) Update() {
 			markerComp.Intensity = 0.5 + pulseMod*0.25
 		}
 
-		// Fade update
-		if markerComp.FadeMode != 0 {
-			timer, hasTimer := s.world.Components.Timer.GetComponent(markerEntity)
-			if hasTimer && timer.Remaining > 0 {
-				// Calculate fade progress based on remaining time
-				// FadeMode 1 = fade out (1.0 -> 0.0)
-				// FadeMode 2 = fade in (0.0 -> 1.0)
-				// Note: actual timer countdown handled by TimeKeeper
-				if markerComp.FadeMode == 1 {
-					// Intensity decreases as timer expires
-					fadeRate := 1.0 / timer.Remaining.Seconds()
-					markerComp.Intensity -= fadeRate * dtSeconds
-					if markerComp.Intensity < 0 {
-						markerComp.Intensity = 0
-					}
+		// FadeMode 1 fades out over the marker's remaining lifetime; 2 (fade in) is unimplemented
+		if markerComp.FadeMode == 1 {
+			if timer, ok := s.world.Components.Timer.GetPtr(markerEntity); ok {
+				if remaining := timer.Slots[component.TimerLifetime].Remaining; remaining > 0 {
+					markerComp.Intensity = max(markerComp.Intensity-dtSeconds/remaining.Seconds(), 0)
 				}
 			}
 		}
@@ -144,11 +134,8 @@ func (s *MarkerSystem) spawnMarker(p *event.MarkerSpawnRequestPayload) {
 		FadeMode:  p.FadeMode,
 	})
 
-	// Timer for auto-destruction
 	if p.Duration > 0 {
-		s.world.Components.Timer.SetComponent(entity, component.TimerComponent{
-			Remaining: p.Duration,
-		})
+		armTimer(s.world, entity, component.TimerLifetime, p.Duration)
 	}
 }
 

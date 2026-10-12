@@ -6,16 +6,14 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// MaterializeComponent represents a converging beam effect toward a spawn target
+// MaterializeComponent represents a converging beam effect toward a spawn target;
+// its deadline timer runs the beam and completes it
 type MaterializeComponent struct {
 	// Target area (beams converge to this rectangle)
 	TargetX    int // Top-left X
 	TargetY    int // Top-left Y
 	AreaWidth  int // Target width (1 = single column)
 	AreaHeight int // Target height (1 = single row)
-
-	// Animation progress: 0.0 = start, 1.0 = complete
-	Progress float64
 
 	// Visual parameters
 	BeamWidth int // Beam thickness perpendicular to direction (1 = thin)

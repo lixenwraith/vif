@@ -7,19 +7,14 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/vmath"
-	"slices"
 )
 
 // SpiritSystem manages converging visual effect entities
-// Spirits travel from start to target position over a duration
-// Self-destruct on arrival; EventSpiritDespawn provides safety cleanup
+// Spirits travel from start to target position over their lifetime timer, which
+// ends them after the arrival frame; EventSpiritDespawn provides safety cleanup
 // Stamped: spirits are created in the requesting event's domain (D-7)
 type SpiritSystem struct {
 	world *engine.World
-
-	// Deferred destruction for final frame visibility
-	destroyNextTick []core.Entity
-	buffers         bufferTelemetry
 
 	toggle
 }
@@ -28,14 +23,11 @@ func NewSpiritSystem(world *engine.World) engine.System {
 	s := &SpiritSystem{
 		world: world,
 	}
-	s.buffers = newBufferTelemetry(world.Resources.Status, "spirit", "destroy_next_tick")
 	s.Init()
 	return s
 }
 
 func (s *SpiritSystem) Init() {
-	s.destroyNextTick = s.destroyNextTick[:0]
-	s.buffers.Reset()
 	s.enabled = true
 }
 
@@ -87,48 +79,12 @@ func (s *SpiritSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-func (s *SpiritSystem) Update() {
-	if !s.enabled {
-		return
-	}
-
-	// Destroy entities marked last tick
-	s.world.DestroyEntitiesBatch(s.destroyNextTick)
-	s.destroyNextTick = s.destroyNextTick[:0]
-
-	spirits := s.world.Components.Spirit
-	if spirits.CountEntities() == 0 {
-		return
-	}
-
-	for _, entity := range spirits.Entities() {
-		spirit, ok := spirits.GetPtr(entity)
-		if !ok {
-			continue
-		}
-
-		// Advance progress
-		spirit.Progress += spirit.Speed
-		if spirit.Progress >= 1.0 {
-			spirit.Progress = 1.0
-			// Mark for destruction next tick - allows final frame render
-			s.destroyNextTick = append(s.destroyNextTick, entity)
-		}
-	}
-	s.buffers.Observe(0, len(s.destroyNextTick))
-}
+// Update is empty: a spirit's lifetime timer drives and ends its flight
+func (s *SpiritSystem) Update() {}
 
 // spawnSpirit creates spirit entities and their components in the requesting domain, without position store registration (vfx only, no world interaction)
 func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload, domain core.Domain) {
 	entity := s.world.CreateEntity(domain)
-
-	// Speed = Progress increment per tick for all spirits to arrive together
-	// Lerp handles distance normalization - progress 0→1 over duration
-	durationTicks := int64(parameter.SpiritAnimationDuration / parameter.GameUpdateInterval)
-	if durationTicks <= 0 {
-		durationTicks = 1
-	}
-	speed := 1.0 / float64(durationTicks)
 
 	// Calculate spin: 1.5 rotations in radians.
 	// Alternating direction based on position parity to create chaotic implosion
@@ -149,23 +105,18 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload, domain co
 		StartY:    startY,
 		TargetX:   targetX,
 		TargetY:   targetY,
-		Progress:  0,
-		Speed:     speed,
 		Spin:      spinMag,
 		Rune:      p.Char,
 		BaseColor: p.BaseColor,
 	})
+	// One flight time for every spirit so they arrive together; Lerp handles
+	// distance. The lifetime holds one tick past arrival so the arrival frame draws
+	// before the death batch settles between ticks.
+	armTimer(s.world, entity, component.TimerLifetime, parameter.SpiritAnimationDuration+parameter.GameUpdateInterval)
 }
 
 func (s *SpiritSystem) destroyAllSpirits() {
 	// Batch destruction mutates the live spirit slice, so detach it first.
 	entities := s.world.Components.Spirit.GetAllEntities()
 	s.world.DestroyEntitiesBatch(entities)
-}
-
-func (s *SpiritSystem) CopyState() any { return slices.Clone(s.destroyNextTick) }
-
-func (s *SpiritSystem) RestoreState(v any) error {
-	s.destroyNextTick = append(s.destroyNextTick[:0], v.([]core.Entity)...)
-	return nil
 }

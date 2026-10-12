@@ -373,7 +373,7 @@ Declared system carriers are:
 | `adaptation` | route weights, sample pool, consumer head, fallback rotation |
 | `genetic` | streaming checkpoints, archives, pending evaluations, IDs, scout state, fitness accumulators |
 | `navigation` | group and cursor-pursuit cache phases, targets, route rebuild budget, route endpoints |
-| `gold` | sequence liveness, header, deadlines, per-slot contribution |
+| `gold` | sequence liveness, header, per-slot contribution; the deadline rides the header's timer in the stores |
 | `storm` | live root entity, swarm spawns pending a blue attack |
 | `meta` | kill tallies, defeat latches and reset tick, cycle damage multiplier |
 | `environment` | active base wind, remaining duration, enable/applied phase |
@@ -393,8 +393,9 @@ Snapshot schema 5 carries the complete simulation checkpoint plus one applied
 crossing fence per participant. Delayed FSM work names its deterministic compiled
 action identity, so transition-delayed actions restore independently of their
 queue position. An install preserves receiver-owned cursor values, rebuilds
-roster/control binding, derives spatial/navigation caches, and restores status
-only after carriers have loaded.
+roster/control binding, derives spatial/navigation caches, re-queues the death
+batch of every expired Shared lifetime, and restores status only after carriers
+have loaded.
 
 Persistent Player-domain effects controlled by Shared FSM state are re-derived by
 the install itself. Only immediate, unguarded `ClassLocal` lifecycle events marked
