@@ -146,8 +146,8 @@ Observed (runs a scenario and prints what happened; not part of `all`)
   host-loss [n]     scripted host + n scripted guests, then kill the host and
                     report what each guest concluded  (AUTHORITY=migrate|host)
   vacant            watch a dedicated host park when its last guest leaves
-  botscore [graph] [seeds] [secs]
-                    sum default's score per scenario over seeds 1..N (4) of secs
+  botfitness [graph] [seeds] [secs]
+                    sum default's fitness per scenario over seeds 1..N (4) of secs
                     (60) each; given a graph file, fail unless it beats default
   load [sessions] [bots] [secs]
                     per session a host seating its own bots and a networked bot
@@ -328,8 +328,8 @@ vacant)
 	note "tick after 3s parked: $first -> $second"
 	;;
 
-botscore)
-	# A graph's score is summed per scenario over a fixed seed set, flat out at one
+botfitness)
+	# A graph's fitness is summed per scenario over a fixed seed set, flat out at one
 	# size. blank is left out: it disables glyph, nugget and gold, so nothing there
 	# separates two graphs. A graph given is also measured against default.
 	need_bin
@@ -342,13 +342,13 @@ botscore)
 		[ -f "$graph" ] || fail "no graph file $graph"
 		{ cat "$graph"; stop $((secs * 1000)); } >"$dir/graph.toml"
 	fi
-	# score plays one graph on one scenario and seed and prints its score
-	score() {
+	# fitness plays one graph on one scenario and seed and prints its fitness
+	fitness() {
 		# shellcheck disable=SC2086 # $2 is a flag list
 		"$BIN" -headless -bot "$1" $2 -seed "$3" -speed max -size 120x40 -log-stdout -lv info \
 			>"$dir/run.log" 2>&1 || fail "$1 did not end cleanly on $2 seed $3: $dir/run.log"
-		v=$(botstat "$dir/run.log" score)
-		[ -n "$v" ] || fail "$1 left no score on $2 seed $3: $dir/run.log"
+		v=$(botstat "$dir/run.log" fitness)
+		[ -n "$v" ] || fail "$1 left no fitness on $2 seed $3: $dir/run.log"
 		echo "$v"
 	}
 	lost=
@@ -361,10 +361,10 @@ botscore)
 		printf '%-6s %10s %10s\n' seed default "${graph:+$(basename "$graph" .toml)}"
 		base=0 mine=0 s=1
 		while [ "$s" -le "$seeds" ]; do
-			b=$(score "$dir/default.toml" "$flags" "$s") || exit 1
+			b=$(fitness "$dir/default.toml" "$flags" "$s") || exit 1
 			m=
 			if [ -n "$graph" ]; then
-				m=$(score "$dir/graph.toml" "$flags" "$s") || exit 1
+				m=$(fitness "$dir/graph.toml" "$flags" "$s") || exit 1
 				mine=$((mine + m))
 			fi
 			base=$((base + b))
@@ -376,8 +376,8 @@ botscore)
 	done
 	rm -rf "$dir"
 	if [ -n "$graph" ]; then
-		[ -z "$lost" ] || fail "$graph did not outscore default on:$lost"
-		pass "$graph outscored default on every scenario"
+		[ -z "$lost" ] || fail "$graph did not beat default on:$lost"
+		pass "$graph beat default on every scenario"
 	fi
 	;;
 
