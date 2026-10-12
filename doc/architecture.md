@@ -114,8 +114,8 @@ bounded settling passes before the FSM update, after it, and after the systems.
 Input can request immediate settling, and a separate event loop handles
 inter-tick work. This lets pre-tick, FSM, system, input, and reset cascades
 converge before their next dependent phase. The pass after the systems closes
-the tick, so nothing it produced is still queued when its crossings are sent,
-its world is captured or its digest is taken. An iteration cap prevents an
+the tick, so nothing its systems produced is still queued when its crossings are
+sent, its world is captured or its digest is taken. An iteration cap prevents an
 accidental event cycle from monopolizing a thread.
 
 An optional replay journal copies every non-system-origin event synchronously

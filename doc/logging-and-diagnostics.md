@@ -788,9 +788,10 @@ groups can change their order relative to system events. A tick's own events
 settle inside it, before its digest, so the replay's tick reproduces them. Every
 between-tick dispatch is a whole settle, the interactive event loop's included,
 so a group that held no record is one settle a replay reproduces before the next
-group it reaches. A journaled event is therefore never pushed inside a tick body:
-the session layer raises its records after the body's last settle. The reset event that opens run `R+1` is itself
-recorded in run `R`, so replay follows that boundary rather than fabricating it.
+group it reaches. A journaled event is therefore never pushed before a tick
+body's last settle: the session layer raises its records at the epoch flush,
+after the closing settle. The reset event that opens run `R+1` is itself recorded
+in run `R`, so replay follows that boundary rather than fabricating it.
 
 ### Record and anchor shapes
 

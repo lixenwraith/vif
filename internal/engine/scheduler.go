@@ -791,8 +791,8 @@ func drainTimer(t *time.Timer) {
 // eventLoop settles queued events between ticks, pause or not, a whole settle at a
 // time so a journal's groups never interleave by wall time. Consume is
 // single-consumer, so it runs under the world lock: tried first, since short holds
-// are cheaper to skip, and blocking after EventLoopBackoffMax misses, since a hold
-// that long is a tick whose events need settling before the next frame.
+// are cheaper to skip, and blocking after EventLoopBackoffMax misses, so a long
+// hold cannot keep back what was pushed outside a tick.
 func (s *Scheduler) eventLoop() {
 	defer s.wg.Done()
 
@@ -1280,7 +1280,7 @@ func (s *Scheduler) processTick() {
 		// 2. Update game elapsed time status
 		s.statGameElapsedMs.Store(tickTime.Sub(s.gameStartTime).Milliseconds())
 
-		// 3. Initial Settling: Resolve everything accumulated during game tick.
+		// 3. Initial Settling: Resolve everything pushed since the last tick closed.
 
 		// Ensures FSM and Systems start with a consistent, settled world
 		s.dispatchAndProcessEvents("pre")

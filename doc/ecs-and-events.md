@@ -269,8 +269,9 @@ stops. A deadline or cooldown stays expired until its owner acts and re-arms or
 stops it. Owners and renderers read `Progress` and `Elapsed` instead of keeping
 their own clock.
 
-A slot armed in an event handler counts its arming tick, because the pass runs
-after dispatch; one armed in an owner's `Update` starts counting on the next
+A slot armed by a handler settled before the systems (pre or post) counts its
+arming tick, because the pass runs after that dispatch; one armed in an owner's
+`Update`, or by a handler the closing settle runs, starts counting on the next
 tick. Systems whose entities end or act on a slot declare `Requires: timer`.
 Cursor countdowns stay in their owner-authored stores (D-13), and species phase
 timers stay with their state machines (see [Machine design](machine-design.md)).
@@ -315,8 +316,9 @@ up to 16 rounds, so reactions can publish follow-up work without unbounded
 recursion. These paths run before a tick, after the FSM phase, after the systems
 phase and after input/reset work. The one after the systems closes the tick, so
 an outcome a system applies through a queued event is part of the tick that
-decided it on every reader. The independent 4 ms event loop settles input and
-other asynchronous requests between 50 ms game ticks.
+decided it on every reader. The independent 4 ms event loop settles what was
+pushed outside a tick, such as the session layer's records, between 50 ms game
+ticks.
 
 ### Replay capture
 

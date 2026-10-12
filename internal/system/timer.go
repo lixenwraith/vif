@@ -64,8 +64,8 @@ func (s *TimerSystem) HandleEvent(ev event.GameEvent) {
 
 // Update ages every armed slot; an expired lifetime leaves through a death batch,
 // settled as the tick closes. Collection is by state, not by the pass that expired
-// it: an expired slot whose batch never settled (a disabled DeathSystem, a settle
-// stopped at its pass cap) is ended by the next pass.
+// it: an expired slot whose batch never settled (a disabled DeathSystem, a batch
+// a full queue overwrote) is ended by the next pass.
 func (s *TimerSystem) Update() {
 	if !s.enabled {
 		return

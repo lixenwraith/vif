@@ -192,9 +192,9 @@ func TestTimerCollectsAnExpiredLifetimeByState(t *testing.T) {
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	tick := newTimerTick(w)
 
-	installed := w.CreateEntity(core.DomainShared)
+	expired := w.CreateEntity(core.DomainShared)
 	protected := w.CreateEntity(core.DomainShared)
-	for _, e := range []core.Entity{installed, protected} {
+	for _, e := range []core.Entity{expired, protected} {
 		w.Components.Timer.SetComponent(e, component.TimerComponent{
 			Slots: [component.TimerSlotCount]component.Countdown{component.TimerLifetime: {Duration: time.Second}},
 		})
@@ -203,7 +203,7 @@ func TestTimerCollectsAnExpiredLifetimeByState(t *testing.T) {
 
 	tick.open()
 	tick.open()
-	if _, alive := w.GetComponentMask(installed); alive {
+	if _, alive := w.GetComponentMask(expired); alive {
 		t.Fatal("an expired lifetime without its batch was never collected")
 	}
 	timer, ok := w.Components.Timer.GetPtr(protected)

@@ -618,20 +618,21 @@ flowchart TD
 8. settle the events the systems emitted, as a tick phase like steps 4 and 6, so
    an outcome a system applies through a queued event belongs to this tick for
    every reader after it;
-9. snapshot position-derived entity counts before unlocking;
-10. close this tick's production epoch and hand it to the transport, so a peer
-    receives one tick's artifacts as one tick's worth, then raise the session
-    layer's own journaled records, which settle between ticks.
+9. commit the tick count and APM, and snapshot entity, queue and event counters
+   before unlocking;
+10. raise the session layer's own journaled records, which settle between ticks,
+    then close this tick's production epoch and hand it to the transport, so a
+    peer receives one tick's artifacts as one tick's worth, and write the journal
+    digest when it is due.
 
 Step 9 is inside the critical section deliberately: `Position` has no internal
 lock, so counting entities after unlocking would race removals on the
 event-loop and main goroutines.
 
 After the lock is released, the scheduler uses only atomic or internally
-synchronized paths to increment tick count, roll APM windows, publish entity
-and event counters, report queue overflow, sample the flight recorder,
-optionally emit a grouped status snapshot, and drain any pending recorder
-flush request.
+synchronized paths to check breakpoints, report queue overflow, sample the
+flight recorder, optionally emit a grouped status snapshot and journal anchor,
+and drain any pending recorder flush request.
 
 That tail is not a barrier. Because the lock is already released, the event
 loop, input path and render goroutine can commit between step 9 and the
@@ -647,9 +648,9 @@ the recorder ring.
 
 Systems may emit events during `Update`; step 8 settles them before the guest's
 tick-close capture, the epoch flush and the journal digest read the world. What
-a capture still does not carry is an event pushed after that settle: an install's
-own re-derivations, a breakpoint's pause, and whatever a settle stopped at its
-pass cap left queued.
+a capture still does not carry is a queued event: one pushed after that settle
+(the session layer's records, an install's re-derivations, a breakpoint's
+pause) or one a settle stopped at its pass cap left behind.
 
 Each completed event-settle group advances the journal `boundary` counter.
 This preserves distinctions between separately injected groups whose system

@@ -260,12 +260,10 @@ func (a *App) Loop() (*restartRequest, error) {
 	}
 }
 
-// handleResize records the terminal change and lets the handler apply it. The
-// dispatch is synchronous so the orchestrator resizes against dimensions the
-// handler has already written; the render pipeline is main-loop state, so it stays
-// here rather than in the handler. The push takes the lock like any input: a
-// journaled record landing mid-tick would be settled inside that tick, where a
-// reproduction cannot put it.
+// handleResize records the terminal change and dispatches it synchronously, so the
+// orchestrator (main-loop state) resizes against dimensions the handler wrote. The
+// push takes the lock like any input: a journaled record landing mid-tick would
+// settle inside that tick, where a reproduction cannot put it.
 func (a *App) handleResize(width, height int) {
 	a.world.RunSafe(func() {
 		a.ctx.PushLocalOrigin(event.EventScreenResize,
