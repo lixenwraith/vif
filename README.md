@@ -84,10 +84,11 @@ make release
 ```
 
 Useful targets include `make dev`, `make test`, `make verify`, `make headless`,
-`make tools`, `make wasm`, and `make serve`. `make install` installs the binary
-and the `wad/` payload under `/usr/local`, or for the current user under `~/.local`
-and `~/.config/vif` when `/usr/local` is not writable; `make install-config` installs
-only the payload into the user root. A reinstall replaces shipped files and keeps
+`make tools`, `make wasm`, and `make serve`. `make release install` builds, then
+installs the binary and the `wad/` payload under `/usr/local`, or for the current
+user under `~/.local` and `~/.config/vif` when `/usr/local/bin` is not writable
+(`sudo make install` after `make release` installs system-wide); `make uninstall`
+removes it, and `make install-config` installs only the payload into the user root. A reinstall replaces shipped files and keeps
 added ones; `CLEAN=1` starts the payload fresh. Uninstalled, `./bin/vif -s td` plays
 the checkout's `wad/`.
 Audio starts muted; press `Ctrl-S` to cycle audio channels or launch with
