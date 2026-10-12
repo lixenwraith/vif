@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 )
 
@@ -94,11 +95,22 @@ func botFor(t *testing.T, ctx *engine.GameContext, doc string, n int) (*Driver, 
 	return d, rec
 }
 
-// recorder is an instance that keeps what reaches it
-type recorder struct{ got []input.Intent }
+// recorder is an instance that keeps what reaches it and dispatches the next of
+// dispatch on each tick
+type recorder struct {
+	got      []input.Intent
+	tap      func(event.GameEvent)
+	dispatch []event.GameEvent
+}
 
-func (r *recorder) Tick(int)        {}
-func (r *recorder) InputTick() bool { return true }
+func (r *recorder) Tick(int) {
+	if len(r.dispatch) > 0 {
+		r.tap(r.dispatch[0])
+		r.dispatch = r.dispatch[1:]
+	}
+}
+func (r *recorder) SetDispatchTap(fn func(event.GameEvent)) { r.tap = fn }
+func (r *recorder) InputTick() bool                         { return true }
 func (r *recorder) Inject(intents ...*input.Intent) bool {
 	for _, intent := range intents {
 		r.got = append(r.got, *intent)
@@ -240,6 +252,37 @@ on_update = [{ action = "PointAt", payload = { target = "glyph" } }]
 	for _, intent := range rec.got {
 		if intent.Type != input.IntentMouseMove || intent.X != maxX || intent.Y != 6 {
 			t.Fatalf("pointed at %+v, want a move to the open edge cell (%d, 6)", intent, maxX)
+		}
+	}
+}
+
+// TestAGraphTransitionsOnEventsItsInstanceDispatchedLastStep: what the bot's own
+// step dispatched is a present fact at its next update, and Own keeps another
+// cursor's event from counting as the bot's.
+func TestAGraphTransitionsOnEventsItsInstanceDispatchedLastStep(t *testing.T) {
+	w, ctx := soloWorld(0, 0)
+	d, rec := botFor(t, ctx, `
+[regions.play]
+initial = "A"
+
+[states.A]
+transitions = [{ trigger = "EventCursorDefeatState", target = "B", guard = "Own", guard_args = { field = "entity" } }]
+
+[states.B]
+on_enter = [{ action = "Intent", payload = { name = "motion_left" } }]
+`, 0)
+	defeat := func(e core.Entity) event.GameEvent {
+		return event.GameEvent{Type: event.EventCursorDefeatState,
+			Payload: &event.CursorDefeatStatePayload{Entity: e, Defeated: true}}
+	}
+	own := w.Resources.Player.Entity
+	rec.dispatch = []event.GameEvent{defeat(own + 1), defeat(own)}
+	for step, want := range []int{0, 0, 1} {
+		if _, err := d.Step(); err != nil {
+			t.Fatal(err)
+		}
+		if len(rec.got) != want {
+			t.Fatalf("after step %d released %d intents, want %d", step+1, len(rec.got), want)
 		}
 	}
 }
