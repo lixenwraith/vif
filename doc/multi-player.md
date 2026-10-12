@@ -67,7 +67,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
 | Playout lead | Per participant (§3.5): a guest's own round trip to the authority plus a jitter allowance and a relay tick, less how late the authority's epochs land on it; behind a relay, the round trip is how long its own epochs take to come back committed. The authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
 | Commit and pacing | The authority commits every guest crossing — as stamped, late at its next tick, or void past `NetworkCommitLateTicks` — and relays only the committed copy. Every guest paces its tick interval so the authority's epochs land inside its band. A participant whose own crossings stay late is evicted by policy (§3.5). |
-| Mesh and relay | Committed epochs, owner state, corrections, and authority records flood with per-source duplicate suppression; a raw epoch travels only toward the authority, and its committed copy floods back through every relay it crossed. A relay serves selective repair to the participants behind it from retained authority content, forwards its own committed copies to them, and names each with the tick it last proved in its own answer, which the authority's floor and flood count as a direct answer. A guest linked to the authority sends it alone its raw epochs and syncs and those it carries, one bundle a tick; the authority takes a participant's raw artifacts only on its own link or its holder's. |
+| Mesh and relay | Committed epochs, owner state, corrections, and authority records flood with per-source duplicate suppression; a raw epoch travels only toward the authority, and its committed copy floods back through every relay it crossed. A relay serves selective repair to the participants behind it from retained authority content, forwards its own committed copies to them, and names each with the tick it last proved in its own answer, which the authority's floor and flood count as a direct answer. A guest linked to the authority sends it alone its raw epochs and syncs and those it carries, one bundle a tick; the authority takes a participant's raw artifacts on its own link, else its holder's, else — a person behind a relay — on any. |
 | Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is never elected (§5.3). |
 | Host loss | `-authority migrate` (default off `-serve`): **the first survivor in the succession chain** takes the next term, with no vote, because every survivor computes it from state it already holds identically. `-authority host` (default on `-serve`): nobody takes it and every survivor continues alone. |
 | Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, and tick interval, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted rather than compared — `PeerIdentity.SessionFrom` takes the coordinator's, and a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
@@ -297,9 +297,10 @@ crossing at its stamped tick, a late one at its own next tick, and one more than
 fence, so its producer's projection stops replaying it. It relays the committed copy
 with the ticks it chose. Every other participant applies another's crossings only
 from that copy or the authority's own epochs, and passes a raw one on toward the
-authority. A producer with a link of its own is heard on that link; its identity on
-another is refused. A slow or stalling participant therefore delays only its own
-actions and pays for the corrections that repair its own early copies.
+authority. A producer with a link of its own is heard only on it, and a bot behind
+its holder only on the holder's; its identity on another is refused. A slow or
+stalling participant therefore delays only its own actions and pays for the
+corrections that repair its own early copies.
 
 A guest paces its clock against the authority (`observeAuthorityEpoch`): it trims its
 tick interval, by up to `NetworkPacePermilleMax`, until the latest authority epoch of
@@ -316,12 +317,14 @@ placement on the guest that ran it.
 While authoring, the authority evicts a participant whose epochs, over
 `-slow-window`, reached it late at least `-slow-late` times a second while its link
 carried at least `-slow-bytes` a second (`driveEviction`). Epochs rather than
-crossings: a player sweeping the pointer is not a slower link than one standing still. The first window after
-arrival is grace, and only a participant's own raw epochs count, so its actions
-relayed to the others never mark them. A link is evicted with the bots it holds once
-what it sends over the window passes `NetworkIngressBytesPerSecond` for itself, each
-bot it holds and each person the authority has no link to (`driveIngress`). On a handoff a guest drops its own uncommitted
-crossings, scheduled and retained: the authority they went to is gone.
+crossings: a player sweeping the pointer is not a slower link than one standing
+still. The first window after arrival is grace, and only a participant's own raw
+epochs count, so its actions relayed to the others never mark them. A link is
+evicted with the bots it holds once what it sends over the window passes
+`NetworkIngressBytesPerSecond` for itself, each bot it holds and each person the
+authority has no link to (`driveIngress`). `-slow-window 0` turns off both. On a
+handoff a guest drops its own uncommitted crossings, scheduled and retained: the
+authority they went to is gone.
 
 ## 4. Correction pipeline
 
@@ -419,9 +422,10 @@ unbounded catch-up gap, or one still wider than the playout lead once it has cau
 up; a bot seat retries either, since a fresh attempt brings a fresher world.
 
 The session protocol supports a mesh even though the shipped CLI normally builds
-a star. Each source epoch is admitted once within a bounded replay window and
-forwarded to every neighbour except the arrival edge. Corrections retain the
-authority's term, tick, hashes, and chunks across relays.
+a star, or a two-level tree once a guest seats bots behind it. Each source epoch is
+admitted once within a bounded replay window and forwarded to every neighbour
+except the arrival edge. Corrections retain the authority's term, tick, hashes, and
+chunks across relays.
 
 Bot admission declares an independent holder. That identity is retained in the
 roster and Shared cursor across captures, resets and succession. A host's bots dial
@@ -432,7 +436,8 @@ once the bot installed the world the guest last proved, to cross its arrival
 departure retires its bot group at the same crossing. Hosts may remove any remote
 slot with `:player drop`; removing a bot alone leaves its holder and siblings.
 `:bot drop` also lets a guest remove its own bot. Both accept decimal or hex slots.
-Holder checks are structural; they do not authenticate a peer.
+Holder checks are structural; they do not authenticate a peer. The player's view of
+these rules is [Bots](bots.md#ownership-and-leaving).
 
 ### 5.0 Who listens, who authors, who can be reached
 

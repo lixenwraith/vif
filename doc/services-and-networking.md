@@ -405,19 +405,25 @@ epoch, `MsgStateSync` for one owner-authored cursor snapshot, and
 `MsgStateManifest`/`MsgStateRequest`/`MsgStateShard` exchange below, with
 `MsgStateUnserved` (0x2B) as the answer a retention holder gives to a request it
 cannot produce pages for. `MsgAuthorityReport` (0x2C) and `MsgAuthorityHandoff`
-(0x2E) carry the succession; 0x2D was the vote and is retired. The epoch is JSON
-containing journal-registry TOML payloads; representative complete-frame budgets
-are pinned by `TestWireEncodingBudget`. The remaining codes in `protocol.go` are
-reserved placeholders that nothing sends and `NetworkSystem` counts as drops.
-Raw participant input is not among them, and 0x10 stays reserved — a peer sends
-the resolved D-3 artifact, never the keystroke that produced it.
+(0x2E) carry the succession; 0x2D was the vote and is retired. `MsgPeerList`
+(0x20) is the address map and `MsgConnect`/`MsgAck` (0x02/0x04) open a peer link
+([Multiplayer](multi-player.md) §5.3). A guest linked to the authority packs a
+tick's raw epochs and syncs, its own and those it carries, into one `MsgBundle`
+(0x19) while they fit a frame. A guest admitting its own bot asks the coordinator
+on its own link, with `MsgRelayJoin` (0x21), to allocate it, cross its arrival or
+retire a failed join; the first two are answered on that link with
+`MsgRelayAdmit` (0x2F). The epoch is JSON containing journal-registry TOML
+payloads; representative complete-frame budgets are pinned by
+`TestWireEncodingBudget`. Only the authentication codes 0x30 and 0x31 are reserved
+placeholders, which nothing sends and `NetworkSystem` counts as drops. Raw
+participant input has no code: 0x10 stays reserved, since a peer sends the
+resolved D-3 artifact, never the keystroke that produced it.
 
 `MsgLinkProbe` (0x14) and `MsgLinkEcho` (0x15) are the only round trip this
-protocol makes. Everything else is one-directional — what this instance sent, and
-how far behind the newest tick it has *heard about* it stands — which is why the
-correction cadence had a constant and nothing else to be chosen from before
-Phase 5. They are unusual in one way that matters: **neither ever reaches the
-game**. `SocketPort` answers a probe from the read goroutine and swallows an echo
+protocol times. Everything else says only what this instance sent and how far
+behind the newest tick it has *heard about* it stands, so without them the
+correction cadence would have only a constant to choose from. They are unusual in
+one way that matters: **neither ever reaches the game**. `SocketPort` answers a probe from the read goroutine and swallows an echo
 there, `MeshPort` does the same inside `Drain`, so what the measurement describes
 is the wire rather than how often an instance runs a tick — and no timing value
 has to enter the world for the cadence to exist.
@@ -908,7 +914,7 @@ inside a process nothing can reach.
 
 | Path | Code | Body |
 |---|---|---|
-| `/health` | 200 while the run is live; 503 when the scheduler is running, unpaused, and the tick has not moved in `parameter.ProbeStallInterval` | `live`, `ready`, a `reason` when either is false, then `tick`, `clock`, `guests`, `capacity`, `address`, `phase`, and `expires_in` when a countdown is running |
+| `/health` | 200 while the run is live; 503 when the scheduler is running, unpaused, and the tick has not moved in `parameter.ProbeStallInterval` | `live`, `ready`, a `reason` when either is false, then `tick`, `clock`, `guests`, `bots` (how many of the guests are bots), `capacity`, `address`, `phase`, and `expires_in` when a countdown is running |
 | `/metrics` | always 200 | the status registry in the Prometheus text format |
 
 There is one health path rather than a liveness one and a readiness one. They were
