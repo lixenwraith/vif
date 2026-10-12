@@ -29,7 +29,6 @@ const (
 	CursorViewBit
 	ParticleBit
 	TracerBit
-	DustBit
 	NavigationBit
 	CombatBit
 	GenotypeBit
@@ -88,7 +87,6 @@ type Component struct {
 	CursorView   *Store[component.CursorViewComponent]
 	Particle     *Store[component.ParticleComponent]
 	Tracer       *Store[component.TracerComponent]
-	Dust         *Store[component.DustComponent]
 	Navigation   *Store[component.NavigationComponent]
 	Combat       *Store[component.CombatComponent]
 	Genotype     *Store[component.GenotypeComponent]
@@ -146,7 +144,6 @@ func initComponents(w *World) {
 	w.Components.CursorView = NewStore[component.CursorViewComponent](w, CursorViewBit)
 	w.Components.Particle = NewStore[component.ParticleComponent](w, ParticleBit)
 	w.Components.Tracer = NewStore[component.TracerComponent](w, TracerBit)
-	w.Components.Dust = NewStore[component.DustComponent](w, DustBit)
 	w.Components.Navigation = NewStore[component.NavigationComponent](w, NavigationBit)
 	w.Components.Combat = NewStore[component.CombatComponent](w, CombatBit)
 	w.Components.Genotype = NewStore[component.GenotypeComponent](w, GenotypeBit)
@@ -256,9 +253,6 @@ func (w *World) removeEntity(e core.Entity) {
 	}
 	if mask&TracerBit != 0 {
 		w.Components.Tracer.RemoveEntity(e, true)
-	}
-	if mask&DustBit != 0 {
-		w.Components.Dust.RemoveEntity(e, true)
 	}
 	if mask&NavigationBit != 0 {
 		w.Components.Navigation.RemoveEntity(e, true)
@@ -438,9 +432,6 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	if union&TracerBit != 0 {
 		w.Components.Tracer.RemoveBatch(entities, true)
 	}
-	if union&DustBit != 0 {
-		w.Components.Dust.RemoveBatch(entities, true)
-	}
 	if union&NavigationBit != 0 {
 		w.Components.Navigation.RemoveBatch(entities, true)
 	}
@@ -571,7 +562,6 @@ func (w *World) wipeAll() {
 	w.Components.CursorView.ClearAllComponents()
 	w.Components.Particle.ClearAllComponents()
 	w.Components.Tracer.ClearAllComponents()
-	w.Components.Dust.ClearAllComponents()
 	w.Components.Navigation.ClearAllComponents()
 	w.Components.Combat.ClearAllComponents()
 	w.Components.Genotype.ClearAllComponents()
@@ -632,7 +622,6 @@ type componentCopies struct {
 	CursorView   storeCopy[component.CursorViewComponent]
 	Particle     storeCopy[component.ParticleComponent]
 	Tracer       storeCopy[component.TracerComponent]
-	Dust         storeCopy[component.DustComponent]
 	Navigation   storeCopy[component.NavigationComponent]
 	Combat       storeCopy[component.CombatComponent]
 	Genotype     storeCopy[component.GenotypeComponent]
@@ -690,7 +679,6 @@ func (w *World) copyComponentsOut(reuse *componentCopies) (c componentCopies) {
 	c.CursorView = w.Components.CursorView.copyOut(reuse.CursorView)
 	c.Particle = w.Components.Particle.copyOut(reuse.Particle)
 	c.Tracer = w.Components.Tracer.copyOut(reuse.Tracer)
-	c.Dust = w.Components.Dust.copyOut(reuse.Dust)
 	c.Navigation = w.Components.Navigation.copyOut(reuse.Navigation)
 	c.Combat = w.Components.Combat.copyOut(reuse.Combat)
 	c.Genotype = w.Components.Genotype.copyOut(reuse.Genotype)
@@ -749,7 +737,6 @@ func (w *World) copyComponentsIn(c componentCopies) {
 	w.Components.CursorView.copyIn(c.CursorView)
 	w.Components.Particle.copyIn(c.Particle)
 	w.Components.Tracer.copyIn(c.Tracer)
-	w.Components.Dust.copyIn(c.Dust)
 	w.Components.Navigation.copyIn(c.Navigation)
 	w.Components.Combat.copyIn(c.Combat)
 	w.Components.Genotype.copyIn(c.Genotype)

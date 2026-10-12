@@ -346,7 +346,7 @@ func TestKrakenTracerAndGlyphExplosionsSpendSeparatePlayerWeaponBudgets(t *testi
 	weapon := NewWeaponSystem(w).(*WeaponSystem)
 	combat := NewCombatSystem(w).(*CombatSystem)
 	explosion := NewExplosionSystem(w).(*ExplosionSystem)
-	dust := NewDustSystem(w).(*DustSystem)
+	dust := NewParticleSystem(w).(*ParticleSystem)
 	heat := NewHeatSystem(w).(*HeatSystem)
 	settle := func() {
 		for range 10 {

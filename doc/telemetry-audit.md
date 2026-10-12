@@ -25,7 +25,7 @@ Every metric is consumed generically by the status snapshot, telemetry overlay, 
 | Loot | `loot.{drops,active,collects,routes,route_recomputes,unreachable,wall_collisions,boundary_reflections,physics_steps,buf_pity_hwm,buf_routes_hwm}` | `NewLootSystem` | Drop/collect handlers, owner-route maintenance, bounce integration, buffer observation | `Init` | Generic only |
 | Glyph | `glyph.{enabled,next_spawn_ms,orphan_glyph,density,rate_mult,buf_placement_hwm}` | `NewGlyphSystem` | Spawn/update and snapshot publication | `Init` | Generic only |
 | Nugget | `nugget.{active,spawned,collected,jumps,spawn_failures,cursor_rejects,disabled_rejects}` | `NewNuggetSystem` | Resolved nugget handlers/update | `Init` | Generic only |
-| Particle | `decay.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}`, `blossom.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}` | `NewParticleSystem` | Behavior-selected spawn/apply/update paths | `Init` | Separate decay/blossom series preserve the operator surface |
+| Particle | `{dust,decay,blossom}.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}`, `dust.{created,destroyed,centers_dropped,buf_*_hwm}`, `particle.{cursor_rejects,disabled_rejects}` | `NewParticleSystem` | Behavior-selected spawn/apply/update and detonation paths | `Init` | Separate behavior series preserve the operator surface |
 | Gold | `gold.{active,header_entity,timer,spawn_failures,cursor_rejects,disabled_rejects}` | `NewGoldSystem` | Resolved sequence handlers/update | `Init` | Generic only |
 | Materialize | None | — | — | — | — |
 | Fuse | `fuse.{spawn_failures,disabled_rejects,buf_pending_hwm}` | `NewFuseSystem` | Fuse request/update failure paths and buffer observation | `Init` | Generic only |
@@ -44,7 +44,6 @@ Every metric is consumed generically by the status snapshot, telemetry overlay, 
 | Eye | `eye.{count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewEyeSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
 | Mount | `mount.{count,fired,host_rejects,disabled_rejects}` | `NewMountSystem` | Attach requests and the per-mount fire pass | `Init` | Generic only |
 | Bullet | `bullet.{count,spawned,hits,wall_collisions,boundary_hits,grid_steps,disabled_rejects}` | `NewBulletSystem` | Spawn, swept update, and cursor or target hits | `Init` | Generic only |
-| Dust | `dust.{created,active,destroyed,wall_collisions,boundary_reflections,grid_steps,buf_*_hwm}` | `NewDustSystem` | Resolved spawn/destruction/collision paths | `Init` | Generic only |
 | Flash | None | — | — | — | — |
 | Fadeout | None | — | — | — | — |
 | Marker | None | — | — | — | — |
@@ -198,7 +197,7 @@ the effect's current name; death API unification removed the two obsolete
 | `death.batch_blossom` (int) | Death requests routed to the particle effect with blossom behavior. |
 | `death.batch_count` (int) | Resolved unified `EventDeathBatch` payloads. |
 | `death.batch_decay` (int) | Death requests routed to the particle effect with decay behavior. |
-| `death.batch_dust` (int) | Death requests routed through the dust-effect processor. |
+| `death.batch_dust` (int) | Death requests routed to the particle effect with dust behavior. |
 | `death.batch_entities_total` (int) | Total entity entries presented across resolved death requests. |
 | `death.batch_fadeout` (int) | Death requests routed through the fadeout-effect processor. |
 | `death.batch_flash` (int) | Death requests routed through the flash-effect processor. |
@@ -228,15 +227,14 @@ the effect's current name; death API unification removed the two obsolete
 | `drain.paused` (bool) | Whether a spawning hold applies to this instance's own cursor. A session-wide region holds every participant; a quasar holds only the cursor it was fused from. |
 | `drain.protected_rejects` (int) | drain interactions rejected by the applicable protection mask. |
 | `drain.wall_collisions` (int) | Resolved drain contacts with blocking wall cells. |
-| `dust.boundary_reflections` (int) | Resolved dust reflections at simulation bounds. |
-| `dust.buf_collision_cells_hwm` (int) | High-water live length of the reusable collision cells buffer/state collection. |
-| `dust.buf_collision_impulses_hwm` (int) | High-water live length of the reusable collision impulses buffer/state collection. |
-| `dust.buf_combat_headers_hwm` (int) | High-water live length of the reusable combat headers buffer/state collection. |
-| `dust.buf_death_hwm` (int) | High-water live length of the reusable death buffer/state collection. |
-| `dust.buf_destroy_hwm` (int) | High-water live length of the reusable destroy buffer/state collection. |
+| `dust.applied` (int) | Dust contacts that nudged a drain. |
+| `dust.boundary_hits` (int) | Resolved dust reflections at simulation bounds. |
+| `dust.buf_centers_hwm` (int) | High-water live length of the reusable centers buffer/state collection. |
 | `dust.buf_flash_hwm` (int) | High-water live length of the reusable flash buffer/state collection. |
+| `dust.buf_impulses_hwm` (int) | High-water live length of the reusable impulses buffer/state collection. |
 | `dust.buf_transform_hwm` (int) | High-water live length of the reusable transform buffer/state collection. |
 | `dust.centers_dropped` (int) | Dust burst centres discarded because the per-tick centre budget was already spent. |
+| `dust.destroyed` (int) | Dust consumed by a detonation; expired dust dies through the timer. |
 | `dust.grid_steps` (int) | Grid-traversal steps executed by swept dust movers. |
 | `dust.wall_collisions` (int) | Resolved dust contacts with blocking wall cells. |
 | `energy.cursor_rejects` (int) | Requests rejected because energy could not resolve a roster cursor. |

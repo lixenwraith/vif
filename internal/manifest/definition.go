@@ -60,7 +60,6 @@ var Components = []ComponentDef{
 	// --- Entity Behaviors ---
 	{"Particle", "ParticleComponent", "player"},
 	{"Tracer", "TracerComponent", "player"},
-	{"Dust", "DustComponent", "player"},
 	{"Navigation", "NavigationComponent", ""},
 	{"Combat", "CombatComponent", ""},
 	{"Genotype", "GenotypeComponent", "shared"},
@@ -143,7 +142,7 @@ var Systems = []SystemDef{
 	{Name: "glyph", Constructor: "NewGlyphSystem", Domain: "player"}, // player stream and entities; corpus and map are its only inputs
 	{Name: "nugget", Constructor: "NewNuggetSystem", Domain: "player",
 		Optional: []string{"materialize", "energy", "heat"}}, // personal: each participant owns its spawn, collection and reward
-	{Name: "particle", Constructor: "NewParticleSystem", Domain: "player", Optional: []string{"glyph", "death"}}, // behavior-selected player particles; glyph and death effects are optional
+	{Name: "particle", Constructor: "NewParticleSystem", Domain: "player", Optional: []string{"glyph", "death", "explosion"}}, // behavior-selected player particles; dust detonation optionally crosses through explosion
 	{Name: "gold", Constructor: "NewGoldSystem", Domain: "shared", Snapshot: "state", // sequence liveness, its header, and both deadlines live outside any store
 		Requires: []string{"composite"}, Optional: []string{"nugget", "energy", "splash"}}, // contested: the composite sequence is shared, the reward owner-authored
 
@@ -173,7 +172,7 @@ var Systems = []SystemDef{
 	{Name: "swarm", Constructor: "NewSwarmSystem", Domain: "shared", Requires: []string{"composite"},
 		Optional: []string{"navigation", "combat"}}, // shared stream and composite species with a D-12 footprint sweep
 	{Name: "storm", Constructor: "NewStormSystem", Domain: "shared", Snapshot: "state", Requires: []string{"composite"}, // the live root and pending blue spawns live outside any store
-		Optional: []string{"navigation", "combat", "mount", "dust", "wall"}}, // shared stream and composite species with a D-12 footprint sweep
+		Optional: []string{"navigation", "combat", "mount", "particle", "wall"}}, // shared stream and composite species with a D-12 footprint sweep
 	{Name: "kraken", Constructor: "NewKrakenSystem", Domain: "shared", Requires: []string{"composite"},
 		Optional: []string{"combat"}},
 	{Name: "pylon", Constructor: "NewPylonSystem", Domain: "shared", Requires: []string{"composite"},
@@ -187,7 +186,6 @@ var Systems = []SystemDef{
 	{Name: "bullet", Constructor: "NewBulletSystem", Domain: "player", Optional: []string{"combat"}}, // player bullets; combat optionally resolves their hits
 
 	// --- Particles / Effects: player-domain by D-6 ---
-	{Name: "dust", Constructor: "NewDustSystem", Domain: "player", Optional: []string{"explosion"}},               // player stream and entities; detonation optionally crosses through explosion
 	{Name: "flash", Constructor: "NewFlashSystem", Domain: "player"},                                              // request-created player effect
 	{Name: "fadeout", Constructor: "NewFadeoutSystem", Domain: "player"},                                          // request-created player effect
 	{Name: "marker", Constructor: "NewMarkerSystem", Domain: "shared"},                                            // request-created shared marker

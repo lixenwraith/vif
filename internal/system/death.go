@@ -182,32 +182,17 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 	}
 
 	// Extract char: glyph first, sigil fallback
-	var char rune
-	var level component.GlyphLevel
-	if glyphComp, ok := s.world.Components.Glyph.GetPtr(entity); ok {
-		char = glyphComp.Rune
-		level = glyphComp.Level
-	} else if sigilComp, ok := s.world.Components.Sigil.GetPtr(entity); ok {
-		char = sigilComp.Rune
-	} else {
+	char, _, ok := s.extractCharData(entity)
+	if !ok {
 		s.statMissingEffectData.Add(1)
 		return
 	}
 
-	switch effectEvent {
-	case event.EventFlashSpawnOneRequest:
+	if effectEvent == event.EventFlashSpawnOneRequest {
 		s.world.PushLocal(event.EventFlashSpawnOneRequest, &event.FlashRequestPayload{
 			X:    entityPos.X,
 			Y:    entityPos.Y,
 			Char: char,
-		})
-
-	case event.EventDustSpawnOneRequest:
-		s.world.PushEvent(event.EventDustSpawnOneRequest, &event.DustSpawnOneRequestPayload{
-			X:     entityPos.X,
-			Y:     entityPos.Y,
-			Char:  char,
-			Level: level,
 		})
 	}
 }
@@ -256,6 +241,8 @@ func (s *DeathSystem) processBatch(p *event.DeathRequestPayload) {
 			s.statBatchDecay.Add(1)
 		case component.ParticleBlossom:
 			s.statBatchBlossom.Add(1)
+		case component.ParticleDust:
+			s.statBatchDust.Add(1)
 		default:
 			s.statBatchOther.Add(1)
 			s.processBatchSilent(p.Entities)
@@ -268,9 +255,6 @@ func (s *DeathSystem) processBatch(p *event.DeathRequestPayload) {
 	case event.EventFadeoutSpawnOne:
 		s.statBatchFadeout.Add(1)
 		processBatchWith(s, event.FadeoutBatchPool, event.EventFadeoutSpawnBatch, p.Entities, s.extractFadeout)
-	case event.EventDustSpawnOneRequest:
-		s.statBatchDust.Add(1)
-		processBatchWith(s, event.DustBatchPool, event.EventDustSpawnBatchRequest, p.Entities, s.extractDust)
 	default:
 		s.statBatchOther.Add(1)
 		for _, entity := range p.Entities {
@@ -381,21 +365,13 @@ func (s *DeathSystem) extractFlash(entity core.Entity) (event.FlashSpawnEntry, b
 }
 
 func (s *DeathSystem) extractParticle(entity core.Entity, behavior component.ParticleBehavior) (event.ParticleSpawnEntry, bool) {
-	x, y, char, _, ok := s.extractPosChar(entity)
+	x, y, char, level, ok := s.extractPosChar(entity)
 	if !ok {
 		return event.ParticleSpawnEntry{}, false
 	}
 	return event.ParticleSpawnEntry{
-		Behavior: behavior, X: x, Y: y, Char: char, SkipStartCell: true,
+		Behavior: behavior, X: x, Y: y, Char: char, Level: level, SkipStartCell: true,
 	}, true
-}
-
-func (s *DeathSystem) extractDust(entity core.Entity) (event.DustSpawnEntry, bool) {
-	x, y, char, level, ok := s.extractPosChar(entity)
-	if !ok {
-		return event.DustSpawnEntry{}, false
-	}
-	return event.DustSpawnEntry{X: x, Y: y, Char: char, Level: level}, true
 }
 
 func (s *DeathSystem) extractFadeout(entity core.Entity) (event.FadeoutSpawnEntry, bool) {

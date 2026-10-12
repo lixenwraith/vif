@@ -112,7 +112,7 @@ func TestSpecialAttackConvertsDarkGlyphsThenChainsThroughTheBlast(t *testing.T) 
 			heat := NewHeatSystem(w).(*HeatSystem)
 			heat.setHeat(cursor, tc.heat)
 			w.Components.Energy.SetComponent(cursor, component.EnergyComponent{Current: tc.energy})
-			dust := NewDustSystem(w).(*DustSystem)
+			dust := NewParticleSystem(w).(*ParticleSystem)
 			polarity := component.GlyphBlue
 			if tc.energy < 0 {
 				polarity = component.GlyphRed
@@ -163,15 +163,15 @@ func TestSpecialAttackConvertsDarkGlyphsThenChainsThroughTheBlast(t *testing.T) 
 			// Co-located old dust is consumed once, alongside newly converted dust.
 			oldDust := 0
 			if tc.heat == 156 {
-				dust.spawnDust(30, 15, 'a', component.GlyphNormal, 5, 5)
-				dust.spawnDust(30, 15, 'b', component.GlyphBright, 5, 5)
+				dust.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDust, X: 30, Y: 15, Char: 'a', Level: component.GlyphNormal}, 5, 5)
+				dust.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDust, X: 30, Y: 15, Char: 'b', Level: component.GlyphBright}, 5, 5)
 				wantCenters[event.ExplosionCenterEntry{X: 30, Y: 15}] = true
 				oldDust = 2
 			}
 			remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
 			dust.HandleEvent(event.GameEvent{Type: event.EventFireSpecialRequest,
 				Payload: &event.FireSpecialRequestPayload{Entity: remote}})
-			if w.Components.Dust.CountEntities() != oldDust || len(w.Resources.Event.Queue.Consume()) != 0 {
+			if w.Components.Particle.CountEntities() != oldDust || len(w.Resources.Event.Queue.Consume()) != 0 {
 				t.Fatal("remote cursor detonated local dust")
 			}
 
@@ -203,7 +203,7 @@ func TestSpecialAttackConvertsDarkGlyphsThenChainsThroughTheBlast(t *testing.T) 
 						t.Fatalf("flashes = %+v, want the caught dark glyphs %v", p, flashed)
 					}
 					event.ReleaseDeathRequest(p)
-				case event.EventDustSpawnBatchRequest, event.EventDustSpawnOneRequest:
+				case event.EventParticleSpawnBatch, event.EventParticleSpawnOne:
 					t.Fatal("special attack deferred a conversion")
 				}
 			}
@@ -212,7 +212,7 @@ func TestSpecialAttackConvertsDarkGlyphsThenChainsThroughTheBlast(t *testing.T) 
 			}
 
 			// Glyphs the blast caught are the dust the next special attack detonates
-			for _, e := range w.Components.Dust.Entities() {
+			for _, e := range w.Components.Particle.Entities() {
 				pos, _ := w.Positions.GetPosition(e)
 				cell := event.ExplosionCenterEntry{X: pos.X, Y: pos.Y}
 				if !wantChainCells[cell] {
@@ -245,7 +245,7 @@ func TestSpecialAttackConvertsDarkGlyphsThenChainsThroughTheBlast(t *testing.T) 
 func TestSpecialAttackWithoutHeatOrDustChangesNothing(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	heat := NewHeatSystem(w).(*HeatSystem)
-	dust := NewDustSystem(w).(*DustSystem)
+	dust := NewParticleSystem(w).(*ParticleSystem)
 	w.Components.Energy.SetComponent(cursor, component.EnergyComponent{Current: 50})
 
 	glyph := w.CreateEntity(core.DomainPlayer)

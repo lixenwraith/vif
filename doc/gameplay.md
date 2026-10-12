@@ -111,13 +111,17 @@ Spawn pacing adapts to screen occupancy: sparse maps receive text faster while
 dense maps sharply reduce new placement. Placement excludes a region around the
 cursor and retries only a bounded number of positions.
 
-Decay is an explicit wave mechanic. `ParticleSystem` selects decay or blossom
-rules from `ParticleComponent.Behavior`: decay marks eligible glyphs and removes
-them over time while blossom spreads the inverse level transformation. Both
-respect `ProtectFromParticle`, share a deterministic Player-domain RNG stream and
-the same wall/boundary destruction rules, and remain Player-domain. Dust, flash,
-fade, splash, marker, explosion, and motion-marker systems are transient feedback
-rather than durable text state.
+Decay is an explicit wave mechanic. `ParticleSystem` selects dust, decay or
+blossom rules from `ParticleComponent.Behavior`, and everything that differs
+between them is one row of its profile table: decay marks eligible glyphs and
+removes them over time while blossom spreads the inverse level transformation.
+Both respect `ProtectFromParticle`, die on walls and bounds, and have no lifetime.
+Dust bounces instead, nudges the drains it crosses, and lives 2/4/8 s by glyph
+level through `TimerComponent`, fading a level as it runs down. All three share
+one deterministic Player-domain RNG stream. Dust orbits the local cursor while its
+energy is nonzero. Flash, fade, splash, marker,
+explosion, and motion-marker systems are transient feedback rather than durable
+text state.
 
 ## 5. Energy, heat, boost, and shield
 
@@ -386,7 +390,7 @@ declares for itself:
 | Spawning/effects | `materialize`, `fuse`, `spirit`, `lightning`, `missile` |
 | Motion/environment/combat | `navigation`, `soft_collision`, `environment`, `combat` |
 | Species | `drain`, `quasar`, `swarm`, `storm`, `pylon`, `snake`, `eye`, `mount`, `bullet` |
-| Particles | `dust`, `flash`, `fadeout`, `marker`, `explosion`, `motion_marker`, `splash` |
+| Particles | `flash`, `fadeout`, `marker`, `explosion`, `motion_marker`, `splash` |
 | Lifecycle/learning | `death`, `timer`, `adaptation`, `genetic` |
 | Sound | `audio`, `music` |
 

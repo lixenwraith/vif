@@ -5,14 +5,6 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 )
 
-// DustSpawnEntry is a value type for batch dust spawning
-type DustSpawnEntry struct {
-	X     int                  `toml:"x"`
-	Y     int                  `toml:"y"`
-	Char  rune                 `toml:"char"`
-	Level component.GlyphLevel `toml:"level"`
-}
-
 // FadeoutSpawnEntry is a value type for batch fadeout spawning
 type FadeoutSpawnEntry struct {
 	X       int
@@ -35,6 +27,7 @@ type ParticleSpawnEntry struct {
 	X             int
 	Y             int
 	Char          rune
+	Level         component.GlyphLevel
 	SkipStartCell bool
 }
 

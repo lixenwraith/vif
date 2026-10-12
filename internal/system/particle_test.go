@@ -2,11 +2,15 @@ package system
 
 import (
 	"testing"
+	"time"
+
+	"github.com/lixenwraith/color"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 )
 
@@ -20,9 +24,9 @@ func newParticleWorld(seed uint64) (*engine.World, *ParticleSystem) {
 func TestParticleSpawnBranchesByBehavior(t *testing.T) {
 	w, particles := newParticleWorld(0xC0111DE)
 
-	particles.spawnOne(component.ParticleDecay, 3, 4, 'd', true)
-	particles.spawnOne(component.ParticleBlossom, 6, 7, 'b', false)
-	particles.spawnOne(component.ParticleNone, 1, 1, 'x', false)
+	particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDecay, X: 3, Y: 4, Char: 'd', SkipStartCell: true}, 0, 0)
+	particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleBlossom, X: 6, Y: 7, Char: 'b'}, 0, 0)
+	particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleNone, X: 1, Y: 1, Char: 'x'}, 0, 0)
 
 	entities := w.Components.Particle.Entities()
 	if len(entities) != 2 {
@@ -113,7 +117,7 @@ func TestParticleBehaviorsPreserveGlyphEffects(t *testing.T) {
 			w.Components.Glyph.SetComponent(glyphEntity, component.GlyphComponent{
 				Rune: 'g', Type: component.GlyphBlue, Level: component.GlyphNormal,
 			})
-			particles.spawnOne(tc.behavior, 5, 5, 'p', false)
+			particles.spawnOne(event.ParticleSpawnEntry{Behavior: tc.behavior, X: 5, Y: 5, Char: 'p'}, 0, 0)
 
 			particles.Update()
 
@@ -201,8 +205,8 @@ func TestParticleProtectionAndTerminalGlyphRules(t *testing.T) {
 
 func TestParticleMutualAnnihilationIsImmediateAndSilent(t *testing.T) {
 	w, particles := newParticleWorld(0xA6611A7E)
-	particles.spawnOne(component.ParticleDecay, 5, 5, 'd', false)
-	particles.spawnOne(component.ParticleBlossom, 5, 5, 'b', false)
+	particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDecay, X: 5, Y: 5, Char: 'd'}, 0, 0)
+	particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleBlossom, X: 5, Y: 5, Char: 'b'}, 0, 0)
 	w.Resources.Time.DeltaTime = 0
 
 	particles.Update()
@@ -217,19 +221,19 @@ func TestParticleMutualAnnihilationIsImmediateAndSilent(t *testing.T) {
 
 func TestParticleBehaviorsShareOneRNGStream(t *testing.T) {
 	w1, decayFirst := newParticleWorld(0x5EED)
-	decayFirst.spawnOne(component.ParticleDecay, 1, 1, 'd', false)
+	decayFirst.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDecay, X: 1, Y: 1, Char: 'd'}, 0, 0)
 	decayEntity := w1.Components.Particle.Entities()[0]
 	decayKinetic, _ := w1.Components.Kinetic.GetComponent(decayEntity)
 
 	w2, blossomFirst := newParticleWorld(0x5EED)
-	blossomFirst.spawnOne(component.ParticleBlossom, 2, 2, 'b', false)
+	blossomFirst.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleBlossom, X: 2, Y: 2, Char: 'b'}, 0, 0)
 	blossomEntity := w2.Components.Particle.Entities()[0]
 	blossomKinetic, _ := w2.Components.Kinetic.GetComponent(blossomEntity)
 	if decayKinetic.VelY != -blossomKinetic.VelY {
 		t.Fatalf("first draw differs by behavior: decay %v, blossom %v", decayKinetic.VelY, blossomKinetic.VelY)
 	}
 
-	blossomFirst.spawnOne(component.ParticleDecay, 1, 1, 'd', false)
+	blossomFirst.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDecay, X: 1, Y: 1, Char: 'd'}, 0, 0)
 	secondDecay := w2.Components.Particle.Entities()[1]
 	secondDecayKinetic, _ := w2.Components.Kinetic.GetComponent(secondDecay)
 	if decayKinetic.VelY == secondDecayKinetic.VelY {
@@ -237,14 +241,17 @@ func TestParticleBehaviorsShareOneRNGStream(t *testing.T) {
 	}
 }
 
-func TestParticleBehaviorsUseCommonWallDestruction(t *testing.T) {
+func TestFallingParticlesUseCommonWallDestruction(t *testing.T) {
 	for _, behavior := range particleBehaviorOrder {
+		if particleProfiles[behavior].bounce > 0 {
+			continue
+		}
 		t.Run(behavior.String(), func(t *testing.T) {
 			w, particles := newParticleWorld(0x5EED)
 			wall := w.CreateEntity(core.DomainShared)
 			w.Positions.SetPosition(wall, component.PositionComponent{X: 5, Y: 5})
 			w.Components.Wall.SetComponent(wall, component.WallComponent{BlockMask: component.WallBlockParticle})
-			particles.spawnOne(behavior, 5, 5, 'p', false)
+			particles.spawnOne(event.ParticleSpawnEntry{Behavior: behavior, X: 5, Y: 5, Char: 'p'}, 0, 0)
 			w.Resources.Time.DeltaTime = 0
 
 			particles.Update()
@@ -269,7 +276,7 @@ func TestParticleBehaviorOrderCoversEveryProfile(t *testing.T) {
 			t.Errorf("behavior %v appears more than once in update order", behavior)
 		}
 		seen[behavior] = true
-		if _, ok := particleProfileFor(behavior); !ok {
+		if particleProfiles[behavior].color == ([3]color.RGB{}) {
 			t.Errorf("behavior %v has no profile", behavior)
 		}
 	}
@@ -277,5 +284,57 @@ func TestParticleBehaviorOrderCoversEveryProfile(t *testing.T) {
 		if !seen[behavior] {
 			t.Errorf("behavior %v has no update-order entry", behavior)
 		}
+	}
+}
+
+// Dust lives by its glyph level and fades a level as its life runs down; the
+// falling behaviors carry no timer, so they live until they collide or leave.
+func TestParticleLifetimeFollowsProfile(t *testing.T) {
+	w, particles := newParticleWorld(0x71FE)
+	particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDecay, X: 3, Y: 4, Char: 'd'}, 0, 0)
+	particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleBlossom, X: 6, Y: 7, Char: 'b'}, 0, 0)
+	particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDust, X: 10, Y: 5, Char: 'u',
+		Level: component.GlyphBright, SkipStartCell: true}, 10, 5)
+
+	entities := w.Components.Particle.Entities()
+	for _, e := range entities[:2] {
+		if w.Components.Timer.HasEntity(e) {
+			t.Fatalf("falling particle %d has a timer", e)
+		}
+	}
+	dust := entities[2]
+	if timer, ok := w.Components.Timer.GetComponent(dust); !ok || timer.Remaining != parameter.DustTimerBright {
+		t.Fatalf("bright dust timer = %+v, want %v", timer, parameter.DustTimerBright)
+	}
+
+	w.Components.Timer.SetComponent(dust, component.TimerComponent{Remaining: parameter.DustTimerNormal - time.Millisecond})
+	w.Resources.Time.DeltaTime = 0
+	particles.Update()
+	if sigil, _ := w.Components.Sigil.GetComponent(dust); sigil.Color != visual.RgbDustNormal {
+		t.Fatalf("dust colour = %+v, want the normal level once below its lifetime", sigil.Color)
+	}
+}
+
+func TestDustBouncesOffWalls(t *testing.T) {
+	w, particles := newParticleWorld(0xB0)
+	wall := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(wall, component.PositionComponent{X: 6, Y: 5})
+	w.Components.Wall.SetComponent(wall, component.WallComponent{BlockMask: component.WallBlockParticle})
+	particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDust, X: 5, Y: 5, Char: 'u',
+		Level: component.GlyphNormal, SkipStartCell: true}, 5, 5)
+	dust := w.Components.Particle.Entities()[0]
+	kinetic, _ := w.Components.Kinetic.GetComponent(dust)
+	kinetic.VelX, kinetic.VelY = 20, 0
+	w.Components.Kinetic.SetComponent(dust, kinetic)
+	w.Resources.Time.DeltaTime = 100 * time.Millisecond
+
+	particles.Update()
+
+	kinetic, ok := w.Components.Kinetic.GetComponent(dust)
+	if pos, _ := w.Positions.GetPosition(dust); !ok || pos.X != 5 || kinetic.VelX >= 0 {
+		t.Fatalf("dust at %+v with velocity %v, want it held at 5 and reflected", pos, kinetic.VelX)
+	}
+	if got := w.Resources.Status.Ints.Get("dust.wall_collisions").Load(); got != 1 {
+		t.Fatalf("dust wall collisions = %d, want 1", got)
 	}
 }

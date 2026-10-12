@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 181
+const EventTypeCount = 179
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -97,8 +97,6 @@ func InitRegistry() {
 	RegisterType("EventExplosionVisualRequest", EventExplosionVisualRequest, &ExplosionVisualRequestPayload{})
 	RegisterType("EventExplosionVisualBatchRequest", EventExplosionVisualBatchRequest, &ExplosionVisualBatchRequestPayload{})
 	RegisterType("EventPulseVisualRequest", EventPulseVisualRequest, &PulseVisualRequestPayload{})
-	RegisterType("EventDustSpawnOneRequest", EventDustSpawnOneRequest, &DustSpawnOneRequestPayload{})
-	RegisterType("EventDustSpawnBatchRequest", EventDustSpawnBatchRequest, nil)
 	RegisterType("EventDustAllRequest", EventDustAllRequest, nil)
 	RegisterType("EventParticleSpawnOne", EventParticleSpawnOne, &ParticleSpawnPayload{})
 	RegisterType("EventParticleSpawnBatch", EventParticleSpawnBatch, nil)
@@ -284,8 +282,6 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventExplosionVisualRequest:          ClassLocal,
 	EventExplosionVisualBatchRequest:     ClassLocal,
 	EventPulseVisualRequest:              ClassLocal,
-	EventDustSpawnOneRequest:             ClassLocal,
-	EventDustSpawnBatchRequest:           ClassLocal,
 	EventDustAllRequest:                  ClassLocal,
 	EventParticleSpawnOne:                ClassLocal,
 	EventParticleSpawnBatch:              ClassLocal,

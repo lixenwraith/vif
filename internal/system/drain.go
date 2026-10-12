@@ -1186,7 +1186,7 @@ func (s *DrainSystem) handleCollisionAtPosition(drain *drainCacheEntry, entity c
 
 	// Convert glyphs to dust
 	if s.world.Components.Glyph.HasEntity(entity) {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventDustSpawnOneRequest, entity)
+		event.EmitParticleDeath(s.world.Resources.Event.Queue, component.ParticleDust, entity)
 		return
 	}
 

@@ -586,16 +586,6 @@ type ExplosionVisualBatchRequestPayload struct {
 	Type     ExplosionType
 }
 
-// --- Dust ---
-
-// DustSpawnOneRequestPayload contains parameters for single dust entity creation
-type DustSpawnOneRequestPayload struct {
-	X     int                  `toml:"x"`
-	Y     int                  `toml:"y"`
-	Char  rune                 `toml:"char"`
-	Level component.GlyphLevel `toml:"level"`
-}
-
 // --- Particle ---
 
 // ParticleSpawnPayload contains parameters to spawn one behavior-selected particle.
@@ -604,6 +594,7 @@ type ParticleSpawnPayload struct {
 	X             int                        `toml:"x"`
 	Y             int                        `toml:"y"`
 	Char          rune                       `toml:"char"`
+	Level         component.GlyphLevel       `toml:"level"`           // Dust lifetime and colour; falling behaviors ignore it
 	SkipStartCell bool                       `toml:"skip_start_cell"` // True: particle skips interaction at spawn position
 }
 

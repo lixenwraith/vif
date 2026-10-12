@@ -87,8 +87,7 @@ wind or a generic integration pass.
 | Missile | Homing or ballistic velocity, speed cap, position-only integration, swept impact, lifetime | Targeting and detonation are part of the same step; it intentionally ignores `Accel`. |
 | Bullet | Ballistic position-only integration plus swept wall/shield/cursor collision | A projectile should not inherit environmental forces merely because it stores precise motion. |
 | Loot | Owner-specific line of sight/flow homing, cornering brake or velocity bleed, swept bounce | It is Player-domain and owned; current wind scope excludes it. |
-| Dust | Random jitter, orbital equilibrium, aspect-corrected orbital damping, quadratic drag, position-only integration, damped wall reflection | It has bespoke field dynamics and is explicitly deferred until mass/physical interaction are designed. Dust also batches impulses onto drains. |
-| Particle | Decay moves down and blossom moves up under opposite persistent acceleration; both use normal integration and swept transform/destruction | `ParticleBehavior` selects the rules. Particles already own `AccelY`, have no mass, and are explicitly outside wind for now. |
+| Particle | Decay falls and blossom rises under opposite persistent acceleration and die on contact; dust jitters, bounces with damping and batches impulses onto drains. An anchor (the cursor for dust) adds orbital equilibrium, aspect-corrected radial damping and quadratic drag; all use normal integration and a swept path | `ParticleBehavior` selects one profile row. Particles have no mass and are explicitly outside wind until mass/physical interaction are designed. |
 | Weapon orb | Orbit angle and cursor position are authoritative; `Kinetic.Precise` is overwritten as a positional mirror | It is a scripted attachment, not an integrated body. |
 | Cursor | No `Kinetic`; position changes through owner-authored absolute-cell events and local prediction | Adding forces requires an authority and prediction design before adding a component. |
 
@@ -142,7 +141,7 @@ scatter between configured species pairs and continuous flocking separation for
 configured targets. A shared target's scatter is seeded from the tick and the
 colliding pair rather than drawn from the Shared stream, because whether a
 collision happens at all depends on live positions (D-8). Pylons can be sources without being movable targets. Dust is
-another producer: it aggregates many particle hits per drain and applies one
+another producer: it aggregates many hits per drain and applies one
 diminishing-return velocity delta.
 
 These are different operations and should stay named separately:

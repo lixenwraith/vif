@@ -263,16 +263,10 @@ const (
 	// EventPulseVisualRequest (PulseVisualRequestPayload) [local] presents one disruptor pulse ring for its producer
 	EventPulseVisualRequest
 
-	// --- Dust ---
+	// --- Particle ---
 
-	// EventDustSpawnOneRequest (DustSpawnOneRequestPayload) [local] signals intent to spawn a single dust entity
-	EventDustSpawnOneRequest
-	// EventDustSpawnBatchRequest (BatchPayload[DustSpawnEntry]) [local] signals intent to spawn multiple dust entities
-	EventDustSpawnBatchRequest
 	// EventDustAllRequest [local] signals intent to convert all glyphs on the map to dust
 	EventDustAllRequest
-
-	// --- Particle ---
 
 	// EventParticleSpawnOne (ParticleSpawnPayload) [local] signals intent to spawn one behavior-selected particle
 	EventParticleSpawnOne
