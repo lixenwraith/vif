@@ -47,7 +47,7 @@ type Scheduler struct {
 	// Event routing
 	eventRouter *event.Router
 
-	// tap observes every event before dispatch; harness-only, set before Start
+	// tap observes every event before dispatch: a driven bot's or a harness's, set before Start
 	tap func(event.GameEvent)
 
 	// digest reads the world a journal's digest carries, under the world lock
@@ -314,8 +314,9 @@ func (s *Scheduler) RegisterEventHandler(handler event.Handler) {
 }
 
 // SetDispatchTap installs an observer called for every event before the FSM and
-// system handlers see it, so a pooled payload is still the producer's. Harness-only:
-// set before Start, or any time on a driven App, never on a running scheduler.
+// system handlers see it, so a pooled payload is still the producer's. Its one slot
+// belongs to a driven App's bot, or to a harness on an App no bot drives: set before
+// Start, or any time on a driven App, never on a running scheduler.
 func (s *Scheduler) SetDispatchTap(fn func(event.GameEvent)) { s.tap = fn }
 
 // SetJournalDigest installs the world reading a journal carries every

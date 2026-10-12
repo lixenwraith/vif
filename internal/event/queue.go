@@ -310,7 +310,7 @@ func (eq *EventQueue) CopyOut() QueueCopy {
 	c := QueueCopy{tail: eq.tail.Load(), overwritten: eq.overwritten.Load(), stamp: *eq.stamp.Load()}
 	for i := eq.head.Load(); i < c.tail; i++ {
 		ev := eq.events[i&parameter.EventBufferMask]
-		ev.Payload = clonePayload(ev.Payload)
+		ev.Payload = ClonePayload(ev.Payload)
 		c.pending = append(c.pending, ev)
 	}
 	eq.SnapshotTelemetry(&c.dispatched, &c.deadLetter)
@@ -324,7 +324,7 @@ func (eq *EventQueue) CopyIn(c QueueCopy) {
 	head := c.tail - uint64(len(c.pending))
 	for i, ev := range c.pending {
 		idx := (head + uint64(i)) & parameter.EventBufferMask
-		ev.Payload = clonePayload(ev.Payload)
+		ev.Payload = ClonePayload(ev.Payload)
 		eq.events[idx] = ev
 		eq.published[idx].Store(true)
 	}
@@ -339,9 +339,9 @@ func (eq *EventQueue) CopyIn(c QueueCopy) {
 	eq.stamp.Store(&st)
 }
 
-// clonePayload returns a payload sharing no storage with p: a queued one may be
+// ClonePayload returns a payload sharing no storage with p: a queued one may be
 // pooled, and whoever dispatches it recycles it.
-func clonePayload(p any) any {
+func ClonePayload(p any) any {
 	if p == nil {
 		return nil
 	}

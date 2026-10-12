@@ -10,9 +10,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -41,8 +43,10 @@ type Graph struct {
 	doc      map[string]any
 }
 
-// ParseGraph parses and validates one bot document.
+// ParseGraph parses and validates one bot document. A startup graph parses before
+// any App has built the event catalogue its triggers name.
 func ParseGraph(name string, data []byte) (*Graph, error) {
+	event.EnsureRegistry()
 	doc, err := toml.NewParser(data).Parse()
 	if err != nil {
 		return nil, fmt.Errorf("bot %s: %w", name, err)
@@ -122,11 +126,12 @@ func unknownKey(table map[string]any, allowed ...string) string {
 }
 
 // Instance is the surface of the participant a driver plays: the same calls an
-// authored script and the fuzz driver make.
+// authored script and the fuzz driver make, and the tap its dispatch reports through.
 type Instance interface {
 	Tick(int)
 	Inject(...*input.Intent) bool
 	InputTick() bool
+	SetDispatchTap(func(event.GameEvent))
 }
 
 // Stats reports one bot's progress.
@@ -149,6 +154,12 @@ type Driver struct {
 	credit  int64 // intents owed, in thousandths
 	started bool
 	stats   Stats
+
+	// seen is what the instance dispatched during the last step that the graph
+	// reacts to, in order; written inside dispatch and read inside Step, both under
+	// the world lock. observing is set only while the driver itself plays.
+	seen      []event.GameEvent
+	observing atomic.Bool
 }
 
 // NewDriver builds a driver for one instance. The graph's draws come from its own
@@ -162,12 +173,23 @@ func NewDriver(inst Instance, ctx *engine.GameContext, g *Graph, seed uint64, pa
 		rate: int64(g.Settings.ActionsPerSecond)}
 	d.mind = mind{ctx: ctx, queue: &d.queue,
 		rng: vmath.NewSeededRand(seed, "bot."+strconv.FormatUint(uint64(participant), 10))}
+	inst.SetDispatchTap(d.observe)
 	return d, nil
 }
 
-// Step updates the graph at the completed tick, releases what the rate allows,
-// advances input-driven work and ticks once. False means an intent quit the game.
-// Credit left idle is capped at one second's worth, so a quiet bot bursts no further.
+// observe keeps a copy of an event the graph reacts to, as dispatch recycles a
+// pooled payload; what an operator drives while the graph is suspended is not its.
+func (d *Driver) observe(ev event.GameEvent) {
+	if d.observing.Load() && d.machine.Reacts(ev.Type) {
+		ev.Payload = event.ClonePayload(ev.Payload)
+		d.seen = append(d.seen, ev)
+	}
+}
+
+// Step updates the graph at the completed tick, after the events the last step
+// dispatched, then releases what the rate allows, advances input-driven work and
+// ticks once. False means an intent quit the game. Credit left idle is capped at
+// one second's worth, so a quiet bot bursts no further.
 func (d *Driver) Step() (bool, error) {
 	d.credit = min(d.credit+d.rate*parameter.GameUpdateInterval.Milliseconds(), d.rate*1000)
 	var err error
@@ -179,11 +201,18 @@ func (d *Driver) Step() (bool, error) {
 			err = d.machine.Init(&d.mind)
 			return
 		}
+		for _, ev := range d.seen {
+			d.machine.HandleEvent(&d.mind, ev)
+		}
+		clear(d.seen)
+		d.seen = d.seen[:0]
 		d.machine.Update(&d.mind, parameter.GameUpdateInterval)
 	})
 	if err != nil {
 		return false, err
 	}
+	d.observing.Store(true)
+	defer d.observing.Store(false)
 	if !d.release() || !d.inst.InputTick() {
 		return false, nil
 	}

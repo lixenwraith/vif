@@ -177,6 +177,7 @@ func (a *App) Region(op, region, state string) bool {
 		&event.FSMRegionPayload{Op: op, Region: region, State: state})
 }
 
-// SetDispatchTap installs an observer for every dispatched event, for assertions the
-// journal cannot make: system-origin events are never journaled.
+// SetDispatchTap installs an observer for every dispatched event: a bot driving this
+// App reads its own dispatch through it, and a harness on an App no bot drives makes
+// assertions the journal cannot, as system-origin events are never journaled.
 func (a *App) SetDispatchTap(fn func(event.GameEvent)) { a.scheduler.SetDispatchTap(fn) }

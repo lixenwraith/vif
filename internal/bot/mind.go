@@ -369,6 +369,20 @@ func register(m *fsm.Machine[*mind]) {
 			return m.rng.Intn(100) < percent
 		}, nil
 	})
+	guard("Own", []string{"field"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
+		field, _ := args["field"].(string)
+		if field == "" {
+			return nil, errors.New("Own: field must name a payload field")
+		}
+		return func(m *mind, _ *fsm.RegionState, payload any) bool { return m.owns(payload, field) }, nil
+	})
+}
+
+// owns reports whether an event payload's field names the bot's own cursor
+func (m *mind) owns(payload any, field string) bool {
+	own := m.ctx.World.Resources.Player.Entity
+	v := fsm.FieldByTag(fsm.StructValue(payload), field)
+	return own != 0 && v.CanUint() && v.Uint() == uint64(own)
 }
 
 // intentChoice is a compiled Intent payload: one keymap action or a list drawn

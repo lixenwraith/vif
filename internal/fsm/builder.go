@@ -30,6 +30,7 @@ func (m *Machine[T]) AddTransition(sourceID StateID, t Transition[T]) {
 // Must be called after all nodes are added and before Init
 // This ensures O(1) LCA lookups during runtime
 func (m *Machine[T]) CompilePaths() error {
+	m.reacts.clear()
 	for id, node := range m.nodes {
 		path := make([]StateID, 0, 4)
 		curr := node
@@ -62,6 +63,7 @@ func (m *Machine[T]) CompilePaths() error {
 		for i := range node.Transitions {
 			node.triggers.set(node.Transitions[i].Event)
 		}
+		m.reacts.or(&node.triggers)
 	}
 	return nil
 }
