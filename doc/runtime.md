@@ -595,11 +595,12 @@ flowchart TD
     Pre --> FSM["Advance all active HFSM regions"]
     FSM --> Post["Settle FSM-emitted events"]
     Post --> Systems["Run priority-ordered systems"]
-    Systems --> Stats["Publish counters, APM, queue and status snapshots"]
+    Systems --> Close["Settle system-emitted events"]
+    Close --> Stats["Publish counters, APM, queue and status snapshots"]
     Stats --> Flush["Close and send this tick's production epoch"]
 ```
 
-`Scheduler.processTick` holds the world lock for steps 1–9:
+`Scheduler.processTick` holds the world lock for steps 1–10:
 
 1. apply the wire artifacts whose fixed playout deadline has arrived and, if any
    did, settle them in their own `"wire"` group — before the tick stamp advances,
@@ -614,22 +615,27 @@ flowchart TD
    one metric set per declared region;
 6. settle events emitted by state transitions and actions;
 7. run all systems sequentially against that settled state;
-8. snapshot position-derived entity counts before unlocking;
-9. close this tick's production epoch and hand it to the transport, so a peer
-   receives one tick's artifacts as one tick's worth.
+8. settle the events the systems emitted, as a tick phase like steps 4 and 6, so
+   an outcome a system applies through a queued event belongs to this tick for
+   every reader after it;
+9. commit the tick count and APM, and snapshot entity, queue and event counters
+   before unlocking;
+10. raise the session layer's own journaled records, which settle between ticks,
+    then close this tick's production epoch and hand it to the transport, so a
+    peer receives one tick's artifacts as one tick's worth, and write the journal
+    digest when it is due.
 
-Step 8 is inside the critical section deliberately: `Position` has no internal
+Step 9 is inside the critical section deliberately: `Position` has no internal
 lock, so counting entities after unlocking would race removals on the
 event-loop and main goroutines.
 
 After the lock is released, the scheduler uses only atomic or internally
-synchronized paths to increment tick count, roll APM windows, publish entity
-and event counters, report queue overflow, sample the flight recorder,
-optionally emit a grouped status snapshot, and drain any pending recorder
-flush request.
+synchronized paths to check breakpoints, report queue overflow, sample the
+flight recorder, optionally emit a grouped status snapshot and journal anchor,
+and drain any pending recorder flush request.
 
 That tail is not a barrier. Because the lock is already released, the event
-loop, input path and render goroutine can commit between step 8 and the
+loop, input path and render goroutine can commit between step 9 and the
 sample, so a status snapshot or recorder window is stamped with tick *n* but
 reads "at or after tick *n*" for anything not written inside the locked body.
 See [Logging and diagnostics](logging-and-diagnostics.md) §6.
@@ -640,9 +646,11 @@ registration surface before any tick reads it:
 `Seal` freezes the system list, `Freeze` freezes the metric set and lays out
 the recorder ring.
 
-Systems may emit events during `Update`. Those events are normally handled by
-the inter-tick event loop before the next frame; if contention delays that loop,
-the next tick's initial settling is the fallback.
+Systems may emit events during `Update`; step 8 settles them before the guest's
+tick-close capture, the epoch flush and the journal digest read the world. What
+a capture still does not carry is a queued event: one pushed after that settle
+(the session layer's records, an install's re-derivations, a breakpoint's
+pause) or one a settle stopped at its pass cap left behind.
 
 Each completed event-settle group advances the journal `boundary` counter.
 This preserves distinctions between separately injected groups whose system

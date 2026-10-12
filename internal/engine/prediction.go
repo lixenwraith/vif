@@ -35,19 +35,17 @@ func (w *World) recordPrediction(et event.EventType, payload any) {
 			return
 		}
 	}
-	var overflow []event.SpeciesKilledPayload
 	if len(w.predicted) >= parameter.PredictionLedgerMax {
 		// Past the bound the ledger pays out unproved rather than losing a reward:
 		// a guest killing this many shared species inside one convergence floor has
-		// a correction problem, and eating its progression would not fix it.
-		overflow = append(overflow, w.predicted[0].payload)
+		// a correction problem, and eating its progression would not fix it. Paid as
+		// the tick closes: a journaled confirmation must not settle inside the body.
+		w.overdue = append(w.overdue, w.predicted[0].payload)
 		w.predicted = append(w.predicted[:0], w.predicted[1:]...)
 	}
 	w.predicted = append(w.predicted, predictedDeath{payload: *p, tick: tick})
 	w.publishPredictionLocked()
 	w.predictionMu.Unlock()
-
-	w.confirm(overflow)
 }
 
 // ConfirmPredictedDeaths settles the ledger against the authority's world at
@@ -69,10 +67,15 @@ func (w *World) ConfirmPredictedDeaths(authorityTick uint64, authority *World) {
 	})
 }
 
-// SettlePredictedDeaths releases everything held once nothing will correct this
-// instance any more — it took the term, or the last peer went. The world it
-// predicted is the only one there is, so its derivations are settled.
+// SettlePredictedDeaths pays what the ledger's bound evicted, and releases
+// everything held once nothing will correct this instance any more — it took the
+// term, or the last peer went. The world it predicted is then the only one there is.
 func (w *World) SettlePredictedDeaths() {
+	w.predictionMu.Lock()
+	overdue := w.overdue
+	w.overdue = nil
+	w.predictionMu.Unlock()
+	w.confirm(overdue)
 	if w.PredictsShared() {
 		return
 	}
@@ -92,6 +95,7 @@ func (w *World) ResetPredictedDeaths() {
 	w.predictionMu.Lock()
 	defer w.predictionMu.Unlock()
 	w.predicted = w.predicted[:0]
+	w.overdue = nil
 	w.publishPredictionLocked()
 }
 

@@ -345,9 +345,12 @@ caller:
 
 | `src` | Call site |
 |---|---|
+| `wire` | `processTick` settling the wire artifacts due before the tick opens |
 | `pre` | `processTick` initial settling |
 | `post` | `processTick` settling after the FSM update |
+| `close` | `processTick` settling after the systems, before the tick closes |
 | `loop` | inter-tick event loop |
+| `settle` | `Settle`, from a driven or headless caller |
 | `input` | `DispatchEventsImmediately`, from an intent or macro |
 | `reset` | `executeReset` settling |
 
@@ -781,11 +784,14 @@ Each record is stamped synchronously at queue push with
 
 A record `(R,T,b)` was produced after tick `T` of run `R` completed, in the
 `b`th settle group since. Separate boundaries matter: merging two injected
-groups can change their order relative to system events. Every between-tick
-dispatch is a whole settle, the interactive event loop's included, so a group
-that held no record — a tick's leftovers — is one settle a replay reproduces
-before the next group it reaches. The reset event that opens run `R+1` is itself
-recorded in run `R`, so replay follows that boundary rather than fabricating it.
+groups can change their order relative to system events. A tick's own events
+settle inside it, before its digest, so the replay's tick reproduces them. Every
+between-tick dispatch is a whole settle, the interactive event loop's included,
+so a group that held no record is one settle a replay reproduces before the next
+group it reaches. A journaled event is therefore never pushed before a tick
+body's last settle: the session layer raises its records at the epoch flush,
+after the closing settle. The reset event that opens run `R+1` is itself recorded
+in run `R`, so replay follows that boundary rather than fabricating it.
 
 ### Record and anchor shapes
 
@@ -864,7 +870,7 @@ recorded run did.
 Every `event.DigestIntervalTicks` (20) ticks the run writes a `digest` record,
 `jrun`, `jtick` and four hex hashes from `snapshot.DigestWorld` over both domains:
 `positions`, `kinetics`, `combat` and `entities`. It is taken last in the tick
-body, before anything settles between that tick and the next; a replay compares
+body, after the tick's closing settle; a replay compares
 it after the tick that reaches the same place, before injecting that tick's
 groups. The first one it does not reproduce names the tick, the classes that
 differ and the last digest that matched, so a replay that left its run is caught

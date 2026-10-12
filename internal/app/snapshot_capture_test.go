@@ -483,6 +483,74 @@ func TestInstalledWorldStaysIdenticalForFiveHundredTicks(t *testing.T) {
 	}
 }
 
+// TestACaptureAfterATickCarriesWhatItsSystemsEnded: a swarm that ends at its
+// charge limit or at zero HP queues its despawn in Update. The tick settles that
+// before it closes, so a capture read after it already lacks the swarm and a
+// receiver does not end it, count it or credit its kill a second time.
+func TestACaptureAfterATickCarriesWhatItsSystemsEnded(t *testing.T) {
+	for _, end := range []string{"charges", "hp"} {
+		t.Run(end, func(t *testing.T) {
+			origin := mustHeadless(t, 0x5A4E, 120, 40)
+			defer origin.Close()
+			receiver := mustHeadless(t, 0x5A4E, 120, 40)
+			defer receiver.Close()
+			tickUntilCursor(t, origin)
+			tickUntilCursor(t, receiver)
+			quiescePlayerDomain(t, origin)
+			quiescePlayerDomain(t, receiver)
+			origin.World().RunSafe(func() {
+				origin.World().PushEventDomain(event.EventSwarmSpawnRequest,
+					&event.SwarmSpawnRequestPayload{X: 30, Y: 12}, core.DomainShared)
+			})
+			origin.Settle()
+			origin.Tick(1)
+
+			var header core.Entity
+			origin.World().RunSafe(func() {
+				w := origin.World()
+				swarms := w.Components.Swarm.Entities()
+				if len(swarms) == 0 {
+					return
+				}
+				header = swarms[0]
+				if end == "charges" {
+					sc, _ := w.Components.Swarm.GetPtr(header)
+					sc.ChargesCompleted = parameter.SwarmMaxCharges
+					return
+				}
+				c, _ := w.Components.Combat.GetPtr(header)
+				c.HitPoints, c.LastDamagedBy = 0, w.Resources.Player.Slot(0)
+			})
+			if header == 0 {
+				t.Fatal("no swarm spawned")
+			}
+			origin.Tick(1)
+			if err := receiver.InstallShared(mustRoundTrip(t, origin)); err != nil {
+				t.Fatalf("install: %v", err)
+			}
+			var held bool
+			receiver.World().RunSafe(func() { held = receiver.World().Components.Swarm.HasEntity(header) })
+			if held {
+				t.Fatal("the capture holds a swarm its tick already ended")
+			}
+
+			counters := []string{"swarm.killed_by_lifecycle", "kills.swarm"}
+			before := make([][2]int64, len(counters))
+			for i, key := range counters {
+				before[i] = [2]int64{statOf(origin, key), statOf(receiver, key)}
+			}
+			origin.Tick(2)
+			receiver.Tick(2)
+			for i, key := range counters {
+				o, r := statOf(origin, key)-before[i][0], statOf(receiver, key)-before[i][1]
+				if o != r {
+					t.Errorf("%s moved %d on the receiver after the install, %d on the origin", key, r, o)
+				}
+			}
+		})
+	}
+}
+
 func seedName(seed uint64) string {
 	return "seed_" + strconv.FormatUint(seed, 16)
 }
