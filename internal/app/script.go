@@ -111,7 +111,7 @@ func RunBot(cfg Config, spec string) (bot.Stats, error) {
 	stats := driver.Stats()
 	reg := played.world.Resources.Status
 	played.log.Info("app", "msg", "bot stopped", "name", name, "quit", quit, "ticks", stats.Ticks,
-		"injected", stats.Injected, "dropped", stats.Dropped, "state", stats.State,
+		"injected", stats.Injected, "dropped", stats.Dropped, "score", stats.Score, "state", stats.State,
 		"typed", reg.Ints.Get("typing.correct").Load(), "errors", reg.Ints.Get("typing.errors").Load())
 	return stats, err
 }

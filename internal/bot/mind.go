@@ -415,8 +415,8 @@ func register(m *fsm.Machine[*mind]) {
 // owns reports whether an event payload's field names the bot's own cursor
 func (m *mind) owns(payload any, field string) bool {
 	own := m.ctx.World.Resources.Player.Entity
-	v := fsm.FieldByTag(fsm.StructValue(payload), field)
-	return own != 0 && v.CanUint() && v.Uint() == uint64(own)
+	v, ok := std.ExtractIntField(payload, field)
+	return ok && own != 0 && v == int64(own)
 }
 
 // intentChoice is a compiled Intent payload: one keymap action or a list drawn
