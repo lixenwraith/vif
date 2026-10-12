@@ -57,7 +57,14 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 		return
 	}
 
-	materializes.Each(func(_ core.Entity, mat *component.MaterializeComponent) bool {
+	timers := r.gameCtx.World.Components.Timer
+	materializes.Each(func(e core.Entity, mat *component.MaterializeComponent) bool {
+		timer, ok := timers.GetPtr(e)
+		if !ok {
+			return true
+		}
+		progress := timer.Progress(component.TimerDeadline)
+
 		// Transform target area to viewport coords
 		targetVX, targetVY, _ := ctx.MapToViewport(mat.TargetX, mat.TargetY)
 
@@ -67,13 +74,13 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 			c = materializePalette[mat.Type]
 		}
 		for _, dir := range [...]beamDir{dirUp, dirDown, dirLeft, dirRight} {
-			r.renderBeam(ctx, buf, pf, mat, style, c, targetVX, targetVY, dir)
+			r.renderBeam(ctx, buf, pf, mat, progress, style, c, targetVX, targetVY, dir)
 		}
 		return true
 	})
 }
 
-func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, mat *component.MaterializeComponent, style component.MaterializeStyle, c color.RGB, targetVX, targetVY int, dir beamDir) {
+func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, mat *component.MaterializeComponent, progress float64, style component.MaterializeStyle, c color.RGB, targetVX, targetVY int, dir beamDir) {
 	var edgePos, distance int
 	var spanStart, spanEnd int // Range along the target edge
 
@@ -107,7 +114,6 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 	}
 
 	dist := float64(distance)
-	progress := mat.Progress
 
 	// Calculate segment bounds based on phase.
 	var segStartF, segEndF float64
@@ -138,7 +144,7 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 
 	// Render cells across the target edge span
 	for cellOffset := segStart; cellOffset <= segEnd; cellOffset++ {
-		intensity := r.calcIntensity(style, mat.Progress, cellOffset, segStart, segEnd)
+		intensity := r.calcIntensity(style, progress, cellOffset, segStart, segEnd)
 		for spanPos := spanStart; spanPos <= spanEnd; spanPos++ {
 			r.renderBeamCellSpan(ctx, buf, pf, c, dir, edgePos, cellOffset, spanPos, intensity)
 		}

@@ -1419,7 +1419,7 @@ func equalLightning(a, b *component.LightningComponent) bool {
 }
 
 func equalMissile(a, b *component.MissileComponent) bool {
-	return a.Owner == b.Owner && a.Hostile == b.Hostile && a.Damage == b.Damage && a.TargetEntity == b.TargetEntity && a.HitEntity == b.HitEntity && a.Lifetime == b.Lifetime && a.LastTrailEmit == b.LastTrailEmit && func() bool {
+	return a.Owner == b.Owner && a.Hostile == b.Hostile && a.Damage == b.Damage && a.TargetEntity == b.TargetEntity && a.HitEntity == b.HitEntity && a.LastTrailEmit == b.LastTrailEmit && func() bool {
 		for i0 := range a.Trail {
 			if !(math.Float64bits(float64(a.Trail[i0].X)) == math.Float64bits(float64(b.Trail[i0].X)) && math.Float64bits(float64(a.Trail[i0].Y)) == math.Float64bits(float64(b.Trail[i0].Y)) && a.Trail[i0].Age == b.Trail[i0].Age) {
 				return false
@@ -1442,7 +1442,7 @@ func equalSpirit(a, b *component.SpiritComponent) bool {
 }
 
 func equalMaterialize(a, b *component.MaterializeComponent) bool {
-	return a.TargetX == b.TargetX && a.TargetY == b.TargetY && a.AreaWidth == b.AreaWidth && a.AreaHeight == b.AreaHeight && math.Float64bits(float64(a.Progress)) == math.Float64bits(float64(b.Progress)) && a.BeamWidth == b.BeamWidth && a.Type == b.Type
+	return *a == *b
 }
 
 func equalTarget(a, b *component.TargetComponent) bool {

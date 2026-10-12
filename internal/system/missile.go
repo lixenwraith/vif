@@ -128,30 +128,16 @@ func (s *MissileSystem) Update() {
 			continue
 		}
 
-		missileComp.Lifetime += dt
+		// The flight deadline only arms at spawn; a missile without one flies on
+		timer, timed := s.world.Components.Timer.GetPtr(missileEntity)
+		var flight time.Duration
+		if timed {
+			flight = timer.Elapsed(component.TimerDeadline)
+		}
 
 		if s.updateMissile(missileComp, kineticComp, dtSec) {
-			x, y := physics.GridPos(&kineticComp.Kinetic)
-			s.blast.resetOne(x, y, parameter.MissileExplosionRadius)
-			s.world.PushLocal(event.EventExplosionVisualRequest, &event.ExplosionVisualRequestPayload{
-				X: x, Y: y, Radius: parameter.MissileExplosionRadius,
-				Type: event.ExplosionTypeMissile,
-			})
-			if missileComp.Hostile {
-				strikeCursorsIn(s.world, s.blast.contains, missileComp.Damage)
-			} else {
-				// Missile is player-domain: resolve its own half before the request crosses
-				strikePlayerTargets(s.world, missileComp.Owner, &s.blast, component.CombatAttackMissile, false)
-				s.world.PushCrossing(event.EventExplosionRequest, &event.ExplosionRequestPayload{
-					Entity: missileComp.Owner,
-					X:      x,
-					Y:      y,
-					Radius: parameter.MissileExplosionRadius,
-					Attack: component.CombatAttackMissile,
-				})
-			}
+			s.detonate(missileComp, kineticComp)
 			toDestroy = append(toDestroy, missileEntity)
-			s.statImpacts.Add(1)
 			continue
 		}
 
@@ -165,15 +151,22 @@ func (s *MissileSystem) Update() {
 			continue
 		}
 
+		// An orphaned missile out of flight time detonates where this move left it
+		if timed && timer.Expired(component.TimerDeadline) {
+			s.detonate(missileComp, kineticComp)
+			toDestroy = append(toDestroy, missileEntity)
+			continue
+		}
+
 		// Update spatial grid position
 		if missilePos, ok := s.world.Positions.GetPosition(missileEntity); !ok || missilePos.X != gridX || missilePos.Y != gridY {
 			s.world.Positions.SetPosition(missileEntity, component.PositionComponent{X: gridX, Y: gridY})
 		}
 
-		// Trail emission based on elapsed time
-		if missileComp.Lifetime-missileComp.LastTrailEmit >= parameter.MissileTrailInterval {
+		// Trail emission based on flight time
+		if flight-missileComp.LastTrailEmit >= parameter.MissileTrailInterval {
 			s.pushTrail(missileComp, kineticComp.PreciseX, kineticComp.PreciseY)
-			missileComp.LastTrailEmit = missileComp.Lifetime
+			missileComp.LastTrailEmit = flight
 		}
 		s.ageTrail(missileComp, dt)
 	}
@@ -181,12 +174,31 @@ func (s *MissileSystem) Update() {
 	s.world.DestroyEntitiesBatch(toDestroy)
 }
 
-func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *component.KineticComponent, dt float64) (impacted bool) {
-	// Lifetime timeout for orphaned missiles
-	if m.Lifetime > parameter.MissileMaxLifetime {
-		return true
+// detonate blasts a missile's surroundings where it stands
+func (s *MissileSystem) detonate(m *component.MissileComponent, k *component.KineticComponent) {
+	x, y := physics.GridPos(&k.Kinetic)
+	s.blast.resetOne(x, y, parameter.MissileExplosionRadius)
+	s.world.PushLocal(event.EventExplosionVisualRequest, &event.ExplosionVisualRequestPayload{
+		X: x, Y: y, Radius: parameter.MissileExplosionRadius,
+		Type: event.ExplosionTypeMissile,
+	})
+	if m.Hostile {
+		strikeCursorsIn(s.world, s.blast.contains, m.Damage)
+	} else {
+		// Missile is player-domain: resolve its own half before the request crosses
+		strikePlayerTargets(s.world, m.Owner, &s.blast, component.CombatAttackMissile, false)
+		s.world.PushCrossing(event.EventExplosionRequest, &event.ExplosionRequestPayload{
+			Entity: m.Owner,
+			X:      x,
+			Y:      y,
+			Radius: parameter.MissileExplosionRadius,
+			Attack: component.CombatAttackMissile,
+		})
 	}
+	s.statImpacts.Add(1)
+}
 
+func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *component.KineticComponent, dt float64) (impacted bool) {
 	prevX, prevY := k.PreciseX, k.PreciseY
 
 	// Resolve target for homing
@@ -422,6 +434,7 @@ func (s *MissileSystem) spawnMissile(p *event.MissileSpawnRequestPayload, x, y, 
 
 	cell := vmath.PointAtF(x, y)
 	s.world.Positions.SetPosition(e, component.PositionComponent{X: cell.X, Y: cell.Y})
+	armTimer(s.world, e, component.TimerDeadline, parameter.MissileMaxLifetime)
 	s.statSpawned.Add(1)
 }
 

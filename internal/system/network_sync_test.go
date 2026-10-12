@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -67,10 +68,11 @@ func TestTheTimerSplashFollowsTheInstalledGoldSequence(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	gold := NewGoldSystem(w).(*GoldSystem)
 
+	// The store pass installs each header with its deadline before LoadShared
 	header := w.CreateEntity(core.DomainShared)
+	armTimer(w, header, component.TimerDeadline, parameter.GoldDuration)
 	data, err := json.Marshal(goldSnapshot{
 		Active: true, SpawnEnabled: true, HeaderEntity: header,
-		ExpiresIn: parameter.GoldDuration,
 	})
 	if err != nil {
 		t.Fatalf("marshal a captured sequence: %v", err)
@@ -107,9 +109,9 @@ func TestTheTimerSplashFollowsTheInstalledGoldSequence(t *testing.T) {
 	}
 
 	next := w.CreateEntity(core.DomainShared)
+	armTimer(w, next, component.TimerDeadline, parameter.GoldDuration)
 	data, err = json.Marshal(goldSnapshot{
 		Active: true, SpawnEnabled: true, HeaderEntity: next,
-		ExpiresIn: parameter.GoldDuration,
 	})
 	if err != nil {
 		t.Fatalf("marshal a second sequence: %v", err)

@@ -28,9 +28,8 @@ type MissileComponent struct {
 	TargetEntity core.Entity // Header for composite, entity for single
 	HitEntity    core.Entity // Specific member to hit (same as Target for non-composite)
 
-	// Timing
-	Lifetime      time.Duration // Time since spawn
-	LastTrailEmit time.Duration // Lifetime at last trail emission
+	// Flight time, counted on the deadline timer that ends it, at the last trail emission
+	LastTrailEmit time.Duration
 
 	// Trail ring buffer
 	Trail     [TrailCapacity]MissileTrailPoint

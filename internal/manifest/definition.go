@@ -143,7 +143,7 @@ var Systems = []SystemDef{
 	{Name: "nugget", Constructor: "NewNuggetSystem", Domain: "player",
 		Optional: []string{"materialize", "energy", "heat"}}, // personal: each participant owns its spawn, collection and reward
 	{Name: "particle", Constructor: "NewParticleSystem", Domain: "player", Optional: []string{"glyph", "death", "explosion"}}, // behavior-selected player particles; dust detonation optionally crosses through explosion
-	{Name: "gold", Constructor: "NewGoldSystem", Domain: "shared", Snapshot: "state", // sequence liveness, its header, and both deadlines live outside any store
+	{Name: "gold", Constructor: "NewGoldSystem", Domain: "shared", Snapshot: "state", // sequence liveness and its header live outside any store; its deadline rides the header's timer
 		Requires: []string{"composite"}, Optional: []string{"nugget", "energy", "splash"}}, // contested: the composite sequence is shared, the reward owner-authored
 
 	// --- Spawning / Materialize ---
