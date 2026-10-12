@@ -181,7 +181,9 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 			return false, nil
 		default:
 		}
-		if a.dismissed.Load() {
+		// A headless bot left with no session plays for nobody; a watched one plays
+		// on, as a person does.
+		if a.dismissed.Load() || kind == "bot" && forkCell(a).Load() {
 			return false, nil
 		}
 		if hold != nil && hold() {
