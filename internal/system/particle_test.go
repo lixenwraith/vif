@@ -1,6 +1,7 @@
 package system
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -336,5 +337,44 @@ func TestDustBouncesOffWalls(t *testing.T) {
 	}
 	if got := w.Resources.Status.Ints.Get("dust.wall_collisions").Load(); got != 1 {
 		t.Fatalf("dust wall collisions = %d, want 1", got)
+	}
+}
+
+// Every decay particle on the map orbits a spinning or charging Kraken, entering
+// with a kick in its spin, and drops straight down once the Kraken stands still.
+func TestDecayOrbitsKrakenOnlyWhileItSpinsOrCharges(t *testing.T) {
+	w, _, kraken, _ := krakenFixture(t)
+	particles := NewParticleSystem(w).(*ParticleSystem)
+	k, _ := w.Components.Kraken.GetPtr(kraken)
+	k.State, k.TurnDir = component.KrakenSpin, 1
+	body, _ := w.Components.Kinetic.GetComponent(kraken)
+	particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDecay, X: 90, Y: 10, Char: 'd', SkipStartCell: true}, 0, 0)
+	decay := w.Components.Particle.Entities()[0]
+	w.Resources.Time.DeltaTime = 50 * time.Millisecond
+	distance := func() float64 {
+		kinetic, _ := w.Components.Kinetic.GetComponent(decay)
+		return math.Hypot(kinetic.PreciseX-body.PreciseX, 2*(kinetic.PreciseY-body.PreciseY))
+	}
+	start := distance()
+
+	particles.Update()
+	particle, _ := w.Components.Particle.GetComponent(decay)
+	kinetic, _ := w.Components.Kinetic.GetComponent(decay)
+	if !particle.Orbiting || particle.OrbitRadius < parameter.DecayOrbitRadiusMin || kinetic.VelX <= 0 {
+		t.Fatalf("decay above a spinning Kraken = %+v, velocity %v; want it orbiting with the spin", particle, kinetic.VelX)
+	}
+	for range 40 {
+		particles.Update()
+	}
+	if d := distance(); d > start/2 || !w.Components.Particle.HasEntity(decay) {
+		t.Fatalf("decay at %.1f cells from the Kraken after 2 s, started at %.1f", d, start)
+	}
+
+	k.State = component.KrakenIdle
+	particles.Update()
+	particle, _ = w.Components.Particle.GetComponent(decay)
+	kinetic, _ = w.Components.Kinetic.GetComponent(decay)
+	if particle.Orbiting || kinetic.VelX != 0 || kinetic.VelY < parameter.ParticleMinSpeed {
+		t.Fatalf("decay beside an idle Kraken = %+v, velocity (%v, %v); want a straight fall", particle, kinetic.VelX, kinetic.VelY)
 	}
 }

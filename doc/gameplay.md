@@ -119,7 +119,9 @@ Both respect `ProtectFromParticle`, die on walls and bounds, and have no lifetim
 Dust bounces instead, nudges the drains it crosses, and lives 2/4/8 s by glyph
 level through `TimerComponent`, fading a level as it runs down. All three share
 one deterministic Player-domain RNG stream. Dust orbits the local cursor while its
-energy is nonzero. Flash, fade, splash, marker,
+energy is nonzero. Every decay particle on the map orbits the nearest Kraken while
+it spins or charges, entering with a kick in its spin; when the Kraken stands
+still, they drop straight down at fresh decay speed. Flash, fade, splash, marker,
 explosion, and motion-marker systems are transient feedback rather than durable
 text state.
 
@@ -358,7 +360,8 @@ it spawns and arms the cursor before opening `main`.
    a full-map maze without rooms and spawn one Kraken at its center.
 4. Kraken contact destroys walls, and each charge locks on to the farthest cursor.
    Its body stays within the map; tentacles can extend beyond it, but only their
-   in-map cells interact.
+   in-map cells interact. The glyphs it covers become decay, which swirls around it
+   while it spins or charges and drops away when it stands still.
 5. The first Kraken kill returns to `main`; another three storm kills open the
    second Kraken encounter. Its defeat starts tower defense. Thus the escalation
    is **3 storms → 1 Kraken → 3 storms → 1 Kraken → tower**. Each threshold counts
