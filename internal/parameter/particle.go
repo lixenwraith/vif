@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-// Particle entities (decay and blossom behaviors)
+// Falling particles (decay and blossom behaviors)
 const (
 	// ParticleMinSpeed is the minimum initial particle velocity in cells per second
 	ParticleMinSpeed = 8.0
@@ -16,7 +16,7 @@ const (
 	ParticleChangeChance = 0.4
 )
 
-// Dust Entity
+// Dust particles orbiting the local cursor
 const (
 	// DustAttractionBase is orbital attraction strength (cells/sec²)
 	DustAttractionBase = 60.0
@@ -46,7 +46,7 @@ const (
 	// DustJitter - constant random velocity added per frame (cells/sec)
 	DustJitter = 2.0
 
-	// Timers are the lifetime of each dust type (dark is disabled for now)
+	// Lifetime of dust by glyph level; dark glyphs make no dust, so dark is only a fade step
 	DustTimerDark   = 2 * time.Second
 	DustTimerNormal = 4 * time.Second
 	DustTimerBright = 8 * time.Second

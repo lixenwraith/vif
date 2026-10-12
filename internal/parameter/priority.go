@@ -17,8 +17,7 @@ const (
 	PriorityGlyph
 	PriorityNugget
 	PriorityGold
-	PriorityDust       // Before Explosion
-	PriorityExplosion  // After Dust
+	PriorityExplosion
 	PriorityFuse       // After Explosion, before Drain
 	PrioritySpirit     // After Fuse, before Drain
 	PriorityNavigation // Before systems that move entities
