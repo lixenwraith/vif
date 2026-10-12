@@ -1,8 +1,35 @@
 package input
 
 import (
+	"sync/atomic"
+
 	"github.com/lixenwraith/terminal"
 )
+
+// KeyCapture is the set of printable ASCII keys a scenario takes from Normal, Visual
+// and Insert parsing. Written under the world lock, read by the parser outside it.
+type KeyCapture struct{ bits [2]atomic.Uint64 }
+
+// Set replaces the captured keys; an empty string releases them all. It reports
+// the runes it refused, which lie outside printable ASCII.
+func (c *KeyCapture) Set(keys string) (refused string) {
+	var bits [2]uint64
+	for _, r := range keys {
+		if r < ' ' || r > '~' {
+			refused += string(r)
+			continue
+		}
+		bits[r>>6] |= 1 << (r & 63)
+	}
+	c.bits[0].Store(bits[0])
+	c.bits[1].Store(bits[1])
+	return refused
+}
+
+// Has reports whether r is captured
+func (c *KeyCapture) Has(r rune) bool {
+	return c != nil && r >= 0 && r < 128 && c.bits[r>>6].Load()&(1<<(r&63)) != 0
+}
 
 // Machine is the input state machine
 // Parses terminal.Event into semantic Intent
@@ -10,6 +37,7 @@ type Machine struct {
 	mode     InputMode
 	state    InputState
 	keyTable *KeyTable
+	capture  *KeyCapture
 
 	// Normal mode state
 	count1     int
@@ -85,10 +113,17 @@ func (m *Machine) Process(ev terminal.Event) *Intent {
 
 func (m *Machine) processKey(ev terminal.Event) *Intent {
 	switch m.mode {
-	case ModeNormal, ModeVisual:
+	case ModeNormal, ModeVisual, ModeInsert:
+		// A captured key outranks any pending grammar, so a count or operator never eats it
+		if ev.Key == terminal.KeyRune && m.capture.Has(ev.Rune) {
+			m.Reset()
+			m.last = string(ev.Rune)
+			return &Intent{Type: IntentKeyPress, Char: ev.Rune, Count: 1, Command: m.last}
+		}
+		if m.mode == ModeInsert {
+			return m.processInsert(ev)
+		}
 		return m.processNormal(ev)
-	case ModeInsert:
-		return m.processInsert(ev)
 	case ModeSearch:
 		return m.processSearch(ev)
 	case ModeCommand:
@@ -161,6 +196,11 @@ func (m *Machine) SetState(state InputState) {
 // SetKeyTable replaces the active key table (call before processing starts)
 func (m *Machine) SetKeyTable(kt *KeyTable) {
 	m.keyTable = kt
+}
+
+// SetCapture installs the key set this parser yields as IntentKeyPress
+func (m *Machine) SetCapture(c *KeyCapture) {
+	m.capture = c
 }
 
 // === Normal Mode Processing ===

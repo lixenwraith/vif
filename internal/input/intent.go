@@ -78,6 +78,7 @@ const (
 
 	// Appended so recorded intent numbers keep their meaning.
 	IntentConfigMenu // Ctrl+G
+	IntentKeyPress   // A key the scenario captured from Normal, Visual and Insert
 )
 
 // MotionOp identifies motion algorithm

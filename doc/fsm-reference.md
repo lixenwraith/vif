@@ -56,6 +56,7 @@ macro_files = ["macros.toml"]       # Macro libraries, relative to this file
 
 [systems]
 disabled_systems = ["system_name", ...] # Disabled at FSM init
+only_systems = ["system_name", ...]     # Or: every other toggled system disabled
 
 [regions.region_name]
 initial = "StateName"               # Initial state (omit for dynamic regions)
@@ -533,6 +534,19 @@ struct tag first, then Go field name — identical to `capture_vars` and
 
 ```toml
 { trigger = "EventNetworkError", target = "ConnectionFailed", guard = "PayloadStringEquals", guard_args = { field = "error", value = "connection failed" } }
+```
+
+A state that turns keys into buttons captures them for its lifetime and reads each
+press by its key ([Input and modes](input-and-modes.md) §1):
+
+```toml
+[states.Buttons]
+on_enter = [{ action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "12345" }, reconcile = true }]
+on_exit = [{ action = "EmitEvent", event = "EventKeyCaptureRequest", reconcile = true }]
+transitions = [
+  { trigger = "EventKeyPressed", internal = true, guard = "PayloadStringEquals",
+    guard_args = { field = "key", value = "1" }, actions = [{ action = "IncrementVar", payload = { name = "ones" } }] },
+]
 ```
 
 ### PayloadExists

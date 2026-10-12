@@ -82,6 +82,7 @@ func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 		macro:         NewMacroManager(),
 		cmdHistBrowse: -1,
 	}
+	machine.SetCapture(&ctx.KeyCapture)
 
 	r.motionLUT = map[input.MotionOp]MotionFunc{
 		input.MotionLeft:                MotionLeft,
@@ -234,6 +235,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleFireMain()
 	case input.IntentFireSpecial:
 		return r.handleFireSpecial()
+	case input.IntentKeyPress:
+		return r.handleKeyPress(intent)
 
 	// Mode switching
 	case input.IntentModeSwitch:
@@ -563,6 +566,15 @@ func (r *Router) handleFireMain() bool {
 func (r *Router) handleFireSpecial() bool {
 	r.ctx.PushLocal(event.EventFireSpecialRequest, &event.FireSpecialRequestPayload{
 		Entity: r.ctx.World.Resources.Player.Entity,
+	})
+	return true
+}
+
+// handleKeyPress crosses a captured key: the scenario reading it is shared
+func (r *Router) handleKeyPress(intent *input.Intent) bool {
+	r.ctx.PushCrossing(event.EventKeyPressed, &event.KeyPressedPayload{
+		Entity: r.ctx.World.Resources.Player.Entity,
+		Key:    string(intent.Char),
 	})
 	return true
 }

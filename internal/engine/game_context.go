@@ -110,6 +110,8 @@ type GameContext struct {
 
 	AutoFire atomic.Uint32 // AutoFireOff, AutoFireMain, or AutoFireBoth
 
+	KeyCapture input.KeyCapture // Keys the scenario takes from play-mode parsing
+
 	// Viewer marks the command line as a replay viewer's: the recording authors the
 	// world, so a command may inspect it but not change it.
 	Viewer atomic.Bool

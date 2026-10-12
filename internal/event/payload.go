@@ -466,6 +466,19 @@ var CharacterTypedPayloadPool = sync.Pool{
 	New: func() any { return &CharacterTypedPayload{} },
 }
 
+// KeyCapturePayload names the keys to capture, empty to release them. Entity scopes
+// it to the instance driving that cursor, every instance when zero.
+type KeyCapturePayload struct {
+	Keys   string      `toml:"keys"`
+	Entity core.Entity `toml:"entity"`
+}
+
+// KeyPressedPayload names the cursor that pressed a captured key and the key
+type KeyPressedPayload struct {
+	Entity core.Entity `toml:"entity"`
+	Key    string      `toml:"key"`
+}
+
 // DeleteRangeType defines the scope of deletion
 type DeleteRangeType int
 

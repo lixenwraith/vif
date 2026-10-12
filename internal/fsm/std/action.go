@@ -245,6 +245,14 @@ func registerSystemActions[T any](m *fsm.Machine[T], h Host[T]) {
 		for _, name := range cfg.DisabledSystems {
 			h.SetSystem(ctx, name, false)
 		}
+		if cfg.OnlySystems == nil || h.Systems == nil {
+			return
+		}
+		for _, name := range h.Systems(ctx) {
+			if !cfg.Enabled(name) {
+				h.SetSystem(ctx, name, false)
+			}
+		}
 	})
 
 	// ApplyRegionSystemConfigs reconciles declared toggles for every

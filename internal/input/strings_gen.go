@@ -102,6 +102,8 @@ func (i IntentType) String() string {
 		return "IntentMouseMove"
 	case IntentConfigMenu:
 		return "IntentConfigMenu"
+	case IntentKeyPress:
+		return "IntentKeyPress"
 	default:
 		return fmt.Sprintf("IntentType(%d)", i)
 	}

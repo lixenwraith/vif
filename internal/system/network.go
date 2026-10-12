@@ -504,9 +504,10 @@ func (s *NetworkSystem) Name() string { return "network" }
 // is queued in time for the settle of the tick that drained it
 func (s *NetworkSystem) Priority() int { return parameter.PriorityNetwork }
 
+// EventTypes omits EventMetaSystemCommandRequest deliberately: a disabled bridge
+// strands every peer, and only_systems must not do that by omission.
 func (s *NetworkSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 		event.EventParticipantJoined,
 		event.EventParticipantDeparted,
@@ -519,10 +520,6 @@ func (s *NetworkSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventGameResetRequest:
 		s.Init()
-	case event.EventMetaSystemCommandRequest:
-		if p, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok && p.SystemName == s.Name() {
-			s.enabled = p.Enabled
-		}
 	case event.EventParticipantJoined:
 		if p, ok := ev.Payload.(*event.ParticipantJoinedPayload); ok {
 			s.addParticipant(p)
