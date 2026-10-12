@@ -56,6 +56,7 @@ macro_files = ["macros.toml"]       # Macro libraries, relative to this file
 
 [systems]
 disabled_systems = ["system_name", ...] # Disabled at FSM init
+only_systems = ["system_name", ...]     # Or: every other toggled system disabled
 
 [regions.region_name]
 initial = "StateName"               # Initial state (omit for dynamic regions)

@@ -26,6 +26,8 @@ type Host[T any] struct {
 
 	// SetSystem enables or disables a named game system
 	SetSystem func(ctx T, name string, enabled bool)
+	// Systems names every system SetSystem can toggle
+	Systems func(ctx T) []string
 
 	// Status keys are an open runtime set, resolved per evaluation
 	StatusInt  func(ctx T, key string) (int64, bool)

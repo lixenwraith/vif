@@ -90,7 +90,7 @@ prints generated JSON describing known events, actions, guards, and payloads.
 description = "A short description for scenario selection."
 
 [systems]
-disabled_systems = ["system_runtime_name"]
+disabled_systems = ["system_runtime_name"] # or only_systems = [...], not both
 
 [regions.main]
 initial = "MainStart"
@@ -108,6 +108,7 @@ file = "boss.toml" # no initial: dynamic region
 | `description` | Optional short scenario summary, carried with the scenario during transfers. |
 | `macro_files`, `macros` | Macro libraries and definitions every scenario file may invoke ([TOML macros](toml-macros.md)). |
 | `systems.disabled_systems` | Systems disabled after FSM initialization. Names are validated against runtime `System.Name()` values. |
+| `systems.only_systems` | Every toggled system not named starts disabled; the inverse of `disabled_systems`, for a scenario that needs few mechanics. |
 | `regions.<name>.initial` | Initial state for a region started during machine initialization. Omit for a region spawned later. |
 | `file` | File supplying additional `[states.*]` tables. |
 | `background` | Excludes the region from normal telemetry/overlay presentation; it still updates and handles events. |
@@ -321,20 +322,23 @@ runtime region, then performs root-to-leaf entry. `TerminateRegion` removes the
 runtime region and its delayed actions. Pause/resume preserves active state and
 time.
 
-When a region is spawned or resumed,
-`ApplyRegionSystemConfigs` can apply its enabled/disabled lists through meta
-events. Global disabled systems are applied during initialization/reset. This
-allows a scenario to keep mechanics constructed but dormant until needed.
+The root `[systems]` table sets the baseline, applied during initialization and
+reset: every system but `disabled_systems`, or only `only_systems`. When a region is
+spawned or resumed, `ApplyRegionSystemConfigs` applies its enabled/disabled lists on
+top through meta events. This keeps mechanics constructed but dormant until needed.
 
-System lists use runtime names, which now equal their manifest keys. A system
-also has to subscribe to and honor `EventMetaSystemCommandRequest`;
-construction alone does not guarantee runtime toggle support.
+System lists use runtime names, which equal their manifest keys. A system toggles
+only if it subscribes to and honors `EventMetaSystemCommandRequest`; `cursor`,
+`camera` and `network` do not, so no list can strand the roster, the
+view or a session's peers.
 
-A disable is checked against the declared dependency graph. `-check` rejects a
-config that leaves an enabled system without a required dependency, naming the
-region, and `World.AllowSystemDisable` refuses the same request from an
-`EnableSystem`/`DisableSystem` action or the `:system` command. Disabling both
-ends stays legal; an optional dependency is reported once, not per resume.
+A disable is checked against the declared dependency graph, as the baseline leaves
+it. `-check` rejects a config that leaves an enabled system without a required
+dependency, naming the region (`[systems]` for an `only_systems` list that omits
+one), and `World.AllowSystemDisable` refuses the same request from an
+`EnableSystem`/`DisableSystem` action or the `:system` command. A dependent the
+baseline leaves off holds nothing on, so disabling both ends stays legal; an
+optional dependency is reported once, not per resume.
 
 ### Installing a captured machine
 

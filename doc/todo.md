@@ -226,6 +226,11 @@ so it judges a window by the press's production tick and composes two players'
 presses in either order (D-3). A bot or authored script cannot press a captured key
 until `IntentFor` names an action that builds `IntentKeyPress`.
 
+`only_systems` is root-only, so a puzzle that is one phase of a larger scenario
+cannot narrow the set for that phase alone. A region-level form needs an answer for
+the regions active beside it, and a system a region enables outside the baseline
+does not yet hold its required dependencies on against a later disable.
+
 ### Build the map and scenario editor
 
 - Priority: P2

@@ -413,6 +413,7 @@ func (s *Scheduler) initLoadedScenario() error {
 	if err := s.fsm.Init(s.world); err != nil {
 		return fmt.Errorf("failed to init FSM: %w", err)
 	}
+	s.world.SetSystemBaseline(s.fsm.GetSystemsConfig().Enabled)
 	return s.applySystemConfig()
 }
 
