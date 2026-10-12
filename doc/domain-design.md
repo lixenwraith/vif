@@ -373,7 +373,7 @@ Declared system carriers are:
 | `adaptation` | route weights, sample pool, consumer head, fallback rotation |
 | `genetic` | streaming checkpoints, archives, pending evaluations, IDs, scout state, fitness accumulators |
 | `navigation` | group and cursor-pursuit cache phases, targets, route rebuild budget, route endpoints |
-| `gold` | sequence liveness, header, deadlines, per-slot contribution |
+| `gold` | sequence liveness, header, per-slot contribution; the deadline rides the header's timer in the stores |
 | `storm` | live root entity, swarm spawns pending a blue attack |
 | `meta` | kill tallies, defeat latches and reset tick, cycle damage multiplier |
 | `environment` | active base wind, remaining duration, enable/applied phase |

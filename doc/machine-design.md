@@ -188,11 +188,12 @@ a call before the plan is written.
   interval. This becomes a global edge from {Lock, Charge, Teleport, Decel} to
   Chase, followed by suspension.
 - **S15. Timer idioms diverge across species.**
-  - Countdown `Remaining`: swarm, quasar, storm, eye frames, the fuse and storm
-    queues, and `TimerComponent`.
+  - Countdown `Remaining`: swarm, quasar, storm, eye frames, and the fuse and
+    storm queues. Lifetimes, one-shot deadlines and ready gates outside the
+    machines run on `TimerComponent` slots, including the swarm's lifetime.
   - Count-up with carry: gateway.
   - Count-up with reset: storm `InvulnerableElapsed`.
-  - Absolute instants: quasar speed scaling, drain energy drain.
+  - Absolute instants: quasar speed scaling.
   - Absolute ticks: drain spawn schedule and backoff.
 
   Periodic cycles drop the remainder on reset (swarm pattern, eye frames), while
@@ -207,7 +208,7 @@ a call before the plan is written.
   beam is local presentation and its spawn is a shared crossing. Fuse and storm
   swap-remove while iterating in reverse, so same-tick emission order depends on
   slice history (deterministic, but fragile). The storm's clock agrees with the
-  materialize's float progress only because 20 × 0.05 rounds up past 1.0.
+  materialize's deadline slot because both count the same 20 ticks.
   **Decision:** whether fuse and storm share a small deferred queue (relative
   timers, stable order) in `pkg/machine`. It is not a machine.
 
