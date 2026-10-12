@@ -86,7 +86,7 @@ func TestLifetimesKeepTheirTickCounts(t *testing.T) {
 // a drain beam completes on its 20th tick and a nugget beacon on its 12th, as
 // their summed progress did; a missile detonates on its 60th tick, where its 60th
 // move left it, and a gold sequence times out on the tick its countdown reaches
-// zero.
+// zero, while its header lives.
 func TestDeadlinesEndOnTheirLastTick(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	tick := newTimerTick(w)
@@ -137,11 +137,34 @@ func TestDeadlinesEndOnTheirLastTick(t *testing.T) {
 	}
 
 	gold := NewGoldSystem(w).(*GoldSystem)
-	gold.HandleEvent(event.GameEvent{Type: event.EventGoldSpawnRequest})
-	if !gold.active {
-		t.Fatal("gold sequence did not spawn")
+	spawnGold := func() {
+		gold.HandleEvent(event.GameEvent{Type: event.EventGoldSpawnRequest})
+		if !gold.active {
+			t.Fatal("gold sequence did not spawn")
+		}
+		w.Resources.Event.Queue.Consume()
 	}
-	w.Resources.Event.Queue.Consume()
+
+	// Every member lost in one batch lets the composite destroy the header, and
+	// its deadline, before gold runs: the breach, not a timeout, ends that sequence
+	spawnGold()
+	headerEntity := gold.headerEntity
+	header, _ := w.Components.Header.GetPtr(headerEntity)
+	for _, m := range header.MemberEntries {
+		w.DestroyEntity(m.Entity)
+	}
+	w.DestroyEntity(headerEntity)
+	gold.Update()
+	if has(event.EventGoldTimeout)(w.Resources.Event.Queue.Consume()) {
+		t.Fatal("a gold sequence whose header was destroyed timed out")
+	}
+	gold.HandleEvent(event.GameEvent{Type: event.EventCompositeIntegrityBreach,
+		Payload: &event.CompositeIntegrityBreachPayload{HeaderEntity: headerEntity}})
+	if !has(event.EventGoldDestroyed)(w.Resources.Event.Queue.Consume()) {
+		t.Fatal("the breach did not end the gold sequence")
+	}
+
+	spawnGold()
 	if got, want := actsOn(gold.Update, has(event.EventGoldTimeout)), ticks(parameter.GoldDuration); got != want {
 		t.Fatalf("gold sequence timed out on tick %d, want %d", got, want)
 	}
