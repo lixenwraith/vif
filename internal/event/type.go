@@ -228,6 +228,10 @@ const (
 	EventCharacterTyped
 	// EventDeleteRequest (DeleteRequestPayload) [local] signals a deletion operation (x, d, etc.)
 	EventDeleteRequest
+	// EventKeyCaptureRequest (KeyCapturePayload) [local] replaces the keys a scenario takes from Normal, Visual and Insert parsing
+	EventKeyCaptureRequest
+	// EventKeyPressed (KeyPressedPayload) [bus] signals a captured key pressed by a cursor
+	EventKeyPressed
 
 	// --- Ping ---
 

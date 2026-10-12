@@ -106,6 +106,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventDebugFlowToggle,
 		event.EventDebugGraphToggle,
 		event.EventMetaStatusMessageRequest,
+		event.EventKeyCaptureRequest,
 		event.EventModeChanged,
 		event.EventLevelSetup,
 		event.EventScreenResize,
@@ -140,6 +141,13 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventMetaStatusMessageRequest:
 		if payload, ok := ev.Payload.(*event.MetaStatusMessagePayload); ok {
 			s.handleMessageRequest(payload)
+		}
+
+	case event.EventKeyCaptureRequest:
+		if p, ok := ev.Payload.(*event.KeyCapturePayload); ok && (p.Entity == 0 || p.Entity == s.world.Resources.Player.Entity) {
+			if refused := s.ctx.KeyCapture.Set(p.Keys); refused != "" {
+				s.world.Log().Warn("input", "msg", "capture refused keys", "keys", refused)
+			}
 		}
 
 	case event.EventModeChanged:
@@ -419,8 +427,9 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	// Grid tracks map dimensions; a level-sized grid would outlive the level
 	s.ctx.World.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
 
-	// 6. Reset mode and status; the FSM reset below spawns the cursor
+	// 6. Reset mode, captured keys and status; the FSM reset below spawns the cursor
 	s.ctx.SetMode(core.ModeNormal)
+	s.ctx.KeyCapture.Set("")
 	s.ctx.SetCommandText("")
 	s.ctx.SetSearchText("")
 	s.ctx.ClearStatusMessage()
