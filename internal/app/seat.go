@@ -203,7 +203,7 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 				s.id.Store(uint32(entry.ID))
 				a.log.Info("app", "msg", "bot seated", "graph", s.graph.Name,
 					"participant", s.id.Load(), "slot", s.slot.Load(), "joined", cfg.JoinAddress)
-				return seatSource{botSource{d}, forkCell(b), forkCell(a)}, nil
+				return seatSource{botSource{d}, forkCell(a)}, nil
 			})
 		if driver == nil && err != nil && retryableJoin(err) && time.Now().Before(deadline) &&
 			waitScriptTick(s.stop, parameter.SessionRejoinInterval) {
@@ -234,15 +234,15 @@ func retryableJoin(err error) bool {
 // nobody took the session over.
 func forkCell(a *App) *atomic.Bool { return a.world.Resources.Status.Bools.Get("network.fork") }
 
-// seatSource ends a seat once its session has, for it or for its holder. A seat left
-// alone plays for nobody, and a holder that left its session takes its bots along.
+// seatSource ends a seat once its holder is left with no session: a holder that
+// left its session takes its bots along.
 type seatSource struct {
 	botSource
-	own, holder *atomic.Bool
+	holder *atomic.Bool
 }
 
 func (s seatSource) Step() (bool, error) {
-	if s.own.Load() || s.holder.Load() {
+	if s.holder.Load() {
 		return false, nil
 	}
 	return s.botSource.Step()
