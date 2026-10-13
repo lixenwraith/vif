@@ -767,8 +767,8 @@ default and move the TOML codec to the caller, or drop the subpackage.
   `internal/app/clone_test.go`, the replay and journal tests in `internal/app`
 
 `go test -race ./internal/app` runs 258 tests summing 680 s; nearly all are
-parallel, so wall time follows their CPU (4.5 minutes on 4 cores, nearly 10 on a
-full race run). Four carry 43%: `TestATowerGuestAnswersHashOnly` (103 s, 1200
+parallel, so wall time follows their CPU: 4.5 minutes on 4 cores against 36 s
+without `-race`, and nearly 10 in a full race run. Four carry 43%: `TestATowerGuestAnswersHashOnly` (103 s, 1200
 tower ticks), `TestAGAScenarioStagesAcrossAReset` (70 s),
 `TestAReplayRestoredFromACheckpointContinuesAsItsSource` (60 s) and
 `TestASlowLinkCarriesTheTowerWithoutAStandingQueue` (58 s). The 25 replay and
