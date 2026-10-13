@@ -71,7 +71,7 @@ per-entity runtime, but the new front-end shares its dialect (§7).
    own routing, and a generic `EmitEvent` verb accepts only classes whose routing
    is mechanical.
 4. **RNG.** D-8 already prescribes the remedy for per-entity conditional draws:
-   seed from (tick, entity) through `vmath.Mix64`, as mount spread and soft
+   seed from (tick, entity) through `vmath.MixChain`, as mount spread and soft
    collision do. A `Chance` predicate draws that way, so guard short-circuiting
    cannot move any stream. A "fixed draws per step" rule is not needed.
 5. **Relative timers.** D-19 states that absolute instants are sound, because

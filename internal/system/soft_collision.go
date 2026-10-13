@@ -353,8 +353,7 @@ func (s *SoftCollisionSystem) impulseStream(source, target core.Entity) *vmath.F
 		return s.rngPlayer
 	}
 	tick := s.world.Resources.Game.State.GetGameTicks()
-	s.rngArtifact.Reseed(vmath.Mix64(s.sharedRoot ^ tick*vmath.Golden64 ^
-		uint64(source)*0xD6E8FEB86659FD93 ^ uint64(target)))
+	s.rngArtifact.Reseed(vmath.MixChain(s.sharedRoot, tick, uint64(source), uint64(target)))
 	return &s.rngArtifact
 }
 

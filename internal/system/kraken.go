@@ -201,7 +201,7 @@ func (s *KrakenSystem) chooseState(k *component.KrakenComponent, x, y float64) {
 func (s *KrakenSystem) seed(e core.Entity) {
 	// A transition's draw count must not depend on another Kraken's predicted death.
 	seed := vmath.DeriveSeed(s.world.Resources.Rand.DomainRoot(core.DomainShared), s.Name())
-	s.rng.Reseed(vmath.Mix64(seed ^ uint64(e) ^ s.world.Resources.Game.State.GetGameTicks()*vmath.Golden64))
+	s.rng.Reseed(vmath.MixChain(seed, uint64(e), s.world.Resources.Game.State.GetGameTicks()))
 }
 
 func (s *KrakenSystem) wait(k *component.KrakenComponent) {

@@ -319,7 +319,7 @@ func layLane(w *engine.World, m *component.MountComponent, pos component.Positio
 // shotRand seeds one host's draw for this tick
 func (s *MountSystem) shotRand(host core.Entity) *vmath.FastRand {
 	tick := s.world.Resources.Game.State.GetGameTicks()
-	s.rng.Reseed(vmath.Mix64(s.sharedRoot ^ tick*vmath.Golden64 ^ uint64(host)*0xD6E8FEB86659FD93))
+	s.rng.Reseed(vmath.MixChain(s.sharedRoot, tick, uint64(host)))
 	return &s.rng
 }
 

@@ -72,9 +72,8 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			}
 		}
 
-		// Deterministic path per PathSeed and AnimFrame; the golden multiplier spreads consecutive frames
-		seed := l.PathSeed ^ (uint64(l.AnimFrame) * vmath.Golden64)
-		rng := vmath.NewFastRand(seed)
+		// Deterministic path per PathSeed and AnimFrame
+		rng := vmath.NewFastRand(vmath.MixChain(l.PathSeed, uint64(l.AnimFrame)))
 
 		// Generate fractal path in sub-pixel coordinates (2x resolution)
 		// Shared between both rendering modes for consistent path shape
