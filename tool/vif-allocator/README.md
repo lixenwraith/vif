@@ -86,9 +86,10 @@ discovering them by refusal:
   "players_max": 4,
   "bots_max": 0,
   "log_levels": ["debug", "info", "warn", "error"],
-  "scenarios": ["main", "blank", "kraken", "td"],
+  "scenarios": ["main", "blank", "kraken", "simon", "td"],
   "scenario_descriptions": {
     "main": "Survive escalating storms, lure Krakens through mazes, and defend the tower.",
+    "simon": "Simon: listen to the notes, then repeat them with keys 1-4 or by clicking the buttons.",
     "td": "Defend two central towers in a sprawling maze against escalating enemy waves."
   }
 }

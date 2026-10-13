@@ -162,7 +162,10 @@ ms. Active effects duck the music bus to 70%, with fast attack and slower
 release.
 
 Sound IDs are process-local registration values. Configuration and persistent
-documents must use names, not numeric IDs.
+documents must use names, not numeric IDs: a scenario names a sound with
+`EventSoundRequest { sound = "chime" }`, or gives a button one, and `AudioSystem`
+resolves the name as it plays. Such a name skips startup resolution, so a
+mistyped one is silent and counts only as a bad-ID rejection.
 
 ## 6. Mixer buses, mute, and pause
 
@@ -310,11 +313,12 @@ For a new game sound:
 
 1. author and validate a named sound definition;
 2. add it to `internal/asset/audio` or a tested override document;
-3. add the semantic name to the game's sound table and volume/shape policy;
-4. run startup resolution so a missing mapping fails early;
-5. emit `EventSoundRequest` from the mechanic rather than calling the engine
+3. for a sound Go emits, add the semantic name to the game's sound table and
+   volume/shape policy, and run startup resolution so a missing mapping fails
+   early; a sound only configuration names needs neither;
+4. emit `EventSoundRequest` from the mechanic rather than calling the engine
    from arbitrary systems;
-6. verify rapid-fire, polyphony, mute, pause, silent-backend, and 256-command
+5. verify rapid-fire, polyphony, mute, pause, silent-backend, and 256-command
    saturation behavior.
 
 For music, keep new APM/campaign decisions in `MusicSystem` or configuration

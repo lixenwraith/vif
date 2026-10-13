@@ -402,8 +402,17 @@ it spawns and arms the cursor before opening `main`.
    also retains its objective-failure and victory conditions.
 
 `wad/scenario/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
-scaffold, and `kraken` is a repeating combat arena. Each entry has a short
-`description` for scenario listings.
+scaffold, `kraken` is a repeating combat arena, and `simon` is a memory game. Each
+entry has a short `description` for scenario listings.
+
+`simon` lays four buttons across the map on keys 1-4, each with its note, rising
+in pitch from 1 to 4. A level plays the sequence, one note longer than the last,
+and the player repeats it by key or by clicking the buttons; every note shown or
+pressed sounds, so the game can be played with eyes closed once sound is on (sound
+starts muted; `Ctrl-S` cycles it). A correct press blooms over its button, a cleared
+level flashes green, and a wrong note grays the field, rains decay over it and plays
+the note that was due before a new game. The level stops rising at 100. Glyphs
+drift behind the buttons as a moving backdrop, and music stays off.
 
 ## 11. System inventory
 
@@ -418,7 +427,7 @@ declares for itself:
 | Spawning/effects | `materialize`, `fuse`, `spirit`, `lightning`, `missile` |
 | Motion/environment/combat | `navigation`, `soft_collision`, `environment`, `combat` |
 | Species | `drain`, `quasar`, `swarm`, `storm`, `pylon`, `snake`, `eye`, `mount`, `bullet` |
-| Particles | `flash`, `fadeout`, `marker`, `explosion`, `motion_marker`, `splash` |
+| Particles/overlays | `flash`, `fadeout`, `marker`, `button`, `explosion`, `motion_marker`, `splash` |
 | Lifecycle/learning | `death`, `timer`, `adaptation`, `genetic` |
 | Sound | `audio`, `music` |
 
@@ -443,7 +452,7 @@ Each entry declares a domain profile and its dependencies in
 | Environment effects | `internal/system/environment.go`, `internal/parameter/environment.go`, `internal/profile/mass.go` |
 | System behavior | Matching files in `internal/system` |
 | Default progression | `internal/asset/scenario/*.toml` |
-| External scenarios | `wad/scenario/td`, `wad/scenario/blank`, `wad/scenario/kraken` |
+| External scenarios | `wad/scenario/*` |
 
 Changing a number in `parameter` changes a mechanic; changing a transition in
 TOML changes when that mechanic is invoked. Keep that distinction intact when

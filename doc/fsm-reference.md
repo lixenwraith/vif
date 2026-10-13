@@ -549,17 +549,26 @@ struct tag first, then Go field name — identical to `capture_vars` and
 ```
 
 A state that turns keys into buttons captures them for its lifetime and reads each
-press by its key ([Input and modes](input-and-modes.md) §1):
+press by its key, typed or clicked on the key's button ([Input and modes](input-and-modes.md) §1):
 
 ```toml
 [states.Buttons]
-on_enter = [{ action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "12345" }, reconcile = true }]
+on_enter = [
+  { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "12345" }, reconcile = true },
+  { action = "EmitEvent", event = "EventButtonSpawnRequest", payload = { key = "1", color = { r = 0, g = 200, b = 0 }, sound = "tone_a4" } },
+]
 on_exit = [{ action = "EmitEvent", event = "EventKeyCaptureRequest", reconcile = true }]
 transitions = [
-  { trigger = "EventKeyPressed", internal = true, guard = "PayloadStringEquals",
+  { trigger = "EventInputPressed", internal = true, guard = "PayloadStringEquals",
     guard_args = { field = "key", value = "1" }, actions = [{ action = "IncrementVar", payload = { name = "ones" } }] },
 ]
 ```
+
+A button lights and sounds on every press of its key by itself, so a machine judges
+a press and never plays its tone. `EventButtonLightRequest { button, duration_ms }`
+lights the button at that place in the row, counted from 1, with its sound; a
+spawn on a key that already has a button is refused. `wad/scenario/simon` is the
+worked example.
 
 ### PayloadExists
 
