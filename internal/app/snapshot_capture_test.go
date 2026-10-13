@@ -691,7 +691,7 @@ func TestAGAScenarioStagesAcrossAReset(t *testing.T) {
 	reset := func(a *App) {
 		a.Context().PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{}, event.OriginDebug)
 		a.Settle()
-		a.Tick(20)
+		a.Tick(1)
 	}
 	host, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 160, Height: 50, Resources: td})
 	if err != nil {

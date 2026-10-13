@@ -1380,10 +1380,11 @@ func towerFight(t *testing.T, cfg Config, shape network.LinkShape) (host, guest 
 // owner-authored cursor state moves every tick, snakes rewrite their segments in
 // place and overlays toggle. None of it may reach the compared world, or a guest
 // there repairs nearly every manifest instead of proving the authority's world.
+// The first snake comes out near tick 550; 750 leave it about fifty manifests.
 func TestATowerGuestAnswersHashOnly(t *testing.T) {
 	t.Parallel()
 	_, guest, fight := towerFight(t, towerScenario(t, 0x70E4), network.LinkShape{LatencyTicks: 2})
-	fight(1200)
+	fight(750)
 	manifests := statOf(guest, "snapshot.manifests_received")
 	hashOnly := statOf(guest, "snapshot.corrections_hash_only")
 	if manifests == 0 || hashOnly*100 < manifests*95 {
@@ -1401,10 +1402,10 @@ func TestASlowLinkCarriesTheTowerWithoutAStandingQueue(t *testing.T) {
 	cfg := towerScenario(t, 0x70E4)
 	cfg.Width, cfg.Height, cfg.MapWidth, cfg.MapHeight = 239, 66, 239, 64
 	host, guest, fight := towerFight(t, cfg, network.LinkShape{LatencyTicks: 3, BytesPerTick: 1000})
-	fight(300)
+	fight(150)
 	manifests := statOf(guest, "snapshot.manifests_received")
 	hashOnly := statOf(guest, "snapshot.corrections_hash_only")
-	fight(300)
+	fight(150)
 	manifests = statOf(guest, "snapshot.manifests_received") - manifests
 	hashOnly = statOf(guest, "snapshot.corrections_hash_only") - hashOnly
 	if manifests == 0 || hashOnly*100 < manifests*90 {

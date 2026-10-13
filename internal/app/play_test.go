@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -204,6 +205,27 @@ func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {
 	}
 }
 
+// botJournal is a default bot's run a checkpoint interval and more long, recorded
+// once for every test that presents it.
+var botJournal struct {
+	once sync.Once
+	set  journal.Set
+}
+
+func botJournalSet(t *testing.T) journal.Set {
+	t.Helper()
+	botJournal.once.Do(func() {
+		rec := journal.NewCapture()
+		source, _ := playBot(t, "default", fixtureSeed, parameter.ReplayCheckpointSteps+60, rec)
+		source.Close()
+		botJournal.set = setOf(rec)
+	})
+	if len(botJournal.set.Anchors) == 0 {
+		t.Fatal("the shared bot journal did not record")
+	}
+	return botJournal.set
+}
+
 // setOf is what Load reads from the journal rec captured.
 func setOf(rec *journal.Capture) journal.Set {
 	end := rec.End()
@@ -278,10 +300,7 @@ func settle(t *testing.T, p *player) {
 // further back replays from the ladder and refills the ring as it goes.
 func TestAReplayStepsBackOneTickAPressFromItsRing(t *testing.T) {
 	t.Parallel()
-	rec := journal.NewCapture()
-	source, _ := playBot(t, "default", fixtureSeed, parameter.ReplayCheckpointSteps+60, rec)
-	source.Close()
-	p := replayPlayer(t, setOf(rec), nil)
+	p := replayPlayer(t, botJournalSet(t), nil)
 	const shown = parameter.ReplayCheckpointSteps + 40
 	playSteps(p, shown)
 	settle(t, p)
@@ -357,10 +376,7 @@ func TestAReplaySeekLandsOnTheFirstStepAtOrPastItsTick(t *testing.T) {
 // checkpoint nearest that step, not replayed all the way from the step presented.
 func TestAReplaySeekPastWhereItReachedPlaysOnFromTheLatestCheckpoint(t *testing.T) {
 	t.Parallel()
-	rec := journal.NewCapture()
-	source, _ := playBot(t, "default", fixtureSeed, parameter.ReplayCheckpointSteps+60, rec)
-	source.Close()
-	p := replayPlayer(t, setOf(rec), nil)
+	p := replayPlayer(t, botJournalSet(t), nil)
 	const reached = parameter.ReplayCheckpointSteps + 40
 	playSteps(p, reached)
 	settle(t, p)
@@ -383,9 +399,6 @@ func TestAReplaySeekPastWhereItReachedPlaysOnFromTheLatestCheckpoint(t *testing.
 // claim a divergence the recording does not have.
 func TestACopyThatLeftTheRunIsNeverPresented(t *testing.T) {
 	t.Parallel()
-	rec := journal.NewCapture()
-	source, _ := playBot(t, "default", fixtureSeed, parameter.ReplayCheckpointSteps+60, rec)
-	source.Close()
 	const shown = parameter.ReplayCheckpointSteps + 40
 	for name, spoil := range map[string]func(p *player) int{
 		"digest": func(p *player) int {
@@ -401,7 +414,7 @@ func TestACopyThatLeftTheRunIsNeverPresented(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			p := replayPlayer(t, setOf(rec), nil)
+			p := replayPlayer(t, botJournalSet(t), nil)
 			playSteps(p, shown)
 			settle(t, p)
 			trail := slices.Clone(p.rw.trail)
@@ -452,7 +465,8 @@ func TestOnlyThePresentedReplayCopyHoldsTheFlightRecorder(t *testing.T) {
 // there with the error on the bar, can go back, and plays no further than it.
 func TestAReplayThatFailsPausesThereAndStepsBack(t *testing.T) {
 	t.Parallel()
-	set := setOf(guestJournalPastItsHost(t, func(*App) {}))
+	rec, _ := guestJournalPastItsHost(t)
+	set := setOf(rec)
 	set.Captures[len(set.Captures)-1].Body = []byte("{")
 	p := replayPlayer(t, set, nil)
 	rw := p.rw
@@ -487,7 +501,7 @@ func TestAReplayThatFailsPausesThereAndStepsBack(t *testing.T) {
 // ticks took none of the recorded run's time. Presented as a step of its own, it
 // held the view a tick each time one was installed.
 func TestAPresentedReplayStepIsOneRecordedTick(t *testing.T) {
-	rec := guestJournalPastItsHost(t, func(*App) {})
+	rec, _ := guestJournalPastItsHost(t)
 	cfg, err := ConfigFromAnchor(rec.Anchors()[0])
 	if err != nil {
 		t.Fatal(err)
