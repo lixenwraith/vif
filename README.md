@@ -15,9 +15,9 @@ vif is a real-time terminal game that combines Vim-style navigation and
 text operations with typing, shooting, procedural encounters, adaptive species
 movement, and generative audio.
 
-The game is written in Go and has no application CGO requirement. Terminal,
-TOML, color, and logging primitives are maintained as separate Go modules;
-vif owns the ECS, gameplay, input semantics, compositor, scenario
+The game is written in pure Go, no CGO, and with mininmal external dependencies.
+Terminal, TOML, color, and logging primitives are maintained as separate Go modules;
+vif owns the ECS, gameplay, input semantics, compositor, scenario, renderers, 
 configuration, audio policy, and reusable simulation libraries.
 
 ## Highlights
@@ -83,10 +83,8 @@ make release
 ./bin/vif
 ```
 
-Useful targets include `make dev`, `make test`, `make verify`, `make headless`,
-`make tools`, `make wasm`, and `make serve`. `make release install` builds, then
-installs the binary and the `wad/` payload under `/usr/local`, or for the current
-user under `~/.local` and `~/.config/vif` when `/usr/local/bin` is not writable
+`make release install` builds, then installs the binary and the `wad/` payload
+under `/usr/local/` for root, or for the current user under `~/.local` and `~/.config/vif` when `/usr/local/bin` is not writable
 (`sudo make install` after `make release` installs system-wide); `make uninstall`
 removes it, and `make install-config` installs only the payload into the user root. A reinstall replaces shipped files and keeps
 added ones; `CLEAN=1` starts the payload fresh. Uninstalled, `./bin/vif -s td` plays
