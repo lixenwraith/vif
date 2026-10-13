@@ -413,8 +413,7 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	// carry across the reset; only a run that owns them returns them to its viewport.
 	config := s.ctx.World.Resources.Config
 	if s.ctx.World.MapSizeLocal() {
-		config.MapWidth = config.ViewportWidth
-		config.MapHeight = config.ViewportHeight
+		config.MapWidth, config.MapHeight = config.FloorMapSize(config.ViewportWidth, config.ViewportHeight)
 	}
 	config.CameraX = 0
 	config.CameraY = 0

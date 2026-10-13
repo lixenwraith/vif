@@ -350,6 +350,13 @@ func (a *App) initWorld() {
 	a.ctx.BindLog(a.log)
 	a.world.Resources.Config.ColorMode = colorMode
 
+	// The floor applies before the latch and the boot script, which places the
+	// first cursor from the map's size
+	cfg := a.world.Resources.Config
+	cfg.MapMinWidth, cfg.MapMinHeight = a.scenario.MapMinWidth, a.scenario.MapMinHeight
+	if w, h := cfg.FloorMapSize(cfg.MapWidth, cfg.MapHeight); w != cfg.MapWidth || h != cfg.MapHeight {
+		a.world.SetupLevel(w, h, false, cfg.CropOnResize, false)
+	}
 	a.applyMapLatch()
 
 	if n := a.cfg.StatTicks; n != 0 {

@@ -303,7 +303,9 @@ correction wrote.
 `MapWidth`, `MapHeight`, and `CropOnResize` are Shared simulation state. Session
 admission installs them before the FSM boots. While `World.SessionShared()` is
 true, a terminal resize changes only local viewport/camera state; it cannot crop
-the map or announce a Shared cursor move.
+the map or announce a Shared cursor move. A scenario's `[map]` floor bounds every
+one of these writes from below; it travels with the scenario, so every instance
+holds the same one.
 
 The session-shared latch survives lobby wait, disconnect, and journal replay. A
 map script asking for `viewport_width`/`viewport_height` is asking for the extent it

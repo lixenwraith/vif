@@ -348,9 +348,8 @@ func (ctx *GameContext) HandleResizeLocked() {
 	cropped := config.CropOnResize && ctx.mapSizeLocal()
 	ctx.PublishMapLock()
 	if cropped {
-		// Resize map to match viewport, cleanup OOB entities
-		config.MapWidth = viewportWidth
-		config.MapHeight = viewportHeight
+		// Resize map to match viewport down to the scenario's floor, cleanup OOB entities
+		config.MapWidth, config.MapHeight = config.FloorMapSize(viewportWidth, viewportHeight)
 		ctx.cleanupOutOfBoundsEntities(config.MapWidth, config.MapHeight)
 		// Reset camera
 		config.CameraX = 0
