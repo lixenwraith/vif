@@ -335,7 +335,7 @@ events and keep the sequencer unaware of gameplay concepts.
 | Shipped sound and music banks | `internal/asset/audio/*.toml`, `internal/parameter.BuiltinSounds`, `BuiltinPatterns` |
 | Sequencer/patterns | `pkg/audio/sequencer.go`, `pattern*.go`, `track.go`, `voice.go` |
 | Game service | `internal/service/adapter_audio.go` |
-| Game event adapters | `internal/system/audio.go`, `music.go` |
+| Game event adapters | `internal/system/audio.go`, `music.go`; `sound.go` holds the mask both publish and the handover |
 | Mode/build selection and replay default | `internal/app/config.go`, `audio*.go`, `play.go` |
 | Game policy | `internal/parameter/audio.go`, `music.go`, `sfx.go`, `sfx_audio.go` |
 | Authoring tool | `cmd/soundlab`, `cmd/soundlab/README.md` |

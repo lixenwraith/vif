@@ -267,6 +267,15 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
+// takeOver moves the speakers and the conductor's state from the music system of
+// the world this one replaces; audible is the audio system's gated music channel.
+func (s *MusicSystem) takeOver(from *MusicSystem, audible bool) {
+	s.player, s.bpmF, s.lastBPM, s.tier = from.player, from.bpmF, from.lastBPM, from.tier
+	s.manualTier, s.arranged, s.stopped, s.startPending = from.manualTier, from.arranged, from.stopped, from.startPending
+	from.player = nil
+	s.applyMusicAudible(audible)
+}
+
 // applyMusicAudible gates the music bus. The sequencer is frozen, not stopped,
 // so position and phrase survive the mute; start covers a run that began muted.
 func (s *MusicSystem) applyMusicAudible(audible bool) {
