@@ -221,10 +221,10 @@ It builds the `vif_headless` profile once with Docker, refuses an image without 
 `headless` OCI label, runs its own `-check` as UID 65532 read-only with no network,
 imports it into K3s pinned, records it as `VIF_ALLOCATOR_IMAGE`, removes older tags,
 empties Docker's store, and restores the Docker baseline; a Docker that was already
-running loses only that image. Pinned, because the kubelet deletes images no pod uses
-once the disk passes 85%, and between matches none does. Later runs rebuild only when
-`cmd`, `internal`, `pkg`, `go.mod`, `go.sum` or the Dockerfile changed since the
-installed tag.
+running only has that image removed. Pinned, because the kubelet deletes images no
+pod uses once the disk passes 85%, and between matches none does. Later runs rebuild
+only when `cmd`, `internal`, `pkg`, `go.mod`, `go.sum` or the Dockerfile changed since
+the installed tag.
 
 ## 9. The fleet objects and the shared volumes
 
