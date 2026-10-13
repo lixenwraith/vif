@@ -33,6 +33,16 @@ type VariableArgs struct {
 	Max       *int64 `toml:"max"`        // Optional clamp upper bound
 }
 
+// RandomVarArgs draws name in [min, max] as a pure function of the host seed and
+// two variables, so a sequence is recomputed from its seed and index, not stored
+type RandomVarArgs struct {
+	Name     string `toml:"name"`
+	Min      int64  `toml:"min"`
+	Max      int64  `toml:"max"`
+	SeedVar  string `toml:"seed_var"`
+	IndexVar string `toml:"index_var"`
+}
+
 // SystemControlArgs holds args for system enable/disable actions
 type SystemControlArgs struct {
 	SystemName string `toml:"system_name"`
@@ -81,6 +91,23 @@ func compileEmitEvent[T any](m *fsm.Machine[T], cfg fsm.ActionConfig, _ fsm.Stat
 		}
 	}
 	return &EmitEventArgs{Type: et, Payload: payload, PayloadVars: cfg.PayloadVars}, nil
+}
+
+// compileRandomVar refuses a draw that would repeat or has no range: without an index
+// every draw is the same value
+func compileRandomVar[T any](m *fsm.Machine[T], cfg fsm.ActionConfig, resolve fsm.StateResolver) (any, error) {
+	parsed, err := decodePayload[T, RandomVarArgs](m, cfg, resolve)
+	if err != nil {
+		return nil, err
+	}
+	args := parsed.(*RandomVarArgs)
+	if args.Name == "" || args.IndexVar == "" {
+		return nil, fmt.Errorf("requires 'name' and 'index_var'")
+	}
+	if args.Max < args.Min {
+		return nil, fmt.Errorf("'max' %d is below 'min' %d", args.Max, args.Min)
+	}
+	return args, nil
 }
 
 // compileRegionControl validates the region reference and resolves SpawnRegion's initial state
