@@ -39,6 +39,10 @@ type Host[T any] struct {
 	ConfigInt  func(field string) (func(ctx T) int64, bool)
 	ConfigBool func(field string) (func(ctx T) bool, bool)
 
+	// Seed roots RandomVar: one value for a run, the same on every instance
+	// that plays it; a nil Seed roots every draw at zero
+	Seed func(ctx T) uint64
+
 	// Refuse, when set, fails the load of an action whose hook is nil with this
 	// reason, for an embedder whose scripts must not name what does nothing
 	Refuse string
@@ -48,7 +52,7 @@ type Host[T any] struct {
 // Must be called before LoadConfig; names are resolved at load time
 func Register[T any](m *fsm.Machine[T], h Host[T]) {
 	registerCoreActions(m, h)
-	registerVariableActions(m)
+	registerVariableActions(m, h)
 	registerRegionActions(m, h)
 	registerSystemActions(m, h)
 	registerStatusActions(m, h)

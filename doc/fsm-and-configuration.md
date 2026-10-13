@@ -244,7 +244,7 @@ action supports an optional guard and `delay_ms`.
 
 | Group | Actions |
 |---|---|
-| Variables | `SetVar`, `IncrementVar`, `DecrementVar`, `MultiplyVar`, `DivideVar`, `ModuloVar`, `ClampVar`, `CopyVar` |
+| Variables | `SetVar`, `IncrementVar`, `DecrementVar`, `MultiplyVar`, `DivideVar`, `ModuloVar`, `ClampVar`, `CopyVar`, `RandomVar` |
 | Regions | `SpawnRegion`, `TerminateRegion`, `PauseRegion`, `ResumeRegion` |
 | Systems | `EnableSystem`, `DisableSystem`, `ApplyRegionSystemConfigs` |
 | Game bridge | `EmitEvent` |
@@ -263,7 +263,12 @@ apply optional `min`/`max` clamps. Division and modulo by zero are no-ops.
 
 `payload_vars` can replace nested fields using quoted dot paths such as
 `"rooms.0.center_x"`. Struct segments use TOML tags first; numeric segments
-index an already populated slice. Injection does not append elements.
+index an already populated slice. Injection does not append elements. A
+string field takes the value in place of each `{}`, so a status message can
+carry a count.
+
+`RandomVar` draws a value from the run's shared seed and an index variable, so
+a sequence replays from its index on every instance instead of being stored.
 
 An action with no `payload` table still emits the registered payload type,
 zero-valued, which is what makes an effect's *scope* configurable without

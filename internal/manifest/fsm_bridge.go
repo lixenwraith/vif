@@ -3,10 +3,12 @@ package manifest
 import (
 	"slices"
 
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/fsm/std"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // RegisterFSMComponents installs the FSM standard library bound to the ECS world
@@ -71,5 +73,12 @@ func worldHost() std.Host[*engine.World] {
 
 		ConfigInt:  engine.ConfigIntAccessor,
 		ConfigBool: engine.ConfigBoolAccessor,
+
+		// The session root is shared session identity, and the run moves before a
+		// reset re-enters the machine, which the session counter does only after
+		Seed: func(w *engine.World) uint64 {
+			run := w.Resources.Event.Queue.Stamp().Run
+			return vmath.DeriveSeed(w.Resources.Rand.DomainRoot(core.DomainShared)^vmath.Mix64(run), "fsm")
+		},
 	}
 }

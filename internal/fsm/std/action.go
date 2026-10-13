@@ -4,11 +4,12 @@ import (
 	"errors"
 
 	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // === Variable Actions ===
 
-func registerVariableActions[T any](m *fsm.Machine[T]) {
+func registerVariableActions[T any](m *fsm.Machine[T], h Host[T]) {
 	for _, name := range []string{
 		"SetVar", "IncrementVar", "DecrementVar", "MultiplyVar",
 		"DivideVar", "ModuloVar", "ClampVar", "CopyVar",
@@ -121,6 +122,37 @@ func registerVariableActions[T any](m *fsm.Machine[T]) {
 		value := clampValue(m.GetVar(varArgs.SourceVar), varArgs.Min, varArgs.Max)
 		m.SetVar(varArgs.Name, value)
 	})
+
+	m.RegisterActionArgs("RandomVar", compileRandomVar[T])
+	m.RegisterAction("RandomVar", func(ctx T, args any) {
+		ra, ok := args.(*RandomVarArgs)
+		if !ok {
+			return
+		}
+		var root uint64
+		if h.Seed != nil {
+			root = h.Seed(ctx)
+		}
+		var seed int64
+		if ra.SeedVar != "" {
+			seed = m.GetVar(ra.SeedVar)
+		}
+		m.SetVar(ra.Name, drawInRange(root, seed, m.GetVar(ra.IndexVar), ra.Min, ra.Max))
+	})
+}
+
+// drawInRange hashes (root, seed, index) into [lo, hi]. The span is unsigned, so it
+// wraps to zero only for the whole int64 range, and the sum wraps back inside it.
+func drawInRange(root uint64, seed, index, lo, hi int64) int64 {
+	const golden = 0x9e3779b97f4a7c15
+	x := vmath.Mix64(root + golden)
+	x = vmath.Mix64((x ^ uint64(seed)) + golden)
+	x = vmath.Mix64((x ^ uint64(index)) + golden)
+	span := uint64(hi) - uint64(lo) + 1
+	if span == 0 {
+		return int64(x)
+	}
+	return int64(uint64(lo) + x%span)
 }
 
 // resolveVarValue returns the source var value when sourceVar is set, else the literal
