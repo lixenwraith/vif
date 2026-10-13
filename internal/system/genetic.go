@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"sync"
@@ -328,7 +330,8 @@ func (s *GeneticSystem) processPendingDeaths() {
 func (s *GeneticSystem) processTracking() {
 	eyes := 0
 
-	s.trackKeys = sortedKeys(s.trackKeys, s.tracking)
+	s.trackKeys = slices.AppendSeq(s.trackKeys[:0], maps.Keys(s.tracking))
+	slices.Sort(s.trackKeys)
 	s.buffers.Observe(0, len(s.trackKeys))
 	for _, entity := range s.trackKeys {
 		tracked := s.tracking[entity]
@@ -498,8 +501,7 @@ func (s *GeneticSystem) SaveShared() ([]byte, error) {
 			return nil, err
 		}
 	}
-	keys := sortedKeys(make([]core.Entity, 0, len(s.tracking)), s.tracking)
-	for _, entity := range keys {
+	for _, entity := range slices.Sorted(maps.Keys(s.tracking)) {
 		tracked := s.tracking[entity]
 		snap.Tracking = append(snap.Tracking, geneticTrackedState{
 			Entity:        entity,
