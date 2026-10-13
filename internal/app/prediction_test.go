@@ -182,8 +182,9 @@ func TestAPredictedSharedDeathRewardsItsPlayerOnce(t *testing.T) {
 
 // TestAPointerSweepCrossesOncePerTick is the pointer's half of D-18: the view
 // follows every cell the pointer names, the shared world gets the newest one a tick
-// as a single placement, and a key move made after it still lands after it. A report
-// on the cell the cursor is already bound for is no placement at all.
+// as a single placement, and the next input crosses it ahead of itself, so a shot or
+// a key move made after it lands after it. A report on the cell the cursor is
+// already bound for is no placement at all.
 func TestAPointerSweepCrossesOncePerTick(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, fixtureSeed, 100, 40)
@@ -212,9 +213,16 @@ func TestAPointerSweepCrossesOncePerTick(t *testing.T) {
 		return pos
 	}
 	var moves int
+	var fired bool
 	a.SetDispatchTap(func(ev event.GameEvent) {
-		if ev.Type == event.EventCursorMoveRequest {
+		switch ev.Type {
+		case event.EventCursorMoveRequest:
 			moves++
+		case event.EventFireSpecialRequest:
+			fired = true
+			if moves != 2 {
+				t.Errorf("the shot dispatched after %d placements, want the pending one first", moves)
+			}
 		}
 	})
 
@@ -241,12 +249,11 @@ func TestAPointerSweepCrossesOncePerTick(t *testing.T) {
 	}
 
 	report(fromX+6, fromY)
-	a.World().RunSafe(func() { a.World().PushCursorMove(cursor, fromX+9, fromY) })
-	a.Settle()
+	a.Inject(&input.Intent{Type: input.IntentMouseRightDown}, intentMotion(input.MotionRight, 3))
 	a.Tick(1)
-	if moves != 3 || cursorPosition(a, cursor).X != fromX+9 {
-		t.Fatalf("pointer then key applied %d placements in all, store column %d; want 3, ending at %d",
-			moves, cursorPosition(a, cursor).X, fromX+9)
+	if !fired || moves != 3 || cursorPosition(a, cursor).X != fromX+9 {
+		t.Fatalf("pointer, shot and key applied %d placements in all (fired %v), store column %d; want 3, ending at %d",
+			moves, fired, cursorPosition(a, cursor).X, fromX+9)
 	}
 }
 
