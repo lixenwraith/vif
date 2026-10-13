@@ -149,7 +149,7 @@ on_enter = [
     { macro = "Say", message = "New game" },
 ]
 transitions = [
-    { trigger = "Tick", target = "Listen", guard = "StateTimeExceeds", guard_args = { ms = 1500 } },
+    { trigger = "Tick", target = "Listen", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
 ]
 
 # One note every note_ticks, the first half a second after the message; Turn starts
@@ -191,7 +191,7 @@ on_enter = [
     { macro = "Say", message = "Level {}: your turn next" },
 ]
 transitions = [
-    { trigger = "Tick", target = "Repeat", guard = "StateTimeExceeds", guard_args = { ms = 900 } },
+    { trigger = "Tick", target = "Repeat", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
 ]
 
 # The buttons light and sound every press themselves; the machine only judges it
