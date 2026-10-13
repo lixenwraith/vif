@@ -137,23 +137,22 @@ func (c *Corrections) publishPlanTelemetryLocked(ids []uint32) {
 		m.KeyframeInterval.Store(int64(c.keyPeriod / c.base))
 	}
 
-	// The session is as constrained as its most constrained edge, and the budget
-	// worth reporting is the tightest one: an average would hide the peer that
-	// needs saying.
-	constrained := false
+	// The uplink carries every link, so what the plan and the floor cost is their
+	// sum; the budget worth reporting is the tightest link's, and the session is as
+	// constrained as its most constrained edge, counted so one of many shows.
+	links, constrained := 0, 0
 	budget, planned, floor := 0.0, 0.0, 0.0
 	for _, id := range ids {
 		p := c.peers[id]
 		if p == nil {
 			continue
 		}
-		constrained = constrained || p.plan.Constrained
-		if p.plan.FloorBps > floor {
-			floor = p.plan.FloorBps
+		links++
+		if p.plan.Constrained {
+			constrained++
 		}
-		if p.plan.PlannedBps > planned {
-			planned = p.plan.PlannedBps
-		}
+		floor += p.plan.FloorBps
+		planned += p.plan.PlannedBps
 		if b := p.plan.BudgetBps; b > 0 && (budget == 0 || b < budget) {
 			budget = b
 		}
@@ -161,7 +160,9 @@ func (c *Corrections) publishPlanTelemetryLocked(ids []uint32) {
 	m.UplinkBps.Store(int64(planned))
 	m.BudgetBps.Store(int64(budget))
 	m.FloorBps.Store(int64(floor))
-	m.Constrained.Store(constrained)
+	m.Links.Store(int64(links))
+	m.ConstrainedLinks.Store(int64(constrained))
+	m.Constrained.Store(constrained > 0)
 	m.FloorBreached.Store(c.breached)
 
 	c.reportFloorLocked()
@@ -182,10 +183,13 @@ func (c *Corrections) reportFloorLocked() {
 		c.inst.SetStatusMessage("Link recovered; corrections are converging again", parameter.StatusAlert)
 		return
 	}
-	c.log.Warn("converge", "msg", "link cannot sustain the convergence floor",
-		"floor_ticks", c.bounds.FloorKeyframeTicks,
-		"floor_bps", int64(c.tel.FloorBps.Load()),
-		"budget_bps", int64(c.tel.BudgetBps.Load()))
+	for id, p := range c.peers {
+		if p.plan.FloorBreached {
+			c.log.Warn("converge", "msg", "link cannot sustain the convergence floor",
+				"peer", id, "floor_ticks", c.bounds.FloorKeyframeTicks,
+				"floor_bps", int64(p.plan.FloorBps), "budget_bps", int64(p.plan.BudgetBps))
+		}
+	}
 	c.inst.SetStatusMessage(
 		"Link cannot carry a whole world within the convergence floor; corrections may not converge", parameter.StatusAlert)
 }

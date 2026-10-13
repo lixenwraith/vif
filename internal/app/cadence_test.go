@@ -131,6 +131,29 @@ func TestTheRoundTripIsMeasuredEndToEnd(t *testing.T) {
 	}
 }
 
+// TestALinkThatIsGoneLeavesNoOperatingPoint: once the last peer leaves, neither the
+// status cells, the badge they feed nor :session read its round trip or its plan as
+// this session's.
+func TestALinkThatIsGoneLeavesNoOperatingPoint(t *testing.T) {
+	t.Parallel()
+	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{LatencyTicks: 3})
+	runSession(host, guest, 120)
+	if statOf(host, "network.link_rtt_ms") == 0 || statOf(host, "snapshot.cadence_links") != 1 {
+		t.Fatal("the link was never measured and planned, so its retirement proves nothing")
+	}
+	transportOf(t, host).Disconnect(2)
+	runSession(host, guest, 2)
+	for _, key := range []string{"network.link_rtt_ms", "network.link_peer",
+		"snapshot.cadence_links", "snapshot.cadence_uplink_bps", "snapshot.cadence_floor_bps"} {
+		if v := statOf(host, key); v != 0 {
+			t.Errorf("%s reads %d with no link", key, v)
+		}
+	}
+	if s := host.SessionSummary(); strings.Contains(s, "uplink") || strings.Contains(s, "slowest link") {
+		t.Errorf(":session reports an operating point with no link: %s", s)
+	}
+}
+
 // TestAConstrainedLinkSlowsTheCadenceAndPublishesIt is the phase's headline: the
 // cadence becomes a function of what the link carries, the operating point is
 // reported rather than guessed at, and the correction magnitude that rises with

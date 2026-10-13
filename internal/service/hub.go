@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -133,17 +134,26 @@ func (h *Hub) StopAll() {
 	defer h.mu.Unlock()
 
 	// initialized is a superset of started and Stop is contractually
-	// idempotent, so one reverse pass releases everything Init acquired.
+	// idempotent, so one reverse pass releases everything Init acquired. A
+	// shutdown is one record; each service's own is there at debug.
+	begin := time.Now()
+	stopped := make([]string, 0, len(h.initialized))
 	for _, name := range slices.Backward(h.initialized) {
 		svc, ok := h.services[name]
 		if !ok {
 			continue
 		}
+		start := time.Now()
 		if err := svc.Stop(); err != nil {
 			h.log.Error("service", "msg", "service stop failed", "service", name, "error", err.Error())
 			continue
 		}
-		h.log.Info("service", "msg", "service stopped", "service", name)
+		h.log.Debug("service", "msg", "service stopped", "service", name, "us", time.Since(start).Microseconds())
+		stopped = append(stopped, name)
+	}
+	if len(stopped) > 0 {
+		h.log.Info("service", "msg", "services stopped",
+			"services", strings.Join(stopped, ","), "us", time.Since(begin).Microseconds())
 	}
 	h.initialized, h.started = nil, nil
 }
