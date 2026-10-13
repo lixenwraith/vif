@@ -816,16 +816,17 @@ request it; the request crosses and every participant applies it at one barrier
 tick. A reset from the shared monitor FSM remains re-derived on every instance.
 `MetaSystem` snapshots the roster's slot/control/peer assignments, pauses
 audio/time, clears entities and `GameState`, advances the journal run while
-rebasing its tick to zero, restores viewport-sized map/camera/mode state, and
-cancels pending step controls. The reset FSM's first cursor spawn carries the
+rebasing its tick to zero, restores the viewport-sized map (no smaller than the
+scenario's `[map]` floor), camera and mode state, and cancels pending step controls. The reset FSM's first cursor spawn carries the
 configured heat/energy template and expands the saved roster in deterministic
 slot order. The scheduler serializes these phases with the world lock:
 
 1. drain and discard stale queued events;
 2. reset deadlines and elapsed-time anchors;
-3. settle an unpause, so entry actions below sound;
+3. settle an unpause with the HFSM held out, so entry actions below sound;
 4. reset all initially configured HFSM regions, variables, and delayed actions;
-5. reapply global and active-region system toggles and settle their events;
+5. reapply global and active-region system toggles, then settle the entry-action
+   and toggle events;
 6. advance the RNG session and emit a fresh journal anchor.
 
 Simulation state is rebuilt; operator state describes how that simulation is
