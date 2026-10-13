@@ -1,6 +1,7 @@
 package system
 
 import (
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -72,6 +73,10 @@ type GlyphSystem struct {
 	// Reused placement scratch
 	placement []glyphPlacement
 
+	// Drift as the environment publishes it; read only, for the entry band
+	statDriftActive    *atomic.Bool
+	statDriftDirection *status.AtomicFloat
+
 	// Cached metric pointers
 	statEnabled     *atomic.Bool
 	statDensity     *status.AtomicFloat
@@ -96,6 +101,8 @@ func NewGlyphSystem(world *engine.World) engine.System {
 	s.statNextSpawnMS = world.Resources.Status.Ints.Get("glyph.next_spawn_ms")
 	s.statOrphanGlyph = world.Resources.Status.Ints.Get("glyph.orphan_glyph")
 	s.buffers = newBufferTelemetry(world.Resources.Status, "glyph", "placement")
+	s.statDriftActive = world.Resources.Status.Bools.Get("environment.drift_active")
+	s.statDriftDirection = world.Resources.Status.Floats.Get("environment.drift_direction")
 
 	s.Init()
 	return s
@@ -201,8 +208,7 @@ func (s *GlyphSystem) calculateDensity(entityCount, screenCapacity int) float64 
 	return float64(entityCount) / float64(screenCapacity)
 }
 
-// updateRateMultiplier adjusts spawn rate based on screen density
-// <30% filled: 2x faster, 30-70%: normal, >70%: 0.5x slower
+// updateRateMultiplier adjusts spawn rate by map density against the parameter thresholds
 func (s *GlyphSystem) updateRateMultiplier(density float64) {
 	if density < parameter.SpawnDensityLowThreshold {
 		s.rateMultiplier = parameter.SpawnRateFast
@@ -305,9 +311,10 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		return false
 	}
 
+	rowLo, rowHi, colLo, colHi := s.placementRange(lineLength)
 	for range parameter.MaxPlacementTries {
-		row := s.rng.Intn(config.MapHeight)
-		startCol := s.rng.Intn(config.MapWidth - lineLength + 1)
+		row := rowLo + s.rng.Intn(rowHi-rowLo)
+		startCol := colLo + s.rng.Intn(colHi-colLo)
 
 		// Cursor exclusion: interval overlap on X, distance on Y
 		excluded := false
@@ -374,6 +381,30 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 	}
 
 	return false
+}
+
+// placementRange returns the half-open rows and first columns a line may take: the
+// whole map, or while glyphs drift, the band beside the upwind edge, so text enters
+// the map rather than appearing inside it. The draws per try are the same either way.
+func (s *GlyphSystem) placementRange(lineLength int) (rowLo, rowHi, colLo, colHi int) {
+	config := s.world.Resources.Config
+	rowLo, rowHi, colLo, colHi = 0, config.MapHeight, 0, config.MapWidth-lineLength+1
+	if !s.statDriftActive.Load() {
+		return rowLo, rowHi, colLo, colHi
+	}
+	sin, cos := math.Sincos(s.statDriftDirection.Get())
+	horizontal := math.Abs(cos) >= math.Abs(sin)*parameter.DriftAspectY
+	switch band := parameter.DriftEntryBand; {
+	case horizontal && cos < 0:
+		colLo = max(colLo, colHi-band)
+	case horizontal:
+		colHi = min(colHi, band)
+	case sin > 0:
+		rowHi = min(rowHi, band)
+	default:
+		rowLo = max(rowLo, rowHi-band)
+	}
+	return rowLo, rowHi, colLo, colHi
 }
 
 type glyphState struct {

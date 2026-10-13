@@ -14,7 +14,7 @@ import (
 
 // Capture and journal schemas are separate so compatibility errors identify
 // which layout prevents an install.
-const Schema = 14
+const Schema = 15
 
 // SharedCapture is the shared world at one tick (D-19): the shared component
 // stores, the allocator's next ID, the Shared RNG stream positions, and the private
