@@ -2,10 +2,11 @@ description = "Simon: listen to the notes, then repeat them with keys 1-4 or by 
 
 # Four buttons on keys 1-4, lowest note on 1, so the game plays with eyes closed:
 # every press and every shown note sounds its button's tone. A level adds one note
-# to the sequence, up to 100. The glyph field drifts behind the buttons.
+# to the sequence, up to 100. The glyph field drifts behind the buttons. Heat stays
+# full with its system off; energy reads the level.
 
 [systems]
-only_systems = ["button", "timer", "death", "glyph", "environment", "particle", "transient", "audio"]
+only_systems = ["button", "timer", "death", "glyph", "environment", "particle", "transient", "audio", "cursor", "energy"]
 
 [regions.simon]
 initial = "Ready"
@@ -85,6 +86,11 @@ body = { trigger = "EventInputPressed", internal = true, guard = "And", guard_ar
     { macro = "Note" },
 ] }
 
+[macros.Score]
+doc = "Set the cursor this instance drives to full heat and the level as energy."
+params = {}
+body = { action = "EmitEvent", event = "EventCursorArmRequest", payload = { heat = 100, energy = 0 }, payload_vars = { energy = "level" } }
+
 [macros.Heading]
 doc = "Drift towards `rad` when variable heading is `idx`."
 params = { idx = "int", rad = "float" }
@@ -114,6 +120,7 @@ parent = "Root"
 on_enter = [
     { action = "IncrementVar", payload = { name = "game" } },
     { action = "SetVar", payload = { name = "level", value = 1 } },
+    { macro = "Score" },
     { macro = "Flash", color = { r = 255, g = 255, b = 255 }, ms = 300 },
     { macro = "Cue", sound = "bell" },
     { macro = "Say", message = "New game" },
@@ -178,6 +185,7 @@ on_enter = [
 transitions = [
     { trigger = "Tick", target = "Listen", guard = "StateTimeExceeds", guard_args = { ms = 1600 }, actions = [
         { action = "IncrementVar", payload = { name = "level", max = 100 } },
+        { macro = "Score" },
     ] },
 ]
 
@@ -199,6 +207,7 @@ transitions = [
 ]
 
 # --- Player: a cursor below the buttons, and a new game on any defeat ---
+# A cursor arriving mid-game reads the level at once rather than at the next one
 
 [states.PlayerBoot]
 parent = "Root"
@@ -207,7 +216,7 @@ on_enter = [
     { action = "DivideVar", payload = { name = "cursor_x", delta = 2 } },
     { action = "ConfigToVar", payload = { field = "map_height", name = "cursor_y" } },
     { action = "DecrementVar", payload = { name = "cursor_y", delta = 3 } },
-    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { heat = 10, energy = 100 }, payload_vars = { x = "cursor_x", y = "cursor_y" } },
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { heat = 100, energy = 1 }, payload_vars = { x = "cursor_x", y = "cursor_y" } },
 ]
 transitions = [
     { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },
@@ -223,6 +232,7 @@ transitions = [
 [states.PlayerActive]
 parent = "Root"
 transitions = [
+    { trigger = "EventCursorSpawned", internal = true, guard = "VarCompare", guard_args = { var = "level", op = "gte", value = 1 }, actions = [{ macro = "Score" }] },
     { trigger = "Tick", target = "PlayerReset", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
 ]
 
