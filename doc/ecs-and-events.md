@@ -141,10 +141,14 @@ is a property of the entity a component attaches to, and
 domain only, generated into `component_domain_gen.go` from `ComponentDef.Domain`
 in `internal/manifest/definition.go`.
 
-Components should remain data-oriented. Behavior belongs in systems, and
-cross-system requests belong in events. Related enum values and static profiles
-live alongside a component when they define the meaning of that data, such as
-weapon types, loot profiles, or glyph levels.
+Components are data. Behavior, rules over one component's own fields included,
+belongs in the owning system, and cross-system requests belong in events. Enums
+and static per-kind tables live alongside a component when they define the
+meaning of its data, such as weapon specs, materialize styles or glyph levels.
+The only functions in `internal/component` are reads a renderer or mode shares
+with a system, since neither imports `internal/system` (timer progress, the
+Kraken's tentacle shape, button layout), and the snapshot detach of components
+holding slices.
 
 `ParticleComponent` is the unified data shape for the Player-domain decay and
 blossom behaviors. `ParticleBehavior` is the discriminator used by the component,
