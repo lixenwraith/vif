@@ -42,9 +42,9 @@ the generated manifest supplies construction order. A system's file serves only
 its own system: no other system calls its functions or reads its fields, timer
 arming aside. Shared mechanics move downward into focused packages, or into a
 file that declares no system (`targeting.go`, `interaction.go`, `blast.go`,
-`sweep.go`) and takes the world it works on. Systems otherwise communicate
-through ECS data and events: a species that must refuse hits sets a status
-combat reads, rather than calling combat.
+`sweep.go`, `sound.go`) and takes the world it works on. Systems otherwise
+communicate through ECS data and events: a species that must refuse hits sets a
+status combat reads, rather than calling combat.
 
 ## 3. Presentation and interaction topology
 
