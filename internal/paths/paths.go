@@ -3,6 +3,7 @@
 package paths
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -29,10 +30,6 @@ const (
 	KeymapConfigFile = "keymap.toml"
 	MusicConfigFile  = "music.toml"
 	SoundConfigFile  = "sounds.toml"
-
-	// FallbackLogDir is used only when no platform state or cache root can be
-	// established; every normal target resolves one.
-	FallbackLogDir = "log"
 )
 
 // ExternalFiles reports whether this target has a host filesystem available
@@ -147,7 +144,7 @@ func ConfigTarget(roots []string, explicit, category, name string) (string, erro
 }
 
 // DefaultLogDir returns the writable session-log directory. The XDG state
-// hierarchy is preferred; ./log is the final fallback when no platform user
+// hierarchy is preferred; ./vif/log is the final fallback when no platform user
 // directory can be established.
 func DefaultLogDir() string { return stateDir(LogDirName) }
 
@@ -159,12 +156,11 @@ func DefaultJournalDir() string { return stateDir(JournalDirName) }
 func DefaultMusicDir() string { return stateDir(MusicDirName) }
 
 func stateDir(kind string) string {
+	base := "."
 	if ExternalFiles() {
-		if base := stateBase(); base != "" {
-			return filepath.Join(base, AppDirName, kind)
-		}
+		base = cmp.Or(stateBase(), base)
 	}
-	return filepath.Join(".", FallbackLogDir)
+	return filepath.Join(base, AppDirName, kind)
 }
 
 func stateBase() string {

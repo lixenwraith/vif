@@ -158,8 +158,8 @@ the streams separate:
 | Music recordings | `$XDG_STATE_HOME/vif/music/` | `-mw=DIR`, `paths.music` |
 
 On platforms without an XDG state root, the platform user-cache directory is
-used. Only when no user location can be resolved does either stream fall back to
-`./log/`. `/var/log` is never assumed.
+used. Only when no user location can be resolved does a stream fall back to
+`./vif/<stream>/` in the working directory. `/var/log` is never assumed.
 
 Bare `-l`, `-j` and `-mw` enable their streams at the defaults. Because they are
 Go boolean-style flags, a directory must use the equals form.
