@@ -121,7 +121,7 @@ var configPages = []configPage{
 			},
 			disabled: recorderUnavailable},
 		withDisabled(commandAction("flush", "Flush flight recorder", "Write the recorder window on the next tick; needs rec in the log scope.", "log rec flush"), recorderUnavailable),
-		{key: "prof", label: "Runtime profiler", description: "Collect module timings. Enabling also pins profiler cards to the telemetry HUD.",
+		{key: "prof", label: "Runtime profiler", description: "Collect module timings, logged each second while file logging is on. Enabling also pins profiler cards to the telemetry HUD.",
 			command: "debug prof", choices: []string{"off", "on"},
 			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.World.Resources.Prof.Profiling()) }},
 		commandAction("cpu", "CPU profile", captureDescription("a CPU profile"), "debug cpu"),

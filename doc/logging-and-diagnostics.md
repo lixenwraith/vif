@@ -37,7 +37,7 @@ flowchart TD
 | Flight recorder | `internal/status` | one atomic load/store per frozen metric per tick | on a trigger only |
 | Replay journal | `internal/event`, `internal/vlog` | payload encode on each external event | every non-system-origin event, independent of diagnostic filters |
 | Runtime capture | `internal/core` | one `Stat` per drain interval | when the Go runtime writes to fd 2 |
-| Profiler | `internal/prof` | one atomic load per timed call | once per second of running game while `:d prof` is on; captures on command |
+| Profiler | `internal/prof` | one atomic load per timed call | its groups once per second of running game while `:d prof` is on; captures on command |
 
 ## 2. Record shape
 
@@ -206,14 +206,15 @@ greps for rather than enumerating every refusal.
 |---|---|---|---|
 | `init started` / `init completed` | INFO | `mode` / `width`, `height`, `systems` | `app.init` |
 | `seed resolved` / `scenario loaded` | INFO | `seed` / `name`, `digest`, `files` | `app.init` |
-| `shutdown started` / `shutdown completed` | INFO | — | `app.Close` |
+| `shutdown started` / `shutdown completed` | INFO | — / `us` | `app.Close` |
 | `signal received` | INFO | `signal` | main loop |
 | `runtime capture started` | INFO | `path`, `reason`, `race` | `setupDiagnostics` |
 | `logging started` / `logging stopped by command` | INFO | `path`, `level` | `:log on`/`off` |
 | `log level changed` / `log scope changed` | INFO | `level` / `scope` | `:log` |
 | `stat interval changed` / `recorder depth changed` | INFO | `ticks` | `:log stat`, `:log rec N` |
 | `snapshot saved` / `capture saved` | INFO | `path`, plus `kind` | `:t save`, `:d heap` and the timed `:d` captures |
-| `time scale changed` / `steps granted` / `breakpoint hit` | INFO | `scale` / `ticks` / `on`, `cause` | operator time control |
+| `time scale changed` / `steps granted` / `breakpoint hit` | INFO | `scale` / `ticks` / `on`, `cause`, and `pause` for a standing one | operator time control |
+| `breakpoint set` / `breakpoints cleared` | INFO | `on` / `count` | `:d break` |
 | `cursor spawned` / `cursor despawned` | INFO | `entity`, `slot`, plus `x`, `y` | `CursorSystem` |
 
 ### `sub="net"`
@@ -231,7 +232,7 @@ greps for rather than enumerating every refusal.
 | `msg` | Level | Fields | Emitted by |
 |---|---|---|---|
 | `network session active` | INFO | `local`, `slot`, `coordinator`, `barrier_delay_ticks`, `peers` | this instance's one statement of who it is |
-| `session summary` | INFO | `summary` | the `-serve` loop, every 30 s; the same line `:session` prints |
+| `session summary` | INFO | `summary` | the `-serve` loop, every 30 s when the line changed; the same line `:session` prints. With peer links it names the slowest link and the plan's totals over all of them; with none it names neither |
 | `participant evicted as too slow` | WARN | `participant`, `late_per_s`, `bytes_per_s`, `window` | the authority's slow policy (multi-player.md §3.5) |
 | `authority handed off` / `authority lost; succession opened` | WARN | `term`, `authority`, `predecessor`, `roster` / `peer`, `term`, `local` | `Authority` |
 | `uncommitted crossings dropped at handoff` | INFO | `crossings` | a guest following a new authority |
@@ -293,7 +294,8 @@ per tick; the config read warns once per key per process.
 
 | `msg` | Level | Fields |
 |---|---|---|
-| `service initialized` / `service started` / `service stopped` | INFO | `service`, `us` |
+| `service initialized` / `service started` | INFO | `service`, `us` |
+| `services stopped` | INFO | `services` in stop order, `us` for all of them; each one's `service stopped` is at DEBUG |
 | `service init failed` / `service start failed` / `service stop failed` | ERROR | `service`, `error` |
 
 ### `sub="fsm"`
@@ -929,7 +931,10 @@ renderer and the engine phases around them, and samples the process, once per
 about 90 ns, plus two ~400 ns reads of the allocation counter around a leaf. A
 window closes on a tick and never spans a pause. It publishes into
 activity-gated registry groups, so their cards exist only while it runs and reach
-the HUD, snapshots, the recorder, `vif-log` and `/metrics` like other telemetry:
+the HUD, snapshots, the recorder, `vif-log` and `/metrics` like other telemetry.
+The periodic snapshot is ten windows apart, so while the `stat` scope is on at
+info each closed window also logs these groups on its own, in the snapshot's
+record shape:
 
 | Group | Contents |
 |---|---|
@@ -1023,6 +1028,7 @@ use their independently configured journal directory.
 | `:t save` | Write a standalone snapshot (§7) |
 | `:d`, `:d prof [on\|off]` | Profiler report; start or stop the profiler (§11) |
 | `:d cpu [s]`, `:d heap`, `:d mutex [s]`, `:d trace [s]` | Write a CPU, heap or mutex profile, or an execution trace (§11) |
+| `:d break ...` | Set, list or clear standing breakpoints that pause on the command line ([Input](input-and-modes.md)) |
 | `:content` | Corpus telemetry in the status bar |
 
 `:log` reports `log <path> | level <L> | scope <S> | stat <N> | rec <M>`.

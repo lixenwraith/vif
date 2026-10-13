@@ -111,8 +111,12 @@ type FlowField struct {
 	TargetX, TargetY int  // Target position this field was computed for
 	Valid            bool // False if field needs recomputation
 
-	// Reusable heap buffer to reduce allocations across recomputes
-	heap minHeap
+	// Scratch reused across recomputes, nil until the first and after a clone: the
+	// bucket queue, and isBlocked asked once per cell into a grid with a blocked
+	// border, so the search reads a neighbour with one load and no bounds test
+	ring    [][]int32
+	pending int
+	blocked []bool
 }
 
 // NewFlowField creates an empty flow field for the given dimensions
@@ -132,7 +136,6 @@ func NewFlowField(width, height int) *FlowField {
 		TargetX:    -1,
 		TargetY:    -1,
 		Valid:      false,
-		heap:       make(minHeap, 0, size/4),
 	}
 }
 
@@ -200,7 +203,19 @@ func (f *FlowField) GetDistance(x, y int) int {
 // WallChecker is a function that returns true if cell blocks navigation
 type WallChecker func(x, y int) bool
 
-// Compute performs weighted Dijkstra from all target points across the entire valid field
+// ringSize spans every distance pending at once: a seed is at most
+// maxSearchRadius cells along each axis from its target, and an edge adds at most
+// CostDiagonal, so pending distances never spread across a whole ring.
+const (
+	maxSearchRadius = 8
+	ringSize        = 256
+	ringMask        = ringSize - 1
+)
+
+// Compute performs weighted Dijkstra from all target points across the entire
+// valid field. Edge costs are small integers, so a ring of buckets indexed by
+// distance pops in constant time where a heap paid a logarithm; cells of equal
+// distance settle in bucket order.
 func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
 	if len(targets) == 0 {
 		f.Valid = false
@@ -215,71 +230,71 @@ func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
 		}
 		f.CurrentGen = 1
 	}
+	if f.ring == nil {
+		f.ring = make([][]int32, ringSize)
+	}
+	f.pending = 0
+	pw := w + 2
+	f.blockGrid(isBlocked)
+	var offset [DirCount]int
+	for k := range DirCount {
+		offset[k] = DirVectors[k][1]*pw + DirVectors[k][0]
+	}
 
-	f.heap = f.heap[:0]
-
-	// Seed all valid targets
 	for _, t := range targets {
 		if t.X < 0 || t.Y < 0 || t.X >= f.Width || t.Y >= f.Height {
 			continue
 		}
-
 		targetIdx := int32(t.Y*w + t.X)
 		if !isBlocked(t.X, t.Y) {
 			if f.VisitedGen[targetIdx] != f.CurrentGen {
 				f.Distances[targetIdx] = 0
 				f.VisitedGen[targetIdx] = f.CurrentGen
 				f.Directions[targetIdx] = DirTarget
-				f.heap.push(heapEntry{idx: targetIdx, dist: 0})
+				f.push(targetIdx, 0)
 			}
 		} else {
 			f.seedVirtualTargets(t.X, t.Y, isBlocked)
 		}
 	}
 
-	if len(f.heap) == 0 {
+	if f.pending == 0 {
 		f.Valid = false
 		return
 	}
 
-	// Weighted Dijkstra (Unrestricted Expansion)
-	for len(f.heap) > 0 {
-		entry := f.heap.pop()
-		idx := entry.idx
-
-		if f.VisitedGen[idx] == f.CurrentGen && entry.dist > f.Distances[idx] {
-			continue
-		}
-
-		cx := int(idx) % w
-		cy := int(idx) / w
-
-		// Each neighbour is tested once: a diagonal's corner cells are the two
-		// orthogonal neighbours beside it, in bounds whenever the diagonal is.
-		var blocked [DirCount]bool
-		for d := range DirCount {
-			nx, ny := cx+DirVectors[d][0], cy+DirVectors[d][1]
-			blocked[d] = nx < 0 || nx >= f.Width || ny < 0 || ny >= f.Height || isBlocked(nx, ny)
-		}
-
-		for dirIdx := int8(0); dirIdx < DirCount; dirIdx++ {
-			if blocked[dirIdx] {
-				continue
-			}
-			if dirIdx%2 == 1 && (blocked[dirIdx-1] || blocked[(dirIdx+1)%DirCount]) {
-				continue
+	for d := int32(0); f.pending > 0; d++ {
+		bucket := &f.ring[d&ringMask]
+		for len(*bucket) > 0 {
+			idx := (*bucket)[len(*bucket)-1]
+			*bucket = (*bucket)[:len(*bucket)-1]
+			f.pending--
+			if f.Distances[idx] != d {
+				continue // a shorter distance reached it since
 			}
 
-			nx := cx + DirVectors[dirIdx][0]
-			ny := cy + DirVectors[dirIdx][1]
-			nIdx := int32(ny*w + nx)
-			newDist := entry.dist + dirCosts[dirIdx]
+			cx := int(idx) % w
+			cy := int(idx) / w
+			p := (cy+1)*pw + cx + 1
 
-			if f.VisitedGen[nIdx] != f.CurrentGen || newDist < f.Distances[nIdx] {
-				f.Distances[nIdx] = newDist
-				f.VisitedGen[nIdx] = f.CurrentGen
-				f.Directions[nIdx] = DirOpposite[dirIdx]
-				f.heap.push(heapEntry{idx: nIdx, dist: newDist})
+			// A diagonal's corner cells are the two orthogonal neighbours beside it
+			var blocked [DirCount]bool
+			for k := range DirCount {
+				blocked[k] = f.blocked[p+offset[k]]
+			}
+
+			for k := int8(0); k < DirCount; k++ {
+				if blocked[k] || k%2 == 1 && (blocked[k-1] || blocked[(k+1)%DirCount]) {
+					continue
+				}
+				nIdx := int32((cy+DirVectors[k][1])*w + cx + DirVectors[k][0])
+				nd := d + dirCosts[k]
+				if f.VisitedGen[nIdx] != f.CurrentGen || nd < f.Distances[nIdx] {
+					f.Distances[nIdx] = nd
+					f.VisitedGen[nIdx] = f.CurrentGen
+					f.Directions[nIdx] = DirOpposite[k]
+					f.push(nIdx, nd)
+				}
 			}
 		}
 	}
@@ -287,11 +302,56 @@ func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
 	f.Valid = true
 }
 
+// blockGrid fills the padded grid from isBlocked; outside the field is blocked
+func (f *FlowField) blockGrid(isBlocked WallChecker) {
+	pw, ph := f.Width+2, f.Height+2
+	if cap(f.blocked) < pw*ph {
+		f.blocked = make([]bool, pw*ph)
+	}
+	f.blocked = f.blocked[:pw*ph]
+	for x := range pw {
+		f.blocked[x], f.blocked[(ph-1)*pw+x] = true, true
+	}
+	for y := range f.Height {
+		row := f.blocked[(y+1)*pw : (y+2)*pw]
+		row[0], row[pw-1] = true, true
+		for x := range f.Width {
+			row[x+1] = isBlocked(x, y)
+		}
+	}
+}
+
+func (f *FlowField) push(idx, dist int32) {
+	f.ring[dist&ringMask] = append(f.ring[dist&ringMask], idx)
+	f.pending++
+}
+
+// Reachable reports whether Compute would seed anything for targets, so a field
+// whose compute is deferred can say now whether it will be valid.
+func (f *FlowField) Reachable(targets []vmath.Point, isBlocked WallChecker) bool {
+	for _, t := range targets {
+		if t.X < 0 || t.Y < 0 || t.X >= f.Width || t.Y >= f.Height {
+			continue
+		}
+		if !isBlocked(t.X, t.Y) {
+			return true
+		}
+		for dy := -maxSearchRadius; dy <= maxSearchRadius; dy++ {
+			for dx := -maxSearchRadius; dx <= maxSearchRadius; dx++ {
+				nx, ny := t.X+dx, t.Y+dy
+				if (dx != 0 || dy != 0) && nx >= 0 && nx < f.Width && ny >= 0 && ny < f.Height && !isBlocked(nx, ny) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // seedVirtualTargets finds passable cells near blocked target using spiral search
 // Seeds passable cells with weighted distance - does NOT mark blocked target
 func (f *FlowField) seedVirtualTargets(targetX, targetY int, isBlocked WallChecker) {
 	w := f.Width
-	const maxSearchRadius = 8
 
 	// DO NOT mark the blocked target cell - only seed passable neighbors
 
@@ -326,7 +386,7 @@ func (f *FlowField) seedVirtualTargets(targetX, targetY int, isBlocked WallCheck
 					f.Distances[nIdx] = cost
 					f.VisitedGen[nIdx] = f.CurrentGen
 					f.Directions[nIdx] = DirTarget // Mark as target for direction derivation
-					f.heap.push(heapEntry{idx: int32(nIdx), dist: cost})
+					f.push(int32(nIdx), cost)
 					foundAny = true
 				}
 			}

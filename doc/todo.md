@@ -288,6 +288,19 @@ library copies.
 
 ## Browser sessions
 
+### Coarsen navigation fields if busy maps still stall a browser frame
+
+- Priority: P2
+- Affected files: `pkg/navigation/flowfield.go`, `internal/system/navigation.go`
+
+Navigation's fields are computed only for a reader, at most once per 5-tick cooldown,
+and a 199x97 field is 3.0 ms under WASM; solo play with nothing chasing now costs
+0.1 ms a tick. A busy map pays those 3 ms for every field read when it falls due,
+and several groups' fields can fall due in one tick. Next, in order: compute a field over 2x2 blocks, about a quarter
+of the cells, where its directions mostly agree with the full field's away from walls;
+then a second Go instance in another worker computing fields at a fixed lead, at the
+cost of a second runtime and of copying the grid in and the field out.
+
 ### Serve wss from vif's own listener
 
 - Priority: P3
@@ -415,8 +428,10 @@ Diagnoses and what each item follows from are in
 - Affected files: `pkg/navigation/flowfield.go`, `internal/system/interaction.go`,
   `internal/engine/world_copy.go`
 
-At td with 16 players a tick is about 2.6 ms at `GOMAXPROCS=1`: flow field derivation
-is about 45% of it and `checkCursorOverlap`'s position lookups a quarter. A
+At td with 16 players a tick was about 2.6 ms at `GOMAXPROCS=1`, before flow fields
+moved to a bucket queue, a 5-tick cooldown and computing only for a reader: field
+derivation was about 45% of it and `checkCursorOverlap`'s position lookups a
+quarter. Measure again before choosing between them. A
 checkpoint scans the whole grid for its occupied cells, most of its 10 ms. Each must
 stay exact; per-store write counters stay rejected, since a cache compares values it
 owns.
@@ -713,9 +728,11 @@ reads as farther; a distinct attribute for bright would separate the three.
 - Priority: P2
 - Affected files: `internal/mode/config_menu.go`, `internal/paths/settings.go`
 - Persist operator preferences through an explicit save action and startup
-  loading; the live menu currently changes only this run. Music gain needs an
-  authoritative readback before joining effects volume in the menu. Keymap,
-  backend, paths and colour depth remain startup settings.
+  loading; the live menu currently changes only this run, and what `:new` keeps
+  (rate, HUD, pins, standing breakpoints) a restart or scenario change drops. Music
+  gain needs an authoritative readback before joining effects volume in the menu.
+  Keymap, backend, paths and colour depth remain startup settings; `:d break`
+  stays on the command line, since a row cannot take its arguments.
 
 ### Use sixteen console backgrounds on Linux
 
@@ -760,16 +777,12 @@ default and move the TOML codec to the caller, or drop the subpackage.
 
 ### Cut the app package's test time
 
-- Priority: P1
-- Affected files: `internal/app/correction_test.go`, `internal/app/snapshot_capture_test.go`,
-  `internal/app/clone_test.go`, the replay and journal tests in `internal/app`
+- Priority: P2
+- Affected files: the socket tests in `internal/app` (`bot_test.go`, `host_test.go`,
+  `join_test.go`, `migration_test.go`, `script_test.go`)
 
-`go test -race ./internal/app` runs 258 tests summing 680 s; nearly all are
-parallel, so wall time follows their CPU: 4.5 minutes on 4 cores against 36 s
-without `-race`, and nearly 10 in a full race run. Four carry 43%: `TestATowerGuestAnswersHashOnly` (103 s, 1200
-tower ticks), `TestAGAScenarioStagesAcrossAReset` (70 s),
-`TestAReplayRestoredFromACheckpointContinuesAsItsSource` (60 s) and
-`TestASlowLinkCarriesTheTowerWithoutAStandingQueue` (58 s). The 25 replay and
-journal tests carry 228 s more, each recording its own run. Cut each of the four to
-the ticks its rule needs, and record a replay fixture once per seed for the tests
-that only read it back.
+Without `-race` the package's wall time is set by its 47 serial tests, about 23 s
+of 33 s on 4 cores: each drives a real socket against the shipped wall-clock
+deadlines (heartbeat loss, succession, join readiness), so none can share the
+machine. Test-only deadlines a fraction of the shipped ones, or the in-process mesh
+where a socket is not the rule under test, would cut them.

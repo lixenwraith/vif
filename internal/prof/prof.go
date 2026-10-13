@@ -12,12 +12,14 @@ import (
 	"runtime/trace"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/status"
+	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // Kind classifies a timer; kindLabel prefixes it in rankings and pprof labels
@@ -166,6 +168,7 @@ type Profiler struct {
 	frameMax *atomic.Int64
 	top      [parameter.ProfTopN]*status.AtomicString
 	proc     process
+	reg      *status.Registry
 }
 
 // New registers the prof and proc groups; call before the registry freezes
@@ -173,6 +176,7 @@ func New(reg *status.Registry) *Profiler {
 	p := &Profiler{
 		tickMax:  reg.Ints.Get("prof.tick_max_us"),
 		frameMax: reg.Ints.Get("prof.frame_max_us"),
+		reg:      reg,
 	}
 	for i := range phases {
 		p.phase[i] = newTimer(KindCore, phases[i].name, phases[i].leaf)
@@ -309,6 +313,17 @@ func (p *Profiler) Publish() {
 	}
 	p.report.Store(&stats)
 	p.proc.sample(span)
+
+	// The periodic snapshot is ten windows apart, so while profiling each window
+	// is logged on its own, in the snapshot's shape.
+	if log := p.reg.Log(); log.On(status.SubStat, vlog.LevelInfo) {
+		p.reg.SnapshotFiltered(isProfKey, log.Info)
+	}
+}
+
+// isProfKey selects the groups a profiler window publishes
+func isProfKey(key string) bool {
+	return strings.HasPrefix(key, "prof.") || strings.HasPrefix(key, "proc.")
 }
 
 // Report returns the last closed window ranked by share; nil while off

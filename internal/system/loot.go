@@ -324,6 +324,7 @@ func (s *LootSystem) refreshOwnerRoutes(loots []core.Entity) {
 				config.MapWidth, config.MapHeight,
 				parameter.NavFlowMinTicksBetweenCompute,
 				parameter.NavFlowDirtyDistance,
+				parameter.NavFlowSettleTicks,
 			)
 		case r.cache.Field.Width != config.MapWidth || r.cache.Field.Height != config.MapHeight:
 			r.cache.Resize(config.MapWidth, config.MapHeight)

@@ -339,7 +339,9 @@ therefore snapshots recompute counters, last targets, and gateway route rebuild
 budget, then re-derives fields and graphs during install from the captured inputs,
 keeping any it holds from the same inputs on a wall grid that has not moved since.
 
-Local view changes do not mark Shared navigation dirty.
+Local view changes do not mark Shared navigation dirty. Whether a field is
+computed when due or at its first reader is local too: the phase is the throttle's
+decision, which is the same either way.
 
 ### D-18 — Local prediction is private
 

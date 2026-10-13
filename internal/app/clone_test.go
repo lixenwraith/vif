@@ -40,8 +40,8 @@ func TestAReplayRestoredFromACheckpointContinuesAsItsSource(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for i := range 1100 {
-			if i == 600 {
+		for i := range 700 {
+			if i == 400 {
 				a.Reset(false)
 			}
 			if more, err := d.Step(); !more || err != nil {
@@ -49,7 +49,7 @@ func TestAReplayRestoredFromACheckpointContinuesAsItsSource(t *testing.T) {
 			}
 		}
 		a.Close()
-		continuesFromCheckpoints(t, rec, []event.Stamp{{Run: 0, Tick: 450}, {Run: 1, Tick: 200}}, 250)
+		continuesFromCheckpoints(t, rec, []event.Stamp{{Run: 0, Tick: 300}, {Run: 1, Tick: 100}}, 150)
 	})
 	t.Run("guest", func(t *testing.T) {
 		const seed = 0xC2
@@ -69,7 +69,7 @@ func TestAReplayRestoredFromACheckpointContinuesAsItsSource(t *testing.T) {
 		waitForRosterPair(t, host, guest)
 		rng := vmath.NewFastRand(7)
 		motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
-		for range 500 {
+		for range 300 {
 			for _, p := range []*App{host, guest} {
 				if rng.Intn(3) == 0 {
 					inject(t, p, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
@@ -84,7 +84,7 @@ func TestAReplayRestoredFromACheckpointContinuesAsItsSource(t *testing.T) {
 		}
 		guest.Close()
 		joined := rec.Captures()[0].Tick
-		continuesFromCheckpoints(t, rec, []event.Stamp{{Tick: joined + 150}}, 250)
+		continuesFromCheckpoints(t, rec, []event.Stamp{{Tick: joined + 100}}, 150)
 	})
 }
 

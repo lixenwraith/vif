@@ -135,14 +135,15 @@ type NetworkSystem struct {
 	statCommitVoid  *atomic.Int64
 	statUncommitted *atomic.Int64
 
-	// The link measurement, published for the worst peer this instance has. It is
-	// the transport's own estimate rather than anything this system derives: what
-	// happens here is a read and a store, so that a network round trip never
-	// becomes a value a tick could branch on.
+	// The link measurement: the slowest link's round trip, variation, rate and
+	// peer, and the highest loss any link reports. It is the transport's own
+	// estimate, read and stored, so a network round trip never becomes a value a
+	// tick could branch on; with no link measured every cell reads zero.
 	statRTT       *atomic.Int64
 	statJitter    *atomic.Int64
 	statLinkBps   *atomic.Int64
 	statLinkLoss  *atomic.Int64
+	statLinkPeer  *atomic.Int64
 	statSaturated *atomic.Bool
 
 	// statMagnitude is App's correction magnitude, read rather than owned: it is
@@ -405,6 +406,7 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statJitter = s.intStat(reg, "network.link_jitter_ms")
 	s.statLinkBps = s.intStat(reg, "network.link_bps")
 	s.statLinkLoss = s.intStat(reg, "network.link_loss_pct")
+	s.statLinkPeer = s.intStat(reg, "network.link_peer")
 	s.statSaturated = s.boolStat(reg, "network.link_saturated")
 	// Not registered through intStat: this cell is App's and a session reset must
 	// not clear the magnitude of a correction App has already published into it.
@@ -1283,27 +1285,28 @@ func (s *NetworkSystem) publishLinkMeasurement(p engine.NetworkPort, completedTi
 	}
 	link.SetLinkReport(s.linkReport(completedTick))
 
-	// The worst link is the one that decides what a player is told: a session is
-	// as constrained as its most constrained edge, and reporting an average would
-	// hide exactly the peer that needs saying.
+	// The worst link decides what a player is told: a session is as constrained as
+	// its most constrained edge, and an average would hide the peer that needs
+	// saying. Loss is its own worst, since a lossy link need not be the slow one. A
+	// link that is gone is not measured, so the last one leaving clears the cells.
 	var worst linkpace.Metrics
-	var haveWorst bool
+	var worstPeer uint32
+	loss := 0.0
 	for _, peer := range link.Peers() {
 		m := link.LinkMetric(peer)
 		if m.Samples == 0 {
 			continue
 		}
-		if !haveWorst || m.RTT > worst.RTT {
-			worst, haveWorst = m, true
+		if worstPeer == 0 || m.RTT > worst.RTT {
+			worst, worstPeer = m, peer
 		}
-	}
-	if !haveWorst {
-		return
+		loss = max(loss, m.Loss)
 	}
 	s.statRTT.Store(worst.RTTMillis())
 	s.statJitter.Store(worst.JitterMillis())
 	s.statLinkBps.Store(int64(worst.Throughput))
-	s.statLinkLoss.Store(int64(worst.Loss * 100))
+	s.statLinkLoss.Store(int64(loss * 100))
+	s.statLinkPeer.Store(int64(worstPeer))
 	s.statSaturated.Store(worst.Saturated)
 }
 
