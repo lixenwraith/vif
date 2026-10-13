@@ -91,7 +91,7 @@ func (s *TimerSystem) Update() {
 		// Death refuses a protected entity; its lifetime ends without it, as the
 		// Death tag's did
 		if prot, ok := s.world.Components.Protection.GetPtr(entity); ok && prot.Mask&component.ProtectFromDeath != 0 {
-			timer.Stop(component.TimerLifetime)
+			timer.Slots[component.TimerLifetime] = component.Countdown{}
 			continue
 		}
 		s.expired = append(s.expired, entity)
@@ -110,13 +110,14 @@ func timerRunning(w *engine.World, e core.Entity, slot component.TimerSlot) bool
 	return ok && timer.Running(slot)
 }
 
-// armTimer starts one of e's countdowns, attaching its timer on first use
+// armTimer starts one of e's countdowns over d, attaching its timer on first use
 func armTimer(w *engine.World, e core.Entity, slot component.TimerSlot, d time.Duration) {
+	armed := component.Countdown{Remaining: d, Duration: d}
 	if timer, ok := w.Components.Timer.GetPtr(e); ok {
-		timer.Arm(slot, d)
+		timer.Slots[slot] = armed
 		return
 	}
 	var timer component.TimerComponent
-	timer.Arm(slot, d)
+	timer.Slots[slot] = armed
 	w.Components.Timer.SetComponent(e, timer)
 }

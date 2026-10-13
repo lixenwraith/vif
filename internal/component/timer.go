@@ -24,15 +24,6 @@ type TimerComponent struct {
 	Slots [TimerSlotCount]Countdown
 }
 
-// Arm starts slot s over d
-func (t *TimerComponent) Arm(s TimerSlot, d time.Duration) {
-	t.Slots[s] = Countdown{Remaining: d, Duration: d}
-}
-
-func (t *TimerComponent) Stop(s TimerSlot) {
-	t.Slots[s] = Countdown{}
-}
-
 // Running reports slot s counting down; an idle or expired slot is not
 func (t *TimerComponent) Running(s TimerSlot) bool {
 	return t.Slots[s].Remaining > 0
