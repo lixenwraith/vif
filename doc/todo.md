@@ -757,3 +757,21 @@ restates `EngineConfig.PerturbationStrength`; collapse each pair. The `fitness`
 context keys and most `tracking` metric keys are conventions of this game, and
 the `persistence` default codec is the one external dependency: make JSON the
 default and move the TOML codec to the caller, or drop the subpackage.
+
+## Tests
+
+### Cut the app package's test time
+
+- Priority: P1
+- Affected files: `internal/app/correction_test.go`, `internal/app/snapshot_capture_test.go`,
+  `internal/app/clone_test.go`, the replay and journal tests in `internal/app`
+
+`go test -race ./internal/app` runs 258 tests summing 680 s; nearly all are
+parallel, so wall time follows their CPU (4.5 minutes on 4 cores, nearly 10 on a
+full race run). Four carry 43%: `TestATowerGuestAnswersHashOnly` (103 s, 1200
+tower ticks), `TestAGAScenarioStagesAcrossAReset` (70 s),
+`TestAReplayRestoredFromACheckpointContinuesAsItsSource` (60 s) and
+`TestASlowLinkCarriesTheTowerWithoutAStandingQueue` (58 s). The 25 replay and
+journal tests carry 228 s more, each recording its own run. Cut each of the four to
+the ticks its rule needs, and record a replay fixture once per seed for the tests
+that only read it back.
