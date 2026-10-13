@@ -270,6 +270,15 @@ func TestAnAuthorityPausesOnlyWhileItsOtherParticipantsAreItsBots(t *testing.T) 
 	// Not parallel: real sockets against wall-clock deadlines.
 	holder, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
 	waitForCursors(t, holder, 2)
+	// A bot is rostered before its seat learns its participant, and until then its
+	// link is a stranger's to the pause gate
+	seated := func() bool {
+		holder.seatsMu.Lock()
+		defer holder.seatsMu.Unlock()
+		return len(holder.seats) == 1 && holder.seats[0].id.Load() != 0
+	}
+	for deadline := time.Now().Add(socketWait); !seated() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
 	pauses := func() bool {
 		holder.Context().SetPaused(true)
 		// A driven holder steps through its pause, so ticks bound the wait.
