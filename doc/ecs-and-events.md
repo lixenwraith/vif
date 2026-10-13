@@ -382,7 +382,9 @@ the fields it owns into a component, resource, or new value.
    manifest only if per-entity storage is required.
 2. Add event types and typed payloads for cross-system requests or domain facts.
 3. Implement behavior as a system with a stable `Name`, priority, `Update`, and
-   explicit `EventTypes` subscription.
+   explicit `EventTypes` subscription. Do not call into another system's file;
+   shared mechanics take the world from a file that declares no system
+   ([Package map](package-map.md) §2).
 4. Register the system in the manifest; keep construction keys and `Name()`
    equal so configuration and `:system` commands are unsurprising.
 5. Do not retain live store pointers/slices across structural mutation or event

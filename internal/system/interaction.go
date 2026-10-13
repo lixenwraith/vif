@@ -200,3 +200,12 @@ func checkCursorOverlap(w *engine.World, cursorEntity, entity core.Entity) Curso
 
 	return result
 }
+
+// cursorDefeated is the owner-authored lifecycle predicate: energy and heat both
+// at zero. Energy and heat each author half of it, and each pushes the crossing
+// from its own file so the D-3 table sees both.
+func cursorDefeated(w *engine.World, cursor core.Entity) bool {
+	energy, energyOK := w.Components.Energy.GetComponent(cursor)
+	heat, heatOK := w.Components.Heat.GetComponent(cursor)
+	return energyOK && heatOK && energy.Current == 0 && heat.Current == 0
+}
