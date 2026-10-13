@@ -471,7 +471,9 @@ func (s *NetworkSystem) Init() {
 	s.snapshotAuthority = 0
 	s.snapshotFences = nil
 	s.appliedPeerSeq = [participantSlots]uint64{}
-	s.productionEpoch = s.world.Resources.Game.State.GetGameTicks() + 1
+	// A run's first tick is 1; a reset reaches this handler before MetaSystem
+	// re-bases the tick counter, which still holds the replaced run's count.
+	s.productionEpoch = 1
 	s.lastApplyTick = 0
 	s.crossSeq = 0
 	s.appliedCrossSeq = 0
