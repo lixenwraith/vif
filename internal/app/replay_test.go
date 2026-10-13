@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -312,11 +313,7 @@ func TestReplayReproducesRecordedRuns(t *testing.T) {
 // correction written, the owner syncs and the session's end all come from records,
 // and so does the pause the guest could take only once its session had ended.
 func TestAGuestJournalReplaysFromItsJoin(t *testing.T) {
-	want := map[event.Stamp][]string{}
-	rec := guestJournalPastItsHost(t, func(guest *App) {
-		p := guest.Position()
-		want[event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(guest)
-	})
+	rec, want := guestJournalPastItsHost(t)
 
 	// Compared only on ticks nothing was recorded on: there the live guest had not
 	// yet consumed what the replay injects after the tick.
@@ -367,11 +364,27 @@ func TestAGuestJournalReplaysFromItsJoin(t *testing.T) {
 	}
 }
 
-// guestJournalPastItsHost records a guest from its join until after its host has
-// left, with one of its crossings late at the host, so the journal holds a
-// correction written between two ticks, and a pause the guest takes alone. each
-// sees the guest after every tick.
-func guestJournalPastItsHost(t *testing.T, each func(guest *App)) *journal.Capture {
+// guestJournal is recorded once for every test that reads it back.
+var guestJournal struct {
+	once     sync.Once
+	rec      *journal.Capture
+	surfaces map[event.Stamp][]string
+}
+
+// guestJournalPastItsHost is a guest's journal from its join until after its host
+// has left, with one of its crossings late at the host, so it holds a correction
+// written between two ticks, and a pause the guest takes alone; and the guest's
+// surface after every tick.
+func guestJournalPastItsHost(t *testing.T) (*journal.Capture, map[event.Stamp][]string) {
+	t.Helper()
+	guestJournal.once.Do(func() { guestJournal.rec, guestJournal.surfaces = recordGuestPastItsHost(t) })
+	if guestJournal.rec == nil {
+		t.Fatal("the shared guest journal did not record")
+	}
+	return guestJournal.rec, guestJournal.surfaces
+}
+
+func recordGuestPastItsHost(t *testing.T) (*journal.Capture, map[event.Stamp][]string) {
 	t.Helper()
 	const seed, hostLeaves = 0x3017, 400
 	host := mustHeadless(t, seed, 120, 40)
@@ -389,6 +402,7 @@ func guestJournalPastItsHost(t *testing.T, each func(guest *App)) *journal.Captu
 	stop()
 	waitForRosterPair(t, host, guest)
 
+	surfaces := map[event.Stamp][]string{}
 	rng := vmath.NewFastRand(3)
 	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
 	for i := range hostLeaves + 300 {
@@ -422,7 +436,8 @@ func guestJournalPastItsHost(t *testing.T, each func(guest *App)) *journal.Captu
 		}
 		guest.Tick(1)
 		guest.ApplyPendingCorrections()
-		each(guest)
+		p := guest.Position()
+		surfaces[event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(guest)
 		if i == hostLeaves+150 && !guest.Context().TimeCtl.IsPaused() {
 			t.Fatal("the guest was refused a pause after its session ended")
 		}
@@ -430,7 +445,8 @@ func guestJournalPastItsHost(t *testing.T, each func(guest *App)) *journal.Captu
 	if guest.World().PredictsShared() {
 		t.Fatal("the guest still predicts after its host left")
 	}
-	return rec
+	guest.Close() // finishes the journal before any reader sees it
+	return rec, surfaces
 }
 
 // TestAReplayNamesTheFirstDigestItDoesNotReproduce: a replay reproduces every digest
