@@ -37,7 +37,7 @@ flowchart TD
 | Flight recorder | `internal/status` | one atomic load/store per frozen metric per tick | on a trigger only |
 | Replay journal | `internal/event`, `internal/vlog` | payload encode on each external event | every non-system-origin event, independent of diagnostic filters |
 | Runtime capture | `internal/core` | one `Stat` per drain interval | when the Go runtime writes to fd 2 |
-| Profiler | `internal/prof` | one atomic load per timed call | once per second of running game while `:d prof` is on; captures on command |
+| Profiler | `internal/prof` | one atomic load per timed call | its groups once per second of running game while `:d prof` is on; captures on command |
 
 ## 2. Record shape
 
@@ -930,7 +930,10 @@ renderer and the engine phases around them, and samples the process, once per
 about 90 ns, plus two ~400 ns reads of the allocation counter around a leaf. A
 window closes on a tick and never spans a pause. It publishes into
 activity-gated registry groups, so their cards exist only while it runs and reach
-the HUD, snapshots, the recorder, `vif-log` and `/metrics` like other telemetry:
+the HUD, snapshots, the recorder, `vif-log` and `/metrics` like other telemetry.
+The periodic snapshot is ten windows apart, so while the `stat` scope is on at
+info each closed window also logs these groups on its own, in the snapshot's
+record shape:
 
 | Group | Contents |
 |---|---|
