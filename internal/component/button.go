@@ -26,7 +26,7 @@ type ButtonComponent struct {
 func ButtonRect(slot, count, mapW, mapH int) (x, y, w, h int) {
 	gap := parameter.ButtonGap
 	w = max(1, min(parameter.ButtonMaxWidth, (mapW-(count+1)*gap)/max(count, 1)))
-	h = max(1, min(parameter.ButtonMaxHeight, mapH/4))
+	h = max(1, min(parameter.ButtonMaxHeight, mapH/parameter.ButtonHeightShare))
 	x = (mapW-count*w-(count-1)*gap)/2 + (slot-1)*(w+gap)
 	y = (mapH - h) / 2
 	return x, y, w, h

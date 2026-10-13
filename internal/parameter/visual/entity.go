@@ -9,5 +9,6 @@ var (
 	ButtonLit256 = DensityChars[3]
 )
 
-// ButtonUnlit is the share of its colour an unlit button keeps, enough to tell a row apart
-const ButtonUnlit = 0.3
+// ButtonUnlit is the share of its colour an unlit button keeps: dim beside a lit one,
+// yet light enough for its black key to read on red and blue
+const ButtonUnlit = 0.6

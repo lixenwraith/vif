@@ -5,6 +5,11 @@ description = "Simon: listen to the notes, then repeat them with keys 1-4 or by 
 # to the sequence, up to 100. The glyph field drifts behind the buttons. Heat stays
 # full with its system off; energy reads the level.
 
+# Room for four buttons ten cells square, each holding its key's splash digit
+[map]
+min_width = 50
+min_height = 20
+
 [systems]
 only_systems = ["button", "timer", "death", "glyph", "environment", "particle", "transient", "audio", "cursor", "energy"]
 

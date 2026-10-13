@@ -11,8 +11,9 @@ import (
 	"github.com/lixenwraith/vif/internal/render"
 )
 
-// ButtonRenderer draws each button as an opaque block with its key in the middle, so
-// drifting glyphs pass behind it. A lit button fades back to unlit over its light.
+// ButtonRenderer draws each button as an opaque block with its key in the splash font,
+// so drifting glyphs pass behind it. The key is black and the block dim until the
+// button lights; then the key turns white and the block brightens, fading back.
 type ButtonRenderer struct {
 	gameCtx *engine.GameContext
 	console *render.Console // nil draws true colour
@@ -24,6 +25,44 @@ func NewButtonRenderer(ctx *engine.GameContext) *ButtonRenderer {
 		r.console = render.ConsoleFor(cfg.ConsolePalette)
 	}
 	return r
+}
+
+// buttonCell is what one cell of a button shows
+type buttonCell uint8
+
+const (
+	buttonFill  buttonCell = iota
+	buttonInk              // part of the key's splash glyph
+	buttonLabel            // the key as one character, when the glyph does not fit
+)
+
+// buttonKey places a key's splash glyph with its ink centred on a w by h button. A
+// glyph whose ink does not fit, or a key the font lacks, falls back to the key as
+// one character in the middle.
+type buttonKey struct {
+	glyph      splashBitmap
+	big        bool
+	x, y, w, h int // glyph cell origin within the button, and the button's size
+}
+
+func placeButtonKey(key rune, w, h int) buttonKey {
+	glyph, ok := splashGlyph(key)
+	k := buttonKey{glyph: glyph, w: w, h: h}
+	left, top, inkW, inkH := splashInkBounds(glyph)
+	if ok && inkW > 0 && inkW <= w && inkH <= h {
+		k.big, k.x, k.y = true, (w-inkW)/2-left, (h-inkH)/2-top
+	}
+	return k
+}
+
+func (k buttonKey) at(dx, dy int) buttonCell {
+	switch {
+	case k.big && splashInk(k.glyph, dx-k.x, dy-k.y):
+		return buttonInk
+	case !k.big && dx == k.w/2 && dy == k.h/2:
+		return buttonLabel
+	}
+	return buttonFill
 }
 
 func (r *ButtonRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
@@ -39,17 +78,17 @@ func (r *ButtonRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	buttons.Each(func(e core.Entity, b *component.ButtonComponent) bool {
 		x, y, w, h := component.ButtonRect(b.Slot, count, cfg.MapWidth, cfg.MapHeight)
 		lit := r.lit(e, b)
+		key := placeButtonKey(b.Key, w, h)
 		for dy := range h {
 			for dx := range w {
 				sx, sy, visible := ctx.MapToScreen(x+dx, y+dy)
 				if !visible {
 					continue
 				}
-				label := dx == w/2 && dy == h/2
 				if r.console != nil {
-					r.cell256(buf, sx, sy, b, lit > 0, label)
+					r.cell256(buf, sx, sy, b, lit > 0, key.at(dx, dy))
 				} else {
-					r.cellTrueColor(buf, sx, sy, b, lit, label)
+					r.cellTrueColor(buf, sx, sy, b, lit, key.at(dx, dy))
 				}
 			}
 		}
@@ -79,37 +118,41 @@ func (r *ButtonRenderer) lit(e core.Entity, b *component.ButtonComponent) float6
 	return lit
 }
 
-func (r *ButtonRenderer) cellTrueColor(buf *render.RenderBuffer, sx, sy int, b *component.ButtonComponent, lit float64, label bool) {
-	bg := color.Scale(b.Color, visual.ButtonUnlit+(1-visual.ButtonUnlit)*lit)
-	if !label {
-		buf.SetWithBg(sx, sy, ' ', bg, bg)
-		return
+func (r *ButtonRenderer) cellTrueColor(buf *render.RenderBuffer, sx, sy int, b *component.ButtonComponent, lit float64, cell buttonCell) {
+	fill := color.Scale(b.Color, visual.ButtonUnlit+(1-visual.ButtonUnlit)*lit)
+	ink := color.Scale(visual.RgbWhite, lit)
+	switch cell {
+	case buttonInk:
+		buf.SetWithBg(sx, sy, ' ', ink, ink)
+	case buttonLabel:
+		buf.SetWithBg(sx, sy, b.Key, ink, fill)
+	default:
+		buf.SetWithBg(sx, sy, ' ', fill, fill)
 	}
-	fg := b.Color
-	if lit > 0 {
-		fg = visual.RgbBlack
-	}
-	buf.SetWithBg(sx, sy, b.Key, fg, bg)
 }
 
-// cell256 has no fade: a console shows a button lit for as long as it is lit
-func (r *ButtonRenderer) cell256(buf *render.RenderBuffer, sx, sy int, b *component.ButtonComponent, lit, label bool) {
+// cell256 has no fade: a console shows a button lit for as long as it is lit. Eight
+// backgrounds cannot show a bright entry, so a lit block and a white key are drawn
+// as foreground blocks.
+func (r *ButtonRenderer) cell256(buf *render.RenderBuffer, sx, sy int, b *component.ButtonComponent, lit bool, cell buttonCell) {
 	dark, light := r.console.Family(b.Color)
-	fill := r.console.Background(dark)
+	fill, block, ink := r.console.Background(dark), ' ', visual.ConBlack
 	if lit {
-		fill = r.console.Background(light)
+		fill, block, ink = r.console.Background(light), visual.ButtonLit256, visual.ConBrightWhite
 	}
-	switch {
-	case label:
-		buf.SetWithBg(sx, sy, b.Key, visual.RgbBlack, visual.RgbBlack)
-		buf.SetBg256(sx, sy, fill)
-		buf.SetFgOnly(sx, sy, b.Key, color.RGB{R: r.console.TextOn(fill)}, terminal.AttrFg256)
-	case lit:
-		buf.SetWithBg(sx, sy, visual.ButtonLit256, visual.RgbBlack, visual.RgbBlack)
-		buf.SetBg256(sx, sy, fill)
-		buf.SetFgOnly(sx, sy, visual.ButtonLit256, color.RGB{R: light}, terminal.AttrFg256)
-	default:
-		buf.SetWithBg(sx, sy, ' ', visual.RgbBlack, visual.RgbBlack)
-		buf.SetBg256(sx, sy, fill)
+	fg := light
+	switch cell {
+	case buttonInk:
+		if !lit {
+			fill = visual.ConBlack
+		}
+		fg = ink
+	case buttonLabel:
+		block, fg = b.Key, ink
+	}
+	buf.SetWithBg(sx, sy, block, visual.RgbBlack, visual.RgbBlack)
+	buf.SetBg256(sx, sy, fill)
+	if block != ' ' {
+		buf.SetFgOnly(sx, sy, block, color.RGB{R: fg}, terminal.AttrFg256)
 	}
 }
