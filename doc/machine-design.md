@@ -104,7 +104,7 @@ per-entity runtime, but the new front-end shares its dialect (§7).
 | System | Encoding | Timers | Preemption | Fallible entries | Moore outputs | Commit |
 |---|---|---|---|---|---|---|
 | Swarm | enum ×5 | 5 countdowns, pattern cycle | stun → Chase, then freeze | Lock, Charge, Teleport | `IsEnraged`; `ChargesCompleted++` on Decel entry | `GetPtr` |
-| Quasar | 3 bools | `ChargeRemaining`; speed scaling on an instant | stun cancels Charging; in range cancels both | Zapping | `IsEnraged`, `IsShielded`, `Shield.Active`, sealed immunity | detached |
+| Quasar | 3 bools | `ChargeRemaining`; speed scaling on an instant | stun cancels Charging; in range cancels both | Zapping | `IsEnraged`, `IsShielded`, `Shield.Active`, ward status | detached |
 | Storm circle | enum ×3 | cooldown/attack countdowns; `InvulnerableElapsed` | none; no cursor freezes | none (Active waits for convex) | `IsInvulnerable`, `Mount.Armed`, `AttackProgress`, Z clamp | `GetPtr` |
 | Storm root | liveness aggregation | `pendingBlueSpawns` | — | — | — | detached |
 
@@ -245,7 +245,7 @@ a call before the plan is written.
   in range, from {Charging, Zapping} → Homing.
 - Suspend: stunned.
 - From the flags, the host writes `IsEnraged`, `IsShielded` and `Shield.Active`,
-  and seals immunity.
+  and refreshes the ward status.
 - The component moves to `GetPtr`: the detached copy existed only to order
   commits that the step now makes unconditional.
 

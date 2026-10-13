@@ -413,8 +413,8 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 	physics.ApplyImpulse(&kineticComp.Kinetic, impulseX, impulseY)
 	s.statCollisions.Add(1)
 
-	// Set immunity
-	sealKineticImmunity(combatComp, parameter.SoftCollisionImmunityDuration)
+	// Steering and flocking read this window as displacement
+	combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
 
 }
 

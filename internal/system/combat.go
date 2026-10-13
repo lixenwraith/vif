@@ -346,7 +346,7 @@ func (s *CombatSystem) attackerBit(cursor core.Entity) uint32 {
 }
 
 func damageImmuneTo(c *component.CombatComponent, attacker uint32, weapon component.CombatAttackType) bool {
-	if uint(weapon) >= uint(component.CombatAttackTypeCount) {
+	if uint(weapon) >= uint(component.CombatAttackTypeCount) || c.Status[component.StatusWard].Remaining > 0 {
 		return true
 	}
 	return c.RemainingDamageImmunity != 0 && c.DamageImmunitySpent[weapon]&attacker != 0
@@ -366,15 +366,6 @@ func spendDamageImmunity(c *component.CombatComponent, attacker uint32, weapon c
 	c.DamageImmunitySpent[weapon] |= attacker
 }
 
-// sealDamageImmunity opens a window no attacker may spend, for species-authored
-// invulnerability rather than the per-attacker hit rate limit
-func sealDamageImmunity(c *component.CombatComponent, d time.Duration) {
-	c.RemainingDamageImmunity = d
-	for weapon := range c.DamageImmunitySpent {
-		c.DamageImmunitySpent[weapon] = ^uint32(0)
-	}
-}
-
 // spendKineticImmunity records the accepted source without extending an open
 // window; opened tells the hit whether its impulse replaces or composes
 func spendKineticImmunity(c *component.CombatComponent, attacker uint32, d time.Duration) (opened bool) {
@@ -385,13 +376,6 @@ func spendKineticImmunity(c *component.CombatComponent, attacker uint32, d time.
 	}
 	c.KineticImmunitySpent |= attacker
 	return opened
-}
-
-// sealKineticImmunity opens a displacement window no attacker may spend, for the
-// species-authored knockback that has no attacker to name
-func sealKineticImmunity(c *component.CombatComponent, d time.Duration) {
-	c.RemainingKineticImmunity = d
-	c.KineticImmunitySpent = ^uint32(0)
 }
 
 // joining is the profile a hit uses: its own when it opens the target's knockback
