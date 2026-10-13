@@ -1,8 +1,6 @@
 package component
 
-// ParticleBehavior selects the gameplay rules applied by ParticleSystem.
-// Keep zero invalid so an omitted event discriminator cannot silently create
-// the wrong particle behavior.
+// ParticleBehavior selects the gameplay rules applied by ParticleSystem; zero is invalid
 type ParticleBehavior uint8
 
 const (
@@ -12,25 +10,6 @@ const (
 	ParticleDust
 	ParticleBehaviorCount
 )
-
-// Valid reports whether the behavior is implemented by ParticleSystem.
-func (b ParticleBehavior) Valid() bool {
-	return b > ParticleNone && b < ParticleBehaviorCount
-}
-
-// String returns the stable behavior name used for telemetry.
-func (b ParticleBehavior) String() string {
-	switch b {
-	case ParticleDecay:
-		return "decay"
-	case ParticleBlossom:
-		return "blossom"
-	case ParticleDust:
-		return "dust"
-	default:
-		return "particle"
-	}
-}
 
 // ParticleComponent marks a non-typeable moving glyph whose gameplay is
 // selected by Behavior. Kinetic owns its sub-cell motion, Sigil its render
