@@ -289,17 +289,6 @@ func (s *WeaponSystem) advanceStreams(cursor core.Entity, weaponComp *component.
 	}
 }
 
-// loadout is a fresh cursor's: one charge of every innate kind
-func loadout() component.WeaponComponent {
-	var w component.WeaponComponent
-	for wt, spec := range component.WeaponSpecs {
-		if spec.Innate {
-			w.Charges[wt] = 1
-		}
-	}
-	return w
-}
-
 // addWeapon grants or recharges one weapon on one cursor
 func (s *WeaponSystem) addWeapon(cursor core.Entity, weapon component.WeaponType) {
 	weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor)
