@@ -920,7 +920,7 @@ func (c CrossingID) Seed(salt uint64) (uint64, bool) {
 	if c.CrossingSeq == 0 {
 		return 0, false
 	}
-	return vmath.Mix64(uint64(c.CrossingSource)<<32 ^ c.CrossingSeq*0x9E3779B97F4A7C15 ^ salt), true
+	return vmath.Mix64(uint64(c.CrossingSource)<<32 ^ c.CrossingSeq*vmath.Golden64 ^ salt), true
 }
 
 // CombatAttackDirectRequestPayload contains direct attack information.

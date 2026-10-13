@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // pair builds two joined participants on one seed over an in-process transport,
@@ -500,7 +501,7 @@ func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA jour
 	assertSharedParity(t, a, b, -1)
 
 	optB := optA
-	optB.Seed ^= 0x9E3779B97F4A7C15
+	optB.Seed ^= vmath.Golden64
 	da, db := journal.NewFuzzDriver(a, optA), journal.NewFuzzDriver(b, optB)
 
 	startA, startB := cursorPosition(a, localA), cursorPosition(b, localB)

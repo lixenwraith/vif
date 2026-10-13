@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // meshSession builds n participants on one seed and links them into the given
@@ -239,7 +240,7 @@ func TestMeshPropagatesEveryParticipantToEveryOther(t *testing.T) {
 		opt := parityScript(seed, steps)
 		opt.Regions, opt.MapSetups = false, false
 		opt.DisableTicks, opt.DisableCommands, opt.DisableOverlays = true, true, true
-		opt.Seed ^= uint64(i) * 0x9E3779B97F4A7C15
+		opt.Seed ^= uint64(i) * vmath.Golden64
 		drivers[i] = journal.NewFuzzDriver(a, opt)
 		starts[i] = cursorPosition(a, local[i])
 	}
