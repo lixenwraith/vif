@@ -669,6 +669,21 @@ func (r *Router) transitionMode(newMode core.GameMode) {
 	r.machine.SetMode(inputMode)
 }
 
+// openBreak puts the command line over a run a breakpoint paused, so the operator
+// inspects it there and leaving the line resumes it. An overlay keeps the screen.
+func (r *Router) openBreak() {
+	if !r.ctx.TimeCtl.TakeHit() {
+		return
+	}
+	if m := r.ctx.GetMode(); m == core.ModeCommand || m == core.ModeOverlay {
+		return
+	}
+	r.ctx.SetCommandText("")
+	r.ctx.SetCommandCursorPos(0)
+	r.resetCommandHistoryBrowse()
+	r.transitionMode(core.ModeCommand)
+}
+
 // --- Text Entry Handlers ---
 
 func (r *Router) handleTextChar(intent *input.Intent) bool {
@@ -1090,6 +1105,7 @@ func (r *Router) syncMouseMode() {
 // ProcessInputTick checks mouse reports and emits repeat fire requests for auto-fire and held buttons
 func (r *Router) ProcessInputTick() bool {
 	r.syncMouseMode()
+	r.openBreak()
 
 	if r.inputSuspended() {
 		return false

@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -44,9 +46,103 @@ type BreakState struct {
 	Label   string          // operator-facing description
 }
 
+// BreakKind selects what a standing breakpoint watches
+type BreakKind uint8
+
+const (
+	BreakOnEvent  BreakKind = iota // a dispatch of the named event
+	BreakOnRegion                  // the named region spawning
+	BreakOnState                   // any region entering the named state
+	BreakOnStat                    // a status cell's comparison becoming true
+)
+
+// BreakKindNames is the command word for each kind
+var BreakKindNames = [...]string{"event", "region", "state", "stat"}
+
+// Breakpoint is one standing condition: it trips each time it matches until it
+// is cleared, across resets. Region and state names match without case.
+type Breakpoint struct {
+	Kind  BreakKind
+	Name  string          // event, region or state name, or stat key
+	Event event.EventType // BreakOnEvent
+	Label string          // the condition as the operator reads it back
+	Test  func() bool     // BreakOnStat: the comparison over the live cell
+	held  atomic.Bool     // BreakOnStat: whether Test held at the last reading
+}
+
+// Arm records whether the comparison holds now, so a condition already met
+// trips the next time it becomes true rather than at once.
+func (bp *Breakpoint) Arm() *Breakpoint {
+	if bp.Test != nil {
+		bp.held.Store(bp.Test())
+	}
+	return bp
+}
+
+// BreakSet is the standing breakpoints, replaced whole on every change
+type BreakSet struct {
+	List   []*Breakpoint
+	events map[event.EventType]*Breakpoint
+	stats  []*Breakpoint
+}
+
+func newBreakSet(list []*Breakpoint) *BreakSet {
+	if len(list) == 0 {
+		return nil
+	}
+	bs := &BreakSet{List: list, events: map[event.EventType]*Breakpoint{}}
+	for _, bp := range list {
+		switch bp.Kind {
+		case BreakOnEvent:
+			bs.events[bp.Event] = bp
+		case BreakOnStat:
+			bs.stats = append(bs.stats, bp)
+		}
+	}
+	return bs
+}
+
+// OnEvent is the breakpoint a dispatch of et trips; nil when none
+func (bs *BreakSet) OnEvent(et event.EventType) *Breakpoint {
+	if bs == nil || len(bs.events) == 0 {
+		return nil
+	}
+	return bs.events[et]
+}
+
+// Named is the region or state breakpoint name trips; nil when none
+func (bs *BreakSet) Named(kind BreakKind, name string) *Breakpoint {
+	if bs == nil {
+		return nil
+	}
+	for _, bp := range bs.List {
+		if bp.Kind == kind && strings.EqualFold(bp.Name, name) {
+			return bp
+		}
+	}
+	return nil
+}
+
+// RisenStats is the stat breakpoints whose comparison became true since the
+// last reading. Read once per completed tick, by one goroutine.
+func (bs *BreakSet) RisenStats() []*Breakpoint {
+	if bs == nil {
+		return nil
+	}
+	var out []*Breakpoint
+	for _, bp := range bs.stats {
+		now := bp.Test()
+		if now && !bp.held.Load() {
+			out = append(out, bp)
+		}
+		bp.held.Store(now)
+	}
+	return out
+}
+
 // TimeControl is the single time surface: reads, rate, pause, step and
-// run-until policy, telemetry, and the wake signal that preempts a sleep armed
-// at the previous rate. Owned by GameContext.
+// run-until policy, standing breakpoints, telemetry, and the wake signal that
+// preempts a sleep armed at the previous rate. Owned by GameContext.
 type TimeControl struct {
 	clock Clock
 	wake  chan struct{}
@@ -54,6 +150,8 @@ type TimeControl struct {
 	paused atomic.Bool                // pause authority; the clock mirrors it
 	brk    atomic.Pointer[BreakState] // armed run-until request, nil when disarmed
 	budget atomic.Int64               // remaining stepped ticks while paused
+	breaks atomic.Pointer[BreakSet]   // standing breakpoints, nil when none
+	hit    atomic.Bool                // a breakpoint paused the run; the command line opens
 
 	statPct    *atomic.Int64
 	statScale  *status.AtomicString
@@ -226,6 +324,50 @@ func (tc *TimeControl) CancelBreak() {
 		tc.take(bs)
 	}
 }
+
+// SetBreak adds a standing breakpoint, replacing one with the same label
+func (tc *TimeControl) SetBreak(bp *Breakpoint) {
+	tc.editBreaks(func(list []*Breakpoint) []*Breakpoint {
+		list = slices.DeleteFunc(list, func(o *Breakpoint) bool { return o.Label == bp.Label })
+		return append(list, bp.Arm())
+	})
+}
+
+// ClearBreaks removes the breakpoints match accepts, every one for a nil match,
+// and reports how many went
+func (tc *TimeControl) ClearBreaks(match func(*Breakpoint) bool) int {
+	n := 0
+	tc.editBreaks(func(list []*Breakpoint) []*Breakpoint {
+		before := len(list)
+		list = slices.DeleteFunc(list, func(bp *Breakpoint) bool { return match == nil || match(bp) })
+		n = before - len(list)
+		return list
+	})
+	return n
+}
+
+// editBreaks replaces the standing set with edit's rewrite of a copy of it
+func (tc *TimeControl) editBreaks(edit func([]*Breakpoint) []*Breakpoint) {
+	for {
+		old := tc.breaks.Load()
+		var list []*Breakpoint
+		if old != nil {
+			list = slices.Clone(old.List)
+		}
+		if tc.breaks.CompareAndSwap(old, newBreakSet(edit(list))) {
+			return
+		}
+	}
+}
+
+// Breaks returns the standing breakpoints; nil when there are none
+func (tc *TimeControl) Breaks() *BreakSet { return tc.breaks.Load() }
+
+// MarkHit records that a breakpoint paused the run
+func (tc *TimeControl) MarkHit() { tc.hit.Store(true) }
+
+// TakeHit reports, once per hit, that a breakpoint paused the run
+func (tc *TimeControl) TakeHit() bool { return tc.hit.Swap(false) }
 
 // Scale returns the active rate
 func (tc *TimeControl) Scale() TimeScale { return tc.clock.Scale() }
