@@ -22,6 +22,20 @@ func (r *FastRand) Reseed(seed uint64) {
 	r.SetState(Mix64(seed))
 }
 
+// Golden64 is 2^64 over the golden ratio, the SplitMix64 increment: added before a mix,
+// it keeps an all-zero input from mixing to zero
+const Golden64 = 0x9e3779b97f4a7c15
+
+// MixChain folds values into one word, a SplitMix64 round per value, so the result
+// moves with every input and with their order
+func MixChain(values ...uint64) uint64 {
+	var x uint64
+	for _, v := range values {
+		x = Mix64((x ^ v) + Golden64)
+	}
+	return x
+}
+
 // Mix64 is the SplitMix64 finalizer, exported because a caller deriving a seed from
 // structured values — an identity and a counter — needs the same avalanche before
 // it uses one, and gets correlated early draws without it.
@@ -102,7 +116,7 @@ func DeriveSeed(root uint64, label string) uint64 {
 	x *= 0x94d049bb133111eb
 	x ^= x >> 31
 	if x == 0 {
-		x = 0x9e3779b97f4a7c15
+		x = Golden64
 	}
 	return x
 }

@@ -144,10 +144,7 @@ func registerVariableActions[T any](m *fsm.Machine[T], h Host[T]) {
 // drawInRange hashes (root, seed, index) into [lo, hi]. The span is unsigned, so it
 // wraps to zero only for the whole int64 range, and the sum wraps back inside it.
 func drawInRange(root uint64, seed, index, lo, hi int64) int64 {
-	const golden = 0x9e3779b97f4a7c15
-	x := vmath.Mix64(root + golden)
-	x = vmath.Mix64((x ^ uint64(seed)) + golden)
-	x = vmath.Mix64((x ^ uint64(index)) + golden)
+	x := vmath.MixChain(root, uint64(seed), uint64(index))
 	span := uint64(hi) - uint64(lo) + 1
 	if span == 0 {
 		return int64(x)
