@@ -49,6 +49,13 @@ allocator_was_active=false
 if systemctl is-active --quiet vif-allocator.service 2>/dev/null; then
 	allocator_was_active=true
 fi
+# A Docker already running serves something else on this host: build with it,
+# leave it and the FORWARD policy as they were, and take only this image back out.
+docker_running=false
+if systemctl is-active --quiet docker.service docker.socket 2>/dev/null; then
+	docker_running=true
+fi
+image_built=false
 
 restore_forward_policy() {
 	policy=$(sudo iptables -S FORWARD | sed -n '1p')
@@ -65,10 +72,14 @@ cleanup() {
 	rm -f "$archive" "$env_copy" "$env_copy.next" || cleanup_status=$?
 
 	# Docker and the distribution containerd are build tools on this node, not
-	# workload runtimes. Always restore the established disabled baseline.
-	sudo systemctl disable --now docker.service docker.socket containerd.service \
-		>/dev/null 2>&1 || cleanup_status=$?
-	restore_forward_policy || cleanup_status=$?
+	# workload runtimes. Restore the established disabled baseline.
+	if [ "$docker_running" = false ]; then
+		sudo systemctl disable --now docker.service docker.socket containerd.service \
+			>/dev/null 2>&1 || cleanup_status=$?
+		restore_forward_policy || cleanup_status=$?
+	elif [ "$image_built" = true ]; then
+		docker image rm "$local_image" >/dev/null || cleanup_status=$?
+	fi
 
 	if [ "$allocator_was_active" = true ]; then
 		sudo systemctl start vif-allocator.service || cleanup_status=$?
@@ -90,15 +101,20 @@ if ! "$repo_root/deploy/k3s/session.sh" blockers; then
 	exit 1
 fi
 
-echo "starting Docker for one image build"
-sudo systemctl start docker.service
-restore_forward_policy
+if [ "$docker_running" = true ]; then
+	echo "building with the Docker already running, which stays running"
+else
+	echo "starting Docker for one image build"
+	sudo systemctl start docker.service
+	restore_forward_policy
+fi
 
 docker build --network host \
 	-f deploy/docker/Dockerfile \
 	--build-arg VERSION="$tag" \
 	--build-arg REVISION="$revision" \
 	-t "$local_image" .
+image_built=true
 
 image_profile=$(docker image inspect \
 	--format '{{ index .Config.Labels "dev.lixenwraith.vif.build-profile" }}' \
@@ -144,6 +160,8 @@ done
 
 # Docker only builds here: once K3s holds the image, nothing Docker kept — this
 # image, pulled bases, build cache — is used again, and all of it is disk.
-docker system prune --all --force >/dev/null
+if [ "$docker_running" = false ]; then
+	docker system prune --all --force >/dev/null
+fi
 
 echo "ready: VIF_ALLOCATOR_IMAGE=$runtime_image revision=$revision"
