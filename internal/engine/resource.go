@@ -151,9 +151,16 @@ type ConfigResource struct {
 }
 
 // FloorMapSize raises a map size to the scenario's floor and bounds it to the grid,
-// the one rule every writer of the map's size applies
+// the one rule every writer of the map's size applies. The cell cap trims height,
+// so a wide map keeps the floor's height and gives up width instead; the floor
+// itself always fits, which the scenario loader checks.
 func (c *ConfigResource) FloorMapSize(width, height int) (int, int) {
-	return ClampMapSize(max(width, c.MapMinWidth), max(height, c.MapMinHeight))
+	width, height = ClampMapSize(max(width, c.MapMinWidth), max(height, c.MapMinHeight))
+	if height < c.MapMinHeight {
+		height = c.MapMinHeight
+		width = parameter.MaxMapCells / height
+	}
+	return width, height
 }
 
 // MapOffset returns the map's top-left corner in viewport coordinates: zero when
