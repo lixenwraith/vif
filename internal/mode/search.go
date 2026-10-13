@@ -1,6 +1,8 @@
 package mode
 
 import (
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -54,22 +56,16 @@ func RepeatSearch(ctx *engine.GameContext, lastSearchText string, forward bool) 
 	return PerformSearch(ctx, lastSearchText, forward)
 }
 
-// buildCharacterGrid builds a 2D map of characters from the ECS
+// buildCharacterGrid maps each cell to its top glyph's character, as it is drawn
 func buildCharacterGrid(ctx *engine.GameContext) map[vmath.Point]rune {
 	grid := make(map[vmath.Point]rune)
-	glyphStore := ctx.World.Components.Glyph
-
-	entities := ctx.World.Components.Glyph.GetAllEntities()
-
-	for _, entity := range entities {
-		pos, pOk := ctx.World.Positions.GetPosition(entity)
-		glyph, gOk := glyphStore.GetComponent(entity)
-		if !pOk || !gOk {
-			continue
+	ctx.World.Components.Glyph.Each(func(entity core.Entity, glyph *component.GlyphComponent) bool {
+		pos, ok := ctx.World.Positions.GetPosition(entity)
+		if top, _ := ctx.World.Positions.TopGlyphAt(pos.X, pos.Y); ok && top == entity {
+			grid[vmath.Point{X: pos.X, Y: pos.Y}] = glyph.Rune
 		}
-		grid[vmath.Point{X: pos.X, Y: pos.Y}] = glyph.Rune
-	}
-
+		return true
+	})
 	return grid
 }
 

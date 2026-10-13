@@ -851,17 +851,17 @@ func MotionColoredGlyph(ctx *engine.GameContext, x, y, count int, motion input.M
 		return MotionResult{StartX: x, StartY: y, EndX: x, EndY: y, Valid: false}
 	}
 
-	glyphStore := ctx.World.Components.Glyph
+	positions := ctx.World.Positions
 
+	// The jump lands on a cell's top glyph, the one drawn and typed there
 	filter := func(e core.Entity) bool {
-		if !glyphStore.HasEntity(e) {
+		glyph, ok := ctx.World.Components.Glyph.GetComponent(e)
+		if !ok || glyphType >= 0 && glyph.Type != glyphType {
 			return false
 		}
-		if glyphType < 0 {
-			return true // Any glyph
-		}
-		glyph, ok := glyphStore.GetComponent(e)
-		return ok && glyph.Type == glyphType
+		pos, _ := positions.GetPosition(e)
+		top, _ := positions.TopGlyphAt(pos.X, pos.Y)
+		return top == e
 	}
 
 	endX, endY := x, y
@@ -871,7 +871,7 @@ func MotionColoredGlyph(ctx *engine.GameContext, x, y, count int, motion input.M
 		var nextX, nextY int
 		var ok bool
 		// Both domains: the color filter narrows the result, the scope must not
-		_, nextX, nextY, ok = ctx.World.Positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds, engine.ScopeBoth, filter)
+		_, nextX, nextY, ok = positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds, engine.ScopeBoth, filter)
 
 		if !ok {
 			// If not found in sequence, stop at last valid

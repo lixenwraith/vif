@@ -9,26 +9,20 @@ import (
 	"github.com/lixenwraith/vif/internal/render"
 )
 
-// cursorCellContent resolves what a cursor is standing on: the glyph that cell
-// holds, or failing that the sigil. A glyph wins and stops the scan — it is the
-// interactable, and the first one found takes precedence — while a sigil is only
-// a candidate until the whole cell has been read.
-//
-// Both cursor renderers read it, so the local cursor and a peer's agree about what
-// is under them rather than answering the question twice.
-func cursorCellContent(gameCtx *engine.GameContext, x, y int) (glyph, sigil core.Entity) {
+// cellContent resolves what a cell shows under a cursor or a marker: its top glyph,
+// the one typing acts on, or failing that the first sigil.
+func cellContent(gameCtx *engine.GameContext, x, y int) (glyph, sigil core.Entity) {
+	if glyph, ok := gameCtx.World.Positions.TopGlyphAt(x, y); ok {
+		return glyph, 0
+	}
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	count := gameCtx.World.Positions.GetAllEntitiesAtInto(x, y, entities[:])
 	for i := range count {
-		e := entities[i]
-		if gameCtx.World.Components.Glyph.HasEntity(e) {
-			return e, 0
-		}
-		if sigil == 0 && gameCtx.World.Components.Sigil.HasEntity(e) {
-			sigil = e
+		if gameCtx.World.Components.Sigil.HasEntity(entities[i]) {
+			return 0, entities[i]
 		}
 	}
-	return 0, sigil
+	return 0, 0
 }
 
 // CursorRenderer draws the cursor with complex entity overlap handling
@@ -73,7 +67,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	var charFgColor = visual.RgbBlack
 
 	// 2. Scan entities at cursor position
-	glyphEntity, sigilEntity := cursorCellContent(r.gameCtx, ctx.CursorX, ctx.CursorY)
+	glyphEntity, sigilEntity := cellContent(r.gameCtx, ctx.CursorX, ctx.CursorY)
 
 	// 3. Resolve Visuals
 	if glyphEntity != 0 {

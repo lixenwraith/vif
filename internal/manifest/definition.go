@@ -139,7 +139,7 @@ var Systems = []SystemDef{
 	// --- Entity Behaviors ---
 	{Name: "loot", Constructor: "NewLootSystem", Domain: "player",
 		Optional: []string{"death", "energy", "weapon", "heat"}}, // rolled per participant against owner-authored inventory; reward handlers are optional (D-6)
-	{Name: "glyph", Constructor: "NewGlyphSystem", Domain: "player"}, // player stream and entities; corpus and map are its only inputs
+	{Name: "glyph", Constructor: "NewGlyphSystem", Domain: "player", Optional: []string{"environment"}}, // player stream and entities from corpus and map; an active drift moves placement to the upwind edge
 	{Name: "nugget", Constructor: "NewNuggetSystem", Domain: "player",
 		Requires: []string{"timer"}, Optional: []string{"materialize", "energy", "heat"}}, // personal: each participant owns its spawn, collection and reward
 	{Name: "particle", Constructor: "NewParticleSystem", Domain: "player", Requires: []string{"timer"}, Optional: []string{"glyph", "death", "explosion"}}, // behavior-selected player particles; dust detonation optionally crosses through explosion
@@ -194,7 +194,7 @@ var Systems = []SystemDef{
 	{Name: "splash", Constructor: "NewSplashSystem", Domain: "player", Requires: []string{"cursor", "timer"}},     // local-cursor viewport overlay (D-6)
 
 	// --- Environment ---
-	{Name: "environment", Constructor: "NewEnvironmentSystem", Domain: "dual", Snapshot: "state"}, // one shared wind stream/state, applied explicitly to player drains and shared species
+	{Name: "environment", Constructor: "NewEnvironmentSystem", Domain: "dual", Snapshot: "state"}, // one shared wind stream/state and one shared drift, applied explicitly to player drains, shared species and player glyphs
 
 	// --- Lifecycle ---
 	{Name: "death", Constructor: "NewDeathSystem", Domain: "dual"},                              // routes one death batch per domain; effect systems subscribe to its output

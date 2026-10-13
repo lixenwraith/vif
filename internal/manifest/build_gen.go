@@ -140,7 +140,7 @@ var systemProfiles = map[string]engine.SystemProfile{
 	"tower":          {Domain: engine.SystemShared, Requires: append(engine.Require("composite"), engine.Optional("navigation", "combat")...)},
 	"gateway":        {Domain: engine.SystemShared, Requires: append(engine.Require("navigation"), engine.Optional("eye", "snake")...)},
 	"loot":           {Domain: engine.SystemPlayer, Requires: engine.Optional("death", "energy", "weapon", "heat")},
-	"glyph":          {Domain: engine.SystemPlayer, Requires: nil},
+	"glyph":          {Domain: engine.SystemPlayer, Requires: engine.Optional("environment")},
 	"nugget":         {Domain: engine.SystemPlayer, Requires: append(engine.Require("timer"), engine.Optional("materialize", "energy", "heat")...)},
 	"particle":       {Domain: engine.SystemPlayer, Requires: append(engine.Require("timer"), engine.Optional("glyph", "death", "explosion")...)},
 	"gold":           {Domain: engine.SystemShared, Requires: append(engine.Require("composite", "timer"), engine.Optional("nugget", "energy", "splash")...)},

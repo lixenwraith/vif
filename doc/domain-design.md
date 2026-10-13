@@ -186,7 +186,9 @@ refuse a state naming another.
 
 The environment is a deliberate dual-domain exception with one Shared stream.
 An active wind draws force and direction exactly once per tick before iterating
-entities, so different local drain populations cannot move the Shared RNG.
+entities, so different local drain populations cannot move the Shared RNG. Glyph
+drift draws nothing: its per-level phases advance by tick delta alone, so every
+instance steps its own Player glyphs on the same ticks.
 
 A Shared stream orders draws by tick, so only work every instance performs at the
 same tick, in the same number, may take one. The count matters as much as the tick:
@@ -238,6 +240,7 @@ re-derive them on every instance, so sending them would apply the same wind
 twice. Each instance applies the sampled wind to its own Player drains as well as
 the predicted Shared species. A future player-originated wind trigger needs a
 separate Bus artifact rather than changing these derived events into wire data.
+`EventDriftStart` and `EventDriftCancel` follow the same rule.
 
 ### D-11 — The host is exact; guests converge
 
@@ -377,7 +380,7 @@ Declared system carriers are:
 | `gold` | sequence liveness, header, per-slot contribution; the deadline rides the header's timer in the stores |
 | `storm` | live root entity, swarm spawns pending a blue attack |
 | `meta` | kill tallies, defeat latches and reset tick, cycle damage multiplier |
-| `environment` | active base wind, remaining duration, enable/applied phase |
+| `environment` | active base wind, remaining duration, enable/applied phase; drift speed, direction, remaining duration and per-level sub-cell phases |
 
 A carrier is also where a status cell the compared surface excludes has to live.
 `SharedKey` answers what two instances must agree on, and a capture reads through

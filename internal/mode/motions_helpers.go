@@ -16,22 +16,14 @@ const (
 	CharTypePunctuation CharType = 2
 )
 
-// getCharAt returns the character at the given position, or 0 if empty
+// getCharAt returns the character of the cell's top glyph, or 0 if empty
 func getCharAt(ctx *engine.GameContext, x, y int) rune {
-	entities := ctx.World.Positions.GetAllEntityAt(x, y)
-	glyphStore := ctx.World.Components.Glyph
-
-	for _, entity := range entities {
-		if entity == ctx.World.Resources.Player.Entity || entity == 0 {
-			continue
-		}
-		glyph, ok := glyphStore.GetComponent(entity)
-		if ok {
-			if glyph.Rune == ' ' {
-				return 0
-			}
-			return glyph.Rune
-		}
+	entity, ok := ctx.World.Positions.TopGlyphAt(x, y)
+	if !ok {
+		return 0
+	}
+	if glyph, _ := ctx.World.Components.Glyph.GetComponent(entity); glyph.Rune != ' ' {
+		return glyph.Rune
 	}
 	return 0
 }
@@ -267,17 +259,12 @@ func findCharInBounds(ctx *engine.GameContext, startX, startY int, target rune, 
 	lastMatchX, lastMatchY := -1, -1
 
 	hasTargetAt := func(x, y int) bool {
-		entities := ctx.World.Positions.GetAllEntityAt(x, y)
-		for _, entity := range entities {
-			if entity == 0 {
-				continue
-			}
-			glyph, ok := glyphStore.GetComponent(entity)
-			if ok && glyph.Rune == target {
-				return true
-			}
+		entity, ok := ctx.World.Positions.TopGlyphAt(x, y)
+		if !ok {
+			return false
 		}
-		return false
+		glyph, _ := glyphStore.GetComponent(entity)
+		return glyph.Rune == target
 	}
 
 	if forward {
