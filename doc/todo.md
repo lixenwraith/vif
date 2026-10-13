@@ -617,6 +617,21 @@ knockback should reset the immunity duration and apply its impulse; equal or wea
 hits remain blocked across all weapons and players. Carry the recorded strength
 through snapshots and synchronization. Stun immunity remains target-wide.
 
+### Drop the kinetic window's dead joiner path
+
+- Priority: P2
+- Affected files: `internal/system/combat.go`, `internal/component/combat.go`,
+  `internal/snapshot/digest.go`, `doc/generic-kinetic.md`, `doc/troubleshooting.md`
+
+Both kinetic hit sites (`combat.go:557`, `:733`) land only while
+`RemainingKineticImmunity` is zero, so every accepted knockback opens the window:
+`spendKineticImmunity` always reports opened, `joining` never composes an impulse,
+and `KineticImmunitySpent` is written but read only by the digest. Generic kinetic
+§5 and troubleshooting §4 ("Since.") still describe a per-attacker kinetic budget
+whose joiners add. The target-wide gate is the intended rule (see the item above),
+so delete the joiner path, the field and its digest line, and correct both texts;
+the field's removal is a capture schema bump.
+
 ### Let mounted weapons strike more than cursors
 
 - Priority: P3
