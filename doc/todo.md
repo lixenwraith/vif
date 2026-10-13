@@ -288,6 +288,24 @@ library copies.
 
 ## Browser sessions
 
+### Keep navigation from stalling a browser frame
+
+- Priority: P1
+- Affected files: `pkg/navigation/flowfield.go`, `pkg/navigation/cache.go`,
+  `internal/system/navigation.go`
+
+Solo on a 199x97 default map, a moving cursor marks the cursor group's point and
+composite fields dirty (`EventCursorMoved`), so both recompute every third tick
+whether or not anything navigates: early in a run nothing does, yet navigation is
+95% of a 6 ms mean tick with 16-28 ms peaks under WASM, which is where a 16 ms frame
+is lost. A heap Dijkstra is 7.3 ms a field in WASM, 2.7 ms native. Options, to be
+decided: compute a group's fields only while it has Shared members (drains navigate
+too and are Player-domain, so counting them would split the D-17 phase); a bucket
+queue over the wall grid slice, measured 3.1 ms in WASM, which reorders equal-cost
+ties and so changes routes; staggering the two fields onto different ticks. A second
+Go instance in another worker could compute fields only at a fixed lead, at the cost
+of a second runtime and of copying the grid in and the field out.
+
 ### Serve wss from vif's own listener
 
 - Priority: P3
@@ -713,9 +731,11 @@ reads as farther; a distinct attribute for bright would separate the three.
 - Priority: P2
 - Affected files: `internal/mode/config_menu.go`, `internal/paths/settings.go`
 - Persist operator preferences through an explicit save action and startup
-  loading; the live menu currently changes only this run. Music gain needs an
-  authoritative readback before joining effects volume in the menu. Keymap,
-  backend, paths and colour depth remain startup settings.
+  loading; the live menu currently changes only this run, and what `:new` keeps
+  (rate, HUD, pins, standing breakpoints) a restart or scenario change drops. Music
+  gain needs an authoritative readback before joining effects volume in the menu.
+  Keymap, backend, paths and colour depth remain startup settings; `:d break`
+  stays on the command line, since a row cannot take its arguments.
 
 ### Use sixteen console backgrounds on Linux
 
