@@ -123,7 +123,10 @@ sudo systemctl disable --now docker.service docker.socket containerd.service
 
 That is the baseline every build helper restores (D2). Docker sets the `FORWARD`
 policy to `DROP` on start, which severs NodePort traffic, and a stop does not undo
-it; the helpers set it back to `ACCEPT`. After any manual Docker use:
+it; the helpers set it back to `ACCEPT`. A host whose Docker is already running, as
+on a development machine, keeps it: the helpers build with it and leave it running
+and `FORWARD` as it is, so NodePorts there rely on that host's own forwarding rules.
+After any manual Docker use:
 
 ```sh
 sudo iptables -S FORWARD | head -1         # expect: -P FORWARD ACCEPT
@@ -217,9 +220,11 @@ older than the match ceiling.
 It builds the `vif_headless` profile once with Docker, refuses an image without the
 `headless` OCI label, runs its own `-check` as UID 65532 read-only with no network,
 imports it into K3s pinned, records it as `VIF_ALLOCATOR_IMAGE`, removes older tags,
-empties Docker's store, and restores the Docker baseline. Pinned, because the kubelet
-deletes images no pod uses once the disk passes 85%, and between matches none does. Later runs rebuild only when `cmd`, `internal`,
-`pkg`, `go.mod`, `go.sum` or the Dockerfile changed since the installed tag.
+empties Docker's store, and restores the Docker baseline; a Docker that was already
+running loses only that image. Pinned, because the kubelet deletes images no pod uses
+once the disk passes 85%, and between matches none does. Later runs rebuild only when
+`cmd`, `internal`, `pkg`, `go.mod`, `go.sum` or the Dockerfile changed since the
+installed tag.
 
 ## 9. The fleet objects and the shared volumes
 

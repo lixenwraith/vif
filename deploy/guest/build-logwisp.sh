@@ -1,17 +1,18 @@
 #!/bin/sh
 # Build LogWisp from a fresh clone, at REVISION or upstream main's head, into one
-# caller-owned output path, then restore the disabled Docker baseline.
+# caller-owned output path, then restore the disabled Docker baseline, or leave a
+# Docker that was already running as it was.
 #
 #   build-logwisp.sh OUTPUT [REVISION]
 set -eu
 
 case ${1:-} in
 	-h|--help)
-		sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'
 		exit 0
 		;;
 	'')
-		sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//' >&2
+		sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//' >&2
 		exit 2
 		;;
 esac
@@ -38,22 +39,30 @@ sudo docker buildx version >/dev/null || {
 	exit 1
 }
 
-for build_unit in docker.service docker.socket containerd.service; do
-	if systemctl is-active --quiet "$build_unit"; then
-		echo "$0: $build_unit must be inactive before the temporary build" >&2
-		exit 1
-	fi
-	if systemctl is-enabled --quiet "$build_unit"; then
-		echo "$0: $build_unit must be disabled before the temporary build" >&2
-		exit 1
-	fi
-done
+# A running Docker serves something else on this host and is built with in place.
+# A stopped one is started from the disabled baseline, which cleanup restores.
+docker_running=false
+if systemctl is-active --quiet docker.service docker.socket; then
+	docker_running=true
+else
+	for build_unit in docker.service docker.socket containerd.service; do
+		if systemctl is-active --quiet "$build_unit"; then
+			echo "$0: $build_unit must be inactive before the temporary build" >&2
+			exit 1
+		fi
+		if systemctl is-enabled --quiet "$build_unit"; then
+			echo "$0: $build_unit must be disabled before the temporary build" >&2
+			exit 1
+		fi
+	done
+fi
 
 tmp_parent=${TMPDIR:-/tmp}
 tmp_parent=$(CDPATH= cd -- "$tmp_parent" && pwd)
 build_root=$(mktemp -d "$tmp_parent/vif-logwisp-build.XXXXXX")
 build_source=$build_root/source
 container=
+image=
 docker_started=false
 output_complete=false
 
@@ -69,13 +78,17 @@ cleanup() {
 	status=$?
 	cleanup_status=0
 	trap - EXIT HUP INT TERM
+	if [ -n "$container" ]; then
+		sudo docker rm -f "$container" >/dev/null 2>&1 || cleanup_status=$?
+	fi
 	if [ "$docker_started" = true ]; then
-		if [ -n "$container" ]; then
-			sudo docker rm -f "$container" >/dev/null 2>&1 || cleanup_status=$?
-		fi
 		# Everything, not just the image: --pull leaves each earlier base behind, and
 		# BuildKit its cache.
 		sudo docker system prune --all --force >/dev/null 2>&1 || cleanup_status=$?
+	elif [ "$docker_running" = true ] && [ -n "$image" ] &&
+		sudo docker image inspect "$image" >/dev/null 2>&1; then
+		# A store that holds other work loses only this build's image.
+		sudo docker image rm "$image" >/dev/null || cleanup_status=$?
 	fi
 	case "$build_root" in
 		"$tmp_parent"/vif-logwisp-build.*) rm -rf -- "$build_root" || cleanup_status=$? ;;
@@ -84,12 +97,14 @@ cleanup() {
 	if [ "$output_complete" != true ]; then
 		rm -f -- "$output" || cleanup_status=$?
 	fi
-	sudo systemctl disable docker.service docker.socket containerd.service \
-		>/dev/null 2>&1 || cleanup_status=$?
-	sudo systemctl stop docker.socket >/dev/null 2>&1 || cleanup_status=$?
-	sudo systemctl stop docker.service containerd.service \
-		>/dev/null 2>&1 || cleanup_status=$?
-	restore_forward_policy || cleanup_status=$?
+	if [ "$docker_running" = false ]; then
+		sudo systemctl disable docker.service docker.socket containerd.service \
+			>/dev/null 2>&1 || cleanup_status=$?
+		sudo systemctl stop docker.socket >/dev/null 2>&1 || cleanup_status=$?
+		sudo systemctl stop docker.service containerd.service \
+			>/dev/null 2>&1 || cleanup_status=$?
+		restore_forward_policy || cleanup_status=$?
+	fi
 	if [ "$status" -eq 0 ] && [ "$cleanup_status" -ne 0 ]; then status=$cleanup_status; fi
 	exit "$status"
 }
@@ -111,9 +126,13 @@ image=local/logwisp-build:$(printf '%.12s' "$revision")
 [ "$(git -C "$build_source" rev-parse HEAD)" = "$revision" ]
 version=$(git -C "$build_source" describe --tags --always)
 echo "building LogWisp $version at revision $revision"
-sudo systemctl start docker.service
-docker_started=true
-restore_forward_policy
+if [ "$docker_running" = true ]; then
+	echo "building with the Docker already running, which stays running"
+else
+	sudo systemctl start docker.service
+	docker_started=true
+	restore_forward_policy
+fi
 sudo docker buildx build --load --pull \
 	--build-arg VERSION="$version" \
 	--build-arg REVISION="$revision" \

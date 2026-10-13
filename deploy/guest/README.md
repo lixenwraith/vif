@@ -36,7 +36,9 @@ back one out.
 
 Each builds first, keeps one rollback set at `.previous`, restores it if
 verification fails, and leaves Docker, its socket and the distribution containerd
-disabled with `FORWARD ACCEPT` restored.
+disabled with `FORWARD ACCEPT` restored. Where Docker was already running, the image
+and LogWisp builds use it in place and leave it running, with `FORWARD` and its store
+untouched apart from their own image.
 
 | Helper | What it replaces | What it refuses |
 |---|---|---|
