@@ -57,7 +57,7 @@ by kind.
 
 **`weapon`** (player) owns cursor loadouts: charges and cooldowns, one orb per
 held kind that has one, and firing on main fire. A cursor spawns holding the gun
-(`component.Loadout`); loot grants the other kinds; a zero crossing of the
+(`loadout` in the weapon system); loot grants the other kinds; a zero crossing of the
 cursor's energy clears those and keeps the gun; `EventWeaponRemoveRequest` takes
 any kind, the gun included, for a region fought without it. Aimed deliveries
 share one nearest-target query from the cursor, sized to the largest ready

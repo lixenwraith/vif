@@ -31,9 +31,6 @@ const (
 	DeliveryTracer                          // cardinal streaks from the cursor: direct damage on contact, glyph effects by polarity
 )
 
-// Aimed reports whether the delivery needs targets assigned before it fires
-func (d WeaponDelivery) Aimed() bool { return d != DeliveryPulse && d != DeliveryTracer }
-
 // WeaponSpec is one weapon kind's static profile, whatever carries it. A cursor's
 // discharge resolves against species through Attack; a hosted one strikes cursors.
 type WeaponSpec struct {
@@ -104,17 +101,6 @@ var WeaponSpecs = [WeaponCount]WeaponSpec{
 		Sustained:    true},
 	WeaponGun: {Name: "gun", Delivery: DeliveryTracer, Attack: CombatAttackTracer,
 		MaxCharges: parameter.WeaponMaxChargeGun, Innate: true, FromCursor: true, Directions: TracerAllDirections},
-}
-
-// Loadout is a fresh cursor's: one charge of every innate kind
-func Loadout() WeaponComponent {
-	var w WeaponComponent
-	for wt, spec := range WeaponSpecs {
-		if spec.Innate {
-			w.Charges[wt] = 1
-		}
-	}
-	return w
 }
 
 // WeaponComponent is a cursor's loadout: charges and cooldown per kind, and main fire's cooldown.

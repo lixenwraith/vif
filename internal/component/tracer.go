@@ -20,12 +20,6 @@ const (
 // TracerCardinals is the spawn order of a volley's directions
 var TracerCardinals = [...]TracerDirection{TracerRight, TracerLeft, TracerDown, TracerUp}
 
-// tracerLanes are the row or column offsets a volley covers, by charge count
-var tracerLanes = [...][]int{{0}, {-1, 1}, {-1, 0, 1}}
-
-// TracerLanes are the offsets a volley of charges covers; charges past the table cover every lane
-func TracerLanes(charges int) []int { return tracerLanes[max(min(charges, len(tracerLanes)), 1)-1] }
-
 // TracerComponent is one streak of the gun: a head sweeping a row or column at
 // constant speed with a fading trail, draining where a wall or combatant stops it
 type TracerComponent struct {
