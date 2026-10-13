@@ -122,7 +122,7 @@ func (s *MountSystem) attach(p *event.MountRequestPayload) {
 	// the new weapon starts ready
 	s.world.Components.Ray.RemoveEntity(p.Host, false)
 	if timer, ok := s.world.Components.Timer.GetPtr(p.Host); ok {
-		timer.Stop(component.TimerCooldown)
+		timer.Slots[component.TimerCooldown] = component.Countdown{}
 	}
 }
 
