@@ -101,8 +101,8 @@ while menu navigation uses overlay bindings.
 Action rows (`Enter`) run the command they name and close the menu: `:n`,
 `:n <scenario>`, `:t unpin`, `:t save`, `:log rec flush`, `:d cpu|heap|mutex|trace`,
 `:journal start` and `:replay restart`. Views (`:t`, `:d`, help), developer state
-commands (`:god`, `:energy` and the like), `:step`, `:emit`, `:system`, `:region`
-and `:replay tick|time` stay on the command line.
+commands (`:god`, `:energy` and the like), `:step`, `:d break`, `:emit`, `:system`,
+`:region` and `:replay tick|time` stay on the command line.
 
 Use CLI arguments and `vif.toml` for startup defaults. The Startup settings page
 identifies options that need a restart; it does not edit files. Exact values

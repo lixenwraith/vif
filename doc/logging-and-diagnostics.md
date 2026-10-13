@@ -232,7 +232,7 @@ greps for rather than enumerating every refusal.
 | `msg` | Level | Fields | Emitted by |
 |---|---|---|---|
 | `network session active` | INFO | `local`, `slot`, `coordinator`, `barrier_delay_ticks`, `peers` | this instance's one statement of who it is |
-| `session summary` | INFO | `summary` | the `-serve` loop, every 30 s; the same line `:session` prints |
+| `session summary` | INFO | `summary` | the `-serve` loop, every 30 s when the line changed; the same line `:session` prints. With peer links it names the slowest link and the plan's totals over all of them; with none it names neither |
 | `participant evicted as too slow` | WARN | `participant`, `late_per_s`, `bytes_per_s`, `window` | the authority's slow policy (multi-player.md §3.5) |
 | `authority handed off` / `authority lost; succession opened` | WARN | `term`, `authority`, `predecessor`, `roster` / `peer`, `term`, `local` | `Authority` |
 | `uncommitted crossings dropped at handoff` | INFO | `crossings` | a guest following a new authority |
