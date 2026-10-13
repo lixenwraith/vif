@@ -83,12 +83,35 @@ make release
 ./bin/vif
 ```
 
-`make release install` builds, then installs the binary and the `wad/` payload
-under `/usr/local/` for root, or for the current user under `~/.local` and `~/.config/vif` when `/usr/local/bin` is not writable
-(`sudo make install` after `make release` installs system-wide); `make uninstall`
-removes it, and `make install-config` installs only the payload into the user root. A reinstall replaces shipped files and keeps
-added ones; `CLEAN=1` starts the payload fresh. Uninstalled, `./bin/vif -s td` plays
-the checkout's `wad/`.
+`make release install` builds, then installs. `make release` followed by
+`sudo make install` installs system-wide; a user who cannot write `/usr/local/bin`
+gets an install of their own. A Linux distribution package follows the system
+layout under `/usr` and `/etc`; a FreeBSD port matches `sudo make install`:
+
+| | `sudo make install` | `make install` as a user | Linux package |
+|---|---|---|---|
+| Binary | `/usr/local/bin/vif` | `~/.local/bin/vif` | `/usr/bin/vif` |
+| Wad | `/usr/local/etc/vif/` | `~/.config/vif/` | `/etc/vif/` |
+| Manual, completion, docs | `/usr/local/share/` | `~/.local/share/` | `/usr/share/` |
+| Logs, journals, music (`-l`, `-j`, `-mw`) | `~/.local/state/vif/` | `~/.local/state/vif/` | `~/.local/state/vif/` |
+
+The wad, `wad/` with the shipped bot graphs, keymap and `vif.toml`, fills the
+`vif/` directory named above: `scenario/`, `content/`, `image/`, `bot/`, `input/`
+and `vif.toml` sit directly in it, never loose in `etc` or `~/.config`. A file a
+player puts in `~/.config/vif` overrides the system copy of it. Whatever the
+install, each player's logs, journals and music go to `log/`, `journal/` and
+`music/` under their own `~/.local/state/vif/`, so a system install run by a
+normal user needs no writable system directory, and vif never writes `/var/log`.
+`-l=DIR`, or `paths.log` in `vif.toml`, puts the logs elsewhere.
+
+`make uninstall` removes the binary, manual, completion and docs, keeping the
+wad; `make install-config` installs only the wad, into `~/.config/vif`. A
+reinstall replaces shipped files and keeps added ones; `CLEAN=1` starts the wad
+fresh. A downloaded release unpacks into a directory of its own, and its wad
+archive unpacks as `vif/`: `tar -xzf vif-nightly-wad.tar.gz -C ~/.config`, or
+`-C /usr/local/etc` as root. Uninstalled, `./bin/vif -s td` plays the checkout's
+`wad/`.
+
 Audio starts muted; press `Ctrl-S` to cycle audio channels or launch with
 `-mute=false`. Run `./bin/vif -h` for all flags — it prints to stdout, so it pipes
 into `grep` without redirecting stderr.
@@ -168,10 +191,11 @@ settings explain why. Rebind the `config_menu` action in the keymap.
 - `cmd/soundlab` authors and auditions sounds/music.
 - `cmd/ascimage` converts and previews dual-mode `.vifimg` assets.
 
-Editable files ship in `wad/`, laid out exactly as they install; everything the
-binary can play without a filesystem is embedded in `internal/asset`. User
-configuration defaults to `~/.config/vif`; logs and journals
-default to separate directories under `$XDG_STATE_HOME/vif`. See the
+Editable files ship in `wad/`, laid out exactly as they install into a `vif/`
+configuration root; everything the binary can play without a filesystem is
+embedded in `internal/asset`. User configuration defaults to `~/.config/vif`;
+logs, journals and music default to separate directories under
+`$XDG_STATE_HOME/vif` (table above). See the
 [external filesystem layout](doc/filesystem-layout.md) for exact precedence,
 installation, and WASM behavior, and [packaging](doc/packaging.md) for the
 distribution checklists.
