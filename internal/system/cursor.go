@@ -248,7 +248,14 @@ func (s *CursorSystem) build(slot uint8, x, y int, control component.ControlKind
 		LastDrainTime: w.Resources.Time.GameTime,
 	})
 	w.Components.Boost.SetComponent(e, component.BoostComponent{})
-	w.Components.Weapon.SetComponent(e, loadout())
+	// A fresh cursor holds one charge of every innate kind
+	var loadout component.WeaponComponent
+	for wt, spec := range component.WeaponSpecs {
+		if spec.Innate {
+			loadout.Charges[wt] = 1
+		}
+	}
+	w.Components.Weapon.SetComponent(e, loadout)
 	w.Components.Combat.SetComponent(e, component.CombatComponent{
 		OwnerEntity:      e,
 		CombatEntityType: component.CombatEntityCursor,

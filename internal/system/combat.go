@@ -345,11 +345,6 @@ func (s *CombatSystem) attackerBit(cursor core.Entity) uint32 {
 	return unownedAttacker
 }
 
-// stunned is read by every species' steering, which stands still while it holds
-func stunned(c *component.CombatComponent) bool {
-	return c.Status[component.StatusStun].Remaining > 0
-}
-
 func damageImmuneTo(c *component.CombatComponent, attacker uint32, weapon component.CombatAttackType) bool {
 	if uint(weapon) >= uint(component.CombatAttackTypeCount) {
 		return true
@@ -1082,7 +1077,7 @@ func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatCom
 	// A running stun is not refreshed. Refreshing it made every later hit — the
 	// other participant's included — extend the lockdown, so a target under
 	// continuous fire never left it.
-	if stunned(targetCombatComp) {
+	if targetCombatComp.Status[component.StatusStun].Remaining > 0 {
 		return false
 	}
 

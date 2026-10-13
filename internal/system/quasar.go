@@ -184,7 +184,7 @@ func (s *QuasarSystem) Update() {
 		}
 
 		// Stun check: skip movement, reset charging state
-		if stunned(combatComp) {
+		if combatComp.Status[component.StatusStun].Remaining > 0 {
 			if quasarComp.IsCharging {
 				quasarComp.IsCharging = false
 				quasarComp.ChargeRemaining = 0
