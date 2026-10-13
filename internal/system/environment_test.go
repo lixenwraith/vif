@@ -429,6 +429,11 @@ func TestDriftExpiryReplacementAndCancel(t *testing.T) {
 	if !s.drift.Endless || s.drift.Speed != 2 || s.drift.Phase != phase {
 		t.Fatalf("replacement = %+v, want speed 2 until cancelled with phase %v kept", s.drift, phase)
 	}
+	s.startDrift(&event.DriftStartPayload{Direction: 0, Speed: 2})
+	if s.drift.Phase != ([driftLevels][2]int64{}) {
+		t.Fatalf("reversal kept phase %v, want the old part-cell dropped", s.drift.Phase)
+	}
+	s.startDrift(&event.DriftStartPayload{Direction: math.Pi, Speed: 2})
 	s.startDrift(&event.DriftStartPayload{Direction: math.NaN(), Speed: 3})
 	s.startDrift(&event.DriftStartPayload{Direction: 1, Speed: 0})
 	s.startDrift(&event.DriftStartPayload{Direction: 1, Speed: 3, DurationMs: -1})
@@ -452,17 +457,21 @@ func TestDriftExpiryReplacementAndCancel(t *testing.T) {
 // TestGlyphLinesEnterAtTheUpwindEdge: while glyphs drift, new lines are placed in
 // the band beside the edge the drift comes from.
 func TestGlyphLinesEnterAtTheUpwindEdge(t *testing.T) {
+	type band func(cfg *engine.ConfigResource, p component.PositionComponent) bool
+	right := func(cfg *engine.ConfigResource, p component.PositionComponent) bool {
+		return p.X >= cfg.MapWidth-parameter.DriftEntryBand-2
+	}
+	top := func(_ *engine.ConfigResource, p component.PositionComponent) bool {
+		return p.Y < parameter.DriftEntryBand
+	}
 	for _, tc := range []struct {
 		name      string
 		direction float64
-		inBand    func(cfg *engine.ConfigResource, pos component.PositionComponent) bool
+		bands     []band
 	}{
-		{"left", math.Pi, func(cfg *engine.ConfigResource, p component.PositionComponent) bool {
-			return p.X >= cfg.MapWidth-parameter.DriftEntryBand-2
-		}},
-		{"down", math.Pi / 2, func(_ *engine.ConfigResource, p component.PositionComponent) bool {
-			return p.Y < parameter.DriftEntryBand
-		}},
+		{"left", math.Pi, []band{right}},
+		{"down", math.Pi / 2, []band{top}},
+		{"down-left", 3 * math.Pi / 4, []band{right, top}},
 	} {
 		w, _, _ := testCursorWorld(t)
 		glyphs := NewGlyphSystem(w).(*GlyphSystem)
@@ -472,12 +481,26 @@ func TestGlyphLinesEnterAtTheUpwindEdge(t *testing.T) {
 			glyphs.placeLine("abc", component.GlyphBlue, component.GlyphNormal)
 		}
 
-		if w.Components.Glyph.CountEntities() == 0 {
-			t.Fatalf("%s: no line was placed", tc.name)
-		}
+		// Every glyph lies in a band, and each band holds one that lies in no other
+		only := make([]int, len(tc.bands))
 		for _, e := range w.Components.Glyph.Entities() {
-			if pos, _ := w.Positions.GetPosition(e); !tc.inBand(w.Resources.Config, pos) {
-				t.Fatalf("%s: glyph placed at %v, outside the entry band", tc.name, pos)
+			pos, _ := w.Positions.GetPosition(e)
+			var in []int
+			for i, b := range tc.bands {
+				if b(w.Resources.Config, pos) {
+					in = append(in, i)
+				}
+			}
+			if len(in) == 0 {
+				t.Fatalf("%s: glyph placed at %v, outside every entry band", tc.name, pos)
+			}
+			if len(in) == 1 {
+				only[in[0]]++
+			}
+		}
+		for i, n := range only {
+			if n == 0 {
+				t.Fatalf("%s: no line entered through band %d", tc.name, i)
 			}
 		}
 	}
