@@ -1,0 +1,262 @@
+description = "Simon: listen to the notes, then repeat them with keys 1-4 or by clicking the buttons."
+
+# Four buttons on keys 1-4, lowest note on 1, so the game plays with eyes closed:
+# every press and every shown note sounds its button's tone. A level adds one note
+# to the sequence, up to 100. The glyph field drifts behind the buttons.
+
+[systems]
+only_systems = ["button", "timer", "death", "glyph", "environment", "particle", "transient", "audio"]
+
+[regions.simon]
+initial = "Ready"
+
+[regions.player]
+initial = "PlayerBoot"
+background = true
+
+[regions.backdrop]
+initial = "BackdropStart"
+background = true
+
+# --- Macros ---
+
+[macros.Say]
+doc = "Status message; each {} in it reads variable `var`."
+params = { message = "string", var = "string" }
+defaults = { var = "level" }
+body = { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "${message}" }, payload_vars = { message = "${var}" } }
+
+[macros.Cue]
+doc = "Play the named sound after `delay_ms`."
+params = { sound = "string", delay_ms = "int" }
+defaults = { delay_ms = 0 }
+body = { action = "EmitEvent", event = "EventSoundRequest", payload = { sound = "${sound}" }, delay_ms = "${delay_ms}" }
+
+[macros.Flash]
+doc = "Flash the screen in `color` for `ms`, after `delay_ms`."
+params = { color = "table", ms = "int", delay_ms = "int" }
+defaults = { delay_ms = 0 }
+body = { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = "${color}", intensity = 0.5, duration_ms = "${ms}" }, delay_ms = "${delay_ms}" }
+
+[macros.Button]
+doc = "Add a button on `key` that plays `sound`."
+params = { key = "string", color = "table", sound = "string" }
+body = { action = "EmitEvent", event = "EventButtonSpawnRequest", payload = { key = "${key}", color = "${color}", sound = "${sound}" } }
+
+[macros.Show]
+doc = "Light button `button`, sounding its note, after `delay_ms`."
+params = { button = "int", delay_ms = "int" }
+body = { action = "EmitEvent", event = "EventButtonLightRequest", payload = { button = "${button}", duration_ms = 400 }, delay_ms = "${delay_ms}" }
+
+[macros.Note]
+doc = "color = note i of this game's sequence, a pure function of the game and i."
+params = {}
+body = { action = "RandomVar", payload = { name = "color", min = 1, max = 4, seed_var = "game", index_var = "i" } }
+
+[macros.Take]
+doc = "Take keys 1-4 from play while the state is active; reconciled, so a joiner takes them too."
+params = {}
+body = { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "1234" }, reconcile = true }
+
+[macros.Free]
+doc = "Give keys 1-4 back to play as the state exits."
+params = {}
+body = { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "" }, reconcile = true }
+
+[macros.Tier]
+doc = "From level `from`, a note lasts `note` ticks and lights `lit_ms`; the turn opens `tail` ticks after the last."
+params = { from = "int", note = "int", lit_ms = "int", tail = "int" }
+body = [
+    { action = "SetVar", payload = { name = "note_ticks", value = "${note}" }, guard = "VarCompare", guard_args = { var = "level", op = "gte", value = "${from}" } },
+    { action = "SetVar", payload = { name = "lit_ms", value = "${lit_ms}" }, guard = "VarCompare", guard_args = { var = "level", op = "gte", value = "${from}" } },
+    { action = "SetVar", payload = { name = "tail_ticks", value = "${tail}" }, guard = "VarCompare", guard_args = { var = "level", op = "gte", value = "${from}" } },
+]
+
+[macros.Correct]
+doc = "In Repeat, a press of the expected button `k` blooms over it and moves to the next note."
+params = { k = "int", key = "string" }
+body = { trigger = "EventInputPressed", internal = true, guard = "And", guard_args = { guards = [
+    { name = "PayloadStringEquals", args = { field = "key", value = "${key}" } },
+    { name = "VarEquals", args = { var = "color", value = "${k}" } },
+    { name = "VarCompareVar", args = { var_a = "i", op = "lt", var_b = "level" } },
+] }, actions = [
+    { action = "EmitEvent", event = "EventParticleWave", payload = { behavior = 2, button = "${k}" } },
+    { action = "IncrementVar", payload = { name = "i" } },
+    { macro = "Note" },
+] }
+
+[macros.Heading]
+doc = "Drift towards `rad` when variable heading is `idx`."
+params = { idx = "int", rad = "float" }
+body = { action = "EmitEvent", event = "EventDriftStart", payload = { direction = "${rad}", speed = 6.0, duration_ms = 0 }, guard = "VarEquals", guard_args = { var = "heading", value = "${idx}" } }
+
+# --- Simon ---
+
+# Buttons ascend in pitch left to right: the A major notes of the classic game
+[states.Ready]
+parent = "Root"
+on_enter = [
+    { macro = "Take" },
+    { macro = "Button", key = "1", color = { r = 230, g = 200, b = 0 }, sound = "tone_cs4" },
+    { macro = "Button", key = "2", color = { r = 0, g = 90, b = 255 }, sound = "tone_e4" },
+    { macro = "Button", key = "3", color = { r = 220, g = 0, b = 0 }, sound = "tone_a4" },
+    { macro = "Button", key = "4", color = { r = 0, g = 200, b = 0 }, sound = "tone_e5" },
+    { macro = "Show", each = { button = [1, 2, 3, 4], delay_ms = [0, 500, 1000, 1500] } },
+    { macro = "Say", message = "Simon: listen, then repeat the notes with 1-4 or clicks. Press a button to start" },
+]
+on_exit = [{ macro = "Free" }]
+transitions = [
+    { trigger = "EventInputPressed", target = "NewGame" },
+]
+
+[states.NewGame]
+parent = "Root"
+on_enter = [
+    { action = "IncrementVar", payload = { name = "game" } },
+    { action = "SetVar", payload = { name = "level", value = 1 } },
+    { macro = "Flash", color = { r = 255, g = 255, b = 255 }, ms = 300 },
+    { macro = "Cue", sound = "bell" },
+    { macro = "Say", message = "New game" },
+]
+transitions = [
+    { trigger = "Tick", target = "Listen", guard = "StateTimeExceeds", guard_args = { ms = 1500 } },
+]
+
+# One note every note_ticks; the turn opens tail_ticks after the last note starts
+[states.Listen]
+parent = "Root"
+on_enter = [
+    { macro = "Tier", each = { from = [1, 6, 14], note = [16, 13, 10], lit_ms = [550, 450, 350], tail = [12, 10, 8] } },
+    { action = "SetVar", payload = { name = "i", value = 0 } },
+    { action = "CopyVar", payload = { name = "beat", source_var = "note_ticks" } },
+    { macro = "Say", message = "Level {}: listen" },
+]
+on_update = [
+    { action = "IncrementVar", payload = { name = "beat" } },
+]
+transitions = [
+    { trigger = "Tick", target = "Repeat", guard = "And", guard_args = { guards = [
+        { name = "VarCompareVar", args = { var_a = "i", op = "gte", var_b = "level" } },
+        { name = "VarCompareVar", args = { var_a = "beat", op = "gte", var_b = "tail_ticks" } },
+    ] } },
+    { trigger = "Tick", internal = true, guard = "And", guard_args = { guards = [
+        { name = "VarCompareVar", args = { var_a = "i", op = "lt", var_b = "level" } },
+        { name = "VarCompareVar", args = { var_a = "beat", op = "gte", var_b = "note_ticks" } },
+    ] }, actions = [
+        { action = "SetVar", payload = { name = "beat", value = 0 } },
+        { macro = "Note" },
+        { action = "EmitEvent", event = "EventButtonLightRequest", payload = { button = 0, duration_ms = 0 }, payload_vars = { button = "color", duration_ms = "lit_ms" } },
+        { action = "IncrementVar", payload = { name = "i" } },
+    ] },
+]
+
+# The buttons light and sound every press themselves; the machine only judges it
+[states.Repeat]
+parent = "Root"
+on_enter = [
+    { macro = "Take" },
+    { action = "SetVar", payload = { name = "i", value = 0 } },
+    { macro = "Note" },
+    { macro = "Cue", sound = "turn" },
+    { macro = "Say", message = "Your turn, level {}" },
+]
+on_exit = [{ macro = "Free" }]
+transitions = [
+    { macro = "Correct", each = { k = [1, 2, 3, 4], key = ["1", "2", "3", "4"] } },
+    { trigger = "EventInputPressed", target = "Wrong", guard = "VarCompareVar", guard_args = { var_a = "i", op = "lt", var_b = "level" } },
+    { trigger = "Tick", target = "Cleared", guard = "VarCompareVar", guard_args = { var_a = "i", op = "gte", var_b = "level" } },
+]
+
+# Cues wait out the last pressed tone
+[states.Cleared]
+parent = "Root"
+on_enter = [
+    { macro = "Flash", each = { delay_ms = [400, 700, 1000] }, color = { r = 0, g = 255, b = 0 }, ms = 150 },
+    { macro = "Cue", sound = "chime", delay_ms = 400 },
+    { macro = "Say", message = "Level {} cleared" },
+]
+transitions = [
+    { trigger = "Tick", target = "Listen", guard = "StateTimeExceeds", guard_args = { ms = 1600 }, actions = [
+        { action = "IncrementVar", payload = { name = "level", max = 100 } },
+    ] },
+]
+
+# After the buzz, the button that was due lights and sounds
+[states.Wrong]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGrayoutStart", reconcile = true },
+    { action = "EmitEvent", event = "EventParticleWave", payload = { behavior = 1 } },
+    { macro = "Cue", sound = "buzz" },
+    { macro = "Say", message = "Wrong note: game over at level {}" },
+    { action = "EmitEvent", event = "EventButtonLightRequest", payload = { button = 0, duration_ms = 800 }, payload_vars = { button = "color" }, delay_ms = 1000 },
+]
+on_exit = [
+    { action = "EmitEvent", event = "EventGrayoutEnd", reconcile = true },
+]
+transitions = [
+    { trigger = "Tick", target = "NewGame", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
+]
+
+# --- Player: a cursor below the buttons, and a new game on any defeat ---
+
+[states.PlayerBoot]
+parent = "Root"
+on_enter = [
+    { action = "ConfigToVar", payload = { field = "map_width", name = "cursor_x" } },
+    { action = "DivideVar", payload = { name = "cursor_x", delta = 2 } },
+    { action = "ConfigToVar", payload = { field = "map_height", name = "cursor_y" } },
+    { action = "DecrementVar", payload = { name = "cursor_y", delta = 3 } },
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { heat = 10, energy = 100 }, payload_vars = { x = "cursor_x", y = "cursor_y" } },
+]
+transitions = [
+    { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },
+    { trigger = "EventCursorSpawnFailed", target = "PlayerBootRetry" },
+]
+
+[states.PlayerBootRetry]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "PlayerBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+]
+
+[states.PlayerActive]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "PlayerReset", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
+]
+
+[states.PlayerReset]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGameResetRequest" },
+]
+
+# --- Backdrop: an endless glyph drift, re-aimed between 80 and 100 degrees ---
+
+# Sway and Hold alternate: a state re-entering itself keeps its time and fires every tick
+[states.BackdropStart]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 1.5708, speed = 6.0, duration_ms = 0 } },
+]
+transitions = [
+    { trigger = "Tick", target = "BackdropSway", guard = "StateTimeExceeds", guard_args = { ms = 7000 } },
+]
+
+[states.BackdropSway]
+parent = "Root"
+on_enter = [
+    { action = "IncrementVar", payload = { name = "sway" } },
+    { action = "RandomVar", payload = { name = "heading", min = 0, max = 4, index_var = "sway" } },
+    { macro = "Heading", each = { idx = [0, 1, 2, 3, 4], rad = [1.3963, 1.4835, 1.5708, 1.6581, 1.7453] } },
+]
+transitions = [
+    { trigger = "Tick", target = "BackdropHold" },
+]
+
+[states.BackdropHold]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "BackdropSway", guard = "StateTimeExceeds", guard_args = { ms = 7000 } },
+]
