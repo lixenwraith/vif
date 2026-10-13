@@ -400,8 +400,12 @@ Capture the entity to address that cursor in later actions:
 { action = "EmitEvent", event = "EventHeatSetRequest", payload = { entity = 0, value = 10 }, payload_vars = { entity = "player_entity" } }
 ```
 
-Every player-scoped command payload accepts an `entity` field. Omitting it
-addresses the local cursor — a migration convenience, not the target design.
+A player-scoped command names its cursor in `entity`; zero names none. The
+owner-authored ones (energy, heat, boost, shield, weapon; D-13) act only on a cursor
+this instance owns, the rest (move, ping, typing, gold jump, tower) on any live one.
+A captured entity names the first cursor on every instance, so to set each
+participant's own heat and energy emit `EventCursorArmRequest { heat, energy }`,
+which acts on the cursor this instance drives, as `wad/scenario/simon` does.
 
 ---
 
@@ -567,8 +571,9 @@ transitions = [
 A button lights and sounds on every press of its key by itself, so a machine judges
 a press and never plays its tone. `EventButtonLightRequest { button, duration_ms }`
 lights the button at that place in the row, counted from 1, with its sound; a
-spawn on a key that already has a button is refused. `wad/scenario/simon` is the
-worked example.
+spawn on a key that already has a button is refused. A button shows its key in the
+splash font once it is about ten cells square, so a scenario sets a `[map]` floor
+that leaves room for its row. `wad/scenario/simon` is the worked example.
 
 ### PayloadExists
 

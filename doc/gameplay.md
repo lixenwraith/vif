@@ -406,13 +406,16 @@ scaffold, `kraken` is a repeating combat arena, and `simon` is a memory game. Ea
 entry has a short `description` for scenario listings.
 
 `simon` lays four buttons across the map on keys 1-4, each with its note, rising
-in pitch from 1 to 4. A level plays the sequence, one note longer than the last,
-and the player repeats it by key or by clicking the buttons; every note shown or
-pressed sounds, so the game can be played with eyes closed once sound is on (sound
-starts muted; `Ctrl-S` cycles it). A correct press blooms over its button, a cleared
-level flashes green, and a wrong note grays the field, rains decay over it and plays
-the note that was due before a new game. The level stops rising at 100. Glyphs
-drift behind the buttons as a moving backdrop, and music stays off.
+in pitch from 1 to 4, and each key drawn large in black that turns white as its
+button lights. Each button plays once before the first game. A level plays the
+sequence, one note longer than the last; after a short pause the player
+repeats it by key or by clicking the buttons. Every note shown or pressed sounds,
+so the game can be played with eyes closed once sound is on (sound starts muted;
+`Ctrl-S` cycles it). A correct press blooms over its button, a cleared level
+flashes green, and a wrong note grays the field and rains decay over it, then plays
+the note that was due before a new game. The level stops rising at 100, and the
+energy cell reads it while heat stays full. Glyphs drift behind the buttons as a
+moving backdrop, and music stays off.
 
 ## 11. System inventory
 

@@ -307,7 +307,7 @@ const (
 	EventCursorSpawned
 	// EventCursorSpawnFailed [shared] signals no roster slot or no free cell was available
 	EventCursorSpawnFailed
-	// EventCursorArmRequest (CursorArmRequestPayload) [local] restores the locally owned cursor's configured starting resources
+	// EventCursorArmRequest (CursorArmRequestPayload) [local] sets the heat and energy of the cursor this instance drives
 	EventCursorArmRequest
 	// EventCursorDespawnRequest (CursorDespawnRequestPayload) [shared] asks CursorSystem to destroy cursors
 	EventCursorDespawnRequest

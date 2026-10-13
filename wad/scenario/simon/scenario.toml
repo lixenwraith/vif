@@ -2,13 +2,19 @@ description = "Simon: listen to the notes, then repeat them with keys 1-4 or by 
 
 # Four buttons on keys 1-4, lowest note on 1, so the game plays with eyes closed:
 # every press and every shown note sounds its button's tone. A level adds one note
-# to the sequence, up to 100. The glyph field drifts behind the buttons.
+# to the sequence, up to 100. The glyph field drifts behind the buttons. Heat stays
+# full with its system off; energy reads the level.
+
+# Room for four buttons ten cells square, each holding its key's splash digit
+[map]
+min_width = 50
+min_height = 20
 
 [systems]
-only_systems = ["button", "timer", "death", "glyph", "environment", "particle", "transient", "audio"]
+only_systems = ["button", "timer", "death", "glyph", "environment", "particle", "transient", "audio", "cursor", "energy"]
 
 [regions.simon]
-initial = "Ready"
+initial = "Intro"
 
 [regions.player]
 initial = "PlayerBoot"
@@ -64,7 +70,7 @@ params = {}
 body = { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "" }, reconcile = true }
 
 [macros.Tier]
-doc = "From level `from`, a note lasts `note` ticks and lights `lit_ms`; the turn opens `tail` ticks after the last."
+doc = "From level `from`, a note lasts `note` ticks and lights `lit_ms`; Turn starts `tail` ticks after the last starts."
 params = { from = "int", note = "int", lit_ms = "int", tail = "int" }
 body = [
     { action = "SetVar", payload = { name = "note_ticks", value = "${note}" }, guard = "VarCompare", guard_args = { var = "level", op = "gte", value = "${from}" } },
@@ -85,6 +91,11 @@ body = { trigger = "EventInputPressed", internal = true, guard = "And", guard_ar
     { macro = "Note" },
 ] }
 
+[macros.Score]
+doc = "Set the cursor this instance drives to full heat and the level as energy."
+params = {}
+body = { action = "EmitEvent", event = "EventCursorArmRequest", payload = { heat = 100, energy = 0 }, payload_vars = { energy = "level" } }
+
 [macros.Heading]
 doc = "Drift towards `rad` when variable heading is `idx`."
 params = { idx = "int", rad = "float" }
@@ -92,28 +103,47 @@ body = { action = "EmitEvent", event = "EventDriftStart", payload = { direction 
 
 # --- Simon ---
 
-# Buttons ascend in pitch left to right: the A major notes of the classic game
-[states.Ready]
+# Buttons ascend in pitch left to right: the A major notes of the classic game. The
+# legend plays through with keys closed, after the reset's board is drawn.
+[states.Intro]
 parent = "Root"
 on_enter = [
-    { macro = "Take" },
     { macro = "Button", key = "1", color = { r = 230, g = 200, b = 0 }, sound = "tone_cs4" },
     { macro = "Button", key = "2", color = { r = 0, g = 90, b = 255 }, sound = "tone_e4" },
     { macro = "Button", key = "3", color = { r = 220, g = 0, b = 0 }, sound = "tone_a4" },
     { macro = "Button", key = "4", color = { r = 0, g = 200, b = 0 }, sound = "tone_e5" },
-    { macro = "Show", each = { button = [1, 2, 3, 4], delay_ms = [0, 500, 1000, 1500] } },
-    { macro = "Say", message = "Simon: listen, then repeat the notes with 1-4 or clicks. Press a button to start" },
+    { macro = "Show", each = { button = [1, 2, 3, 4], delay_ms = [400, 900, 1400, 1900] } },
+    { macro = "Say", message = "Simon: listen, then repeat the notes" },
+]
+transitions = [
+    { trigger = "Tick", target = "Ready", guard = "StateTimeExceeds", guard_args = { ms = 2600 } },
+]
+
+[states.Ready]
+parent = "Root"
+on_enter = [
+    { macro = "Take" },
+    { macro = "Say", message = "Press 1-4 or click a button to start" },
 ]
 on_exit = [{ macro = "Free" }]
 transitions = [
     { trigger = "EventInputPressed", target = "NewGame" },
 ]
 
-[states.NewGame]
+# A snapshot that lands mid-game moves the level without replaying its Score, so the
+# game re-arms it as energy whenever the level it entered with changes
+[states.Game]
 parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCursorArmRequest", payload = { heat = 100, energy = 0 }, payload_vars = { energy = "level" }, reconcile = true },
+]
+
+[states.NewGame]
+parent = "Game"
 on_enter = [
     { action = "IncrementVar", payload = { name = "game" } },
     { action = "SetVar", payload = { name = "level", value = 1 } },
+    { macro = "Score" },
     { macro = "Flash", color = { r = 255, g = 255, b = 255 }, ms = 300 },
     { macro = "Cue", sound = "bell" },
     { macro = "Say", message = "New game" },
@@ -122,20 +152,22 @@ transitions = [
     { trigger = "Tick", target = "Listen", guard = "StateTimeExceeds", guard_args = { ms = 1500 } },
 ]
 
-# One note every note_ticks; the turn opens tail_ticks after the last note starts
+# One note every note_ticks, the first half a second after the message; Turn starts
+# tail_ticks after the last note starts
 [states.Listen]
-parent = "Root"
+parent = "Game"
 on_enter = [
     { macro = "Tier", each = { from = [1, 6, 14], note = [16, 13, 10], lit_ms = [550, 450, 350], tail = [12, 10, 8] } },
     { action = "SetVar", payload = { name = "i", value = 0 } },
     { action = "CopyVar", payload = { name = "beat", source_var = "note_ticks" } },
+    { action = "DecrementVar", payload = { name = "beat", delta = 10 } },
     { macro = "Say", message = "Level {}: listen" },
 ]
 on_update = [
     { action = "IncrementVar", payload = { name = "beat" } },
 ]
 transitions = [
-    { trigger = "Tick", target = "Repeat", guard = "And", guard_args = { guards = [
+    { trigger = "Tick", target = "Turn", guard = "And", guard_args = { guards = [
         { name = "VarCompareVar", args = { var_a = "i", op = "gte", var_b = "level" } },
         { name = "VarCompareVar", args = { var_a = "beat", op = "gte", var_b = "tail_ticks" } },
     ] } },
@@ -150,15 +182,27 @@ transitions = [
     ] },
 ]
 
+# A pause between the sequence and the answer, so the turn's cue never falls on the
+# sequence's beat; keys stay closed until Repeat
+[states.Turn]
+parent = "Game"
+on_enter = [
+    { macro = "Flash", color = { r = 80, g = 120, b = 255 }, ms = 150 },
+    { macro = "Say", message = "Level {}: your turn next" },
+]
+transitions = [
+    { trigger = "Tick", target = "Repeat", guard = "StateTimeExceeds", guard_args = { ms = 900 } },
+]
+
 # The buttons light and sound every press themselves; the machine only judges it
 [states.Repeat]
-parent = "Root"
+parent = "Game"
 on_enter = [
     { macro = "Take" },
     { action = "SetVar", payload = { name = "i", value = 0 } },
     { macro = "Note" },
     { macro = "Cue", sound = "turn" },
-    { macro = "Say", message = "Your turn, level {}" },
+    { macro = "Say", message = "Your turn: repeat the notes" },
 ]
 on_exit = [{ macro = "Free" }]
 transitions = [
@@ -169,7 +213,7 @@ transitions = [
 
 # Cues wait out the last pressed tone
 [states.Cleared]
-parent = "Root"
+parent = "Game"
 on_enter = [
     { macro = "Flash", each = { delay_ms = [400, 700, 1000] }, color = { r = 0, g = 255, b = 0 }, ms = 150 },
     { macro = "Cue", sound = "chime", delay_ms = 400 },
@@ -178,27 +222,43 @@ on_enter = [
 transitions = [
     { trigger = "Tick", target = "Listen", guard = "StateTimeExceeds", guard_args = { ms = 1600 }, actions = [
         { action = "IncrementVar", payload = { name = "level", max = 100 } },
+        { macro = "Score" },
     ] },
 ]
 
-# After the buzz, the button that was due lights and sounds
-[states.Wrong]
-parent = "Root"
+# A lost game grays the field through the buzz and the reveal of the note that was due
+[states.Lost]
+parent = "Game"
 on_enter = [
     { action = "EmitEvent", event = "EventGrayoutStart", reconcile = true },
-    { action = "EmitEvent", event = "EventParticleWave", payload = { behavior = 1 } },
-    { macro = "Cue", sound = "buzz" },
-    { macro = "Say", message = "Wrong note: game over at level {}" },
-    { action = "EmitEvent", event = "EventButtonLightRequest", payload = { button = 0, duration_ms = 800 }, payload_vars = { button = "color" }, delay_ms = 1000 },
 ]
 on_exit = [
     { action = "EmitEvent", event = "EventGrayoutEnd", reconcile = true },
 ]
+
+[states.Wrong]
+parent = "Lost"
+on_enter = [
+    { action = "EmitEvent", event = "EventParticleWave", payload = { behavior = 1 } },
+    { macro = "Cue", sound = "buzz" },
+    { macro = "Say", message = "Wrong note: game over at level {}" },
+]
 transitions = [
-    { trigger = "Tick", target = "NewGame", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
+    { trigger = "Tick", target = "Reveal", guard = "StateTimeExceeds", guard_args = { ms = 1000 } },
+]
+
+[states.Reveal]
+parent = "Lost"
+on_enter = [
+    { action = "EmitEvent", event = "EventButtonLightRequest", payload = { button = 0, duration_ms = 800 }, payload_vars = { button = "color" } },
+    { macro = "Say", message = "The note was {}", var = "color" },
+]
+transitions = [
+    { trigger = "Tick", target = "NewGame", guard = "StateTimeExceeds", guard_args = { ms = 1200 } },
 ]
 
 # --- Player: a cursor below the buttons, and a new game on any defeat ---
+# A cursor arriving mid-game reads the level at once rather than at the next one
 
 [states.PlayerBoot]
 parent = "Root"
@@ -207,7 +267,7 @@ on_enter = [
     { action = "DivideVar", payload = { name = "cursor_x", delta = 2 } },
     { action = "ConfigToVar", payload = { field = "map_height", name = "cursor_y" } },
     { action = "DecrementVar", payload = { name = "cursor_y", delta = 3 } },
-    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { heat = 10, energy = 100 }, payload_vars = { x = "cursor_x", y = "cursor_y" } },
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { heat = 100, energy = 1 }, payload_vars = { x = "cursor_x", y = "cursor_y" } },
 ]
 transitions = [
     { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },
@@ -223,6 +283,7 @@ transitions = [
 [states.PlayerActive]
 parent = "Root"
 transitions = [
+    { trigger = "EventCursorSpawned", internal = true, guard = "VarCompare", guard_args = { var = "level", op = "gte", value = 1 }, actions = [{ macro = "Score" }] },
     { trigger = "Tick", target = "PlayerReset", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
 ]
 

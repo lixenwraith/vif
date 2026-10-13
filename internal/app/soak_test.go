@@ -287,9 +287,18 @@ func TestSimonTakesBackWhatItShowed(t *testing.T) {
 	key := func(k rune) *input.Intent {
 		return a.inputMachine.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: k})
 	}
+	// Energy reads the level and heat stays full
+	score := func(level int64) {
+		t.Helper()
+		cursor := w.Resources.Player.Entity
+		energy, _ := w.Components.Energy.GetComponent(cursor)
+		heat, _ := w.Components.Heat.GetComponent(cursor)
+		if energy.Current != level || heat.Current != parameter.HeatMax {
+			t.Fatalf("energy %d heat %d at level %d", energy.Current, heat.Current, level)
+		}
+	}
 
-	await("Ready")
-	a.Tick(40) // the legend plays each button's note once
+	await("Ready") // after the legend, which plays with keys closed
 	press(key('1'), 1)
 	await("Listen")
 	shown = nil
@@ -326,6 +335,7 @@ func TestSimonTakesBackWhatItShowed(t *testing.T) {
 	if len(shown) != 2 {
 		t.Fatalf("level 2 showed %v", shown)
 	}
+	score(2)
 	for _, b := range shown {
 		bot, err := input.IntentFor(input.PressAction, 1, strconv.Itoa(b))
 		if err != nil {
@@ -340,6 +350,7 @@ func TestSimonTakesBackWhatItShowed(t *testing.T) {
 	press(key(rune('1'+shown[0]%4)), 1) // the next button over is the wrong note
 	await("Wrong")
 	await("NewGame")
+	score(1)
 }
 
 // TestExternalConfigsOwnTheirTowers covers the external producer side of cursor

@@ -16,14 +16,12 @@ type SplashRenderer struct {
 	gameCtx *engine.GameContext
 }
 
-// NewSplashRenderer creates a new splash renderer
 func NewSplashRenderer(gameCtx *engine.GameContext) *SplashRenderer {
 	return &SplashRenderer{
 		gameCtx: gameCtx,
 	}
 }
 
-// Render draws all splash effects to background channel
 func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	splashes := r.gameCtx.World.Components.Splash
 	if splashes.CountEntities() == 0 {
@@ -38,7 +36,6 @@ func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			return true
 		}
 
-		// Resolve anchor position (map coords)
 		anchorX, anchorY := r.resolveAnchor(splash)
 
 		for i := range length {
@@ -49,7 +46,8 @@ func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	})
 }
 
-// resolveAnchor determines the screen position for a splash
+// resolveAnchor returns the splash's origin in map coordinates, following its anchor
+// entity while that entity has a position
 func (r *SplashRenderer) resolveAnchor(splashComp *component.SplashComponent) (int, int) {
 	baseX, baseY := splashComp.AnchorX, splashComp.AnchorY
 
@@ -66,31 +64,57 @@ func (r *SplashRenderer) resolveAnchor(splashComp *component.SplashComponent) (i
 	return baseX, baseY
 }
 
-// renderChar renders a single splash character bitmap
-func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, c color.RGB) {
-	var bitmap [12]uint16
-	// Bounds check and fallback for missing glyphs
+// splashBitmap is one glyph of the splash font, a row per element
+type splashBitmap = [parameter.SplashCharHeight]uint16
+
+// splashGlyph returns char's glyph, and the fallback box with false where the font
+// has none
+func splashGlyph(char rune) (splashBitmap, bool) {
 	if char < 32 || char > 126 {
-		bitmap = asset.SplashFontFallback
-	} else {
-		bitmap = asset.SplashFont[char-32]
+		return asset.SplashFontFallback, false
 	}
+	return asset.SplashFont[char-32], true
+}
+
+// splashInk reports whether a glyph inks the cell at col, row; rows are MSB-first,
+// bit 15 being column 0
+func splashInk(bitmap splashBitmap, col, row int) bool {
+	return row >= 0 && row < parameter.SplashCharHeight && col >= 0 && col < parameter.SplashCharWidth &&
+		bitmap[row]&(1<<(15-col)) != 0
+}
+
+// splashInkBounds returns the rectangle a glyph inks within its cell, zero-sized
+// for a blank glyph
+func splashInkBounds(bitmap splashBitmap) (left, top, width, height int) {
+	right, bottom := -1, -1
+	left, top = parameter.SplashCharWidth, parameter.SplashCharHeight
+	for row := range parameter.SplashCharHeight {
+		for col := range parameter.SplashCharWidth {
+			if splashInk(bitmap, col, row) {
+				left, right = min(left, col), max(right, col)
+				top, bottom = min(top, row), max(bottom, row)
+			}
+		}
+	}
+	if right < 0 {
+		return 0, 0, 0, 0
+	}
+	return left, top, right - left + 1, bottom - top + 1
+}
+
+func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, c color.RGB) {
+	bitmap, _ := splashGlyph(char)
 
 	for row := range parameter.SplashCharHeight {
-		// Map coord for this row
 		mapY := gameY + row
 
-		rowBits := bitmap[row]
 		for col := range parameter.SplashCharWidth {
-			// MSB-first: bit 15 = column 0
-			if rowBits&(1<<(15-col)) == 0 {
+			if !splashInk(bitmap, col, row) {
 				continue
 			}
 
-			// Map coord for this column
 			mapX := gameX + col
 
-			// Transform to screen with visibility check
 			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 			if !visible {
 				continue
