@@ -47,7 +47,8 @@ const (
 	PriorityFadeout
 	PriorityUI
 	PriorityEffect
-	PriorityMarker       // Before splash, after game logic
+	PriorityMarker // Before splash, after game logic
+	PriorityButton
 	PrioritySplash       // After game logic, before rendering
 	PriorityMotionMarker // After game logic and splash, before rendering
 	PriorityDeath        // After game logic

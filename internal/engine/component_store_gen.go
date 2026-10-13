@@ -60,6 +60,7 @@ const (
 	FadeoutBit
 	SplashBit
 	MarkerBit
+	ButtonBit
 	DeathBit
 	TimerBit
 	PositionBit // Special index designated for spatial grid presence
@@ -118,6 +119,7 @@ type Component struct {
 	Fadeout      *Store[component.FadeoutComponent]
 	Splash       *Store[component.SplashComponent]
 	Marker       *Store[component.MarkerComponent]
+	Button       *Store[component.ButtonComponent]
 	Death        *Store[component.DeathComponent]
 	Timer        *Store[component.TimerComponent]
 }
@@ -175,6 +177,7 @@ func initComponents(w *World) {
 	w.Components.Fadeout = NewStore[component.FadeoutComponent](w, FadeoutBit)
 	w.Components.Splash = NewStore[component.SplashComponent](w, SplashBit)
 	w.Components.Marker = NewStore[component.MarkerComponent](w, MarkerBit)
+	w.Components.Button = NewStore[component.ButtonComponent](w, ButtonBit)
 	w.Components.Death = NewStore[component.DeathComponent](w, DeathBit)
 	w.Components.Timer = NewStore[component.TimerComponent](w, TimerBit)
 	w.Positions = NewPosition(w, PositionBit)
@@ -346,6 +349,9 @@ func (w *World) removeEntity(e core.Entity) {
 	}
 	if mask&MarkerBit != 0 {
 		w.Components.Marker.RemoveEntity(e, true)
+	}
+	if mask&ButtonBit != 0 {
+		w.Components.Button.RemoveEntity(e, true)
 	}
 	if mask&DeathBit != 0 {
 		w.Components.Death.RemoveEntity(e, true)
@@ -525,6 +531,9 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	if union&MarkerBit != 0 {
 		w.Components.Marker.RemoveBatch(entities, true)
 	}
+	if union&ButtonBit != 0 {
+		w.Components.Button.RemoveBatch(entities, true)
+	}
 	if union&DeathBit != 0 {
 		w.Components.Death.RemoveBatch(entities, true)
 	}
@@ -593,6 +602,7 @@ func (w *World) wipeAll() {
 	w.Components.Fadeout.ClearAllComponents()
 	w.Components.Splash.ClearAllComponents()
 	w.Components.Marker.ClearAllComponents()
+	w.Components.Button.ClearAllComponents()
 	w.Components.Death.ClearAllComponents()
 	w.Components.Timer.ClearAllComponents()
 	w.Positions.ClearAllComponents()
@@ -653,6 +663,7 @@ type componentCopies struct {
 	Fadeout      storeCopy[component.FadeoutComponent]
 	Splash       storeCopy[component.SplashComponent]
 	Marker       storeCopy[component.MarkerComponent]
+	Button       storeCopy[component.ButtonComponent]
 	Death        storeCopy[component.DeathComponent]
 	Timer        storeCopy[component.TimerComponent]
 }
@@ -710,6 +721,7 @@ func (w *World) copyComponentsOut(reuse *componentCopies) (c componentCopies) {
 	c.Fadeout = w.Components.Fadeout.copyOut(reuse.Fadeout)
 	c.Splash = w.Components.Splash.copyOut(reuse.Splash)
 	c.Marker = w.Components.Marker.copyOut(reuse.Marker)
+	c.Button = w.Components.Button.copyOut(reuse.Button)
 	c.Death = w.Components.Death.copyOut(reuse.Death)
 	c.Timer = w.Components.Timer.copyOut(reuse.Timer)
 	return c
@@ -768,6 +780,7 @@ func (w *World) copyComponentsIn(c componentCopies) {
 	w.Components.Fadeout.copyIn(c.Fadeout)
 	w.Components.Splash.copyIn(c.Splash)
 	w.Components.Marker.copyIn(c.Marker)
+	w.Components.Button.copyIn(c.Button)
 	w.Components.Death.copyIn(c.Death)
 	w.Components.Timer.copyIn(c.Timer)
 }

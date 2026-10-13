@@ -212,3 +212,124 @@ gain = 0.45
 source = { kind = "osc", wave = "sine", freq = 990, vibrato = { rate = 2.5, depth = 0.06, phase = 0.25 } }
 chain = [{ kind = "am", rate = 2.5, depth = 0.55, phase = 0.5 }]
 
+
+
+# Simon tones: one take at concert pitch. A zero pitch_walk means the 10% default,
+# which leaves a lone take 5% flat, so a negligible walk pins the pitch.
+[[sound]]
+name = "tone_cs4"
+duration = 0.42
+fixed_length = true
+variants = 1
+pitch_walk = 0.0001
+norm = 0.85
+chain = [{ kind = "ar", attack = 0.008, release = 0.14 }]
+[[sound.layer]]
+source = { kind = "osc", wave = "sine", freq = 277.18 }
+[[sound.layer]]
+gain = 0.35
+source = { kind = "osc", wave = "square", freq = 277.18 }
+chain = [{ kind = "lp", freq = 1400, q = 0.707 }]
+
+[[sound]]
+name = "tone_e4"
+duration = 0.42
+fixed_length = true
+variants = 1
+pitch_walk = 0.0001
+norm = 0.85
+chain = [{ kind = "ar", attack = 0.008, release = 0.14 }]
+[[sound.layer]]
+source = { kind = "osc", wave = "sine", freq = 329.63 }
+[[sound.layer]]
+gain = 0.35
+source = { kind = "osc", wave = "square", freq = 329.63 }
+chain = [{ kind = "lp", freq = 1400, q = 0.707 }]
+
+[[sound]]
+name = "tone_a4"
+duration = 0.42
+fixed_length = true
+variants = 1
+pitch_walk = 0.0001
+norm = 0.85
+chain = [{ kind = "ar", attack = 0.008, release = 0.14 }]
+[[sound.layer]]
+source = { kind = "osc", wave = "sine", freq = 440 }
+[[sound.layer]]
+gain = 0.35
+source = { kind = "osc", wave = "square", freq = 440 }
+chain = [{ kind = "lp", freq = 1400, q = 0.707 }]
+
+[[sound]]
+name = "tone_e5"
+duration = 0.42
+fixed_length = true
+variants = 1
+pitch_walk = 0.0001
+norm = 0.85
+chain = [{ kind = "ar", attack = 0.008, release = 0.14 }]
+[[sound.layer]]
+source = { kind = "osc", wave = "sine", freq = 659.26 }
+[[sound.layer]]
+gain = 0.35
+source = { kind = "osc", wave = "square", freq = 659.26 }
+chain = [{ kind = "lp", freq = 1400, q = 0.707 }]
+
+# Level cleared: the tones' A major triad rising to the octave.
+[[sound]]
+name = "chime"
+fixed_length = true
+variants = 1
+pitch_walk = 0.0001
+norm = 0.8
+[[sound.layer]]
+length = 0.3
+source = { kind = "osc", wave = "sine", freq = 440 }
+chain = [{ kind = "decay", attack = 0.004, tau = 0.12 }]
+[[sound.layer]]
+offset = 0.09
+length = 0.3
+source = { kind = "osc", wave = "sine", freq = 554.37 }
+chain = [{ kind = "decay", attack = 0.004, tau = 0.12 }]
+[[sound.layer]]
+offset = 0.18
+length = 0.3
+source = { kind = "osc", wave = "sine", freq = 659.26 }
+chain = [{ kind = "decay", attack = 0.004, tau = 0.12 }]
+[[sound.layer]]
+offset = 0.27
+length = 0.45
+source = { kind = "osc", wave = "sine", freq = 880 }
+chain = [{ kind = "decay", attack = 0.004, tau = 0.18 }]
+
+# Wrong note: two detuned low saws, the beating is the razz.
+[[sound]]
+name = "buzz"
+duration = 1.0
+fixed_length = true
+norm = 0.8
+chain = [
+  { kind = "lp", freq = 700, q = 0.9 },
+  { kind = "ar", attack = 0.01, release = 0.3 }
+]
+[[sound.layer]]
+source = { kind = "osc", wave = "saw", freq = 98 }
+[[sound.layer]]
+gain = 0.8
+source = { kind = "osc", wave = "saw", freq = 103.8 }
+
+# Your turn: a short rising blip pair, above every tone.
+[[sound]]
+name = "turn"
+fixed_length = true
+norm = 0.7
+[[sound.layer]]
+length = 0.05
+source = { kind = "osc", wave = "sine", freq = 1318.51 }
+chain = [{ kind = "ar", attack = 0.002, release = 0.03 }]
+[[sound.layer]]
+offset = 0.06
+length = 0.06
+source = { kind = "osc", wave = "sine", freq = 1760 }
+chain = [{ kind = "ar", attack = 0.002, release = 0.04 }]

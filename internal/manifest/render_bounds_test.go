@@ -51,6 +51,12 @@ func TestNoRegisteredRendererDrawsOutsideTheMap(t *testing.T) {
 		Shape: component.MarkerShapeRectangle, Color: color.RGB{G: 200}, Intensity: 1.0,
 	})
 
+	// A row of buttons too long for the map hangs off both sides of it
+	for slot := 1; slot <= 9; slot++ {
+		button := world.CreateEntity(core.DomainShared)
+		world.Components.Button.SetComponent(button, component.ButtonComponent{Slot: slot, Key: '0' + rune(slot), Color: color.RGB{B: 200}})
+	}
+
 	kraken := world.CreateEntity(core.DomainShared)
 	world.Components.Kraken.SetComponent(kraken, component.KrakenComponent{State: component.KrakenAttack, AttackT: 1})
 	motion := component.KineticComponent{}

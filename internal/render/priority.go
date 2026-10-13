@@ -58,6 +58,7 @@ const (
 	PrioritySpirit
 
 	// === Overlays ===
+	PriorityButton // Opaque, so every map layer under it passes behind
 	PrioritySplash
 	PriorityMarker
 

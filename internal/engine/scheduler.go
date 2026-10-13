@@ -979,9 +979,11 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 // returns the placement when it is pointer travel. A key is the event type, with a
 // motion's direction and a typed character, so h then l are two keys and ll one.
 // Read before the handlers, which may release a pooled payload and move the cursor.
-// A screen resize carries OriginInput so a replay reflows, not because the player acted.
+// A screen resize carries OriginInput so a replay reflows, not because the player acted,
+// and an input's echo so a replay presents it; the input's crossing is the action.
 func (s *Scheduler) apmAction(ev event.GameEvent) (key uint64, pointer *event.CursorMoveRequestPayload) {
-	if ev.Type == event.EventScreenResize {
+	switch ev.Type {
+	case event.EventScreenResize, event.EventInputPressEcho, event.EventInputReleaseEcho:
 		return 0, nil
 	}
 	key = uint64(ev.Type) << 32

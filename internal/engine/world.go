@@ -834,6 +834,20 @@ func (w *World) PushCursorMove(e core.Entity, x, y int) {
 	w.PushCrossing(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: e, X: x, Y: y})
 }
 
+// PushInputPress crosses a press of a captured input with its echo, which lights and
+// sounds it on this instance at once; the crossing does so on every other instance a
+// playout lead later (D-18). Caller MUST hold updateMutex.
+func (w *World) PushInputPress(p *event.InputPayload) {
+	w.PushLocal(event.EventInputPressEcho, p)
+	w.PushCrossing(event.EventInputPressed, p)
+}
+
+// PushInputRelease is PushInputPress for the release of a held press
+func (w *World) PushInputRelease(p *event.InputPayload) {
+	w.PushLocal(event.EventInputReleaseEcho, p)
+	w.PushCrossing(event.EventInputReleased, p)
+}
+
 // PushPointerMove is PushCursorMove for a cell the pointer named, which the camera
 // follows with its pointer margins (see CameraPointerMarginX). The view moves at
 // once; the placement waits for the next tick, retargeted by every later report,

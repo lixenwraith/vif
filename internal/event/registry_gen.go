@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 182
+const EventTypeCount = 187
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -87,7 +87,10 @@ func InitRegistry() {
 	RegisterType("EventCharacterTyped", EventCharacterTyped, &CharacterTypedPayload{})
 	RegisterType("EventDeleteRequest", EventDeleteRequest, &DeleteRequestPayload{})
 	RegisterType("EventKeyCaptureRequest", EventKeyCaptureRequest, &KeyCapturePayload{})
-	RegisterType("EventKeyPressed", EventKeyPressed, &KeyPressedPayload{})
+	RegisterType("EventInputPressed", EventInputPressed, &InputPayload{})
+	RegisterType("EventInputReleased", EventInputReleased, &InputPayload{})
+	RegisterType("EventInputPressEcho", EventInputPressEcho, &InputPayload{})
+	RegisterType("EventInputReleaseEcho", EventInputReleaseEcho, &InputPayload{})
 	RegisterType("EventPingGridRequest", EventPingGridRequest, &PingGridRequestPayload{})
 	RegisterType("EventMaterializeRequest", EventMaterializeRequest, &MaterializeRequestPayload{})
 	RegisterType("EventMaterializeComplete", EventMaterializeComplete, &MaterializeCompletedPayload{})
@@ -156,6 +159,8 @@ func InitRegistry() {
 	RegisterType("EventMissileSpawnRequest", EventMissileSpawnRequest, &MissileSpawnRequestPayload{})
 	RegisterType("EventBulletSpawnRequest", EventBulletSpawnRequest, &BulletSpawnRequestPayload{})
 	RegisterType("EventMarkerSpawnRequest", EventMarkerSpawnRequest, &MarkerSpawnRequestPayload{})
+	RegisterType("EventButtonSpawnRequest", EventButtonSpawnRequest, &ButtonSpawnRequestPayload{})
+	RegisterType("EventButtonLightRequest", EventButtonLightRequest, &ButtonLightRequestPayload{})
 	RegisterType("EventMotionMarkerShowColored", EventMotionMarkerShowColored, &MotionMarkerShowPayload{})
 	RegisterType("EventMotionMarkerClearColored", EventMotionMarkerClearColored, nil)
 	RegisterType("EventModeChanged", EventModeChanged, &ModeChangedPayload{})
@@ -275,7 +280,10 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventCharacterTyped:                  ClassLocal,
 	EventDeleteRequest:                   ClassLocal,
 	EventKeyCaptureRequest:               ClassLocal,
-	EventKeyPressed:                      ClassBus,
+	EventInputPressed:                    ClassBus,
+	EventInputReleased:                   ClassBus,
+	EventInputPressEcho:                  ClassLocal,
+	EventInputReleaseEcho:                ClassLocal,
 	EventPingGridRequest:                 ClassLocal,
 	EventMaterializeRequest:              ClassStamped,
 	EventMaterializeComplete:             ClassStamped,
@@ -344,6 +352,8 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventMissileSpawnRequest:             ClassLocal,
 	EventBulletSpawnRequest:              ClassLocal,
 	EventMarkerSpawnRequest:              ClassShared,
+	EventButtonSpawnRequest:              ClassShared,
+	EventButtonLightRequest:              ClassShared,
 	EventMotionMarkerShowColored:         ClassLocal,
 	EventMotionMarkerClearColored:        ClassLocal,
 	EventModeChanged:                     ClassLocal,

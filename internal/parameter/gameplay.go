@@ -110,3 +110,13 @@ const (
 	// DefaultMouseFreeMode enables cursor tracking of bare mouse motion at startup
 	DefaultMouseFreeMode = true
 )
+
+// Buttons: one row a scenario lays across the middle of the map
+const (
+	ButtonGap       = 2  // columns between neighbours and at each end of the row
+	ButtonMaxWidth  = 16 // a wide map leaves the row centred rather than stretched
+	ButtonMaxHeight = 7
+
+	// ButtonPressLight lights a pressed button; a pointer press holds it lit until release
+	ButtonPressLight = 300 * time.Millisecond
+)

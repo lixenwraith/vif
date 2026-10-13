@@ -52,4 +52,5 @@ var componentDomains = map[uint64]componentRule{
 	FlashBit:        {"Flash", core.DomainPlayer},
 	FadeoutBit:      {"Fadeout", core.DomainPlayer},
 	SplashBit:       {"Splash", core.DomainPlayer},
+	ButtonBit:       {"Button", core.DomainShared},
 }

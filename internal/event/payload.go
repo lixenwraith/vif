@@ -34,9 +34,11 @@ type ScreenResizePayload struct {
 
 // --- Audio ---
 
-// SoundRequestPayload contains the sound type to play
+// SoundRequestPayload names the sound to play: Go emitters pass the resolved ID,
+// configuration passes the name, which AudioSystem resolves when ID is zero
 type SoundRequestPayload struct {
-	ID model.SoundID `toml:"sound_id"`
+	ID   model.SoundID `toml:"sound_id"`
+	Name string        `toml:"sound"`
 }
 
 type SoundMuteToggleMode uint8
@@ -473,10 +475,21 @@ type KeyCapturePayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
-// KeyPressedPayload names the cursor that pressed a captured key and the key
-type KeyPressedPayload struct {
+// InputSource says what made an input: a typed key has no release, a pointer press
+// on a button is released when the pointer lets go
+type InputSource uint8
+
+const (
+	InputKey InputSource = iota
+	InputPointer
+)
+
+// InputPayload names the cursor that pressed or released a captured key, the key, and
+// whether it was typed or clicked on the key's button
+type InputPayload struct {
 	Entity core.Entity `toml:"entity"`
 	Key    string      `toml:"key"`
+	Source InputSource `toml:"source"`
 }
 
 // DeleteRangeType defines the scope of deletion
@@ -611,9 +624,11 @@ type ParticleSpawnPayload struct {
 	SkipStartCell bool                       `toml:"skip_start_cell"` // True: particle skips interaction at spawn position
 }
 
-// ParticleWavePayload selects the behavior of a full-width particle wave.
+// ParticleWavePayload selects the behavior of a particle wave across the map, or across
+// one button's columns when Button names its place in the row
 type ParticleWavePayload struct {
 	Behavior component.ParticleBehavior `toml:"behavior"`
+	Button   int                        `toml:"button"`
 }
 
 // --- Death ---
@@ -1035,6 +1050,22 @@ type MarkerSpawnRequestPayload struct {
 	Color     color.RGB             `toml:"color"`
 	Shape     component.MarkerShape `toml:"shape"`
 	FadeMode  uint8                 `toml:"fade_mode"` // 0=none, 1=out, 2=in
+}
+
+// --- Button ---
+
+// ButtonSpawnRequestPayload names a button's key, one printable character, its colour
+// and the sound bank name it plays
+type ButtonSpawnRequestPayload struct {
+	Key   string    `toml:"key"`
+	Color color.RGB `toml:"color"`
+	Sound string    `toml:"sound"`
+}
+
+// ButtonLightRequestPayload names a button by its 1-based place in the row
+type ButtonLightRequestPayload struct {
+	Button     int   `toml:"button"`
+	DurationMs int64 `toml:"duration_ms"`
 }
 
 // --- Motion Marker ---

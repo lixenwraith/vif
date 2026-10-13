@@ -61,6 +61,10 @@ type Router struct {
 	mouseLeftHeld  bool
 	mouseRightHeld bool
 
+	// heldButton is the key whose button a left press holds: the release goes to the
+	// button pressed, wherever the pointer lets go
+	heldButton rune
+
 	// Fire anchors, shared by auto-fire and held-button preventing stacked requests
 	lastFireMain time.Time
 	lastFireSpec time.Time
@@ -164,6 +168,7 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		switch intent.Type {
 		case input.IntentMouseLeftDown, input.IntentMouseLeftUp:
 			r.mouseLeftHeld = false
+			r.releaseButton()
 		case input.IntentMouseRightDown, input.IntentMouseRightUp:
 			r.mouseRightHeld = false
 		}
@@ -572,11 +577,39 @@ func (r *Router) handleFireSpecial() bool {
 
 // handleKeyPress crosses a captured key: the scenario reading it is shared
 func (r *Router) handleKeyPress(intent *input.Intent) bool {
-	r.ctx.PushCrossing(event.EventKeyPressed, &event.KeyPressedPayload{
-		Entity: r.ctx.World.Resources.Player.Entity,
-		Key:    string(intent.Char),
-	})
+	r.pressInput(intent, intent.Char, event.InputKey)
 	return true
+}
+
+// pressInput crosses a press of a captured key, typed or clicked on its button. The
+// capture and the modes the parser captures in gate every source, bots and scripts
+// included. A macro replays none: a recorded round is the wrong answer to the next.
+func (r *Router) pressInput(intent *input.Intent, key rune, source event.InputSource) {
+	playing := r.ctx.IsNormalMode() || r.ctx.IsVisualMode() || r.ctx.IsInsertMode()
+	if intent.MacroPlayback || !playing || r.inputSuspended() || !r.ctx.KeyCapture.Has(key) {
+		return
+	}
+	r.ctx.World.PushInputPress(&event.InputPayload{
+		Entity: r.ctx.World.Resources.Player.Entity,
+		Key:    string(key),
+		Source: source,
+	})
+	if source == event.InputPointer {
+		r.heldButton = key
+	}
+}
+
+// releaseButton crosses the release of the button a left press holds
+func (r *Router) releaseButton() {
+	if r.heldButton == 0 {
+		return
+	}
+	r.ctx.World.PushInputRelease(&event.InputPayload{
+		Entity: r.ctx.World.Resources.Player.Entity,
+		Key:    string(r.heldButton),
+		Source: event.InputPointer,
+	})
+	r.heldButton = 0
 }
 
 // --- Mode Switch Handler ---
@@ -963,6 +996,15 @@ func (r *Router) closeOverlay() bool {
 // --- Mouse ---
 
 func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
+	r.releaseButton()
+	// A press on a button is its key's input whether or not that key is taken now, so
+	// it never moves the cursor onto the button or fires
+	if x, y, ok := r.pointerCell(intent); ok {
+		if key := buttonAt(r.ctx, x, y); key != 0 {
+			r.pressInput(intent, key, event.InputPointer)
+			return true
+		}
+	}
 	r.moveMouseCursor(intent)
 	r.ctx.PushLocal(event.EventWeaponFireRequest, &event.WeaponFireRequestPayload{
 		Entity: r.ctx.World.Resources.Player.Entity,
@@ -974,6 +1016,7 @@ func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 
 func (r *Router) handleMouseLeftUp() bool {
 	r.mouseLeftHeld = false
+	r.releaseButton()
 	return true
 }
 
@@ -1035,6 +1078,11 @@ func (r *Router) syncMouseMode() {
 	if r.mouseMode.applied && r.mouseMode.enabled == enabled && r.mouseMode.motion == motion {
 		return
 	}
+	// Reporting off, no release can follow a press held now
+	if !enabled {
+		r.mouseLeftHeld, r.mouseRightHeld = false, false
+		r.releaseButton()
+	}
 	r.mouseMode = mouseModeState{applied: true, enabled: enabled, motion: motion}
 	r.applyMouseMode(enabled, motion)
 }
@@ -1087,14 +1135,19 @@ func (r *Router) fireDue(now time.Time, last *time.Time, auto, held bool) (event
 // A map cell counts only where the viewport shows it, which is all a mouse reaches;
 // a terminal cell goes through ViewportToMap, which undoes the centring of a map
 // smaller than the viewport so the cell under the pointer is the one jumped to.
-func (r *Router) moveMouseCursor(intent *input.Intent) bool {
+// pointerCell is the shown map cell a pointer intent names: a terminal cell, or a map
+// cell from a bot or script
+func (r *Router) pointerCell(intent *input.Intent) (x, y int, ok bool) {
 	config := r.ctx.World.Resources.Config
-	gameX, gameY, ok := intent.X, intent.Y, false
 	if intent.MapCell {
-		_, _, ok = config.MapToViewport(gameX, gameY)
-	} else {
-		gameX, gameY, ok = config.ViewportToMap(intent.X-r.ctx.GameXOffset, intent.Y-r.ctx.GameYOffset)
+		_, _, ok = config.MapToViewport(intent.X, intent.Y)
+		return intent.X, intent.Y, ok
 	}
+	return config.ViewportToMap(intent.X-r.ctx.GameXOffset, intent.Y-r.ctx.GameYOffset)
+}
+
+func (r *Router) moveMouseCursor(intent *input.Intent) bool {
+	gameX, gameY, ok := r.pointerCell(intent)
 	if !ok {
 		return false
 	}

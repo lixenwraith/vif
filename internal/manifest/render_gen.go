@@ -44,6 +44,7 @@ func BuildRenderers(ctx *engine.GameContext) []render.Registration {
 		{Name: "fadeout", Renderer: renderer.NewFadeoutRenderer(ctx), Priority: render.PriorityFadeout},
 		{Name: "explosion", Renderer: renderer.NewExplosionRenderer(ctx), Priority: render.PriorityExplosion},
 		{Name: "spirit", Renderer: renderer.NewSpiritRenderer(ctx), Priority: render.PrioritySpirit},
+		{Name: "button", Renderer: renderer.NewButtonRenderer(ctx), Priority: render.PriorityButton},
 		{Name: "splash", Renderer: renderer.NewSplashRenderer(ctx), Priority: render.PrioritySplash},
 		{Name: "marker", Renderer: renderer.NewMarkerRenderer(ctx), Priority: render.PriorityMarker},
 		{Name: "grayout", Renderer: renderer.NewGrayoutRenderer(ctx), Priority: render.PriorityGrayout},

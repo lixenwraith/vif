@@ -75,6 +75,7 @@ var SharedWorldStoreNames = []string{
 	"fadeout",
 	"splash",
 	"marker",
+	"button",
 	"death",
 	"timer",
 }
@@ -288,6 +289,10 @@ func newStoreEncoders() []storeEncoder {
 		&rowEncoder[component.MarkerComponent]{
 			read:  func(s *SharedWorldState) []StoreEntry[component.MarkerComponent] { return s.Marker },
 			equal: equalMarker,
+		},
+		&rowEncoder[component.ButtonComponent]{
+			read:  func(s *SharedWorldState) []StoreEntry[component.ButtonComponent] { return s.Button },
+			equal: equalButton,
 		},
 		&rowEncoder[component.DeathComponent]{
 			read:  func(s *SharedWorldState) []StoreEntry[component.DeathComponent] { return s.Death },
@@ -665,13 +670,20 @@ func SharedWorldApplyStoreRows(s *SharedWorldState, i int, owns func(core.Entity
 		s.Marker = out
 		return nil
 	case 51:
+		out, err := applyStoreRows(s.Button, owns, rows)
+		if err != nil {
+			return err
+		}
+		s.Button = out
+		return nil
+	case 52:
 		out, err := applyStoreRows(s.Death, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Death = out
 		return nil
-	case 52:
+	case 53:
 		out, err := applyStoreRows(s.Timer, owns, rows)
 		if err != nil {
 			return err
