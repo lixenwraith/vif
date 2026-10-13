@@ -793,8 +793,10 @@ body's last settle: the session layer raises its records at the epoch flush,
 after the closing settle. Nor is one pushed by a handler: a pending pointer
 placement crosses before the next tick or ahead of the next journaled push, not
 from a crossing some handler raises, which a replay would dispatch ahead of
-that handler's earlier events. The reset event that opens run `R+1` is itself
-recorded in run `R`, so replay follows that boundary rather than fabricating it.
+that handler's earlier events. A `:new` or crossed reset is recorded in run `R`,
+so replay follows that boundary rather than fabricating it; one the scenario
+requests is derived, so replay plays run `R` on until it opens `R+1`. Either
+ends the tick it lands in, so run `R+1` counts from tick 1 alike.
 
 ### Record and anchor shapes
 
