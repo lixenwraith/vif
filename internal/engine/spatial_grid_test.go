@@ -201,3 +201,69 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 		}
 	})
 }
+
+// TestShiftMovesARigidGroupThroughFullCells: two full player halves side by side
+// shift without clipping, where moving one entity at a time would overfill a cell;
+// a cell that still refuses the mover is reported, not hidden.
+func TestShiftMovesARigidGroupThroughFullCells(t *testing.T) {
+	w := NewWorld()
+	NewGameContextWithClock(w, 40, 24, NewManualClock())
+
+	var group []core.Entity
+	for x := 3; x <= 4; x++ {
+		for range parameter.ReservedPlayerPerCell {
+			e := w.CreateEntity(core.DomainPlayer)
+			w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: 3})
+			group = append(group, e)
+		}
+	}
+	if unplaced := w.Positions.Shift(group, 1, 0, nil); len(unplaced) != 0 {
+		t.Fatalf("rigid shift refused %d entities", len(unplaced))
+	}
+	full := parameter.ReservedPlayerPerCell
+	for _, c := range []struct{ x, want int }{{3, 0}, {4, full}, {5, full}} {
+		if got := len(w.Positions.grid.EntitiesAt(c.x, 3, ScopePlayer)); got != c.want {
+			t.Fatalf("cell %d holds %d player entities, want %d", c.x, got, c.want)
+		}
+	}
+
+	lone := w.CreateEntity(core.DomainPlayer)
+	w.Positions.SetPosition(lone, component.PositionComponent{X: 6, Y: 3})
+	unplaced := w.Positions.Shift([]core.Entity{lone}, -1, 0, nil)
+	if len(unplaced) != 1 || unplaced[0] != lone {
+		t.Fatalf("refused mover reported as %v, want [%v]", unplaced, lone)
+	}
+	if pos, _ := w.Positions.GetPosition(lone); pos.X != 5 {
+		t.Fatalf("refused mover at x=%d, want its destination 5", pos.X)
+	}
+}
+
+// TestTopGlyphIsSharedThenNearestThenLowest: the glyph a cell shows and types is a
+// shared one first, then the highest level, then the lowest entity.
+func TestTopGlyphIsSharedThenNearestThenLowest(t *testing.T) {
+	w := NewWorld()
+	NewGameContextWithClock(w, 40, 24, NewManualClock())
+	at := component.PositionComponent{X: 7, Y: 2}
+	glyph := func(d core.Domain, level component.GlyphLevel) core.Entity {
+		e := w.CreateEntity(d)
+		w.Positions.SetPosition(e, at)
+		w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'x', Level: level})
+		return e
+	}
+
+	if _, ok := w.Positions.TopGlyphAt(at.X, at.Y); ok {
+		t.Fatal("empty cell reported a top glyph")
+	}
+	w.Positions.SetPosition(w.CreateEntity(core.DomainPlayer), at)
+	glyph(core.DomainPlayer, component.GlyphDark)
+	nearLow := glyph(core.DomainPlayer, component.GlyphBright)
+	glyph(core.DomainPlayer, component.GlyphBright)
+	glyph(core.DomainPlayer, component.GlyphNormal)
+	if top, _ := w.Positions.TopGlyphAt(at.X, at.Y); top != nearLow {
+		t.Fatalf("top player glyph = %v, want the lower bright %v", top, nearLow)
+	}
+	gold := glyph(core.DomainShared, component.GlyphDark)
+	if top, _ := w.Positions.TopGlyphAt(at.X, at.Y); top != gold {
+		t.Fatalf("top glyph = %v, want shared %v over any player level", top, gold)
+	}
+}
