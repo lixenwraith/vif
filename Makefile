@@ -24,6 +24,9 @@ CLEAN ?= 0
 WAD_DIR := wad
 PKG_DIR := deploy/package
 WAD_ARCHIVE ?= $(BIN_DIR)/vif-wad.tar.gz
+# Root extracting an archive restores its owners, so its entries are root's rather
+# than the packer's uid. GNU tar and bsdtar name that differently.
+TAR_ROOT_OWNER != tar --version 2>/dev/null | grep -q GNU && echo '--owner=0 --group=0 --numeric-owner' || echo '--uid 0 --gid 0'
 KEYMAP_SRC := internal/asset/input/keymap.toml
 SETTINGS_SRC := internal/asset/vif.toml
 BOT_DIR := internal/asset/bot
@@ -68,7 +71,7 @@ help:
 	@echo "  uninstall Remove what install put under $(PREFIX), keeping $(SYSCONFDIR)/vif"
 	@echo "  install-config Install the wad, default keymap, bot graphs and vif.toml under $(VIF_CONFIG_DIR)"
 	@echo "           (both: CLEAN=1 first removes what an earlier install put there)"
-	@echo "  wad-archive Pack the wad as the config root a player extracts ($(WAD_ARCHIVE))"
+	@echo "  wad-archive Pack the wad as vif/, the config root a player extracts ($(WAD_ARCHIVE))"
 	@echo "  image    Build the dedicated-session container image (scratch, static, non-root)"
 	@echo "  image-check Run the image's own config validation as its numeric user"
 	@echo "  verify   Run tests, vet, and multi-arch compilation checks"
@@ -179,7 +182,9 @@ run: dev
 	./$(BIN_DIR)/$(BINARY)
 
 # put creates only missing directories, so an install changes no existing mode.
-INSTALL_FUNCS = put() { [ -d "$${3%/*}" ] || install -d -m 0755 "$${3%/*}"; install -m "$$1" "$$2" "$$3"; echo "install $$3"; }; \
+# BSD install makes missing parents under the umask, and a private one carried
+# through sudo would hide a system root from every other user.
+INSTALL_FUNCS = umask 022; put() { [ -d "$${3%/*}" ] || install -d -m 0755 "$${3%/*}"; install -m "$$1" "$$2" "$$3"; echo "install $$3"; }; \
 	keep() { if [ -e "$$3" ]; then echo "keep    $$3"; else put "$$@"; fi; }
 # The wad is the whole external payload and mirrors the installed layout, so a
 # copy is the install: shipped files are replaced, files a player added kept,
@@ -200,16 +205,17 @@ INSTALL_ROOT = case "$$root" in ''|/) echo "refusing to install into '$$root'" >
 install-config:
 	@set -eu; $(INSTALL_FUNCS); root='$(VIF_CONFIG_DIR)'; $(INSTALL_ROOT)
 
-# wad-archive is that same install as one file, so what a player extracts over a
-# config root is what install-config would have written there. The release
-# publishes it because a binary alone resolves only the embedded scenario.
+# wad-archive is that same install as one file, unpacking as vif/ into the
+# directory that holds a config root: ~/.config, /usr/local/etc or %AppData%. The
+# release publishes it because a binary alone resolves only the embedded scenario.
 wad-archive: $(BIN_DIR)
 	@set -eu; $(INSTALL_FUNCS); \
-	root=$$(mktemp -d); \
-	trap 'rm -rf "$$root"' EXIT; \
+	stage=$$(mktemp -d); \
+	trap 'rm -rf "$$stage"' EXIT; \
+	root="$$stage/vif"; install -d -m 0755 "$$root"; \
 	{ $(INSTALL_ROOT); } >/dev/null; \
 	install -m 0644 LICENSE "$$root/LICENSE"; \
-	tar -C "$$root" -czf $(WAD_ARCHIVE) .; \
+	tar -C "$$stage" $(TAR_ROOT_OWNER) -czf $(WAD_ARCHIVE) vif; \
 	echo "packed $(WAD_ARCHIVE)"
 
 # install puts the binary, the wad as the config root $(SYSCONFDIR)/vif, the

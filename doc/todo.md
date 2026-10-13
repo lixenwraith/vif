@@ -332,7 +332,7 @@ Argon2-SCRAM dependency.
   format and the limits are `resource.Scenario`'s and are already decided
 
 Two of the three routes to content exist. A native player downloads the release
-wad and extracts it over a config root; a guest joining a session is served the
+wad and extracts it as a config root; a guest joining a session is served the
 coordinator's scenario and verifies its digest before constructing its `App`. The
 corpus needs neither: it is player domain, resolved per instance and never
 reconciled, so a peer holding a different one is not a disagreement to settle.
