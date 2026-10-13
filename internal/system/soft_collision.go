@@ -353,7 +353,7 @@ func (s *SoftCollisionSystem) impulseStream(source, target core.Entity) *vmath.F
 		return s.rngPlayer
 	}
 	tick := s.world.Resources.Game.State.GetGameTicks()
-	s.rngArtifact.Reseed(vmath.Mix64(s.sharedRoot ^ tick*0x9E3779B97F4A7C15 ^
+	s.rngArtifact.Reseed(vmath.Mix64(s.sharedRoot ^ tick*vmath.Golden64 ^
 		uint64(source)*0xD6E8FEB86659FD93 ^ uint64(target)))
 	return &s.rngArtifact
 }
@@ -415,7 +415,7 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 	s.statCollisions.Add(1)
 
 	// Set immunity
-	combatComp.SealKineticImmunity(parameter.SoftCollisionImmunityDuration)
+	sealKineticImmunity(combatComp, parameter.SoftCollisionImmunityDuration)
 
 }
 
@@ -457,7 +457,7 @@ func (s *SoftCollisionSystem) processAllFlocking(dtSec float64) {
 
 			combatComp, ok := s.world.Components.Combat.GetComponent(tgt.entity)
 			// Flocking does not apply if dead, immune to kinetic shifts (recently hit), enraged (attacking), or stunned
-			if !ok || combatComp.HitPoints <= 0 || combatComp.RemainingKineticImmunity > 0 || combatComp.IsEnraged || combatComp.Stunned() {
+			if !ok || combatComp.HitPoints <= 0 || combatComp.RemainingKineticImmunity > 0 || combatComp.IsEnraged || stunned(&combatComp) {
 				continue
 			}
 

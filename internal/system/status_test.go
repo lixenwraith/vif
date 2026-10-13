@@ -83,7 +83,7 @@ func TestOnlyASealedWindowBlocksABurnTick(t *testing.T) {
 	}
 	w.Resources.Time.DeltaTime = time.Second
 
-	state.SealDamageImmunity(time.Hour)
+	sealDamageImmunity(state, time.Hour)
 	combat.Update()
 	if state.HitPoints != 100 {
 		t.Fatal("a sealed window let a burn tick through")

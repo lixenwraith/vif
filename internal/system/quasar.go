@@ -184,7 +184,7 @@ func (s *QuasarSystem) Update() {
 		}
 
 		// Stun check: skip movement, reset charging state
-		if combatComp.Stunned() {
+		if stunned(combatComp) {
 			if quasarComp.IsCharging {
 				quasarComp.IsCharging = false
 				quasarComp.ChargeRemaining = 0
@@ -257,7 +257,7 @@ func (s *QuasarSystem) Update() {
 		// Damage immunity requires explicit refresh (not handled by IsEnraged).
 		// A shield refuses every attacker, not one per window.
 		if quasarComp.IsShielded {
-			combatComp.SealDamageImmunity(parameter.CombatDamageImmunityDuration)
+			sealDamageImmunity(combatComp, parameter.CombatDamageImmunityDuration)
 		}
 
 		activeCount++

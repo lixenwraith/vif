@@ -46,6 +46,7 @@ type particleOrbit struct {
 // behavior enters orbit with a tangential kick and leaves it back into its fall;
 // dust orbits from spawn and only loses the pull while its anchor lapses.
 type particleProfile struct {
+	name     string           // telemetry key prefix
 	fall     float64          // spawn and gravity direction: 1 down, -1 up, 0 none
 	color    [3]color.RGB     // by glyph level
 	lifetime [3]time.Duration // by glyph level; 0 is no timer, an infinite life
@@ -60,6 +61,7 @@ type particleProfile struct {
 
 var particleProfiles = [component.ParticleBehaviorCount]particleProfile{
 	component.ParticleDecay: {
+		name:     "decay",
 		fall:     1,
 		color:    [3]color.RGB{visual.RgbDecay, visual.RgbDecay, visual.RgbDecay},
 		runeSwap: parameter.ParticleChangeChance,
@@ -71,11 +73,13 @@ var particleProfiles = [component.ParticleBehaviorCount]particleProfile{
 		},
 	},
 	component.ParticleBlossom: {
+		name:     "blossom",
 		fall:     -1,
 		color:    [3]color.RGB{visual.RgbBlossom, visual.RgbBlossom, visual.RgbBlossom},
 		runeSwap: parameter.ParticleChangeChance,
 	},
 	component.ParticleDust: {
+		name:     "dust",
 		color:    [3]color.RGB{visual.RgbDustDark, visual.RgbDustNormal, visual.RgbDustBright},
 		lifetime: [3]time.Duration{parameter.DustTimerDark, parameter.DustTimerNormal, parameter.DustTimerBright},
 		protect:  component.ProtectFromSpecies,
@@ -89,6 +93,12 @@ var particleProfiles = [component.ParticleBehaviorCount]particleProfile{
 			damping: parameter.DustDamping, drag: parameter.DustGlobalDrag, speed: parameter.DustInitialSpeed,
 		},
 	},
+}
+
+// validParticle reports a behavior ParticleSystem implements; zero is invalid so an
+// omitted event discriminator cannot create the wrong particle
+func validParticle(b component.ParticleBehavior) bool {
+	return b > component.ParticleNone && b < component.ParticleBehaviorCount
 }
 
 // particleBehaviorState keeps behavior-specific collision bookkeeping and
@@ -185,7 +195,7 @@ func NewParticleSystem(world *engine.World) engine.System {
 		state.hitThisFrame = make(map[core.Entity]bool)
 		state.processedGridCells = make(map[int]bool)
 
-		name := behavior.String()
+		name := particleProfiles[behavior].name
 		state.statCount = reg.Ints.Get(name + ".count")
 		state.statApplied = reg.Ints.Get(name + ".applied")
 		state.statWallCollisions = reg.Ints.Get(name + ".wall_collisions")
@@ -343,7 +353,7 @@ func (s *ParticleSystem) Update() {
 	var counts [component.ParticleBehaviorCount]int64
 	for _, entity := range particles.Entities() {
 		particle, ok := particles.GetComponent(entity)
-		if ok && particle.Behavior.Valid() {
+		if ok && validParticle(particle.Behavior) {
 			counts[particle.Behavior]++
 		}
 	}
@@ -373,7 +383,7 @@ func (s *ParticleSystem) spawnRequested(e event.ParticleSpawnEntry) {
 // spawnOne creates one particle. A falling one takes its fall; any other enters
 // orbit at once around the cursor cell (cx, cy).
 func (s *ParticleSystem) spawnOne(e event.ParticleSpawnEntry, cx, cy int) {
-	if !e.Behavior.Valid() {
+	if !validParticle(e.Behavior) {
 		return
 	}
 	prof := &particleProfiles[e.Behavior]
@@ -420,7 +430,7 @@ func (s *ParticleSystem) spawnOne(e event.ParticleSpawnEntry, cx, cy int) {
 // across the map or the columns of the button the payload names
 func (s *ParticleSystem) spawnWave(p *event.ParticleWavePayload) {
 	behavior := p.Behavior
-	if !behavior.Valid() || particleProfiles[behavior].fall == 0 {
+	if !validParticle(behavior) || particleProfiles[behavior].fall == 0 {
 		return
 	}
 	config := s.world.Resources.Config

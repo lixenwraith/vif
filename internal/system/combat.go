@@ -2,6 +2,7 @@ package system
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -332,11 +333,70 @@ func (s *CombatSystem) Update() {
 	}
 }
 
+// unownedAttacker is the immunity bit for an attack no cursor owns
+const unownedAttacker = 1 << parameter.MaxPlayers
+
 // attackerBit names the roster slot spending a target's immunity window, so one
 // participant's hit does not consume another's budget (D-3, D-16).
 func (s *CombatSystem) attackerBit(cursor core.Entity) uint32 {
-	slot, ok := s.world.CursorSlot(cursor)
-	return component.AttackerBit(slot, ok)
+	if slot, ok := s.world.CursorSlot(cursor); ok && int(slot) < parameter.MaxPlayers {
+		return 1 << slot
+	}
+	return unownedAttacker
+}
+
+// stunned is read by every species' steering, which stands still while it holds
+func stunned(c *component.CombatComponent) bool {
+	return c.Status[component.StatusStun].Remaining > 0
+}
+
+func damageImmuneTo(c *component.CombatComponent, attacker uint32, weapon component.CombatAttackType) bool {
+	if uint(weapon) >= uint(component.CombatAttackTypeCount) {
+		return true
+	}
+	return c.RemainingDamageImmunity != 0 && c.DamageImmunitySpent[weapon]&attacker != 0
+}
+
+// spendDamageImmunity records a landed hit, opening the window when it is closed.
+// An attacker joining a window late may land twice inside one duration; the rate
+// stays bounded at two hits per window and the alternative is a timer per slot.
+func spendDamageImmunity(c *component.CombatComponent, attacker uint32, weapon component.CombatAttackType, d time.Duration) {
+	if uint(weapon) >= uint(component.CombatAttackTypeCount) {
+		return
+	}
+	if c.RemainingDamageImmunity == 0 {
+		c.RemainingDamageImmunity = d
+		clear(c.DamageImmunitySpent[:])
+	}
+	c.DamageImmunitySpent[weapon] |= attacker
+}
+
+// sealDamageImmunity opens a window no attacker may spend, for species-authored
+// invulnerability rather than the per-attacker hit rate limit
+func sealDamageImmunity(c *component.CombatComponent, d time.Duration) {
+	c.RemainingDamageImmunity = d
+	for weapon := range c.DamageImmunitySpent {
+		c.DamageImmunitySpent[weapon] = ^uint32(0)
+	}
+}
+
+// spendKineticImmunity records the accepted source without extending an open
+// window; opened tells the hit whether its impulse replaces or composes
+func spendKineticImmunity(c *component.CombatComponent, attacker uint32, d time.Duration) (opened bool) {
+	if c.RemainingKineticImmunity == 0 {
+		c.RemainingKineticImmunity = d
+		c.KineticImmunitySpent = 0
+		opened = true
+	}
+	c.KineticImmunitySpent |= attacker
+	return opened
+}
+
+// sealKineticImmunity opens a displacement window no attacker may spend, for the
+// species-authored knockback that has no attacker to name
+func sealKineticImmunity(c *component.CombatComponent, d time.Duration) {
+	c.RemainingKineticImmunity = d
+	c.KineticImmunitySpent = ^uint32(0)
 }
 
 // joining is the profile a hit uses: its own when it opens the target's knockback
@@ -442,7 +502,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		// Ablative: damage the HitEntity (member)
 		if memberCombat, ok := s.world.Components.Combat.GetPtr(hitEntity); ok && hitEntity != targetEntity {
 			if attack.DamageValue != 0 {
-				if memberCombat.DamageImmuneTo(attacker, weapon) {
+				if damageImmuneTo(memberCombat, attacker, weapon) {
 					s.statImmune.Add(1)
 					s.recordDamage(attack.AttackType, attackerType, memberCombat.CombatEntityType, 0, attack.DamageValue)
 				} else {
@@ -452,7 +512,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 					resolved = true
 
 					memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
-					memberCombat.SpendDamageImmunity(attacker, weapon, parameter.CombatDamageImmunityDuration)
+					spendDamageImmunity(memberCombat, attacker, weapon, parameter.CombatDamageImmunityDuration)
 					memberCombat.LastDamagedBy = damageCursor
 					targetCombatComp.LastDamagedBy = damageCursor
 					damageTargetDead = memberCombat.HitPoints == 0
@@ -464,7 +524,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	} else {
 		// Unit or Simple: damage the TargetEntity
 		if attack.DamageValue != 0 {
-			if targetCombatComp.DamageImmuneTo(attacker, weapon) {
+			if damageImmuneTo(targetCombatComp, attacker, weapon) {
 				s.statImmune.Add(1)
 				s.recordDamage(attack.AttackType, attackerType, targetCombatComp.CombatEntityType, 0, attack.DamageValue)
 			} else {
@@ -474,7 +534,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 				resolved = true
 
 				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
-				targetCombatComp.SpendDamageImmunity(attacker, weapon, parameter.CombatDamageImmunityDuration)
+				spendDamageImmunity(targetCombatComp, attacker, weapon, parameter.CombatDamageImmunityDuration)
 				targetCombatComp.LastDamagedBy = damageCursor
 				damageTargetDead = targetCombatComp.HitPoints == 0
 			}
@@ -514,9 +574,9 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		}
 	}
 	if attack.EffectMask&component.CombatEffectKinetic != 0 && attack.Collision != nil {
-		// Kinetic applies to header (composite moves as unit), check header immunity
-		if !damageTargetDead && !targetCombatComp.KineticImmuneTo(attacker) && !targetCombatComp.IsEnraged {
-			opened := targetCombatComp.SpendKineticImmunity(attacker, attack.KineticImmunity)
+		// Kinetic applies to header (composite moves as unit); its window covers every attacker
+		if !damageTargetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
+			opened := spendKineticImmunity(targetCombatComp, attacker, attack.KineticImmunity)
 			if payload.HasVelocity &&
 				s.applyCollision(payload.CrossingID, uint64(payload.ChainDepth), opened,
 					payload.OriginVelX, payload.OriginVelY,
@@ -532,7 +592,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 					// the header's gate already decided this hit lands, so a later
 					// attacker refreshes the flag instead of joining a window that
 					// would expire under the spring still reading it.
-					hitCombat.SpendKineticImmunity(attacker, attack.KineticImmunity)
+					spendKineticImmunity(hitCombat, attacker, attack.KineticImmunity)
 					hitCombat.RemainingKineticImmunity = max(
 						hitCombat.RemainingKineticImmunity, attack.KineticImmunity)
 				}
@@ -634,7 +694,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				if !ok {
 					continue
 				}
-				if memberCombat.DamageImmuneTo(attacker, weapon) {
+				if damageImmuneTo(memberCombat, attacker, weapon) {
 					s.statImmune.Add(1)
 					s.recordDamage(attack.AttackType, attackerType, memberCombat.CombatEntityType, 0, perHit)
 					continue
@@ -643,7 +703,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				memberCombat.HitPoints -= dealt
 				s.recordDamage(attack.AttackType, attackerType, memberCombat.CombatEntityType, dealt, 0)
 				memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
-				memberCombat.SpendDamageImmunity(attacker, weapon, parameter.CombatDamageImmunityDuration)
+				spendDamageImmunity(memberCombat, attacker, weapon, parameter.CombatDamageImmunityDuration)
 				memberCombat.LastDamagedBy = damageCursor
 				damageApplied = true
 				resolved = true
@@ -666,7 +726,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				}
 			}
 			damageValue := perHit * validHitCount
-			if targetCombatComp.DamageImmuneTo(attacker, weapon) {
+			if damageImmuneTo(targetCombatComp, attacker, weapon) {
 				s.statImmune.Add(1)
 				s.recordDamage(attack.AttackType, attackerType, targetCombatComp.CombatEntityType, 0, damageValue)
 			} else if validHitCount > 0 {
@@ -674,7 +734,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				targetCombatComp.HitPoints -= dealt
 				s.recordDamage(attack.AttackType, attackerType, targetCombatComp.CombatEntityType, dealt, 0)
 				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
-				targetCombatComp.SpendDamageImmunity(attacker, weapon, parameter.CombatDamageImmunityDuration)
+				spendDamageImmunity(targetCombatComp, attacker, weapon, parameter.CombatDamageImmunityDuration)
 				damageApplied = true
 				resolved = true
 				if targetCombatComp.HitPoints == 0 {
@@ -691,8 +751,8 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 
 	// Apply kinetic effect
 	if attack.EffectMask&component.CombatEffectKinetic != 0 && attack.Collision != nil {
-		if !targetDead && !targetCombatComp.KineticImmuneTo(attacker) && !targetCombatComp.IsEnraged {
-			opened := targetCombatComp.SpendKineticImmunity(attacker, attack.KineticImmunity)
+		if !targetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
+			opened := spendKineticImmunity(targetCombatComp, attacker, attack.KineticImmunity)
 			if s.applyAreaKnockback(payload, targetEntity, hits, opened, attack.Collision) {
 				s.statEffectKinetic.Add(1)
 				resolved = true
@@ -764,7 +824,7 @@ func (s *CombatSystem) applyOverTime(payload *event.CombatAttackDirectRequestPay
 		victim = member
 	}
 	source := s.world.ResolveCursor(payload.OwnerEntity)
-	if victim.HitPoints <= 0 || victim.DamageImmuneTo(s.attackerBit(source), attack.AttackType) {
+	if victim.HitPoints <= 0 || damageImmuneTo(victim, s.attackerBit(source), attack.AttackType) {
 		s.statImmune.Add(1)
 		return
 	}
@@ -785,7 +845,7 @@ func (s *CombatSystem) tickStatus(e core.Entity, c *component.CombatComponent, s
 	if c.HitPoints <= 0 || slot.Magnitude <= 0 {
 		return
 	}
-	if c.DamageImmuneTo(s.attackerBit(slot.Source), slot.Attack) {
+	if damageImmuneTo(c, s.attackerBit(slot.Source), slot.Attack) {
 		s.statImmune.Add(1)
 		s.recordDamage(slot.Attack, component.CombatEntityCursor, c.CombatEntityType, 0, slot.Magnitude)
 		return
@@ -1022,7 +1082,7 @@ func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatCom
 	// A running stun is not refreshed. Refreshing it made every later hit — the
 	// other participant's included — extend the lockdown, so a target under
 	// continuous fire never left it.
-	if targetCombatComp.Stunned() {
+	if stunned(targetCombatComp) {
 		return false
 	}
 

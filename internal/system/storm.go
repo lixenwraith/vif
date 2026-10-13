@@ -624,15 +624,11 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 			stormComp.CirclesAlive[i] = false
 			continue
 		}
-		// Check stun state on circle header
-		stunned := false
-		if combatComp, ok := s.world.Components.Combat.GetComponent(stormComp.Circles[i]); ok {
-			stunned = combatComp.Stunned()
-		}
+		combatComp, ok := s.world.Components.Combat.GetPtr(stormComp.Circles[i])
 		circleBuffer[circleCount] = circleState{
 			entity:  stormComp.Circles[i],
 			circle:  circleComp,
-			stunned: stunned,
+			stunned: ok && stunned(combatComp),
 		}
 		circleCount++
 	}
@@ -1077,7 +1073,7 @@ func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormCompo
 			if !ok {
 				continue
 			}
-			memberCombat.SealDamageImmunity(parameter.CombatDamageImmunityDuration)
+			sealDamageImmunity(memberCombat, parameter.CombatDamageImmunityDuration)
 		}
 	}
 }

@@ -122,7 +122,7 @@ func (s *MountSystem) attach(p *event.MountRequestPayload) {
 	// the new weapon starts ready
 	s.world.Components.Ray.RemoveEntity(p.Host, false)
 	if timer, ok := s.world.Components.Timer.GetPtr(p.Host); ok {
-		timer.Stop(component.TimerCooldown)
+		timer.Slots[component.TimerCooldown] = component.Countdown{}
 	}
 }
 
@@ -319,7 +319,7 @@ func layLane(w *engine.World, m *component.MountComponent, pos component.Positio
 // shotRand seeds one host's draw for this tick
 func (s *MountSystem) shotRand(host core.Entity) *vmath.FastRand {
 	tick := s.world.Resources.Game.State.GetGameTicks()
-	s.rng.Reseed(vmath.Mix64(s.sharedRoot ^ tick*0x9E3779B97F4A7C15 ^ uint64(host)*0xD6E8FEB86659FD93))
+	s.rng.Reseed(vmath.Mix64(s.sharedRoot ^ tick*vmath.Golden64 ^ uint64(host)*0xD6E8FEB86659FD93))
 	return &s.rng
 }
 

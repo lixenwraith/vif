@@ -289,6 +289,17 @@ func (s *WeaponSystem) advanceStreams(cursor core.Entity, weaponComp *component.
 	}
 }
 
+// loadout is a fresh cursor's: one charge of every innate kind
+func loadout() component.WeaponComponent {
+	var w component.WeaponComponent
+	for wt, spec := range component.WeaponSpecs {
+		if spec.Innate {
+			w.Charges[wt] = 1
+		}
+	}
+	return w
+}
+
 // addWeapon grants or recharges one weapon on one cursor
 func (s *WeaponSystem) addWeapon(cursor core.Entity, weapon component.WeaponType) {
 	weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor)
@@ -768,7 +779,7 @@ func (s *WeaponSystem) fireLoadout(cursor core.Entity, weaponComp *component.Wea
 	// largest ready loadout, so a fire cycle scans and sorts the stores once.
 	need := 0
 	for wt, charges := range weaponComp.Charges {
-		if charges > 0 && weaponComp.Cooldown[wt] <= 0 && component.WeaponSpecs[wt].Delivery.Aimed() {
+		if charges > 0 && weaponComp.Cooldown[wt] <= 0 && aimed(component.WeaponSpecs[wt].Delivery) {
 			need = max(need, charges)
 		}
 	}
@@ -1104,7 +1115,7 @@ func (s *WeaponSystem) fireTracers(cursor core.Entity, originX, originY int, spe
 	ox, oy := vmath.Point{X: originX, Y: originY}.CenterF()
 
 	fired := false
-	for _, lane := range component.TracerLanes(charges) {
+	for _, lane := range tracerLanes(charges) {
 		off := float64(lane)
 		for _, d := range component.TracerCardinals {
 			if spec.Directions&d == 0 {
@@ -1335,6 +1346,19 @@ func appendTracerTrail(tracer *component.TracerComponent, x, y int) {
 	if tracer.TrailLen < parameter.TracerTrailLength {
 		tracer.TrailLen++
 	}
+}
+
+// aimed reports whether a delivery needs targets assigned before it fires
+func aimed(d component.WeaponDelivery) bool {
+	return d != component.DeliveryPulse && d != component.DeliveryTracer
+}
+
+// tracerLaneOffsets are the row or column offsets a volley covers, by charge count
+var tracerLaneOffsets = [...][]int{{0}, {-1, 1}, {-1, 0, 1}}
+
+// tracerLanes are the offsets a volley of charges covers; charges past the table cover every lane
+func tracerLanes(charges int) []int {
+	return tracerLaneOffsets[max(min(charges, len(tracerLaneOffsets)), 1)-1]
 }
 
 // tracerFlightBounds returns cell-centered off-map targets far enough for a

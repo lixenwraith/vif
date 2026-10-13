@@ -129,6 +129,9 @@ func (s *MaterializeSystem) Update() {
 
 // spawnMaterializeEffect creates one materialize entity in the request's domain
 func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, targetX, targetY, areaWidth, areaHeight, beamWidth int, spawnType component.SpawnType) {
+	if spawnType < 0 || spawnType >= component.SpawnTypeCount {
+		return
+	}
 	config := s.world.Resources.Config
 
 	// Clamp target coordinates
@@ -155,5 +158,5 @@ func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, targetX, 
 		BeamWidth:  beamWidth,
 		Type:       spawnType,
 	})
-	armTimer(s.world, entity, component.TimerDeadline, spawnType.Style().Duration)
+	armTimer(s.world, entity, component.TimerDeadline, component.MaterializeStyles[spawnType].Duration)
 }

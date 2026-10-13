@@ -79,7 +79,7 @@ func TestGunLanesFollowItsCharges(t *testing.T) {
 			w.DestroyEntity(e)
 		}
 		weapon.fireTracers(cursor, 5, 5, spec, charges, component.PalettePositive)
-		lanes := component.TracerLanes(charges)
+		lanes := tracerLanes(charges)
 		rows, cols := map[int]bool{}, map[int]bool{}
 		for _, e := range w.Components.Tracer.Entities() {
 			pos, _ := w.Positions.GetPosition(e)

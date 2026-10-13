@@ -72,9 +72,8 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			}
 		}
 
-		// Deterministic path: seed combines PathSeed + AnimFrame
-		// XOR with golden ratio constant ensures full avalanche on AnimFrame increment
-		seed := l.PathSeed ^ (uint64(l.AnimFrame) * 0x9E3779B97F4A7C15)
+		// Deterministic path per PathSeed and AnimFrame; the golden multiplier spreads consecutive frames
+		seed := l.PathSeed ^ (uint64(l.AnimFrame) * vmath.Golden64)
 		rng := vmath.NewFastRand(seed)
 
 		// Generate fractal path in sub-pixel coordinates (2x resolution)
