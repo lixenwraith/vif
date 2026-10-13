@@ -411,8 +411,9 @@ and the player repeats it by key or by clicking the buttons; every note shown or
 pressed sounds, so the game can be played with eyes closed once sound is on (sound
 starts muted; `Ctrl-S` cycles it). A correct press blooms over its button, a cleared
 level flashes green, and a wrong note grays the field, rains decay over it and plays
-the note that was due before a new game. The level stops rising at 100. Glyphs
-drift behind the buttons as a moving backdrop, and music stays off.
+the note that was due before a new game. The level stops rising at 100, and the
+energy cell reads it while heat stays full. Glyphs drift behind the buttons as a
+moving backdrop, and music stays off.
 
 ## 11. System inventory
 

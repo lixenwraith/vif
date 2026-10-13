@@ -723,9 +723,10 @@ type CursorSpawnRequestPayload struct {
 	Center  bool   `toml:"center"`
 }
 
-// CursorArmRequestPayload restores the configured starting resources on the
-// cursor this instance owns. It is local by design: heat and energy are D-13
-// owner-authored state after the shared cursor has been created.
+// CursorArmRequestPayload sets heat and energy on the cursor this instance drives:
+// the configured starting resources at a join, or a scenario's own values. It is
+// local by design: heat and energy are D-13 owner-authored state after the shared
+// cursor has been created.
 type CursorArmRequestPayload struct {
 	Heat   int `toml:"heat"`
 	Energy int `toml:"energy"`

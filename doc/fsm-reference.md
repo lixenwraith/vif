@@ -400,8 +400,10 @@ Capture the entity to address that cursor in later actions:
 { action = "EmitEvent", event = "EventHeatSetRequest", payload = { entity = 0, value = 10 }, payload_vars = { entity = "player_entity" } }
 ```
 
-Every player-scoped command payload accepts an `entity` field. Omitting it
-addresses the local cursor — a migration convenience, not the target design.
+Every player-scoped command payload accepts an `entity` field and acts only on a
+cursor this instance owns; zero names none. A captured entity names the first
+cursor on every instance, so to reach each participant's own cursor emit
+`EventCursorArmRequest { heat, energy }`, as `wad/scenario/simon` does.
 
 ---
 
