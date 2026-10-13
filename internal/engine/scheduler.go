@@ -1154,22 +1154,24 @@ func (s *Scheduler) executeReset() {
 		s.tickInterval,
 	)
 
-	// 4. Reset FSM state - This will trigger OnEnter actions
+	// 4. Unpause via the single owner so clock, context, and audio move together,
+	//    settled before the FSM re-enters: an entry action's sound reaching
+	//    AudioSystem under the reset's own pause would be dropped.
+	s.world.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: false})
+	s.dispatchAndProcessEvents("reset")
+
+	// 5. Reset FSM state - This will trigger OnEnter actions
 	if err := s.fsm.Reset(s.world); err != nil {
 		panic(fmt.Errorf("FSM reset failed: %v", err))
 	}
 
-	// 5. Re-apply global system configuration (mirrors the scenario load)
+	// 6. Re-apply global system configuration (mirrors the scenario load)
 	if err := s.applySystemConfig(); err != nil {
 		s.world.Log().Error("fsm", "msg", "system config not applied", "error", err.Error())
 	}
 
-	// 6. Unpause via the single owner so clock, context, and audio move
-	//    together; settled below while the world lock is still held.
-	s.world.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: false})
-
-	// 7. Settle FSM-reset and unpause events before releasing the lock. No boundary
-	//    bump: this is a phase of the reset, reached identically by a run and its replay.
+	// 7. Settle FSM-reset events before releasing the lock. No boundary bump: this
+	//    is a phase of the reset, reached identically by a run and its replay.
 	s.dispatchAndProcessEvents("reset")
 
 	// 8. Systems re-Init on the reset dispatch that preceded this call, so the

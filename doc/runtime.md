@@ -823,9 +823,9 @@ slot order. The scheduler serializes these phases with the world lock:
 
 1. drain and discard stale queued events;
 2. reset deadlines and elapsed-time anchors;
-3. reset all initially configured HFSM regions, variables, and delayed actions;
-4. reapply global and active-region system toggles;
-5. enqueue an unpause request and settle reset/unpause events;
+3. settle an unpause, so entry actions below sound;
+4. reset all initially configured HFSM regions, variables, and delayed actions;
+5. reapply global and active-region system toggles and settle their events;
 6. advance the RNG session and emit a fresh journal anchor.
 
 Simulation state is rebuilt; operator state describes how that simulation is
