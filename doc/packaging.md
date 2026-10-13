@@ -42,7 +42,9 @@ These hold regardless of which repository is targeted first.
 
 `.github/workflows/release.yml` builds one set of archives: Linux amd64 client and
 headless server, FreeBSD amd64 client, an experimental and untested Windows amd64
-zip, the browser bundle, the wad, and `SHA256SUMS`.
+zip, the browser bundle, the wad, and `SHA256SUMS`. Each unpacks into one
+directory named for it, owned by root, so extracting one as root neither scatters
+files nor hands them to the builder's uid.
 
 - **Nightly** (daily or on dispatch) is never a release. It replaces the assets
   of the `nightly` prerelease, titled and described as a development build, and
@@ -57,16 +59,16 @@ publishes nothing until a person publishes the draft; it fails if the committed
 generated files are stale, so the binaries are what the source archive builds.
 
 `vif-*-wad.tar.gz` is `make wad-archive`, which is `install-config` into
-one file: it unpacks over a config root, so a downloaded binary reaches the
-installed scenarios and corpus rather than only the embedded scenario. The
+one file: it unpacks as `vif/`, the config root, into the directory that holds
+one (`~/.config`, `/usr/local/etc`, `%AppData%`), so a downloaded binary reaches
+the installed scenarios and corpus rather than only the embedded scenario. The
 Makefile owns its contents so a release and a source install cannot drift.
 
 Downloads are at the repository's
 [`nightly` release](https://github.com/lixenwraith/vif/releases/tag/nightly);
-the image is `ghcr.io/lixenwraith/vif:nightly` or `sha-<commit>`. On
-Windows the wad archive unpacks into `%AppData%\vif`. Content a client fetches for
-itself, rather than one a person downloads and extracts, still needs its trust,
-origin and cache policy decided.
+the image is `ghcr.io/lixenwraith/vif:nightly` or `sha-<commit>`. Content a
+client fetches for itself, rather than one a person downloads and extracts, still
+needs its trust, origin and cache policy decided.
 
 ## 3. Gaps to close before a first submission
 

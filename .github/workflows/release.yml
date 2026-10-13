@@ -52,39 +52,44 @@ jobs:
           set -euo pipefail
           label=nightly
           if [ "$GITHUB_REF_TYPE" = tag ]; then label=${GITHUB_REF_NAME#v}; fi
-          mkdir -p dist stage/linux-amd64 stage/linux-amd64-headless \
-            stage/freebsd-amd64 stage/windows-amd64 stage/web
+          p="vif-$label"
+          mkdir -p dist "stage/$p-linux-amd64" "stage/$p-linux-amd64-headless" \
+            "stage/$p-freebsd-amd64" "stage/$p-windows-amd64" "stage/$p-web"
 
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-            go build -trimpath -ldflags='-s -w' -o stage/linux-amd64/vif ./cmd/vif
+            go build -trimpath -ldflags='-s -w' -o "stage/$p-linux-amd64/vif" ./cmd/vif
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
             go build -trimpath -tags=vif_headless -ldflags='-s -w' \
-            -o stage/linux-amd64-headless/vif ./cmd/vif
+            -o "stage/$p-linux-amd64-headless/vif" ./cmd/vif
           CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 \
-            go build -trimpath -ldflags='-s -w' -o stage/freebsd-amd64/vif ./cmd/vif
+            go build -trimpath -ldflags='-s -w' -o "stage/$p-freebsd-amd64/vif" ./cmd/vif
           # Experimental and untested, with make windows's tags.
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
             go build -trimpath -tags='novlog vif_noaudio' -ldflags='-s -w' \
-            -o stage/windows-amd64/vif.exe ./cmd/vif
+            -o "stage/$p-windows-amd64/vif.exe" ./cmd/vif
           GOOS=js GOARCH=wasm \
             go build -trimpath -tags=vif_noaudio -ldflags='-s -w' \
-            -o stage/web/vif.wasm ./cmd/vif
+            -o "stage/$p-web/vif.wasm" ./cmd/vif
 
-          for target in linux-amd64 linux-amd64-headless freebsd-amd64; do
-            cp README.md LICENSE "stage/$target/"
-            tar -C "stage/$target" -czf "dist/vif-$label-$target.tar.gz" .
+          for target in linux-amd64 linux-amd64-headless freebsd-amd64 windows-amd64; do
+            cp README.md LICENSE "stage/$p-$target/"
           done
-          cp README.md LICENSE stage/windows-amd64/
-          (cd stage/windows-amd64 && zip -qX "../../dist/vif-$label-windows-amd64.zip" vif.exe README.md LICENSE)
-          cp -R web/. stage/web/
+          cp -R web/. "stage/$p-web/"
           # The loader of the Go that built vif.wasm above, not the committed copy.
-          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" stage/web/
-          tar -C stage/web -czf "dist/vif-$label-web.tar.gz" .
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "stage/$p-web/"
+
+          # Each archive unpacks into one directory named for it, and root extracting
+          # one gets root's files rather than the runner's uid.
+          for target in linux-amd64 linux-amd64-headless freebsd-amd64 web; do
+            tar -C stage --owner=0 --group=0 --numeric-owner \
+              -czf "dist/$p-$target.tar.gz" "$p-$target"
+          done
+          (cd stage && zip -qrX "../dist/$p-windows-amd64.zip" "$p-windows-amd64")
 
           # One archive rather than a copy in each target's: the wad is the same
           # bytes on every platform. The Makefile owns what is in it, so the
-          # release and make install-config cannot drift.
-          make wad-archive WAD_ARCHIVE="dist/vif-$label-wad.tar.gz"
+          # release and make install-config cannot drift; it unpacks as vif/.
+          make wad-archive WAD_ARCHIVE="dist/$p-wad.tar.gz"
 
           # The source archive distributions build from. It is uploaded once, so
           # its bytes and checksum never change the way GitHub's generated ones may.

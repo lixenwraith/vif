@@ -503,13 +503,14 @@ check)
 	;;
 
 bundle)
-	# What the release publishes is the wad as the config root it extracts into, so
-	# the archive is only right if an empty root filled from it resolves. A binary
-	# on its own reaches the embedded scenario and nothing else.
+	# What the release publishes is the wad as the vif/ config root it extracts as,
+	# so the archive is only right if that root resolves and nothing lands beside
+	# it. A binary on its own reaches the embedded scenario and nothing else.
 	need_bin
-	ARCHIVE=$(mktemp -d)/wad.tar.gz; ROOT=$(mktemp -d)
+	ARCHIVE=$(mktemp -d)/wad.tar.gz; DEST=$(mktemp -d); ROOT=$DEST/vif
 	make wad-archive WAD_ARCHIVE="$ARCHIVE" >/dev/null || fail "make wad-archive"
-	tar -C "$ROOT" -xzf "$ARCHIVE" || fail "the archive did not extract"
+	tar -C "$DEST" -xzf "$ARCHIVE" || fail "the archive did not extract"
+	[ "$(ls -A "$DEST")" = vif ] || fail "the archive unpacked beside vif/: $(ls -A "$DEST")"
 	for tree in "-s main" "-s td" ""; do
 		# shellcheck disable=SC2086
 		"$BIN" -check -config-dir "$ROOT" $tree >/dev/null \
@@ -517,7 +518,7 @@ bundle)
 	done
 	"$BIN" -check -config-dir "$ROOT" | grep -q "^content ok: $ROOT/content" \
 		|| fail "the archive carries no corpus for a player who has none"
-	rm -rf "$ROOT" "$(dirname "$ARCHIVE")"
+	rm -rf "$DEST" "$(dirname "$ARCHIVE")"
 	pass "the release wad archive extracts to a config root that resolves"
 	;;
 
