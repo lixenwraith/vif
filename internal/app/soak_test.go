@@ -298,8 +298,7 @@ func TestSimonTakesBackWhatItShowed(t *testing.T) {
 		}
 	}
 
-	await("Ready")
-	a.Tick(40) // the legend plays each button's note once
+	await("Ready") // after the legend, which plays with keys closed
 	press(key('1'), 1)
 	await("Listen")
 	shown = nil
