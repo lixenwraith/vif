@@ -125,11 +125,11 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 	p.setGrid(e, pos.X, pos.Y, countSaturation)
 }
 
-// setGrid preserves soft clipping while exposing saturation, budget rejection, and data loss.
-func (p *Position) setGrid(e core.Entity, x, y int, countSaturation bool) {
+// setGrid preserves soft clipping while exposing saturation, budget rejection, and
+// data loss; it reports whether the cell took the entity.
+func (p *Position) setGrid(e core.Entity, x, y int, countSaturation bool) bool {
 	if x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height {
-		_ = p.grid.Set(e, x, y)
-		return
+		return p.grid.Set(e, x, y)
 	}
 	cell := &p.grid.Cells[y*p.grid.Width+x]
 	before := cell.Count
@@ -143,7 +143,7 @@ func (p *Position) setGrid(e core.Entity, x, y int, countSaturation bool) {
 		} else if p.statCellOverflows != nil {
 			p.statCellOverflows.Add(1)
 		}
-		return
+		return false
 	}
 	if p.statOccupancyHWM != nil {
 		storeAtomicMax(p.statOccupancyHWM, int64(before+1))
@@ -151,6 +151,7 @@ func (p *Position) setGrid(e core.Entity, x, y int, countSaturation bool) {
 	if countSaturation && before+1 == parameter.MaxEntitiesPerCell && p.statCellSaturations != nil {
 		p.statCellSaturations.Add(1)
 	}
+	return true
 }
 
 func storeAtomicMax(dst *atomic.Int64, value int64) {
@@ -667,6 +668,50 @@ func (p *Position) Move(e core.Entity, newPos component.PositionComponent) {
 	p.dense[i] = newPos
 	// Explicit ignore for OOB and Cell full
 	p.setGrid(e, newPos.X, newPos.Y, old.X != newPos.X || old.Y != newPos.Y)
+}
+
+// Shift translates every entity by (dx, dy) in two phases, all leaving their cells
+// before any enters one, so a rigid group never contends with itself for a cell's
+// budget. Dense order is kept. Entities must be unique; those the destination cell
+// refused are appended to unplaced, which is returned.
+func (p *Position) Shift(entities []core.Entity, dx, dy int, unplaced []core.Entity) []core.Entity {
+	if dx == 0 && dy == 0 {
+		return unplaced
+	}
+	for _, e := range entities {
+		if i, ok := p.index[e]; ok {
+			old := p.dense[i]
+			p.grid.RemoveEntityAt(e, old.X, old.Y)
+			p.dense[i] = component.PositionComponent{X: old.X + dx, Y: old.Y + dy}
+		}
+	}
+	for _, e := range entities {
+		if i, ok := p.index[e]; ok && !p.setGrid(e, p.dense[i].X, p.dense[i].Y, true) {
+			unplaced = append(unplaced, e)
+		}
+	}
+	return unplaced
+}
+
+// TopGlyphAt returns the one glyph at (x, y) that is drawn and typed: shared (gold)
+// before player, then the nearer level, then the lower entity. It reads the grid,
+// so a glyph its cell refused is never on top.
+func (p *Position) TopGlyphAt(x, y int) (core.Entity, bool) {
+	glyphs := p.world.Components.Glyph
+	var top core.Entity
+	var topLevel component.GlyphLevel
+	for _, e := range p.grid.EntitiesAt(x, y, ScopeBoth) {
+		g, ok := glyphs.GetPtr(e)
+		if !ok {
+			continue
+		}
+		if top != 0 && (e.Domain() > top.Domain() || e.Domain() == top.Domain() &&
+			(g.Level < topLevel || g.Level == topLevel && e > top)) {
+			continue
+		}
+		top, topLevel = e, g.Level
+	}
+	return top, top != 0
 }
 
 // --- Batch Implementation ---
