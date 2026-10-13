@@ -118,7 +118,7 @@ func TestDeadlinesEndOnTheirLastTick(t *testing.T) {
 	for _, spawn := range []component.SpawnType{component.SpawnTypeDrain, component.SpawnTypeNugget} {
 		materialize.HandleEvent(event.GameEvent{Type: event.EventMaterializeRequest, Domain: core.DomainPlayer,
 			Payload: &event.MaterializeRequestPayload{X: 10, Y: 10, Type: spawn}})
-		if got, want := actsOn(materialize.Update, has(event.EventMaterializeComplete)), ticks(spawn.Style().Duration); got != want {
+		if got, want := actsOn(materialize.Update, has(event.EventMaterializeComplete)), ticks(component.MaterializeStyles[spawn].Duration); got != want {
 			t.Fatalf("spawn type %d beam completed on tick %d, want %d", spawn, got, want)
 		}
 		if n := w.Components.Materialize.CountEntities(); n != 0 {

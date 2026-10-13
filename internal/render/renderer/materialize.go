@@ -60,7 +60,7 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 	timers := r.gameCtx.World.Components.Timer
 	materializes.Each(func(e core.Entity, mat *component.MaterializeComponent) bool {
 		timer, ok := timers.GetPtr(e)
-		if !ok {
+		if !ok || mat.Type < 0 || mat.Type >= component.SpawnTypeCount {
 			return true
 		}
 		progress := timer.Progress(component.TimerDeadline)
@@ -68,11 +68,7 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 		// Transform target area to viewport coords
 		targetVX, targetVY, _ := ctx.MapToViewport(mat.TargetX, mat.TargetY)
 
-		style := mat.Type.Style()
-		c := visual.RgbMaterialize
-		if mat.Type >= 0 && mat.Type < component.SpawnTypeCount {
-			c = materializePalette[mat.Type]
-		}
+		style, c := component.MaterializeStyles[mat.Type], materializePalette[mat.Type]
 		for _, dir := range [...]beamDir{dirUp, dirDown, dirLeft, dirRight} {
 			r.renderBeam(ctx, buf, pf, mat, progress, style, c, targetVX, targetVY, dir)
 		}
