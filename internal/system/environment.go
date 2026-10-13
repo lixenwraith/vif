@@ -302,10 +302,10 @@ func (s *EnvironmentSystem) startDrift(payload *event.DriftStartPayload) {
 	s.drift.Speed = min(payload.Speed, parameter.DriftMaxSpeed)
 	s.drift.Direction = vmath.NormalizeAngleF(payload.Direction)
 	s.drift.Remaining = time.Duration(payload.DurationMs) * time.Millisecond
-	s.deriveDriftVelocity()
+	s.driftVelocity = driftVelocity(s.drift.Speed, s.drift.Direction)
 	for level := range driftLevels {
 		for axis, v := range s.driftVelocity[level] {
-			if p := &s.drift.Phase[level][axis]; v == 0 || (*p < 0) != (v < 0) {
+			if p := &s.drift.Phase[level][axis]; !phaseFollows(*p, v) {
 				*p = 0
 			}
 		}
@@ -319,18 +319,24 @@ func (s *EnvironmentSystem) endDrift() {
 	s.driftVelocity = [driftLevels][2]int64{}
 }
 
-// deriveDriftVelocity uses exact trigonometry rather than the lookup tables: a
-// table bin leaves a cardinal drift a stray cross component that steps a row
-// every minute or so. Rounding to whole microcells absorbs the last bit.
-func (s *EnvironmentSystem) deriveDriftVelocity() {
-	sin, cos := math.Sincos(s.drift.Direction)
+// driftVelocity uses exact trigonometry rather than the lookup tables: a table bin
+// leaves a cardinal drift a stray cross component that steps a row every minute or
+// so. Rounding to whole microcells absorbs the last bit.
+func driftVelocity(speed, direction float64) (v [driftLevels][2]int64) {
+	sin, cos := math.Sincos(direction)
 	for level, factor := range parameter.DriftLayerFactor {
-		micro := s.drift.Speed * factor * 1e6
-		s.driftVelocity[level] = [2]int64{
+		micro := speed * factor * 1e6
+		v[level] = [2]int64{
 			int64(math.Round(micro * cos)),
 			int64(math.Round(micro * sin * parameter.DriftAspectY)),
 		}
 	}
+	return v
+}
+
+// phaseFollows reports whether a part-cell is on its way along velocity v
+func phaseFollows(phase, v int64) bool {
+	return phase == 0 || v != 0 && (phase < 0) == (v < 0)
 }
 
 func (s *EnvironmentSystem) updateDrift(delta time.Duration) {
@@ -487,7 +493,7 @@ func (s *EnvironmentSystem) LoadShared(data []byte) error {
 	s.endDrift()
 	if snap.Drift.Active {
 		s.drift = snap.Drift
-		s.deriveDriftVelocity()
+		s.driftVelocity = driftVelocity(s.drift.Speed, s.drift.Direction)
 	}
 	s.publishStatus()
 	return nil
@@ -501,13 +507,16 @@ func (d driftState) validate() error {
 		}
 		return nil
 	}
-	if !finite(d.Speed) || d.Speed <= 0 || d.Speed > parameter.DriftMaxSpeed || !finite(d.Direction) ||
-		d.Remaining < 0 || d.Endless != (d.Remaining == 0) {
+	if !finite(d.Speed) || d.Speed <= 0 || d.Speed > parameter.DriftMaxSpeed ||
+		!(d.Direction >= 0 && d.Direction <= vmath.TwoPi) || d.Remaining < 0 || d.Endless != (d.Remaining == 0) {
 		return fmt.Errorf("environment: invalid drift state")
 	}
-	for _, phase := range d.Phase {
-		if phase[0] <= -driftCell || phase[0] >= driftCell || phase[1] <= -driftCell || phase[1] >= driftCell {
-			return fmt.Errorf("environment: drift phase beyond one cell")
+	velocity := driftVelocity(d.Speed, d.Direction)
+	for level, phase := range d.Phase {
+		for axis, p := range phase {
+			if p <= -driftCell || p >= driftCell || !phaseFollows(p, velocity[level][axis]) {
+				return fmt.Errorf("environment: drift phase beyond one cell or against its velocity")
+			}
 		}
 	}
 	return nil
