@@ -844,7 +844,7 @@ func TestKnockbackAndStunImmunityCoverAllPlayersAndWeapons(t *testing.T) {
 		}
 	}
 	area(first, component.CombatAttackPulse)
-	if !state.Stunned() {
+	if !stunned(state) {
 		t.Fatal("first stun did not land")
 	}
 	state.Status[component.StatusStun].Remaining /= 2

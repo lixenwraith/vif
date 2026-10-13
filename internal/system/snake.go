@@ -176,7 +176,7 @@ func (s *SnakeSystem) Update() {
 		}
 
 		// Update head movement (stun check)
-		if !headCombat.Stunned() {
+		if !stunned(&headCombat) {
 			s.updateHeadMovement(snakeComp.HeadEntity, headComp, dtSec)
 		}
 
@@ -233,8 +233,8 @@ func (s *SnakeSystem) Update() {
 
 		// Sync head immunity based on shield
 		if snakeComp.IsShielded {
-			headCombat.SealDamageImmunity(parameter.CombatDamageImmunityDuration)
-			headCombat.SealKineticImmunity(parameter.CombatKineticImmunityDuration)
+			sealDamageImmunity(&headCombat, parameter.CombatDamageImmunityDuration)
+			sealKineticImmunity(&headCombat, parameter.CombatKineticImmunityDuration)
 		}
 
 		// Process interactions
