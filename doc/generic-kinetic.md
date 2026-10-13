@@ -197,6 +197,10 @@ on its 2D mirror for the 3D system to absorb. Pylon is typed but currently
 immobile. Tower, cursor, snake body members, tracer, missile, bullet, loot, weapon
 orbs, dust, and particles are not affected.
 
+Glyph drift, the environment's second effect, is not a kinetic path. It moves
+player glyphs on the spatial grid in whole cells, from integer per-level phases,
+and never touches `Kinetic`; see [Gameplay](gameplay.md) §9.
+
 The environment runs after soft collision and before every ordinary species
 mover. This makes external acceleration the last velocity contribution before the
 2D integrator, so steering drag does not erase the same tick's gust. Homing's
