@@ -16,14 +16,12 @@ type SplashRenderer struct {
 	gameCtx *engine.GameContext
 }
 
-// NewSplashRenderer creates a new splash renderer
 func NewSplashRenderer(gameCtx *engine.GameContext) *SplashRenderer {
 	return &SplashRenderer{
 		gameCtx: gameCtx,
 	}
 }
 
-// Render draws all splash effects to background channel
 func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	splashes := r.gameCtx.World.Components.Splash
 	if splashes.CountEntities() == 0 {
@@ -38,7 +36,6 @@ func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			return true
 		}
 
-		// Resolve anchor position (map coords)
 		anchorX, anchorY := r.resolveAnchor(splash)
 
 		for i := range length {
@@ -49,7 +46,8 @@ func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	})
 }
 
-// resolveAnchor determines the screen position for a splash
+// resolveAnchor returns the splash's origin in map coordinates, following its anchor
+// entity while that entity has a position
 func (r *SplashRenderer) resolveAnchor(splashComp *component.SplashComponent) (int, int) {
 	baseX, baseY := splashComp.AnchorX, splashComp.AnchorY
 
@@ -104,12 +102,10 @@ func splashInkBounds(bitmap splashBitmap) (left, top, width, height int) {
 	return left, top, right - left + 1, bottom - top + 1
 }
 
-// renderChar renders a single splash character bitmap
 func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, c color.RGB) {
 	bitmap, _ := splashGlyph(char)
 
 	for row := range parameter.SplashCharHeight {
-		// Map coord for this row
 		mapY := gameY + row
 
 		for col := range parameter.SplashCharWidth {
@@ -117,10 +113,8 @@ func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.Render
 				continue
 			}
 
-			// Map coord for this column
 			mapX := gameX + col
 
-			// Transform to screen with visibility check
 			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 			if !visible {
 				continue
