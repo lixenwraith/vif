@@ -569,8 +569,9 @@ transitions = [
 A button lights and sounds on every press of its key by itself, so a machine judges
 a press and never plays its tone. `EventButtonLightRequest { button, duration_ms }`
 lights the button at that place in the row, counted from 1, with its sound; a
-spawn on a key that already has a button is refused. `wad/scenario/simon` is the
-worked example.
+spawn on a key that already has a button is refused. A button shows its key in the
+splash font once it is about ten cells square, so a scenario sets a `[map]` floor
+that leaves room for its row. `wad/scenario/simon` is the worked example.
 
 ### PayloadExists
 
