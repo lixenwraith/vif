@@ -203,63 +203,21 @@ func (s *AudioSystem) gated() uint8 {
 	return m
 }
 
-// HandOverSound moves the speakers from a presented world to a copy rebuilt to
-// replace it, which replayed without them. The engine plays on rather than
-// rewinding, so the viewer's preference and the conductor's state go with it; the
-// gates the copy replayed then decide what sounds.
-func HandOverSound(to, from *engine.World) {
-	ta, fa := systemOf[*AudioSystem](to), systemOf[*AudioSystem](from)
-	if ta == nil || fa == nil || fa.player == nil {
-		return
+// takeOver moves the speakers and the viewer's preference from the audio system of
+// the world this one replaces, and returns the gated mask the music bus follows;
+// ok is false when the old world held no speakers.
+func (s *AudioSystem) takeOver(from *AudioSystem) (m uint8, ok bool) {
+	if from.player == nil {
+		return 0, false
 	}
-	to.Resources.Audio, from.Resources.Audio = from.Resources.Audio, nil
-	ta.player, ta.mask, ta.initialized = fa.player, fa.mask, fa.initialized
-	ta.basePlayed, ta.baseDropped, ta.baseReject = fa.basePlayed, fa.baseDropped, fa.baseReject
-	fa.player = nil
-	m := ta.gated()
-	ta.player.SetEffectMuted(m&parameter.AudioChanEffects == 0)
-	publishAudioMask(to, ta.player)
-
-	tm, fm := systemOf[*MusicSystem](to), systemOf[*MusicSystem](from)
-	if tm == nil || fm == nil {
-		return
-	}
-	tm.player, tm.bpmF, tm.lastBPM, tm.tier = fm.player, fm.bpmF, fm.lastBPM, fm.tier
-	tm.manualTier, tm.arranged, tm.stopped, tm.startPending = fm.manualTier, fm.arranged, fm.stopped, fm.startPending
-	fm.player = nil
-	tm.applyMusicAudible(m&parameter.AudioChanMusic != 0)
-}
-
-// systemOf finds a world's system of type T, nil when it has none.
-func systemOf[T engine.System](w *engine.World) T {
-	var none T
-	for _, s := range w.Systems() {
-		if t, ok := s.(T); ok {
-			return t
-		}
-	}
-	return none
-}
-
-// Both controllers publish after device changes, including while gameplay is paused.
-func publishAudioMask(world *engine.World, player *audio.AudioEngine) {
-	m := parameter.AudioChanNone
-	if player != nil && player.IsEnabled() {
-		if !player.IsEffectMuted() {
-			m |= parameter.AudioChanEffects
-		}
-		if !player.IsMusicMuted() && player.IsMusicPlaying() {
-			m |= parameter.AudioChanMusic
-		}
-	}
-	reg := world.Resources.Status
-	mask := int64(m)
-	if player == nil {
-		mask = -1
-	}
-	reg.Ints.Get("audio.mask").Store(mask)
-	reg.Bools.Get("audio.effect_muted").Store(m&parameter.AudioChanEffects == 0)
-	reg.Bools.Get("audio.music_muted").Store(m&parameter.AudioChanMusic == 0)
+	s.world.Resources.Audio, from.world.Resources.Audio = from.world.Resources.Audio, nil
+	s.player, s.mask, s.initialized = from.player, from.mask, from.initialized
+	s.basePlayed, s.baseDropped, s.baseReject = from.basePlayed, from.baseDropped, from.baseReject
+	from.player = nil
+	m = s.gated()
+	s.player.SetEffectMuted(m&parameter.AudioChanEffects == 0)
+	publishAudioMask(s.world, s.player)
+	return m, true
 }
 
 // Mixer commands settle asynchronously, so refresh the audible mask with telemetry.

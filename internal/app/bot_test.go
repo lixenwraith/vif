@@ -270,6 +270,15 @@ func TestAnAuthorityPausesOnlyWhileItsOtherParticipantsAreItsBots(t *testing.T) 
 	// Not parallel: real sockets against wall-clock deadlines.
 	holder, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
 	waitForCursors(t, holder, 2)
+	// A bot is rostered before its seat learns its participant, and until then its
+	// link is a stranger's to the pause gate
+	seated := func() bool {
+		holder.seatsMu.Lock()
+		defer holder.seatsMu.Unlock()
+		return len(holder.seats) == 1 && holder.seats[0].id.Load() != 0
+	}
+	for deadline := time.Now().Add(socketWait); !seated() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
 	pauses := func() bool {
 		holder.Context().SetPaused(true)
 		// A driven holder steps through its pause, so ticks bound the wait.
@@ -401,7 +410,17 @@ func TestAStillGuestSeatsBotsAfterItsHostLeaves(t *testing.T) {
 	for _, a := range []*App{successor, guest} {
 		waitForCursors(t, a, 3)
 	}
-	if s, g := successor.sessionTransport().PeerCount(), guest.sessionTransport().PeerCount(); s != 1 || g != 2 {
+	// The bot is rostered before its handshake ends, so its link to the guest can
+	// land after its cursor does
+	links := func() (int, int) {
+		return successor.sessionTransport().PeerCount(), guest.sessionTransport().PeerCount()
+	}
+	for deadline := time.Now().Add(socketWait); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if s, g := links(); s == 1 && g == 2 {
+			break
+		}
+	}
+	if s, g := links(); s != 1 || g != 2 {
 		t.Fatalf("the authority holds %d links and the guest %d, want 1 and 2", s, g)
 	}
 }

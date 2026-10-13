@@ -38,9 +38,13 @@ flowchart TD
 ```
 
 The system package is intentionally broad: each file is a gameplay system, and
-the generated manifest supplies construction order. Shared mechanics should
-move downward into focused packages rather than creating system-to-system
-object references; systems communicate through ECS data and events.
+the generated manifest supplies construction order. A system's file serves only
+its own system: no other system calls its functions or reads its fields, timer
+arming aside. Shared mechanics move downward into focused packages, or into a
+file that declares no system (`targeting.go`, `interaction.go`, `blast.go`,
+`sweep.go`, `sound.go`) and takes the world it works on. Systems otherwise
+communicate through ECS data and events: a species that must refuse hits sets a
+status combat reads, rather than calling combat.
 
 ## 3. Presentation and interaction topology
 

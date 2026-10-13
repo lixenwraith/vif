@@ -71,7 +71,7 @@ per-entity runtime, but the new front-end shares its dialect (§7).
    own routing, and a generic `EmitEvent` verb accepts only classes whose routing
    is mechanical.
 4. **RNG.** D-8 already prescribes the remedy for per-entity conditional draws:
-   seed from (tick, entity) through `vmath.Mix64`, as mount spread and soft
+   seed from (tick, entity) through `vmath.MixChain`, as mount spread and soft
    collision do. A `Chance` predicate draws that way, so guard short-circuiting
    cannot move any stream. A "fixed draws per step" rule is not needed.
 5. **Relative timers.** D-19 states that absolute instants are sound, because
@@ -104,7 +104,7 @@ per-entity runtime, but the new front-end shares its dialect (§7).
 | System | Encoding | Timers | Preemption | Fallible entries | Moore outputs | Commit |
 |---|---|---|---|---|---|---|
 | Swarm | enum ×5 | 5 countdowns, pattern cycle | stun → Chase, then freeze | Lock, Charge, Teleport | `IsEnraged`; `ChargesCompleted++` on Decel entry | `GetPtr` |
-| Quasar | 3 bools | `ChargeRemaining`; speed scaling on an instant | stun cancels Charging; in range cancels both | Zapping | `IsEnraged`, `IsShielded`, `Shield.Active`, sealed immunity | detached |
+| Quasar | 3 bools | `ChargeRemaining`; speed scaling on an instant | stun cancels Charging; in range cancels both | Zapping | `IsEnraged`, `IsShielded`, `Shield.Active`, ward status | detached |
 | Storm circle | enum ×3 | cooldown/attack countdowns; `InvulnerableElapsed` | none; no cursor freezes | none (Active waits for convex) | `IsInvulnerable`, `Mount.Armed`, `AttackProgress`, Z clamp | `GetPtr` |
 | Storm root | liveness aggregation | `pendingBlueSpawns` | — | — | — | detached |
 
@@ -245,7 +245,7 @@ a call before the plan is written.
   in range, from {Charging, Zapping} → Homing.
 - Suspend: stunned.
 - From the flags, the host writes `IsEnraged`, `IsShielded` and `Shield.Active`,
-  and seals immunity.
+  and refreshes the ward status.
 - The component moves to `GetPtr`: the detached copy existed only to order
   commits that the step now makes unconditional.
 

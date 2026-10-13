@@ -398,7 +398,7 @@ func TestKrakenTracerAndGlyphExplosionsSpendSeparatePlayerWeaponBudgets(t *testi
 			t.Fatal("repeat tracer or explosion bypassed its own allowance")
 		}
 	}
-	sealDamageImmunity(hp, parameter.CombatDamageImmunityDuration)
+	hp.Status[component.StatusWard] = component.Status{Remaining: parameter.CombatDamageImmunityDuration}
 	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
 		OwnerEntity: w.Resources.Player.Slot(0), TargetEntity: kraken, HitEntity: kraken, AttackType: component.CombatAttackBullet,
 	})
@@ -442,7 +442,7 @@ func TestKrakenLegInterceptsMissilesAndSharesUnstunnableHealth(t *testing.T) {
 	combat.applyHitArea(&event.CombatAttackAreaRequestPayload{
 		AttackType: component.CombatAttackPulse, OriginEntity: cursor, OwnerEntity: cursor, TargetEntity: e, HitEntities: []core.Entity{hit},
 	})
-	if hp.HitPoints != before-parameter.CombatDamagePulse || stunned(hp) {
+	if hp.HitPoints != before-parameter.CombatDamagePulse || hp.Status[component.StatusStun].Remaining > 0 {
 		t.Fatalf("pulse must damage without stunning: %+v", hp)
 	}
 	for _, attack := range []component.CombatAttackType{component.CombatAttackShield, component.CombatAttackExplosion} {

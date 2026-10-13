@@ -535,6 +535,25 @@ body now waits behind one 4 KiB chunk ([Troubleshooting](troubleshooting.md) §1
 Carrying it in the correction chunk envelope through the per-peer outbox bounds that
 too. Repairs at 20 kB/s have so far been a few kilobytes.
 
+### Find why a seed-42 solo bot journal leaves its run
+
+- Priority: P1
+- Affected files: unknown; start at `internal/journal/replay.go`
+
+On a build with the `vmath.MixChain` seeds, a solo bot journal does not replay on
+the build that recorded it. Recorded with `vif -bot 1 -headless -seed 42 -journal=DIR`
+and stopped with SIGINT past tick 146000 (about 110 s on four cores),
+`vif -replay <journal> -headless` reports "replay left its run by run 0 tick
+145360 (positions); it matched at run 0 tick 145340". Two separate recordings
+diverge at that same tick. Seeds 1 and 7 verify on that build, and seeds 1, 7 and
+42 verify on the build before it (2026-10-13). MixChain is a pure function of the
+same inputs the old folds read, so the new streams only change which states a run
+reaches. Something a state between ticks 145340 and 145360 depends on is not
+reproduced by replay: an input the journal does not carry, an order nothing fixes,
+or state read from outside the world. That would desync a session as well. The
+smallest next step is capturing both worlds at tick 145340 and diffing the
+position store by entity.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
@@ -616,6 +635,21 @@ Record the strength of the knockback that opened immunity. A stronger incoming
 knockback should reset the immunity duration and apply its impulse; equal or weaker
 hits remain blocked across all weapons and players. Carry the recorded strength
 through snapshots and synchronization. Stun immunity remains target-wide.
+
+### Drop the kinetic window's dead joiner path
+
+- Priority: P2
+- Affected files: `internal/system/combat.go`, `internal/component/combat.go`,
+  `internal/snapshot/digest.go`, `doc/generic-kinetic.md`, `doc/troubleshooting.md`
+
+Both kinetic hit sites (`combat.go:557`, `:733`) land only while
+`RemainingKineticImmunity` is zero, so every accepted knockback opens the window:
+`spendKineticImmunity` always reports opened, `joining` never composes an impulse,
+and `KineticImmunitySpent` is written but read only by the digest. Generic kinetic
+§5 and troubleshooting §4 ("Since.") still describe a per-attacker kinetic budget
+whose joiners add. The target-wide gate is the intended rule (see the item above),
+so delete the joiner path, the field and its digest line, and correct both texts;
+the field's removal is a capture schema bump.
 
 ### Let mounted weapons strike more than cursors
 
@@ -757,3 +791,21 @@ restates `EngineConfig.PerturbationStrength`; collapse each pair. The `fitness`
 context keys and most `tracking` metric keys are conventions of this game, and
 the `persistence` default codec is the one external dependency: make JSON the
 default and move the TOML codec to the caller, or drop the subpackage.
+
+## Tests
+
+### Cut the app package's test time
+
+- Priority: P1
+- Affected files: `internal/app/correction_test.go`, `internal/app/snapshot_capture_test.go`,
+  `internal/app/clone_test.go`, the replay and journal tests in `internal/app`
+
+`go test -race ./internal/app` runs 258 tests summing 680 s; nearly all are
+parallel, so wall time follows their CPU: 4.5 minutes on 4 cores against 36 s
+without `-race`, and nearly 10 in a full race run. Four carry 43%: `TestATowerGuestAnswersHashOnly` (103 s, 1200
+tower ticks), `TestAGAScenarioStagesAcrossAReset` (70 s),
+`TestAReplayRestoredFromACheckpointContinuesAsItsSource` (60 s) and
+`TestASlowLinkCarriesTheTowerWithoutAStandingQueue` (58 s). The 25 replay and
+journal tests carry 228 s more, each recording its own run. Cut each of the four to
+the ticks its rule needs, and record a replay fixture once per seed for the tests
+that only read it back.

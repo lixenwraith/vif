@@ -461,13 +461,6 @@ func (s *EnergySystem) publishSlots() {
 	})
 }
 
-// cursorDefeated reports the owner-authored lifecycle predicate.
-func cursorDefeated(w *engine.World, cursor core.Entity) bool {
-	energy, energyOK := w.Components.Energy.GetComponent(cursor)
-	heat, heatOK := w.Components.Heat.GetComponent(cursor)
-	return energyOK && heatOK && energy.Current == 0 && heat.Current == 0
-}
-
 // pushDefeatTransition crosses only changes to the combined lifecycle predicate.
 func (s *EnergySystem) pushDefeatTransition(cursor core.Entity, was bool) {
 	now := cursorDefeated(s.world, cursor)
