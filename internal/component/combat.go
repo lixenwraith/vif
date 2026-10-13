@@ -69,10 +69,12 @@ type StatusKind uint8
 const (
 	StatusStun StatusKind = iota // movement suppressed
 	StatusBurn                   // periodic damage credited to Source
+	StatusWard                   // every hit refused; set by the entity's own species
 	StatusCount
 )
 
-// Status is one effect a hit left on a combat entity, aged by combat each tick
+// Status is one effect a hit or the entity's own species left on a combat entity,
+// aged by combat each tick
 type Status struct {
 	Remaining time.Duration    // zero: inactive
 	Period    time.Duration    // between ticks of a periodic effect; zero: none

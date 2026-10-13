@@ -66,9 +66,9 @@ func TestChargedPulseLeavesABurnCreditedToItsLastRefresher(t *testing.T) {
 	}
 }
 
-// TestOnlyASealedWindowBlocksABurnTick: species-authored invulnerability refuses
+// TestOnlyAWardBlocksABurnTick: species-authored invulnerability refuses
 // a tick, while the window a player's own direct hit spends does not.
-func TestOnlyASealedWindowBlocksABurnTick(t *testing.T) {
+func TestOnlyAWardBlocksABurnTick(t *testing.T) {
 	w, first, _ := testCursorWorld(t)
 	combat := NewCombatSystem(w).(*CombatSystem)
 	target := w.CreateEntity(core.DomainShared)
@@ -83,13 +83,13 @@ func TestOnlyASealedWindowBlocksABurnTick(t *testing.T) {
 	}
 	w.Resources.Time.DeltaTime = time.Second
 
-	sealDamageImmunity(state, time.Hour)
+	state.Status[component.StatusWard] = component.Status{Remaining: time.Hour}
 	combat.Update()
 	if state.HitPoints != 100 {
-		t.Fatal("a sealed window let a burn tick through")
+		t.Fatal("a ward let a burn tick through")
 	}
 
-	state.RemainingDamageImmunity = 0
+	state.Status[component.StatusWard] = component.Status{}
 	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
 		OwnerEntity: first, OriginEntity: first, TargetEntity: target, HitEntity: target,
 		AttackType: component.CombatAttackLightning,

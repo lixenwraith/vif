@@ -398,7 +398,7 @@ func TestKrakenTracerAndGlyphExplosionsSpendSeparatePlayerWeaponBudgets(t *testi
 			t.Fatal("repeat tracer or explosion bypassed its own allowance")
 		}
 	}
-	sealDamageImmunity(hp, parameter.CombatDamageImmunityDuration)
+	hp.Status[component.StatusWard] = component.Status{Remaining: parameter.CombatDamageImmunityDuration}
 	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
 		OwnerEntity: w.Resources.Player.Slot(0), TargetEntity: kraken, HitEntity: kraken, AttackType: component.CombatAttackBullet,
 	})

@@ -1073,7 +1073,7 @@ func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormCompo
 			if !ok {
 				continue
 			}
-			sealDamageImmunity(memberCombat, parameter.CombatDamageImmunityDuration)
+			memberCombat.Status[component.StatusWard] = component.Status{Remaining: parameter.CombatDamageImmunityDuration}
 		}
 	}
 }

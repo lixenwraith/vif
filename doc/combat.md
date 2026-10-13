@@ -122,19 +122,22 @@ The damage type picks the resolver: direct, area, or over-time, which leaves a
 status instead of taking hit points. Damage allowances are per player and attack
 family within the target's immunity window (D-3); chained effects keep their
 originating weapon's allowance. Knockback and stun immunity each cover all players
-and weapons. Species-authored invulnerability still blocks every weapon.
+and weapons. Species-authored invulnerability is the ward status and blocks every
+weapon.
 
 A status is one slot per kind on `CombatComponent`, no stacking: remaining time,
 a period and its timer, a magnitude, the crediting cursor and the family it
-records under. Combat ages every slot each tick. Stun suppresses movement and is
-never refreshed while it runs, so a target under fire from two players still
-leaves it. Burn is the charged pulse's chained over-time attack,
-`CombatAttackBurn`: `BurnDamage` every `BurnPeriod` for `BurnDuration`, the last
-refresher credited, each tick recorded under the burn family, flashing the target
-and setting `LastDamagedBy` on it and its header. Nothing spends the burn
-family's immunity, so only a sealed window refuses a burn or its tick; a tick
-spends no window, so a player's own burn never blocks their direct hits. The
-digest names every slot field, so a status is compared state.
+records under. Combat ages every slot each tick. The ward is the one slot a hit
+never writes: quasar shields, storm phase and the shielded snake head refresh it
+from their own systems, and combat refuses every hit and tick while it runs. Stun
+suppresses movement and is never refreshed while it runs, so a target under fire
+from two players still leaves it. Burn is the charged pulse's chained over-time
+attack, `CombatAttackBurn`: `BurnDamage` every `BurnPeriod` for `BurnDuration`, the
+last refresher credited, each tick recorded under the burn family, flashing the
+target and setting `LastDamagedBy` on it and its header. Nothing spends the burn
+family's immunity, so only a ward refuses a burn or its tick; a tick spends no
+window, so a player's own burn never blocks their direct hits. The digest names
+every slot field, so a status is compared state.
 
 Hits on cursors are `CursorDamage`: energy through an active shield, heat without
 one. Projectiles find the cursor they touch with `CursorContactAt`, shields
