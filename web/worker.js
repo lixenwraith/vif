@@ -3,28 +3,31 @@
    ways and this side presents it to Go as the page globals it expects. */
 'use strict';
 
-importScripts('wasm_exec.js');
-
 /* Why the program ended. stderr is a Go program's only word on that, and
    wasm_exec sends it to the console alone; kept here, the page shows it once the
    program exits instead of leaving a terminal that simply stopped. */
 let lastLine = '';
 let crashLine = '';
-const writeSync = globalThis.fs.writeSync;
 const errDecoder = new TextDecoder('utf-8');
 let partial = '';
-globalThis.fs.writeSync = function(fd, buf) {
-    if (fd === 2) {
-        const lines = (partial + errDecoder.decode(buf, { stream: true })).split('\n');
-        partial = lines.pop();
-        for (const line of lines.map(l => l.trim()).filter(Boolean)) {
-            // A crash's first line names it; the rest is its stack.
-            if (!crashLine && /^(panic|fatal error|CRASH DETECTED):/.test(line)) crashLine = line;
-            lastLine = line;
+
+// wasm_exec.js by the URL the page names, then its stderr kept as above.
+function loadRuntime(exec) {
+    importScripts(exec);
+    const writeSync = globalThis.fs.writeSync;
+    globalThis.fs.writeSync = function(fd, buf) {
+        if (fd === 2) {
+            const lines = (partial + errDecoder.decode(buf, { stream: true })).split('\n');
+            partial = lines.pop();
+            for (const line of lines.map(l => l.trim()).filter(Boolean)) {
+                // A crash's first line names it; the rest is its stack.
+                if (!crashLine && /^(panic|fatal error|CRASH DETECTED):/.test(line)) crashLine = line;
+                lastLine = line;
+            }
         }
-    }
-    return writeSync.call(this, fd, buf);
-};
+        return writeSync.call(this, fd, buf);
+    };
+}
 
 // Go allocates each array for this call alone, so its buffer can move.
 globalThis.goTerminalWrite = function(data) {
@@ -32,6 +35,12 @@ globalThis.goTerminalWrite = function(data) {
 };
 
 async function start(msg) {
+    try {
+        loadRuntime(msg.exec || 'wasm_exec.js');
+    } catch (err) {
+        postMessage({ type: 'failed', reason: 'wasm_exec.js did not load: ' + err.message });
+        return;
+    }
     globalThis.xterm = { cols: msg.cols, rows: msg.rows };
     const go = new Go();
     go.argv = msg.argv;

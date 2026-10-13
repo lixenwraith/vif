@@ -1,7 +1,13 @@
 (function() {
     'use strict';
 
-    const WASM_PATH = 'vif.wasm';
+    /* The files beside the page, by the names web/ gives them. A site that
+       publishes them under other names, as content-hashed ones, says so on this
+       script's element: data-wasm, data-worker and data-exec (wasm_exec.js). */
+    const files = (document.currentScript && document.currentScript.dataset) || {};
+    const WASM_PATH = files.wasm || 'vif.wasm';
+    const WORKER_PATH = files.worker || 'worker.js';
+    const EXEC_PATH = files.exec || 'wasm_exec.js';
 
     let term;
     let fitAddon;
@@ -166,7 +172,7 @@
             return;
         }
 
-        program = new Worker('worker.js');
+        program = new Worker(WORKER_PATH);
         program.onerror = function(e) {
             showMessage('Failed to start vif (' + e.message + '). Reload to retry.', true);
         };
@@ -185,8 +191,9 @@
                 break;
             }
         };
-        program.postMessage({ type: 'start', bytes: bytes.buffer, argv: argv,
-            cols: term.cols, rows: term.rows }, [bytes.buffer]);
+        // Resolved here: the worker would resolve a relative name against its own URL.
+        program.postMessage({ type: 'start', exec: new URL(EXEC_PATH, document.baseURI).href,
+            bytes: bytes.buffer, argv: argv, cols: term.cols, rows: term.rows }, [bytes.buffer]);
         document.addEventListener('visibilitychange', function() {
             program.postMessage({ type: 'visibility', hidden: document.hidden });
         });
