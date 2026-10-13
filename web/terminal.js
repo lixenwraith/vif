@@ -185,9 +185,11 @@
                 break;
             case 'exit':
                 showExit(msg.code, msg.reason);
+                stop();
                 break;
             case 'failed':
                 showMessage('Failed to load vif (' + msg.reason + '). Reload to retry.', true);
+                stop();
                 break;
             }
         };
@@ -195,9 +197,17 @@
         program.postMessage({ type: 'start', exec: new URL(EXEC_PATH, document.baseURI).href,
             bytes: bytes.buffer, argv: argv, cols: term.cols, rows: term.rows }, [bytes.buffer]);
         document.addEventListener('visibilitychange', function() {
-            program.postMessage({ type: 'visibility', hidden: document.hidden });
+            if (program) program.postMessage({ type: 'visibility', hidden: document.hidden });
         });
         wireHandlers();
+    }
+
+    /* An ended program takes no more messages: a resize or a key posted to it
+       would fail there, and its error would replace the reason it ended. */
+    function stop() {
+        if (!program) return;
+        program.terminate();
+        program = null;
     }
 
     function sendInput(arr) {

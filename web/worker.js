@@ -65,6 +65,7 @@ onmessage = function(e) {
         if (typeof globalThis.goTerminalInput === 'function') globalThis.goTerminalInput(msg.data);
         break;
     case 'resize':
+        if (!globalThis.xterm) break; // not started: the page's first fit can come first
         globalThis.xterm.cols = msg.cols;
         globalThis.xterm.rows = msg.rows;
         if (typeof globalThis.goTerminalResize === 'function') globalThis.goTerminalResize(msg.cols, msg.rows);
@@ -74,7 +75,7 @@ onmessage = function(e) {
            terminal gathers no backlog to replay on return. A resize of the same size
            is what repaints the whole screen once it is seen again. */
         globalThis.vifHidden = msg.hidden;
-        if (!msg.hidden && typeof globalThis.goTerminalResize === 'function') {
+        if (!msg.hidden && globalThis.xterm && typeof globalThis.goTerminalResize === 'function') {
             globalThis.goTerminalResize(globalThis.xterm.cols, globalThis.xterm.rows);
         }
         break;
