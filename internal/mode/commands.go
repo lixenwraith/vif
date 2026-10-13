@@ -1,6 +1,8 @@
 package mode
 
 import (
+	"cmp"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -689,6 +691,8 @@ func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 	switch kind {
 	case "p", "prof":
 		handleProfCommand(ctx, args[1:])
+	case "b", "break":
+		handleBreakCommand(ctx, args[1:])
 	case "heap":
 		dir := diagnosticsDir()
 		core.Go(func() {
@@ -697,7 +701,7 @@ func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 		})
 		ctx.SetStatusMessage("Writing heap profile", parameter.StatusNotice)
 	default:
-		setCommandError(ctx, "Usage: :debug [prof [on|off]|cpu [s]|heap|mutex [s]|trace [s]]")
+		setCommandError(ctx, "Usage: :debug [prof [on|off]|break ...|cpu [s]|heap|mutex [s]|trace [s]]")
 	}
 	return CommandResult{Continue: true, KeepPaused: false}
 }
@@ -725,6 +729,198 @@ func handleProfCommand(ctx *engine.GameContext, args []string) {
 	}
 	ctx.Log.Info("app", "msg", "profiler toggled", "on", on)
 	ctx.SetStatusMessage(msg, parameter.StatusNotice)
+}
+
+const breakUsage = "Usage: :d break [event <Event>|region <name>|state <name>|stat <key> [op] [value]|clear [...]]"
+
+// handleBreakCommand lists, sets or clears the standing breakpoints. A hit pauses
+// the run on the command line, so leaving the line resumes it.
+func handleBreakCommand(ctx *engine.GameContext, args []string) {
+	tc := ctx.TimeCtl
+	if len(args) == 0 {
+		var labels []string
+		if bs := tc.Breaks(); bs != nil {
+			for _, bp := range bs.List {
+				labels = append(labels, bp.Label)
+			}
+		}
+		if len(labels) == 0 {
+			ctx.SetStatusMessage("No breakpoints; "+breakUsage[len("Usage: "):], parameter.StatusNotice)
+			return
+		}
+		ctx.SetStatusMessage("Break on "+strings.Join(labels, "; "), parameter.StatusNotice)
+		return
+	}
+	if strings.EqualFold(args[0], "clear") {
+		var match func(*engine.Breakpoint) bool
+		if len(args) > 1 {
+			bp, err := parseBreakpoint(ctx, args[1:])
+			if err != nil {
+				setCommandError(ctx, err.Error())
+				return
+			}
+			// A stat named without a comparison clears every one on that key
+			whole := bp.Kind != engine.BreakOnStat || len(args) > 2
+			match = func(o *engine.Breakpoint) bool {
+				return o.Kind == bp.Kind && strings.EqualFold(o.Name, bp.Name) && (!whole || o.Label == bp.Label)
+			}
+		}
+		n := tc.ClearBreaks(match)
+		ctx.Log.Info("app", "msg", "breakpoints cleared", "count", n)
+		ctx.SetStatusMessage(fmt.Sprintf("Cleared %d breakpoint(s)", n), parameter.StatusNotice)
+		return
+	}
+	if ctx.World.Session().Live {
+		setCommandError(ctx, "Breakpoints are unavailable in a live session")
+		return
+	}
+	bp, err := parseBreakpoint(ctx, args)
+	if err != nil {
+		setCommandError(ctx, err.Error())
+		return
+	}
+	tc.SetBreak(bp)
+	ctx.Log.Info("app", "msg", "breakpoint set", "on", bp.Label)
+	ctx.SetStatusMessage("Break on "+bp.Label, parameter.StatusNotice)
+}
+
+// parseBreakpoint reads `<kind> <name> [op] [value]` into a breakpoint
+func parseBreakpoint(ctx *engine.GameContext, args []string) (*engine.Breakpoint, error) {
+	if len(args) < 2 {
+		return nil, errors.New(breakUsage)
+	}
+	word := strings.ToLower(args[0])
+	if word == "ev" {
+		word = "event"
+	}
+	idx := slices.Index(engine.BreakKindNames[:], word)
+	if idx < 0 {
+		return nil, errors.New(breakUsage)
+	}
+	kind := engine.BreakKind(idx)
+	bp := &engine.Breakpoint{Kind: kind, Name: args[1]}
+	reg := ctx.World.Resources.Status
+	switch kind {
+	case engine.BreakOnEvent:
+		et, ok := event.GetEventType(args[1])
+		if !ok {
+			et, ok = event.GetEventType("Event" + args[1])
+		}
+		// A hit pushes these two itself, so breaking on them would never end
+		if !ok || et == event.EventNone || et == event.EventGamePauseRequest || et == event.EventMetaStatusMessageRequest {
+			return nil, fmt.Errorf("No breakable event %q", args[1])
+		}
+		bp.Event, bp.Name = et, event.GetEventName(et)
+	case engine.BreakOnRegion:
+		region := ""
+		for _, k := range reg.Strings.Keys() {
+			if name, ok := strings.CutPrefix(k, "fsm."); ok && strings.HasSuffix(name, ".state") &&
+				strings.EqualFold(strings.TrimSuffix(name, ".state"), args[1]) {
+				region = strings.TrimSuffix(name, ".state")
+			}
+		}
+		if region == "" {
+			return nil, fmt.Errorf("No region %q in this scenario", args[1])
+		}
+		bp.Name = region
+	case engine.BreakOnStat:
+		test, cond, err := statCondition(reg, args[1], args[2:])
+		if err != nil {
+			return nil, err
+		}
+		bp.Test, bp.Label = test, "stat "+args[1]+cond
+		return bp, nil
+	}
+	if len(args) > 2 {
+		return nil, errors.New(breakUsage)
+	}
+	bp.Label = word + " " + bp.Name
+	return bp, nil
+}
+
+// breakOps maps each comparison word to the sign it tests: what the comparison
+// of cell against value must be, as cmp.Compare reports it
+var breakOps = map[string][]int{
+	"eq": {0}, "equal": {0}, "e": {0}, "=": {0}, "==": {0},
+	"ne": {-1, 1}, "!=": {-1, 1},
+	"gt": {1}, "g": {1}, ">": {1},
+	"ge": {0, 1}, ">=": {0, 1},
+	"lt": {-1}, "l": {-1}, "<": {-1},
+	"le": {-1, 0}, "<=": {-1, 0},
+}
+
+// statCondition builds the comparison over one status cell. With no value it
+// holds while the cell is set: non-zero, true, or a string neither empty nor "-".
+func statCondition(reg *status.Registry, key string, rest []string) (func() bool, string, error) {
+	op, value := "eq", ""
+	switch len(rest) {
+	case 0:
+	case 1:
+		value = rest[0]
+	case 2:
+		op, value = strings.ToLower(rest[0]), rest[1]
+	default:
+		return nil, "", errors.New(breakUsage)
+	}
+	signs, ok := breakOps[op]
+	if !ok {
+		return nil, "", fmt.Errorf("Unknown comparison %q: eq ne gt ge lt le", op)
+	}
+	holds := func(c int) bool { return slices.Contains(signs, c) }
+	cond := ""
+	if value != "" {
+		cond = " " + op + " " + value
+	}
+	switch {
+	case reg.Ints.Has(key):
+		cell := reg.Ints.Get(key)
+		if value == "" {
+			return func() bool { return cell.Load() != 0 }, cond, nil
+		}
+		want, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return nil, "", fmt.Errorf("%s is an integer", key)
+		}
+		return func() bool { return holds(cmp.Compare(cell.Load(), want)) }, cond, nil
+	case reg.Floats.Has(key):
+		cell := reg.Floats.Get(key)
+		if value == "" {
+			return func() bool { return cell.Get() != 0 }, cond, nil
+		}
+		want, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return nil, "", fmt.Errorf("%s is a number", key)
+		}
+		return func() bool { return holds(cmp.Compare(cell.Get(), want)) }, cond, nil
+	case reg.Bools.Has(key):
+		cell := reg.Bools.Get(key)
+		want := true
+		if value != "" {
+			b, err := strconv.ParseBool(value)
+			if err != nil {
+				return nil, "", fmt.Errorf("%s is true or false", key)
+			}
+			want = b
+		}
+		return func() bool { return holds(boolCompare(cell.Load(), want)) }, cond, nil
+	case reg.Strings.Has(key):
+		cell := reg.Strings.Get(key)
+		if value == "" {
+			return func() bool { v := cell.Load(); return v != "" && v != "-" }, cond, nil
+		}
+		return func() bool { return holds(strings.Compare(cell.Load(), value)) }, cond, nil
+	}
+	return nil, "", fmt.Errorf("No status key %q; :t lists them", key)
+}
+
+func boolCompare(a, b bool) int {
+	if a == b {
+		return 0
+	}
+	if a {
+		return 1
+	}
+	return -1
 }
 
 // timedCaptures are the :d captures that run for a duration, by subcommand

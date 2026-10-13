@@ -280,7 +280,7 @@ The command dispatcher recognizes aliases shown in the first column.
 |---|---|
 | `:quit`, `:q` | Exit. |
 | `:new`, `:n` | Reset simulation state; in a live session only the host may request it, and both participants reset. |
-| `:new!` | Reset and purge the initiating operator's free-mouse, auto-fire, speed, telemetry HUD, and pins. |
+| `:new!` | Reset and purge the initiating operator's free-mouse, auto-fire, speed, telemetry HUD, pins, and breakpoints. |
 | `:n <scenario>` | Rebuild the run on another scenario, by installed name or path. A scenario declares its own regions, so a different one needs a run of its own; naming the one already loaded resets in place instead. In a live session only the host may ask, and every guest rebuilds and rejoins with it. |
 | `:help`, `:h`, `:?`; `:about` | Open overlays. |
 | `:content` | Show corpus telemetry. |
@@ -307,6 +307,8 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:telemetry [save\|hud\|unpin]`, `:t` | Open the telemetry overlay; `save` writes a point-in-time status snapshot, `unpin` clears pins. |
 | `:hud [on\|off]` | Toggle or set the pinned-card HUD; `:t hud` is the same. |
 | `:debug`, `:d [prof [on\|off]\|cpu [s]\|heap\|mutex [s]\|trace [s]]` | Open the profiler report, toggle the profiler, or write a CPU, heap or mutex profile or an execution trace; see [Logging and diagnostics](logging-and-diagnostics.md) §11. |
+| `:d break event <Event>\|region <name>\|state <name>\|stat <key> [op] [value]` | Set a standing breakpoint: each time the event is dispatched, the region is entered (spawned, or started by a new game), any region enters the state, or the status cell starts to meet the comparison, the run pauses on the command line and leaving it resumes. Ops are `eq` (default), `ne`, `gt`, `ge`, `lt`, `le`; with no value a stat breaks once it is set — non-zero, true, or a string other than empty or `-`. Names match without case. Breakpoints persist across `:new`; `:new!` clears them. Refused in a live session. `:d break` lists them. |
+| `:d break clear [<kind> <name> [op] [value]]` | Clear every breakpoint, or the ones matching; a stat named without a comparison clears every one on that key. |
 | `:emit <EventName> [{ TOML payload }]` | Construct and publish a registered event for testing. |
 | `:energy <value>`, `:heat <0-100>`, `:boost` | Directly manipulate player state for development. |
 | `:god`, `:demon` | Apply high positive/negative energy test states. |

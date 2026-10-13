@@ -213,7 +213,8 @@ greps for rather than enumerating every refusal.
 | `log level changed` / `log scope changed` | INFO | `level` / `scope` | `:log` |
 | `stat interval changed` / `recorder depth changed` | INFO | `ticks` | `:log stat`, `:log rec N` |
 | `snapshot saved` / `capture saved` | INFO | `path`, plus `kind` | `:t save`, `:d heap` and the timed `:d` captures |
-| `time scale changed` / `steps granted` / `breakpoint hit` | INFO | `scale` / `ticks` / `on`, `cause` | operator time control |
+| `time scale changed` / `steps granted` / `breakpoint hit` | INFO | `scale` / `ticks` / `on`, `cause`, and `pause` for a standing one | operator time control |
+| `breakpoint set` / `breakpoints cleared` | INFO | `on` / `count` | `:d break` |
 | `cursor spawned` / `cursor despawned` | INFO | `entity`, `slot`, plus `x`, `y` | `CursorSystem` |
 
 ### `sub="net"`
@@ -1027,6 +1028,7 @@ use their independently configured journal directory.
 | `:t save` | Write a standalone snapshot (§7) |
 | `:d`, `:d prof [on\|off]` | Profiler report; start or stop the profiler (§11) |
 | `:d cpu [s]`, `:d heap`, `:d mutex [s]`, `:d trace [s]` | Write a CPU, heap or mutex profile, or an execution trace (§11) |
+| `:d break ...` | Set, list or clear standing breakpoints that pause on the command line ([Input](input-and-modes.md)) |
 | `:content` | Corpus telemetry in the status bar |
 
 `:log` reports `log <path> | level <L> | scope <S> | stat <N> | rec <M>`.

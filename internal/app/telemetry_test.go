@@ -437,3 +437,36 @@ func TestEveryParticipantsResourcesAreReported(t *testing.T) {
 		}
 	}
 }
+
+// TestABreakpointPausesOnTheCommandLineEveryRun: a standing breakpoint pauses the
+// run where it matches and opens the command line, leaving the line resumes play,
+// and it holds across a new game.
+func TestABreakpointPausesOnTheCommandLineEveryRun(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, fixtureSeed, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	injectExCommand(t, a, "d break stat engine.ticks ge 60")
+	injectExCommand(t, a, "d break region MAIN")
+	hit := func(what string) {
+		t.Helper()
+		for i := range 80 {
+			if i > 0 && a.ctx.TimeCtl.IsPaused() {
+				break
+			}
+			a.Tick(1) // the first also runs a pending reset
+		}
+		a.processInputTick()
+		if !a.ctx.TimeCtl.IsPaused() || a.ctx.GetMode() != core.ModeCommand {
+			t.Fatalf("the %s breakpoint left the run paused %t in mode %d", what, a.ctx.TimeCtl.IsPaused(), a.ctx.GetMode())
+		}
+		inject(t, a, intentEscape())
+		if a.ctx.TimeCtl.IsPaused() {
+			t.Fatalf("leaving the command line after the %s breakpoint did not resume", what)
+		}
+	}
+	hit("stat")
+	a.Reset(false)
+	hit("region")
+	hit("stat")
+}

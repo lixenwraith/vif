@@ -476,20 +476,32 @@ func (s *Scheduler) bindFSMTelemetry() {
 				"max_ms", s.fsm.StateDurations[to].Milliseconds())
 		}
 		// After the transition record, so the breakpoint reads as its consequence
+		cause := region + " " + s.fsm.StateName(from) + " -> " + s.fsm.StateName(to)
 		if bs := s.ctl.Trip(StepFSM, region, event.EventNone); bs != nil {
-			s.breakHit(bs, region+" "+s.fsm.StateName(from)+" -> "+s.fsm.StateName(to))
+			s.breakHit(bs, cause)
+		}
+		if bp := s.ctl.Breaks().Named(BreakOnState, s.fsm.StateName(to)); bp != nil {
+			s.breakpointHit(bp, cause)
 		}
 	}
 
 	s.fsm.OnRegion = func(op, region string, state fsm.StateID) {
-		log := s.world.Log()
-		if !log.On("fsm", vlog.LevelInfo) {
+		if log := s.world.Log(); log.On("fsm", vlog.LevelInfo) {
+			log.Info("fsm", "msg", "region",
+				"region", region,
+				"op", op,
+				"state", s.fsm.StateName(state))
+		}
+		if op != "init" && op != "spawn" {
 			return
 		}
-		log.Info("fsm", "msg", "region",
-			"region", region,
-			"op", op,
-			"state", s.fsm.StateName(state))
+		breaks := s.ctl.Breaks()
+		if bp := breaks.Named(BreakOnRegion, region); bp != nil {
+			s.breakpointHit(bp, region+" "+op)
+		}
+		if bp := breaks.Named(BreakOnState, s.fsm.StateName(state)); bp != nil {
+			s.breakpointHit(bp, region+" "+op+" in "+s.fsm.StateName(state))
+		}
 	}
 }
 
@@ -739,6 +751,23 @@ func (s *Scheduler) breakHit(bs *BreakState, cause string) {
 	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: "Break: " + cause})
 }
 
+// breakpointHit pauses the run where a standing breakpoint matched and asks for
+// the command line, so leaving it resumes. A live session cannot pause one copy
+// of itself, so there the hit is only reported.
+func (s *Scheduler) breakpointHit(bp *Breakpoint, cause string) {
+	pause := !s.world.Session().Live
+	s.world.Resources.Status.Trigger(status.TrigBreak)
+	s.world.Log().Info("app", "msg", "breakpoint hit", "on", bp.Label, "cause", cause, "pause", pause)
+	msg := "Break on " + bp.Label + ": " + cause
+	if pause {
+		s.world.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: true})
+		s.ctl.MarkHit()
+	} else {
+		msg += " (a live session does not pause)"
+	}
+	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: msg})
+}
+
 // awaitFrame applies render backpressure: at real time and slower a tick waits
 // for the render loop, bounded by a timeout so a stalled terminal cannot freeze
 // the simulation. Above real time the operator has asked the world to outrun the
@@ -883,11 +912,13 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 	perEvent := log.On("dispatch", vlog.LevelTrace)
 	summary := log.On("event", vlog.LevelDebug)
 
-	// Breakpoint probe: one pointer load per pass, one compare per event
+	// Breakpoint probe: one pointer load per pass, one compare per event, and a
+	// lookup per event only while a standing event breakpoint exists
 	var brkEv event.EventType
 	if bs := s.ctl.Armed(); bs != nil && bs.Mode == StepEvent {
 		brkEv = bs.Event
 	}
+	breaks := s.ctl.Breaks()
 
 	// APM admission; input while paused is not gameplay
 	apmOpen := !s.ctl.IsPaused()
@@ -959,6 +990,9 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 				s.breakHit(bs, event.GetEventName(ev.Type))
 			}
 			brkEv = 0
+		}
+		if bp := breaks.OnEvent(ev.Type); bp != nil {
+			s.breakpointHit(bp, event.GetEventName(ev.Type))
 		}
 	}
 
@@ -1406,6 +1440,9 @@ func (s *Scheduler) processTick() {
 	statusSpan := p.BeginPhase(prof.PhaseStatus)
 	s.world.Resources.Status.Tick(ticks)
 	statusSpan.End()
+	for _, bp := range s.ctl.Breaks().RisenStats() {
+		s.breakpointHit(bp, fmt.Sprintf("tick %d", ticks))
+	}
 
 	// Anchor cadence: a rotated journal file must be interpretable on its own
 	if event.AnchorDue(ticks) {

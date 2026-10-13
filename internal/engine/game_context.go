@@ -541,6 +541,7 @@ func (ctx *GameContext) ResetSessionState() {
 	ctx.ClearOverlayPins()
 	ctx.SetOverlayContent(nil)
 	ctx.TimeCtl.SetScale(ScaleNormal)
+	ctx.TimeCtl.ClearBreaks(nil)
 }
 
 // === Viewport and Bounds ===
