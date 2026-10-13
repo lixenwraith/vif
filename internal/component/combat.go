@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/core"
-	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 type CombatEntityType int
@@ -120,71 +119,4 @@ type CombatComponent struct {
 
 	// Status is indexed by StatusKind
 	Status [StatusCount]Status
-}
-
-func (c *CombatComponent) Stunned() bool { return c.Status[StatusStun].Remaining > 0 }
-
-// unownedAttacker is the immunity bit for an attack no cursor owns
-const unownedAttacker = 1 << parameter.MaxPlayers
-
-func (c *CombatComponent) DamageImmuneTo(attacker uint32, weapon CombatAttackType) bool {
-	if uint(weapon) >= uint(CombatAttackTypeCount) {
-		return true
-	}
-	return c.RemainingDamageImmunity != 0 && c.DamageImmunitySpent[weapon]&attacker != 0
-}
-
-// SpendDamageImmunity records a landed hit, opening the window when it is closed.
-// An attacker joining a window late may land twice inside one duration; the rate
-// stays bounded at two hits per window and the alternative is a timer per slot.
-func (c *CombatComponent) SpendDamageImmunity(attacker uint32, weapon CombatAttackType, d time.Duration) {
-	if uint(weapon) >= uint(CombatAttackTypeCount) {
-		return
-	}
-	if c.RemainingDamageImmunity == 0 {
-		c.RemainingDamageImmunity = d
-		clear(c.DamageImmunitySpent[:])
-	}
-	c.DamageImmunitySpent[weapon] |= attacker
-}
-
-// SealDamageImmunity opens a window no attacker may spend, for species-authored
-// invulnerability rather than the per-attacker hit rate limit.
-func (c *CombatComponent) SealDamageImmunity(d time.Duration) {
-	c.RemainingDamageImmunity = d
-	for weapon := range c.DamageImmunitySpent {
-		c.DamageImmunitySpent[weapon] = ^uint32(0)
-	}
-}
-
-// Every weapon and player shares the target's displacement window.
-func (c *CombatComponent) KineticImmuneTo(_ uint32) bool {
-	return c.RemainingKineticImmunity != 0
-}
-
-// Record the accepted source without extending an open displacement window.
-// The return value preserves the impulse replacement/composition contract.
-func (c *CombatComponent) SpendKineticImmunity(attacker uint32, d time.Duration) (opened bool) {
-	if c.RemainingKineticImmunity == 0 {
-		c.RemainingKineticImmunity = d
-		c.KineticImmunitySpent = 0
-		opened = true
-	}
-	c.KineticImmunitySpent |= attacker
-	return opened
-}
-
-// SealKineticImmunity opens a displacement window no attacker may spend, for the
-// species-authored knockback that has no attacker to name.
-func (c *CombatComponent) SealKineticImmunity(d time.Duration) {
-	c.RemainingKineticImmunity = d
-	c.KineticImmunitySpent = ^uint32(0)
-}
-
-// AttackerBit names an attacking cursor's slot inside a target's immunity window.
-func AttackerBit(slot uint8, owned bool) uint32 {
-	if owned && int(slot) < parameter.MaxPlayers {
-		return 1 << slot
-	}
-	return unownedAttacker
 }

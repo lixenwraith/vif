@@ -130,7 +130,7 @@ rate stays bounded at two hits per window per attacker, and the alternative is
 sixteen timers on every storm member.
 
 Species-authored invulnerability is a different thing and says so: quasar shields,
-storm phase and the snake head call `SealDamageImmunity`, which opens a window no
+storm phase and the snake head call `sealDamageImmunity`, which opens a window no
 attacker may spend.
 
 **Since.** Kinetic immunity is per attacker as well, with the opener replacing the
