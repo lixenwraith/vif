@@ -248,7 +248,7 @@ func (s *CursorSystem) build(slot uint8, x, y int, control component.ControlKind
 		LastDrainTime: w.Resources.Time.GameTime,
 	})
 	w.Components.Boost.SetComponent(e, component.BoostComponent{})
-	w.Components.Weapon.SetComponent(e, component.Loadout())
+	w.Components.Weapon.SetComponent(e, loadout())
 	w.Components.Combat.SetComponent(e, component.CombatComponent{
 		OwnerEntity:      e,
 		CombatEntityType: component.CombatEntityCursor,
