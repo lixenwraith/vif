@@ -4,7 +4,6 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 )
@@ -69,7 +68,6 @@ func (r *MarkerRenderer) renderInvert(ctx render.RenderContext, buf *render.Rend
 		return
 	}
 
-	var entitiesBuf [parameter.MaxEntitiesPerCell]core.Entity
 	for dy := range marker.Height {
 		for dx := range marker.Width {
 			mapX := marker.X + dx
@@ -80,30 +78,16 @@ func (r *MarkerRenderer) renderInvert(ctx render.RenderContext, buf *render.Rend
 				continue
 			}
 
-			count := r.gameCtx.World.Positions.GetAllEntitiesAtInto(mapX, mapY, entitiesBuf[:])
-
 			var char rune
 			var fg, bg = visual.RgbWhite, visual.RgbBackground
 
-			for i := range count {
-				e := entitiesBuf[i]
-				if e == 0 {
-					continue
-				}
-
-				// Check glyph first
-				if glyph, ok := r.gameCtx.World.Components.Glyph.GetPtr(e); ok {
-					char = glyph.Rune
-					fg = visual.GlyphColorLUT[glyph.Type][glyph.Level]
-					break
-				}
-
-				// Fallback to sigil
-				if sigil, ok := r.gameCtx.World.Components.Sigil.GetPtr(e); ok {
-					char = sigil.Rune
-					fg = sigil.Color
-					break
-				}
+			glyphEntity, sigilEntity := cellContent(r.gameCtx, mapX, mapY)
+			if glyph, ok := r.gameCtx.World.Components.Glyph.GetPtr(glyphEntity); ok {
+				char = glyph.Rune
+				fg = visual.GlyphColorLUT[glyph.Type][glyph.Level]
+			} else if sigil, ok := r.gameCtx.World.Components.Sigil.GetPtr(sigilEntity); ok {
+				char = sigil.Rune
+				fg = sigil.Color
 			}
 
 			if char == 0 {
