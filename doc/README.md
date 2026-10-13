@@ -83,7 +83,7 @@ changing a subsystem, update the source that actually owns its shape.
 | Input enum string forms | input enum definitions | `internal/input/strings_gen.go` |
 | Shipped encounter progression | `internal/asset/scenario/*.toml` | `internal/fsm`, `internal/engine.Scheduler` |
 | Embedded fallback progression | `internal/asset/scenario/*.toml` | the same, when no root supplies one |
-| Alternate scenarios | `wad/scenario/blank`, `wad/scenario/td` | selected by name or path with `-s` |
+| Alternate scenarios | `wad/scenario/*` | selected by name or path with `-s` |
 | Gameplay tuning | `internal/parameter` and `internal/parameter/visual` | systems and renderers |
 | Embedded fallback corpus | `internal/asset/content/*.toml` | content service |
 | Built-in sound bank | `internal/asset/audio/*.toml` | `parameter.BuiltinSounds`, `AudioConfig.BaseSounds` |

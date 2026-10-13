@@ -135,14 +135,15 @@ counted. Allowance left idle builds up to one second's worth.
 
 | Action | Payload | Queues |
 |---|---|---|
-| `Intent` | `name`: an action of the [default keymap](../internal/asset/input/keymap.toml), or a list drawn from; `count`: a number or a `[min, max]` range drawn from; `char` for a char-wait action | one key press |
+| `Intent` | `name`: an action of the [default keymap](../internal/asset/input/keymap.toml), or a list drawn from, or `press`; `count`: a number or a `[min, max]` range drawn from; `char` for a char-wait action, or the key `press` presses | one key press |
 | `Text` | `text` | one character per rune |
 | `Command` | `text`: an ex-command, the leading `:` optional, not empty | the command-line round trip |
 | `TypeGlyph` | none | the glyph under the cursor, switching to Insert first; nothing when there is none |
 | `PointAt` | `target`; `fire = true` clicks instead of moving; `away = true` aims away | a pointer move or click |
 
 `Intent` refuses operators, prefixes, marker jumps and macro keys; `quit` ends the
-run. `PointAt` aims at the nearest target of its class, clamped to the cells the
+run. `press` presses a key a scenario captured, as a typed key or a click on its
+button would, and does nothing while the key is not captured. `PointAt` aims at the nearest target of its class, clamped to the cells the
 view shows, and for `glyph` at the left edge of that text run. If the cursor may
 not enter the cell, it lands on the nearest shown cell it may enter, and does
 nothing when none is shown. `away` aims at the target's mirror through the cursor,

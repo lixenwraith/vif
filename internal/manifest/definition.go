@@ -97,6 +97,7 @@ var Components = []ComponentDef{
 	{"Fadeout", "FadeoutComponent", "player"},
 	{"Splash", "SplashComponent", "player"},
 	{"Marker", "MarkerComponent", ""},
+	{"Button", "ButtonComponent", "shared"},
 
 	// --- Lifecycle ---
 	{"Death", "DeathComponent", ""},
@@ -189,6 +190,7 @@ var Systems = []SystemDef{
 	{Name: "flash", Constructor: "NewFlashSystem", Domain: "player", Requires: []string{"timer"}},                 // request-created player effect
 	{Name: "fadeout", Constructor: "NewFadeoutSystem", Domain: "player", Requires: []string{"timer"}},             // request-created player effect
 	{Name: "marker", Constructor: "NewMarkerSystem", Domain: "shared", Requires: []string{"timer"}},               // request-created shared marker
+	{Name: "button", Constructor: "NewButtonSystem", Domain: "shared", Requires: []string{"timer"}},               // request-created shared buttons, lit by request and by applied input crossings (D-3)
 	{Name: "explosion", Constructor: "NewExplosionSystem", Domain: "shared", Requires: []string{"combat"}},        // combat-only consumer of crossed geometry; presentation is transient (D-3, D-6)
 	{Name: "motion_marker", Constructor: "NewMotionMarkerSystem", Domain: "player", Requires: []string{"cursor"}}, // local-cursor marker (D-6)
 	{Name: "splash", Constructor: "NewSplashSystem", Domain: "player", Requires: []string{"cursor", "timer"}},     // local-cursor viewport overlay (D-6)
@@ -269,6 +271,7 @@ var Renderers = []RendererDef{
 	{"spirit", "NewSpiritRenderer", "PrioritySpirit"},
 
 	// --- Overlays ---
+	{"button", "NewButtonRenderer", "PriorityButton"},
 	{"splash", "NewSplashRenderer", "PrioritySplash"},
 	{"marker", "NewMarkerRenderer", "PriorityMarker"},
 

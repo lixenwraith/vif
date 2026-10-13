@@ -25,18 +25,36 @@ producers share the same entity-owned path.
 
 `Intent` is a data structure, not a callback. It includes intent type, motion,
 operator, special action, target mode, count, optional character, the pointer
-cell in terminal coordinates, captured command text, and a flag identifying macro
-playback. This boundary makes the
-parser testable without constructing an ECS world.
+cell (terminal coordinates, or a map cell when `MapCell` is set), captured command
+text, and a flag identifying macro playback. This boundary makes the parser
+testable without constructing an ECS world.
 
 A scenario can take printable ASCII keys away from the play grammar, for a game
 whose buttons are keys. An FSM state emits `EventKeyCaptureRequest { keys = "12345" }`
 (empty `keys` releases them; `entity` scopes the capture to one cursor's instance)
 and `MetaSystem` stores the set in `GameContext.KeyCapture`, which the parser reads
 without the world lock. In Normal, Visual and Insert a captured key cancels any
-pending count or operator and becomes `IntentKeyPress`, which the router crosses as
-`EventKeyPressed { entity, key }` so the shared FSM sees it on every instance. Text
-entry, Escape and mode switches are untouched, and a reset releases the capture.
+pending count or operator and becomes `IntentKeyPress`. Text entry, Escape and mode
+switches are untouched, and a reset releases the capture.
+
+A captured key is the scenario's one input hook, whatever produces it:
+
+- **Sources.** A typed key, a left press on the button of that key (§7), and a bot
+  or script naming the `press` action with the key as its `char` all reach the
+  router, which crosses `EventInputPressed { entity, key, source }` so the shared
+  FSM sees it on every instance. `source` is 0 for a key, 1 for a pointer.
+- **Release.** A terminal reports no key release, so only a pointer press has one:
+  the router remembers the button a left press holds and crosses
+  `EventInputReleased` when the pointer lets go, when reporting stops, or before
+  the next press.
+- **Gate.** The router presses only a captured key, only in Normal, Visual and
+  Insert, never while input is suspended, and never from macro playback: a
+  recorded round of a memory game is the wrong answer to the next one.
+- **Echo.** `World.PushInputPress` sends each crossing with a local echo
+  (`EventInputPressEcho`, `EventInputReleaseEcho`), which lights and sounds the
+  button on the pressing instance at once. The crossing applies a playout lead
+  later; it lights the shared button for everyone else and sounds only presses
+  from peers, so a session can be played with eyes closed (D-18).
 
 ## 2. Modes
 
@@ -200,6 +218,8 @@ When terminal mouse reporting is enabled:
 | Input | Behavior |
 |---|---|
 | Left press | Move the cursor to the translated map cell and fire main. |
+| Left press on a button | Press the button's key (§1); never moves or fires. |
+| Left release | End held fire; release a held button. Passed on from every mode. |
 | Left drag | Continue moving the cursor. |
 | Held left | Repeat main fire at the shared repeat interval. |
 | Right press/hold | Fire/repeat special without moving first. |
@@ -221,7 +241,8 @@ reaches no further than a mouse on the same screen would.
 
 `:mouse enable|disable|free` controls reporting and free motion. `:free` is a
 short toggle for free mouse motion. Input is ignored while suspended, in
-Command mode, or where pause/overlay policy blocks it.
+Command mode, or where pause/overlay policy blocks it, except a release, which
+still ends the hold of a press made before.
 
 Automatic fire starts in both-weapons mode. `a` in Normal mode or bare `:auto`
 cycles both weapons → off → main only → both weapons. `:auto on`, `:auto off`,
@@ -375,8 +396,9 @@ sections are:
 | `[overlay_keys]` | terminal key name | Overlay special keys. |
 | `[text_keys]` | terminal key name | Insert/Search/Command navigation/edit keys. |
 
-Values are canonical action names from `internal/input/actionnames.go`. Use
-`"none"` to unbind a default. Unknown sections are ignored by the explicit
+Values are canonical action names from `internal/input/actionnames.go`, except
+`press`, which a scenario's capture chooses the keys of. Use `"none"` to unbind a
+default. Unknown sections are ignored by the explicit
 section reader, while invalid key or action names inside supported sections
 fail loading.
 

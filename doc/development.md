@@ -278,15 +278,16 @@ event = "QuasarSpawnRequest"
 payload = "x = 40\ny = 15"
 ```
 
-Intent names are canonical keymap action names. `text` emits one semantic
+Intent names are canonical keymap action names, plus `press`, which presses the
+captured key its `char` names. `text` emits one semantic
 text-character intent per rune; `command` performs command-mode entry, text,
 and confirmation as separate settled groups. An event resolves through the
 generated registry and its payload uses the same TOML field names as the
 journal. Local and Bus events default to the player domain, Shared events to
 shared; Stamped events require `domain = "player"` or `"shared"`.
 Unknown top-level and action fields are errors. `run` and `tick` default to zero;
-`count` applies only to an intent, and the four char-wait intents additionally
-require a one-rune `char`. Geometry must either omit both dimensions or set both.
+`count` applies only to an intent, and the four char-wait intents and `press`
+additionally require a one-rune `char`. Geometry must either omit both dimensions or set both.
 
 Pacing defaults to a property of the run rather than of the flags. Solo scripts
 execute flat out; a host/join pair is wall-paced at the fixed game tick so two

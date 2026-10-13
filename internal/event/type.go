@@ -230,8 +230,14 @@ const (
 	EventDeleteRequest
 	// EventKeyCaptureRequest (KeyCapturePayload) [local] replaces the keys a scenario takes from Normal, Visual and Insert parsing
 	EventKeyCaptureRequest
-	// EventKeyPressed (KeyPressedPayload) [bus] signals a captured key pressed by a cursor
-	EventKeyPressed
+	// EventInputPressed (InputPayload) [bus] signals a captured key pressed by a cursor, typed or clicked on its button
+	EventInputPressed
+	// EventInputReleased (InputPayload) [bus] signals the release of a pointer press on a button
+	EventInputReleased
+	// EventInputPressEcho (InputPayload) [local] presents this instance's own press at once, a playout lead before EventInputPressed applies
+	EventInputPressEcho
+	// EventInputReleaseEcho (InputPayload) [local] presents this instance's own release at once, as EventInputPressEcho does a press
+	EventInputReleaseEcho
 
 	// --- Ping ---
 
@@ -276,7 +282,7 @@ const (
 	EventParticleSpawnOne
 	// EventParticleSpawnBatch (BatchPayload[ParticleSpawnEntry]) [local] signals batch spawn of behavior-selected particles
 	EventParticleSpawnBatch
-	// EventParticleWave (ParticleWavePayload) [local] signals a full-width wave selected by behavior
+	// EventParticleWave (ParticleWavePayload) [local] signals a wave selected by behavior, across the map or one button
 	EventParticleWave
 
 	// --- Death ---
@@ -441,6 +447,13 @@ const (
 
 	// EventMarkerSpawnRequest (MarkerSpawnRequestPayload) [shared] signals a request to spawn a visual marker
 	EventMarkerSpawnRequest
+
+	// --- Button ---
+
+	// EventButtonSpawnRequest (ButtonSpawnRequestPayload) [shared] adds a button on a key to the end of the row
+	EventButtonSpawnRequest
+	// EventButtonLightRequest (ButtonLightRequestPayload) [shared] lights a button and plays its sound
+	EventButtonLightRequest
 
 	// --- Motion Marker ---
 

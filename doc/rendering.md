@@ -283,7 +283,7 @@ also the visual stacking order; exact integer priorities are in
 | Tracer/materialize | `tracer`, `materialize`, `teleportline` |
 | Fields/projectiles | `shield`, `ember`, `orb`, `lightning`, `missile`, `pulse`, `ray`, `bullet` |
 | Particles | `flash`, `fadeout`, `explosion`, `spirit` |
-| Overlay effects | `splash`, `marker` |
+| Overlay effects | `button`, `splash`, `marker` |
 | Post-process | `grayout`, `strobe`, `dim` |
 | UI | `heat`, `indicator`, `statusbar`, `peer_cursor`, `cursor` |
 | Debug and telemetry | `flowfield`, `pinned_state`, `overlay` |

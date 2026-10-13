@@ -22,8 +22,17 @@ type TransientResource struct {
 
 // ViewResource holds player-domain screen-space effect state; never replicated.
 type ViewResource struct {
-	Grayout GrayoutState
-	Strobe  StrobeState
+	Grayout    GrayoutState
+	Strobe     StrobeState
+	ButtonEcho ButtonEchoState
+}
+
+// ButtonEchoState is this instance's latest own press of a button, lit at production;
+// its crossing lights the shared button for everyone else a playout lead later
+type ButtonEchoState struct {
+	Key       rune
+	Remaining time.Duration
+	Held      bool
 }
 
 // GrayoutState controls screen desaturation effect
@@ -73,6 +82,7 @@ func NewViewResource() *ViewResource {
 func (r *ViewResource) Reset() {
 	r.Grayout = GrayoutState{}
 	r.Strobe = StrobeState{}
+	r.ButtonEcho = ButtonEchoState{}
 }
 
 // --- Explosion API ---

@@ -299,6 +299,18 @@ Apply bounds with `min`/`max` (optional, independent):
 { action = "SetVar", payload = { name = "level", source_var = "raw_level", min = 1, max = 99 } }
 ```
 
+### Random Draw
+
+```toml
+{ action = "RandomVar", payload = { name = "color", min = 1, max = 4, seed_var = "seed", index_var = "step" } }
+```
+
+Sets `name` to a value in `[min, max]` that is a pure function of the run's seed,
+`seed_var` and `index_var`. The same index gives the same value, so a sequence is
+recomputed element by element instead of stored. The run's seed is shared session
+identity and moves on every reset, so every instance draws the same values (D-3).
+`index_var` is required; `seed_var` is optional and reseeds a sequence within a run.
+
 ### Config to Variable
 
 ```toml
@@ -537,17 +549,26 @@ struct tag first, then Go field name — identical to `capture_vars` and
 ```
 
 A state that turns keys into buttons captures them for its lifetime and reads each
-press by its key ([Input and modes](input-and-modes.md) §1):
+press by its key, typed or clicked on the key's button ([Input and modes](input-and-modes.md) §1):
 
 ```toml
 [states.Buttons]
-on_enter = [{ action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "12345" }, reconcile = true }]
+on_enter = [
+  { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "12345" }, reconcile = true },
+  { action = "EmitEvent", event = "EventButtonSpawnRequest", payload = { key = "1", color = { r = 0, g = 200, b = 0 }, sound = "tone_a4" } },
+]
 on_exit = [{ action = "EmitEvent", event = "EventKeyCaptureRequest", reconcile = true }]
 transitions = [
-  { trigger = "EventKeyPressed", internal = true, guard = "PayloadStringEquals",
+  { trigger = "EventInputPressed", internal = true, guard = "PayloadStringEquals",
     guard_args = { field = "key", value = "1" }, actions = [{ action = "IncrementVar", payload = { name = "ones" } }] },
 ]
 ```
+
+A button lights and sounds on every press of its key by itself, so a machine judges
+a press and never plays its tone. `EventButtonLightRequest { button, duration_ms }`
+lights the button at that place in the row, counted from 1, with its sound; a
+spawn on a key that already has a button is refused. `wad/scenario/simon` is the
+worked example.
 
 ### PayloadExists
 
@@ -593,7 +614,10 @@ Inject FSM variable values into event payloads:
 ```
 
 Supported field kinds: all signed and unsigned integer widths, `float32`,
-`float64`, and `bool`. Negative values are ignored for unsigned fields.
+`float64`, `bool`, and `string`. Negative values are ignored for unsigned fields.
+A string takes the value's decimal form in place of each `{}`, so
+`payload = { message = "Level {}" }, payload_vars = { message = "level" }` reads
+"Level 3".
 
 ---
 

@@ -87,6 +87,7 @@ type SharedWorldState struct {
 	Fadeout      []StoreEntry[component.FadeoutComponent]      `json:"fadeout,omitempty"`
 	Splash       []StoreEntry[component.SplashComponent]       `json:"splash,omitempty"`
 	Marker       []StoreEntry[component.MarkerComponent]       `json:"marker,omitempty"`
+	Button       []StoreEntry[component.ButtonComponent]       `json:"button,omitempty"`
 	Death        []StoreEntry[component.DeathComponent]        `json:"death,omitempty"`
 	Timer        []StoreEntry[component.TimerComponent]        `json:"timer,omitempty"`
 }
@@ -511,6 +512,14 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			s.Marker = append(s.Marker, StoreEntry[component.MarkerComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
+	for _, e := range w.Components.Button.Entities() {
+		if e.Domain() != core.DomainShared {
+			continue
+		}
+		if v, ok := w.Components.Button.GetComponent(e); ok {
+			s.Button = append(s.Button, StoreEntry[component.ButtonComponent]{Entity: e, Value: DetachSnapshotValue(v)})
+		}
+	}
 	for _, e := range w.Components.Death.Entities() {
 		if e.Domain() != core.DomainShared {
 			continue
@@ -691,6 +700,9 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	for _, en := range s.Marker {
 		w.Components.Marker.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
+	for _, en := range s.Button {
+		w.Components.Button.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
+	}
 	for _, en := range s.Death {
 		w.Components.Death.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
@@ -773,6 +785,7 @@ type SharedWorldDelta struct {
 	Fadeout      StoreDelta[component.FadeoutComponent]      `json:"fadeout,omitzero"`
 	Splash       StoreDelta[component.SplashComponent]       `json:"splash,omitzero"`
 	Marker       StoreDelta[component.MarkerComponent]       `json:"marker,omitzero"`
+	Button       StoreDelta[component.ButtonComponent]       `json:"button,omitzero"`
 	Death        StoreDelta[component.DeathComponent]        `json:"death,omitzero"`
 	Timer        StoreDelta[component.TimerComponent]        `json:"timer,omitzero"`
 }
@@ -837,6 +850,7 @@ func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
 	d.Fadeout = diffStore(base.Fadeout, next.Fadeout, equalFadeout)
 	d.Splash = diffStore(base.Splash, next.Splash, equalSplash)
 	d.Marker = diffStore(base.Marker, next.Marker, equalMarker)
+	d.Button = diffStore(base.Button, next.Button, equalButton)
 	d.Death = diffStore(base.Death, next.Death, equalDeath)
 	d.Timer = diffStore(base.Timer, next.Timer, equalTimer)
 	return d
@@ -897,6 +911,7 @@ func ApplySharedWorldDelta(base SharedWorldState, d SharedWorldDelta) SharedWorl
 	s.Fadeout = applyStore(base.Fadeout, d.Fadeout)
 	s.Splash = applyStore(base.Splash, d.Splash)
 	s.Marker = applyStore(base.Marker, d.Marker)
+	s.Button = applyStore(base.Button, d.Button)
 	s.Death = applyStore(base.Death, d.Death)
 	s.Timer = applyStore(base.Timer, d.Timer)
 	return s
@@ -956,6 +971,7 @@ func (d SharedWorldDelta) DeltaEntries() int {
 	n += d.Fadeout.Entries()
 	n += d.Splash.Entries()
 	n += d.Marker.Entries()
+	n += d.Button.Entries()
 	n += d.Death.Entries()
 	n += d.Timer.Entries()
 	return n
@@ -1018,6 +1034,7 @@ func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
 	w.Entries += countStoreDifference(a.Fadeout, b.Fadeout, touched, equalFadeout)
 	w.Entries += countStoreDifference(a.Splash, b.Splash, touched, equalSplash)
 	w.Entries += countStoreDifference(a.Marker, b.Marker, touched, equalMarker)
+	w.Entries += countStoreDifference(a.Button, b.Button, touched, equalButton)
 	w.Entries += countStoreDifference(a.Death, b.Death, touched, equalDeath)
 	w.Entries += countStoreDifference(a.Timer, b.Timer, touched, equalTimer)
 	w.Entities = len(touched)
@@ -1203,6 +1220,9 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	for _, en := range s.Marker {
 		target[en.Entity] = struct{}{}
 	}
+	for _, en := range s.Button {
+		target[en.Entity] = struct{}{}
+	}
 	for _, en := range s.Death {
 		target[en.Entity] = struct{}{}
 	}
@@ -1277,6 +1297,7 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	reconcileStore(w.Components.Fadeout, s.Fadeout)
 	reconcileStore(w.Components.Splash, s.Splash)
 	reconcileStore(w.Components.Marker, s.Marker)
+	reconcileStore(w.Components.Button, s.Button)
 	reconcileStore(w.Components.Death, s.Death)
 	reconcileStore(w.Components.Timer, s.Timer)
 
@@ -1545,6 +1566,10 @@ func equalSplash(a, b *component.SplashComponent) bool {
 
 func equalMarker(a, b *component.MarkerComponent) bool {
 	return a.X == b.X && a.Y == b.Y && a.Width == b.Width && a.Height == b.Height && a.Shape == b.Shape && a.Color == b.Color && math.Float64bits(float64(a.Intensity)) == math.Float64bits(float64(b.Intensity)) && math.Float64bits(float64(a.PulseRate)) == math.Float64bits(float64(b.PulseRate)) && a.FadeMode == b.FadeMode
+}
+
+func equalButton(a, b *component.ButtonComponent) bool {
+	return *a == *b
 }
 
 func equalDeath(a, b *component.DeathComponent) bool {

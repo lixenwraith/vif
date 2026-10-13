@@ -283,7 +283,7 @@ func (s *ParticleSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventParticleWave:
 		if payload, ok := ev.Payload.(*event.ParticleWavePayload); ok {
-			s.spawnWave(payload.Behavior)
+			s.spawnWave(payload)
 		}
 
 	case event.EventParticleSpawnOne:
@@ -416,16 +416,32 @@ func (s *ParticleSystem) spawnOne(e event.ParticleSpawnEntry, cx, cy int) {
 	}
 }
 
-// spawnWave creates one particle per map column at a falling behavior's starting edge.
-func (s *ParticleSystem) spawnWave(behavior component.ParticleBehavior) {
+// spawnWave creates one particle per column at a falling behavior's starting edge,
+// across the map or the columns of the button the payload names
+func (s *ParticleSystem) spawnWave(p *event.ParticleWavePayload) {
+	behavior := p.Behavior
 	if !behavior.Valid() || particleProfiles[behavior].fall == 0 {
 		return
 	}
+	config := s.world.Resources.Config
 	y := 0
 	if particleProfiles[behavior].fall < 0 {
-		y = s.world.Resources.Config.MapHeight - 1
+		y = config.MapHeight - 1
 	}
-	for column := range s.world.Resources.Config.MapWidth {
+	from, to := 0, config.MapWidth
+	if p.Button != 0 {
+		from, to = 0, 0
+		buttons := s.world.Components.Button
+		buttons.Each(func(_ core.Entity, b *component.ButtonComponent) bool {
+			if b.Slot != p.Button {
+				return true
+			}
+			x, _, w, _ := component.ButtonRect(b.Slot, buttons.CountEntities(), config.MapWidth, config.MapHeight)
+			from, to = max(x, 0), min(x+w, config.MapWidth)
+			return false
+		})
+	}
+	for column := from; column < to; column++ {
 		char := parameter.AlphanumericRunes[s.rng.Intn(len(parameter.AlphanumericRunes))]
 		s.spawnOne(event.ParticleSpawnEntry{Behavior: behavior, X: column, Y: y, Char: char}, 0, 0)
 	}

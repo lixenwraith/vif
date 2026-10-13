@@ -165,7 +165,12 @@ func (s *AudioSystem) HandleEvent(ev event.GameEvent) {
 
 	if ev.Type == event.EventSoundRequest {
 		if p, ok := ev.Payload.(*event.SoundRequestPayload); ok {
-			s.player.Play(p.ID) // payload carries audio.SoundType
+			// A configured payload is shared by every emit, so the name resolves into a local
+			id := p.ID
+			if id == audio.SoundNone && p.Name != "" {
+				id = audio.SoundIDByName(p.Name)
+			}
+			s.player.Play(id)
 		}
 	}
 }

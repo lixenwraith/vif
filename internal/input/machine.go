@@ -10,12 +10,16 @@ import (
 // and Insert parsing. Written under the world lock, read by the parser outside it.
 type KeyCapture struct{ bits [2]atomic.Uint64 }
 
+// Capturable reports whether a scenario can take r: printable ASCII, which every
+// terminal sends as itself
+func Capturable(r rune) bool { return r >= ' ' && r <= '~' }
+
 // Set replaces the captured keys; an empty string releases them all. It reports
 // the runes it refused, which lie outside printable ASCII.
 func (c *KeyCapture) Set(keys string) (refused string) {
 	var bits [2]uint64
 	for _, r := range keys {
-		if r < ' ' || r > '~' {
+		if !Capturable(r) {
 			refused += string(r)
 			continue
 		}
@@ -135,6 +139,15 @@ func (m *Machine) processKey(ev terminal.Event) *Intent {
 }
 
 func (m *Machine) processMouse(ev terminal.Event) *Intent {
+	// A release ends a press made before the mode changed, so every mode passes it on
+	if ev.MouseAction == terminal.MouseActionRelease {
+		switch ev.MouseBtn {
+		case terminal.MouseBtnLeft:
+			return &Intent{Type: IntentMouseLeftUp}
+		case terminal.MouseBtnRight:
+			return &Intent{Type: IntentMouseRightUp}
+		}
+	}
 	switch m.mode {
 	case ModeNormal, ModeVisual, ModeInsert:
 		switch ev.MouseBtn {
@@ -146,8 +159,6 @@ func (m *Machine) processMouse(ev terminal.Event) *Intent {
 					X:    ev.MouseX,
 					Y:    ev.MouseY,
 				}
-			case terminal.MouseActionRelease:
-				return &Intent{Type: IntentMouseLeftUp}
 			case terminal.MouseActionDrag:
 				return &Intent{
 					Type: IntentMouseDrag,
@@ -157,11 +168,8 @@ func (m *Machine) processMouse(ev terminal.Event) *Intent {
 			}
 
 		case terminal.MouseBtnRight:
-			switch ev.MouseAction {
-			case terminal.MouseActionPress:
+			if ev.MouseAction == terminal.MouseActionPress {
 				return &Intent{Type: IntentMouseRightDown}
-			case terminal.MouseActionRelease:
-				return &Intent{Type: IntentMouseRightUp}
 			}
 			// Right drag intentionally ignored
 

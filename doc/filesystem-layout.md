@@ -20,12 +20,12 @@ file the binary falls back to and the file a user edits are one source.
 
 ```text
 wad/                            internal/asset/
-├── scenario/   named scenarios  ├── scenario/  fallback scenario
-│   ├── kraken/ combat arena          ├── content/   fallback corpus
-│   ├── blank/  scaffold         ├── input/     default keymap
-│   └── td/     tower defence    ├── audio/     built-in sound bank
-├── content/    typing corpus    ├── bot/       shipped bot graphs
-└── image/      .vifimg assets   ├── vif.toml   default settings
+├── scenario/   one directory    ├── scenario/  fallback scenario
+│               per scenario     ├── content/   fallback corpus
+├── content/    typing corpus    ├── input/     default keymap
+└── image/      .vifimg assets   ├── audio/     built-in sound bank
+                                 ├── bot/       shipped bot graphs
+                                 ├── vif.toml   default settings
                                  └── splash_font.go
 ```
 
@@ -48,9 +48,7 @@ for a distribution package. System roots exist on Unix-like targets only.
 vif/
 ├── vif.toml     settings: flag defaults (§3)
 ├── scenario/    named scenarios, each rooted at scenario.toml
-│   ├── main/    optional default override
-│   ├── blank/   authoring scaffold
-│   └── td/      tower-defence scenario
+│   └── main/    optional default override
 ├── input/       keymap.toml
 ├── audio/       music.toml, sounds.toml (optional overrides)
 ├── content/     .txt and .toml typing corpus

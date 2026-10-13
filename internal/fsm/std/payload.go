@@ -50,7 +50,7 @@ func ApplyPayloadVars[T any](m *fsm.Machine[T], payload any, vars map[string]str
 			continue
 		}
 
-		setPayloadInt(field, varValue)
+		setPayloadVar(field, varValue)
 	}
 
 	return copied.Addr().Interface()
@@ -99,8 +99,9 @@ func walkPayloadPath(current reflect.Value, segments []string, copiedSlices map[
 	return current
 }
 
-// setPayloadInt writes an FSM variable value into an int-compatible field
-func setPayloadInt(field reflect.Value, value int64) {
+// setPayloadVar writes an FSM variable value into a field; a string takes its decimal
+// form in place of each "{}", so a message can carry a count
+func setPayloadVar(field reflect.Value, value int64) {
 	switch field.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		field.SetInt(value)
@@ -112,6 +113,8 @@ func setPayloadInt(field reflect.Value, value int64) {
 		field.SetFloat(float64(value))
 	case reflect.Bool:
 		field.SetBool(value != 0)
+	case reflect.String:
+		field.SetString(strings.ReplaceAll(field.String(), "{}", strconv.FormatInt(value, 10)))
 	}
 }
 
