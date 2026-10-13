@@ -52,24 +52,35 @@ gap costs. This lets a large actor navigate toward an occupied anchor without
 pretending its footprint can stand in the blocked cell.
 
 Generation stamps avoid clearing full distance/direction arrays on each
-recompute. A reusable binary min-heap reduces allocation. `DirNone` identifies
-blocked/unreachable cells and `DirTarget` a seed/arrival cell. Each settled cell
-asks the wall test about its eight neighbours once, a diagonal's corners being two
-of them. Navigation and loot pass `Position.WallTest`: a grid read from the wall
-store on the derivation's first probe, exact to `HasBlockingWallAt` under any wall
-change between derivations, so a field touches the walls and not every grid cell.
-Both equivalences are fuzzed against the direct query.
+recompute. Step costs are small integers, so the search keeps a ring of distance
+buckets rather than a heap and settles a cell in constant time; cells of equal
+distance settle in bucket order, so a tie may point either of two shortest ways.
+`DirNone` identifies blocked/unreachable cells and `DirTarget` a seed/arrival cell.
+A compute asks the wall test once per cell into a reused grid with a blocked
+border, and the search reads a neighbour from it with one load. Navigation and loot
+pass `Position.WallTest`, a grid read from the wall store on the derivation's first
+probe, exact to `HasBlockingWallAt` under any wall change between derivations. The
+field is fuzzed against a direct heap search: equal distances everywhere, and every
+direction a shortest step. Measured at 199x97, a field is 1.1 ms native and 3.0 ms
+under WASM, against 2.8 and 6.7 for the heap.
 
 ## 3. Flow-field cache and target groups
 
 Computing a field over a large map every 50 ms is too expensive, so
-`FlowFieldCache` latches dirty state and throttles recomputation. It recomputes
-when:
+`FlowFieldCache` latches dirty state and throttles recomputation. A field falls due:
 
-- target count changes;
-- a target moves at least the configured Manhattan dirty distance;
-- wall/level logic explicitly marks it dirty and the tick threshold is met;
-- the existing field is invalid.
+- at once when the target count changes or it has no valid field;
+- after a cooldown (`NavFlowMinTicksBetweenCompute`, 5 ticks), when wall or level
+  logic marked it dirty or a target drifted the Manhattan dirty distance (5 cells);
+- after `NavFlowSettleTicks` (20) for a smaller drift: a field a few cells off
+  points the same way everywhere but beside the target, where sight takes over.
+
+A cursor's motion reaches the field only through that drift. Navigation's group
+caches are lazy: a field that falls due is computed when something first reads it
+that Update — a pursuer without sight of its target, a snake choosing whom to lock,
+the debug view — so a group nobody chases costs a cheap reachability check. The
+throttle decides exactly as it would eagerly, which is what keeps the D-17 phase
+identical between an instance whose drains read a field and one with none.
 
 Target groups allow multiple actors/structures to define one navigation goal.
 Group 0 contains the live cursor roster up to the eight-target navigation cap;

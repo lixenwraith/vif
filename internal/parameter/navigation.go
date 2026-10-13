@@ -2,11 +2,15 @@ package parameter
 
 // Navigation - Flow Field
 const (
-	// NavFlowMinTicksBetweenCompute is minimum game ticks between flow field recomputation
-	NavFlowMinTicksBetweenCompute = 3
+	// NavFlowMinTicksBetweenCompute is the cooldown, in game ticks, between flow field recomputes
+	NavFlowMinTicksBetweenCompute = 5
 
-	// NavFlowDirtyDistance triggers immediate recompute if target moves this far (cells)
+	// NavFlowDirtyDistance is the target drift, in cells, that recomputes once the cooldown passes
 	NavFlowDirtyDistance = 5
+
+	// NavFlowSettleTicks is how long a smaller drift waits: a field a few cells off
+	// still points the same way everywhere but beside the target, where sight takes over
+	NavFlowSettleTicks = 20
 
 	// NavRouteRebuildInterval is minimum game ticks between gateway route graph recomputes
 	NavRouteRebuildInterval = 20

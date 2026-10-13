@@ -288,23 +288,18 @@ library copies.
 
 ## Browser sessions
 
-### Keep navigation from stalling a browser frame
+### Coarsen navigation fields if busy maps still stall a browser frame
 
-- Priority: P1
-- Affected files: `pkg/navigation/flowfield.go`, `pkg/navigation/cache.go`,
-  `internal/system/navigation.go`
+- Priority: P2
+- Affected files: `pkg/navigation/flowfield.go`, `internal/system/navigation.go`
 
-Solo on a 199x97 default map, a moving cursor marks the cursor group's point and
-composite fields dirty (`EventCursorMoved`), so both recompute every third tick
-whether or not anything navigates: early in a run nothing does, yet navigation is
-95% of a 6 ms mean tick with 16-28 ms peaks under WASM, which is where a 16 ms frame
-is lost. A heap Dijkstra is 7.3 ms a field in WASM, 2.7 ms native. Options, to be
-decided: compute a group's fields only while it has Shared members (drains navigate
-too and are Player-domain, so counting them would split the D-17 phase); a bucket
-queue over the wall grid slice, measured 3.1 ms in WASM, which reorders equal-cost
-ties and so changes routes; staggering the two fields onto different ticks. A second
-Go instance in another worker could compute fields only at a fixed lead, at the cost
-of a second runtime and of copying the grid in and the field out.
+Navigation's fields are computed only for a reader, at most once per 5-tick cooldown,
+and a 199x97 field is 3.0 ms under WASM; solo play with nothing chasing now costs
+0.1 ms a tick. A busy map pays those 3 ms for every field read when it falls due,
+and several groups' fields can fall due in one tick. Next, in order: compute a field over 2x2 blocks, about a quarter
+of the cells, where its directions mostly agree with the full field's away from walls;
+then a second Go instance in another worker computing fields at a fixed lead, at the
+cost of a second runtime and of copying the grid in and the field out.
 
 ### Serve wss from vif's own listener
 
@@ -433,8 +428,10 @@ Diagnoses and what each item follows from are in
 - Affected files: `pkg/navigation/flowfield.go`, `internal/system/interaction.go`,
   `internal/engine/world_copy.go`
 
-At td with 16 players a tick is about 2.6 ms at `GOMAXPROCS=1`: flow field derivation
-is about 45% of it and `checkCursorOverlap`'s position lookups a quarter. A
+At td with 16 players a tick was about 2.6 ms at `GOMAXPROCS=1`, before flow fields
+moved to a bucket queue, a 5-tick cooldown and computing only for a reader: field
+derivation was about 45% of it and `checkCursorOverlap`'s position lookups a
+quarter. Measure again before choosing between them. A
 checkpoint scans the whole grid for its occupied cells, most of its 10 ms. Each must
 stay exact; per-store write counters stay rejected, since a cache compares values it
 owns.

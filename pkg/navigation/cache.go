@@ -14,21 +14,28 @@ type FlowFieldCache struct {
 	// Recomputation throttling
 	LastTargets            []vmath.Point // Tracks previously requested target coords
 	TicksSinceCompute      int           // Ticks since last computation
-	MinTicksBetweenCompute int           // Minimum ticks between recomputes
-	DirtyDistance          int           // Target must move this many cells to trigger immediate recompute
+	MinTicksBetweenCompute int           // Cooldown between recomputes
+	DirtyDistance          int           // Drift, in cells, that recomputes once the cooldown passes
+	SettleTicks            int           // Ticks a smaller drift waits before it recomputes
 
-	// PendingUpdate latches true on any state change, cleared after compute
+	// PendingUpdate latches true when a caller marks the field dirty, cleared after compute
 	PendingUpdate bool
+
+	// Lazy defers each due compute until Materialize, so a field nothing reads costs
+	// nothing; the throttle decides exactly as it would eagerly.
+	Lazy     bool
+	deferred bool // due and reachable, but not yet computed for LastTargets
 }
 
 // NewFlowFieldCache creates a cache with default throttling
-func NewFlowFieldCache(width, height, minTicks, dirtyDist int) *FlowFieldCache {
+func NewFlowFieldCache(width, height, minTicks, dirtyDist, settleTicks int) *FlowFieldCache {
 	return &FlowFieldCache{
 		Field:                  NewFlowField(width, height),
 		LastTargets:            make([]vmath.Point, 0, 8),
 		TicksSinceCompute:      minTicks, // Allow immediate first compute
 		MinTicksBetweenCompute: minTicks,
 		DirtyDistance:          dirtyDist,
+		SettleTicks:            settleTicks,
 		PendingUpdate:          true, // Force initial compute
 	}
 }
@@ -41,7 +48,7 @@ func (c *FlowFieldCache) Clone() *FlowFieldCache {
 	if c.Field != nil {
 		f := *c.Field
 		f.Directions, f.Distances, f.VisitedGen = slices.Clone(f.Directions), slices.Clone(f.Distances), slices.Clone(f.VisitedGen)
-		f.heap = nil
+		f.ring, f.blocked = nil, nil
 		n.Field = &f
 	}
 	return &n
@@ -52,48 +59,51 @@ func (c *FlowFieldCache) Resize(width, height int) {
 	c.Field.Resize(width, height)
 	c.LastTargets = c.LastTargets[:0]
 	c.PendingUpdate = true
+	c.deferred = false
 }
 
-// Update recomputes the field when dirty state and throttling allow
-// targets: goal points the field converges toward
-// Returns true if field was recomputed this tick
+// Update recomputes the field when it is due, or in a lazy cache records that it
+// is. It is due at once when it has no field or the target count changes; after
+// the cooldown, when marked dirty or a target drifted DirtyDistance cells; and a
+// smaller drift after SettleTicks. Returns true when the field was due.
 func (c *FlowFieldCache) Update(targets []vmath.Point, isBlocked WallChecker) bool {
 	c.TicksSinceCompute++
-
-	if len(targets) != len(c.LastTargets) {
-		c.PendingUpdate = true
-		c.TicksSinceCompute = c.MinTicksBetweenCompute
-	} else {
+	due := !c.Computed() || len(targets) != len(c.LastTargets)
+	if !due && c.TicksSinceCompute >= c.MinTicksBetweenCompute {
+		drift := 0
 		for i, t := range targets {
-			dx := t.X - c.LastTargets[i].X
-			dy := t.Y - c.LastTargets[i].Y
-			if dx < 0 {
-				dx = -dx
-			}
-			if dy < 0 {
-				dy = -dy
-			}
-			if dx+dy > 0 {
-				c.PendingUpdate = true
-			}
-			if dx+dy >= c.DirtyDistance {
-				c.PendingUpdate = true
-				c.TicksSinceCompute = c.MinTicksBetweenCompute
-				break
-			}
+			drift = max(drift, abs(t.X-c.LastTargets[i].X)+abs(t.Y-c.LastTargets[i].Y))
 		}
+		due = c.PendingUpdate || drift >= c.DirtyDistance || drift > 0 && c.TicksSinceCompute >= c.SettleTicks
 	}
-
-	if (c.PendingUpdate && c.TicksSinceCompute >= c.MinTicksBetweenCompute) || !c.Field.Valid {
-		c.Field.Compute(targets, isBlocked)
-		c.LastTargets = c.LastTargets[:0]
-		c.LastTargets = append(c.LastTargets, targets...)
-		c.TicksSinceCompute = 0
-		c.PendingUpdate = false
-		return true
+	if !due {
+		return false
 	}
+	c.LastTargets = append(c.LastTargets[:0], targets...)
+	c.TicksSinceCompute = 0
+	c.PendingUpdate = false
+	c.compute(isBlocked)
+	return true
+}
 
-	return false
+// compute derives the field for LastTargets, or in a lazy cache defers it,
+// knowing already whether it will be valid
+func (c *FlowFieldCache) compute(isBlocked WallChecker) {
+	if !c.Lazy {
+		c.Field.Compute(c.LastTargets, isBlocked)
+		return
+	}
+	c.Field.Invalidate()
+	c.deferred = c.Field.Reachable(c.LastTargets, isBlocked)
+}
+
+// Materialize computes a deferred field before it is read. isBlocked must answer
+// as it did when the field fell due, which holds while the observed grid is unmoved.
+func (c *FlowFieldCache) Materialize(isBlocked WallChecker) {
+	if c.deferred {
+		c.Field.Compute(c.LastTargets, isBlocked)
+		c.deferred = false
+	}
 }
 
 // MarkDirty forces recomputation on next eligible tick
@@ -113,21 +123,20 @@ func (c *FlowFieldCache) ObserveGrid(grid []bool, gen uint64) {
 	if !slices.Equal(c.grid, grid) {
 		c.grid = append(c.grid[:0], grid...)
 		c.Field.Invalidate()
+		c.deferred = false
 	}
 }
 
 // Rebuild derives a restored field without advancing its captured throttle phase.
 func (c *FlowFieldCache) Rebuild(isBlocked WallChecker) {
-	ticks, pending := c.TicksSinceCompute, c.PendingUpdate
-	c.Field.Compute(c.LastTargets, isBlocked)
-	c.TicksSinceCompute, c.PendingUpdate = ticks, pending
+	c.compute(isBlocked)
 }
 
 // Computed reports whether a field has been derived at least once. It is part of
 // the throttle phase for the same reason the counters are: an install that left the
 // field underived would force a compute on the next tick that the instance it
 // copied is not making.
-func (c *FlowFieldCache) Computed() bool { return c.Field != nil && c.Field.Valid }
+func (c *FlowFieldCache) Computed() bool { return c.Field != nil && (c.Field.Valid || c.deferred) }
 
 // GetDirection returns cached flow direction
 func (c *FlowFieldCache) GetDirection(x, y int) int8 {
