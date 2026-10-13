@@ -287,7 +287,7 @@ the effect's current name; death API unification removed the two obsolete
 | `loot.buf_pity_hwm` (int) | High-water live length of the reusable pity buffer/state collection. |
 | `loot.buf_routes_hwm` (int) | High-water count of owner flow fields held at once. |
 | `loot.routes` (int) | Owner flow fields currently held: one per cursor that has dropped something and still exists. |
-| `loot.route_recomputes` (int) | Owner flow fields rebuilt, cumulative. A drop in flight rebuilds its owner's field when that cursor moves past the dirty distance, so this rises with player movement while loot is out and not otherwise. |
+| `loot.route_recomputes` (int) | Owner flow fields rebuilt, cumulative. A drop in flight rebuilds its owner's field when that cursor moves past the dirty distance, or less once the settle interval passes, so this rises with player movement while loot is out and not otherwise. |
 | `loot.unreachable` (int) | Drops with no route home this tick: their owner is gone, or walls seal them off. They bleed to rest rather than press against what is in the way, so a sustained nonzero reading is geometry, not motion. |
 | `loot.physics_steps` (int) | Physics integration substeps executed for loot movers. |
 | `loot.wall_collisions` (int) | Resolved loot contacts with blocking wall cells. |

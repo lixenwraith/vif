@@ -273,7 +273,7 @@ func TestTheGatewayWorldKeepsItsRebuildScheduleAndGeneticStream(t *testing.T) {
 // TestAnInstallKeepsNavigationOnlyOverUnmovedWalls: a flow field and a route graph
 // are functions of their targets or cells and of the wall grid, so an install over
 // the walls they were computed on keeps them, one over moved walls derives them
-// again, and the two agree.
+// again once read, and the two agree.
 func TestAnInstallKeepsNavigationOnlyOverUnmovedWalls(t *testing.T) {
 	t.Parallel()
 	origin, cap := navRouteOrigin(t)
@@ -287,6 +287,11 @@ func TestAnInstallKeepsNavigationOnlyOverUnmovedWalls(t *testing.T) {
 		d.graphs = routeGraphs(origin)
 		origin.World().RunSafe(func() {
 			w, dbg := origin.World(), origin.World().Resources.NavigationDebug
+			var grid []bool
+			point := w.Positions.WallTest(component.WallBlockKinetic, &grid)
+			point(-1, -1)
+			dbg.Flow.Materialize(point)
+			dbg.CompositeFlow.Materialize(dbg.CompositePassability.IsBlocked)
 			for i, c := range []*navigation.FlowFieldCache{dbg.Flow, dbg.CompositeFlow} {
 				if !c.Field.Valid {
 					t.Fatal("a cursor flow field is not computed; there is nothing to keep")

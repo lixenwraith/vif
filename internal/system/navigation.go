@@ -52,6 +52,10 @@ type NavigationSystem struct {
 	// Ticks since last gateway route graph recompute (rebuild budget)
 	routeRebuildTicks int
 
+	// The wall checkers of the Update in progress, which a lazy field is computed
+	// against when something first reads it
+	blockedPoint, blockedComposite navigation.WallChecker
+
 	statEntities   *atomic.Int64
 	statRecomputes *atomic.Int64
 	statROICells   *atomic.Int64
@@ -154,11 +158,6 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventCursorMoved, event.EventCursorDespawned:
-		g := s.getOrCreateGroup(0)
-		g.pointFlowCache.MarkDirty()
-		g.compositeFlowCache.MarkDirty()
-
 	case event.EventLevelSetup:
 		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
 			s.resizePassability(payload.Width, payload.Height)
@@ -334,6 +333,7 @@ func (s *NavigationSystem) Update() {
 
 	// Wall checker for composites (uses pre-computed passability)
 	isBlockedComposite := s.compositePassability.IsBlocked
+	s.blockedPoint, s.blockedComposite = isBlockedPoint, isBlockedComposite
 
 	// Build routes before choosing a pursuit target.
 	totalRecomputes := int64(0)
@@ -487,15 +487,19 @@ func (s *NavigationSystem) Update() {
 
 		// Shared group flow field (default)
 		if isComposite {
-			navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(preciseX, preciseY, group.compositeFlowCache)
+			navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(preciseX, preciseY, s.flow(group, true))
 		} else {
-			navComp.FlowX, navComp.FlowY = navigation.InterpolatedDirection(group.pointFlowCache, preciseX, preciseY)
+			navComp.FlowX, navComp.FlowY = navigation.InterpolatedDirection(s.flow(group, false), preciseX, preciseY)
 		}
 
 	}
 
 	if dbg := s.world.Resources.NavigationDebug; dbg != nil {
 		if g, ok := s.groups[dbg.GroupID]; ok {
+			if dbg.ShowFlow || dbg.ShowComposite {
+				s.flow(g, false)
+				s.flow(g, true)
+			}
 			dbg.Flow = g.pointFlowCache
 			dbg.CompositeFlow = g.compositeFlowCache
 		} else {
@@ -544,16 +548,30 @@ func (s *NavigationSystem) getOrCreateGroup(groupID uint8) *targetGroupNav {
 			config.MapWidth, config.MapHeight,
 			parameter.NavFlowMinTicksBetweenCompute,
 			parameter.NavFlowDirtyDistance,
+			parameter.NavFlowSettleTicks,
 		),
 		compositeFlowCache: navigation.NewFlowFieldCache(
 			config.MapWidth, config.MapHeight,
 			parameter.NavFlowMinTicksBetweenCompute,
 			parameter.NavFlowDirtyDistance,
+			parameter.NavFlowSettleTicks,
 		),
 	}
+	g.pointFlowCache.Lazy, g.compositeFlowCache.Lazy = true, true
 	s.groups[groupID] = g
 	s.buffers.Observe(0, len(s.groups))
 	return g
+}
+
+// flow is a group's field for an entity of this shape, computed now if its
+// throttle let it wait for a reader. Only Update may call it: the checkers are its.
+func (s *NavigationSystem) flow(g *targetGroupNav, composite bool) *navigation.FlowFieldCache {
+	if composite {
+		g.compositeFlowCache.Materialize(s.blockedComposite)
+		return g.compositeFlowCache
+	}
+	g.pointFlowCache.Materialize(s.blockedPoint)
+	return g.pointFlowCache
 }
 
 func (s *NavigationSystem) getEntityGroup(entity core.Entity) uint8 {
@@ -793,12 +811,13 @@ func (s *NavigationSystem) lockSnakeTarget(entity core.Entity, nav *component.Na
 		if g == nil || !s.targets[gid].Valid {
 			continue
 		}
-		cost := g.compositeFlowCache.GetDistance(pos.X, pos.Y)
+		field := s.flow(g, true)
+		cost := field.GetDistance(pos.X, pos.Y)
 		// Rotated heads can straddle the fixed footprint's blocked edge.
 		if cost < 0 {
 			cost = navigation.CostUnreachable
 			for _, d := range navigation.DirVectors {
-				if next := g.compositeFlowCache.GetDistance(pos.X+d[0], pos.Y+d[1]); next >= 0 {
+				if next := field.GetDistance(pos.X+d[0], pos.Y+d[1]); next >= 0 {
 					cost = min(cost, next+navigation.CostDiagonal)
 				}
 			}
