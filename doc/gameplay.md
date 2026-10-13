@@ -63,7 +63,10 @@ cursors.
 ## 3. Typing rules
 
 Insert-mode character input emits a character event at the cursor cell.
-`TypingSystem` selects the first glyph in that cell and validates the rune.
+`TypingSystem` selects the cell's top glyph, the one drawn, and validates the
+rune. `Position.TopGlyphAt` picks it: a Shared glyph (a gold member) before a
+player glyph, then the nearer drift layer (bright, normal, dark), then the lower
+entity ID.
 
 ```mermaid
 flowchart TD
@@ -109,7 +112,10 @@ Red, white, and gold exist for hostile/special mechanics.
 
 Spawn pacing adapts to screen occupancy: sparse maps receive text faster while
 dense maps sharply reduce new placement. Placement excludes a region around the
-cursor and retries only a bounded number of positions.
+cursor and retries only a bounded number of positions. While a glyph drift is
+active, new lines are placed in a band `DriftEntryBand` cells deep beside the
+upwind edge, so text enters where the drift carries it across; the spawner reads
+the drift from the environment's published status.
 
 Decay is an explicit wave mechanic. `ParticleSystem` selects dust, decay or
 blossom rules from `ParticleComponent.Behavior`, and everything that differs
@@ -344,6 +350,23 @@ head, and storm are affected. Cursor kinetics, snake body-local deformation,
 pylons/towers, weapons/projectiles/loot, dust, and the decay/blossom particle
 behaviors are not yet wind targets. See [Generic kinetic analysis](generic-kinetic.md)
 for the exact motion paths and extension plan.
+
+Its second effect is glyph drift, a parallax background for side-scrolling
+levels. `EventDriftStart` supplies a direction in the same radians, a speed in
+cells per second (capped at `DriftMaxSpeed`) and `duration_ms`, where zero drifts
+until `EventDriftCancel`. Every loose player glyph moves along that direction at
+its level's fraction of the speed, `DriftLayerFactor`: bright at full speed,
+normal at half, dark at a quarter, with rows moving at `DriftAspectY` of that for
+the cell aspect. Each level keeps an integer sub-cell phase per axis that advances
+by simulated time, so drift follows game speed, draws no RNG, and every instance
+steps a layer on the same tick. A layer moves one cell and one axis at a time as
+a rigid group. A glyph that would leave the map, enter a wall, cut a wall's corner
+or find its target cell full is removed with no reward or effect. Composite
+members (gold) and glyphs already dying stay put, and the cursor does not ride
+with the text under it. A new start keeps the phases, so a change of pace does
+not jolt the text, and disabling the system pauses the drift as it pauses wind.
+Where layers share a cell the nearest draws on top and is the one typing acts on
+(§3).
 
 ## 10. Embedded campaign progression
 

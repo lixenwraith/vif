@@ -50,7 +50,7 @@ Every metric is consumed generically by the status snapshot, telemetry overlay, 
 | Explosion | `explosion.{triggered,converted,merged,cursor_rejects,disabled_rejects,buf_*_hwm}` | `NewExplosionSystem` | Resolved explosion paths and reusable collections | `Init` | Generic only |
 | Motion marker | `motion_marker.buf_{base_markers,base_positions,colored_markers}_hwm` | `NewMotionMarkerSystem` | Reusable marker-buffer observation | `Init` | Generic only |
 | Splash | None | — | — | — | — |
-| Environment | `environment.wind_active` | `NewEnvironmentSystem` | Update gauge | `Init` | Generic only |
+| Environment | `environment.{wind_active,drift_active,drift_direction}` | `NewEnvironmentSystem` | Update gauges | `Init` | `drift_*` steer the glyph spawner's entry band; remainder generic |
 | Death | `death.{killed,one_*,tagged,batch_*,protected_rejects,zero_rejects,missing_*,payload_rejects,disabled_rejects,buf_destroy_hwm}` | `NewDeathSystem` | Resolved single/tagged/batch death paths | `Init` | Generic only |
 | Timer | None | — | — | — | — |
 | Adaptation | `adapt.{graphs,populations,g1,g2,g3,g4,buf_*_hwm}` | `NewAdaptationSystem` | Adaptation processing; expensive strings on snapshot cadence | `Init` | Generic only |

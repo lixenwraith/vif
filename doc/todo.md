@@ -657,6 +657,48 @@ Charges beyond the ray could add rays 360°/n apart, one through the sustained o
 
 Its area pulse is the hosted disruptor's shape; the red circle's turret mount is the pattern.
 
+## Environment
+
+### Carry the cursor with the text it is on
+
+- Priority: P2
+- Affected files: `internal/system/environment.go`, `internal/system/cursor.go`
+
+Glyph drift moves the line under a cursor but not the cursor, so a player chases
+moving text. Carrying it would move each local cursor with the glyph it stands on,
+as a Player-domain cursor write per layer step; a peer's cursor would follow
+through its owner's move, never through the drift.
+
+### Decide what a delete removes under a drift stack
+
+- Priority: P2
+- Affected files: `internal/system/typing.go`
+
+`handleDeleteRequest` removes every player glyph in its range, including farther
+layers hidden under a cell's top glyph, while typing, rendering and motions act
+on the top glyph only. Deleting only each cell's `TopGlyphAt` would make a
+delete remove exactly what is shown.
+
+### Refresh motion markers as glyphs drift
+
+- Priority: P2
+- Affected files: `internal/system/motion_marker.go`
+
+Markers are recomputed on cursor movement and mode changes, so under a drift they
+sit on cells the glyphs have left. Recomputing after a drift step, which the
+environment could announce as a local event, would keep them on the text.
+
+### Widen what drifts
+
+- Priority: P3
+- Affected files: `internal/system/environment.go`, `internal/parameter/environment.go`
+
+Composite members (gold), particles, nuggets and species stay put; a side-scroller
+may want some of them carried with the nearest layer. Decay and blossom change a
+glyph's level, so a glyph they touch changes layer and speed mid-flight. In 256
+colours normal and bright glyphs share one console entry, so only the dark layer
+reads as farther; a distinct attribute for bright would separate the three.
+
 ## Rendering
 
 ### Configuration menu follow-up

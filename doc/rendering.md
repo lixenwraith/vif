@@ -301,6 +301,12 @@ crosses it. `BlendMaxBg` bounds overlapping auto-fire at the brighter input
 instead of accumulating color, and the visible ring-buffer prefix contracts as
 a blocked tracer drains to its stop point.
 
+A cell can hold several glyphs while drift carries layers past one another. The
+glyph renderer draws only the cell's top glyph from `Position.TopGlyphAt`, the
+one typing acts on, so a nearer parallax layer covers a farther one. In 256-color
+mode a glyph hue has two console entries, one for dark and one shared by normal
+and bright, so only the dark layer stands apart there.
+
 ### Local and peer cursors
 
 Two renderers rather than one loop, and they answer different questions. The local
@@ -313,8 +319,9 @@ matters, which is when they overlap. `PriorityPeerCursor` sits directly under
 
 Before `peer_cursor` existed a participant was visible only through the effects it
 happened to be projecting — its shield, its ember — so one holding none was not on
-the map at all. Both renderers read the cell underneath through one
-`cursorCellContent`, so they cannot disagree about what is there.
+the map at all. The local cursor and the inverted marker read the cell underneath
+through one `cellContent`, which picks the cell's top glyph as typing does, so
+what they show is what a keystroke would hit.
 
 Peer shield and ember fields keep their owner's color and geometry but compose at
 30% of local intensity over the existing or theme background. Indexed rendering

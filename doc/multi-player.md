@@ -56,7 +56,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Shared authority | The host's Shared world is canonical. A guest's predicted result is provisional until the next correction. |
 | Player state | Each instance simulates only its Player domain. Owner-authored cursor values have one writer and travel as values; a receiver keeps the values it authors across an install. |
 | Predicted derivations | A shared death a predicting instance derives is stamped `PhasePredicted` and held in a ledger. Presentation follows it; the player-domain rewards behind it are paid once, when an authoritative world proves the entity gone. |
-| Global environment | Shared wind events are re-derived rather than sent. Every instance consumes two draws from the same Shared environment stream, applies the gust to its own drains and predicted Shared species, and restores active wind state through corrections. |
+| Global environment | Shared wind events are re-derived rather than sent. Every instance consumes two draws from the same Shared environment stream, applies the gust to its own drains and predicted Shared species, and restores active wind state through corrections. Glyph drift is re-derived the same way and draws nothing: each instance steps its own glyphs from the same per-level phases, which corrections restore without moving a glyph. |
 | Corrections | A correction starts with a versioned hash index. Equal roots send no state. Mismatches descend to independently proved pages. Compressed whole keyframes remain the bounded fallback. |
 | Correction playout | The clock never moves backwards. A correction behind this instance's tick is projected: simulated forward in the staging world, over what this instance applied since, and written at the present. One ahead of the clock inside the lead waits for its tick; the newest waiting one wins, and one further ahead is taken as the jump it is. |
 | Replay | A guest retains a bounded suffix of its own crossings and of what it applied from others; a projection re-applies each past the installed capture's fence for its source, at its own tick. |
@@ -147,7 +147,8 @@ on the wire, because a transported copy would duplicate the transition's local
 output. Wind variation is sampled once per tick, before entity iteration, so a
 participant's private drain count cannot perturb Shared RNG order. If a future
 Player mechanic starts wind, it must cross a separate Bus request whose Shared
-resolution installs the wind at the agreed tick.
+resolution installs the wind at the agreed tick. Drift start/cancel are the same
+kind of output and take the same path.
 
 ### 3.2 The capture boundary
 
@@ -352,7 +353,9 @@ The environment is a declared system-state carrier. A capture therefore includes
 its base force, normalized direction, remaining duration and application phase;
 the general RNG section includes the environment stream position, and Shared
 component pages include the species kinetic result. Player drains remain local
-and resume from the same per-tick samples after an install.
+and resume from the same per-tick samples after an install. The capture also
+carries an active drift and its per-level phases; installing them moves no glyph,
+so each instance's own text continues from where it is.
 
 The owner-authored cells of every cursor a participant owns, the authority's
 included, are outside the hashed surface: each instance holds another's as a mirror
