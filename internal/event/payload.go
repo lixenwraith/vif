@@ -818,6 +818,15 @@ type WindStartPayload struct {
 	Duration  time.Duration `toml:"duration"`
 }
 
+// DriftStartPayload sets loose glyphs drifting along Direction (radians, as for
+// wind) at Speed cells/second, each level at its own parallax fraction and rows
+// scaled for the cell aspect. DurationMs 0 drifts until cancelled.
+type DriftStartPayload struct {
+	Direction  float64 `toml:"direction"`
+	Speed      float64 `toml:"speed"`
+	DurationMs int64   `toml:"duration_ms"`
+}
+
 // --- Post-Process ---
 
 // StrobeRequestPayload scopes a flash to one owned cursor, or all local cursors

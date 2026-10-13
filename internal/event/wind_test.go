@@ -8,27 +8,29 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 )
 
-func TestWindEventsAreSharedAndTyped(t *testing.T) {
+func TestEnvironmentEventsAreSharedAndTyped(t *testing.T) {
 	EnsureRegistry()
-	if got := ClassOf(EventWindStart); got != ClassShared {
-		t.Fatalf("EventWindStart class = %s, want shared", got)
-	}
-	if got := ClassOf(EventWindCancel); got != ClassShared {
-		t.Fatalf("EventWindCancel class = %s, want shared", got)
-	}
-	for _, eventType := range []EventType{EventWindStart, EventWindCancel} {
-		if !Replicated(eventType, core.DomainShared) {
-			t.Fatalf("event %d must be journal-replicated", eventType)
+	for _, tc := range []struct {
+		eventType EventType
+		payload   any
+	}{
+		{EventWindStart, &WindStartPayload{}},
+		{EventWindCancel, nil},
+		{EventDriftStart, &DriftStartPayload{}},
+		{EventDriftCancel, nil},
+	} {
+		if got := ClassOf(tc.eventType); got != ClassShared {
+			t.Fatalf("event %d class = %s, want shared", tc.eventType, got)
 		}
-		if OnWire(GameEvent{Type: eventType, Domain: core.DomainShared}) {
-			t.Fatalf("event %d must be re-derived, not transported", eventType)
+		if !Replicated(tc.eventType, core.DomainShared) {
+			t.Fatalf("event %d must be journal-replicated", tc.eventType)
 		}
-	}
-	if got := NewPayloadStruct(EventWindStart); reflect.TypeOf(got) != reflect.TypeOf(&WindStartPayload{}) {
-		t.Fatalf("EventWindStart payload prototype = %T, want *WindStartPayload", got)
-	}
-	if got := NewPayloadStruct(EventWindCancel); got != nil {
-		t.Fatalf("EventWindCancel payload prototype = %T, want nil", got)
+		if OnWire(GameEvent{Type: tc.eventType, Domain: core.DomainShared}) {
+			t.Fatalf("event %d must be re-derived, not transported", tc.eventType)
+		}
+		if got := NewPayloadStruct(tc.eventType); reflect.TypeOf(got) != reflect.TypeOf(tc.payload) {
+			t.Fatalf("event %d payload prototype = %T, want %T", tc.eventType, got, tc.payload)
+		}
 	}
 }
 

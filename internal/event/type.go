@@ -381,6 +381,10 @@ const (
 	EventWindStart
 	// EventWindCancel [shared] cancels the global wind
 	EventWindCancel
+	// EventDriftStart (DriftStartPayload) [shared] starts or replaces the global glyph drift
+	EventDriftStart
+	// EventDriftCancel [shared] cancels the global glyph drift
+	EventDriftCancel
 
 	// --- Post-Process ---
 
