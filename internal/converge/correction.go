@@ -302,6 +302,7 @@ func (c *Corrections) PublishDue() error { return c.publishRound(false) }
 func (c *Corrections) publishRound(force bool) error {
 	port := c.inst.Transport()
 	if port == nil || !port.IsRunning() || port.PeerCount() == 0 {
+		c.retirePlan()
 		return nil
 	}
 
@@ -318,6 +319,7 @@ func (c *Corrections) publishRound(force bool) error {
 		return c.publishBroadcast(port, tick, force)
 	}
 	if len(ids) == 0 {
+		c.retirePlanLocked()
 		return nil
 	}
 	c.decideLocked(ids, link)
@@ -614,6 +616,24 @@ func (c *Corrections) decideLocked(ids []uint32, link engine.LinkMeasuringPort) 
 		keyPeriod = c.bounds.FloorKeyframeTicks
 	}
 	c.base, c.keyPeriod, c.breached = base, keyPeriod, breached
+}
+
+// retirePlan clears the operating point once no link is left to plan for, so
+// nothing reads the last peer's figures as this session's. A floor breach goes
+// with its link rather than recovering, so it is not announced as a recovery.
+func (c *Corrections) retirePlan() {
+	if c.tel.Links.Load() == 0 && !c.tel.FloorBreached.Load() {
+		return
+	}
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+	c.retirePlanLocked()
+}
+
+// retirePlanLocked is retirePlan for a caller that holds publishMu.
+func (c *Corrections) retirePlanLocked() {
+	c.breached, c.saidFloor = false, false
+	c.publishPlanTelemetryLocked(nil)
 }
 
 // answerSpacing is the fewest ticks between two indexes to one peer that keeps the

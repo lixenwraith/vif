@@ -102,6 +102,7 @@ func (a *App) Serve() error {
 	defer report.Stop()
 	life := time.NewTicker(lifecycleInterval)
 	defer life.Stop()
+	var lastSummary string
 
 	for {
 		select {
@@ -133,7 +134,11 @@ func (a *App) Serve() error {
 			a.holdVacant(st)
 
 		case <-report.C:
-			a.log.Info("session", "msg", "session summary", "summary", a.SessionSummary())
+			// A parked session reads the same line until somebody arrives.
+			if summary := a.SessionSummary(); summary != lastSummary {
+				lastSummary = summary
+				a.log.Info("session", "msg", "session summary", "summary", summary)
+			}
 		}
 	}
 }

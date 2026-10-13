@@ -24,11 +24,12 @@ type Telemetry struct {
 	CorrectionEntries, CorrectionEntities, CorrectionCells, CorrectionTick *atomic.Int64
 
 	// The operating point in force. KeyframePeriod is CadenceTicks times
-	// KeyframeInterval, which is what the convergence floor bounds. The three rates
-	// are bytes per second: what the schedule costs, what the tightest link allows,
-	// and what the floor costs on a world this size.
+	// KeyframeInterval, which is what the convergence floor bounds. The rates are
+	// bytes per second: what the schedule and the floor cost summed over the links,
+	// since the uplink carries all of them, and what the tightest link allows.
 	CadenceTicks, KeyframeInterval, KeyframePeriod *atomic.Int64
 	UplinkBps, BudgetBps, FloorBps                 *atomic.Int64
+	Links, ConstrainedLinks                        *atomic.Int64
 	Constrained, FloorBreached                     *atomic.Bool
 
 	// KeyframeAge is the receiving end of the floor: ticks since a whole
@@ -97,13 +98,15 @@ func NewTelemetry(reg *status.Registry) Telemetry {
 		KeyframeInterval: i("snapshot.cadence_keyframe_interval"),
 		KeyframePeriod:   i("snapshot.cadence_keyframe_period_ticks"),
 		UplinkBps:        i("snapshot.cadence_uplink_bps"), BudgetBps: i("snapshot.cadence_budget_bps"),
-		FloorBps:      i("snapshot.cadence_floor_bps"),
-		Constrained:   b("snapshot.cadence_constrained"),
-		FloorBreached: b("snapshot.cadence_floor_breached"),
-		KeyframeAge:   i("snapshot.cadence_keyframe_age_ticks"),
-		Held:          i("snapshot.corrections_held"),
-		Jumped:        i("snapshot.corrections_jumped"),
-		Projected:     i("snapshot.projected_ticks"),
+		FloorBps:         i("snapshot.cadence_floor_bps"),
+		Links:            i("snapshot.cadence_links"),
+		ConstrainedLinks: i("snapshot.cadence_constrained_links"),
+		Constrained:      b("snapshot.cadence_constrained"),
+		FloorBreached:    b("snapshot.cadence_floor_breached"),
+		KeyframeAge:      i("snapshot.cadence_keyframe_age_ticks"),
+		Held:             i("snapshot.corrections_held"),
+		Jumped:           i("snapshot.corrections_jumped"),
+		Projected:        i("snapshot.projected_ticks"),
 
 		ManifestSent: i("snapshot.manifests_sent"), ManifestRecv: i("snapshot.manifests_received"),
 		ManifestBytesSent: i("snapshot.manifest_bytes_sent"),

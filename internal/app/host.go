@@ -476,30 +476,40 @@ func (a *App) sessionSummaryLocked() string {
 	// scheduler itself. This runs under the world lock and the scheduler takes it
 	// on the other side of its own — a capture is a world read — so reading the
 	// atomics is not a shortcut here, it is the only order that cannot deadlock.
+	// With no peer link there is no operating point: the cells are cleared with it.
+	if peers == 0 {
+		return line
+	}
+	// The link line is what the badge collapses: the slowest link's round trip,
+	// variation and delivery rate with the peer it belongs to, and the worst loss.
+	if rtt := reg.Ints.Get("network.link_rtt_ms").Load(); rtt > 0 {
+		line += fmt.Sprintf("; slowest link %s ±%dms, %sB/s (peer %d), loss up to %d%%",
+			status.FormatLatency(rtt),
+			reg.Ints.Get("network.link_jitter_ms").Load(),
+			status.FormatCount(reg.Ints.Get("network.link_bps").Load()),
+			reg.Ints.Get("network.link_peer").Load(),
+			reg.Ints.Get("network.link_loss_pct").Load())
+	}
 	cadence := reg.Ints.Get("snapshot.cadence_ticks").Load()
 	if cadence == 0 {
 		return line
 	}
+	links := reg.Ints.Get("snapshot.cadence_links").Load()
 	state := "nominal"
 	switch {
 	case reg.Bools.Get("snapshot.cadence_floor_breached").Load():
 		state = "BELOW THE CONVERGENCE FLOOR"
 	case reg.Bools.Get("snapshot.cadence_constrained").Load():
-		state = "constrained"
+		state = fmt.Sprintf("constrained on %d of %d", reg.Ints.Get("snapshot.cadence_constrained_links").Load(), links)
 	}
-	// Keyframe period in ticks only: the cadence count it is derived from is the
-	// same number divided by the cadence, and the floor it is checked against is
-	// stated in ticks. The link line is what the badge collapses: the round trip
-	// it draws, and beside it the variation, the loss and the rates it does not.
+	// Keyframe period in ticks only: the floor it is checked against is stated in
+	// ticks. Uplink and floor are totals over the links the plan covers.
 	return line + fmt.Sprintf(
-		"; cadence %d ticks, keyframe %d ticks, link %s ±%dms, %d%% loss, %sB/s, uplink %sB/s, floor %sB/s, %s",
+		"; cadence %d ticks, keyframe %d ticks, uplink %sB/s over %d link(s), floor %sB/s, %s",
 		cadence,
 		reg.Ints.Get("snapshot.cadence_keyframe_period_ticks").Load(),
-		status.FormatLatency(reg.Ints.Get("network.link_rtt_ms").Load()),
-		reg.Ints.Get("network.link_jitter_ms").Load(),
-		reg.Ints.Get("network.link_loss_pct").Load(),
-		status.FormatCount(reg.Ints.Get("network.link_bps").Load()),
 		status.FormatCount(reg.Ints.Get("snapshot.cadence_uplink_bps").Load()),
+		links,
 		status.FormatCount(reg.Ints.Get("snapshot.cadence_floor_bps").Load()),
 		state)
 }

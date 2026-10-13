@@ -206,7 +206,7 @@ greps for rather than enumerating every refusal.
 |---|---|---|---|
 | `init started` / `init completed` | INFO | `mode` / `width`, `height`, `systems` | `app.init` |
 | `seed resolved` / `scenario loaded` | INFO | `seed` / `name`, `digest`, `files` | `app.init` |
-| `shutdown started` / `shutdown completed` | INFO | — | `app.Close` |
+| `shutdown started` / `shutdown completed` | INFO | — / `us` | `app.Close` |
 | `signal received` | INFO | `signal` | main loop |
 | `runtime capture started` | INFO | `path`, `reason`, `race` | `setupDiagnostics` |
 | `logging started` / `logging stopped by command` | INFO | `path`, `level` | `:log on`/`off` |
@@ -293,7 +293,8 @@ per tick; the config read warns once per key per process.
 
 | `msg` | Level | Fields |
 |---|---|---|
-| `service initialized` / `service started` / `service stopped` | INFO | `service`, `us` |
+| `service initialized` / `service started` | INFO | `service`, `us` |
+| `services stopped` | INFO | `services` in stop order, `us` for all of them; each one's `service stopped` is at DEBUG |
 | `service init failed` / `service start failed` / `service stop failed` | ERROR | `service`, `error` |
 
 ### `sub="fsm"`

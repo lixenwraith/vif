@@ -611,6 +611,7 @@ func (a *App) buildAnchor() event.JournalAnchor {
 // Safe on a partially constructed App
 func (a *App) Close() {
 	a.log.Info("app", "msg", "shutdown started")
+	begin := time.Now()
 	a.closeSeats()
 	if a.scheduler != nil {
 		a.scheduler.Stop()
@@ -636,7 +637,7 @@ func (a *App) Close() {
 		}
 	}
 
-	a.log.Info("app", "msg", "shutdown completed")
+	a.log.Info("app", "msg", "shutdown completed", "us", time.Since(begin).Microseconds())
 }
 
 // loadKeymap merges an external key table over the embedded default document.
