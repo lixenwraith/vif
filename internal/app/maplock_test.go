@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 )
 
@@ -224,8 +225,8 @@ func TestLocalViewChangesLeaveTheFlowFieldPhaseAlone(t *testing.T) {
 }
 
 // TestAMapNeverCropsBelowItsScenarioFloor: a scenario's [map] floor holds at boot,
-// under a smaller terminal and across a reset, while a larger terminal still crops
-// the map to itself.
+// under a smaller terminal, across a reset and through a level setup the cell cap
+// trims, while a larger terminal still crops the map to itself.
 func TestAMapNeverCropsBelowItsScenarioFloor(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -234,7 +235,7 @@ func TestAMapNeverCropsBelowItsScenarioFloor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(entry, append(body, "[map]\nmin_width = 50\nmin_height = 20\n"...), 0o600); err != nil {
+	if err := os.WriteFile(entry, append(body, "[map]\nmin_width = 50\nmin_height = 100\n"...), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	a, err := NewHeadless(Config{Seed: 0xF100, Width: 40, Height: 15, Resources: resource.Options{Dir: root, Scenario: "floor"}})
@@ -251,12 +252,15 @@ func TestAMapNeverCropsBelowItsScenarioFloor(t *testing.T) {
 			t.Fatalf("%s: map %dx%d, want %dx%d", when, gotW, gotH, w, h)
 		}
 	}
-	expect("at boot", 50, 20)
-	a.Resize(120, 40)
-	expect("on a larger terminal", 119, 37)
+	expect("at boot", 50, 100)
+	a.Resize(200, 110)
+	expect("on a larger terminal", 199, 107)
 	a.Resize(40, 15)
-	expect("on a smaller terminal", 50, 20)
+	expect("on a smaller terminal", 50, 100)
 	a.Reset(false)
 	a.Tick(1)
-	expect("after a reset", 50, 20)
+	expect("after a reset", 50, 100)
+	a.SetupLevel(1500, 30, false, true)
+	a.Tick(1)
+	expect("past the cell cap", parameter.MaxMapCells/100, 100)
 }
