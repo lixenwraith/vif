@@ -74,8 +74,8 @@ func TestSharedGlyphsAreGoldMembersOnly(t *testing.T) {
 	}
 }
 
-// scenarioTrees names every scenario a build can boot: the two shipped ones, the
-// empty one, and the copy embedded in the binary. A rule that holds for one of
+// scenarioTrees names every scenario a build can boot: the shipped ones, the empty
+// one, and the copy embedded in the binary. A rule that holds for one of
 // them and not the others is not a rule.
 func scenarioTrees(t *testing.T) map[string]func() (map[string]any, error) {
 	t.Helper()
@@ -85,7 +85,7 @@ func scenarioTrees(t *testing.T) map[string]func() (map[string]any, error) {
 			return fsm.ResolveScenario(asset.DefaultScenario, asset.DefaultScenarioEntry)
 		},
 	}
-	for _, dir := range []string{"scenario/td", "scenario/blank", "scenario/kraken"} {
+	for _, dir := range []string{"scenario/td", "scenario/blank", "scenario/kraken", "scenario/simon"} {
 		d := filepath.Join(root, "wad", dir)
 		if _, err := os.Stat(filepath.Join(d, "scenario.toml")); err != nil {
 			continue

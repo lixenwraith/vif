@@ -8,10 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
@@ -176,7 +178,7 @@ func TestMainProgressesFromThreeStormKillsThroughTwoKrakensToTower(t *testing.T)
 // Each shipped scenario must boot a player and end the run on one participant defeat.
 func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"main", "blank", "kraken", "td", ""} {
+	for _, name := range []string{"main", "blank", "kraken", "td", "simon", ""} {
 		label := name
 		if label == "" {
 			label = resource.EmbeddedLabel
@@ -224,6 +226,120 @@ func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 
 		})
 	}
+}
+
+// TestSimonTakesBackWhatItShowed plays the shipped simon scenario through each way a
+// press arrives: a typed key, a click on the button, and a bot's press. Each level
+// shows one more note, a press sounds once on the pressing instance, a key the game
+// is not taking crosses nothing, and a wrong note starts a new game.
+func TestSimonTakesBackWhatItShowed(t *testing.T) {
+	t.Parallel()
+	opts := resource.Options{Dir: soakRoot, Scenario: "simon"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("simon scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 80, Height: 24, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+
+	w := a.World()
+	state := func() string { return w.Resources.Status.Strings.Get("fsm.simon.state").Load() }
+	var shown []int
+	var tones, presses int
+	a.SetDispatchTap(func(ev event.GameEvent) {
+		switch p := ev.Payload.(type) {
+		case *event.ButtonLightRequestPayload:
+			if state() == "Listen" {
+				shown = append(shown, p.Button)
+			}
+		case *event.SoundRequestPayload:
+			if strings.HasPrefix(p.Name, "tone_") {
+				tones++
+			}
+		case *event.InputPayload:
+			if ev.Type == event.EventInputPressed {
+				presses++
+			}
+		}
+	})
+	await := func(want string) {
+		t.Helper()
+		for range 400 {
+			if state() == want {
+				return
+			}
+			a.Tick(1)
+		}
+		t.Fatalf("simon stayed in %s, never reached %s", state(), want)
+	}
+	press := func(intent *input.Intent, want int) {
+		t.Helper()
+		tones, presses = 0, 0
+		if intent != nil { // a key the parser keeps as a count
+			a.Inject(intent)
+		}
+		if presses != want || tones != want {
+			t.Fatalf("press %v crossed %d and sounded %d times, want %d", intent, presses, tones, want)
+		}
+	}
+	key := func(k rune) *input.Intent {
+		return a.inputMachine.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: k})
+	}
+
+	await("Ready")
+	a.Tick(40) // the legend plays each button's note once
+	press(key('1'), 1)
+	await("Listen")
+	shown = nil
+	press(key('1'), 0) // between turns 1 is a count again
+	await("Repeat")
+	if len(shown) != 1 {
+		t.Fatalf("level 1 showed %v", shown)
+	}
+
+	// A click presses its button, held until the release
+	config := w.Resources.Config
+	x, y, bw, bh := component.ButtonRect(shown[0], w.Components.Button.CountEntities(), config.MapWidth, config.MapHeight)
+	press(&input.Intent{Type: input.IntentMouseLeftDown, X: x + bw/2, Y: y + bh/2, MapCell: true}, 1)
+	held := func() (n int) {
+		w.Components.Button.Each(func(_ core.Entity, b *component.ButtonComponent) bool {
+			if b.Held {
+				n++
+			}
+			return true
+		})
+		return n
+	}
+	if held() != 1 {
+		t.Fatal("a pointer press did not hold its button")
+	}
+	a.Inject(&input.Intent{Type: input.IntentMouseLeftUp})
+	if held() != 0 {
+		t.Fatal("the release did not let the button go")
+	}
+
+	await("Cleared")
+	shown = nil
+	await("Repeat")
+	if len(shown) != 2 {
+		t.Fatalf("level 2 showed %v", shown)
+	}
+	for _, b := range shown {
+		bot, err := input.IntentFor(input.PressAction, 1, strconv.Itoa(b))
+		if err != nil {
+			t.Fatal(err)
+		}
+		press(&bot, 1)
+	}
+
+	await("Cleared")
+	shown = nil
+	await("Repeat")
+	press(key(rune('1'+shown[0]%4)), 1) // the next button over is the wrong note
+	await("Wrong")
+	await("NewGame")
 }
 
 // TestExternalConfigsOwnTheirTowers covers the external producer side of cursor
