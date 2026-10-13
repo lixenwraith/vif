@@ -312,8 +312,7 @@ func (d *ReplayDriver) Step() (bool, error) {
 
 	if k.tick > d.cur.tick {
 		d.tick()
-		// Read back, not counted: a run a reset opened inside a tick starts at tick 2
-		d.cur.tick = d.target.Position().Tick
+		d.cur.tick++
 		if k.tick > d.cur.tick {
 			return true, nil
 		}

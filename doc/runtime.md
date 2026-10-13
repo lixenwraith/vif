@@ -625,6 +625,11 @@ flowchart TD
     peer receives one tick's artifacts as one tick's worth, and write the journal
     digest when it is due.
 
+A reset dispatched by step 1, 4, 6 or 8 — a crossed `:new`, or the scenario's
+own — ends the tick there, as one between ticks does: the rest of the body, the
+epoch flush and the tail are skipped on every participant alike, and the
+scheduler resets the FSM before the new run's tick 1.
+
 Step 9 is inside the critical section deliberately: `Position` has no internal
 lock, so counting entities after unlocking would race removals on the
 event-loop and main goroutines.

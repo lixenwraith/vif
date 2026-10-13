@@ -409,23 +409,6 @@ operator's.
 Diagnoses and what each item follows from are in
 [Troubleshooting](troubleshooting.md).
 
-### End the tick at a reset a scenario requests
-
-- Priority: P0
-- Affected files: `internal/engine/scheduler.go`, `internal/system/meta.go`,
-  `internal/journal/replay.go`
-
-A reset a scenario requests (a defeat's `MonitorGlobalReset`, td's `MonReset`) is
-dispatched in `processTick`'s post-FSM settle: `MetaSystem` clears the world and
-opens the next run, then the same tick runs every system on the cleared world,
-settles what they emit, and counts itself as the new run's tick 1, before
-`executeReset` resets the FSM. The first tick the new run plays whole is 2, where
-`:n`'s is 1. The journal does not record such a reset, so a replay waits for it
-(`awaitRun`) and reads each tick back instead of counting.
-Ending the tick at the reset, as `:n` does, removes both; the skipped remainder
-carries the wire flush and the tick-0 digest and anchor, and every participant must
-end that tick alike.
-
 ### Trim what remains of a tick and a checkpoint at the map limit
 
 - Priority: P2

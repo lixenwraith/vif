@@ -574,6 +574,11 @@ func (s *Scheduler) RunTicks(n int) {
 	s.drainReset()
 }
 
+// resetPending reports a reset a settle dispatched and executeReset has not run.
+// One a tick's settle dispatches ends that tick, as one between ticks does, so a
+// run's first tick is 1 however its reset was asked for.
+func (s *Scheduler) resetPending() bool { return len(s.resetChan) > 0 }
+
 // drainReset services a pending reset request without blocking
 func (s *Scheduler) drainReset() {
 	select {
@@ -1232,6 +1237,7 @@ func (s *Scheduler) processTick() {
 		ticks            uint64
 		dropped          uint64
 		droppedDelta     uint64
+		ended            bool // a reset one of the tick's settles dispatched ended it
 	)
 
 	p := s.world.Resources.Prof
@@ -1262,11 +1268,12 @@ func (s *Scheduler) processTick() {
 
 		// Settled on every tick of a session, not only one that delivered something:
 		// arrivals are this instance's own traffic, and settling on them gave what was
-		// pushed since the last tick a different phase and GameTime on each instance. A
-		// reset crossing among them re-bases the counter, so the tick that opens is re-read.
+		// pushed since the last tick a different phase and GameTime on each instance.
 		if s.world.Resources.Event.Queue.ReceiveWire(tick) {
 			s.settleLocked("wire")
-			tick = s.world.Resources.Game.State.GetGameTicks() + 1
+		}
+		if ended = s.resetPending(); ended {
+			return
 		}
 
 		// The simulation instant is derived from the tick, never from the pacing
@@ -1294,6 +1301,9 @@ func (s *Scheduler) processTick() {
 
 		// Ensures FSM and Systems start with a consistent, settled world
 		s.dispatchAndProcessEvents("pre")
+		if ended = s.resetPending(); ended {
+			return
+		}
 
 		// 4. FSM Update: Advance state machine (may emit new events via Actions)
 		fsmSpan := p.BeginPhase(prof.PhaseFSM)
@@ -1313,6 +1323,9 @@ func (s *Scheduler) processTick() {
 
 		// 6. Post-FSM Settling: Resolve events emitted by FSM state transitions
 		s.dispatchAndProcessEvents("post")
+		if ended = s.resetPending(); ended {
+			return
+		}
 
 		// 7. System Execution: Systems run on the final, settled state for this tick
 		s.world.UpdateLocked()
@@ -1321,6 +1334,9 @@ func (s *Scheduler) processTick() {
 		// crossing and digest that reads this tick reads its outcomes, not their
 		// pending events. A tick phase like pre and post: no group of its own.
 		s.dispatchAndProcessEvents("close")
+		if ended = s.resetPending(); ended {
+			return
+		}
 
 		// 9. Commit the tick and every registry write while the world is stable.
 		gs := s.world.Resources.Game.State
@@ -1367,6 +1383,11 @@ func (s *Scheduler) processTick() {
 		sessionShared = s.world.SessionShared()
 		slot = s.world.Resources.Player.LocalSlot()
 	})
+	// The new run is at tick 0 with nothing to flush, digest or sample; executeReset
+	// anchors it before its first tick
+	if ended {
+		return
+	}
 
 	if bs := s.ctl.Expire(ticks); bs != nil {
 		s.breakHit(bs, "expired")
