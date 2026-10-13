@@ -220,9 +220,15 @@ func (s *MotionMarkerSystem) showColoredMarkers(dx, dy int) {
 
 	for _, glyphType := range colors {
 		targetType := glyphType
+		// Marks the cell's top glyph, where the colour motion lands
 		filter := func(e core.Entity) bool {
 			glyph, ok := s.world.Components.Glyph.GetComponent(e)
-			return ok && glyph.Type == targetType
+			if !ok || glyph.Type != targetType {
+				return false
+			}
+			pos, _ := s.world.Positions.GetPosition(e)
+			top, _ := s.world.Positions.TopGlyphAt(pos.X, pos.Y)
+			return top == e
 		}
 
 		// Use the consolidated search logic from engine

@@ -384,8 +384,9 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 }
 
 // placementRange returns the half-open rows and first columns a line may take: the
-// whole map, or while glyphs drift, the band beside the upwind edge, so text enters
-// the map rather than appearing inside it. The draws per try are the same either way.
+// whole map, or while glyphs drift, the band beside one upwind edge, so text enters
+// the map rather than appearing inside it. Each upwind edge is drawn in proportion
+// to the drift crossing it, so a diagonal drift fills the map from both.
 func (s *GlyphSystem) placementRange(lineLength int) (rowLo, rowHi, colLo, colHi int) {
 	config := s.world.Resources.Config
 	rowLo, rowHi, colLo, colHi = 0, config.MapHeight, 0, config.MapWidth-lineLength+1
@@ -393,11 +394,13 @@ func (s *GlyphSystem) placementRange(lineLength int) (rowLo, rowHi, colLo, colHi
 		return rowLo, rowHi, colLo, colHi
 	}
 	sin, cos := math.Sincos(s.statDriftDirection.Get())
-	horizontal := math.Abs(cos) >= math.Abs(sin)*parameter.DriftAspectY
+	side := math.Abs(cos) * float64(config.MapHeight)
+	end := math.Abs(sin) * parameter.DriftAspectY * float64(config.MapWidth)
+	fromSide := s.rng.Float64()*(side+end) < side
 	switch band := parameter.DriftEntryBand; {
-	case horizontal && cos < 0:
+	case fromSide && cos < 0:
 		colLo = max(colLo, colHi-band)
-	case horizontal:
+	case fromSide:
 		colHi = min(colHi, band)
 	case sin > 0:
 		rowHi = min(rowHi, band)

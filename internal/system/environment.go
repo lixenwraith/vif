@@ -289,8 +289,9 @@ func (s *EnvironmentSystem) clearPlanarWind() {
 	s.applyPlanarWind(0, 0)
 }
 
-// startDrift replaces any drift but keeps each layer's phase, so a change of pace
-// does not jolt text already on its way to the next cell.
+// startDrift replaces any drift but keeps each layer's phase where it still points
+// the new way, so a change of pace does not jolt text already on its way to the next
+// cell, and a reversal does not first unwind the old part-cell.
 func (s *EnvironmentSystem) startDrift(payload *event.DriftStartPayload) {
 	if payload == nil || !finite(payload.Direction) || !finite(payload.Speed) || payload.Speed <= 0 ||
 		payload.DurationMs < 0 || payload.DurationMs > int64(math.MaxInt64/time.Millisecond) {
@@ -302,6 +303,13 @@ func (s *EnvironmentSystem) startDrift(payload *event.DriftStartPayload) {
 	s.drift.Direction = vmath.NormalizeAngleF(payload.Direction)
 	s.drift.Remaining = time.Duration(payload.DurationMs) * time.Millisecond
 	s.deriveDriftVelocity()
+	for level := range driftLevels {
+		for axis, v := range s.driftVelocity[level] {
+			if p := &s.drift.Phase[level][axis]; v == 0 || (*p < 0) != (v < 0) {
+				*p = 0
+			}
+		}
+	}
 	s.publishStatus()
 }
 

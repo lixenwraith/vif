@@ -113,9 +113,10 @@ Red, white, and gold exist for hostile/special mechanics.
 Spawn pacing adapts to screen occupancy: sparse maps receive text faster while
 dense maps sharply reduce new placement. Placement excludes a region around the
 cursor and retries only a bounded number of positions. While a glyph drift is
-active, new lines are placed in a band `DriftEntryBand` cells deep beside the
-upwind edge, so text enters where the drift carries it across; the spawner reads
-the drift from the environment's published status.
+active, new lines are placed in a band `DriftEntryBand` cells deep beside an
+upwind edge, each drawn in proportion to the drift crossing it, so text enters
+where the drift carries it across; the spawner reads the drift from the
+environment's published status.
 
 Decay is an explicit wave mechanic. `ParticleSystem` selects dust, decay or
 blossom rules from `ParticleComponent.Behavior`, and everything that differs
@@ -362,9 +363,10 @@ by simulated time, so drift follows game speed, draws no RNG, and every instance
 steps a layer on the same tick. A layer moves one cell and one axis at a time as
 a rigid group. A glyph that would leave the map, enter a wall, cut a wall's corner
 or find its target cell full is removed with no reward or effect. Composite
-members (gold) and glyphs already dying stay put, and the cursor does not ride
-with the text under it. A new start keeps the phases, so a change of pace does
-not jolt the text, and disabling the system pauses the drift as it pauses wind.
+members (gold) and glyphs already tagged to die stay put, and the cursor does not
+ride with the text under it. A new start keeps each phase that still points the
+new way, so a change of pace does not jolt the text and a reversal does not stall
+it, and disabling the system pauses the drift as it pauses wind.
 Where layers share a cell the nearest draws on top and is the one typing acts on
 (§3).
 
