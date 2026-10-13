@@ -145,10 +145,21 @@ func ActionNames() []string {
 	return names
 }
 
+// PressAction presses the key char a scenario captured. Scripts and bots name it; a
+// keymap cannot bind it, since the scenario, not the player, chooses the keys.
+const PressAction = "press"
+
 // IntentFor builds the intent one canonical action performs, as an authored script
 // or a bot names it: count defaults to one, and char is the one rune a char-wait
 // action targets. A parser prefix is refused, since it is half of a key sequence.
 func IntentFor(name string, count int, char string) (Intent, error) {
+	if name == PressAction {
+		r, size := utf8.DecodeRuneInString(char)
+		if size == 0 || size != len(char) || !Capturable(r) {
+			return Intent{}, fmt.Errorf("intent %q requires one printable ASCII char", name)
+		}
+		return Intent{Type: IntentKeyPress, Char: r, Count: 1, Command: name}, nil
+	}
 	entry, ok := ActionEntry(name)
 	if !ok || name == "none" {
 		return Intent{}, fmt.Errorf("unknown intent action %q", name)

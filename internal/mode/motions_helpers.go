@@ -468,3 +468,20 @@ func scanBoundsBackward(ctx *engine.GameContext, cursorX, cursorY int, bounds en
 	}
 	return cursorX, cursorY
 }
+
+// buttonAt returns the key of the button covering map cell (x, y), zero for none
+func buttonAt(ctx *engine.GameContext, x, y int) rune {
+	config := ctx.World.Resources.Config
+	buttons := ctx.World.Components.Button
+	count := buttons.CountEntities()
+	var key rune
+	buttons.Each(func(_ core.Entity, b *component.ButtonComponent) bool {
+		bx, by, w, h := component.ButtonRect(b.Slot, count, config.MapWidth, config.MapHeight)
+		if x >= bx && x < bx+w && y >= by && y < by+h {
+			key = b.Key
+			return false
+		}
+		return true
+	})
+	return key
+}
