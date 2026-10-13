@@ -521,5 +521,5 @@ event counter plus an outer tick transition.
 | Standard actions/guards | `internal/fsm/std/*.go` |
 | Game host adapter | `internal/manifest/fsm_bridge.go` |
 | Current embedded campaign | `internal/asset/scenario/*.toml` |
-| External examples | `wad/scenario/td`, `wad/scenario/blank`, `wad/scenario/kraken` |
+| External examples | `wad/scenario/*` |
 | Extended syntax examples | `doc/fsm-reference.md` |

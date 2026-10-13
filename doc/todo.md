@@ -214,17 +214,26 @@ what is modelled and whether players see it; nothing is persisted.
 
 ## Authoring
 
-### Build a timed button game on captured keys
+### Widen the input hook past order-only play
 
 - Priority: P2
-- Affected files: `internal/system`, `internal/input/actionnames.go`, `internal/bot`
+- Affected files: `internal/event/payload.go`, `internal/mode/router.go`,
+  `internal/input/machine.go`, `internal/bot`, `internal/system/button.go`
 
-Scenarios capture keys and read `EventKeyPressed` ([Input and modes](input-and-modes.md)
-§1); the game on top is not built. A button system owns the per-key windows and the
-score or penalty. In a session a press applies a playout lead after it was pressed,
-so it judges a window by the press's production tick and composes two players'
-presses in either order (D-3). A bot or authored script cannot press a captured key
-until `IntentFor` names an action that builds `IntentKeyPress`.
+Presses of captured keys and clicks on buttons cross as `EventInputPressed` and
+`EventInputReleased` ([Input and modes](input-and-modes.md) §1). Simon judges
+order only, so what an order-only game never needed is open:
+
+- Timing: a press applies a playout lead after it was pressed (D-3). A rhythm or
+  reaction game judges by the press's production tick: carry the tick in
+  `InputPayload`, or widen each window by the lead?
+- Sources: right button, wheel, touch, and key release (kitty keyboard protocol)
+  have room in `InputSource`. Does a held key mean anything before terminals
+  report releases?
+- Cursorless play: a press names its cursor. Should a scenario without one still
+  take presses, and whose would they be?
+- Bots press by key; a `button` `PointAt` target matters only if a bot should
+  click.
 
 `only_systems` is root-only, so a puzzle that is one phase of a larger scenario
 cannot narrow the set for that phase alone. A region-level form needs an answer for

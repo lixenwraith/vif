@@ -223,8 +223,7 @@ imported variables, and every release precedes every acquisition. Delayed work i
 restored by a deterministic compiled-action identity rather than a queue index.
 
 The embedded scenario runs foreground gameplay regions alongside a background
-monitor. Alternate configurations include a blank authoring scaffold, an
-expanded main encounter, and a tower-defense scenario.
+monitor. Alternate scenarios live under `wad/scenario/`.
 
 See [HFSM and configuration](fsm-and-configuration.md) and the detailed
 [authoring reference](fsm-reference.md).

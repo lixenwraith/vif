@@ -88,7 +88,7 @@ never enters the replay suffix (D-9).
 | Pointer placement | cursor and the newest cell the pointer named that tick |
 | Owned shield or ray striking shared species | target/member set and owner cursor |
 | Cursor entering or leaving combined defeat state | cursor and state |
-| Scenario-captured key pressed | cursor and key |
+| Scenario-captured key pressed or its button released | cursor, key, and key or pointer source |
 
 Effects on Player targets do not cross. Shared follow-up events derived from a
 crossing do not cross again (D-5).
@@ -361,6 +361,13 @@ prediction. A sweep that outruns the ring sheds its oldest cells the same way, a
 an own placement an install discards as already applied is consumed there. Replay
 reconstructs prediction from the `EventCursorPredicted` note each placement journals.
 
+`World.PushInputPress` is the same pairing for a scenario's input hook: a journaled
+local echo lights and sounds the pressed button on this instance at once, and the
+crossing lights the Shared button a lead later. The echo presents the gesture, not
+the verdict, so nothing rolls back when the machine ignores the press. The
+renderer shows this instance's own presses from the echo and every other from the
+Shared button, and the button sounds an applied press only when it came from a peer.
+
 ### D-19 — Every future-affecting Shared value is restorable
 
 A value that can change a future Shared outcome is one of:
@@ -507,7 +514,7 @@ is the Shared placement gate.
 
 | Domain | Entities |
 |---|---|
-| **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, kraken, tower, gateway, wall, gold, marker, FSM, time |
+| **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, kraken, tower, gateway, wall, gold, marker, button, FSM, time |
 | **Player** | glyph, nugget, drain, particle (dust/decay/blossom), tracer, bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, explosion presentation, loot |
 | **Stamped** | materialise, spirit; domain is resolved per request |
 
