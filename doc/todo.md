@@ -535,6 +535,25 @@ body now waits behind one 4 KiB chunk ([Troubleshooting](troubleshooting.md) §1
 Carrying it in the correction chunk envelope through the per-peer outbox bounds that
 too. Repairs at 20 kB/s have so far been a few kilobytes.
 
+### Find why a seed-42 solo bot journal leaves its run
+
+- Priority: P1
+- Affected files: unknown; start at `internal/journal/replay.go`
+
+On a build with the `vmath.MixChain` seeds, a solo bot journal does not replay on
+the build that recorded it. Recorded with `vif -bot 1 -headless -seed 42 -journal=DIR`
+and stopped with SIGINT past tick 146000 (about 110 s on four cores),
+`vif -replay <journal> -headless` reports "replay left its run by run 0 tick
+145360 (positions); it matched at run 0 tick 145340". Two separate recordings
+diverge at that same tick. Seeds 1 and 7 verify on that build, and seeds 1, 7 and
+42 verify on the build before it (2026-10-13). MixChain is a pure function of the
+same inputs the old folds read, so the new streams only change which states a run
+reaches. Something a state between ticks 145340 and 145360 depends on is not
+reproduced by replay: an input the journal does not carry, an order nothing fixes,
+or state read from outside the world. That would desync a session as well. The
+smallest next step is capturing both worlds at tick 145340 and diffing the
+position store by entity.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
