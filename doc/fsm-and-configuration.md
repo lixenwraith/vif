@@ -92,6 +92,10 @@ description = "A short description for scenario selection."
 [systems]
 disabled_systems = ["system_runtime_name"] # or only_systems = [...], not both
 
+[map]
+min_width = 50
+min_height = 20
+
 [regions.main]
 initial = "MainStart"
 file = "main.toml"
@@ -109,6 +113,7 @@ file = "boss.toml" # no initial: dynamic region
 | `macro_files`, `macros` | Macro libraries and definitions every scenario file may invoke ([TOML macros](toml-macros.md)). |
 | `systems.disabled_systems` | Systems disabled after FSM initialization. Names are validated against runtime `System.Name()` values. |
 | `systems.only_systems` | Every toggled system not named starts disabled; the inverse of `disabled_systems`, for a scenario that needs few mechanics. |
+| `map.min_width`, `map.min_height` | Floor under the map's size, applied before the FSM boots and by every resize, reset and level setup; a smaller terminal crops the view and the camera follows the cursor. |
 | `regions.<name>.initial` | Initial state for a region started during machine initialization. Omit for a region spawned later. |
 | `file` | File supplying additional `[states.*]` tables. |
 | `background` | Excludes the region from normal telemetry/overlay presentation; it still updates and handles events. |

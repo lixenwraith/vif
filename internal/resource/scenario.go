@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/fsm"
 )
 
@@ -45,6 +47,9 @@ const (
 type Scenario struct {
 	Name        string
 	Description string
+	// MapMinWidth and MapMinHeight are the [map] floor under the map's size, zero
+	// when the scenario sets none
+	MapMinWidth, MapMinHeight int
 
 	entry  string
 	files  []scenarioFile
@@ -256,6 +261,36 @@ func (s *Scenario) validate() error {
 		if !ok {
 			return errors.New("description must be a string")
 		}
+	}
+	if table, exists := doc["map"]; exists {
+		return s.readMapFloor(table)
+	}
+	return nil
+}
+
+// readMapFloor reads [map] min_width and min_height. A floor the grid cannot hold is
+// refused rather than clamped: it names the size the scenario's layout needs, and
+// it arrives from a peer as readily as from disk.
+func (s *Scenario) readMapFloor(v any) error {
+	table, ok := v.(map[string]any)
+	if !ok {
+		return errors.New("map must be a table")
+	}
+	for key, value := range table {
+		n, ok := value.(int64)
+		switch {
+		case key != "min_width" && key != "min_height":
+			return fmt.Errorf("map.%s is not a map setting", key)
+		case !ok || n < 1 || n > math.MaxInt32:
+			return fmt.Errorf("map.%s must be a positive integer", key)
+		case key == "min_width":
+			s.MapMinWidth = int(n)
+		default:
+			s.MapMinHeight = int(n)
+		}
+	}
+	if w, h := engine.ClampMapSize(max(s.MapMinWidth, 1), max(s.MapMinHeight, 1)); w < s.MapMinWidth || h < s.MapMinHeight {
+		return fmt.Errorf("map floor %dx%d is larger than a map can be", s.MapMinWidth, s.MapMinHeight)
 	}
 	return nil
 }

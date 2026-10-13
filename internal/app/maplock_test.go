@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -219,4 +221,42 @@ func TestLocalViewChangesLeaveTheFlowFieldPhaseAlone(t *testing.T) {
 	if moves == 0 {
 		t.Fatal("a cropping resize announced no cursor move; the guard above proves nothing")
 	}
+}
+
+// TestAMapNeverCropsBelowItsScenarioFloor: a scenario's [map] floor holds at boot,
+// under a smaller terminal and across a reset, while a larger terminal still crops
+// the map to itself.
+func TestAMapNeverCropsBelowItsScenarioFloor(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	entry := filepath.Join(writeScenario(t, root, "floor", "A floored map."), "scenario.toml")
+	body, err := os.ReadFile(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(entry, append(body, "[map]\nmin_width = 50\nmin_height = 20\n"...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewHeadless(Config{Seed: 0xF100, Width: 40, Height: 15, Resources: resource.Options{Dir: root, Scenario: "floor"}})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+	cfg := a.World().Resources.Config
+	expect := func(when string, w, h int) {
+		t.Helper()
+		var gotW, gotH int
+		a.World().RunSafe(func() { gotW, gotH = cfg.MapWidth, cfg.MapHeight })
+		if gotW != w || gotH != h {
+			t.Fatalf("%s: map %dx%d, want %dx%d", when, gotW, gotH, w, h)
+		}
+	}
+	expect("at boot", 50, 20)
+	a.Resize(120, 40)
+	expect("on a larger terminal", 119, 37)
+	a.Resize(40, 15)
+	expect("on a smaller terminal", 50, 20)
+	a.Reset(false)
+	a.Tick(1)
+	expect("after a reset", 50, 20)
 }

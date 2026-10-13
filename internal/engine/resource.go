@@ -133,6 +133,11 @@ type ConfigResource struct {
 	// false: Map persists, Viewport/Camera updated, entities preserved
 	CropOnResize bool `toml:"crop_on_resize"`
 
+	// MapMinWidth and MapMinHeight are the scenario's floor under every map size this
+	// instance writes: a terminal below it crops the view, never the map
+	MapMinWidth  int `toml:"-"`
+	MapMinHeight int `toml:"-"`
+
 	// ColorMode for rendering pipeline (256-color vs TrueColor)
 	// Set after terminal initialization
 	ColorMode terminal.ColorMode `toml:"color_mode"`
@@ -143,6 +148,12 @@ type ConfigResource struct {
 	// pointer records that the pointer made the last local placement; FollowCamera
 	// holds its narrower margins until another input moves the cursor.
 	pointer bool
+}
+
+// FloorMapSize raises a map size to the scenario's floor and bounds it to the grid,
+// the one rule every writer of the map's size applies
+func (c *ConfigResource) FloorMapSize(width, height int) (int, int) {
+	return ClampMapSize(max(width, c.MapMinWidth), max(height, c.MapMinHeight))
 }
 
 // MapOffset returns the map's top-left corner in viewport coordinates: zero when
