@@ -45,7 +45,7 @@ func TestParticleSpawnBranchesByBehavior(t *testing.T) {
 	} {
 		entity := entities[i]
 		if entity.Domain() != core.DomainPlayer {
-			t.Errorf("%s domain = %s, want player", tc.behavior.String(), entity.Domain())
+			t.Errorf("%s domain = %s, want player", particleProfiles[tc.behavior].name, entity.Domain())
 		}
 		particle, _ := w.Components.Particle.GetComponent(entity)
 		if particle.Behavior != tc.behavior || particle.Rune != tc.rune ||
@@ -55,7 +55,7 @@ func TestParticleSpawnBranchesByBehavior(t *testing.T) {
 		}
 		kinetic, _ := w.Components.Kinetic.GetComponent(entity)
 		if (kinetic.VelY < 0) != tc.wantNegativeY || (kinetic.AccelY < 0) != tc.wantNegativeY {
-			t.Errorf("%s vertical motion = vel %v accel %v", tc.behavior.String(), kinetic.VelY, kinetic.AccelY)
+			t.Errorf("%s vertical motion = vel %v accel %v", particleProfiles[tc.behavior].name, kinetic.VelY, kinetic.AccelY)
 		}
 		sigil, _ := w.Components.Sigil.GetComponent(entity)
 		wantColor := visual.RgbDecay
@@ -63,7 +63,7 @@ func TestParticleSpawnBranchesByBehavior(t *testing.T) {
 			wantColor = visual.RgbBlossom
 		}
 		if sigil.Rune != tc.rune || sigil.Color != wantColor {
-			t.Errorf("%s sigil = %+v, want rune %q color %+v", tc.behavior.String(), sigil, tc.rune, wantColor)
+			t.Errorf("%s sigil = %+v, want rune %q color %+v", particleProfiles[tc.behavior].name, sigil, tc.rune, wantColor)
 		}
 	}
 }
@@ -126,8 +126,8 @@ func TestParticleBehaviorsPreserveGlyphEffects(t *testing.T) {
 			if glyph.Level != tc.wantLevel || glyph.Type != component.GlyphBlue {
 				t.Fatalf("glyph = %+v, want blue level %v", glyph, tc.wantLevel)
 			}
-			if got := w.Resources.Status.Ints.Get(tc.behavior.String() + ".applied").Load(); got != 1 {
-				t.Fatalf("%s.applied = %d, want 1", tc.behavior.String(), got)
+			if got := w.Resources.Status.Ints.Get(particleProfiles[tc.behavior].name + ".applied").Load(); got != 1 {
+				t.Fatalf("%s.applied = %d, want 1", particleProfiles[tc.behavior].name, got)
 			}
 		})
 	}
@@ -247,7 +247,7 @@ func TestFallingParticlesUseCommonWallDestruction(t *testing.T) {
 		if particleProfiles[behavior].bounce > 0 {
 			continue
 		}
-		t.Run(behavior.String(), func(t *testing.T) {
+		t.Run(particleProfiles[behavior].name, func(t *testing.T) {
 			w, particles := newParticleWorld(0x5EED)
 			wall := w.CreateEntity(core.DomainShared)
 			w.Positions.SetPosition(wall, component.PositionComponent{X: 5, Y: 5})
@@ -260,7 +260,7 @@ func TestFallingParticlesUseCommonWallDestruction(t *testing.T) {
 			if got := w.Components.Particle.CountEntities(); got != 0 {
 				t.Fatalf("particle count after wall collision = %d, want 0", got)
 			}
-			if got := w.Resources.Status.Ints.Get(behavior.String() + ".wall_collisions").Load(); got != 1 {
+			if got := w.Resources.Status.Ints.Get(particleProfiles[behavior].name + ".wall_collisions").Load(); got != 1 {
 				t.Fatalf("wall collisions = %d, want 1", got)
 			}
 			if events := w.Resources.Event.Queue.Consume(); len(events) != 0 {
