@@ -31,7 +31,8 @@ func NewGlyphRenderer(gameCtx *engine.GameContext) *GlyphRenderer {
 	return r
 }
 
-// Render draws all glyph entities
+// Render draws each cell's top glyph, the one typing acts on, so a nearer drift
+// layer covers a farther one and a glyph its cell refused is not shown
 func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	glyphs := r.gameCtx.World.Components.Glyph
 	if glyphs.CountEntities() == 0 {
@@ -39,6 +40,7 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	}
 
 	buf.SetWriteMask(visual.MaskGlyph)
+	positions := r.gameCtx.World.Positions
 
 	glyphs.Each(func(entity core.Entity, glyph *component.GlyphComponent) bool {
 		// Gold is handled in its own composite renderer with a different mask
@@ -46,13 +48,16 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 			return true
 		}
 
-		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
+		pos, ok := positions.GetPosition(entity)
 		if !ok {
 			return true
 		}
 
 		screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
 		if !visible {
+			return true
+		}
+		if top, _ := positions.TopGlyphAt(pos.X, pos.Y); top != entity {
 			return true
 		}
 

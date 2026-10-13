@@ -12,7 +12,6 @@ import (
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/fsm/std"
 	"github.com/lixenwraith/vif/internal/input"
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -157,8 +156,8 @@ func (m *mind) nearest(t target) sighting {
 	return s
 }
 
-// glyphUnder is the rune typing would validate at the cursor: the first glyph in
-// its cell, as TypingSystem selects it.
+// glyphUnder is the rune typing would validate at the cursor: its cell's top glyph,
+// as TypingSystem selects it.
 func (m *mind) glyphUnder() (rune, bool) {
 	pos, ok := m.ctx.World.LocalCursor()
 	if !ok {
@@ -168,14 +167,12 @@ func (m *mind) glyphUnder() (rune, bool) {
 }
 
 func (m *mind) glyphAt(x, y int, standalone bool) (rune, bool) {
-	var buf [parameter.MaxEntitiesPerCell]core.Entity
-	n := m.ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
-	for _, e := range buf[:n] {
-		if g, ok := m.ctx.World.Components.Glyph.GetComponent(e); ok {
-			return g.Rune, !standalone || g.Type != component.GlyphGold && !m.ctx.World.Components.Member.HasEntity(e)
-		}
+	e, ok := m.ctx.World.Positions.TopGlyphAt(x, y)
+	if !ok {
+		return 0, false
 	}
-	return 0, false
+	g, _ := m.ctx.World.Components.Glyph.GetComponent(e)
+	return g.Rune, !standalone || g.Type != component.GlyphGold && !m.ctx.World.Components.Member.HasEntity(e)
 }
 
 // push queues intents in order, spending the step's room

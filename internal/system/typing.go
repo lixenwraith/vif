@@ -150,24 +150,10 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// handleTyping resolves the glyph under one cursor and dispatches the match
+// handleTyping resolves the glyph drawn under one cursor and dispatches the match
 func (s *TypingSystem) handleTyping(cursor core.Entity, cursorX, cursorY int, typedRune rune) {
-	// Stack-allocated buffer for zero-allocation lookup
-	var buf [parameter.MaxEntitiesPerCell]core.Entity
-	count := s.world.Positions.GetAllEntitiesAtInto(cursorX, cursorY, buf[:])
-
-	var entity core.Entity
-
-	// Iterate to find typeable entity (Glyph)
-	// Break on first match for O(1) best case in crowded cells
-	for i := range count {
-		if s.world.Components.Glyph.HasEntity(buf[i]) {
-			entity = buf[i]
-			break
-		}
-	}
-
-	if entity == 0 {
+	entity, ok := s.world.Positions.TopGlyphAt(cursorX, cursorY)
+	if !ok {
 		s.emitTypingError(cursor)
 		return
 	}
