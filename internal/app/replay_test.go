@@ -744,7 +744,8 @@ func TestVerifyAnchorRejectsMismatch(t *testing.T) {
 }
 
 // TestJournalStampRebasesOnReset pins the invariant the replay driver depends on:
-// the run advances exactly when the tick counter is re-based
+// the run advances exactly when the tick counter is re-based, and its first tick
+// is 1 whether :n or the scenario asked for it, so the driver counts ticks
 func TestJournalStampRebasesOnReset(t *testing.T) {
 	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
@@ -776,6 +777,26 @@ func TestJournalStampRebasesOnReset(t *testing.T) {
 	a.Tick(2)
 	if s := q.Stamp(); s.Run != 1 || s.Tick != 2 {
 		t.Fatalf("stamp %+v after two ticks in run 1", s)
+	}
+
+	// A reset the scenario requests mid-tick ends that tick, so its run opens alike
+	cursor := localCursorEntity(a)
+	a.Context().PushEventOrigin(event.EventEnergySetRequest,
+		&event.EnergySetPayload{Entity: cursor, Value: 0}, event.OriginDebug)
+	a.Context().PushEventOrigin(event.EventHeatSetRequest,
+		&event.HeatSetRequestPayload{Entity: cursor, Value: 0}, event.OriginDebug)
+	for range 20 {
+		if q.Stamp().Run == 2 {
+			break
+		}
+		a.Tick(1)
+	}
+	if s, n := q.Stamp(), a.World().Resources.Game.State.GetGameTicks(); s.Run != 2 || s.Tick != 0 || n != 0 {
+		t.Fatalf("stamp %+v with %d game ticks after a defeat, want run 2 at tick 0", s, n)
+	}
+	a.Tick(1)
+	if s := q.Stamp(); s.Run != 2 || s.Tick != 1 {
+		t.Fatalf("stamp %+v after one tick in run 2", s)
 	}
 }
 

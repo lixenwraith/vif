@@ -409,23 +409,6 @@ operator's.
 Diagnoses and what each item follows from are in
 [Troubleshooting](troubleshooting.md).
 
-### End the tick at a reset a scenario requests
-
-- Priority: P0
-- Affected files: `internal/engine/scheduler.go`, `internal/system/meta.go`,
-  `internal/journal/replay.go`
-
-A reset a scenario requests (a defeat's `MonitorGlobalReset`, td's `MonReset`) is
-dispatched in `processTick`'s post-FSM settle: `MetaSystem` clears the world and
-opens the next run, then the same tick runs every system on the cleared world,
-settles what they emit, and counts itself as the new run's tick 1, before
-`executeReset` resets the FSM. The first tick the new run plays whole is 2, where
-`:n`'s is 1. The journal does not record such a reset, so a replay waits for it
-(`awaitRun`) and reads each tick back instead of counting.
-Ending the tick at the reset, as `:n` does, removes both; the skipped remainder
-carries the wire flush and the tick-0 digest and anchor, and every participant must
-end that tick alike.
-
 ### Trim what remains of a tick and a checkpoint at the map limit
 
 - Priority: P2
@@ -534,25 +517,6 @@ link at the tower's floor it can hold the epochs behind it for two seconds, wher
 body now waits behind one 4 KiB chunk ([Troubleshooting](troubleshooting.md) §16).
 Carrying it in the correction chunk envelope through the per-peer outbox bounds that
 too. Repairs at 20 kB/s have so far been a few kilobytes.
-
-### Find why a seed-42 solo bot journal leaves its run
-
-- Priority: P1
-- Affected files: unknown; start at `internal/journal/replay.go`
-
-On a build with the `vmath.MixChain` seeds, a solo bot journal does not replay on
-the build that recorded it. Recorded with `vif -bot 1 -headless -seed 42 -journal=DIR`
-and stopped with SIGINT past tick 146000 (about 110 s on four cores),
-`vif -replay <journal> -headless` reports "replay left its run by run 0 tick
-145360 (positions); it matched at run 0 tick 145340". Two separate recordings
-diverge at that same tick. Seeds 1 and 7 verify on that build, and seeds 1, 7 and
-42 verify on the build before it (2026-10-13). MixChain is a pure function of the
-same inputs the old folds read, so the new streams only change which states a run
-reaches. Something a state between ticks 145340 and 145360 depends on is not
-reproduced by replay: an input the journal does not carry, an order nothing fixes,
-or state read from outside the world. That would desync a session as well. The
-smallest next step is capturing both worlds at tick 145340 and diffing the
-position store by entity.
 
 ## Session membership
 

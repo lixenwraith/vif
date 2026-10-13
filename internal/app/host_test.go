@@ -901,6 +901,10 @@ func TestCoordinatorResetCrossesAndPreservesRoster(t *testing.T) {
 		t.Fatalf("guest :new changed run to %d", got)
 	}
 
+	// A run longer than the lead, so the new run's crossings cannot wait out its count
+	for range 100 {
+		tickAll(apps)
+	}
 	mode.ExecuteCommand(apps[0].Context(), "n")
 	apps[0].Settle()
 	for range parameter.NetworkBarrierDelayTicks + 8 {
@@ -918,6 +922,16 @@ func TestCoordinatorResetCrossesAndPreservesRoster(t *testing.T) {
 		}
 	}
 	assertMeshParity(t, apps, 0)
+
+	guest := apps[1].World().Resources.Player.Entity
+	before := cursorPosition(apps[0], guest)
+	apps[1].Inject(intentMotion(input.MotionRight, 3))
+	for range parameter.NetworkBarrierDelayTicks + 2 {
+		tickAll(apps)
+	}
+	if got := cursorPosition(apps[0], guest); got.X != before.X+3 {
+		t.Fatalf("the guest's move after the reset reached the host at column %d, want %d", got.X, before.X+3)
+	}
 }
 
 // TestOneSharedQuasarTriggerProducesOneSpawn models the old MainEscalate fan-out:

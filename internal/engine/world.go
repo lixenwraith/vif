@@ -571,9 +571,8 @@ func (w *World) PushLocal(eventType event.EventType, payload any) {
 // mechanic determines a shared outcome. Stamped player, which is what separates it
 // from the same type pushed by a shared system re-deriving its own copy — every
 // Bus type has producers of both kinds. The journal replicates both; the wire
-// carries only this one (event.OnWire). A pending pointer placement crosses first.
+// carries only this one (event.OnWire).
 func (w *World) PushCrossing(eventType event.EventType, payload any) {
-	w.FlushPointerMove()
 	w.pushEvent(eventType, payload, event.Origin(w.origin.Load()), core.DomainPlayer)
 }
 
@@ -585,6 +584,9 @@ func (w *World) pushEvent(eventType event.EventType, payload any, origin event.O
 
 	if l := w.Log(); l.On("push", vlog.LevelTrace) {
 		l.Trace("push", vlog.LevelTrace, 4, "msg", "push", "ev", event.GetEventName(eventType))
+	}
+	if origin.Journaled() {
+		w.FlushPointerMove()
 	}
 
 	ev := event.GameEvent{
@@ -863,8 +865,9 @@ func (w *World) PushPointerMove(e core.Entity, x, y int) {
 }
 
 // FlushPointerMove crosses the pending pointer placement, reporting whether there
-// was one. The scheduler calls it before each tick; any other crossing this
-// instance produces calls it first, so placements keep the order they were made in.
+// was one. The scheduler calls it before each tick and every journaled push before
+// itself, so placements keep the order they were made in and the placement is
+// pushed on the input path, where a replay puts it, never from inside a dispatch.
 // Caller MUST hold updateMutex
 func (w *World) FlushPointerMove() bool {
 	roster := w.Resources.Player
