@@ -8,13 +8,13 @@ responsibility map is in [Package map](package-map.md).
 
 `go.mod` declares Go `1.27.2`; use that version or a compatible newer toolchain.
 The application has no CGO requirement, but it is not standard-library-only.
-Direct modules currently provide:
+The modules it requires:
 
 | Module | Responsibility used here |
 |---|---|
 | `github.com/lixenwraith/terminal` | Raw terminal, input events, cell flush, color-mode detection. |
 | `github.com/lixenwraith/color` | RGB/palette values and blend functions. |
-| `github.com/lixenwraith/toml` | FSM, content, keymap, audio, and persistence parsing/decoding. |
+| `github.com/lixenwraith/toml` | Scenario, FSM, content, keymap, audio, bot-graph, `vif.toml`, script and journal-payload parsing, and genetics persistence. |
 | `github.com/lixenwraith/log` | Asynchronous structured file logger behind `internal/vlog`. |
 | `golang.org/x/sys`, `x/term` | Indirect platform/terminal support. |
 
@@ -31,7 +31,7 @@ make dev       # generated code + race-enabled debug build
 ./bin/vif
 ```
 
-The Makefile targets are:
+`make` with no target prints the list below (`help`):
 
 | Target | Effect |
 |---|---|
@@ -49,24 +49,28 @@ The Makefile targets are:
 | `tools` | Build `cmd/ascimage`, `cmd/soundlab`, and every `tool/*` command. |
 | `allocator` | Build the website-to-K3s session allocator as `bin/vif-allocator`. |
 | `serve` | Build WASM and the small HTTP server, then serve `web/`. |
-| `install-config` | Copy `wad/`, bot graphs, keymap and `vif.toml` into the user config root; `CLEAN=1` removes the previous install first. |
-| `install` | Install binary, `wad/` as the system config root, licence, docs under `PREFIX`; a user who cannot write `/usr/local/bin` gets `~/.local` and the user root. Compiles nothing: `make release install` builds first. |
+| `install-config` | Copy `wad/`, bot graphs, keymap and `vif.toml` into the user config root, the last two only when absent; `CLEAN=1` (here and for `install`) removes the previous install first. |
+| `wad-archive` | Pack that same install as `bin/vif-wad.tar.gz` (`WAD_ARCHIVE`), unpacking as `vif/` into the directory that holds a config root; the release publishes it. |
+| `install` | Install the binary, manual, desktop entry, icons, shell completion, licence and docs under `PREFIX`, and the wad as `$(SYSCONFDIR)/vif`; a user who cannot write `/usr/local/bin` gets `~/.local` and the user root. Compiles nothing: `make release install` builds first. |
 | `uninstall` | Remove what `install` put under `PREFIX`, keeping the config root. |
 | `image` | Build the dedicated-session container image from `deploy/docker/Dockerfile`. |
 | `image-check` | Run the built image's own `-check` as its numeric user, read-only and with no network. |
 | `clean` | Remove `bin/`. |
 
-`TAGS` appends native build tags and `PORT` changes the WASM server port.
+`TAGS` appends build tags to each `cmd/vif` build and `PORT` changes the WASM
+server port. `GO` names the toolchain command (on FreeBSD, the versioned package
+`go.mod` asks for).
 `GO_BUILDFLAGS` (default `-trimpath`) and `GO_LDFLAGS` (default `-s -w`) are the
 release-style flags; they are not `GOFLAGS` and `LDFLAGS`, which the go command
 and the C linker read from the environment themselves.
 `VIF_CONFIG_DIR` retargets `install-config`; `DESTDIR`, `PREFIX` (default
-`/usr/local`) and `SYSCONFDIR` (`/etc` for `PREFIX=/usr`, else `$(PREFIX)/etc`)
-retarget `install`. See [Packaging](packaging.md).
+`/usr/local`) and `SYSCONFDIR` (`/etc` for `PREFIX=/usr`, the user config base for
+a user install, else `$(PREFIX)/etc`) retarget `install`. See [Packaging](packaging.md).
 `CONTAINER_ENGINE`, `IMAGE` and `IMAGE_TAG` retarget the image build — the engine
-defaults to `docker` and accepts `podman`. The image is a `scratch` layer holding
-one static non-root binary; `image-check` is the only way to prove it starts,
-because there is no shell in it to ask.
+defaults to `docker` and accepts `podman` — and `IMAGE_VERSION` and `IMAGE_REVISION`
+(default the tag and `HEAD`) become its OCI labels. The image is a `scratch` layer
+holding one static non-root `vif_headless` binary; `image-check` is the only way to
+prove it starts, because there is no shell in it to ask.
 Release-style profile targets use stripped linker flags; `dev` intentionally
 retains diagnostics and enables race instrumentation.
 
@@ -111,8 +115,9 @@ where stable output matters. If formatting fails it leaves a `.err` artifact
 beside the intended output for diagnosis.
 
 Any change to components, system/renderer assembly, event declarations, or
-input enums must include regenerated output. A clean-tree generation check is a
-useful CI addition even though the current workflow does not perform one.
+input enums must include regenerated output. The release workflow regenerates
+before it builds and fails a tag whose tree that changes (§6); the test workflow
+does not check.
 
 ## 4. CLI reference
 
@@ -122,18 +127,22 @@ flag still goes to stderr with exit 2, which is the `flag` package's contract fo
 a usage error. Short and long forms of the same option share one line here and
 one line in the program's own help; they are the same flag, not aliases, so
 `-s` and `-config-scenario` write the same field and the last one on the command
-line wins.
+line wins. That help is `helpSections` in `cmd/vif/usage.go`, which also renders
+`doc/vif.6` and the shell completions in `deploy/package/`.
 
 ### Session
 
 | Flag | Purpose |
 |---|---|
-| `-host <addr>` | Bind a session and play in it, for example `:7777`. |
-| `-serve <addr>` | Bind a headless session with no local cursor: a dedicated host. |
-| `-join <addr>` | Join a session at `host:port`; the host supplies seed, config and content identity. |
-| `-players <n>` | Roster ceiling including self, `2`..`parameter.MaxPlayers`. Unset holds the whole roster. With `-serve` it counts guests, because the server is not one of them, and the session starts on its first guest and admits the rest as they arrive. |
-| `-bots [N[:graph]\|graph]` | Same as `-bot`; requests from both flags add together. With `-serve`, bots keep the session occupied. |
-| `-authority host\|migrate` | Where authorship goes when the authoring participant leaves. `host` pins it; `migrate` hands it to the lowest surviving identity. Default `host` with `-serve`, `migrate` otherwise. |
+| `-host <addr>` | Play at once and open the run to participants, for example `:7777`, or `ws://:7777` for WebSocket. |
+| `-serve <addr>` | Bind a headless session with no local cursor: a dedicated host. Takes `ws://` like `-host`. |
+| `-join <addr>` | Join `[tcp://\|vif://]host:port[/name]` or a `ws(s)://` URL, or a new session an `http(s)://` site creates; the host supplies seed, config and content identity. Grammar in [Services and networking](services-and-networking.md) §6. |
+| `-name <name>` | With `-host` or `-serve`, the session name this host answers to, so one address serves several. |
+| `-players <n>` | Roster ceiling including self, `2`..`parameter.MaxPlayers`; with a `-join` site, the size requested. Unset holds the whole roster. With `-serve` it counts guests, because the server is not one of them, and the session starts on its first guest and admits the rest as they arrive. |
+| `-bot`, `-bots [N[:graph]\|graph]` | Add bots beside this run's participant; requests from both flags add together, operands default to `1:default`, and a count of 0 adds none. With `-serve`, bots keep the session occupied. See [Bots](bots.md). |
+| `-authority host\|migrate` | Where authorship goes when the authoring participant leaves. `host` keeps it with the starting machine, so losing that machine leaves each survivor playing alone; `migrate` hands it to the first surviving member of the succession chain, else the lowest surviving identity. Default `host` with `-serve`, `migrate` otherwise. |
+| `-slow-window <dur>`, `-slow-late <n>`, `-slow-bytes <n>` | A host's eviction policy for a participant that cannot keep up: this many late epochs per second over the window, on a link carrying at least this many bytes per second. A zero window never evicts; a zero rate drops its condition. See [Multiplayer](multi-player.md) §3.5. |
+| `-listen <addr>`, `-no-advertise` | With `-join`, the address this participant is dialled back on in a migrate session, or none at all, which keeps it a leaf that is never elected ([Multiplayer](multi-player.md) §5.3). |
 | `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own. Omitted on a server, the first guest's terminal sizes the session. |
 | `-probe <addr>` | Serve `/health` and `/metrics`; `-serve` only. |
 | `-first-join <dur>` | End a `-serve` run if no guest has connected within `dur`; zero waits forever. |
@@ -152,6 +161,10 @@ line wins.
 | `-config-music <path>` | Music pattern override TOML; strict optional. |
 | `-config-sounds <path>` | Sound definition override TOML; strict optional. |
 
+The first config root holding a `vif.toml` supplies the defaults of the path flags
+and the audio buffer; a flag on the command line wins
+([Filesystem layout](filesystem-layout.md#3-resolution-policy)).
+
 ### Presentation and audio
 
 | Flag | Purpose |
@@ -167,11 +180,10 @@ line wins.
 | `-seed <n>` | Root RNG seed; zero draws one and logs it. |
 | `-speed <rate>` | Initial play-mode rate: `1/8`, `1/4`, `1/2`, `1`, `2`, `4`, `8`. With `-script` or autonomous bots it is the run's wall pace instead and additionally accepts `max`. |
 | `-script <path>` | Run a bounded authored TOML tick schedule; may be combined with `-host` or `-join`. |
-| `-bot [N[:graph]\|graph]` | Add bots beside the human, including with `-host` or `-join`; omitted operands mean `1:default`, and a count of 0 adds none. |
-| `-headless` | With bots, run without a human or terminal; solo runs are unpaced. |
+| `-headless` | With bots, run without a human or terminal; solo runs are unpaced. With `-replay`, verify the journal's digests unattended. |
 | `-watch` | Present a script or the first bot, with no human player. |
 | `-r`, `-replay <path>` | Present a recorded journal instead of starting interactive play. |
-| `-check` | Resolve and validate FSM, keymap, audio, content and bot graphs; print the result and exit. |
+| `-check` | Resolve and validate `vif.toml`, the scenario, keymap, audio, content and bot graphs; print the result and exit. |
 | `-schema` | Print the FSM and event schema as JSON, then exit. |
 
 ### Diagnostics
@@ -183,9 +195,18 @@ line wins.
 | `-ls`, `-log-scope <spec>` | Which subsystems log (see below); implies `-l`. |
 | `-lt`, `-log-stat <ticks>` | Status snapshot period in game ticks; zero disables; implies `-l`. |
 | `-lr`, `-log-recorder <ticks>` | Flight recorder depth in game ticks; zero disables; implies `-l`. |
+| `-log-session-id <id>` | Stamp every record with a deployment session ID and name the file after it (§8); implies `-l`. |
 | `-log-stdout` | Write the log to stdout as JSON instead of to a file; implies `-l`. |
-| `-j`, `-journal[=DIR]` | Record non-system-origin events to a replay journal; `DIR` overrides the user-state journal directory. |
+| `-j`, `-journal[=DIR]` | Record journaled-origin events to a replay journal (§8); `DIR` overrides the user-state journal directory. |
+| `-mw`, `-music-wav[=DIR]` | Record the music alone to a WAV file; `DIR` overrides the user-state music directory ([Audio](audio.md)). |
 | `-dev[=false]` | Capture runtime stderr to a file; on by default for `-race` builds. |
+
+### Help
+
+| Flag | Purpose |
+|---|---|
+| `-h`, `-help` | Print the help and exit. |
+| `-version` | Print the module version and commit a package should report. |
 
 ### Log scopes
 
@@ -203,26 +224,31 @@ silences taps. `-ls all+dispatch` is `all` said twice.
 
 ### Combination rules
 
-`-lv`, `-ls`, `-lt` and `-lr` each imply `-l`; `-ls` is parsed through
-`vlog.ParseScopes` during flag parsing, before terminal startup, so a bad spec
-fails before the screen is taken. A bare `-l` and a bare `-j` remain boolean, so
-a directory requires `-l=DIR` and `-j=DIR`, not a space.
+Every other log flag implies `-l`; `-ls` is parsed through `vlog.ParseScopes`
+during flag parsing, before terminal startup, so a bad spec fails before the
+screen is taken. A bare `-l`, `-j` or `-mw` remains boolean, so a directory
+requires `-l=DIR`, `-j=DIR` or `-mw=DIR`, not a space; a leftover argument is
+reported and ignored.
+
+`-schema`, `-check`, `-replay`, `-script` and `-bot` are mutually exclusive.
+`-watch` needs a script or a bot, and `-headless` a bot or a replay; neither
+combines with `-serve`, nor `-headless` with `-watch`.
 
 `-first-join`, `-empty` and `-drain` are refused without `-serve`, for the reason
 `-probe` is: an interactive run is ended by the person who started it, and a flag
 that ends a process must not silently do nothing.
 
-`-serve` is a host of its own and does not combine with `-host` or `-join`.
-`-host` and `-join` are mutually exclusive and available on interactive play or
-the authored headless `-script` path; combining either with `-check`, `-schema`,
-or `-replay` is an error. `-host` plays at once and opens its port once the clock
-runs; `:host <addr> [host|migrate]` does the same on a run that is **already
-playing**, at whatever tick it has reached — same acceptor, same identity
-allocation, same capture. The joiner dials before constructing its `App`, so the
-anchor seed is installed before RNG/content initialization. `:join <target>` is
-the other half: a solo run, or one its
-session left alone, dials target while it plays on and rebuilds itself joined once
-admitted. `:session` reports what a run is part of.
+`-serve` is a host of its own and does not combine with `-host` or `-join`. `-host`
+and `-join` are mutually exclusive and available on interactive play and on driven
+`-script` and bot runs; they and the other session flags are an error beside
+`-check`, `-schema` or `-replay`. An interactive `-host` plays at once and opens its
+port once the clock runs; `:host <addr> [host|migrate]` does the same on a run that
+is **already playing**, at whatever tick it has reached — same acceptor, same
+identity allocation, same capture. The joiner dials before constructing its `App`,
+so the anchor seed is installed before RNG/content initialization. `:join <target>`
+is the other half: a solo run, or one its session left alone, dials target while it
+plays on and rebuilds itself joined once admitted. `:session` reports what a run is
+part of.
 
 ### Two-terminal verification
 
@@ -246,9 +272,9 @@ terminal. Quit the joiner and continue on the host; its badge becomes `Net: down
 and only the remote cursor disappears. The map stays latched either way — a run
 that opened a session keeps its bounds — which `:session` names rather than the
 status bar, along with the peers, the tick and how many succession candidates the
-chain holds. For a LAN, bind `:7777` and join the host's reachable address. Public-internet routing uses the same socket code, but the
-current operator path is plaintext and unauthenticated, so it is for trusted
-peers only.
+chain holds. For a LAN, bind `:7777` and join the host's reachable address.
+Public-internet routing uses the same socket code, but a direct tcp link is
+plaintext and unauthenticated, so it is for trusted peers only.
 
 ### Authored headless scripts
 
@@ -289,19 +315,19 @@ Unknown top-level and action fields are errors. `run` and `tick` default to zero
 `count` applies only to an intent, and the four char-wait intents and `press`
 additionally require a one-rune `char`. Geometry must either omit both dimensions or set both.
 
-Pacing defaults to a property of the run rather than of the flags. Solo scripts
-execute flat out; a host/join pair is wall-paced at the fixed game tick so two
-independent processes can exchange artifacts normally; and a solo script that opens
-a session itself with `:host` starts pacing at that moment, with the clock
-re-anchored there rather than carried forward — otherwise the ticks it ran flat out
-would be a debt the pacing immediately spends. That is what makes a mid-run join
-scriptable at all.
+Pacing defaults to a property of the run rather than of the flags
+(`scriptPacing`, `internal/app/script.go`). A solo script executes flat out; a run
+with `-host`, `-join` or bots is wall-paced at the fixed game tick so independent
+participants exchange artifacts normally; and a solo script that opens a session
+itself with `:host` starts pacing at that moment, with the clock re-anchored there
+rather than carried forward — otherwise the ticks it ran flat out would be a debt
+the pacing immediately spends. That is what makes a mid-run join scriptable.
 
 `-speed` overrides the default. A ladder token paces one tick at that multiple of
 the game interval, so `-speed 2` runs a script at twice real time and `-speed 1/2`
-at half; `-speed max` removes pacing entirely and is refused alongside `-host` or
-`-join`, because a participant that outruns its peers is not simulating the session
-it is in.
+at half; `-speed max` removes pacing entirely and is refused alongside `-host`,
+`-join` or bots, because a participant that outruns its peers is not simulating the
+session it is in.
 
 Every participant of one session must use the same rate. Only the `max` case is
 enforced, because the runtime cannot see a peer's pace: a faster participant is
@@ -322,15 +348,17 @@ term and its vote, and its slot is `parameter.NoPlayerSlot`.
 ./bin/vif -join server.example:7777          # each person, elsewhere
 ```
 
-`-size` matters: a server has no terminal to derive geometry from, and what it
-resolves is the D-14 map latch every joiner adopts. It logs a session summary
-periodically rather than drawing a status bar, so `-l -lv info` is how the run is
-watched. A server whose roster empties parks: it stops its clock at once, so the
-world a returning guest reclaims is the world it left. An unbounded server starts a
-fresh run after `parameter.SessionVacantReset`; one with `-empty` preserves the same
-run until that grace expires. A returning participant releases the park and receives
-the world at its stopped tick, into the slot its departure released. See
-[Runtime](runtime.md) §1.2.
+A server has no terminal to derive geometry from, so `-size` fixes the D-14 map
+latch every joiner adopts; without it the first guest's terminal sizes the map
+before the lobby closes (`adoptLobbyGeometry`, `internal/app/session.go`), unless
+the scenario fixes its own. It logs a session summary periodically rather than
+drawing a status bar, so `-l -lv info` is how the run is watched. A server whose
+roster empties parks: it stops its clock at once, so the world a returning guest
+reclaims is the world it left. An unbounded server starts a fresh run after
+`parameter.SessionVacantReset`; one with `-empty` preserves the same run until that
+grace expires. A returning participant releases the park and receives the world at
+its stopped tick, into the slot its departure released. See [Runtime](runtime.md)
+§1.2.
 
 A server started this way runs until somebody stops it. One that was *allocated* —
 created by a website when a player asked for a game — bounds its own life instead:
@@ -348,14 +376,17 @@ outside `-serve`; the policy is `internal/lifecycle` and the phases are document
 in [Runtime](runtime.md) §1.2. This is what `deploy/` runs; see
 [Deploying the session fleet](kube-docker-deploy.md).
 
-`-players` is a ceiling on every host shape and unset means the whole roster: the
-session starts on its first guest and takes the rest through the mid-run gate, so
-the example above holds at most two guests but plays as soon as one arrives.
-A dialling host is admitted at most `parameter.NetworkAdmitBurst`
-times per `NetworkAdmitWindow`, because the admission that follows a handshake
-reads and sends a whole world and a peer cycling through it would otherwise spend
-one connect per capture. A loopback dial is not counted: only this machine makes
-one, a run's own bots among them.
+`-players` is a ceiling on every host shape and unset means the whole roster. A
+server starts on its first guest and takes the rest through the mid-run gate, so the
+example above holds at most four guests but plays as soon as one arrives. An
+interactive `-host` plays from its first tick and opens its port once the clock
+runs. Only a driven host (`-script`, or a `-headless`/`-watch` bot) that names
+`-players` waits in its lobby for that whole party before releasing tick zero
+(`lobbyQuorum`, `internal/app/session.go`). A dialling host is admitted at most
+`parameter.NetworkAdmitBurst` times per `NetworkAdmitWindow`, because the admission
+that follows a handshake reads and sends a whole world and a peer cycling through it
+would otherwise spend one connect per capture. A loopback dial is not counted: only
+this machine makes one, a run's own bots among them.
 
 ### A scripted participant
 
@@ -382,14 +413,15 @@ and the same script geometry, so the presented and headless forms simulate
 identically. A presented run that is in a session offers pan and quit only: pause,
 step and rate are instance-local and half a session cannot be paused.
 
-`script/test.sh pair` runs both halves headless in one command. A mid-run form
-takes no flag on the host half: it runs solo, opens hosting with `:host`, and the
-guest dials it once the log says so.
+`script/test.sh pair` runs both halves headless in one command. For a mid-run
+join, start the host half without `-host` and give its script a `command` action
+`:host <addr>`; it runs solo until then, and the guest dials once the host logs
+`hosting opened mid-run`.
 
 In a session the driver schedules actions on the ticks it has issued, not on the
 world's position: a join, a correction's jump or a reset moves the world and not the
-schedule, so a guest half may join mid-run and `run` is refused. A solo run stays
-absolute, and an action whose position it has passed is an error.
+schedule, so a guest half may join mid-run and a nonzero `run` is refused. A solo
+run stays absolute, and an action whose position it has passed is an error.
 
 Use distinct log directories so each terminal's session log and journal are
 unambiguous. Scripts do not inspect/assert world state or transport a snapshot;
@@ -397,13 +429,14 @@ process exit, paired journals, status records, and the cross-process gate provid
 those verdicts. Interactive play remains the acceptance path for actual terminal
 responsiveness and rendering.
 
-`app.PlayJournal` and `journal.Load` can reassemble several
-rotated files by `jseq`. The current CLI flag stores one string and passes one
-path, so positional paths after `-r` are not a supported multi-file form.
-The replay path rebuilds seed, config/content, timing, and geometry from its
-anchor rather than `buildConfig`; normal gameplay flags do not override those
-values. Session logging and `-dev` are still applied before playback starts;
-`-j` is an App config flag and does not journal a replay.
+`app.PlayJournal` and `journal.Load` can reassemble several rotated files by
+`jseq`, but `-r` passes one path, so positional paths after it are not a
+multi-file form. A replay takes seed, config, content, timing and geometry from its
+anchor (`ConfigFromAnchor`); the viewer's flags supply only the `-config-dir` root
+the anchor's scenario resolves in, audio, colour and `-mw` (`internal/app/play.go`).
+Logging and `-dev` apply as usual; `-j` does not journal a replay. `-headless -r`
+replays flat out without presenting and fails on the first digest it does not
+reproduce.
 
 ### Bots beside a run
 
@@ -413,9 +446,11 @@ Commands, compositions and examples are in [Bots](bots.md).
 
 ### End-to-end setups
 
-`script/test.sh` is the command reference for running a setup by hand: `solo`,
-`host`, `join`, `serve`, `serve-fleet`, `probe`, `pair`, and the automated `check`,
-`lifetime`, `drain`, `identity` and `image` checks that print PASS or FAIL.
+`script/test.sh` is the command reference for running a setup by hand. It files
+each setup as interactive (`solo`, `host`, `join`, `serve`, `pair`, ...), observed
+(`host-loss`, `vacant`, `load`, ...) or automated (asserts and prints PASS or FAIL);
+`all` runs the automated set, and `image` needs a container engine and stays out
+of it.
 
 ```sh
 ./script/test.sh list
@@ -426,96 +461,94 @@ See [script/README.md](../script/README.md).
 
 ## 5. Validation and tests
 
-The intended local gate is:
+A change is gated by what [AGENTS.md](../AGENTS.md) names: `go build ./...`,
+`gofmt -l` on the changed files, and `go test` on the packages the change
+touches, with `make generate` first when an event or manifest definition changed.
+A change behind a build constraint also builds that target:
+`GOOS=js GOARCH=wasm go build ./...` or `go build -tags vif_headless ./...`.
+
+`make verify` is the full sweep the project owner runs, not a per-change step. It
+regenerates, runs `go test -race ./...`, builds `./...` plain and under `novlog`,
+`vif_noaudio` and `vif_headless`, tests `./internal/...` under `vif_noaudio` and
+the manifest and system suites under `vif_headless`, cross-builds `js/wasm` and
+`windows/amd64` (`novlog vif_noaudio`), fails if the headless command imports the
+renderer or audio implementation or the browser command the audio implementation,
+and runs `go vet ./...`. It does not execute a Windows artifact or a real
+terminal/audio backend; Windows is a best-effort cross-build, not a supported
+release target.
+
+Tests cover `cmd/vif`, `cmd/soundlab`, the headless/replay application harness
+(seeded soak, mutation, bisect, reset, journal density, replay, operator-state
+comparison, staged corrections), clocks, scheduler and time control, event
+journaling and authored scripts, input/help/mode commands, FSM staging and
+local-lifecycle reconciliation, parameters, profiling, audio, genetics, vectors and
+geometry, cell mapping, physics, and selected system and renderer surfaces.
+Coverage is selective: many gameplay systems, renderers, content parsing paths,
+services and network failure modes have no focused test file. Programs under
+`sandbox/` are experiments, not tests.
+
+The soak profiles are tiered, because the widest one is a release-gate cost rather
+than an edit-cycle one. `soakScale(short, normal, full)` in `internal/app` selects a
+repetition or step count per profile:
 
 ```bash
-make verify
+go test -short ./internal/app        # smoke
+go test ./internal/app               # the default profile
+VIF_SOAK=full go test ./internal/app # the wide seed sweep
 ```
 
-It covers race-enabled tests, package compilation, `novlog`, `vif_noaudio`,
-`vif_headless`, `js/wasm`, `windows/amd64`, and vet. The audio-free internal suite
-and the headless manifest/system suites also run under their tags. Verification
-does not execute a real Windows artifact or exercise a real terminal/audio
-backend. Windows is a best-effort cross-build rather than a supported release
-target. Dependency assertions fail if the headless command regains
-renderer/audio packages or the browser command regains the audio implementation.
+Every iteration is reproducible from its seed, so a failure found by the wide sweep
+reruns alone with `-run 'TestReplaySoak/<seed>'`, the seed written in hex as the
+subtest name prints it.
 
-The Go test suite covers `cmd/vif`, `cmd/soundlab`, the
-headless/replay application harness, clocks/scheduler/time control, event
-journaling and authored scripts, input/help/mode commands, selected gameplay-system surfaces,
-parameters, profiling, audio, genetics, `float64` vectors/geometry, cell
-mapping, and physics. Focused system/renderer tests now also cover multi-cursor
-ownership, delayed drain interactions, tracer trail behavior, and quasar range
-clipping at centered map edges. The app suite includes seeded soak, mutation,
-bisect, reset, journal-density, replay, operator-state comparisons, and a staged
-correction that skips a quasar's release transition. FSM unit tests distinguish
-side-effect-free staging from live local-lifecycle reconciliation and verify
-delayed transition actions survive capture by compiled identity. Coverage is
-still selective: many concrete
-gameplay systems, renderers, content parsing paths, services, and network
-failure modes have no focused test file. Standalone programs under `benchmark`
-and `sandbox` remain experiments rather than production-supported tests.
+Most `internal/app` tests call `t.Parallel`. The exceptions drive a real socket
+against wall-clock deadlines or run the staged `tc netem` gate, which shapes
+loopback for the whole machine; both are marked and stay sequential.
 
-The soak profiles are tiered rather than fixed, because the widest one is a
-release-gate cost rather than an edit-cycle one. `soakScale(short, normal, full)`
-in `internal/app` selects a repetition or step count per profile:
+Configuration work also runs:
 
 ```bash
-go test -short ./...        # smoke
-go test ./...               # the default a change is validated against
-VIF_SOAK=full go test ./... # the wide seed sweep
-```
-
-Every iteration is still reproducible from its seed, so a failure found by the
-wide sweep reruns alone with `-run 'TestReplaySoak/<seed>'`.
-
-Most `internal/app` tests call `t.Parallel`, so the package uses `GOMAXPROCS`
-workers. The exceptions are the tests that drive a real socket against
-wall-clock deadlines and the staged `tc netem` gate, which shapes loopback for
-the whole machine; both are marked and must stay sequential. Under `-race` the
-default profile runs the whole tree in roughly a minute and a half, of which
-`internal/app` is most.
-
-Configuration work should also run:
-
-```bash
-go run ./cmd/vif -check -g path/to/scenario
-go run ./cmd/vif -check -g td                    # named installed game
+go run ./cmd/vif -check -s path/to/scenario
+go run ./cmd/vif -check -s td                    # installed scenario by name
 go run ./cmd/vif -schema > /tmp/vif-schema.json
 ```
 
 `-check` validates system names against the manifest and then the declared
 dependency graph, rejecting a scenario that leaves an enabled system without a
-system it requires. It also rejects an invalid `reconcile = true` marker: only
-an immediate, unguarded `ClassLocal` `EmitEvent` in `on_enter`/`on_exit` may be
-replayed by a live FSM import. Persistent holds should be modeled on a common
-parent with paired marked acquisition/release actions. Two lints run inside
-`make verify` rather than as separate
-commands: `TestNoOrderDependentMapRange` reports map iteration whose order can
-reach simulation state, and `TestSystemDomainProfiles` checks every declared
-domain profile against the RNG streams, entity domains and component stores its
-system touches. Both carry an allowlist that wants a reason, not a name.
+system it requires. It also rejects an invalid `reconcile = true` marker: only an
+immediate, unguarded `ClassLocal` `EmitEvent` in `on_enter`/`on_exit` may be
+replayed by a live FSM import. Persistent holds are modeled on a common parent with
+paired marked acquisition/release actions.
+
+Two lints are ordinary `internal/system` tests: `TestNoOrderDependentMapRange`
+reports map iteration whose order can reach simulation state, and
+`TestSystemDomainProfiles` checks every declared domain profile against the RNG
+streams, entity domains and component stores its system touches. Each allowlist
+entry carries a reason.
 
 For audio documents, use `soundlab validate`; for visual behavior, exercise the
 blend tester and both color modes. Runtime terminal interactions still need a
 manual smoke test because unit tests do not reproduce every emulator.
 
-## 6. Current CI workflows
+## 6. CI workflows
 
-`.github/workflows/test.yml` runs on pushes to selected development branches
-and pull requests to `main`, `master`, or `develop`. Its single Go 1.27.2 job
-downloads modules, runs `go vet ./...`, builds `./...`, and runs
-`go test -race -v ./...` with race output redirected to `race.*`; those files
-are uploaded for seven days on failure.
+`.github/workflows/test.yml` runs on pushes to `main`, `master`, `develop` and
+`claude/*`, and on pull requests to `main`, `master` or `develop`. Its single
+Go 1.27.2 job runs `go vet ./...`, `go build ./...` and `go test -race -v ./...`
+with `GORACE` halting on the first race and writing `race.*`, which is uploaded for
+seven days on failure.
 
-CI does not run generation followed by a clean-tree check, the profile build
-matrix, Windows cross-compilation, or terminal/audio smoke tests. `make verify`
-covers generation, race tests, the compile matrix, and vet locally; host-I/O
-behavior remains separate runtime validation work.
+`.github/workflows/release.yml` runs nightly, on demand and on a `v*` tag. It
+regenerates the registries and, on a tag, fails if that changed the tree, then
+builds CGO-free archives for `linux-amd64`, `linux-amd64-headless`,
+`freebsd-amd64`, `windows-amd64` (`novlog vif_noaudio`) and `web`, the wad archive
+through `make wad-archive`, a source archive on a tag, and `SHA256SUMS`. Off a tag
+it also pushes the headless image to GHCR and moves the `nightly` prerelease; a tag
+drafts a release. [Packaging](packaging.md) §2 lists what each publishes.
 
-`.github/workflows/release.yml` builds the downloadable archives nightly and on a
-`vX.Y.Z` tag; [Packaging](packaging.md) §2 lists what each publishes and how a
-nightly or pre-release says it is not a final release.
+Neither workflow runs the `novlog` or `vif_noaudio` native builds, the tagged test
+suites, the dependency assertions of `make verify` (§5), or terminal/audio smoke
+tests.
 
 ## 7. Platform matrix
 
@@ -529,13 +562,16 @@ nightly or pre-release says it is not a final release.
 
 ### WASM host
 
-`web/index.html` creates an xterm.js terminal, optional WebGL renderer and fit
-addon, and starts the Go WASM instance in a Worker (`web/worker.js`), so a frame
-xterm takes long to draw never delays a tick, a probe echo or a socket read. The
-page batches the worker's writes into microtasks, relays text/binary input and
-resizes to it, prevents the context menu, and maintains focus. `make serve` builds `web/vif.wasm` and serves this
-directory. Before launch, `web/terminal.js` maps `window.VIF_ARGS` and repeated
-`arg` query parameters into `Go.argv`.
+`web/index.html` loads xterm.js and `web/terminal.js`, which creates the terminal
+with the fit and optional WebGL addons and starts the Go WASM instance in a Worker
+(`web/worker.js`), so a frame xterm takes long to draw never delays a tick, a
+probe echo or a socket read. The page batches the worker's writes into
+microtasks, relays text/binary input and resizes to it, prevents the context menu,
+and keeps focus. Before launch it maps `window.VIF_ARGS` and repeated `arg` query
+parameters into the program's argv; a site that renames the files says so with
+`data-wasm`, `data-worker` and `data-exec` on the script element
+([Build profiles](multi-platform.md#6-browser-launch-arguments)). `make serve`
+builds `web/vif.wasm` and serves this directory.
 
 `web/` is the deployed launcher, not a harness that resembles one. Its asset paths
 are absolute (`/vendor/xterm-5.5/`) so they resolve both under `make serve`, which
@@ -547,18 +583,18 @@ keymap, content, audio overrides, or logs. Embedded assets make it playable;
 audio and logging compile out. Browser JavaScript cannot open the framed TCP
 socket used by native `-join`, so a browser joins over the session's `wss://`
 route instead — the page's own WebSocket wrapped as a `net.Conn` — and `-host`,
-`-serve` and a `host:port` target still fail validation. Arguments can select
-embedded behavior but cannot turn a URL into a filesystem path. See
+`-serve` and a `host:port` target fail validation. Arguments can select embedded
+behavior but cannot turn a URL into a filesystem path. See
 [Build profiles and platform boundaries](multi-platform.md) for the transport and
-HTTP resource-provider strategy.
+the open HTTP resource-provider design.
 
 ## 8. Structured logging
 
 `internal/vlog` is a leaf facade over the external logger so any game package
-can log without importing application composition. Normal native builds write
-asynchronous JSON Lines files named `vif-log-<timestamp>.jsonl`.
+can log without importing application composition. Native builds write
+asynchronous JSON Lines files named `vif-log-<060102-150405>.jsonl`.
 
-| Policy | Current value |
+| Policy | Value |
 |---|---|
 | Queue | 8,192 records |
 | Flush | 50 ms |
@@ -570,23 +606,25 @@ asynchronous JSON Lines files named `vif-log-<timestamp>.jsonl`.
 | Process-exit drain | 2 seconds |
 | Panic flush | 200 ms |
 
-With `-log-session-id`, the per-file cap is 8 MB and directory-wide cleanup is
-disabled so one commissioned writer cannot remove another session's files. The
-fleet node owns the shared-directory bound and cleanup policy.
+With `-log-session-id`, the file is named for the ID, the per-file cap is 8 MB,
+and the total budget, minimum free disk and retention are disabled, so one
+commissioned writer cannot remove another session's files. The fleet node owns the
+shared-directory bound and cleanup policy.
 
-Every record can carry subsystem plus run/tick correlation stamps.
-Scopes are listed in [logging](logging-and-diagnostics.md) §4; unknown subsystem
-labels fall into tap. Errors bypass scope filtering, while level still applies.
+Every record can carry subsystem plus run/tick correlation stamps. Scopes are
+listed in [logging](logging-and-diagnostics.md) §4; unknown subsystem labels fall
+into tap. Errors bypass scope filtering, while level still applies.
 
 [Logging and diagnostics](logging-and-diagnostics.md) is the full reference for
 record shapes, scopes, the status registry, the flight recorder, and the
 diagnostic playbooks. This section covers only the build-facing policy.
 
-Replay capture is a separate `vif-jrn-*` JSONL sink. `-j` records every
-journaled-origin event regardless of session log level/scope, and its anchor
-carries the seed, RNG session, config/corpus identity and fingerprint, fixed
-tick interval, and simulation geometry. `-r` runs those records through a
-manual-clock App; this is reproduction input, not another diagnostic scope.
+Replay capture is a separate `vif-jrn-<060102-150405>` JSONL sink, with a `-N`
+suffix when that name is taken. `-j` records every journaled-origin event regardless
+of session log level/scope, and its anchor carries the seed, RNG session,
+config/corpus identity and fingerprint, fixed tick interval, and simulation
+geometry. `-r` runs those records through a manual-clock App; this is reproduction
+input, not another diagnostic scope.
 
 Logging is disabled at compile time for `wasm` or `novlog`. In enabled builds,
 log arguments are formatted asynchronously: call sites must pass primitive
@@ -647,28 +685,35 @@ telemetry—archive or remove them according to development needs.
    dependencies included; see [the domain model](domain-design.md).
 4. Add focused tests, including error/overflow/pause/reset paths where the
    subsystem is concurrent.
-5. Run formatting, `make verify`, config checks, and the appropriate manual
-   terminal/color/audio smoke test.
+5. Run the [§5](#5-validation-and-tests) gates (`go build ./...`, `gofmt -l` on
+   the changed files, `go test` on the touched packages, and the constrained
+   target's build), `-check` for configuration, and the relevant manual
+   terminal/color/audio smoke test. `make verify` is the owner's full sweep.
 6. Update domain docs when a public rule, lifecycle, configuration schema,
    external boundary, or known limitation changes.
 7. Keep generated files and human source in the same commit.
 
 Do not “fix” unrelated dirty-tree changes during a focused contribution. Avoid
-blocking I/O inside the world lock, storing game behavior in renderers, calling
-peer systems directly, or exposing host service implementations across package
-boundaries. Anything iterating a map before a write, an RNG draw or an event
-push has to sort first; determinism across instances is the invariant the
-domain model rests on.
+blocking I/O inside the world lock and storing game behavior in renderers.
+Components are pure data and their logic lives in the owning system; renderers
+reading shared state are the exception. A system file serves only its own system:
+no system calls another's helpers, apart from the unattributed files pinned in
+`helperFiles` (`internal/system/domain_test.go`). Math constants live in
+`pkg/vmath` and tunables in `internal/parameter` and `internal/parameter/visual`,
+never inline. Host service implementations stay behind their package boundaries.
+Anything iterating a map before a write, an RNG draw or an event push has to sort
+first; determinism across instances is the invariant the domain model rests on.
 
 ## 12. Source map
 
 | Concern | Primary source |
 |---|---|
 | Build targets | `Makefile`, `go.mod` |
-| CLI and filesystem policy | `cmd/vif/main.go`, `internal/app/config.go`, `internal/resource/resolve.go`, `internal/paths` |
+| CLI and filesystem policy | `cmd/vif/main.go`, `cmd/vif/usage.go`, `internal/app/config.go`, `internal/resource/resolve.go`, `internal/paths` |
 | Code generation | `internal/manifest/manifest.go`, `definition.go`, `internal/gen-manifest` |
-| CI | `.github/workflows/test.yml` |
-| Browser host | `web/index.html`, `web/terminal.js`, `web/terminal.css` |
+| CI | `.github/workflows/test.yml`, `release.yml` |
+| End-to-end setups | `script/test.sh`, `script/*.toml` |
+| Browser host | `web/index.html`, `web/terminal.js`, `web/worker.js`, `web/terminal.css` |
 | Logging | `internal/vlog/*.go` |
 | Metrics and flight recorder | `internal/status/*.go`, `internal/engine/snapshot.go` |
 | Journal, replay, fuzz, and authored scripts | `internal/event/journal*.go`, `origin.go`, `internal/journal`, `internal/app/replay.go`, `play.go`, `script.go` |
