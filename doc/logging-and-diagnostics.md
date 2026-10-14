@@ -58,7 +58,7 @@ payload is an open key-value map.
 | `sub` | Subsystem tag; resolves to a scope (§4) |
 | `run` | Reset generation; incremented by game reset, so `:new` starts run 1 |
 | `tick` | Simulation tick at emission |
-| `fields` | Record payload; `msg` names a diagnostic record, `type` a logger heartbeat (which has no `sub` or stamp), `ev` a journal event; the journal's other records are named by `sub` (§9) |
+| `fields` | Record payload; `msg` names a diagnostic record, `type` a logger heartbeat (which has no `sub`, and `run`/`tick` 0), `ev` a journal event; the journal's other records are named by `sub` (§9) |
 | `trace` | Present only on `Trace` records: a `->` joined call chain |
 
 `fields.instance` names the runtime when a process runs more than one: `seat N`
@@ -110,10 +110,9 @@ cursorless coordinator included; anything named participants counts cursors.
 Installing a received world, a join's capture or a correction, moves both to its
 header's (`App.adoptClockLocked`). `tick` is stamped with the tick *about to
 execute*, so records emitted inside `processTick` carry the tick they describe
-rather than the previous one. A played
-or served runtime adopts `vlog.Default()`, which also stamps the process's own
-records (flags, runtime capture, a crash); a driven one keeps its own, so a process
-stepping several stamps each. A replay's copies are muted until presented, and a
+rather than the previous one. A played or served runtime adopts `vlog.Default()`,
+which also stamps the process's own records (flags, runtime capture, a crash); a
+driven one keeps its own, so a process stepping several stamps each. A replay's copies are muted until presented, and a
 mute passes failures; see [Runtime and concurrency](runtime.md), Replay playback.
 
 The render frame is not a stamp. Nothing logs from the render goroutine, so it
@@ -210,6 +209,7 @@ greps for rather than enumerating every refusal.
 | `init started` / `init completed` | INFO | `mode` / `width`, `height`, `systems` | `app.init` |
 | `seed resolved` / `scenario loaded` | INFO | `seed` / `name`, `digest`, `files` | `app.init` |
 | `rng session advanced` | INFO | `session` | `Scheduler.executeReset`, once per game reset |
+| `session purged` | INFO | — | `MetaSystem`, a game reset whose payload sets `purge` |
 | `run restarting` | INFO | `scenario`, `host`, `join`, `rejoin` | the play loop, building the run that replaces this one |
 | `scenario change requested` / `scenario served` / `scenario received` | INFO | `scenario`, `digest`, plus `host` / `bytes` / `files`, `bytes` | `:new <scenario>`; a host sending its scenario to a joiner, and the joiner |
 | `shutdown started` / `shutdown completed` | INFO | — / `us` | `app.Close` |
@@ -224,7 +224,12 @@ greps for rather than enumerating every refusal.
 | `breakpoint set` / `breakpoints cleared` | INFO | `on` / `count` | `:d break` |
 | `profiler toggled` | INFO | `on` | `:d prof` |
 | `cursor spawned` / `cursor despawned` / `local cursor bound` | INFO | `entity`, `slot`, plus `x`, `y` on a spawn | `CursorSystem` |
+| `cursor spawn failed` | WARN | `reason` | `CursorSystem`, a refused spawn the FSM retries |
+| `map size locked` | INFO | `map_w`, `map_h`, `viewport_w`, `viewport_h` | a resize under crop-on-resize while the map is not this instance's to crop |
 | `bot seated` / `bot left` / `bot stopped` / `script completed` | INFO | the graph or script and its counters | a bot seat; an autonomous `-bot` run; a `-script` run; see [Bots](bots.md) |
+| `bot not seated` / `bots not seated` | WARN | `graph`, `error` / `error` | one seat that could not join; the seating as a whole, which costs the bots, not the run |
+| `presented run failed` | ERROR | `error`, plus `step` on a journal replay | a presented replay, script or bot stream failing a step; the stream ends there |
+| `music recording started` / `music not recorded` | INFO / WARN | `path`, plus `error` | `-mw`, once the mixer runs |
 | `probe listening` | INFO | `address` | a `-serve` run's `-probe` |
 
 ### `sub="net"`
@@ -274,7 +279,7 @@ beside `TRACE` — while the node-local file keeps it for an operator.
 | `capture staged` / `capture installed` | INFO | `tick`, `streams`, `systems`, `stage_us` / `tick`, `projected_ticks`, `stage_us`, `commit_us`, `correction_entries`, `correction_entities`, `correction_cells` | `App.stageProved`, `StagedInstall.Commit` |
 | `session captured` | INFO | `tick`, `bytes`, `streams`, `systems` | the authority taking a keyframe outside the cadence: a join's snapshot, a fallback |
 | `correction published` / `repair applied` | DEBUG | `tick`, `keyframe`, `bytes`, `chunks`, `whole_bodies`, `peers`, `of`, `cadence_ticks`, `keyframe_period_ticks`, `encode_us` / `tick`, `pages`, `sections`, `cells` | `Corrections` |
-| `correction not applied` / `repair failed its proof` | WARN | `tick`, `error` / `error` | `Corrections`, which falls back to a keyframe |
+| `correction not applied` / `repair failed its proof` | WARN | `tick`, `error` / `error` | `Corrections`; a failed proof asks the authority for a keyframe |
 | `keyframe fallback sent` | DEBUG | `peer`, `tick`, `bytes` | the authority answering a peer selective repair could not serve |
 | `link cannot sustain the convergence floor` / `link is carrying the convergence floor again` | WARN / INFO | `peer`, `floor_ticks`, `floor_bps`, `budget_bps` / `floor_ticks` | the relevance budget, once on onset and once on recovery |
 | `no authoritative world inside the convergence floor` / `authoritative world arrived inside the convergence floor` | WARN / INFO | `age_ticks`, plus `floor_ticks`, `grace_ticks` on the loss | `Corrections`; the instance predicts alone between them |
@@ -332,6 +337,7 @@ order, for every region.
 | `region` | INFO | `region`, `op`, `state` |
 | `region requested` / `region request failed` | INFO / ERROR | `op`, `region`, `state`, plus `error` on a failure |
 | `session reset` | INFO | — |
+| `import reconciled local lifecycle` | DEBUG | `actions`; a live capture install replaying the `reconcile=true` lifecycle actions its position crossed |
 | `system config not applied` | ERROR | `error`; the reset re-applying the scenario's system configuration |
 
 `via` is the triggering event name, or `Tick` for an automatic transition.
@@ -418,7 +424,8 @@ stack trace, so the record identifies the producing system. Separate from
 
 One `intent` record per semantic intent produced by the input machine. `macro`
 distinguishes replayed intents from physical input. `capture refused keys` names
-the keys of a key-capture request the input machine cannot capture.
+the keys a scenario's key-capture request asked for outside printable ASCII,
+which no capture takes.
 
 ### `sub="stat"`
 
@@ -493,16 +500,14 @@ combat.damage_attacker_cursor → msg="combat.damage.attacker"  cursor=<v>
 adapt.buf_cdf_hwm → msg="adapt.buffers"  cdf_hwm=<v>
 ```
 
-The projection separates per-region FSM state, each domain's `buf_*` marks
-(`<domain>.buffers`), combat attribution, chains, live counts, effects and
-rejections, weapon fire and death batches with their rejections, event settle
-passes, the eye's GA and protection counters and each species' protection,
-network session/authority/barrier/link/pace, the snapshot cards (cadence,
-correction, index, repair, relay, replay), the profiler's ranking, and
-per-player weapon state. Every resulting group stays within
-`parameter.OverlayCardMaxEntries` (15) metrics, a bound
-`TestTelemetryGroupsFitOverlayCards` holds rather than a runtime truncation, so
-the same index remains navigable as overlay cards and readable as log records.
+The projection gives per-region FSM state and each domain's `buf_*` marks
+(`<domain>.buffers`) their own groups, splits the wide combat, weapon, death,
+event, eye, network, snapshot and profiler domains into sub-groups and each
+species' protection counters into `<species>.protection`, and gives each player
+slot a card with its weapon inventory split out (`player.<N>.weapon`). Every
+resulting group stays within `parameter.OverlayCardMaxEntries` (15) metrics, a
+bound `TestTelemetryGroupsFitOverlayCards` holds rather than a runtime truncation,
+so the same index remains navigable as overlay cards and readable as log records.
 The metric registry keys themselves do not change.
 
 ### High-water marks
@@ -533,12 +538,11 @@ world, and two participants that agree about the world will disagree about it.
 One neighbouring key is worth reading carefully because it is *not* a mark:
 `spatial.max_cell_occupancy` is a plain gauge, stored rather than maximised, and it
 means "the fullest cell **at its last publication**": `Position.PublishTelemetry`
-computes it with the other grid gauges (`spatial.occupied_cells`,
-`spatial.indexed_entities`, `spatial.indexed_shared`, `spatial.unindexed`) every
-`parameter.StatSnapshotTicks` ticks, whatever period `-lt` sets.
-`spatial.cell_occupancy_hwm` is the same quantity maximised over time and kept on
-every cell insertion. Max-across-cells and max-across-cells-and-time are different numbers
-and both names are accurate; only reading one for the other is wrong.
+computes it with the other grid gauges every `parameter.StatSnapshotTicks` ticks,
+whatever period `-lt` sets. `spatial.cell_occupancy_hwm` is the same quantity
+maximised over time, kept on every cell insertion. Max-across-cells and
+max-across-cells-and-time are different numbers and both names are accurate; only
+reading one for the other is wrong.
 
 The bounded roster still registers every slot before `Freeze`, but inactive
 slots do not produce periodic snapshot records or telemetry cards. The flight
@@ -637,7 +641,7 @@ registry mirror, emitted by `GameContext.SnapshotContext`:
 | `msg` | Contents |
 |---|---|
 | `context` | map size and the crop-on-resize flag |
-| `view` | mode, screen and game offsets, viewport, camera, color mode; the local cursor's entity, slot, outstanding prediction depth, position and ping bounds |
+| `view` | mode, screen size, game offsets, viewport, camera, color mode; the local cursor's entity, slot, outstanding prediction depth, position and ping bounds |
 | `player` | roster count |
 | `world` | shared and local entity created/destroyed counts, and system count |
 | `session` | frame, pause, macro recording/playback, mouse preferences, and auto-fire |
@@ -657,11 +661,11 @@ recorder holds the last N ticks of the full registry in memory and writes only
 when something goes wrong.
 
 A run installs one of `parameter.RecorderDepthTicks` (200) ticks when a session
-log is running at startup; `-lr`/`Config.RecTicks` sets the depth, a negative one
-installs none, and a bare run installs none, so no trigger writes a file nobody
-asked for. A runtime replacing another, a replay's presented copy, takes over the
-recorder with its depth and FSM trigger (`Registry.TakeRecorder`); its window
-starts empty.
+log is running as it is built; `-lr`/`Config.RecTicks` sets the depth, `-lr 0` (a
+negative `RecTicks`) installs none, and a bare run installs none, so no trigger
+writes a file nobody asked for. When a replay presents another copy, that copy
+takes over the recorder with its depth and FSM trigger (`Registry.TakeRecorder`);
+its window starts empty.
 
 ### Storage
 
@@ -885,11 +889,12 @@ Each line names its kind by `sub`: `journal` for an event record or note,
 `anchor`, `capture` for a written world (below), `digest` and `end`. A rotation
 renames the full file to `vif-jrn-<time>_<yymmdd_hhmmss>.jsonl` (§13).
 `journal.Load` accepts a journal's files in any order, sorts records and anchors
-by `jseq`, written worlds by `cseq` and digests by position, removes overlap,
-keeps the latest `end`, and reports the first `jseq` gap; the first anchor is the
-earliest. `app.PlayJournal` and `app.VerifyJournal` take the same file list,
-while `-replay` passes one file. `PlayJournal` warns `journal incomplete` and
-plays on past a gap; `VerifyJournal` (`-replay -headless`) refuses one.
+by `jseq`, written worlds by `cseq` and digests by position, removes overlap and
+keeps the latest `end`; the first anchor is the earliest. `Set.CheckDense`
+reports the first `jseq` gap. `app.PlayJournal` and `app.VerifyJournal` take the
+same file list, while `-replay` passes one file. `PlayJournal` warns
+`journal incomplete` and plays on past a gap; `VerifyJournal`
+(`-replay -headless`) refuses one.
 
 `ConfigFromAnchor` rebuilds the run's configuration: it checks schema, tick
 interval and a non-zero seed, and refuses an anchor with non-zero `start_run` or
@@ -984,8 +989,9 @@ is never split across two records.
 
 At shutdown the drain runs once more, fd 2 is restored, and an empty capture is
 removed. `-dev` defaults **on** for race builds and is disabled with
-`-dev=false`. The redirect needs a unix platform (`redirect_unix.go`); elsewhere
-the run prints `runtime capture disabled` and plays on without it.
+`-dev=false`. The redirect needs a unix platform (`redirect_linux.go`,
+`redirect_unix.go`); elsewhere (`redirect_other.go`) the run prints
+`runtime capture disabled` and plays on without it.
 
 ## 11. Profiler
 
@@ -1091,7 +1097,7 @@ use their independently configured journal directory.
 | `:log scope <spec>` | Apply a scope spec |
 | `:log stat <ticks>` | Set the snapshot period, `0` disables |
 | `:log rec` | Report state |
-| `:log rec <ticks>` | Set the recorder depth; discards history |
+| `:log rec <ticks>` | Set the recorder depth, `0` removes it; discards history |
 | `:log rec flush` | Request a window flush on the next tick |
 | `:log rec fsm [on\|off]` | Toggle the FSM transition trigger |
 | `:t save` | Write a standalone snapshot (§7) |
