@@ -1,7 +1,7 @@
 # vif Development Timeline
 
 High-level progress collapsed from commit messages and `doc/`, April 2025 through
-2026-10-12. The project was vi-fighter until it was renamed vif in September 2026.
+2026-10-14. The project was vi-fighter until it was renamed vif in September 2026.
 Each line folds many commits, so dates within a section are approximate.
 
 ## 2025-04 to 2025-11 — Prototype and core game
@@ -272,11 +272,16 @@ Each line folds many commits, so dates within a section are approximate.
 
 ## 2026-09 — Scenarios, browser sessions, and the vif name
 
+- Special attacks, three-state auto-fire, and heat-driven drains were reworked.
 - The loaded map became a content-identified scenario that `:n` could change mid-session.
 - Joiners that lacked a scenario received it over net.
+- The corpus became player domain, resolved on each instance and never reconciled.
+- `script/test.sh` replaced the phase scripts as the test harness.
 - The fleet served scenarios from a node volume replaceable while live.
+- Releases carried the wad as one archive, the config root a player extracts.
 - A WebSocket bridge with `websocat` sidecar opened the first browser route.
 - `web/` became the launcher the deployment serves.
+- A node deploy became one command, `deploy/update.sh`, which `--diff` previews.
 - A running game could `:join` a session.
 - The browser build moved its Go program into a Worker.
 - Every crossing was committed at the authority, and guests were paced against it.
@@ -298,6 +303,7 @@ Each line folds many commits, so dates within a section are approximate.
 
 - Guest journals replayed from their join.
 - The journal recorded each written world as the change the write made.
+- `vif.toml` supplied flag defaults, and `-mw` recorded the music as WAV.
 - `-host` started play at once, and session addresses shared one endpoint grammar.
 - A scaling audit narrowed and baselined correction bodies and paced them per link.
 - Participants behind a relay converged as a stopgap.
@@ -312,7 +318,8 @@ Each line folds many commits, so dates within a section are approximate.
 - FSM-graph bots could take a participant seat.
 - `vif -bot` and `:bot` seated bots in the run's session.
 - Named actions and ex commands resolved in one input layer.
-- A live configuration overlay added bot and multiplayer actions.
+- An in-game configuration menu (`:config`) arrived with live settings, then bot and
+  multiplayer actions.
 - Cursors were marked by session slot, and roam and patrol merged into `default`.
 - Bots carried their holder's identity, and `:player drop` removed a player with its bots.
 - A guest's bots joined and played through the guest's own link.
@@ -337,6 +344,7 @@ Each line folds many commits, so dates within a section are approximate.
 - Replay stepping moved off the frame loop.
 - Session state was journaled, so replays reproduced session changes.
 - Logging moved to one handle per runtime with per-layer scopes.
+- The beam weapon became the ray.
 - Drop tiers moved into profiles, and all cursor contact took one strike path.
 - Corrections resumed across session resets.
 - Overlapping journal files installed each written world once.
@@ -345,3 +353,39 @@ Each line folds many commits, so dates within a section are approximate.
 - Network failures named the player's next step.
 - A startup `-host` that cannot bind failed before the UI.
 - The status bar gained a fixed key cell and ranked messages that stay up to be read.
+
+## 2026-10 — Weapons, macros, timers, and the input hook
+
+- TOML macros (`pkg/tomlmacro`) expanded scenarios and bot graphs at load; td and the
+  embedded campaign's repeated blocks were rewritten in them.
+- Combat statuses moved into one slot array per target: stun, a charged pulse's burn,
+  and the ward a species raises.
+- Each orb weapon gained a charge-cap effect: arcing rod hits, a halved launcher
+  cooldown, a burning pulse, a streaming turret, and a ray held while main fire is.
+- The cleaner became the gun, an innate tracer weapon, and the sweeping cleaner was
+  removed.
+- The streaming genetic archive gained duplicate rejection, and `GeneSpread` scored
+  an archive's diversity.
+- System roots became `/usr/local/etc/vif` and `/etc/vif`, a checkout's `bin/vif` read
+  its own `wad/`, and `make install` fell back to a user install and gained `uninstall`.
+- Reused row encodings, an exact wall-grid cache, and compact replay checkpoints cut
+  the cost of corrections, td ticks, and replay at the map limit.
+- A defeat started a new game as `:n` does, and kill tallies restarted with it.
+- Dust folded into the particle system, and decay orbited a spinning or charging Kraken.
+- Timers became fixed lifetime, deadline, and cooldown slots aged first in each tick,
+  and an expired lifetime left through a death batch.
+- Each tick settled what its systems queued before it closed, and a reset raised
+  inside a tick ended that tick.
+- Glyph drift moved loose text in parallax layers, and typing, drawing, and motions
+  took a cell's top glyph.
+- Scenarios could capture keys and lay out buttons as an input hook, run only the
+  systems they named, floor the map size, and draw seeded variables; simon, a
+  four-button memory game, was built on them.
+- Component logic moved into the owning systems, no system file served another, and
+  multi-value seeds folded through `vmath.MixChain`.
+- `:d break` set standing breakpoints on events, regions, states, and status cells.
+- Navigation's flow fields were computed only when read and on a throttled cadence,
+  and flow fields and route graphs shared one bucket-queue grid search.
+- What a busy link was owed waited behind its transfer instead of being dropped.
+- Release archives each unpacked into one root-owned directory, and a site could
+  name the browser launcher's files, content-hashed ones included.
