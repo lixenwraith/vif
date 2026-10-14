@@ -14,26 +14,28 @@ skip host discovery and use embedded assets.
 
 `wad/` mirrors the installed tree exactly, so installing it is a copy and
 `vif -config-dir wad` plays the repository checkout without installing
-anything. The embedded keymap and bot graphs have no `wad/` copy: they are
-installed from `internal/asset/input/keymap.toml` and `internal/asset/bot/`, so the
-file the binary falls back to and the file a user edits are one source.
+anything. The embedded keymap, bot graphs and `vif.toml` have no `wad/` copy: they
+are installed from `internal/asset/input/keymap.toml`, `internal/asset/bot/` and
+`internal/asset/vif.toml`, so the file the binary falls back to and the file a user
+edits are one source.
 
 ```text
 wad/                            internal/asset/
 ├── scenario/   one directory    ├── scenario/  fallback scenario
 │               per scenario     ├── content/   fallback corpus
 ├── content/    typing corpus    ├── input/     default keymap
-└── image/      .vifimg assets   ├── audio/     built-in sound bank
+└── image/      .vifimg assets   ├── audio/     sound and music banks
                                  ├── bot/       shipped bot graphs
                                  ├── vif.toml   default settings
+                                 ├── version.txt source-archive stamp
                                  └── splash_font.go
 ```
 
 The main campaign lives only in `internal/asset/scenario/`. Native, headless,
 and browser builds embed that same tree; `-s main` falls back to it when no
 external override exists. To author a variant, copy that directory into a
-configuration root as `scenario/<name>/`. Existing `scenario/main` overrides
-continue to take precedence, including copies installed by earlier releases.
+configuration root as `scenario/<name>/`. A `scenario/main/` in any root takes
+precedence, a copy an earlier release installed included.
 
 ## 2. Installed configuration tree
 
@@ -42,7 +44,8 @@ The user root is Go's `os.UserConfigDir` plus `vif`:
 `%AppData%\vif` on Windows, `~/Library/Application Support/vif` on macOS.
 `make install-config` writes that same root. `make install` writes the system
 root `$(SYSCONFDIR)/vif`: `/usr/local/etc/vif` for a source install, `/etc/vif`
-for a distribution package. System roots exist on Unix-like targets only.
+for a distribution package. System roots exist on Linux, the BSDs and the other
+Unix-like targets `internal/paths` lists, not on macOS or Windows.
 
 ```text
 vif/
@@ -77,9 +80,9 @@ resource walks the same roots in order:
    names others in their place, separated as `PATH` is, and set empty names none.
 
 The first root holding the categorized path wins, so an older user layout still
-overrides a newer system installation, and an installed copy of a scenario
-shadows the checkout's; `-config-dir wad` puts the checkout first. A resource absent from every root uses
-the embedded fallback.
+overrides a newer system installation, a copy in the user root shadows the
+checkout's, and the checkout's shadows a system install; `-config-dir wad` puts
+the checkout first. A resource absent from every root uses the embedded fallback.
 
 | Resource | Path in each root | Final fallback |
 |---|---|---|
@@ -101,14 +104,20 @@ an absolute path; the relative-path check remains for compatibility. Missing
 explicit paths or names other than the built-in `main` are errors; absent
 discovered overrides are normal.
 
-`-d` bypasses scenario and content discovery only. Keymap and audio overrides remain
-local participant preferences and retain their ordinary resolution.
+`-d` bypasses scenario and content discovery only, and refuses `-s` and `-f`.
+Keymap, audio and bot-graph overrides remain local participant preferences and
+retain their ordinary resolution.
+
+A joiner whose roots hold no scenario with the session's digest is served the
+coordinator's during the join and holds it in memory only; nothing is written to a
+root ([Services §7.2](services-and-networking.md#72-join-identity-and-who-decides-it)).
 
 A fleet node carries a partial root. `/var/db/vif/wad` holds `scenario/` and
 `image/` and nothing else, mounted read-only at `/wad` in every session pod, so a
-session resolves its scenario from the node and its corpus and keymap from the
-binary. That is deliberate: a native guest running `-d` has to be able to join one,
-and its content identity is `embedded`.
+session resolves its scenario from the node and everything else from the binary.
+Content is not a category there: a dedicated host spawns no glyphs, each guest
+reads its own corpus, and a guest without the session's scenario is served it at
+the join.
 
 `vif.toml` at the top of a root holds what a flag would otherwise say on every run:
 `[paths]` names another root (`root`, read as `-config-dir` is), the log,
@@ -118,7 +127,8 @@ from `-config-dir` down to the system roots; the first file wins whole, a key it
 omits keeps the embedded default, and the `vif.toml` inside its own `root` is not
 read. Every key is a default: a flag given on the command line wins, and `-d`
 still takes the embedded scenario and content. A relative path is relative to the
-file, `~/` is the home directory, and an unknown key is refused. `-check` names
+file (a bare scenario name stays a name the roots resolve), `~/` is the home
+directory, and an unknown key is refused. `-check` names
 the file it read. Music and sound overrides stay out of it, because a run that
 creates no audio refuses them and a default must not break `-serve`.
 
@@ -137,8 +147,9 @@ every shipped file and keeps files a player added; the keymap and `vif.toml` are
 the player's settings and are written only when absent. `CLEAN=1` first removes
 the shipped categories (`scenario/`, `content/`, `image/`, `bot/`) and those two
 files, so the root holds only the fresh install plus `audio/` and anything else
-a player put beside them. `install` adds the binary, licence, manual, launcher,
-completion and documentation under `PREFIX` with the wad at `$(SYSCONFDIR)/vif`.
+a player put beside them. `install` adds the binary, licence, manual, desktop
+entry and icons, completion and documentation under `PREFIX` with the wad at
+`$(SYSCONFDIR)/vif`.
 A user who cannot write `/usr/local/bin` gets, unstaged, `PREFIX=~/.local` and the
 user root as the defaults; `sudo make install` installs system-wide, and `make
 help` prints the values in effect. `install` writes nothing until it can write
@@ -148,8 +159,9 @@ See [Packaging](packaging.md).
 
 ## 5. Logs, journals, and runtime output
 
-Native Unix builds use `$XDG_STATE_HOME` (normally `~/.local/state`) and keep
-the streams separate:
+Linux, the BSDs and the other Unix-like targets use `$XDG_STATE_HOME` when it is
+an absolute path, else `~/.local/state`, for every install, and keep the streams
+separate:
 
 | Output | Default | Override |
 |---|---|---|
@@ -157,9 +169,9 @@ the streams separate:
 | Replay journals | `$XDG_STATE_HOME/vif/journal/` | `-j=DIR`, `paths.journal` |
 | Music recordings | `$XDG_STATE_HOME/vif/music/` | `-mw=DIR`, `paths.music` |
 
-On platforms without an XDG state root, the platform user-cache directory is
-used. Only when no user location can be resolved does a stream fall back to
-`./vif/<stream>/` in the working directory. `/var/log` is never assumed.
+On macOS and Windows the platform user-cache directory is the base. Only when no
+user location can be resolved does a stream fall back to `./vif/<stream>/` in the
+working directory. `/var/log` is never assumed.
 
 Bare `-l`, `-j` and `-mw` enable their streams at the defaults. Because they are
 Go boolean-style flags, a directory must use the equals form.
@@ -176,12 +188,14 @@ not open host paths directly.
 
 `internal/asset` owns every embedded group and is the only package with an
 `embed` directive for shipped data. In an audio-capable build, `pkg/audio`
-carries no specs of its own: `internal/parameter.BuiltinSounds` parses the
-embedded bank and hands it to the engine as `AudioConfig.BaseSounds`, which is
-what keeps `pkg/` free of `internal/` imports. Audio-free and browser builds omit
-that loader and the audio engine.
+carries no specs or patterns of its own: `internal/parameter.BuiltinSounds` and
+`BuiltinPatterns` parse the embedded banks and the audio service hands them to the
+engine as `AudioConfig.BaseSounds` and `BasePatterns`, which is what keeps `pkg/`
+free of `internal/` imports. Audio-free and browser builds omit those loaders and
+the audio engine.
 
 A `js/wasm` build performs no host-directory discovery, so it remains playable
-from the embedded scenario, content, and keymap. Page launch arguments do not make
-external URLs into files; downloadable `wad/` content needs an HTTP-backed
-resource provider. See [Build profiles and platform boundaries](multi-platform.md).
+from the embedded scenario, content, and keymap, and as a guest it is served the
+session's scenario like any joiner. Page launch arguments do not make external URLs
+into files; downloadable `wad/` content needs an HTTP-backed resource provider. See
+[Build profiles and platform boundaries](multi-platform.md).

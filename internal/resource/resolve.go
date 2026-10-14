@@ -1,7 +1,7 @@
-// Package resource applies one precedence rule to every discovered runtime
-// resource: operator root, user root, system roots, then the caller's embedded
-// fallback. It also validates what those paths resolve to, without starting a
-// runtime.
+// Package resource applies one precedence rule to every runtime resource: its flag,
+// -config-dir, the user root, the checkout's wad/, the system roots, then the
+// embedded copy. It reads a scenario whole into the digested form a session serves
+// a joiner, and validates what the paths resolve to without starting a runtime.
 package resource
 
 import (
