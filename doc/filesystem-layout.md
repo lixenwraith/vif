@@ -108,13 +108,14 @@ discovered overrides are normal.
 Keymap, audio and bot-graph overrides remain local participant preferences and
 retain their ordinary resolution.
 
-A joiner whose roots hold no scenario with the session's digest is served the
-coordinator's during the join and holds it in memory only; nothing is written to a
-root ([Services §7.2](services-and-networking.md#72-join-identity-and-who-decides-it)).
+A joiner that does not resolve the session's scenario to the same digest is served
+the coordinator's during the join and holds it in memory only; nothing is written to
+a root ([Services §7.2](services-and-networking.md#72-join-identity-and-who-decides-it)).
 
 A fleet node carries a partial root. `/var/db/vif/wad` holds `scenario/` and
 `image/` and nothing else, mounted read-only at `/wad` in every session pod, so a
-session resolves its scenario from the node and everything else from the binary.
+session resolves its scenario and wall images from the node and everything else
+from the binary.
 Content is not a category there: a dedicated host spawns no glyphs, each guest
 reads its own corpus, and a guest without the session's scenario is served it at
 the join.
