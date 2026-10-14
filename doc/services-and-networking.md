@@ -585,8 +585,8 @@ participant in the succession chain that holds its own seat (a bot's seat has a
 holder), else the lowest such ID on the roster. Every survivor computes it from
 state it already holds, so at most one instance can conclude that it is the
 successor and at most one can claim the term, without a round trip. A quorum could
-not supply that here anyway: a star's survivors are mutually unreachable the moment
-its centre goes, so none of them could ever collect a vote. The successor's one
+not supply that here anyway: in a session of two, the one survivor is half the
+closed roster, and a strict majority of it elects nobody. The successor's one
 self-check is retention, because an instance with nothing retained has no baseline
 for a delta to name; a receiver's check is that the record names the successor its
 own roster designates.
@@ -741,10 +741,12 @@ believes is authoring, how many handoffs it has adopted and what their records
 cost, how many artifacts the term gate ignored or refused, how many participants
 it evicted, and the run-level facts: `network.fork`, set when this instance is a
 local continuation rather than part of a session; `network.host_lost`, which draws
-`Host lost` for the case where no succession is possible; and `network.migrating`,
-which draws a transient `Migrating` badge for `NetworkMigrationBadgeTicks` after a
-handoff is adopted — carrying `network.rejoin_attempts` beside it while a survivor
-with no link is walking the succession list. `:session` prints the term, the
+`Host lost`, raised when a guest loses its link to the authority, kept if the
+succession ends as a fork and cleared once a handoff is adopted; and
+`network.migrating`, which draws a transient `Migrating` badge while a succession is
+open and for `NetworkMigrationBadgeTicks` after a handoff is adopted — carrying
+`network.rejoin_attempts` beside it while a survivor with no link is walking the
+succession list. `:session` prints the term, the
 authority when it is somebody else, the handoff count once there has been one, a
 succession in progress, the fork state, how many succession candidates the chain
 holds and whether this one is listening.

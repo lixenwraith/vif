@@ -226,8 +226,9 @@ borrow. `-join ws://host:7777/<name>` joins it from a terminal or a page.
 
 `network.AdmissionLimiter` is per address, and the pod sees browsers at the node's
 address, as it sees front-door players, so per-player admission is the
-allocator's: one budget per address over both routes, keyed on the address the
-edge writes into `-client-address-header` ([fleet §4](kubernetes-fleet.md#4-security-posture)).
+allocator's: one budget per address over both routes, keyed on the front door's
+socket address and on the address the edge writes into `-client-address-header`
+([fleet §4](kubernetes-fleet.md#4-security-posture)).
 
 ### The public route
 
@@ -240,10 +241,10 @@ flowchart LR
 
 `wss://<site>/vif/ws/<session>`. The session identifier is a routing key, not a
 secret. Nginx terminates TLS and forwards `Upgrade` without interpreting a frame.
-The allocator checks the method, the identifier's syntax, the `Origin`, the
-session's liveness and readiness in reconciled Kubernetes state, and its own
-per-session ceiling; only then does it answer the upgrade, and it never accepts an
-upstream a caller named.
+The allocator checks the method, the identifier's syntax, that the request is an
+upgrade, the `Origin`, the address's join budget, the session's liveness and
+readiness in reconciled Kubernetes state, and its own per-session ceiling; only then
+does it answer the upgrade, and it never accepts an upstream a caller named.
 
 For a page served over HTTPS the endpoint must be `wss://`: browsers block
 `ws://` as active mixed content. The route is same-origin with the page, so a

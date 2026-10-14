@@ -24,8 +24,8 @@ spec:
 # trying to. externalTrafficPolicy keeps the original source for the application.
 # What it does is confine the reachable surface to one port on one workload, so
 # that everything else in the namespace stays unreachable even from a source that
-# is allowed to play. Restricting *who* may reach 7777 is the firewall's job on the
-# FreeBSD host and the node; see doc/kube-docker-deploy.md §2.
+# is allowed to play. Restricting *who* may reach 7777 is the firewall's job at the
+# host forward and on the node; see doc/kube-docker-deploy.md §2.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -44,11 +44,10 @@ spec:
 ---
 # The operator ports, from the monitoring namespace only.
 #
-# /health and /metrics describe the session's roster, tick and remaining lifetime,
-# and the log stream carries every line the session writes — including the metric
-# records. All of it is operational data, all of it is unauthenticated, and none of
-# it may be reachable from the player-facing path. The kubelet's own probes bypass
-# the pod network and are unaffected by this.
+# /health and /metrics describe the session's roster, tick and remaining lifetime.
+# All of it is operational data, all of it is unauthenticated, and none of it may be
+# reachable from the player-facing path. The kubelet's own probes bypass the pod
+# network and are unaffected by this.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

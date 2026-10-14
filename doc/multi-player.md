@@ -825,10 +825,11 @@ it. Planned multiplayer work is in [the todo list](todo.md#multiplayer).
 
 5. **A crossing that misses its lead lands later on the authority than on its
    producer.** The producer applies it as stamped and the authority commits it at
-   its own next tick (§3.5). A knockback window's impulses compose to one vector
-   whichever hit opened it; a kill is credited to the cursor whose hit killed it,
-   so two cursors finishing one target inside that lateness can each be credited
-   on their own instance.
+   its own next tick (§3.5). The knockback window covers every attacker, so the
+   knockback an instance applies first holds it and the next correction repairs a
+   difference. A kill is credited to the cursor whose hit killed it, so two cursors
+   finishing one target inside that lateness can each be credited on their own
+   instance.
 
 6. **An instance that keeps a link after a loss keeps the whole roster.**
    `DropAbandonedCursors` acts only on an instance left with no link (§5.2). A
@@ -843,12 +844,11 @@ two-participant and mesh convergence, selective repair and fallback, replay
 retention, correction ordering, join/reconnect, link shaping, relay retention,
 authority succession, the commit, pacing and own lead of §3.5, the correction
 playout buffer, the knockback an artifact rather than a stream position determines,
-the identity an explosion's re-derived hits inherit from it, the per-attacker window
-and additive join that make two participants' knockbacks compose the same way in
-either order, the one reward a shared death pays however many times a rollback makes
-a guest derive it, the eviction that drops only the participant that stays late,
-the domain a capture's RNG streams may carry, the placement budget and the storm
-burst a shared stream draws before it reads a live position, the owner-state sync an
+the identity an explosion's re-derived hits inherit from it, the knockback window
+every attacker shares, the one reward a shared death pays however many times a
+rollback makes a guest derive it, the eviction that drops only the participant that
+stays late, the domain a capture's RNG streams may carry, the placement budget and
+the storm burst a shared stream draws before it reads a live position, the owner-state sync an
 install must not stall, the agreed tick a shared-identity crossing waits for on its
 own producer, and the peer link and succession chain rules that make a successor
 reachable. It also forces a capture to enter and retire a quasar while the receiver

@@ -35,8 +35,8 @@ Every `World` has two domains:
 zero is invalid in both. A cursor's roster slot lives in `CursorComponent` and is
 not encoded in the domain tag.
 
-A participant and a cursor are separate things. A participant holds an identity,
-an authority term and a vote; a roster slot is what binds it to a cursor. The
+A participant and a cursor are separate things. A participant holds an identity
+and the authority term it follows; a roster slot is what binds it to a cursor. The
 coordinator of a dedicated host holds `parameter.NoPlayerSlot` and therefore no
 cursor: it authors the Shared world and puts nobody on the map. Only the
 coordinator may be cursorless — every other participant is in the session to drive
@@ -498,8 +498,8 @@ artifacts due after the capture's tick, simulates to the live tick, and the
 projection is what the live world is reconciled to — clock and barrier alone when
 the two are already equal. A hole in the retained suffix makes it unavailable and
 selects authority-only recovery. A capture ahead of the clock waits for its tick
-inside the lead, newest wins, and one further ahead is adopted at its own tick as
-the jump it is (multi-player.md §3.3, §4.1).
+within `parameter.NetworkHoldTicks`, newest wins, and one further ahead is adopted
+at its own tick as the jump it is (multi-player.md §3.3, §4.1).
 
 ### D-24 — Cadence adapts; the convergence floor does not
 
@@ -604,10 +604,11 @@ qualifier shows, worst first:
 - `loss p%`: probes went unanswered often enough for the link to be the cause;
 - `slow`: the cadence backed off and prediction is carrying more.
 
-Three states replace the badge, in this order: `Host lost` (this instance is an
-explicit local fork), `Migrating [k]` (a handoff is in flight, k passes down the
-succession list so far), and `Net: down` or `Net: wait` while the link is down or
-still connecting. The measurements behind each are in the status snapshot and in
+Three states replace the badge, in this order: `Host lost` (this guest lost its
+link to the authority or continues as a local fork, until a handoff is adopted),
+`Migrating [k]` (a succession is open or a handoff was just adopted, k passes down
+the succession list so far), and `Net: down` or `Net: wait` while the link is down
+or still connecting. The measurements behind each are in the status snapshot and in
 `:session`.
 
 ### 4.4 Membership and session control
@@ -742,7 +743,7 @@ departing cursor, and reconnect must take a current world.
 | Guest replay | Suffix membership uses the capture's per-source fence, so a frame that missed the playout lead is replayed rather than discarded. Remote entries are a maximum rather than a contiguous prefix: on a relay a frame that overtakes a lower one can leave the lower one looking contained for one cadence. |
 | Playout | Each participant stamps the lead its own link to the authority asks for, capped at `NetworkBarrierMaxDelayTicks` (multi-player.md §3.5). A crossing that misses it still lands later on the authority than on its producer, and one past `NetworkCommitLateTicks` is void everywhere but its producer until a correction repairs it. |
 | Topology | The protocol relays over a graph. `-join` dials one address, and in a migrate session every participant then dials the current successor from the published succession chain, so the shape is a star with a successor chain over it. |
-| Partition | The **first survivor in the succession chain** succeeds without a vote; losing it as well as the authority elects nobody and the survivors fork, because a chain gives nobody but the successor a link to anyone. Merging an explicit local fork does not work. An instance with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
+| Partition | The **first survivor in the succession chain**, else the lowest independent roster identity, succeeds without a vote; losing that successor in turn runs the next succession. A survivor with no link walks the succession list, and one that hears no record within the succession window forks. Merging an explicit local fork does not work. An instance with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
 | Relay scheduling | A relayed participant inherits its neighbour's cadence and repair pricing. |
 | Tower ownership | Optional tower configurations still bind to slot zero rather than an explicit session-owned/cursor-owned rule. |
 | Progression | `kills.drain` is a session total, so quasar progression is session-wide rather than per cursor. |
