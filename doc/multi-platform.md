@@ -234,15 +234,15 @@ socket address and on the address the edge writes into `-client-address-header`
 
 ```mermaid
 flowchart LR
-    Browser["Browser WASM"] -->|"wss://"| Nginx["Host Nginx"]
+    Browser["Browser WASM"] -->|"wss://"| Nginx["Site nginx, TLS"]
     Nginx -->|"Upgrade"| Allocator["vif-allocator"]
     Allocator -->|"payload, TCP 7777"| Pod["vif -serve"]
 ```
 
 `wss://<site>/vif/ws/<session>`. The session identifier is a routing key, not a
-secret. Nginx terminates TLS and forwards `Upgrade` without interpreting a frame.
-The allocator checks the method, the identifier's syntax, that the request is an
-upgrade, the `Origin`, the address's join budget, the session's liveness and
+secret. The site's nginx terminates TLS and forwards `Upgrade` without interpreting
+a frame. The allocator checks the method, the identifier's syntax, that the request
+is an upgrade, the `Origin`, the address's join budget, the session's liveness and
 readiness in reconciled Kubernetes state, and its own per-session ceiling; only then
 does it answer the upgrade, and it never accepts an upstream a caller named.
 
@@ -391,7 +391,7 @@ dependency checks in addition to the normal test and vet gates. A release should
 also run:
 
 ```bash
-go generate ./internal/event ./internal/manifest
+go generate ./internal/manifest
 go build ./...
 go test ./...
 go vet ./...

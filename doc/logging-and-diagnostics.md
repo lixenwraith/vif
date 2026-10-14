@@ -580,10 +580,10 @@ a stable narrow interval, preventing value-width jitter.
 
 ### Freeze
 
-`Registry.Freeze` is called once from `Scheduler.Prepare`, reached by
-`Start` in play mode and by a driven App's construction. It follows
-`World.Seal` and precedes the first tick; every system and renderer has
-registered by then. Freezing:
+`Registry.Freeze` is called once from `Scheduler.Prepare`, reached by `Start` in
+play and server mode, by `RunTicks`, and by a driven or scripted App's
+construction. It follows `World.Seal` and precedes the first tick; every system and
+renderer has registered by then. Freezing:
 
 - closes all four maps to new keys;
 - builds the group index once and caches it lock-free, so the per-tick path

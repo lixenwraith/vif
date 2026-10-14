@@ -49,7 +49,7 @@ This reference covers the status-registry telemetry of every system `manifest.Bu
 - **Keys that survive a reset.**
   - Prefixes: `content.`, `rec.`, `stat.`, `snapshot.` (except `predictions_pending`), `prof.`, `proc.`, `network.term*` and `network.handoff*`.
   - Session keys: `network.{authority,migrations,fork,migrating,evicted,listening,chain,host_lost}`.
-  - Operator and context keys: `context.{frame,screen_w,screen_h,mode}` and `engine.{fps,speed_pct,speed,breakpoint}`.
+  - Operator and context keys: `context.{frame,screen_w,screen_h,mode}` and `engine.{fps,speed_pct,speed}`. The test also exempts `engine.breakpoint`, because its seeded value has no armed request behind it; at runtime a reset cancels the armed run-until request and the key reads `-`.
 - **Metric-free systems.** Systems with no counters and no reusable allocation-shaped buffers register nothing.
 
 ## System telemetry
@@ -141,7 +141,7 @@ The whole `snapshot.` prefix is outside both comparison surfaces. A host publish
 | Owner | Metric keys | Registered | Written | Reset | Named consumer |
 |---|---|---|---|---|---|
 | Game context | `engine.fps`, `context.{frame,screen_w,screen_h,map_locked,mode}` | `newGameContext` | The render loop (`fps`, `frame`), resize, mode change, and the map lock (game context and `NetworkSystem`) | A game reset does not clear them; the owners rewrite them | Status bar: `engine.fps` |
-| Time control | `engine.{speed_pct,speed,step,breakpoint,paused}` | `NewTimeControl` | Pause, rate, step and breakpoint changes under the time-control lock | `speed_pct`, `speed` and `breakpoint` persist across a game reset | Status bar: `speed`, `step`, `breakpoint` |
+| Time control | `engine.{speed_pct,speed,step,breakpoint,paused}` | `NewTimeControl` | Pause, rate, step and breakpoint changes under the time-control lock | `speed_pct` and `speed` survive a plain reset, except that cancelling an armed run-until request reinstates the rate it was armed from; `:new!` returns them to 1x. `breakpoint` returns to `-` and `step` to 0, because the reset cancels both requests | Status bar: `speed`, `step`, `breakpoint` |
 | Scheduler / world | `engine.{ticks,apm,music_apm,tick_slips}`, `entity.{count,created_total,destroyed_total}`, `time.game_elapsed_ms`, `event.{backoffs,dispatches,dead,dropped,invalid,queue_len,queue_max,settle_exhausted}`, `event.settle_{pre,post,loop,reset,input,settle,wire,close}`, `fsm.{state,elapsed,max_duration,state_index,state_count}` | `NewScheduler` | Dispatch and the tick tail, under the world lock; the `fsm.` summary after the FSM update and on an FSM import. A capture install stores `engine.ticks` and `time.game_elapsed_ms` (`App.adoptClockLocked`) | `Scheduler.resetTelemetry` from `executeReset` | Status bar: `engine.ticks`, `engine.music_apm` and the five `fsm.` summary keys |
 | FSM regions | `fsm.<region>.{state,index,elapsed,max_duration,paused}` for each region of the loaded scenario | `bindFSMTelemetry` from `initLoadedScenario` | After the FSM update each tick, and on an FSM import (`ImportFSM`) | `resetTelemetry` | `:d break region` resolves its region name against the `fsm.<region>.state` keys |
 | Event queue | Per-type `[EventTypeCount]atomic.Int64` dispatch and dead-letter arrays, surfaced as strings `event.{dispatch_by_type,dead_by_type}` | Arrays in `NewEventQueue`; strings in `NewScheduler` | The scheduler records after routing; the strings publish every `StatSnapshotTicks` | `Queue.ResetTelemetry` after the stale-event drain | Generic only |
@@ -290,7 +290,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `snapshot.corrections_refused` (int) | Corrections that could not be resolved: a delta against a keyframe not held, or a body its header does not describe. The next keyframe is self-sufficient |
 | `snapshot.corrections_superseded` (int) | Corrections a fresher one overtook before they applied, plus any the queue dropped |
 | `snapshot.corrections_held` (int) | Corrections the playout buffer deferred until this instance reached their tick. A steady rise with no applications beside it is the buffer stalling |
-| `snapshot.corrections_jumped` (int) | Corrections further ahead than the lead, adopted at their own tick: a join, or a clock that had fallen behind |
+| `snapshot.corrections_jumped` (int) | Corrections more than `parameter.NetworkHoldTicks` ahead of the clock, adopted at their own tick: a join, or a clock that had fallen behind |
 | `snapshot.projected_ticks` (int) | How far behind the clock the last correction was, which is how far staging simulated it forward |
 | `snapshot.correction_entries`, `snapshot.correction_entities`, `snapshot.correction_cells`, `snapshot.correction_tick` (int) | The last applied correction: component cells moved, distinct shared entities behind them, the largest placement move, and its tick. `NetworkSystem` reports `correction_entities` to peers as the correction magnitude |
 | `snapshot.predictions_pending` (int) | Predicted species kills held for authoritative confirmation |
