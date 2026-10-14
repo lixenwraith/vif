@@ -43,8 +43,8 @@ flowchart TD
     Start --> Stop["Stop initialized services in reverse order"]
 ```
 
-The hub delegates to `core.TopoSort`, the same Kahn implementation the system
-dependency graph resolves with. Names and dependent lists are sorted so
+The hub delegates to `core.TopoSort`, the same Kahn implementation that checks the
+system dependency graph. Names and dependent lists are sorted so
 unrelated siblings have a deterministic order. Missing dependencies and cycles are
 startup errors, and the resolver reports them as typed errors the hub renders
 in service terms.
@@ -64,7 +64,7 @@ an arbitrary order.
 
 | Service | `Init` | `Start` | Resource contribution |
 |---|---|---|---|
-| `file` | Retain the ordered configuration roots. | No-op. | `FileResource.Provider`, a generic categorized open capability. |
+| `file` | No-op; the service is built over the ordered configuration roots. | No-op. | `FileResource.Provider`, a generic categorized open capability. |
 | `terminal` | Construct terminal, enter raw/alternate-screen state, detect/force color mode. | Start blocking poll loop. | Exposed directly to app/render/input rather than as an ECS resource. |
 | `content` | Resolve, load, sanitize, and freeze corpus/cursor. | No-op. | `ContentResource.Provider`. |
 | `audio` | Build engine/config and load optional documents. | Freeze/register sounds, probe backend, start mixer/supervisor. | `AudioResource.Engine` when available. |
@@ -75,7 +75,7 @@ Assembly is mode-dependent:
 | App mode | Registered services |
 |---|---|
 | `ModePlay` | file, terminal, content, audio, and network; `RoleNone` unless `-join` makes it `RolePeer`. `-host` and `:host` open a port of their own once the clock runs (§6) |
-| `ModeHeadless` | file and content for ordinary harnesses; `app.RunScript` additionally registers `RoleHost`/`RolePeer` network when a startup flag is present |
+| `ModeHeadless` | file and content for ordinary harnesses; a script or bot run (`app.RunScript`, `app.RunBot`, a holder's bot seat) additionally registers `RoleHost`/`RolePeer` network when given an address |
 | `ModeReplay` | file, terminal, content, and audio |
 | `ModeScript` | file, terminal, content, audio, and the same `RoleHost`/`RolePeer` network a headless script registers |
 | `ModeServer` | file, content, and `RoleHost` network; no terminal and no audio |
@@ -84,8 +84,9 @@ The predicates in `internal/app/config.go` are authoritative for terminal and
 audio capabilities, then build capabilities constrain them further. A
 `vif_headless` build has no terminal or audio adapter; `vif_noaudio` and browser
 builds have no audio adapter. Native networking is role-selected separately:
-play constructs the no-op-capable socket adapter, while an authored headless
-script constructs it only for `-host`/`-join`. A browser registers the same adapter
+play constructs the no-op-capable socket adapter, while every other mode
+constructs it only for a host or join address, which only a script or bot run and
+`-serve` may be given. A browser registers the same adapter
 for a `-join` naming the same-origin route `wss://<site>/vif/ws/<session>`, and is
 refused `-host`, `-serve` and a `host:port` target, none of which it could bind or
 dial. The allocator terminates the route and splices it to the session's game
@@ -138,9 +139,9 @@ notifications and sends opaque framed messages.
 `ModePlay` registers `NetworkService` on every run (a browser only for a `-join`).
 Unless the run joins, it uses `RoleNone`, so Init/Start are no-ops and no
 `NetworkResource` is contributed: a play run's `-host` opens its own port once the
-clock runs, the path `:host` takes. `app.RunScript` can register an active service
-without a terminal; ordinary `NewHeadless` deliberately rejects address flags so no
-caller can bypass the start/ready gate. The entry points:
+clock runs, the path `:host` takes. A script or bot run can register an active
+service without a terminal; ordinary `NewHeadless` deliberately rejects address
+flags so no caller can bypass the start/ready gate. The entry points:
 
 | Entry point | Behavior |
 |---|---|
@@ -164,8 +165,8 @@ scheme is refused (§7.3).
 
 `-host` and `:host` are one path: the host plays from its first tick and a joiner
 takes the roster, then the world it names, as a chunked `MsgStateSnapshot` from
-the mid-run gate. Only a run with nobody to play — `-serve`, or an authored
-script's `-host` — holds tick zero in a lobby until its guests are ready. After a
+the mid-run gate. Only `-serve`, or a script or bot run's `-host`, holds tick zero
+in a lobby until its guests are ready. After a
 connected peer leaves, the remote cursor is removed and the survivor continues; the
 listener stays active and the same participant may dial again, which is the
 reconnect path and is not a separate mechanism.
@@ -215,7 +216,7 @@ state, peer count and connected state.
 |---|---|
 | `RoleNone` | Disabled/no-op. |
 | `RoleHost` | Listener with `HostAcceptor`: admits the dialling address against a per-host budget, then allocates a participant identity and slot and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `App.midRunGate` serialises. |
-| `RolePeer` | The dialled (or preconnected) stream to the coordinator, admitted after the join and start gates. With `AcceptPeer` set it also listens, on a port the caller bound or `ListenAddress`, for the participants the succession chain sends to it; `DialPeer` opens a link to one of them. A bind that fails leaves it a leaf rather than failing the run. |
+| `RolePeer` | The dialled (or preconnected) stream to the coordinator, or to the holder a guest's bot joins through, admitted after the join and start gates. With `AcceptPeer` set it also listens, on a port the caller bound or `ListenAddress`, for the participants the succession chain sends to it; `DialPeer` opens a link to one of them. A bind that fails leaves it a leaf rather than failing the run. |
 | `RoleRelay` | A *session* role rather than a transport mode: a participant with more than one link, which forwards the authority's artifacts to the participants behind it and retains what it forwards so it can answer their selective requests. The transport starts it exactly as `RolePeer`, because what makes it a relay is what it does with the artifacts, not how the stream was established. `network.SessionRole(authoring, links)` is what the protocol reads. |
 
 ```mermaid
@@ -255,8 +256,9 @@ peer manager enforces the configured cap and duplicate-ID rejection.
 
 Each peer owns a bounded send queue, exact-frame read loop, encode/flush loop and
 close monitor. `Stop` closes its listeners, then the handshakes still in flight,
-then the peers, and waits for all of them; peer close removes it from the manager
-and emits one poll notification.
+then the peers, and waits for all of them. A closing peer still writes what was
+queued before the close, for at most a second, so a notice broadcast just before it
+arrives; peer close removes it from the manager and emits one poll notification.
 
 ### 7.1 Admission
 
@@ -269,11 +271,12 @@ back behind the same read. The budget is released the moment the handshake retur
 what it bounds is unauthenticated work, and everything after that point concerns a
 peer the roster ceiling already bounds.
 
-The acceptance a joiner sends back carries its own terminal-equivalent geometry
-(`network.JoinerReport`). It travels with the reply rather than the dial because
-only after construction does a joiner know the terminal it got, and it is advisory:
-a coordinator that was given a `-size` ignores it, and one that was not uses the
-first to size the session (see [Runtime](runtime.md) §1.2).
+The acceptance a joiner sends back (`network.JoinerReport`) carries its own
+terminal-equivalent geometry, the address it listens on for the succession chain,
+and a bot's holder. It travels with the reply rather than the dial because only
+after construction does a joiner know the terminal it got. The geometry is
+advisory: only a dedicated host given no `-size` reads it, sizing a cropping map
+from the first guest that reports one (see [Runtime](runtime.md) §1.2).
 
 ### 7.2 Join identity, and who decides it
 
@@ -335,8 +338,8 @@ mismatch names one field and both values, and carries `IdentityRefusalTag` so th
 joiner can recognise it across the wire — unlike a handoff refusal it is not worth
 retrying, because nothing about the peer will be different a second later.
 
-An offer that names no identity verifies nothing, which is what leaves a harness
-free to dial a hand-built fixture.
+A dialer configured with no build identity (`Config.Identity`) skips its check,
+which is what leaves a harness free to dial a hand-built fixture.
 
 `Coordinator.Admit` runs before `Assign`, and it is the one decision made about a
 dialer before it costs the session anything. The expensive part of a join is not
@@ -473,9 +476,10 @@ will ever be. The gate counts what it reads and the port that takes over counts
 from zero, so the joiner's `MsgReady` rebases the host's meter; otherwise the
 capture stands as backlog for the whole session.
 
-`MsgStateSnapshot` (0x26) carries one chunk of a shared-world capture. It is the only message whose size is a
-function of the world rather than of the format, so it is the only one that may be
-split. The schema JSON first enters a 10-byte bounded compression envelope:
+`MsgStateSnapshot` (0x26) carries one chunk of a shared-world capture. A capture's
+size is a function of the world rather than of the format, so it is split, as a
+correction (`MsgStateCorrection`) and a scenario body are. The schema JSON first
+enters a 10-byte bounded compression envelope:
 `[magic:4][version:1][codec:1][plain bytes:4]`, followed by deflate data. The
 reassembled wire size is capped at `MaxSnapshotBytes` and the declared plain size
 at `MaxSnapshotPlainBytes`, which is eight times it. The two differ because the
@@ -485,12 +489,11 @@ ratio is large and world-dependent: the storm high water compresses from about
 refuse at the encoder a world whose bytes fit on the wire four times over.
 
 The wire cap is a sanity bound rather than the defence. A declared length is a claim
-by whoever sent the chunk, and `NetworkSystem` holds one `SnapshotAssembly` per
-source, so reserving for the declared total would let one twenty-byte header make
-a receiver hold the whole ceiling, once per participant. The reservation is bounded
-by `snapshotReserve` and the buffer grows with the bytes that actually arrive, so
-what a peer can make a receiver hold is what that peer sends. Each chunk carries a
-20-byte header before its payload:
+by whoever sent the chunk, so reserving for the declared total would let one
+twenty-byte header make a receiver hold the whole ceiling. The reservation is
+bounded by `snapshotReserve` and the buffer grows with the bytes that actually
+arrive, so what a peer can make a receiver hold is what that peer sends. Each chunk
+carries a 20-byte header before its payload:
 
 | Byte range | Width | Field |
 |---|---:|---|
@@ -530,14 +533,15 @@ part of the protocol. All three use a capture's 10-byte envelope. A shard set is
 deflated in it; a manifest and a request carry the plain codec, because they repeat
 their predecessors and compress against them on the link's stream.
 
-A manifest travels one hop past the authority and no further. A participant with
-more than one link forwards it to the participants behind it — but only for a tick
-it can itself answer, so a question is never passed to someone whose neighbour
-would have to refuse it — and their requests come back to that neighbour, which
-serves them from its retention. A request and a repair are never forwarded: a relay
-that does not hold the manifest a request names answers `MsgStateUnserved` rather
-than routing the request onward, and the receiver degrades to the whole world the
-keyframe cadence is flooding anyway.
+A manifest travels outward one link at a time. A participant with more than one
+link forwards the newest one it answered to the participants behind it — but only
+once it can itself answer that tick, so a question is never passed to someone whose
+neighbour would have to refuse it — and their requests come back to that neighbour,
+which serves them from its retention. A relay behind a relay does the same, and
+each answer upstream names who it answers for, nested. A request and a repair are
+never forwarded: a relay that does not hold the manifest a request names answers
+`MsgStateUnserved` rather than routing the request onward, and the receiver
+degrades to the whole world the keyframe cadence is flooding anyway.
 
 Retention is what makes a relayed answer sound. Every instance keeps an index over
 each authoritative capture it can *prove* it holds — a whole correction that
@@ -662,7 +666,8 @@ authority bundles its own raw epochs for it alone, and passes on toward the
 authority the raw epochs of the participants behind it; a guest with no such link
 floods its own. The committed copy reaches the rest of the session by being
 forwarded: each node floods an epoch it has not seen to every link but the one it
-arrived on, and the per-source epoch window is what stops the flood. Because every
+arrived on, and the per-source epoch window is what stops the flood
+(`NetworkRelayHopLimit` is only the backstop for a bug in it). Because every
 frame names the absolute tick it applies at, a relayed artifact still lands on the
 same tick everywhere. A roster change travels the same way, produced only by the
 coordinator so it has one apply tick.
@@ -693,12 +698,14 @@ one that cannot reach a successor continues its local fork from the last
 authoritative state and keeps `Host lost` visible.
 
 The host publishes its world as a whole capture and a delta against the last whole
-one in between, chunked under `MsgStateCorrection` and reassembled per peer. A node
-relays the chunks it admitted, on the same argument the epoch flood uses, so the
-authority reaches a participant the host is not linked to directly. A guest queues
-what arrives and installs the newest that resolves between two ticks, into a staging
-world built once and re-used; the `snapshot.correction` group carries what it cost
-and how far its prediction had drifted. Measured at the storm high water, the
+one in between, chunked under `MsgStateCorrection` and reassembled once per node,
+whichever link a chunk arrives on. A node relays the chunks it admitted, on the
+same argument the epoch flood uses, so the authority reaches a participant the host
+is not linked to directly; an assembly per link would admit each chunk once per
+path, a cycle the mesh closes. A guest queues what arrives and installs the newest
+that resolves between two ticks, into a staging world built once and re-used; the
+`snapshot.correction` group carries what it cost and how far its prediction had
+drifted. Measured at the storm high water, the
 schema's 29 KiB delta and 176 KiB keyframe compress to about 7.1 KiB and 15.4 KiB.
 With one keyframe in ten that is about 39.6 KiB/s at the 5 Hz nominal cadence;
 full compressed keyframes would be about 76.9 KiB/s.
@@ -782,7 +789,7 @@ once as well as counted.
 
 `network.Config` applies connection/read/write deadlines, heartbeat and silent
 disconnect intervals, read/write buffer sizes, bounded send/receive queues, peer
-cap, barrier delay and optional TLS. Heartbeats are framed control messages and a
+cap, handshake budget and optional TLS. Heartbeats are framed control messages and a
 silent connection closes through the normal disconnect path. The defaults send a
 heartbeat every 10 seconds and declare the peer silent after 30 seconds; clean EOF
 is observed immediately.
@@ -963,7 +970,7 @@ inside a process nothing can reach.
 
 | Path | Code | Body |
 |---|---|---|
-| `/health` | 200 while the run is live; 503 when the scheduler is running, unpaused, and the tick has not moved in `parameter.ProbeStallInterval` | `live`, `ready`, a `reason` when either is false, then `tick`, `clock`, `guests`, `bots` (how many of the guests are bots), `capacity`, `address`, `phase`, and `expires_in` when a countdown is running |
+| `/health` | 200 while the run is live; 503 when the scheduler is running, unpaused, and the tick has not moved in `parameter.ProbeStallInterval` | plain text: `live`, `ready` and a `reason` when either is false on one line, then a `key=value` line each, in key order, for `address`, `bots` (how many of the guests are bots), `capacity`, `clock`, `expires_in` when a countdown is running, `guests`, `phase` and `tick` |
 | `/metrics` | always 200 | the status registry in the Prometheus text format |
 
 There is one health path rather than a liveness one and a readiness one. An
@@ -1026,5 +1033,5 @@ metric stream. See [Runtime](runtime.md) §1.2 for the flags and the phases.
 | Tick-owned ECS wire bridge | `internal/system/network.go` |
 | Authority, succession, reach and corrections | `internal/converge` |
 | Startup session assembly | `internal/app/session.go`, `app.go`, `loop.go`, `network_socket.go`, `network_wasm.go` |
-| Session commands, mid-run gate and join dial | `internal/app/host.go`, `join.go` |
+| Session commands, mid-run gate and a joiner's install | `internal/app/host.go`, `join.go` |
 | Supervised run's endpoint | `internal/probe`, `internal/app/probe.go` |
