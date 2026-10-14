@@ -279,8 +279,8 @@ An invalid user definition leaves the shipped one in place; a document that does
 not parse or names an unknown key is ignored whole, and so is a user
 `sounds.toml` that uses `include`, which the game's loader rejects. Play reports
 the first line of the engine's combined specification error on the status bar;
-`vif -check` reports every invalid definition before startup, music first,
-stopping at the first document that fails.
+`vif -check` checks music, then sounds, before startup and stops at the first
+document that fails, listing every invalid definition in it.
 
 The shipped banks are `internal/asset/audio/sfx.toml`, `drums.toml` and
 `music.toml`, embedded and handed to the engine as `BaseSounds` and
@@ -308,9 +308,9 @@ embedded assets, and takes vif's `-config-dir`, `-config-music` and
 the game does, registers them, and opens them as its documents, so its registry
 and the game's hold identical specs. A save writes where the next run reads
 first: the `-config-music`/`-config-sounds` file when given, else
-`audio/<file>` under `-config-dir` or the user root, shadowing a copy in the
-checkout's `wad/` or a system root. It does not apply the game's per-sound
-volumes and shapes, so its auditions and exports play a spec as authored.
+`audio/<file>` under `-config-dir` or else the user root, shadowing any copy in
+a lower root. It does not apply the game's per-sound volumes and shapes, so its
+auditions and exports play a spec as authored.
 
 The working document and live registry are separate: edits do not affect audio
 until `apply`; `revert` restores the document from the canonical registry. Its

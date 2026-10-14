@@ -27,7 +27,7 @@ go run ./cmd/soundlab -headless -s script.slab
 ```
 
 ### CLI Flags
-- `-tui`: Full-screen Terminal User Interface. Empty documents are seeded from the built-ins; the REPL and scripts start unseeded.
+- `-tui`: Full-screen Terminal User Interface. Empty documents are seeded from the built-ins; the REPL and scripts leave that to `builtin`.
 - `-headless`: Discard audio output (`-ab null`).
 - `-s <file>`: Execute a `.slab` script file line-by-line and exit.
 - `-config-dir <dir>`, `-config-music <file>`, `-config-sounds <file>`: vif's flags, resolved the same way. The overrides vif would load are registered and opened as the working documents; `save` writes where the next vif run reads first.
@@ -47,7 +47,7 @@ The TUI is a shell over the exact same dispatch table used by the REPL and scrip
 
 ## Command Reference
 
-`help [verb]` prints the full usage of every verb.
+`help` prints the full usage of every verb; `help <verb>` describes one.
 
 | Command | Usage | Description |
 |---|---|---|
