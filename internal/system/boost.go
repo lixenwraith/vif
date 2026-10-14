@@ -177,20 +177,6 @@ func (s *BoostSystem) reward(cursor core.Entity) {
 	s.publish(cursor, boostComp)
 }
 
-// rewardKill applies the same activation/extension contract as correct typing
-// to the cursor credited with the fatal combat hit.
-func (s *BoostSystem) rewardKill(cursor core.Entity) {
-	boostComp, ok := s.world.Components.Boost.GetPtr(cursor)
-	if !ok {
-		return
-	}
-	if boostComp.Active {
-		s.extend(cursor, parameter.BoostExtensionDuration)
-		return
-	}
-	s.activate(cursor, parameter.BoostBaseDuration)
-}
-
 // Update decrements each cursor's boost by delta time
 func (s *BoostSystem) Update() {
 	if !s.enabled {
