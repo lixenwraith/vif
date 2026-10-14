@@ -48,7 +48,7 @@ its own instance in the same process (§4, Bot seats). See [Bots](bots.md).
 | Export schema | `manifest.Schema` | No | Emit schema version 1 JSON for events, fields, actions, guards, operators, and config fields. |
 | Verify replay | `app.VerifyJournal` | No | `-r <file> -headless`: replay a journal flat out and fail at the first world digest it does not reproduce; a `jseq` gap fails before it plays. |
 | Run script | `app.RunScript` | Only with `-watch` | Execute a bounded versioned TOML schedule; optional `-host`/`-join` uses the session's start gate. |
-| Run bot | `app.RunBot` | With `-watch` | Explicit `-watch` or `-headless` drives the first bot; remaining bots are seats. A headless bot defaults to 120x40 and paces as a script does (§1.1). Ordinary `-bot` uses `app.Run` with a human. |
+| Run bot | `app.RunBot` | With `-watch` | Explicit `-watch` or `-headless` drives the first bot; remaining bots are seats. A headless bot defaults to 120x40 and paces as a script does (§1.1); a watched one defaults to the terminal's size and real time. Ordinary `-bot` uses `app.Run` with a human. |
 
 ### 1.0 The four session flags
 
@@ -289,7 +289,7 @@ sequenceDiagram
     App->>App: Open journal, latch session state
     App->>Runtime: Renderers, input and router
     App->>Runtime: Scheduler, load and initialize HFSM
-    App->>Runtime: Add MetaSystem, register event handlers
+    App->>Runtime: Add MetaSystem, check dependencies, register handlers
 ```
 
 `-join` adds a pre-composition step: `newSessionApp` dials, receives the host's
@@ -333,17 +333,18 @@ The detailed construction order is significant:
 11. Open the journal when requested, then latch the session state the run starts
     in.
 12. For a presenting mode, construct and priority-sort renderers.
-13. Create the input parser and mode router for semantic injection in every
-    mode; merge the live keymap and bind terminal mouse control only when the
+13. Create the input parser, merge the keymap and build the mode router for
+    semantic injection in every mode; bind terminal mouse control only when the
     terminal owns simulation input.
 14. Create frame synchronization channels and the scheduler, then load the
     scenario into the HFSM, initialize its regions, enqueue their entry actions
     (including the shipped cursor spawn request), and apply global/region system
     toggles.
 15. Add `MetaSystem`, which needs the completed `GameContext` and ticks at
-    `PriorityUI`; check the declared system dependencies (an unknown name or a
-    cycle is a startup error); register every system that implements
-    `event.Handler`.
+    `PriorityUI`; check the declared system dependencies with
+    `World.CheckSystemDependencies` (an unknown name or a cycle is a startup
+    error; it orders nothing, since `AddSystem`'s priority sort fixes tick order);
+    register every system that implements `event.Handler`.
 
 If any step fails, `App.New` calls `Close` on the partially built application.
 Services therefore must make `Stop` idempotent and able to release resources
@@ -629,9 +630,9 @@ flowchart TD
    and settle it as an `"input"` group; read the guest pace trim;
 2. apply the wire artifacts whose fixed playout deadline has arrived and settle
    them in their own `"wire"` group — before the tick stamp advances, so both
-   copies of a crossing land at the same absolute tick ([domain model](domain-design.md) §4.1).
-   A run that is session-shared settles this group every tick, whether or not a
-   peer is linked; a solo run has none;
+   copies of a crossing land at the same absolute tick
+   ([domain model](domain-design.md) §4.1). A run that is session-shared settles
+   this group every tick, whether or not a peer is linked; a solo run has none;
 3. open the next journal tick stamp, then set `GameTime` to `SimTime(tick)` —
    derived from the tick, never from the pacing clock, so every participant reads
    the same instant — with wall `RealTime` and fixed `DeltaTime`;
@@ -731,7 +732,7 @@ state loss and is logged when observed.
 | System list | Single-threaded construction, then `World.Seal` | Read-only after `Scheduler.Prepare` seals it. |
 | Pause, rate, step budget, run-until request, standing breakpoints | `TimeControl` atomics; breakpoints as a `BreakSet` replaced whole | `MetaSystem` and commands set them, and the session paths pause and release a lobby or a parked run; the scheduler takes steps and trips requests and breakpoints; input and render read them without the world lock. |
 | Render buffer | Render orchestrator | Main/render path only; cleared and reused per frame. |
-| Context flags/counters | Atomics | Cross-goroutine reads for pause, macros, mouse, auto-fire, frame/status strings. |
+| Context flags/counters | Atomics | Cross-goroutine reads for macros, mouse, auto-fire, frame/status strings. |
 | APM history | `GameState.mu` plus atomic published totals | Scheduler admits gestures at dispatch and rolls history. |
 | Target groups | `TargetResource` RW lock | Navigation writes; species/genetic code reads snapshots. |
 | Status metric values | Per-value atomics; set closed by `Registry.Freeze` | Systems cache pointers during construction; snapshots and the recorder load atomically off the world lock. |
@@ -847,7 +848,8 @@ per run, and the command validates the name and latches which one comes next;
 naming the scenario already loaded resets in place instead. The same loop replaces
 the run for a `:join`, a `:journal start`, a session restart and a removal by the
 host; the scenario change, the restart and the journal seat the run's bots again.
-Everything operator-owned restarts with it. See [HFSM and configuration](fsm-and-configuration.md) §2.
+Everything operator-owned restarts with it. See
+[HFSM and configuration](fsm-and-configuration.md) §2.
 
 In a session every participant does this together. Only the coordinator may ask;
 it broadcasts `MsgSessionRestart` before its transport goes and rebuilds solo,
@@ -862,14 +864,15 @@ without reconstructing the process. In a live session only the coordinator may
 request it; the request crosses and every participant applies it at one barrier
 tick. A reset the scenario's own FSM emits, such as the shipped monitor's on a
 defeat, is re-derived on every instance instead.
-`MetaSystem` snapshots the roster's slot/control/peer/holder assignments,
-pauses time and audio, clears entities, `GameState` and kill tallies, advances the
+`MetaSystem` snapshots the roster's slot/control/peer/holder assignments, pauses
+time and audio, clears entities, `GameState` and kill tallies, advances the
 journal run while rebasing its tick to zero, returns a map this instance owns to
 its viewport size (no smaller than the scenario's `[map]` floor) while a session's
-latched bounds carry across, resets camera, crop-on-resize, mode, captured keys and
-status text, and cancels pending step controls. The reset FSM's first cursor spawn carries the
-configured heat/energy template and expands the saved roster in deterministic
-slot order. The scheduler serializes these phases with the world lock:
+latched bounds carry across, resets camera, crop-on-resize, mode, captured keys
+and status text, and cancels pending step controls. The reset FSM's first cursor
+spawn carries the configured heat/energy template and expands the saved roster
+in deterministic slot order. The scheduler serializes these phases with the
+world lock:
 
 1. drain and discard stale queued events;
 2. reset deadlines and elapsed-time anchors;
@@ -891,9 +894,9 @@ Both `:new` and `:new!` clear recorded/playing macros, close overlays, return to
 Normal mode, and clear command/search/status text. `:new!` additionally purges
 the initiating instance's operator contract: free mouse and auto-fire become
 off, speed returns to 1x, and the telemetry HUD/pins and breakpoints are cleared.
-A peer receiving the crossed reset retains its own operator state. Logging target, level, scope,
-snapshot period, and recorder depth are process diagnostics and are never part
-of this purge.
+A peer receiving the crossed reset retains its own operator state. Logging target,
+level, scope, snapshot period, and recorder depth are process diagnostics and are
+never part of this purge.
 
 Other session-observer fields have explicit behavior rather than belonging to
 that purge list: the render frame remains monotonic, reset ends paused state,
@@ -933,9 +936,9 @@ session the run was part of rather than the simulation it reproduces; `prof.` an
 ## 11. Shutdown and failure handling
 
 Normal shutdown is triggered by quit intent, terminal close/error, or an OS
-signal. `App.Close` halts its bot seats, then stops the scheduler before stopping
-services so no tick can use an I/O resource after it is released. The hub stops
-every initialized service in reverse dependency order.
+signal. `App.Close` halts its bot seats and waits for them to leave, then stops
+the scheduler before stopping services so no tick can use an I/O resource after it
+is released. The hub stops every initialized service in reverse dependency order.
 
 `cmd/vif` configures diagnostics before any terminal enters its alternate screen,
 so startup failures and runtime reports remain recoverable. It exits 1 on any
