@@ -222,6 +222,34 @@ func TestAGuestPacesIntoItsBand(t *testing.T) {
 	}
 }
 
+// TestAGuestStepsOnceForOneLateness: epochs read while a step is still being
+// served measure the lateness it already answers, so they order no second step;
+// once it is served the next window decides again.
+func TestAGuestStepsOnceForOneLateness(t *testing.T) {
+	t.Parallel()
+	guest := sessionSystem(t, 2, 100, &linkedPort{peers: []uint32{1}})
+	r := guest.world.Resources.Network
+	window := func(from uint64) {
+		for i := range uint64(parameter.NetworkPaceWindow) {
+			guest.observeAuthorityEpoch(from + i)
+		}
+	}
+	window(60)
+	first := r.PaceStep.Load()
+	if first < parameter.NetworkPaceStepTicks {
+		t.Fatalf("a window 40 ticks late stepped %d", first)
+	}
+	window(70) // arrived while the guest waits the step out
+	if got := r.PaceStep.Load(); got != first {
+		t.Fatalf("the step owed grew to %d while %d was being served", got, first)
+	}
+	guest.world.Resources.Event.Queue.RebaseStamp(0, 100+parameter.NetworkPaceServedTicks)
+	window(60)
+	if got := r.PaceStep.Load(); got == first {
+		t.Fatal("a late window after the step was served ordered none")
+	}
+}
+
 // TestAGuestStampsWithItsOwnRoundTrip: the lead is this guest's round trip to the
 // authority plus the relay tick, less how late the authority's epochs land; the
 // authority's own is a tick, and an unmeasured link keeps the default. Behind a
