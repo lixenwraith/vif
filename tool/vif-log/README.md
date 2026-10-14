@@ -13,7 +13,7 @@ The two share an envelope (`time`, `level`, `sub`, `run`, `tick`, `fields`), so 
 ## Architecture
 
 * **Index pass**: a hand-rolled RFC3339Nano parser and JSON tokenizer (`internal/logfile`) build a pointer-free 48-byte `Meta` row per record; `sub` and `msg` strings are interned to integer IDs.
-* **Background indexing**: indexers publish to the render loop without locks, so the UI stays responsive while a large file loads.
+* **Background indexing**: the index publishes to the render loop without locks. A single file publishes as it scans, so the UI is usable while a large one loads; several files scan in parallel and publish once, merged.
 * **Multi-source merge**: several `.jsonl` files (a client and a server, or a log and its journal) merge stably by nanosecond timestamp without rewriting the row index.
 * **Snapshot collapse**: the status registry's periodic `sub:"stat"` snapshots (around 40 records each) collapse into one navigable row (`filter.Collapse`); `Enter` expands one.
 * **Cost-ordered filters**: predicates that read only the index row (`level`, `snap`, `dom`, `tick`, `run`, `sub`, `msg`, pins) run first; `fields` and an all-column or `fields` search read the line through a per-source sliding window, only for records that survive. The pass is incremental: 40 ms of filtering on a filter change, then 8 ms per tick.
@@ -22,7 +22,7 @@ The two share an envelope (`time`, `level`, `sub`, `run`, `tick`, `fields`), so 
 
 A journal record is not shaped like a diagnostic one, and the viewer indexes the difference rather than rendering it as a wall of key-value text.
 
-* **Event names in the `msg` column.** Journal records carry no `fields.msg`; `fields.ev` names them, so the discriminator resolves `msg` → `type` → `ev`. Every column-scoped operation follows: `msg:` filters, `/msg` searches, sorting and `f`/`F` follow all work on event names. The anchor carries no discriminator at all, so its `sub` stands in for one.
+* **Event names in the `msg` column.** Journal records carry no `fields.msg`; `fields.ev` names them, so the discriminator resolves `msg` → `type` → `ev`. Every column-scoped operation follows: `msg:` filters, `/msg` searches, sorting and `f`/`F` follow all work on event names. The `anchor`, `capture`, `digest` and `end` records carry no discriminator at all; the anchor's `sub` stands in for one, and the other three show no `msg` and are told apart by `sub`.
 * **Domain attribution.** `fields.domain` is resolved during the index pass into the `Meta` row, at no cost in memory — it fits in the struct's tail padding. Selecting a domain is therefore a byte comparison per record and never reads a line.
 * **Anchors as landmarks.** An anchor is the journal's self-describing header, re-emitted on a cadence so a rotated file replays standalone. `n` / `N` jump between landmarks — stat snapshot heads in a diagnostic log, anchors in a capture — and an anchor row is marked `⚑`.
 * **Dropped-record detection.** `jseq` is dense by construction, so any step other than `+1` is a lost record. The status bar reports the break count as `jgaps`; a non-zero count means the capture will not replay as it stands.
@@ -39,7 +39,7 @@ Domains are the journal's replication scope: **shared** state is identical on ev
 | `shared` | records stamped `domain=shared` |
 | `player` | records stamped `domain=player` |
 
-`D` cycles the three. Selecting a domain excludes records that carry none — anchors and the whole diagnostic log — because a record without a domain is not evidence about either one.
+`D` cycles the three. Selecting a domain excludes records that carry none — the journal's anchor, capture, digest and end records and the whole diagnostic log — because a record without a domain is not evidence about either one.
 
 Two pieces of the frame carry the state:
 
@@ -82,7 +82,7 @@ vif-log -f dom:player -f 'msg:^EventNugget' vif-jrn-260829-211523.jsonl
 Filters stack. Use `\` in the UI or `-f` on the command line.
 * `level`: a set of initials (`IWE`) or a threshold (`>=WARN`). Levels are `TRACE DEBUG INFO WARN ERROR`, plus `PROC` (the logger's own records) and `BAD` (malformed lines).
 * `sub` / `msg`: smart-case regex over the interned vocabulary.
-* `tick` / `run`: numeric spans (`100-200`, `150-`, `-50`).
+* `tick` / `run`: a value or an inclusive span (`100`, `100-200`, `150-`, `-50`).
 * `dom`: journal domain — `both`, `shared` or `player`.
 * `fields`: smart-case regex over the parsed JSON fields.
 * `find`: regex search; from `-f` it covers every column, from `/` the focused one.
@@ -116,11 +116,11 @@ Snapshot collapse and pins are driven by their keys, not by a spec.
 | `\` | Add/replace a filter in the stack (e.g., `msg:transition`) |
 | `f` / `F` | Follow: jump to next/prev record like this one |
 | `D` | Cycle journal domain: both / shared / player |
-| `t` `d` `i` `w` `e` `p` `b` | Toggle one level (`p` PROC, `b` BAD) |
+| `t` `d` `i` `w` `e` `p` `b` | Toggle one level (`p` or `6` PROC, `b` or `7` BAD) |
 | `1`-`5` | Hide below a level (1=TRACE, 5=ERROR) |
 | `0` | Show all levels |
 | `<` / `>` | Lower/raise level threshold |
-| `Esc` | Clear search and dynamic filters |
+| `Esc` | Clear the search and the `sub`, `msg`, `tick`, `run` and `fields` filters; levels, domain, snapshot collapse and pins stay |
 
 ### Buffer & File Management
 | Key | Action |

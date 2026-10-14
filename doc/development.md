@@ -20,7 +20,9 @@ The modules it requires:
 
 Audio sends PCM to optional host commands; see [Audio](audio.md) for runtime
 backend choices. A compiler, module download access, and a terminal are enough
-to build the normal binary.
+to build the normal binary. When the `GO` command is missing, a target that
+compiles proposes the Arch, Debian (snap) or FreeBSD package install and runs it
+only on a yes.
 
 ## 2. Common build workflow
 
@@ -31,7 +33,7 @@ make dev       # generated code + race-enabled debug build
 ./bin/vif
 ```
 
-`make` with no target prints the list below (`help`):
+`make` with no target prints `help`, which lists every target below but `generate`:
 
 | Target | Effect |
 |---|---|
@@ -40,7 +42,7 @@ make dev       # generated code + race-enabled debug build
 | `release` | Generate and build a stripped `-trimpath` native binary. |
 | `headless` | Build `bin/vif-headless` without terminal presentation, renderers, or audio. |
 | `nolog` | Release-style build with the `novlog` tag. |
-| `wasm` | Build audio-free `web/vif.wasm` for the xterm.js host, with its toolchain's `web/wasm_exec.js`. |
+| `wasm` | Build audio- and log-free `web/vif.wasm` for the xterm.js host, with its toolchain's `web/wasm_exec.js`. |
 | `windows` | Experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0` cross-build. |
 | `run` | Build the dev binary and execute it. |
 | `test` | Generate and run `go test -race ./...`. |
@@ -138,11 +140,11 @@ line wins. That help is `helpSections` in `cmd/vif/usage.go`, which also renders
 | `-serve <addr>` | Bind a headless session with no local cursor: a dedicated host. Takes `ws://` like `-host`. |
 | `-join <addr>` | Join `[tcp://\|vif://]host:port[/name]` or a `ws(s)://` URL, or a new session an `http(s)://` site creates; the host supplies seed, config and content identity. Grammar in [Services and networking](services-and-networking.md) §6. |
 | `-name <name>` | With `-host` or `-serve`, the session name this host answers to, so one address serves several. |
-| `-players <n>` | Roster ceiling including self, `2`..`parameter.MaxPlayers`; with a `-join` site, the size requested. Unset holds the whole roster. With `-serve` it counts guests, because the server is not one of them, and the session starts on its first guest and admits the rest as they arrive. |
-| `-bot`, `-bots [N[:graph]\|graph]` | Add bots beside this run's participant; requests from both flags add together, operands default to `1:default`, and a count of 0 adds none. With `-serve`, bots keep the session occupied. See [Bots](bots.md). |
-| `-authority host\|migrate` | Where authorship goes when the authoring participant leaves. `host` keeps it with the starting machine, so losing that machine leaves each survivor playing alone; `migrate` hands it to the first surviving member of the succession chain, else the lowest surviving identity. Default `host` with `-serve`, `migrate` otherwise. |
+| `-players <n>` | Roster ceiling including self, `2`..`parameter.MaxPlayers`; with a `-join` site, the size requested. Unset holds the whole roster. With `-serve` it counts guests from `1`, because the server is not one of them, and the session starts on its first guest and admits the rest as they arrive. |
+| `-bot`, `-bots [N[:graph]\|graph]` | Add bots beside this run's participant, which under `-headless` or `-watch` is the first bot; requests from both flags add together, operands default to `1:default`, and a count of 0 adds none. With `-serve`, bots keep the session occupied. See [Bots](bots.md). |
+| `-authority host\|migrate` | With `-host` or `-serve`, where authorship goes when the authoring participant leaves; a guest adopts the host's policy. `host` keeps it with the starting machine, so losing that machine leaves each survivor playing alone; `migrate` hands it to the first surviving member of the succession chain, else the lowest surviving identity, never a bot's. Default `host` with `-serve`, `migrate` otherwise. |
 | `-slow-window <dur>`, `-slow-late <n>`, `-slow-bytes <n>` | A host's eviction policy for a participant that cannot keep up: this many late epochs per second over the window, on a link carrying at least this many bytes per second. A zero window never evicts; a zero rate drops its condition. See [Multiplayer](multi-player.md) §3.5. |
-| `-listen <addr>`, `-no-advertise` | With `-join`, the address this participant is dialled back on in a migrate session, or none at all, which keeps it a leaf that is never elected ([Multiplayer](multi-player.md) §5.3). |
+| `-listen <addr>`, `-no-advertise` | With `-join`, the address this participant is dialled back on in a migrate session, or none at all, which keeps it a leaf, elected only when no chain member survives ([Multiplayer](multi-player.md) §5.3). |
 | `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own. Omitted on a server, the first guest's terminal sizes the session. |
 | `-probe <addr>` | Serve `/health` and `/metrics`; `-serve` only. |
 | `-first-join <dur>` | End a `-serve` run if no guest has connected within `dur`; zero waits forever. |
@@ -224,7 +226,8 @@ silences taps. `-ls all+dispatch` is `all` said twice.
 
 ### Combination rules
 
-Every other log flag implies `-l`; `-ls` is parsed through `vlog.ParseScopes`
+`-lv`, `-ls`, `-lt`, `-lr`, `-log-session-id` and `-log-stdout` imply `-l`; `-j`,
+`-mw` and `-dev` do not. `-ls` is parsed through `vlog.ParseScopes`
 during flag parsing, before terminal startup, so a bad spec fails before the
 screen is taken. A bare `-l`, `-j` or `-mw` remains boolean, so a directory
 requires `-l=DIR`, `-j=DIR` or `-mw=DIR`, not a space; a leftover argument is
@@ -240,7 +243,8 @@ that ends a process must not silently do nothing.
 
 `-serve` is a host of its own and does not combine with `-host` or `-join`. `-host`
 and `-join` are mutually exclusive and available on interactive play and on driven
-`-script` and bot runs; they and the other session flags are an error beside
+`-script` and bot runs. They, `-serve`, `-probe`, `-players`, `-bots`, `-authority`,
+`-listen`, `-no-advertise`, `-name` and the lifetime bounds are an error beside
 `-check`, `-schema` or `-replay`. An interactive `-host` plays at once and opens its
 port once the clock runs; `:host <addr> [host|migrate]` does the same on a run that
 is **already playing**, at whatever tick it has reached — same acceptor, same
@@ -449,8 +453,8 @@ Commands, compositions and examples are in [Bots](bots.md).
 `script/test.sh` is the command reference for running a setup by hand. It files
 each setup as interactive (`solo`, `host`, `join`, `serve`, `pair`, ...), observed
 (`host-loss`, `vacant`, `load`, ...) or automated (asserts and prints PASS or FAIL);
-`all` runs the automated set, and `image` needs a container engine and stays out
-of it.
+`all` runs the automated set except `maxmap`, and `image` needs a container engine
+and stays out of it.
 
 ```sh
 ./script/test.sh list
@@ -467,10 +471,11 @@ touches, with `make generate` first when an event or manifest definition changed
 A change behind a build constraint also builds that target:
 `GOOS=js GOARCH=wasm go build ./...` or `go build -tags vif_headless ./...`.
 
-`make verify` is the full sweep the project owner runs, not a per-change step. It
-regenerates, runs `go test -race ./...`, builds `./...` plain and under `novlog`,
-`vif_noaudio` and `vif_headless`, tests `./internal/...` under `vif_noaudio` and
-the manifest and system suites under `vif_headless`, cross-builds `js/wasm` and
+`make verify`, `go test ./...`, `go vet ./...` and `script/test.sh all` are sweeps
+the project owner runs, not per-change steps. `make verify` regenerates, runs
+`go test -race ./...`, builds `./...` plain and under `novlog`, `vif_noaudio` and
+`vif_headless`, tests `./internal/...` under `vif_noaudio` and the manifest and
+system suites under `vif_headless`, `cmd/vif` under both, cross-builds `js/wasm` and
 `windows/amd64` (`novlog vif_noaudio`), fails if the headless command imports the
 renderer or audio implementation or the browser command the audio implementation,
 and runs `go vet ./...`. It does not execute a Windows artifact or a real
@@ -479,17 +484,21 @@ release target.
 
 Tests cover `cmd/vif`, `cmd/soundlab`, the headless/replay application harness
 (seeded soak, mutation, bisect, reset, journal density, replay, operator-state
-comparison, staged corrections), clocks, scheduler and time control, event
-journaling and authored scripts, input/help/mode commands, FSM staging and
-local-lifecycle reconciliation, parameters, profiling, audio, genetics, vectors and
-geometry, cell mapping, physics, and selected system and renderer surfaces.
-Coverage is selective: many gameplay systems, renderers, content parsing paths,
-services and network failure modes have no focused test file. Programs under
-`sandbox/` are experiments, not tests.
+comparison, staged corrections, hosting, joins, migration, mesh reach and the
+dedicated host), the network protocol and handshake, convergence, snapshots, clocks,
+scheduler and time control, event journaling and authored scripts,
+input/help/mode commands, FSM staging and local-lifecycle reconciliation, the
+session lifecycle and probe, parameters, profiling, audio, genetics, vectors and
+geometry, cell mapping, physics, the WebSocket and link-pace packages, the session
+allocator, `vif-log`, and selected system and renderer surfaces. Coverage is
+selective: many gameplay systems and renderers, content parsing, the generator and
+the other `tool/*` commands have no focused test file. Programs under `sandbox/`
+are experiments, not tests.
 
-The soak profiles are tiered, because the widest one is a release-gate cost rather
-than an edit-cycle one. `soakScale(short, normal, full)` in `internal/app` selects a
-repetition or step count per profile:
+The soak profiles are tiered, because the widest one costs too much for an edit
+cycle; no workflow sets `VIF_SOAK`, so it runs only when asked for.
+`soakScale(short, normal, full)` in `internal/app` selects a repetition or step
+count per profile:
 
 ```bash
 go test -short ./internal/app        # smoke
@@ -503,7 +512,8 @@ subtest name prints it.
 
 Most `internal/app` tests call `t.Parallel`. The exceptions drive a real socket
 against wall-clock deadlines or run the staged `tc netem` gate, which shapes
-loopback for the whole machine; both are marked and stay sequential.
+loopback for the whole machine; both are marked and stay sequential. The netem gate
+is Linux-only and opt-in: it skips unless `VIF_NETEM=1`, root and `tc` are present.
 
 Configuration work also runs:
 
@@ -573,10 +583,12 @@ parameters into the program's argv; a site that renames the files says so with
 ([Build profiles](multi-platform.md#6-browser-launch-arguments)). `make serve`
 builds `web/vif.wasm` and serves this directory.
 
-`web/` is the deployed launcher, not a harness that resembles one. Its asset paths
-are absolute (`/vendor/xterm-5.5/`) so they resolve both under `make serve`, which
-serves this directory at the root, and under a site that installs it at a path.
-Copy the directory; do not rewrite a path in it.
+`web/` is the deployed launcher, not a harness that resembles one. The xterm files
+load from the absolute `/vendor/xterm-5.5/`, which `make serve` finds in
+`web/vendor/` and a site serves from its root; the launcher's own files
+(`terminal.css`, `terminal.js` and what it loads) are relative to the page, so the
+directory works at whatever path a site installs it. Copy the directory; do not
+rewrite a path in it.
 
 The browser build does not perform native config-root discovery for `scenario.toml`,
 keymap, content, audio overrides, or logs. Embedded assets make it playable;
@@ -667,14 +679,16 @@ because its blocking loop is especially capable of stranding raw mode.
 
 Go runtime diagnostics such as race reports write directly to file descriptor
 2 and would corrupt/disappear behind an alternate screen. `-dev` redirects
-stderr to `vif-stderr-<timestamp>.log` before terminal startup, periodically
-parses complete blocks, and logs lightweight path/offset/size summaries. At
-shutdown it restores the original descriptor and removes an empty capture.
-Race builds enable this automatically unless `-dev=false`.
+stderr to `vif-stderr-<timestamp>.log` in the log directory before terminal
+startup, periodically parses complete blocks, and logs lightweight
+path/offset/size summaries. At shutdown it restores the original descriptor and
+removes an empty capture. Race builds enable this automatically unless
+`-dev=false`.
 
-This capture is supported by Unix descriptor helpers; generic/WASM builds use
-different paths. Never treat runtime-capture files as unbounded permanent
-telemetry—archive or remove them according to development needs.
+The redirect needs Unix descriptor duplication; elsewhere `-dev` prints `runtime
+capture disabled` and the run continues uncaptured. Never treat runtime-capture
+files as unbounded permanent telemetry—archive or remove them according to
+development needs.
 
 ## 11. Contribution workflow
 
@@ -683,8 +697,8 @@ telemetry—archive or remove them according to development needs.
 3. Update manifest/event/input source declarations and regenerate where needed.
    A new system is declared in `internal/manifest/definition.go`, profile and
    dependencies included; see [the domain model](domain-design.md).
-4. Add focused tests, including error/overflow/pause/reset paths where the
-   subsystem is concurrent.
+4. Add a test only for a rule nothing covers yet and that could regress: one test
+   per rule, named for it ([AGENTS.md](../AGENTS.md) Tests).
 5. Run the [§5](#5-validation-and-tests) gates (`go build ./...`, `gofmt -l` on
    the changed files, `go test` on the touched packages, and the constrained
    target's build), `-check` for configuration, and the relevant manual

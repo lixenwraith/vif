@@ -4,7 +4,7 @@ Command reference for verifying behaviour on a dev machine. Build first: `make d
 
 ```sh
 ./script/test.sh list        # every scenario
-./script/test.sh all         # every automated one; prints PASS/FAIL
+./script/test.sh all         # the automated set but maxmap; prints PASS/FAIL
 ```
 
 Overrides: `BIN` (default `./bin/vif`), `HOST` (`127.0.0.1`), `PORT` (`7777`),
@@ -34,7 +34,7 @@ Two terminals for a real session:
 
 `host` plays at once and admits guests mid-run, up to the whole roster; `host 3`
 caps the roster at three, the host included. Any terminal or scripted guest can
-join whenever it likes. Only a scripted or headless-bot host that names
+join whenever it likes. Only a scripted or bot-driven host that names
 `-players`, as `pair` and `host-loss` run one, holds tick zero until that whole
 party has arrived.
 
@@ -51,7 +51,7 @@ assert nothing, because what they show is a design choice rather than a promise;
 | `host-loss [n]` | host + n guests, then the host goes; prints what each guest concluded. `AUTHORITY=migrate` (default) or `AUTHORITY=host` |
 | `vacant` | a dedicated host parking its clock when its last guest leaves |
 | `botfitness [graph] [seeds] [secs]` | default's fitness summed per scenario (embedded, td, kraken) over seeds 1..N, flat out; given a graph file, it fails unless that graph beats default on every scenario |
-| `load [sessions] [bots] [secs]` | per session a `-serve` host seating its own bots at 120x40 under the pod's `GOMEMLIMIT`, and a headless bot joining it (`GUEST_BOTS` of its own; `SCENARIO` serves a wad scenario); prints each host's memory, CPU, tick, guests, peers, evictions and digest mismatches, and fails on a slipping clock, an eviction, a short roster or a peak past `LIMIT_MB` (default the pod's limit for its bots) |
+| `load [sessions] [bots] [secs]` | Linux only, since it reads `/proc`: per session a `-serve` host seating its own bots at 120x40 under the pod's `GOMEMLIMIT`, and a headless bot joining it (`GUEST_BOTS` of its own; `SCENARIO` serves a wad scenario); prints each host's memory, CPU, tick, guests, peers, evictions and digest mismatches, and fails on a slipping clock, an eviction, a short roster or a peak past `LIMIT_MB` (default the pod's limit for its bots) |
 
 `host-loss` is the one to read carefully. Under `migrate` every guest binds a port
 and keeps a link to the successor, so the survivors elect the chain's first
@@ -76,7 +76,7 @@ PASS/FAIL.
 | `corpus` | a guest whose `content/` holds one file the host does not have joins a host reading the wad's corpus: glyphs are player domain, so nothing is reconciled and no `content_id` appears in either log |
 | `fleet` | the hand-rendered session template and the allocator's own render carry the same arguments, mounts and claims |
 | `deploy` | what a node needs before a pod can start, none of which a normal build reaches: the image's `vif_headless` tag compiles, no manifest leaves an image placeholder unquoted, the wad installer refuses a scenario that does not load, naming it, before staging anything, and a scenario resolves through the pod's `scenario/`+`image/` mount, reads no corpus off it, and names itself in the log the commissioning check reads |
-| `lifetime` | an unclaimed session exits 0 on its first-guest window; an emptied one exits 0 on its vacancy grace, each naming why |
+| `lifetime` | an unclaimed session exits 0 on its first-guest window; an emptied one ends on its vacancy grace, each naming why |
 | `drain` | `SIGTERM` keeps the match running, reports `live=true ready=false phase=draining`, keeps the clock moving, then ends itself |
 | `bot` | every shipped graph plays solo without overflowing its queue, and `default` types; then it joins a dedicated host with two bots, types and leaves with them, and the emptied host ends; a `-serve -bots 2` host outlives its `-empty` grace and its bots leave on drain |
 | `identity` | a peer running a different build or session is refused (runs the Go tests that can construct one) |
@@ -92,7 +92,7 @@ it exercises is the image rather than the game.
 
 | Scenario | Asserts |
 |---|---|
-| `image` | the container image builds and validates its own config as a non-root read-only user |
+| `image` | the container image builds and validates its own config as a non-root read-only user. It runs `make image`, whose engine is `docker` unless `CONTAINER_ENGINE=podman` is set |
 
 ## If `-serve` seems to hang
 

@@ -26,7 +26,7 @@ Minimum terminal size: 120x24. The index covers `.go` files other than `_test.go
 
 ## Annotations
 
-Declare after `package` statement:
+Declare in comment lines directly after the `package` clause; the scan stops at the first later line that is neither a comment nor blank:
 ```go
 package systems
 // @lixen: #focus(term,io),#interact{sys[cursor(init),state(gold)]}
@@ -87,7 +87,7 @@ Press `?` in any view for full help overlay.
 | `H` / `L` | Collapse / Expand all |
 | `0` / `$`, `Home` / `End` | Jump to start / end |
 | `PgUp` / `PgDn` | Page scroll |
-| `Enter` | Open the file viewer (tree pane); expand (dependency panes) |
+| `Enter` | Open the file viewer (tree pane); expand a header or move the tree to that file (dependency panes, as do `l`/`→`) |
 
 ### Selection
 
@@ -165,9 +165,11 @@ Press `e` with files selected to open editor.
 | Symbol | Meaning |
 |--------|---------|
 | `[x]` | Directly selected (a directory: all its files) |
-| `[o]` | Directory with some of its files selected; `[N/M]` counts them |
+| `[o]` | Directory with some of its files selected |
 | `[+]` | Included via dependency expansion |
 | `[ ]` | Not selected |
+
+Every directory with files also shows `[N/M]`: selected of total.
 
 ### Hierarchy Pane
 
