@@ -26,7 +26,7 @@ type pendingBlueSpawn struct {
 // StormSystem manages the storm boss entity lifecycle
 // Storm is a 3-part composite boss with 3D orbital physics
 // Each circle is an independent sub-header that can be destroyed individually
-// Spawned when SwarmSystem accumulates enough player-damage kills
+// Spawned on EventStormSpawnRequest, which the scenario FSM emits (StormSetup)
 type StormSystem struct {
 	world *engine.World
 

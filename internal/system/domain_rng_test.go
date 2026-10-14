@@ -54,10 +54,11 @@ func TestCombatKnockbackDrawsFromTheTargetsStream(t *testing.T) {
 	}
 }
 
-// TestCombatKnockbackFollowsTheArtifactNotTheStream is D-3 where D-8 stops. An
-// ordinary crossing applies at once on its producer and a playout lead later
-// everywhere else, so two instances reach the same impulse only if it is a function
-// of the artifact rather than of a stream position they consume at different ticks.
+// TestCombatKnockbackFollowsTheArtifactNotTheStream is D-3 where D-8 stops. A
+// crossing that reaches the authority late is committed at its next tick, after its
+// producer applied it at the stamped one, and a projection replays it later still, so
+// two instances reach the same impulse only if it is a function of the artifact
+// rather than of a stream position they consume at different ticks.
 func TestCombatKnockbackFollowsTheArtifactNotTheStream(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	s := NewCombatSystem(w).(*CombatSystem)

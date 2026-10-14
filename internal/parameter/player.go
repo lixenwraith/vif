@@ -10,9 +10,9 @@ const MaxPlayers = 16
 
 // NoPlayerSlot is the roster slot of a participant that owns no cursor. A
 // dedicated host is one: it authors the shared world, holds a participant
-// identity and a vote, and puts nobody on the map. It is outside the slot range
-// by construction, so every "is this my slot" test answers no without a special
-// case.
+// identity and a roster entry, and puts nobody on the map. It is outside the slot
+// range by construction, so every "is this my slot" test answers no without a
+// special case.
 const NoPlayerSlot uint8 = 0xFF
 
 // MaxPredictedCursorCells bounds D-18's ring of cells this instance has requested

@@ -229,14 +229,10 @@ func (s *GeneticSystem) rememberRegistrationLocked(p event.GeneticRegisterSpecie
 	})
 }
 
-// registerSpeciesLocked builds one species' configuration and registers it.
-//
-// The configuration is a deterministic function of the declaration and of build
-// constants — the per-species seed is derived from the shared RNG root — so two
-// instances that process the same declaration register identical species. That is
-// what lets a capture carry the declaration rather than the configuration.
-//
-// Caller MUST hold mu.
+// registerSpeciesLocked builds one species' configuration and registers it. The
+// configuration is a deterministic function of the declaration and build constants,
+// its seed derived from the shared RNG root, so a capture carries the declaration
+// rather than the configuration. Caller MUST hold mu.
 func (s *GeneticSystem) registerSpeciesLocked(payload *event.GeneticRegisterSpeciesPayload) {
 	bounds := make([]genetic.ParameterBounds, len(payload.Bounds))
 	for i, b := range payload.Bounds {
@@ -441,16 +437,11 @@ func (s *GeneticSystem) updateTelemetry() {
 	s.publishTypeFit()
 }
 
-// geneticSnapshot is this system's D-19 record: the populations, plus the two
-// pieces of per-system scratch that decide a published value.
-//
-// The telemetry throttle is here for the reason §4.1 predicted when it listed
-// "per-system scratch: throttles" as state with no inventory. eye.ga.typefit is
-// part of the compared shared surface, and it is published once every
-// StatSnapshotTicks — so two instances whose throttles stand at different counts
-// publish on different ticks and disagree until both have cycled. The running
-// per-type average travels for the same reason: it is what the published value is
-// computed from.
+// geneticSnapshot is this system's D-19 record: declarations, populations, live
+// evaluations and pending deaths, plus the telemetry throttle and per-type fitness
+// EMA. eye.ga.typefit is on the compared shared surface, published from that EMA
+// every StatSnapshotTicks, so instances whose throttles differ publish on different
+// ticks and disagree until both have cycled.
 type geneticSnapshot struct {
 	Registry       []registry.SpeciesState               `json:"registry"`
 	Registrations  []event.GeneticRegisterSpeciesPayload `json:"registrations,omitempty"`
@@ -475,13 +466,9 @@ type geneticTrackedState struct {
 	MinDistSq     float64               `json:"min_dist_sq"`
 }
 
-// SaveShared carries the complete genetic continuation point (D-19).
-//
-// The second learned resource the hidden-state survey named. The registry lives
-// behind a mutex and per-slot atomics in pkg/genetic, which is why it needed an
-// export contract it did not have: persistence could write one species at a time
-// to a caller-supplied store, and a transfer needs all of them as one value with
-// no store involved and no lock reaching here.
+// SaveShared carries the complete genetic continuation point (D-19). The registry
+// sits behind a mutex and per-slot atomics in pkg/genetic, so it is exported whole,
+// as one value with no store involved and no lock reaching here.
 func (s *GeneticSystem) SaveShared() ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -527,17 +514,9 @@ func (s *GeneticSystem) sortedRegistrationsLocked() []event.GeneticRegisterSpeci
 }
 
 // reconcileRegistrationsLocked brings this instance's registered species set to the
-// capture's before the populations are imported.
-//
-// Both directions are needed and both are ordinary prediction, not corruption. A
-// guest that reached the level transition first holds a species the authority has
-// not declared yet, and keeps it only until the authority gets there — so it is
-// dropped, and the declaration will arrive again with the corrected FSM. A guest
-// that has not reached it holds none and the capture holds one, so it is registered
-// from the declaration the capture carries. Either way Registry.Import then finds
-// the exact set it requires, and a level transition stops being a divergence a
-// session cannot recover from.
-//
+// capture's before the populations are imported. A guest past a level transition the
+// authority has not reached drops the species it declared; one short of it registers
+// the capture's declaration. Registry.Import then finds the exact set it requires.
 // Caller MUST hold mu.
 func (s *GeneticSystem) reconcileRegistrationsLocked(want []event.GeneticRegisterSpeciesPayload) {
 	keep := make(map[uint8]bool, len(want))
@@ -572,14 +551,10 @@ func (s *GeneticSystem) heldRegistrationLocked(species component.SpeciesType) bo
 }
 
 // CheckShared reports whether this instance could install the record without
-// touching anything.
-//
-// It exists because a carrier that refuses halfway through a live install leaves a
-// world that is neither this instance's nor the authority's — the store pass has
-// already run. The staging pass cannot catch this one: a staging world has never
-// entered a level region, so its registered set is empty and it accepts what the
-// live world would refuse. So the answer is asked of the live system, before the
-// write, and the reconciliation below is what makes it yes.
+// touching anything. A staging world has never entered a level region, so its empty
+// registered set accepts what the live world would refuse; asked of the live system
+// before the store pass, a refusal cannot leave a world half-installed. The
+// reconciliation in LoadShared is what makes the answer yes.
 func (s *GeneticSystem) CheckShared(data []byte) error {
 	var snap geneticSnapshot
 	if err := json.Unmarshal(data, &snap); err != nil {

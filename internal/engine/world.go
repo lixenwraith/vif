@@ -339,7 +339,7 @@ func (w *World) UpdateLocked() {
 }
 
 // Seal freezes the system set and binds each system's profiler timer; called by
-// Scheduler.Start before its tick and event goroutines begin ranging it
+// Scheduler.Prepare before any tick or settle ranges it
 func (w *World) Seal() {
 	if w.sealed.Swap(true) {
 		return

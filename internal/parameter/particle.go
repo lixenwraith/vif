@@ -46,7 +46,8 @@ const (
 	// DustJitter - constant random velocity added per frame (cells/sec)
 	DustJitter = 2.0
 
-	// Lifetime of dust by glyph level; dark glyphs make no dust, so dark is only a fade step
+	// Lifetime of dust by glyph level. Requested dust skips dark glyphs, so dark dust
+	// is special fire's conversion of dark glyphs or the last fade step of brighter dust
 	DustTimerDark   = 2 * time.Second
 	DustTimerNormal = 4 * time.Second
 	DustTimerBright = 8 * time.Second

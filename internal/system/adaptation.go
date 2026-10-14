@@ -668,19 +668,11 @@ func (s *AdaptationSystem) updateTelemetry(ar *engine.AdaptationResource) {
 	}
 }
 
-// SaveShared carries the EXP3 route learning (D-19).
-//
-// The hidden-state survey named this as one of two learned resources that no
-// existing document listed and the digest does not hash: the weights, the
-// pre-sampled pool and the consumer head together decide which route the next
-// spawned eye takes, so a divergence in any of them is silent until it moves an
-// entity. The export contract is on the resource itself, because the pool's
-// fallback rotation is unexported and an export written here would leave it
-// behind.
-//
-// The per-tick outcome buffer is deliberately not carried: it holds this tick's
-// unapplied observations, which the capture's tick boundary has already either
-// applied or not.
+// SaveShared carries the EXP3 route learning (D-19): the weights, the pre-sampled
+// pool, the consumer head and the fallback rotation decide which route the next
+// spawned eye takes. The resource owns the export, since the rotation is unexported.
+// The per-tick outcome buffer is not carried: it holds this tick's unapplied
+// observations, which the capture's tick boundary has already applied or not.
 func (s *AdaptationSystem) SaveShared() ([]byte, error) {
 	res := s.world.Resources.Adaptation
 	if res == nil {

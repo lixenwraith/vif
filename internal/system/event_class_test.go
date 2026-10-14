@@ -29,10 +29,8 @@ var stampingPush = map[string]bool{
 
 // crossingHelpers are World methods that wrap exactly one D-3 crossing, so their
 // call sites name no event constant. A helper exists where the crossing must not
-// leave alone: World.PushCursorMove carries the D-18 prediction that answers a local
-// cursor placement immediately, World.PushInputPress the echo that answers a press,
-// and the two must leave from one statement. The D-3 table still has to see the push, so both walks resolve
-// the helper to the type and the method it stands for, and
+// leave without its local answer, a D-18 prediction or an input echo. Both walks
+// resolve a helper to the type and method it stands for, and
 // TestCrossingHelpersPushWhatTheyDeclare pins each mapping against the helper body.
 var crossingHelpers = map[string]string{
 	"PushCursorMove":   "EventCursorMoveRequest",
@@ -63,9 +61,8 @@ var crossingPushes = map[string]string{
 	"typing:EventCompositeMemberDestroyed": "gold member typed; header, member and typist cross",
 	"nugget:EventCursorMoveRequest":        "a personal nugget jump moves the shared cursor",
 
-	// Crossings the D-3 table does not name. Each is a player mechanic whose
-	// shared outcome is determined by the artifact it pushes, so each takes the
-	// same wire path as the rows above.
+	// D-3 table, drain donation and death, cursor advance and defeat state: each is
+	// a player mechanic whose shared outcome is determined by the artifact it pushes.
 	"drain:EventCombatHealRequest":  "a dying drain donating its hit points; target and amount cross",
 	"drain:EventDrainDefeated":      "one personal drain death and its causal cursor advance shared progression",
 	"fuse:EventDrainDefeated":       "each fused personal drain and its causal cursor advance shared progression",
@@ -87,16 +84,10 @@ type systemPushes struct {
 }
 
 // TestEventClassMatchesSystemProfile checks every statically resolvable push
-// against the D-10 class of the event and the D-15 profile of the pusher.
-//
-// One direction is a rule: a player-profile system pushing a replicated event is
-// a D-3 crossing, and every one of them must be named in crossingPushes with the
-// artifact it crosses. That list is the D-3 table, kept honest by the compiler
-// rather than by review.
-//
-// The other direction is not a rule. A shared system routinely pushes local-class
-// events: D-6 effects it requests and D-13 owner-authored state it damages both
-// land per-instance. Those pushes are correct and are not checked here.
+// against the D-10 class of the event and the D-15 profile of the pusher: a
+// player-profile system pushing a replicated event is a D-3 crossing and must be
+// named in crossingPushes. A shared system pushing a local-class event (a D-6
+// effect, D-13 owner-authored state) is correct and not checked.
 func TestEventClassMatchesSystemProfile(t *testing.T) {
 	event.EnsureRegistry()
 
@@ -280,16 +271,11 @@ func eventConstName(arg ast.Expr) string {
 	return sel.Sel.Name
 }
 
-// sortedPushed orders one system's pushed event names for deterministic diagnostics
-// TestStampedEventsAreExplicitlyStamped asserts a Stamped declaration is earned.
-// The class defers the replication decision to GameEvent.Domain, which is only
-// information if a producer set it: core.DomainShared is the zero value and the
-// ambient domain defaults to it, so a bare PushEvent leaves every record reading
-// "shared" whatever produced it. A type nothing stamps is misdeclared.
-//
-// The scan covers internal/system and internal/mode, the two packages that push
-// simulation events; app and fsm push through the same World methods and are
-// covered by the runtime audit instead.
+// TestStampedEventsAreExplicitlyStamped asserts a Stamped declaration is earned: the
+// class defers replication to GameEvent.Domain, whose zero value and ambient default
+// is core.DomainShared, so a type nothing stamps is misdeclared. The scan covers
+// internal/system and internal/mode; app and fsm push through the same World
+// methods and are covered by the runtime audit instead.
 func TestStampedEventsAreExplicitlyStamped(t *testing.T) {
 	event.EnsureRegistry()
 
@@ -364,6 +350,7 @@ func collectStampingEvidence(t *testing.T, dir string, pushed, stamped map[strin
 	}
 }
 
+// sortedPushed orders one system's pushed event names for deterministic diagnostics
 func sortedPushed(m map[string]map[string]bool) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

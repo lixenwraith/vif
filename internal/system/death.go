@@ -13,8 +13,8 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 )
 
-// DeathSystem routes death requests through protection checks and effect emission
-// Game entities route through here; effect entities bypass via direct DeathComponent
+// DeathSystem routes death batches through protection checks and effect emission;
+// entities the crop cleanup tags with DeathComponent are destroyed silently in Update
 type DeathSystem struct {
 	world *engine.World
 

@@ -330,10 +330,9 @@ func (w *epochWindow) has(tick uint64) bool {
 func (w *epochWindow) newest() uint64 { return w.high }
 
 // participantSlots sizes every array this system indexes by participant identity.
-// The coordinator hands out 1..MaxPlayers+1 and never zero, so one name rather than
-// a size at each declaration: they used to disagree by one, and the identity at the
-// top of the range had its epochs, corrections, digests and departure silently
-// dropped by whichever array was short.
+// The coordinator hands out 1..MaxPlayers+1 and never zero; one name for every
+// declaration keeps a short array from silently dropping the epochs, corrections,
+// digests and departure of the identity at the top of the range.
 const participantSlots = parameter.MaxPlayers + 2
 
 // barrierArtifact is one encoded local or peer crossing waiting for its apply tick.
@@ -460,9 +459,7 @@ func (s *NetworkSystem) Init() {
 	s.applied = s.applied[:0]
 	// The replay suffix goes with them, and it has to: a reset restarts crossSeq at
 	// zero, so a record retained from before it carries a sequence a post-reset
-	// fence would compare against and get wrong in both directions. Under the old
-	// tick boundary the first correction pruned these by age; a sequence boundary
-	// has no such accident to rely on.
+	// fence would compare against and get wrong in both directions.
 	s.suffix = s.suffix[:0]
 	s.suffixBytes = 0
 	s.suffixDropped = 0
@@ -659,10 +656,10 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 }
 
 // forgetParticipant clears a departed identity for whoever takes it next, whose
-// sequence starts at one: its fence, and the ordinary crossings of its still
-// scheduled or retained. Applied after the departure, one of those re-raised the
-// fence and the next holder's first crossings read as applied everywhere (§3.2).
-// Committed copies precede the departure on every link, so all instances drop alike.
+// sequence starts at one: its fence, and its ordinary crossings still scheduled or
+// retained, any of which would re-raise the fence and make the next holder's first
+// crossings read as applied (multi-player.md §3.2). Committed copies precede the
+// departure on every link, so all instances drop alike.
 func (s *NetworkSystem) forgetParticipant(participant uint32) {
 	if participant == 0 || int(participant) >= len(s.appliedPeerSeq) {
 		return
@@ -730,10 +727,10 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (taken bool) {
 	})
 	s.scheduledBytes += frameBytes(frame)
 	if barrierBound(ev.Type) {
-		// A barrier-bound sequence does not participate in the authority's
-		// local-first capture fence. Close its position now so it cannot leave a
-		// permanent hole in the ordinary sequence prefix; its effect remains
-		// classified by ApplyTick on every instance.
+		// A barrier-bound sequence is contained by tick, never by its source's
+		// fence. Close its position now so it cannot leave a permanent hole in the
+		// ordinary sequence prefix; its effect remains classified by ApplyTick on
+		// every instance.
 		s.closeAppliedCrossingLocked(frame.Seq)
 	} else {
 		// Retained for the projection a correction runs, at the agreed tick.
@@ -1001,7 +998,7 @@ func (s *NetworkSystem) LocalReplaySuffix(fence uint64) ([]event.ScheduledWireFr
 }
 
 // ReplaySuffixSize is how many records this instance is currently retaining, and
-// how many retention has dropped, for the telemetry the plan asks for.
+// how many retention has dropped, for the replay telemetry.
 func (s *NetworkSystem) ReplaySuffixSize() (retained int, dropped int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1080,11 +1077,9 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 	}
 	s.scheduled = keep
 	s.scheduledBytes = held
-	// The retained local suffix is pruned by this instance's own fence, for the same
-	// reason the schedule is: a record the captured world does not contain is still
-	// this participant's action, whatever its apply tick says. Pruning by tick here
-	// was the discard that made a guest's own action vanish for one cadence whenever
-	// its link missed the playout lead.
+	// The retained local suffix is pruned by this instance's own fence, never by
+	// tick, for the same reason the schedule is: a record the captured world does not
+	// contain is still this participant's action, whatever its apply tick says.
 	pruned := s.suffix[:0]
 	s.suffixBytes = 0
 	for _, rec := range s.suffix {
@@ -2382,7 +2377,8 @@ func (s *NetworkSystem) publishBarrierTelemetry(nextTick uint64, p engine.Networ
 		return
 	}
 	// The authority waits on nobody: it commits a late crossing at its next tick
-	// (§3.5), so no peer epoch is required of it and it cannot fall behind one.
+	// (multi-player.md §3.5), so no peer epoch is required of it and it cannot fall
+	// behind one.
 	if s.isCoordinator() {
 		s.statPeerLag.Store(0)
 		s.statLag.Store(0)

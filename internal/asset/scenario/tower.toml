@@ -61,7 +61,7 @@ on_enter = [
     # Victory ungated until spawn chain completes
     { action = "SetVar", payload = { name = "pylons_chain_done", value = 0 } },
 
-    # Register Eye (Species 7) for GA. 1 Gene [0.0, 0.99] mapping to 7 discrete types.
+    # Register Eye (Species 7) for GA: 1 gene in [0, 1], binned into 7 types by GeneBounds.Bin.
     { action = "EmitEvent", event = "EventGeneticRegisterSpecies", payload = { species = 7, gene_count = 1, bounds = [{ min = 0.0, max = 1.0 }], perturbation_std_dev = 0.1, is_composite = true, probe_bins = 7 } },
 
     # Spawn tower at center
