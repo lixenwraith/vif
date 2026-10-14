@@ -1,9 +1,3 @@
-// Package snapshot: the cross-instance comparison surface.
-//
-// Three filters over the status registry, and one line format they render
-// through. SharedKey is what two participants of one session must agree on;
-// SimDeniedKey is what a replay must not compare, because it describes how a run
-// was watched and driven rather than what it simulated.
 package snapshot
 
 import (

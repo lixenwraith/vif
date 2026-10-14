@@ -1,34 +1,8 @@
-// Package linkpace measures a link and decides how fast to publish over it.
-//
-// It is deliberately a leaf: the standard library and nothing else. What it
-// describes — a round trip, a delivery rate, a cadence in ticks — is arithmetic
-// over numbers a transport hands it, and none of it may reach the simulation.
-// Keeping it outside `internal` is what makes that structural rather than
-// remembered: this package cannot see a world, an event or a component, so a
-// measurement cannot become a game decision by accident.
-//
-// The package has two halves and they answer different questions.
-//
-//   - [Link] answers *what the link is doing*: round-trip time, its variation,
-//     the rate at which bytes are actually arriving, and — the part that is easy
-//     to get wrong — whether that rate is the link's limit or merely what the
-//     sender happened to offer. A delivery rate measured while the sender is
-//     idle says nothing about capacity, and a controller that treats it as
-//     capacity will throttle a link that was never busy.
-//
-//   - [Controller] answers *what to do about it*: a correction cadence and a
-//     keyframe interval, chosen inside declared bounds, never crossing the
-//     convergence floor, and moved one step at a time so a single noisy sample
-//     cannot swing the operating point.
-//
-// The floor is the load-bearing idea. Everything else here is a preference that
-// may be traded away under pressure; the floor is the promise that a receiver
-// gets a whole authoritative world within a bounded number of ticks no matter
-// how the adaptation goes. A link that cannot carry that promise is not adapted
-// to — it is refused at admission, or reported as an unrecoverable operating
-// condition if it is already in the session. Silently publishing slower than the
-// floor would leave a participant diverging with nothing to say about it, which
-// is the one outcome the whole design exists to avoid.
+// Package linkpace measures a link (Link: round trip, jitter, delivery rate, and
+// whether that rate was the link's limit) and chooses how fast to publish over it
+// (Controller: a cadence and keyframe interval inside declared bounds, never past
+// the convergence floor; Admit refuses a link that cannot carry it). Standard
+// library only, so no measurement can reach a world and become a game decision.
 package linkpace
 
 import (
