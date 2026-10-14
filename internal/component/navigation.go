@@ -22,7 +22,7 @@ type NavigationComponent struct {
 	Height int
 
 	// FlowLookahead is how far along the flow vector, in cells, the homing target is
-	// placed while the target is out of sight
+	// placed while HasDirectPath is false
 	FlowLookahead float64
 
 	// UseRouteGraph enables per-route flow field navigation instead of shared optimal field

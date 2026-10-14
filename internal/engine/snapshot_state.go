@@ -1,10 +1,10 @@
 package engine
 
 // SharedStateSaver is implemented by a system that holds state outside any
-// component store which can change a future shared outcome (D-19). The manifest
-// declares "state" for exactly these systems, and its declaration test fails a pair
-// that disagree. Never carried: shared stores, what install re-derives, and any
-// player-domain value (D-1, D-6). Durations count from the capture tick.
+// component store which can change a future shared outcome (D-19), exactly the
+// systems the manifest declares "state", which its declaration test checks. It never
+// carries what a shared store holds, what install re-derives, or any player-domain
+// value (D-1, D-6). Durations count from the capture tick.
 type SharedStateSaver interface {
 	// SaveShared serializes this system's future-affecting private state. The
 	// encoding must be canonical: two instances holding equal state must produce

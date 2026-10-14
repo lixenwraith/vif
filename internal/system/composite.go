@@ -8,8 +8,8 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// CompositeSystem keeps headers and members consistent: member offsets synced from
-// the phantom head, liveness tombstones, compaction, integrity breach events and
+// CompositeSystem keeps headers and members consistent: member positions propagated
+// from the phantom head, liveness tombstones, compaction, integrity breach events and
 // destroy requests
 type CompositeSystem struct {
 	world *engine.World

@@ -19,13 +19,10 @@ func RegisterFSMComponents(m *fsm.Machine[*engine.World]) {
 // worldHost binds std.Host capabilities to the ECS world
 func worldHost() std.Host[*engine.World] {
 	return std.Host[*engine.World]{
-		// A region's actions run on every instance — the machine is shared and every
-		// instance enters the same state — so an artifact one of them raises is a
-		// per-instance effect unless its class says otherwise. The Local class
-		// already says so: it is what keeps the artifact off the wire. Stamping the
-		// record to match is what makes it honest, because a per-instance effect
-		// journaled as shared is a record two instances legitimately differ on
-		// while claiming they should not.
+		// A region's actions run on every instance, so an artifact one raises is a
+		// per-instance effect unless its class says otherwise. The Local class keeps it
+		// off the wire; pushing it player-domain makes the record match, since one
+		// journaled as shared would claim an agreement two instances legitimately lack.
 		Emit: func(w *engine.World, t event.EventType, payload any) {
 			if event.ClassOf(t) == event.ClassLocal {
 				w.PushLocal(t, payload)

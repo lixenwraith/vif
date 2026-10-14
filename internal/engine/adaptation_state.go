@@ -5,17 +5,10 @@ import (
 	"time"
 )
 
-// AdaptationState is AdaptationResource's export contract (D-19).
-//
-// The EXP3 route learning is shared state that neither the domain document nor
-// the digest listed: the weights, the pre-sampled pool and the consumer head
-// together decide which route the next spawned eye takes. A divergence in any of
-// them is silent until it moves an entity, and a snapshot that omitted them would
-// install a world that routes differently from the one it claims to reproduce.
-//
-// The contract lives here rather than in the system because the pool's fallback
-// rotation is unexported: an export written outside this package would leave it
-// behind and a resumed pool would rotate from a different position.
+// AdaptationState is AdaptationResource's export contract (D-19): the weights,
+// pre-sampled pool, consumer head and fallback rotation together decide which
+// route the next spawned eye takes. It lives here because the rotation is
+// unexported, so an export written outside this package would leave it behind.
 type AdaptationState struct {
 	Entries []AdaptationEntryState `json:"entries"`
 }
@@ -25,10 +18,8 @@ type AdaptationEntryState struct {
 	ID         uint32 `json:"id"`
 	RouteCount int    `json:"route_count"`
 	Draining   bool   `json:"draining"`
-	// DrainAge is how long the entry had been draining at the capture's tick, not
-	// the instant it started (D-19, §4.2). An instant is a function of the tick
-	// since the simulation clock became tick-derived, but the relative form stays
-	// correct if a capture is ever rebased.
+	// DrainAge is how long the entry had been draining at the capture's tick
+	// (D-19); LoadState rebases it onto the instant the receiving world resumes at.
 	DrainAge    time.Duration          `json:"drain_age"`
 	Populations []RoutePopulationState `json:"populations"`
 }
@@ -42,12 +33,10 @@ type RoutePopulationState struct {
 	Spin    int       `json:"spin"`
 }
 
-// SaveState exports the learned routing as of now, which the caller passes as the
-// capture's simulation instant so ages are measured against the tick being
-// captured rather than against whenever the export ran.
-//
-// Entries and populations are emitted in key order: a capture is compared as well
-// as installed, so map iteration order must not reach the bytes.
+// SaveState exports the learned routing as of now, the capture's simulation
+// instant, so ages are measured against the captured tick. Entries and
+// populations are emitted in key order: a capture is compared as well as
+// installed, so map iteration order must not reach the bytes.
 func (ar *AdaptationResource) SaveState(now time.Time) AdaptationState {
 	var out AdaptationState
 	if ar == nil || len(ar.Entries) == 0 {

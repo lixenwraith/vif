@@ -184,8 +184,7 @@ var systemProfiles = map[string]engine.SystemProfile{
 // systemSnapshots is every system's declared D-19 obligation: whether it holds
 // future-affecting state outside the component stores, and therefore whether it
 // must implement engine.SharedStateSaver. The boundary suite asserts the
-// declaration against the code, which is what turns the hidden-state survey from
-// a list someone maintains into one the build checks.
+// declaration against the code.
 var systemSnapshots = map[string]engine.SnapshotProfile{
 	"network":        engine.SnapshotNone,
 	"cursor":         engine.SnapshotNone,
