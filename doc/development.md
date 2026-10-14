@@ -144,7 +144,7 @@ line wins. That help is `helpSections` in `cmd/vif/usage.go`, which also renders
 | `-bot`, `-bots [N[:graph]\|graph]` | Add bots beside this run's participant, which under `-headless` or `-watch` is the first bot; requests from both flags add together, operands default to `1:default`, and a count of 0 adds none. With `-serve`, bots keep the session occupied. See [Bots](bots.md). |
 | `-authority host\|migrate` | With `-host` or `-serve`, where authorship goes when the authoring participant leaves; a guest adopts the host's policy. `host` keeps it with the starting machine, so losing that machine leaves each survivor playing alone; `migrate` hands it to the first surviving member of the succession chain, else the lowest surviving identity, never a bot's. Default `host` with `-serve`, `migrate` otherwise. |
 | `-slow-window <dur>`, `-slow-late <n>`, `-slow-bytes <n>` | A host's eviction policy for a participant that cannot keep up: this many late epochs per second over the window, on a link carrying at least this many bytes per second. A zero window never evicts; a zero rate drops its condition. See [Multiplayer](multi-player.md) §3.5. |
-| `-listen <addr>`, `-no-advertise` | With `-join`, the address this participant is dialled back on in a migrate session, or none at all, which keeps it a leaf, elected only when no chain member survives ([Multiplayer](multi-player.md) §5.3). |
+| `-listen <addr>`, `-no-advertise` | With `-join`, the address the other participants reach this one at in a migrate session, or none at all, which keeps it a leaf, elected only when no chain member survives ([Multiplayer](multi-player.md) §5.3). |
 | `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own. Omitted on a server, the first guest's terminal sizes the session. |
 | `-probe <addr>` | Serve `/health` and `/metrics`; `-serve` only. |
 | `-first-join <dur>` | End a `-serve` run if no guest has connected within `dur`; zero waits forever. |
@@ -337,9 +337,9 @@ Every participant of one session must use the same rate. Only the `max` case is
 enforced, because the runtime cannot see a peer's pace: a faster participant is
 rebased to the authority's tick by every correction, which keeps the session
 correct and moves the world under a script's own schedule. A dedicated host runs
-real time. An interactive host runs the rate it was started at, which an
-interactive guest adopts from the offer and nobody changes during a live session;
-a script sharing the session must match it.
+real time; an interactive host runs its own rate, which an interactive guest
+adopts from the offer and nobody changes while a peer is linked. A script sharing
+the session must match it.
 
 ### A dedicated host
 
@@ -634,11 +634,11 @@ record shapes, scopes, the status registry, the flight recorder, and the
 diagnostic playbooks. This section covers only the build-facing policy.
 
 Replay capture is a separate `vif-jrn-<060102-150405>` JSONL sink, with a `-N`
-suffix when that name is taken. `-j` records every journaled-origin event and every
-own crossing regardless of session log level/scope, and its anchor carries the seed,
-RNG session, config/corpus identity and fingerprint, fixed tick interval, and
-simulation geometry. `-r` runs those records through a manual-clock App; this is reproduction
-input, not another diagnostic scope.
+suffix when that name is taken. `-j` records every journaled-origin event and
+every own crossing regardless of session log level/scope, and its anchor carries
+the seed, RNG session, config/corpus identity and fingerprint, fixed tick interval,
+and simulation geometry. `-r` runs those records through a manual-clock App; this
+is reproduction input, not another diagnostic scope.
 
 Logging is disabled at compile time for `wasm` or `novlog`. In enabled builds,
 log arguments are formatted asynchronously: call sites must pass primitive
@@ -659,11 +659,11 @@ Snapshot indexing projects stable keys into bounded semantic groups and sorts
 groups/members. Allocation buffers, combat attribution, FSM regions, and active
 player slots therefore remain separate readable records without renaming keys.
 `Registry.Freeze`, called by `Scheduler.Prepare` from `Start`, from `RunTicks`, or
-when a driven App is constructed (`newDriven`), closes the metric set and caches
-that index permanently; a registration afterwards yields a detached cell and
-increments `stat.late`. Periodic snapshots run after a completed tick and after
-releasing the world lock, so all tick-owned writes are settled and async logging
-cannot extend lock time.
+when a caller-driven App is constructed (`newDriven`, `newScriptApp`), closes the
+metric set and caches that index permanently; a registration afterwards yields a
+detached cell and increments `stat.late`. Periodic snapshots run after a completed
+tick and after releasing the world lock, so all tick-owned writes are settled and
+async logging cannot extend lock time.
 
 `-lt`/`:log stat` controls periodic emission; the default period is a coarse
 heartbeat because the flight recorder holds fine-grained history. `-lr`/`:log
@@ -715,11 +715,12 @@ blocking I/O inside the world lock and storing game behavior in renderers.
 Components are pure data and their logic lives in the owning system; renderers
 reading shared state are the exception. A system file serves only its own system:
 no system calls another's helpers, apart from the unattributed files pinned in
-`helperFiles` (`internal/system/domain_test.go`). Math constants live in
-`pkg/vmath` and tunables in `internal/parameter` and `internal/parameter/visual`,
-never inline. Host service implementations stay behind their package boundaries.
-Anything iterating a map before a write, an RNG draw or an event push has to sort
-first; determinism across instances is the invariant the domain model rests on.
+`helperFiles` (`internal/system/domain_test.go`) and the timer slot's `armTimer`
+and `timerRunning`. Math constants live in `pkg/vmath` and tunables in
+`internal/parameter` and `internal/parameter/visual`, never inline. Host service
+implementations stay behind their package boundaries. Anything iterating a map
+before a write, an RNG draw or an event push has to sort first; determinism
+across instances is the invariant the domain model rests on.
 
 ## 12. Source map
 

@@ -157,7 +157,7 @@ activates the shield, while attack color/polarity derives from the sign.
 | Delta class | Rule |
 |---|---|
 | Reward | Increases absolute magnitude without crossing through zero. |
-| Penalty | Converges toward zero, clamps there, and is multiplied by the current encounter damage multiplier. Boost or ember can block it. |
+| Penalty | Converges toward zero, clamps there, and is multiplied by the cycle damage multiplier (`energy.damage_multiplier`). Boost or ember can block it. |
 | Passive | Converges toward zero and clamps, but bypasses boost/ember protection. |
 | Spend | Converges toward zero and may cross it; used by explicit player actions such as jumps. |
 
@@ -173,10 +173,11 @@ Glyph changes remain signed by color and can move energy across zero.
 
 Blue, green, and red glyphs start with different signed base values. The energy
 system adjusts the actual change with current heat, so the relationship is part
-of the live resource economy rather than a fixed reward table. The penalty
+of the live resource economy rather than a fixed reward table. The cycle damage
 multiplier doubles on each `EventCycleDamageMultiplierIncrease` (every storm kill
-in the campaign); a game reset or `EventCycleDamageMultiplierReset` returns it to
-one.
+in the campaign) and survives encounter changes; a game reset or
+`EventCycleDamageMultiplierReset` returns it to one. Shield drains are the only
+penalties the game produces, so an unshielded hit's heat loss is not multiplied.
 
 ### Heat and ember
 
@@ -405,7 +406,8 @@ it spawns and arms the cursor before opening `main`.
    cursor, pause `main`, and begin a quasar encounter.
 2. The quasar holds that owner's grayout and drains. Three quasar kills lead to a
    storm; earlier kills return to `main`.
-3. Each storm kill doubles the species damage multiplier. Three storm kills create
+3. Each storm kill doubles the cycle damage multiplier on shield drains (§5);
+   the notice reads `SPECIES DAMAGE INCREASED`. Three storm kills create
    a full-map maze without rooms and spawn one Kraken (§8) at its center, which
    demolishes the maze as it moves.
 4. The first Kraken kill returns to `main`; another three storm kills open the
