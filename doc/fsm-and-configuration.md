@@ -20,7 +20,11 @@ flowchart TD
 `internal/fsm` is generic over its context type and imports no gameplay
 systems. `internal/fsm/std` defines reusable actions/guards against a capability
 `Host[T]`. `internal/manifest/fsm_bridge.go` supplies those capabilities for
-`*engine.World`.
+`*engine.World`. A nil `Host` field leaves its actions inert and its guards false,
+so a config still loads, and a nil `Seed` roots every `RandomVar` draw at zero;
+with `Host.Refuse` set, `EmitEvent` and the system actions fail the load instead
+when their hook is nil. Bot graphs run the same machine and library over a bot's
+own context with such a host ([Bots](bots.md#shared-vocabulary)).
 
 The result is a strict policy/mechanism split:
 
@@ -33,9 +37,11 @@ The result is a strict policy/mechanism split:
 
 The scenario entry is resolved in this order:
 
-1. `-s <path-or-name>`, where a path is `scenario.toml` or a directory containing
-   it, and a name resolves under `scenario/<name>/` in the configured roots;
-2. `scenario/main/scenario.toml` under a root passed with `-config-dir`;
+1. `-s <path-or-name>`, defaulting to `[paths] scenario` in `vif.toml`, where a
+   path is an entry file or a directory holding `scenario.toml`, and a name
+   resolves under `scenario/<name>/` in the configured roots;
+2. `scenario/main/scenario.toml` under a root passed with `-config-dir` (or
+   `[paths] root`);
 3. the same under the user config root, normally `~/.config/vif`;
 4. the same under the checkout's `wad/` for a binary in its `bin/`, then under
    each system root, `/usr/local/etc/vif` and `/etc/vif`;
@@ -46,27 +52,31 @@ is no duplicate main scenario under `wad/`.
 
 All external resources share this root hierarchy; see
 [External filesystem layout](filesystem-layout.md) for the categorized tree and
-migration policy.
+resolution policy.
 
-The resolved entry and its region files are read whole into a `resource.Scenario`
-before the FSM loads, and the loader reads that rather than the host filesystem.
-The scenario is identified by its name and by the SHA-256 of its canonical form,
-which is what a replay and a join are refused on; `-check` prints both. Reading it
-first is also what lets a scenario that never touched this disk be loaded.
+The resolved entry, its macro files and its region files are read whole into a
+`resource.Scenario` before the FSM loads, and the loader reads that rather than
+the host filesystem. A scenario holds at most 64 `.toml` files, 256 KiB each and
+1 MiB in all, whether read from disk or received from a peer. It is identified by
+its name and by the SHA-256 of its canonical form, which is what a replay and a
+join are refused on; `-check` prints both.
 
-A scenario need not be on this host at all. A participant joining a session whose
-scenario no local root holds receives it from the coordinator during the handshake
-and holds it in memory; `resource.Options.Provided` is that scenario, and it wins
+A scenario need not be on this host at all. A joining participant whose own
+resolved scenario does not match the session's digest asks the coordinator for
+those bytes during the handshake and holds them in memory;
+`resource.Options.Provided` is that scenario, and it wins
 over every other selector because the run holding one has already agreed to
 simulate exactly those bytes. See
-[Services and networking](services-and-networking.md) §on the join identity.
+[Services and networking](services-and-networking.md#72-join-identity-and-who-decides-it).
 
 A run plays one scenario. The regions a scenario declares register one metric set
 each, and `Scheduler.Prepare` freezes the registry before the first tick, so
 loading a second scenario into a running machine would need keys the frozen set
 does not hold. `:n <scenario>` therefore ends the run and starts another on the
 same command line with a different `-s`; `resource.ValidateScenario` proves the
-new one loads before the old one is torn down.
+new one loads before the old one is torn down, and a name that resolves to the
+running scenario's digest resets the game instead. In a live session only the
+host may change scenario.
 
 `-d` selects the embedded scenario and content. It is mutually exclusive with
 `-s` and `-f`; combining them fails validation.
@@ -75,19 +85,21 @@ Region files are resolved through the same filesystem as the entry file and
 relative to its directory. They may contain only `[states]`; nested region
 declarations or other top-level keys are rejected. The entry's `macro_files` resolve
 the same way and are scenario files too, so the digest covers them; every file
-expands against the entry's macros before regions merge ([TOML macros](toml-macros.md)). Circular includes and
-duplicate state names are errors, and filesystem traversal outside the config
-root is not accepted.
+expands against the entry's macros before regions merge ([TOML macros](toml-macros.md)).
+Circular includes and duplicate state names are errors, and a path outside the
+entry's directory is rejected.
 
-Use `vif -check [-g <name-or-path>]` to resolve, parse, assemble, and validate
-the FSM plus keymap, audio overrides, and content without starting the terminal
-game. `vif -schema`
-prints generated JSON describing known events, actions, guards, and payloads.
+Use `vif -check [-s <name-or-path>]` to resolve, load and validate the scenario
+plus keymap, audio overrides, content and every bot graph without starting the
+terminal game. `vif -schema` prints generated JSON describing known events and
+their payload fields, actions, guards, comparison operators and script-visible
+config fields.
 
 ## 3. Root schema
 
 ```toml
 description = "A short description for scenario selection."
+macro_files = ["macros.toml"]
 
 [systems]
 disabled_systems = ["system_runtime_name"] # or only_systems = [...], not both
@@ -113,12 +125,12 @@ file = "boss.toml" # no initial: dynamic region
 | `macro_files`, `macros` | Macro libraries and definitions every scenario file may invoke ([TOML macros](toml-macros.md)). |
 | `systems.disabled_systems` | Systems disabled after FSM initialization. Names are validated against runtime `System.Name()` values. |
 | `systems.only_systems` | Every toggled system not named starts disabled; the inverse of `disabled_systems`, for a scenario that needs few mechanics. |
-| `map.min_width`, `map.min_height` | Floor under the map's size, applied before the FSM boots and by every resize, reset and level setup; a smaller terminal crops the view and the camera follows the cursor. |
+| `map.min_width`, `map.min_height` | Floor under the map's size, positive integers a map can hold, applied before the FSM boots and by every resize, reset and level setup; a smaller terminal crops the view and the camera follows the cursor. |
 | `regions.<name>.initial` | Initial state for a region started during machine initialization. Omit for a region spawned later. |
 | `file` | File supplying additional `[states.*]` tables. |
-| `background` | Excludes the region from normal telemetry/overlay presentation; it still updates and handles events. |
-| `enabled_systems` | Systems enabled when the region is spawned or resumed. |
-| `disabled_systems` | Systems disabled when the region is spawned or resumed. |
+| `background` | Keeps the region out of the foreground summary the status bar shows; it still updates, handles events and publishes its own `fsm.<region>.*` metrics. |
+| `enabled_systems` | Systems enabled when the region starts or resumes. |
+| `disabled_systems` | Systems disabled when the region starts or resumes. |
 
 Initial regions are sorted by name before startup. That sorted insertion order
 becomes their deterministic update/event order. Dynamically spawned regions are
@@ -154,8 +166,11 @@ Each live region owns:
 - a pause flag;
 - delayed actions associated with state owners.
 
-Variables are signed 64-bit integers shared across all regions of one machine.
-They reset on machine initialization/reset.
+Variables are signed 64-bit integers shared across all regions of one machine;
+region spawn and terminate leave them alone. A game reset runs every region's
+`on_exit` leaf to root, clears regions, variables and delayed actions, and
+re-initializes the initial regions
+([Runtime](runtime.md#10-reset-and-operator-state)).
 
 ## 5. Tick processing
 
@@ -174,14 +189,22 @@ state, declaration order is priority. If none passes, lookup bubbles to the
 parent. A passing internal `Tick` transition consumes that tick and can shadow
 outer tick transitions, so use it deliberately.
 
-Region time and delayed-action countdown use pause-aware game delta. A paused
-region neither updates nor handles events; other regions continue.
+The scheduler updates the machine once per game tick by the fixed tick interval,
+after the tick's opening event settle and before the systems run
+([Runtime](runtime.md#5-simulation-tick-steps)); a paused game ticks only when
+stepped, so region time and delayed countdowns stop with it. A paused region
+neither updates nor handles events; other regions continue.
 
 ## 6. Event processing
 
 The event queue offers each event to the FSM before system handlers. For every
 unpaused region in its deterministic snapshot, the machine looks for matching
 transitions from leaf to root and executes the first whose guard passes.
+
+Each region keeps a trigger mask of the event types its active path names, and
+the machine their union over unpaused regions, so an event no active state reacts
+to is rejected with one bit test. `Reacts` answers for every state, active or not,
+which is how a bot driver picks the events its graph sees.
 
 Regions spawned while handling an event do not receive that same event because
 iteration uses a snapshot. A region terminated during handling is skipped when
@@ -245,13 +268,15 @@ Capture precedes exit/transition/enter actions, so the target state's
 ## 8. Actions and delayed work
 
 Actions can appear in `on_enter`, `on_update`, `on_exit`, or a transition. Every
-action supports an optional guard and `delay_ms`.
+action supports an optional guard and `delay_ms`. An action guard sees no event
+payload and is checked when the action is reached; a delayed action runs unguarded
+when its delay elapses.
 
 | Group | Actions |
 |---|---|
 | Variables | `SetVar`, `IncrementVar`, `DecrementVar`, `MultiplyVar`, `DivideVar`, `ModuloVar`, `ClampVar`, `CopyVar`, `RandomVar` |
 | Regions | `SpawnRegion`, `TerminateRegion`, `PauseRegion`, `ResumeRegion` |
-| Systems | `EnableSystem`, `DisableSystem`, `ApplyRegionSystemConfigs` |
+| Systems | `EnableSystem`, `DisableSystem`, `ApplyGlobalSystemConfig`, `ApplyRegionSystemConfigs` |
 | Game bridge | `EmitEvent` |
 | Status/config | `StatusToVar`, `ConfigToVar` |
 
@@ -272,25 +297,27 @@ index an already populated slice. Injection does not append elements. A
 string field takes the value in place of each `{}`, so a status message can
 carry a count.
 
-`RandomVar` draws a value from the run's shared seed and an index variable, so
-a sequence replays from its index on every instance instead of being stored.
+`RandomVar` sets `name` to a draw in `[min, max]` from the run's shared seed, an
+optional `seed_var` and the required `index_var`, so a sequence replays from its
+index on every instance instead of being stored.
 
 An action with no `payload` table still emits the registered payload type,
 zero-valued, which is what makes an effect's *scope* configurable without
 touching the regions that do not care about it. A region is session-wide: every
 instance runs the same machine and enters the same state, so an effect it raises
-reaches every participant. Where that is wrong — the quasar's grayout and drain
-pause belong to the one cursor the quasar was fused from — the event carries
-`CursorScopePayload`, entity zero means session-wide, and the region injects the
-owner it already elected by:
+reaches every participant, each raising its own; the host pushes a `ClassLocal`
+event with `PushLocal`, which never replicates. Where that is wrong — the
+quasar's grayout and drain pause belong to the one cursor the quasar was fused
+from — the event carries `CursorScopePayload`, entity zero means session-wide,
+and the region injects the owner it already elected by:
 
 ```toml
 { action = "EmitEvent", event = "EventDrainPause",
   payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } }
 ```
 
-Only the instance simulating that cursor acts on it. Every other `EmitEvent` of
-the same event keeps the session-wide meaning it had.
+Only the instance simulating that cursor acts on it; an `EmitEvent` of the same
+event with entity zero stays session-wide.
 
 A delayed action is scheduled against its owning state and counts down in
 region time. It survives child-to-child transitions while its owner remains on
@@ -300,7 +327,8 @@ the current leaf.
 
 ## 9. Guards
 
-Comparison operators are `eq`, `neq`, `gt`, `gte`, `lt`, and `lte`.
+Comparison operators are `eq`, `neq`, `gt`, `gte`, `lt`, and `lte`; any other
+`op`, or none, compares for equality.
 
 | Guard | Arguments | Meaning |
 |---|---|---|
@@ -317,49 +345,58 @@ Comparison operators are `eq`, `neq`, `gt`, `gte`, `lt`, and `lte`.
 | `PayloadBoolEquals` | `field`, `value` | Event payload boolean field comparison. |
 | `PayloadStringEquals` | `field`, `value` | Event payload string field comparison. |
 | `PayloadExists` | none | Event payload is non-nil. |
-| `And`, `Or` | nested `guards` array | Recursively combine parameterized/static guards. |
+| `And`, `Or` | `guards`: array of `{ name, args }` | Recursively combine parameterized/static guards; an empty list passes. |
+| `Not` | `guard`: one `{ name, args }` | Negates one guard. |
 | `AlwaysTrue` | none | Always passes. |
 | `StateTimeExceeds2s`, `StateTimeExceeds10s` | none | Convenience static duration guards. |
 
-`ConfigToVar` and the config guards expose only fields accepted by
-`engine.ConfigIntAccessor`/`ConfigBoolAccessor`, not arbitrary reflection over
-the resource. Consult `-schema` and the accessors when authoring.
+`ConfigToVar` and the config guards expose only the fields in
+`internal/engine/config_access.go`, bound at load, not arbitrary
+reflection over the resource. Consult `-schema` and
+[the authoring reference](fsm-reference.md#config-fields) when authoring.
 
 ## 10. Region lifecycle and system policy
 
-`SpawnRegion` validates the declared region and initial state, creates a fresh
-runtime region, then performs root-to-leaf entry. `TerminateRegion` removes the
-runtime region and its delayed actions. Pause/resume preserves active state and
-time.
+`SpawnRegion` validates the declared region and initial state at load, creates a
+fresh runtime region, then performs root-to-leaf entry. `TerminateRegion` runs the
+active path's `on_exit` leaf to root, then removes the runtime region and its
+delayed actions. Pause/resume preserves active state and time.
 
-The root `[systems]` table sets the baseline, applied during initialization and
-reset: every system but `disabled_systems`, or only `only_systems`. When a region is
-spawned or resumed, `ApplyRegionSystemConfigs` applies its enabled/disabled lists on
-top through meta events. This keeps mechanics constructed but dormant until needed.
+The root `[systems]` table sets the baseline: every system but `disabled_systems`,
+or only `only_systems`. After initialization, a reset and a capture import, the
+scheduler runs `ApplyGlobalSystemConfig` and then `ApplyRegionSystemConfigs`, which
+applies every active region's enabled/disabled lists on top, so a region
+declaration wins over the root list. Spawning or resuming a region applies that
+region's lists, and every `:region` operation re-applies all active regions'.
+Toggles travel as `EventMetaSystemCommandRequest` events. This keeps mechanics
+constructed but dormant until needed.
 
 System lists use runtime names, which equal their manifest keys. A system toggles
 only if it subscribes to and honors `EventMetaSystemCommandRequest`; `cursor`,
-`camera` and `network` do not, so no list can strand the roster, the
-view or a session's peers.
+`camera`, `meta` and `network` do not, so no list can strand the roster, the view,
+pause and reset, or a session's peers.
 
 A disable is checked against the declared dependency graph, as the baseline leaves
 it. `-check` rejects a config that leaves an enabled system without a required
-dependency, naming the region (`[systems]` for an `only_systems` list that omits
-one), and `World.AllowSystemDisable` refuses the same request from an
-`EnableSystem`/`DisableSystem` action or the `:system` command. A dependent the
-baseline leaves off holds nothing on, so disabling both ends stays legal; an
-optional dependency is reported once, not per resume.
+dependency, naming the region, or `[systems]` when the root list itself does, and
+`World.AllowSystemDisable` refuses the same disable at run time, whether
+a region list, a `DisableSystem` action or the `:system` command asks for it. A
+dependent the baseline leaves off holds nothing on, so disabling both ends stays
+legal; an optional dependency is reported once, not per resume.
 
 ### Installing a captured machine
 
-FSM import has separate staging and live forms. Both first resolve the complete
-capture—regions, named states, variables, and delayed compiled-action identities—
-before mutating the machine. The staging form then places the state without side
-effects. That proves a capture is loadable without touching either the live world
-or instance-local systems.
+A capture carries each active region's state name, dwell and pause flag, the
+variables, and pending delayed actions by compiled action ID; the graph travels
+with the build. Import has a staging form (`Machine.Import`) and a live one
+(`ImportReconciled`). Both resolve the whole capture before mutating the machine,
+so a name or action ID this build lacks refuses it; the staging form then places
+the state without side effects. Regions the capture omits stop.
+`Scheduler.ImportFSM` then re-applies system toggles, since an installed position
+runs no entry actions, and republishes region telemetry.
 
 The live form also reconciles persistent local lifecycle. Ordinary entry and exit
-actions still do not replay: their Shared results are already in the capture, and
+actions do not replay: their Shared results are already in the capture, and
 one-shot local rewards or presentation bursts must not happen twice. A config
 author explicitly marks only durable `ClassLocal` `EmitEvent` actions:
 
@@ -385,8 +422,8 @@ variables. After placement, marked entries run root-to-leaf against imported
 variables. All releases precede all acquisitions, so a quasar-to-storm handoff
 cannot clear the storm's new drain pause. If a referenced `payload_vars` value
 changes while the path stays active, the owning path is exited and re-entered to
-move the scope. Region deletion is an exit, which closes the reported case where
-a correction retired a quasar but left the guest grayed out with drains paused.
+move the scope. Deleting a region is an exit, so a correction that retires a
+quasar also lifts the guest's grayout and drain pause.
 
 Load validation restricts `reconcile = true` to immediate, unguarded
 `ClassLocal` `EmitEvent` actions in `on_enter`/`on_exit`. Persistent effects should
@@ -410,6 +447,7 @@ Each command publishes exactly one `EventFSMRegionRequest` primitive. Compound
 policy remains explicit: for example, entering a region that an escalation
 chain would normally reach is issued as `pause` and then `spawn`, not hidden in
 one command. Every successful mutating operation reapplies region system policy.
+`:region` is unavailable in a live session and in a replay, where `:r` is `:replay`.
 
 ### Telemetry and transition taps
 
@@ -418,20 +456,28 @@ declared region:
 
 `fsm.<region>.state`, `.index`, `.elapsed`, `.max_duration`, and `.paused`.
 
-Inactive regions publish `-`, `-1`, zero durations, and `false`. The older
-foreground summary (`fsm.state`, `fsm.elapsed`, and related fields) remains,
-but the per-region sets preserve simultaneous background activity.
+`.index` is the state's position in name order and `.max_duration` the `ms` of the
+state's own `StateTimeExceeds` transition guard, zero when it has none. Inactive
+regions publish `-`, `-1`, zero durations, and `false`. The foreground summary the
+status bar shows (`fsm.state`, `fsm.elapsed`, `fsm.max_duration`,
+`fsm.state_index`, `fsm.state_count`) follows the first unpaused region that is
+not `background` and keeps its last value while there is none; the per-region
+sets show simultaneous background activity.
 
-`Machine.OnTransition` observes every transition. External transitions emit
-an info record with region, from/to state, trigger, state index, and maximum
-duration; internal transitions emit a debug `msg="internal"` record instead.
-`Machine.OnRegion` emits info records for spawn/pause/resume/terminate lifecycle
-operations. These are observation taps, not policy callbacks.
+`Machine.OnTransition` observes every transition before any of its actions run,
+internal and self transitions flagged as internal, and `Machine.OnRegion` every
+region `init`, `spawn`, `pause`, `resume` and `terminate`. The scheduler logs transitions
+at debug and region operations at info under `sub="fsm"`
+([Logging](logging-and-diagnostics.md#subfsm)). These are observation taps, not
+policy callbacks.
 
 `:log rec fsm on` asks the flight recorder to flush on each external
 transition with reason `fsm:<region>`; it is off by default because a busy FSM
 would otherwise write continuously. `:step ... fsm` uses the same transition
 tap to trip a run-until breakpoint after the transition record is emitted.
+Standing breakpoints use the same taps: `:d break state <name>` pauses on a
+transition into that state or a region starting in it, `:d break region <name>`
+on that region's init or spawn.
 
 ## 11. Authoring pattern
 
@@ -461,24 +507,27 @@ The embedded campaign uses `main`, `quasar`, `storm`, `kraken`, `tower`, and a
 background `monitor` that owns cursor boot/retry and resets on
 `session.any_defeated`. This guard aggregates replicated owner defeat reports; it
 does not read instance-local energy or heat mirrors. Encounter `EventLevelSetup`
-actions use `preserve_loot = true` alongside `clear_entities = true`; a run reset
-leaves it false to clear rewards as well. The full current flow is summarized in [Gameplay design](gameplay.md),
-and [the authoring reference](fsm-reference.md) shows cursor spawn payloads
-and capture.
+actions pair `clear_entities = true` with `preserve_loot = true`, so a level change
+keeps uncollected rewards; a defeat emits `EventGameResetRequest`, the same new
+game `:n` starts, which clears the world, rewards included. The full current flow
+is summarized in [Gameplay design](gameplay.md), and
+[the authoring reference](fsm-reference.md) shows cursor spawn payloads and capture.
 
 ## 12. Validation rules and diagnostics
 
-The loader validates at least:
+Reading and loading a scenario validates at least:
 
+- scenario file count, sizes and names, and the entry's `description` and `[map]`;
 - presence of regions and valid initial states;
 - unique state names and valid parent/target references;
 - known event, guard, and action names;
 - action/guard argument decoding and event payload shapes;
-- legal internal transitions;
+- legal internal transitions, no actions on `Root`, and `reconcile` placement;
 - external-file cycles, illegal top-level content, and duplicate states;
 - macro definitions, argument names and types, recursion and expansion bounds;
 - state hierarchy/path validity;
-- referenced runtime system names during app-level validation.
+- `only_systems` beside `disabled_systems`, and, in `resource.ValidateScenario`,
+  unknown system names and required dependencies left disabled.
 
 State compilation accumulates multiple per-state errors where practical, so
 `-check` is more useful than fail-on-first-error parsing. It does not execute a
@@ -519,12 +568,14 @@ event counter plus an outer tick transition.
 | Concern | Primary source |
 |---|---|
 | Runtime semantics | `internal/fsm/machine.go`, `types.go` |
+| Capture export/import and reconcile | `internal/fsm/export.go` |
 | Region commands and scheduler adapter | `internal/mode/commands.go`, `internal/engine/scheduler.go` |
 | TOML schema/compiler | `internal/fsm/config.go`, `loader.go`, `builder.go` |
-| External files | `internal/fsm/file_loader.go` |
+| External and macro files | `internal/fsm/file_loader.go` |
 | Macro expansion | `pkg/tomlmacro` |
+| Scenario resolution, canonical form, `-check` | `internal/resource/resolve.go`, `scenario.go`, `check.go` |
 | Standard actions/guards | `internal/fsm/std/*.go` |
-| Game host adapter | `internal/manifest/fsm_bridge.go` |
+| Game host adapter, config fields, `-schema` | `internal/manifest/fsm_bridge.go`, `internal/engine/config_access.go`, `internal/manifest/schema.go` |
 | Current embedded campaign | `internal/asset/scenario/*.toml` |
 | External examples | `wad/scenario/*` |
 | Extended syntax examples | `doc/fsm-reference.md` |
