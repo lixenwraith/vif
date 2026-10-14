@@ -144,6 +144,11 @@ between a source and target:
 5. reject paths whose corridor overlap is above the configured percentage;
 6. stop at the route limit, attempt limit, no path, or excessive true cost.
 
+Every search runs on the flow field's core: passability read once per graph into the
+bordered grid, one corner rule, and the bucket ring, sized past the largest penalty
+a cell carries. The search is fuzzed against relaxation to a fixpoint. A graph at
+200x100 costs 10 ms native, against 23 ms on a heap.
+
 ```mermaid
 flowchart TD
     Shortest["shortest path"] --> Accept["accept distinct in-tolerance route"]

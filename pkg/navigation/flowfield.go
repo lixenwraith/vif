@@ -1,6 +1,10 @@
 package navigation
 
-import "github.com/lixenwraith/vif/pkg/vmath"
+import (
+	"math/bits"
+
+	"github.com/lixenwraith/vif/pkg/vmath"
+)
 
 // Direction constants for flow field
 // Index into NavSenseDirections: N=0, NE=1, E=2, SE=3, S=4, SW=5, W=6, NW=7
@@ -47,56 +51,6 @@ var dirCosts = [8]int32{
 	CostY, CostDiagonal, CostX, CostDiagonal,
 }
 
-// --- Min-heap for Dijkstra ---
-
-type heapEntry struct {
-	idx  int32 // Flat grid index (y*width + x)
-	dist int32 // Weighted distance from target
-}
-
-type minHeap []heapEntry
-
-func (h *minHeap) push(e heapEntry) {
-	*h = append(*h, e)
-	// Sift up
-	i := len(*h) - 1
-	for i > 0 {
-		parent := (i - 1) / 2
-		if (*h)[parent].dist <= (*h)[i].dist {
-			break
-		}
-		(*h)[parent], (*h)[i] = (*h)[i], (*h)[parent]
-		i = parent
-	}
-}
-
-func (h *minHeap) pop() heapEntry {
-	old := *h
-	n := len(old)
-	e := old[0]
-	old[0] = old[n-1]
-	*h = old[:n-1]
-
-	// Sift down
-	i := 0
-	for {
-		left := 2*i + 1
-		if left >= len(*h) {
-			break
-		}
-		smallest := left
-		if right := left + 1; right < len(*h) && (*h)[right].dist < (*h)[left].dist {
-			smallest = right
-		}
-		if (*h)[i].dist <= (*h)[smallest].dist {
-			break
-		}
-		(*h)[i], (*h)[smallest] = (*h)[smallest], (*h)[i]
-		i = smallest
-	}
-	return e
-}
-
 // FlowField stores precomputed navigation directions toward a target
 type FlowField struct {
 	Width, Height int
@@ -111,12 +65,7 @@ type FlowField struct {
 	TargetX, TargetY int  // Target position this field was computed for
 	Valid            bool // False if field needs recomputation
 
-	// Scratch reused across recomputes, nil until the first and after a clone: the
-	// bucket queue, and isBlocked asked once per cell into a grid with a blocked
-	// border, so the search reads a neighbour with one load and no bounds test
-	ring    [][]int32
-	pending int
-	blocked []bool
+	search gridSearch // scratch reused across recomputes, empty after a clone
 }
 
 // NewFlowField creates an empty flow field for the given dimensions
@@ -203,19 +152,15 @@ func (f *FlowField) GetDistance(x, y int) int {
 // WallChecker is a function that returns true if cell blocks navigation
 type WallChecker func(x, y int) bool
 
-// ringSize spans every distance pending at once: a seed is at most
-// maxSearchRadius cells along each axis from its target, and an edge adds at most
-// CostDiagonal, so pending distances never spread across a whole ring.
+// seedSpan is the furthest a seed lies from its target: maxSearchRadius cells
+// along each axis.
 const (
 	maxSearchRadius = 8
-	ringSize        = 256
-	ringMask        = ringSize - 1
+	seedSpan        = maxSearchRadius * (CostX + CostY)
 )
 
 // Compute performs weighted Dijkstra from all target points across the entire
-// valid field. Edge costs are small integers, so a ring of buckets indexed by
-// distance pops in constant time where a heap paid a logarithm; cells of equal
-// distance settle in bucket order.
+// valid field.
 func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
 	if len(targets) == 0 {
 		f.Valid = false
@@ -230,16 +175,9 @@ func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
 		}
 		f.CurrentGen = 1
 	}
-	if f.ring == nil {
-		f.ring = make([][]int32, ringSize)
-	}
-	f.pending = 0
-	pw := w + 2
-	f.blockGrid(isBlocked)
-	var offset [DirCount]int
-	for k := range DirCount {
-		offset[k] = DirVectors[k][1]*pw + DirVectors[k][0]
-	}
+	g := &f.search
+	g.fill(w, f.Height, isBlocked)
+	g.reset(seedSpan)
 
 	for _, t := range targets {
 		if t.X < 0 || t.Y < 0 || t.X >= f.Width || t.Y >= f.Height {
@@ -251,50 +189,31 @@ func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
 				f.Distances[targetIdx] = 0
 				f.VisitedGen[targetIdx] = f.CurrentGen
 				f.Directions[targetIdx] = DirTarget
-				f.push(targetIdx, 0)
+				g.push(targetIdx, 0)
 			}
 		} else {
 			f.seedVirtualTargets(t.X, t.Y, isBlocked)
 		}
 	}
 
-	if f.pending == 0 {
+	if g.pending == 0 {
 		f.Valid = false
 		return
 	}
 
-	for d := int32(0); f.pending > 0; d++ {
-		bucket := &f.ring[d&ringMask]
-		for len(*bucket) > 0 {
-			idx := (*bucket)[len(*bucket)-1]
-			*bucket = (*bucket)[:len(*bucket)-1]
-			f.pending--
-			if f.Distances[idx] != d {
-				continue // a shorter distance reached it since
-			}
-
-			cx := int(idx) % w
-			cy := int(idx) / w
-			p := (cy+1)*pw + cx + 1
-
-			// A diagonal's corner cells are the two orthogonal neighbours beside it
-			var blocked [DirCount]bool
-			for k := range DirCount {
-				blocked[k] = f.blocked[p+offset[k]]
-			}
-
-			for k := int8(0); k < DirCount; k++ {
-				if blocked[k] || k%2 == 1 && (blocked[k-1] || blocked[(k+1)%DirCount]) {
-					continue
-				}
-				nIdx := int32((cy+DirVectors[k][1])*w + cx + DirVectors[k][0])
-				nd := d + dirCosts[k]
-				if f.VisitedGen[nIdx] != f.CurrentGen || nd < f.Distances[nIdx] {
-					f.Distances[nIdx] = nd
-					f.VisitedGen[nIdx] = f.CurrentGen
-					f.Directions[nIdx] = DirOpposite[k]
-					f.push(nIdx, nd)
-				}
+	for idx, d, ok := g.pop(); ok; idx, d, ok = g.pop() {
+		if f.Distances[idx] != d {
+			continue // a shorter distance reached it since
+		}
+		for m := g.open(idx); m != 0; m &= m - 1 {
+			k := bits.TrailingZeros8(m)
+			nIdx := idx + g.step[k]
+			nd := d + dirCosts[k]
+			if f.VisitedGen[nIdx] != f.CurrentGen || nd < f.Distances[nIdx] {
+				f.Distances[nIdx] = nd
+				f.VisitedGen[nIdx] = f.CurrentGen
+				f.Directions[nIdx] = DirOpposite[k]
+				g.push(nIdx, nd)
 			}
 		}
 	}
@@ -302,28 +221,99 @@ func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
 	f.Valid = true
 }
 
-// blockGrid fills the padded grid from isBlocked; outside the field is blocked
-func (f *FlowField) blockGrid(isBlocked WallChecker) {
-	pw, ph := f.Width+2, f.Height+2
-	if cap(f.blocked) < pw*ph {
-		f.blocked = make([]bool, pw*ph)
+// gridSearch is the scratch every Dijkstra over the grid runs on: isBlocked asked
+// once per cell into a grid with a blocked border, so a neighbour is one load and
+// no bounds test, and a ring of buckets indexed by distance, which pops in constant
+// time while no queued distance runs a whole ring ahead of the one settling.
+type gridSearch struct {
+	w       int
+	blocked []bool
+	step    [DirCount]int32 // to each neighbour, in field cells
+	padStep [DirCount]int   // the same, in the bordered grid
+	ring    [][]int32
+	pending int
+	at      int32
+}
+
+// fill reads the passability of a w×h field.
+func (g *gridSearch) fill(w, h int, isBlocked WallChecker) {
+	pw, ph := w+2, h+2
+	if cap(g.blocked) < pw*ph {
+		g.blocked = make([]bool, pw*ph)
 	}
-	f.blocked = f.blocked[:pw*ph]
+	g.blocked = g.blocked[:pw*ph]
 	for x := range pw {
-		f.blocked[x], f.blocked[(ph-1)*pw+x] = true, true
+		g.blocked[x], g.blocked[(ph-1)*pw+x] = true, true
 	}
-	for y := range f.Height {
-		row := f.blocked[(y+1)*pw : (y+2)*pw]
+	for y := range h {
+		row := g.blocked[(y+1)*pw : (y+2)*pw]
 		row[0], row[pw-1] = true, true
-		for x := range f.Width {
+		for x := range w {
 			row[x+1] = isBlocked(x, y)
 		}
 	}
+	g.w = w
+	for k := range DirCount {
+		g.step[k] = int32(DirVectors[k][1]*w + DirVectors[k][0])
+		g.padStep[k] = DirVectors[k][1]*pw + DirVectors[k][0]
+	}
 }
 
-func (f *FlowField) push(idx, dist int32) {
-	f.ring[dist&ringMask] = append(f.ring[dist&ringMask], idx)
-	f.pending++
+// pad is a field cell's index in the bordered grid.
+func (g *gridSearch) pad(idx int32) int {
+	return (int(idx)/g.w+1)*(g.w+2) + int(idx)%g.w + 1
+}
+
+// open is the directions a search steps along from idx, as bits: into a passable
+// cell, and along a diagonal only past both corners beside it.
+func (g *gridSearch) open(idx int32) uint8 {
+	p := g.pad(idx)
+	var m uint8
+	for k := range DirCount {
+		if !g.blocked[p+g.padStep[k]] {
+			m |= 1 << k
+		}
+	}
+	return m & (0x55 | (m<<1|m>>7)&(m>>1|m<<7))
+}
+
+// reset empties the queue and sizes its ring past span, the furthest a queued
+// distance may run ahead of the one settling.
+func (g *gridSearch) reset(span int32) {
+	n := max(len(g.ring), 64)
+	for int32(n) <= span {
+		n *= 2
+	}
+	if n > len(g.ring) {
+		g.ring = append(g.ring, make([][]int32, n-len(g.ring))...)
+	}
+	for i := range g.ring {
+		g.ring[i] = g.ring[i][:0]
+	}
+	g.pending, g.at = 0, 0
+}
+
+func (g *gridSearch) push(idx, dist int32) {
+	b := &g.ring[dist&int32(len(g.ring)-1)]
+	*b = append(*b, idx)
+	g.pending++
+}
+
+// pop is the nearest queued cell and the distance it was queued at; a cell queued
+// again is popped again, and ok is false once nothing is queued.
+func (g *gridSearch) pop() (idx, dist int32, ok bool) {
+	mask := int32(len(g.ring) - 1)
+	for g.pending > 0 {
+		b := &g.ring[g.at&mask]
+		if n := len(*b); n > 0 {
+			idx = (*b)[n-1]
+			*b = (*b)[:n-1]
+			g.pending--
+			return idx, g.at, true
+		}
+		g.at++
+	}
+	return 0, 0, false
 }
 
 // Reachable reports whether Compute would seed anything for targets, so a field
@@ -386,7 +376,7 @@ func (f *FlowField) seedVirtualTargets(targetX, targetY int, isBlocked WallCheck
 					f.Distances[nIdx] = cost
 					f.VisitedGen[nIdx] = f.CurrentGen
 					f.Directions[nIdx] = DirTarget // Mark as target for direction derivation
-					f.push(int32(nIdx), cost)
+					f.search.push(int32(nIdx), cost)
 					foundAny = true
 				}
 			}

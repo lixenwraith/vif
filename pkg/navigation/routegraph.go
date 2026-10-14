@@ -1,6 +1,10 @@
 package navigation
 
-import "github.com/lixenwraith/vif/pkg/vmath"
+import (
+	"math/bits"
+
+	"github.com/lixenwraith/vif/pkg/vmath"
+)
 
 // Route graph tuning. It lives here rather than in the game's parameter package
 // so this leaf stays free of internal imports.
@@ -88,15 +92,16 @@ func ComputeRouteGraph(
 
 	size := mapW * mapH
 	sc := newRouteScratch(size)
+	sc.search.fill(mapW, mapH, isBlocked)
 	tolerance := 0
-	penalty := make([]int, size)
+	penalty := make([]int32, size)
 	usedDilated := make([]bool, size)
 	var acceptedPaths [][]int
 	optDist := -1
 
 	maxAttempts := RouteGraphMaxRoutes + RouteGraphExtraAttempts
 	for attempt := 0; attempt < maxAttempts && len(rg.Routes) < RouteGraphMaxRoutes; attempt++ {
-		path, trueCost := sc.penalizedShortestPath(sourceX, sourceY, targetX, targetY, mapW, mapH, isBlocked, penalty)
+		path, trueCost := sc.penalizedShortestPath(sourceY*mapW+sourceX, targetY*mapW+targetX, mapW, penalty)
 		if path == nil {
 			break
 		}
@@ -120,7 +125,7 @@ func ComputeRouteGraph(
 			shared*100 <= len(path)*RouteGraphMaxOverlapPct
 
 		// Penalize regardless of acceptance to drive out near-duplicates
-		sc.dilate(path, RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
+		sc.dilate(path, RouteCorridorRadius, func(idx int) {
 			penalty[idx] += routeCellPenalty
 		})
 
@@ -128,7 +133,7 @@ func ComputeRouteGraph(
 			continue
 		}
 
-		sc.dilate(path, RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
+		sc.dilate(path, RouteCorridorRadius, func(idx int) {
 			usedDilated[idx] = true
 		})
 
@@ -187,7 +192,7 @@ func computePathFields(rg *RouteGraph, paths [][]int, mapW, mapH int, isBlocked 
 	for ri, path := range paths {
 		gen++
 		g := gen
-		sc.dilate(path, RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
+		sc.dilate(path, RouteCorridorRadius, func(idx int) {
 			allowed[idx] = g
 		})
 
@@ -249,35 +254,36 @@ func routeTolerance(optDist int) int {
 	return (optDist * RouteTolerancePct) / 100
 }
 
-// routeScratch holds reusable buffers for one ComputeRouteGraph invocation
+// routeScratch holds reusable buffers for one ComputeRouteGraph invocation, over
+// one passability its search reads for every route
 type routeScratch struct {
-	dist           []int
+	search         gridSearch
+	dist           []int32
 	prev           []int32
 	stamp          []uint32 // dilate visited marks, generation-stamped
 	frontA, frontB []int
-	heap           minHeap
 	gen            uint32
 }
 
 func newRouteScratch(size int) *routeScratch {
 	return &routeScratch{
-		dist:   make([]int, size),
+		dist:   make([]int32, size),
 		prev:   make([]int32, size),
 		stamp:  make([]uint32, size),
 		frontA: make([]int, 0, 1024),
 		frontB: make([]int, 0, 1024),
-		heap:   make(minHeap, 0, size/8),
 	}
 }
 
 // dilate performs BFS dilation over passable cells to radius; fn invoked once per unique cell
-func (sc *routeScratch) dilate(path []int, radius, mapW, mapH int, isBlocked WallChecker, fn func(idx int)) {
+func (sc *routeScratch) dilate(path []int, radius int, fn func(idx int)) {
 	sc.gen++
 	if sc.gen == 0 {
 		clear(sc.stamp)
 		sc.gen = 1
 	}
 
+	g := &sc.search
 	cur, next := sc.frontA[:0], sc.frontB[:0]
 	for _, idx := range path {
 		if sc.stamp[idx] != sc.gen {
@@ -290,13 +296,12 @@ func (sc *routeScratch) dilate(path []int, radius, mapW, mapH int, isBlocked Wal
 	for depth := 0; depth < radius && len(cur) > 0; depth++ {
 		next = next[:0]
 		for _, idx := range cur {
-			cx, cy := idx%mapW, idx/mapW
-			for d := range DirCount {
-				nx, ny := cx+DirVectors[d][0], cy+DirVectors[d][1]
-				if nx < 0 || nx >= mapW || ny < 0 || ny >= mapH || isBlocked(nx, ny) {
+			p := g.pad(int32(idx))
+			for k := range DirCount {
+				if g.blocked[p+g.padStep[k]] {
 					continue
 				}
-				nIdx := ny*mapW + nx
+				nIdx := idx + int(g.step[k])
 				if sc.stamp[nIdx] != sc.gen {
 					sc.stamp[nIdx] = sc.gen
 					fn(nIdx)
@@ -309,54 +314,37 @@ func (sc *routeScratch) dilate(path []int, radius, mapW, mapH int, isBlocked Wal
 	sc.frontA, sc.frontB = cur[:0], next[:0]
 }
 
-// penalizedShortestPath is Dijkstra over (dirCost + penalty), predecessor extraction, corner-cut rule kept
-func (sc *routeScratch) penalizedShortestPath(
-	sx, sy, tx, ty, mapW, mapH int,
-	isBlocked WallChecker,
-	penalty []int,
-) ([]int, int) {
+// penalizedShortestPath is Dijkstra from start to goal over dirCost plus the penalty
+// of the cell entered, returning the path and its unpenalized cost
+func (sc *routeScratch) penalizedShortestPath(start, goal, mapW int, penalty []int32) ([]int, int) {
 	dist, prev := sc.dist, sc.prev
+	var most int32
 	for i := range dist {
 		dist[i] = CostUnreachable
+		most = max(most, penalty[i])
 	}
 	// prev needs no reset: it is written on every dist write, and the goal→start
 	// walk only visits cells relaxed this pass (start terminates the walk)
 
-	start := sy*mapW + sx
-	goal := ty*mapW + tx
+	g := &sc.search
+	g.reset(CostDiagonal + most)
 	dist[start] = 0
+	g.push(int32(start), 0)
 
-	sc.heap = sc.heap[:0]
-	sc.heap.push(heapEntry{idx: int32(start), dist: 0})
-
-	// Only a distance under CostUnreachable is pushed, which the heap's int32 holds.
-	for len(sc.heap) > 0 {
-		e := sc.heap.pop()
-		at, atDist := int(e.idx), int(e.dist)
-		if atDist > dist[at] {
+	for at, d, ok := g.pop(); ok; at, d, ok = g.pop() {
+		if d != dist[at] {
 			continue
 		}
-		if at == goal {
+		if int(at) == goal {
 			break
 		}
-		cx, cy := at%mapW, at/mapW
-		for d := range int8(DirCount) {
-			dx, dy := DirVectors[d][0], DirVectors[d][1]
-			nx, ny := cx+dx, cy+dy
-			if nx < 0 || nx >= mapW || ny < 0 || ny >= mapH || isBlocked(nx, ny) {
-				continue
-			}
-			if dx != 0 && dy != 0 {
-				if isBlocked(cx+dx, cy) || isBlocked(cx, cy+dy) {
-					continue
-				}
-			}
-			nIdx := ny*mapW + nx
-			nd := atDist + int(dirCosts[d]) + penalty[nIdx]
-			if nd < dist[nIdx] {
+		for m := g.open(at); m != 0; m &= m - 1 {
+			k := bits.TrailingZeros8(m)
+			nIdx := at + g.step[k]
+			if nd := d + dirCosts[k] + penalty[nIdx]; nd < dist[nIdx] {
 				dist[nIdx] = nd
-				prev[nIdx] = e.idx
-				sc.heap.push(heapEntry{idx: int32(nIdx), dist: int32(nd)})
+				prev[nIdx] = at
+				g.push(nIdx, nd)
 			}
 		}
 	}

@@ -7,6 +7,55 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
+// minHeap is the queue the reference searches run on.
+type heapEntry struct {
+	idx  int32 // Flat grid index (y*width + x)
+	dist int32 // Weighted distance from target
+}
+
+type minHeap []heapEntry
+
+func (h *minHeap) push(e heapEntry) {
+	*h = append(*h, e)
+	// Sift up
+	i := len(*h) - 1
+	for i > 0 {
+		parent := (i - 1) / 2
+		if (*h)[parent].dist <= (*h)[i].dist {
+			break
+		}
+		(*h)[parent], (*h)[i] = (*h)[i], (*h)[parent]
+		i = parent
+	}
+}
+
+func (h *minHeap) pop() heapEntry {
+	old := *h
+	n := len(old)
+	e := old[0]
+	old[0] = old[n-1]
+	*h = old[:n-1]
+
+	// Sift down
+	i := 0
+	for {
+		left := 2*i + 1
+		if left >= len(*h) {
+			break
+		}
+		smallest := left
+		if right := left + 1; right < len(*h) && (*h)[right].dist < (*h)[left].dist {
+			smallest = right
+		}
+		if (*h)[i].dist <= (*h)[smallest].dist {
+			break
+		}
+		(*h)[i], (*h)[smallest] = (*h)[smallest], (*h)[i]
+		i = smallest
+	}
+	return e
+}
+
 // referenceCompute is Compute as it stood before its wall answers were memoized
 // and its heap became a bucket queue: every neighbour and both corners of every
 // diagonal asked of isBlocked directly.
@@ -238,4 +287,76 @@ func TestALazyCacheKeepsTheEagerPhase(t *testing.T) {
 			}
 		}
 	}
+}
+
+// FuzzRouteSearchFindsACheapestLegalPath: under any walls and corridor penalties,
+// the route search returns a path of legal steps from start to goal, with the cost
+// it reports, whose penalized cost is the least any path has; relaxing every edge
+// to a fixpoint is the reference, which no queue order can bias.
+func FuzzRouteSearchFindsACheapestLegalPath(f *testing.F) {
+	for seed := range uint64(16) {
+		f.Add(seed, uint8(seed*11))
+	}
+	f.Fuzz(func(t *testing.T, seed uint64, density uint8) {
+		rng := rand.New(rand.NewPCG(seed, uint64(density)))
+		w, h := 2+rng.IntN(40), 2+rng.IntN(20)
+		walls, penalty := make([]bool, w*h), make([]int32, w*h)
+		for i := range walls {
+			walls[i] = rng.IntN(256) < int(density)/2
+			penalty[i] = int32(rng.IntN(RouteGraphMaxRoutes+RouteGraphExtraAttempts+1)) * routeCellPenalty
+		}
+		isBlocked := func(x, y int) bool { return walls[y*w+x] }
+		start, goal := rng.IntN(w*h), rng.IntN(w*h)
+		walls[start], walls[goal] = false, false
+
+		legal := func(from, to int) bool {
+			fx, fy, tx, ty := from%w, from/w, to%w, to/w
+			dx, dy := tx-fx, ty-fy
+			return max(abs(dx), abs(dy)) == 1 && !walls[to] && (dx == 0 || dy == 0 || !walls[fy*w+tx] && !walls[ty*w+fx])
+		}
+		want := make([]int32, w*h)
+		for i := range want {
+			want[i] = CostUnreachable
+		}
+		want[start] = 0
+		for changed := true; changed; {
+			changed = false
+			for at := range want {
+				for k := range DirCount {
+					x, y := at%w+DirVectors[k][0], at/w+DirVectors[k][1]
+					if x < 0 || y < 0 || x >= w || y >= h || want[at] == CostUnreachable || !legal(at, y*w+x) {
+						continue
+					}
+					if nd := want[at] + dirCosts[k] + penalty[y*w+x]; nd < want[y*w+x] {
+						want[y*w+x], changed = nd, true
+					}
+				}
+			}
+		}
+
+		sc := newRouteScratch(w * h)
+		sc.search.fill(w, h, isBlocked)
+		path, cost := sc.penalizedShortestPath(start, goal, w, penalty)
+		if path == nil {
+			if want[goal] != CostUnreachable {
+				t.Fatalf("no path, reference reaches the goal at %d", want[goal])
+			}
+			return
+		}
+		if path[0] != start || path[len(path)-1] != goal {
+			t.Fatalf("path runs %d→%d, want %d→%d", path[0], path[len(path)-1], start, goal)
+		}
+		var penalized int32
+		trueCost := 0
+		for i := 1; i < len(path); i++ {
+			if !legal(path[i-1], path[i]) {
+				t.Fatalf("step %d→%d is not legal", path[i-1], path[i])
+			}
+			penalized += int32(stepCost(path[i-1], path[i], w)) + penalty[path[i]]
+			trueCost += stepCost(path[i-1], path[i], w)
+		}
+		if penalized != want[goal] || cost != trueCost {
+			t.Fatalf("penalized cost %d (reference %d), reported cost %d for a path costing %d", penalized, want[goal], cost, trueCost)
+		}
+	})
 }
