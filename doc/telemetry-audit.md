@@ -1,519 +1,344 @@
-# Telemetry audit
+# Telemetry reference
 
-This audit covers every system constructed by `manifest.BuildSystems`, `MetaSystem`, and telemetry owned by `internal/engine` and `internal/event`. The table describes the final wiring; the defect table preserves the Phase 1 findings from the pre-fix tree.
+This reference covers the status-registry telemetry of every system `manifest.BuildSystems` constructs, `MetaSystem` (`manifest.ContextSystems`), the session layer (`internal/snapshot`, `internal/converge` and the content service), and the telemetry `internal/engine` and `internal/event` own. For each owner it records the keys, where they are registered, written and reset, and what reads them by name.
 
-Every metric is consumed generically by the status snapshot, telemetry overlay, pinning UI, and `vif-log` registry traversal. “Generic only” means no code or configuration reads the key by name outside its producer. Player patterns expand across roster slots 0–15 and retain the legacy slot-zero mirror; inactive slots keep their frozen schema but are omitted from live views and output until active. Stable keys project into semantic groups of at most 15 fields for overlay and log presentation.
+## The registry
 
-## Phase 1 system audit
+`status.Registry` holds four maps of atomic cells: `Bools`, `Ints`, `Floats` and `Strings`. An owner registers a key by calling `Get` before `Scheduler.Prepare` calls `Registry.Freeze`. After the freeze, a `Get` of a new key returns a detached cell that no snapshot sees and counts it in `stat.late`. Constructors register; `Init` and the reset paths only store.
+
+**Consumers.**
+
+- **Generic.** The status snapshot, the telemetry overlay and pinned cards, the flight recorder, `vif-log`'s registry traversal, and the probe's `/metrics`. The probe exports ints, floats and bools as `vif_<key>` gauges and omits strings. "Generic only" in the tables below means nothing outside the producer reads the key by name.
+- **Named.**
+  - The status bar (`NewStatusBarRenderer`).
+  - The `:session` line (`App.sessionSummaryLocked`) and the `:content` command.
+  - The journal anchor and capture header, which carry `content.*`.
+  - Scenario FSM guards and actions (`StatusIntCompare`, `StatusBoolEquals`, `StatusToVar`).
+  - Bot graph conditions (`StatusInt`, `StatusBool`), which read the bot's own registry.
+- **Comparison surfaces** (`internal/snapshot/surface.go`).
+  - `SharedKey` selects the keys two instances must agree on. It denies the player-domain, transport, aggregate and per-instance prefixes and keys, every `.buf_*_hwm` and every `.protected_player_rejects`. It re-admits `spatial.indexed_shared`.
+  - `SimDeniedKey` selects the keys a replay does not compare: the pacing, render and telemetry-about-telemetry keys in `deniedSimKey`, plus the `snapshot.`, `prof.` and `proc.` prefixes.
+
+**Slots.** A per-slot metric (`status.NewPlayerInt` or `NewPlayerBool`) registers `player.<slot>.<suffix>` for slots 0–15 (`parameter.MaxPlayers` is 16). It can also register a bare key that mirrors the slot this instance drives, set by `Registry.SetLocalSlot`. With no local slot, the bare key mirrors nothing and reads zero.
+
+- Bare keys are instance-local and never a shared FSM guard input (D-20).
+- The mirrored bare keys are `energy.current`, `heat.{current,overheat,at_max,ember}`, `shield.active`, `boost.{active,remaining}`, `typing.max_streak`, `weapon.<kind>`, `weapon.orbs` and `player.{x,y}`.
+
+**Cards.** `status.SplitKey` projects keys into cards of at most `OverlayCardMaxEntries` (15) fields, and `TestTelemetryGroupsFitOverlayCards` enforces that limit. Visibility gates apply to views, snapshots and recorder windows:
+
+- A slot's cards (`player.<slot>`, `player.<slot>.weapon`) are kept only while `player.<slot>.entity` is non-zero.
+- The `combat.absorbed.*`, `combat.damage.*`, `prof*` and `proc` cards are kept only while a member is non-zero.
+
+## Registration and reset rules
+
+- **Freeze timing.** Every key registers before the freeze:
+  - Schema-derived `fsm.<region>.*` keys bind in `Scheduler.initLoadedScenario`, because region names exist only once a scenario loads. That is still before `Prepare`.
+  - The position store binds right after `newGameContext` creates the registry, because `World` builds the store before the registry exists.
+  - `NewRegistry` reserves `stat.late` and the recorder's `rec.*`, so a recorder enabled after the freeze is still visible.
+  - `Freeze` reserves `stat.groups` and `stat.metrics`.
+  - `TestTelemetryRegistryStaysFrozenAcrossTicksAndReset` asserts that nothing registers late.
+- **Shared helpers.** `internal/system/telemetry.go` holds the helpers that produce the repeated key families listed under [Key families](#key-families): `newLifecycleTelemetry`, `newBounceTelemetry`, `newRejectionTelemetry` and `newBufferTelemetry`.
+- **Fresh allocations.** `hitComposite.members` in the explosion path is a fresh slice inside a queued payload, not a reusable buffer. Reusing it would corrupt queued events, so it has no high-water metric.
+- **Throttled publication.** Expensive formatting runs on a cadence rather than every tick:
+  - The event-type strings and spatial gauges publish every `parameter.StatSnapshotTicks` (200).
+  - `eye.ga.typefit` publishes on the same cadence.
+  - The `adapt.*` gauges and strings publish every `parameter.AdaptTelemetryInterval` (10) ticks.
+- **Reset test.** `TestTelemetrySessionCountersReset` seeds every int, bool and string, runs a game reset, and requires zero, the reset baseline, or a listed bootstrap value. Floats are not checked.
+- **Keys that survive a reset.**
+  - Prefixes: `content.`, `rec.`, `stat.`, `snapshot.`, `prof.`, `proc.`, `network.term*` and `network.handoff*`.
+  - Session keys: `network.{authority,migrations,fork,migrating,evicted,listening,chain,host_lost}`.
+  - Operator and context keys: `context.{frame,screen_w,screen_h,mode}` and `engine.{fps,speed_pct,speed,breakpoint}`.
+- **Metric-free systems.** Systems with no counters and no reusable allocation-shaped buffers register nothing.
+
+## System telemetry
+
+Rows follow `manifest.BuildSystems` order, then `MetaSystem`. `Init` runs from the constructor and again when the system handles `EventGameResetRequest`.
 
 | Owner | Metric keys | Registered | Written | Reset | Named consumer |
 |---|---|---|---|---|---|
-| Cursor | `player.{count,local,cursor_rejects,spawn_failures}`, `player.<slot>.{entity,control}` | `NewCursorSystem` | Spawn/despawn handlers and roster publication | `Init` | Generic only |
+| Network | `network.*` connection, barrier, relay, parity, link and pacing keys; `context.map_locked` | `NewNetworkSystem` | See [Session telemetry](#session-telemetry) | `Init` | See [Session telemetry](#session-telemetry) |
+| Cursor | `player.{count,local,cursor_rejects,spawn_failures}`, `player.<slot>.{entity,control}` | `NewCursorSystem` | Spawn failures, move rejections, and `publishRoster` on every roster change | `Init` | Slot cards gate on `player.<slot>.entity` |
 | Ping | `ping.{cursor_rejects,disabled_rejects}` | `NewPingSystem` | Request rejection paths | `Init` | Generic only |
-| Transient | `effects.{grayout_active,strobe_active}`, `transient.{explosion_merged,explosion_evicted}` | `NewTransientSystem` | Effect handlers/update, and the explosion table's merge and eviction paths | `Init` | Generic only |
+| Transient | `effects.{grayout_active,strobe_active}`, `transient.{explosion_merged,explosion_evicted}` | `NewTransientSystem` | Effect handlers and update; the explosion table's merge and eviction paths | `Init` | Generic only |
 | Camera | None | — | — | — | — |
-| Energy | `energy.{current,damage_multiplier,penalty_count,reward_count,spend_count,passive_count,passive_drained,crossed_zero_count,penalty_rejects,cursor_rejects,missing_energy_rejects,disabled_rejects}`, `player.<slot>.energy.current` | `NewEnergySystem` | Resolved energy handlers/update | `Init` / player reset | `energy.damage_multiplier` is world state `MetaSystem` writes and carries (D-19); energy and the status bar read it |
-| Shield | `shield.{active,shield_hit,cursor_rejects,disabled_rejects}`, `player.<slot>.shield.active` | `NewShieldSystem` | Resolved shield handlers/update | `Init` / player reset | Generic only |
-| Heat | `heat.{current,overheat,at_max,ember,cursor_rejects,disabled_rejects}`, `player.<slot>.heat.*` | `NewHeatSystem` | Resolved heat handlers/update | `Init` / player reset | Generic only |
-| Boost | `boost.{active,remaining,truncated,cursor_rejects,disabled_rejects}`, `player.<slot>.boost.*` | `NewBoostSystem` | Resolved boost handlers/update | `Init` / player reset | Generic only |
-| Weapon | `weapon.{<kind>,orbs,orbs_reaped,tracers,tracer_{wall_collisions,boundary_steps,grid_steps},buf_{tracers,glyphs}_hwm}`, `weapon.{main,<kind>}_fired` (card `weapon.fired`), `weapon.{kind,cursor,disabled}_rejects` (card `weapon.rejects`), `player.<slot>.weapon.*`; kinds are `WeaponSpecs` names | `NewWeaponSystem` | Resolved fire/weapon handlers and the tracer sweep | `Init` / player reset | Generic only |
-| Typing | `typing.{correct,errors,max_streak,buf_delete_hwm,cursor_rejects,disabled_rejects}`, `player.<slot>.typing.max_streak` | `NewTypingSystem` | Resolved typing/delete paths | `Init` / player reset | Generic only |
+| Energy | `energy.{current,damage_multiplier,penalty_count,reward_count,spend_count,passive_count,passive_drained,crossed_zero_count,penalty_rejects,cursor_rejects,missing_energy_rejects,disabled_rejects}`, `player.<slot>.energy.current` | `NewEnergySystem` | Resolved energy deltas and passive drain. `damage_multiplier` is written only by `MetaSystem` | `Init`; a despawned cursor's slot is zeroed | `damage_multiplier` scales penalties in `EnergySystem` and is shown by the status bar |
+| Shield | `shield.{active,shield_hit,cursor_rejects,disabled_rejects}`, `player.<slot>.shield.active` | `NewShieldSystem` | Resolved shield handlers and update | `Init` / player reset | Generic only |
+| Heat | `heat.{current,overheat,at_max,ember,cursor_rejects,disabled_rejects}`, `player.<slot>.heat.{current,overheat,at_max,ember}` | `NewHeatSystem` | Resolved heat handlers and update | `Init` / player reset | Generic only |
+| Boost | `boost.{active,remaining,truncated,cursor_rejects,disabled_rejects}`, `player.<slot>.boost.{active,remaining}` | `NewBoostSystem` | Resolved boost handlers and update | `Init` / player reset | Generic only |
+| Weapon | `weapon.{<kind>,orbs,orbs_reaped,tracers,tracer_{wall_collisions,boundary_steps,grid_steps},buf_{tracers,glyphs}_hwm}`; `weapon.{main,<kind>}_fired` (card `weapon.fired`); `weapon.{kind,cursor,disabled}_rejects` (card `weapon.rejects`); `player.<slot>.weapon.{<kind>,orbs}`. Kinds are the `WeaponSpecs` names: `disruptor`, `emitter`, `gun`, `launcher`, `rod`, `turret` | `NewWeaponSystem` | Resolved fire and grant handlers, the orb reap, and the tracer sweep | `Init` / player reset | Generic only |
+| Typing | `typing.{correct,errors,max_streak,buf_delete_hwm,cursor_rejects,disabled_rejects}`, `player.<slot>.typing.max_streak` | `NewTypingSystem` | Resolved typing and delete paths | `Init` / player reset | Generic only |
 | Composite | None | — | — | — | — |
-| Wall | `wall.{enabled,count,push_events,buf_pending_push_checks_hwm}` | `NewWallSystem` | Wall handlers/update and buffer observation | `Init` | Generic only |
-| Tower | `tower.{active,count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures}` | `NewTowerSystem` | Spawn/cancel/death handlers and update | `Init` | Generic only |
-| Gateway | `gateway.{active,count}` | `NewGatewaySystem` | Spawn/despawn handlers/update | `Init` | Generic only |
-| Loot | `loot.{drops,active,collects,routes,route_recomputes,unreachable,wall_collisions,boundary_reflections,physics_steps,buf_pity_hwm,buf_routes_hwm}` | `NewLootSystem` | Drop/collect handlers, owner-route maintenance, bounce integration, buffer observation | `Init` | Generic only |
-| Glyph | `glyph.{enabled,next_spawn_ms,orphan_glyph,density,rate_mult,buf_placement_hwm}` | `NewGlyphSystem` | Spawn/update and snapshot publication | `Init` | Generic only |
-| Nugget | `nugget.{active,spawned,collected,jumps,spawn_failures,cursor_rejects,disabled_rejects}` | `NewNuggetSystem` | Resolved nugget handlers/update | `Init` | Generic only |
-| Particle | `{dust,decay,blossom}.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}`, `dust.{created,destroyed,centers_dropped,buf_*_hwm}`, `particle.{cursor_rejects,disabled_rejects}` | `NewParticleSystem` | Behavior-selected spawn/apply/update and detonation paths | `Init` | Separate behavior series preserve the operator surface |
-| Gold | `gold.{active,header_entity,timer,spawn_failures,cursor_rejects,disabled_rejects}` | `NewGoldSystem` | Resolved sequence handlers/update | `Init` | Generic only |
+| Wall | `wall.{enabled,count,push_events,buf_pending_push_checks_hwm}` | `NewWallSystem` | Wall handlers, update and buffer observation | `Init` | Generic only |
+| Tower | `tower.{active,count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures}` | `NewTowerSystem` | Spawn, cancel and death handlers; update | `Init` | Generic only |
+| Gateway | `gateway.{active,count}` | `NewGatewaySystem` | `Update` | `Init` | Generic only |
+| Loot | `loot.{drops,active,collects,routes,route_recomputes,unreachable,wall_collisions,boundary_reflections,physics_steps,buf_pity_hwm,buf_routes_hwm}` | `NewLootSystem` | Drop and collect handlers; per-tick `active` and `unreachable`; owner-route maintenance; bounce integration | `Init` | Generic only |
+| Glyph | `glyph.{enabled,next_spawn_ms,orphan_glyph,buf_placement_hwm}`; floats `glyph.{density,rate_mult}` | `NewGlyphSystem` | Spawn pacing in update and the enable command | `Init` | Generic only. The spawner reads `environment.drift_*` |
+| Nugget | `nugget.{active,spawned,collected,jumps,spawn_failures,cursor_rejects,disabled_rejects}` | `NewNuggetSystem` | Resolved nugget handlers and update | `Init` | Generic only |
+| Particle | `{dust,decay,blossom}.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}`; `dust.{created,destroyed,centers_dropped,buf_{centers,flash,impulses,transform}_hwm}`; `particle.{cursor_rejects,disabled_rejects}` | `NewParticleSystem` | Behavior-selected spawn, apply, update and detonation paths | `Init` | Generic only |
+| Gold | `gold.{active,header_entity,timer,spawn_failures,cursor_rejects,disabled_rejects}` | `NewGoldSystem` | Resolved sequence handlers and update | `Init` | Generic only |
 | Materialize | None | — | — | — | — |
-| Fuse | `fuse.{spawn_failures,disabled_rejects,buf_pending_hwm}` | `NewFuseSystem` | Fuse request/update failure paths and buffer observation | `Init` | Generic only |
+| Fuse | `fuse.{spawn_failures,disabled_rejects,buf_pending_hwm}` | `NewFuseSystem` | Fuse request and update failure paths; buffer observation | `Init` | Generic only |
 | Spirit | None | — | — | — | — |
 | Lightning | None | — | — | — | — |
-| Missile | `missile.{count,spawned,impacts,expired,wall_collisions,boundary_hits,grid_steps,disabled_rejects}` | `NewMissileSystem` | Resolved spawn/impact/expiry and swept update | `Init` | Generic only |
-| Navigation | `nav.{entities,recomputes,roi_cells,buf_groups_hwm}` | `NewNavigationSystem` | Recompute/update paths and group observation | `Init` | Generic only |
-| Soft collision | `soft_collision.{collisions,immune_rejects,buf_{drains,swarms,quasars,storms,pylons}_hwm}` | `NewSoftCollisionSystem` | Resolved collision pass and buffer observation | `Init` | Generic only |
-| Combat | `combat.{active,count,live_*,hits_direct,hits_area,knockbacks,stuns,burn_ticks,damage_dealt,immune_rejects,unprofiled,*_rejects,effect_*,chain_*,damage_{attacker,defender,family}_*,absorbed_{attacker,defender}_*}` | `NewCombatSystem` | Resolved direct/area/over-time attacks and status ticks | `Init` | Generic only |
-| Drain | `drain.{count,pending,paused,collisions,suicides,spawned,fusions,despawned,spawn_failures,killed_by_*,wall_collisions,boundary_reflections,grid_steps,protected_rejects,buf_*_hwm}` | `NewDrainSystem` | Spawn/lifecycle/collision/movement paths | `Init` | Generic only |
-| Quasar | `quasar.{active,count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewQuasarSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
-| Swarm | `swarm.{active,count,player_kills,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewSwarmSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
-| Storm | `storm.{active,circle_count,*_active_frames,nudge_count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects,buf_*_hwm}` | `NewStormSystem` | Spawn/lifecycle/3-D physics/update paths | `Init` | Generic only |
-| Pylon | `pylon.{active,count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures}` | `NewPylonSystem` | Spawn/cancel/death handlers and update | `Init` | Generic only |
-| Snake | `snake.{active,count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewSnakeSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
-| Eye | `eye.{count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewEyeSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
+| Missile | `missile.{count,spawned,impacts,expired,wall_collisions,boundary_hits,grid_steps,disabled_rejects}` | `NewMissileSystem` | Resolved spawn, impact and expiry; swept update | `Init` | Generic only |
+| Navigation | `nav.{entities,recomputes,roi_cells,buf_groups_hwm}` | `NewNavigationSystem` | Wall-change ROI accumulation, per-tick flow-field rebuild count, and group observation | `Init` | Generic only |
+| Soft collision | `soft_collision.{collisions,immune_rejects,buf_{drains,swarms,quasars,storms,pylons}_hwm}` | `NewSoftCollisionSystem` | Resolved collision pass; buffer observation | `Init` | Generic only |
+| Combat | `combat.{active,count,hits_direct,hits_area,knockbacks,stuns,burn_ticks,damage_dealt,immune_rejects,unprofiled}`; `combat.{attacker,container,cursor,disabled,kinetic_immune,relation,stun_immune,target}_rejects`; `combat.effect_{kinetic,stun,burn,energy_drain}`; `combat.chain_{followups,depth_max,depth_total}`; `combat.live_<type>`; `combat.{damage,absorbed}_{attacker,defender}_<type>`; `combat.damage_family_<family>` | `NewCombatSystem` | Resolved direct, area and over-time attacks; status ticks | `Init` | Generic only |
+| Drain | `drain.{count,pending,paused,collisions,suicides,spawned,fusions,despawned,spawn_failures,killed_by_player,killed_by_lifecycle,wall_collisions,boundary_reflections,grid_steps,protected_rejects,buf_{drain_cache,pending_spawns}_hwm}` | `NewDrainSystem` | Spawn, lifecycle, collision and movement paths | `Init` | Generic only |
+| Quasar | `quasar.{active,count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewQuasarSystem` | Spawn, lifecycle and bounce paths | `Init` | `quasar.active` is a shipped FSM guard (the `LeftMap` and `Slain` macros) |
+| Swarm | `swarm.{active,count,player_kills,transition_stalls,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewSwarmSystem` | Spawn, lifecycle, state-transition and bounce paths | `Init` | Generic only |
+| Storm | `storm.{active,circle_count,red_active_frames,green_active_frames,blue_active_frames,nudge_count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects,buf_{ellipse_offsets,member_excludes,pending_blue_spawns}_hwm}` | `NewStormSystem` | Spawn, lifecycle, 3-D physics and update paths | `Init` | `storm.active` is a shipped FSM guard (`storm.toml`, the `LeftMap` and `Slain` macros) |
+| Kraken | None | — | — | — | — |
+| Pylon | `pylon.{active,count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures}` | `NewPylonSystem` | Spawn, cancel and death handlers; update | `Init` | Generic only |
+| Snake | `snake.{active,count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewSnakeSystem` | Spawn, lifecycle and bounce paths | `Init` | Generic only |
+| Eye | `eye.{count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewEyeSystem` | Spawn, lifecycle and bounce paths | `Init` | Generic only |
 | Mount | `mount.{count,fired,host_rejects,disabled_rejects}` | `NewMountSystem` | Attach requests and the per-mount fire pass | `Init` | Generic only |
-| Bullet | `bullet.{count,spawned,hits,wall_collisions,boundary_hits,grid_steps,disabled_rejects}` | `NewBulletSystem` | Spawn, swept update, and cursor or target hits | `Init` | Generic only |
+| Bullet | `bullet.{count,spawned,hits,wall_collisions,boundary_hits,grid_steps,disabled_rejects}` | `NewBulletSystem` | Spawn, swept update, and cursor, shield or target hits | `Init` | Generic only |
 | Flash | None | — | — | — | — |
 | Fadeout | None | — | — | — | — |
 | Marker | None | — | — | — | — |
-| Explosion | `explosion.{triggered,converted,merged,cursor_rejects,disabled_rejects,buf_*_hwm}` | `NewExplosionSystem` | Resolved explosion paths and reusable collections | `Init` | Generic only |
-| Motion marker | `motion_marker.buf_{base_markers,base_positions,colored_markers}_hwm` | `NewMotionMarkerSystem` | Reusable marker-buffer observation | `Init` | Generic only |
+| Button | None | — | — | — | — |
+| Explosion | `explosion.{triggered,cursor_rejects,disabled_rejects,buf_composites_hwm}` | `NewExplosionSystem` | Explosion request handler and the composite pass | `Init` | Generic only |
+| Motion marker | `motion_marker.buf_{base_markers,base_positions,colored_markers}_hwm` | `NewMotionMarkerSystem` | Marker-buffer observation | `Init` | Generic only |
 | Splash | None | — | — | — | — |
-| Environment | `environment.{wind_active,drift_active,drift_direction}` | `NewEnvironmentSystem` | Update gauges | `Init` | `drift_*` steer the glyph spawner's entry band; remainder generic |
-| Death | `death.{killed,one_*,tagged,batch_*,protected_rejects,zero_rejects,missing_*,payload_rejects,disabled_rejects,buf_destroy_hwm}` | `NewDeathSystem` | Resolved single/tagged/batch death paths | `Init` | Generic only |
+| Environment | `environment.{wind_active,drift_active}`; float `environment.drift_direction` | `NewEnvironmentSystem` | Update gauges | `Init` | `drift_*` steer the glyph spawner's entry band |
+| Death | `death.{killed,tagged,batch_{count,entities_total,size_max,silent,flash,blossom,decay,fadeout,dust,other},protected_rejects,zero_rejects,missing_entities,missing_effect_data,payload_rejects,disabled_rejects,buf_destroy_hwm}` | `NewDeathSystem` | The `EventDeathBatch` handler and the `DeathComponent` sweep in `Update` | `Init` | Generic only |
 | Timer | None | — | — | — | — |
-| Adaptation | `adapt.{graphs,populations,g1,g2,g3,g4,buf_*_hwm}` | `NewAdaptationSystem` | Adaptation processing; expensive strings on snapshot cadence | `Init` | Generic only |
-| Genetic | `eye.ga.{generation,best,avg,pending,outcomes,tracked,typefit}`, `eye.buf_ga_*_hwm` | `NewGeneticSystem` | GA processing; formatted type fitness on snapshot cadence | `Init` | Generic only |
-| Audio | `audio.{backend,silent,played,dropped,mask,effect_muted,music_muted,rej_*}` | `NewAudioSystem` | Session deltas from backend/update | `Init` with backend baselines | `audio.mask` is read by the status bar; remainder generic |
-| Music | `music.{group,tier,bpm,rhythm,melody,fill}` | `NewMusicSystem` | `MusicSystem.Update` from the sequencer readout | Next update | Telemetry HUD card; generic |
-| Music | None | — | — | — | — |
-| Meta | `context.{map_w,map_h,camera_x,camera_y}`, `player.<slot>.{x,y}`, `kills.{<species>,total,uncredited}`, `session.{any_defeated,all_defeated}` | `NewMetaSystem` | Debug/map publication, lifecycle fold and resolved species-kill handler | `Init` | Kill keys and `session.any_defeated` are shipped FSM guards; remainder generic |
-| Network | `network.{crossings_sent,crossings_received,state_applied,frames_dropped,barrier_deferred,barrier_applied_local,barrier_applied_peer,barrier_late,barrier_ran_without_peer,barrier_peer_lag_ticks,barrier_peer_artifacts,barrier_peer_applied,peers,connected,state,map_latched,artifacts_pre_install,artifacts_refused,corrections_received,join_lag_ticks,lag_ticks,stale,digest_mismatches,drift_part,drift_tick}`, `context.map_locked` | `NewNetworkSystem` | Transport polling, playout admission, cursor sync, connection state and the running staleness measurement | `Init` | Status bar reads peer/state/latch, `stale`/`lag_ticks` and the `link_rtt_ms`/`link_loss_pct` pair; remainder generic |
-| Snapshot transfer | `snapshot.{bytes,capture_us,encode_us,stage_us,commit_us,install_tick,catch_up_ticks,keyframes,corrections_sent,correction_bytes_sent,corrections_applied,corrections_refused,corrections_superseded,corrections_held,correction_entries,correction_entities,correction_cells,correction_tick}` | `snapshot.NewTelemetry` during App construction | A capture read, a correction published, or a correction installed | **Not reset** — a join is not undone by `:new`, and these describe a transfer rather than a game | Generic only; the whole prefix is excluded from the compared shared surface *and* from a replay comparison: a host publishes what a read cost, a guest what an install cost and how far its own prediction had drifted, and under weakened D-11 the last of those is deliberately not something two instances agree on |
-| Selective correction | `snapshot.{manifests_sent,manifests_received,manifest_bytes_sent,manifest_bytes_received,corrections_hash_only,sections_compared,pages_compared,hash_us,selective_bytes,shards_requested,shards_sent,shards_received,shards_refused,shards_applied,shard_bytes_sent,shard_bytes_received,request_bytes,pages_repaired,entities_repaired,cells_repaired,proof_failures,baseline_refusals,keyframe_fallbacks,replay_suffix_records,replay_records,replay_overflow,replay_skipped,replay_suffix_unavailable}` | `snapshot.NewTelemetry` during App construction | Every index published or answered, every repair served or applied, every correction that replayed a local suffix | **Not reset** — like the rest of the prefix, these describe transfers rather than a game | Generic only; excluded from the compared surface with the whole `snapshot.` prefix. They are split across the `snapshot.index`, `snapshot.repair` and `snapshot.replay` cards so each stays inside `OverlayCardMaxEntries` |
-| Correction cadence | `snapshot.cadence_{ticks,keyframe_interval,keyframe_period_ticks,keyframe_age_ticks,uplink_bps,budget_bps,floor_bps,links,constrained_links,constrained,floor_breached}` | `snapshot.NewTelemetry` during App construction | Every publication decision, and every correction a guest applies | **Not reset** — the operating point describes this instance's link, which a `:new` does not change | Generic only; excluded from the shared surface with the rest of the prefix. Network timing may pace a transport and may not enter shared simulation state (D-24), and `TestLinkMeasurementNeverEntersTheComparedSurface` is the assertion from the other direction |
-| Authority term | `network.{term,authority,migrations,term_refused,term_stale,handoff_bytes,fork,migrating,host_lost}` | `newAuthority` during App construction, and `snapshot.NewTelemetry` for the two byte/stale counters | Every offer, handoff, refusal and succession this instance takes part in | **Not reset** — a `:new` restarts the game inside a session, not the session | Status bar reads `fork`, `migrating` and `host_lost`; `:session` reads the term and holder |
-| Reachability | `network.{chain,rejoin_attempts,listening}` | `newReach` during App construction | The succession loop, once per drive: the chain size, the retry pass count, and whether this instance bound a port | **Not reset** — a reset does not unbind a socket or forget where the other participants are | `:session` reports the chain size as "confirmed reachable"; the status bar reads the retry count |
-| Relay retention | `snapshot.relay_{retained,served,unserved,bytes_sent,bytes_received}` | `snapshot.NewTelemetry` during App construction | Every repair a relaying participant serves, refuses or forwards from its own retention | **Not reset** — like the rest of the prefix, these describe transfers rather than a game | Generic only; the bytes are priced against the relaying participant's own link, never the authority's |
-| Link measurement | `network.link_{rtt_ms,rtt_us,jitter_ms,bps,loss_pct,saturated}` | `NewNetworkSystem` | Every tick, copied from the transport's own per-peer estimate for the worst link | Cleared with the rest of `NetworkSystem`'s counters on a session reset | Generic only; the `network.` prefix is already the exact complement of a peer's counters. Nothing here is derived by a system — the estimate is the transport's and this is a copy, which is what keeps a round trip out of the simulation |
+| Adaptation | `adapt.{graphs,populations,buf_*_hwm}`; strings `adapt.{g1,g2,g3,g4}` | `NewAdaptationSystem` | Every `AdaptTelemetryInterval` ticks | `Init` | Generic only |
+| Genetic | `eye.ga.{generation,best,avg,pending,outcomes,tracked}`; string `eye.ga.typefit`; `eye.buf_ga_{pending_deaths,track_keys,tracking,typefit}_hwm` | `NewGeneticSystem` | GA processing; `typefit` every `StatSnapshotTicks` | `Init` | Generic only |
+| Audio | `audio.{backend,silent,played,dropped,mask,effect_muted,music_muted}`, `audio.rej_{bad_id,muted,not_running,paused,queue_full,silent}` | `NewAudioSystem` | `Update`, from backend totals; `publishAudioMask` (audio and music systems) for the mask keys | `Init` takes backend baselines; counters publish deltas from them | The status bar and config menu read `audio.mask`; the config menu also reads `audio.silent` |
+| Music | Strings `music.{group,tier,rhythm,melody,fill}`; `music.bpm` | `NewMusicSystem` | Update, stop and mute, from the sequencer readout | `Init` clears them | Generic only |
+| Meta | `context.{map_w,map_h,camera_x,camera_y}`, `player.<slot>.{x,y}`, `kills.{drain,eye,kraken,pylon,quasar,snake,storm,swarm,tower,total,uncredited}`, `session.{any_defeated,all_defeated}`, `energy.damage_multiplier` | `NewMetaSystem` | `Update` (map, camera, placement), kill and defeat handlers, the cycle damage-multiplier events, and `LoadShared` | `Init`; kill tallies, the defeat latches and the multiplier are carried by its D-19 record | `session.any_defeated` and `kills.{drain,quasar,storm,kraken}` are shipped FSM guards and `StatusToVar` sources; the status bar reads `energy.damage_multiplier` |
 
-## Engine and event audit
+Audio-free builds (`vif_headless`, `vif_noaudio`, `wasm`) use `audio_none.go`. There, Audio registers only `audio.mask`, held at -1, and Music registers nothing.
+
+## Session telemetry
+
+These owners describe this instance's place in a session rather than the game, so most of them survive a game reset.
 
 | Owner | Metric keys | Registered | Written | Reset | Named consumer |
 |---|---|---|---|---|---|
-| Game context | `engine.fps`, `context.{frame,screen_w,screen_h,mode}` | `NewGameContextWithClock` | Presentation/context owners | Context lifecycle | Status bar reads `engine.fps`; snapshot allow-list reads context keys |
-| Time control | `engine.{speed_pct,speed,step,breakpoint,paused}` | `NewTimeControl` | Time-control mutation under its owner lock | Time-control reset/persistent operator state | Status bar and app snapshot read these keys |
-| Scheduler / world | `engine.{ticks,apm,music_apm,tick_slips}`, `entity.{count,created_total,destroyed_total}`, `time.game_elapsed_ms`, `event.{backoffs,dispatches,dead,dropped,queue_len,queue_max,invalid,settle_*}`, `fsm.*` | `NewScheduler`; schema-derived region keys bind before `Prepare` | Dispatch/tick tail while the world mutex is held | `resetTelemetry` during reset | Status bar reads tick/APM/FSM; region/debug metrics are generic |
-| Event queue | Per-type `[EventTypeCount]atomic.Int64` dispatch/dead arrays; surfaced as `event.{dispatch_by_type,dead_by_type}` | Fixed arrays in `NewEventQueue`; strings in scheduler constructor | Scheduler records after routing; strings publish every `StatSnapshotTicks` | `ResetTelemetry` after stale-event drain | Generic only |
-| Profiler | `prof.{<phase>_us,tick_max_us,frame_max_us}`, `prof.top.<rank>`, `proc.{cpu_user_pct,cpu_sys_pct,rss_peak_mb,mem_mb,heap_live_mb,alloc_mb_s,allocs_s,gc_s,goroutines,io_read_s,io_write_s,csw_s,preempt_s}` | `prof.New` in `newGameContext` | Once per `ProfWindow` of running game while `:d prof` is on; zeroed when it stops | **Not reset** — they measure the process | Generic only; activity-gated, so the cards hide while off, and excluded from both comparison surfaces |
-| Position/spatial grid | `spatial.{cell_saturations,cell_overflows,occupied_cells,indexed_entities,unindexed,max_cell_occupancy,cell_occupancy_hwm,positions_hwm,position_batch_hwm}` | `BindTelemetry` immediately after registry construction | Position mutations under the world mutex; expensive gauges on snapshot cadence | `World.Clear` | Generic only |
+| Connection | `network.{peers,connected,state,map_latched}`, `context.map_locked` | `NewNetworkSystem` (`map_locked` by the game context) | `publishConnectionTelemetry` every poll | `Init`; `state` rests at `off` | Status bar: `state`. `:session`: `peers`, `map_latched` |
+| Barrier and crossings | `network.{crossings_sent,crossings_received,state_applied,frames_dropped,corrections_received,join_lag_ticks,lag_ticks,stale}`, `network.barrier_{deferred,applied_local,applied_peer,late,delay_ticks,ran_without_peer,peer_lag_ticks,peer_artifacts,peer_applied}`, `network.artifacts_{refused,refused_tick,schedule_full,pre_install,authority_superseded,restored}`, `network.commit_{late,void,refused_raw}` | `NewNetworkSystem` | Transport polling, admission, playout, commit and the per-tick lag measurement | `Init` | Status bar: `stale`, `lag_ticks` |
+| Relay and transport | `network.{relay_forwarded,relay_duplicates,transport_lost_in,transport_lost_out}` | `NewNetworkSystem` | Flood relay of artifacts, corrections and departures; `publishTransportLoss` | `Init` | Generic only |
+| Parity | `network.{digest_mismatches,drift_part,drift_tick}` | `NewNetworkSystem` | Runtime digest comparison | `Init` | Generic only |
+| Link measurement | `network.link_{rtt_ms,jitter_ms,bps,loss_pct,peer,saturated}` | `NewNetworkSystem` | `publishLinkMeasurement` every tick, copied from the transport's per-peer estimate | `Init` | Status bar: `link_rtt_ms`, `link_loss_pct`. `:session`: all but `link_saturated` |
+| Pacing | `network.pace_{late_ticks,trim_permille,steps}` | `NewNetworkSystem` | Guest tick pacing against authority epochs | `Init` | Generic only |
+| Authority | `network.{term,authority,migrations,term_refused,fork,migrating,host_lost,evicted}`; `network.{term_stale,handoff_bytes}` | `newAuthority` through `converge.New` during App construction; `snapshot.NewTelemetry` registers `term_stale` and `handoff_bytes`. `NewNetworkSystem` also binds `host_lost` | Offers, handoffs, refusals, succession and eviction. `NetworkSystem.reportDisconnect` raises `host_lost` | Not reset: a game reset does not undo a handoff, a fork or a lost authority | Status bar: `host_lost`, `migrating`. `:session`: `host_lost` and `Authority.Summary`. `network.fork` is read by the seat and script hosts (`forkCell`) |
+| Reachability | `network.{chain,rejoin_attempts,listening}` | `newReach` through `converge.New` | `Reach.drive` between ticks (`chain`, `rejoin_attempts`); `AdoptListener` (`listening`) | `chain` and `listening` are not reset; `drive` zeroes `rejoin_attempts` whenever no succession is contested | `:session`: `chain`, `listening`. Status bar: `rejoin_attempts` in the `Migrating` badge |
+| Capture and correction | `snapshot.{bytes,capture_us,encode_us,stage_us,commit_us,install_tick,catch_up_ticks,keyframes,projected_ticks}`, `snapshot.corrections_{sent,applied,refused,superseded,held,jumped}`, `snapshot.correction_{bytes_sent,entries,entities,cells,tick}` | `snapshot.NewTelemetry` during App construction | Capture reads, publications and installs | Not reset: a game reset does not undo a join | `NetworkSystem` reads `correction_entities` into its link report |
+| Selective correction | `snapshot.{manifests_sent,manifests_received,manifests_off_tick,manifest_bytes_sent,manifest_bytes_received,corrections_hash_only,sections_compared,pages_compared,hash_us,selective_bytes,request_bytes}`, `snapshot.shards_{requested,sent,received,refused,applied}`, `snapshot.shard_bytes_{sent,received}`, `snapshot.{pages,entities,cells}_repaired`, `snapshot.{proof_failures,baseline_refusals,keyframe_fallbacks}` | `snapshot.NewTelemetry` | Every index published or answered and every repair served or applied | Not reset | Generic only; split across the `snapshot.index` and `snapshot.repair` cards |
+| Relay retention | `snapshot.relay_{retained,served,unserved,bytes_sent,bytes_received}` | `snapshot.NewTelemetry` | Repairs a relaying participant serves or refuses from its own retention | Not reset | Generic only |
+| Replay suffix | `snapshot.replay_{suffix_records,records,overflow,skipped,suffix_unavailable}` | `snapshot.NewTelemetry` | Every correction that replays, or declines to replay, the local suffix | Not reset | Generic only |
+| Correction cadence | `snapshot.cadence_{ticks,keyframe_interval,keyframe_period_ticks,keyframe_age_ticks,uplink_bps,budget_bps,floor_bps,links,constrained_links,constrained,floor_breached}` | `snapshot.NewTelemetry` | Every publication decision, and every correction a guest applies | Not reset | Status bar: `cadence_ticks`, `cadence_constrained`, `cadence_floor_breached`. `:session`: the operating point |
 
-## Phase 1 defects and dispositions
+The whole `snapshot.` prefix is outside both comparison surfaces. A host publishes what a read cost, and a guest publishes what an install cost and how far its prediction drifted. Under weakened D-11, two instances do not agree on those values. The `network.` prefix is outside the shared surface because a peer's counters are the complement of this instance's. Link timing is copied from the transport and never derived by a system, so a round trip stays out of the simulation (D-24). `TestAHealthyLinkKeepsTheNominalPointAndHidesItsTiming` asserts that no cadence or link key is compared.
 
-| Finding | Keys | Pre-fix evidence | Disposition |
-|---|---|---|---|
-| Late registration | `context.{map_w,map_h,camera_x,camera_y}`, `player.{x,y}`, `kills.*` | `MetaSystem.Init` called `Get` / `NewPlayerInt` and was re-entered on game reset | Moved every registration to `NewMetaSystem`; `Init` now only stores/resets |
-| Dead metrics | `energy.{penalty_count,reward_count}`, `environment.wind_active`, `nav.roi_cells` | Registered but never written after construction/reset | Wired to resolved deltas, the live wind gauge, and clamped recompute ROI area |
-| Suspected but not dead | `combat.{hits_direct,hits_area,knockbacks,stuns}` | All four had writes, but direct/area counted accepted profiles before state resolution | Retained keys and moved hit increments to resolved damage/effect/chain paths |
-| Unreset metrics | `drain.{spawned,fusions,despawned,spawn_failures}`, all `eye.ga.*`, `nav.{entities,recomputes,roi_cells}`, `storm.nudge_count`, audio backend totals, scheduler session totals | Written values survived `EventGameResetRequest` | All session counters/strings now reset in `Init` or the scheduler reset path; audio publishes deltas from reset baselines |
-| Misleading gauge | `drain.count` | Used `Drain.CountEntities()`, including entities with death already queued; pause forced a false zero | Publishes only live, non-dying drains and preserves the live gauge while paused |
-| Misleading counters | `dust.created`, `swarm.player_kills`, `combat.hits_*`, audio totals | Dust counted dark entries it skipped; swarm counted every HP death as a player kill; combat counted pre-resolution; audio exposed backend-lifetime totals | Counts now follow actual creation, resolved cursor credit, state-changing attacks, and session deltas |
-| Consumerless by key | Most diagnostic counters, including all newly added coverage | No exact-key lookup outside the producer | Deliberately retained: the telemetry overlay, pinned cards, snapshots, recorder, and `vif-log` enumerate the registry generically |
-| Removed/renamed keys | `death.one_packed`, `death.one_fallback` | Baseline registry had 488 keys; the Phase 1 result had 752 | Death API unification retired the two obsolete one-entity path counters; the current registry has 750 keys, a net 262 additions |
+## Engine, event and process telemetry
 
-## Deliberately unchanged or excluded
+| Owner | Metric keys | Registered | Written | Reset | Named consumer |
+|---|---|---|---|---|---|
+| Game context | `engine.fps`, `context.{frame,screen_w,screen_h,map_locked,mode}` | `newGameContext` | The render loop (`fps`, `frame`), resize, mode change, and the map lock (game context and `NetworkSystem`) | A game reset does not clear them; the owners rewrite them | Status bar: `engine.fps` |
+| Time control | `engine.{speed_pct,speed,step,breakpoint,paused}` | `NewTimeControl` | Pause, rate, step and breakpoint changes under the time-control lock | `speed_pct`, `speed` and `breakpoint` persist across a game reset | Status bar: `speed`, `step`, `breakpoint` |
+| Scheduler / world | `engine.{ticks,apm,music_apm,tick_slips}`, `entity.{count,created_total,destroyed_total}`, `time.game_elapsed_ms`, `event.{backoffs,dispatches,dead,dropped,invalid,queue_len,queue_max,settle_exhausted}`, `event.settle_{pre,post,loop,reset,input,settle,wire,close}`, `fsm.{state,elapsed,max_duration,state_index,state_count}` | `NewScheduler` | Dispatch and the tick tail, under the world lock. A capture install stores `engine.ticks` | `Scheduler.resetTelemetry` from `executeReset` | Status bar: `engine.ticks`, `engine.music_apm`, `fsm.*` |
+| FSM regions | `fsm.<region>.{state,index,elapsed,max_duration,paused}` for each region of the loaded scenario | `bindFSMTelemetry` from `initLoadedScenario` | Transitions and the tick tail | `resetTelemetry` | `:break region` resolves its region name against the `fsm.<region>.state` keys |
+| Event queue | Per-type `[EventTypeCount]atomic.Int64` dispatch and dead-letter arrays, surfaced as strings `event.{dispatch_by_type,dead_by_type}` | Arrays in `NewEventQueue`; strings in `NewScheduler` | The scheduler records after routing; the strings publish every `StatSnapshotTicks` | `Queue.ResetTelemetry` after the stale-event drain | Generic only |
+| Prediction ledger | `snapshot.predictions_{pending,confirmed,dropped}` | `World.BindPredictionTelemetry` in `newGameContext` | `recordPrediction`, `settle` and `confirm` | `ResetPredictedDeaths` (from `NetworkSystem.Init`) zeroes `pending`; the other two are not reset | Generic only |
+| Position / spatial grid | `spatial.{cell_saturations,cell_overflows,player_budget_rejects,occupied_cells,indexed_entities,indexed_shared,unindexed,max_cell_occupancy,cell_occupancy_hwm,positions_hwm,position_batch_hwm}` | `Positions.BindTelemetry` in `newGameContext` | Position mutations under the world lock. Gauges publish every `StatSnapshotTicks` and after a capture install | `World.Clear` | `spatial.indexed_shared` is the one compared `spatial.` key |
+| Profiler | `prof.{<phase>_us,tick_max_us,frame_max_us}`, strings `prof.top.<NN>`, `proc.{cpu_user_pct,cpu_sys_pct,rss_peak_mb,mem_mb,heap_live_mb,alloc_mb_s,gc_s,allocs_s,goroutines,io_read_s,io_write_s,csw_s,preempt_s}` | `prof.New` in `newGameContext` | Once per `ProfWindow` of running game while `:d prof` is on; zeroed when it stops | Not reset | `:d prof` pins the `prof` and `prof.top` cards |
+| Corpus | `content.{source,files,blocks,lines,rejected,served,file}` | `ContentService.PublishStatus` during App construction | The fingerprint once at publication; `served` and `file` on every `NextBlock` | Not reset | The journal anchor and replay verification, the capture header, and `:content` |
+| Registry | `stat.{late,groups,metrics}` | `NewRegistry` (`late`) and `Freeze` (`groups`, `metrics`) | Snapshots (`late`) and `Freeze` | Not reset | Excluded from replay comparison |
+| Flight recorder | `rec.{depth,flushes,records,skipped}` | `NewRegistry` | The recorder | Not reset | Excluded from replay comparison |
 
-- Schema-derived `fsm.<region>.*` keys still bind during FSM loading because region names do not exist when the scheduler constructor runs. Binding completes before `Scheduler.Prepare` freezes the registry, and the freeze regression test proves that no key is added afterward.
-- The position store binds its metrics immediately after `NewGameContextWithClock` creates the registry; `World` necessarily constructs the store before that registry exists. It is frozen before the first tick and never registers during reset.
-- Legacy slot-zero mirrors such as `energy.current`, `heat.current`, and `player.x` remain intact for existing status-bar/config consumers.
-- Registry-owned `content.*`, `rec.*`, and `stat.*` metrics and persistent operator/context settings are excluded from session-zero assertions. Reset tests seed and verify every session-owned int, bool, and string; live gauges are allowed to rebuild to their deterministic reset values.
-- Systems with no existing counters and no reusable allocation-shaped buffers remain metric-free.
-- `hitComposite.members` in the explosion path remains a fresh queued-payload slice, not a reusable system buffer; reusing it would corrupt queued events.
-- Event-type arrays remain internal fixed atomics and are formatted only at `parameter.StatSnapshotTicks`, avoiding per-event formatting/allocation.
+## Key families
 
-## Added key catalogue
+These patterns account for most keys. The [key notes](#key-notes) cover individual keys whose meaning a pattern does not convey.
 
-Every current addition is listed below. The combat energy-drain key follows
-the effect's current name; death API unification removed the two obsolete
-`death.one_*` path counters documented above.
+| Pattern | Producer | Meaning |
+|---|---|---|
+| `<d>.{spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures}` | `newLifecycleTelemetry`: drain, eye, pylon, quasar, snake, storm, swarm, tower | Instances created, removed by cancellation or integrity cleanup, and killed. A kill counts as `killed_by_player` when its killer resolves to a roster cursor (`ResolveCursor`), otherwise as `killed_by_lifecycle`. `spawn_failures` counts requests that produced no entity |
+| `<d>.{wall_collisions,boundary_reflections,physics_steps}` | `newBounceTelemetry`: eye, loot, quasar, snake, storm, swarm | Resolved wall contacts, reflections at the simulation bounds, and physics integration substeps |
+| `<d>.{wall_collisions,boundary_hits,grid_steps}` | Swept movers: blossom, bullet, decay, dust, missile (drain uses `boundary_reflections`) | Wall contacts, swept paths ended at the bounds, and grid-traversal steps |
+| `<d>.cursor_rejects`, `<d>.disabled_rejects` | `newRejectionTelemetry` and per-system cells | Requests dropped because no roster cursor resolved, or because the system was disabled. `combat.cursor_rejects` is the exception: see [key notes](#key-notes) |
+| `<d>.protected_rejects`, `<d>.protected_player_rejects` | Death, drain, the particle behaviors, and the shared species (eye, quasar, snake, storm, swarm) | Interactions refused by a protection mask. The shared sweep systems count player-domain victims in `protected_player_rejects` so that `protected_rejects` stays comparable |
+| `<d>.buf_<name>_hwm` | `newBufferTelemetry` | High-water live length of one reusable buffer or state collection. Outside the shared surface |
+| `combat.{damage,absorbed}_{attacker,defender}_<type>` | Combat | Damage points dealt, or rejected by immunity, by attacker or defender type. Types are `combatEntityNames`: cursor, drain, quasar, swarm, storm, pylon, snake_head, snake_body, eye, tower, kraken |
+| `combat.damage_family_<family>` | Combat | Damage points per attack family (`combatAttackNames`): tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn |
+| `combat.live_<type>` | Combat | Live Combat-store population per type. It decomposes `combat.count`, so a type still counted while its species reports inactive is a lifecycle leak |
+| `weapon.<kind>`, `weapon.<kind>_fired`, `player.<slot>.weapon.<kind>` | Weapon | Whether a cursor holds the kind, and discharges per kind. `weapon.main_fired` counts main-fire actions past the cooldown, each of which fires the loadout |
+| `storm.<color>_active_frames` | Storm | Attack ticks of a circle of that colour (red, green, blue) |
+| `event.settle_<label>` | Scheduler | Non-empty settle passes, attributed by source label |
+| `player.<slot>.<suffix>` | Per-slot metrics | See [The registry](#the-registry) |
 
-| Key | Description |
+## Key notes
+
+### Player, session and progression
+
+| Key | Meaning |
 |---|---|
-| `adapt.buf_cdf_hwm` (int) | High-water live length of the reusable cdf buffer/state collection. |
-| `adapt.buf_counts_hwm` (int) | High-water live length of the reusable counts buffer/state collection. |
-| `adapt.buf_graph_keys_hwm` (int) | High-water live length of the reusable graph keys buffer/state collection. |
-| `adapt.buf_outcome_graphs_hwm` (int) | High-water live length of the reusable outcome graphs buffer/state collection. |
-| `adapt.buf_outcome_samples_hwm` (int) | High-water live length of the reusable outcome samples buffer/state collection. |
-| `adapt.buf_pending_deaths_hwm` (int) | High-water live length of the reusable pending deaths buffer/state collection. |
-| `adapt.buf_sub_keys_hwm` (int) | High-water live length of the reusable sub keys buffer/state collection. |
-| `adapt.buf_sum_fitness_hwm` (int) | High-water live length of the reusable sum fitness buffer/state collection. |
-| `adapt.buf_track_keys_hwm` (int) | High-water live length of the reusable track keys buffer/state collection. |
-| `adapt.buf_tracking_hwm` (int) | High-water live length of the reusable tracking buffer/state collection. |
-| `adapt.buf_weight_scratch_hwm` (int) | High-water live length of the reusable weight scratch buffer/state collection. |
-| `blossom.boundary_hits` (int) | blossom swept paths terminated at simulation bounds. |
-| `blossom.buf_hit_entities_hwm` (int) | High-water live length of the reusable hit entities buffer/state collection. |
-| `blossom.buf_processed_cells_hwm` (int) | High-water live length of the reusable processed cells buffer/state collection. |
-| `blossom.grid_steps` (int) | Grid-traversal steps executed by swept blossom movers. |
-| `blossom.protected_rejects` (int) | blossom interactions rejected by the applicable protection mask. |
-| `blossom.wall_collisions` (int) | Resolved blossom contacts with blocking wall cells. |
-| `boost.cursor_rejects` (int) | Requests rejected because boost could not resolve a roster cursor. |
-| `boost.disabled_rejects` (int) | Action requests dropped while the boost system was disabled. |
-| `bullet.boundary_hits` (int) | bullet swept paths terminated at simulation bounds. |
-| `bullet.count` (int) | Live bullets this instance holds. |
-| `bullet.disabled_rejects` (int) | Action requests dropped while the bullet system was disabled. |
-| `bullet.grid_steps` (int) | Grid-traversal steps executed by swept bullet movers. |
-| `bullet.hits` (int) | Bullets stopped by a cursor or shield they struck, or a species they hit. |
-| `bullet.spawned` (int) | Bullets created, by a mount or a cursor's turret. |
-| `bullet.wall_collisions` (int) | Resolved bullet contacts with blocking wall cells. |
-| `combat.absorbed_attacker_cursor` (int) | Damage points rejected by immunity from attacks attributed to cursor. |
-| `combat.absorbed_attacker_drain` (int) | Damage points rejected by immunity from attacks attributed to drain. |
-| `combat.absorbed_attacker_eye` (int) | Damage points rejected by immunity from attacks attributed to eye. |
-| `combat.absorbed_attacker_pylon` (int) | Damage points rejected by immunity from attacks attributed to pylon. |
-| `combat.absorbed_attacker_quasar` (int) | Damage points rejected by immunity from attacks attributed to quasar. |
-| `combat.absorbed_attacker_snake_body` (int) | Damage points rejected by immunity from attacks attributed to snake body. |
-| `combat.absorbed_attacker_snake_head` (int) | Damage points rejected by immunity from attacks attributed to snake head. |
-| `combat.absorbed_attacker_storm` (int) | Damage points rejected by immunity from attacks attributed to storm. |
-| `combat.absorbed_attacker_swarm` (int) | Damage points rejected by immunity from attacks attributed to swarm. |
-| `combat.absorbed_attacker_tower` (int) | Damage points rejected by immunity from attacks attributed to tower. |
-| `combat.absorbed_defender_cursor` (int) | Damage points rejected by immunity while cursor was the defender type. |
-| `combat.absorbed_defender_drain` (int) | Damage points rejected by immunity while drain was the defender type. |
-| `combat.absorbed_defender_eye` (int) | Damage points rejected by immunity while eye was the defender type. |
-| `combat.absorbed_defender_pylon` (int) | Damage points rejected by immunity while pylon was the defender type. |
-| `combat.absorbed_defender_quasar` (int) | Damage points rejected by immunity while quasar was the defender type. |
-| `combat.absorbed_defender_snake_body` (int) | Damage points rejected by immunity while snake body was the defender type. |
-| `combat.absorbed_defender_snake_head` (int) | Damage points rejected by immunity while snake head was the defender type. |
-| `combat.absorbed_defender_storm` (int) | Damage points rejected by immunity while storm was the defender type. |
-| `combat.absorbed_defender_swarm` (int) | Damage points rejected by immunity while swarm was the defender type. |
-| `combat.absorbed_defender_tower` (int) | Damage points rejected by immunity while tower was the defender type. |
-| `combat.attacker_rejects` (int) | Attack requests rejected because neither origin nor owner had an attributable combat type. |
-| `combat.chain_depth_max` (int) | Highest chain-attack depth emitted during the session. |
-| `combat.chain_depth_total` (int) | Sum of emitted chain depths, weighted by follow-up count. |
-| `combat.chain_followups` (int) | Number of direct follow-up attacks emitted by chain profiles. |
-| `combat.container_rejects` (int) | Attack requests rejected because the resolved composite was a non-damageable container. |
-| `combat.cursor_rejects` (int) | Requests rejected because combat could not resolve a roster cursor. |
-| `combat.damage_attacker_cursor` (int) | Damage points dealt by attackers attributed to cursor. |
-| `combat.damage_attacker_drain` (int) | Damage points dealt by attackers attributed to drain. |
-| `combat.damage_attacker_eye` (int) | Damage points dealt by attackers attributed to eye. |
-| `combat.damage_attacker_pylon` (int) | Damage points dealt by attackers attributed to pylon. |
-| `combat.damage_attacker_quasar` (int) | Damage points dealt by attackers attributed to quasar. |
-| `combat.damage_attacker_snake_body` (int) | Damage points dealt by attackers attributed to snake body. |
-| `combat.damage_attacker_snake_head` (int) | Damage points dealt by attackers attributed to snake head. |
-| `combat.damage_attacker_storm` (int) | Damage points dealt by attackers attributed to storm. |
-| `combat.damage_attacker_swarm` (int) | Damage points dealt by attackers attributed to swarm. |
-| `combat.damage_attacker_tower` (int) | Damage points dealt by attackers attributed to tower. |
-| `combat.damage_defender_cursor` (int) | Damage points dealt to defenders of type cursor. |
-| `combat.damage_defender_drain` (int) | Damage points dealt to defenders of type drain. |
-| `combat.damage_defender_eye` (int) | Damage points dealt to defenders of type eye. |
-| `combat.damage_defender_pylon` (int) | Damage points dealt to defenders of type pylon. |
-| `combat.damage_defender_quasar` (int) | Damage points dealt to defenders of type quasar. |
-| `combat.damage_defender_snake_body` (int) | Damage points dealt to defenders of type snake body. |
-| `combat.damage_defender_snake_head` (int) | Damage points dealt to defenders of type snake head. |
-| `combat.damage_defender_storm` (int) | Damage points dealt to defenders of type storm. |
-| `combat.damage_defender_swarm` (int) | Damage points dealt to defenders of type swarm. |
-| `combat.damage_defender_tower` (int) | Damage points dealt to defenders of type tower. |
-| `combat.damage_family_<family>` (int) | Damage points dealt by one attack family (tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn): how a weapon reads. |
-| `combat.disabled_rejects` (int) | Action requests dropped while the combat system was disabled. |
-| `combat.effect_kinetic` (int) | Kinetic effect applications that resolved to an impulse. |
-| `combat.effect_stun` (int) | Stun effect applications that changed target state. |
-| `combat.effect_burn` (int) | Burns left or refreshed on a target by a charged pulse's chain. |
-| `combat.burn_ticks` (int) | Burn ticks that dealt damage. |
-| `combat.effect_energy_drain` (int) | Energy-drain effect applications that emitted an energy reward. |
-| `combat.kinetic_immune_rejects` (int) | Kinetic effects rejected by kinetic immunity, enrage, or a dead target. |
-| `combat.live_<type>` (int) | Live population of the Combat store per entity type, one key per `combatEntityNames` entry. Decomposes `combat.count`: a type still counted while its species reports inactive is a lifecycle leak. |
-| `combat.relation_rejects` (int) | Direct-hit requests rejected because the hit entity was not a member of the target composite. |
-| `combat.stun_immune_rejects` (int) | Stun effects rejected by species/state immunity. |
-| `combat.target_rejects` (int) | Attack requests rejected because the target or required target member lacked combat state. |
-| `death.batch_blossom` (int) | Death requests routed to the particle effect with blossom behavior. |
-| `death.batch_count` (int) | Resolved unified `EventDeathBatch` payloads. |
-| `death.batch_decay` (int) | Death requests routed to the particle effect with decay behavior. |
-| `death.batch_dust` (int) | Death requests routed to the particle effect with dust behavior. |
-| `death.batch_entities_total` (int) | Total entity entries presented across resolved death requests. |
-| `death.batch_fadeout` (int) | Death requests routed through the fadeout-effect processor. |
-| `death.batch_flash` (int) | Death requests routed through the flash-effect processor. |
-| `death.batch_other` (int) | Death requests using an effect outside the optimized processors. |
-| `death.batch_silent` (int) | Death requests processed without an effect. |
-| `death.batch_size_max` (int) | Largest entity count observed in one death request. |
-| `death.buf_destroy_hwm` (int) | High-water live length of the reusable destroy buffer/state collection. |
-| `death.disabled_rejects` (int) | Death requests dropped while the death system was disabled. |
-| `death.missing_effect_data` (int) | Deaths whose requested effect lacked the required position/glyph/wall data. |
-| `death.missing_entities` (int) | Death entries that no longer existed when resolved. |
-| `death.payload_rejects` (int) | Death events rejected because their payload type was invalid. |
-| `death.protected_rejects` (int) | Death entries rejected by `ProtectFromDeath`. |
-| `death.tagged` (int) | Entities processed from the `DeathComponent` tick path. |
-| `death.zero_rejects` (int) | Zero entity identifiers rejected by the death pipeline. |
-| `decay.boundary_hits` (int) | decay swept paths terminated at simulation bounds. |
-| `decay.buf_hit_entities_hwm` (int) | High-water live length of the reusable hit entities buffer/state collection. |
-| `decay.buf_processed_cells_hwm` (int) | High-water live length of the reusable processed cells buffer/state collection. |
-| `decay.grid_steps` (int) | Grid-traversal steps executed by swept decay movers. |
-| `decay.protected_rejects` (int) | decay interactions rejected by the applicable protection mask. |
-| `decay.wall_collisions` (int) | Resolved decay contacts with blocking wall cells. |
-| `drain.boundary_reflections` (int) | Resolved drain reflections at simulation bounds. |
-| `drain.buf_drain_cache_hwm` (int) | High-water live length of the reusable drain cache buffer/state collection. |
-| `drain.buf_pending_spawns_hwm` (int) | High-water live length of the reusable pending spawns buffer/state collection. |
-| `drain.grid_steps` (int) | Grid-traversal steps executed by swept drain movers. |
-| `drain.killed_by_lifecycle` (int) | drain deaths with no resolved roster-cursor killer. |
-| `drain.killed_by_player` (int) | drain deaths credited to a resolved roster cursor. |
-| `drain.paused` (bool) | Whether a spawning hold applies to this instance's own cursor. A session-wide region holds every participant; a quasar holds only the cursor it was fused from. |
-| `drain.protected_rejects` (int) | drain interactions rejected by the applicable protection mask. |
-| `drain.wall_collisions` (int) | Resolved drain contacts with blocking wall cells. |
-| `dust.applied` (int) | Dust contacts that nudged a drain. |
-| `dust.boundary_hits` (int) | Resolved dust reflections at simulation bounds. |
-| `dust.buf_centers_hwm` (int) | High-water live length of the reusable centers buffer/state collection. |
-| `dust.buf_flash_hwm` (int) | High-water live length of the reusable flash buffer/state collection. |
-| `dust.buf_impulses_hwm` (int) | High-water live length of the reusable impulses buffer/state collection. |
-| `dust.buf_transform_hwm` (int) | High-water live length of the reusable transform buffer/state collection. |
-| `dust.centers_dropped` (int) | Dust burst centres discarded because the per-tick centre budget was already spent. |
-| `dust.destroyed` (int) | Dust consumed by a detonation; expired dust dies through the timer. |
-| `dust.grid_steps` (int) | Grid-traversal steps executed by swept dust movers. |
-| `dust.wall_collisions` (int) | Resolved dust contacts with blocking wall cells. |
-| `energy.cursor_rejects` (int) | Requests rejected because energy could not resolve a roster cursor. |
-| `energy.disabled_rejects` (int) | Action requests dropped while the energy system was disabled. |
-| `energy.missing_energy_rejects` (int) | Resolved cursor requests rejected because the cursor lacked an energy component. |
-| `energy.penalty_rejects` (int) | Energy penalties rejected by boost or ember protection. |
-| `event.invalid` (int) | Dispatched events whose type was outside the declared event-type range. |
-| `event.settle_close` (int) | Nonempty event settle passes attributed to source label `close`. |
-| `event.settle_exhausted` (int) | Settle operations that reached the pass cap with events still queued. |
-| `event.settle_input` (int) | Nonempty event settle passes attributed to source label `input`. |
-| `event.settle_loop` (int) | Nonempty event settle passes attributed to source label `loop`. |
-| `event.settle_post` (int) | Nonempty event settle passes attributed to source label `post`. |
-| `event.settle_pre` (int) | Nonempty event settle passes attributed to source label `pre`. |
-| `event.settle_reset` (int) | Nonempty event settle passes attributed to source label `reset`. |
-| `event.settle_settle` (int) | Nonempty event settle passes attributed to source label `settle`. |
-| `event.settle_wire` (int) | Nonempty event settle passes attributed to source label `wire`. |
-| `explosion.buf_centers_hwm` (int) | High-water live length of the reusable centers buffer/state collection. |
-| `explosion.buf_composite_index_hwm` (int) | High-water live length of the reusable composite index buffer/state collection. |
-| `explosion.buf_composites_hwm` (int) | High-water live length of the reusable composites buffer/state collection. |
-| `explosion.buf_drains_hwm` (int) | High-water live length of the reusable drains buffer/state collection. |
-| `explosion.buf_dust_entries_hwm` (int) | High-water live length of the reusable dust entries buffer/state collection. |
-| `explosion.buf_entities_hwm` (int) | High-water live length of the reusable entities buffer/state collection. |
-| `explosion.buf_seen_cells_hwm` (int) | High-water live length of the reusable seen cells buffer/state collection. |
-| `explosion.cursor_rejects` (int) | Requests rejected because explosion could not resolve a roster cursor. |
-| `explosion.disabled_rejects` (int) | Action requests dropped while the explosion system was disabled. |
-| `eye.boundary_reflections` (int) | Resolved eye reflections at simulation bounds. |
-| `eye.buf_ga_pending_deaths_hwm` (int) | High-water live length of the reusable ga pending deaths buffer/state collection. |
-| `eye.buf_ga_track_keys_hwm` (int) | High-water live length of the reusable ga track keys buffer/state collection. |
-| `eye.buf_ga_tracking_hwm` (int) | High-water live length of the reusable ga tracking buffer/state collection. |
-| `eye.buf_ga_typefit_hwm` (int) | High-water live length of the reusable ga typefit buffer/state collection. |
-| `eye.despawned` (int) | eye instances removed by cancellation or integrity cleanup. |
-| `eye.killed_by_lifecycle` (int) | eye deaths with no resolved roster-cursor killer. |
-| `eye.killed_by_player` (int) | eye deaths credited to a resolved roster cursor. |
-| `eye.physics_steps` (int) | Physics integration substeps executed for eye movers. |
-| `eye.protected_player_rejects` (int) | eye interactions rejected on player-domain victims. |
-| `eye.protected_rejects` (int) | eye interactions rejected by the applicable protection mask. |
-| `eye.spawn_failures` (int) | eye spawn requests that could not produce an entity. |
-| `eye.spawned` (int) | Successfully created eye lifecycle instances. |
-| `eye.wall_collisions` (int) | Resolved eye contacts with blocking wall cells. |
-| `fuse.buf_pending_hwm` (int) | High-water live length of the reusable pending buffer/state collection. |
-| `fuse.disabled_rejects` (int) | Action requests dropped while the fuse system was disabled. |
-| `fuse.spawn_failures` (int) | fuse spawn requests that could not produce an entity. |
-| `glyph.buf_placement_hwm` (int) | High-water live length of the reusable placement buffer/state collection. |
-| `gold.cursor_rejects` (int) | Requests rejected because gold could not resolve a roster cursor. |
-| `gold.disabled_rejects` (int) | Action requests dropped while the gold system was disabled. |
-| `gold.spawn_failures` (int) | gold spawn requests that could not produce an entity. |
-| `heat.cursor_rejects` (int) | Requests rejected because heat could not resolve a roster cursor. |
-| `heat.disabled_rejects` (int) | Action requests dropped while the heat system was disabled. |
-| `loot.boundary_reflections` (int) | Resolved loot reflections at simulation bounds. |
-| `loot.buf_pity_hwm` (int) | High-water live length of the reusable pity buffer/state collection. |
-| `loot.buf_routes_hwm` (int) | High-water count of owner flow fields held at once. |
-| `loot.routes` (int) | Owner flow fields currently held: one per cursor that has dropped something and still exists. |
-| `loot.route_recomputes` (int) | Owner flow fields rebuilt, cumulative. A drop in flight rebuilds its owner's field when that cursor moves past the dirty distance, or less once the settle interval passes, so this rises with player movement while loot is out and not otherwise. |
-| `loot.unreachable` (int) | Drops with no route home this tick: their owner is gone, or walls seal them off. They bleed to rest rather than press against what is in the way, so a sustained nonzero reading is geometry, not motion. |
-| `loot.physics_steps` (int) | Physics integration substeps executed for loot movers. |
-| `loot.wall_collisions` (int) | Resolved loot contacts with blocking wall cells. |
-| `missile.boundary_hits` (int) | missile swept paths terminated at simulation bounds. |
-| `missile.disabled_rejects` (int) | Action requests dropped while the missile system was disabled. |
-| `missile.grid_steps` (int) | Grid-traversal steps executed by swept missile movers. |
-| `missile.wall_collisions` (int) | Resolved missile contacts with blocking wall cells. |
-| `mount.count` (int) | Shared hosts carrying a mounted weapon. |
-| `mount.disabled_rejects` (int) | Action requests dropped while the mount system was disabled. |
-| `mount.fired` (int) | Mounted discharges; a ray counts once per warn-fire cycle. |
-| `mount.host_rejects` (int) | Mount requests naming no placed Shared host, a cursor, or an unknown weapon or lane. |
-| `motion_marker.buf_base_markers_hwm` (int) | High-water live length of the reusable base markers buffer/state collection. |
-| `motion_marker.buf_base_positions_hwm` (int) | High-water live length of the reusable base positions buffer/state collection. |
-| `motion_marker.buf_colored_markers_hwm` (int) | High-water live length of the reusable colored markers buffer/state collection. |
-| `nav.buf_groups_hwm` (int) | High-water live length of the reusable groups buffer/state collection. |
-| `nugget.cursor_rejects` (int) | Requests rejected because nugget could not resolve a roster cursor. |
-| `nugget.disabled_rejects` (int) | Action requests dropped while the nugget system was disabled. |
-| `nugget.spawn_failures` (int) | nugget spawn requests that could not produce an entity. |
-| `network.barrier_applied_local` (int) | Local artifacts admitted at their playout boundary, which is every crossing this participant produces. |
-| `network.barrier_applied_peer` (int) | Peer artifacts admitted at their playout boundary. |
-| `network.barrier_deferred` (int) | Local crossing artifacts the barrier took ownership of at production, to apply at the agreed tick. |
-| `network.barrier_late` (int) | Artifacts admitted after their scheduled apply tick. Under an authority this is an ordering decision rather than a divergence — the host applies what reaches it in the order it reaches it — but it is still what says a participant's link is not keeping the playout lead. |
-| `network.barrier_peer_applied` (bool) | Whether the most recent boundary admitted a peer artifact. |
-| `network.barrier_peer_artifacts` (int) | Peer artifacts admitted at the most recent boundary. |
-| `network.barrier_peer_lag_ticks` (int) | Closed-epoch lag beyond this instance's own lead, over live participants; zero on the authority, which commits a late crossing rather than waiting for it. |
-| `network.pace_late_ticks` (int) | How late the latest authority epoch of the pacing window landed on this guest, in ticks; negative is early. |
-| `network.pace_trim_permille` (int) | The trim pacing applies to this guest's tick interval; positive runs it slower. |
-| `network.pace_steps` (int) | Whole-tick steps pacing took, for an error too large to trim away. |
-| `network.commit_late` (int) | On the authority: guest crossings that reached it after their tick and were committed at its next one. |
-| `network.commit_void` (int) | The subset too late to apply, which only closed their source's fence. |
-| `network.commit_refused_raw` (int) | On a guest: another participant's raw epochs, passed on toward the authority and not applied. |
-| `network.evicted` (int) | Participants the slow policy dropped while this instance authored. |
-| `network.barrier_ran_without_peer` (int) | Tick boundaries reached before every required peer epoch marker; the authority requires none. |
-| `network.crossings_received` (int) | Peer crossing artifacts decoded and admitted. |
-| `network.crossings_sent` (int) | Local crossing artifacts sent in closed epochs. |
-| `network.corrections_received` (int) | Authoritative corrections reassembled from the wire. |
-| `network.artifacts_refused` (int) | Peer artifacts refused: an arrival or a departure produced by a participant that is not the coordinator, or a raw epoch under an identity whose own link it did not arrive on. |
-| `network.digest_mismatches` (int) | Runtime parity samples that disagreed. A gauge under weakened D-11, not a fault: a guest differs from the host between corrections by design. |
-| `network.drift_part` (string) | The surface the last disagreement was in: positions, kinetics, combat, context, status or snapshot. |
-| `network.drift_tick` (int) | The tick it was seen on. |
-| `network.lag_ticks` (int) | How far behind the newest tick any peer has been seen closing this instance stands, measured every tick. |
-| `network.stale` (bool) | Whether that lag exceeds the playout lead, past which this participant's own crossings reach the host after the ticks they name. Shown in the status bar as `desync t`, since the delay a player reads is the round trip beside it. |
-| `network.connected` (bool) | Whether at least one session peer is currently connected. |
-| `network.frames_dropped` (int) | Transport frames rejected by encoding, framing, ordering or identity checks. |
-| `network.map_latched` (bool) | Whether the host-authored D-14 map dimensions are latched. |
-| `network.peers` (int) | Current connected session-peer count. |
-| `network.state` (string) | Operator connection state: off, connecting, connected or disconnected. |
-| `network.state_applied` (int) | Owner-authored cursor snapshots applied to remote cursors. |
-| `network.artifacts_pre_install` (int) | Peer artifacts refused because the installed world already contains them — everything due at or before a capture's tick (D-22). Non-zero on a joiner is the ordering working, not a loss. |
-| `network.artifacts_refused_tick` (int) | Peer artifacts naming an apply tick past `parameter.NetworkApplyWindowTicks` ahead of this instance. The window admits a fresh join's whole catch-up, so a non-zero count is a sender whose ticks are not a participant's position. |
-| `network.artifacts_schedule_full` (int) | Peer artifacts turned away because the barrier schedule was at `NetworkScheduledMax` entries or `NetworkScheduledBytes`. Distinct from `frames_dropped`: these are frames this instance read and refused, which is a different diagnosis from one it could not read. |
-| `network.join_lag_ticks` (int) | Ticks this participant still stood behind the session after its join caught up. Zero is the ordinary result; anything above the playout lead refuses the join. |
-| `network.link_rtt_ms` (int) | The slowest link's smoothed round trip, in milliseconds — the unit a person reads and the unit `tc netem delay` speaks. A measured one is at least 1, so a loopback link reads as fast rather than unmeasured; zero means no link is measured, and every `link_*` cell clears when the last one goes. The status bar and `:session` read it. |
-| `network.link_jitter_ms` (int) | Its smoothed variation. A cadence is held at or above twice this: publishing faster than a link's own timing noise only bunches corrections. |
-| `network.link_bps` (int) | The delivery rate that link was measured at, in bytes per second. Read it with `link_saturated`: a rate measured while nothing was queued is a lower bound on capacity and not a measurement of it. |
-| `network.link_peer` (int) | The participant on the far end of that link. |
-| `network.link_loss_pct` (int) | The highest share of probes any link charged as lost, which need not be the slowest link's: sent while no echo had come back for `NetworkProbeLostAfter`. A slow echo is latency, not loss, and a probe is the only loss signal this protocol has. The badge names it past `StatusNetLossWarnPct`; `:session` always prints it. |
-| `network.link_saturated` (bool) | Whether the link, rather than the sender, was the limit while `link_bps` was measured — from a standing backlog or a round trip inflated past its own baseline. |
-| `network.term` (int) | The authority term this instance is acting under. Every authoritative artifact carries the term it was produced under; one from an older term is ignored and one from a term nobody handed this instance is refused. |
-| `network.authority` (int) | The participant currently authoring the shared world. Equal to this instance's own identity exactly while it is the authority. |
-| `network.migrations` (int) | Handoffs this instance has taken part in, as successor or as follower. |
-| `network.term_refused` (int) | Artifacts refused for naming a term nobody handed this instance: a fork that has been running separately, or an instance that skipped a succession. Distinct from `term_stale`, which is the ordinary in-flight case. |
-| `network.term_stale` (int) | Artifacts dropped as belonging to a generation the session has left. Non-zero across every handoff and not an error — the frames were in flight when the term changed. |
-| `network.handoff_bytes` (int) | What one succession cost this instance on the wire: reports, votes and the handoff record. |
-| `network.fork` (bool) | This instance could not reach the successor the roster designated and is continuing as an explicit local fork. Shown in the status bar. |
-| `network.migrating` (bool) | A succession is in progress. Dials are refused while it is set, because an offer written now would name a term that is about to end. Shown in the status bar as `Migrating`. |
-| `network.host_lost` (bool) | The authority went and this instance is continuing locally from the last authoritative state. Shown in the status bar and named in `:session`. |
-| `network.chain` (int) | Participants in the succession chain — the candidate list, which is also the address book a survivor dials down. `:session` reports it as "confirmed reachable"; a participant that declared no port is in the session and playing but is never elected. |
-| `network.rejoin_attempts` (int) | Passes this instance has made down that chain while the authority was gone and it had no link to whoever is taking over. Zero once a link is open. |
-| `network.listening` (bool) | Whether this instance bound a port peers can dial it back on. False on a leaf — a `-no-advertise` run, or one whose bind failed — which plays normally and is never elected. |
-| `ping.cursor_rejects` (int) | Requests rejected because ping could not resolve a roster cursor. |
-| `snapshot.bytes` (int) | Encoded length of the last shared-world capture this instance read. |
-| `snapshot.capture_us` (int) | What that read cost under the world lock — the one stall a join is allowed. |
-| `snapshot.encode_us` (int) | What encoding it cost outside the lock, which stalls nothing. |
-| `snapshot.stage_us` (int) | What resolving the last received capture into a staging world cost. |
-| `snapshot.commit_us` (int) | What writing it into the live world cost. |
-| `snapshot.install_tick` (int) | The tick the last installed capture described. |
-| `snapshot.catch_up_ticks` (int) | Ticks simulated after the install to close the gap the transfer opened. |
-| `snapshot.keyframes` (int) | Whole captures this host has published, as a join's gate or as a cadence keyframe. |
-| `snapshot.corrections_sent` (int) | Corrections broadcast, keyframes and deltas together. |
-| `snapshot.correction_bytes_sent` (int) | Their total encoded size, which is the uplink the cadence costs. |
-| `snapshot.corrections_applied` (int) | Corrections this instance installed. |
-| `snapshot.corrections_refused` (int) | Corrections that could not be resolved — a delta naming a keyframe this instance does not hold, or a body its header does not describe. Not an error: the next keyframe is self-sufficient. |
-| `snapshot.corrections_superseded` (int) | Corrections a fresher one overtook before they were applied, plus any the queue dropped. |
-| `snapshot.correction_entries` (int) | Component cells the last correction moved: how far this instance's prediction had drifted when the authority arrived. |
-| `snapshot.correction_entities` (int) | The distinct shared entities behind them. |
-| `snapshot.correction_cells` (int) | The largest distance a shared placement moved — the correction a player would actually see. |
-| `snapshot.correction_tick` (int) | The tick the last applied correction described. |
-| `snapshot.corrections_held` (int) | Corrections the playout buffer deferred because this instance had not reached the tick they describe. Nonzero says the exchange paths are delivering worlds of different ages, which is the ordinary case on a link with a round trip; a steady rise with no corrections applied beside it is the buffer stalling rather than smoothing. |
-| `snapshot.corrections_jumped` (int) | Corrections further ahead of the clock than the lead, adopted at their own tick rather than waited for: a join, or a clock this instance had fallen behind. |
-| `snapshot.projected_ticks` (int) | How far behind the clock the last correction was, which is the distance the staging world simulated it forward before the install; zero when it was level. |
-| `snapshot.cadence_ticks` (int) | The correction cadence in force, in ticks. The publication timeline's base — the fastest peer's plan — rather than any one peer's, which `:session` and `CadenceReport` name individually. |
-| `snapshot.cadence_keyframe_interval` (int) | Corrections between whole captures at that cadence. |
-| `snapshot.cadence_keyframe_period_ticks` (int) | Their product: the ticks the session leaves between whole authoritative worlds. This is the value the convergence floor bounds, and the first one to read — a value above `SnapshotFloorKeyframeTicks` is a defect in the controller rather than a slow link. |
-| `snapshot.cadence_keyframe_age_ticks` (int) | The *receiving* end of the same guarantee: how long this instance has actually gone without a whole authoritative world. The host promises one per floor window; this says whether one arrived. |
-| `snapshot.cadence_uplink_bps` (int) | What the schedule in force costs in bytes per second, summed over every link it plans: the uplink carries all of them. |
-| `snapshot.cadence_links` (int) | The links the schedule plans for. Zero, with every rate, once the last peer goes. |
-| `snapshot.cadence_constrained_links` (int) | How many of them the link moved worse than nominal. |
-| `snapshot.cadence_budget_bps` (int) | What the tightest link was measured to allow after the utilisation share. Zero means no link has been measured *while saturated*, which on a loopback or a fat link is the ordinary case. |
-| `snapshot.cadence_floor_bps` (int) | What the convergence floor costs on a world this size, summed over the links: the cheapest schedule that still delivers a whole world per floor window to each. A link whose own budget is below its share is the unrecoverable condition, logged with that link's figures. |
-| `snapshot.cadence_constrained` (bool) | The link moved the operating point *worse* than nominal. This is the design working: prediction carries more, the magnitude rises and stays bounded. Shown in the status bar as `LNK`. |
-| `snapshot.cadence_floor_breached` (bool) | No schedule the controller may choose delivers a whole world inside the guaranteed window, or none arrived. This is not the design working, and it is the one condition adaptation may not hide. Shown as `nP <round trip> slow!`. |
-| `snapshot.manifests_sent` (int) | Correction indexes this host published. |
-| `snapshot.manifests_received` (int) | Indexes this receiver was sent, including the ones an older one was superseded by before it could be answered. |
-| `snapshot.manifests_off_tick` (int) | Indexes compared against this receiver's present because no reading at the tick they describe was taken — neither held ahead of it nor promised by the index before. |
-| `snapshot.manifest_bytes_sent` (int) | What those indexes cost, per peer served. On a converged link this is the whole of a correction. |
-| `snapshot.manifest_bytes_received` (int) | The same figure from the receiving end. |
-| `snapshot.corrections_hash_only` (int) | Corrections that carried no state at all: the roots agreed and the receiver proved it with a hash. This is the number the whole selective path exists to raise. |
-| `snapshot.sections_compared` (int) | Section hashes examined while answering indexes. One per section per manifest, which is the cost of proving convergence. |
-| `snapshot.pages_compared` (int) | Page hashes computed while descending into the sections that disagreed. Zero on a converged correction — the descent stops at the root. |
-| `snapshot.hash_us` (int) | What indexing and comparing one capture cost *outside* the world lock. Read it beside `snapshot.capture_us`: if the second grows with the first, work has moved under the lock that should not have. |
-| `snapshot.selective_bytes` (int) | What a non-keyframe correction currently costs on the wire, measured rather than assumed, and the figure the cadence controller and admission are priced from. |
-| `snapshot.shards_requested` (int) | Pages a receiver put in play by sending its own hashes for them. |
-| `snapshot.shards_sent` (int) | Pages actually returned, which is the subset that differed. |
-| `snapshot.shards_received` (int) | Pages that arrived, including those in a repair later refused. |
-| `snapshot.shards_refused` (int) | Pages in a repair that was not applied — a baseline this instance has moved past, a failed proof, a request this host could not build. Not an error: every one of them ends at a keyframe. |
-| `snapshot.shards_applied` (int) | Pages spliced into a capture whose root then verified. |
-| `snapshot.shard_bytes_sent` (int) | What the repairs cost, per peer served. |
-| `snapshot.shard_bytes_received` (int) | The same from the receiving end, including refused repairs. |
-| `snapshot.request_bytes` (int) | What the answers to indexes cost — an acknowledgement when the roots agreed, a page vector when they did not. |
-| `snapshot.pages_repaired` (int) | Pages a verified repair replaced. |
-| `snapshot.entities_repaired` (int) | Distinct entities behind them, in the component-store sections. |
-| `snapshot.cells_repaired` (int) | Indexed cells the repairs carried, across every section. |
-| `snapshot.proof_failures` (int) | Repairs whose rows did not reproduce their declared page hash, or whose result did not reproduce the root the repair declared. Nothing was written in either case. |
-| `snapshot.baseline_refusals` (int) | Indexes or repairs describing a run, session or baseline this instance is not holding. |
-| `snapshot.keyframe_fallbacks` (int) | Times the exchange gave up and a whole world was sent or asked for: a retention miss, a failed proof, a repair wider than the capture it was repairing toward, or a floor the receiver could not meet. |
-| `snapshot.relay_retained` (int) | Authoritative records this instance is currently holding for a neighbour to ask about. A relay may answer only from these: an index enters the ring only once the capture under it is provably the authority's. |
-| `snapshot.relay_served` (int) | Repairs this instance answered for a participant behind it, from that retention rather than from a world it authored. |
-| `snapshot.relay_unserved` (int) | Requests it had to turn down, because it does not hold the tick the request names. The receiver degrades to the next whole authoritative world rather than waiting. |
-| `snapshot.relay_bytes_sent` (int) | What those relayed answers cost, priced against the relaying participant's own link and never the authority's. |
-| `snapshot.relay_bytes_received` (int) | The same figure from the receiving end. |
-| `snapshot.replay_suffix_records` (int) | Crossings this instance is currently retaining for replay. |
-| `snapshot.replay_records` (int) | Crossings re-applied in a projection, cumulative. Each one is an action this participant took that the capture did not contain. |
-| `snapshot.replay_overflow` (int) | Retained crossings dropped by the tick, count or byte bound. |
-| `snapshot.replay_skipped` (int) | Corrections that installed the authority alone because the suffix was incomplete. A partial replay is a guess, so there is no partial answer. |
-| `snapshot.replay_suffix_unavailable` (bool) | Whether the suffix was unavailable at the last correction. |
-| `ping.disabled_rejects` (int) | Action requests dropped while the ping system was disabled. |
-| `player.cursor_rejects` (int) | Requests rejected because player could not resolve a roster cursor. |
-| `player.spawn_failures` (int) | player spawn requests that could not produce an entity. |
-| `pylon.despawned` (int) | pylon instances removed by cancellation or integrity cleanup. |
-| `pylon.killed_by_lifecycle` (int) | pylon deaths with no resolved roster-cursor killer. |
-| `pylon.killed_by_player` (int) | pylon deaths credited to a resolved roster cursor. |
-| `pylon.spawn_failures` (int) | pylon spawn requests that could not produce an entity. |
-| `pylon.spawned` (int) | Successfully created pylon lifecycle instances. |
-| `quasar.boundary_reflections` (int) | Resolved quasar reflections at simulation bounds. |
-| `quasar.despawned` (int) | quasar instances removed by cancellation or integrity cleanup. |
-| `quasar.killed_by_lifecycle` (int) | quasar deaths with no resolved roster-cursor killer. |
-| `quasar.killed_by_player` (int) | quasar deaths credited to a resolved roster cursor. |
-| `quasar.physics_steps` (int) | Physics integration substeps executed for quasar movers. |
-| `quasar.protected_player_rejects` (int) | quasar interactions rejected on player-domain victims. |
-| `quasar.protected_rejects` (int) | quasar interactions rejected by the applicable protection mask. |
-| `quasar.spawn_failures` (int) | quasar spawn requests that could not produce an entity. |
-| `quasar.spawned` (int) | Successfully created quasar lifecycle instances. |
-| `quasar.wall_collisions` (int) | Resolved quasar contacts with blocking wall cells. |
-| `shield.cursor_rejects` (int) | Requests rejected because shield could not resolve a roster cursor. |
-| `shield.disabled_rejects` (int) | Action requests dropped while the shield system was disabled. |
-| `session.any_defeated` (bool) | At least one currently rostered cursor has crossed its terminal heat/energy state; shipped game-over guard. |
-| `session.all_defeated` (bool) | Every currently rostered cursor has crossed its terminal heat/energy state. |
-| `snake.boundary_reflections` (int) | Resolved snake reflections at simulation bounds. |
-| `snake.despawned` (int) | snake instances removed by cancellation or integrity cleanup. |
-| `snake.killed_by_lifecycle` (int) | snake deaths with no resolved roster-cursor killer. |
-| `snake.killed_by_player` (int) | snake deaths credited to a resolved roster cursor. |
-| `snake.physics_steps` (int) | Physics integration substeps executed for snake movers. |
-| `snake.protected_player_rejects` (int) | snake interactions rejected on player-domain victims. |
-| `snake.protected_rejects` (int) | snake interactions rejected by the applicable protection mask. |
-| `snake.spawn_failures` (int) | snake spawn requests that could not produce an entity. |
-| `snake.spawned` (int) | Successfully created snake lifecycle instances. |
-| `snake.wall_collisions` (int) | Resolved snake contacts with blocking wall cells. |
-| `soft_collision.buf_drains_hwm` (int) | High-water live length of the reusable drains buffer/state collection. |
-| `soft_collision.buf_pylons_hwm` (int) | High-water live length of the reusable pylons buffer/state collection. |
-| `soft_collision.buf_quasars_hwm` (int) | High-water live length of the reusable quasars buffer/state collection. |
-| `soft_collision.buf_storms_hwm` (int) | High-water live length of the reusable storms buffer/state collection. |
-| `soft_collision.buf_swarms_hwm` (int) | High-water live length of the reusable swarms buffer/state collection. |
-| `soft_collision.collisions` (int) | Soft-collision pairs that resolved to separation impulses. |
-| `soft_collision.immune_rejects` (int) | Soft-collision pairs skipped because either entity was collision-immune. |
-| `spatial.cell_occupancy_hwm` (int) | Highest successful entity occupancy observed in any spatial cell. |
-| `spatial.cell_overflows` (int) | Spatial insertions dropped because a cell already held 31 entities. |
-| `spatial.cell_saturations` (int) | Transitions where a cell first reached the 31-entity capacity. |
-| `spatial.indexed_shared` (int) | The shared half of that gauge. It is the one `spatial.` key in the compared surface: D-11 requires two instances to agree on the shared partition, while the whole-store counts sum both domains. |
-| `spatial.indexed_entities` (int) | Snapshot-cadence gauge of entities currently represented in spatial cells. |
-| `spatial.max_cell_occupancy` (int) | Snapshot-cadence gauge of the fullest current spatial cell. |
-| `spatial.occupied_cells` (int) | Snapshot-cadence gauge of nonempty spatial cells. |
-| `spatial.player_budget_rejects` (int) | Player-domain insertions refused because the cell's per-domain budget was already spent. A shared entity is never refused for a player one. |
-| `spatial.position_batch_hwm` (int) | Largest pending position batch committed during the session. |
-| `spatial.positions_hwm` (int) | Highest live length of the dense position store. |
-| `spatial.unindexed` (int) | Snapshot-cadence gauge of positioned entities the grid holds no cell for: outside the map after a crop, or dropped by a full cell. Nothing renders them and no grid query reaches them. |
-| `storm.boundary_reflections` (int) | Resolved storm reflections at simulation bounds. |
-| `storm.buf_ellipse_offsets_hwm` (int) | High-water live length of the reusable ellipse offsets buffer/state collection. |
-| `storm.buf_member_excludes_hwm` (int) | High-water live length of the reusable member excludes buffer/state collection. |
-| `storm.buf_pending_blue_spawns_hwm` (int) | High-water live length of the reusable pending blue spawns buffer/state collection. |
-| `storm.despawned` (int) | storm instances removed by cancellation or integrity cleanup. |
-| `storm.killed_by_lifecycle` (int) | storm deaths with no resolved roster-cursor killer. |
-| `storm.killed_by_player` (int) | storm deaths credited to a resolved roster cursor. |
-| `storm.physics_steps` (int) | Physics integration substeps executed for storm movers. |
-| `storm.protected_player_rejects` (int) | storm interactions rejected on player-domain victims. |
-| `storm.protected_rejects` (int) | storm interactions rejected by the applicable protection mask. |
-| `storm.spawn_failures` (int) | storm spawn requests that could not produce an entity. |
-| `storm.spawned` (int) | Successfully created storm lifecycle instances. |
-| `storm.wall_collisions` (int) | Resolved storm contacts with blocking wall cells. |
-| `swarm.boundary_reflections` (int) | Resolved swarm reflections at simulation bounds. |
-| `swarm.despawned` (int) | swarm instances removed by cancellation or integrity cleanup. |
-| `swarm.killed_by_lifecycle` (int) | swarm deaths with no resolved roster-cursor killer. |
-| `swarm.killed_by_player` (int) | swarm deaths credited to a resolved roster cursor. |
-| `swarm.physics_steps` (int) | Physics integration substeps executed for swarm movers. |
-| `swarm.protected_player_rejects` (int) | swarm interactions rejected on player-domain victims. |
-| `swarm.protected_rejects` (int) | swarm interactions rejected by the applicable protection mask. |
-| `swarm.spawn_failures` (int) | swarm spawn requests that could not produce an entity. |
-| `swarm.transition_stalls` (int) | Swarm state transitions that could not proceed on the tick they were due. |
-| `swarm.spawned` (int) | Successfully created swarm lifecycle instances. |
-| `swarm.wall_collisions` (int) | Resolved swarm contacts with blocking wall cells. |
-| `tower.despawned` (int) | tower instances removed by cancellation or integrity cleanup. |
-| `tower.killed_by_lifecycle` (int) | tower deaths with no resolved roster-cursor killer. |
-| `tower.killed_by_player` (int) | tower deaths credited to a resolved roster cursor. |
-| `tower.spawn_failures` (int) | tower spawn requests that could not produce an entity. |
-| `tower.spawned` (int) | Successfully created tower lifecycle instances. |
-| `typing.buf_delete_hwm` (int) | High-water live length of the reusable delete buffer/state collection. |
-| `typing.cursor_rejects` (int) | Requests rejected because typing could not resolve a roster cursor. |
-| `typing.disabled_rejects` (int) | Action requests dropped while the typing system was disabled. |
-| `wall.buf_pending_push_checks_hwm` (int) | High-water live length of the reusable pending push checks buffer/state collection. |
-| `weapon.orbs_reaped` (int) | Orbs the `Orb` store held that no loadout justified — a duplicate, one owned by a cursor this instance does not simulate, or one whose charges are gone. Zero is the ordinary reading; a rising count is an orb lifecycle the store-derived index disagrees with. |
-| `weapon.cursor_rejects` (int) | Requests rejected because weapon could not resolve a roster cursor. |
-| `weapon.kind_rejects` (int) | Grants or removals naming a weapon kind outside `WeaponSpecs`. |
-| `weapon.disabled_rejects` (int) | Action requests dropped while the weapon system was disabled. |
-| `weapon.tracers` (int) | Tracers in flight. |
-| `weapon.tracer_boundary_steps` (int) | Tracer swept traversal steps outside the map. |
-| `weapon.tracer_grid_steps` (int) | Grid-traversal steps executed by the tracer sweep. |
-| `weapon.tracer_wall_collisions` (int) | Tracers stopped by a blocking wall cell. |
-| `event.dead_by_type` (string) | Snapshot-cadence sparse `EventType=count` dead-letter summary. |
-| `event.dispatch_by_type` (string) | Snapshot-cadence sparse `EventType=count` dispatch summary. |
+| `player.<slot>.entity` (int) | The cursor entity in the slot, or zero. Gates the slot's cards |
+| `player.<slot>.control` (int) | That cursor's control mode, or -1 for an empty slot |
+| `player.local` (int) | The slot this instance drives |
+| `session.any_defeated` (bool) | At least one rostered cursor's owner-authored defeat latch (`EventCursorDefeatState`) is set. A shipped game-over guard |
+| `session.all_defeated` (bool) | Every rostered cursor's defeat latch is set |
+| `kills.<species>` (int) | Species deaths. `kills.drain` counts `EventDrainDefeated`, not `EventSpeciesKilled`. A tower death with no killer is not counted |
+| `kills.total`, `kills.uncredited` (int) | All counted deaths, and those whose killer resolves to no roster cursor |
+| `energy.damage_multiplier` (int) | The cycle damage factor. `MetaSystem.setDamageMultiplier` is its only writer: it doubles on `EventCycleDamageMultiplierIncrease` and returns to 1 on `EventCycleDamageMultiplierReset` and in `Init`. `EnergySystem` multiplies penalties by it |
+| `energy.penalty_rejects` (int) | Penalties absorbed by an active boost or ember |
+| `energy.missing_energy_rejects` (int) | Resolved cursor requests whose cursor had no energy component |
+
+### Species, combat and effects
+
+| Key | Meaning |
+|---|---|
+| `combat.cursor_rejects` (int) | Direct and area attacks whose owner resolves to no roster cursor. The attack still resolves, so the count measures species-owned attacks rather than rejections |
+| `combat.attacker_rejects` (int) | Attacks refused because neither origin nor owner had an attributable combat type |
+| `combat.container_rejects` (int) | Attacks refused because the resolved composite was a non-damageable container |
+| `combat.relation_rejects` (int) | Direct hits refused because the hit entity was not a member of the target composite |
+| `combat.target_rejects` (int) | Attacks refused because the target, or a required member, lacked combat state |
+| `combat.kinetic_immune_rejects` (int) | Kinetic effects refused on a living target by an open kinetic-immunity window or enrage |
+| `combat.stun_immune_rejects` (int) | Stun effects a living target's species or state refused |
+| `combat.effect_burn`, `combat.burn_ticks` (int) | Burns left or refreshed by a charged pulse's chain, and burn ticks that dealt damage |
+| `combat.effect_energy_drain` (int) | Energy-drain effects that emitted an energy reward |
+| `combat.chain_{followups,depth_max,depth_total}` (int) | Follow-up attacks emitted by chain profiles, the deepest chain, and the sum of emitted depths |
+| `swarm.player_kills` (int) | Swarm deaths credited to a roster cursor. Incremented under the same condition as `swarm.killed_by_player` |
+| `swarm.transition_stalls` (int) | Charge transitions that found no lock target and re-armed, or failed to enter the charge state and fell back to deceleration |
+| `drain.count` (int) | Live drains not already queued for death |
+| `drain.paused` (bool) | A spawning hold applies to this instance's own cursor: a session-wide hold, or a quasar fused from that cursor |
+| `nav.recomputes` (int) | Flow fields rebuilt on the last tick (a gauge) |
+| `nav.roi_cells` (int) | Cumulative clamped wall-change area, in cells, that invalidated flow fields |
+| `nav.entities` (int) | Entities holding a Navigation component on the last tick. Outside the shared surface |
+| `loot.routes` (int) | Owner flow fields held: one per cursor that has dropped something and still exists |
+| `loot.route_recomputes` (int) | Owner flow fields rebuilt, cumulative. Rises with owner movement while loot is out |
+| `loot.unreachable` (int) | Drops with no route home this tick, because their owner is gone or walls seal them off. They bleed to rest |
+| `weapon.orbs_reaped` (int) | Orbs the store held that no loadout justified: a duplicate, an orb whose owner resolves to no cursor this instance owns, or one whose weapon has no charges |
+| `weapon.kind_rejects` (int) | Grants or removals naming a kind outside `WeaponSpecs` |
+| `mount.fired` (int) | Mounted discharges; a ray counts once per warning start |
+| `mount.host_rejects` (int) | Mount requests naming an unplaced or non-Shared host, a cursor, or an unknown weapon or lane |
+| `bullet.spawned`, `bullet.hits` (int) | Bullets created by a mount or a cursor's turret, and bullets stopped by a cursor, a shield or a combat target |
+| `dust.created`, `dust.destroyed` (int) | Dust actually created, and dust consumed by a detonation. Expired dust dies through the timer |
+| `dust.centers_dropped` (int) | Burst centres (one per occupied cell) dropped from a detonation that already held `ExplosionCenterCap` |
+| `death.batch_*` (int) | Resolved `EventDeathBatch` payloads (`count`), entries presented (`entities_total`), the largest batch (`size_max`), and requests per effect route (`silent`, `flash`, `blossom`, `decay`, `fadeout`, `dust`, `other`) |
+| `death.tagged` (int) | Entities processed from the `DeathComponent` sweep |
+| `death.{protected,zero,payload}_rejects`, `death.missing_{entities,effect_data}` (int) | Entries refused by `ProtectFromDeath`, zero identifiers, bad payload types, entities already gone, and deaths whose effect lacked position, glyph or wall data |
+| `environment.drift_active` (bool), `environment.drift_direction` (float) | The drift gauge and heading. The glyph spawner reads both to bias its entry band |
+
+### Network
+
+| Key | Meaning |
+|---|---|
+| `network.state` (string) | `off`, `waiting`, `connected` or `down`. The status bar shows `Net: down` and `Net: wait`, and hides the badge when `off` |
+| `network.peers`, `network.connected` | Connected session peers, and whether there is at least one |
+| `network.map_latched` (bool) | The host-authored D-14 map dimensions are latched |
+| `network.state_applied` (int) | Owner-authored cursor snapshots applied to remote cursors |
+| `network.frames_dropped` (int) | Frames rejected by encoding, framing, ordering or identity checks |
+| `network.barrier_deferred` (int) | Local crossing artifacts the barrier took at production, to apply at the agreed tick |
+| `network.barrier_applied_local`, `network.barrier_applied_peer` (int) | Local and peer artifacts admitted at their playout boundary |
+| `network.barrier_late` (int) | Artifacts admitted after their scheduled tick. Under an authority this is an ordering decision, but it still says a link is not keeping the playout lead |
+| `network.barrier_delay_ticks` (int) | The playout lead in force, in ticks |
+| `network.barrier_ran_without_peer` (int) | Tick boundaries reached before every required peer epoch marker. The authority requires none |
+| `network.barrier_peer_lag_ticks`, `network.barrier_peer_artifacts`, `network.barrier_peer_applied` | Closed-epoch lag beyond this instance's lead (zero on the authority), and the peer artifacts admitted at the latest boundary |
+| `network.artifacts_refused` (int) | Peer artifacts refused: an arrival or departure from a participant that is not the coordinator, or a raw epoch under an identity whose link it did not arrive on |
+| `network.artifacts_refused_tick` (int) | Peer artifacts naming an apply tick more than `NetworkApplyWindowTicks` ahead |
+| `network.artifacts_schedule_full` (int) | Peer artifacts turned away at `NetworkScheduledMax` entries or `NetworkScheduledBytes` |
+| `network.artifacts_pre_install` (int) | Peer artifacts the installed world already contains: everything due at or before a capture's tick (D-22). Non-zero on a joiner is the ordering working |
+| `network.artifacts_authority_superseded` (int) | Crossings refused because an installed authoritative capture already holds them under its source fence |
+| `network.artifacts_restored` (int) | Applied barrier-bound artifacts the installed capture did not contain, returned to the schedule to apply again |
+| `network.commit_late`, `network.commit_void` (int) | On the authority: guest crossings committed at its next tick because they arrived after their own, and the subset too late to apply, which only closed their source's fence |
+| `network.commit_refused_raw` (int) | On a guest: another participant's raw epochs, passed toward the authority and not applied |
+| `network.join_lag_ticks` (int) | Ticks this participant still stood behind after its join caught up. Above the playout lead, the join is refused |
+| `network.lag_ticks` (int) | How far behind the newest tick any peer closed this instance stands, measured every tick |
+| `network.stale` (bool) | That lag exceeds the playout lead, so this participant's crossings reach the host after the ticks they name. The status bar shows `desync <lag_ticks>` |
+| `network.corrections_received` (int) | Authoritative corrections reassembled from the wire |
+| `network.relay_forwarded` (int) | Artifact batches, correction chunks and departure notices this instance passed on to its other links |
+| `network.relay_duplicates` (int) | Copies already admitted, arriving by a second path. These end the flood |
+| `network.transport_lost_in`, `network.transport_lost_out` (int) | Inbound notifications a full poll buffer discarded, and outbound frames a peer's send queue refused. A new loss is also logged |
+| `network.digest_mismatches` (int) | Runtime parity samples that disagreed. A gauge under weakened D-11, not a fault |
+| `network.drift_part` (string), `network.drift_tick` (int) | The surface the last disagreement was in (positions, kinetics, combat, context, status or snapshot), and its tick |
+| `network.link_rtt_ms` (int) | The slowest measured link's smoothed round trip. A measured one is at least 1, so zero means no link is measured. Every `link_*` cell clears when the last link goes |
+| `network.link_jitter_ms`, `network.link_bps`, `network.link_peer` (int) | That link's smoothed variation, its measured delivery rate in bytes per second, and the participant at its far end |
+| `network.link_saturated` (bool) | The link, not the sender, was the limit while `link_bps` was measured. Without it, `link_bps` is a lower bound on capacity |
+| `network.link_loss_pct` (int) | The highest probe-loss share over all links, which need not be the slowest link's. The badge shows `loss n%` at `StatusNetLossWarnPct` or more. `:session` prints it in the link line, which appears only while a link is measured |
+| `network.pace_late_ticks` (int) | How late the latest authority epoch of the pacing window landed on this guest; negative is early |
+| `network.pace_trim_permille`, `network.pace_steps` (int) | The trim pacing applies to the tick interval (positive runs slower), and whole-tick steps taken for an error too large to trim |
+| `network.term` (int) | The authority term this instance acts under. An artifact from an older term is ignored; one from a term nobody handed this instance is refused |
+| `network.authority` (int) | The participant authoring the shared world |
+| `network.migrations` (int) | Handoffs this instance took part in, as successor or follower |
+| `network.term_refused` (int) | Artifacts naming a term nobody handed this instance: a fork, or an instance that skipped a succession |
+| `network.term_stale` (int) | Artifacts from a term the session has left. Non-zero across every handoff and not an error |
+| `network.handoff_bytes` (int) | What successions cost this instance on the wire: reports, votes and the handoff record |
+| `network.fork` (bool) | This instance could not reach the designated successor and continues as an explicit local fork |
+| `network.migrating` (bool) | A succession is in progress. Dials are refused while it is set. The status bar shows `Migrating`, with `rejoin_attempts` when non-zero |
+| `network.host_lost` (bool) | The authority went and this instance continues from the last authoritative state. It outranks every other badge (`Host lost`), and `:session` names it |
+| `network.evicted` (int) | Participants this authority dropped, under the slow policy or for exceeding the ingress byte budget |
+| `network.chain` (int) | Participants in the succession chain. `:session` reports it as "confirmed reachable". A participant that declared no port plays but is never elected |
+| `network.rejoin_attempts` (int) | Passes down the chain, while a succession is contested, that found no link to any successor |
+| `network.listening` (bool) | This instance bound a port peers can dial back. False on a leaf: a `-no-advertise` run, or one whose bind failed |
+
+### Snapshot and correction
+
+| Key | Meaning |
+|---|---|
+| `snapshot.bytes`, `snapshot.capture_us`, `snapshot.encode_us` (int) | The last shared-world capture this instance read: its encoded length, its cost under the world lock (the one stall a join is allowed), and its encoding cost outside the lock |
+| `snapshot.stage_us`, `snapshot.commit_us`, `snapshot.install_tick`, `snapshot.catch_up_ticks` (int) | The last install: staging cost, commit cost, the tick it described, and the ticks simulated afterwards to close the gap |
+| `snapshot.keyframes` (int) | Whole captures this host published, as a join gate or a cadence keyframe |
+| `snapshot.corrections_sent`, `snapshot.correction_bytes_sent` (int) | Corrections broadcast, keyframes and deltas together, and their total size |
+| `snapshot.corrections_applied` (int) | Corrections this instance installed |
+| `snapshot.corrections_refused` (int) | Corrections that could not be resolved: a delta against a keyframe not held, or a body its header does not describe. The next keyframe is self-sufficient |
+| `snapshot.corrections_superseded` (int) | Corrections a fresher one overtook before they applied, plus any the queue dropped |
+| `snapshot.corrections_held` (int) | Corrections the playout buffer deferred until this instance reached their tick. A steady rise with no applications beside it is the buffer stalling |
+| `snapshot.corrections_jumped` (int) | Corrections further ahead than the lead, adopted at their own tick: a join, or a clock that had fallen behind |
+| `snapshot.projected_ticks` (int) | How far behind the clock the last correction was, which is how far staging simulated it forward |
+| `snapshot.correction_entries`, `snapshot.correction_entities`, `snapshot.correction_cells`, `snapshot.correction_tick` (int) | The last applied correction: component cells moved, distinct shared entities behind them, the largest placement move, and its tick. `NetworkSystem` reports `correction_entities` to peers as the correction magnitude |
+| `snapshot.predictions_pending` (int) | Predicted species kills held for authoritative confirmation |
+| `snapshot.predictions_confirmed` (int) | Held kills released as `EventSpeciesKillConfirmed`: proved by an authoritative capture, paid out past `PredictionLedgerMax`, or released once nothing corrects this instance |
+| `snapshot.predictions_dropped` (int) | Held kills an authoritative capture refuted: the entity is still alive a convergence floor (`SnapshotFloorKeyframeTicks`) later, or the authority's allocator never issued it |
+| `snapshot.manifests_sent`, `snapshot.manifests_received` (int) | Correction indexes published, and indexes received, including superseded ones |
+| `snapshot.manifests_off_tick` (int) | Indexes compared against this receiver's present because no reading at their tick was held |
+| `snapshot.manifest_bytes_sent`, `snapshot.manifest_bytes_received` (int) | What the indexes cost. On a converged link, this is the whole of a correction |
+| `snapshot.corrections_hash_only` (int) | Corrections that carried no state because the roots agreed |
+| `snapshot.sections_compared`, `snapshot.pages_compared` (int) | Section hashes examined, and page hashes computed while descending into disagreeing sections |
+| `snapshot.hash_us` (int) | What indexing and comparing a capture cost outside the world lock. Read it beside `capture_us` |
+| `snapshot.selective_bytes` (int) | The measured wire cost of a non-keyframe correction, which the cadence controller and admission are priced from |
+| `snapshot.shards_{requested,sent,received,refused,applied}` (int) | Pages a receiver asked about, pages returned because they differed, pages arrived, pages in a repair that was not applied, and pages spliced into a capture whose root then verified |
+| `snapshot.shard_bytes_sent`, `snapshot.shard_bytes_received`, `snapshot.request_bytes` (int) | Repair cost per peer from each end, and what the answers to indexes cost |
+| `snapshot.{pages,entities,cells}_repaired` (int) | Pages a verified repair replaced, the distinct entities behind them, and the indexed cells carried |
+| `snapshot.proof_failures` (int) | Repairs whose rows or result did not reproduce their declared hash. Nothing was written |
+| `snapshot.baseline_refusals` (int) | Indexes or repairs describing a run, session or baseline this instance does not hold |
+| `snapshot.keyframe_fallbacks` (int) | Times the exchange gave up and a whole world was sent or asked for |
+| `snapshot.relay_retained` (int) | Authoritative records held for a neighbour to ask about. An index enters the ring only once its capture is provably the authority's |
+| `snapshot.relay_served`, `snapshot.relay_unserved` (int) | Repairs answered from that retention, and requests refused because the tick is not held |
+| `snapshot.relay_bytes_sent`, `snapshot.relay_bytes_received` (int) | Relayed answer cost, priced against the relaying participant's own link |
+| `snapshot.replay_suffix_records` (int) | Crossings retained for replay |
+| `snapshot.replay_records` (int) | Crossings re-applied in a projection, cumulative |
+| `snapshot.replay_overflow` (int) | Retained crossings dropped by the tick, count or byte bound |
+| `snapshot.replay_skipped` (int), `snapshot.replay_suffix_unavailable` (bool) | Corrections installed without replay because the suffix was incomplete, and whether that was so at the last correction |
+| `snapshot.cadence_ticks` (int) | The correction cadence in force: the publication timeline's base, the fastest peer's plan |
+| `snapshot.cadence_keyframe_interval`, `snapshot.cadence_keyframe_period_ticks` (int) | Corrections between whole captures, and the product of the two: ticks between whole authoritative worlds. A period above `SnapshotFloorKeyframeTicks` is a controller defect |
+| `snapshot.cadence_keyframe_age_ticks` (int) | How long this instance has actually gone without a whole authoritative world |
+| `snapshot.cadence_uplink_bps`, `snapshot.cadence_floor_bps` (int) | What the schedule costs, and what the convergence floor costs, summed over the planned links |
+| `snapshot.cadence_links`, `snapshot.cadence_constrained_links` (int) | Links the schedule plans for, and how many of them are worse than nominal |
+| `snapshot.cadence_budget_bps` (int) | What the tightest link allows after the utilisation share. Zero means no link has been measured while saturated |
+| `snapshot.cadence_constrained` (bool) | A link moved the operating point worse than nominal. While a cadence is in force and no worse qualifier applies, the status bar shows `slow` |
+| `snapshot.cadence_floor_breached` (bool) | No schedule delivers a whole world inside the guaranteed window, or none arrived. The status bar shows `slow!` while a cadence is in force, and `:session` prints `BELOW THE CONVERGENCE FLOOR` |
+
+### Engine, event and process
+
+| Key | Meaning |
+|---|---|
+| `engine.music_apm` (int) | The action rate music follows. The status bar shows it as `APM` |
+| `engine.tick_slips` (int) | Missed tick deadlines. Process pacing, so outside the shared surface |
+| `event.invalid` (int) | Dispatched events whose type was outside the declared range |
+| `event.settle_exhausted` (int) | Settles that reached the pass cap with events still queued |
+| `event.dispatch_by_type`, `event.dead_by_type` (string) | Sparse `EventType=count` summaries, refreshed every `StatSnapshotTicks` |
+| `spatial.cell_overflows`, `spatial.cell_saturations` (int) | Insertions dropped because a cell held `MaxEntitiesPerCell` (31) entities, and transitions where a cell first reached that capacity |
+| `spatial.player_budget_rejects` (int) | Player-domain insertions refused because the cell's `ReservedPlayerPerCell` budget was spent. A shared entity is never refused for a player one |
+| `spatial.indexed_entities`, `spatial.indexed_shared` (int) | Entities in spatial cells, and the shared half, which D-11 requires two instances to agree on |
+| `spatial.unindexed` (int) | Positioned entities the grid holds no cell for: off-map after a crop, or dropped by a full cell. Nothing renders them and no grid query reaches them |
+| `spatial.{occupied_cells,max_cell_occupancy}` (int) | Non-empty cells and the fullest cell, on the snapshot cadence |
+| `spatial.{cell_occupancy_hwm,positions_hwm,position_batch_hwm}` (int) | Highest cell occupancy, dense position-store length, and committed position batch this session |
+| `content.source`, `content.files`, `content.blocks`, `content.lines` | The corpus fingerprint the journal anchor and capture header carry. A replay verifies it |
+| `content.rejected` (int) | Corpus sources rejected at load |
+| `content.served` (int), `content.file` (string) | Blocks drawn, and the source of the latest one |
+| `stat.late` (int) | Registrations after `Freeze`. Non-zero is a regression |
+| `stat.groups`, `stat.metrics` (int) | Cards and keys in the frozen index |
