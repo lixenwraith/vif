@@ -128,9 +128,9 @@ list|'')
 	cat <<'EOF'
 Interactive (runs in the foreground until you stop it)
   solo              single player, embedded config
-  host [players]    interactive host; with no argument it starts on its first
-                    guest and admits the whole roster, with one it is a party
-                    of that size that starts together
+  host [players]    interactive host; plays at once and admits guests mid-run,
+                    up to the whole roster or, with an argument, that many
+                    players, the host included
   join [addr]       join a host
   serve [players]   dedicated host, runs until Ctrl-C  (no lifetime bounds)
   serve-fleet       dedicated host with the deployed 90s/90s/20s bounds
