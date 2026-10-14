@@ -99,8 +99,9 @@ by `profile.Contact` needs a `CombatEntityType`-to-`SpeciesType` table.
 - Priority: P3
 - Affected files: `internal/input/actionnames.go`, `internal/bot/mind.go`
 
-`input.IntentFor` refuses operators, prefixes, marker jumps and macro keys, so a
-graph cannot delete a word or jump to a coloured glyph. Options: a `motion` operand
+`input.IntentFor` refuses the actions that only open a key sequence
+(`operator_delete`, `prefix_g`, `prefix_macro_play`, `marker_glyph_*`), so a graph
+cannot delete a word or jump to a coloured glyph. Options: a `motion` operand
 on `Intent` that applies an operator to a named motion, which keeps graphs
 semantic; or a `Keys` action parsed through the keymap, which reaches everything a
 keymap binds but depends on the bindings. A right press carries no position, so
@@ -536,6 +537,18 @@ one 4 KiB body chunk ([Troubleshooting](troubleshooting.md) §16). Sending it in
 `SnapshotCorrectionChunkBytes` chunks, as a body is, bounds that too. Repairs at
 20 kB/s have so far been a few kilobytes.
 
+### Credit a shared tower to the session
+
+- Priority: P3
+- Affected files: `internal/system/tower.go`, `internal/system/combat.go`,
+  `internal/asset/scenario/tower.toml`
+
+A tower's `CombatComponent.OwnerEntity` is the one cursor the FSM's `player_entity`
+names, so `applyHitDirect` and `applyHitArea` credit one participant for a structure
+the session shares ([Multi-player](multi-player.md#8-remaining-gaps) §8). Decide
+between a hybrid shared/local shape, as the cursor and its shield have, and an
+"every player" ownership value that attribution expands.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
@@ -580,6 +593,18 @@ prints, playing on alone as after `:leave` instead of starting over, and an
 operator route on the allocator, since a dedicated host has no console. Keeping a
 dropped player out is a separate decision: the session name is a routing key, not
 an identity.
+
+### Drop the cursors a linked instance cannot reach
+
+- Priority: P3
+- Affected files: `internal/app/session.go`, `internal/converge/authority.go`
+
+`dropAbandonedCursors` acts only on an instance left with no link, so a successor
+some survivors could not reach, or a fork still linked to its own bots, keeps every
+roster entry, and a participant it has no path to stays a cursor nothing moves
+([Multi-player](multi-player.md#52-the-roster-after-a-loss) §5.2). Decide who
+produces those departures, and at which tick, on an instance that still has peers
+to agree one with.
 
 ### Merge two sessions
 

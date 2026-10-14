@@ -77,8 +77,8 @@ It is the contract, not a suggestion.
 ## Gates
 
 `go build ./...`, `gofmt -l` on changed files, and `go test` on the packages the
-change touches. Run `go generate ./internal/event ./internal/manifest` only when
-an event or manifest definition changed.
+change touches. Run `go generate ./internal/manifest` (`make generate`), which
+also writes the event registry, only when an event or manifest definition changed.
 - A change to code behind a build constraint also builds that target:
   `GOOS=js GOARCH=wasm go build ./...` for `js/wasm`, `go build -tags vif_headless
   ./...` for the headless profile.
