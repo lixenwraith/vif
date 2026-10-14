@@ -15,10 +15,10 @@ Terminology is deliberately orthogonal:
 - the **authority term** identifies the generation under which authoritative
   content was produced.
 
-Participant 1 opened the session; it is not permanently synonymous with the
-authority. A successful handoff increments the term and moves authorship without
-changing participant IDs, roster slots, or entity domains. In this document,
-`epoch` means one source's closed tick of crossing production.
+Peer 1 opened the session; it is not permanently synonymous with the authority.
+A successful handoff increments the term and moves authorship without changing
+participant IDs, roster slots, or entity domains. In this document, `epoch` means
+one source's closed tick of crossing production.
 
 ## 1. Domains and identity
 
@@ -35,13 +35,13 @@ Every `World` has two domains:
 zero is invalid in both. A cursor's roster slot lives in `CursorComponent` and is
 not encoded in the domain tag.
 
-A participant and a cursor are separate things. A participant holds an identity
-and the authority term it follows; a roster slot is what binds it to a cursor. The
-coordinator of a dedicated host holds `parameter.NoPlayerSlot` and therefore no
-cursor: it authors the Shared world and puts nobody on the map. Only the
-coordinator may be cursorless — every other participant is in the session to drive
-one — and the ceiling of `parameter.MaxPlayers` counts cursors rather than
-participants.
+A peer and a cursor are separate things. Every admitted peer holds an identity, a
+roster entry and the authority term it follows; a roster slot binds it to a cursor
+and makes it a participant. The coordinator of a dedicated host holds
+`parameter.NoPlayerSlot`: it authors the Shared world and puts nobody on the map,
+so it is a peer and not a participant. It is the only roster entry allowed no
+cursor, and `parameter.MaxPlayers` counts participants (cursors), not roster
+entries.
 
 ## 2. Domain rules
 
@@ -743,7 +743,7 @@ departing cursor, and reconnect must take a current world.
 | Guest replay | Suffix membership uses the capture's per-source fence, so a frame that missed the playout lead is replayed rather than discarded. Remote entries are a maximum rather than a contiguous prefix: on a relay a frame that overtakes a lower one can leave the lower one looking contained for one cadence. |
 | Playout | Each participant stamps the lead its own link to the authority asks for, capped at `NetworkBarrierMaxDelayTicks` (multi-player.md §3.5). A crossing that misses it still lands later on the authority than on its producer, and one past `NetworkCommitLateTicks` is void everywhere but its producer until a correction repairs it. |
 | Topology | The protocol relays over a graph. `-join` dials one address, and in a migrate session every participant then dials the current successor from the published succession chain, so the shape is a star with a successor chain over it. |
-| Partition | The **first survivor in the succession chain**, else the lowest independent roster identity, succeeds without a vote; losing that successor in turn runs the next succession. A survivor with no link walks the succession list, and one that hears no record within the succession window forks. Merging an explicit local fork does not work. An instance with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
+| Partition | The **first survivor in the succession chain**, else the lowest independent roster identity, succeeds without a vote; losing that successor once it holds the term runs the next succession, but losing it together with the authority elects nobody, because the roster still names it, and the survivors fork. A survivor with no link walks the succession list, and one that hears no record within the succession window forks. Merging an explicit local fork does not work. An instance with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
 | Relay scheduling | A relayed participant inherits its neighbour's cadence and repair pricing. |
 | Tower ownership | Optional tower configurations still bind to slot zero rather than an explicit session-owned/cursor-owned rule. |
 | Progression | `kills.drain` is a session total, so quasar progression is session-wide rather than per cursor. |
