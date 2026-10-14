@@ -315,8 +315,9 @@ corrections that repair its own early copies.
 A guest paces its clock against the authority (`observeAuthorityEpoch`): it trims its
 tick interval, by up to `NetworkPacePermilleMax`, until the latest authority epoch of
 `NetworkPaceWindow` lands between `NetworkPaceBandTicks` early and
-`NetworkAheadTicks` late, and steps past `NetworkPaceStepTicks` of error. Wall pacing
-only: the simulation step is fixed, so a trim shows as the world running a few
+`NetworkAheadTicks` late, and steps past `NetworkPaceStepTicks` of error. Epochs read
+in the `NetworkPaceServedTicks` before a step is served are not sampled, since they
+measure the lateness it answers. Wall pacing only: the simulation step is fixed, so a trim shows as the world running a few
 percent fast or slow while it settles. In the band every committed crossing reaches
 the guest before its tick. `NetworkAheadTicks` lets a guest run ahead: each tick
 shortens its own lead by one and lands everyone else's crossings on it up to a tick

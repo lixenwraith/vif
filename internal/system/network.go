@@ -173,11 +173,13 @@ type NetworkSystem struct {
 	applied []barrierArtifact
 
 	// paceSamples holds the newest arrival offsets of the authority's epochs, and
-	// paceCount how many are live; see observeAuthorityEpoch.
+	// paceCount how many are live; paceSettled is the first local tick sampled after
+	// the last step is served. See observeAuthorityEpoch.
 	paceSamples [parameter.NetworkPaceWindow]int64
 	paceCount   int
 	paceLatest  int64
 	paceKnown   bool
+	paceSettled uint64
 
 	// pathSamples holds the newest round trips, in ticks, of this instance's own
 	// epochs returned committed, pathCount how many are live and pathEpoch the newest
@@ -439,7 +441,7 @@ func (s *NetworkSystem) Init() {
 	s.statConnection.Store("off") // the link has a resting value; the counters do not
 	s.lastLostIn, s.lastLostOut = 0, 0
 	s.barrierActive.Store(false)
-	s.paceCount, s.paceLatest, s.paceKnown = 0, 0, false
+	s.paceCount, s.paceLatest, s.paceKnown, s.paceSettled = 0, 0, false, 0
 	s.pathCount, s.pathEpoch = 0, 0
 	s.relayingAt = [participantSlots]uint64{}
 	s.leadLowSince, s.leadPushed = 0, 0
@@ -2122,13 +2124,17 @@ func (s *NetworkSystem) linked(id uint32) bool {
 
 // observeAuthorityEpoch paces a guest against the authority. The sample is how
 // late the epoch landed: this instance's completed tick minus the epoch's. The
-// latest of a window decides, and a step clears the window it has answered.
+// latest of a window decides, and a step clears the window it has answered. The
+// scheduler takes a step at the next tick and waits it out before the one after;
+// a sample read while it waits counts the lateness the step already answers.
 func (s *NetworkSystem) observeAuthorityEpoch(produced uint64) {
 	r := s.world.Resources.Network
-	if r == nil || s.participantID() == s.authorityParticipant() {
+	tick := s.localTick()
+	serving := tick < s.paceSettled && tick+parameter.NetworkPaceServedTicks >= s.paceSettled
+	if r == nil || s.participantID() == s.authorityParticipant() || serving {
 		return
 	}
-	s.paceSamples[s.paceCount%len(s.paceSamples)] = int64(s.localTick()) - int64(produced)
+	s.paceSamples[s.paceCount%len(s.paceSamples)] = int64(tick) - int64(produced)
 	s.paceCount++
 	if s.paceCount < len(s.paceSamples) {
 		return
@@ -2142,7 +2148,7 @@ func (s *NetworkSystem) observeAuthorityEpoch(produced uint64) {
 	if step != 0 {
 		r.PaceStep.Add(step)
 		s.statPaceSteps.Add(1)
-		s.paceCount = 0
+		s.paceCount, s.paceSettled = 0, tick+parameter.NetworkPaceServedTicks
 	}
 }
 
@@ -2713,6 +2719,7 @@ type networkState struct {
 	paceCount, pathCount                       int
 	paceLatest                                 int64
 	paceKnown                                  bool
+	paceSettled                                uint64
 	pathEpoch, leadLowSince, leadPushed        uint64
 	lastLostIn, lastLostOut                    uint64
 }
@@ -2732,8 +2739,8 @@ func (s *NetworkSystem) CopyState() any {
 		rawStateSeen: s.rawStateSeen, states: clonePendingStates(s.states), departed: s.departed,
 		digestHistory: s.digestHistory, pendingDigest: s.pendingDigest, suffix: slices.Clone(s.suffix),
 		paceSamples: s.paceSamples, pathSamples: s.pathSamples, paceCount: s.paceCount, pathCount: s.pathCount,
-		paceLatest: s.paceLatest, paceKnown: s.paceKnown, pathEpoch: s.pathEpoch, leadLowSince: s.leadLowSince,
-		leadPushed: s.leadPushed, lastLostIn: s.lastLostIn, lastLostOut: s.lastLostOut,
+		paceLatest: s.paceLatest, paceKnown: s.paceKnown, paceSettled: s.paceSettled, pathEpoch: s.pathEpoch,
+		leadLowSince: s.leadLowSince, leadPushed: s.leadPushed, lastLostIn: s.lastLostIn, lastLostOut: s.lastLostOut,
 	}
 	return c
 }
@@ -2757,7 +2764,7 @@ func (s *NetworkSystem) RestoreState(v any) error {
 	s.stateSeen, s.rawStateSeen, s.states, s.departed = c.stateSeen, c.rawStateSeen, clonePendingStates(c.states), c.departed
 	s.digestHistory, s.pendingDigest, s.suffix = c.digestHistory, c.pendingDigest, slices.Clone(c.suffix)
 	s.paceSamples, s.pathSamples, s.paceCount, s.pathCount = c.paceSamples, c.pathSamples, c.paceCount, c.pathCount
-	s.paceLatest, s.paceKnown, s.pathEpoch = c.paceLatest, c.paceKnown, c.pathEpoch
+	s.paceLatest, s.paceKnown, s.paceSettled, s.pathEpoch = c.paceLatest, c.paceKnown, c.paceSettled, c.pathEpoch
 	s.leadLowSince, s.leadPushed, s.lastLostIn, s.lastLostOut = c.leadLowSince, c.leadPushed, c.lastLostIn, c.lastLostOut
 	return nil
 }

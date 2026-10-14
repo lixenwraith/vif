@@ -54,6 +54,10 @@ const (
 	NetworkPaceStepTicks     = 3
 	NetworkPaceStepBackTicks = 2
 
+	// NetworkPaceServedTicks is how many local ticks a step takes to be served: the
+	// scheduler adds it after the next tick and waits it out before the one after.
+	NetworkPaceServedTicks = 2
+
 	// NetworkCommitLateTicks is how late a guest's crossing may reach the authority
 	// and still be committed, at the authority's next tick. Past it the crossing is
 	// void: an action that old would land on a world its player no longer saw.
