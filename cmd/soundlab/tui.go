@@ -379,7 +379,7 @@ func (a *tuiApp) normalKey(ev terminal.Event) {
 }
 
 // toggleMusic starts or stops the transport. Stop preserves the playhead by
-// engine design (aligned resume); M / music reset zeroes it.
+// engine design (aligned resume); m / music reset zeroes it.
 func (a *tuiApp) toggleMusic() {
 	if a.s.eng.IsMusicPlaying() {
 		a.exec("music stop")

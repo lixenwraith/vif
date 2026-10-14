@@ -51,7 +51,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"listen"}, arg: "<addr>",
 				hint: "Address this participant is dialled back on; -join only, default the host's port then an ephemeral one"},
 			{names: []string{"no-advertise"},
-				hint: "Keep this participant's address out of the session; -join only, and it is never elected"},
+				hint: "Keep this participant's address out of the session; -join only, elected only when no advertised participant survives"},
 			{names: []string{"size"}, arg: "<WxH>", hint: "Terminal-equivalent size for a run that has no terminal"},
 			{names: []string{"probe"}, arg: "<addr>", hint: "Health and metrics endpoint; -serve only"},
 			{names: []string{"first-join"}, arg: "<dur>", hint: "Exit if no guest connects within this; -serve only, 0 waits forever"},
@@ -61,7 +61,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 	}, {
 		title: "Configuration",
 		lines: []flagLine{
-			{names: []string{"d", "config-embedded"}, hint: "Use the embedded scenario and content, ignoring -s and -f"},
+			{names: []string{"d", "config-embedded"}, hint: "Use the embedded scenario and content; refuses -s and -f and ignores vif.toml's scenario and content"},
 			{names: []string{"config-dir"}, arg: "<dir>", hint: "Configuration root holding scenario/ input/ audio/ content/ image/ bot/"},
 			{names: []string{"s", "config-scenario"}, arg: "<name|path>", hint: "Installed scenario name, scenario.toml, or a scenario directory"},
 			{names: []string{"f", "config-content"}, arg: "<path>", hint: "Content directory, or a single content file"},
@@ -85,7 +85,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"headless"}, hint: "With -bot, run bots without a human player or terminal; solo runs are unpaced. With -replay, verify the journal's digests unattended"},
 			{names: []string{"watch"}, hint: "Watch the first bot or a script on this terminal, with no human player"},
 			{names: []string{"r", "replay"}, arg: "<path>", hint: "Replay a recorded journal instead of playing"},
-			{names: []string{"check"}, hint: "Validate the resolved scenario, keymap, audio, content and bot graphs, then exit"},
+			{names: []string{"check"}, hint: "Validate the resolved settings, scenario, keymap, audio, content and bot graphs, then exit"},
 			{names: []string{"schema"}, hint: "Print the FSM schema as JSON, then exit"},
 		},
 	}, {
@@ -268,8 +268,9 @@ bots open a loopback session.
 .PP
 Multiplayer hosts this run, joins an address/link, or requests a session from
 an HTTP(S) vif-allocator site with a player count and scenario. Player count 0
-and a blank scenario use server defaults. Allocator-side bot provisioning is
-not yet implemented. Hosts can remove individual bots or players with all their bots
+and a blank scenario use server defaults. The request asks for no bots; an
+allocator seats bots only for a request that names them, up to its \-bots\-max.
+Hosts can remove individual bots or players with all their bots
 on the Multiplayer page. :player lists slots; :player drop <slot> removes a player
 and its bots. :bot drop <slot> removes your bot, or any bot when hosting. Slots
 accept decimal 10, hexadecimal A or 0xA for the cursor marked A.
@@ -282,9 +283,11 @@ in the status bar. A failed join preserves the current run.
 .PP
 Audio controls music, sound effects and effects volume. Controls adjusts mouse
 input, pointer following and auto-fire. Display controls the telemetry HUD and
-navigation overlays. Simulation changes solo speed. Diagnostics controls logging,
-log level and scope presets, snapshot interval, flight-recorder depth and FSM
-trigger, and profiling. Values in brackets are unavailable or read only; the
+navigation overlays. Simulation changes solo speed, starts a new game, changes
+the scenario and restarts a replay. Diagnostics controls logging, log level and
+scope presets, snapshot interval, flight-recorder depth, FSM trigger and flush,
+and the runtime profiler, and captures profiles, an execution trace, a telemetry
+snapshot and a replay journal. Values in brackets are unavailable or read only; the
 selected row explains why. Startup settings explains the relevant file or flag.
 .PP
 Changes apply to the current run and are not saved to disk. Solo play pauses;
@@ -311,7 +314,7 @@ System configuration roots, in that order;
 names others in their place, separated by colons.
 .TP
 .I $XDG_STATE_HOME/vif
-Logs and journals, normally
+Logs, journals and music recordings, normally
 .IR ~/.local/state/vif .
 .SH SEE ALSO
 https://github.com/lixenwraith/vif

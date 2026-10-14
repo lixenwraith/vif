@@ -4,8 +4,8 @@ package main
 
 // Piano mode: a two-row strip above the input line, tracker key layout.
 // Notes go through Execute("note ...") like everything else — quiet echo,
-// but full script parity. The strip is mode-owned: a future beat/step-grid
-// editor claims the same rows, one mode active at a time.
+// but full script parity. The strip is mode-owned and shared with the beat
+// editor, one mode active at a time.
 
 import (
 	"fmt"

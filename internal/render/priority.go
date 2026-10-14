@@ -83,8 +83,9 @@ const (
 	PriorityDebug
 )
 
-// ClipsToPlayfield confines simulation layers to the map, including when it is
-// smaller than the viewport. UI, debug and post-processing address the whole screen.
+// ClipsToPlayfield confines simulation layers and the cursors to the map, including
+// when it is smaller than the viewport. Post-processing, heat, indicators, the status
+// bar and debug overlays address the whole screen.
 func (p RenderPriority) ClipsToPlayfield() bool {
 	switch p {
 	case PriorityGrayout, PriorityStrobe, PriorityDim,

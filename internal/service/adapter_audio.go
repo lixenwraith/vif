@@ -90,12 +90,9 @@ func (s *AudioService) Start() error {
 		return err
 	}
 
-	// Registration, freeze and preload completed inside audioEngine.Start,
-	// including on the ErrNoAudioBackend path, so the table resolves whether
-	// or not a device was found. Hub.StartAll precedes scheduler.Start in
-	// App.Loop, so no system has emitted EventSoundRequest yet.
-	//
-	// Fatal by design: a missing name means soundTable and the shipped bank
+	// Registration, freeze and preload completed inside audioEngine.Start, on the
+	// ErrNoAudioBackend path too, so the table resolves whether or not a device was
+	// found. Fatal by design: a missing name means soundTable and the shipped bank
 	// disagree, and every Play of it would be a bad-ID rejection.
 	if err := parameter.ResolveSounds(); err != nil {
 		return fmt.Errorf("audio service: %w", err)

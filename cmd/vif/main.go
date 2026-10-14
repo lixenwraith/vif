@@ -41,9 +41,8 @@ const (
 	colourTrue = "true"
 )
 
-// CLI flags. Every one of them is described in helpSections; the usage strings
-// here are what `flag` prints on a parse error before that table is reachable, and
-// are deliberately the same sentence.
+// CLI flags. helpSections describes every one, and flag.Usage prints that table
+// rather than these usage strings, which only have to agree with it.
 var (
 	flagColor    = flag.String("color", colourAuto, "Colour depth: auto, 256 or true")
 	flagMute     = flag.Bool("mute", true, "Start muted; -mute=false starts with sound")
@@ -248,10 +247,8 @@ func setupDiagnostics() {
 	if flagLogs.enabled() {
 		path, err := vlog.Start()
 		if err != nil {
-			// Fatal rather than degraded. Logging was asked for, and a run that
-			// cannot write it has no way to say so afterwards: the old behaviour
-			// played the whole session unlogged and reported the failure at exit,
-			// which for a supervised process is a silent one.
+			// Fatal rather than degraded: logging was asked for, and a run that
+			// cannot write it has no way to say so afterwards.
 			fmt.Fprintf(os.Stderr, "logging unavailable: %v\n", err)
 			os.Exit(exitLogSetup)
 		}
@@ -442,7 +439,7 @@ func (f *configFlags) register(fs *flag.FlagSet) {
 		fs.StringVar(alias.into, alias.long, "", alias.hint)
 	}
 
-	embedded := "Use the embedded scenario and content, ignoring -s and -f"
+	embedded := "Use the embedded scenario and content; refuses -s and -f and ignores vif.toml's scenario and content"
 	fs.BoolVar(&f.embedded, "d", false, embedded)
 	fs.BoolVar(&f.embedded, "config-embedded", false, embedded)
 }
@@ -508,7 +505,7 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 			"port is taken; whatever is bound is what the session publishes",
 		authorityMigrate))
 	fs.BoolVar(&f.noAdvertise, "no-advertise", false,
-		"With -join, keep this participant's address out of the session. It plays normally and is never elected")
+		"With -join, keep this participant's address out of the session. It plays normally and is elected only when no advertised participant survives")
 	fs.DurationVar(&f.slow.Window, "slow-window", parameter.NetworkSlowWindow,
 		"With -host or -serve, the window a participant's lateness is judged over; 0 never evicts")
 	fs.Float64Var(&f.slow.LatePerSecond, "slow-late", parameter.NetworkSlowLatePerSecond,

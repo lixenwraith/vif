@@ -115,9 +115,9 @@ func NewSession(backend string, masterVol float64, out io.Writer, files audioFil
 }
 
 // adoptOverrides loads each override the engine registered as a clean document that
-// saves to its target, which differs from the source only when the source is a
-// system root: the save then shadows it from the user root, as the game reads. One
-// that fails to load loses its target, so an untitled save cannot overwrite it.
+// saves to its target, which differs from the source whenever a lower root supplied
+// it: the save then shadows it from the first root, as the game reads. One that
+// fails to load loses its target, so an untitled save cannot overwrite it.
 func (s *Session) adoptOverrides() {
 	if f := s.files.sounds; f != "" {
 		fmt.Fprintf(s.out, "sounds override %s, saving to %s\n", f, s.files.soundsTarget)
@@ -369,12 +369,11 @@ func (s *Session) applyAll() error {
 	return nil
 }
 
-// sameCanonical reports whether two defs serialize to identical canonical
-// TOML. This is the honest equality for revert: what matters is "would save
-// emit the same document", and the marshaller is already the canonical form
-// (cmdShow leans on the same property). reflect.DeepEqual is the wrong
-// predicate — it distinguishes representations that serialize, validate and
-// render identically.
+// sameCanonical reports whether two defs serialize to identical canonical TOML,
+// the honest equality for revert: what matters is whether save would emit the same
+// document (cmdShow leans on the same property). reflect.DeepEqual is the wrong
+// predicate; it distinguishes representations that serialize, validate and render
+// identically.
 func sameCanonical[T any](marshal func([]T) ([]byte, error), a, b T) bool {
 	x, ex := marshal([]T{a})
 	y, ey := marshal([]T{b})

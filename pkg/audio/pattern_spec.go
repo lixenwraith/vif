@@ -7,16 +7,11 @@ import (
 	"strings"
 )
 
-// Declarative pattern specification — the TOML face of Pattern/Track/Step.
-//
-// Two representations exist on purpose. Pattern is the render form: Instr is an
-// InstrumentType read per event on the mixer goroutine. PatternDef is the
-// authoring form: Instr is a name, every field carries a toml tag, and the key
-// space survives enum reordering. Conversion is total in both directions and
-// lossless except for PatternID, which is process-local and assigned at
-// registration.
-
-// PatternSpecFile is the root of a music TOML document.
+// PatternSpecFile is the root of a music TOML document, the authoring face of
+// Pattern/Track/Step. Pattern is the render form, its Instr an InstrumentType the
+// mixer goroutine reads per event; PatternDef names its Instr and tags every field,
+// so the key space survives enum reordering. Conversion is lossless both ways except
+// for PatternID, which is process-local and assigned at registration.
 type PatternSpecFile struct {
 	Pattern []*PatternDef `toml:"pattern"`
 }
@@ -134,13 +129,11 @@ func (p *Pattern) Def() *PatternDef {
 	return d
 }
 
-// ValidatePattern rejects anything that could panic, stall, or produce a
-// runaway voice on the mixer goroutine. It runs on the render form so it covers
-// both TOML loading and in-memory construction by an editor.
-//
-// An empty Name is permitted: RegisterPattern already allows anonymous
-// patterns. PatternDef.Pattern requires one, because a TOML pattern with no
-// name cannot be overridden or referenced.
+// ValidatePattern rejects anything that could panic, stall, or produce a runaway
+// voice on the mixer goroutine. It runs on the render form, so it covers both TOML
+// loading and in-memory construction by an editor. An empty Name is permitted, as
+// RegisterPattern allows anonymous patterns; PatternDef.Pattern requires one,
+// because a TOML pattern with no name cannot be overridden or referenced.
 func ValidatePattern(p *Pattern) error {
 	if p == nil {
 		return errors.New("pattern: nil")

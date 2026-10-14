@@ -7,8 +7,8 @@ import "time"
 // game-specific mix lives here
 const DefaultEffectVolume = 0.7
 
-// AudioConfig holds engine configuration
-// SampleRate field dropped (write-only duplicate of AudioSampleRate)
+// AudioConfig holds engine configuration; the sample rate is the constant
+// AudioSampleRate.
 type AudioConfig struct {
 	Enabled      bool
 	MasterVolume float64

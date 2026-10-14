@@ -2,9 +2,9 @@
 
 package main
 
-// The verb table is the whole API: the REPL, script runner and (next pass)
-// the TUI all dispatch through Execute, so nothing one front-end can do is
-// invisible to another — that is what keeps the scripted E2E meaningful.
+// The verb table is the whole API: the REPL, script runner and TUI all
+// dispatch through Execute, so nothing one front-end can do is invisible to
+// another — that is what keeps the scripted E2E meaningful.
 
 import (
 	"errors"

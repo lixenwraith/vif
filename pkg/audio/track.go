@@ -14,9 +14,9 @@ type pendingTrig struct {
 	instr InstrumentType
 }
 
-// PatternPlayer plays one Pattern layer; mixer-goroutine confined
+// PatternPlayer plays one Pattern layer; mixer-goroutine confined.
 // Crossfading between patterns is owned by the sequencer's slot A/B pair;
-// the per-player fade-in was removed — it hard-cut voice tails on SetPattern
+// a player has no fade-in of its own, so SetPattern leaves voice tails ringing.
 type PatternPlayer struct {
 	patternData *Pattern
 	mask        uint32
