@@ -167,6 +167,16 @@ func (s *stub) installs() int {
 	return len(s.installed)
 }
 
+// installedTick is the tick of the last world installed, zero before any.
+func (s *stub) installedTick() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.installed) == 0 {
+		return 0
+	}
+	return s.installed[len(s.installed)-1].Header.Tick
+}
+
 // run is one instance of the protocol over a stub world.
 type run struct {
 	world *stub
