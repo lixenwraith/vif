@@ -136,7 +136,7 @@ release: generate $(BIN_DIR)
 headless: generate $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -tags "vif_headless $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-headless $(SRC)
 
-# nolog strips logging; internal/vlog is not linked
+# nolog strips logging: internal/vlog builds as a no-op stub and lixenwraith/log is not linked
 nolog: generate $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -tags "novlog $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 

@@ -1,13 +1,10 @@
 # vif Engineering Documentation
 
 This directory describes the architecture and design of the current vif
-codebase. It was last audited on 2026-09-19, through the build-capability split,
-browser boundary, correction and authority protocol in `internal/converge`, the
-crossing barrier it orders against, the shared-world capture that a mid-run join
-installs, the CLI flag surface, and every entry in the multiplayer remaining-gaps
-list.
-The implementation, generated manifest, and shipped configuration were treated as
-authoritative where older prose disagreed with the code.
+codebase. It was last audited on 2026-10-14, when every document, the package doc
+comments and the READMEs under pkg/, script/ and tool/ were checked claim by claim
+against the code. The implementation, generated manifest and shipped configuration
+are authoritative where prose disagrees with them.
 
 vif is a terminal action game that combines vi-style text navigation,
 typing, shooting, data-driven encounters, adaptive species navigation, procedural
@@ -42,8 +39,8 @@ reader can start with the application shape and then descend into a subsystem.
 | [Packaging](packaging.md) | Operational detail | What do nightly releases publish, what must hold for a distribution package, and what is still missing per repository? |
 | [Build profiles and platforms](multi-platform.md) | Operational/design detail | What does each build include, how does a browser join a session over WebSocket, how could external assets be added, and where do future renderers attach? |
 | [Development and operations](development.md) | Operational detail | How is the project built, generated, tested and diagnosed on native and WASM targets, and what does every command-line flag do? |
-| [Deploying the session fleet](kube-docker-deploy.md) | Operational detail | How are the public edge, the node, Docker, K3s, the node's own filter, the log tmpfs, the image, the fleet objects, LogWisp, the allocator and the site's edge installed, in order? **Start here to deploy a node.** |
-| [Session fleet design](kubernetes-fleet.md) | Operational detail | What is deployed, what did it cost when measured, what is still open, and what was decided against? Holds the work list. |
+| [Deploying the session fleet](kube-docker-deploy.md) | Operational detail | What must the public edge and the site's edge provide, and how are the node, Docker, K3s, the node's own filter, the log tmpfs, the image, the fleet objects, LogWisp and the allocator installed, in order? **Start here to deploy a node.** |
+| [The session fleet: design and work list](kubernetes-fleet.md) | Operational detail | What is deployed, what did it cost when measured, what is still open, and what was decided against? Holds the work list. |
 | [Node runbook](../deploy/runbook.md) | Operational detail | What do you run on a node that is already up — status, draining, the updaters, and what each refusal means? |
 | [End-to-end setups](../script/README.md) | Operational detail | Which command runs which game setup, and which ones assert? |
 | [Bots](bots.md) | User guide | How do you play beside, watch or host bots, remove them, write a graph and compare graphs? |
@@ -89,7 +86,7 @@ changing a subsystem, update the source that actually owns its shape.
 | Alternate scenarios | `wad/scenario/*` | selected by name or path with `-s` |
 | Gameplay tuning | `internal/parameter` and `internal/parameter/visual` | systems and renderers |
 | Embedded fallback corpus | `internal/asset/content/*.toml` | content service |
-| Built-in sound bank | `internal/asset/audio/*.toml` | `parameter.BuiltinSounds`, `AudioConfig.BaseSounds` |
+| Built-in sound and music banks | `internal/asset/audio/*.toml` | `parameter.BuiltinSounds`/`BuiltinPatterns`, `AudioConfig.BaseSounds`/`BasePatterns` |
 | CLI flags, manual page, shell completions | `helpSections` in `cmd/vif/usage.go` | `-help`, `doc/vif.6`, `deploy/package/vif.bash`, `_vif`, `vif.fish` |
 | External package versions | `go.mod` | Go module resolver |
 

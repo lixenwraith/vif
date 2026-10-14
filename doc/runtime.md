@@ -65,8 +65,9 @@ The guest's port is what makes migration mean anything: it is dialled back once 
 confirm it, published to the other participants, and used only after a handoff.
 `-listen <addr>` pins it, the default is the host's own port falling back to an
 OS-assigned one, and `-no-advertise` — or a bind that fails, or an `-authority
-host` session — leaves the participant a leaf that plays normally and is never
-elected. See [Multiplayer](multi-player.md) §5.3.
+host` session — leaves the participant a leaf that plays normally and, in a
+migrate session, is elected only when the chain names no survivor. See
+[Multiplayer](multi-player.md) §5.3.
 
 Everything else about the session is one implementation. `-players` is a ceiling
 on every host and unset means the whole roster; the mid-run gate is
@@ -117,7 +118,7 @@ the scheduler goroutine, because a session's simulation has to advance whether o
 not anybody is watching it here.
 
 Holding no cursor is a roster property rather than an absence. The coordinator
-keeps its participant identity, its authority term and its vote; its slot is
+keeps its participant identity and roster entry; its slot is
 `parameter.NoPlayerSlot`, so every "is this my cursor" test answers no without a
 special case. The FSM's boot cursor is not suppressed — it is created as it always
 is, and the roster hands it to the first guest, which is what keeps shared creation
@@ -631,8 +632,9 @@ flowchart TD
 2. apply the wire artifacts whose fixed playout deadline has arrived and settle
    them in their own `"wire"` group — before the tick stamp advances, so both
    copies of a crossing land at the same absolute tick
-   ([domain model](domain-design.md) §4.1). A run that is session-shared settles
-   this group every tick, whether or not a peer is linked; a solo run has none;
+   ([domain model](domain-design.md#41-receive-lead) §4.1). A run that is
+   session-shared settles this group every tick, whether or not a peer is linked;
+   a solo run has none;
 3. open the next journal tick stamp, then set `GameTime` to `SimTime(tick)` —
    derived from the tick, never from the pacing clock, so every participant reads
    the same instant — with wall `RealTime` and fixed `DeltaTime`;

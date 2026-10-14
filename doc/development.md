@@ -138,7 +138,7 @@ line wins. That help is `helpSections` in `cmd/vif/usage.go`, which also renders
 |---|---|
 | `-host <addr>` | Play at once and open the run to participants, for example `:7777`, or `ws://:7777` for WebSocket. |
 | `-serve <addr>` | Bind a headless session with no local cursor: a dedicated host. Takes `ws://` like `-host`. |
-| `-join <addr>` | Join `[tcp://\|vif://]host:port[/name]` or a `ws(s)://` URL, or a new session an `http(s)://` site creates; the host supplies seed, config and content identity. Grammar in [Services and networking](services-and-networking.md) §6. |
+| `-join <addr>` | Join `[tcp://\|vif://]host:port[/name]` or a `ws(s)://` URL, or a new session an `http(s)://` site creates; the host supplies the seed and the scenario, and the joiner keeps its own typing corpus. Grammar in [Services and networking](services-and-networking.md) §6. |
 | `-name <name>` | With `-host` or `-serve`, the session name this host answers to, so one address serves several. |
 | `-players <n>` | Roster ceiling including self, `2`..`parameter.MaxPlayers`; with a `-join` site, the size requested. Unset holds the whole roster. With `-serve` it counts guests from `1`, because the server is not one of them, and the session starts on its first guest and admits the rest as they arrive. |
 | `-bot`, `-bots [N[:graph]\|graph]` | Add bots beside this run's participant, which under `-headless` or `-watch` is the first bot; requests from both flags add together, operands default to `1:default`, and a count of 0 adds none. With `-serve`, bots keep the session occupied. See [Bots](bots.md). |
@@ -199,7 +199,7 @@ and the audio buffer; a flag on the command line wins
 | `-lr`, `-log-recorder <ticks>` | Flight recorder depth in game ticks; zero disables; implies `-l`. |
 | `-log-session-id <id>` | Stamp every record with a deployment session ID and name the file after it (§8); implies `-l`. |
 | `-log-stdout` | Write the log to stdout as JSON instead of to a file; implies `-l`. |
-| `-j`, `-journal[=DIR]` | Record journaled-origin events to a replay journal (§8); `DIR` overrides the user-state journal directory. |
+| `-j`, `-journal[=DIR]` | Record every journaled-origin event (all but system and device) and every own crossing to a replay journal (§8); `DIR` overrides the user-state journal directory. |
 | `-mw`, `-music-wav[=DIR]` | Record the music alone to a WAV file; `DIR` overrides the user-state music directory ([Audio](audio.md)). |
 | `-dev[=false]` | Capture runtime stderr to a file; on by default for `-race` builds. |
 
@@ -327,25 +327,27 @@ itself with `:host` starts pacing at that moment, with the clock re-anchored the
 rather than carried forward — otherwise the ticks it ran flat out would be a debt
 the pacing immediately spends. That is what makes a mid-run join scriptable.
 
-`-speed` overrides the default. A ladder token paces one tick at that multiple of
-the game interval, so `-speed 2` runs a script at twice real time and `-speed 1/2`
-at half; `-speed max` removes pacing entirely and is refused alongside `-host`,
-`-join` or bots, because a participant that outruns its peers is not simulating the
-session it is in.
+`-speed` overrides the default. A ladder token makes one tick occupy the game
+interval divided by the rate, so `-speed 2` runs a script at twice real time and
+`-speed 1/2` at half; `-speed max` removes pacing entirely and is refused alongside
+`-host`, `-join` or bots, because a participant that outruns its peers is not
+simulating the session it is in.
 
 Every participant of one session must use the same rate. Only the `max` case is
 enforced, because the runtime cannot see a peer's pace: a faster participant is
 rebased to the authority's tick by every correction, which keeps the session
-correct and moves the world under a script's own schedule. A dedicated
-host and an interactive participant always run real time.
+correct and moves the world under a script's own schedule. A dedicated host runs
+real time. An interactive host runs the rate it was started at, which an
+interactive guest adopts from the offer and nobody changes during a live session;
+a script sharing the session must match it.
 
 ### A dedicated host
 
 `-serve` runs a host with no terminal, no renderer, no audio and no cursor of its
 own — the shared world, the authority, the correction cadence and the roster, and
 nothing a person would use locally. Holding no cursor is a roster property rather
-than an absence: the coordinator keeps its participant identity, its authority
-term and its vote, and its slot is `parameter.NoPlayerSlot`.
+than an absence: the coordinator keeps its participant identity and roster entry,
+and its slot is `parameter.NoPlayerSlot`.
 
 ```bash
 ./bin/vif -serve :7777 -players 2 -size 120x40 -l -lv info -ls afs
@@ -632,10 +634,10 @@ record shapes, scopes, the status registry, the flight recorder, and the
 diagnostic playbooks. This section covers only the build-facing policy.
 
 Replay capture is a separate `vif-jrn-<060102-150405>` JSONL sink, with a `-N`
-suffix when that name is taken. `-j` records every journaled-origin event regardless
-of session log level/scope, and its anchor carries the seed, RNG session,
-config/corpus identity and fingerprint, fixed tick interval, and simulation
-geometry. `-r` runs those records through a manual-clock App; this is reproduction
+suffix when that name is taken. `-j` records every journaled-origin event and every
+own crossing regardless of session log level/scope, and its anchor carries the seed,
+RNG session, config/corpus identity and fingerprint, fixed tick interval, and
+simulation geometry. `-r` runs those records through a manual-clock App; this is reproduction
 input, not another diagnostic scope.
 
 Logging is disabled at compile time for `wasm` or `novlog`. In enabled builds,
@@ -656,11 +658,12 @@ and update them without map lookups in hot paths.
 Snapshot indexing projects stable keys into bounded semantic groups and sorts
 groups/members. Allocation buffers, combat attribution, FSM regions, and active
 player slots therefore remain separate readable records without renaming keys.
-`Registry.Freeze`, called by `Scheduler.Prepare` from either `Start` or a
-driven tick/settle path, closes the metric set and caches that index permanently;
-a registration afterwards yields a detached cell and increments `stat.late`. Periodic snapshots run after a completed tick and
-after releasing the world lock, so all tick-owned writes are settled and async
-logging cannot extend lock time.
+`Registry.Freeze`, called by `Scheduler.Prepare` from `Start`, from `RunTicks`, or
+when a driven App is constructed (`newDriven`), closes the metric set and caches
+that index permanently; a registration afterwards yields a detached cell and
+increments `stat.late`. Periodic snapshots run after a completed tick and after
+releasing the world lock, so all tick-owned writes are settled and async logging
+cannot extend lock time.
 
 `-lt`/`:log stat` controls periodic emission; the default period is a coarse
 heartbeat because the flight recorder holds fine-grained history. `-lr`/`:log
