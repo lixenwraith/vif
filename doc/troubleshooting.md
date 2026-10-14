@@ -25,15 +25,15 @@ Everything else an `on_enter` would have done — a spawn request, a
 not: whatever the action established has to be in the capture instead, and
 sometimes was not.
 
-**B — a crossing the capture is assumed to contain is discarded.** §3.2 of the
-plan prunes an ordinary frame whose `Seq` is at or below the capture's fence for
-its source. The authority applies its own crossing immediately and captures
-later, so almost every host frame is pruned on the guest. In this run, by tick
+**B — a crossing the capture is assumed to contain is discarded.** Containment
+prunes an ordinary frame whose `Seq` is at or below the capture's fence for its
+source. The authority then applied its own crossing immediately and captured
+later, so almost every host frame was pruned on the guest. In this run, by tick
 600, the host had sent 245 crossings and the guest had applied **80**, discarding
-**165** as `artifacts_authority_superseded`. The rule is sound *for the shared
-component stores*, which the capture carries. It is wrong for every other effect
+**165** as `artifacts_authority_superseded`. The rule was sound *for the shared
+component stores*, which the capture carries, and wrong for every other effect
 that frame would have had — a status counter the capture excludes, or any
-player-domain effect the receiver would have raised.
+player-domain effect the receiver would have raised. §6 records the close.
 
 Both reduce to one sentence: **a shared effect that is re-derived rather than
 carried is lost whenever the install replaces the derivation.**
@@ -42,9 +42,9 @@ A third, narrower rule made B worse than it looks. `snapshot.SharedKey` answers
 two different questions with one predicate: what two instances must *agree* on,
 and what a capture *carries* — `captureStatusLocked` filters through it. A cell
 excluded as a mixed-domain aggregate is therefore also excluded from the
-correction, and if an FSM guard reads it, the two instances silently drift apart.
-`kills.*` is exactly that cell, and every escalation guard in the shipped game
-reads one.
+correction, and if an FSM guard reads it, the two instances silently drift apart
+unless a carrier holds it (§6). `kills.*` is exactly that cell, and every
+escalation guard in the shipped game reads one.
 
 ## 2. Issue 1 — the gold timer splash disappears on the guest
 
@@ -58,16 +58,16 @@ QuasarGoldActive` at 403 and pushes `EventGoldSpawned` + `EventSplashTimerReques
 The guest pushes neither: the capture for host tick 403 commits before the guest's
 own tick-403 FSM update, so the guest's `quasar` region resumes from
 `QuasarGoldActive` and its `QuasarGoldSpawn.on_enter` never runs. The install
-carries the gold — `correction_entries 67, correction_entities 24` — and
-`GoldSystem.LoadShared` restores liveness, header and deadline. Nothing restores
-the splash, and the guest plays 40 ticks of gold with no timer. The next gold, at
-tick 444, is spawned locally on both and the timer is back: hence "about 30% of
-the time".
+carries the gold — `correction_entries 67, correction_entities 24` — with its
+liveness, header and deadline. Nothing restores the splash, and the guest plays 40
+ticks of gold with no timer. The next gold, at tick 444, is spawned locally on both
+and the timer is back: hence "about 30% of the time".
 
 **Fix.** `GoldSystem.LoadShared` marks a sequence whose header this instance did
-not spawn, and `Update` raises the timer for the remaining duration. `Update` runs
-only on the live world, so the staging world does not queue one. This also covers
-the join case, where the first capture always arrives without a local spawn.
+not spawn, and `Update` raises the timer for the remaining duration. A projecting
+staging world raises one too, which goes with its player domain at commit; the
+live install marks its own. This also covers the join case, where the first
+capture always arrives without a local spawn.
 
 **Since.** The inverse — a timer for a gold that is not there. A mispredicted
 composite spawn shifts a guest's shared allocation, so its gold can hold an id the
@@ -101,13 +101,13 @@ writer and one value.
 opened 150 ms in which the target refused everyone. Two consequences, and the
 second is the one that reads as "no damage at all":
 
-- The window is a budget the roster divides. Two participants firing at one swarm
-  land one hit per 150 ms **between them**, so each does roughly half the damage
+- The window was a budget the roster divided. Two participants firing at one swarm
+  landed one hit per 150 ms **between them**, so each did roughly half the damage
   they do alone, with more weapons on screen.
-- 150 ms is exactly the receive lead (three ticks at 20 Hz). A guest's hit is
-  applied locally at once and reaches the host three ticks later — reliably inside
-  the shadow of a host hit the guest could not have seen. The guest watches hit
-  points fall, the host refuses the same hit, and the next correction puts them
+- 150 ms was exactly the receive lead (three ticks at 20 Hz). A guest's hit then
+  applied locally at once and reached the host three ticks later — reliably inside
+  the shadow of a host hit the guest could not have seen. The guest watched hit
+  points fall, the host refused the same hit, and the next correction put them
   back. Repeatedly.
 
 **In the logs.** At tick 600 the host had absorbed 1751 damage against swarms and
@@ -116,14 +116,14 @@ host and 235 on the guest, `kinetic_immune` 653 and 394. A high absorb ratio is
 expected from a single player with every weapon; what the counters cannot show,
 and the structure does, is which participant's hit each rejection belonged to.
 
-**Fix.** The window stays the target's; its budget is now per attacker.
-`CombatComponent.DamageImmunitySpent` is a bitmask of the roster slots that have
-already landed inside the open window, with the top bit for an attack no cursor
-owns. A hit is refused only when its own bit is set; a second attacker lands and
-sets its bit without extending the window. One attacker is unchanged — the same
-one hit per 150 ms — and one participant can no longer spend another's budget.
-The mask travels with owner-authored cursor state and is in the shared combat
-digest.
+**Fix.** The window stays the target's; its budget is now per attacker and per
+attack family. `CombatComponent.DamageImmunitySpent` holds, for each family, a
+bitmask of the roster slots that have already landed inside the open window, with
+the bit above the last slot for an attack no cursor owns. A hit is refused only
+when its own bit for its family is set; a second attacker lands and sets its bit
+without extending the window. One attacker with one weapon is unchanged — one hit
+per 150 ms — and one participant can no longer spend another's budget. The masks
+travel with owner-authored cursor state and are in the shared combat digest.
 
 An attacker joining an open window late may land twice inside one duration. The
 rate stays bounded at two hits per window per attacker, and the alternative is
@@ -133,9 +133,10 @@ Species-authored invulnerability is a different thing and says so: quasar shield
 storm phase and the snake head refresh the ward status (`StatusWard`), which
 refuses every attacker until it runs out.
 
-**Since.** Kinetic immunity is per attacker as well, with the opener replacing the
-velocity and every joiner adding to it, so a window composes to one vector in any
-order. Kill credit stays with the cursor that landed the killing hit (§12).
+**Since.** Kinetic immunity stays the target's: the first knockback opens a window
+that refuses every attacker until it closes, so which knockback holds it depends on
+arrival order and a correction repairs a difference. Kill credit stays with the
+cursor that landed the killing hit (§12).
 
 **Incomplete.** This was the right change and not the whole one: the swarms that
 would not die were not being refused damage, they were never asked. §7.1.
@@ -159,9 +160,9 @@ the encounter had been fought. Every sibling region already handles this:
 `QuasarFuse` waits for `EventSpeciesCreated` rather than for a clock.
 
 **The escalation guards read state the correction drops.** `StormDecision`
-branches on `kills.swarm >= 20` and `kills.storm >= 3`; `QuasarGoldCycle` on
+branched on `kills.swarm >= 20` and `kills.storm >= 3`; `QuasarGoldCycle` on
 `kills.quasar`; `MainCycle` on `kills.drain`. All are `kills.*`, which the capture
-excluded (§1), and all are reset by an `on_enter`/`on_exit` action an installed
+excluded (§1), and all were reset by an `on_enter`/`on_exit` action an installed
 state never runs (shape A). The counters drift, and a region entered by install can
 satisfy an escalation guard on its very first tick. In this run at tick 600 the
 host held `kills {drain 12, quasar 1, swarm 8}` and the guest
@@ -171,10 +172,13 @@ host held `kills {drain 12, quasar 1, swarm 8}` and the guest
 a receiver whose FSM was installed by testing `storm.active` instead, and otherwise
 falls to `StormSetupRetry` and asks again — the shape `MainSpawnGoldRetry` already
 has. `MetaSystem` carries the kill tallies, the combined defeat latch and the
-multiplier, so guards read the same numbers on every instance. `StormSystem`
-becomes a carrier for its root entity and pending blue spawns: without them a
-receiver corrected past `StormSetup` held the storm's entities and simulated none
-of them, because `Update` returns immediately on `rootEntity == 0`.
+multiplier, so guards read the same numbers on every instance. The tallies now
+restart only with the game: an escalation records its tally into an FSM variable
+(`StatusToVar`), which the capture carries, and the next guard counts from that
+mark (`StatusIntCompare` with `since`). `StormSystem` becomes a carrier for its
+root entity and pending blue spawns: without them a receiver corrected past
+`StormSetup` held the storm's entities and simulated none of them, because `Update`
+returns immediately on `rootEntity == 0`.
 
 **Uncertain.** No capture of the failure exists, so neither mechanism is confirmed
 as *the* cause, and both are addressed. `storm.spawn_failures` and `fsm.storm`
@@ -187,15 +191,15 @@ the same retry (`StSpawn`).
 Closed since (2026-09-24):
 
 - **The pruning rule.** A capture follows the epochs it fences on one ordered link,
-  and every copy of a crossing now applies at one tick, so a fenced frame has been
+  and a frame it fences was committed at or before its tick, so the frame has been
   applied before the capture claiming it installs. A 3-tick latency mesh with both
   participants moving every other tick counted zero
   `network.artifacts_authority_superseded` in 1200 ticks; a non-zero count in a
   field log reopens the inventory.
 - **`SharedKey` answering two questions.** Every excluded cell a shared guard or
-  system reads — `kills.*`, `energy.damage_multiplier`, `session.any_defeated` — is
-  carried and compared through `MetaSystem`'s record, and the other excluded groups
-  are telemetry. A second predicate would be a second carrier for the same values.
+  system reads — `kills.*` and `energy.damage_multiplier` — is carried and compared
+  through `MetaSystem`'s record, and the other excluded groups are telemetry. A
+  second predicate would be a second carrier for the same values.
 - **`MonitorWarmup`**, which guarded on owner-authored keys and nothing entered, is
   deleted.
 
@@ -243,15 +247,16 @@ gates on `HasAnySharedEntityAt`. Both were already shared-only, so neither is a
 source of divergence.
 
 What the search does read is **cursor positions**, and that is a source. An
-ordinary crossing applies at once on its producer and a playout lead later
-everywhere else (§3.1 of the plan), so at any tick the two instances hold the
-guest's cursor at different cells. The exclusion band is `|dx| <= 5` **or**
-`|dy| <= 3` around every cursor — roughly a quarter of the map per cursor — so
-the two instances accept and reject different candidates. Each rejected candidate
-had already consumed two draws from the shared gold stream, so a single
-disagreement left the stream at a different position on each instance, and every
-*later* sequence and position differed too, not just this one. That is the
-"one gold here, another gold there" report, and it is why it did not settle.
+ordinary crossing then applied at once on its producer and a playout lead later
+everywhere else, so at any tick the two instances held the guest's cursor at
+different cells; a crossing the authority commits late still does. The exclusion
+band is `|dx| <= 5` **or** `|dy| <= 3` around every cursor — roughly a quarter of
+the map per cursor — so the two instances accept and reject different candidates.
+Each rejected candidate had already consumed two draws from the shared gold
+stream, so a single disagreement left the stream at a different position on each
+instance, and every *later* sequence and position differed too, not just this one.
+That is the "one gold here, another gold there" report, and it is why it did not
+settle.
 
 **Fix.** Every candidate is drawn before any is examined, so the stream advances
 by a fixed amount whatever the filters decide. A mispredicted gold is now one
@@ -274,11 +279,11 @@ The typed member shown again inside the lead and the timer on a re-issued anchor
 are both closed since: a typed member leaves at its agreed tick, and an install
 cancels the timer of the gold header it replaces.
 
-### 7.3 `scenario.sh drain`
+### 7.3 `script/test.sh drain`
 
 Reworked rather than removed. It asserted that the drain "waited out its deadline
 *holding* the guest", which needed a scripted guest to outlive a wall-clock
-window. `ScriptDriver.applyCurrent` fails the run when the world tick has passed
+window. `ScriptDriver.applyCurrent` failed the run when the world tick had passed
 an action's target tick — and a correction moves the world tick, so on a loaded
 machine the guest ended itself and the scenario reported a failure the host had
 no part in.
@@ -494,9 +499,10 @@ whole installs in 1,200 ticks and 15 moved nothing, each about 30 ms staged and
   hash-only answer does (`TestACorrectionThatMovesNothingWritesNothing`).
 
 An install that moves nothing now costs about 8 ms staged and 6 ms committed, a
-repair 8 ms staged with its commit bound by projection (`doc/todo.md`). Adopting a
-body whose root equals this instance's world at that tick, as proposed, would
-index that world first — 14 ms, more than the install it saves — and was not built.
+repair 8 ms staged with its commit bound by projection
+([Todo](todo.md#project-a-correction-outside-the-live-lock)). Adopting a body whose
+root equals this instance's world at that tick would index that world first —
+14 ms, more than the install it saves — so it is not built.
 
 ## 15. Tenth round (2026-09-26–27, multiplayer scaling)
 
@@ -537,6 +543,10 @@ producers forward their own. Leaves then answered 95% hash-only with late commit
 at the star's rate, at the cost of a whole world per floor window through every
 link. The delegated relay in [Todo](todo.md#delegate-convergence-to-relays) is the
 intended shape.
+
+**Since** (`d76ebe4`). A relay's manifest answer names each participant behind it
+with the tick it last proved, and the authority's floor counts those, so the whole
+world per floor window through every link is gone.
 
 ## 16. Eleventh round (2026-09-27, a terminal guest into the tower over a slow link)
 
