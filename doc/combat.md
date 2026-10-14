@@ -40,9 +40,10 @@ flowchart LR
 
 `component.WeaponSpecs` is the one table of weapon kinds: status name, delivery,
 combat attack family, cursor cooldown and charge cap, whether the kind is innate
-and fires from the cursor, the hosted range and `CursorDamage`, and what the
-kind gains at its cap (§4). A new kind adds a row; drivers and renderers index
-by kind.
+and fires from the cursor, the cardinals a tracer volley covers (`Directions`),
+the hosted range and the `CursorDamage` a hosted hit costs (`HostedDamage`), and
+what the kind gains at its cap (§4). A new kind adds a row; drivers and renderers
+index by kind.
 
 | Kind | Delivery | On a cursor | Mounted |
 |---|---|---|---|
@@ -67,8 +68,9 @@ unplaced or the kind has none. Spread draws from the Player stream.
 Tracers are the weapon system's own, as rays are: the gun's volley spawns one
 per direction and lane, and every tick each sweeps its row or column cell by
 cell, striking the first wall or combatant it meets and draining its trail
-there. A tracer takes the cursor's polarity when fired: a positive one blossoms
-the red glyphs it crosses, a negative one decays blue ones to green.
+there. A tracer takes the cursor's polarity when fired: a positive one turns the
+red glyphs it crosses into blossom, a negative one turns blue ones green and
+releases decay from them.
 
 **`mount`** (shared) fires the one weapon a Shared host carries. A level attaches
 it with `EventMountRequest` (host, weapon, interval, range, muzzle, lane, width),
@@ -123,21 +125,21 @@ status instead of taking hit points. Damage allowances are per player and attack
 family within the target's immunity window (D-3); chained effects keep their
 originating weapon's allowance. Knockback and stun immunity each cover all players
 and weapons. Species-authored invulnerability is the ward status and blocks every
-weapon.
+weapon's damage.
 
 A status is one slot per kind on `CombatComponent`, no stacking: remaining time,
 a period and its timer, a magnitude, the crediting cursor and the family it
 records under. Combat ages every slot each tick. The ward is the one slot a hit
 never writes: quasar shields, storm phase and the shielded snake head refresh it
-from their own systems, and combat refuses every hit and tick while it runs. Stun
-suppresses movement and is never refreshed while it runs, so a target under fire
-from two players still leaves it. Burn is the charged pulse's chained over-time
-attack, `CombatAttackBurn`: `BurnDamage` every `BurnPeriod` for `BurnDuration`, the
-last refresher credited, each tick recorded under the burn family, flashing the
-target and setting `LastDamagedBy` on it and its header. Nothing spends the burn
-family's immunity, so only a ward refuses a burn or its tick; a tick spends no
-window, so a player's own burn never blocks their direct hits. The digest names
-every slot field, so a status is compared state.
+from their own systems, and combat refuses every hit's damage and every tick while
+it runs. Stun suppresses movement and is never refreshed while it runs, so a target
+under fire from two players still leaves it. Burn is the charged pulse's chained
+over-time attack, `CombatAttackBurn`: `BurnDamage` every `BurnPeriod` for
+`BurnDuration`, the last refresher credited, each tick recorded under the burn
+family, flashing the target and setting `LastDamagedBy` on it and its header.
+Nothing spends the burn family's immunity, so only a ward refuses a burn or its
+tick; a tick spends no window, so a player's own burn never blocks their direct
+hits. The digest names every slot field, so a status is compared state.
 
 Hits on cursors are `CursorDamage`: energy through an active shield, heat without
 one. Projectiles find the cursor they touch with `CursorContactAt`, shields
@@ -149,6 +151,7 @@ own footprint test for its hundreds of cells.
 |---|---|
 | Tracer, rod, turret bullet on a Shared target | one direct request stamped Shared (stamped class) |
 | Missile blast, disruptor pulse | explosion geometry: centre, radius, attack, owner, and whether the weapon was at its cap |
+| Special-fire detonation | one batch of explosion centres sharing radius, attack and owner |
 | Ray on a Shared target, each tick it covers it | area crossing: target, member set, owner, scale |
 | Any hit on a drain | local; drains are Player-domain |
 
@@ -192,7 +195,7 @@ Lightning, missile and bullet integrate after combat; `transient` ages rings lat
    with the artifact it crosses; `TestEventClassMatchesSystemProfile` enforces it.
 
 Telemetry: the `weapon` card holds the loadout, orbs and tracers in flight,
-`weapon.fired` and `weapon.rejects` the counters, `weapon.tracer_*` the sweep;
-`combat.damage.family` is the damage each attack family deals, which is how a
-weapon's effect reads; `combat.effect_burn` and `combat.burn_ticks` count burns
-left and ticks landed; `mount`, `missile` and `bullet` hold their own.
+the `weapon.fired` and `weapon.rejects` groups the counters, `weapon.tracer_*` the
+sweep; the `combat.damage.family` group is the damage each attack family deals,
+which is how a weapon's effect reads; `combat.effect_burn` and `combat.burn_ticks`
+count burns left and ticks landed; `mount`, `missile` and `bullet` hold their own.
