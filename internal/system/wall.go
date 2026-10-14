@@ -716,10 +716,14 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int) int64 {
 
 		if _, _, moved := s.world.PushEntityFromBlocked(entity, mask); moved {
 			pushCount++
+			continue
+		}
+		// Not moved: either this wall does not block the entity, or no free cell exists
+		if !s.world.Positions.IsBlocked(x, y, mask) {
+			continue
 		}
 
-		// Push failed - entity is stuck
-		// Destroy non-cursor-owned combat entities that cannot escape
+		// Stuck: destroy non-cursor-owned combat entities that cannot escape
 		if combat, ok := s.world.Components.Combat.GetComponent(entity); ok {
 			if !s.world.Components.Cursor.HasEntity(combat.OwnerEntity) {
 				event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
