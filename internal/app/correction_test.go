@@ -160,9 +160,9 @@ func sharedStatesAgree(a, b *App) bool {
 	return !differs
 }
 
-// TestCorrectionMagnitudeIsMeasuredNotAsserted pins the number that replaced
-// DESYNC: how far this instance's prediction had drifted when the authority
-// arrived, published rather than escalated.
+// TestCorrectionMagnitudeIsMeasuredNotAsserted pins how far this instance's
+// prediction had drifted when the authority arrived: a number published, never
+// escalated to a desync state.
 func TestCorrectionMagnitudeIsMeasuredNotAsserted(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF
@@ -192,7 +192,7 @@ func TestCorrectionMagnitudeIsMeasuredNotAsserted(t *testing.T) {
 	if cells == 0 {
 		t.Fatal("correction magnitude reports no placement shift, want one that moved")
 	}
-	// Nothing escalated: the drift is the ordinary condition this phase created.
+	// Nothing escalated: drift from a host-only placement is ordinary, not divergence.
 	if diverged := host.World().Resources.Status.Bools.Has("network.diverged"); diverged {
 		t.Fatal("network.diverged is still registered; DESYNC/DIVERGED were retired")
 	}
@@ -418,8 +418,8 @@ func TestReconcileMatchesAFullInstall(t *testing.T) {
 
 // TestCrossingApplyTimes is the ordering rule over one pair: a crossing applies at
 // one agreed tick, a playout lead after its production, on its producer as on its
-// peer. A producer that applied its own a lead early was the one every correction
-// inside that lead had to undo.
+// peer. A producer that applied its own crossing a lead early would leave every
+// correction inside that lead to undo it.
 func TestCrossingApplyTimes(t *testing.T) {
 	t.Parallel()
 	a, b := pair(t, 0x5EEDBEEF, 0)
@@ -743,10 +743,10 @@ func TestMidRunJoinWaitsOutThePlayoutLead(t *testing.T) {
 }
 
 // TestCorrectionsLeaveOneOrbPerArmedWeapon is the D-4/D-13 boundary a correction
-// crosses: a player-domain handle carried on a shared component means nothing on the
-// receiving instance, so every correction overwrote a guest's live orb handles with
-// the host's zeroes and the next tick spawned replacements over the orphans. No
-// shared component names a player entity now, which is what this asserts.
+// crosses: a player-domain handle on a shared component means nothing on the
+// receiving instance, so a correction carrying the host's would orphan a guest's
+// orbs and the next tick would spawn replacements. No shared component names a
+// player entity, so every correction leaves one orb per armed weapon.
 func TestCorrectionsLeaveOneOrbPerArmedWeapon(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF
@@ -1395,7 +1395,7 @@ func TestATowerGuestAnswersHashOnly(t *testing.T) {
 // TestASlowLinkCarriesTheTowerWithoutAStandingQueue: a link slower than the tower's
 // whole world a second still converges its guest on proofs, and the host queues
 // no body behind another, so the round trip stays the link's own. Unpaced, the
-// queue grew until the guest's crossings voided and it was evicted.
+// queue would grow until the guest's crossings voided and it was evicted.
 func TestASlowLinkCarriesTheTowerWithoutAStandingQueue(t *testing.T) {
 	t.Parallel()
 	// A wide terminal's map, whose tower world is about 40 KB whole.

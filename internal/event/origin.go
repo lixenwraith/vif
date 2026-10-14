@@ -10,7 +10,7 @@ const (
 	OriginMacro                 // Macro playback and auto-fire, which is a macro by another name
 	OriginCommand               // Ex command line
 	OriginNetwork               // Remote producer
-	OriginDebug                 // Harness and out-of-band control such as :region
+	OriginDebug                 // Harness and out-of-band control, such as App.Region and -script events
 	OriginSession               // Session layer, from a transport observation
 	OriginDevice                // This machine's own output, such as the audio mute
 	originCount

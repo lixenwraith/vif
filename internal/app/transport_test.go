@@ -489,11 +489,11 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 
 }
 
-// proveTwoLive drives two live participants and asserts the criterion that replaced
-// lockstep: the guest is equal to the host as of every correction. Between
-// corrections the two are expected to disagree, so what has to stay true is that each
-// is really driving something — the moved/sent/apm checks below — and that the
-// disagreement is closed rather than tolerated.
+// proveTwoLive drives two live participants and asserts the convergence criterion:
+// the guest is equal to the host as of every correction. Between corrections the two
+// are expected to disagree, so what has to stay true is that each is really driving
+// something — the moved/sent/apm checks below — and that the disagreement is closed
+// rather than tolerated.
 func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA journal.FuzzOptions, tickPair func()) {
 	t.Helper()
 	steps := optA.Steps
@@ -1172,11 +1172,10 @@ func diffSharedWorld(a, b *App, maxDiff int) []string {
 	return out
 }
 
-// TestSharedIdentityCrossingWaitsOnItsProducer is the rule the storm flicker broke:
-// a crossing that creates shared entities applies at its agreed tick on its producer
-// as everywhere else. Applied a lead early it would allocate identity nobody else
-// has, the next correction would delete what it made, and the one after that would
-// put it back.
+// TestSharedIdentityCrossingWaitsOnItsProducer: a crossing that creates shared
+// entities applies at its agreed tick on its producer as everywhere else. Applied a
+// lead early it would allocate identity nobody else has, the next correction would
+// delete what it made, and the one after that would put it back: a storm flicker.
 func TestSharedIdentityCrossingWaitsOnItsProducer(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF

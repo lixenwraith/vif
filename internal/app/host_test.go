@@ -123,9 +123,9 @@ func TestMidRunHostUsesConfiguredCapOrMaximum(t *testing.T) {
 
 // TestAMidRunHostAttributesItsOwnCursor is what a succession is decided from: the
 // roster is re-derived from the participant stamped on each cursor, and it travels
-// in every capture. A session opened without a lobby left the coordinator's own
-// cursor unattributed, so no survivor's handoff record named the participant that
-// had just gone and its cursor stayed on the map.
+// in every capture. A session opened without a lobby stamps the coordinator's own
+// cursor too; unstamped, no survivor's handoff record would name the participant
+// that had gone, and its cursor would stay on the map.
 func TestAMidRunHostAttributesItsOwnCursor(t *testing.T) {
 	host := mustHeadless(t, 0x3017, 120, 40)
 	defer host.Close()
@@ -255,9 +255,8 @@ func TestAReconnectIsTheSameJoin(t *testing.T) {
 	const seed = 0x3019
 	addr := freeAddress(t)
 
-	// newScriptApp is the interactive -host sequence with the frame loop removed:
-	// the same lobby, the same start gate, and the same arming of the mid-run gate
-	// once the roster has closed.
+	// newScriptApp is a scripted -host: a lobby, the start gate, and the mid-run
+	// gate armed once the roster has closed.
 	cfg := Config{
 		Mode: ModeHeadless, Seed: seed, Width: 120, Height: 40,
 		Resources:   resource.Options{Embedded: true},
@@ -589,10 +588,9 @@ func TestAReceivedScenarioAnswersOnlyItsOwnName(t *testing.T) {
 }
 
 // TestASuccessorLeadsTheSessionItInherited pins what a term means for every rule
-// reserved for the authority. IsSessionCoordinator used to compare against
-// identity 1 alone, so a participant that had inherited the session was refused
-// its own reset and its own scenario change while being the only instance able to
-// apply either.
+// reserved for the authority: IsSessionCoordinator follows the authority the held
+// term names, so a participant that inherited the session keeps its own reset and
+// scenario change, being the only instance able to apply either.
 func TestASuccessorLeadsTheSessionItInherited(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0xA1A3, 2, [][2]int{{1, 2}})
@@ -934,9 +932,9 @@ func TestCoordinatorResetCrossesAndPreservesRoster(t *testing.T) {
 	}
 }
 
-// TestOneSharedQuasarTriggerProducesOneSpawn models the old MainEscalate fan-out:
-// the same shared decision asks every player-domain FuseSystem to act. It is one
-// logical fusion and therefore must yield one shared spawn request, not N.
+// TestOneSharedQuasarTriggerProducesOneSpawn is the MainEscalate fan-out: one shared
+// decision reaches every participant's player-domain FuseSystem. It is one logical
+// fusion and therefore must yield one shared spawn request, not N.
 func TestOneSharedQuasarTriggerProducesOneSpawn(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0xA4A4, 2, [][2]int{{1, 2}})
@@ -998,11 +996,10 @@ func TestExplosionPresentationStaysWithItsProducer(t *testing.T) {
 	}
 }
 
-// TestRuntimeDigestIsADriftGaugeRatherThanAVerdict. An escalation to DESYNC or
-// DIVERGED states that two instances re-deriving one world have lost an artifact for
-// good, which holds while both re-derive and not for a guest that predicts and is
-// corrected. The escalation is gone and the measurement stayed: a mismatch is counted
-// and the disagreeing surface named, and neither is a state a session is stuck in.
+// TestRuntimeDigestIsADriftGaugeRatherThanAVerdict: a digest mismatch is counted and
+// the disagreeing surface named, never escalated to a DESYNC or DIVERGED state. That
+// verdict says two instances re-deriving one world lost an artifact for good, which
+// does not hold for a guest that predicts and is corrected.
 func TestRuntimeDigestIsADriftGaugeRatherThanAVerdict(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0xD165E57, 2, [][2]int{{1, 2}})
@@ -1051,8 +1048,8 @@ func TestRuntimeDigestIsADriftGaugeRatherThanAVerdict(t *testing.T) {
 		}
 	}
 
-	// The retired surface is retired, not renamed: a session cannot enter a state
-	// the next correction does not leave, so there is nothing left to report one.
+	// No sync state is published under another name either: a session cannot enter
+	// a state the next correction does not leave, so there is none to report.
 	for _, key := range []string{"network.sync_state", "network.sync_part", "network.sync_records"} {
 		if apps[0].World().Resources.Status.Strings.Has(key) {
 			t.Fatalf("%s is still registered; DESYNC and DIVERGED were retired", key)
@@ -1062,8 +1059,8 @@ func TestRuntimeDigestIsADriftGaugeRatherThanAVerdict(t *testing.T) {
 		t.Fatal("network.diverged is still registered; DESYNC and DIVERGED were retired")
 	}
 
-	// And the authority closes it. A correction is what repairs a disagreement now,
-	// including one nothing in the simulation caused.
+	// And the authority closes it: a correction repairs a disagreement, including
+	// one nothing in the simulation caused.
 	advance := func() { tickAll(apps) }
 	want := deliverCorrection(t, apps[0], apps[1:], advance)
 	assertCorrected(t, want, apps[1], "guest after a corrupted position")

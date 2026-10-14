@@ -5,21 +5,10 @@ import (
 )
 
 // CrossingFence is one participant's ordinary-crossing boundary in a shared world:
-// the source-local sequence through which that world already contains what the
-// participant produced.
-//
-// It exists because a tick cannot answer the question. An ordinary crossing has two
-// application times by design — its producer applies it immediately and every other
-// instance waits for the agreed apply tick — so "is this artifact in that world"
-// and "is its apply tick in the past" are different questions, and the answer to
-// the second is only usually the answer to the first.
-//
-// Where they part is a link that misses the playout lead. A participant produces a
-// crossing for tick T+3, the authority has not received it when it reads the world
-// at T+5, and the capture therefore does not contain an artifact whose apply tick is
-// already old. Judged by tick, the producer concludes its own action is represented
-// and drops it; judged by sequence, it knows exactly what the authority had and
-// replays the rest.
+// the source-local sequence through which that world holds the participant's
+// crossings. A tick cannot tell: the authority commits a crossing that missed the
+// playout lead at its own next tick, so a capture can lack one whose apply tick is
+// past. The producer replays what lies past the fence, not what lies past a tick.
 type CrossingFence struct {
 	Source PeerID `json:"s"`
 	Seq    uint64 `json:"q"`
@@ -43,10 +32,10 @@ func (f CrossingFences) Seq(source PeerID) uint64 {
 	return 0
 }
 
-// Normalize sorts by source, drops zero sequences, and collapses a repeated source
-// to its highest. It is applied where a vector is built rather than where one is
-// read, so everything downstream — comparison, encoding, the manifest's byte
-// equality — sees one canonical form.
+// Normalize sorts by source, drops zero sources and sequences, and collapses a
+// repeated source to its highest. It is applied where a vector is built rather than
+// where one is read, so everything downstream — comparison, encoding, the manifest's
+// byte equality — sees one canonical form.
 func (f CrossingFences) Normalize() CrossingFences {
 	if len(f) == 0 {
 		return nil
