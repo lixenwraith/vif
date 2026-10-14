@@ -1,5 +1,8 @@
-// Package snapshot defines Shared captures, compression and manifests.
-// The caller owns the world lock while reading or installing a capture.
+// Package snapshot is the shared-capture wire model — the capture and its header,
+// the compressed keyframe and delta, the correction manifest with its section and
+// page hashes, the selective shard set — and the cross-instance comparison
+// surface: its key filters, line format and digest. Its readers take a world the
+// caller has locked; nothing here acquires the world lock.
 package snapshot
 
 import (
