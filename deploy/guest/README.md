@@ -21,42 +21,48 @@ back one out.
 | `vif-fleet-log-cleanup.service` / `.timer` | `/etc/systemd/system/` | root 0644 | runs the cleanup as `vif-fleet` once per minute |
 | `nftables.conf` | `/etc/nftables.conf` | root 0644 | the include below; owns one `inet vif` table, admits the front door's 7777, never flushes the ruleset; `update.sh filter` installs and loads it |
 | `vif-operator.nft.example` | `/etc/nftables.d/vif-operator.nft` | root 0644 | site values: the one address allowed to reach the node, and its ports |
-| `logwisp.sysusers` | `/etc/sysusers.d/` | root 0644 | creates the locked `logwisp` identity; tmpfs read access comes from the `vif-fleet` supplementary group alone |
+| `logwisp.sysusers` | `/etc/sysusers.d/logwisp.conf` | root 0644 | creates the locked `logwisp` identity; tmpfs read access comes from the `vif-fleet` supplementary group alone |
 | `logwisp.service` | `/etc/systemd/system/` | root 0644 | read-only view of the fleet tmpfs, inaccessible K3s and allocator credential paths, no dependency on games or the allocator |
 | `../logwisp/aggregator.toml` | `/etc/logwisp/vif-fleet.toml` | root 0644 | `raw = true`, `from = "start"`, bounded flow and clients, loopback-only sink |
-| `vif-allocator.env` | `/etc/vif-allocator/allocator.env` | `root:vif-allocator` 0640 | this deployment's allocator settings, installed by `update-vif-allocator.sh`; edited here, never on the node. `VIF_ALLOCATOR_IMAGE` alone is added on the node, by `update-vif-image.sh` |
+| `vif-allocator.env` | `/etc/vif-allocator/allocator.env` | `root:vif-allocator` 0640 | this deployment's allocator settings, installed by `update-vif-allocator.sh`; edited here, never on the node. `VIF_ALLOCATOR_IMAGE` alone is added on the node: by the first install, then by `update-vif-image.sh` |
 | `vif-allocator.service` | `/etc/systemd/system/` | root 0644 | `/usr/local/bin/vif-allocator`, the CA copy and the token file; `Type=notify` |
 | `vif-allocator-token.service` / `.timer` | `/etc/systemd/system/` | root 0644 | root-only atomic rotation of the short-lived ServiceAccount token, every six hours |
 | `vif-allocator-refresh-token.sh` | `/usr/local/libexec/vif-allocator-refresh-token` | root 0755 | the rotation the oneshot runs |
 
-`/etc/vif-allocator` is `root:vif-allocator` 0750, so reading `allocator.env` needs
-`sudo`. A helper that reports it missing without one is out of date.
+`/etc/vif-allocator` is `root:vif-allocator` 0750, so reading `allocator.env`, or
+even testing that it exists, needs `sudo`.
 
 ## Helpers
 
-Each builds first, keeps one rollback set at `.previous`, restores it if
-verification fails, and leaves Docker, its socket and the distribution containerd
-disabled with `FORWARD ACCEPT` restored. Where Docker was already running, the image
-and LogWisp builds use it in place and leave it running with `FORWARD` as it was; they
-remove their own image and keep the bases and build cache they pulled.
+Each builds or validates before it replaces anything. The allocator and LogWisp
+updaters keep one rollback set at `.previous` and restore it if verification fails;
+the wad helper keeps the tree it replaced at `/var/db/vif/wad.previous`. The image
+and LogWisp builds leave Docker, its socket and the distribution containerd disabled
+with `FORWARD ACCEPT` restored. Where Docker was already running, they use it in
+place and leave it running with `FORWARD` as it was; they remove their own image and
+keep the bases and build cache they pulled.
 
 | Helper | What it replaces | What it refuses |
 |---|---|---|
-| `install-logwisp.sh [revision]` | first install of the binary, identity, configuration and unit | an existing installation; a revision that is not on upstream `main`; Docker without buildx |
+| `install-logwisp.sh [revision]` | first install of the binary, identity, configuration and unit | an existing installation; a node without the `vif-fleet` identity; a revision that is not on upstream `main`; Docker without buildx, or stopped but not disabled |
 | `update-logwisp.sh [revision]` | LogWisp's binary, configuration and unit only | a stopped `logwisp.service`; the same revision and Docker refusals |
-| `update-vif-allocator.sh [--render]` | the allocator binary, unit, and env from `vif-allocator.env`; `--render` prints that env and changes nothing | a dirty worktree; a non-empty fleet |
-| `update-vif-image.sh [tag]` | the headless session image, imported pinned, and `VIF_ALLOCATOR_IMAGE` with it; empties Docker's store afterwards; rejects an image without the `headless` profile label | a dirty worktree; an occupied fleet |
+| `update-vif-allocator.sh [--render]` | the allocator binary, unit, and env from `vif-allocator.env`; `--render` prints that env and changes nothing | a dirty worktree; a stopped `vif-allocator.service`; an installed env without `VIF_ALLOCATOR_IMAGE`; a non-empty fleet |
+| `update-vif-image.sh [tag]` | the headless session image, imported pinned, and an installed allocator's `VIF_ALLOCATOR_IMAGE` with it, with allocation paused meanwhile; removes older `vif` tags from K3s and empties Docker's store afterwards; rejects an image without the `headless` profile label | a dirty worktree; an occupied fleet |
 | `update-vif-wad.sh [dir]` | the node's scenario volume at `/var/db/vif/wad`, by atomic rename; validates every scenario first, with a binary built from the checkout and the layout a pod mounts | a tree that is not laid out like `wad/`; a scenario that does not load. **Not** an occupied fleet: a running match keeps the tree it mounted |
 
-The LogWisp helpers build upstream `main`'s head, or the revision given, from a
-fresh clone in a temporary directory; no LogWisp checkout is needed. Every refusal
-message is explained in [`../runbook.md`](../runbook.md).
+The LogWisp helpers build upstream `main`'s head, or the revision given, through
+`build-logwisp.sh` from a fresh clone in a temporary directory; no LogWisp checkout
+is needed. [`../runbook.md`](../runbook.md) explains the common refusals.
 
 ## Backing one component out
 
 Each block assumes allocation is stopped and the fleet is empty:
 `./deploy/k3s/session.sh blockers`, then `drain` if it refuses. None of them lowers
 Pod Security, deletes a Bound PV/PVC in use, or unmounts the tmpfs while K3s runs.
+
+The session image, the scenario volume, the node filter and the fleet objects come
+from the checkout: check out the revision to return to and run `./deploy/update.sh`
+naming that component.
 
 ### The allocator, or LogWisp
 
@@ -78,8 +84,10 @@ curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/healthz
 curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/readyz
 ```
 
-`update-logwisp.sh` prints the equivalent `.previous` paths for the LogWisp binary,
-configuration and unit, and restores them itself when its own verification fails.
+LogWisp's set is `/usr/local/libexec/logwisp.previous`,
+`/etc/logwisp/vif-fleet.toml.previous` and
+`/etc/systemd/system/logwisp.service.previous`, all `root:root`, restored the same
+way; `update-logwisp.sh` restores them itself when its own verification fails.
 
 If LogWisp's isolation or loopback checks fail, remove only its live listener and
 keep the installed binary, configuration and locked identity for diagnosis. Nothing
@@ -95,19 +103,10 @@ sudo ss -ltnH 'sport = :8081'      # must print nothing
 
 ### The allocator Role
 
-If an allocator operation fails specifically because a removed permission is
-required, restore only that exact grant and diagnose before deploying anything
-else: a live Role that differs from the repository is a drift, not a fix.
-
-```sh
-sudo systemctl stop vif-allocator.service
-sudo kubectl -n vif patch role vif-allocator --type=json \
-  -p='[{"op":"add","path":"/rules/-","value":{"apiGroups":[""],"resources":["pods/log"],"verbs":["get"]}}]'
-sudo systemctl start vif-allocator.service
-```
-
-Do not restore `pods/log` for a node-file, LogWisp, or public-stream failure. None
-of those components is allowed to use the Kubernetes log API.
+The Role is `../k3s/40-allocator-rbac.yaml` as `./deploy/update.sh objects` applies
+it; a live Role that differs from the repository is a drift, not a fix. It never
+grants `pods/log`: no allocator call, node file, LogWisp or public stream uses the
+Kubernetes log API.
 
 ### The fleet-log storage
 
@@ -120,9 +119,9 @@ sudo kubectl get pods --all-namespaces -o json | jq -e \
     .persistentVolumeClaim.claimName == "vif-fleet-logs"))'
 ```
 
-With no consumers, stop K3s, remove only the new dependency, and make the uncovered
-root-filesystem directory unwritable before restarting, so a later writer cannot
-quietly fill `/`:
+With no consumers, stop K3s, remove only its dependency on the mount, and make the
+uncovered root-filesystem directory unwritable before restarting, so a later writer
+cannot quietly fill `/`:
 
 ```sh
 MOUNT_UNIT='var-log-vif\x2dfleet.mount'
