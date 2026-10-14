@@ -920,9 +920,8 @@ type ContentResource struct {
 
 // NetworkPort is the service-side endpoint driven by NetworkSystem.
 // Outbound: direct calls. Inbound: Drain per game tick (poll model keeps
-// network goroutines out of the world event queue).
-// Interface is transitional; collapses to a concrete network type once the
-// package matures (same path as audio).
+// network goroutines out of the world event queue). network.SocketPort
+// implements it over sockets and network.MeshPort over the in-process test mesh.
 type NetworkPort interface {
 	Send(peerID uint32, msgType uint8, payload []byte) bool
 	Broadcast(msgType uint8, payload []byte)
