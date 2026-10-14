@@ -69,7 +69,7 @@ report a coordinate visible only when it is both a map cell and inside the
 viewport, so an out-of-map coordinate that projects into a centered map's margin
 answers false. `MapToViewport` still returns the projection (`MapToScreen`
 returns zero), so a renderer anchoring a shape on an off-map centre projects it
-there and lets the clip trim the result, as explosions and storms do. Area
+there and lets the clip trim the result, as the explosion field does. Area
 renderers should still intersect their iteration bounds with `VisibleMapBounds`
 to avoid the wasted work; the quasar zap ellipse does.
 
@@ -365,8 +365,8 @@ first when space is tight. After the mode label a fixed key cell
 shares its cells or its time with a message. Typed input takes the space it needs
 from the right-side items; a status message takes it from the metrics only. A
 message is a notice or an alert (`parameter.StatusKinds`): the newest replaces the
-one shown unless that one is an alert younger than its minimum, and each leaves
-after its kind's wall time. Its
+one shown, except that a notice does not displace an alert younger than its
+minimum, and each leaves after its kind's wall time. Its
 colors come from one palette per color mode: the theme's in truecolor, and on a
 text console fixed entries, each apart from the items beside it and with the text
 that reads best on it. The audio state is a letter: X muted, S effects, M music,

@@ -56,7 +56,7 @@ ascimage -no-status file.vifimg
 | `+` / `-` | Zoom, 10–400% | Image only |
 | `0` | Zoom to 100% | Image only |
 | `hjkl` / arrows | Pan; `HJKL` / Shift+arrows by 10 | All |
-| `g` / `G`, `Home` / `End`, `PgUp` / `PgDn` | Pan to top/bottom, left/right edge, by half a screen | All |
+| `g` / `G`, `Home` / `End`, `PgUp` / `PgDn` | Pan to top-left/bottom-left, left/right edge, up/down half a screen | All |
 | `s` | Toggle status bar | All |
 
 ## Render Modes
