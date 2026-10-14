@@ -777,6 +777,33 @@ context keys and most `tracking` metric keys are conventions of this game, and
 the `persistence` default codec is the one external dependency: make JSON the
 default and move the TOML codec to the caller, or drop the subpackage.
 
+## Engine
+
+### Initialize systems in dependency order from the engine
+
+- Priority: P3
+- Affected files: `internal/engine/world.go` (`CheckSystemDependencies`),
+  `internal/app/app.go` (`initScheduler`), each system's constructor and
+  `EventGameResetRequest` handler in `internal/system`
+
+Half of this exists: the manifest declares each system's `Requires` and startup
+checks the graph for unknown names and cycles. The other half does not: each
+system still calls its own `Init` in its constructor (manifest order) and again
+on reset (handler order). The engine would instead call `Init` once per system
+in the graph's `core.TopoSort` order, at startup and on reset, and the per-system
+calls would go.
+
+### Give the composite lifecycle methods a user
+
+- Priority: P3
+- Affected files: `internal/system/composite.go`
+
+`CompositeSystem` carries `handleEmptyComposite`, `CreateHeader`, `AddMember`,
+`DestroyComposite` and `GetAnchorForMember`, designed for building and tearing
+down composites at run time, but no system or scenario uses them. A species or
+scenario that assembles composites would; it reaches them through events, since
+another system may not call them directly.
+
 ## Tests
 
 ### Cut the app package's test time
