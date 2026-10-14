@@ -15,9 +15,9 @@ vif is a real-time terminal game that combines Vim-style navigation and
 text operations with typing, shooting, procedural encounters, adaptive species
 movement, and generative audio.
 
-The game is written in pure Go, no CGO, and with mininmal external dependencies.
+The game is written in pure Go, no CGO, and with minimal external dependencies.
 Terminal, TOML, color, and logging primitives are maintained as separate Go modules;
-vif owns the ECS, gameplay, input semantics, compositor, scenario, renderers, 
+vif owns the ECS, gameplay, input semantics, compositor, scenario, renderers,
 configuration, audio policy, and reusable simulation libraries.
 
 ## Highlights
@@ -34,8 +34,9 @@ configuration, audio policy, and reusable simulation libraries.
 - TOML-authored hierarchical state machines with parallel regions, dynamic
   encounters, payload capture/injection, guards, delayed actions, and system
   control.
-- A layered terminal-cell compositor with truecolor/xterm-256 support, blend
-  modes, semantic masks, camera transforms, and post-processing.
+- A layered terminal-cell compositor with truecolor output and a 256-color tier
+  settled on a text console's sixteen colors, blend modes, semantic masks, camera
+  transforms, and post-processing.
 - Pure-Go synthesis, SFX mixing, and a three-slot sequencer whose tempo and
   arrangement respond to player APM; PCM is streamed to common host audio
   tools, FreeBSD OSS, a null sink, or WAV capture.
@@ -46,17 +47,17 @@ configuration, audio policy, and reusable simulation libraries.
   tutorial content, image-to-terminal wall assets, and dedicated audio/image/
   visual authoring tools.
 - A replay journal, versioned tick-script runner, manual-clock harness, exact
-  rational time controls,
-  per-region FSM telemetry, structured logs, status snapshots, and a triggered
-  flight recorder for reproduction and diagnosis.
+  rational time controls, per-region FSM telemetry, structured logs, status
+  snapshots, and a triggered flight recorder for reproduction and diagnosis.
 - Bots that play as participants: a TOML state-machine graph holds a slot and a
   cursor and acts through the same input router as a person, beside you, in your
   place, or alone on a dedicated host.
 - Multi-participant play over framed TCP, with deterministic shared simulation,
-  owner-authored cursor state, a fixed-delay crossing barrier that relays
-  artifacts to participants a producer never linked to, roster changes that land
-  on one agreed tick, selective authoritative correction with bounded keyframe
-  fallback, and clean continuation after a peer disconnects.
+  owner-authored cursor state, a crossing barrier whose lead each participant
+  sizes to its own link and that relays artifacts to participants a producer never
+  linked to, roster changes that land on one agreed tick, selective authoritative
+  correction with bounded keyframe fallback, and clean continuation after a peer
+  disconnects.
 - Named sessions: a host answers to one name, so a single address can front many
   and a stale link is refused rather than seated. A browser build, or a terminal
   whose network blocks the game port, joins the same session over WebSocket,
@@ -97,11 +98,12 @@ layout under `/usr` and `/etc`; a FreeBSD port matches `sudo make install`:
 
 The wad, `wad/` with the shipped bot graphs, keymap and `vif.toml`, fills the
 `vif/` directory named above: `scenario/`, `content/`, `image/`, `bot/`, `input/`
-and `vif.toml` sit directly in it, never loose in `etc` or `~/.config`. A file a
-player puts in `~/.config/vif` overrides the system copy of it. Whatever the
-install, each player's logs, journals and music go to `log/`, `journal/` and
-`music/` under their own `~/.local/state/vif/`, so a system install run by a
-normal user needs no writable system directory, and vif never writes `/var/log`.
+and `vif.toml` sit directly in it, beside an empty `audio/` for music and sound
+overrides, never loose in `etc` or `~/.config`. A file a player puts in
+`~/.config/vif` overrides the system copy of it. Whatever the install, each
+player's logs, journals and music go to `log/`, `journal/` and `music/` under
+their own `~/.local/state/vif/`, so a system install run by a normal user needs no
+writable system directory, and vif never writes `/var/log`.
 `-l=DIR`, or `paths.log` in `vif.toml`, puts the logs elsewhere.
 
 `make uninstall` removes the binary, manual, completion and docs, keeping the
@@ -152,20 +154,25 @@ settings explain why. Rebind the `config_menu` action in the keymap.
 - `-schema` exports the current event/action/guard schema as JSON.
 - `-version` prints the module version and commit a package should report.
 - `-seed <n>` selects the root RNG seed and `-speed <rate>` selects an exact
-  startup rate from `1/8` through `8`.
+  startup rate from `1/8` through `8`, or `max` for an unpaced `-script` or
+  autonomous bot run.
 - `-j[=DIR]` records replay input to a dedicated journal; `-r <file>`
-  presents a journal on the terminal with fixed playback controls.
-- `-script <file>` runs a bounded authored TOML input/event schedule headlessly;
-  it can be combined with `-host` or `-join` for repeatable two-process runs.
+  presents a journal on the terminal with fixed playback controls, and
+  `-headless -r <file>` verifies its digests unattended.
+- `-script <file>` runs a bounded authored TOML input/event schedule headlessly,
+  or on this terminal with `-watch`; it can be combined with `-host` or `-join` for
+  repeatable two-process runs.
 - `-bot [N[:graph]|graph]` seats N bots playing a graph name or file (bare, one
   `default`; `0`, none), and `-bots` adds more the same way. You play beside them;
   `-watch` puts the first in your place on this terminal, and `-headless` runs
   them with no terminal. See [Bots](doc/bots.md).
 - `-host <bind-address>` hosts a session, `ws://:7777` serving it over WebSocket
-  instead of TCP, and `-players <n>` sets the lobby size; `-join <addr>` joins one
-  and adopts the host's seed/config/content identity, where `<addr>` is
-  `host:port`, a `vif://host:port/<name>` link, a `ws(s)://` URL, or a site such
-  as `https://lixen.com`, which creates a session and hands back its link.
+  instead of TCP, and `-players <n>` caps the roster, self included; a script or
+  bot host given `-players` also holds tick zero until that party is in.
+  `-join <addr>` joins one and adopts the host's seed/config/content identity,
+  where `<addr>` is `host:port`, a `vif://host:port/<name>` link, a `ws(s)://`
+  URL, or a site such as `https://lixen.com`, which creates a session and hands
+  back its link.
 - `-name <name>` makes a host answer to that name only, so one address can serve
   several sessions.
 - `-authority host|migrate` decides where authorship goes when the participant
@@ -185,9 +192,9 @@ settings explain why. Rebind the `config_menu` action in the keymap.
   allocated on somebody's behalf: end it if no guest arrives, end it after the last
   one leaves, and let a termination signal wait for the roster instead of cutting
   the match. Omitting them is the long-lived host an operator starts by hand.
-- `-l`, `-ls`, `-lt`, and `-lr` — long forms `-log`, `-log-scope`, `-log-stat`,
-  `-log-recorder` — enable structured logging, scoped snapshots, and
-  flight-recorder history.
+- `-l`, `-lv`, `-ls`, `-lt`, and `-lr` — long forms `-log`, `-log-level`,
+  `-log-scope`, `-log-stat`, `-log-recorder` — enable structured logging and set
+  its level, scopes, status-snapshot period and flight-recorder depth.
 - `cmd/soundlab` authors and auditions sounds/music.
 - `cmd/ascimage` converts and previews dual-mode `.vifimg` assets.
 
@@ -201,16 +208,17 @@ installation, and WASM behavior, and [packaging](doc/packaging.md) for the
 distribution checklists.
 
 For a local two-terminal session, run `./bin/vif -d -host 127.0.0.1:7777`
-in the first terminal and `./bin/vif -join 127.0.0.1:7777` in the second; add
-`-players <n>` to the host for a larger lobby. A participant joins at startup or
-mid-run: the host sends an authoritative shared snapshot of the world at whatever
-tick the session has reached, which is also how a peer that dropped comes back.
-Live installs reconcile configuration-marked persistent local FSM effects, so a
-correction that skips an encounter exit cannot leave that participant's drains or
+in the first terminal and `./bin/vif -join 127.0.0.1:7777` in the second. The
+host plays from its first tick and admits guests while it runs, up to `-players`
+or the whole roster: it sends each an authoritative shared snapshot of the world at
+whatever tick the session has reached, which is also how a peer that dropped comes
+back. Live installs reconcile configuration-marked persistent local FSM effects, so
+a correction that skips an encounter exit cannot leave that participant's drains or
 screen state latched.
-The session is plaintext and trusted-peer — a dial is rate-limited per address and
-bounded in what it can allocate, but it is not authenticated, so a host reachable
-from an untrusted network needs one in front of it.
+The session is trusted-peer and plaintext unless a TLS edge terminates it — a dial
+is rate-limited per address and bounded in what it can allocate, but no peer is
+authenticated, so a host reachable from an untrusted network needs authentication
+in front of it.
 
 For an automatic headless pair, `./script/test.sh pair` runs both scripted sides
 in one command. For a host nobody sits at, `./bin/vif -serve :7777 -size 120x40`
@@ -218,9 +226,10 @@ waits for its first guest and then runs the session on its own.
 
 `deploy/` holds what runs the public fleet: a `scratch` image of the static
 `vif_headless` non-root binary (`make image`), K3s objects for one Job per session
-under a ten-session quota and default-deny policy, and `vif-allocator`, which
-creates sessions on request and routes joins to them — by name on one port, at
-each session's own port, or over its WebSocket route.
+under a ten-session quota and default-deny policy, and the node units that run
+`vif-allocator` (`tool/vif-allocator`), which creates sessions on request. A
+session is reached by name on the one port the allocator routes, at its own port,
+or over the WebSocket route the allocator terminates.
 [lixen.com/vif](https://lixen.com/vif) is the running deployment;
 [doc/kube-docker-deploy.md](doc/kube-docker-deploy.md) installs one and
 [doc/kubernetes-fleet.md](doc/kubernetes-fleet.md) is the design and work list.
@@ -228,9 +237,11 @@ No final release exists yet. The nightly workflow publishes development builds,
 not releases: Linux, FreeBSD, browser, headless server and experimental Windows
 archives plus the headless container image; see [doc/packaging.md](doc/packaging.md).
 
-`script/test.sh` runs named setups for verifying behaviour by hand —
-`solo`, `host`/`join`, `serve`, `serve-fleet`, `probe`, bot fitness and load, and
-automated checks for the session lifetime, the drain, and join-identity refusal. See
+`script/test.sh` runs named setups for verifying behaviour by hand — `solo`,
+`host`/`join`, `serve`, `serve-fleet`, `probe`, bot fitness and load — and `all`,
+the automated checks: scenario resolution, the release wad, scenario transfer and
+change, a guest's own corpus, the fleet template and node prerequisites, bots, the
+session lifetime, the drain, and join-identity refusal. See
 [script/README.md](script/README.md).
 
 ## Documentation
@@ -238,8 +249,9 @@ automated checks for the session lifetime, the drain, and join-identity refusal.
 Start with the [engineering documentation index](doc/README.md). It links the
 high-level architecture, medium-level package/runtime diagrams, and detailed
 references for gameplay, ECS/events, input, FSM configuration, rendering,
-audio, navigation/evolution, content/assets, services/networking, and
-development. Players and operators running bots start with [Bots](doc/bots.md).
+audio, navigation/evolution, content/assets, services/networking, multiplayer,
+deployment, and development. Players and operators running bots start with
+[Bots](doc/bots.md); multiplayer starts with [Multiplayer](doc/multi-player.md).
 
 ## License
 
