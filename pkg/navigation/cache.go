@@ -41,14 +41,14 @@ func NewFlowFieldCache(width, height, minTicks, dirtyDist, settleTicks int) *Flo
 }
 
 // Clone returns a cache sharing no storage with c, so a copied world continues from
-// the field c holds instead of computing one; the search heap is scratch.
+// the field c holds instead of computing one; the search is scratch.
 func (c *FlowFieldCache) Clone() *FlowFieldCache {
 	n := *c
 	n.grid, n.LastTargets = slices.Clone(c.grid), slices.Clone(c.LastTargets)
 	if c.Field != nil {
 		f := *c.Field
 		f.Directions, f.Distances, f.VisitedGen = slices.Clone(f.Directions), slices.Clone(f.Distances), slices.Clone(f.VisitedGen)
-		f.ring, f.blocked = nil, nil
+		f.search = gridSearch{}
 		n.Field = &f
 	}
 	return &n
