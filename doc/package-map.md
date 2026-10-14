@@ -15,7 +15,7 @@ flowchart TD
     Converge --> Snapshot["internal/snapshot"]
     App --> Snapshot
     App --> Services["internal/service"]
-    App --> Runtime["engine, input, mode, FSM"]
+    App --> Runtime["engine, input, mode, bot, FSM"]
     App --> Assembly["manifest, systems, renderers"]
     App --> Journal["internal/journal"]
     App --> Supervised["internal/lifecycle, internal/probe"]
@@ -39,12 +39,13 @@ flowchart TD
 
 The system package is intentionally broad: each file is a gameplay system, and
 the generated manifest supplies construction order. A system's file serves only
-its own system: no other system calls its functions or reads its fields, timer
-arming aside. Shared mechanics move downward into focused packages, or into a
-file that declares no system (`targeting.go`, `interaction.go`, `blast.go`,
-`sweep.go`, `sound.go`) and takes the world it works on. Systems otherwise
-communicate through ECS data and events: a species that must refuse hits sets a
-status combat reads, rather than calling combat.
+its own system: no other system calls its functions or reads its fields, the
+timer slot's `armTimer` and `timerRunning` aside. Shared mechanics move downward
+into focused packages, or into a file that declares no system and takes the world
+it works on: `blast.go`, `interaction.go`, `sound.go`, `sweep.go`, `targeting.go`
+and `telemetry.go`, the list `helperFiles` in `internal/system/domain_test.go`
+pins. Systems otherwise communicate through ECS data and events: a species that
+must refuse hits sets a ward status combat reads, rather than calling combat.
 
 ## 3. Presentation and interaction topology
 
@@ -66,31 +67,33 @@ render abstraction, while the orchestrator owns the terminal capability.
 
 | Package | Responsibility and boundary |
 |---|---|
-| `cmd/vif` | Grouped config/log/session flags including startup host/join selection, logging/journal/runtime-capture setup, replay/script/watch/check/schema selection, process exit policy. |
+| `cmd/vif` | Flags and the one help table that also renders `doc/vif.6` and the shell completions in `deploy/package/`; `vif.toml` defaults; logging/journal/runtime-capture setup; play/serve/replay/script/bot/check/schema selection; the session request a `-join` site answers; process exit policy. |
 | `internal/content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. Internal because it depends on game `core.CodeBlock`. |
-| `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, drive frame/input/playback/script loops, capture and install the shared world, choose the session's playout lead, and verify anchor/config identity. It owns the world and the lock over it; the authority protocol that reads and writes that world lives in `internal/converge` and reaches it only through the `converge.Instance` seam this package implements. |
-| `internal/converge` | The authority protocol: which generation of the session this instance is part of and who is authoring it, the succession that moves authorship when the author goes, the adaptive per-link correction cadence a host publishes, the selective manifest/page exchange that makes a converged link cost hashes, the install a guest commits between two ticks, and the listening port and succession chain a survivor dials down. It holds no world and takes no world lock: `converge.Instance` is the whole of what it asks the run for, and every method on it acquires that lock itself — which is also what lets its own criteria drive it against a stub world instead of a composition root. |
-| `internal/asset` | Every embedded shipped file — fallback FSM bundle, tutorial corpus, default keymap, built-in sound bank — plus the splash bitmap font. The only package with an `embed` directive for shipped data. |
+| `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, seat bots and relay their links, drive frame/input/playback/script loops and replay checkpoints, capture and install the shared world, verify anchor/config identity, and run a dedicated host's lifetime and probe. It owns the world and the lock over it; the authority protocol that reads and writes that world lives in `internal/converge` and reaches it only through the `converge.Instance` seam this package implements. |
+| `internal/converge` | The authority protocol: which generation of the session this instance is part of and who is authoring it, the succession that moves authorship when the author goes, the adaptive per-link correction cadence a host publishes, the selective manifest/page exchange that makes a converged link cost hashes, the install a guest commits between two ticks, slow-participant eviction, the answers a relay serves the participants behind it, and the listening port and succession chain a survivor dials down. It holds no world: `converge.Instance` is the whole of what it asks the run for, and every method on it takes the world lock itself except `CaptureSharedLocked`, which `TickClosed` calls from inside a tick — which is also what lets its own criteria drive it against a stub world instead of a composition root. |
+| `internal/asset` | Every embedded shipped file — fallback scenario, tutorial corpus, default keymap and `vif.toml`, shipped bot graphs, built-in sound and music banks, the source-archive version stamp — plus the splash bitmap font. The only package with an `embed` directive. |
 | `internal/component` | Pure ECS component data, enums/masks and per-kind tables; logic over them lives in the owning system (exceptions in [ECS](ecs-and-events.md#4-component-catalog)). Position is declared here but stored specially by `engine`. |
 | `internal/core` | Small shared value types, entity ID and replication domain, modes, code blocks, the deterministic dependency resolver both `service` and `engine` order with, crash and stderr-capture support. |
-| `internal/engine` | World, typed stores, positions/spatial grid, resources, game context/state, pausable/manual clocks, time control, scheduler, locking, and the roster/control re-derivation an install performs over the cursor store. |
-| `internal/event` | Event catalog/payload registry, producer origins, replay record/anchor schema, MPSC queue, handler router, pooled/batched payload support. |
-| `internal/fsm` | Generic hierarchical, parallel-region machine; TOML graph loader; transitions, delayed actions, variables, per-region trigger masks, and optional transition/region observation hooks. |
-| `internal/fsm/std` | Reusable HFSM actions/guards and host capability interface. It does not import the game engine. |
-| `internal/input` | Terminal-event parser, semantic intents, keymap override decoding/merging; the default document comes from `internal/asset`. It does not import the ECS. |
+| `internal/engine` | World, typed stores, positions/spatial grid, resources, game context/state, pausable/manual clocks, time control, scheduler, locking, world copies, the shared-world state and paged delta a capture is built from, the shared-death prediction ledger, and the roster/control re-derivation an install performs over the cursor store. |
+| `internal/event` | Event catalog/payload registry, replication classes and the wire predicate, producer origins, replay record/anchor schema, the MPSC queue and its wire-sink hooks, crossing frame encoding, handler router, pooled/batched payload support. |
+| `internal/fsm` | Generic hierarchical, parallel-region machine; TOML graph loader with macro expansion; transitions, delayed actions, variables, per-region trigger masks, system policy, capture import/export, and optional transition/region observation hooks. |
+| `internal/fsm/std` | Reusable HFSM actions/guards and the `Host` capability set. It does not import the game engine. |
+| `internal/gen-manifest` | The `go generate` program behind `internal/manifest`: reads `definition.go`, the event catalog and the input enums, and writes every `*_gen.go` file (§6). |
+| `internal/help` | Projects the live key bindings into the help overlay's topics. A leaf over `internal/input`. |
+| `internal/input` | Terminal-event parser, semantic intents, the keys a scenario captures, keymap override decoding/merging; the default document comes from `internal/asset`. It does not import the ECS. |
 | `internal/bot` | Bot graphs: parse and validate a bot document, the vocabulary of actions and guards over the bot's own world, and the driver that feeds a graph the events its instance dispatched during the last step, releases its intents through the router at the graph's rate and keeps its score. Engine-aware like `mode`; it imports neither `app` nor `converge`, and writes the world only through intents. |
 | `internal/journal` | Runtime-agnostic deterministic-run machinery: recording lifecycle, in-memory capture, rotated JSONL loading, replay ordering/payload decoding, seeded fuzz input, and versioned authored tick scripts. Drivers depend on narrow target interfaces and never import `internal/app`. |
-| `internal/lifecycle` | The allocated session's lifetime policy: a pure state machine over an injected clock turning roster observations into a phase (waiting, occupied, vacant, draining, expired), a deadline, and whether a dial may still be admitted. It opens nothing, reads no roster, and terminates nothing — the run supplies the observations and acts on the phase. |
-| `internal/manifest` | Authoritative component/system/renderer lists, the simulation fingerprint two participants must share, capability-split generated builders, game binding for the generic FSM, and the JSON schema dump the map editor consumes. |
-| `internal/mode` | Mode ownership, intent execution, motions/operators/search, mouse handling, macros, command mode, undo/history. |
-| `internal/network` | Length-prefixed TCP transport, optional TLS configuration, anchor/start/ready session protocol, the peer-link handshake two participants open a stream with, the succession chain a handoff reads, peers, sequence/ack fields, bounded inbound notifications, and the per-address dial budget the coordinator admits against. |
-| `internal/parameter` | Gameplay constants, timing, priorities, effect/audio tuning, and navigation/genetics settings. |
+| `internal/lifecycle` | The allocated session's lifetime policy: a pure state machine over an injected clock turning roster observations into a phase (unstarted, waiting, occupied, vacant, draining, expired), a deadline, and whether a dial may still be admitted. It opens nothing, reads no roster, and terminates nothing — the run supplies the observations and acts on the phase. |
+| `internal/manifest` | Authoritative component/system/renderer lists, the simulation fingerprint two participants must share, capability-split generated builders, the declared system dependency graph, game binding for the generic FSM, and the JSON schema `-schema` prints for authoring tools. |
+| `internal/mode` | Mode ownership, intent execution, motions/operators/search, mouse handling, macros, command mode and the configuration menu, undo/history. |
+| `internal/network` | Length-prefixed transport over TCP or WebSocket (the browser's own socket on `js/wasm`), session endpoints and routes, the allocator request a site `-join` makes, a TLS hook no flag sets, anchor/start/ready session protocol, chunked snapshot framing, crossing fences, the link probe, the peer-link handshake, the succession chain a handoff reads, peers, sequence/ack fields, bounded inbound notifications, and the per-address dial budget the coordinator admits against. |
+| `internal/parameter` | Gameplay tunables, timing, priorities, effect/audio tuning, the shipped sound bank's parse, and navigation/genetics settings. |
 | `internal/parameter/visual` | Renderer-facing characters, masks, palettes, gradients, shapes, and post-process settings. |
-| `internal/paths` | Platform config-root and user-state discovery and categorized resource names; performs no resource I/O. |
-| `internal/resource` | Resolve the game config, keymap, corpus, audio overrides and bot graphs against the config-root precedence rule, and validate what those paths resolve to, every bot graph in the roots and embedded included, for `-check`. |
+| `internal/paths` | Platform config-root and user-state discovery, categorized resource names, and the `vif.toml` settings, the one file it reads. |
+| `internal/resource` | Resolve the scenario, keymap, corpus, audio overrides and bot graphs against the config-root precedence rule; read a scenario whole into the digested canonical form a session serves a joiner; and validate what those paths resolve to, every bot graph in the roots and embedded included, for `-check`. |
 | `internal/pattern` | Convert a dual-mode `.vifimg` asset into wall spawn cells. One file, one path, no drawing. |
 | `internal/prof` | Profiler: per-module wall time on the tick, event and render paths, process CPU/memory/GC/I/O sampling, and pprof CPU/heap and execution-trace captures. Publishes into the status registry; one atomic load per timed call while off. |
-| `internal/probe` | The supervised run's HTTP endpoint: `/health` and `/metrics`. Stdlib only and stateless — a snapshot function supplies the run's answer and a status registry supplies the metrics, so the run decides what its words mean and this decides only how to say them. |
+| `internal/probe` | The supervised run's HTTP endpoint: `/health` and `/metrics`. Standard library and `internal/status` only, and stateless — a snapshot function supplies the run's answer and a status registry supplies the metrics, so the run decides what its words mean and this decides only how to say them. |
 | `internal/profile` | Per-kind tables indexed by kind: the combat attack matrix and species contact damage, collision, homing and mass profiles, and species drop tiers. |
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |
@@ -110,6 +113,8 @@ flowchart TD
     Game --> Genetic["pkg/genetic and subpackages"]
     Game --> Link["pkg/linkpace"]
     Game --> Image["pkg/ascimage"]
+    Game --> Macro["pkg/tomlmacro"]
+    Game --> Socket["pkg/websocket"]
 ```
 
 | Package | Public purpose | Important coupling |
@@ -123,18 +128,18 @@ flowchart TD
 | `pkg/genetic/registry` | Up to 256 species/populations, sampling, probes, tracking, stats, optional persistence. | Composes core genetic, fitness, tracking, and persistence. |
 | `pkg/genetic/persistence` | Atomic file saves and TOML/JSON codecs for population DTOs. | TOML codec imports the external TOML module. |
 | `pkg/linkpace` | Per-peer link estimation (round trip, jitter, delivery rate, saturation) and the bounded controller that turns it into a correction cadence and keyframe interval inside a convergence floor. | Standard library only, deliberately: the package cannot see a world, an event or a component, which is what makes "network timing may not enter the simulation" (D-24) structural rather than remembered. |
-| `pkg/tomlmacro` | Expand macros in parsed TOML documents: typed parameters, substitution, array splicing, zipped `each`, bounded nesting and output. | Standard library only: it works on the parser's generic trees, so the FSM loader, bot graphs and later the editor share one expander. |
-| `pkg/maze` | Recursive-backtracker maze generation, rooms, braiding, and solution data. | Uses shared point/value types and is surfaced through wall/maze events. |
+| `pkg/tomlmacro` | Expand macros in parsed TOML documents: typed parameters, substitution, array splicing, zipped `each`, bounded nesting and output. | Standard library only: it works on the parser's generic trees, so the FSM loader and bot graphs share one expander. |
+| `pkg/maze` | Recursive-backtracker maze generation, rooms, braiding, and solution data. | Standard library only, with its own `Point`; surfaced through wall/maze events. |
 | `pkg/navigation` | Flow fields, recompute caches, flow steering, composite passability, multi-route graphs. | Owns its route-graph tuning; wall access is callback-based. |
 | `pkg/vmath/physics` | `float64` kinetic state, integration, bounce, homing/arrival, collisions, orbital and 3D operations. | Owns `physics.Kinetic`; depends only on the standard library and `pkg/vmath`. |
-| `pkg/vmath` | `float64` scalar/vector math, LUTs, shapes, arcs, grid traversal, cell topology, and seeded randomness. | Standard-library-only foundation; integer `Point`/`Area` values are grid indices, not fixed-point numbers. |
+| `pkg/vmath` | `float64` scalar/vector math, LUTs, shapes, arcs, grid traversal, cell topology, seeded randomness, and the shared math constants. | Standard-library-only foundation; integer `Point`/`Area` values are grid indices, not fixed-point numbers. |
+| `pkg/websocket` | RFC 6455 as a byte stream: the version-13 upgrade as client and server, binary frames, ping, pong and close. | Standard library only. `internal/network` dials and serves sessions with it and `tool/vif-allocator` terminates the browser route with it. |
 
 No package under `pkg` imports anything under `internal`; `make arch-check`
 enforces it. That is what lets a leaf take game data — the sound bank, wall
 callbacks, fitness policy — from its caller instead of reaching for it. The
-numeric stack is cleanly one-way: `pkg/vmath` imports only the standard library,
-`pkg/vmath/physics` imports `pkg/vmath`, and neither exposes the removed
-fixed-point types or conversion API. `pkg/audio`, the core `pkg/genetic`
+numeric stack is one-way: `pkg/vmath` imports only the standard library and
+`pkg/vmath/physics` imports `pkg/vmath`. `pkg/audio`, the core `pkg/genetic`
 package, `pkg/linkpace` and the numeric stack have the clearest game-independent
 boundaries.
 
@@ -143,44 +148,47 @@ boundaries.
 `internal/manifest/definition.go` is the human-edited declaration for three
 registries:
 
-- component field/type pairs;
-- system registry keys, constructors, and optional local build capability;
+- component field/type pairs and the entity domain each may attach to;
+- system registry keys, constructors, domain profile, required and optional
+  dependencies, snapshot obligation, and optional local build capability;
 - renderer registry keys, constructors, and layer priorities.
 
-`go generate ./internal/manifest/...` invokes `internal/gen-manifest` and
-updates the core and audio system builders, terminal renderer builder, typed
-component stores/removal masks, event reflection registry, and input enum strings.
+`go generate ./internal/manifest/...` (`make generate`) invokes
+`internal/gen-manifest` and updates the core, audio and audio-free system
+builders, the terminal renderer builder, typed component stores/removal masks and
+the component domain table, the shared-world capture, install, delta and store
+rows, the event reflection registry, and input enum strings.
 Stable tie-breaking comes from manifest order when two systems or renderers share
 a priority. Audio is the current local-only implementation capability; audio-free
 builds select null event sinks without changing the simulation fingerprint.
 
 Important exceptions:
 
-- `MetaSystem` is event-only, declared in `manifest.ContextSystems` and
-  registered directly by `internal/app` because it takes a `GameContext`; it
-  is intentionally absent from the per-tick system manifest.
-- `NetworkSystem` is a manifest-registered dual-domain system. It is inert with
-  the default `RoleNone` resource and becomes the tick-owned wire bridge for a
-  `-host` or `-join` session.
-- runtime system control uses each system's `Name()` value, not necessarily the
-  manifest construction key. New systems should keep those names identical.
+- `MetaSystem` takes a `GameContext`, so `internal/app` registers it once the
+  context exists. Its profile is declared in `manifest.ContextSystems` for the
+  same validation and fingerprint, and the generated builders do not construct it.
+- `NetworkSystem` is a manifest-registered dual-domain system. It is inert while
+  the world holds no network resource and becomes the tick-owned wire bridge once
+  a session attaches one.
+- runtime system control matches each system's `Name()`;
+  `TestActiveSystemsMatchRuntimeNames` keeps it equal to the manifest key.
 
 ## 7. Dependency direction rules
 
 The practical dependency rules are:
 
-1. `cmd` may depend on `internal/app`, `internal/resource` and `internal/manifest`; lower packages must not depend on `cmd`.
+1. `cmd/vif` translates flags into `app.Config` and the option types of the packages it configures (`app`, `bot`, `converge`, `lifecycle`, `network`, `paths`, `resource` and others); nothing imports a `cmd` package.
 2. `app` may compose all runtime layers; domain packages should not import it.
 3. `converge` sits between `app` and `snapshot`/`network`: it decides what a session publishes and installs, and asks the run for the world through `converge.Instance` rather than importing `app`. It exports the protocol's own operations and reports and nothing else: a criterion that has to fabricate protocol state belongs in that package, where it can reach the state directly, rather than behind an exported knob.
-4. `snapshot` and `resource` sit below both: the first owns the capture wire model and the comparison surface, the second the config-root precedence rule. Neither imports `app`, and neither acquires a lock — the surface readers walk a world the caller has already locked, and the wire model reads none at all.
+4. `snapshot` and `resource` sit below both: the first owns the capture wire model and the comparison surface, the second the config-root precedence rule. Neither imports `app`, and neither acquires the world lock — the surface readers walk a world the caller has already locked, and the wire model reads none at all.
 5. `journal` owns deterministic input-stream mechanics and may depend on event and input values, while App-specific construction, presentation, and session startup stay above it.
 6. `engine` owns data/lifecycle infrastructure but should not import concrete
    gameplay systems or renderers.
 7. `input` produces pure intents and must remain free of engine dependencies.
 8. `mode`, `bot`, systems, and renderers may depend on engine data, but communicate
    laterally through resources/events rather than concrete peer references.
-9. Generic FSM core/std stays independent of the game through `std.Host`; the
-   manifest bridge is the adapter.
+9. Generic FSM core/std share the event catalog but not the engine: `std.Host` is
+   the capability seam and the manifest bridge is the adapter.
 10. Blocking I/O stays behind services, render flush, audio backends, tools, or
    diagnostics—not inside a simulation update.
 11. Reusable algorithms accept callbacks/data structures instead of reaching
@@ -190,25 +198,27 @@ The practical dependency rules are:
 
 | External module | Used by | What remains in vif |
 |---|---|---|
-| `lixenwraith/terminal` | app, service, input, render, ascimage/tools | Game-specific input semantics, compositor, renderers, and layout. |
-| `lixenwraith/toml` | content, FSM, keymaps, audio specs, commands, genetic persistence | Schemas, validation policy, semantic models, and application resolution. |
-| `lixenwraith/color` | renderers, visual parameters, ascimage | Layering, masks, game palettes, effects, and render scheduling. |
+| `lixenwraith/terminal` | app, service, input, mode (`tui` forms), render and renderers, ascimage, cmds and tools; core's crash reset and a few attribute and color-mode types in component, engine, pattern and system | Game-specific input semantics, compositor, renderers, and layout. |
+| `lixenwraith/toml` | content, FSM and std, bot graphs, keymaps, commands, journal scripts, `vif.toml` settings, resource checks, event payload text, audio specs, genetic persistence, soundlab, the allocator | Schemas, validation policy, semantic models, and application resolution. |
+| `lixenwraith/color` | components, engine, events, render and renderers, visual parameters, pattern, systems, ascimage, cmds and tools | Layering, masks, game palettes, effects, and render scheduling. |
 | `lixenwraith/log` | `internal/vlog` only in normal builds | Scopes, game correlation fields, crash/runtime capture integration, status snapshots. |
 
 The pinned revisions are in `go.mod`; this document intentionally avoids
 duplicating version strings that would become stale.
 
-## 9. Commands, tools, sandboxes, and benchmarks
+## 9. Commands, tools, and sandboxes
 
 | Area | Contents |
 |---|---|
 | `cmd/ascimage` | Supported image converter/viewer command. |
 | `cmd/soundlab` | Supported audio document editor, REPL/TUI, sequencer audition environment, and script runner. |
-| `script/*` | Authored deterministic `vif -script` schedules: the phase host/guest pairs are the checked-in multiplayer diagnostics, and the sparring pair is the scripted-participant scenario a person joins. |
+| `script/*` | `test.sh`, the named end-to-end setups ([script/README.md](../script/README.md)), and the sparring host/guest pair of authored `vif -script` schedules they and a person join. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
 | `tool/font-editor` | Edit the bitmap splash font. |
-| `tool/hierarchy-map` | Analyze and visualize Go package/import hierarchy. |
+| `tool/hierarchy-map` | Terminal UI that selects Go source subsets as LLM context, indexed by `@lixen:` annotations, local imports and symbol-level coupling. |
 | `tool/http-server` | Minimal static server used by `make serve` for the WASM bundle. |
 | `tool/vif-allocator` | Website-to-K3s session allocator; a host service, not part of the game binary. |
-| `sandbox/*` | Isolated prototypes and visual/interaction experiments; not part of application assembly. |
-| `benchmark/*` | Standalone math, random, and render experiments; not Go benchmark test packages. |
+| `tool/vif-log` | Terminal viewer for the JSONL session log and replay journal, separately or merged; its packages are internal to the tool. |
+| `web/` | The xterm.js page and worker the WASM build runs in. |
+| `deploy/` | The session image, K3s objects, node units and updaters, the LogWisp pipeline, and the packaging files in `deploy/package/`. |
+| `sandbox/*` | Isolated prototypes, visual/interaction experiments, and the random and render benchmarks; not part of application assembly. |
