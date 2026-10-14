@@ -8,7 +8,7 @@ in the current run; the menu does not rewrite `vif.toml` or the keymap.
 | Where | Keys | Action |
 |---|---|---|
 | Menu | Up/Down or `j/k` | Select a category, setting or action. |
-| Menu | Left/Right or `h/l` | Change a setting; Right also enters a category. Session actions require activation. |
+| Menu | Left/Right or `h/l` | Change a setting; Right also enters a category. Form and action rows need Enter or Space. |
 | Menu | Enter or Space | Enter a category, advance a setting, or activate an action. |
 | Menu | Home/End, PageUp/PageDown | Navigate longer lists. |
 | Form | Up/Down | Move between fields; the focused field's help appears below. |
@@ -24,8 +24,9 @@ progress or failure. Cancelling a form before submission starts no action.
 Solo play pauses while the menu is open. A host may pause when its only other
 participants are its own bots; a guest or a session with other players keeps
 running. A new arrival resumes a paused host. Replay viewers retain their
-inspection-only command restrictions. Bracketed rows are unavailable or read
-only; their description explains the reason.
+inspection-only command restrictions. A bracketed value marks a row that is
+unavailable or read only; for an unavailable row the description below the list
+starts with the reason.
 
 ## Pages
 
@@ -61,11 +62,13 @@ adds bots only as a guest of a session it joined. The same operations are
 
 ### Multiplayer
 
-Hosts also see **Drop <slot>: player/bot** rows. Dropping a player removes its
-bots; dropping a bot leaves its holder and siblings. Guests cannot remove other
-participants. Commands are `:player` and `:player drop <slot>`; `:bot drop <slot>`
-also lets the host remove any bot. Decimal `10`, hexadecimal `A` and `0xA` all
-refer to the cursor marked `A`. Slots may be reused after departure.
+A read-only **Current session** row summarises the session, and every other
+participant has a **Drop &lt;slot&gt;: player|bot** row that only the host can
+activate. Dropping a player removes its bots; dropping a bot leaves its holder
+and siblings. Commands are `:player` and `:player drop <slot>`;
+`:bot drop <slot>` also lets the host remove any bot. Decimal `10`, hexadecimal
+`A` and `0xA` all refer to the cursor marked `A`. Slots may be reused after
+departure.
 
 **Host this run** takes a listening address such as `:4242`, `127.0.0.1:4242` or
 `ws://:4242`. Authority may be blank to keep the startup policy, `host` to end
@@ -99,10 +102,11 @@ change its shortcut; `:g` remains available. Forms use the text-key bindings,
 while menu navigation uses overlay bindings.
 
 Action rows (`Enter`) run the command they name and close the menu: `:n`,
-`:n <scenario>`, `:t unpin`, `:t save`, `:log rec flush`, `:d cpu|heap|mutex|trace`,
-`:journal start` and `:replay restart`. Views (`:t`, `:d`, help), developer state
-commands (`:god`, `:energy` and the like), `:step`, `:d break`, `:emit`, `:system`,
-`:region` and `:replay tick|time` stay on the command line.
+`:t unpin`, `:t save`, `:log rec flush`, `:d cpu|heap|mutex|trace`, `:journal start`
+and `:replay restart`; the Change scenario form submits `:n <scenario>` the same
+way. Views (`:t`, `:d`, help), developer state commands (`:god`, `:energy` and the
+like), `:step`, `:d break`, `:emit`, `:system`, `:region` and `:replay tick|time`
+stay on the command line.
 
 Use CLI arguments and `vif.toml` for startup defaults. The Startup settings page
 identifies options that need a restart; it does not edit files. Exact values

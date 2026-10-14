@@ -17,25 +17,26 @@ flowchart LR
 
 The terminal service polls in its own goroutine and writes to a bounded event
 channel. The application input loop passes events to `input.Machine`, which
-maintains only parsing context. The router owns engine-aware state such as
-selection anchors, search results, history, undo, macros, mouse holds, and
-auto-fire. It drives only the roster's selected local cursor; `CursorSystem`
-applies and announces placement so live input, replay, bots, and remote
-producers share the same entity-owned path.
+maintains only parsing context. The router owns engine-aware interaction state:
+the last search pattern and find target, command history, cursor undo, macros,
+mouse and button holds, and the fire anchors held buttons share with auto-fire.
+It drives only the roster's selected local cursor; `CursorSystem` applies and
+announces placement so live input, replay, bots, and remote producers share the
+same entity-owned path.
 
 `Intent` is a data structure, not a callback. It includes intent type, motion,
-operator, special action, target mode, count, optional character, the pointer
-cell (terminal coordinates, or a map cell when `MapCell` is set), captured command
-text, and a flag identifying macro playback. This boundary makes the parser
-testable without constructing an ECS world.
+operator, special action, target mode, scroll direction, count, optional character,
+the pointer cell (terminal coordinates, or a map cell when `MapCell` is set),
+captured command text, and a flag identifying macro playback. This boundary makes
+the parser testable without constructing an ECS world.
 
 A scenario can take printable ASCII keys away from the play grammar, for a game
 whose buttons are keys. An FSM state emits `EventKeyCaptureRequest { keys = "12345" }`
 (empty `keys` releases them; `entity` scopes the capture to one cursor's instance)
 and `MetaSystem` stores the set in `GameContext.KeyCapture`, which the parser reads
 without the world lock. In Normal, Visual and Insert a captured key cancels any
-pending count or operator and becomes `IntentKeyPress`. Text entry, Escape and mode
-switches are untouched, and a reset releases the capture.
+pending count or operator and becomes `IntentKeyPress`. Search and Command text,
+Escape and other special keys are untouched, and a reset releases the capture.
 
 A captured key is the scenario's one input hook, whatever produces it:
 
@@ -61,32 +62,35 @@ A captured key is the scenario's one input hook, whatever produces it:
 ```mermaid
 stateDiagram-v2
     [*] --> Normal
-    Normal --> Insert: i or a
+    Normal --> Insert: i
     Normal --> Visual: v
     Normal --> Search: slash
     Normal --> Command: colon
-    Normal --> Overlay: help/about/telemetry
+    Normal --> Overlay: Ctrl-G
     Insert --> Normal: Escape
-    Visual --> Normal: Escape
+    Visual --> Normal: Escape or v
     Search --> Normal: confirm or Escape
     Command --> Normal: execute or Escape
+    Command --> Overlay: help, about, t, d, g
     Overlay --> Normal: close
 ```
 
 | Mode | Purpose | Simulation behavior |
 |---|---|---|
 | Normal | Motions, counts, operators, find/search repeat, actions, macros. | Continues unless the game was separately paused. |
-| Visual | Select a characterwise range from an anchor and apply delete operations. | Continues; active shield bounds are exposed as the selection/ping boundary. |
+| Visual | Normal's grammar over the shield's ping bounds: while the shield is active, `h j k l` step by the bounds radius and word, find and line motions scan every row the bounds cover. | Continues. |
 | Insert | Type glyphs at the cursor; arrows move; Delete/Space/Backspace support edit-like deletion. | Continues in real time. |
-| Search | Edit and confirm a forward search pattern; `n`/`N` repeat later. | Uses text-entry routing. |
+| Search | Type a pattern; Enter jumps to the next match, wrapping round the map; `n`/`N` repeat later. | Continues. |
 | Command | Edit and execute a colon command with history. | Pauses a single-instance game; a live network session continues. |
-| Overlay | Navigate help, about, or telemetry content; `/` filters telemetry cards. | Pauses a single-instance game; a live network session continues. |
+| Overlay | Navigate help, about, telemetry, the profiler report or the [configuration menu](config-menu.md); `/` filters telemetry cards. | Pauses a single-instance game; a live network session continues. |
 
-Escape resets pending parser state and normally returns to Normal. Command and
-overlay completion coordinate their own pause result in a single-instance game,
-so a command such as `:new`, `:help`, or `:telemetry` can intentionally keep the game
-paused until its follow-up state is ready. `MetaSystem` refuses the pause request
-when a peer is live, leaving those modes available as non-blocking inspection.
+Escape in Normal cancels a pending key sequence, or with none pending flashes the
+ping grid; from any other mode it returns to Normal, and in the configuration menu
+it goes back one level. The router unpauses before it runs a command: an overlay
+command (`:help`, `:t`, `:g`) requests the pause again, and a reset pauses until the
+scheduler has rebuilt the run. `MetaSystem` refuses a pause in a live session
+unless every other participant is one of this run's bots (§9), which leaves Command
+and Overlay as non-blocking inspection there.
 
 ## 3. Normal-mode grammar
 
@@ -111,9 +115,10 @@ wait. Invalid continuations cancel the pending grammar rather than leaking a
 partial action into the game.
 
 Counts begin with `1` through `9`; `0` continues an existing count but is a line
-motion when idle. Operator and motion counts compose. Motions are clamped by map
-bounds and apply game-specific definitions of words, paragraphs, columns, and
-screen positions over the glyph grid.
+motion when idle. Each count caps at 9999, and operator and motion counts multiply.
+Motions are clamped by map bounds and apply game-specific definitions of words,
+paragraphs, columns, and map positions over the glyph grid. The status bar's key
+cell shows the keys of a pending sequence, else the last one completed.
 
 ## 4. Default bindings
 
@@ -121,11 +126,12 @@ screen positions over the glyph grid.
 
 | Key | Action |
 |---|---|
-| `Ctrl-Q`, `Ctrl-C` | Quit. |
-| `Ctrl-S` | Cycle audio mute state. |
+| `Ctrl-Q`, `Ctrl-C` | Quit; `[overlay_keys]` does not bind them, so overlay navigation ignores them. |
+| `Ctrl-S` | Cycle audio mute state; overlay navigation ignores it too. |
+| `Ctrl-G` | Open or close the [configuration menu](config-menu.md), from any mode. |
 | `a` in Normal | Cycle auto-fire: both weapons → off → main only. |
-| `Esc` | Cancel pending input or return toward Normal mode. |
-| Arrow keys | Move in the applicable mode. |
+| `Esc` | Cancel pending input, flash the ping grid in Normal, or return to Normal (§2). |
+| Arrow keys, `Home`, `End` | Move in the applicable mode. |
 | `Tab` | Jump to the active nugget. |
 | `Shift-Tab` | Jump to the first remaining gold character. |
 | `Enter` in Normal | Fire main weapons. |
@@ -143,8 +149,8 @@ screen positions over the glyph grid.
 | `b B` | Previous word / WORD. |
 | `e E` | End of word / WORD. |
 | `0 ^ $` | Line start, first non-whitespace, line end. |
-| `[ O` / `] o` | Previous / next occupied column target. |
-| `M m G` | Vertical middle, horizontal middle, screen bottom. |
+| `[ O` / `] o` | Nearest glyph above / below in the same column. |
+| `M m G` | Map middle row, middle column, bottom row. |
 | `{ }` | Previous / next paragraph. |
 | `%` | Matching bracket. |
 | `f F t T` + character | Find/till forward or backward. |
@@ -154,9 +160,9 @@ screen positions over the glyph grid.
 
 | Keys | Action |
 |---|---|
-| `gg` | Screen top. |
+| `gg` | Map top row. |
 | `go`, `g$`, `gm` | Map origin, map end, map center. |
-| `gh`, `gj`, `gk`, `gl` then `r`, `g`, or `b` | Show and jump to a red, green, or blue glyph in that direction. Repeating the direction key uses its repeat behavior. |
+| `gh`, `gj`, `gk`, `gl` then `r`, `g`, or `b` | Show and jump to a red, green, or blue glyph in that direction. Repeating the direction key (`gll`) jumps to the nearest glyph of any colour. |
 | `d` + motion | Delete the motion range. |
 | `dd` | Delete the current line. |
 | `x`, `D` | Delete current glyph / through line end. |
@@ -175,13 +181,14 @@ defined by vif's motion/operator code.
 ## 5. Insert, search, and command text editing
 
 Printable Insert input becomes `EventCharacterTyped`. Arrow/Home/End/Page keys
-remain navigation. Delete removes the current glyph. Insert-mode Space and
-Backspace use forward/back deletion semantics in addition to moving the cursor.
+remain navigation, and Tab, Shift-Tab and Enter keep their Normal actions. Delete
+removes the current glyph. Insert-mode Space and Backspace use forward/back
+deletion semantics in addition to moving the cursor.
 
-Search and Command keep their own editable rune buffers and cursor positions.
-Home/End and Left/Right edit the line; Up/Down browse command history in Command
-mode. Search remembers its last pattern and find commands remember their last
-target/direction for `n`, `N`, `;`, and `,`.
+Command keeps an editable line with a cursor: Left/Right and Home/End move within
+it, and Up/Down browse command history. Search only appends typed characters, and
+Backspace removes the last. Search remembers its last matched pattern and find
+commands remember their last target/direction for `n`, `N`, `;`, and `,`.
 
 The router retains up to 256 cursor undo positions and 256 command-history
 entries. These are session interaction structures, not persisted editor files.
@@ -198,18 +205,20 @@ even when they contain multi-key motions or commands.
 | `3@a` | Play it three times. |
 | `@@a` | Play it indefinitely. |
 | `@@@` | Play every non-empty register indefinitely. |
-| `q` + playing register | Stop that register's playback. |
-| `q@` or `Ctrl-@` | Stop all playback. |
+| `q` + playing register | Stop that register's playback and record over it. |
+| `q@` or `Ctrl-@` (`Ctrl-Space`) | Stop all playback; `Ctrl-@` works in every mode but Overlay. |
 
 Registers are lowercase `a` through `z`. Different registers can play
 concurrently. The 16 ms input ticker polls playback; each active register emits
-at most one intent when its 250 ms playback interval has elapsed. Simultaneous
-work is ordered by playback start time. Recorded intents originating from
-playback are marked, preventing recursive re-recording and excluding synthetic
-activity from APM.
+at most one intent when its 250 ms playback interval has elapsed, and playback
+waits while input is suspended (paused, Command or Overlay). Simultaneous work is
+ordered by playback start time. Intents from playback are marked, so they are never
+re-recorded, press no captured key, and dispatch with the macro origin, which
+admits no APM.
 
-Macro state resets on both `:new` and `:new!` and is not saved across process
-runs. Other operator preferences have a different reset contract below.
+Macro state resets on the instance that issues `:new` or `:new!`, and when a
+scenario change, join or journal start replaces the run; it is never saved across
+process runs. Other operator preferences have a different reset contract (§9).
 
 ## 7. Mouse and automatic fire
 
@@ -240,9 +249,10 @@ it only where `ConfigResource.MapToViewport` says the viewport shows it: a bot
 reaches no further than a mouse on the same screen would.
 
 `:mouse enable|disable|free` controls reporting and free motion. `:free` is a
-short toggle for free mouse motion. Input is ignored while suspended, in
-Command mode, or where pause/overlay policy blocks it, except a release, which
-still ends the hold of a press made before.
+short toggle for free mouse motion, on by default. The parser passes pointer input
+on only in Normal, Visual and Insert, and the router drops it while the mouse is
+disabled or input is suspended (paused, Command or Overlay); a release still ends
+the hold of a press made before.
 
 Automatic fire starts in both-weapons mode. `a` in Normal mode or bare `:auto`
 cycles both weapons → off → main only → both weapons. `:auto on`, `:auto off`,
@@ -279,29 +289,30 @@ The command dispatcher recognizes aliases shown in the first column.
 | Command | Purpose |
 |---|---|
 | `:quit`, `:q` | Exit. |
-| `:new`, `:n` | Reset simulation state; in a live session only the host may request it, and both participants reset. |
-| `:new!` | Reset and purge the initiating operator's free-mouse, auto-fire, speed, telemetry HUD, pins, and breakpoints. |
+| `:new`, `:n` | Reset simulation state; in a live session only the host may request it, and every participant resets. |
+| `:new!`, `:n!` | Reset and purge the initiating operator's free-mouse, auto-fire, speed, telemetry HUD, pins, and breakpoints. |
 | `:n <scenario>` | Rebuild the run on another scenario, by installed name or path. A scenario declares its own regions, so a different one needs a run of its own; naming the one already loaded resets in place instead. In a live session only the host may ask, and every guest rebuilds and rejoins with it. |
 | `:help`, `:h`, `:?`; `:about` | Open overlays. |
+| `:g`, `:config` | Open the [configuration menu](config-menu.md). |
 | `:content` | Show corpus telemetry. |
-| `:free [on\|off]` | Toggle or set free mouse. |
-| `:auto [on\|off\|main]` | Cycle or set automatic fire. |
-| `:mouse enable\|disable\|free` | Control terminal mouse input. |
+| `:free [on\|off]`, `:f` | Toggle or set free mouse. |
+| `:auto [on\|off\|main]`, `:a` | Cycle or set automatic fire. |
+| `:mouse enable\|disable\|free`, `:m` | Control terminal mouse input. |
 | `:host <addr> [host\|migrate]` | Open this running game to participants (`:host :7777`), under the authority policy named: `host` ends the session with this participant, `migrate` hands it to a survivor. Refused if the run is already in a session. |
 | `:join <target>` | Replace this solo game with the session at target, in any form `-join` takes; a browser takes only its `wss://` link. Refused while in a session. The game plays on while the dial runs and is replaced only once the host admits it; a refusal leaves it as it was, and a join that fails after that starts a solo game. |
-| `:session` | Report the session role, address, participant identity, its cursor slot, peer count and tick. |
+| `:session` | Report the session role, address, participant, cursor slot, peer links, tick and map latch, then the authority, reachability, slowest link and snapshot cadence. |
 | `:bot [add [N[:graph]\|graph]\|drop <slot>]` | List your bots; add one or N using `default` when omitted; drop your bot by slot, or any bot when hosting. Decimal `10`, hex `A` and `0xA` name the same slot. |
 | `:player [drop <slot>]` | List all players and bots. Host-only removal drops the player and its bots, or one bot alone; uses the same slot grammar. |
-| `:system <runtime-name> enable\|disable` | Toggle a system that honors meta-system commands. |
+| `:system <runtime-name> enable\|disable`, `:s` | Toggle a system that honors meta-system commands. |
 | `:flow [group]`, `:graph [group]` | Toggle navigation flow-field or route-graph debug views. |
 | `:speed [rate\|+\|-\|reset]`, `:sp` | Report or set the rational simulation rate. |
 | `:step [n]`, `:st` | Pause and advance complete ticks. |
 | `:step [rate] fsm [region] [pause]` | Run until an FSM transition, optionally pausing there. |
 | `:step [rate] ev <Event> [pause]` | Run until the named event is dispatched. |
 | `:step off` | Disarm run-until and restore 1x. |
-| `:region list\|spawn\|pause\|resume\|terminate ...` | Issue one scheduler-owned region primitive. |
+| `:region list\|spawn\|pause\|resume\|terminate ...`, `:r` | Issue one scheduler-owned region primitive. |
 | `:replay restart\|tick <n>\|time <[[h:]m:]s>`, `:r` | In a replay only, where `:r` means it rather than `:region`: play again from the start, or go to a tick or 1x game time of the run shown. |
-| `:log ...` | Start/stop logging; set level/scope and snapshot period. |
+| `:log ...`, `:l` | Start/stop logging; set level/scope and snapshot period. |
 | `:log rec [ticks\|flush\|fsm [on\|off]]` | Configure, request, or transition-trigger the flight recorder. |
 | `:journal [start]` | Name the replay journal, or start one from here: a solo run restarts on its own world and a guest rejoins; a session's host journals from its start with `-j`. |
 | `:telemetry [save\|hud\|unpin]`, `:t` | Open the telemetry overlay; `save` writes a point-in-time status snapshot, `unpin` clears pins. |
@@ -309,47 +320,46 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:debug`, `:d [prof [on\|off]\|cpu [s]\|heap\|mutex [s]\|trace [s]]` | Open the profiler report, toggle the profiler, or write a CPU, heap or mutex profile or an execution trace; see [Logging and diagnostics](logging-and-diagnostics.md) §11. |
 | `:d break event <Event>\|region <name>\|state <name>\|stat <key> [op] [value]` | Set a standing breakpoint: each time the event is dispatched, the region is entered (spawned, or started by a new game), any region enters the state, or the status cell starts to meet the comparison, the run pauses on the command line and leaving it resumes. Ops are `eq` (default), `ne`, `gt`, `ge`, `lt`, `le`; with no value a stat breaks once it is set — non-zero, true, or a string other than empty or `-`. Names match without case. Breakpoints persist across `:new`; `:new!` clears them. Refused in a live session. `:d break` lists them. |
 | `:d break clear [<kind> <name> [op] [value]]` | Clear every breakpoint, or the ones matching; a stat named without a comparison clears every one on that key. |
-| `:emit <EventName> [{ TOML payload }]` | Construct and publish a registered event for testing. |
+| `:emit <EventName> [{ TOML payload }]`, `:e`, `:event` | Construct and publish a registered event for testing; the `Event` prefix is optional. |
 | `:energy <value>`, `:heat <0-100>`, `:boost` | Directly manipulate player state for development. |
-| `:god`, `:demon` | Apply high positive/negative energy test states. |
+| `:god`, `:demon` | Set max heat, high positive/negative energy and every weapon. |
 | `:blossom`, `:decay`, `:dust` | Trigger effect/gameplay events directly. |
 
 The event registry validates `:emit` names and uses generated payload type
-metadata to decode optional inline TOML. Commands below the first six rows are
-primarily developer/authoring controls.
+metadata to decode optional inline TOML. Rows from `:system` down are mainly
+developer and authoring controls.
 
-In a live session, pause, speed, step, system mutation, raw `:emit` and FSM region
-operations are refused because applying them to only one scheduler would
-desynchronise shared state. Pause alone is allowed to the authority while every
-other participant is its own bot, which stands still with it; an arrival ends the
-pause. `:host` is deliberately outside that guard: the guard exists to stop an
-operator changing shared scheduling under a session that has already agreed on
-it, and this is the command that creates one. It refuses a run that is already in
-a session, which is the same rule stated where it belongs. `:bot` is outside it
-too: a bot joins through the session's own gate, as any participant does.
+In a live session, pause, speed, step, breakpoints, system mutation, raw `:emit`
+and FSM region operations are refused because applying them to only one scheduler
+would desynchronise shared state. Pause alone is allowed to the authority while
+every other participant is its own bot, which stands still with it; an arrival
+ends the pause. Help, telemetry and about overlays stay local and do not pause,
+logging and view controls are local inspection, and resizes retain D-14's locked
+map bounds. Player grants and effect commands remain available because they author
+the invoking cursor or use the ordinary player-to-shared crossing path. The host's
+reset crosses at an agreed tick, so every participant resets; a guest reset is
+refused. `:host` and `:bot` are outside the guard: `:host` creates the session
+the guard protects and refuses a run already in one, and a bot joins through the
+session's own gate as any participant does.
 
 A watched bot is live play: `:n` and `:bot` use the normal command path. While
 its operator types a command, graph input waits and a live session keeps ticking.
 These permissions do not apply to a recorded replay.
 
-`:host` binds a socket and `:bot add` dials one, and both start goroutines, which is
-more than any other command does, **inside the router's critical section** — the whole
-intent path runs under the world lock and `mode/` must never acquire it itself. The
-command reaches `engine.SessionController`, whose methods are therefore the
-lock-held forms; an implementation that took the lock again wedges the instance at
-the tick the command lands on, with neither a tick nor a signal able to recover it. Resizes retain D-14's locked map bounds. Help, telemetry
-and about overlays remain local and do not pause; logging and view controls are
-local inspection. Player grants and effect commands remain available because
-they author the invoking cursor or use the ordinary player-to-shared crossing
-path. The host's reset is the exceptional session-wide command and crosses at an
-agreed tick; a guest reset is refused.
+`:host` and `:bot add` can bind a listener, and they and `:join` start goroutines,
+**inside the router's critical section**: the whole intent path runs under the world
+lock and `mode/` must never acquire it itself. Such a command reaches
+`engine.SessionController`, whose methods are therefore the lock-held forms; an
+implementation that took the lock again wedges the instance at the tick the command
+lands on, with neither a tick nor a signal able to recover it.
 
-Free-mouse and auto-fire preferences, time scale, telemetry HUD visibility, and
-pinned overlay cards are operator-owned and survive plain `:new`. Both reset
-forms clear macros and transient command/overlay state. `:new!` additionally
-turns the initiating instance's two preferences off, restores 1x, and clears its
-HUD/pins; peers retain their own operator choices when the shared reset arrives.
-Logging state is process diagnostic configuration and survives both forms.
+Free-mouse and auto-fire preferences, time scale, telemetry HUD visibility, pinned
+overlay cards and breakpoints are operator-owned and survive plain `:new`. Both
+reset forms clear the issuing instance's macros, and every instance's captured
+keys and transient command/overlay state. `:new!` additionally turns the issuing
+instance's two preferences off, restores 1x, and clears its HUD, pins and
+breakpoints; peers retain their own operator choices when the shared reset
+arrives. Logging state is process diagnostic configuration and survives both forms.
 
 Telemetry cards contain at most 15 metrics. Empty player slots are omitted until
 they become active. A clipped selected card consumes `j`/`k` scroll steps before
@@ -362,10 +372,11 @@ top-left and wraps pinned cards into columns. If the viewport cannot fit every
 whole card, a `hidden` line names the omitted groups; the HUD intentionally has
 no focus or navigation mode of its own.
 
-Replay terminal keys are not entries in this command table or the keymap. A
-`ModeReplay` App reserves `SPACE . , + - h j k l 0 q` for viewer pause, step,
-step back, speed, pan/reset, and quit; those keys never become simulation intents.
-[Runtime and concurrency](runtime.md) describes playback.
+Viewer keys are not entries in this command table or the keymap. A replay, and a
+watched script or bot, reserve `SPACE . , + - h j k l 0 q` for viewer pause, step,
+step back, speed, pan/reset, and quit (in a live session only pan and quit); those
+keys never become simulation intents. `:` and `Ctrl-G` open the command line and
+the menu over it. [Runtime and concurrency](runtime.md) describes playback.
 
 System control uses `System.Name()`, which the manifest keys match. `:system`
 refuses a disable that a system declares required, naming the dependents.
@@ -374,29 +385,29 @@ refuses a disable that a system declares required, naming the dependents.
 
 Resolution order is:
 
-1. path passed with `-k`;
+1. path passed with `-k` (`-config-keymap`), or `vif.toml`'s `[paths] keymap`;
 2. `input/keymap.toml` under `-config-dir`;
-3. the same under the user root, then under each system root;
+3. the same under the user root, the checkout `wad/` beside a `bin/` binary, then
+   each system root;
 4. the embedded `internal/asset/input/keymap.toml` document.
 
 `make install-config` installs the embedded document without overwriting existing
-user files. Existing `append` bindings are normalized to `toggle_auto_fire` when
-loaded, so installed keymaps select the new action without restoring Insert-mode
-append behavior. Other custom bindings are preserved. See
-[External filesystem layout](filesystem-layout.md) for the shared root policy.
+user files. The action name `append` is an alias of `toggle_auto_fire`.
+See [External filesystem layout](filesystem-layout.md) for the shared root policy.
 
-An override is sparse: unspecified bindings retain defaults. The accepted TOML
-sections are:
+An override is sparse: it is merged over the embedded table, so unspecified
+bindings retain defaults. The help overlay reads its key column from the merged
+table, so it shows a player's own bindings. The accepted TOML sections are:
 
 | Section | Key form | Context |
 |---|---|---|
-| `[normal]` | one rune, `space`, `backslash`, or `zero` | Normal-mode rune bindings. |
-| `[normal_keys]` | terminal key name | Normal/global special keys. |
-| `[operator]` | rune | Motions accepted after `d`. |
-| `[prefix_g]` | rune | Second key after `g`. |
-| `[overlay]` | rune | Overlay rune bindings. |
+| `[normal]` | one rune, `space`, `backslash`, or `zero` | Normal and Visual rune bindings. |
+| `[normal_keys]` | terminal key name | Normal and Visual special keys. |
+| `[operator]` | as `[normal]` | Motions accepted after `d`. |
+| `[prefix_g]` | as `[normal]` | Second key after `g`. |
+| `[overlay]` | as `[normal]` | Overlay rune bindings. |
 | `[overlay_keys]` | terminal key name | Overlay special keys. |
-| `[text_keys]` | terminal key name | Insert/Search/Command navigation/edit keys. |
+| `[text_keys]` | terminal key name | Insert/Search/Command navigation/edit keys, and configuration-menu forms. |
 
 Values are canonical action names from `internal/input/actionnames.go`, except
 `press`, which a scenario's capture chooses the keys of. Use `"none"` to unbind a
@@ -426,8 +437,9 @@ When adding interaction behavior:
 3. Route the intent under the world lock and emit a domain event where another
    system owns the effect.
 4. Add the canonical action to the action registry if it is remappable.
-5. Update default mappings, help overlay content, keymap examples, and tests
-   together.
+5. Update default mappings, help overlay content (`internal/help/topics.go`),
+   keymap examples, and tests together. A new command also joins `commandNames`
+   in `commands.go`; a test fails on any command the help names that it lacks.
 6. Decide explicitly whether the action counts toward APM, can be recorded, can
    run from playback, and is allowed while paused.
 
@@ -435,10 +447,12 @@ When adding interaction behavior:
 
 | Concern | Primary source |
 |---|---|
-| Intent/parser types | `internal/input/intent.go`, `state.go`, `machine.go` |
-| Bindings and overrides | `internal/input/keytable.go`, `actionnames.go`, `keyconfig.go` |
+| Intent/parser types | `internal/input/intent.go`, `state.go`, `machine.go`; enum strings in `strings_gen.go` (`go generate ./internal/manifest`) |
+| Bindings and overrides | `internal/input/keytable.go`, `actionnames.go`, `keyconfig.go`, `binding.go` |
 | Mode routing | `internal/mode/router.go`, `actions.go`, `motions*.go`, `operators.go` |
 | Search | `internal/mode/search.go` |
 | Commands | `internal/mode/commands.go` |
+| Overlays and configuration menu | `internal/mode/overlay.go`, `config_menu.go`, `config_form.go` |
+| Help content | `internal/help` |
 | Macros | `internal/mode/macro.go` |
-| APM | `internal/parameter/apm.go`, `internal/engine/game_state.go` |
+| APM | `internal/parameter/apm.go`, `internal/engine/game_state.go`, admission in `internal/engine/scheduler.go` |
