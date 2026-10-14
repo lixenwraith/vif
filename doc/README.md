@@ -22,7 +22,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Runtime and concurrency](runtime.md) | Medium/detail | How does the process start, tick, render, pause, reset, and shut down safely? How is a replay presented, stepped back, sought and logged? |
 | [ECS and events](ecs-and-events.md) | Medium/detail | How are entities stored, systems ordered, spatial queries performed, and events settled? |
 | [Logging and diagnostics](logging-and-diagnostics.md) | Medium/detail | How do scopes, telemetry, the replay journal, snapshots, the flight recorder, and the profiler work? |
-| [Telemetry reference](telemetry-audit.md) | Detail | Which metric keys does each system, the session layer, the engine and the event queue register, where is each written and reset, and what reads them by name? |
+| [Telemetry reference](telemetry-reference.md) | Detail | Which metric keys does each system, the session layer, the engine and the event queue register, where is each written and reset, and what reads them by name? |
 | [Multi-instance domain model](domain-design.md) | Medium/detail | How are entities, events, RNG streams and systems split between shared and player domains, who holds authority over what, and what is still missing? |
 | [Multiplayer](multi-player.md) | Medium/detail | What a session guarantees, how a correction is ordered and contained, how authorship moves, what is still missing, and why this protocol rather than another. **Start here for multiplayer.** |
 | [Troubleshooting](troubleshooting.md) | Medium/detail | What did each dated diagnosis round, 2026-09-10 to 2026-10-13, find in host, guest, fleet and browser runs, and what closed each defect? |

@@ -69,12 +69,19 @@ it does not move an in-memory session into an unrelated pod.
 |---|---|---|---|
 | G | next | **Hand off a deployment a stranger can install.** | Both rehearsals below reach a first session with no undocumented step, and every resource value in `deploy/k3s/30-session.yaml` cites a number from H3. |
 | G1 | next | **Rehearse from bare Arch Linux and from bare Ubuntu.** Record package and service differences, and fix every command that assumes the production node. | A second node reaches [§13 of the procedure](kube-docker-deploy.md#13-first-session) without a step its operator had to invent. |
-| W1 | partly done | **Commission the browser path.** What remains is a tab that leaves; a hidden tab draws nothing and repaints once on return ([multi-platform §5](multi-platform.md#a-hidden-tab)). | A tab hidden or suspended for five minutes costs the other players nothing and resumes or rejoins on return, and a session whose last guest was a browser ends on its own grace. |
 | H3 | next | **Measure a full roster.** Nine sessions driven by headless joiners for the fleet-level readings — CPU, memory, tmpfs, log rate, rotations — plus one real four-player session over real links, through a tower and a storm and on `wad/scenario/td`, for the hour the Job's deadline allows, which tick slips and correction magnitude need. | Requests and limits in `30-session.yaml`, and the quota totals, come from the four-player measurement rather than from single-guest history and estimates. |
-| H1 | partly done | **Harden the open port.** The game port is unauthenticated by decision and reachable from the Internet, so everything a stranger can do has to be bounded; §4 lists what bounds it. | `internal/network` has a handshake fuzz target for malformed, oversized, replayed and half-open cases. |
-| H16 | partly done | **Automate image delivery.** Nightly CI publishes the headless image to GHCR under moving and commit-addressed tags; the node builds and imports its own with `deploy/guest/update-vif-image.sh`. | Choose the node's registry/promotion policy, authenticate pulls without a long-lived off-node deployment credential, and move new sessions to a verified digest while existing matches finish. |
-| H4 | partly done | **Renderer-neutral builds.** `vif_headless`, which the image runs, leaves out renderer and audio packages; terminal-shaped key, color, cell and image values remain in common simulation/configuration packages. | Extract renderer-neutral values for a minimally polished Android host within one month of development time; keep the simulation fingerprint shared with clients. |
 | H5 | later | **Spatial grid on ceiling-sized maps.** The grid is sized to the map, so only a ceiling-sized one such as `td` (500×250) reserves about 30.5 MiB per world, and a guest's staging world a second. | Deferred until density matters; on `td` the grid is a minority of what a session was measured to cost. |
+
+### Partly done
+
+Each of these has landed in part; what remains is a [TODO](todo.md) item.
+
+| ID | Done | Remaining |
+|---|---|---|
+| W1 | **Commission the browser path.** A hidden tab draws nothing and repaints once on return ([multi-platform §5](multi-platform.md#a-hidden-tab)). | [Let a browser tab leave and come back](todo.md#let-a-browser-tab-leave-and-come-back) |
+| H1 | **Harden the open port.** The game port is unauthenticated by decision and reachable from the Internet; everything a stranger can do on it is bounded as §4 lists. | [Fuzz the join handshake](todo.md#fuzz-the-join-handshake) |
+| H16 | **Automate image delivery.** Nightly CI publishes the headless image to GHCR under moving and commit-addressed tags; the node builds and imports its own with `deploy/guest/update-vif-image.sh`. | [Promote verified images to the node](todo.md#promote-verified-images-to-the-node) |
+| H4 | **Renderer-neutral builds.** `vif_headless`, which the image runs, leaves out the renderer and audio packages. | [Extract the renderer-neutral Android host model](todo.md#extract-the-renderer-neutral-android-host-model) |
 
 The deployment keeps a session's own bots closed (`VIF_ALLOCATOR_BOTS_MAX=0`) until
 [Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots) holds, and its
@@ -148,7 +155,7 @@ What bounds a stranger:
   reason to want the other shape.
 
 What remains unbounded is fuzz coverage for a malformed, oversized, replayed or
-half-open handshake (H1). The firewall requirements in
+half-open handshake ([Fuzz the join handshake](todo.md#fuzz-the-join-handshake)). The firewall requirements in
 [Deployment §2](kube-docker-deploy.md#2-the-public-edge) are what
 stand in front of the rest: the forwarded surface is the ten-port NodePort range and
 the front door's 7777, and the probe, log-stream and cluster API ports never leave

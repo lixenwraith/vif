@@ -34,13 +34,15 @@ guest's bots join and play through its own link. What remains is under
 - Affected files: terminal-shaped input/cell/color values, `internal/app`, host
   entry points
 - Prerequisite: define the minimum visual contract
+- Guide: fleet item H4
 
 Target a minimally polished Android build within one month of development time.
-Move terminal-specific visual and input values behind positive renderer/host
-adapters, add a library entry point, and keep lifecycle, simulation, networking,
-and resource providers common. Touch input maps onto the semantic input bots
-already drive, and [Multi-platform](multi-platform.md) lists the terminal-shaped
-values that remain.
+`vif_headless` already leaves out the renderer and audio packages. Move the
+terminal-shaped key, color, cell and image values still in common packages behind
+positive renderer/host adapters, add a library entry point, and keep lifecycle,
+simulation, networking, resource providers and the simulation fingerprint common
+with clients. Touch input maps onto the semantic input bots already drive, and
+[Multi-platform](multi-platform.md) lists the terminal-shaped values that remain.
 
 ## Bots
 
@@ -361,6 +363,18 @@ who would rather fetch a scenario than unpack one. What it needs before it is
 written is whose signature makes bytes trustworthy, which origins may serve them,
 and how long a fetched container is kept.
 
+### Let a browser tab leave and come back
+
+- Priority: P2
+- Affected files: `web/terminal.js`, `web/worker.js`, `internal/app/loop.go`,
+  `internal/lifecycle`
+- Guide: [Build profiles](multi-platform.md#a-hidden-tab), fleet item W1
+
+A hidden tab draws nothing and repaints once on return. What remains is a tab that
+leaves: one hidden or suspended for five minutes must cost the other players
+nothing and resume or rejoin on return, and a session whose last guest was a
+browser must end on its own grace.
+
 ## Packaging
 
 Distribution-specific detail lives in [Packaging](packaging.md).
@@ -419,6 +433,19 @@ rejoining the same session downloads it again. Writing it under the user root
 behind an explicit opt-in would keep it, and needs a trust decision first: the
 bytes came from a peer, and nothing about a plaintext link says they are the
 operator's.
+
+### Promote verified images to the node
+
+- Priority: P2
+- Affected files: `deploy/guest/update-vif-image.sh`, `.github/workflows/release.yml`,
+  `deploy/k3s/30-session.yaml`, `tool/vif-allocator`
+- Guide: [Session fleet](kubernetes-fleet.md#3-work-list) §3, fleet item H16
+
+Nightly CI publishes the headless image to GHCR under moving and commit-addressed
+tags, and the node builds and imports its own. What remains is choosing the
+node's registry and promotion policy, authenticating pulls without a long-lived
+off-node deployment credential, and moving new sessions to a verified digest while
+existing ones finish on theirs.
 
 ## Multiplayer
 
@@ -842,3 +869,14 @@ of 33 s on 4 cores: each drives a real socket against the shipped wall-clock
 deadlines (heartbeat loss, succession, join readiness), so none can share the
 machine. Test-only deadlines a fraction of the shipped ones, or the in-process mesh
 where a socket is not the rule under test, would cut them.
+
+### Fuzz the join handshake
+
+- Priority: P1
+- Affected files: `internal/network` (join and peer-link handshakes, admission)
+- Guide: [Session fleet](kubernetes-fleet.md#4-security-posture) §4, fleet item H1
+
+The game port is unauthenticated by decision and reachable from the Internet, and
+§4 lists what bounds a stranger on it. What it lacks is a fuzz target in
+`internal/network` for malformed, oversized, replayed and half-open handshakes,
+beside the frame and upgrade targets `pkg/websocket` already has.
