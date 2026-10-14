@@ -1,25 +1,8 @@
-// Package lifecycle decides when a supervised session has outlived its reason to
-// exist.
-//
-// A dedicated host started by hand is a long-lived thing: it waits, it is joined,
-// it empties, and it waits again, because the person who started it is the one who
-// will stop it. A session a website allocates has no such person. Something created
-// a container on a player's behalf, and if that player never arrives, or arrives
-// and leaves, nothing else will ever notice: the pod keeps a slot in a fleet whose
-// capacity is counted in tens, and the cluster's answer to "is anyone in there" is
-// a roster only the process can see.
-//
-// So the process answers it. This package holds the three durations that bound an
-// allocated session — the window a first guest has to connect, the grace after the
-// last one leaves, and how long a termination request waits for the roster to
-// empty — and turns a sequence of roster observations into one of five phases and
-// a single question: may this run still be joined, and should it still be running.
-//
-// It is deliberately a pure state machine over an injected clock. It opens no
-// listener, reads no roster, and terminates nothing; the run supplies observations
-// and acts on the phase. That keeps the policy testable at the resolution of a
-// nanosecond rather than of a ninety-second integration test, and keeps the
-// dedicated host's loop free of the arithmetic.
+// Package lifecycle bounds an allocated session by three durations — the first
+// guest's window, the grace after the last leaves, the drain — as a pure state
+// machine over an injected clock: roster observations in, a phase, a deadline and
+// whether a dial may still be admitted out. It opens no listener, reads no roster
+// and terminates nothing; the run supplies observations and acts on the phase.
 package lifecycle
 
 import (
