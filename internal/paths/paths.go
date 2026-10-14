@@ -1,5 +1,7 @@
-// Package paths defines vif's external filesystem layout. It owns
-// platform discovery only; callers decide which resource names are required.
+// Package paths defines vif's external filesystem layout: the configuration roots
+// in priority order, the categorized names under each, the user-state directories
+// and vif.toml. It finds files and reads only vif.toml; callers decide which
+// resources are required and read them.
 package paths
 
 import (
