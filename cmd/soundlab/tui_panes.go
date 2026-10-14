@@ -137,12 +137,11 @@ func (a *tuiApp) walkStruct(name string, sv reflect.Value, segs []string, depth 
 	}
 }
 
-// emitField renders one field. A nil pointer sub-table (Burst, Vibrato) is
-// walked through its zero value so fields that do not exist yet can be
-// browsed and edited — set's create-on-write resolve allocates on commit;
-// the whole substituted subtree renders dimmed. A leaf also dims when its
-// tag is omitempty and the value is zero: exactly the fields a save would
-// omit, i.e. the ones resolving to package defaults.
+// emitField renders one field. A nil pointer sub-table (Burst, Vibrato) is walked
+// through its zero value so fields that do not exist yet can be browsed and edited
+// (set's create-on-write resolve allocates on commit); the substituted subtree
+// renders dimmed. A leaf also dims when its tag is omitempty and its value zero:
+// the fields a save would omit, which resolve to package defaults.
 func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, depth int, unset, omitEmpty bool) {
 	full := name + "." + strings.Join(segs, ".")
 	for fv.Kind() == reflect.Pointer {
@@ -375,9 +374,8 @@ func (a *tuiApp) renderHeader(r tui.Region) {
 	}
 	trans := tui.BarSection{Value: fmt.Sprintf("%s %d:%02d", sym, bar, step), ValueStyle: val, Priority: 3}
 
-	// Slot names shorten only when the full form does not fit (was an
-	// unconditional 12-char cap): measure the fixed sections, give the
-	// slots whatever width remains.
+	// Slot names shorten only when the full form does not fit: measure the
+	// fixed sections, give the slots whatever width remains.
 	names := [3]string{
 		patName(a.s.eng.SlotPattern(0)),
 		patName(a.s.eng.SlotPattern(1)),

@@ -307,8 +307,9 @@ func (s *Sequencer) updateReveal() {
 }
 
 // updateFill runs the slot-2 auto-fill: fill bar on the last bar of each phrase,
-// previous pattern restored on the downbeat; skipped while slot 2 is user-driven
-// The fill comes from the group and tier drawing, or the first group before any has.
+// previous pattern restored on the downbeat; skipped while auto-fill is off
+// (SetAutoFill) or slot 2 has a change pending or a reveal running. The fill comes
+// from the group and tier drawing, or the first group before any has.
 func (s *Sequencer) updateFill() {
 	if !s.autoFill {
 		return

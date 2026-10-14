@@ -85,8 +85,8 @@ type AudioEngine struct {
 	silentMode  atomic.Bool
 
 	// rejected counts Play rejections by reason. The pre-mixer gates leave no
-	// trace in played/dropped, which is what let a zeroed SoundID table go
-	// unnoticed across revisions.
+	// trace in played/dropped, so without it a zeroed SoundID table would go
+	// unnoticed.
 	rejected [RejectCount]atomic.Uint64
 
 	stopChan chan struct{}
@@ -244,7 +244,7 @@ func (ae *AudioEngine) attach(c *BackendConfig) (io.Writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd.Stderr = ae.stderrTail // backend stderr no longer lost to raw-mode terminal
+	cmd.Stderr = ae.stderrTail // bounded tail, off the raw-mode terminal; a probe exit quotes its last line
 	if err := cmd.Start(); err != nil {
 		stdin.Close()
 		return nil, err
@@ -403,8 +403,8 @@ func (ae *AudioEngine) SetPaused(paused bool) {
 	}
 }
 
-// volumes is the per-ID effect level, resolved once from the name-keyed
-// config. Removes the map lookup Play used to do per shot.
+// resolveVolumes builds the per-ID effect level once from the name-keyed
+// config, so Play indexes a slice rather than looking up a name per shot.
 func (ae *AudioEngine) resolveVolumes() {
 	defs := registeredSounds()
 	v := make([]float64, len(defs))

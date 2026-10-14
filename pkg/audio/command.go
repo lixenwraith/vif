@@ -37,13 +37,13 @@ type audioCmd struct {
 	pattern PatternID
 	instr   InstrumentType
 	tier    Intensity // arrangement tier
-	slot    int8      // sequencer slot; was overloaded onto i1/i2
+	slot    int8      // sequencer slot
 	f1      float64   // play volume | swing | music volume | note velocity
-	i1      int       // bpm | crossfade | midi note | harmony root | slot (mask)
-	i2      int       // slot (pattern) | duration samples | scale | mask value
+	i1      int       // bpm | crossfade | midi note | harmony root
+	i2      int       // duration samples | scale | mask value
 	ints    []int     // harmony progression
 	seed    int64     // sequencer rng seed (explicit width, no int-size assumption)
-	b       bool      // quantize
+	b       bool      // quantize | auto-fill on
 	reveal  bool      // per-bar track build-up on the incoming pattern
 	w       io.Writer
 	bufs    []floatBuffer // cmdReloadSound: rendered variant set, mixer-owned on receipt
