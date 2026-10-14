@@ -201,7 +201,7 @@ func (r *MaterializeRenderer) calcIntensity(style component.MaterializeStyle, pr
 		if cellOffset >= segEnd-2 && segEnd > 0 {
 			// Sine pulse: 0.8 + 0.2 * sin(progress * pulseHz * 2π)
 			pulseAngle := progress * float64(parameter.MaterializePulseHz) * vmath.TwoPi
-			pulseIntensity := 0.8 + vmath.SinF(pulseAngle)/5.0
+			pulseIntensity := 0.8 + vmath.Sin(pulseAngle)/5.0
 			return baseIntensity * pulseIntensity
 		}
 		return baseIntensity

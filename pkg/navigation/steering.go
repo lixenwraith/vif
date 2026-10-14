@@ -21,7 +21,7 @@ func init() {
 		fx := float64(vec[0])
 		fy := float64(vec[1]) * 0.5
 		if fx != 0 || fy != 0 {
-			fx, fy = vmath.Normalize2DF(fx, fy)
+			fx, fy = vmath.Normalize2D(fx, fy)
 		}
 		UnitVectors[i] = [2]float64{fx, fy}
 	}
@@ -62,10 +62,10 @@ func FlowVector(src Source, x, y int) (float64, float64, bool) {
 // cover drop out of the average rather than pulling it toward zero, and a position
 // with no covered neighbour returns the zero vector for the caller to interpret.
 func InterpolatedDirection(src Source, preciseX, preciseY float64) (float64, float64) {
-	sampleX := preciseX - vmath.CellCenterF
-	sampleY := preciseY - vmath.CellCenterF
+	sampleX := preciseX - vmath.CellCenter
+	sampleY := preciseY - vmath.CellCenter
 
-	cell := vmath.PointAtF(sampleX, sampleY)
+	cell := vmath.PointAt(sampleX, sampleY)
 	x0, y0 := cell.X, cell.Y
 
 	u := sampleX - float64(x0)
@@ -115,7 +115,7 @@ func InterpolatedDirection(src Source, preciseX, preciseY float64) (float64, flo
 	resY := sumY / totalWeight
 
 	if resX != 0 || resY != 0 {
-		return vmath.Normalize2DF(resX, resY)
+		return vmath.Normalize2D(resX, resY)
 	}
 	return 0, 0
 }

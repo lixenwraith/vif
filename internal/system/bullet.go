@@ -149,9 +149,9 @@ func (s *BulletSystem) traverseAndCollide(
 	bullet *component.BulletComponent,
 	fromX, fromY, toX, toY float64,
 ) bool {
-	start := vmath.PointAtF(fromX, fromY)
+	start := vmath.PointAt(fromX, fromY)
 
-	traverser := vmath.NewGridTraverserF(fromX, fromY, toX, toY)
+	traverser := vmath.NewGridTraverser(fromX, fromY, toX, toY)
 	for traverser.Next() {
 		s.statGridSteps.Add(1)
 		cx, cy := traverser.Pos()
@@ -218,7 +218,7 @@ func (s *BulletSystem) spawnBullet(p *event.BulletSpawnRequestPayload) {
 		},
 	})
 
-	origin := vmath.PointAtF(p.OriginX, p.OriginY)
+	origin := vmath.PointAt(p.OriginX, p.OriginY)
 	s.world.Positions.SetPosition(e, component.PositionComponent{X: origin.X, Y: origin.Y})
 	s.statSpawned.Add(1)
 }

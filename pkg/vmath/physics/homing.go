@@ -53,7 +53,7 @@ func applyHomingInternal(
 ) bool {
 	dx := targetX - k.PreciseX
 	dy := targetY - k.PreciseY
-	dist := vmath.MagnitudeF(dx, dy)
+	dist := vmath.Magnitude(dx, dy)
 
 	deadZone := profile.DeadZone
 	if deadZone == 0 {
@@ -65,7 +65,7 @@ func applyHomingInternal(
 	// acceleration. The owning integrator applies that acceleration later in the
 	// tick; settling here would otherwise pin a body against any modest steady
 	// field (such as wind) by resetting its displacement and velocity every tick.
-	if dist < deadZone && vmath.MagnitudeSqF(k.VelX, k.VelY) < homingSettleSpeedSq &&
+	if dist < deadZone && vmath.MagnitudeSq(k.VelX, k.VelY) < homingSettleSpeedSq &&
 		k.AccelX == 0 && k.AccelY == 0 {
 		k.PreciseX = targetX
 		k.PreciseY = targetY
@@ -82,7 +82,7 @@ func applyHomingInternal(
 	if profile.ArrivalRadius > 0 && dist < profile.ArrivalRadius {
 		factor := dist / profile.ArrivalRadius
 
-		effectiveAccel *= vmath.LerpF(profile.ArrivalAccelMin, 1.0, factor)
+		effectiveAccel *= vmath.Lerp(profile.ArrivalAccelMin, 1.0, factor)
 
 		// Cruise speed ramps to zero at the target so drag engages below BaseSpeed;
 		// Without this the actor orbits at cruise speed forever
@@ -94,7 +94,7 @@ func applyHomingInternal(
 	}
 
 	// Apply homing acceleration; dist is already the magnitude, so reuse it
-	// instead of paying a second sqrt inside Normalize2DF
+	// instead of paying a second sqrt inside Normalize2D
 	if dist > 0 {
 		dirX, dirY := dx/dist, dy/dist
 		k.VelX += dirX * effectiveAccel * dt
@@ -102,7 +102,7 @@ func applyHomingInternal(
 	}
 
 	if applyDrag {
-		currentSpeed := vmath.MagnitudeF(k.VelX, k.VelY)
+		currentSpeed := vmath.Magnitude(k.VelX, k.VelY)
 
 		if currentSpeed > effectiveBaseSpeed && currentSpeed > 0 {
 			excess := currentSpeed - effectiveBaseSpeed

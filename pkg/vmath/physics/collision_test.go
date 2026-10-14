@@ -108,7 +108,7 @@ func TestApplyOffsetCollisionImpulseZeroOffsetMatchesBase(t *testing.T) {
 }
 
 func TestCheckSoftCollision(t *testing.T) {
-	invRx, invRy := vmath.EllipseInvRadiiSqF(3, 1.5)
+	invRx, invRy := vmath.EllipseInvRadiiSq(3, 1.5)
 
 	if _, _, hit := CheckSoftCollision(11, 10, 10, 10, invRx, invRy); !hit {
 		t.Error("adjacent cell must collide")

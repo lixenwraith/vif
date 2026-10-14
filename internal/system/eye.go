@@ -311,7 +311,7 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 	})
 
 	// Kinetic with centered position
-	preciseX, preciseY := vmath.Point{X: headerX, Y: headerY}.CenterF()
+	preciseX, preciseY := vmath.Point{X: headerX, Y: headerY}.Center()
 	s.world.Components.Kinetic.SetComponent(headerEntity, component.KineticComponent{
 		Kinetic: physics.Kinetic{
 			PreciseX: preciseX,

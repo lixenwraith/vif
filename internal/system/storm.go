@@ -272,7 +272,7 @@ func (s *StormSystem) buildEllipseOffsets() {
 
 	for y := -radiusY; y <= radiusY; y++ {
 		for x := -radiusX; x <= radiusX; x++ {
-			if vmath.EllipseContainsF(float64(x), float64(y),
+			if vmath.EllipseContains(float64(x), float64(y),
 				parameter.StormCircleCollisionInvRxSq, parameter.StormCircleCollisionInvRySq) {
 				s.ellipseOffsets = append(s.ellipseOffsets, vmath.Point{X: x, Y: y})
 			}
@@ -296,7 +296,7 @@ func (s *StormSystem) spawnStorm() {
 	config := s.world.Resources.Config
 	centerX := config.MapWidth / 2
 	centerY := config.MapHeight / 2
-	centerPX, centerPY := (vmath.Point{X: centerX, Y: centerY}).CenterF()
+	centerPX, centerPY := (vmath.Point{X: centerX, Y: centerY}).Center()
 
 	// Pre-calculate circle spawn parameters
 	angleOffsets := [3]float64{0, vmath.TwoPi / 3, 2 * vmath.TwoPi / 3}
@@ -307,8 +307,8 @@ func (s *StormSystem) spawnStorm() {
 
 	type circleSpawnInfo struct {
 		gridX, gridY int
-		pos3D        vmath.Vec3F
-		vel3D        vmath.Vec3F
+		pos3D        vmath.Vec3
+		vel3D        vmath.Vec3
 	}
 
 	var circleInfos [component.StormCircleCount]circleSpawnInfo
@@ -324,10 +324,10 @@ func (s *StormSystem) spawnStorm() {
 	// 1. Calculate target positions and validate all circles
 	for i := range component.StormCircleCount {
 		angle := angleOffsets[i]
-		offsetX := initialRadius * vmath.CosF(angle)
-		offsetY := initialRadius * vmath.SinF(angle) * 0.5 // Terminal aspect ratio
+		offsetX := initialRadius * vmath.Cos(angle)
+		offsetY := initialRadius * vmath.Sin(angle) * 0.5 // Terminal aspect ratio
 
-		target := vmath.PointAtF(centerPX+offsetX, centerPY+offsetY)
+		target := vmath.PointAt(centerPX+offsetX, centerPY+offsetY)
 		targetX, targetY := target.X, target.Y
 
 		// Find valid position via spiral search
@@ -338,19 +338,19 @@ func (s *StormSystem) spawnStorm() {
 		}
 
 		// Circle center at the cell center, matching every other spawn path
-		centerPX, centerPY := vmath.Point{X: foundX, Y: foundY}.CenterF()
+		centerPX, centerPY := vmath.Point{X: foundX, Y: foundY}.Center()
 
 		circleInfos[i] = circleSpawnInfo{
 			gridX: foundX,
 			gridY: foundY,
-			pos3D: vmath.Vec3F{
+			pos3D: vmath.Vec3{
 				X: centerPX,
 				Y: centerPY,
 				Z: baseZ + zOffsets[i]*parameter.StormZSpawnOffset,
 			},
-			vel3D: vmath.Vec3F{
-				X: -initialSpeed * vmath.SinF(angle),
-				Y: initialSpeed * vmath.CosF(angle) * 0.5,
+			vel3D: vmath.Vec3{
+				X: -initialSpeed * vmath.Sin(angle),
+				Y: initialSpeed * vmath.Cos(angle) * 0.5,
 				Z: zJitter[i],
 			},
 		}
@@ -469,9 +469,9 @@ func (s *StormSystem) clearCircleSpawnArea(centerX, centerY int) {
 func (s *StormSystem) createCircleHeader(
 	parentEntity core.Entity,
 	index int,
-	pos3D, vel3D vmath.Vec3F,
+	pos3D, vel3D vmath.Vec3,
 ) core.Entity {
-	cell := vmath.PointAtF(pos3D.X, pos3D.Y)
+	cell := vmath.PointAt(pos3D.X, pos3D.Y)
 
 	circleEntity := s.world.CreateEntity(core.DomainShared)
 	s.world.Positions.SetPosition(circleEntity, component.PositionComponent{X: cell.X, Y: cell.Y})
@@ -639,8 +639,8 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 	circles := circleBuffer[:circleCount]
 
 	// Precompute center-aligned boundary limits accounting for ellipse radius.
-	minX, minY := (vmath.Point{X: 0, Y: 0}).CenterF()
-	maxX, maxY := (vmath.Point{X: config.MapWidth - 1, Y: config.MapHeight - 1}).CenterF()
+	minX, minY := (vmath.Point{X: 0, Y: 0}).Center()
+	maxX, maxY := (vmath.Point{X: config.MapWidth - 1, Y: config.MapHeight - 1}).Center()
 	boundMinX := minX + parameter.StormBoundaryInsetX
 	boundMaxX := maxX - parameter.StormBoundaryInsetX
 	boundMinY := minY + parameter.StormBoundaryInsetY
@@ -686,10 +686,10 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		circles[i].circle.Vel3D.Z += accelZ * dtSec
 
 		// 6. Apply damping
-		circles[i].circle.Vel3D = vmath.V3FDampDt(circles[i].circle.Vel3D, parameter.StormDamping, dtSec)
+		circles[i].circle.Vel3D = vmath.V3DampDt(circles[i].circle.Vel3D, parameter.StormDamping, dtSec)
 
 		// 7. Clamp velocity
-		circles[i].circle.Vel3D = vmath.V3FClampMagnitude(circles[i].circle.Vel3D, parameter.StormMaxVelocity)
+		circles[i].circle.Vel3D = vmath.V3ClampMagnitude(circles[i].circle.Vel3D, parameter.StormMaxVelocity)
 
 		// 8. Axis-separated position integration with collision
 
@@ -712,7 +712,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 			}
 		} else {
 			// Wall check X (only if within bounds)
-			cell := vmath.PointAtF(circles[i].circle.Pos3D.X, circles[i].circle.Pos3D.Y)
+			cell := vmath.PointAt(circles[i].circle.Pos3D.X, circles[i].circle.Pos3D.Y)
 			if s.collectAndDestroyWallsInEllipse(cell.X, cell.Y) {
 				motion.WallCollisions++
 				circles[i].circle.Pos3D.X = oldPosX
@@ -739,7 +739,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 			}
 		} else {
 			// Wall check Y (uses potentially updated X position)
-			cell := vmath.PointAtF(circles[i].circle.Pos3D.X, circles[i].circle.Pos3D.Y)
+			cell := vmath.PointAt(circles[i].circle.Pos3D.X, circles[i].circle.Pos3D.Y)
 			if s.collectAndDestroyWallsInEllipse(cell.X, cell.Y) {
 				motion.WallCollisions++
 				circles[i].circle.Pos3D.Y = oldPosY
@@ -790,7 +790,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		circle := circles[i].circle
 		circleEntity := circles[i].entity
 
-		cell := vmath.PointAtF(circle.Pos3D.X, circle.Pos3D.Y)
+		cell := vmath.PointAt(circle.Pos3D.X, circle.Pos3D.Y)
 		newGridX, newGridY := cell.X, cell.Y
 
 		// Update grid position
@@ -834,7 +834,7 @@ func (s *StormSystem) absorbExternalImpulse(circleEntity core.Entity, circle *co
 // resolveCircleCollision handles elastic collision between two circles
 func (s *StormSystem) resolveCircleCollision(a, b *component.StormCircleComponent) {
 	minDist := parameter.StormCircleCollisionRadius * 2
-	if vmath.V3FMagSq(vmath.V3FSub(b.Pos3D, a.Pos3D)) >= minDist*minDist {
+	if vmath.V3MagSq(vmath.V3Sub(b.Pos3D, a.Pos3D)) >= minDist*minDist {
 		return
 	}
 
@@ -1226,7 +1226,7 @@ func (s *StormSystem) processGreenAttack(
 	s.statGreenActiveFrame.Add(1)
 
 	strikeCursorsIn(s.world, func(x, y int) bool {
-		return vmath.EllipseContainsPointF(x, y, circleX, circleY, parameter.StormGreenInvRxSq, parameter.StormGreenInvRySq)
+		return vmath.EllipseContainsPoint(x, y, circleX, circleY, parameter.StormGreenInvRxSq, parameter.StormGreenInvRySq)
 	}, stormGreenDamage)
 }
 
@@ -1248,10 +1248,10 @@ func (s *StormSystem) initBlueAttack(
 	angle := s.rng.Float64() * vmath.TwoPi
 	distance := parameter.StormBlueSpawnDistance
 
-	circlePX, circlePY := (vmath.Point{X: circleX, Y: circleY}).CenterF()
-	target := vmath.PointAtF(
-		circlePX+distance*vmath.CosF(angle),
-		circlePY+distance*vmath.SinF(angle)*0.5,
+	circlePX, circlePY := (vmath.Point{X: circleX, Y: circleY}).Center()
+	target := vmath.PointAt(
+		circlePX+distance*vmath.Cos(angle),
+		circlePY+distance*vmath.Sin(angle)*0.5,
 	)
 	targetX, targetY := target.X, target.Y
 

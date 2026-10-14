@@ -176,7 +176,7 @@ func (r *ExplosionRenderer) accumulateCenter(ctx render.RenderContext, c *engine
 		durationNano = parameter.ExplosionFieldDurationNano
 	}
 	ageIndex := min(int(c.Age*100/durationNano), 100)
-	timeDecay := vmath.ExpDecayF(ageIndex)
+	timeDecay := vmath.ExpDecay(ageIndex)
 
 	// Bounding box (aspect-corrected)
 	radiusCells := int(math.Floor(c.Radius))
@@ -264,7 +264,7 @@ func (r *ExplosionRenderer) accumulateCenter(ctx render.RenderContext, c *engine
 	for vy := minY; vy <= maxY; vy++ {
 		rowOffset := vy * r.bufWidth
 		dy := float64(vy) - centerVYF
-		dyCirc := vmath.ScaleToCircularF(dy)
+		dyCirc := vmath.ScaleToCircular(dy)
 		dyCircSq := dyCirc * dyCirc
 
 		for vx := minX; vx <= maxX; vx++ {

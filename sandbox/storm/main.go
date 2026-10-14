@@ -16,7 +16,7 @@ import (
 
 // Part represents one composite sphere entity
 type Part struct {
-	Pos, Vel vmath.Vec3F
+	Pos, Vel vmath.Vec3
 	Mass     float64
 	Radius   float64
 	Color    color.RGB
@@ -93,10 +93,10 @@ func resolveCollision(a, b *Part) {
 		massA, massB, restitution,
 	)
 	if a.Frozen {
-		a.Vel = vmath.Vec3F{}
+		a.Vel = vmath.Vec3{}
 	}
 	if b.Frozen {
-		b.Vel = vmath.Vec3F{}
+		b.Vel = vmath.Vec3{}
 	}
 	if collided {
 		a.Flash = flashSeconds
@@ -395,7 +395,7 @@ func main() {
 					case ev.Key == terminal.KeyRune && ev.Rune == 'f':
 						parts[selected].Frozen = !parts[selected].Frozen
 						if parts[selected].Frozen {
-							parts[selected].Vel = vmath.Vec3F{}
+							parts[selected].Vel = vmath.Vec3{}
 						}
 					case ev.Key == terminal.KeyUp:
 						parts[selected].Mass += massStep
@@ -443,22 +443,22 @@ func main() {
 func initParts() [3]Part {
 	return [3]Part{
 		{
-			Pos:    vmath.Vec3F{X: -4.0, Y: -2.0, Z: 10.0},
-			Vel:    vmath.Vec3F{X: 5.0, Y: 2.0, Z: -3.0},
+			Pos:    vmath.Vec3{X: -4.0, Y: -2.0, Z: 10.0},
+			Vel:    vmath.Vec3{X: 5.0, Y: 2.0, Z: -3.0},
 			Mass:   massDefault,
 			Radius: partRadius,
 			Color:  color.RGB{R: 40, G: 180, B: 255}, // Cyan
 		},
 		{
-			Pos:    vmath.Vec3F{X: 3.0, Y: 1.5, Z: 18.0},
-			Vel:    vmath.Vec3F{X: -3.0, Y: -4.0, Z: 4.0},
+			Pos:    vmath.Vec3{X: 3.0, Y: 1.5, Z: 18.0},
+			Vel:    vmath.Vec3{X: -3.0, Y: -4.0, Z: 4.0},
 			Mass:   massDefault,
 			Radius: partRadius,
 			Color:  color.RGB{R: 255, G: 60, B: 120}, // Magenta
 		},
 		{
-			Pos:    vmath.Vec3F{X: 0.0, Y: 0.0, Z: 24.0},
-			Vel:    vmath.Vec3F{X: 2.0, Y: 3.5, Z: -6.0},
+			Pos:    vmath.Vec3{X: 0.0, Y: 0.0, Z: 24.0},
+			Vel:    vmath.Vec3{X: 2.0, Y: 3.5, Z: -6.0},
 			Mass:   massDefault,
 			Radius: partRadius,
 			Color:  color.RGB{R: 120, G: 255, B: 80}, // Lime
@@ -472,7 +472,7 @@ func simulate(parts *[3]Part, dt float64) {
 		if parts[i].Frozen {
 			continue
 		}
-		parts[i].Pos = vmath.V3FAdd(parts[i].Pos, vmath.V3FScale(parts[i].Vel, dt))
+		parts[i].Pos = vmath.V3Add(parts[i].Pos, vmath.V3Scale(parts[i].Vel, dt))
 	}
 
 	// Boundary reflection per axis

@@ -96,7 +96,7 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 
 	dxF := float64(dx)
 	dyF := float64(dy)
-	dist := vmath.MagnitudeF(dxF, dyF)
+	dist := vmath.Magnitude(dxF, dyF)
 	if dist < 1.0 {
 		return []struct{ X, Y int }{{sx1, sy1}, {sx2, sy2}}
 	}
@@ -130,7 +130,7 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 
 		// === Sine envelope: sin(t * π) ===
 		// Maps t ∈ [0,1] to envelope ∈ [0,1], max at t=0.5
-		envelope := vmath.SinF(t * vmath.TwoPi / 2.0)
+		envelope := vmath.Sin(t * vmath.TwoPi / 2.0)
 		if envelope < 0 {
 			envelope = -envelope // Ensure positive (shouldn't happen in [0, 0.5] but safety)
 		}
@@ -160,7 +160,7 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 		// Apply perpendicular displacement
 		jx := perpX * totalJitter
 		jy := perpY * totalJitter
-		point := vmath.PointAtF(bx+jx, by+jy)
+		point := vmath.PointAt(bx+jx, by+jy)
 
 		points = append(points, struct{ X, Y int }{
 			point.X,

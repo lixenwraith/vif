@@ -104,7 +104,7 @@ func IntegrateWithBounceStats(
 			// ReflectBoundsX only flips the sign; scale by restitution magnitude
 			k.VelX *= wallRestitution
 		} else {
-			p := vmath.PointAtF(k.PreciseX, k.PreciseY)
+			p := vmath.PointAt(k.PreciseX, k.PreciseY)
 			if checkWall(p.X-headerOffsetX, p.Y-headerOffsetY) {
 				stats.WallCollisions++
 				k.PreciseX = startPreciseX
@@ -120,7 +120,7 @@ func IntegrateWithBounceStats(
 			stats.BoundaryReflections++
 			k.VelY *= wallRestitution
 		} else {
-			p := vmath.PointAtF(k.PreciseX, k.PreciseY)
+			p := vmath.PointAt(k.PreciseX, k.PreciseY)
 			if checkWall(p.X-headerOffsetX, p.Y-headerOffsetY) {
 				stats.WallCollisions++
 				k.PreciseY = startPreciseY
@@ -129,6 +129,6 @@ func IntegrateWithBounceStats(
 		}
 	}
 
-	p := vmath.PointAtF(k.PreciseX, k.PreciseY)
+	p := vmath.PointAt(k.PreciseX, k.PreciseY)
 	return p.X, p.Y, stats
 }

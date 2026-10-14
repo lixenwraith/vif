@@ -320,7 +320,7 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 	})
 
 	// Initialize kinetic with cell-centered position
-	preciseX, preciseY := vmath.Point{X: headerX, Y: headerY}.CenterF()
+	preciseX, preciseY := vmath.Point{X: headerX, Y: headerY}.Center()
 	kinetic := physics.Kinetic{
 		PreciseX: preciseX,
 		PreciseY: preciseY,
@@ -600,7 +600,7 @@ func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *comp
 	swarmComp.ChargeStartX = kineticComp.PreciseX
 	swarmComp.ChargeStartY = kineticComp.PreciseY
 	swarmComp.ChargeTargetX, swarmComp.ChargeTargetY =
-		vmath.Point{X: swarmComp.LockedTargetX, Y: swarmComp.LockedTargetY}.CenterF()
+		vmath.Point{X: swarmComp.LockedTargetX, Y: swarmComp.LockedTargetY}.Center()
 
 	// Calculate initial charge velocity
 	dx := swarmComp.ChargeTargetX - swarmComp.ChargeStartX
@@ -666,7 +666,7 @@ func (s *SwarmSystem) updateTeleportState(
 	s.clearSwarmSpawnArea(newX, newY)
 
 	if kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity); ok {
-		kineticComp.PreciseX, kineticComp.PreciseY = vmath.Point{X: newX, Y: newY}.CenterF()
+		kineticComp.PreciseX, kineticComp.PreciseY = vmath.Point{X: newX, Y: newY}.Center()
 		kineticComp.VelX = 0
 		kineticComp.VelY = 0
 	}

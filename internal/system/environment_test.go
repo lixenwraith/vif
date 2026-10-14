@@ -437,7 +437,7 @@ func TestDriftExpiryReplacementAndCancel(t *testing.T) {
 	s.startDrift(&event.DriftStartPayload{Direction: math.NaN(), Speed: 3})
 	s.startDrift(&event.DriftStartPayload{Direction: 1, Speed: 0})
 	s.startDrift(&event.DriftStartPayload{Direction: 1, Speed: 3, DurationMs: -1})
-	if s.drift.Speed != 2 || s.drift.Direction != vmath.NormalizeAngleF(math.Pi) {
+	if s.drift.Speed != 2 || s.drift.Direction != vmath.NormalizeAngle(math.Pi) {
 		t.Fatalf("invalid start replaced the drift: %+v", s.drift)
 	}
 

@@ -281,7 +281,7 @@ func (s *WeaponSystem) advanceStreams(cursor core.Entity, weaponComp *component.
 		}
 		weaponComp.Stream[wt] = parameter.WeaponStreamInterval
 		x, y := s.emitterCell(orbs[wt], cursorPos)
-		fromX, fromY := vmath.Point{X: x, Y: y}.CenterF()
+		fromX, fromY := vmath.Point{X: x, Y: y}.Center()
 		targets := FindNearestTargets(s.world, fromX, fromY, spec.Stream, engine.ScopeBoth, cursor)
 		if spec.Delivery == component.DeliveryBullet && s.fireBullets(cursor, x, y, spec.Attack, targets) {
 			s.statFired[wt].Add(1)
@@ -498,8 +498,8 @@ func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType compon
 	}
 
 	// Initial position at angle 0
-	gridX, gridY := vmath.AngleToGridPosF(0, ownerPos.X, ownerPos.Y, orbComp.OrbitRadiusX, orbComp.OrbitRadiusY)
-	preciseX, preciseY := vmath.Point{X: gridX, Y: gridY}.CenterF()
+	gridX, gridY := vmath.AngleToGridPos(0, ownerPos.X, ownerPos.Y, orbComp.OrbitRadiusX, orbComp.OrbitRadiusY)
+	preciseX, preciseY := vmath.Point{X: gridX, Y: gridY}.Center()
 
 	kineticComp := component.KineticComponent{
 		Kinetic: physics.Kinetic{
@@ -565,18 +565,18 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 	radiusY := firstOrb.OrbitRadiusY
 
 	// Sample orbital ellipse for blockage
-	samplePoints := vmath.SampleEllipseGridF(cursorPos.X, cursorPos.Y, radiusX, radiusY, vmath.EllipseSampleCount)
+	samplePoints := vmath.SampleEllipseGrid(cursorPos.X, cursorPos.Y, radiusX, radiusY, vmath.EllipseSampleCount)
 	blocked := make([]bool, len(samplePoints))
 	for i, pt := range samplePoints {
 		blocked[i] = !s.world.Positions.IsPointValidForOrbit(pt[0], pt[1], component.WallBlockKinetic)
 	}
 
 	// Find available arcs
-	arcs := vmath.FindUnblockedArcsF(blocked)
-	fullCircle := vmath.IsFullCircleF(arcs)
+	arcs := vmath.FindUnblockedArcs(blocked)
+	fullCircle := vmath.IsFullCircle(arcs)
 
 	// Distribute target angles
-	targetAngles := vmath.DistributeAnglesF(arcs, len(entries))
+	targetAngles := vmath.DistributeAngles(arcs, len(entries))
 	if targetAngles == nil {
 		// Fully blocked - orbs stay in place
 		return
@@ -587,7 +587,7 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 	redistribute := false
 	for i, entry := range entries {
 		orb, _ := s.world.Components.Orb.GetPtr(entry.entity)
-		if orb.TargetAngle < 0 || vmath.AbsF(vmath.AngleDiffF(orb.TargetAngle, targetAngles[i])) > angleThreshold {
+		if orb.TargetAngle < 0 || vmath.Abs(vmath.AngleDiff(orb.TargetAngle, targetAngles[i])) > angleThreshold {
 			redistribute = true
 			break
 		}
@@ -619,7 +619,7 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 		// Handle movement based on arc availability
 		if freeOrbit {
 			// A common phase also repairs offsets left by blocked-path recovery.
-			orb.OrbitAngle = vmath.NormalizeAngleF(phase + float64(i)*spacing)
+			orb.OrbitAngle = vmath.NormalizeAngle(phase + float64(i)*spacing)
 		} else if orb.RedistributeRemaining > 0 {
 			// Animating to new position
 			orb.RedistributeRemaining -= dt
@@ -629,8 +629,8 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 			} else {
 				t := 1.0 - orb.RedistributeRemaining.Seconds()/parameter.OrbRedistributeDuration.Seconds()
 				// Use shortest path interpolation
-				diff := vmath.AngleDiffF(orb.StartAngle, orb.TargetAngle)
-				orb.OrbitAngle = vmath.NormalizeAngleF(orb.StartAngle + diff*t)
+				diff := vmath.AngleDiff(orb.StartAngle, orb.TargetAngle)
+				orb.OrbitAngle = vmath.NormalizeAngle(orb.StartAngle + diff*t)
 			}
 		} else {
 			// Partial arc, stationary - snap to target
@@ -638,7 +638,7 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 		}
 
 		// Calculate world position from angle
-		targetGridX, targetGridY := vmath.AngleToGridPosF(orb.OrbitAngle, cursorPos.X, cursorPos.Y, radiusX, radiusY)
+		targetGridX, targetGridY := vmath.AngleToGridPos(orb.OrbitAngle, cursorPos.X, cursorPos.Y, radiusX, radiusY)
 
 		// Get current position
 		currentPos, hasPos := s.world.Positions.GetPosition(orbEntity)
@@ -664,7 +664,7 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 				// Isolated - teleport to target (no flash, reserved for firing)
 				orb.OrbitAngle = targetAngle
 				orb.RedistributeRemaining = 0
-				targetGridX, targetGridY = vmath.AngleToGridPosF(targetAngle, cursorPos.X, cursorPos.Y, radiusX, radiusY)
+				targetGridX, targetGridY = vmath.AngleToGridPos(targetAngle, cursorPos.X, cursorPos.Y, radiusX, radiusY)
 
 				// Re-validate teleport destination
 				if !s.world.Positions.IsPointValidForOrbit(targetGridX, targetGridY, component.WallBlockKinetic) {
@@ -684,7 +684,7 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 
 		// Update kinetic position
 		if kinetic, ok := s.world.Components.Kinetic.GetPtr(orbEntity); ok {
-			kinetic.PreciseX, kinetic.PreciseY = vmath.Point{X: targetGridX, Y: targetGridY}.CenterF()
+			kinetic.PreciseX, kinetic.PreciseY = vmath.Point{X: targetGridX, Y: targetGridY}.Center()
 		}
 
 		// Update grid position
@@ -774,7 +774,7 @@ func (s *WeaponSystem) fireLoadout(cursor core.Entity, weaponComp *component.Wea
 	}
 	var nearest []TargetAssignment
 	if need > 0 {
-		fromX, fromY := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.CenterF()
+		fromX, fromY := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.Center()
 		nearest = FindNearestTargets(s.world, fromX, fromY, need, engine.ScopeBoth, cursor)
 	}
 
@@ -858,7 +858,7 @@ func (s *WeaponSystem) arcLightning(cursor core.Entity, from TargetAssignment, a
 	if !ok {
 		return arced
 	}
-	fromX, fromY := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+	fromX, fromY := vmath.Point{X: pos.X, Y: pos.Y}.Center()
 	struck := func(e core.Entity) bool {
 		return slices.Contains(arced, e) ||
 			slices.ContainsFunc(assignments, func(a TargetAssignment) bool { return a.Target == e })
@@ -914,20 +914,20 @@ func (s *WeaponSystem) fireMissiles(cursor core.Entity, x, y, count int, assignm
 
 // fireBullets shoots one spread bullet per assignment from the emitter cell at the member it names
 func (s *WeaponSystem) fireBullets(cursor core.Entity, x, y int, attack component.CombatAttackType, assignments []TargetAssignment) bool {
-	originX, originY := vmath.Point{X: x, Y: y}.CenterF()
+	originX, originY := vmath.Point{X: x, Y: y}.Center()
 	fired := false
 	for _, a := range assignments {
 		pos, ok := s.world.Positions.GetPosition(a.Hit)
 		if !ok {
 			continue
 		}
-		targetX, targetY := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
-		dirX, dirY := vmath.Normalize2DF(targetX-originX, targetY-originY)
+		targetX, targetY := vmath.Point{X: pos.X, Y: pos.Y}.Center()
+		dirX, dirY := vmath.Normalize2D(targetX-originX, targetY-originY)
 		if dirX == 0 && dirY == 0 {
 			continue
 		}
 		spread := (s.rng.Float64() - 0.5) * 2 * parameter.TurretSpreadHalfAngle
-		dirX, dirY = vmath.RotateVectorF(dirX, dirY, spread)
+		dirX, dirY = vmath.RotateVector(dirX, dirY, spread)
 		s.world.PushLocal(event.EventBulletSpawnRequest, &event.BulletSpawnRequestPayload{
 			OriginX:     originX,
 			OriginY:     originY,
@@ -1101,7 +1101,7 @@ func (s *WeaponSystem) fireTracers(cursor core.Entity, originX, originY int, spe
 	config := s.world.Resources.Config
 	minFlightX, maxFlightX := tracerFlightBounds(config.MapWidth)
 	minFlightY, maxFlightY := tracerFlightBounds(config.MapHeight)
-	ox, oy := vmath.Point{X: originX, Y: originY}.CenterF()
+	ox, oy := vmath.Point{X: originX, Y: originY}.Center()
 
 	fired := false
 	for _, lane := range tracerLanes(charges) {
@@ -1121,7 +1121,7 @@ func (s *WeaponSystem) fireTracers(cursor core.Entity, originX, originY int, spe
 			case component.TracerUp:
 				vy, sx, sy, tx, ty = -parameter.TracerVerticalSpeed, ox+off, oy, ox+off, minFlightY
 			}
-			start := vmath.PointAtF(sx, sy)
+			start := vmath.PointAt(sx, sy)
 			if s.world.Positions.IsOutOfBounds(start.X, start.Y) ||
 				s.world.Positions.HasBlockingWallAt(start.X, start.Y, component.WallBlockKinetic) {
 				continue
@@ -1197,8 +1197,8 @@ func (s *WeaponSystem) advanceTracers() {
 		prevPreciseX := kineticComp.PreciseX
 		prevPreciseY := kineticComp.PreciseY
 		physics.Integrate(&kineticComp.Kinetic, dtSec)
-		prevCell := vmath.PointAtF(prevPreciseX, prevPreciseY)
-		newCell := vmath.PointAtF(kineticComp.PreciseX, kineticComp.PreciseY)
+		prevCell := vmath.PointAt(prevPreciseX, prevPreciseY)
+		newCell := vmath.PointAt(kineticComp.PreciseX, kineticComp.PreciseY)
 
 		blocked := false
 		var blockGridX, blockGridY int
@@ -1300,7 +1300,7 @@ func (s *WeaponSystem) advanceTracers() {
 			tracer.DrainTotal = drainDist
 
 			// Update precise position to block point (velocity preserved for combat resolution)
-			kineticComp.PreciseX, kineticComp.PreciseY = vmath.Point{X: blockGridX, Y: blockGridY}.CenterF()
+			kineticComp.PreciseX, kineticComp.PreciseY = vmath.Point{X: blockGridX, Y: blockGridY}.Center()
 			s.world.Positions.SetPosition(tracerEntity, component.PositionComponent{X: blockGridX, Y: blockGridY})
 			continue
 		}

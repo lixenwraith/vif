@@ -111,12 +111,12 @@ func (r *SnakeRenderer) renderShieldGlow(ctx render.RenderContext, buf *render.R
 	glowRadiusY := baseRadiusY + glowExtend/2.0 // Half extension for Y due to aspect
 
 	// Pre-compute inverse squared for ellipse distance
-	invRxSq, invRySq := vmath.EllipseInvRadiiSqF(glowRadiusX, glowRadiusY)
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(glowRadiusX, glowRadiusY)
 
 	// Inner ellipse (head bounds) for exclusion
 	innerRadiusX := baseRadiusX * 0.8
 	innerRadiusY := baseRadiusY * 0.8
-	invInnerRxSq, invInnerRySq := vmath.EllipseInvRadiiSqF(innerRadiusX, innerRadiusY)
+	invInnerRxSq, invInnerRySq := vmath.EllipseInvRadiiSq(innerRadiusX, innerRadiusY)
 
 	// Pulse intensity
 	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
@@ -124,7 +124,7 @@ func (r *SnakeRenderer) renderShieldGlow(ctx render.RenderContext, buf *render.R
 	pulse := 0.5
 	if periodMs > 0 {
 		angle := float64(gameTimeMs%periodMs) / float64(periodMs) * vmath.TwoPi
-		pulse = 0.5 + 0.5*vmath.SinF(angle)
+		pulse = 0.5 + 0.5*vmath.Sin(angle)
 	}
 	glowIntensity := 0.3 + 0.4*pulse
 
@@ -145,8 +145,8 @@ func (r *SnakeRenderer) renderShieldGlow(ctx render.RenderContext, buf *render.R
 			dy := float64(mapY - centerY)
 
 			// Ellipse distance: (dx/rx)² + (dy/ry)²
-			outerDistSq := vmath.EllipseDistSqF(dx, dy, invRxSq, invRySq)
-			innerDistSq := vmath.EllipseDistSqF(dx, dy, invInnerRxSq, invInnerRySq)
+			outerDistSq := vmath.EllipseDistSq(dx, dy, invRxSq, invRySq)
+			innerDistSq := vmath.EllipseDistSq(dx, dy, invInnerRxSq, invInnerRySq)
 
 			// Skip inside head or outside glow
 			if innerDistSq <= 1.0 || outerDistSq > 1.0 {

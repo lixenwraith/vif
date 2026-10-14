@@ -108,7 +108,7 @@ func init() {
 }
 
 func buildShieldConfig(rx, ry, maxOpacity float64, colorMain, colorAlt color.RGB, palette, paletteAlt uint8, glowColor color.RGB, glowIntensity float64, glowPeriod time.Duration) ShieldConfig {
-	invRxSq, invRySq := vmath.EllipseInvRadiiSqF(rx, ry)
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rx, ry)
 
 	visualRxInt := int(math.Ceil(rx*parameter.ShieldFeatherEndRatio)) + 1
 	visualRyInt := int(math.Ceil(ry*parameter.ShieldFeatherEndRatio)) + 1
@@ -140,12 +140,12 @@ func buildShieldConfig(rx, ry, maxOpacity float64, colorMain, colorAlt color.RGB
 func rim256Band(invRxSq, invRySq float64, reachX, reachY int) (float64, float64) {
 	var edgeX, edgeY float64
 	for n := reachX; n > 0 && edgeX == 0; n-- {
-		if d := vmath.EllipseDistSqF(float64(n), 0, invRxSq, invRySq); d <= ShieldFeatherEnd {
+		if d := vmath.EllipseDistSq(float64(n), 0, invRxSq, invRySq); d <= ShieldFeatherEnd {
 			edgeX = d
 		}
 	}
 	for n := reachY; n > 0 && edgeY == 0; n-- {
-		if d := vmath.EllipseDistSqF(0, float64(n), invRxSq, invRySq); d <= ShieldFeatherEnd {
+		if d := vmath.EllipseDistSq(0, float64(n), invRxSq, invRySq); d <= ShieldFeatherEnd {
 			edgeY = d
 		}
 	}

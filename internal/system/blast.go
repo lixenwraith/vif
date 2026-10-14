@@ -48,8 +48,8 @@ func (a *blastArea) find(x, y int) (cx, cy int, ok bool) {
 	best := -1.0
 	for i := range a.centers {
 		dx := float64(x - a.centers[i].X)
-		dyCirc := vmath.ScaleToCircularF(float64(y - a.centers[i].Y))
-		distSq := vmath.CircleDistSqF(dx, dyCirc)
+		dyCirc := vmath.ScaleToCircular(float64(y - a.centers[i].Y))
+		distSq := vmath.CircleDistSq(dx, dyCirc)
 		if distSq > a.radiusSq {
 			continue
 		}

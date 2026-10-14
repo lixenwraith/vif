@@ -772,7 +772,7 @@ func (w *World) PushEntityFromBlocked(entity core.Entity, mask component.WallBlo
 	// Physics integrates from the sub-cell position; left in the wall, the next
 	// step would write the entity straight back into the cell it was pushed from.
 	if k, ok := w.Components.Kinetic.GetPtr(entity); ok {
-		k.PreciseX, k.PreciseY = vmath.Point{X: newX, Y: newY}.CenterF()
+		k.PreciseX, k.PreciseY = vmath.Point{X: newX, Y: newY}.Center()
 	}
 	return newX, newY, true
 }

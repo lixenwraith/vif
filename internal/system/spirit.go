@@ -97,8 +97,8 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload, domain co
 		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
 
-	startX, startY := (vmath.Point{X: p.StartX, Y: p.StartY}).CenterF()
-	targetX, targetY := (vmath.Point{X: p.TargetX, Y: p.TargetY}).CenterF()
+	startX, startY := (vmath.Point{X: p.StartX, Y: p.StartY}).Center()
+	targetX, targetY := (vmath.Point{X: p.TargetX, Y: p.TargetY}).Center()
 
 	s.world.Components.Spirit.SetComponent(entity, component.SpiritComponent{
 		StartX:    startX,

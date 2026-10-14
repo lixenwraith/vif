@@ -253,7 +253,7 @@ func (s *TransientSystem) addExplosionCenter(x, y int, radius float64, duration 
 			continue
 		}
 		dx, dy := float64(x-c.X), float64(y-c.Y)
-		if vmath.MagnitudeSqF(dx, dy) > parameter.ExplosionMergeThresholdSq {
+		if vmath.MagnitudeSq(dx, dy) > parameter.ExplosionMergeThresholdSq {
 			continue
 		}
 		c.Age = 0

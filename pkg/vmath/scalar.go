@@ -12,14 +12,14 @@ func RadToDeg(rad float64) float64 {
 	return rad * 180.0 / math.Pi
 }
 
-// LerpF performs linear interpolation between a and b
+// Lerp performs linear interpolation between a and b
 // t is in [0.0, 1.0] where 0.0 returns a, 1.0 returns b
-func LerpF(a, b, t float64) float64 {
+func Lerp(a, b, t float64) float64 {
 	return a + (b-a)*t
 }
 
-// ClampF restricts a value v between lo and hi
-func ClampF(v, lo, hi float64) float64 {
+// Clamp restricts a value v between lo and hi
+func Clamp(v, lo, hi float64) float64 {
 	if v < lo {
 		return lo
 	}
@@ -29,13 +29,13 @@ func ClampF(v, lo, hi float64) float64 {
 	return v
 }
 
-// AbsF returns the absolute value
-func AbsF(x float64) float64 {
+// Abs returns the absolute value
+func Abs(x float64) float64 {
 	return math.Abs(x)
 }
 
-// SignF returns -1.0, 0.0, or 1.0
-func SignF(x float64) float64 {
+// Sign returns -1.0, 0.0, or 1.0
+func Sign(x float64) float64 {
 	if x < 0 {
 		return -1.0
 	}

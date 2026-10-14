@@ -91,5 +91,5 @@ const (
 )
 
 // Entity collision radii (ellipse semi-axes for overlap detection)
-var SwarmCollisionInvRxSq, SwarmCollisionInvRySq = vmath.EllipseInvRadiiSqF(
+var SwarmCollisionInvRxSq, SwarmCollisionInvRySq = vmath.EllipseInvRadiiSq(
 	SwarmCollisionRadiusX, SwarmCollisionRadiusY)

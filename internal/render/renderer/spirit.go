@@ -42,7 +42,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		// Pre-calculate invariant vector and aspect-corrected Y for spiral math
 		relX := spiritComp.StartX - spiritComp.TargetX
 		relY := spiritComp.StartY - spiritComp.TargetY
-		relYCirc := vmath.ScaleToCircularF(relY)
+		relYCirc := vmath.ScaleToCircular(relY)
 
 		// Render loop: Draw head (i=0) and trailing segments (i>0)
 		for i := range visual.SpiritTrailSteps {
@@ -58,7 +58,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			currentRot := p * spiritComp.Spin
 
 			// 2. Rotate the aspect-corrected relative vector
-			rotX, rotYCirc := vmath.RotateVectorF(relX, relYCirc, currentRot)
+			rotX, rotYCirc := vmath.RotateVector(relX, relYCirc, currentRot)
 
 			// 3. Apply convergence scale (1.0 at start -> 0.0 at target)
 			scale := 1.0 - p
@@ -66,12 +66,12 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			rotYCirc *= scale
 
 			// 4. Restore aspect ratio (Circular -> Elliptical)
-			rotY := vmath.ScaleFromCircularF(rotYCirc)
+			rotY := vmath.ScaleFromCircular(rotYCirc)
 
 			// 5. Map to screen space
 
 			// Compute map position
-			mapPoint := vmath.PointAtF(spiritComp.TargetX+rotX, spiritComp.TargetY+rotY)
+			mapPoint := vmath.PointAt(spiritComp.TargetX+rotX, spiritComp.TargetY+rotY)
 			mapX := mapPoint.X
 			mapY := mapPoint.Y
 

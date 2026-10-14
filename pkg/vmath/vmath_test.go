@@ -10,18 +10,18 @@ func signedRand(rng *FastRand, bound int64) int64 {
 	return int64(rng.Next()%uint64(2*bound)) - bound
 }
 
-func TestScalarFHelpers(t *testing.T) {
-	if got := LerpF(-3, 11, 0.5); math.Abs(got-4) > 1e-12 {
-		t.Errorf("LerpF midpoint = %v, want 4", got)
+func TestScalarHelpers(t *testing.T) {
+	if got := Lerp(-3, 11, 0.5); math.Abs(got-4) > 1e-12 {
+		t.Errorf("Lerp midpoint = %v, want 4", got)
 	}
-	if ClampF(-2, -1, 1) != -1 || ClampF(2, -1, 1) != 1 || ClampF(0.5, -1, 1) != 0.5 {
-		t.Error("ClampF")
+	if Clamp(-2, -1, 1) != -1 || Clamp(2, -1, 1) != 1 || Clamp(0.5, -1, 1) != 0.5 {
+		t.Error("Clamp")
 	}
-	if SignF(-5) != -1 || SignF(0) != 0 || SignF(5) != 1 {
-		t.Error("SignF")
+	if Sign(-5) != -1 || Sign(0) != 0 || Sign(5) != 1 {
+		t.Error("Sign")
 	}
-	if AbsF(-5) != 5 || AbsF(5) != 5 {
-		t.Error("AbsF")
+	if Abs(-5) != 5 || Abs(5) != 5 {
+		t.Error("Abs")
 	}
 }
 
@@ -29,20 +29,14 @@ func TestScalarFHelpers(t *testing.T) {
 
 func TestPointCenterRoundTrip(t *testing.T) {
 	for _, p := range []Point{{0, 0}, {1, 2}, {-1, -2}, {-7, 13}, {1000, -1000}} {
-		px, py := p.CenterF()
-		if got := PointAtF(px, py); got != p {
-			t.Errorf("PointAtF(%v.CenterF()) = %v", p, got)
+		px, py := p.Center()
+		if got := PointAt(px, py); got != p {
+			t.Errorf("PointAt(%v.Center()) = %v", p, got)
 		}
 	}
-}
-
-func TestPointCenterMatchesCenteredFromGrid(t *testing.T) {
-	for _, p := range []Point{{0, 0}, {3, -4}, {-9, 9}} {
-		px, py := p.CenterF()
-		cx, cy := CenteredFromGridF(p.X, p.Y)
-		if px != cx || py != cy {
-			t.Errorf("%v: (%v,%v) != (%v,%v)", p, px, py, cx, cy)
-		}
+	// int() truncates toward zero; the grid needs floor
+	if got := PointAt(-0.25, -1.75); got != (Point{-1, -2}) {
+		t.Errorf("PointAt negative = %v, want (-1,-2)", got)
 	}
 }
 

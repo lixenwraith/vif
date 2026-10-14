@@ -507,7 +507,7 @@ func (s *SoftCollisionSystem) calculateFlockingAccel(
 	rule *FlockingRule,
 ) (accelX, accelY float64, applied bool) {
 	// Source is the center. Does its ellipse overlap the target?
-	if !vmath.EllipseContainsPointF(targetX, targetY, sourceX, sourceY, rule.InvRxSq, rule.InvRySq) {
+	if !vmath.EllipseContainsPoint(targetX, targetY, sourceX, sourceY, rule.InvRxSq, rule.InvRySq) {
 		return 0, 0, false
 	}
 
@@ -519,7 +519,7 @@ func (s *SoftCollisionSystem) calculateFlockingAccel(
 		dx = 1.0 // Fallback rightwards to prevent stacking lock
 	}
 
-	dist := vmath.MagnitudeF(dx, dy)
+	dist := vmath.Magnitude(dx, dy)
 	dirX, dirY := dx/dist, dy/dist
 
 	// Weight inversely proportional to distance: (MaxDist - dist) / MaxDist

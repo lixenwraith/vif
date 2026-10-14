@@ -311,19 +311,19 @@ func (s *TowerSystem) createDiscMembers(
 ) []component.MemberEntry {
 	var members []component.MemberEntry
 
-	invRxSq, invRySq := vmath.EllipseInvRadiiSqF(float64(radiusX), float64(radiusY))
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(float64(radiusX), float64(radiusY))
 
 	hpRange := maxHP - minHP
 
 	for dy := -radiusY; dy <= radiusY; dy++ {
 		for dx := -radiusX; dx <= radiusX; dx++ {
-			if !vmath.EllipseContainsPointF(dx, dy, 0, 0, invRxSq, invRySq) {
+			if !vmath.EllipseContainsPoint(dx, dy, 0, 0, invRxSq, invRySq) {
 				continue
 			}
 
 			var hp int
 			if hpRange > 0 {
-				normDistSq := vmath.EllipseDistSqF(float64(dx), float64(dy), invRxSq, invRySq)
+				normDistSq := vmath.EllipseDistSq(float64(dx), float64(dy), invRxSq, invRySq)
 				normDist := math.Sqrt(normDistSq)
 				if normDist > 1.0 {
 					normDist = 1.0

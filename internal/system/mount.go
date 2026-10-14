@@ -169,7 +169,7 @@ func (s *MountSystem) aim(m *component.MountComponent, pos component.PositionCom
 		if !ok {
 			continue
 		}
-		distSq := vmath.CircleDistSqF(float64(cp.X-pos.X), vmath.ScaleToCircularF(float64(cp.Y-pos.Y)))
+		distSq := vmath.CircleDistSq(float64(cp.X-pos.X), vmath.ScaleToCircular(float64(cp.Y-pos.Y)))
 		if m.Range > 0 && distSq > m.Range*m.Range {
 			continue
 		}
@@ -185,9 +185,9 @@ func (s *MountSystem) aim(m *component.MountComponent, pos component.PositionCom
 // muzzle is the sub-cell point a shot leaves from: the host's centre, pushed Muzzle
 // cells toward the aim (half that vertically)
 func muzzle(m *component.MountComponent, pos component.PositionComponent) (float64, float64) {
-	cx, cy := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+	cx, cy := vmath.Point{X: pos.X, Y: pos.Y}.Center()
 	dx, dy := float64(m.AimX-pos.X), float64(m.AimY-pos.Y)
-	dist := vmath.MagnitudeF(dx, dy)
+	dist := vmath.Magnitude(dx, dy)
 	if m.Muzzle == 0 || dist < 1 {
 		return cx, cy
 	}
@@ -199,7 +199,7 @@ func muzzle(m *component.MountComponent, pos component.PositionComponent) (float
 func (s *MountSystem) fire(host, cursor core.Entity, m *component.MountComponent, pos component.PositionComponent) {
 	spec := &component.WeaponSpecs[m.Weapon]
 	originX, originY := muzzle(m, pos)
-	origin := vmath.PointAtF(originX, originY)
+	origin := vmath.PointAt(originX, originY)
 
 	switch spec.Delivery {
 	case component.DeliveryLightning:
@@ -229,12 +229,12 @@ func (s *MountSystem) fire(host, cursor core.Entity, m *component.MountComponent
 
 	case component.DeliveryBullet:
 		dx, dy := float64(m.AimX-pos.X), float64(m.AimY-pos.Y)
-		dist := vmath.MagnitudeF(dx, dy)
+		dist := vmath.Magnitude(dx, dy)
 		if dist < 1 {
 			return
 		}
 		spread := (s.shotRand(host).Float64() - 0.5) * 2 * parameter.TurretSpreadHalfAngle
-		dirX, dirY := vmath.RotateVectorF(dx/dist, dy/dist, spread)
+		dirX, dirY := vmath.RotateVector(dx/dist, dy/dist, spread)
 		s.world.PushLocal(event.EventBulletSpawnRequest, &event.BulletSpawnRequestPayload{
 			OriginX:     originX,
 			OriginY:     originY,

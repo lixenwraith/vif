@@ -32,7 +32,7 @@ func TestStormRedTurretTracksTheNearestCursor(t *testing.T) {
 
 	root := w.CreateEntity(core.DomainShared)
 	circle := storm.createCircleHeader(root, int(component.StormCircleRed),
-		vmath.Vec3F{X: 10.5, Y: 5.5, Z: parameter.StormZMid - 1}, vmath.Vec3F{})
+		vmath.Vec3{X: 10.5, Y: 5.5, Z: parameter.StormZMid - 1}, vmath.Vec3{})
 	circleComp, _ := w.Components.StormCircle.GetPtr(circle)
 	circleComp.AttackState = component.StormCircleAttackCooldown
 	stormComp := component.StormComponent{}

@@ -7,8 +7,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-func v3(x, y, z float64) vmath.Vec3F {
-	return vmath.Vec3F{X: x, Y: y, Z: z}
+func v3(x, y, z float64) vmath.Vec3 {
+	return vmath.Vec3{X: x, Y: y, Z: z}
 }
 
 func TestElasticCollision3DEqualMassSwap(t *testing.T) {
@@ -31,11 +31,11 @@ func TestElasticCollision3DConservesMomentum(t *testing.T) {
 	velA, velB := v3(4, 1, -2), v3(-1, 0, 1)
 	const massA, massB = 2.0, 5.0
 
-	pBefore := vmath.V3FAdd(vmath.V3FScale(velA, massA), vmath.V3FScale(velB, massB))
+	pBefore := vmath.V3Add(vmath.V3Scale(velA, massA), vmath.V3Scale(velB, massB))
 	if !ElasticCollision3D(&posA, &posB, &velA, &velB, massA, massB, 1) {
 		t.Skip("configuration is separating")
 	}
-	pAfter := vmath.V3FAdd(vmath.V3FScale(velA, massA), vmath.V3FScale(velB, massB))
+	pAfter := vmath.V3Add(vmath.V3Scale(velA, massA), vmath.V3Scale(velB, massB))
 
 	for _, d := range []float64{pAfter.X - pBefore.X, pAfter.Y - pBefore.Y, pAfter.Z - pBefore.Z} {
 		if math.Abs(d) > 1e-9 {
@@ -83,7 +83,7 @@ func TestSeparateOverlap3D(t *testing.T) {
 	if !SeparateOverlap3D(&posA, &posB, 1, 1, 1, 1) {
 		t.Fatal("overlapping spheres must separate")
 	}
-	d := vmath.V3FMag(vmath.V3FSub(posB, posA))
+	d := vmath.V3Mag(vmath.V3Sub(posB, posA))
 	if d < 2.0 {
 		t.Fatalf("separation %v, want >= 2", d)
 	}
@@ -135,7 +135,7 @@ func TestGravitationalAccelWithRepulsion3D(t *testing.T) {
 		t.Fatalf("outside repulsion: ax = %v, want positive", out.X)
 	}
 
-	if z := GravitationalAccelWithRepulsion3D(v3(0, 0, 0), v3(0, 0, 0), 1, 1, repulsionR, 5); z != (vmath.Vec3F{}) {
+	if z := GravitationalAccelWithRepulsion3D(v3(0, 0, 0), v3(0, 0, 0), 1, 1, repulsionR, 5); z != (vmath.Vec3{}) {
 		t.Fatal("coincident bodies must yield zero acceleration")
 	}
 }
@@ -164,23 +164,23 @@ func TestReflectAxis3D(t *testing.T) {
 }
 
 func TestV3NormalizeUnit(t *testing.T) {
-	n := vmath.V3FNormalize(v3(3, 4, 12))
-	if m := vmath.V3FMag(n); math.Abs(m-1) > 1e-9 {
+	n := vmath.V3Normalize(v3(3, 4, 12))
+	if m := vmath.V3Mag(n); math.Abs(m-1) > 1e-9 {
 		t.Fatalf("normalized magnitude = %v", m)
 	}
-	if vmath.V3FNormalize(vmath.Vec3F{}) != (vmath.Vec3F{}) {
+	if vmath.V3Normalize(vmath.Vec3{}) != (vmath.Vec3{}) {
 		t.Fatal("zero vector must normalize to zero")
 	}
 }
 
 func TestV3ClampMagnitude(t *testing.T) {
 	v := v3(30, 40, 0)
-	c := vmath.V3FClampMagnitude(v, 5)
-	if m := vmath.V3FMag(c); math.Abs(m-5) > 1e-9 {
+	c := vmath.V3ClampMagnitude(v, 5)
+	if m := vmath.V3Mag(c); math.Abs(m-5) > 1e-9 {
 		t.Fatalf("clamped magnitude = %v, want 5", m)
 	}
 	small := v3(1, 1, 1)
-	if vmath.V3FClampMagnitude(small, 100) != small {
+	if vmath.V3ClampMagnitude(small, 100) != small {
 		t.Fatal("under-limit vector was modified")
 	}
 }
@@ -188,12 +188,12 @@ func TestV3ClampMagnitude(t *testing.T) {
 func TestV3DampDtBounds(t *testing.T) {
 	v := v3(10, 0, 0)
 	// dt large enough to over-decay must clamp at zero, not invert.
-	d := vmath.V3FDampDt(v, 0, 10)
+	d := vmath.V3DampDt(v, 0, 10)
 	if d.X != 0 {
 		t.Fatalf("over-decay produced %v, want 0", d.X)
 	}
 	// No decay.
-	if n := vmath.V3FDampDt(v, 1, 1); n != v {
+	if n := vmath.V3DampDt(v, 1, 1); n != v {
 		t.Fatal("factor=1 must not change the vector")
 	}
 }

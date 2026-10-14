@@ -82,7 +82,7 @@ func TestProfilesProduceUsableImpulse(t *testing.T) {
 		if ix == 0 && iy == 0 {
 			t.Errorf("%s: produced zero impulse", name)
 		}
-		if m := vmath.MagnitudeF(ix, iy); m > 1000 {
+		if m := vmath.Magnitude(ix, iy); m > 1000 {
 			t.Errorf("%s: impulse magnitude %v cells/sec is implausible", name, m)
 		}
 	}

@@ -19,7 +19,7 @@ func Integrate(k *Kinetic, dt float64) (x, y int) {
 	k.VelY += k.AccelY * dt
 	k.PreciseX += k.VelX * dt
 	k.PreciseY += k.VelY * dt
-	p := vmath.PointAtF(k.PreciseX, k.PreciseY)
+	p := vmath.PointAt(k.PreciseX, k.PreciseY)
 	return p.X, p.Y
 }
 
@@ -38,14 +38,14 @@ func SetImpulse(k *Kinetic, vx, vy float64) {
 // ReflectBoundsX handles horizontal boundary collision, returns true if reflection occurred
 // Clamps to centered position within valid cell range [minX, maxX)
 func ReflectBoundsX(k *Kinetic, minX, maxX int) bool {
-	p := vmath.PointAtF(k.PreciseX, k.PreciseY)
+	p := vmath.PointAt(k.PreciseX, k.PreciseY)
 	if p.X < minX {
-		k.PreciseX, _ = (vmath.Point{X: minX}).CenterF()
+		k.PreciseX, _ = (vmath.Point{X: minX}).Center()
 		k.VelX = -k.VelX
 		return true
 	}
 	if p.X >= maxX {
-		k.PreciseX, _ = (vmath.Point{X: maxX - 1}).CenterF()
+		k.PreciseX, _ = (vmath.Point{X: maxX - 1}).Center()
 		k.VelX = -k.VelX
 		return true
 	}
@@ -54,14 +54,14 @@ func ReflectBoundsX(k *Kinetic, minX, maxX int) bool {
 
 // ReflectBoundsY handles vertical boundary collision, returns true if reflection occurred
 func ReflectBoundsY(k *Kinetic, minY, maxY int) bool {
-	p := vmath.PointAtF(k.PreciseX, k.PreciseY)
+	p := vmath.PointAt(k.PreciseX, k.PreciseY)
 	if p.Y < minY {
-		_, k.PreciseY = (vmath.Point{Y: minY}).CenterF()
+		_, k.PreciseY = (vmath.Point{Y: minY}).Center()
 		k.VelY = -k.VelY
 		return true
 	}
 	if p.Y >= maxY {
-		_, k.PreciseY = (vmath.Point{Y: maxY - 1}).CenterF()
+		_, k.PreciseY = (vmath.Point{Y: maxY - 1}).Center()
 		k.VelY = -k.VelY
 		return true
 	}
@@ -77,11 +77,11 @@ func ReflectBounds(k *Kinetic, width, height int) bool {
 
 // GridPos returns current integer grid position
 func GridPos(k *Kinetic) (x, y int) {
-	p := vmath.PointAtF(k.PreciseX, k.PreciseY)
+	p := vmath.PointAt(k.PreciseX, k.PreciseY)
 	return p.X, p.Y
 }
 
 // SetGridPos sets precise position from integer grid coordinates (centered)
 func SetGridPos(k *Kinetic, x, y int) {
-	k.PreciseX, k.PreciseY = vmath.Point{X: x, Y: y}.CenterF()
+	k.PreciseX, k.PreciseY = vmath.Point{X: x, Y: y}.Center()
 }

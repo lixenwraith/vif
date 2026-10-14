@@ -230,7 +230,7 @@ func TestKrakenDestroysWallsAtSpawnAndAcrossItsFootprint(t *testing.T) {
 	shape := component.KrakenComponent{}
 	shape.TentacleSamples(90.5, 45.5, func(x, y, _, step float64, _ bool) {
 		if leg == (vmath.Point{}) && step >= 0.5 {
-			leg = vmath.PointAtF(x, y)
+			leg = vmath.PointAt(x, y)
 		}
 	})
 	for _, cell := range []vmath.Point{{X: 90, Y: 45}, leg, {X: 150, Y: 80}} {

@@ -18,7 +18,7 @@ func OrbitalVelocity(attraction, radius float64) float64 {
 // OrbitalInsert returns velocity vector for circular orbit insertion
 // dx, dy: position relative to center; clockwise: orbit direction
 func OrbitalInsert(dx, dy, attraction float64, clockwise bool) (vx, vy float64) {
-	radius := vmath.MagnitudeF(dx, dy)
+	radius := vmath.Magnitude(dx, dy)
 	if radius == 0 {
 		return 0, 0
 	}
@@ -26,8 +26,8 @@ func OrbitalInsert(dx, dy, attraction float64, clockwise bool) (vx, vy float64) 
 	speed := OrbitalVelocity(attraction, radius)
 
 	// Tangent is perpendicular to radius
-	tx, ty := vmath.PerpendicularF(dx, dy)
-	tx, ty = vmath.Normalize2DF(tx, ty)
+	tx, ty := vmath.Perpendicular(dx, dy)
+	tx, ty = vmath.Normalize2D(tx, ty)
 
 	if clockwise {
 		tx, ty = -tx, -ty
@@ -41,7 +41,7 @@ func OrbitalAttraction(dx, dy, attraction float64) (ax, ay float64) {
 	if dx == 0 && dy == 0 {
 		return 0, 0
 	}
-	dirX, dirY := vmath.Normalize2DF(-dx, -dy) // toward center
+	dirX, dirY := vmath.Normalize2D(-dx, -dy) // toward center
 	return dirX * attraction, dirY * attraction
 }
 
@@ -71,7 +71,7 @@ func OrbitalDamp(vx, vy, dx, dy, damping, dt float64) (nvx, nvy float64) {
 // OrbitalEquilibrium returns acceleration toward target orbit radius
 // Positive when outside target (pull in), negative when inside (push out)
 func OrbitalEquilibrium(dx, dy, targetRadius, stiffness float64) (ax, ay float64) {
-	dist := vmath.MagnitudeF(dx, dy)
+	dist := vmath.Magnitude(dx, dy)
 	if dist == 0 {
 		// At center, push outward in an arbitrary direction
 		return stiffness, 0

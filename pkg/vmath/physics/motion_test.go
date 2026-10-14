@@ -237,7 +237,7 @@ func TestOrbitalInsertIsTangential(t *testing.T) {
 	const dx, dy = 4.0, 0.0
 	vx, vy := OrbitalInsert(dx, dy, 2, false)
 
-	if d := vmath.DotProductF(dx, dy, vx, vy); math.Abs(d) > 1e-6 {
+	if d := vmath.DotProduct(dx, dy, vx, vy); math.Abs(d) > 1e-6 {
 		t.Fatalf("insertion velocity not tangential (dot = %v)", d)
 	}
 	if m := math.Hypot(vx, vy); math.Abs(m-math.Sqrt(8)) > 1e-4 {

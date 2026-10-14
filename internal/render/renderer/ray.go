@@ -75,7 +75,7 @@ func (r *RayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 
 	buf.SetWriteMask(visual.MaskTransient)
 	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
-	flicker := 0.85 + 0.15*vmath.SinF(float64(gameTimeMs%120)/120*vmath.TwoPi)
+	flicker := 0.85 + 0.15*vmath.Sin(float64(gameTimeMs%120)/120*vmath.TwoPi)
 	rays.Each(func(_ core.Entity, b *component.RayComponent) bool {
 		if b.Duration <= 0 || b.Palette >= component.PaletteCount {
 			return true
