@@ -150,7 +150,8 @@ func TestAGuestOfADedicatedHostDrivesItsOwn(t *testing.T) {
 
 // TestACursorlessRosterIsOnlyTheCoordinators pins the protocol rule: one
 // participant may hold no slot, and only the coordinator may be it. Anything else
-// takes a vote and a roster entry while contributing nothing the roster describes.
+// takes an identity and a roster entry while contributing nothing the roster
+// describes.
 func TestACursorlessRosterIsOnlyTheCoordinators(t *testing.T) {
 	t.Parallel()
 	an := event.JoinAnchor{}
@@ -353,8 +354,8 @@ func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
 // TestPlayersIsACeilingAndOnlySometimesAParty pins all three meanings of one flag.
 // It is always the cursor ceiling; sessionCapacity is its guest half, which on a
 // dedicated host is the whole of it because that host drives none. What an explicit
-// value adds on an interactive host is the lobby — a party that says it is four
-// starts together — and the zero value drops exactly that.
+// value adds on a scripted or bot-driven host is the lobby — a party that says it is
+// four starts together — and the zero value drops exactly that.
 func TestPlayersIsACeilingAndOnlySometimesAParty(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
@@ -400,11 +401,10 @@ func TestPlayersIsACeilingAndOnlySometimesAParty(t *testing.T) {
 	}
 }
 
-// TestAVacantUnboundedHostParksAndRestarts is what an empty session used to cost: with
-// no cursor on the map the gold cycle cannot place a sequence, so it failed and
-// retried for as long as the process ran, aging a world away from the guest that
-// might come back. The clock stops as soon as the roster empties, and a world nobody
-// returned to inside the window is replaced rather than handed to the next dialer.
+// TestAVacantUnboundedHostParksAndRestarts: with no cursor on the map the gold cycle
+// cannot place a sequence, and a running clock only ages the world. The clock stops
+// as soon as the roster empties, and a world nobody returned to inside the window is
+// replaced rather than handed to the next dialer.
 func TestAVacantUnboundedHostParksAndRestarts(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, 0x5E8E, 120, 40)

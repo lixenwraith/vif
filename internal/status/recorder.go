@@ -9,13 +9,11 @@ import (
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
-// SubRec is the vlog subsystem tag on every flight-recorder record.
-//
-// Flush encoding: one record per metric group per window. A metric whose value
-// never changed is emitted as a scalar of its native type; a metric that varied
-// is emitted as a string — comma-separated for ints, floats and strings, a run
-// of 0/1 digits for bools. t0 names the first tick and n the sample count, so
-// position k in a series belongs to tick t0+k.
+// SubRec is the vlog subsystem tag on every flight-recorder record. A flush writes
+// one record per metric group per window: an unchanged metric as a scalar of its
+// native type, a varied one as a string, comma-separated for ints, floats and
+// strings and a run of 0/1 digits for bools. t0 names the first tick and n the
+// sample count, so position k in a series belongs to tick t0+k.
 const SubRec = "rec"
 
 // Trigger reasons
@@ -28,9 +26,9 @@ const (
 	TrigBreak  = "break"
 )
 
-// active is the process-wide recorder, so triggers reach it from packages
-// holding no Registry reference: the update mutex, the stderr drain, the crash
-// hook. One registry exists per process.
+// active is the most recently enabled recorder, for the paths that hold no
+// Registry: the runtime-report drain and the crash flush. Each world owns a
+// registry, and anything holding one triggers through it.
 var active atomic.Pointer[Recorder]
 
 // Trigger requests a flush from any goroutine; the tick goroutine performs it

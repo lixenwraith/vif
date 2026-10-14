@@ -32,16 +32,31 @@ ascimage file.vifimg
 ascimage -no-status file.vifimg
 ```
 
+### Flags
+
+| Flag | Meaning |
+|---|---|
+| `-m bg\|quadrant` | Render mode (default `quadrant`) |
+| `-c auto\|true\|256` | Color depth (default `auto`) |
+| `-w <n>` | Output width in cells when an image is written with `-o` or `-dual` (`0` = 80) |
+| `-dual <file>` | Write a dual-mode `.vifimg` from an image |
+| `-o <file>` | Write ANSI (`-` = stdout); omit both outputs for the viewer |
+| `-ax`, `-ay` | Anchor offset stored in a `.vifimg` |
+| `-fit`, `-z <pct>` | Image viewer start state: fit (default on), or a zoom other than 100 |
+| `-no-status` | Start the viewer without its status bar |
+
 ### Controls
 
 | Key | Action | Scope |
 |---|---|---|
-| `q` / `Esc` | Quit | All |
+| `q` / `Esc` / `^C` / `^D` | Quit | All |
 | `f` | Toggle fit/actual | Image only |
 | `m` | Toggle quadrant/bg mode | Image only |
 | `c` | Toggle TrueColor/256 | All |
-| `+` / `-` | Zoom | Image only |
-| `hjkl` / arrows | Pan | All |
+| `+` / `-` | Zoom, 10–400% | Image only |
+| `0` | Zoom to 100% | Image only |
+| `hjkl` / arrows | Pan; `HJKL` / Shift+arrows by 10 | All |
+| `g` / `G`, `Home` / `End`, `PgUp` / `PgDn` | Pan to top-left/bottom-left, left/right edge, up/down half a screen | All |
 | `s` | Toggle status bar | All |
 
 ## Render Modes
@@ -71,17 +86,16 @@ Game command to drop the shipped sample as a non-blocking wall background:
 `event WallPatternSpawnRequest {path="test.vifimg",x=0,y=0,block_mask=0}`
 
 An existing absolute or relative path is used directly. Otherwise the name is
-looked up below `image/` in the `-config-dir`, user, and system configuration
-roots. With `-config-dir wad`, the example resolves to `wad/image/test.vifimg`;
-the same event works after installation without relying on the process working
-directory. New configurations should prefer this logical-name form (or an
-absolute path); accepting an existing relative process path is a compatibility
-fallback.
+looked up below `image/` in each configuration root: `-config-dir`, the user
+root, the checkout `wad/` beside a `bin/` binary, then the system roots. A
+checkout's `bin/vif`, or `-config-dir wad`, resolves the example to
+`wad/image/test.vifimg`, and the same event works after installation. Prefer
+this logical-name form (or an absolute path); an existing relative process path
+is a compatibility fallback.
 
-New `.vifimg` files use a versioned standard-library deflate body. The reader
-continues to accept the earlier uncompressed format. Both formats retain the
-`ax`/`ay` authored anchor-offset metadata, which the loader carries even though
-the current wall spawn path does not consume it yet.
+`.vifimg` files carry a versioned header and a deflate-compressed cell body; the
+reader also accepts the legacy unversioned, uncompressed format. Both carry the
+`ax`/`ay` anchor offset, which the loader keeps but wall spawn does not use.
 
 ### Sizing
 

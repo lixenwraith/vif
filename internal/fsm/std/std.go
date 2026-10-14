@@ -1,13 +1,8 @@
-// Package std provides the standard action and guard library for fsm.Machine.
-//
-// Registration is split by coupling. Actions and guards operating only on
-// machine state — variables, regions, timing, payload inspection — are always
-// available. Those needing embedder cooperation are driven through Host.
-//
-// Host fields are optional. A nil field leaves its actions registered but inert
-// and its guards reporting false, so a config referencing them still loads and
-// validates. A zero Host therefore yields a pure machine, which is what
-// non-game embedders (editors, tools, tests) want.
+// Package std is the standard action and guard library for fsm.Machine. Those over
+// machine state (variables, regions, timing, payloads) always work; those needing
+// the embedder go through Host. A nil Host field leaves its actions inert and its
+// guards false; Host.Refuse makes a nil hook fail the load of the event and system
+// actions instead. A zero Host yields a pure machine. See doc/fsm-and-configuration.md.
 package std
 
 import (
@@ -43,13 +38,14 @@ type Host[T any] struct {
 	// that plays it; a nil Seed roots every draw at zero
 	Seed func(ctx T) uint64
 
-	// Refuse, when set, fails the load of an action whose hook is nil with this
-	// reason, for an embedder whose scripts must not name what does nothing
+	// Refuse, when set, fails the load of an event or system action whose hook
+	// is nil with this reason, for an embedder whose scripts must not name what
+	// does nothing
 	Refuse string
 }
 
 // Register installs the standard actions and guards on m
-// Must be called before LoadConfig; names are resolved at load time
+// Must be called before a scenario loads; names are resolved at load time
 func Register[T any](m *fsm.Machine[T], h Host[T]) {
 	registerCoreActions(m, h)
 	registerVariableActions(m, h)

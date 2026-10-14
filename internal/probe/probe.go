@@ -1,24 +1,8 @@
-// Package probe serves a run's health and metrics over HTTP.
-//
-// It exists because a supervised process has to be able to answer two questions
-// from outside itself: should it still be running, and what is it doing. A terminal
-// game answers both by being looked at; a dedicated host has nobody looking, and
-// its status bar, its periodic summary and its metric registry are all inside a
-// process nothing can reach.
-//
-// There is one health path, not a liveness one and a readiness one. They were
-// separate while the fleet routed players through a Service that had to stop
-// selecting a full pod; an allocated session is one pod behind one endpoint an
-// allocator hands out directly, so the routing decision moved to the allocator and
-// the admission decision was always the application's own — a dial to a session
-// that cannot take it is refused by the handshake, not by a load balancer. What is
-// left is one code that says whether to restart this process, and a body that says
-// everything else, including whether a dial would currently be admitted.
-//
-// The server is deliberately small and stdlib-only. It holds no state of its own:
-// a Snapshot function supplies the run's answer and a status registry supplies the
-// metrics, so the run decides what its words mean and this only decides how to say
-// them.
+// Package probe serves a supervised run's /health, and its status registry as
+// Prometheus text at /metrics. One health path: its code says only whether to
+// restart the process, and its body the rest, readiness to admit a dial included.
+// It keeps no answer of its own: a Snapshot function supplies the run's, so the
+// run decides what its words mean and this decides only how to say them.
 package probe
 
 import (
@@ -46,13 +30,11 @@ const shutdownGrace = time.Second
 // its headers is the cheapest way to hold one.
 const readHeaderTimeout = 5 * time.Second
 
-// Snapshot is what a run reports about itself.
-//
-// Live is the only field the HTTP code carries: it is "should this process still
-// be running", and nothing else is a restart. Ready is "would a dial be admitted
-// right now", which an allocator reads from the body when it is choosing where to
-// send a player — a full or draining session is not broken, and answering it with
-// a failure code would say it was. Reason is for whoever reads the body.
+// Snapshot is what a run reports about itself. Live is the only field the HTTP
+// code carries: whether the process should still run, the one restart question.
+// Ready is whether a dial would be admitted now, which an allocator reads from the
+// body; a full or draining session is not broken, so a failure code would mislead.
+// Reason is for whoever reads the body.
 type Snapshot struct {
 	Live   bool
 	Ready  bool

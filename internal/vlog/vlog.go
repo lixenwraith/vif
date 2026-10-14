@@ -1,9 +1,10 @@
 //go:build !wasm && !novlog
 
-// Package vlog is the process's one log sink, written through a handle per runtime.
-// A leaf: it imports only the standard library and lixenwraith/log. Records format
-// asynchronously, up to BufferSize records after the call, so pass primitives and
-// value copies only, never Store.GetPtr pointers, pooled payloads or scratch slices.
+// Package vlog is the process's log facade: one session sink written through a
+// handle per runtime, plus the ungated journal file and standalone snapshot and
+// recorder files. A leaf: it imports only the standard library and lixenwraith/log.
+// Records format asynchronously, up to a full queue after the call, so pass value
+// copies only, never Store.GetPtr pointers, pooled payloads or scratch slices.
 package vlog
 
 import (
@@ -42,7 +43,8 @@ const journalDrainTimeout = 3 * time.Second
 // emit at LevelInfo, so the level field never collides with trace tooling
 const journalLevel = "info"
 
-// Ordinary policy is measured; the commissioned cap remains provisional until H3.
+// Ordinary policy is measured; the commissioned cap stays provisional until a full
+// fleet roster is measured (doc/kubernetes-fleet.md).
 const (
 	bufferSize            = 8192
 	maxSizeMB             = 64
@@ -170,7 +172,7 @@ func buildLogger(dir, name, levelName string, console bool) (*log.Logger, string
 		FlushIntervalMs(flushIntervalMs).
 		EnablePeriodicSync(true).
 		RetentionPeriodHrs(retention).
-		HeartbeatLevel(1). // drop and rotation counters, one-way into the log
+		HeartbeatLevel(1). // processed and dropped counts, one-way into the log
 		HeartbeatIntervalS(heartbeatS).
 		ContextKeys("sub", "run", "tick").
 		Build()

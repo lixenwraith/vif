@@ -64,6 +64,8 @@ It is the contract, not a suggestion.
 
 - `doc/` is already long. Condense when you touch it; append only for a new concept
   or scope.
+- `doc/term-index.md` cites identifiers and section anchors: a rename of either, or
+  a new term of art, updates its entry.
 - A gap you are deferring goes in `doc/todo.md`: extend the item it belongs to, or
   add a concise one in the file's pattern.
 - PR bodies: what changed, why, how it was verified.
@@ -77,8 +79,8 @@ It is the contract, not a suggestion.
 ## Gates
 
 `go build ./...`, `gofmt -l` on changed files, and `go test` on the packages the
-change touches. Run `go generate ./internal/event ./internal/manifest` only when
-an event or manifest definition changed.
+change touches. Run `go generate ./internal/manifest` (`make generate`), which
+also writes the event registry, only when an event or manifest definition changed.
 - A change to code behind a build constraint also builds that target:
   `GOOS=js GOARCH=wasm go build ./...` for `js/wasm`, `go build -tags vif_headless
   ./...` for the headless profile.

@@ -555,8 +555,8 @@ func (r *RandResource) SetSession(n uint64) { r.session.Store(n) }
 
 // Stream returns a fresh labelled generator for a domain in the current session and
 // records it for SaveStreams; a re-Init after a reset needs a fresh one. Two live
-// holders of one name would be one stream by name and two by behaviour, which
-// TestSystemStreamLabelsAreUnique rules out.
+// holders of one name would be one stream by name and two by behaviour, so each
+// system draws under its own Name().
 func (r *RandResource) Stream(d core.Domain, label string) *vmath.FastRand {
 	g := vmath.NewSeededRand(r.DomainRoot(d), label)
 	r.streamMu.Lock()
@@ -659,9 +659,7 @@ func (c *ConfigResource) FollowCamera(cursorX, cursorY int) {
 		return
 	}
 	// Clamped low last, so an axis whose map is shorter than the viewport settles at
-	// zero rather than at a negative bound. Moving this out of CameraSystem changed
-	// that one case: the old order clamped high last and drove the camera negative on
-	// an axis it was not even scrolling.
+	// zero rather than at a negative bound
 	c.CameraX = max(0, min(c.CameraX+shiftX, c.MapWidth-c.ViewportWidth))
 	c.CameraY = max(0, min(c.CameraY+shiftY, c.MapHeight-c.ViewportHeight))
 }
@@ -795,13 +793,14 @@ type RoutePopulation struct {
 }
 
 // AdaptationResource provides lock-free route allocations for spawners.
-// Pools and weights are asynchronously populated by AdaptationSystem.
+// AdaptationSystem's tick updates the weights and refills the pools.
 type AdaptationResource struct {
 	Entries map[uint32]*AdaptationEntry
 }
 
-// PopRoute returns a pre-sampled route assignment for the spawner.
-// Falls back to uniform random sampling if the pool is exhausted or uninitialized.
+// PopRoute returns the next pre-sampled route for the spawner. An exhausted pool
+// rotates through the routes deterministically; a missing, draining or routeless
+// entry returns -1.
 func (ar *AdaptationResource) PopRoute(id uint32, subType uint8) int {
 	if ar.Entries == nil {
 		return -1
@@ -865,17 +864,16 @@ func (ar *AdaptationResource) MarkDraining(id uint32, t time.Time) {
 // === Genetics ===
 
 // GeneticResource exposes the GA registry for synchronous gene sampling by spawners.
-// Includes PopulationID for future-proofing multi-island populations.
+// The registry keeps one population per species; populationID is unused.
 type GeneticResource struct {
 	Registry *registry.Registry
 }
 
-// Sample requests a genotype from the specified species and population pool
+// Sample requests a genotype from the species' population
 func (gr *GeneticResource) Sample(speciesID uint8, populationID uint32) ([]float64, uint64) {
 	if gr == nil || gr.Registry == nil {
 		return nil, 0
 	}
-	// For now, PopulationID is ignored. Future expansion will map (SpeciesID + PopulationID) to a unique tracker.
 	return gr.Registry.Sample(registry.SpeciesID(speciesID))
 }
 
@@ -884,7 +882,6 @@ func (gr *GeneticResource) SampleScout(speciesID uint8, populationID uint32) ([]
 	if gr == nil || gr.Registry == nil {
 		return nil, 0
 	}
-	// populationID reserved for multi-island; single tracker per species today.
 	return gr.Registry.SampleScout(registry.SpeciesID(speciesID))
 }
 
@@ -923,9 +920,8 @@ type ContentResource struct {
 
 // NetworkPort is the service-side endpoint driven by NetworkSystem.
 // Outbound: direct calls. Inbound: Drain per game tick (poll model keeps
-// network goroutines out of the world event queue).
-// Interface is transitional; collapses to a concrete network type once the
-// package matures (same path as audio).
+// network goroutines out of the world event queue). network.SocketPort
+// implements it over sockets and network.MeshPort over the in-process test mesh.
 type NetworkPort interface {
 	Send(peerID uint32, msgType uint8, payload []byte) bool
 	Broadcast(msgType uint8, payload []byte)
@@ -1042,8 +1038,8 @@ type NetworkResource struct {
 	// seam keeps the transport's knowledge to "a selective frame from that peer".
 	OnSelective func(kind uint8, from uint32, body []byte)
 
-	// OnAuthority hands one succession frame — a report, a vote or a
-	// handoff record — to the session layer, under the same rule as the two seams
+	// OnAuthority hands one succession frame — a report, a handoff record or the
+	// succession chain — to the session layer, under the same rule as the two seams
 	// above: called under the world lock, so it takes the bytes and decides
 	// nothing. Succession is a decision about who may author, which belongs beside
 	// the correction protocol rather than inside the transport.

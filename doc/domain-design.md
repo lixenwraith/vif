@@ -15,10 +15,10 @@ Terminology is deliberately orthogonal:
 - the **authority term** identifies the generation under which authoritative
   content was produced.
 
-Participant 1 opened the session; it is not permanently synonymous with the
-authority. A successful handoff increments the term and moves authorship without
-changing participant IDs, roster slots, or entity domains. In this document,
-`epoch` means one source's closed tick of crossing production.
+Peer 1 opened the session; it is not permanently synonymous with the authority.
+A successful handoff increments the term and moves authorship without changing
+participant IDs, roster slots, or entity domains. In this document, `epoch` means
+one source's closed tick of crossing production.
 
 ## 1. Domains and identity
 
@@ -35,13 +35,13 @@ Every `World` has two domains:
 zero is invalid in both. A cursor's roster slot lives in `CursorComponent` and is
 not encoded in the domain tag.
 
-A participant and a cursor are separate things. A participant holds an identity,
-an authority term and a vote; a roster slot is what binds it to a cursor. The
-coordinator of a dedicated host holds `parameter.NoPlayerSlot` and therefore no
-cursor: it authors the Shared world and puts nobody on the map. Only the
-coordinator may be cursorless — every other participant is in the session to drive
-one — and the ceiling of `parameter.MaxPlayers` counts cursors rather than
-participants.
+A peer and a cursor are separate things. Every admitted peer holds an identity, a
+roster entry and the authority term it follows; a roster slot binds it to a cursor
+and makes it a participant. The coordinator of a dedicated host holds
+`parameter.NoPlayerSlot`: it authors the Shared world and puts nobody on the map,
+so it is a peer and not a participant. It is the only roster entry allowed no
+cursor, and `parameter.MaxPlayers` counts participants (cursors), not roster
+entries.
 
 ## 2. Domain rules
 
@@ -82,9 +82,10 @@ never enters the replay suffix (D-9).
 | Missile, dust, or disruptor area effect | immutable centre/radius/attack geometry |
 | Drain fusion | one spawn request from the causal participant |
 | Shared gold member typed | header, member, and typist cursor |
+| Jump to the live gold sequence | cursor |
 | Dying drain donation | target and heal amount |
 | Personal drain death affecting shared progression | owner cursor |
-| Typing or nugget cursor advance | cursor and absolute destination cell |
+| Motion, typing or nugget cursor advance | cursor and absolute destination cell |
 | Pointer placement | cursor and the newest cell the pointer named before the next tick or input |
 | Owned shield or ray striking shared species | target/member set and owner cursor |
 | Cursor entering or leaving combined defeat state | cursor and state |
@@ -115,10 +116,14 @@ an effect that latches or overwrites keeps a different one on each. A shared
 outcome several crossings may reach must therefore compose the same way whichever
 order it saw them in: a budget per producer rather than one window per target, and
 an accumulation rather than a replacement for the ones that join it. Combat's
-damage and kinetic windows are both of that shape.
+damage window is of that shape. Its knockback window is not: it covers every
+attacker, so the knockback an instance applies first holds it and the next
+correction repairs a difference.
 
-Arrival, departure, and full reset are `barrierBound`. They create or destroy
-shared identity, so their producer also waits for the agreed apply tick.
+`barrierBound` names the set: arrival, departure and full reset, which create or
+destroy shared identity; the swarm and quasar spawn requests, which allocate it; and
+a drain's defeat and a cursor's defeat state, which advance the progression a
+region gates its spawns on or rebuild the level.
 
 ### D-4 — Wire payloads name Shared entities only
 
@@ -139,12 +144,13 @@ per-target combat requests derived from that geometry do not.
 ### D-6 — Presentation and personal effects are Player-domain
 
 Lightning, flash, fadeout, splash, motion markers, explosion smoke, pulse rings,
-materialise beams, particles (dust, decay and blossom), orbs, bullets, missiles,
-and loot are Player-domain. Encounter level clears explicitly preserve loot; run
-resets clear it. Shared corrections retain each receiver's drops and ownership,
-and loot revalidates its bounds and walls after an install. Collected weapon
-charges travel through the existing owner-state sync (D-13).
-They may depend on local view state and must not decide a Shared outcome.
+particles (dust, decay and blossom), orbs, bullets, missiles, and loot are
+Player-domain; a materialise beam takes its requester's domain (§3). Encounter
+level clears explicitly preserve loot; run resets clear it. Shared corrections
+retain each receiver's drops and ownership, and loot revalidates its bounds and
+walls after an install. Collected weapon charges travel through the existing
+owner-state sync (D-13). These effects may depend on local view state and must not
+decide a Shared outcome.
 
 An effect keyed to a Shared entity retires with it. An install writes the world
 rather than replaying the lifecycle that ends such effects, so the owner's absence
@@ -233,7 +239,10 @@ Each event type declares one class:
 `event.Replicated` answers whether two instances should hold the record.
 `event.OnWire` answers whether another peer must receive it. The wire set is
 narrower: sending a re-derived Shared event would apply it twice. A Bus type is on
-the wire only when a Player producer explicitly used the crossing path.
+the wire only when a Player producer explicitly used the crossing path. A Stamped
+type is on the wire only when its tag names a Shared target and `stampedCrossings`
+lists it, which today is the direct combat request alone. A payload that reports
+itself `Derived`, a combat chain follow-up, never is (D-5).
 
 `EventWindStart` and `EventWindCancel` are Shared events: a Shared FSM can
 re-derive them on every instance, so sending them would apply the same wind
@@ -252,12 +261,8 @@ by design.
 Shared entity identity and creation order stay exact. Component values are either
 re-derived deterministically or owner-authored and transported, never both.
 
-Correction containment has two boundaries:
-
-- peer-authored and barrier-bound frames are classified against the capture tick;
-- ordinary host-authored frames are classified against the capture's completed
-  authority crossing sequence, because the host applied them locally before their
-  remote `ApplyTick`.
+Correction containment judges an ordinary frame by its own source's fence in the
+capture and a barrier-bound frame by the capture tick (§4.1).
 
 ### D-12 — Shared geometry may inspect both domains
 
@@ -269,20 +274,22 @@ split by domain so a Shared record never names a Player entity.
 ### D-13 — Owner-authored Shared values have one writer
 
 A Shared cursor carries values written by exactly one instance rather than
-re-derived:
+re-derived: its energy, heat, shield, boost, weapon and combat stores, and the
+`CursorViewComponent` and `PingComponent` presentation. For every cursor a
+participant owns, the authority's included, those cells stay out of the manifest
+hash, the correction magnitude and selective repair, and every one but
+`PingComponent` travels on the owner-state sync. Ping is the exception because
+nothing reads a remote cursor's copy — the renderer reads the local cursor's — so a
+mirror frozen at its creation value costs nothing. The two lists are otherwise the
+same and have to stay so: a value on one and not the other is either hashed and
+unrepairable, or repairable and silently overwritten. The sync is committed like a
+crossing: the authority writes a guest's at its own next tick and relays it with
+that tick, so every instance writes it at one tick.
 
-- energy, heat, boost, shield, weapon, and cursor combat values;
-- `CursorComponent.Control` and `PeerID`;
-- `CursorViewComponent` and `PingComponent` presentation.
-
-Every one of them is excluded from what a receiver repairs for a cursor it does not
-own, and every one but `PingComponent` is also transported on the owner-state sync.
-Ping is the exception because nothing reads a remote cursor's copy — the renderer
-reads the local cursor's — so a mirror frozen at its creation value costs nothing.
-The two lists are otherwise the same and have to stay so: a value on one and not the
-other is either hashed and unrepairable, or repairable and silently overwritten.
-The sync is committed like a crossing: the authority writes a guest's at its own
-next tick and relays it with that tick, so every instance writes it at one tick.
+`CursorComponent.PeerID` is set when the cursor is created, by the arrival
+crossing or from the roster on a reset or a join, and is compared like any Shared
+value. `Control` is re-derived on every instance from `PeerID` and the local
+participant, and the hash reads it as zero.
 
 Position is different: it is Shared and changes through
 `EventCursorMoveRequest`. Protection is a deterministic creation constant.
@@ -300,12 +307,14 @@ correction wrote.
 
 ### D-14 — Map bounds are Shared authority
 
-`MapWidth`, `MapHeight`, and `CropOnResize` are Shared simulation state. Session
-admission installs them before the FSM boots. While `World.SessionShared()` is
-true, a terminal resize changes only local viewport/camera state; it cannot crop
-the map or announce a Shared cursor move. A scenario's `[map]` floor bounds every
-one of these writes from below; it travels with the scenario, so every instance
-holds the same one.
+`MapWidth` and `MapHeight` are Shared simulation state, carried in every capture
+header. `CropOnResize` is not in the capture: it rides the join anchor with the
+bounds, and only `EventLevelSetup` and a reset write it, each applied alike on
+every instance, so scripts may read it as agreed. Session admission installs all
+three before the FSM boots. While `World.SessionShared()` is true, a terminal
+resize changes only local viewport/camera state; it cannot crop the map or announce
+a Shared cursor move. A scenario's `[map]` floor bounds every one of these writes
+from below; it travels with the scenario, so every instance holds the same one.
 
 The session-shared latch survives lobby wait, disconnect, and journal replay. A
 map script asking for `viewport_width`/`viewport_height` is asking for the extent it
@@ -353,8 +362,9 @@ what they hit crosses as Shared events like any other; Shared systems do not.
 
 `World.PushCursorMove` advances prediction and emits the crossing atomically from
 the producer's perspective. A pointer places the cursor on every cell it names, but
-crosses only the newest once a tick, before the tick opens or before any other
-crossing this instance makes: cells it passed between ticks are never placed.
+crosses only the newest once a tick, before the tick opens or before this
+instance's next journaled push, so placements keep the order they were made in;
+cells it passed between ticks are never placed.
 
 This instance's own placements land in production order, so each consumes the
 oldest outstanding prediction by its crossing identity, whatever cell a clamp made
@@ -388,7 +398,7 @@ Declared system carriers are:
 | `adaptation` | route weights, sample pool, consumer head, fallback rotation |
 | `genetic` | streaming checkpoints, archives, pending evaluations, IDs, scout state, fitness accumulators |
 | `navigation` | group and cursor-pursuit cache phases, targets, route rebuild budget, route endpoints |
-| `gold` | sequence liveness, header, per-slot contribution; the deadline rides the header's timer in the stores |
+| `gold` | sequence liveness, spawn gate, header, per-slot contribution; the deadline rides the header's timer in the stores |
 | `storm` | live root entity, swarm spawns pending a blue attack |
 | `meta` | kill tallies, defeat latches and reset tick, cycle damage multiplier |
 | `environment` | active base wind, remaining duration, enable/applied phase; drift speed, direction, remaining duration and per-level sub-cell phases |
@@ -399,17 +409,15 @@ it, so an excluded cell is carried by nobody: `kills.*` is a mixed-domain
 aggregate and `energy.damage_multiplier` sits under a player-profile prefix, yet
 both steer shared FSM regions. `meta` carries them.
 
-A capture also carries every RNG stream position, FSM runtime state, Shared
-component stores, allocator counters, and the compared status surface. Durations
-are relative to capture tick. Absolute component instants are sound because
-`engine.SimEpoch` and tick interval are session identity.
-
-Snapshot schema 5 carries the complete simulation checkpoint plus one applied
-crossing fence per participant. Delayed FSM work names its deterministic compiled
-action identity, so transition-delayed actions restore independently of their
-queue position. An install preserves receiver-owned cursor values, rebuilds
-roster/control binding, derives spatial/navigation caches, and restores status
-only after carriers have loaded.
+A capture also carries every Shared RNG stream position (D-8), FSM runtime state,
+Shared component stores, allocator counters, the compared status surface, and one
+applied crossing fence per participant (`CaptureHeader.Crossings`). Durations are
+relative to capture tick. Absolute component instants are sound because
+`engine.SimEpoch` and tick interval are session identity. Delayed FSM work names
+its deterministic compiled action identity, so transition-delayed actions restore
+independently of their queue position. An install preserves receiver-owned
+cursor values, rebuilds roster/control binding, derives spatial/navigation caches,
+and restores status only after carriers have loaded.
 
 Persistent Player-domain effects controlled by Shared FSM state are re-derived by
 the install itself. Only immediate, unguarded `ClassLocal` lifecycle events marked
@@ -452,7 +460,7 @@ lead so pre-admission epochs are represented, then simulates only a bounded
 transfer gap. Admission refuses a gap beyond the lead or a link that cannot carry
 one keyframe inside the convergence floor.
 
-After install, the barrier remembers both the capture tick and authority sequence.
+After install, the barrier remembers the capture tick and each source's fence.
 Already-contained queued artifacts are discarded, and later arrivals are tested
 against the same boundary.
 
@@ -475,7 +483,7 @@ A correction exchange is selective:
 
 The manifest root excludes tick-local header values so worlds at different
 prediction ticks can compare. A repair must match the manifest's authority term,
-participant, and crossing sequence fence. Capture integrity may differ when an
+participant, and per-source crossing fences. Capture integrity may differ when an
 equal canonical world has another dense-store order.
 
 Correction magnitude is measured during commit. It is telemetry, not a verdict.
@@ -484,13 +492,14 @@ escalate to a terminal desynchronisation state.
 
 An install never moves the clock backwards. A capture behind it is projected: the
 staging world takes the capture, this instance's owner-authored values, its own
-encoded ordinary crossings past the capture's fence for its source and the applied
-barrier-bound artifacts due after the capture's tick, simulates to the live tick,
-and the projection is what the live world is reconciled to — clock and barrier
-alone when the two are already equal. A hole in the retained
-suffix makes it unavailable and selects authority-only recovery. A capture ahead of
-the clock waits for its tick inside the lead, newest wins, and one further ahead is
-adopted at its own tick as the jump it is (multi-player.md §3.3, §4.1).
+encoded ordinary crossings past the capture's fence for its source, the peer
+crossings it applied past their source's fence, and the applied barrier-bound
+artifacts due after the capture's tick, simulates to the live tick, and the
+projection is what the live world is reconciled to — clock and barrier alone when
+the two are already equal. A hole in the retained suffix makes it unavailable and
+selects authority-only recovery. A capture ahead of the clock waits for its tick
+within `parameter.NetworkHoldTicks`, newest wins, and one further ahead is adopted
+at its own tick as the jump it is (multi-player.md §3.3, §4.1).
 
 ### D-24 — Cadence adapts; the convergence floor does not
 
@@ -500,15 +509,17 @@ demand. Degradation is immediate; recovery is stepped. Keyframes stretch before
 cadence slows because whole worlds are more expensive than manifests and ordinary
 repairs.
 
-No plan may leave more than `SnapshotFloorKeyframeTicks` between whole worlds. A
-link that cannot meet the floor is refused at admission or reported as an
-unrecoverable operating condition. Relevance changes when a peer receives a
-correction, not which version of Shared state is authoritative.
+Every participant receives a whole world, or proves with a hash-only answer that
+it holds the authority's, within every `SnapshotFloorKeyframeTicks`; a keyframe is
+skipped while every participant has proved it within half the floor. A link that
+cannot meet the floor is refused at admission or reported as an unrecoverable
+operating condition. Relevance changes when a peer receives a correction, not
+which version of Shared state is authoritative.
 
 ## 3. Spatial and entity classification
 
-`Cell` is 256 bytes: count, Shared count, metadata, and 31 entities. Shared
-occupants are the prefix `Entities[:SharedCount]`; Player occupants follow.
+`Cell` is 256 bytes: count, Shared count, alignment padding, and 31 entities.
+Shared occupants are the prefix `Entities[:SharedCount]`; Player occupants follow.
 `ReservedPlayerPerCell` preserves Shared capacity, and insertion rejects rather
 than evicts when full.
 
@@ -532,12 +543,14 @@ the Shared navigation field answers nearest-target questions and cannot answer
 
 ### 4.1 Receive lead
 
-A local crossing is scheduled on this instance's own barrier and encoded into the
-source's next epoch for peers; every copy waits for the same absolute `ApplyTick`.
-At tick open, due frames sort by `(ApplyTick, Source, Seq)` and settle before
-`BeginTick`. There is no exception: a typed gold member leaves at its tick too, and
-the typist's next keystroke validates against the run without the members it has
-already typed.
+A local crossing is scheduled on this instance's own barrier at the `ApplyTick` it
+stamps and encoded into the source's next epoch for peers. Every other copy
+applies at the tick the authority commits: the stamp when on time, the authority's
+next tick when late, nowhere once more than `NetworkCommitLateTicks` late
+(multi-player.md §3.5). At tick open, due frames sort by
+`(ApplyTick, Source, Seq)` and settle before `BeginTick`. There is no exception: a
+typed gold member leaves at its tick too, and the typist's next keystroke validates
+against the run without the members it has already typed.
 
 A correction never rewinds the world tick or the source's production epoch. Peers
 use `ProducedTick` as a replay key, and an install moves the epoch forward only
@@ -573,25 +586,30 @@ flood gate and keyframe floor count subtrees.
 
 ### 4.3 Runtime parity
 
-Instances exchange category digests for the same surface as `SnapshotShared`.
-Mismatches increment drift telemetry and name position, kinetics, combat, context,
-status, or combined surface. Guests are expected to differ provisionally, so a
-digest is diagnostic rather than a failure state.
+Instances exchange category digests for the same surface as `SnapshotShared`. A
+mismatch counts in `network.digest_mismatches` and `network.drift_part` names the
+first part that differs: `positions`, `kinetics`, `combat`, `context`, `status`,
+`snapshot` (the compared status surface), or `combined`. Guests are expected to
+differ provisionally, so a digest is diagnostic rather than a failure state.
 
-The player-visible distinction is one badge — `nP:s <round trip>`, n players and
-local hexadecimal slot s (remote cursors show their slots as `0`–`F`), coloured
-green, amber or red by the worst of the round trip and the state below — with at
-most one qualifier, chosen by severity so a worse fact hides a lesser one:
+The player-visible distinction is one badge. A connected link shows
+`nP:s <round trip>` — n players and this instance's hexadecimal slot s, omitted for
+a cursorless coordinator (remote cursors show their slots as `0`–`F`) — coloured
+green, amber or red by the worst of the round trip and its qualifier. At most one
+qualifier shows, worst first:
 
+- `slow!`: no feasible cadence satisfies the keyframe floor;
 - `desync t`: this instance is t ticks behind, far enough that the receive lead
   is being missed;
 - `loss p%`: probes went unanswered often enough for the link to be the cause;
-- `slow`: the cadence backed off and prediction is carrying more;
-- `slow!`: no feasible cadence satisfies the keyframe floor;
-- `Migrating [k]`: a handoff is in flight, k passes down the succession list so far;
-- `Host lost`: this instance is an explicit local fork.
+- `slow`: the cadence backed off and prediction is carrying more.
 
-The measurements behind each are in the status snapshot and in `:session`.
+Three states replace the badge, in this order: `Host lost` (this guest lost its
+link to the authority or continues as a local fork, until a handoff is adopted),
+`Migrating [k]` (a succession is open or a handoff was just adopted, k passes down
+the succession list so far), and `Net: down` or `Net: wait` while the link is down
+or still connecting. The measurements behind each are in the status snapshot and in
+`:session`.
 
 ### 4.4 Membership and session control
 
@@ -608,8 +626,8 @@ without removing its holder; a guest may remove its own bots.
 When the authority goes, the successor is the first surviving independent
 participant in the succession chain, falling back to the lowest independent
 roster identity. Bot leaves cannot inherit authority. Every survivor computes
-the same choice; a receiver refuses a record naming anyone else. A survivor that cannot reach the successor
-continues as an explicit local fork.
+the same choice; a receiver refuses a record naming anyone else. A survivor that
+cannot reach the successor continues as an explicit local fork.
 
 The one instance that removes a participant without a crossing is an instance with
 no link left: a fork, or the successor of a star. Nothing there can produce or
@@ -623,17 +641,26 @@ identity returns to the pool and a crossing sequence starts at one, so a fence
 kept from the previous holder would claim a capture already contains crossings the
 next holder has yet to produce.
 
-Pause, speed, step, raw Shared mutation, and synchronous diagnostic save are
-instance-local operator actions and are refused while peers are live. Inspection
-modes remain available without stopping simulation.
+Speed, step, breakpoints and raw Shared mutation (`:system`, `:emit`, `:region`)
+are instance-local operator actions and are refused while peers are live; so is
+pause, unless every linked participant is a bot seat this instance holds
+(`SeatsOnly`). Only the coordinator may reset a live session, and the reset
+crosses. The programmatic surface takes the same rule through one guard:
+`App.SetupLevel`, `App.Region` and `App.Reset` read the event's declared class, so
+the coordinator crosses a `Bus` request, a guest's is refused, and any other class
+is refused outright. Inspection modes and the telemetry save remain available
+without stopping simulation.
 
 ### 4.5 Join and stream framing
 
-The handshake establishes schema, tick interval, seed/session, configuration,
-corpus identity, map latch, authority term, participant ID, and roster slot before
-state is accepted. A slot of `parameter.NoPlayerSlot` is the coordinator declaring
-it drives nothing. A mid-run join installs a current keyframe and catches up the
-bounded transfer gap. Reconnect uses the same path.
+Before state is accepted the handshake compares the build — protocol, simulation
+fingerprint, capture and journal schemas, tick interval — and then the session:
+seed, session and scenario digest, which a joiner adopts from the anchor. The
+corpus is the player's and is not compared. The handshake also carries the map
+latch, authority term, participant ID, and roster slot. A slot of
+`parameter.NoPlayerSlot` is the coordinator declaring it drives nothing. A mid-run
+join installs a current keyframe and catches up the bounded transfer gap. Reconnect
+uses the same path.
 
 `network.SocketPort` uses a fixed 12-byte frame header and complete short-read and
 short-write handling. Heartbeats and deadlines close silent streams. Bounded input
@@ -658,9 +685,8 @@ Three views share one status reading:
 
 The Shared filter is driven by system profiles and explicit key/field exclusions.
 It keeps tick-derived elapsed time, Shared FSM state, Shared navigation phase, map
-bounds, corpus identity, and canonical Shared entity digests. It drops terminal,
-camera, network, pacing, Player aggregate, owner-authored cursor, and local effect
-state.
+bounds, and canonical Shared entity digests. It drops terminal, camera, network,
+pacing, Player aggregate, corpus, owner-authored cursor, and local effect state.
 
 Correction/order diagnostics include:
 
@@ -700,13 +726,8 @@ with the capture it was handed. That split is why the protocol exports no knob f
 fabricating its own state: a criterion that needs one is in the package that holds
 it.
 
-Run the generated and repository gates after focused changes:
-
-```sh
-go generate ./internal/event ./internal/manifest
-go test ./...
-go vet ./...
-```
+Regenerating the tables and the repository gates are in
+[Development](development.md) §3 and §5.
 
 Manual host/guest acceptance should use different terminal sizes and rapid input
 from both participants. After a correction, a remote cursor must not walk backward
@@ -720,11 +741,10 @@ departing cursor, and reconnect must take a current world.
 |---|---|
 | Trust | Transport, participant claims and handoff records are unauthenticated and plaintext. Structural checks prevent races, not hostility. |
 | Guest replay | Suffix membership uses the capture's per-source fence, so a frame that missed the playout lead is replayed rather than discarded. Remote entries are a maximum rather than a contiguous prefix: on a relay a frame that overtakes a lower one can leave the lower one looking contained for one cadence. |
-| Playout | The receive lead is chosen once at lobby close from the worst measured round trip and the topology's hop count, floored at the constant and capped at a second. A session that closes before a probe completes keeps the floor, and a session opened mid-run with `:host` has no lobby to choose at. |
+| Playout | Each participant stamps the lead its own link to the authority asks for, capped at `NetworkBarrierMaxDelayTicks` (multi-player.md §3.5). A crossing that misses it still lands later on the authority than on its producer, and one past `NetworkCommitLateTicks` is void everywhere but its producer until a correction repairs it. |
 | Topology | The protocol relays over a graph. `-join` dials one address, and in a migrate session every participant then dials the current successor from the published succession chain, so the shape is a star with a successor chain over it. |
-| Partition | The **first survivor in the succession chain** succeeds without a vote; losing it as well as the authority elects nobody and the survivors fork, because a chain gives nobody but the successor a link to anyone. Merging an explicit local fork does not work. An instance with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
+| Partition | The **first survivor in the succession chain**, else the lowest independent roster identity, succeeds without a vote; losing that successor once it holds the term runs the next succession, but losing it together with the authority elects nobody, because the roster still names it, and the survivors fork. A survivor with no link walks the succession list, and one that hears no record within the succession window forks. Merging an explicit local fork does not work. An instance with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
 | Relay scheduling | A relayed participant inherits its neighbour's cadence and repair pricing. |
-| Operator API | Interactive and programmatic mutation are both session-aware, through one guard that reads the event's declared replication class. |
 | Tower ownership | Optional tower configurations still bind to slot zero rather than an explicit session-owned/cursor-owned rule. |
 | Progression | `kills.drain` is a session total, so quasar progression is session-wide rather than per cursor. |
 | Presentation | Small terminals clip the map; remote cursor presentation has no interpolation beyond receive scheduling. |
@@ -735,13 +755,9 @@ Domain-boundary debt is named rather than merely present:
 - a shared system pushing a Local-class event is a per-instance effect (D-6) and is
   not checked; the reverse, a player-domain push of a replicated event, must name its
   crossing in `crossingPushes` or `TestEventClassMatchesSystemProfile` fails;
-- the programmatic operator surface is **closed**: `App.SetupLevel`, `App.Region`
-  and `App.Reset` share one guard that reads the event's declared class;
 - splitting mixed combat telemetry so Shared results compare directly is what
   remains, and it is a telemetry redesign rather than a boundary fix;
 - tower and per-cursor progression ownership still have to be defined together.
 
-Authentication is the next security-shaped change. Per-source applied crossing
-fences are the next correction-ordering refinement if late-link guest rollback is
-observed. Adaptive playout and presentation interpolation must remain outside
-Shared simulation decisions.
+Authentication is the next security-shaped change. Adaptive playout and
+presentation interpolation must remain outside Shared simulation decisions.

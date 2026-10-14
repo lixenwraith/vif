@@ -96,7 +96,7 @@ func (app *AppState) OpenFileViewer(path string) {
 
 	// Load raw lines
 	lines := strings.Split(string(content), "\n")
-	// RemoveEntity trailing empty line from split if file ends with newline
+	// Remove trailing empty line from split if file ends with newline
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
 	}
@@ -627,7 +627,7 @@ func (app *AppState) viewerToggleFold() {
 	for i, region := range v.FoldRegions {
 		if lineNum >= region.StartLine && lineNum <= region.EndLine {
 			v.FoldState[i] = true
-			// MoveEntity cursor to fold start
+			// Move cursor to fold start
 			for vi, vline := range v.visibleLines() {
 				if vline.LineNum-1 == region.StartLine {
 					v.Cursor = vi

@@ -5,19 +5,20 @@ and it ends itself when nobody is in it.
 
 | You want to | Run |
 |---|---|
-| Deploy a change to a running node | `git pull && ./deploy/update.sh --diff && ./deploy/update.sh` |
+| Deploy a change to a running node | `git pull && ./deploy/update.sh --diff`, then `./deploy/update.sh` |
 | Operate it: status, drain, allocate, logs | [`deploy/runbook.md`](../deploy/runbook.md) |
 | Commission a new node | this document, §3 to §14, once |
 
-`deploy/update.sh` brings every component to the checkout's HEAD — K3s objects,
-scenario volume, session image, allocator, LogWisp — skipping what is
-current and showing each change as a diff first. The design and open work behind
-the fleet are [the fleet plan](kubernetes-fleet.md); where each host artifact lands
-and how to back one out is [`deploy/guest/README.md`](../deploy/guest/README.md).
+`deploy/update.sh` brings every component to the checkout's HEAD — node filter,
+K3s objects, scenario volume, session image, allocator, LogWisp's configuration and
+unit — and LogWisp's binary to upstream `main`, skipping what is current and showing
+each change as a diff first. [The fleet design](kubernetes-fleet.md) holds the
+design and its open work; where each host artifact lands and how to back one out is
+[`deploy/guest/README.md`](../deploy/guest/README.md).
 
-The production node is an Arch Linux guest on a FreeBSD host that owns routing and
-packet filtering. The host, its `pf`, and the site's nginx are site configuration
-kept outside this repository; §2 and §12 state only what they must provide.
+The production node is an Arch Linux guest behind a host that owns routing and
+packet filtering. The host and the site's nginx are site configuration kept outside
+this repository; §2 and §12 state only what they must provide.
 
 ## 0. Decisions
 
@@ -28,7 +29,7 @@ kept outside this repository; §2 and §12 state only what they must provide.
 | D3 | **Cluster commands run through `sudo kubectl`.** K3s's kubeconfig stays root-readable (mode `0640`); never copy it to a login user. |
 | D4 | **The vif JSON line is the log contract.** Records originate in `internal/vlog` and every hop preserves those bytes; nothing reads a Kubernetes pod log. |
 | D5 | **The allocator runs on the node.** It needs the K3s API and node-local access to the pod probes; port 6443 never leaves the node. |
-| D6 | **The session transports are unauthenticated.** Anyone who can reach a forwarded port or the browser route can join; the forwarded surface and the application limits are the controls (fleet plan §4). |
+| D6 | **The session transports are unauthenticated.** Anyone who can reach a forwarded port or the browser route can join; the forwarded surface and the application limits are the controls ([fleet design §4](kubernetes-fleet.md#4-security-posture)). |
 
 ## 1. The shape
 
@@ -39,9 +40,9 @@ flowchart TD
     Alloc -->|"Job + Service"| API["K3s API"]
     API --> Pod["vif -serve pod"]
     Alloc -->|"health, and each socket's payload"| Pod
-    Term["Player's vif -join"] -->|"raw TCP, no nginx"| PF["host pf rdr"]
-    PF -->|"7777"| Alloc -->|"route frame, then bytes"| Pod
-    PF -->|"NodePort"| NP["NodePort"] --> Pod
+    Term["Player's vif -join"] -->|"raw TCP, no nginx"| Fwd["host forward"]
+    Fwd -->|"7777"| Alloc -->|"route frame, then bytes"| Pod
+    Fwd -->|"NodePort"| NP["NodePort"] --> Pod
     Pod -->|"JSONL through PVC"| Log["Capped tmpfs"]
     Log -->|"read-only files"| Wisp["LogWisp, loopback only"]
     Wisp -->|"SSE bytes"| Alloc
@@ -60,7 +61,7 @@ rebuild one from a port:
 
 Every route sends the name before the handshake, and the pod runs `-name <id>`, so a
 link that names another session is refused rather than seated in it
-([the fleet plan §9](kubernetes-fleet.md#9-the-session-routes)).
+([fleet design §9](kubernetes-fleet.md#9-the-session-routes)).
 
 ## 2. The public edge
 
@@ -68,13 +69,13 @@ Site configuration, kept outside this repository. What it must provide:
 
 | Requirement | Why |
 |---|---|
-| Forward TCP 7777 and 31700–31709, and only those, to the node | The whole player-facing native surface: the front door and each session's direct port. 7778, 8081 and 6443 are unauthenticated operational data and never leave the node. |
+| Forward TCP 7777 and 31700–31709, and only those, to the node | The whole player-facing native surface: the front door and each session's direct port. 7778 and 8081 are unauthenticated operational data and 6443 is the cluster API; none leaves the node. |
 | Do not rewrite the source address | Services use `externalTrafficPolicy: Local`, and the front door and the session key their admission budgets on the dialling address. |
-| Keep established TCP mappings for hours | A session holds one long-lived connection per player and heartbeats every ten seconds. |
+| Keep established TCP mappings for a whole match | A session holds one long-lived connection per player, up to the Job's one-hour ceiling, and heartbeats every ten seconds. |
 | Admit the site host to the node's 9080 | The allocator's API and browser route, reached only through the site's nginx (§12). |
 
-Test the public ports from a machine off the host: host-originated traffic bypasses
-a `rdr` and can return an RST that looks like a filter rejection.
+Test the public ports from a machine off the host: host-originated traffic can
+bypass the forward and return an RST that looks like a filter rejection.
 
 ## 3. Node prerequisites
 
@@ -111,8 +112,9 @@ sudo sysctl --system
 ```
 
 Clone the repository once and run everything below from its root. Size the node
-for the host, the OS and K3s plus ten sessions at their 192 MiB limit (1.9 GiB,
-held by [`10-quota.yaml`](../deploy/k3s/10-quota.yaml)) and the 256 MiB log tmpfs.
+for the host, the OS and K3s plus the fleet's 1.9 GiB memory limit (ten sessions at
+192 MiB, fewer when each bot adds 32 MiB, held by
+[`10-quota.yaml`](../deploy/k3s/10-quota.yaml)) and the 256 MiB log tmpfs.
 
 ## 4. Docker, for builds only
 
@@ -121,12 +123,12 @@ sudo usermod -aG docker "$USER"            # log out and back in
 sudo systemctl disable --now docker.service docker.socket containerd.service
 ```
 
-That is the baseline every build helper restores (D2). Docker sets the `FORWARD`
-policy to `DROP` on start, which severs NodePort traffic, and a stop does not undo
-it; the helpers set it back to `ACCEPT`. A host whose Docker is already running, as
-on a development machine, keeps it: the helpers build with it and leave it running
-and `FORWARD` as it is, so NodePorts there rely on that host's own forwarding rules.
-After any manual Docker use:
+That is the baseline the image and LogWisp builds restore (D2). Docker sets the
+`FORWARD` policy to `DROP` on start, which severs NodePort traffic, and a stop does
+not undo it; the helpers set it back to `ACCEPT`. A host whose Docker is already
+running, as on a development machine, keeps it: the helpers build with it and leave
+it running and `FORWARD` as it is, so NodePorts there rely on that host's own
+forwarding rules. After any manual Docker use:
 
 ```sh
 sudo iptables -S FORWARD | head -1         # expect: -P FORWARD ACCEPT
@@ -208,8 +210,8 @@ findmnt -no TARGET,FSTYPE,SIZE,OPTIONS /var/log/vif-fleet
 ```
 
 Expected: `tmpfs`, about `256M`, `nodev,nosuid,noexec`, mode `770`, owner `65532`.
-The cleanup timer owns retention: two recent rotations per session, and nothing
-older than the match ceiling.
+The cleanup timer owns retention: each session's two newest rotations (an older
+one goes once it is five minutes old), and no file untouched for five hours.
 
 ## 8. The session image
 
@@ -219,12 +221,13 @@ older than the match ceiling.
 
 It builds the `vif_headless` profile once with Docker, refuses an image without the
 `headless` OCI label, runs its own `-check` as UID 65532 read-only with no network,
-imports it into K3s pinned, records it as `VIF_ALLOCATOR_IMAGE`, removes older tags,
-empties Docker's store, and restores the Docker baseline; a Docker that was already
-running only has that image removed. Pinned, because the kubelet deletes images no
-pod uses once the disk passes 85%, and between matches none does. Later runs rebuild
-only when `cmd`, `internal`, `pkg`, `go.mod`, `go.sum` or the Dockerfile changed since
-the installed tag.
+imports it into K3s pinned, records it as an installed allocator's
+`VIF_ALLOCATOR_IMAGE` (§11 writes the first), removes older tags, empties Docker's
+store, and restores the Docker baseline; a Docker that was already running only has
+that image removed. Pinned, because the kubelet deletes images no pod uses once the
+disk passes 85%, and between matches none does. Later runs rebuild only when `cmd`,
+`internal`, `pkg`, `go.mod`, `go.sum` or the Dockerfile changed since the installed
+tag, or that image is missing or unpinned.
 
 ## 9. The fleet objects and the shared volumes
 
@@ -260,8 +263,9 @@ sudo kubectl -n vif delete pod vif-log-volume-check --wait=true
 sudo find /var/log/vif-fleet -maxdepth 1 -name 'volume-check*.jsonl' -delete
 ```
 
-`30-session.yaml` is a template, not an object: the allocator renders it per
-session. Scenarios live on the node volume, not in the image, so
+`30-session.yaml` is a template, not an object: the allocator builds the same Job
+and Service per session (`tool/vif-allocator/manifest.go`), and `session.sh create`
+renders the file itself. Scenarios live on the node volume, not in the image, so
 `./deploy/update.sh wad` changes what the fleet serves without a rebuild; a running
 match keeps the tree it mounted.
 
@@ -277,16 +281,18 @@ systemctl is-active logwisp.service
 test "$(sudo ss -ltnH 'sport = :8081' | awk 'NR == 1 {print $4}')" = 127.0.0.1:8081
 ```
 
-What the stream may lose is the `rate_limit` in
-[`aggregator.toml`](../deploy/logwisp/aggregator.toml) and nothing else; §16 names
-the symptoms of a queue below the burst.
+The stream leaves out TRACE records and the `admit` sub's, which name a socket's
+address and stay in the node's files. Beyond that, what it may lose is the
+`rate_limit` in [`aggregator.toml`](../deploy/logwisp/aggregator.toml) and nothing
+else; §16 names the symptoms of a queue below the burst.
 
 ## 11. The allocator
 
 [`tool/vif-allocator`](../tool/vif-allocator/README.md) is the narrow HTTP boundary
-between the site and the `vif` namespace, and the browser route's WebSocket end.
-Its settings are [`deploy/guest/vif-allocator.env`](../deploy/guest/vif-allocator.env):
-edit them there, never on the node. First install, after §9 applied its Role:
+between the site and the `vif` namespace, the native front door on 7777, and the
+browser route's WebSocket end. Its settings are
+[`deploy/guest/vif-allocator.env`](../deploy/guest/vif-allocator.env): edit them
+there, never on the node. First install, after §9 applied its Role:
 
 ```sh
 make allocator
@@ -316,25 +322,31 @@ gate, and keeps one `.previous` set to roll back to.
 
 The credential is a short-lived ServiceAccount token in a file, re-read on every
 request and rotated by the root timer; never give the allocator the node's root
-kubeconfig. Open 9080 to the site host only, in `/etc/nftables.d/vif-operator.nft`
-(`define operator_ports = { 22, 9080 }`), then `sudo systemctl restart nftables`.
-There is deliberately no public delete endpoint: an anonymous caller must not end
-somebody else's match.
+kubeconfig. Open 9080 to the site host only: the node filter admits
+`operator_ports` from `operator_addr` alone, so add it in
+`/etc/nftables.d/vif-operator.nft` (`define operator_ports = { 22, 9080 }`) and load
+it with `sudo nft -f /etc/nftables.conf`, as `update.sh filter` does, never a unit
+restart, whose stop may flush the ruleset (§6). There is deliberately no delete
+endpoint: an anonymous caller must not end somebody else's match.
 
 ## 12. The site's edge
 
-Site configuration, kept outside this repository.
-[`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example) is the
-reference: the exact `/vif/api/sessions` and `/vif/api/logs` locations, the
-`/vif/ws/<session>` Upgrade location with its rate limits keyed on
-`$proxy_protocol_addr`, and no `/healthz` or `/readyz`. Three properties decide
-whether it works: `Upgrade` and `Connection` forwarded for the browser route,
-buffering off with an hour-long read timeout for the streams, and `Origin`
-untouched — the allocator compares it against `VIF_ALLOCATOR_WEB_ORIGIN`. A
-fourth keys the per-player budgets: `X-Real-IP` overwritten with
-`$proxy_protocol_addr` on the API and browser locations, then named in
-`VIF_ALLOCATOR_CLIENT_ADDRESS_HEADER`; unnamed, those routes charge none. The
-page's `connect-src 'self'` is what permits the same-origin socket.
+Site configuration, kept outside this repository. What the allocator needs from
+the edge in front of 9080:
+
+| Requirement | Why |
+|---|---|
+| Publish only `/vif/api/sessions`, `/vif/api/logs` and `/vif/ws/<session>` | `/healthz`, `/readyz` and any later allocator path stay on the node. |
+| Forward `Upgrade` and `Connection` on `/vif/ws/<session>` | The allocator answers the WebSocket handshake itself and splices the socket to the pod. |
+| Leave `Origin` untouched | The allocator compares it with `VIF_ALLOCATOR_WEB_ORIGIN` and refuses any other. |
+| Limit open sockets and handshakes per player on `/vif/ws/<session>` | The allocator's join budget counts dials a minute and `VIF_ALLOCATOR_ROUTE_MAX` connections a session; neither bounds the sockets one player holds open. |
+| Pass `/vif/api/logs` unbuffered, with an hour-long read timeout | It is one long-lived SSE response; a buffer or a short timeout stalls or truncates it. |
+| Overwrite the header `VIF_ALLOCATOR_CLIENT_ADDRESS_HEADER` names with the player's address | It keys the per-player join and creation budgets; with no header named, the API and browser routes charge none. |
+| Keep any idle-connection bound on the TLS path well above ten seconds | A browser session holds one connection for the whole match, and the game's heartbeat crosses it at least every ten seconds each way. |
+
+The page that opens the socket must permit it; `connect-src 'self'` does.
+[`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example) is a
+reference edge, with placeholder addresses, that meets these.
 
 The launcher is [`web/`](../web), copied to the site as it stands together with the
 `vif.wasm` and `wasm_exec.js` that `make wasm` writes; editing a path in it forks
@@ -386,14 +398,15 @@ still live:
 POD_IP=$(sudo kubectl -n vif get pod -l app.kubernetes.io/component=session \
   -o jsonpath='{.items[0].status.podIP}')
 : "${POD_IP:?no session pod is running}"
-bash -c "</dev/tcp/$POD_IP/7777" && echo "node -> 7777 open"
+bash -c "</dev/tcp/$POD_IP/7778" && echo "node -> 7778 open"
 sudo kubectl -n default run np-probe --rm -i --restart=Never --image=busybox --quiet \
   --command -- sh -c "for p in 7777 7778; do nc -zw2 $POD_IP \$p && echo \$p open || echo \$p refused; done" </dev/null
 ```
 
 Expect the node line, then `7777 open` and `7778 refused`. Both open means
 NetworkPolicy is not enforced; the node line failing means node traffic is not
-exempt, and `20-networkpolicy.yaml` names the `ipBlock` fix.
+exempt, and the allocator, which reads each pod's `/health` from the node (D5),
+cannot place a session.
 
 Quit the client, read the session's file before it goes, then delete:
 
@@ -420,8 +433,8 @@ A pod's `/health` answers on its pod IP without a Service:
 
 ## 14. The reboot gate
 
-A reboot ends every match. Drain, reboot, and check the six things a reboot can
-undo, then run §13 again:
+A reboot ends every match. Drain, reboot, and check what a reboot can undo, then
+run §13 again:
 
 ```sh
 ./deploy/k3s/session.sh drain && sudo systemctl reboot
@@ -448,16 +461,17 @@ session and names why:
 `drain deadline … reached holding N guest(s)`, or an operator's cause. Sessions
 expiring with `no guest connected` far more often than players report failed joins
 is a broken path between the page and the forwarded ports; start at the
-EndpointSlice and walk outward with §16. Open work is the fleet plan's
+EndpointSlice and walk outward with §16. Open work is the fleet design's
 [work list](kubernetes-fleet.md#3-work-list).
 
 ## 16. Troubleshooting
 
 ### When the boundary looks wrong
 
-The namespace, quota, policy and Role are whatever the four files in §9 say, and
-the session pod is whatever `30-session.yaml` says. These assertions name which one
-drifted; none of them belongs in a deployment that is going well.
+The namespace, quota, policy and Role are what `./deploy/update.sh objects` applies
+from their four files, and the session pod is what the allocator builds
+(`tool/vif-allocator/manifest.go`, mirrored by `30-session.yaml`). These assertions
+name which one drifted; none of them belongs in a deployment that is going well.
 
 Restricted admission must refuse a privileged pod and a direct `hostPath`:
 
@@ -510,8 +524,8 @@ test "$(sudo kubectl auth can-i get pods --subresource=log \
 ```
 
 A live session's Job must carry exactly the shape the template describes — one
-container, no token, no `hostPath`, no `-log-stdout`, the PVC mounted only in the
-game container, and its own session id on the command line as its log tag and name:
+container, no token, no `hostPath`, no `-log-stdout`, the log PVC only in the game
+container, and its own session id on the command line as its log tag and name:
 
 ```sh
 sudo kubectl -n vif get job "vif-session-$SESSION_ID" -o json |
@@ -530,7 +544,7 @@ sudo kubectl -n vif get job "vif-session-$SESSION_ID" -o json |
       .name == "fleet-logs" and
       .persistentVolumeClaim.claimName == "vif-fleet-logs") and
     all($pod.volumes[]?; has("hostPath") | not) and
-    all($pod.initContainers[]?; ((.volumeMounts // []) | length) == 0) and
+    all($pod.initContainers[]?; all(.volumeMounts[]?; .name != "fleet-logs")) and
     ($pod.containers[0].securityContext.allowPrivilegeEscalation == false) and
     ($pod.containers[0].securityContext.readOnlyRootFilesystem == true) and
     ($pod.containers[0].securityContext.runAsNonRoot == true) and
@@ -571,8 +585,8 @@ sudo iptables-save -c | grep 'KUBE-POD-FW-'
 
 **Walk outward from the pod, never inward from the Internet.** Each boundary names
 one component; a single test from a browser combines all of them and names none.
-These commands read a session that is live, so allocate one with an extended
-`FIRST_JOIN` first (§13) and set `SESSION_ID` to its identity.
+These commands read a session that is live, so create one with an extended
+`FIRST_JOIN` first (`session.sh create`, §13) and set `SESSION_ID` to its identity.
 `bash -c "</dev/tcp/host/port"` is enough when `nc` is absent:
 
 ```sh
@@ -591,11 +605,12 @@ bash -c "</dev/tcp/192.0.2.20/31700"      # node address and NodePort
 bash -c "</dev/tcp/192.0.2.20/7777"       # the front door and the node filter
 ```
 
-From the FreeBSD host, test `192.0.2.20:31700` and `192.0.2.20:7777`. Test the
-public address only from an off-box machine (§2). A join through 7777 that times out
-while the direct target works is the host's forward, or a node filter older than
-its rule (`./deploy/update.sh --diff filter`); a refusal in words is the front door
-answering, and [the fleet plan §9](kubernetes-fleet.md#9-the-session-routes) names each.
+From the host that forwards to the node, test `192.0.2.20:31700` and
+`192.0.2.20:7777`. Test the public address only from an off-box machine (§2). A
+join through 7777 that times out while the direct target works is the host's
+forward, or a node filter older than its rule (`./deploy/update.sh --diff filter`);
+a refusal in words is the front door answering, and
+[fleet design §9](kubernetes-fleet.md#9-the-session-routes) names each.
 
 When a step does not answer, take counter snapshots immediately before and after
 **exactly one** connection attempt. The last rule whose counter moves names the
@@ -614,24 +629,24 @@ sudo conntrack -L -p tcp | grep 31700
 sudo tcpdump -ni cni0 'tcp port 7777'
 ```
 
-Each row below was a dead end in the proof-of-concept run when it was not known:
+Each row below is a dead end until its meaning is known:
 
 | Observation | What it means |
 |---|---|
-| Nothing appears in the node's `input` drop log. | Expected for a NodePort SYN: kube-proxy DNATs it in `prerouting`, then routing sends it through `forward`, not `input`. |
+| A log rule added to the node's `input` chain sees nothing. | Expected for a NodePort SYN: kube-proxy DNATs it in `prerouting`, then routing sends it through `forward`, not `input`. |
 | Every rule in `iptables-save -c` accepts, but the connection still fails. | Another nftables table can drop on the same hook. Only `nft list ruleset` shows every table — usually a surviving `table inet filter` with `policy drop` (§6). |
 | One before/after attempt changes a counter. | The last moving rule identifies the component that handled the packet; take both `iptables-save -c` and `nft list ruleset` around one attempt. |
 | Forward counters move but the tuple has no conntrack entry. | The packet was accepted for forwarding and dropped by another hook before the routing decision completed. |
 | Traffic is visible on `cni0`. | It reached the pod side of routing. A moving `KUBE-POD-FW-*` counter proves the NetworkPolicy path ran. |
 | A finished session first refuses and later times out. | While its Service exists with no endpoint, kube-proxy rejects; after Job TTL garbage-collects the Service, the node filter drops an unassigned port. |
-| A create answers `504 session_not_ready` and the pod never leaves `Init`. | The config check could not start. `kubectl -n vif describe pod` names the image it could not pull, usually one the kubelet deleted at 85% disk before it was pinned: `./deploy/update.sh` imports it again, pinned. |
-| The handshake answers `400` with no `Upgrade` reaching the allocator. | An edge that dropped the hop-by-hop headers. The `map` must be in the `http` context and both headers set in the location (§12). |
-| A browser session ends after about thirty seconds of a full lobby. | A stream-layer `proxy_timeout` shorter than the game's ten-second heartbeat, or an idle-connection bound below it somewhere on the TLS path (§12). |
+| A create answers `504 session_not_ready` and the pod never leaves `Init`. | The config check could not start. `kubectl -n vif describe pod` names the image it could not pull, usually an unpinned one the kubelet deleted at 85% disk: `./deploy/update.sh` imports it again, pinned. |
+| The handshake answers `400` with no `Upgrade` reaching the allocator. | An edge that dropped the hop-by-hop headers; the browser route needs `Upgrade` and `Connection` forwarded (§12). |
+| A browser session ends after about thirty seconds of a full lobby. | An idle-connection bound on the site's TLS path below the game's ten-second heartbeat (§12). |
 | A NodePort that answered before does not now. | `FORWARD` policy is `DROP`. Docker sets it and a stop does not restore it (§4). |
-| The Docker build cannot resolve DNS. | The node ruleset does not accept `docker0`. Build with `--network host` (§8). |
-| `kubectl auth can-i get pods/log` answers `yes`. | Positional `pods/log` parses as `TYPE/NAME`. Use `--subresource=log` (§9). |
+| A LogWisp or hand-run Docker build cannot resolve DNS. | A node filter older than its `docker0` rule (`./deploy/update.sh --diff filter`). The session image builds with `--network host` and never crosses `docker0`. |
+| `kubectl auth can-i get pods/log` answers `yes`. | Positional `pods/log` parses as `TYPE/NAME`. Use `--subresource=log`, as the RBAC check above does. |
 | LogWisp shows no lines written before it started. | A watcher seeks to end-of-file on discovery. The source needs `from = "start"` (§10). |
 | `dropped_writes` rises on `/status` with one reader and an idle node. | Records lost from a burst larger than `client_buffer_size`, not backpressure. Keep that queue at or above the `rate_limit` burst (§10). |
 | `Watcher failed … watcher stopped` in LogWisp's journal. | Read only the invocation running the installed binary (§10); earlier entries belong to whatever it replaced. |
-| `curl` to `:9080` is refused right after `systemctl start`. | Only on an allocator that predates `Type=notify`; otherwise the bind has already happened and the refusal is real. |
-| Testing the public address from the FreeBSD host returns an immediate RST. | Host-originated traffic bypasses `rdr`. Test from off-box, or test the node address directly (§2). |
+| `curl` to `:9080` is refused right after `systemctl start`. | The refusal is real: `Type=notify` returns only once both listeners are bound. Read the allocator's journal. |
+| Testing the public address from the host returns an immediate RST. | Host-originated traffic can bypass the forward. Test from off-box, or test the node address directly (§2). |

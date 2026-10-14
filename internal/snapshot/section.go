@@ -1,13 +1,3 @@
-// Package app: writing one repaired page into the sections a capture carries
-// beside its component stores.
-//
-// The stores have a generated writer, because they are generated. These five do
-// not: they are five fixed shapes, and each one's page is written by rebuilding
-// the section with the page's rows replaced. The shape is the same every time —
-// keep what the page does not own, take what the shard carries, restore the
-// canonical order — and it is written out per section rather than abstracted,
-// because the four registries of the status surface and the two identities of a
-// stream are exactly the details an abstraction would have to leak.
 package snapshot
 
 import (

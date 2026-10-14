@@ -8,12 +8,9 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// CompositeSystem manages composite entity groups
-// Responsibilities:
-// - Float64 sub-cell movement integration
-// - Member position propagation from phantom head
-// - Liveness validation and tombstone marking
-// - Lazy compaction of dead members
+// CompositeSystem keeps headers and members consistent: member positions propagated
+// from the phantom head, liveness tombstones, compaction, integrity breach events and
+// destroy requests
 type CompositeSystem struct {
 	world *engine.World
 	toggle
@@ -184,7 +181,7 @@ func (s *CompositeSystem) destroyComposite(headerEntity core.Entity, effect even
 	s.destroyHead(headerEntity)
 }
 
-// destroyHead removes protection and destroys phantom head directly
+// destroyHead destroys the phantom head directly
 func (s *CompositeSystem) destroyHead(headerEntity core.Entity) {
 	s.world.DestroyEntity(headerEntity)
 }
@@ -242,7 +239,6 @@ func (s *CompositeSystem) syncMembers(headerComp *component.HeaderComponent, hea
 			continue
 		}
 
-		// Use MoveEntity for existing entities (updates spatial grid)
 		s.world.Positions.SetPosition(memberEntry.Entity, component.PositionComponent{
 			X: newX,
 			Y: newY,
@@ -272,7 +268,6 @@ func (s *CompositeSystem) handleEmptyComposite(headerEntity core.Entity, headerC
 		s.destroyHead(headerEntity)
 
 	case component.BehaviorSwarm, component.BehaviorStorm:
-		// Future: emit behavior-specific completion events
 		s.destroyHead(headerEntity)
 
 	default:

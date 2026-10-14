@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -494,13 +493,11 @@ func (a *App) initScheduler() error {
 	meta := system.NewMetaSystem(a.ctx)
 	a.world.AddSystem(meta, manifest.ProfileFor(meta.Name()))
 
-	// The declared dependency graph is resolved once the set is complete; an
+	// The declared dependency graph is checked once the set is complete; an
 	// unknown name or a cycle is a startup error, not a runtime degradation
-	order, err := a.world.SystemInitOrder()
-	if err != nil {
+	if err := a.world.CheckSystemDependencies(); err != nil {
 		return fmt.Errorf("system dependencies: %w", err)
 	}
-	a.log.Debug("app", "msg", "system init order", "systems", strings.Join(order, ","))
 
 	for _, sys := range a.world.Systems() {
 		if h, ok := sys.(event.Handler); ok {
@@ -511,7 +508,8 @@ func (a *App) initScheduler() error {
 }
 
 // initJournal opens the replay journal and installs it on the event queue.
-// Opt-in: it records every non-system event for the life of the run.
+// Opt-in: for the life of the run it records every event of a journaled origin
+// (all but system and device) and every own crossing.
 func (a *App) initJournal() error {
 	if !a.cfg.Journal {
 		return nil

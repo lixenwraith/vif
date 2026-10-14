@@ -1,20 +1,23 @@
 # Distribution Packaging
 
 Steps to publish vif through a distribution repository, and the
-conventions a change must not break while that work is in progress. Sections 2
-onward are checklists to chip away at; section 1 applies to every commit now.
+conventions a change must not break while that work is in progress. Section 1
+applies to every commit, §2 is what the release workflow publishes, §3 to §6 are
+checklists to chip away at, and §7 verifies a staged install.
 
 ## 1. Shared guidelines
 
 These hold regardless of which repository is targeted first.
 
-- **One external payload.** Everything a user may edit lives in `wad/`, laid
-  out exactly as it installs. Everything compiled in lives in `internal/asset`.
-  A new data file goes in one of those two, never beside the code that reads it.
+- **One external payload.** Everything a config root receives installs from
+  `wad/`, laid out exactly as it installs, or from the embedded copy it overrides
+  (the keymap, `vif.toml` and the bot graphs in `internal/asset`). Files installed
+  outside a config root live in `deploy/package/`, and the manual is `doc/vif.6`.
+  A new data file goes in one of those, never beside the code that reads it.
 - **No working-directory discovery.** A packaged binary must behave the same
   from any `cwd`. Resolution is `-flag` → `-config-dir` → user root → checkout
   `wad/` beside a `bin/` binary → system roots → embedded, and nothing else.
-  Never reintroduce a `./config` probe.
+  Never add a working-directory probe.
 - **Honour the environment.** `DESTDIR`, `PREFIX`, `SYSCONFDIR`. No
   target may write outside `DESTDIR`, and none may require network access.
 - **The Makefile runs under GNU make and FreeBSD make.** `!=` rather than
@@ -30,25 +33,30 @@ These hold regardless of which repository is targeted first.
 - **Version comes from the source, never from flags.** `git archive` expands
   `internal/asset/version.txt` to the tag and commit (`export-subst`, which
   GitHub's archives honour too), and a checkout build reads Go's VCS stamp, so
-  `vif -version` names the tag without an ldflags contract. Only a Go module
-  proxy zip carries neither and reports `(devel)`.
-- **Runtime state is XDG.** Logs and journals under `$XDG_STATE_HOME`; nothing
-  in `/var`, nothing beside the binary.
+  `vif -version` names the tag without an ldflags contract. A Go module proxy
+  zip carries neither, so `go install …/cmd/vif@vX.Y.Z` names the version and no
+  commit, and a build of an unpacked zip reports `(devel)`.
+- **Runtime state is XDG.** Logs, journals and music recordings under
+  `$XDG_STATE_HOME`; nothing in `/var`, nothing beside the binary.
 - **Licence stays declarable.** BSD-3-Clause, one `LICENSE` at the root. Any
   vendored or redistributed content (typing corpus, images, sound specs) must
-  be licence-checked before it enters `wad/`.
+  be licence-checked before it enters `wad/` or a release archive. The shipped
+  corpus in `wad/content/` is Go standard-library source under the Go Authors'
+  BSD licence, and the browser bundle carries xterm.js (MIT) in `web/vendor/`.
 
 ## 2. Release surface
 
 `.github/workflows/release.yml` builds one set of archives: Linux amd64 client and
 headless server, FreeBSD amd64 client, an experimental and untested Windows amd64
-zip, the browser bundle, the wad, and `SHA256SUMS`. Each unpacks into one
-directory named for it, owned by root, so extracting one as root neither scatters
-files nor hands them to the builder's uid.
+zip, the browser bundle, the wad, and `SHA256SUMS`. Each binary and browser
+archive unpacks into one directory named for it, and every tarball's entries are
+root's, so extracting one as root neither scatters files nor hands them to the
+builder's uid.
 
 - **Nightly** (daily or on dispatch) is never a release. It replaces the assets
-  of the `nightly` prerelease, titled and described as a development build, and
-  pushes the `vif_headless` image to GHCR as `nightly` and `sha-<commit>`.
+  of the `nightly` prerelease, titled and described as a development build,
+  moves the `nightly` tag, and pushes the `vif_headless` image to GHCR as
+  `nightly` and `sha-<commit>`, keeping only that image version.
 - **A `vX.Y.Z-suffix` tag** (`v0.1.0-rc.1`) drafts a GitHub pre-release whose
   notes open by saying it is not a final release.
 - **A plain `vX.Y.Z` tag** drafts the final release. None has been pushed.
@@ -66,9 +74,9 @@ Makefile owns its contents so a release and a source install cannot drift.
 
 Downloads are at the repository's
 [`nightly` release](https://github.com/lixenwraith/vif/releases/tag/nightly);
-the image is `ghcr.io/lixenwraith/vif:nightly` or `sha-<commit>`. Content a
-client fetches for itself, rather than one a person downloads and extracts, still
-needs its trust, origin and cache policy decided.
+the image is `ghcr.io/lixenwraith/vif:nightly`, or `sha-<commit>` of that build.
+Content a client fetches for itself, rather than one a person downloads and
+extracts, still needs its trust, origin and cache policy decided.
 
 ## 3. Gaps to close before a first submission
 
@@ -83,8 +91,9 @@ draft §2 creates.
 Target `vif` (release) with `vif-git` optional.
 
 1. `depends=()` — the binary is static Go with no runtime library dependency.
-   `makedepends=('go')`. `optdepends` for the audio backends the engine probes
-   (`pulseaudio`/`pipewire-pulse` for `pacat`, `alsa-utils` for `aplay`).
+   `makedepends=('go')`. `optdepends` for the audio players the engine probes,
+   in its order: `pulseaudio`/`pipewire-pulse` for `pacat`, `pipewire` for
+   `pw-cat`, `alsa-utils` for `aplay`, `sox` for `play`, `ffmpeg` for `ffplay`.
 2. `build()` uses the repository's flags plus Arch's hardening:
    `go build -trimpath -buildmode=pie -mod=readonly -modcacherw`.
    `make release GO_LDFLAGS=` does the same with Arch's `GOFLAGS` exported: plain
@@ -121,8 +130,9 @@ Lowest priority: Go game packages move slowly through NEW.
 2. Debian prefers vendored dependencies or packaged Go modules. The four
    `lixenwraith/*` modules are not in Debian, so vendoring is the realistic
    route; commit a `vendor/` only on the packaging branch.
-3. `debian/copyright` in DEP-5 form must enumerate the corpus files in
-   `wad/content/` separately if any is third-party source text.
+3. `debian/copyright` in DEP-5 form enumerates the corpus files in
+   `wad/content/` separately: they are Go standard-library source under the Go
+   Authors' BSD licence.
 4. Lintian may flag the size of the config tree in `/etc/vif`; the override
    goes in `debian/vif.lintian-overrides`.
 
@@ -131,9 +141,12 @@ Lowest priority: Go game packages move slowly through NEW.
 ```bash
 make release
 make install DESTDIR=/tmp/stage PREFIX=/usr SYSCONFDIR=/etc
-XDG_CONFIG_HOME=/nonexistent VIF_SYSTEM_ROOTS=/tmp/stage/etc/vif \
-  /tmp/stage/usr/bin/vif -check
+export XDG_CONFIG_HOME=/nonexistent VIF_SYSTEM_ROOTS=/tmp/stage/etc/vif
+/tmp/stage/usr/bin/vif -check
+/tmp/stage/usr/bin/vif -check -s td
 ```
 
-Every line must report a path under the staged root, not `embedded default`.
-That is the whole packaging contract in one command.
+The settings, keymap, content and installed bot-graph lines must name paths under
+the staged root, and so must the scenario line of the second check. The main
+scenario, the sound and music banks and the `embedded default` bot line are
+embedded by design. That is the packaging contract in two commands.

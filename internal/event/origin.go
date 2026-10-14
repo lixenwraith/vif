@@ -1,7 +1,7 @@
 package event
 
-// Origin identifies the producer of an event. The dispatcher never branches on
-// it; it is carried and journaled only.
+// Origin identifies the producer of an event. The dispatcher never routes on it;
+// it is journaled and read by the wire filter, the action tally and a few handlers.
 type Origin uint8
 
 const (
@@ -10,7 +10,7 @@ const (
 	OriginMacro                 // Macro playback and auto-fire, which is a macro by another name
 	OriginCommand               // Ex command line
 	OriginNetwork               // Remote producer
-	OriginDebug                 // Harness and out-of-band control such as :region
+	OriginDebug                 // Harness and out-of-band control, such as App.Region and -script events
 	OriginSession               // Session layer, from a transport observation
 	OriginDevice                // This machine's own output, such as the audio mute
 	originCount

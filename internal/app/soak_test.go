@@ -31,7 +31,7 @@ const (
 
 // soakScale picks one of three effort profiles for a repetition or step count. The
 // default is what a change is validated against and what CI runs; full is the wide
-// seed sweep, a nightly rather than something every edit pays for.
+// seed sweep, run by hand with VIF_SOAK=full rather than paid for on every edit.
 //
 //	go test ./...  |  go test -short ./...  |  VIF_SOAK=full go test ./...
 func soakScale(short, normal, full int) int {

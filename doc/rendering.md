@@ -15,7 +15,7 @@ flowchart TD
     Clip --> Lock["lock World"]
     Lock --> Layers["render stable priority layers, clipped per layer"]
     Layers --> Unlock["unlock World"]
-    Unlock --> Finalize["background, occlusion, and void finalize"]
+    Unlock --> Finalize["background, occlusion, void, and console finalize"]
     Finalize --> Flush["terminal Flush"]
 ```
 
@@ -26,13 +26,13 @@ happen outside the world lock so a stalled host write cannot block game ticks,
 event delivery, or input routing.
 
 Before the lock the orchestrator derives the frame's playfield rectangle and
-sets it as the compositor clip for every simulation layer, restoring the full
-buffer for screen-space layers. See section 2.1.
+declares the void around it; each simulation layer then draws clipped to the
+playfield and each screen-space layer to the whole buffer. See section 2.1.
 
 Renderers are registered during application assembly. Insertion sort preserves
 priority order, and registration index is the stable tie-breaker. A renderer
 that implements `VisibilityToggle` can be registered permanently and skipped
-without rebuilding the pipeline, as used by debug projections.
+without rebuilding the pipeline, as the cursors, overlay, and pinned state are.
 
 ## 2. Render context and coordinates
 
@@ -67,10 +67,11 @@ flowchart LR
 instead of duplicating camera arithmetic. `MapToViewport` and `MapToScreen`
 report a coordinate visible only when it is both a map cell and inside the
 viewport, so an out-of-map coordinate that projects into a centered map's margin
-answers false. Both still return the projection, so a renderer anchoring a shape
-on an off-map centre can use it and let the clip trim the result. Area renderers
-should still intersect their iteration bounds with `VisibleMapBounds` to avoid
-the wasted work; the quasar zap ellipse does.
+answers false. `MapToViewport` still returns the projection (`MapToScreen`
+returns zero), so a renderer anchoring a shape on an off-map centre projects it
+there and lets the clip trim the result, as the explosion field does. Area
+renderers should still intersect their iteration bounds with `VisibleMapBounds`
+to avoid the wasted work; the quasar zap ellipse does.
 
 ### 2.1 The playfield clip
 
@@ -103,9 +104,10 @@ modes are different:
   accumulation buffer — and it holds for effects nobody has written yet.
 
 `ClipsToPlayfield` is the single classification of layers into simulation and
-screen space; post-processing, UI, and debug layers address the whole screen by
-design and stay unclipped. `TestEveryLayerDeclaresItsClip` fails when a priority
-is added without a declared side.
+screen space. Post-processing, the heat bar, indicators, status bar, and debug
+layers address the whole screen and stay unclipped; the two cursors mark map
+cells and clip. `TestEveryLayerDeclaresItsClip` fails when a priority is added
+without a declared side.
 
 Where a renderer's own geometry depends on the bound rather than merely being
 trimmed by it, it reads `PlayfieldViewportRect` directly: ping spans the map
@@ -114,13 +116,11 @@ length and intensity gradient stay correct, and the indicator gutters number
 only reachable rows and columns, leaving the rest of the frame to the void.
 
 When the map fills the game area — every `crop_on_resize` run, and every
-camera-cropped map — the playfield equals the game area and the clip is a no-op,
-so the common path composes exactly as it did before the clip existed.
+camera-cropped map — the playfield equals the game area and the clip is a no-op.
 
 The centering offset itself has one definition, `ConfigResource.MapOffset`, with
 `ConfigResource.ViewportToMap` as its inverse. Mouse routing uses the inverse, so
-the cell under the pointer is the cell the renderer drew there; deriving the two
-separately is what made a click on a centered map land short by half the margin.
+the cell under the pointer is the cell the renderer drew there.
 
 Replay separates simulation geometry from presentation geometry. The journal
 anchor fixes the former; each frame's context is re-laid for the viewer's
@@ -161,7 +161,8 @@ Focused helpers preserve the other channel:
 |---|---|
 | `SetFgOnly` | Replace rune/foreground/foreground attributes and retain background. |
 | `SetBgOnly` | Replace only background and mark it touched. |
-| `SetWithBg` | Opaque cell replacement with the current mask. |
+| `SetBgScreen` | Screen-blend a background over the cell's, or over a caller base if none was drawn yet. |
+| `SetWithBg` | Opaque cell replacement; the current mask replaces the cell's earlier tags. |
 | `SetBg256` | Store a palette index in the background channel and set the palette attribute. |
 
 `BackgroundAt` supplies a caller-selected canvas color for an untouched staging
@@ -186,8 +187,8 @@ Blend mode is encoded as an operation plus foreground/background flags.
 | Overlay | Ember ring/color shaping. |
 
 Predefined modes include both-channel variants plus foreground-only screen,
-replace, and add, and background-only max. A renderer should choose the
-narrowest channel set it needs so later layers can preserve existing content.
+replace, and add, and background-only max and alpha. A renderer should choose
+the narrowest channel set it needs so later layers can preserve existing content.
 
 The actual color math comes from `lixenwraith/color`; the selection and
 composition policy lives in `internal/render` and the concrete renderers.
@@ -211,8 +212,8 @@ which concrete renderer produced them:
 
 - grayout desaturates glyphs while excluding guidance, fields, transients,
   composites, health bars, and UI;
-- dim scales every category except UI; on a text console, where a halved color
-  is mostly black, it grays them instead;
+- dim scales every category except UI while the game is paused; on a text
+  console, where a halved color is mostly black, it grays them instead;
 - the truecolor finalizer dims selected occupied backgrounds under glyphs;
 - strobe supplies a deferred background overlay for otherwise untouched cells;
   a console shows it in one step, in its nearest background, while the envelope
@@ -238,8 +239,8 @@ playfield (the centering margin, and the gutter cells beside it) is filled with
 `visual.RgbVoid` so it reads as out of play rather than as empty map. Only
 untouched cells are repainted, so a UI or debug layer that legitimately reaches
 into the margin keeps the colors it composed, and the pass walks the four margin
-bands rather than the whole area. Setting `RgbVoid` to `RgbBackground` restores
-the undifferentiated look.
+bands rather than the whole area. Setting `RgbVoid` to `RgbBackground` makes the
+void indistinguishable from the map.
 
 Every cell also leaves finalization with a glyph, a space where none was drawn.
 After a resize the terminal module records its screen as zero cells over a
@@ -278,8 +279,8 @@ also the visual stacking order; exact integer priorities are in
 |---|---|
 | Background/guidance | `ping` |
 | Environment/guidance | `wall`, `chargeline` |
-| Base entities | `sigil`, `glyph`, `gold`, `healthbar` |
-| Species/structures | `pylon`, `tower`, `storm`, `eye`, `snake`, `drain`, `quasar`, `swarm` |
+| Base entities | `sigil`, `glyph`, `gold` |
+| Species/structures | `pylon`, `tower`, `storm`, `kraken`, `eye`, `snake`, `drain`, `quasar`, `swarm`, then `healthbar` over them |
 | Tracer/materialize | `tracer`, `materialize`, `teleportline` |
 | Fields/projectiles | `shield`, `ember`, `orb`, `lightning`, `missile`, `pulse`, `ray`, `bullet` |
 | Particles | `flash`, `fadeout`, `explosion`, `spirit` |
@@ -317,19 +318,19 @@ on — drawing them the same way would make the two indistinguishable exactly wh
 matters, which is when they overlap. `PriorityPeerCursor` sits directly under
 `PriorityCursor` so an overlap resolves in favour of the one the player is steering.
 
-Before `peer_cursor` existed a participant was visible only through the effects it
-happened to be projecting — its shield, its ember — so one holding none was not on
-the map at all. The local cursor and the inverted marker read the cell underneath
+`peer_cursor` keeps a participant visible even when it projects no shield or
+ember. The local cursor and the inverted marker read the cell underneath
 through one `cellContent`, which picks the cell's top glyph as typing does, so
 what they show is what a keystroke would hit.
 
-Peer shield and ember fields keep their owner's color and geometry but compose at
-30% of local intensity over the existing or theme background. Indexed rendering
-quantizes the same dimmed blend. Ember walks the fixed roster instead of every
-shield, keeps one heat cache per slot, and commits its layers in one background
-write. Both field renderers compose peers first and the local cursor last, without
-sorting or changing store/slot order. The distinction remains render-only; no
-transported state changes.
+Peer shield and ember fields keep their owner's color and geometry. In truecolor
+they compose at `visual.PeerFieldBlend` (30%) of local intensity over the
+existing or theme background; in 256-color they are drawn undimmed, since the
+console would show a dimmed rim as black. Ember walks the fixed roster instead
+of every shield, keeps one heat cache per slot, and commits its layers in one
+background write. Both field renderers compose peers first and the local cursor
+last, without sorting or changing store/slot order. The distinction remains
+render-only; no transported state changes.
 
 ## 8. Renderer responsibilities
 
@@ -364,12 +365,12 @@ first when space is tight. After the mode label a fixed key cell
 shares its cells or its time with a message. Typed input takes the space it needs
 from the right-side items; a status message takes it from the metrics only. A
 message is a notice or an alert (`parameter.StatusKinds`): the newest replaces the
-one shown unless that one is an alert younger than its minimum, and each leaves
-after its kind's wall time. Its
+one shown, except that a notice does not displace an alert younger than its
+minimum, and each leaves after its kind's wall time. Its
 colors come from one palette per color mode: the theme's in truecolor, and on a
 text console fixed entries, each apart from the items beside it and with the text
 that reads best on it. The audio state is a letter: X muted, S effects, M music,
-O both.
+O both; it is absent without an audio engine.
 
 The relative row and column gutters number only the rows and columns the
 playfield covers and mark the rest with the void color, so the chrome agrees
@@ -388,7 +389,7 @@ wall. Pattern results become simulation spawn data; they are not drawn by
 bypassing the ECS/render pipeline.
 
 The `cmd/ascimage` tool performs image conversion and viewing. The external
-terminal/color modules now own general terminal and RGB primitives; vif
+terminal/color modules own general terminal and RGB primitives; vif
 retains only game-specific asset interpretation and layering.
 
 ## 11. Adding a renderer
@@ -417,6 +418,8 @@ retains only game-specific asset interpretation and layering.
 | Context/transforms | `internal/render/context.go` |
 | Replay presentation and pan | `internal/app/play.go` |
 | Buffer/finalization | `internal/render/buffer.go` |
+| Text-console palette and quantizer | `internal/render/console.go` |
+| Color mode selection | `internal/app/presentation_terminal.go` |
 | Blending | `internal/render/blender.go`, `color.go` |
 | Layer priorities and clip classification | `internal/render/priority.go` |
 | Rectangles and clipping geometry | `internal/render/rect.go`, `context.go` |

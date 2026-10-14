@@ -13,8 +13,8 @@ The same simulation can therefore run in a full client and a dedicated server
 without presentation becoming part of multiplayer identity.
 
 This document records the current profile contract, what each supported platform
-can actually do, and the extension seams for browser networking, downloadable
-content, a non-text renderer, and Android.
+can actually do, how a browser joins a session, and the extension seams for
+downloadable content, a non-text renderer, and Android.
 
 ## 1. Current build profiles
 
@@ -36,6 +36,7 @@ The useful commands are:
 
 ```bash
 make release                 # bin/vif
+make nolog                   # bin/vif without the logger
 make headless                # bin/vif-headless
 make wasm                    # web/vif.wasm
 make windows                 # bin/vif.exe
@@ -45,7 +46,8 @@ go build -tags='vif_headless novlog' ./cmd/vif
 ```
 
 The dedicated binary deliberately refuses presenting modes. Its normal entry is
-`vif-headless -serve <address>`; an unpresented `-script` is also valid. This turns
+`vif-headless -serve <address>`; an unpresented `-script`, a `-headless` bot run
+and `-replay -headless` verification are also valid. This turns
 an accidental attempt to run interactive play from a server artifact into an
 early configuration error rather than a nil terminal failure.
 
@@ -99,17 +101,16 @@ gameplay code by platform.
 
 ## 3. Reference artifact measurements
 
-These are reference measurements from this change using Go 1.27.1,
-`linux/amd64`, `-trimpath`, and `-ldflags='-s -w'`. They are not release budgets;
-toolchain and source changes will move them.
+Measured with Go 1.27.2 and the release workflow's flags: `CGO_ENABLED=0`,
+`-trimpath`, `-ldflags='-s -w'`, `linux/amd64` for the native profiles. They are
+not release budgets; toolchain and source changes move them.
 
 | Artifact | Bytes | MiB | Comparison |
 |---|---:|---:|---:|
-| Full native | 13,496,583 | 12.87 | baseline for native profiles |
-| `vif_noaudio` native | 13,127,943 | 12.52 | 2.73% smaller than full |
-| `vif_headless` native | 12,484,871 | 11.91 | 7.50% smaller than full |
-| WASM before the audio split | 23,081,208 | 22.01 | previous artifact |
-| WASM after the audio split | 22,459,370 | 21.42 | 2.69% smaller than previous |
+| Full native | 16,580,768 | 15.81 | baseline for native profiles |
+| `vif_noaudio` native | 16,195,744 | 15.45 | 2.32% smaller than full |
+| `vif_headless` native | 15,130,784 | 14.43 | 8.74% smaller than full |
+| Browser (`js/wasm`, `vif_noaudio`) | 28,197,392 | 26.89 | — |
 
 Size is the visible result, not the primary invariant. The stronger checks are
 that these commands print no renderer or audio-engine package:
@@ -122,17 +123,17 @@ GOOS=js GOARCH=wasm go list -deps ./cmd/vif \
   | grep '/pkg/audio$'
 ```
 
-Both commands should produce no output. The container continues to be one static
-binary in `scratch`; its exact layer size should be measured for each release.
+Both commands should produce no output. The container is one static binary in
+`scratch`; its exact layer size should be measured for each release.
 
 ## 4. Platform matrix
 
 | Target | Current support | Important constraints |
 |---|---|---|
 | Linux | Developed and tested | Full audio backend discovery, Unix terminal/crash handling, TCP sessions, dedicated image |
-| FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp`; the deployed node may itself be a VM on FreeBSD without changing the guest build |
+| FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp` |
 | Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`; audio and logging omitted; published as an untested zip, not a development focus, and may be removed if field reports show it is broken |
-| `js/wasm` | Solo play tested; session join built, not yet commissioned | xterm.js presentation; no audio, filesystem discovery, process execution, logging sink, or raw sockets. A session is joined over the page's own WebSocket (§5), never a socket |
+| `js/wasm` | Solo play and session join; a tab that leaves is still being commissioned ([fleet W1](kubernetes-fleet.md#3-work-list)) | xterm.js presentation; no audio, filesystem discovery, process execution, logging sink, or raw sockets. A session is joined over a browser WebSocket (§5), never a socket |
 | Other native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 
 The simulation uses `float64` and live sessions include concurrent scheduling.
@@ -147,10 +148,10 @@ authoritative correction remains the live convergence mechanism.
 The game protocol is a framed byte stream, and a browser has exactly one
 bidirectional byte stream: a WebSocket. It has no arbitrary socket, and `js/wasm`'s
 `net` package is a fake networking surface rather than a way around that. So the
-browser build dials the session's WebSocket route and wraps the page's own
-`WebSocket` object as a `net.Conn` — reads block on arriving binary messages,
-writes send one encoded frame each, and deadlines and closure behave as the
-transport already expects. `network.dial` is the only seam; everything above it,
+browser build dials the session's WebSocket route and wraps the browser's
+`WebSocket` object, opened in the program's Worker, as a `net.Conn` — reads block
+on arriving binary messages, writes send one encoded frame each, and deadlines and
+closure behave as the transport already expects. `network.dial` is the only seam; everything above it,
 including `SocketPort`, the handshake, the fences and the snapshot assembly, is the
 code a native client runs.
 
@@ -163,8 +164,8 @@ route with `pkg/websocket`, whose `Conn` has the same shape: a byte stream acros
 messages, one frame per write, deadlines passed to the socket.
 
 The browser is refused `-host` and `-serve` before initialization, because it can
-bind nothing, and a `-join` or `:join` naming a `host:port` for the same reason. A
-browser guest never advertises a port, even in a migrate session.
+bind nothing, and a `-join` or `:join` naming a `host:port`, because it can dial no
+socket. A browser guest never advertises a port, even in a migrate session.
 
 ### What the browser adds to a link
 
@@ -190,10 +191,11 @@ whole screen once. Drawing on would queue some 60 KB/s of terminal output behind
 page's throttled timers, which the terminal then replays at speed on return.
 
 A browser that freezes the tab instead, as Chrome may under its energy or memory
-saving and mobile browsers readily do, stops the Worker, so nothing reads the socket. The session drops the participant after `DisconnectTimeout` (30 s)
-of silence, as it drops any silent peer, and on return the page shows "Host
-connection lost; continuing locally"; reloading the same link rejoins while the
-session lives.
+saving and mobile browsers readily do, stops the Worker, so nothing reads the
+socket. The session drops the participant after `DisconnectTimeout` (30 s) of
+silence, as it drops any silent peer, and on return the page shows "Host connection
+lost; continuing locally from the last authoritative state"; reloading the same
+link rejoins while the session lives.
 
 ### Where WebSocket is spoken
 
@@ -224,42 +226,44 @@ borrow. `-join ws://host:7777/<name>` joins it from a terminal or a page.
 
 `network.AdmissionLimiter` is per address, and the pod sees browsers at the node's
 address, as it sees front-door players, so per-player admission is the
-allocator's: one budget per address over both routes, keyed on the address the
-edge writes into `-client-address-header` ([fleet §4](kubernetes-fleet.md#4-security-posture)).
+allocator's: one budget per address over both routes, keyed on the front door's
+socket address and on the address the edge writes into `-client-address-header`
+([fleet §4](kubernetes-fleet.md#4-security-posture)).
 
 ### The public route
 
 ```mermaid
 flowchart LR
-    Browser["Browser WASM"] -->|"wss://"| Nginx["Host Nginx"]
+    Browser["Browser WASM"] -->|"wss://"| Nginx["Site nginx, TLS"]
     Nginx -->|"Upgrade"| Allocator["vif-allocator"]
     Allocator -->|"payload, TCP 7777"| Pod["vif -serve"]
 ```
 
 `wss://<site>/vif/ws/<session>`. The session identifier is a routing key, not a
-secret. Nginx terminates TLS and forwards `Upgrade` without interpreting a frame.
-The allocator checks the method, the identifier's syntax, the `Origin`, the
-session's liveness and readiness in reconciled Kubernetes state, and its own
-per-session ceiling; only then does it answer the upgrade, and it never accepts an
-upstream a caller named.
+secret. The site's nginx terminates TLS and forwards `Upgrade` without interpreting
+a frame. The allocator checks the method, the identifier's syntax, that the request
+is an upgrade, the `Origin`, the address's join budget, the session's liveness and
+readiness in reconciled Kubernetes state, and its own per-session ceiling; only then
+does it answer the upgrade, and it never accepts an upstream a caller named.
 
 For a page served over HTTPS the endpoint must be `wss://`: browsers block
-`ws://` as active mixed content. The site's `connect-src 'self'` permits the
-same-origin socket. Ordinary CORS headers are not a substitute for the `Origin`
-check. Browser admission credentials are a later control-plane feature and should
-be short-lived and session-scoped when introduced.
+`ws://` as active mixed content. The route is same-origin with the page, so a
+`connect-src 'self'` policy permits it. Ordinary CORS headers are not a substitute
+for the `Origin` check. Browser admission credentials are open control-plane work
+and should be short-lived and session-scoped.
 
 Native clients use raw TCP, through the allocator's front door or the session's
 own NodePort ([fleet §9](kubernetes-fleet.md#9-the-session-routes)), or this
 route where a network blocks those; a native client's `Origin` is the URL's own.
-The allocator has outgrown pure allocation now that it owns routing and admission;
-keep those duties behind explicit interfaces so the process can be renamed or split
-without moving Kubernetes lifecycle code into the game.
+The allocator owns routing and admission as well as allocation; keep those duties
+behind explicit interfaces so the process can be renamed or split without moving
+Kubernetes lifecycle code into the game.
 
 ## 6. Browser launch arguments
 
-Go's browser support already accepts an argument vector through `Go.argv` in
-`wasm_exec.js`. `web/terminal.js` fills it from two page-controlled sources:
+Go's browser support accepts an argument vector through `Go.argv` in
+`wasm_exec.js`. `web/terminal.js` builds it from two page-controlled sources and
+`web/worker.js` hands it to the program:
 
 1. `window.VIF_ARGS`, set before the terminal script loads;
 2. repeated `arg` query parameters.
@@ -303,46 +307,54 @@ does not make that file exist in the browser filesystem.
 The page passes `-join=wss://<site>/vif/ws/<session>` through this bridge; typing
 `:join <that link>` in a running solo game does the same without a reload. A
 `ws://` or `wss://` target is dialled whole, and its last path segment is the name
-sent first, as a `vif://` link's is; every other form a native build takes is
-refused here (see the address grammar in [Services](services-and-networking.md)).
+sent first, as a `vif://` link's is. An `http(s)://` site creates a session, and the
+page joins the WebSocket route the site answers with; a host:port, `tcp://` or
+`vif://` target is refused here (see the address grammar in
+[Services](services-and-networking.md)).
 
 A browser has no terminal to print an exit error to, so the launcher keeps the
 tail of stderr and, once the program exits, shows its last line (or the crash
-that ended it) in place of the terminal. A refused or failed join reads there.
+that ended it) in place of the terminal. A refused or failed join reads there. The
+page then terminates the Worker and posts it nothing more, so a later resize or
+visibility change cannot replace that reason.
 
 ## 7. External maps and assets
 
-Today the browser uses embedded fallback assets. Native builds can additionally
-resolve the editable `wad/` tree and categorized user/system config roots. CLI
-arguments alone cannot bridge that difference.
+A browser has no config root: solo, it plays the embedded scenario, content and
+keymap, and CLI arguments alone cannot give it the editable `wad/` tree a native
+build resolves.
 
-A shared native/browser content path should use a resource provider rather than
-make systems fetch URLs. A practical sequence is:
+A guest already receives custom maps. When the scenario it resolves does not have
+the session's digest, the coordinator serves it during the join, between the offer
+and the reply: the canonical `resource.Scenario` container (at most 64 files, 256 KiB a
+file, 1 MiB in all), deflated, verified against the digest and held in memory for
+the run ([Services §7.2](services-and-networking.md#72-join-identity-and-who-decides-it)).
+A browser guest takes it the same way. Content never travels on the
+tick/correction channel, where it would couple simulation latency, frame bounds and
+content size.
 
-1. resolve a small, versioned manifest over HTTPS;
-2. validate schema, declared byte limits, content hashes, and allowed media types;
-3. fetch a content-addressed bundle or its named blobs;
-4. cache by digest where the platform permits it;
-5. expose the verified files through the existing resource/provider boundary;
-6. construct a new `App` with the resolved config, content, keymap, image, and
-   optional audio resources.
+What remains is a client with no config root and no peer, such as a page before it
+has joined anything ([todo](todo.md#fetch-a-content-addressed-bundle-over-http)).
+It should read the same container through an HTTP-backed resource provider rather
+than make systems fetch URLs:
 
-Reconstructing the `App` is safer than mutating a running world's configuration:
-the FSM, corpus identity, map bounds, system toggles, and session fingerprint are
-established during initialization. It can look like a restart to the page without
-reloading the WASM module.
+1. fetch the container by its digest over HTTPS;
+2. hold it to the bounds and the digest check a transferred scenario meets;
+3. cache by digest where the platform permits it;
+4. expose it through the provider boundary, as `resource.Options.Provided`
+   exposes a transferred scenario;
+5. construct a new `App` with it.
 
-For future custom multiplayer maps, the host should negotiate a bundle identity
-and an HTTPS location during admission. A guest downloads and verifies it before
-accepting the session anchor. Large content should not travel on the tick/correction
-channel: doing so would couple simulation latency, frame bounds, and content size.
-The same manifest and hash policy can be implemented by a native HTTP provider so
-custom maps have one trust and identity model on every platform.
+Constructing a new `App`, as a scenario change or a `:join` already does in the
+same process, is safer than mutating a running world's configuration: the FSM,
+corpus identity, map bounds, system toggles, and session fingerprint are
+established during initialization. A native HTTP provider can share the policy, so
+a fetched and a transferred scenario have one identity model on every platform.
 
-The content policy still needs explicit decisions about maximum compressed and
-expanded size, allowed origins, cache lifetime, signature or publisher trust, and
-whether executable-like FSM actions from an untrusted host are acceptable. Hashing
-proves identity and integrity; it does not establish trust.
+The format and its limits are decided. The provider still needs decisions about
+publisher trust, allowed origins, cache lifetime, and whether executable-like FSM
+actions from an untrusted source are acceptable. Hashing proves identity and
+integrity; it does not establish trust.
 
 ## 8. Adding another renderer or Android host
 
@@ -374,11 +386,12 @@ the same omission or adapter.
 ## 9. Verification and release concerns
 
 `make verify` compiles the full, `novlog`, audio-free, dedicated, browser, and
-Windows command variants in addition to the normal test and vet gates. A release
-should also run:
+Windows variants, tests the audio-free and dedicated profiles, and runs the §3
+dependency checks in addition to the normal test and vet gates. A release should
+also run:
 
 ```bash
-go generate ./internal/event ./internal/manifest
+go generate ./internal/manifest
 go build ./...
 go test ./...
 go vet ./...
@@ -387,16 +400,15 @@ node --check web/terminal.js
 node --check web/worker.js
 ```
 
-Compilation is not runtime certification. Before browser networking is advertised,
-test through the production TLS proxy and CSP with slow links, partial frames,
-reconnects, large captures, tab suspension, and allocator/session expiry. Linux
-and FreeBSD release checks should continue to include a real terminal;
-audio-capable artifacts also need at least one real or `null`/WAV backend smoke
-test. Windows remains an unpromised cross-build and has no runtime certification
-work on the release path.
+Compilation is not runtime certification. What the browser route still has to
+show is a tab that leaves, hidden or suspended, and a session whose last guest was
+a browser ([fleet W1](kubernetes-fleet.md#3-work-list)). Linux and FreeBSD release
+checks should include a real terminal; audio-capable artifacts also need at least
+one real or `null`/WAV backend smoke test. Windows remains an unpromised
+cross-build and has no runtime certification work on the release path.
 
 The remaining policy decisions are deliberately separate from transport:
 
 - browser authentication and whether the expanded allocator is renamed or split;
-- downloadable bundle format, compressed and expanded limits, trust, and cache policy;
+- publisher trust, allowed origins and cache policy for a fetched container (§7);
 - exact renderer-neutral model boundaries needed for the one-month Android target.

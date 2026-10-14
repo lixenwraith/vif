@@ -33,7 +33,7 @@ guest's bots join and play through its own link. What remains is under
 - Priority: P1, after bots
 - Affected files: terminal-shaped input/cell/color values, `internal/app`, host
   entry points
-- Prerequisite: the bots' input seam; define the minimum visual contract
+- Prerequisite: define the minimum visual contract
 
 Target a minimally polished Android build within one month of development time.
 Move terminal-specific visual and input values behind positive renderer/host
@@ -50,7 +50,7 @@ values that remain.
 - Affected files: the Hugo site's `vif-fleet.js`, `internal/network/endpoint.go`,
   `internal/mode/config_form.go`, `tool/vif-allocator`, `deploy/guest/vif-allocator.env`,
   `deploy/k3s/10-quota.yaml`
-- Guide: [Session fleet plan](kubernetes-fleet.md) §6
+- Guide: [Session fleet](kubernetes-fleet.md) §6
 
 The allocator takes `bots`, but `bots_max` stays 0 until these hold:
 - The site's `vif-fleet.js` sends `bots` and reads `bots_max`; the native client
@@ -99,8 +99,9 @@ by `profile.Contact` needs a `CombatEntityType`-to-`SpeciesType` table.
 - Priority: P3
 - Affected files: `internal/input/actionnames.go`, `internal/bot/mind.go`
 
-`input.IntentFor` refuses operators, prefixes, marker jumps and macro keys, so a
-graph cannot delete a word or jump to a coloured glyph. Options: a `motion` operand
+`input.IntentFor` refuses the actions that only open a key sequence
+(`operator_delete`, `prefix_g`, `prefix_macro_play`, `marker_glyph_*`), so a graph
+cannot delete a word or jump to a coloured glyph. Options: a `motion` operand
 on `Intent` that applies an operator to a named motion, which keeps graphs
 semantic; or a `Keys` action parsed through the keymap, which reaches everything a
 keymap binds but depends on the bindings. A right press carries no position, so
@@ -269,8 +270,8 @@ time knows an editor made it.
   parameter order and per-parameter docs, since a TOML table has no order; root
   `[[expand]]` for blocks spanning several states or a whole region; and provenance,
   so a load error such as an unknown target lands on the block that produced it.
-- **Vocabulary.** Action, guard and event pickers read `-schema`, which lists names
-  only until the argument catalog lands.
+- **Vocabulary.** Action, guard and event pickers read `-schema`, which lists actions
+  and guards by name only, without arguments, until the argument catalog lands.
 - **Map layer.** Geometry is generated at run time (`EventLevelSetup`, maze rooms,
   `.vifimg` walls). A painted map needs a static form the digest covers, and
   `.vifimg` assets come from the `image/` category, which it does not and a joiner
@@ -281,7 +282,7 @@ time knows an editor made it.
   validates with `resource.ValidateScenario` and restarts on it as `:n` does, since
   a run plays one scenario. Editing inside a multiplayer session is out of scope.
 
-Phases: the argument catalog; reference kinds, order and provenance; a read-only
+In order: the argument catalog; reference kinds, order and provenance; a read-only
 graph of a scenario's regions, states and blocks; placing and editing blocks into
 editor-owned files; the map layer and point markers; root `[[expand]]` blocks and
 library copies.
@@ -293,13 +294,15 @@ library copies.
 - Priority: P2
 - Affected files: `pkg/navigation/flowfield.go`, `internal/system/navigation.go`
 
-Navigation's fields are computed only for a reader, at most once per 5-tick cooldown,
-and a 199x97 field is 3.0 ms under WASM; solo play with nothing chasing now costs
-0.1 ms a tick. A busy map pays those 3 ms for every field read when it falls due,
-and several groups' fields can fall due in one tick. Next, in order: compute a field over 2x2 blocks, about a quarter
-of the cells, where its directions mostly agree with the full field's away from walls;
-then a second Go instance in another worker computing fields at a fixed lead, at the
-cost of a second runtime and of copying the grid in and the field out.
+Navigation computes a field only for a reader and, while a valid field covers the
+same number of targets, at most once per 5-tick cooldown; a 199x97 field is 3.0 ms
+under WASM, and in solo play with nothing chasing, navigation costs 0.1 ms a tick.
+A busy map pays those 3 ms for every field read when it falls due, and several
+groups' fields can fall due in one tick. Next, in order: compute a field over 2x2
+blocks, about a quarter of the cells, where its directions mostly agree with the
+full field's away from walls; then a second Go instance in another worker computing
+fields at a fixed lead, at the cost of a second runtime and of copying the grid in
+and the field out.
 
 ### Serve wss from vif's own listener
 
@@ -428,10 +431,9 @@ Diagnoses and what each item follows from are in
 - Affected files: `pkg/navigation/flowfield.go`, `internal/system/interaction.go`,
   `internal/engine/world_copy.go`
 
-At td with 16 players a tick was about 2.6 ms at `GOMAXPROCS=1`, before flow fields
-moved to a bucket queue, a 5-tick cooldown and computing only for a reader: field
-derivation was about 45% of it and `checkCursorOverlap`'s position lookups a
-quarter. Measure again before choosing between them. A
+Measure a td tick with 16 players at `GOMAXPROCS=1` and trim the larger of field
+derivation and `checkCursorOverlap`'s position lookups; with eager, heap-searched
+fields on a 3-tick cooldown they were about 45% and a quarter of a 2.6 ms tick. A
 checkpoint scans the whole grid for its occupied cells, most of its 10 ms. Each must
 stay exact; per-store write counters stay rejected, since a cache compares values it
 owns.
@@ -491,10 +493,10 @@ upstream; owner syncs as deltas; and rounds aligned across peers.
 At td an install that projects nothing already holds the live lock 40–70 ms for the
 capture pair, comparison and write, and each projected tick adds up to a simulation
 tick, so a repair 16 ticks behind holds it past 100 ms. Reduce the O(E) part first.
-Any out-of-lock or incremental design must keep §3.3: fence membership, pending
-barrier crossings not fed, the ledger settled before projection, the journal's place
-and mark, and no live tick between the final projection and the write. WASM gains
-scheduling time, not parallel CPU.
+Any out-of-lock or incremental design must keep [Multi-player](multi-player.md) §3.3:
+fence membership, pending barrier crossings not fed, the ledger settled before
+projection, the journal's place and mark, and no live tick between the final
+projection and the write. WASM gains scheduling time, not parallel CPU.
 
 ### Hold the next run's keyframe through a reset
 
@@ -513,7 +515,7 @@ Holding a keyframe of the next run until the guest enters it, through
 - Affected files: `internal/app/session.go`, `internal/network/session.go`,
   `internal/network/endpoint.go`, `internal/app/loop.go`
 
-A bind or dial now names the player's next step; these gaps remain:
+A bind or dial names the player's next step; these gaps remain:
 - A playing host never learns why a joiner was refused: accept and handshake
   failures only reach the log, and `port.Errors()` is drained only by a lobby.
 - A refusal written after the joiner's reply goes out raw while the joiner reads
@@ -525,13 +527,27 @@ A bind or dial now names the player's next step; these gaps remain:
 ### Pace repairs as bodies are paced
 
 - Priority: P3
-- Affected files: `internal/converge/selective.go`, `internal/snapshot/shard.go`
+- Affected files: `internal/converge/selective.go`, `internal/converge/correction.go`,
+  `internal/snapshot/shard.go`
 
-A repair set leaves as one frame of up to `SnapshotShardBytesMax` (48 kB), so on a
-link at the tower's floor it can hold the epochs behind it for two seconds, where a
-body now waits behind one 4 KiB chunk ([Troubleshooting](troubleshooting.md) §16).
-Carrying it in the correction chunk envelope through the per-peer outbox bounds that
-too. Repairs at 20 kB/s have so far been a few kilobytes.
+A repair set waits for a busy link in the per-peer queue a body uses, but leaves as
+one frame of up to `SnapshotShardBytesMax` (48 kB), so on a link at the tower's floor
+it can hold the epochs behind it for two seconds, where an epoch waits behind at most
+one 4 KiB body chunk ([Troubleshooting](troubleshooting.md) §16). Sending it in
+`SnapshotCorrectionChunkBytes` chunks, as a body is, bounds that too. Repairs at
+20 kB/s have so far been a few kilobytes.
+
+### Credit a shared tower to the session
+
+- Priority: P3
+- Affected files: `internal/system/tower.go`, `internal/system/combat.go`,
+  `internal/asset/scenario/tower.toml`
+
+A tower's `CombatComponent.OwnerEntity` is the one cursor the FSM's `player_entity`
+names, so `applyHitDirect` and `applyHitArea` credit one participant for a structure
+the session shares ([Multi-player](multi-player.md#8-remaining-gaps) §8). Decide
+between a hybrid shared/local shape, as the cursor and its shield have, and an
+"every player" ownership value that attribution expands.
 
 ## Session membership
 
@@ -578,6 +594,18 @@ operator route on the allocator, since a dedicated host has no console. Keeping 
 dropped player out is a separate decision: the session name is a routing key, not
 an identity.
 
+### Drop the cursors a linked instance cannot reach
+
+- Priority: P3
+- Affected files: `internal/app/session.go`, `internal/converge/authority.go`
+
+`dropAbandonedCursors` acts only on an instance left with no link, so a successor
+some survivors could not reach, or a fork still linked to its own bots, keeps every
+roster entry, and a participant it has no path to stays a cursor nothing moves
+([Multi-player](multi-player.md#52-the-roster-after-a-loss) §5.2). Decide who
+produces those departures, and at which tick, on an instance that still has peers
+to agree one with.
+
 ### Merge two sessions
 
 - Priority: P3
@@ -619,16 +647,16 @@ through snapshots and synchronization. Stun immunity remains target-wide.
 
 - Priority: P2
 - Affected files: `internal/system/combat.go`, `internal/component/combat.go`,
-  `internal/snapshot/digest.go`, `doc/generic-kinetic.md`, `doc/troubleshooting.md`
+  `internal/snapshot/digest.go`, `doc/generic-kinetic.md`
 
 Both kinetic hit sites (`combat.go:557`, `:733`) land only while
 `RemainingKineticImmunity` is zero, so every accepted knockback opens the window:
 `spendKineticImmunity` always reports opened, `joining` never composes an impulse,
 and `KineticImmunitySpent` is written but read only by the digest. Generic kinetic
-§5 and troubleshooting §4 ("Since.") still describe a per-attacker kinetic budget
-whose joiners add. The target-wide gate is the intended rule (see the item above),
-so delete the joiner path, the field and its digest line, and correct both texts;
-the field's removal is a capture schema bump.
+§5 still describes a per-attacker kinetic budget whose joiners add. The target-wide
+gate is the intended rule (see the item above), so delete the joiner path, the field
+and its digest line, and correct that text; the field's removal is a capture schema
+bump.
 
 ### Let mounted weapons strike more than cursors
 
@@ -647,7 +675,8 @@ PvP: a hit on a remote cursor crosses as its impact and the victim's owner appli
 ### Tune the charge-cap effects after play tests
 
 - Priority: P1
-- Affected files: `internal/parameter/{combat,player}.go`, `internal/component/tracer.go`
+- Affected files: `internal/parameter/{combat,player,effect}.go`,
+  `internal/system/weapon.go`
 
 Arc reward (an arc pays the lightning's full energy reward; halve it if the cap doubles the rod's income too far), the sustained ray's scale (three damage per covered member per immunity window, continuously), the burn figures and whether the charged pulse's stun should shorten to offset them, `LightningArcRange`, `WeaponStreamInterval` and `TurretStream`, the gun's lane offsets at two charges, `LightningZapDuration` for an arc, and a burn tint on species renderers, which show only the hit flash per tick now.
 
@@ -661,7 +690,7 @@ Only a scenario's `EventWeaponAddRequest` or god mode raises the gun past one ch
 ### Direct the gun by scenario
 
 - Priority: P3
-- Affected files: `internal/component/weapon.go`, `internal/system/tracer.go`, `internal/fsm`
+- Affected files: `internal/component/weapon.go`, `internal/system/weapon.go`, `internal/fsm`
 
 `WeaponSpec.Directions` is a cardinal mask the spawn already reads; a side-scroller needs a level to set one direction, which waits on scenario authoring.
 
@@ -772,6 +801,33 @@ restates `EngineConfig.PerturbationStrength`; collapse each pair. The `fitness`
 context keys and most `tracking` metric keys are conventions of this game, and
 the `persistence` default codec is the one external dependency: make JSON the
 default and move the TOML codec to the caller, or drop the subpackage.
+
+## Engine
+
+### Initialize systems in dependency order from the engine
+
+- Priority: P3
+- Affected files: `internal/engine/world.go` (`CheckSystemDependencies`),
+  `internal/app/app.go` (`initScheduler`), each system's constructor and
+  `EventGameResetRequest` handler in `internal/system`
+
+Half of this exists: the manifest declares each system's `Requires` and startup
+checks the graph for unknown names and cycles. The other half does not: each
+system still calls its own `Init` in its constructor (manifest order) and again
+on reset (handler order). The engine would instead call `Init` once per system
+in the graph's `core.TopoSort` order, at startup and on reset, and the per-system
+calls would go.
+
+### Give the composite lifecycle methods a user
+
+- Priority: P3
+- Affected files: `internal/system/composite.go`
+
+`CompositeSystem` carries `handleEmptyComposite`, `CreateHeader`, `AddMember`,
+`DestroyComposite` and `GetAnchorForMember`, designed for building and tearing
+down composites at run time, but no system or scenario uses them. A species or
+scenario that assembles composites would; it reaches them through events, since
+another system may not call them directly.
 
 ## Tests
 

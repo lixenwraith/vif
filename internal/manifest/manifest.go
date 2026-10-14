@@ -1,13 +1,8 @@
+// Package manifest declares the authoritative component, system and renderer lists
+// (definition.go), the simulation fingerprint two participants share, the FSM bridge
+// and the FSM schema -schema prints. `go generate ./internal/manifest` derives the
+// engine stores, domain table, snapshot code and builders from definition.go, the
+// event registry from event/type.go, and the input enum strings from internal/input.
 package manifest
 
 //go:generate go run ../gen-manifest
-
-// Package manifest contains the authoritative game component, system, and renderer definitions
-//
-// Code generation:
-//   - internal/engine/component_store_gen.go: Component struct, entity lifecycle methods
-//   - internal/manifest/build_gen.go: typed system and renderer builders, ActiveSystems
-//   - internal/event/registry_gen.go: Event registry, derived from event/type.go
-//   - internal/input/strings_gen.go: Reverse lookup strings for input constants
-//
-// Run 'go generate ./internal/manifest' to regenerate.

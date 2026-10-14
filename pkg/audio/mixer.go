@@ -120,14 +120,10 @@ func (m *Mixer) Stop() {
 }
 
 // Wait blocks until the mix goroutine has returned, reporting whether it did so
-// within timeout. A true return is a happens-before edge against every
-// mixer-confined write, which is what makes post-Stop inspection of the cache,
-// the kit or the sequencer well-defined rather than merely temporally ordered.
-//
-// timeout <= 0 polls without blocking. A false return means the goroutine is
-// still inside output.Write on a backend that stopped draining: the caller has
-// no edge and must not touch mixer-confined state or reset the registries.
-// Returns true if Start was never called.
+// within timeout (<= 0 polls); true at once if Start was never called. A true
+// return is a happens-before edge against every mixer-confined write. A false one
+// means the goroutine is still inside output.Write on a backend that stopped
+// draining: the caller must not touch mixer-confined state or reset the registries.
 func (m *Mixer) Wait(timeout time.Duration) bool {
 	if !m.started.Load() {
 		return true
@@ -172,7 +168,7 @@ func (m *Mixer) loop() {
 	mixBuf := make([]float64, n)
 	outBytes := make([]byte, n*AudioBytesPerFrame)
 
-	// Pause fade is per-sample (was 5×0.2 staircase across ticks)
+	// Pause fade steps per sample, not per tick
 	pauseStep := 1.0 / (AudioPauseFade.Seconds() * float64(AudioSampleRate))
 	duckAtk := onePoleCoef(MusicDuckAttack)
 	duckRel := onePoleCoef(MusicDuckRelease)
@@ -274,8 +270,8 @@ func (m *Mixer) startSound(st SoundID, vol float64) {
 			m.rapidVol[st] = RapidFireMinVolume
 		}
 	} else {
-		// gradual recovery replaces instant reset — sustained fire
-		// at real cadence previously reset to full volume every shot
+		// recovery is in proportion to the gap, so sustained fire at
+		// real cadence does not return to full volume every shot
 		rec := elapsed.Seconds() / RapidFireRecovery.Seconds()
 		if rec > 1 {
 			rec = 1

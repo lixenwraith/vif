@@ -229,9 +229,9 @@ func (s *LootSystem) Update() {
 
 		targetX, targetY, routed := s.homingTarget(lootComp, kineticComp, curX, curY, ownerPos, hasOwner)
 		if routed {
-			// Cornering brake, as every homing species applies it: acceleration
-			// alone conserves the sideways component of an approach, which is what
-			// left a drop circling its own cursor until something else moved it.
+			// Cornering brake, as drains, swarms, quasars and eyes apply it:
+			// acceleration alone conserves the sideways component of an approach,
+			// which leaves a drop circling its own cursor until something else moves it.
 			turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
 				parameter.NavCorneringThreshold, 1.0)
 			physics.ApplyHoming(&kineticComp.Kinetic, targetX, targetY, &profile.LootHoming, dtSec)

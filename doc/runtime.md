@@ -11,18 +11,19 @@ operated on by the runtime, see [ECS and events](ecs-and-events.md).
 | Mode | Presents | Driven | Geometry/input owner | Audio | Execution |
 |---|---:|---:|---|---:|---|
 | `ModePlay` | Yes | No | terminal / terminal | If built | `PausableClock`; scheduler and event goroutines |
-| `ModeHeadless` | No | Yes | caller / caller | No | `ManualClock`; harness or authored `ScriptDriver` invokes ticks and injections; an authored host/join script may attach network I/O |
+| `ModeHeadless` | No | Yes | caller / caller | No | `ManualClock`; a harness, `journal.ScriptDriver`, `bot.Driver`, or `journal.ReplayDriver` verifying a journal invokes ticks and injections; a script or bot in a session attaches network I/O |
 | `ModeReplay` | Yes | Yes | journal / playback controls | If built | `ManualClock`; `journal.ReplayDriver` invokes ticks and injections |
-| `ModeScript` | Yes | Yes | script / playback controls | If built | `ManualClock`; `journal.ScriptDriver` invokes ticks and injections; the presented form of a `ModeHeadless` script, network I/O included |
+| `ModeScript` | Yes | Yes | script, or terminal for a watched bot / playback controls | If built | `ManualClock`; `journal.ScriptDriver` or `bot.Driver` invokes ticks and injections; the presented form of a `ModeHeadless` script or bot, network I/O included |
 | `ModeServer` | No | No | config / none | No | `PausableClock`; scheduler and event goroutines, as `ModePlay`, with no terminal and no local cursor |
 
-The five predicates in `internal/app/config.go` are the policy boundary:
-`Presents`, `Driven`, `OwnsGeometry`, `OwnsInput`, and `Audio`. Assembly checks
-them rather than scattering mode comparisons through the runtime. A driven
-config defaults to terminal-equivalent geometry 80x24 when dimensions are not
-supplied and rejects I/O settings the selected mode cannot honor. It also rejects
-a simulation speed setting, because only `Tick` advances its clock — with one
-exception: an authored script reads `-speed` as its wall pace, which is a
+The six predicates in `internal/app/config.go` are the policy boundary:
+`Presents`, `Driven`, `Serves`, `OwnsGeometry`, `OwnsInput`, and `Audio`. Assembly
+checks them rather than scattering mode comparisons through the runtime. A config
+whose mode does not own geometry defaults to terminal-equivalent geometry 80x24
+when dimensions are not supplied, and rejects I/O settings the selected mode cannot
+honor. It also rejects a simulation speed setting — a driven mode's clock is
+advanced only by `Tick`, and a dedicated host runs at the session's rate — with one
+exception: an authored script or bot reads `-speed` as its wall pace, which is a
 property of the run rather than of the clock. See §1.1.
 
 Those predicates describe a full native build. Compile-time capabilities refine
@@ -43,47 +44,46 @@ its own instance in the same process (§4, Bot seats). See [Bots](bots.md).
 
 | Tool path | Entry | Terminal initialized? | Result |
 |---|---|---:|---|
-| Validate | `app.Check` | No | Resolve and load FSM plus corpus; print accepted/rejected sources. |
-| Export schema | `app.Schema` | No | Emit schema version 1 JSON for events, fields, actions, guards, operators, and config fields. |
-| Run script | `app.RunScript` | Only with `-watch` | Execute a bounded versioned TOML schedule; optional `-host`/`-join` uses the normal TCP gate. |
-| Run bot | `app.RunBot` | With `-watch` | Explicit `-watch` or `-headless` drives the first bot; remaining bots are seats. Headless solo runs are unpaced and default to 120x40. Ordinary `-bot` uses `app.Run` with a human. |
+| Validate | `resource.Check` | No | Resolve `vif.toml`, the scenario (loaded into a throwaway HFSM and checked against this build's systems), keymap, audio overrides, corpus and every bot graph; print what each resolved to. |
+| Export schema | `manifest.Schema` | No | Emit schema version 1 JSON for events, fields, actions, guards, operators, and config fields. |
+| Verify replay | `app.VerifyJournal` | No | `-r <file> -headless`: replay a journal flat out and fail at the first world digest it does not reproduce; a `jseq` gap fails before it plays. |
+| Run script | `app.RunScript` | Only with `-watch` | Execute a bounded versioned TOML schedule; optional `-host`/`-join` uses the session's start gate. |
+| Run bot | `app.RunBot` | With `-watch` | Explicit `-watch` or `-headless` drives the first bot; remaining bots are seats. A headless bot defaults to 120x40 and paces as a script does (§1.1); a watched one defaults to the terminal's size and real time. Ordinary `-bot` uses `app.Run` with a human. |
 
-### 1.0 The four session flags, and what each still decides
+### 1.0 The four session flags
 
-Four ways to be in a session, and after the recent convergence they differ in
-less than the flag names suggest:
+Four ways to be in a session, which differ in less than the flag names suggest:
 
 | Flag | Binds a port | Local cursor | Terminal | Startup lobby | Default `-authority` |
 |---|---:|---:|---:|---|---|
-| `-host <addr>` | yes | yes | yes | none — plays from its first tick, opens once its clock runs | `migrate` |
+| `-host <addr>` | yes | yes | yes | none — plays from its first tick, opens once its clock runs; a script or bot waits in one (§1.2) | `migrate` |
 | `-serve <addr>` | yes | no | no | its first guest: nobody plays until one arrives | `host` |
 | `:host <addr> [host\|migrate]` | yes | yes | yes | none — the session opens at the tick it is running | the word given, else the run's |
 | `-join <addr>` | in a migrate session, one of its own | yes | yes | waits for the host's start gate | adopted from the offer |
 
-The guest's port is what makes migration mean anything: it is dialled back once to
-confirm it, published to the other participants, and used only after a handoff.
-`-listen <addr>` pins it, the default is the host's own port falling back to an
-OS-assigned one, and `-no-advertise` — or a bind that fails, or an `-authority
-host` session — leaves the participant a leaf that plays normally and is never
-elected. See [Multiplayer](multi-player.md) §5.3.
+The guest's port is what makes migration mean anything. The coordinator completes
+the declared address from the connection it arrived on and publishes it,
+unconfirmed, in the succession chain; every participant but a seated bot keeps a
+link open to the current successor, so the instance that has to author already has
+one at a handoff. `-listen <addr>` names the port and the default is the host's
+own, either falling back to an OS-assigned one when it is taken; `-no-advertise` —
+or a bind that fails, or an `-authority host` session — leaves the participant a
+leaf that plays normally and, in a migrate session, is elected only when the chain
+names no survivor. See [Multiplayer](multi-player.md) §5.3.
 
-Everything else about the session is now one implementation. `-players` is a
-ceiling on every one of them and unset means the whole roster; the mid-run gate is
+Everything else about the session is one implementation. `-players` is a ceiling
+on every host and unset means the whole roster; the mid-run gate is
 installed on all of them and armed once the clock is running; a reconnect takes the
 same path as a first join; the correction cadence, the barrier, the roster
-crossings and the succession do not know which flag opened the session.
+crossings and the succession do not know which flag opened the session. The first
+three columns are one question — *is a person sitting at this process* — asked
+three times: `-headless` requires bots to drive its local cursor, and `-serve`, with
+no local cursor, is the deployment shape.
 
-**Can `-serve` and `-host` be merged?** They already are, everywhere it matters.
-What is left is the first three columns, and those are one question — *is a person
-sitting at this process* — asked three times. `-headless` requires bots to drive
-its local cursor; `-serve` has no local cursor and remains the deployment shape. What is
-*not* kept is the difference in what they mean: the two rows above disagree only
-where the shape forces them to.
-
-`:host` is the odd one and stays that way: it is an operator command rather than a
-flag, and its session opens at whatever tick the run has reached. `-probe`,
-`-first-join`, `-empty` and `-drain` are refused outside `-serve`, because each of
-them answers to a supervisor and an interactive run has a person instead.
+`:host` is an operator command rather than a flag, and its session opens at
+whatever tick the run has reached. `-probe`, `-first-join`, `-empty` and `-drain`
+are refused outside `-serve`, because each of them answers to a supervisor and an
+interactive run has a person instead.
 
 ### 1.1 Script pacing and presentation
 
@@ -93,15 +93,16 @@ things about how one is *run* are policy rather than content:
 | `-speed` | Effect on a script |
 |---|---|
 | unset | Real time in a session, unpaced when solo. A solo script that opens a session with `:host` starts pacing at that tick and re-anchors its clock there. |
-| `1`, `2`, `1/2`, … | One tick occupies that multiple of the game interval. `2` is twice real time, `1/2` is half. |
+| `1`, `2`, `1/2`, … | One tick occupies the game interval divided by the rate: `2` is twice real time, `1/2` is half. |
 | `max` | No wall pacing at all. Refused with `-host`, `-join` or seated bots: a participant that outruns its peers is not simulating the session it is in. |
 
 Every participant of one session must use the same rate. The runtime cannot see a
 peer's pace, so it enforces only the `max` case: a participant running faster than
 the rest reaches ticks they have not, and every correction rebases it back to the
 authority's tick — which is a working session, but not one whose scripted actions
-land where they were authored. A dedicated host and an interactive participant
-always run real time, so a script sharing a session with either must too.
+land where they were authored. A dedicated host runs real time; an interactive
+host runs its own rate, which an interactive guest adopts from the offer and nobody
+changes while a peer is linked. A script sharing a session with either must match it.
 
 `-watch` presents the run on this terminal instead of running it headlessly. The
 simulation is unchanged — the same manual clock, the same script geometry, the
@@ -119,27 +120,29 @@ the scheduler goroutine, because a session's simulation has to advance whether o
 not anybody is watching it here.
 
 Holding no cursor is a roster property rather than an absence. The coordinator
-keeps its participant identity, its authority term and its vote; its slot is
+keeps its participant identity and roster entry; its slot is
 `parameter.NoPlayerSlot`, so every "is this my cursor" test answers no without a
 special case. The FSM's boot cursor is not suppressed — it is created as it always
 is, and the roster hands it to the first guest, which is what keeps shared creation
 order identical to an ordinary host's.
 
-`-players <n>` is a ceiling on the roster and only a ceiling, on every host shape;
-unset means the whole roster. A server's ceiling counts *guests*, because the
-server is not one of them; an interactive host's counts one fewer, because it holds
-a cursor itself. A lobby exists only where nobody plays: a server starts on its
-first guest, an interactive host on its own first tick, and every later guest
-arrives through the mid-run gate. `-host` is `:host` given at startup.
+A server's `-players` ceiling counts *guests*, because the server is not one of
+them; any other host's counts one fewer, because it holds a cursor itself. A lobby
+exists only where no person plays at the process, and the process seats its own
+bots before it, so they count as guests: a server starts on its first guest; a
+scripted or bot-driven `-host` on its first guest or, with `-players`, on the whole
+party it names; an interactive host has none and plays from its own first tick.
+Every later guest arrives through the mid-run gate. An interactive `-host` is
+`:host` given at startup.
 
 `-size WxH` gives a server the terminal-equivalent geometry it has no terminal to
 derive, which is what every joiner adopts as the D-14 map latch.
 
-Without it the server takes that geometry from its **first guest**. A run with no
-`-size` falls back to `Config.DefaultWidth` x `DefaultHeight`, which is a 77x21
-map — and because the joiner adopts the host's latch, every participant then plays
-on it however large its own terminal is. The joiner's acceptance therefore carries
-its own geometry (`network.JoinerReport`), and `App.adoptLobbyGeometry` applies the
+Without it the server takes that geometry from its **first guest**. Otherwise a run
+with no `-size` would fall back to `app.DefaultWidth` x `DefaultHeight` (80x24), a
+79x21 map — and because the joiner adopts the host's latch, every participant would
+then play on it however large its own terminal is. The joiner's acceptance therefore
+carries its own geometry (`network.JoinerReport`), and `App.adoptLobbyGeometry` applies the
 first one before the roster closes, so the bounds it produces are the ones the
 offer names and the tick-zero capture contains.
 
@@ -186,11 +189,10 @@ answering 200 with `ready=false` plus the phase and the time remaining — a dra
 not a fault. The refusal is deliberately distinguishable from `ErrSessionStarting`:
 that one means retry, this one means the session is leaving.
 
-An abandoned startup gate — the first guest connects and then leaves before
-confirming it installed the world — ends a dedicated host cleanly rather than as a
-failure. On an interactive host it stays the error it always was; here there is
-nobody in the session and nobody watching, so the Job completes instead of failing
-and the allocator can place the next request.
+The start gate waits only on guests still linked. One that leaves before confirming
+it installed the world is dropped from the wait, and one still unconfirmed after
+`parameter.NetworkJoinReadyTimeout` is disconnected with a Warn. The session runs
+on either way, and one left empty parks (below).
 
 Why the process holds this rather than the orchestrator: the roster is the only
 thing that knows whether anybody is in the session, and it is inside the process. A
@@ -209,7 +211,10 @@ outside can end one on emptiness. See
 ```
 
 The scheduler applies render backpressure at real time and slower, so the server
-releases the same frame handshake on the same interval and draws nothing.
+releases the same frame handshake on the same interval and draws nothing. Every
+30 s it logs a `session summary` record if the summary changed, so a parked session
+writes one line until somebody arrives. A signal halts the server's own bot seats
+before the drain.
 
 #### An empty session parks
 
@@ -247,9 +252,9 @@ It also outlives its own authority, and that is why `-serve` defaults to
 `-authority host`. A dedicated host *is* the session: its address is what the
 allocator handed out and what every guest holds, so if the process goes, the answer
 is an orchestrator putting another one at that address and the guests dialling back
-— not a guest declaring itself the host. That is a policy rather than a limit now:
-a migrate session's guests are dialable and its successor is one the session
-confirmed it could reach ([Multiplayer](multi-player.md) §5.3), and
+— not a guest declaring itself the host. This is policy, not a limit:
+a migrate session's guests declare ports and its successor is the first surviving
+member of the published chain ([Multiplayer](multi-player.md) §5.1, §5.3), and
 `-serve` still pins authorship because the address it was allocated at is the
 session's identity.
 
@@ -269,9 +274,6 @@ scripted demonstration is shown and how a reproduction is held constant while th
 other participant is fuzzed by hand. `script/sparring-host.toml` and
 `script/sparring-guest.toml` are the two directions.
 
-Diagnostics are configured before the terminal enters its alternate screen so
-startup failures and runtime reports remain recoverable.
-
 ## 2. Composition sequence
 
 ```mermaid
@@ -283,56 +285,69 @@ sequenceDiagram
     participant Runtime as Scheduler, router, presentation
 
     Main->>App: New(config)
-    App->>App: Initialize event registry
-    App->>Hub: Register mode-selected services
-    App->>World: NewWorld()
-    App->>Hub: InitAll()
-    App->>Hub: BindResources(world.Resources)
-    App->>World: NewGameContext and empty cursor roster
-    App->>Runtime: Build systems, renderers, input, scheduler
-    App->>Runtime: Load and initialize HFSM
-    App->>Runtime: Register event handlers
+    App->>App: Validate config, resolve seed, read scenario
+    App->>Hub: Register mode-selected services, InitAll()
+    App->>World: NewWorld(), BindResources
+    App->>World: GameContext, map floor and latch, systems
+    App->>App: Open journal, latch session state
+    App->>Runtime: Renderers, input and router
+    App->>Runtime: Scheduler, load and initialize HFSM
+    App->>Runtime: Add MetaSystem, check dependencies, register handlers
 ```
 
-`-join` adds a pre-composition step: `Run` or `RunScript` dials, receives the host's
-`JournalAnchor`, validates/adopts its seed and configuration identity, and only
-then calls `New`. `-host` composes first so its acceptor can snapshot the live
-tick-zero anchor. After service start, both roles complete the start/ready gate
-before interactive play releases its first frame token or the authored driver
-advances its first tick. A session clock is frozen during construction and lobby
-wait, before the HFSM creates deadlines, and is resumed only after that gate;
-tick zero therefore does not inherit how long the host waited for its peers.
+`-join` adds a pre-composition step: `newSessionApp` dials, receives the host's
+offer and `JournalAnchor`, adopts its seed, configuration identity and map latch,
+takes the scenario's bytes from the coordinator when no root here holds them, and
+only then calls `New`. A dedicated host or a scripted or bot-driven `-host`
+composes first, so its acceptor can capture the live tick-zero world, then waits in
+its lobby and completes the start/ready gate before it ticks. Every run that waits
+on that gate has its clock frozen during construction, before the HFSM creates
+deadlines, and released only after it, so tick zero does not inherit how long the
+lobby waited. An interactive `-host` binds its port before the terminal starts but
+composes solo and opens the session once its clock runs, as `:host` does.
 
 The detailed construction order is significant:
 
-1. Validate the application config and configure any embedder-provided log
-   scope.
-2. Initialize the generated event registry. FSM trigger resolution and
-   `:emit` reflection depend on it.
-3. Register services selected by mode and available build capability: files and
-   content always; terminal for presenting modes; audio for play/replay/script
-   when compiled; network for native play in `RoleNone`, or for native
-   play/headless script sessions in `RoleHost` or `RolePeer` according to startup
-   configuration.
-4. Create an empty world and initialize services in deterministic topological
-   order.
-5. Let initialized services contribute typed resources to the world.
-6. Resolve geometry from the terminal or config and create `GameContext`, which
-   initializes the status registry, map/camera config, selected clock, event
-   queue, game state, transient state, empty player roster, and target resource.
-7. Publish corpus telemetry now that the status registry exists.
-8. Construct systems from the generated manifest. `World.AddSystem` sorts them
-   by priority and preserves manifest order for equal priorities.
-9. For a presenting mode, construct and priority-sort renderers.
-10. Create the input parser and mode router for semantic injection in every
-    mode; merge the live keymap and bind terminal mouse control only when the
+1. Normalize and validate the config, resolve the seed (a drawn one is logged)
+   and apply any embedder-provided log scope.
+2. Read the scenario, so one that does not resolve fails before the terminal is
+   taken and before the journal anchor names it.
+3. Initialize the generated event registry. FSM trigger resolution and `:emit`
+   depend on it.
+4. Register services by mode and build: terminal for presenting modes; network
+   for native `ModePlay` in every role and for any mode given `-host` or `-join`
+   (a wasm build: a join only); audio when the mode has it; files and content
+   always. A replay copy borrows its lender's terminal and opens no audio.
+   `InitAll` then initializes them in deterministic topological order.
+5. Create the world and its RNG, let services contribute typed resources, and
+   mark the run session-shared when a network endpoint exists.
+6. Resolve geometry from the terminal or config and create `GameContext` (with
+   `ManualClock` for a driven mode), which initializes the status registry,
+   map/camera config, clock, event queue, game state, transient state, empty
+   player roster, and target resource.
+7. Apply the scenario's `[map]` floor and the D-14 map latch, before any system or
+   the boot script reads the map's size.
+8. Size status snapshots and the flight recorder, publish corpus telemetry, and
+   build the authority protocol (`converge.New`).
+9. Apply the initial `-speed` rate, and freeze the clock of a run that waits on a
+   start gate.
+10. Construct systems from the generated manifest. `World.AddSystem` sorts them
+    by priority and preserves manifest order for equal priorities.
+11. Open the journal when requested, then latch the session state the run starts
+    in.
+12. For a presenting mode, construct and priority-sort renderers.
+13. Create the input parser, merge the keymap and build the mode router for
+    semantic injection in every mode; bind terminal mouse control only when the
     terminal owns simulation input.
-11. Create frame synchronization channels and the scheduler.
-12. Resolve and load the external or embedded scenario, initialize its regions,
-    enqueue their entry actions (including the shipped cursor spawn request),
-    and apply global/region system toggles.
-13. Register the event-only `MetaSystem`, then every constructed system that
-    implements `event.Handler`.
+14. Create frame synchronization channels and the scheduler, then load the
+    scenario into the HFSM, initialize its regions, enqueue their entry actions
+    (including the shipped cursor spawn request), and apply global/region system
+    toggles.
+15. Add `MetaSystem`, which needs the completed `GameContext` and ticks at
+    `PriorityUI`; check the declared system dependencies with
+    `World.CheckSystemDependencies` (an unknown name or a cycle is a startup
+    error; it orders nothing, since `AddSystem`'s priority sort fixes tick order);
+    register every system that implements `event.Handler`.
 
 If any step fails, `App.New` calls `Close` on the partially built application.
 Services therefore must make `Stop` idempotent and able to release resources
@@ -346,7 +361,7 @@ only clock.
 | Path | Default interval | Owner | Purpose |
 |---|---:|---|---|
 | Render frame | 16 ms | main goroutine | Snapshot frame state, render, flush, and release the next simulation tick. |
-| Input tick | 16 ms | main goroutine | Reconcile terminal mouse mode, repeat held/automatic fire, and advance macros. |
+| Input tick | 16 ms | main goroutine | Reconcile terminal mouse mode, open the command line after a breakpoint hit, repeat held/automatic fire, and advance macros. |
 | Simulation tick | 50 ms | scheduler goroutine | Advance pause-aware game time, FSM, systems, APM, and telemetry. |
 | Event attempt | 4 ms | event goroutine | Settle queued events between simulation ticks, including while paused. |
 | Audio buffer | 50 ms | audio mixer goroutine | Drain audio commands, synthesize/mix the next PCM buffer, and write it. |
@@ -358,22 +373,24 @@ bounded timeout while waiting, so a missed render token does not block forever.
 This limits the simulation to one outstanding update and prevents rendering a
 world that is being advanced concurrently.
 
-Headless and replay modes replace `PausableClock` with `ManualClock`. They do
-not call `Scheduler.Start`, so there is no scheduler loop, event loop, or
-frame gate racing the world lock. `App.Tick(n)` advances the manual instant by
-exactly the fixed interval and executes `n` tick bodies on the caller's
-goroutine; `App.Settle` drains an injected event group without advancing time.
-`Tick` deliberately executes even when operator pause state is true, because
-the caller is the clock authority.
+Driven modes (headless, replay, script) replace `PausableClock` with
+`ManualClock`. They do not call `Scheduler.Start`, so there is no scheduler loop,
+event loop, or frame gate racing the world lock. `App.Tick(n)` applies corrections
+that have arrived, then for each of `n` ticks services a pending reset, steps the
+manual clock by exactly the fixed interval and executes one tick body on the
+caller's goroutine; `App.Settle` drains an injected event group without advancing
+time. `Tick` deliberately executes even when operator pause state is true,
+because the caller is the clock authority.
 
 For a solo driven App, the resulting run is a pure function of seed, resolved
-config, and injected event groups. A headless TCP script additionally consumes
-the peer's ordered stream; the authored driver paces those sessions at the fixed
-50 ms tick interval so one process cannot race thousands of ticks ahead of the
-other.
+config, and injected event groups. A networked script or bot additionally
+consumes the peer's ordered stream; its driver paces ticks at the run's rate
+(§1.1), trimmed by the guest pace the last tick read, so one process cannot race
+thousands of ticks ahead of the other.
 
-A process may hold several Apps, a holder and its bot seats. What they share and
-what they do not; none of it enters a simulation snapshot:
+A process may hold several Apps: a holder and its bot seats, a replay's copies, an
+install's staging world. What a holder and its seats share and what they do not;
+none of it enters a simulation snapshot:
 
 | State | Scope | With seats |
 |---|---|---|
@@ -394,17 +411,21 @@ flowchart TD
     Select["Select signal, terminal, input tick, frame tick"] --> Terminal{"Terminal event?"}
     Terminal -->|yes| Parse["Parse intent and run router under world lock"]
     Parse --> Settle["Immediate bounded event settling"]
-    Terminal -->|resize| Resize["Resize map or viewport and render buffer"]
+    Terminal -->|resize| Resize["Push EventScreenResize under the lock, settle, resize render buffer"]
     Select --> Input["Input tick: mouse, repeat fire, macros"]
     Input --> Settle
     Select --> Frame["Snapshot, render, flush, signal frame ready"]
 ```
 
 Terminal key and mouse events flow through the input machine. A complete intent
-is handled under `World.RunSafe`; afterward the scheduler immediately settles
-events so the next frame can see its effects. A resize updates the main-loop
-dimensions, then modifies map/viewport state under the world lock and resizes
-the render buffer.
+is handled under `World.RunSafe`; if it pushed anything, the scheduler settles at
+once so the next frame sees its effects. A pointer placement moves the view at
+once but its cursor move waits for the next tick: `World.PushPointerMove` keeps
+only the newest cell, and `FlushPointerMove` pushes it before each tick and before
+any other journaled push, so placements keep their order and a sweep crosses one
+cell a tick. A resize pushes `EventScreenResize` under the world lock like any
+input, settles it, then resizes the render buffer to the dimensions the handler
+wrote.
 
 The input ticker is independent of rendering so held-button fire and macro
 playback have stable cadence even when frames fluctuate. Macro intents re-enter
@@ -412,15 +433,15 @@ the same locked `handleIntent` path as physical input.
 
 For a render frame, the application:
 
-1. increments and publishes the frame counter;
-2. under the world lock, copies `TimeResource`, local-cursor position, map,
-   viewport, and camera data into a value `RenderContext`;
-3. while paused, updates real time so pause visuals continue animating;
-4. invokes the orchestrator, which separately locks the world while concrete
-   renderers read components;
-5. flushes terminal cells outside the world lock;
-6. when the previous simulation update is complete and the game remains
-   unpaused, sends a non-blocking `frameReady` token.
+1. increments the frame counter;
+2. under the world lock, refreshes an open config menu and copies continuous game
+   and real time, local-cursor position, map, viewport, and camera data into a
+   value `RenderContext` (a hidden wasm page skips this step and the next);
+3. invokes the orchestrator, which separately locks the world while concrete
+   renderers read components, then flushes terminal cells outside the lock;
+4. while paused, stops there: the pause overlay renders but no tick is released;
+5. otherwise, when the previous simulation update is complete, sends a
+   non-blocking `frameReady` token.
 
 ### Replay playback
 
@@ -433,7 +454,7 @@ cannot rebuild a world that began elsewhere. The record format is
 [Logging and diagnostics](logging-and-diagnostics.md) §9.
 
 The playback keys are fixed; any other key is parsed by the keymap in NORMAL,
-which keeps only quit, the audio toggle and `:`.
+which keeps only quit, the audio toggle, `:` and the config menu.
 
 | Control | Playback action |
 |---|---|
@@ -446,7 +467,7 @@ which keeps only quit, the audio toggle and `:`.
 | `:r tick <n>` | Go to the first step at or past tick `n` of the run shown, the status bar's `GT`. |
 | `:r time <[[h:]m:]s>` | Go to that game time at 1x: seconds alone, `m:s` or `h:m:s`. |
 | `:r restart` | Play again from the recording's start; also Simulation → Restart replay. |
-| `:` | Command line: `replay`, `help`, `about`, `telemetry`, `hud`, `debug`, `content`, `flow`, `graph`, `log`, `q`. |
+| `:` | Command line: `replay`, `config`, `help`, `about`, `telemetry`, `hud`, `debug`, `content`, `flow`, `graph`, `log`, `q`. |
 | `q` | Quit. |
 
 The status bar adds `diverged by tick <n>` once the replay fails to reproduce a
@@ -531,7 +552,9 @@ again after going back log again, after the record that explains them.
 
 `app.RunScript` loads a versioned TOML file through `internal/journal`, applies
 its optional terminal-equivalent geometry, and builds a driven App. Actions are
-addressed by `(run, tick)` and execute before the next tick at that position.
+addressed by `(run, tick)` and execute before the next tick at that position. With
+`-host` or `-join` the authority ends runs, so an action names no run and its tick
+counts the ticks the script has issued (§1.2).
 Same-position actions retain file order and each settles independently, matching
 separate live input groups. Four deliberately small action forms exist:
 
@@ -544,10 +567,12 @@ separate live input groups. Four deliberately small action forms exist:
 
 The script's `ticks` is a hard bound, so a process terminates without terminal
 input and reports an action whose `(run, tick)` was never reached. With neither
-`-host` nor `-join`, ticks run flat out. A networked script uses the same
-anchor/roster/start/ready gate as play mode, then wall-paces the caller-driven
-ticks. The two processes may use different files; this is how one schedule
-targets the host's local participant and another targets the guest's.
+`-host` nor `-join`, ticks run flat out unless `-speed` sets a pace (§1.1). A
+joining script takes the same anchor, roster and start/ready gate as an
+interactive guest; a hosting one waits in a lobby first, as a dedicated host does
+(§1.2); either then wall-paces the caller-driven ticks. The two processes may use
+different files; this is how one schedule targets the host's local participant
+and another targets the guest's.
 Unknown top-level/action fields are rejected rather than ignored; action fields
 that apply only to intents or events are rejected on the other forms.
 
@@ -590,76 +615,85 @@ ends once its instance forks, and a seat also once its holder does.
 
 ```mermaid
 flowchart TD
-    Wire["Apply due wire artifacts, settle them"] --> Time["Update game and real time"]
+    Latch["Latch session, flush pointer placement"] --> Wire["Apply due wire artifacts, settle them"]
+    Wire --> Time["Stamp the tick, set game and real time"]
     Time --> Pre["Settle pre-existing events"]
     Pre --> FSM["Advance all active HFSM regions"]
     FSM --> Post["Settle FSM-emitted events"]
     Post --> Systems["Run priority-ordered systems"]
     Systems --> Close["Settle system-emitted events"]
-    Close --> Stats["Publish counters, APM, queue and status snapshots"]
+    Close --> Stats["Commit tick, APM and counters"]
     Stats --> Flush["Close and send this tick's production epoch"]
+    Flush --> Tail["Unlocked tail: breakpoints, overflow, status, anchor"]
 ```
 
-`Scheduler.processTick` holds the world lock for steps 1–10:
+`Scheduler.processTick` holds the world lock for steps 1–11:
 
-1. apply the wire artifacts whose fixed playout deadline has arrived and, if any
-   did, settle them in their own `"wire"` group — before the tick stamp advances,
-   so both copies of a crossing land at the same absolute tick (see the domain
-   model, §6). With no live peer this step returns zero and creates no group;
-2. open the next journal tick stamp, then update pause-aware `GameTime`,
-   `RealTime`, and fixed `DeltaTime`;
-3. update elapsed-time status;
-4. consume/dispatch events accumulated before the tick until the queue is empty
+1. latch the session state and, if a pointer placement is pending (§4), push it
+   and settle it as an `"input"` group; read the guest pace trim;
+2. apply the wire artifacts whose fixed playout deadline has arrived and settle
+   them in their own `"wire"` group — before the tick stamp advances, so both
+   copies of a crossing land at the same absolute tick
+   ([domain model](domain-design.md#41-receive-lead) §4.1). A run that is
+   session-shared settles this group every tick, whether or not a peer is linked;
+   a solo run has none;
+3. open the next journal tick stamp, then set `GameTime` to `SimTime(tick)` —
+   derived from the tick, never from the pacing clock, so every participant reads
+   the same instant — with wall `RealTime` and fixed `DeltaTime`;
+4. update elapsed-time status;
+5. consume/dispatch events accumulated before the tick until the queue is empty
    or the settling cap is reached;
-5. advance the FSM by the fixed interval, then publish foreground telemetry and
+6. advance the FSM by the fixed interval, then publish foreground telemetry and
    one metric set per declared region;
-6. settle events emitted by state transitions and actions;
-7. run all systems sequentially against that settled state;
-8. settle the events the systems emitted, as a tick phase like steps 4 and 6, so
+7. settle events emitted by state transitions and actions;
+8. run all systems sequentially against that settled state;
+9. settle the events the systems emitted, as a tick phase like steps 5 and 7, so
    an outcome a system applies through a queued event belongs to this tick for
    every reader after it;
-9. commit the tick count and APM, and snapshot entity, queue and event counters
-   before unlocking;
-10. raise the session layer's own journaled records, which settle between ticks,
+10. commit the tick count and APM, and snapshot entity, queue and event counters;
+11. raise the session layer's own journaled records, which settle between ticks,
     then close this tick's production epoch and hand it to the transport, so a
     peer receives one tick's artifacts as one tick's worth, and write the journal
     digest when it is due.
 
-A reset dispatched by step 1, 4, 6 or 8 — a crossed `:new`, or the scenario's
+A reset dispatched by step 2, 5, 7 or 9 — a crossed `:new`, or the scenario's
 own — ends the tick there, as one between ticks does: the rest of the body, the
 epoch flush and the tail are skipped on every participant alike, and the
 scheduler resets the FSM before the new run's tick 1.
 
-Step 9 is inside the critical section deliberately: `Position` has no internal
+Step 10 is inside the critical section deliberately: `Position` has no internal
 lock, so counting entities after unlocking would race removals on the
 event-loop and main goroutines.
 
 After the lock is released, the scheduler uses only atomic or internally
-synchronized paths to check breakpoints, report queue overflow, sample the
-flight recorder, optionally emit a grouped status snapshot and journal anchor,
-and drain any pending recorder flush request.
+synchronized paths, in this order: expire a run-until request, report queue
+overflow, tick the status registry (recorder sample, grouped status snapshot,
+pending recorder flush), fire standing stat breakpoints that rose (§9), emit the
+journal anchor when due, and close the profiler window when one is due.
 
 That tail is not a barrier. Because the lock is already released, the event
-loop, input path and render goroutine can commit between step 9 and the
+loop, input path and render goroutine can commit between the locked body and the
 sample, so a status snapshot or recorder window is stamped with tick *n* but
 reads "at or after tick *n*" for anything not written inside the locked body.
 See [Logging and diagnostics](logging-and-diagnostics.md) §6.
 
-`Scheduler.Prepare`, reached from `Start` or the first driven operation,
+`Scheduler.Prepare`, reached from `Start` or from driven construction,
 calls `Registry.Freeze` immediately after `World.Seal`. Both close a
 registration surface before any tick reads it:
 `Seal` freezes the system list, `Freeze` freezes the metric set and lays out
 the recorder ring.
 
-Systems may emit events during `Update`; step 8 settles them before the guest's
+Systems may emit events during `Update`; step 9 settles them before the guest's
 tick-close capture, the epoch flush and the journal digest read the world. What
 a capture still does not carry is a queued event: one pushed after that settle
 (the session layer's records, an install's re-derivations, a breakpoint's
 pause) or one a settle stopped at its pass cap left behind.
 
-Each completed event-settle group advances the journal `boundary` counter.
-This preserves distinctions between separately injected groups whose system
-events would be ordered differently if merged. See
+Each non-empty explicit settle group (input, wire, the between-tick event loop
+and an injected `Settle`) advances the journal `boundary` counter; a tick's own
+pre, post and close phases and a reset's settles are not groups. This preserves
+distinctions between separately injected groups whose system events would be
+ordered differently if merged. See
 [Logging and diagnostics](logging-and-diagnostics.md) for the complete journal
 stamp lattice.
 
@@ -669,8 +703,9 @@ The queue accepts multiple producers, but `Consume` is a single-consumer
 operation. The world lock is therefore both an ECS lock and the consumer token.
 No path may consume the event queue without holding it.
 
-This goroutine exists only in `ModePlay`. Driven Apps use `Tick` and `Settle`
-on the caller goroutine and therefore do not need the `TryLock` backoff path.
+The event goroutine exists only where `Scheduler.Start` runs: `ModePlay` and
+`ModeServer`. Driven Apps use `Tick` and `Settle` on the caller goroutine and
+therefore do not need the `TryLock` backoff path.
 
 On each event-loop interval:
 
@@ -682,12 +717,13 @@ On each event-loop interval:
 - one whole settle runs, then the lock is released. A single pass would split a
   cascade across wakeups and interleave it with the next records by wall time.
 
-Each dispatched event goes to the HFSM first and then to registered handlers in
-registration order. The FSM's answer — whether any active region consumed the
-event — is recorded in the pass summary, so a system-handler count of zero is
-no longer ambiguous.
-A handler may enqueue another event; bounded settling loops repeat consume 
-passes up to `EventLoopIterations` (currently 16) for immediate paths.
+Each dispatched event goes to a harness tap (a bot's dispatch tap) while its
+payload is still the producer's, then to the HFSM (unless a reset holds it out),
+then to registered handlers in registration order. The FSM's answer — whether any
+active region consumed the event — is recorded in the pass summary, so a
+system-handler count of zero is unambiguous. A handler may enqueue another event;
+a settle repeats consume passes up to `EventLoopIterations` (16), and one that
+stops there with events still queued counts `event.settle_exhausted`.
 The queue capacity is 2,048. Producers that overrun it evict the oldest
 unread events and increment a monotonic dropped counter; this represents real
 state loss and is logged when observed.
@@ -699,9 +735,10 @@ state loss and is logged when observed.
 | Entity IDs, component stores, component masks, positions, spatial grid, map/camera mutation | `World.updateMutex` | Tick, event dispatch, input/router, reset, and renderers while holding the same lock. |
 | Event queue writes | Lock-free MPSC producer protocol | Any producer; payload lifetime rules still apply. |
 | Event queue consume | World lock as single-consumer token | Scheduler tick, event loop, immediate dispatch, or reset only. |
-| System list | Single-threaded construction, then `World.Seal` | Read-only after scheduler start. |
+| System list | Single-threaded construction, then `World.Seal` | Read-only after `Scheduler.Prepare` seals it. |
+| Pause, rate, step budget, run-until request, standing breakpoints | `TimeControl` atomics; breakpoints as a `BreakSet` replaced whole | `MetaSystem` and commands set them, and the session paths pause and release a lobby or a parked run; the scheduler takes steps and trips requests and breakpoints; input and render read them without the world lock. |
 | Render buffer | Render orchestrator | Main/render path only; cleared and reused per frame. |
-| Context flags/counters | Atomics | Cross-goroutine reads for pause, macros, mouse, auto-fire, frame/status strings. |
+| Context flags/counters | Atomics | Cross-goroutine reads for macros, mouse, auto-fire, frame/status strings. |
 | APM history | `GameState.mu` plus atomic published totals | Scheduler admits gestures at dispatch and rolls history. |
 | Target groups | `TargetResource` RW lock | Navigation writes; species/genetic code reads snapshots. |
 | Status metric values | Per-value atomics; set closed by `Registry.Freeze` | Systems cache pointers during construction; snapshots and the recorder load atomically off the world lock. |
@@ -770,7 +807,8 @@ along it and clamp at the ends. `PausableClock` re-anchors game time on a rate
 change, so there is no time jump or catch-up burst. Above 1x the scheduler
 skips render backpressure so the world can outrun the display.
 
-`-speed <rate>` sets the initial play-mode rate. Runtime commands are:
+`-speed <rate>` sets the initial play-mode rate; an interactive guest takes its
+host's instead (§1.1). Runtime commands are:
 
 | Command | Effect |
 |---|---|
@@ -792,6 +830,15 @@ so a misspelled assumption cannot run forever; a hit or expiry triggers a
 requests because their region/event context was destroyed, while the ordinary
 rate remains operator-owned.
 
+Standing breakpoints (`:d break`, [Input and modes](input-and-modes.md)) trip on
+every match until cleared: an event's dispatch, a region's entry, any region
+entering a state, or a status cell's comparison turning true. The dispatch and
+transition sites probe them as they do run-until requests; stat breakpoints are
+read once per completed tick in the unlocked tail (§5). A hit fires the same
+`break` flush, pauses the run, and the next input tick opens the command line
+unless it or an overlay is already up, so leaving it resumes. A live session only
+reports a hit and refuses setting one.
+
 These controls are operator pacing under `ModePlay`. Replay records and
 reinjects their events, but its manual clock advances only under
 `ReplayDriver`; viewer `+`/`-` controls presentation pacing instead.
@@ -803,7 +850,10 @@ session for the same per-instance-clock reason as pause.
 `:n <scenario>` is not a reset. The regions a scenario declares are what register
 the FSM metric set, and `Scheduler.Prepare` freezes that set for the life of a
 run, so another scenario needs another run: `Run` owns a loop that builds one App
-per scenario, and the command validates the name and latches which one comes next.
+per run, and the command validates the name and latches which one comes next;
+naming the scenario already loaded resets in place instead. The same loop replaces
+the run for a `:join`, a `:journal start`, a session restart and a removal by the
+host; the scenario change, the restart and the journal seat the run's bots again.
 Everything operator-owned restarts with it. See
 [HFSM and configuration](fsm-and-configuration.md) §2.
 
@@ -811,20 +861,24 @@ In a session every participant does this together. Only the coordinator may ask;
 it broadcasts `MsgSessionRestart` before its transport goes and rebuilds solo,
 reopening its address once its clock runs. Each guest latches the same restart,
 rebuilds on its own command line and redials, arriving through the mid-run gate a
-reconnect has always used — so the roster, the world install and the scenario
+reconnect uses — so the roster, the world install and the scenario
 transfer are the paths that already existed. Nothing is carried in the notice: the
 offer a guest is given when it redials names what is being played.
 
 A `:new` command emits `EventGameResetRequest` and requests scheduler reset
 without reconstructing the process. In a live session only the coordinator may
 request it; the request crosses and every participant applies it at one barrier
-tick. A reset from the shared monitor FSM remains re-derived on every instance.
-`MetaSystem` snapshots the roster's slot/control/peer assignments, pauses
-audio/time, clears entities and `GameState`, advances the journal run while
-rebasing its tick to zero, restores the viewport-sized map (no smaller than the
-scenario's `[map]` floor), camera and mode state, and cancels pending step controls. The reset FSM's first cursor spawn carries the
-configured heat/energy template and expands the saved roster in deterministic
-slot order. The scheduler serializes these phases with the world lock:
+tick. A reset the scenario's own FSM emits, such as the shipped monitor's on a
+defeat, is re-derived on every instance instead.
+`MetaSystem` snapshots the roster's slot/control/peer/holder assignments, pauses
+time and audio, clears entities, `GameState` and kill tallies, advances the
+journal run while rebasing its tick to zero, returns a map this instance owns to
+its viewport size (no smaller than the scenario's `[map]` floor) while a session's
+latched bounds carry across, resets camera, crop-on-resize, mode, captured keys
+and status text, and cancels pending step controls. The reset FSM's first cursor
+spawn carries the configured heat/energy template and expands the saved roster
+in deterministic slot order. The scheduler serializes these phases with the
+world lock:
 
 1. drain and discard stale queued events;
 2. reset deadlines and elapsed-time anchors;
@@ -839,31 +893,33 @@ being driven or observed and survives plain `:new`. Its explicit contract is:
 
 - free-mouse and auto-fire preferences;
 - the current time scale;
-- telemetry HUD visibility and pinned overlay cards.
+- telemetry HUD visibility and pinned overlay cards;
+- standing breakpoints.
 
 Both `:new` and `:new!` clear recorded/playing macros, close overlays, return to
 Normal mode, and clear command/search/status text. `:new!` additionally purges
 the initiating instance's operator contract: free mouse and auto-fire become
-off, speed returns to 1x, and the telemetry HUD/pins are cleared. A peer receiving
-the crossed reset retains its own operator state. Logging target, level, scope,
-snapshot period, and recorder depth are process diagnostics and are never part
-of this purge.
+off, speed returns to 1x, and the telemetry HUD/pins and breakpoints are cleared.
+A peer receiving the crossed reset retains its own operator state. Logging target,
+level, scope, snapshot period, and recorder depth are process diagnostics and are
+never part of this purge.
 
 Other session-observer fields have explicit behavior rather than belonging to
 that purge list: the render frame remains monotonic, reset ends paused state,
-and the terminal-wide `MouseDisabled` flag currently survives both reset
+and the terminal-wide `MouseDisabled` flag survives both reset
 forms. The full `session` snapshot record reports these values even though
 replay comparison omits the record.
 
-The genetic registry is not recreated. Its reset drops proposals and in-flight
-evaluations but retains scored archives, so evolution continues across `:new`
-within the process.
+The genetic registry object outlives a reset but its contents do not: the reset
+drops in-flight evaluations and deregisters every species the run declared, and
+the FSM's region entries register them afresh, so evolution starts over with each
+game.
 
 ### Replay comparison boundary
 
 `App.Snapshot` includes the full observer surface. Replay verification uses
 `App.SnapshotSimulation`, which drops the `session` context record and the
-exact replay-excluded keys in `internal/snapshot/surface.go`:
+replay-excluded keys in `internal/snapshot/surface.go`:
 
 | Surface | Excluded keys |
 |---|---|
@@ -873,24 +929,28 @@ exact replay-excluded keys in `internal/snapshot/surface.go`:
 | Recorder bookkeeping | `rec.depth`, `rec.flushes`, `rec.records`, `rec.skipped` |
 | Snapshot bookkeeping | `stat.late`, `stat.groups`, `stat.metrics` |
 | Capture and correction | the whole `snapshot.` prefix |
+| Profiler and process | the whole `prof.` and `proc.` prefixes |
 
 `engine.fps` counts frames per wall second, which no replay reproduces; the other
-entries describe pacing, contention, or telemetry rather than world behavior. The deny-list
-uses exact keys, not whole prefixes, because the same metric groups also
-contain simulation counters that must still compare — with one exception, and it
-is a whole group rather than a compromise. A replay installs no capture and applies
-no correction: it re-derives the run from its record stream, so what a read cost,
-what an install cost, how many corrections arrived and how far this instance's
-prediction had drifted when they did all describe the session the run was part of
-rather than the simulation the replay reproduces. Comparing any of them would be
-asserting that a replay had a network.
+entries describe pacing, contention, or telemetry rather than world behavior. The
+deny-list uses exact keys because the same metric groups also contain simulation
+counters that must still compare, except for three whole groups. A replay installs
+no capture and applies no correction, so every `snapshot.` key describes the
+session the run was part of rather than the simulation it reproduces; `prof.` and
+`proc.` measure this process.
 
 ## 11. Shutdown and failure handling
 
 Normal shutdown is triggered by quit intent, terminal close/error, or an OS
-signal. `App.Close` stops the scheduler before stopping services so no tick can
-use an I/O resource after it is released. The hub stops every initialized
-service in reverse dependency order.
+signal. `App.Close` halts its bot seats and waits for them to leave, then stops
+the scheduler before stopping services so no tick can use an I/O resource after it
+is released. The hub stops every initialized service in reverse dependency order.
+
+`cmd/vif` configures diagnostics before any terminal enters its alternate screen,
+so startup failures and runtime reports remain recoverable. It exits 1 on any
+returned error, and 73 (`EX_CANTCREAT`) when logging was requested and cannot
+start: a run that cannot write the log it was asked for ends before it plays
+rather than playing unlogged.
 
 Crash handling is designed around terminal restoration:
 
@@ -911,14 +971,18 @@ not indefinitely leave the terminal in raw mode.
 
 | Concern | Primary source |
 |---|---|
+| Entry selection, diagnostics setup, exit policy | `cmd/vif/main.go` |
 | Runtime modes and composition | `internal/app/config.go`, `app.go`, `headless.go` |
 | Build capability adapters | `internal/app/presentation_*`, `audio*`, `network_*` |
 | Interactive, playback, and script loops | `internal/app/loop.go`, `play.go`, `script.go` |
+| Session gates, mid-run hosting and restarts, dedicated host, probe, bot seats | `internal/app/session.go`, `host.go`, `serve.go`, `probe.go`, `seat.go` |
+| Allocated-session lifetime policy | `internal/lifecycle` |
+| Replay copies and checkpoints | `internal/app/clone.go` |
 | Recording, replay, fuzz, and authored script drivers | `internal/journal` |
 | Replay identity and comparison boundary | `internal/app/replay.go`, `surface.go`, `internal/snapshot/surface.go` |
 | Tick and event scheduling | `internal/engine/scheduler.go` |
 | World locking and system execution | `internal/engine/world.go`, `sync_*.go` |
-| Play/manual clocks and time control | `internal/engine/pausable_clock.go`, `manual_clock.go`, `time_control.go` |
+| Play/manual clocks, simulation time and time control | `internal/engine/pausable_clock.go`, `manual_clock.go`, `sim_clock.go`, `time_control.go` |
 | Game context, reset flags, and snapshots | `internal/engine/game_context.go`, `game_state.go`, `snapshot.go` |
 | Event queue and routing | `internal/event/queue.go`, `router.go` |
 | Pause/reset owner | `internal/system/meta.go` |

@@ -8,8 +8,7 @@ import (
 
 // SFXParams is embedder-supplied per-sound shaping applied at render time.
 // Zero fields mean "unmodified". Length is ignored by specs marked
-// fixed_length, which is now a property of the spec rather than of which
-// generator function happened to use the multiplier.
+// fixed_length.
 type SFXParams struct {
 	Pitch  float64 `toml:"pitch,omitempty"`
 	Length float64 `toml:"length,omitempty"`
@@ -85,14 +84,11 @@ func RenderVariants(d *SoundDef, p SFXParams) []floatBuffer {
 	return out
 }
 
-// RenderPreview renders one take at unity variance, bypassing the registry and
-// the variant walk. This is the editor's per-keystroke path: a 200ms spec is
-// ~9k samples through a handful of O(N) passes, well under a millisecond.
-// Validation runs first, so an in-editor mutation that would produce non-finite
-// samples is reported rather than played.
-//
-// The result is the canonical sound, not variant 0 — the variant walk deviates
-// from it in both directions. Use RenderVariants to audition the set.
+// RenderPreview renders one take at unity variance, bypassing the registry and the
+// variant walk: the editor's per-keystroke path, well under a millisecond for a
+// 200ms spec. Validation runs first, so a mutation that would produce non-finite
+// samples is reported rather than played. The result is the canonical sound, not
+// variant 0: the variants deviate from it either way. RenderVariants renders the set.
 func RenderPreview(d *SoundDef, p SFXParams) ([]float64, error) {
 	if err := ValidateSound(d); err != nil {
 		return nil, err

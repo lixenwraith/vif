@@ -1,6 +1,6 @@
-// Package converge is one instance's half of the authority protocol: which
-// generation of the session it is part of and who is authoring it, the correction
-// cadence an authority publishes and a guest installs, the selective manifest
-// exchange that makes a converged link cost hashes, and the links a survivor holds
-// so authorship can move. See doc/domain-design.md and doc/multi-player.md.
+// Package converge is one instance's half of the authority protocol: the term and
+// who authors under it, the succession and peer links that move authorship, the
+// per-link cadence an authority publishes on, the selective manifest exchange a
+// relay also answers from retention, and the playout buffer that times a guest's
+// installs. See doc/domain-design.md and doc/multi-player.md.
 package converge

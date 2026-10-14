@@ -3,26 +3,30 @@
 Terminal TUI for selecting Go codebase subsets as LLM context. Indexes files by `@lixen:` annotations, resolves local import dependencies, and performs AST analysis to visualize symbol-level coupling.
 
 ## Installation
+
+It lives in the `vif` module. From the repository root:
+
 ```bash
-go build -o hierarchy-map ./cmd/hierarchy-map
+make tools                 # builds bin/hierarchy-map alongside the other tools
+go build -o bin/hierarchy-map ./tool/hierarchy-map
 ```
 
-**Optional:** `ripgrep` (`rg`) for content search.
+**Optional:** `ripgrep` (`rg`) for content search; without it `/` matches file paths instead.
 
 ## Usage
 ```bash
 # Run in project root, writes to './catalog.txt'
-./hierarchy-map
+./bin/hierarchy-map
 
 # Custom output file
-./hierarchy-map -o context.txt
+./bin/hierarchy-map -o context.txt
 ```
 
-Minimum terminal size: 120x24
+Minimum terminal size: 120x24. The index covers `.go` files other than `_test.go`, skipping `vendor/`, `testdata/` and dot directories.
 
 ## Annotations
 
-Declare after `package` statement:
+Declare in comment lines directly after the `package` clause; the scan stops at the first later line that is neither a comment nor blank:
 ```go
 package systems
 // @lixen: #focus(term,io),#interact{sys[cursor(init),state(gold)]}
@@ -39,7 +43,7 @@ package systems
 | Multi-category | Comma-separated | `#focus{...},#interact{...}` |
 | Always include | `all(*)` in any category | `#focus{all(*)}` |
 
-Categories are arbitrary names discovered at index time. Multiple `// @lixen:` lines accumulate. Whitespace ignored.
+Categories are arbitrary names discovered at index time. Multiple `// @lixen:` lines accumulate. Whitespace ignored. vif's own sources carry no annotations, so in this repository the HIERARCHY pane is empty and selection works through the file tree and the dependency panes.
 
 ## Interface Layout
 
@@ -72,7 +76,7 @@ Press `?` in any view for full help overlay.
 | `?` | Toggle help |
 | `Ctrl+C` / `Ctrl+Q` | Quit |
 | `Ctrl+S` | Write output file |
-| `Ctrl+L` | Load selection from file |
+| `Ctrl+L` | Load selection from the output file |
 
 ### Navigation (All Panes)
 
@@ -81,8 +85,9 @@ Press `?` in any view for full help overlay.
 | `j`/`k`, `↑`/`↓` | Move cursor |
 | `h`/`l`, `←`/`→` | Collapse / Expand |
 | `H` / `L` | Collapse / Expand all |
-| `g` / `G`, `0` / `$` | Jump to start / end |
+| `0` / `$`, `Home` / `End` | Jump to start / end |
 | `PgUp` / `PgDn` | Page scroll |
+| `Enter` | Open the file viewer (tree pane); expand a header or move the tree to that file (dependency panes, as do `l`/`→`) |
 
 ### Selection
 
@@ -99,7 +104,7 @@ Press `?` in any view for full help overlay.
 | Key | Action |
 |-----|--------|
 | `f` | Toggle filter on cursor item |
-| `/` | Content search (uses ripgrep if available) |
+| `/` | Content search with ripgrep; a path substring match without it |
 | `m` | Cycle mode: OR → AND → NOT → XOR |
 | `Esc` | Clear filter |
 
@@ -116,21 +121,24 @@ Press `?` in any view for full help overlay.
 
 | Key | Action |
 |-----|--------|
-| `d` | Toggle dependency expansion |
-| `+` / `-` | Adjust expansion depth (1-5) |
+| `d` | Toggle dependency expansion (on at start) |
+| `+` (or `=`) / `-` | Adjust expansion depth (1-5, default 2) |
 | `r` | Reindex codebase |
 
 ### File Viewer
 
-Press `Enter` on a file to open viewer.
+Press `Enter` on a file in the tree pane to open the viewer.
 
 | Key | Action |
 |-----|--------|
 | `q` / `Esc` | Close viewer |
+| `j`/`k`, `↑`/`↓` | Move cursor |
+| `Ctrl+U` / `Ctrl+D`, `PgUp` / `PgDn` | Half page up / down |
+| `g` / `G`, `Home` / `End` | First / last line |
 | `/` | Search |
 | `n` / `N` | Next / Previous match |
 | `o` | Toggle fold at cursor |
-| `h` / `l` | Collapse / Expand fold |
+| `h` / `l`, `←` / `→` | Collapse / Expand fold |
 | `M` / `R` | Collapse / Expand all folds |
 
 ### Tag Editor
@@ -156,9 +164,12 @@ Press `e` with files selected to open editor.
 
 | Symbol | Meaning |
 |--------|---------|
-| `[x]` | Directly selected |
+| `[x]` | Directly selected (a directory: all its files) |
+| `[o]` | Directory with some of its files selected |
 | `[+]` | Included via dependency expansion |
 | `[ ]` | Not selected |
+
+Every directory with files also shows `[N/M]`: selected of total.
 
 ### Hierarchy Pane
 
@@ -192,7 +203,7 @@ Sorted alphabetically, prefixed with `./`.
 |---------|---------|
 | `./path/to/file.go` | Exact file |
 | `cmd/*` or `cmd/**` | All files recursively under `cmd/` |
-| `*_test.go` | All test files |
+| `*_gen.go` | A slash-free pattern also matches the file name anywhere |
 | `pkg/*.go` | Glob match in directory |
 
 Lines starting with `#` are comments.
@@ -200,7 +211,7 @@ Lines starting with `#` are comments.
 ## Header Stats
 
 The header bar displays:
-- **Deps:** Dependency expansion status and depth limit
+- **Deps:** `N (+depth)`, the dependency-expanded file count and depth limit, or `OFF`
 - **Output:** Total file count for output
 - **Size:** Total size (with dependency size if expansion enabled)
 

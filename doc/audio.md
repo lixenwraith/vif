@@ -34,20 +34,20 @@ build, `ModePlay`, `ModeReplay` and `ModeScript` register the audio service;
 `js/wasm` omit the service, engine resource, full audio systems, and `pkg/audio`
 implementation. Lightweight null systems still consume local audio events and
 publish audio as unavailable, preserving telemetry and system controls. Event
-payloads retain compatible identifiers through the small `pkg/audio/model`
-package. Replay rebuilds simulation from recorded events, including sound
-requests; the journal carries no mute state, so `-mute`, `-ab` and `-mw` are the
-viewer's. The viewer's pause holds the mixer, as the game's pause does, and so
-do a seek and the end of the stream. A copy that takes over to go back keeps the
-speakers and the conductor's state, since the engine does not rewind
-(`system.HandOverSound`).
+payloads carry audio identifiers from the dependency-free `pkg/audio/model`
+package, which every build compiles. Replay rebuilds simulation from recorded
+events, including sound requests; the journal carries no mute state, so
+`-mute`, `-ab` and `-mw` are the viewer's. The viewer's pause holds the mixer,
+as the game's pause does, and so do a seek and the end of the stream. A copy
+that takes over to go back keeps the speakers and the conductor's state, since
+the engine does not rewind (`system.HandOverSound`).
 
 ## 2. Stream contract
 
 | Property | Value |
 |---|---|
 | Sample rate | 44,100 Hz |
-| Channels | 2 (stereo) |
+| Channels | 2 (stereo); the mix is mono, written to both |
 | Format | Signed 16-bit little-endian PCM |
 | Bytes per frame | 4 |
 | Buffer duration | 50 ms; `vif.toml` `[audio] buffer_ms`, 10–200 in steps of 10 |
@@ -88,9 +88,10 @@ backends are useful in automation:
 - `-ab wav:path/to/out.wav` captures the live stream into a finalized WAV file.
 
 `-mw[=DIR]` (`-music-wav`, `paths.music`) records the music bus alone, before
-ducking, to `vif-mus-<stamp>.wav` beside the logs: what plays, so a muted or
-paused stretch adds nothing. It needs a running mixer; `-ab null -mw` records
-on a machine with no device.
+ducking, to `vif-mus-<stamp>.wav` in the state root's `music/` directory, a
+sibling of `log/` ([layout §5](filesystem-layout.md#5-logs-journals-and-runtime-output)):
+what plays, so a muted or paused stretch adds nothing. It needs a running
+mixer; `-ab null -mw` records on a machine with no device.
 
 If no backend survives, the service degrades to a valid silent engine. Gameplay
 continues, sound requests become no-ops with rejection telemetry, and absence
@@ -111,8 +112,9 @@ sequenceDiagram
     Mixer->>Mixer: render one PCM buffer
 ```
 
-All controls—including playback, mute, pause, tempo, patterns, harmony, and
-hot reload—share one command channel, preserving arrival order. The live
+Playback, transport, tempo, patterns, harmony, and hot reload share one command
+channel, preserving arrival order. Pause and music mute are flags the mixer
+reads each pass, and effect mute rejects a play before it is queued. The live
 sequencer, pattern players, voices, active effects, and buses are confined to
 the mixer goroutine and need no inner locks.
 
@@ -151,8 +153,12 @@ At startup the engine:
 2. loads a resolved optional `audio/sounds.toml`, replacing same-name
    definitions;
 3. freezes the name-to-ID registry;
-4. pre-renders the variant cache and drum kit;
-5. resolves game volume/shape overrides by stable sound name.
+4. pre-renders the variant cache, under the game's per-sound shapes, and the
+   drum kit;
+5. resolves the game's per-sound volumes by stable sound name;
+6. registers `melody_gen`, `BasePatterns` and a resolved `audio/music.toml`
+   (same name replaces), and builds the group arrangement before probing
+   backends.
 
 Each effect normally has three pre-rendered variants. The mixer rotates variants
 to reduce repetition, allows at most two concurrent instances per sound ID and
@@ -198,19 +204,20 @@ crossfading slots:
 | 1 | Melody/harmony-following layer. |
 | 2 | Free layer or automatic phrase fill. |
 
-A pattern has up to 64 steps, 32 tracks, and 512 events per track. Track events
-define step position, velocity, scale degree, octave, duration, probability,
-instrument, chord-following, and humanization. Tonal voices include bass,
-piano/FM, pads, and fallback synthesis; the drum kit uses cached effects.
+A pattern has up to 64 steps, 32 tracks, and 512 events per track. A track sets
+its instrument, chord-following, and humanization; its events set step position,
+velocity, scale degree, octave, duration, and probability. Tonal voices include
+bass, piano/FM, pads, and fallback synthesis; the drum kit uses cached effects.
 
 Tempo is clamped to 80–200 BPM. Tempo changes can wait for the next beat;
 patterns can transition immediately or quantized to the bar. The incoming
 pattern plays at full level from its first trigger while the outgoing one's
 ringing tails fade out, over at least 256 samples so none is hard-cut. A reveal
 builds a rising tier up from as many tracks as the outgoing pattern sounded,
-adding one a bar, so a build-up never starts thinner than what it replaces. Slot 2 can substitute a seeded fill on the last bar of each
-eight-bar phrase and restore the previous pattern on the downbeat; explicit
-slot-2 editing disables that surprise behavior.
+adding one a bar, so a build-up never starts thinner than what it replaces.
+Slot 2 substitutes a seeded fill on the last bar of each eight-bar phrase and
+restores the previous pattern on the downbeat. The fill is on by default;
+`SetAutoFill(false)` turns it off, as soundlab does.
 
 Drawn music comes from groups. A pattern's `role` (rhythm, melody or fill),
 `groups` and `tiers` place it; `Start` builds each group's pool per tier and role
@@ -245,12 +252,12 @@ at 120, 168 at 220, 179 at 300, and the engine's 200 maximum only at the 480
 ceiling, which a pointer alone (six gestures a second, 187 BPM) cannot reach. The
 conductor slews rather than jumping (20 BPM/s upward, 16 BPM/s downward), ignores
 changes smaller than three BPM until the slew settles on its target, and the
-sequencer applies each on the next beat, so tempo trails the five-second window by
-about a second. A tier change draws from
-the current group under quantization/crossfade/reveal policy, and a slot already
-sounding its draw keeps playing. The `music.*` status group (the telemetry HUD's music
-card, and the periodic stat log) names the group, tier, requested tempo and the
-pattern in each slot, and reads `-` while music is muted or stopped.
+sequencer applies each on the next beat, so tempo trails the five-second window
+by about a second. A tier change draws from the current group under
+quantization/crossfade/reveal policy, and a slot already sounding its draw keeps
+playing. The `music.*` status group (the telemetry HUD's music card, and the
+periodic stat log) names the group, tier, requested tempo and the pattern in
+each slot, and reads `-` (tempo 0) while music is muted, stopped or disabled.
 
 Explicit music events can start/stop, set patterns, play a melody note, change
 intensity, tempo, seed, swing, or harmony. A manually held intensity can later
@@ -269,9 +276,12 @@ The categorized locations are `audio/sounds.toml` and `audio/music.toml`.
 `-config-sounds` and `-config-music` are strict individual overrides. See
 [External filesystem layout](filesystem-layout.md).
 
-Malformed user definitions degrade to the shipped bank. Play reports the first
-line of the engine's combined specification error on the status bar; `vif -check`
-validates and reports both documents in full before startup.
+An invalid user definition leaves the shipped one in place; a document that does
+not parse or names an unknown key is ignored whole, and so is a user
+`sounds.toml` that uses `include`, which the game's loader rejects. Play reports
+the first line of the engine's combined specification error on the status bar;
+`vif -check` checks music, then sounds, before startup and stops at the first
+document that fails, listing every invalid definition in it.
 
 The shipped banks are `internal/asset/audio/sfx.toml`, `drums.toml` and
 `music.toml`, embedded and handed to the engine as `BaseSounds` and
@@ -297,9 +307,11 @@ Soundlab registers the same sound and pattern banks the game does, from the same
 embedded assets, and takes vif's `-config-dir`, `-config-music` and
 `-config-sounds`. It resolves both overrides through `internal/paths` exactly as
 the game does, registers them, and opens them as its documents, so its registry
-and the game's hold identical specs. A save writes back to the file the next run
-reads first: the override's own file, or the user root's (or `-config-dir`'s)
-when the override came from an installed system root, which it then shadows.
+and the game's hold identical specs. A save writes where the next run reads
+first: the `-config-music`/`-config-sounds` file when given, else
+`audio/<file>` under `-config-dir` or else the user root, shadowing any copy in
+a lower root. It does not apply the game's per-sound volumes and shapes, so its
+auditions and exports play a spec as authored.
 
 The working document and live registry are separate: edits do not affect audio
 until `apply`; `revert` restores the document from the canonical registry. Its
@@ -329,13 +341,13 @@ events and keep the sequencer unaware of gameplay concepts.
 | Concern | Primary source |
 |---|---|
 | Engine/backend lifecycle | `pkg/audio/engine.go`, `detector.go`, `wav.go` |
-| Mixer/SFX admission | `pkg/audio/mixer.go`, `cache.go`, `sound_render.go` |
-| Sound schema | `pkg/audio/sound_spec.go`, `sound_valid.go` |
+| Mixer/SFX admission | `pkg/audio/mixer.go`, `cache.go`, `drumkit.go`, `sound_render.go` |
+| Sound schema, loading and registry | `pkg/audio/sound_spec.go`, `sound_valid.go`, `sound_load.go`, `sound_registry.go` |
 | Shared protocol identifiers | `pkg/audio/model` |
 | Shipped sound and music banks | `internal/asset/audio/*.toml`, `internal/parameter.BuiltinSounds`, `BuiltinPatterns` |
-| Sequencer/patterns | `pkg/audio/sequencer.go`, `pattern*.go`, `track.go`, `voice.go` |
+| Sequencer/patterns | `pkg/audio/sequencer.go`, `pattern*.go`, `harmony.go`, `motif.go`, `track.go`, `voice.go` |
 | Game service | `internal/service/adapter_audio.go` |
-| Game event adapters | `internal/system/audio.go`, `music.go`; `sound.go` holds the mask both publish and the handover |
-| Mode/build selection and replay default | `internal/app/config.go`, `audio*.go`, `play.go` |
+| Game event adapters | `internal/system/audio.go`, `music.go`; `sound.go` holds the mask both publish and the handover; `audio_none.go` the null systems |
+| Mode/build selection and replay default | `internal/app/config.go`, `audio.go`, `audio_none.go`, `play.go` |
 | Game policy | `internal/parameter/audio.go`, `music.go`, `sfx.go`, `sfx_audio.go` |
 | Authoring tool | `cmd/soundlab`, `cmd/soundlab/README.md` |

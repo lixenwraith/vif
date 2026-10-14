@@ -19,7 +19,7 @@ type SpeciesConfig struct {
 	// Boundary selects mutation out-of-range handling for every gene
 	Boundary genetic.BoundaryMode
 
-	// PerturbationStdDev overrides EngineConfig.PerturbationStrength when non-zero
+	// PerturbationStdDev overrides EngineConfig.PerturbationStrength when positive
 	PerturbationStdDev float64
 	TournamentSize     int
 	MixProbability     float64

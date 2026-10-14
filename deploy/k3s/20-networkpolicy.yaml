@@ -1,10 +1,8 @@
-# What a session pod may talk to, and what may talk to it.
-#
-# K3s enforces NetworkPolicy through its bundled kube-router controller unless the
-# cluster was installed with --disable-network-policy. Verify that before trusting
-# these: a policy the CNI does not enforce is a comment, and this one is load
-# bearing — every connected peer can influence the shared simulation, so a session
-# pod is a piece of attack surface reachable by whoever can reach the game port.
+# What a session pod may talk to, and what may talk to it. K3s enforces these through
+# its bundled kube-router controller unless installed with --disable-network-policy;
+# verify that, because an unenforced policy is a comment and this one is load bearing:
+# every connected peer can influence the shared simulation, so a session pod is
+# attack surface for whoever can reach the game port.
 ---
 # Default deny, both directions, for everything in the namespace. Every allowance
 # below is additive to this; anything not named is refused.
@@ -17,15 +15,11 @@ spec:
   podSelector: {}
   policyTypes: [Ingress, Egress]
 ---
-# The game port, from anywhere.
-#
-# Player traffic arrives through a NodePort from an address no pod or namespace
-# selector can identify, so this policy cannot authenticate a player. It is not
-# trying to. externalTrafficPolicy keeps the original source for the application.
-# What it does is confine the reachable surface to one port on one workload, so
-# that everything else in the namespace stays unreachable even from a source that
-# is allowed to play. Restricting *who* may reach 7777 is the firewall's job on the
-# FreeBSD host and the node; see doc/kube-docker-deploy.md §2.
+# The game port, from anywhere. A player's address is one no selector can identify,
+# so this does not authenticate: it confines the reachable surface to one port on
+# one workload, keeping the rest of the namespace unreachable even from a source
+# allowed to play. Who may reach 7777 is the firewall's job at the host forward and
+# on the node (doc/kube-docker-deploy.md §2).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -42,13 +36,10 @@ spec:
         - protocol: TCP
           port: game
 ---
-# The operator ports, from the monitoring namespace only.
-#
-# /health and /metrics describe the session's roster, tick and remaining lifetime,
-# and the log stream carries every line the session writes — including the metric
-# records. All of it is operational data, all of it is unauthenticated, and none of
-# it may be reachable from the player-facing path. The kubelet's own probes bypass
-# the pod network and are unaffected by this.
+# The operator ports, from the monitoring namespace only. /health and /metrics
+# describe the session's roster, tick and remaining lifetime: unauthenticated
+# operational data that must not be reachable from the player-facing path. The
+# kubelet's own probes bypass the pod network and are unaffected by this.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

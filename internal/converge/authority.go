@@ -506,11 +506,11 @@ func (u *Authority) restartRun(tick uint64) {
 	}
 }
 
-// trySucceed takes the term, when this instance is the one the roster names.
-// DesignatedSuccessor is a pure function of the closed roster and the participant
-// that went, so exactly one instance reaches the publish below and reaches it as
-// soon as it notices — a quorum round would add a trip a star cannot complete. The
-// one self-check is retention: without a baseline the successor stands down.
+// trySucceed takes the term when the succession names this instance. The successor
+// is a pure function of the roster, the chain and the participant that went, so at
+// most one instance publishes, as soon as it notices. A quorum would add a round
+// trip and elect nobody in a session of two, where one survivor is half the roster.
+// The one self-check is retention: without a baseline it stands down.
 func (u *Authority) trySucceed() {
 	roster := u.currentRoster()
 	u.mu.Lock()
@@ -566,11 +566,11 @@ func (u *Authority) trySucceed() {
 	}
 }
 
-// giveUp ends a succession no record ever answered: either this instance is not the
-// successor the roster names and cannot reach the one that is, or it is and had
-// nothing retained to author from. What is left is the local-continuation fallback,
-// said plainly: this instance continues its own game from the last authoritative
-// state.
+// giveUp ends a succession no record ever answered: this instance is not the
+// designated successor and cannot reach the one that is, it is and had nothing
+// retained to author from, or the session pinned its authority. What is left is the
+// local-continuation fallback, said plainly: this instance continues its own game
+// from the last authoritative state.
 func (u *Authority) giveUp() {
 	// Read before the state is cleared: what this fork keeps is the roster it can
 	// still reach, and both halves of that answer are gone once lost is.
@@ -801,7 +801,7 @@ func (u *Authority) Receive(kind uint8, from uint32, body []byte) {
 // onReport notes a survivor's loss notice and joins the succession it announces. A
 // participant that never saw the disconnect itself — one two links from the lost
 // authority — learns of it here, which is why the notices are flooded: the
-// departure crossing that used to carry that news is produced by the authority.
+// departure crossing that would carry that news is the lost authority's to produce.
 func (u *Authority) onReport(from uint32, body []byte) {
 	rep, err := network.DecodeAuthorityReport(body)
 	if err != nil || rep.From == 0 {

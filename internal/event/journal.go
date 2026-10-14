@@ -37,9 +37,8 @@ type JournalRecord struct {
 	Domain    core.Domain // producer domain; replication filters on it
 }
 
-// Replicated reports whether this record belongs in the transported set, which
-// is Shared union Bus with Stamped resolved through the domain its producer
-// stamped (D-10). Two instances of one seed must produce the same subsequence.
+// Replicated reports whether every instance of one seed must hold this record, in
+// the same subsequence (D-10); OnWire is the narrower set that travels.
 func (r JournalRecord) Replicated() bool { return Replicated(r.Type, r.Domain) }
 
 // JournalAnchor is a self-describing header re-emitted periodically so a
@@ -176,8 +175,9 @@ const DigestIntervalTicks = 20
 // DigestDue reports whether a completed tick falls on the digest cadence
 func DigestDue(tick uint64) bool { return tick%DigestIntervalTicks == 0 }
 
-// Journal captures non-system events for replay. One per queue, so concurrent
-// harness runs in a single process cannot share a counter.
+// Journal captures events of journaled origins, and this instance's own crossings,
+// for replay. One per queue, so concurrent harness runs in a single process cannot
+// share a counter.
 type Journal struct {
 	sink    JournalSink // immutable after NewJournal
 	seq     atomic.Uint64

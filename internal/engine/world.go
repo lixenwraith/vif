@@ -268,10 +268,10 @@ func (w *World) HasSystem(name string) bool {
 	return false
 }
 
-// SystemInitOrder resolves declared dependencies into a deterministic
-// initialization order. This is not the tick order, which AddSystem fixes from
-// Priority(); a system may legitimately initialize before one that ticks first.
-func (w *World) SystemInitOrder() ([]string, error) {
+// CheckSystemDependencies reports a dependency on an unregistered system or a
+// cycle. The graph orders nothing: each system initializes itself, in its
+// constructor and on reset, and AddSystem fixes the tick order from Priority().
+func (w *World) CheckSystemDependencies() error {
 	deps := make(map[string][]string, len(w.systems))
 	for i := range w.systems {
 		required := w.systems[i].profile.Requires
@@ -281,7 +281,8 @@ func (w *World) SystemInitOrder() ([]string, error) {
 		}
 		deps[w.systems[i].sys.Name()] = names
 	}
-	return core.TopoSort(deps)
+	_, err := core.TopoSort(deps)
+	return err
 }
 
 // SetSystemBaseline installs the scenario's [systems] baseline before the first tick
@@ -338,7 +339,7 @@ func (w *World) UpdateLocked() {
 }
 
 // Seal freezes the system set and binds each system's profiler timer; called by
-// Scheduler.Start before its tick and event goroutines begin ranging it
+// Scheduler.Prepare before any tick or settle ranges it
 func (w *World) Seal() {
 	if w.sealed.Swap(true) {
 		return

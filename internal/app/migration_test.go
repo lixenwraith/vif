@@ -13,7 +13,7 @@ import (
 
 // settleAuthority runs the succession to a conclusion without advancing anyone's
 // clock further than it has to. The election is driven from the correction loop, so
-// a round of ApplyPendingCorrections plus one tick is one round of report, vote and
+// a round of ApplyPendingCorrections plus one tick is one round of report and
 // handoff. The bound is the succession deadline: past it the instances have fallen
 // back to local continuation, which is a conclusion several of these tests are about.
 func settleAuthority(t *testing.T, apps []*App, done func() bool) bool {

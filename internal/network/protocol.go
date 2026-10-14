@@ -18,12 +18,11 @@ const (
 	// Control
 	MsgHeartbeat MessageType = 0x01 // Live: keeps a silent stream inside its read deadline
 
-	// MsgSessionRoute is the one frame a dialer sends before it reads: the name of
-	// the session it was given. It exists so one address can carry several — a
-	// front door reads it to place the connection, and the session it lands on
-	// refuses a name that is not its own, which is what turns a stale link into a
-	// refusal rather than a seat in a stranger's match. It is a routing key and not
-	// a credential; the port is unauthenticated by decision.
+	// MsgSessionRoute is the one frame a dialer sends before it reads: the session
+	// name it was given, so one address can carry several. A front door reads it to
+	// place the connection, and the session refuses a name not its own, so a stale
+	// link is refused rather than seated in a stranger's match. It is a routing key,
+	// not a credential: the port is unauthenticated by decision.
 	MsgSessionRoute MessageType = 0x05 // Live: the session name a dialer is holding
 
 	// Game. 0x10 is reserved and stays so: raw participant input is not a message
@@ -32,36 +31,27 @@ const (
 	MsgEvent       MessageType = 0x12 // Live: one closed barrier production epoch
 	MsgStateDigest MessageType = 0x13 // Live: periodic shared-world parity probe
 
-	// MsgLinkProbe and MsgLinkEcho are the round trip. Nothing else in this
-	// protocol makes one — every other measurement is one-directional — so the
-	// cadence had nothing but a constant to be chosen from until these existed.
-	//
-	// They are answered inside the transport, before the frame reaches a tick, so
-	// what they measure is the wire rather than this instance's scheduling. An
-	// echo carries back the probe's own bytes untouched, the bytes the far end has
-	// received on the link, and the opaque LinkReport the far end's world last
-	// published — which is the only game state that ever travels on them.
+	// MsgLinkProbe and MsgLinkEcho are the only round trip the protocol times; every
+	// other measurement is one-directional. The transport answers a probe before it
+	// reaches a tick, so they measure the wire, not this instance's scheduling. An
+	// echo returns the probe's bytes, the far end's received byte count and read time,
+	// and the LinkReport its world last published: the only game state on them.
 	MsgLinkProbe MessageType = 0x14 // Live: a link measurement, awaiting its echo
 	MsgLinkEcho  MessageType = 0x15 // Live: one probe answered, with the peer's report
 
-	// MsgScenarioRequest and MsgScenarioBody carry the session's scenario to a
-	// joiner whose own roots do not hold it. The request names the digest the offer
-	// announced; the answer is the deflated canonical form, chunked like a capture
-	// because it is the other message whose size is a function of its content.
-	//
-	// They sit inside the join handshake, between the offer and the reply, so a
-	// participant is running the session's scenario before it reports an identity
-	// the coordinator would refuse it on. At most one request fits there by
-	// construction: what follows the answer has to be the reply.
+	// MsgScenarioRequest and MsgScenarioBody carry the session's scenario to a joiner
+	// whose roots lack it: the request names the offer's digest, and the answer is the
+	// deflated canonical form, chunked like a capture. They sit between the offer and
+	// the reply, before the joiner reports an identity the coordinator would refuse
+	// it on, and one request fits there: what follows the answer has to be the reply.
 	MsgScenarioRequest MessageType = 0x16 // Live: a joiner asking for the session's scenario
 	MsgScenarioBody    MessageType = 0x17 // Live: one chunk of the deflated scenario
 
 	// MsgSessionRestart is the authority saying this session is rebuilding on
-	// another scenario. It carries nothing: every participant already knows the
-	// address it came in on, and the offer it is given when it redials names what
-	// is being played. A scenario change restarts the run on both sides, so there
-	// is no state to hand over — only the news that the door is about to close and
-	// reopen.
+	// another scenario. Its payload is the address to redial, where the authority
+	// listens or the one it declared on inheriting the session, so a restart follows
+	// a migrated authority; the offer given on redial names what is being played.
+	// Both sides restart the run, so there is no state to hand over.
 	MsgSessionRestart MessageType = 0x18 // Live: the authority is rebuilding the session
 
 	// MsgBundle is a tick's raw epochs and syncs for the authority as one frame: a
@@ -70,61 +60,46 @@ const (
 	MsgBundle MessageType = 0x19 // Live: several frames for the authority, packed into one
 
 	// MsgStateSnapshot carries one chunk of an authoritative shared-world capture
-	// (D-19). It is the only message whose total size is a function of the world
-	// rather than of the format, so it is the only one that is split; see
-	// snapshot.go for the chunk header.
+	// (D-19). Its size is a function of the world rather than of the format, so it is
+	// split; see snapshot.go for the chunk header.
 	MsgStateSnapshot MessageType = 0x26 // Live: one chunk of a shared-world capture
 
-	// MsgStateCorrection carries one chunk of a periodic authoritative correction:
-	// either a whole capture or a delta against the last one the host sent whole.
-	// It is the same chunking as MsgStateSnapshot and a different message because
-	// it arrives at a different moment — a capture is part of a handshake, on a
-	// stream nothing else owns yet, and a correction arrives mid-session on a port
-	// that is also carrying epochs, syncs and digests.
+	// MsgStateCorrection carries one chunk of a periodic authoritative correction, a
+	// whole capture or a delta against the last keyframe. It is chunked as
+	// MsgStateSnapshot but is its own kind: a capture is part of a handshake on a
+	// stream nothing else owns yet, a correction arrives mid-session beside epochs,
+	// syncs and digests.
 	MsgStateCorrection MessageType = 0x27 // Live: one chunk of an authoritative correction
 
-	// The selective-correction exchange. A manifest is a compact index over
-	// the same capture a correction would carry; a request is a receiver's answer to
-	// one, naming the pages it could not reproduce; a shard set is the repair. All
-	// three are separate message kinds rather than shapes of MsgStateCorrection
-	// because they travel in different directions and are handled at different
-	// moments — a manifest is broadcast on the cadence, a request is unicast back to
-	// the authority, and a repair is unicast to the peer that asked.
-	//
-	// None of the three is chunked: each is bounded to one transport frame by
-	// construction (see parameter.SnapshotShardBytesMax), and a repair too wide for
-	// one frame is not a repair — the host answers it with a keyframe, which is
-	// chunked, self-sufficient and already part of the protocol.
+	// The selective-correction exchange: a manifest indexes the capture a correction
+	// would carry, sent on each peer's cadence; a request, sent back to the peer the
+	// manifest came from, names the pages a receiver could not reproduce; a shard set
+	// is that peer's repair. None is chunked: one that would outgrow a frame (see
+	// parameter.SnapshotShardBytesMax) gives way to a whole, chunked keyframe.
 	MsgStateManifest MessageType = 0x28 // Live: a correction manifest, root and section hashes
 	MsgStateRequest  MessageType = 0x29 // Live: one receiver's answer to a manifest
 	MsgStateShard    MessageType = 0x2A // Live: the pages one request asked for
 
-	// MsgStateUnserved is the answer a retention holder gives when it cannot
-	// produce the pages a request names: it has dropped the manifest, or its own
-	// world never agreed with the authority's at that tick. It exists because the
-	// alternative answers are both wrong — silence costs the receiver a cadence
-	// waiting for a repair that is not coming, and a body from a different
-	// baseline is the mixed-baseline assembly the supersession rules exist to make
-	// unreachable.
+	// MsgStateUnserved answers a request a retention holder cannot serve: it holds no
+	// index for the tick or none that answers the pages, the repair is too wide, or
+	// the request asks a relay for a whole world. Silence would cost the receiver a
+	// cadence, and a body from another baseline is the mixed-baseline assembly the
+	// supersession rules make unreachable.
 	MsgStateUnserved MessageType = 0x2B // Live: a request this peer's retention cannot answer
 
 	// Succession, in the order it runs. A report is the news that the authority is
 	// gone, flooded so a participant two links away learns of a loss only its
-	// neighbour observed; a handoff is the record that lets a receiver adopt a term
-	// it has never seen. Two kinds rather than one because a receiver acts on each
-	// at a different moment, and because only the second is a membership change.
-	// There is no vote: the successor is a function of the roster (see authority.go),
-	// so 0x2D is retired rather than reused.
+	// neighbour observed; a handoff, a membership change, lets a receiver adopt a
+	// term it has never seen. There is no vote: the successor is a function of the
+	// chain and the roster (see authority.go), so 0x2D is retired rather than reused.
 	MsgAuthorityReport  MessageType = 0x2C // Live: a survivor's notice that the authority is gone
 	MsgAuthorityHandoff MessageType = 0x2E // Live: the record a successor authors under
 
-	// MsgPeerList is the reachability map: where each participant listens, so a
-	// survivor can dial the successor a handoff names. It rides the authority's
-	// term and is refused below the term the receiver holds, like every other
-	// authoritative artifact. It carries addresses only — the confirmed set a
-	// succession reads is frozen for the term and travels in the offer and the
-	// handoff record instead. See reach.go.
-	MsgPeerList MessageType = 0x20 // Live: the authority's confirmed address map
+	// MsgPeerList is the succession chain, flooded whole: the eligible participants
+	// in join order and where each listens, so a survivor can dial the successor a
+	// handoff names. It rides the authority's term and is refused below the term the
+	// receiver holds, like every other authoritative artifact. See reach.go.
+	MsgPeerList MessageType = 0x20 // Live: the succession chain and its addresses
 
 	// MsgRelayJoin and MsgRelayAdmit admit a participant on the link of the one it
 	// dialled rather than on the coordinator's: a guest's bot joins through its
@@ -148,14 +123,10 @@ const (
 	// Coordination, in the order the startup handshake runs them
 	MsgJoinOffer MessageType = 0x22 // Live: host offers the session anchor and roster assignment
 	MsgJoinReply MessageType = 0x23 // Live: joiner accepts or rejects the offered identity
-	MsgStart     MessageType = 0x24 // Live: host releases the participants into tick zero
+	MsgStart     MessageType = 0x24 // Live: host releases a joiner into the capture that follows
 	MsgReady     MessageType = 0x25 // Live: joiner confirms it received the start gate
 
-	// Reserved, unused: authentication. Codes once reserved here are live above:
-	// 0x26/0x27 the state snapshot and periodic correction, 0x14/0x15 the link
-	// probe, 0x28..0x2A the selective correction, 0x2B..0x2E the unserved answer and
-	// succession, 0x20, 0x02 and 0x04 the reachability map and peer link, and 0x21
-	// the relayed admission.
+	// Reserved, unused: authentication.
 	MsgAuthRequest  MessageType = 0x30
 	MsgAuthResponse MessageType = 0x31
 )

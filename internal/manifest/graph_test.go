@@ -2,7 +2,6 @@ package manifest
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/engine"
@@ -21,58 +20,8 @@ func buildWorld(t *testing.T) *engine.World {
 // TestSystemGraphResolves asserts every declared dependency names a registered
 // system and the graph is acyclic
 func TestSystemGraphResolves(t *testing.T) {
-	w := buildWorld(t)
-
-	order, err := w.SystemInitOrder()
-	if err != nil {
+	if err := buildWorld(t).CheckSystemDependencies(); err != nil {
 		t.Fatalf("system graph: %v", err)
-	}
-	if len(order) != len(ActiveSystems()) {
-		t.Fatalf("resolved %d systems, registered %d", len(order), len(ActiveSystems()))
-	}
-}
-
-// TestSystemInitOrderIsDeterministic asserts one system set resolves to one
-// order; a shared RNG stream derived during init must not vary between runs
-func TestSystemInitOrderIsDeterministic(t *testing.T) {
-	var first string
-	for range 16 {
-		order, err := buildWorld(t).SystemInitOrder()
-		if err != nil {
-			t.Fatalf("system graph: %v", err)
-		}
-		got := strings.Join(order, " ")
-		if first == "" {
-			first = got
-			continue
-		}
-		if got != first {
-			t.Fatalf("order varies between runs:\n %s\n %s", first, got)
-		}
-	}
-}
-
-// TestSystemInitOrderPrecedesDependents asserts the resolved order places every
-// dependency, required or optional, ahead of the system declaring it
-func TestSystemInitOrderPrecedesDependents(t *testing.T) {
-	w := buildWorld(t)
-
-	order, err := w.SystemInitOrder()
-	if err != nil {
-		t.Fatalf("system graph: %v", err)
-	}
-
-	position := make(map[string]int, len(order))
-	for i, name := range order {
-		position[name] = i
-	}
-	for _, profile := range SystemProfiles() {
-		for _, dep := range profile.Requires {
-			if position[dep.Name] >= position[profile.Name] {
-				t.Errorf("%s initializes at %d, after its dependency %s at %d",
-					profile.Name, position[profile.Name], dep.Name, position[dep.Name])
-			}
-		}
 	}
 }
 

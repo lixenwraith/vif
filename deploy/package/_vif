@@ -5,20 +5,20 @@ _arguments \
   '-serve[Bind a headless session with no local cursor, e.g. :7777 or ws://:7777]:addr: ' \
   '-join[Join a session at \[tcp://|vif://\]host:port\[/name\] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given]:addr: ' \
   '-name[Name this host answers to, so one address can serve several sessions]:name: ' \
-  '-players[Roster ceiling including self, 2..16; unset holds the whole roster; with a -join site, the one requested]:n: ' \
+  '-players[Roster ceiling including self, 2..16 (with -serve, guests only, 1..16); unset holds the whole roster; with a -join site, the one requested]:n: ' \
   '(-bot -bots)'{-bot,-bots}'[Add bots alongside you (default 1:default); -host/-join keep your player]' \
   '-authority[Where authorship goes when the authoring participant leaves; default host with -serve, migrate otherwise]:value:(host migrate)' \
   '-slow-window[Window a participant'\''s lateness is judged over; host only, 0 never evicts (default 20s)]:dur: ' \
   '-slow-late[Evict at this many late epochs per second over the window; 0 ignores lateness (default 5)]:n: ' \
   '-slow-bytes[...and at least this many bytes per second on its link; 0 ignores throughput (default 8192)]:n: ' \
   '-listen[Address this participant is dialled back on; -join only, default the host'\''s port then an ephemeral one]:addr: ' \
-  '-no-advertise[Keep this participant'\''s address out of the session; -join only, and it is never elected]' \
+  '-no-advertise[Keep this participant'\''s address out of the session; -join only, elected only when no advertised participant survives]' \
   '-size[Terminal-equivalent size for a run that has no terminal]:WxH: ' \
   '-probe[Health and metrics endpoint; -serve only]:addr: ' \
   '-first-join[Exit if no guest connects within this; -serve only, 0 waits forever]:dur: ' \
   '-empty[Exit this long after the last guest leaves; -serve only, 0 keeps the session]:dur: ' \
   '-drain[How long a termination signal waits for an empty roster; -serve only, 0 exits at once]:dur: ' \
-  '(-d -config-embedded)'{-d,-config-embedded}'[Use the embedded scenario and content, ignoring -s and -f]' \
+  '(-d -config-embedded)'{-d,-config-embedded}'[Use the embedded scenario and content; refuses -s and -f and ignores vif.toml'\''s scenario and content]' \
   '-config-dir[Configuration root holding scenario/ input/ audio/ content/ image/ bot/]:dir:_files -/' \
   '(-s -config-scenario)'{-s,-config-scenario}'[Installed scenario name, scenario.toml, or a scenario directory]:path:_files' \
   '(-f -config-content)'{-f,-config-content}'[Content directory, or a single content file]:path:_files' \
@@ -34,7 +34,7 @@ _arguments \
   '-headless[With -bot, run bots without a human player or terminal; solo runs are unpaced. With -replay, verify the journal'\''s digests unattended]' \
   '-watch[Watch the first bot or a script on this terminal, with no human player]' \
   '(-r -replay)'{-r,-replay}'[Replay a recorded journal instead of playing]:path:_files' \
-  '-check[Validate the resolved scenario, keymap, audio, content and bot graphs, then exit]' \
+  '-check[Validate the resolved settings, scenario, keymap, audio, content and bot graphs, then exit]' \
   '-schema[Print the FSM schema as JSON, then exit]' \
   '(-l -log)'{-l,-log}'[Enable logging; DIR overrides $XDG_STATE_HOME/vif/log]' \
   '(-lv -log-level)'{-lv,-log-level}'[trace, debug, info, warn or error; implies -l]:level: ' \

@@ -27,10 +27,11 @@ served-block telemetry. `:content` presents a compact view during a run.
 
 Source resolution is:
 
-1. `-f <path>`: an explicit directory, or a single file pinned within its
-   parent directory;
+1. `-f <path>`, or `[paths] content` in `vif.toml`: an explicit directory, or a
+   single file pinned within its parent directory;
 2. `content/` under `-config-dir`;
-3. the same under the user root, then under each system root;
+3. the same under the user root, the checkout's `wad/` beside a `bin/` binary,
+   then each system root;
 4. embedded tutorial content.
 
 `make install-config` copies `wad/content` into the categorized user directory.
@@ -49,10 +50,11 @@ Only eligible files immediately at the directory root are loaded. Subfolders,
 hidden names, and unrelated extensions are skipped.
 
 **Resolution above is per instance, and a session does not change it.** Glyphs are
-player domain (D-11), so each participant spawns them from the corpus its own
-command line resolved — external when a root holds one, embedded otherwise, and
-embedded outright under `-d`. Nothing is reconciled: the join compares the seed,
-session and scenario and not the corpus, and no corpus travels between peers.
+[player domain](domain-design.md#1-domains-and-identity), so each participant
+spawns them from the corpus its own command line resolved — external when a root
+holds one, embedded otherwise, and embedded outright under `-d`. Nothing is
+reconciled: the join compares the seed, session and scenario digest and not the
+corpus, and no corpus travels between peers.
 
 Two consequences. A guest needs no corpus from anyone, and two players reading
 different text are still in the same session. And a dedicated host serves none: the
@@ -73,9 +75,10 @@ type Corpus struct {
 }
 ```
 
-Every accepted source contains at least one `core.CodeBlock`. Rejected eligible
-files retain a name/reason for telemetry instead of aborting the whole corpus.
-Only failure to read the directory itself is a hard loader error.
+Every accepted source contains at least one `core.CodeBlock`. A rejected eligible
+file keeps its name and reason, which `-check` lists and `content.rejected`
+counts, instead of aborting the whole corpus. Only failure to read the directory
+itself is a hard loader error.
 
 The default ingest policy is:
 
@@ -164,7 +167,9 @@ Random selection uses a named `vmath` stream derived from the App's root seed.
 For the same accepted corpus, seed, config, and request order, source hopping is
 therefore reproducible and part of the driven-App/replay contract. A journal
 anchor records the resolved source/pin plus accepted file, block, and line
-counts so replay rejects a corpus that changed behind the same path.
+counts so replay rejects a corpus that changed behind the same path. A replay
+checkpoint carries the cursor's `CursorState` (source, block and stream position),
+so a copy restored from it serves the blocks the original run would have.
 
 ## 7. Embedded assets
 
@@ -176,21 +181,26 @@ everything a build must be able to play without a filesystem:
 | FSM bundle | `internal/asset/scenario/*.toml` | Fallback campaign and region files. |
 | Content bundle | `internal/asset/content/*.toml` | Always-available tutorial corpus. |
 | Keymap | `internal/asset/input/keymap.toml` | Default bindings; also what `make install-config` installs. |
-| Sound bank | `internal/asset/audio/*.toml` | Built-in specs `pkg/audio` renders. |
-| Splash font | `internal/asset/splash_font.go` | 95 printable ASCII glyphs plus fallback, each a 12-row bitmap. |
+| Settings | `internal/asset/vif.toml` | The defaults a root's `vif.toml` overrides; also installed. |
+| Bot graphs | `internal/asset/bot/*.toml` | Shipped graphs, `default` among them; also installed. |
+| Sound bank | `internal/asset/audio/sfx.toml`, `drums.toml` | Built-in specs `pkg/audio` renders, a later file overriding an earlier one by name. |
+| Music bank | `internal/asset/audio/music.toml` | Built-in patterns the conductor arranges. |
+| Version stamp | `internal/asset/version.txt` | Tag and commit `git archive` writes for `-version`. |
+| Splash font | `internal/asset/splash_font.go` | 95 printable ASCII glyphs plus fallback, each a 12-row bitmap; Go source, not embedded. |
 
 The embedded filesystems are narrowed with `fs.Sub`, so their runtime root is
 the category directory rather than `internal/asset/...`. Missing embedded
 bundles panic during package initialization because they represent a broken
 build artifact, not a recoverable user configuration error.
 
-`pkg/audio` holds no specs, which is what keeps `pkg/` free of `internal/`
-imports: `parameter.BuiltinSounds` parses the embedded bank and the embedder
-passes it as `AudioConfig.BaseSounds`. A user `sounds.toml` overrides that set
-by name.
+`pkg/audio` holds no specs or patterns, which is what keeps `pkg/` free of
+`internal/` imports: `parameter.BuiltinSounds` and `parameter.BuiltinPatterns`
+parse the embedded banks and the audio service passes them as
+`AudioConfig.BaseSounds` and `BasePatterns`. A user `sounds.toml` or `music.toml`
+overrides those by name.
 
-The splash renderer consumes the built-in bitmap font for large text overlays.
-The font editor updates the source representation; it is not loaded from a
+The splash and button renderers draw with the built-in bitmap font. The font
+editor exports edited glyphs as Go source for `splash_font.go`; there is no
 runtime font file.
 
 ## 8. Image and pattern pipeline
@@ -199,9 +209,10 @@ runtime font file.
 flowchart TD
     Raster["PNG, JPEG, or GIF"] --> Asc["pkg/ascimage converter"]
     Asc --> Dual["dual-mode .vifimg"]
-    Dual --> Pattern["internal/pattern PatternResult"]
-    Pattern --> Event["wall composite spawn event"]
-    Event --> ECS["wall entities and normal renderer"]
+    Request["WallPatternSpawnRequest"] --> Wall["WallSystem opens it through FileService"]
+    Dual --> Wall
+    Wall --> Pattern["internal/pattern PatternResult"]
+    Pattern --> ECS["one composite wall: wall entities and normal renderer"]
 ```
 
 `pkg/ascimage` converts raster images into terminal cells using either:
@@ -218,22 +229,24 @@ palette attributes and anchor offsets, skips transparent cells, and creates
 `PatternCell` offsets.
 
 `WallSystem` converts a `PatternResult` to `WallCellDef` values and spawns them
-as one composite wall with a block mask and optional box style, so images
+as one composite wall with the request's block mask and collision mode, so images
 participate in wall collision, ECS lifecycle, camera cropping, and the normal
 wall renderer rather than drawing directly to the terminal.
 
 A pattern can be blocking (`WallBlockAll` or directional mask) or a nonblocking
-visual backdrop (`WallBlockNone`). The spawn event currently supplies the map
-coordinate. The `.vifimg` anchor offset remains available in `PatternResult` as
-authored image metadata, but `WallSystem` does not consume it yet.
+visual backdrop (`WallBlockNone`). The spawn event supplies the map coordinate.
+The `.vifimg` anchor offset is available in `PatternResult` as authored image
+metadata, but `WallSystem` does not consume it. A file that fails to open or decode
+is reported on the status line and spawns nothing.
 
 The extension is `.vifimg`, which is what `cmd/ascimage` detects and what the
 shipped `wad/image/test.vifimg` sample uses. An existing absolute or relative path
 in `WallPatternSpawnRequest.path` is explicit. Otherwise it is a logical name
 below `image/`, resolved through `-config-dir`, the user configuration root, the
-checkout's `wad/` and the system roots in that order. Thus `path="test.vifimg"` works both with
-`-config-dir wad` and from an installed tree, independent of the process working
-directory; the existing-relative-path check is retained only for compatibility.
+checkout's `wad/` and the system roots in that order. Thus `path="test.vifimg"`
+works both with `-config-dir wad` and from an installed tree, independent of the
+process working directory; the existing-relative-path check is kept for
+compatibility.
 Runtime image opens cross the generic `FileService` capability contributed to
 the world, so `WallSystem` neither discovers roots nor opens host paths itself.
 
@@ -253,9 +266,9 @@ ascimage backdrop.vifimg
 ```
 
 The viewer supports fit/actual size, quadrant/background mode, truecolor/256
-toggle, zoom, pan, and status display. Transparent raster pixels are omitted
-from dual output, so they create no wall entity. See `cmd/ascimage/README.md`
-for its complete flag/control reference.
+toggle, zoom, pan, and status display. A cell whose sampled pixels are all
+transparent is stored transparent in dual output, so it creates no wall entity. See
+`cmd/ascimage/README.md` for its complete flag/control reference.
 
 ## 10. Other repository tools
 
@@ -264,15 +277,15 @@ for its complete flag/control reference.
 | `cmd/soundlab` | Edit, validate, audition, sequence, script, and export audio definitions. See [Audio](audio.md). |
 | `tool/font-editor` | Edit the compiled 12-row splash font. |
 | `tool/blend-tester` | Inspect compositing operations, masks, effects, truecolor, and palette interactions. |
-| `tool/hierarchy-map` | Analyze Go imports and browse package hierarchy/dependency direction. |
+| `tool/hierarchy-map` | Select Go file subsets as LLM context by annotation, local import dependency and symbol-level coupling. |
 | `tool/http-server` | Minimal static file server used by the WASM development target. |
-| `tool/vif-allocator` | Narrow host service that turns website session requests into fixed K3s Jobs and Services. |
-| `sandbox/*` | Standalone visual/interaction prototypes, intentionally outside application assembly. |
-| `benchmark/*` | Standalone math/random/render experiments rather than `go test -bench` packages. |
+| `tool/vif-log` | Terminal viewer for the JSONL session log and replay journal, separately or merged. See its README. |
+| `tool/vif-allocator` | Host service that turns website session requests into fixed K3s Jobs and Services, and routes the front-door TCP and browser WebSocket connections to their pods. |
+| `sandbox/*` | Standalone visual/interaction prototypes and random/render benchmarks, intentionally outside application assembly. |
 
-Only commands under `cmd` are primary user/developer programs. `tool`,
-`sandbox`, and `benchmark` code may intentionally have narrower validation or
-experimental dependencies.
+Commands under `cmd` are the user and developer programs, and `tool/vif-allocator`
+is the fleet's deployed service. The other `tool` and `sandbox` code may have
+narrower validation or experimental dependencies.
 
 ## 11. Content author checklist
 
@@ -280,8 +293,8 @@ experimental dependencies.
 - Keep every output rune printable ASCII and every line within 256 runes.
 - Run `vif -check -f <path>` to exercise the real loader without opening
   the game.
-- Inspect `content.rejected`/`:content` rather than assuming every directory
-  file was accepted.
+- Read the `skip` lines `-check` prints, or the `content.rejected` count, rather
+  than assuming every directory file was accepted.
 - Treat third-party source as redistributed content and verify its license.
 - Do not depend on directory recursion, hidden files, or live reload. Cross-file
   order is reproducible only for the same accepted corpus, seed, and request
@@ -296,7 +309,8 @@ experimental dependencies.
 | Authored TOML | `internal/content/toml.go` |
 | Selection cursor | `internal/content/cursor.go` |
 | Service/resolution | `internal/service/adapter_content.go`, `internal/resource/resolve.go`, `internal/paths` |
-| Embedded assets | `internal/asset/asset.go` and its `config`, `content`, `input`, `audio` directories |
+| Embedded assets | `internal/asset/asset.go`, its `scenario`, `content`, `input`, `audio` and `bot` directories, `vif.toml`, `version.txt`, `splash_font.go` |
 | Pattern conversion | `internal/pattern/pattern.go` |
+| Image open and spawn | `internal/system/wall.go` through `internal/service/adapter_file.go` |
 | Image codec | `pkg/ascimage` |
 | Image tool and viewer | `cmd/ascimage` |

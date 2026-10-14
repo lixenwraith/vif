@@ -1,8 +1,8 @@
 // Package journal owns deterministic external run streams: recording lifecycle,
-// in-memory capture, journal loading and replay ordering, randomized soak input,
-// and authored tick scripts. Runtime construction stays in internal/app; drivers
-// depend on narrow target interfaces so this package never imports the composition
-// root. Load accepts several files so a rotated set reassembles by jseq.
+// in-memory capture, journal loading, replay ordering and digest checks, seeded
+// soak input, and authored tick scripts. Drivers depend on narrow target interfaces,
+// so it never imports internal/app. Load accepts several files and reassembles a
+// rotated set by jseq.
 package journal
 
 import (

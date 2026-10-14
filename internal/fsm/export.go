@@ -6,21 +6,11 @@ import (
 	"time"
 )
 
-// MachineState is the FSM runtime's transfer contract (D-19).
-//
-// The state graph is immutable configuration and travels with the build, so a
-// capture carries only what a run has reached: which state each region is in, how
-// long it has been there, the variables guards read, and the delayed actions
-// still pending. The multiplayer plan's hidden-state survey called this
-// "straightforward, and small", and it is — but omitting it makes an installed
-// world enter its next timed transition on a different tick than the run it
-// reproduces, which is a divergence no component store shows.
-//
-// States and regions are named by string, never by StateID. IDs are assigned by
-// sorting the configuration's state names at load, so they are stable for one
-// configuration and meaningless across a changed one; a name that no longer
-// resolves is an error the receiver can report rather than a silent landing in
-// whichever state now holds that number.
+// MachineState is the FSM runtime's transfer contract (D-19): each region's state,
+// dwell and pause flag, the variables and the pending delayed actions; the graph
+// travels with the build. States and regions travel by name, never StateID, which
+// comes from sorting one configuration's names, so a name a changed configuration
+// lacks is an import error rather than a silent landing in another state.
 type MachineState struct {
 	Regions   []RegionSnapshot   `json:"regions"`
 	Variables []VariableSnapshot `json:"variables"`
@@ -100,17 +90,11 @@ func (m *Machine[T]) Import(ctx T, state MachineState) error {
 	return err
 }
 
-// ImportReconciled installs a captured runtime position and replays only the
-// lifecycle actions explicitly marked reconcile=true when the import crosses
-// their state boundary. Those actions are restricted at load time to immediate,
-// unguarded ClassLocal EmitEvent actions. One-shot local rewards and presentation
-// bursts therefore remain untouched, while persistent local state follows the
-// Shared FSM position that owns it.
-//
-// Exit actions run against the old variables before the position changes. Entry
-// actions run against the imported variables afterwards. Every old exit precedes
-// every new entry, so an overlapping handoff such as quasar -> storm releases the
-// old hold before taking the new one.
+// ImportReconciled installs a captured position and replays only the reconcile=true
+// lifecycle actions (load restricts them to immediate, unguarded ClassLocal
+// EmitEvent) whose state boundary it crosses, so persistent local state follows the
+// Shared position. Exits run on the old variables and entries on the imported ones,
+// every exit first: quasar -> storm releases the old hold before taking the new.
 func (m *Machine[T]) ImportReconciled(ctx T, state MachineState) (int, error) {
 	return m.importState(ctx, state, true)
 }

@@ -1,7 +1,8 @@
 #!/bin/sh
 # End-to-end setups for verifying behaviour by hand: ./script/test.sh <name> [args]
-# or list. Scenarios marked (auto) assert and print PASS/FAIL; the rest launch
-# something and leave it in the foreground. See script/README.md.
+# or list. Scenarios listed under Automated assert and print PASS/FAIL, observed
+# ones report what happened, and interactive ones stay in the foreground. See
+# script/README.md.
 set -eu
 
 BIN=${BIN:-./bin/vif}
@@ -127,9 +128,9 @@ list|'')
 	cat <<'EOF'
 Interactive (runs in the foreground until you stop it)
   solo              single player, embedded config
-  host [players]    interactive host; with no argument it starts on its first
-                    guest and admits the whole roster, with one it is a party
-                    of that size that starts together
+  host [players]    interactive host; plays at once and admits guests mid-run,
+                    up to the whole roster or, with an argument, that many
+                    players, the host included
   join [addr]       join a host
   serve [players]   dedicated host, runs until Ctrl-C  (no lifetime bounds)
   serve-fleet       dedicated host with the deployed 90s/90s/20s bounds
@@ -178,10 +179,9 @@ solo)
 	;;
 
 host)
-	# No -players unless one is asked for. Unset is not "two": it is the whole
-	# roster, starting on the first guest, with the rest arriving through the
-	# mid-run gate. An explicit count is the other meaning of the same flag — a
-	# party that says how big it is starts together.
+	# Plays from its first tick and admits guests through the mid-run gate. Unset
+	# -players is the whole roster, not "two"; a count caps it, the host included.
+	# Only a scripted or bot-driven host, or -serve, holds tick zero for a lobby.
 	need_bin
 	note "guests join with: $0 join $HOST:$PORT"
 	if [ -n "${2:-}" ]; then
@@ -260,8 +260,8 @@ pair)
 host-loss)
 	# A host and n guests, then the host goes; what each guest concludes is the
 	# output, as which answer is right is a deployment decision. AUTHORITY=migrate
-	# hands the term to the roster's next survivor, AUTHORITY=host to nobody;
-	# script/README.md says what migration can and cannot do.
+	# hands the term to the succession chain's first survivor, AUTHORITY=host to
+	# nobody; script/README.md says what migration can and cannot do.
 	need_bin
 	n=${2:-2}
 	auth=${AUTHORITY:-migrate}
@@ -617,10 +617,10 @@ drain)
 	;;
 
 identity)
-	# A mismatch cannot be staged from a shell: a joiner adopts the host's seed,
-	# configuration and corpus from the anchor, so two runs of one binary always
-	# agree. What can differ is the build — a different protocol, simulation or
-	# capture layout — and constructing one of those is a job for the tests.
+	# A mismatch cannot be staged from a shell: a joiner adopts the host's seed and
+	# scenario from the anchor and its corpus is never compared, so two runs of one
+	# binary always agree. What can differ is the build — a different protocol,
+	# simulation or capture layout — and constructing one is a job for the tests.
 	go test -count=1 -run 'TestTheHostRefuses|TestTheOfferCarries|TestADifferentCorpus|TestVerify|TestSessionFrom' \
 		./internal/app/ ./internal/network/ >/dev/null || fail "identity refusal tests"
 	pass "a peer running a different build or session is refused by the host"

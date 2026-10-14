@@ -54,10 +54,11 @@ func TestCombatKnockbackDrawsFromTheTargetsStream(t *testing.T) {
 	}
 }
 
-// TestCombatKnockbackFollowsTheArtifactNotTheStream is D-3 where D-8 stops. An
-// ordinary crossing applies at once on its producer and a playout lead later
-// everywhere else, so two instances reach the same impulse only if it is a function
-// of the artifact rather than of a stream position they consume at different ticks.
+// TestCombatKnockbackFollowsTheArtifactNotTheStream is D-3 where D-8 stops. A
+// crossing that reaches the authority late is committed at its next tick, after its
+// producer applied it at the stamped one, and a projection replays it later still, so
+// two instances reach the same impulse only if it is a function of the artifact
+// rather than of a stream position they consume at different ticks.
 func TestCombatKnockbackFollowsTheArtifactNotTheStream(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	s := NewCombatSystem(w).(*CombatSystem)
@@ -85,10 +86,10 @@ func TestCombatKnockbackFollowsTheArtifactNotTheStream(t *testing.T) {
 }
 
 // TestSoftCollisionImpulseFollowsTheTickAndThePair is D-8 where a stream stops. A
-// collision is conditional on live positions and on a population a crossing thins a
-// playout lead apart, so it is not work every instance does at the same tick and
-// may not take a shared stream position: one member the producer has already killed
-// would cost the two a different number of draws and desync every later impulse.
+// collision is conditional on live positions and on a population a late crossing
+// thins at different ticks on different instances, so it may not take a shared
+// stream position: one member the producer has already killed would cost the two a
+// different number of draws and desync every later impulse.
 func TestSoftCollisionImpulseFollowsTheTickAndThePair(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
@@ -145,9 +146,9 @@ func TestSoftCollisionImpulseFollowsTheTickAndThePair(t *testing.T) {
 
 // TestASharedSpawnDrawsItsPlacementBudgetBeforeFiltering is D-8 for a placement
 // retry loop. Whether a candidate is rejected depends on live cursor positions and
-// on a wall set a correction repairs, and two instances hold both a playout lead
-// apart, so a stream advanced once per attempt would land at a different position on
-// each — permanently, because nothing between corrections rewinds a shared sequence.
+// on a wall set a correction repairs, which two instances can hold differently until
+// it does, so a stream advanced once per attempt would leave each at a different
+// position, and nothing short of a correction rewinds a shared sequence.
 func TestASharedSpawnDrawsItsPlacementBudgetBeforeFiltering(t *testing.T) {
 	// Each spawner runs twice from one seed: once as it falls, then with the cell it
 	// chose blocked by whatever its own filter reads, which forces that rejection.

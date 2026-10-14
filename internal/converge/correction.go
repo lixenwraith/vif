@@ -1183,11 +1183,11 @@ func (c *Corrections) commit(cap snapshot.SharedCapture) error {
 	return nil
 }
 
-// hold is the correction playout buffer: one ahead of the clock inside the lead
-// waits for its tick, a newer arrival replacing an older one still waiting. One
-// further ahead is a session this instance has fallen behind, adopted at once as
-// the one step the clock takes forward; one behind the clock is projected by the
-// commit instead. Reports whether the capture was deferred.
+// hold is the correction playout buffer: one ahead of the clock within
+// parameter.NetworkHoldTicks waits for its tick, a newer arrival replacing an older
+// one still waiting. One further ahead is a session this instance has fallen behind,
+// adopted at once as the one step the clock takes forward; one behind the clock is
+// projected by the commit instead. Reports whether the capture was deferred.
 func (c *Corrections) hold(cap snapshot.SharedCapture) bool {
 	at := c.inst.Position()
 	if cap.Header.Run != at.Run || reached(cap, at.Tick) {

@@ -1,8 +1,9 @@
 # Keymap configuration
 
 The complete runtime default is [`internal/asset/input/keymap.toml`](../asset/input/keymap.toml).
-It is embedded into every native and WASM build and installed as
-`$XDG_CONFIG_HOME/vif/input/keymap.toml` by `make install-config`.
+It is embedded into every native and WASM build, and `make install-config` installs
+it as `input/keymap.toml` in the user config root (`$XDG_CONFIG_HOME/vif` on Linux)
+unless one is already there.
 
 User documents may remain sparse: only supplied keys override the embedded
 table, and `"none"` removes a binding. For example:

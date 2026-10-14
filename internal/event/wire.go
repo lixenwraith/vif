@@ -1,11 +1,8 @@
-// Package event: the wire predicate and frame codec.
-//
-// Compared is not sent. Replicated answers "must both instances hold this
-// record", which is what the journal filter needs; OnWire answers "must a peer
-// receive it", which is narrower. A Shared event is re-derived identically on
-// every instance (D-5) and must never travel, or it applies twice. What crosses
-// is the D-3 artifact: the Bus class, plus the one Stamped type a player-domain
-// producer aims at a shared target.
+// Package event is the simulation's message layer: the EventType catalog and its
+// generated registry, replication classes and producer origins, the MPSC queue and
+// handler router, pooled payloads, the replay journal schema, and the wire codec.
+// Replicated says whether every instance's journal must agree on a record; OnWire,
+// narrower, whether a peer must receive it: a re-derived Shared event never does.
 package event
 
 import (
@@ -39,13 +36,11 @@ type Crossed interface {
 	StampCrossing(source uint32, seq uint64)
 }
 
-// StampCrossing names the artifact on its payload, before the frame is encoded, so
-// the producer's own copy and every peer's carry the same identity. A crossing
-// applies at once on its producer and a playout lead later everywhere else, so a
-// value drawn from a shared stream at apply time is assigned to a different
-// artifact on each instance — a knockback in another direction, not a rounding
-// difference. D-3 asks the artifact to determine the shared outcome; this is the
-// part of it a producer cannot write down.
+// StampCrossing names the artifact on its payload before the frame is encoded, so
+// every copy carries one identity. A crossing that misses its lead lands later on
+// the authority than on its producer, so a value drawn from a shared stream at apply
+// time would go to a different artifact on each — a knockback in another direction.
+// It is the part of the D-3 shared outcome a producer cannot write down.
 func StampCrossing(payload any, source uint32, seq uint64) {
 	if c, ok := payload.(Crossed); ok {
 		c.StampCrossing(source, seq)
@@ -79,11 +74,11 @@ func OnWire(ev GameEvent) bool {
 	return !ok || !d.IsDerived()
 }
 
-// WireSink defers crossings into a fixed-delay barrier. Cross reports whether it
-// took the event, which the queue then neither journals nor publishes; the barrier
-// publishes the local copy at its agreed tick. Receive reports whether a session is
-// live. Cross is non-blocking and may run from any producer; Receive and Flush run
-// under the world lock.
+// WireSink defers crossings into the barrier at this participant's playout lead.
+// Cross reports whether it took the event, which the queue then neither journals
+// nor publishes; the barrier publishes the local copy at its agreed tick. Receive
+// reports whether a session is live. Cross is non-blocking and may run from any
+// producer; Receive and Flush run under the world lock.
 type WireSink interface {
 	Receive(nextTick uint64) (live bool)
 	Cross(ev GameEvent) (taken bool)

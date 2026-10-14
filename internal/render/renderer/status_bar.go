@@ -513,8 +513,8 @@ func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 // instance is keeping up, and at most one qualifier. A worse fact hides a lesser
 // one; the numbers behind them are in :session and the status snapshot.
 func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
-	// Losing the authority is a permanent change for this run and outranks
-	// everything, including the link state that described the host that went.
+	// Losing the authority outranks everything, including the link state that
+	// described the host that went, until a handoff is adopted.
 	if r.statHostLost.Load() {
 		return r.pal.net[severityFailing].with(" Host lost "), true
 	}

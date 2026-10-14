@@ -1,7 +1,8 @@
-// Package asset embeds every file the binary must be able to play without a
+// Package asset holds every shipped file the binary must be able to play without a
 // host filesystem: the fallback scenario and typing corpus, the default keymap and
-// settings, the built-in sound and music banks, and the version a source archive
-// carries. Each group is narrowed with fs.Sub so its runtime root is its category.
+// settings, the shipped bot graphs, the built-in sound and music banks, the version
+// a source archive carries, and the splash font. The directories served as fs.FS
+// are narrowed with fs.Sub, so each runtime root is its category.
 package asset
 
 import (

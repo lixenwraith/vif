@@ -16,7 +16,7 @@ programs ([Behavior machines](machine-design.md) §8) and from the map editor,
 whose placeable blocks are the same idea.
 
 **Decision.** Macros are data in the document, expanded on the parsed tree
-between `toml.Parse` and decode:
+between parsing and `toml.Decode`:
 
 - a macro is a `[macros.<Name>]` table with typed parameters, defaults, a doc
   string and a body;
@@ -101,7 +101,8 @@ on_enter = [
 
 A state written as an invocation keeps its name in the key, so a chain reads as a
 table of one line per state. `each` takes a table of parameter = array, all of one
-length; arguments outside it are shared by every expansion.
+length; arguments outside it are shared by every expansion, and `each` outside an
+array is an error.
 
 Bodies may invoke other macros, and arguments may be invocations: arguments are
 expanded where they are written, then bound, then the body is substituted and
@@ -130,12 +131,10 @@ block library carries a copy.
 `wad/scenario/td` keeps its blocks in `td_macros.toml`: spawn-and-await states for
 towers and pylons, corner and flank gateways, flank escalation and its closing
 state, tower-loss retargeting, kill-or-left-the-map exits, announcements and
-resets. Its regions fell from 716 to 330 lines. Two pairs of variables were renamed
-so one `side` parameter names a flank's counters: `left_dead`/`right_dead` became
-`l_dead`/`r_dead`, and `p2l_done`/`p2r_done` became `l_p2_done`/`r_p2_done`. The
-embedded campaign's `macros.toml` holds the tower region's corner pylon and gateway
-pair and the quasar and storm regions' left-the-map exit. State names are
-unchanged in both, and each resolved scenario decodes equal to its previous form.
+resets. A flank's counters share a prefix (`l_dead`, `r_p2_done`), so one `side`
+parameter names them. The embedded campaign's `macros.toml` holds the tower
+region's corner pylon and gateway pair and the quasar and storm regions'
+left-the-map exit. `wad/scenario/simon` is one document that defines its own.
 
 ## 7. Rejected alternatives
 
@@ -164,4 +163,4 @@ unchanged in both, and each resolved scenario decodes equal to its previous form
   scenario's set, like region files ([Behavior machines](machine-design.md) §8.3).
 - **Map and scenario editor.** Blocks are macros and placed blocks are
   invocations; the parameter metadata the editor still needs is in
-  [TODO](todo.md) under the editor item.
+  [TODO](todo.md#build-the-map-and-scenario-editor).

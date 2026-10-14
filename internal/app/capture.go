@@ -15,10 +15,10 @@ import (
 	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
-// captureStatusLocked reads every shared-surface registry cell, through
-// snapshot.SharedKey — the same predicate the compared surface uses, so a capture
-// carries exactly what a session is asserted to agree on. The keys are selected
-// again only after a registration: SharedKey over every key was most of a capture.
+// captureStatusLocked reads every shared-surface registry cell through
+// snapshot.SharedKey, the predicate the compared surface uses, so a capture carries
+// exactly what a session is asserted to agree on. Keys are reselected only after a
+// registration: SharedKey over every key would be most of a capture's cost.
 // Caller MUST hold updateMutex.
 func (a *App) captureStatusLocked() snapshot.StatusState {
 	if a.sharedStatus.gen != a.world.Resources.Status.Gen() {
@@ -374,8 +374,8 @@ func (a *App) adoptClockLocked(h snapshot.CaptureHeader) {
 }
 
 // adoptSnapshotBarrierLocked tells the crossing barrier which world it now holds:
-// the tick boundary for peer/barrier artifacts and the authority's exact local-
-// first sequence fence. Caller MUST hold updateMutex.
+// the tick boundary for barrier-bound artifacts and each source's applied crossing
+// fence. Caller MUST hold updateMutex.
 func (a *App) adoptSnapshotBarrierLocked(header snapshot.CaptureHeader) {
 	for _, sys := range a.world.Systems() {
 		if b, ok := sys.(interface {

@@ -1,13 +1,10 @@
 # vif Engineering Documentation
 
 This directory describes the architecture and design of the current vif
-codebase. It was last audited on 2026-09-19, through the build-capability split,
-browser boundary, correction and authority protocol in `internal/converge`, the
-crossing barrier it orders against, the shared-world capture that a mid-run join
-installs, the CLI flag surface, and every entry in the multiplayer remaining-gaps
-list.
-The implementation, generated manifest, and shipped configuration were treated as
-authoritative where older prose disagreed with the code.
+codebase. It was last audited on 2026-10-14, when every document but the two
+future designs, every README and the package doc comments were checked claim by
+claim against the code. The implementation, generated manifest and shipped
+configuration are authoritative where prose disagrees with them.
 
 vif is a terminal action game that combines vi-style text navigation,
 typing, shooting, data-driven encounters, adaptive species navigation, procedural
@@ -19,43 +16,45 @@ reader can start with the application shape and then descend into a subsystem.
 | Document | Level | Primary questions answered |
 |---|---|---|
 | [Architecture overview](architecture.md) | High | What are the major parts, boundaries, and design constraints? |
-| [Development timeline](development-timeline.md) | High | What was built when, from the first prototype to the current release? |
+| [Development timeline](development-timeline.md) | High | What was built when, from the first prototype to the present? |
 | [Package map](package-map.md) | Medium | Which Go packages own each responsibility and how may they depend on one another? |
+| [Term index](term-index.md) | Reference | What does a term mean here, which senses does a shared word have, and where is each explained and implemented? |
 | [Runtime and concurrency](runtime.md) | Medium/detail | How does the process start, tick, render, pause, reset, and shut down safely? How is a replay presented, stepped back, sought and logged? |
 | [ECS and events](ecs-and-events.md) | Medium/detail | How are entities stored, systems ordered, spatial queries performed, and events settled? |
-| [Logging and diagnostics](logging-and-diagnostics.md) | Medium/detail | How do scopes, telemetry, the replay journal, snapshots, and the flight recorder work? |
+| [Logging and diagnostics](logging-and-diagnostics.md) | Medium/detail | How do scopes, telemetry, the replay journal, snapshots, the flight recorder, and the profiler work? |
+| [Telemetry reference](telemetry-audit.md) | Detail | Which metric keys does each system, the session layer, the engine and the event queue register, where is each written and reset, and what reads them by name? |
 | [Multi-instance domain model](domain-design.md) | Medium/detail | How are entities, events, RNG streams and systems split between shared and player domains, who holds authority over what, and what is still missing? |
 | [Multiplayer](multi-player.md) | Medium/detail | What a session guarantees, how a correction is ordered and contained, how authorship moves, what is still missing, and why this protocol rather than another. **Start here for multiplayer.** |
-| [Troubleshooting](troubleshooting.md) | Medium/detail | Diagnosis of the 2026-09-10 two-instance defects: what an installed FSM state does not run, what a pruned crossing loses, and why a contested immunity window reads as no damage. |
+| [Troubleshooting](troubleshooting.md) | Medium/detail | What did each dated diagnosis round, 2026-09-10 to 2026-10-13, find in host, guest, fleet and browser runs, and what closed each defect? |
 | [Gameplay systems](gameplay.md) | Domain detail | What are the player mechanics, world mechanics, species, encounters, and system responsibilities? |
-| [Combat and weapons](combat.md) | Domain detail | How are weapon kinds defined, fired by cursors and by mounts on Shared hosts, resolved against species and cursors, and what crosses? |
+| [Combat and weapons](combat.md) | Domain detail | How are weapon kinds defined, fired by cursors and by mounts on Shared hosts, resolved against species and cursors, which statuses a hit leaves, and what crosses? |
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |
 | [Rendering](rendering.md) | Domain detail | How are ECS state, compositing, color modes, masks, post-processing, and terminal output connected? |
 | [Audio](audio.md) | Domain detail | How are effects synthesized, music sequenced, APM mapped to arrangements, and backends selected? |
 | [AI, navigation, physics, and evolution](ai-physics-and-evolution.md) | Domain detail | How do flow fields, route learning, genetics, float64 geometry, and collision/steering work together? |
-| [Generic kinetic analysis](generic-kinetic.md) | Design detail | Which kinetic paths exist, why one universal motion system is unsafe today, and how can they be consolidated incrementally? |
+| [Generic kinetic analysis](generic-kinetic.md) | Future design | Which kinetic paths exist, why one universal motion system is unsafe today, and how could they be consolidated incrementally? A design for future implementation. |
 | [Content, assets, and tools](content-assets-and-tools.md) | Domain detail | How are corpora and embedded assets resolved, parsed, validated, and authored? |
-| [Services and networking](services-and-networking.md) | Domain detail | How are I/O resources managed, and how do startup sessions, framing, polling, and disconnect work? |
+| [Services and networking](services-and-networking.md) | Domain detail | How are I/O resources managed, how does a session's transport start, frame, relay, poll, time out and disconnect, and what does a supervised run's endpoint answer? |
 | [External filesystem layout](filesystem-layout.md) | Operational detail | Where do the `wad/` and embedded payloads live, and how are config, content, logs, and journals discovered and installed? |
 | [Packaging](packaging.md) | Operational detail | What do nightly releases publish, what must hold for a distribution package, and what is still missing per repository? |
-| [Build profiles and platforms](multi-platform.md) | Operational/design detail | What does each build include, why browser TCP cannot work directly, how will native browser WebSocket joining and external assets be added, and where do future renderers attach? |
-| [Development and operations](development.md) | Operational detail | How is the project built, generated, tested, diagnosed, and deployed on native and WASM targets? |
-| [Deploying the session fleet](kube-docker-deploy.md) | Operational detail | How are the edge firewall, the node, Docker, K3s, the log tmpfs, the image, the fleet objects, LogWisp, the allocator and the site's edge installed, in order? **Start here to deploy a node.** |
-| [Session fleet plan](kubernetes-fleet.md) | Operational detail | What is the design, what did it cost when measured, what is still open, and what was decided against? Holds the work list. |
+| [Build profiles and platforms](multi-platform.md) | Operational/design detail | What does each build include, how does a browser join a session over WebSocket, how could external assets be added, and where do future renderers attach? |
+| [Development and operations](development.md) | Operational detail | How is the project built, generated, tested and diagnosed on native and WASM targets, and what does every command-line flag do? |
+| [Deploying the session fleet](kube-docker-deploy.md) | Operational detail | What must the public edge and the site's edge provide, and how are the node, Docker, K3s, the node's own filter, the log tmpfs, the image, the fleet objects, LogWisp and the allocator installed, in order? **Start here to deploy a node.** |
+| [The session fleet: design and work list](kubernetes-fleet.md) | Operational detail | What is deployed, what did it cost when measured, what is still open, and what was decided against? Holds the work list. |
 | [Node runbook](../deploy/runbook.md) | Operational detail | What do you run on a node that is already up — status, draining, the updaters, and what each refusal means? |
 | [End-to-end setups](../script/README.md) | Operational detail | Which command runs which game setup, and which ones assert? |
 | [Bots](bots.md) | User guide | How do you play beside, watch or host bots, remove them, write a graph and compare graphs? |
 | [Configuration menu](config-menu.md) | User guide | What does each page of the Ctrl-G menu control? |
 
-Existing focused references remain useful:
+Focused references:
 
 - [FSM authoring reference](fsm-reference.md) documents the TOML surface in
   detail.
 - [TOML macros](toml-macros.md) records the macro decision and its syntax.
-- [TODO](todo.md) is the running work list the packaging checklists feed.
-- [Behavior machines](machine-design.md) is the working design for per-entity
-  species state machines and data-driven species behavior.
+- [TODO](todo.md) is the prioritized running work list for every area.
+- [Behavior machines](machine-design.md) is a design for future implementation:
+  per-entity species state machines and data-driven species behavior.
 - [Keymap example](../internal/input/README.md) shows sparse key overrides.
 - [Genetic package reference](../pkg/genetic/README.md) documents the reusable
   optimization library.
@@ -63,6 +62,9 @@ Existing focused references remain useful:
   environment.
 - [Ascimage reference](../cmd/ascimage/README.md) covers terminal-image
   conversion and viewing.
+- [vif-allocator](../tool/vif-allocator/README.md) covers the website-to-K3s
+  session allocator and its routes.
+- [vif-log](../tool/vif-log/README.md) covers the session log and journal viewer.
 
 ## Source-of-truth map
 
@@ -71,26 +73,27 @@ changing a subsystem, update the source that actually owns its shape.
 
 | Concern | Authoritative source | Generated or runtime consumer |
 |---|---|---|
-| Components, systems, renderers | `internal/manifest/definition.go` | `internal/manifest/build_gen.go`, `build_audio_gen.go`, `build_noaudio_gen.go`, `render_gen.go`, `internal/engine/component_store_gen.go` |
-| Build capabilities | build constraints in `internal/app/presentation_*`, `audio*`, and `network_*` | Makefile profiles and generated capability-specific builders |
-| System domain profiles and dependencies | `SystemDef.Domain`/`Requires` in `internal/manifest/definition.go` | `manifest.ProfileFor`/`SystemProfiles`, `World.SystemInitOrder`, `app.checkSystems` |
+| Components, systems, renderers | `internal/manifest/definition.go` | `internal/manifest/build_gen.go`, `build_audio_gen.go`, `build_noaudio_gen.go`, `render_gen.go`, `internal/engine/component_store_gen.go`, `component_domain_gen.go` |
+| Build capabilities | `vif_headless`, `vif_noaudio`, `novlog` and `wasm` build constraints, on files such as `internal/app/presentation_*`, `audio*` and `network_*`, `internal/system/audio*`, `internal/service/adapter_audio.go` and `adapter_terminal.go`, `internal/network/websocket_*` and `internal/vlog/stub.go` | Makefile profiles and generated capability-specific builders |
+| System domain profiles and dependencies | `SystemDef.Domain`/`Requires` in `internal/manifest/definition.go` | `manifest.ProfileFor`/`SystemProfiles`, `World.CheckSystemDependencies`, `World.AllowSystemDisable`, `resource.checkSystems` |
 | Event names, payload association, replication class | `internal/event/type.go` comments and constants | `internal/event/registry_gen.go` |
-| Runtime shape and deterministic harness | `internal/app/config.go`, `headless.go`, `script.go` | `App`, `Scheduler`, services |
+| Runtime shape and deterministic harness | `internal/app/config.go`, `headless.go`, `script.go`, `serve.go` | `App`, `Scheduler`, services |
 | Replay journal format, recording/replay drivers, and authored scripts | `internal/event/journal.go`, `origin.go`, `internal/journal` | `internal/app/replay.go`, `play.go`, `script.go` |
 | Correction cadence, selective repair, authority term and succession | `internal/converge` | `App.corrections`/`authority`/`reach` through `converge.Instance`; its criteria run against a stub world |
 | Cursor lifecycle, roster, and local selection | `internal/system/cursor.go`, `internal/engine/resource.go` | FSM cursor events, mode routing, per-slot metrics |
-| Shared-world capture layout and its declared carriers | `internal/snapshot/capture.go`, `internal/app/capture.go`, `SystemDef.Snapshot` in `internal/manifest/definition.go` | `internal/engine/snapshot_world_gen.go`, `internal/app/snapshot_stage.go`, `internal/network/snapshot.go` |
+| Shared-world capture layout and its declared carriers | `internal/snapshot/capture.go`, `internal/app/capture.go`, `SystemDef.Snapshot` in `internal/manifest/definition.go` | `internal/engine/snapshot_world_gen.go`, `snapshot_pages_gen.go`, `internal/app/snapshot_stage.go`, `internal/network/snapshot.go` |
 | Input enum string forms | input enum definitions | `internal/input/strings_gen.go` |
-| Shipped encounter progression | `internal/asset/scenario/*.toml` | `internal/fsm`, `internal/engine.Scheduler` |
-| Embedded fallback progression | `internal/asset/scenario/*.toml` | the same, when no root supplies one |
+| Main encounter progression | `internal/asset/scenario/*.toml`, embedded; a configuration root's `scenario/main/` overrides it | `internal/fsm`, `internal/engine.Scheduler` |
 | Alternate scenarios | `wad/scenario/*` | selected by name or path with `-s` |
 | Gameplay tuning | `internal/parameter` and `internal/parameter/visual` | systems and renderers |
 | Embedded fallback corpus | `internal/asset/content/*.toml` | content service |
-| Built-in sound bank | `internal/asset/audio/*.toml` | `parameter.BuiltinSounds`, `AudioConfig.BaseSounds` |
+| Built-in sound and music banks | `internal/asset/audio/*.toml` | `parameter.BuiltinSounds`/`BuiltinPatterns`, `AudioConfig.BaseSounds`/`BasePatterns` |
+| CLI flags, manual page, shell completions | `helpSections` in `cmd/vif/usage.go` | `-help`, `doc/vif.6`, `deploy/package/vif.bash`, `_vif`, `vif.fish` |
 | External package versions | `go.mod` | Go module resolver |
 
-Run `make generate` after changing a manifest or generator input. Do not edit a
-generated file by hand.
+Run `make generate` after changing a manifest or generator input, and
+`VIF_WRITE_GENERATED=1 go test ./cmd/vif -run Generated` after changing a flag.
+Do not edit a generated file by hand.
 
 ## Accuracy conventions
 
@@ -101,10 +104,9 @@ This documentation distinguishes three states:
 - **Experimental/incomplete** means code exists but the normal application does
   not expose a complete end-to-end feature. Authenticated multiplayer is an
   example: the message kinds are reserved and nothing populates them. Startup
-  multi-participant networking is optional and active, and so are mid-run join and
-  reconnect (`:host <addr>`) and host authority with periodic correction. What is
-  not active is *adaptive* cadence: the host publishes at a fixed rate rather than
-  one driven by the link.
+  networking, mid-run hosting and joining (`:host`, `:join`), reconnect, host
+  authority with link-paced correction, and authority migration are optional and
+  active.
 
 Performance and determinism statements are intentionally scoped. Several hot
 paths reuse buffers and avoid routine allocation, but the application is not

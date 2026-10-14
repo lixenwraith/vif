@@ -40,9 +40,9 @@ func TestSuccessionSkipsALeaf(t *testing.T) {
 	}
 }
 
-// TestSuccessionSurvivesLosingTheAuthorityAndThenTheSuccessor is gap 5: the
-// participants that can still reach each other keep the session rather than each
-// forking into a game of their own.
+// TestSuccessionSurvivesLosingTheAuthorityAndThenTheSuccessor: the participants
+// that can still reach each other keep the session rather than each forking into a
+// game of their own.
 func TestSuccessionSurvivesLosingTheAuthorityAndThenTheSuccessor(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 4,
@@ -61,7 +61,7 @@ func TestSuccessionSurvivesLosingTheAuthorityAndThenTheSuccessor(t *testing.T) {
 		t.Fatalf("the first succession elected %d, want participant 2", got)
 	}
 
-	// And now the successor itself, which used to fork everyone.
+	// And now the successor itself: the rest elect again rather than fork.
 	closeParticipant(survivors[0])
 	rest := survivors[1:]
 	if !settleAuthority(t, rest, func() bool {

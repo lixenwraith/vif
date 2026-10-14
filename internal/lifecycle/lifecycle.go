@@ -1,25 +1,8 @@
-// Package lifecycle decides when a supervised session has outlived its reason to
-// exist.
-//
-// A dedicated host started by hand is a long-lived thing: it waits, it is joined,
-// it empties, and it waits again, because the person who started it is the one who
-// will stop it. A session a website allocates has no such person. Something created
-// a container on a player's behalf, and if that player never arrives, or arrives
-// and leaves, nothing else will ever notice: the pod keeps a slot in a fleet whose
-// capacity is counted in tens, and the cluster's answer to "is anyone in there" is
-// a roster only the process can see.
-//
-// So the process answers it. This package holds the three durations that bound an
-// allocated session — the window a first guest has to connect, the grace after the
-// last one leaves, and how long a termination request waits for the roster to
-// empty — and turns a sequence of roster observations into one of five phases and
-// a single question: may this run still be joined, and should it still be running.
-//
-// It is deliberately a pure state machine over an injected clock. It opens no
-// listener, reads no roster, and terminates nothing; the run supplies observations
-// and acts on the phase. That keeps the policy testable at the resolution of a
-// nanosecond rather than of a ninety-second integration test, and keeps the
-// dedicated host's loop free of the arithmetic.
+// Package lifecycle bounds an allocated session by three durations — the first
+// guest's window, the grace after the last leaves, the drain — as a pure state
+// machine over an injected clock: roster observations in, a phase, a deadline and
+// whether a dial may still be admitted out. It opens no listener, reads no roster
+// and terminates nothing; the run supplies observations and acts on the phase.
 package lifecycle
 
 import (
@@ -28,12 +11,9 @@ import (
 	"time"
 )
 
-// Phase is where a session is in its allocated life.
-//
-// The phases are ordered by how much of that life is left, and the machine only
-// ever moves forward through them with one exception: a guest arriving returns a
-// vacant session to occupied, because a session that emptied and refilled inside
-// its grace window is a session somebody is still playing.
+// Phase is where a session is in its allocated life. The machine only moves
+// forward through the phases, except that a guest arriving returns a vacant session
+// to occupied: one that emptied and refilled inside its grace is still being played.
 type Phase uint8
 
 const (
@@ -118,17 +98,11 @@ func (p Policy) Validate() error {
 	return nil
 }
 
-// State is one read of the machine: what phase the session is in, whether it may
-// still be joined, whether it should still be running, and when the current
-// countdown ends.
-//
-// Admit is a refusal only where the machine has concluded one. A controller that
-// was never started admits, so a caller can consult it unconditionally without
-// having to know whether this run is an allocated session or an interactive host.
-//
-// Deadline is zero when nothing is counting down, which is both the occupied case
-// and every disabled bound. A caller renders Remaining rather than computing it, so
-// two readers of one state report the same number.
+// State is one read of the machine. Admit refuses only where the machine has
+// concluded so: an unstarted controller admits, so a caller consults it without
+// knowing whether the run is an allocated session or an interactive host. Deadline
+// is zero when nothing counts down (occupied, or a disabled bound); a caller renders
+// Remaining rather than computing it, so two readers report the same number.
 type State struct {
 	Phase   Phase
 	Reason  string
@@ -224,13 +198,10 @@ func (c *Controller) Observe(guests int, now time.Time) State {
 	return c.evalLocked(now)
 }
 
-// Drain asks the session to end. It stops admitting immediately and then waits for
-// the roster, which is what makes a rollout end after a match rather than during
-// one. A drain with no configured deadline, or one that finds an empty roster,
-// expires at once.
-//
-// Draining an expired controller changes nothing: the run is already leaving, and
-// the reason it is leaving is the one worth reporting.
+// Drain asks the session to end: it stops admitting at once and waits for the
+// roster, so a rollout ends after a match rather than during one. With no drain
+// deadline or an empty roster it expires at once. An expired controller keeps the
+// reason it is already leaving for.
 func (c *Controller) Drain(now time.Time, reason string) State {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -248,13 +219,9 @@ func (c *Controller) Drain(now time.Time, reason string) State {
 	return c.evalLocked(now)
 }
 
-// Interrupt is a termination request arriving from outside the process.
-//
-// The first one drains: it stops admitting and waits for the guests the session
-// still holds, which is what makes a rollout or a node maintenance end after a
-// match rather than during one. A second one ends the run, because an operator who
-// asks twice is asking for the second answer, and because a supervisor's own
-// escalation must not find a process that decided to keep waiting.
+// Interrupt is a termination request from outside the process. The first drains;
+// a second ends the run, because an operator who asks twice wants the second answer
+// and a supervisor's escalation must not find a process that kept waiting.
 func (c *Controller) Interrupt(now time.Time, reason string) State {
 	c.mu.Lock()
 	draining := c.phase == PhaseDraining

@@ -156,7 +156,7 @@ func TestTransportSyncsOwnerAuthoredCursorState(t *testing.T) {
 	})
 
 	// Heat and the shield ellipse are mirrored for the remote cursor's presentation
-	// and owner-local interactions; they no longer determine a shared outcome.
+	// and owner-local interactions; they determine no shared outcome.
 	if mirrored.Current != owned.Current || mirrored.Current != 55 || !mirrored.EmberActive {
 		t.Fatalf("remote heat on a = %d, owner holds %d; ember %t",
 			mirrored.Current, owned.Current, mirrored.EmberActive)
@@ -261,8 +261,8 @@ func TestBarrierIsNoOpWithoutPeer(t *testing.T) {
 
 // TestObserverSharedStateTracksTheLiveParticipant proves the correction with
 // one-way traffic: only one participant produces anything, so everything the
-// observer holds arrived from the authority — its own artifacts a playout lead
-// after the producer applied them, and its whole world at every correction.
+// observer holds arrived from the authority — its artifacts at the tick they were
+// stamped for, as the producer applied them, and its world at every correction.
 func TestObserverSharedStateTracksTheLiveParticipant(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF
@@ -307,10 +307,9 @@ func TestObserverSharedStateTracksTheLiveParticipant(t *testing.T) {
 }
 
 // TestTwoLiveParticipantsConvergeOnCorrections is the headless two-participant
-// criterion. Weakened D-11 says two
-// participants no longer agree at every tick, because each applies its own
-// artifacts a playout lead before the other sees them, and what is asserted instead
-// is that every correction closes the gap exactly.
+// criterion. Under D-11 two participants need not agree at every tick, because a
+// guest is the last installed host world plus its own prediction, so what is
+// asserted instead is that every correction closes the gap exactly.
 func TestTwoLiveParticipantsConvergeOnCorrections(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF
@@ -490,11 +489,11 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 
 }
 
-// proveTwoLive drives two live participants and asserts the criterion that replaced
-// lockstep: the guest is equal to the host as of every correction. Between
-// corrections the two are expected to disagree, so what has to stay true is that each
-// is really driving something — the moved/sent/apm checks below — and that the
-// disagreement is closed rather than tolerated.
+// proveTwoLive drives two live participants and asserts the convergence criterion:
+// the guest is equal to the host as of every correction. Between corrections the two
+// are expected to disagree, so what has to stay true is that each is really driving
+// something — the moved/sent/apm checks below — and that the disagreement is closed
+// rather than tolerated.
 func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA journal.FuzzOptions, tickPair func()) {
 	t.Helper()
 	steps := optA.Steps
@@ -1173,11 +1172,10 @@ func diffSharedWorld(a, b *App, maxDiff int) []string {
 	return out
 }
 
-// TestSharedIdentityCrossingWaitsOnItsProducer is the rule the storm flicker broke.
-// An ordinary crossing applies at once on its producer because its effect is
-// provisional and the next correction repairs it. One that *creates* shared
-// entities is not: applied a lead early it allocates identity nobody else has, the
-// next correction deletes what it made, and the one after that puts it back.
+// TestSharedIdentityCrossingWaitsOnItsProducer: a crossing that creates shared
+// entities applies at its agreed tick on its producer as everywhere else. Applied a
+// lead early it would allocate identity nobody else has, the next correction would
+// delete what it made, and the one after that would put it back: a storm flicker.
 func TestSharedIdentityCrossingWaitsOnItsProducer(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF

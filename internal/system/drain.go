@@ -796,7 +796,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	// A fresh drain waits one interval before its first energy drain
 	armTimer(s.world, entity, component.TimerCooldown, parameter.DrainEnergyDrainInterval)
 
-	// Navigation component with defaults (GA will override via event)
+	// Navigation component with defaults
 	navComp := component.NavigationComponent{
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	}

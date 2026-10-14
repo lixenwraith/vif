@@ -525,8 +525,8 @@ func TestARelayedParticipantKeepsTheSelectiveStream(t *testing.T) {
 	}
 	assertMeshParity(t, apps, -1)
 
-	// The same disagreement over a direct link, for the byte comparison the phase
-	// asks to be reported rather than asserted against a threshold.
+	// The same disagreement over a direct link, for the byte comparison, reported
+	// rather than asserted against a threshold.
 	direct := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {1, 3}, {2, 3}})
 	localCursors(t, direct)
 	driveCorrections(t, direct, 4)
@@ -540,8 +540,8 @@ func TestARelayedParticipantKeepsTheSelectiveStream(t *testing.T) {
 		statOf(relay, "snapshot.relay_bytes_sent"),
 		statOf(relay, "snapshot.shard_bytes_sent"))
 
-	// The claim worth asserting is the one the phase makes: a relayed session is
-	// no longer paying the whole-body flood for every correction.
+	// The claim worth asserting: a relayed session does not pay the whole-body
+	// flood for every correction.
 	if rc > 0 && dc > 0 && rc > 4*dc {
 		t.Fatalf("the relayed path moved %d whole-body bytes against %d direct", rc, dc)
 	}
