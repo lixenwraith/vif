@@ -52,7 +52,7 @@ index by kind.
 | Launcher | missile | one homing missile per charge; the blast is explosion geometry | one hostile missile that homes on cursors |
 | Disruptor | pulse | stun burst centred on the orb when a target is inside | strikes every cursor inside its ring |
 | Turret | bullet | one spread bullet per charge, direct damage | hostile bullets; storm's red circle is one |
-| Emitter | ray | sustained ray from the cursor through its orb, sweeping as the orb orbits | warns, fires, rests along a locked ray |
+| Emitter | ray | timed ray from the cursor through its orb at an assigned target, sweeping as the orb orbits; at the cap it is sustained (§4) | warns, fires, rests along a locked ray |
 
 ## 3. Drivers
 
