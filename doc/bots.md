@@ -28,7 +28,7 @@ vif -serve :7777 -size 120x40 -bot 2  # dedicated host with two bots and room fo
 | `-watch` | Show the first bot on this terminal in place of a player; any further bots are seated beside it. Not with `-serve`. |
 | `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`. Not with `-watch` or `-serve`. |
 | `-speed <rate>` | A watched or headless bot's pace: `1/8`..`8`, or `max` for no pacing. A watched bot defaults to `1`; a solo headless bot runs flat out unless set. |
-| `-size <WxH>` | A headless bot's view, default 120x40; a watched bot takes the terminal's. Seats always take 120x40. With `-serve` it sizes the map, which otherwise the first joiner sets. |
+| `-size <WxH>` | A headless bot's view, default 120x40; a watched bot takes the terminal's unless one is given. Seats always take 120x40. With `-serve` it sizes the map, which otherwise the first joiner sets. |
 | `-seed <n>` | Root seed. A solo bot run depends only on it and the configuration. |
 | `-serve <addr>` | A dedicated host with no player of its own; `-bot` seats its bots. |
 | `-host`, `-join` | Keep your player; bots join beside you. |
@@ -102,7 +102,7 @@ only, and a departed slot may be reused.
   until the session Job's one-hour deadline. A guest's bots count only while the
   guest is in the session.
 - The fleet allocator takes a `bots` count, closed by default (`bots_max` 0); see
-  [Session fleet plan](kubernetes-fleet.md). Neither `-join <site>` nor the menu's
+  [The session fleet](kubernetes-fleet.md). Neither `-join <site>` nor the menu's
   request form asks for bots yet.
 - A browser build seats bots only as a guest of a session it joined; it cannot
   host, so it cannot add bots to a solo run.
@@ -141,15 +141,17 @@ counted. Allowance left idle builds up to one second's worth.
 | `TypeGlyph` | none | the glyph under the cursor, switching to Insert first; nothing when there is none |
 | `PointAt` | `target`; `fire = true` clicks instead of moving; `away = true` aims away | a pointer move or click |
 
-`Intent` refuses operators, prefixes, marker jumps and macro keys; `quit` ends the
-run. `press` presses a key a scenario captured, as a typed key or a click on its
-button would, and does nothing while the key is not captured. `PointAt` aims at the nearest target of its class, clamped to the cells the
-view shows, and for `glyph` at the left edge of that text run. If the cursor may
-not enter the cell, it lands on the nearest shown cell it may enter, and does
-nothing when none is shown. `away` aims at the target's mirror through the cursor,
-or, when the view's edge pins the cursor in line with it, at the shown open cell
-farthest from it; it refuses `fire` and `random`, and does nothing while the target
-is on the cursor or no cell gains ground.
+`Intent` refuses an action that only opens a key sequence (`operator_delete`,
+`prefix_g`, `prefix_macro_play`, `marker_glyph_*`); `quit` ends the run. `press`
+presses a key a scenario captured, as a typed key or a click on its button would,
+and does nothing while the key is not captured. `PointAt` aims at the nearest
+target of its class, clamped to the cells the view shows, and for `glyph` at the
+left edge of that text run. If the cursor may not enter the cell, it lands on
+the nearest shown cell it may enter, and does nothing when none is shown. `away`
+aims at the target's mirror through the cursor, or, when the view's edge pins the
+cursor in line with it, at the shown open cell farthest from it; it refuses
+`fire` and `random`, and does nothing while the target is on the cursor or no
+cell gains ground.
 
 ### Guards
 
