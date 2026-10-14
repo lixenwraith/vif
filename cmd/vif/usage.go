@@ -37,8 +37,8 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"join"}, arg: "<addr>", hint: "Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given"},
 			{names: []string{"name"}, arg: "<name>", hint: "Name this host answers to, so one address can serve several sessions"},
 			{names: []string{"players"}, arg: "<n>", hint: fmt.Sprintf(
-				"Roster ceiling including self, 2..%d; unset holds the whole roster; with a -join site, the one requested",
-				parameter.MaxPlayers)},
+				"Roster ceiling including self, 2..%d (with -serve, guests only, 1..%d); unset holds the whole roster; with a -join site, the one requested",
+				parameter.MaxPlayers, parameter.MaxPlayers)},
 			{names: []string{"bot", "bots"}, arg: "[N[:graph]|graph]", hint: "Add bots alongside you (default 1:default); -host/-join keep your player"},
 			{names: []string{"authority"}, arg: "host|migrate",
 				hint: "Where authorship goes when the authoring participant leaves; default host with -serve, migrate otherwise"},

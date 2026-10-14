@@ -494,8 +494,8 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.DurationVar(&f.drain, "drain", 0,
 		"With -serve, how long a termination signal waits for the roster to empty before exiting anyway; 0 exits at once")
 	fs.IntVar(&f.players, "players", 0, fmt.Sprintf(
-		"Ceiling on the roster, itself included (2..%d; default the whole roster); with a -join site, the one requested",
-		parameter.MaxPlayers))
+		"Ceiling on the roster, itself included (2..%d; with -serve, guests only, 1..%d; default the whole roster); with a -join site, the one requested",
+		parameter.MaxPlayers, parameter.MaxPlayers))
 	fs.StringVar(&f.bots, "bots", "", fmt.Sprintf(
 		"Add bots using [N[:graph]|graph] (default 1:%s); combines with -bot",
 		app.DefaultBotGraph))
