@@ -29,8 +29,8 @@ func gameBounds() Bounds {
 	}
 }
 
-// stormSizes and quietSizes are the two measured worlds from the plan's §8: the
-// storm high water and the world at rest.
+// stormSizes and quietSizes are two measured worlds: the storm high water and the
+// world at rest.
 func stormSizes() Sizes { return Sizes{Keyframe: 175_908, Delta: 29_488} }
 func quietSizes() Sizes { return Sizes{Keyframe: 10_891, Delta: 3_200} }
 
@@ -163,9 +163,9 @@ func TestTheFloorIsNeverCrossed(t *testing.T) {
 	}
 }
 
-// TestABreachIsReportedRatherThanAdaptedTo is the boundary the plan states as a
-// must-not: a link below the floor is told about, and the schedule sits exactly
-// at the floor rather than continuing down past it.
+// TestABreachIsReportedRatherThanAdaptedTo is the floor's boundary: a link below
+// the floor is told about, and the schedule sits exactly at the floor rather than
+// continuing down past it.
 func TestABreachIsReportedRatherThanAdaptedTo(t *testing.T) {
 	b, s := gameBounds(), stormSizes()
 	floorCost := b.FloorBps(s)

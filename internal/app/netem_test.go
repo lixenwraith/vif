@@ -25,9 +25,9 @@ type netemStage struct {
 	why  string
 }
 
-// netemStages walks the four shapes the plan asks for, in the order a link
-// actually degrades: distance first, then instability, then loss, then the
-// bottleneck that decides the cadence.
+// netemStages walks four link shapes in the order a link actually degrades:
+// distance first, then instability, then loss, then the bottleneck that decides
+// the cadence.
 func netemStages() []netemStage {
 	return []netemStage{
 		{"baseline", nil, "the unshaped link the rest is measured against"},
@@ -77,11 +77,11 @@ func clearLo(t *testing.T) {
 	_ = exec.Command("tc", "qdisc", "del", "dev", "lo", "root").Run()
 }
 
-// TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers is the gate the phase's
-// manual acceptance asks for, automated: shape the link down in stages and
-// confirm play degrades smoothly — the cadence falls, prediction carries more,
-// correction magnitude rises but stays bounded, the floor is never crossed, and
-// clearing the shape re-converges the session with nothing restarted.
+// TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers is the adaptive cadence's
+// acceptance, automated: shape the link down in stages and confirm play degrades
+// smoothly — the cadence falls, prediction carries more, correction magnitude rises
+// but stays bounded, the floor is never crossed, and clearing the shape
+// re-converges the session with nothing restarted.
 func TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers(t *testing.T) {
 	// Never parallel: this shapes lo for the whole machine, so any other socket
 	// test running beside it would be measuring this test's qdisc.

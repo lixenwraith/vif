@@ -13,9 +13,9 @@ import (
 	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
-// ErrJoinMidRun is returned when the two participants are not at the same position.
-// Nothing carries world state yet, so a joiner can only reproduce a session from
-// its start; a later join needs a world snapshot the current transport does not carry.
+// ErrJoinMidRun is returned by Join, the admission that re-derives the world, when
+// the two participants are not at the same position; JoinAt admits at any tick for
+// a caller that installs the world it is sent.
 var ErrJoinMidRun = errors.New("join: participants are not at the same position")
 
 // JoinAnchor describes this session to a participant that wants to share it: the
@@ -133,7 +133,7 @@ func (a *App) validateSessionOffer(o network.SessionOffer, local network.PeerID)
 		return err
 	}
 	// The ceiling is on cursors rather than on participants: a dedicated host holds
-	// a roster entry, an identity and a vote, and no slot on the map.
+	// a roster entry and an identity, and no slot on the map.
 	if n := cursorParticipants(o.Roster); n > parameter.MaxPlayers {
 		return fmt.Errorf("join roster has %d cursors, maximum is %d", n, parameter.MaxPlayers)
 	}

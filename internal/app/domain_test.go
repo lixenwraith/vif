@@ -720,8 +720,7 @@ func TestEmbedderSharedMutationIsRefusedInALiveSession(t *testing.T) {
 		}
 	}
 
-	// The Bus request the plan compared them against does still travel, from the
-	// authority and from nobody else.
+	// The Bus reset request still travels, from the authority and from nobody else.
 	if guest.Reset(false) {
 		t.Fatal("a guest reset a live session")
 	}

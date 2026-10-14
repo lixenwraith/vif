@@ -45,9 +45,9 @@ func ClassOf(et EventType) EventClass {
 	return eventClasses[et]
 }
 
-// Replicated reports whether a dispatched event belongs in the transported set,
-// which is Shared union Bus (D-10). Stamped types defer to the domain the
-// producer resolved: shared crosses, player does not.
+// Replicated reports whether every instance's journal must hold this record:
+// Shared and Bus, with a Stamped type decided by the domain its producer resolved
+// (D-10). OnWire is the narrower transported set.
 func Replicated(et EventType, domain core.Domain) bool {
 	switch ClassOf(et) {
 	case ClassShared, ClassBus:

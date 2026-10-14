@@ -32,15 +32,11 @@ const (
 	MsgEvent       MessageType = 0x12 // Live: one closed barrier production epoch
 	MsgStateDigest MessageType = 0x13 // Live: periodic shared-world parity probe
 
-	// MsgLinkProbe and MsgLinkEcho are the round trip. Nothing else in this
-	// protocol makes one — every other measurement is one-directional — so the
-	// cadence had nothing but a constant to be chosen from until these existed.
-	//
-	// They are answered inside the transport, before the frame reaches a tick, so
-	// what they measure is the wire rather than this instance's scheduling. An
-	// echo carries back the probe's own bytes untouched, the bytes the far end has
-	// received on the link, and the opaque LinkReport the far end's world last
-	// published — which is the only game state that ever travels on them.
+	// MsgLinkProbe and MsgLinkEcho are the only round trip the protocol times; every
+	// other measurement is one-directional. The transport answers a probe before it
+	// reaches a tick, so they measure the wire, not this instance's scheduling. An
+	// echo returns the probe's bytes, what the far end has received on the link, and
+	// the LinkReport its world last published: the only game state on them.
 	MsgLinkProbe MessageType = 0x14 // Live: a link measurement, awaiting its echo
 	MsgLinkEcho  MessageType = 0x15 // Live: one probe answered, with the peer's report
 
@@ -57,11 +53,10 @@ const (
 	MsgScenarioBody    MessageType = 0x17 // Live: one chunk of the deflated scenario
 
 	// MsgSessionRestart is the authority saying this session is rebuilding on
-	// another scenario. It carries nothing: every participant already knows the
-	// address it came in on, and the offer it is given when it redials names what
-	// is being played. A scenario change restarts the run on both sides, so there
-	// is no state to hand over — only the news that the door is about to close and
-	// reopen.
+	// another scenario. Its payload is the address to redial, where the authority
+	// listens or the one it declared on inheriting the session, so a restart follows
+	// a migrated authority; the offer given on redial names what is being played.
+	// Both sides restart the run, so there is no state to hand over.
 	MsgSessionRestart MessageType = 0x18 // Live: the authority is rebuilding the session
 
 	// MsgBundle is a tick's raw epochs and syncs for the authority as one frame: a
@@ -110,21 +105,17 @@ const (
 
 	// Succession, in the order it runs. A report is the news that the authority is
 	// gone, flooded so a participant two links away learns of a loss only its
-	// neighbour observed; a handoff is the record that lets a receiver adopt a term
-	// it has never seen. Two kinds rather than one because a receiver acts on each
-	// at a different moment, and because only the second is a membership change.
-	// There is no vote: the successor is a function of the roster (see authority.go),
-	// so 0x2D is retired rather than reused.
+	// neighbour observed; a handoff, the one membership change, lets a receiver adopt
+	// a term it has never seen. There is no vote: the successor is a function of the
+	// chain and the roster (see authority.go), so 0x2D is retired rather than reused.
 	MsgAuthorityReport  MessageType = 0x2C // Live: a survivor's notice that the authority is gone
 	MsgAuthorityHandoff MessageType = 0x2E // Live: the record a successor authors under
 
-	// MsgPeerList is the reachability map: where each participant listens, so a
-	// survivor can dial the successor a handoff names. It rides the authority's
-	// term and is refused below the term the receiver holds, like every other
-	// authoritative artifact. It carries addresses only — the confirmed set a
-	// succession reads is frozen for the term and travels in the offer and the
-	// handoff record instead. See reach.go.
-	MsgPeerList MessageType = 0x20 // Live: the authority's confirmed address map
+	// MsgPeerList is the succession chain, flooded whole: the eligible participants
+	// in join order and where each listens, so a survivor can dial the successor a
+	// handoff names. It rides the authority's term and is refused below the term the
+	// receiver holds, like every other authoritative artifact. See reach.go.
+	MsgPeerList MessageType = 0x20 // Live: the succession chain and its addresses
 
 	// MsgRelayJoin and MsgRelayAdmit admit a participant on the link of the one it
 	// dialled rather than on the coordinator's: a guest's bot joins through its

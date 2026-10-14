@@ -123,8 +123,8 @@ func (s *StagedInstall) Commit() error {
 		live.confirmPredictionsLocked(header.Tick, staging)
 
 		// A capture ahead of the clock is adopted at its own tick: the buffer holds
-		// one inside the lead, so reaching here ahead is a join or a jump. One behind
-		// is projected to the present.
+		// one within NetworkHoldTicks, so reaching here ahead is a join or a jump. One
+		// behind is projected to the present.
 		at, tick := live.Position().Tick, header.Tick
 		if at > tick {
 			behind, tick = at-tick, at
