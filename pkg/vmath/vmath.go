@@ -2,7 +2,7 @@
 // scalar math, LUT trigonometry, vectors, ellipses, arcs, grid traversal,
 // and deterministic randomness.
 //
-// Grid coordinates are plain integer cell indices. Point.CenterF is the
+// Grid coordinates are plain integer cell indices. Point.Center is the
 // sanctioned cell-to-precise-position conversion and applies the half-cell
 // offset that keeps physics and rendering aligned.
 //
@@ -11,8 +11,8 @@ package vmath
 
 import "math"
 
-// CellCenterF is the offset from a cell origin to its center.
-const CellCenterF = 0.5
+// CellCenter is the offset from a cell origin to its center.
+const CellCenter = 0.5
 
 // IntAbs returns the absolute value of a grid integer.
 func IntAbs(x int) int {
@@ -40,7 +40,7 @@ const (
 // === Geometry ===
 
 const (
-	// TwoPi is a full rotation in radians (float path)
+	// TwoPi is a full rotation in radians
 	TwoPi = 2.0 * math.Pi
 
 	// EllipseSampleCount is the number of points sampled for arc availability
@@ -54,9 +54,9 @@ type Point struct {
 	X, Y int
 }
 
-// CenterF returns the float64 position of the cell's center
-func (p Point) CenterF() (px, py float64) {
-	return float64(p.X) + CellCenterF, float64(p.Y) + CellCenterF
+// Center returns the float64 position of the cell's center
+func (p Point) Center() (px, py float64) {
+	return float64(p.X) + CellCenter, float64(p.Y) + CellCenter
 }
 
 // Add returns the component-wise sum
@@ -65,9 +65,9 @@ func (p Point) Add(q Point) Point { return Point{X: p.X + q.X, Y: p.Y + q.Y} }
 // Sub returns the component-wise difference
 func (p Point) Sub(q Point) Point { return Point{X: p.X - q.X, Y: p.Y - q.Y} }
 
-// PointAtF returns the cell containing the float64 position
+// PointAt returns the cell containing the float64 position
 // Floor preserves cell mapping for negative coordinates.
-func PointAtF(px, py float64) Point {
+func PointAt(px, py float64) Point {
 	return Point{X: int(math.Floor(px)), Y: int(math.Floor(py))}
 }
 

@@ -74,7 +74,7 @@ const (
 // Pre-computed
 var (
 	StormCircleCollisionInvRxSq,
-	StormCircleCollisionInvRySq = vmath.EllipseInvRadiiSqF(StormCircleRadiusX, StormCircleRadiusY)
+	StormCircleCollisionInvRySq = vmath.EllipseInvRadiiSq(StormCircleRadiusX, StormCircleRadiusY)
 	StormInvulnerabilityMaxDuration = time.Duration(StormInvulnerabilityMaxDurationMs) * time.Millisecond
 )
 
@@ -108,5 +108,5 @@ var (
 	StormGreenRadiusX = StormCircleRadiusX * StormGreenRadiusMultiplier
 	StormGreenRadiusY = StormCircleRadiusY * StormGreenRadiusMultiplier
 	StormGreenInvRxSq,
-	StormGreenInvRySq = vmath.EllipseInvRadiiSqF(StormGreenRadiusX, StormGreenRadiusY)
+	StormGreenInvRySq = vmath.EllipseInvRadiiSq(StormGreenRadiusX, StormGreenRadiusY)
 )

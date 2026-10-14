@@ -326,11 +326,11 @@ func (s *NuggetSystem) collectionCursor(nuggetX, nuggetY int) core.Entity {
 	}
 
 	if heatComp, ok := s.world.Components.Heat.GetComponent(cursor); ok && heatComp.EmberActive &&
-		vmath.EllipseContainsPointF(nuggetX, nuggetY, cursorPos.X, cursorPos.Y, visual.EmberInvRxSq, visual.EmberInvRySq) {
+		vmath.EllipseContainsPoint(nuggetX, nuggetY, cursorPos.X, cursorPos.Y, visual.EmberInvRxSq, visual.EmberInvRySq) {
 		return cursor
 	}
 	if shieldComp, ok := s.world.Components.Shield.GetComponent(cursor); ok && shieldComp.Active &&
-		vmath.EllipseContainsPointF(nuggetX, nuggetY, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
+		vmath.EllipseContainsPoint(nuggetX, nuggetY, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
 		return cursor
 	}
 	if cursorPos.X == nuggetX && cursorPos.Y == nuggetY {

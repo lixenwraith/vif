@@ -161,10 +161,10 @@ func (s *ExplosionSystem) resolveArea(id event.CrossingID, cursor core.Entity, c
 
 	var cellBuf [parameter.MaxEntitiesPerCell]core.Entity
 	for y := minY; y <= maxY; y++ {
-		dyCirc := vmath.ScaleToCircularF(float64(y - centerY))
+		dyCirc := vmath.ScaleToCircular(float64(y - centerY))
 		for x := minX; x <= maxX; x++ {
 			dx := float64(x - centerX)
-			if vmath.CircleDistSqF(dx, dyCirc) > radiusSq {
+			if vmath.CircleDistSq(dx, dyCirc) > radiusSq {
 				continue
 			}
 

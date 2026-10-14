@@ -4,10 +4,10 @@ import "math"
 
 var (
 	// Float64 look-up tables avoid per-call transcendental calculations.
-	SinF_LUT      [LUTSize]float64
-	CosF_LUT      [LUTSize]float64
-	Atan2F_LUT    [LUTSize]float64
-	ExpDecayF_LUT [ExpLUTSize]float64
+	SinLUT      [LUTSize]float64
+	CosLUT      [LUTSize]float64
+	Atan2LUT    [LUTSize]float64
+	ExpDecayLUT [ExpLUTSize]float64
 )
 
 // radToIndex is a precalculated multiplier to convert radians to a LUT index
@@ -17,38 +17,38 @@ func init() {
 	// Initialize trigonometric LUTs.
 	for i := range LUTSize {
 		rad := 2.0 * math.Pi * float64(i) / float64(LUTSize)
-		SinF_LUT[i] = math.Sin(rad)
-		CosF_LUT[i] = math.Cos(rad)
+		SinLUT[i] = math.Sin(rad)
+		CosLUT[i] = math.Cos(rad)
 
 		// Atan2 LUT maps ratio [0,1] to angle [0, π/4]
 		ratio := float64(i) / float64(LUTMask)
-		Atan2F_LUT[i] = math.Atan(ratio)
+		Atan2LUT[i] = math.Atan(ratio)
 	}
 
 	// Initialize the exponential decay LUT.
 	for i := range ExpLUTSize {
 		x := float64(i) * float64(ExpLUTMaxInput) / float64(ExpLUTSize-1)
-		ExpDecayF_LUT[i] = math.Exp(-x / ExpLUTDecayK)
+		ExpDecayLUT[i] = math.Exp(-x / ExpLUTDecayK)
 	}
 }
 
-// SinF returns the sine of angleRad using O(1) LUT lookup.
-func SinF(angleRad float64) float64 {
+// Sin returns the sine of angleRad using O(1) LUT lookup.
+func Sin(angleRad float64) float64 {
 	// Floor keeps negative angles in the preceding angular bin instead of
 	// truncating them toward zero.
 	idx := int(math.Floor(angleRad*radToIndex)) & LUTMask
-	return SinF_LUT[idx]
+	return SinLUT[idx]
 }
 
-// CosF returns the cosine of angleRad using O(1) LUT lookup.
-func CosF(angleRad float64) float64 {
+// Cos returns the cosine of angleRad using O(1) LUT lookup.
+func Cos(angleRad float64) float64 {
 	idx := int(math.Floor(angleRad*radToIndex)) & LUTMask
-	return CosF_LUT[idx]
+	return CosLUT[idx]
 }
 
-// Atan2F returns angle in [0, 2π) for (dy, dx) using LUT.
+// Atan2 returns angle in [0, 2π) for (dy, dx) using LUT.
 // The octant reduction keeps the lookup table compact.
-func Atan2F(dy, dx float64) float64 {
+func Atan2(dy, dx float64) float64 {
 	if dx == 0 && dy == 0 {
 		return 0.0
 	}
@@ -62,11 +62,11 @@ func Atan2F(dy, dx float64) float64 {
 			baseAngle = 0
 		} else {
 			idx := int((ady / adx) * float64(LUTMask))
-			baseAngle = Atan2F_LUT[idx]
+			baseAngle = Atan2LUT[idx]
 		}
 	} else {
 		idx := int((adx / ady) * float64(LUTMask))
-		baseAngle = (math.Pi / 2.0) - Atan2F_LUT[idx]
+		baseAngle = (math.Pi / 2.0) - Atan2LUT[idx]
 	}
 
 	// Map back to correct quadrant
@@ -92,14 +92,14 @@ func Atan2F(dy, dx float64) float64 {
 	return 3.0 * math.Pi / 2.0
 }
 
-// ExpDecayF returns e^(-count/k) using LUT linear interpolation.
+// ExpDecay returns e^(-count/k) using LUT linear interpolation.
 // The result is clamped to the LUT domain and lies in [0.0, 1.0].
-func ExpDecayF(count int) float64 {
+func ExpDecay(count int) float64 {
 	if count <= 0 {
 		return 1.0
 	}
 	if count >= ExpLUTMaxInput {
-		return ExpDecayF_LUT[ExpLUTSize-1]
+		return ExpDecayLUT[ExpLUTSize-1]
 	}
 
 	scaledIdx := count * (ExpLUTSize - 1)
@@ -107,17 +107,17 @@ func ExpDecayF(count int) float64 {
 	frac := float64(scaledIdx%ExpLUTMaxInput) / float64(ExpLUTMaxInput)
 
 	if idx >= ExpLUTSize-1 {
-		return ExpDecayF_LUT[ExpLUTSize-1]
+		return ExpDecayLUT[ExpLUTSize-1]
 	}
 
-	v0 := ExpDecayF_LUT[idx]
-	v1 := ExpDecayF_LUT[idx+1]
+	v0 := ExpDecayLUT[idx]
+	v1 := ExpDecayLUT[idx+1]
 
 	// Linear interpolation between the two closest values
 	return v0 + (v1-v0)*frac
 }
 
-// ExpDecayScaledF returns 1 + boostMax * e^(-count/k)
-func ExpDecayScaledF(count int, boostMax float64) float64 {
-	return 1.0 + boostMax*ExpDecayF(count)
+// ExpDecayScaled returns 1 + boostMax * e^(-count/k)
+func ExpDecayScaled(count int, boostMax float64) float64 {
+	return 1.0 + boostMax*ExpDecay(count)
 }

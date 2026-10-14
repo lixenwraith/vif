@@ -11,9 +11,9 @@ const grav3DMinDistSq = 1.0
 
 // GravitationalAccel3D returns acceleration vector on body at posA toward posB
 // Returns acceleration (force/massA), not force
-func GravitationalAccel3D(posA, posB vmath.Vec3F, massB, G float64) vmath.Vec3F {
-	delta := vmath.V3FSub(posB, posA)
-	distSq := vmath.V3FMagSq(delta)
+func GravitationalAccel3D(posA, posB vmath.Vec3, massB, G float64) vmath.Vec3 {
+	delta := vmath.V3Sub(posB, posA)
+	distSq := vmath.V3MagSq(delta)
 
 	if distSq < grav3DMinDistSq {
 		distSq = grav3DMinDistSq
@@ -23,20 +23,20 @@ func GravitationalAccel3D(posA, posB vmath.Vec3F, massB, G float64) vmath.Vec3F 
 	accelMag := G * massB / distSq
 	inv := accelMag / dist
 
-	return vmath.Vec3F{X: delta.X * inv, Y: delta.Y * inv, Z: delta.Z * inv}
+	return vmath.Vec3{X: delta.X * inv, Y: delta.Y * inv, Z: delta.Z * inv}
 }
 
 // GravitationalAccelWithRepulsion3D combines gravity and soft repulsion
 // Beyond repulsionRadius: inverse-square attraction; within: linear repulsion
 func GravitationalAccelWithRepulsion3D(
-	posA, posB vmath.Vec3F,
+	posA, posB vmath.Vec3,
 	massB, G, repulsionRadius, repulsionStrength float64,
-) vmath.Vec3F {
-	delta := vmath.V3FSub(posB, posA)
-	dist := vmath.V3FMag(delta)
+) vmath.Vec3 {
+	delta := vmath.V3Sub(posB, posA)
+	dist := vmath.V3Mag(delta)
 
 	if dist == 0 {
-		return vmath.Vec3F{}
+		return vmath.Vec3{}
 	}
 
 	invDist := 1.0 / dist
@@ -54,13 +54,13 @@ func GravitationalAccelWithRepulsion3D(
 		accelMag = G * massB / distSq
 	}
 
-	return vmath.Vec3F{X: dirX * accelMag, Y: dirY * accelMag, Z: dirZ * accelMag}
+	return vmath.Vec3{X: dirX * accelMag, Y: dirY * accelMag, Z: dirZ * accelMag}
 }
 
 // ElasticCollision3D computes post-collision velocities in place, returns true if resolved
 func ElasticCollision3D(
-	posA, posB *vmath.Vec3F,
-	velA, velB *vmath.Vec3F,
+	posA, posB *vmath.Vec3,
+	velA, velB *vmath.Vec3,
 	massA, massB, restitution float64,
 ) bool {
 	if massA <= 0 || massB <= 0 {
@@ -110,7 +110,7 @@ func ElasticCollision3D(
 const separateMargin = 0.0625
 
 // SeparateOverlap3D pushes overlapping spheres apart in place, returns true if moved
-func SeparateOverlap3D(posA, posB *vmath.Vec3F, radiusA, radiusB, massA, massB float64) bool {
+func SeparateOverlap3D(posA, posB *vmath.Vec3, radiusA, radiusB, massA, massB float64) bool {
 	if massA <= 0 || massB <= 0 {
 		return false
 	}

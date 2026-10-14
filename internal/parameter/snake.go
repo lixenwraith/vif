@@ -75,7 +75,7 @@ const (
 // Pre-computed values
 var (
 	SnakeHeadCollisionInvRxSq,
-	SnakeHeadCollisionInvRySq = vmath.EllipseInvRadiiSqF(SnakeHeadCollisionRadiusX, SnakeHeadCollisionRadiusY)
+	SnakeHeadCollisionInvRySq = vmath.EllipseInvRadiiSq(SnakeHeadCollisionRadiusX, SnakeHeadCollisionRadiusY)
 
 	// Squared for distance comparison without sqrt
 	SnakeTrailSampleIntervalSq = SnakeTrailSampleInterval * SnakeTrailSampleInterval

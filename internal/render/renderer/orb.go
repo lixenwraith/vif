@@ -30,7 +30,7 @@ type OrbRenderer struct {
 func NewOrbRenderer(gameCtx *engine.GameContext) *OrbRenderer {
 	rx := parameter.OrbCoronaRadiusX
 	ry := parameter.OrbCoronaRadiusY
-	invRxSq, invRySq := vmath.EllipseInvRadiiSqF(rx, ry)
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rx, ry)
 
 	r := &OrbRenderer{
 		gameCtx:          gameCtx,
@@ -109,7 +109,7 @@ func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.R
 		gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
 		angle = float64(gameTimeMs%parameter.OrbCoronaPeriodMs) / float64(parameter.OrbCoronaPeriodMs) * vmath.TwoPi
 	}
-	r.renderCorona(ctx, buf, mapX, mapY, orbPalette[orb.WeaponType].corona, vmath.CosF(angle), vmath.SinF(angle))
+	r.renderCorona(ctx, buf, mapX, mapY, orbPalette[orb.WeaponType].corona, vmath.Cos(angle), vmath.Sin(angle))
 
 	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 	if visible {
@@ -135,15 +135,15 @@ func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderB
 
 			dxF := float64(dx)
 			dyF := float64(dy)
-			distSq := vmath.EllipseDistSqF(dxF, dyF, r.effectInvRxSq, r.effectInvRySq)
+			distSq := vmath.EllipseDistSq(dxF, dyF, r.effectInvRxSq, r.effectInvRySq)
 			if distSq > 1.0 || distSq == 0.0 {
 				continue
 			}
 
 			// Dual-direction glow using vector normalization
-			cellDirX, cellDirY := vmath.Normalize2DF(dxF, dyF)
-			dot1 := vmath.DotProductF(cellDirX, cellDirY, rotDirX, rotDirY)
-			dot2 := vmath.DotProductF(cellDirX, cellDirY, -rotDirX, -rotDirY)
+			cellDirX, cellDirY := vmath.Normalize2D(dxF, dyF)
+			dot1 := vmath.DotProduct(cellDirX, cellDirY, rotDirX, rotDirY)
+			dot2 := vmath.DotProduct(cellDirX, cellDirY, -rotDirX, -rotDirY)
 			dot := max(dot1, dot2)
 			if dot <= 0.0 {
 				continue
@@ -180,7 +180,7 @@ func (r *OrbRenderer) renderBurst(ctx render.RenderContext, buf *render.RenderBu
 
 			dxF := float64(dx)
 			dyF := float64(dy)
-			distSq := vmath.EllipseDistSqF(dxF, dyF, r.effectInvRxSq, r.effectInvRySq)
+			distSq := vmath.EllipseDistSq(dxF, dyF, r.effectInvRxSq, r.effectInvRySq)
 
 			if distSq > 1.0 {
 				continue

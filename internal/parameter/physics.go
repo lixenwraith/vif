@@ -11,7 +11,7 @@ var (
 	FlockingSeparationRadiusY = 4.0
 
 	// Pre-computed inverse squared radii for ellipse overlap checks
-	FlockingSeparationInvRxSq, FlockingSeparationInvRySq = vmath.EllipseInvRadiiSqF(FlockingSeparationRadiusX, FlockingSeparationRadiusY)
+	FlockingSeparationInvRxSq, FlockingSeparationInvRySq = vmath.EllipseInvRadiiSq(FlockingSeparationRadiusX, FlockingSeparationRadiusY)
 )
 
 // Explosion field VFX
@@ -30,10 +30,10 @@ var (
 
 // Pulse physics
 var (
-	PulseRadiusInvRxSq, PulseRadiusInvRySq = vmath.EllipseInvRadiiSqF(PulseRadiusX, PulseRadiusY)
+	PulseRadiusInvRxSq, PulseRadiusInvRySq = vmath.EllipseInvRadiiSq(PulseRadiusX, PulseRadiusY)
 )
 
 // Pylon collision
 var (
-	PylonCollisionInvRxSq, PylonCollisionInvRySq = vmath.EllipseInvRadiiSqF(PylonCollisionRadiusX, PylonCollisionRadiusY)
+	PylonCollisionInvRxSq, PylonCollisionInvRySq = vmath.EllipseInvRadiiSq(PylonCollisionRadiusX, PylonCollisionRadiusY)
 )

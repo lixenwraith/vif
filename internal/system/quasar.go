@@ -357,7 +357,7 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	})
 
 	// Set kinetic component with centered position
-	preciseX, preciseY := vmath.Point{X: headerX, Y: headerY}.CenterF()
+	preciseX, preciseY := vmath.Point{X: headerX, Y: headerY}.Center()
 	kinetic := physics.Kinetic{
 		PreciseX: preciseX,
 		PreciseY: preciseY,
@@ -496,7 +496,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 		// Snap to exact target center
 		baseX, baseY, baseOK := resolveBaseTarget(s.world, headerEntity)
 		if baseOK {
-			kineticComp.PreciseX, kineticComp.PreciseY = vmath.Point{X: baseX, Y: baseY}.CenterF()
+			kineticComp.PreciseX, kineticComp.PreciseY = vmath.Point{X: baseX, Y: baseY}.Center()
 			kineticComp.VelX = 0
 			kineticComp.VelY = 0
 			// Sync grid position if snap crossed cell boundary
@@ -562,8 +562,8 @@ func (s *QuasarSystem) isCursorInZapRange(headerEntity core.Entity, quasarComp *
 
 	// Inside visual circle = in range (no zap)
 	dx := float64(cursorX - headerPos.X)
-	dyCirc := vmath.ScaleToCircularF(float64(cursorY - headerPos.Y)) // Aspect correction
-	dist := vmath.MagnitudeF(dx, dyCirc)
+	dyCirc := vmath.ScaleToCircular(float64(cursorY - headerPos.Y)) // Aspect correction
+	dist := vmath.Magnitude(dx, dyCirc)
 	return dist <= quasarComp.ZapRadius
 }
 

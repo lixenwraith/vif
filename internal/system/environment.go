@@ -179,8 +179,8 @@ func (s *EnvironmentSystem) updateWind(delta time.Duration) {
 		// A wind ending part-way through a tick contributes only that fraction to
 		// the 2D integrators, which consume acceleration over motionSeconds.
 		force *= windSeconds / motionSeconds
-		forceX := force * vmath.CosF(direction)
-		forceY := force * vmath.SinF(direction)
+		forceX := force * vmath.Cos(direction)
+		forceY := force * vmath.Sin(direction)
 
 		s.applyPlanarWind(forceX, forceY)
 		s.applyStormWind(forceX, forceY, motionSeconds)
@@ -208,7 +208,7 @@ func (s *EnvironmentSystem) startWind(payload *event.WindStartPayload) {
 	s.clearAppliedWind()
 	s.windActive = true
 	s.windForce = payload.Force
-	s.windDirection = vmath.NormalizeAngleF(payload.Direction)
+	s.windDirection = vmath.NormalizeAngle(payload.Direction)
 	s.windRemaining = payload.Duration
 	s.publishStatus()
 }
@@ -225,7 +225,7 @@ func (s *EnvironmentSystem) cancelWind() {
 func (s *EnvironmentSystem) sampleWind() (force, direction float64) {
 	forceSpread := (s.rng.Float64()*2 - 1) * parameter.WindForceVariationRatio
 	directionSpread := (s.rng.Float64()*2 - 1) * parameter.WindDirectionVariation
-	return s.windForce * (1 + forceSpread), vmath.NormalizeAngleF(s.windDirection + directionSpread)
+	return s.windForce * (1 + forceSpread), vmath.NormalizeAngle(s.windDirection + directionSpread)
 }
 
 // applyPlanarWind writes acceleration only to the mobile species currently
@@ -300,7 +300,7 @@ func (s *EnvironmentSystem) startDrift(payload *event.DriftStartPayload) {
 	s.drift.Active = true
 	s.drift.Endless = payload.DurationMs == 0
 	s.drift.Speed = min(payload.Speed, parameter.DriftMaxSpeed)
-	s.drift.Direction = vmath.NormalizeAngleF(payload.Direction)
+	s.drift.Direction = vmath.NormalizeAngle(payload.Direction)
 	s.drift.Remaining = time.Duration(payload.DurationMs) * time.Millisecond
 	s.driftVelocity = driftVelocity(s.drift.Speed, s.drift.Direction)
 	for level := range driftLevels {
@@ -482,7 +482,7 @@ func (s *EnvironmentSystem) LoadShared(data []byte) error {
 	s.windActive = snap.Active
 	s.windApplied = snap.Applied
 	s.windForce = snap.Force
-	s.windDirection = vmath.NormalizeAngleF(snap.Direction)
+	s.windDirection = vmath.NormalizeAngle(snap.Direction)
 	s.windRemaining = snap.Remaining
 	if !s.windActive {
 		s.windForce = 0

@@ -395,7 +395,7 @@ func (s *ParticleSystem) spawnOne(e event.ParticleSpawnEntry, cx, cy int) {
 	if e.SkipStartCell {
 		particle.LastIntX, particle.LastIntY = e.X, e.Y
 	}
-	preciseX, preciseY := vmath.Point{X: e.X, Y: e.Y}.CenterF()
+	preciseX, preciseY := vmath.Point{X: e.X, Y: e.Y}.Center()
 	kinetic := physics.Kinetic{PreciseX: preciseX, PreciseY: preciseY}
 	if prof.fall != 0 {
 		kinetic.VelY = prof.fall * s.fallSpeed()
@@ -407,8 +407,8 @@ func (s *ParticleSystem) spawnOne(e event.ParticleSpawnEntry, cx, cy int) {
 		if s.rng.Intn(2) == 0 {
 			spin = -1
 		}
-		centerX, centerY := vmath.Point{X: cx, Y: cy}.CenterF()
-		kinetic.VelX, kinetic.VelY = orbitKick(preciseX-centerX, vmath.ScaleToCircularF(preciseY-centerY), prof.orbit.speed, spin)
+		centerX, centerY := vmath.Point{X: cx, Y: cy}.Center()
+		kinetic.VelX, kinetic.VelY = orbitKick(preciseX-centerX, vmath.ScaleToCircular(preciseY-centerY), prof.orbit.speed, spin)
 		particle.ResponseGroup = uint8(s.rng.Intn(3))
 		particle.Orbiting = true
 	}
@@ -464,8 +464,8 @@ func (s *ParticleSystem) fallSpeed() float64 {
 // orbitKick is a tangential velocity of speed around a centre at circular-space
 // offset (dx, dy), turning the way the Kraken's legs do for a positive spin
 func orbitKick(dx, dy, speed, spin float64) (vx, vy float64) {
-	tx, ty := vmath.Normalize2DF(vmath.PerpendicularF(dx, dy))
-	return tx * speed * spin, vmath.ScaleFromCircularF(ty * speed * spin)
+	tx, ty := vmath.Normalize2D(vmath.Perpendicular(dx, dy))
+	return tx * speed * spin, vmath.ScaleFromCircular(ty * speed * spin)
 }
 
 // updateBehavior integrates every particle of one behavior: anchor pull or fall,
@@ -499,8 +499,8 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 
 		if prof.jitter > 0 {
 			angle := s.rng.Float64() * vmath.TwoPi
-			kinetic.VelX += vmath.CosF(angle) * prof.jitter
-			kinetic.VelY += vmath.SinF(angle) * prof.jitter
+			kinetic.VelX += vmath.Cos(angle) * prof.jitter
+			kinetic.VelY += vmath.Sin(angle) * prof.jitter
 		}
 		center, anchored := nearestCenter(centers, kinetic.PreciseX, kinetic.PreciseY)
 		s.steer(prof, &particle, kinetic, center, anchored, chase, dtSec)
@@ -518,9 +518,9 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 
 		destroyParticle := false
 		if curX != particle.LastIntX || curY != particle.LastIntY {
-			lastSafe := vmath.PointAtF(prevX, prevY)
+			lastSafe := vmath.PointAt(prevX, prevY)
 			lastSafeX, lastSafeY := lastSafe.X, lastSafe.Y
-			traverser := vmath.NewGridTraverserF(prevX, prevY, kinetic.PreciseX, kinetic.PreciseY)
+			traverser := vmath.NewGridTraverser(prevX, prevY, kinetic.PreciseX, kinetic.PreciseY)
 			for traverser.Next() {
 				state.statGridSteps.Add(1)
 				x, y := traverser.Pos()
@@ -547,7 +547,7 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 					if y != lastSafeY {
 						physics.ReflectVelocityY(kinetic, prof.bounce)
 					}
-					kinetic.PreciseX, kinetic.PreciseY = vmath.Point{X: lastSafeX, Y: lastSafeY}.CenterF()
+					kinetic.PreciseX, kinetic.PreciseY = vmath.Point{X: lastSafeX, Y: lastSafeY}.Center()
 					curX, curY = lastSafeX, lastSafeY
 					break
 				}
@@ -608,13 +608,13 @@ func (s *ParticleSystem) anchors(anchor particleAnchor) (centers []orbitCenter, 
 		}
 		dx, dy := cursorPos.X-s.lastCursorX, cursorPos.Y-s.lastCursorY
 		s.lastCursorX, s.lastCursorY = cursorPos.X, cursorPos.Y
-		if vmath.MagnitudeF(float64(dx), float64(dy)) > parameter.DustChaseThreshold {
+		if vmath.Magnitude(float64(dx), float64(dy)) > parameter.DustChaseThreshold {
 			chase = true
 			s.staggerTick = (s.staggerTick + 1) % 3
 		}
 		// Energy of either sign pulls, as it raises the shield
 		if energy, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Player.Entity); ok && energy.Current != 0 {
-			x, y := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.CenterF()
+			x, y := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.Center()
 			s.centers = append(s.centers, orbitCenter{x: x, y: y})
 		}
 	case anchorKraken:
@@ -637,7 +637,7 @@ func (s *ParticleSystem) anchors(anchor particleAnchor) (centers []orbitCenter, 
 func nearestCenter(centers []orbitCenter, x, y float64) (orbitCenter, bool) {
 	best, bestDist := orbitCenter{}, math.Inf(1)
 	for _, c := range centers {
-		dx, dy := x-c.x, vmath.ScaleToCircularF(y-c.y)
+		dx, dy := x-c.x, vmath.ScaleToCircular(y-c.y)
 		if d := dx*dx + dy*dy; d < bestDist {
 			best, bestDist = c, d
 		}
@@ -652,7 +652,7 @@ func (s *ParticleSystem) steer(prof *particleProfile, p *component.ParticleCompo
 	switch {
 	case anchored:
 		// Orbit physics runs in circular space so the orbit looks round on terminal cells
-		dx, dy := k.PreciseX-c.x, vmath.ScaleToCircularF(k.PreciseY-c.y)
+		dx, dy := k.PreciseX-c.x, vmath.ScaleToCircular(k.PreciseY-c.y)
 		if !p.Orbiting && prof.fall != 0 {
 			p.OrbitRadius = prof.orbit.radiusMin + s.rng.Float64()*(prof.orbit.radiusMax-prof.orbit.radiusMin)
 			k.VelX, k.VelY = orbitKick(dx, dy, prof.orbit.speed, c.spin)
@@ -665,12 +665,12 @@ func (s *ParticleSystem) steer(prof *particleProfile, p *component.ParticleCompo
 
 		ax, ay := physics.OrbitalEquilibrium(dx, dy, p.OrbitRadius, prof.orbit.stiffness*max(p.ChaseBoost, 1))
 		k.VelX += ax * dtSec
-		k.VelY += vmath.ScaleFromCircularF(ay) * dtSec
+		k.VelY += vmath.ScaleFromCircular(ay) * dtSec
 
 		// Radial damping turns radial velocity into tangential
-		velYCirc := vmath.ScaleToCircularF(k.VelY)
+		velYCirc := vmath.ScaleToCircular(k.VelY)
 		k.VelX, velYCirc = physics.OrbitalDamp(k.VelX, velYCirc, dx, dy, prof.orbit.damping, dtSec)
-		k.VelY = vmath.ScaleFromCircularF(velYCirc)
+		k.VelY = vmath.ScaleFromCircular(velYCirc)
 		drag = prof.orbit.drag
 	case p.Orbiting && prof.fall != 0:
 		k.VelX = 0

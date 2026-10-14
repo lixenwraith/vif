@@ -190,7 +190,7 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 		disp := p.computeJaggedDisplacement(theta, timePhase)
 		adjRx := p.radiusX + disp
 		adjRy := p.radiusY + disp/2.0
-		invRxSq, invRySq := vmath.EllipseInvRadiiSqF(adjRx, adjRy)
+		invRxSq, invRySq := vmath.EllipseInvRadiiSq(adjRx, adjRy)
 		p.invRadiiSqLUT[i].invRxSq = invRxSq
 		p.invRadiiSqLUT[i].invRySq = invRySq
 	}
@@ -219,15 +219,15 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 			cellDX := mapX - centerX
 			cellDY := mapY - centerY
 
-			// Atan2F depends only on the ratio, so raw cell deltas are sufficient.
-			theta := vmath.Atan2F(float64(cellDY), float64(cellDX))
+			// Atan2 depends only on the ratio, so raw cell deltas are sufficient.
+			theta := vmath.Atan2(float64(cellDY), float64(cellDX))
 			lutIdx := int(theta*radToJaggedIdx) & 255
 			invRxSq := p.invRadiiSqLUT[lutIdx].invRxSq
 			invRySq := p.invRadiiSqLUT[lutIdx].invRySq
 
 			dx := float64(cellDX)
 			dy := float64(cellDY)
-			normDistSq := vmath.EllipseDistSqF(dx, dy, invRxSq, invRySq)
+			normDistSq := vmath.EllipseDistSq(dx, dy, invRxSq, invRySq)
 
 			if normDistSq > 1.25 {
 				continue
@@ -262,11 +262,11 @@ func emberFrameTrueColor(p *EmberPainter, _ render.RenderContext, heatChanged bo
 	// Compute ring rotation and pulse state once per frame.
 	for i := range visual.EmberRingCount {
 		effectiveSpeed := p.params.RingSpeed * visual.EmberRingVelocities[i]
-		angle := vmath.NormalizeAngleF(p.gameTime*effectiveSpeed + visual.EmberRingPhaseOffsets[i])
+		angle := vmath.NormalizeAngle(p.gameTime*effectiveSpeed + visual.EmberRingPhaseOffsets[i])
 
-		p.ringStates[i].cosA = vmath.CosF(angle)
-		p.ringStates[i].sinA = vmath.SinF(angle)
-		p.ringStates[i].pulseAlpha = p.ringAlpha + visual.PulseAmplitude*vmath.SinF(p.gameTime*visual.PulseFrequency+visual.EmberRingPulsePhases[i])
+		p.ringStates[i].cosA = vmath.Cos(angle)
+		p.ringStates[i].sinA = vmath.Sin(angle)
+		p.ringStates[i].pulseAlpha = p.ringAlpha + visual.PulseAmplitude*vmath.Sin(p.gameTime*visual.PulseFrequency+visual.EmberRingPulsePhases[i])
 	}
 }
 
@@ -322,7 +322,7 @@ func (p *EmberPainter) computeRingVisibility(normDistF, dxF, dyF float64) float6
 
 		// Gaussian visibility via ExpDecay LUT
 		lutInput := int(ringDistSq * p.ringInvWidthSq * visual.ExpLUTDecayK)
-		vis := vmath.ExpDecayF(lutInput) * edgeFade * rs.pulseAlpha
+		vis := vmath.ExpDecay(lutInput) * edgeFade * rs.pulseAlpha
 
 		// Back-face dimming
 		if rz < visual.BackFaceThreshold {
@@ -382,17 +382,17 @@ func (p *EmberPainter) computeJaggedDisplacement(theta, timePhase float64) float
 
 	// Multi-octave sine noise
 	angle1 := theta*p.params.JaggedFreq + timePhase
-	noise := vmath.SinF(angle1) / 2.0
+	noise := vmath.Sin(angle1) / 2.0
 
 	angle2 := theta*(p.params.JaggedFreq*2.1) + timePhase*1.3
-	noise += vmath.SinF(angle2) * p.params.Octave2
+	noise += vmath.Sin(angle2) * p.params.Octave2
 
 	angle3 := theta*(p.params.JaggedFreq/2.0) + timePhase*0.7
-	noise += vmath.SinF(angle3) * p.params.Octave3
+	noise += vmath.Sin(angle3) * p.params.Octave3
 
 	// Eruption spikes
 	eruptAngle := theta*3.0 + timePhase*1.5
-	eruptBase := min(vmath.SinF(eruptAngle), 0.0)
+	eruptBase := min(vmath.Sin(eruptAngle), 0.0)
 	eruption := p.powApprox(eruptBase, p.params.EruptionPower) * 1.2
 
 	return (noise + eruption) * p.params.JaggedAmp

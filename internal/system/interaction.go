@@ -65,7 +65,7 @@ func CursorContactAt(w *engine.World, x, y int) core.Entity {
 			continue
 		}
 		shield, ok := w.Components.Shield.GetPtr(cursor)
-		if ok && shield.Active && vmath.EllipseContainsPointF(x, y, pos.X, pos.Y, shield.InvRxSq, shield.InvRySq) {
+		if ok && shield.Active && vmath.EllipseContainsPoint(x, y, pos.X, pos.Y, shield.InvRxSq, shield.InvRySq) {
 			return cursor
 		}
 	}
@@ -179,7 +179,7 @@ func checkCursorOverlap(w *engine.World, cursorEntity, entity core.Entity) Curso
 				result.OnCursor = true
 			}
 
-			if shieldActive && vmath.EllipseContainsPointF(memberPos.X, memberPos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
+			if shieldActive && vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
 				result.ShieldMembers = append(result.ShieldMembers, member.Entity)
 			}
 		}
@@ -194,7 +194,7 @@ func checkCursorOverlap(w *engine.World, cursorEntity, entity core.Entity) Curso
 
 	result.OnCursor = pos.X == cursorPos.X && pos.Y == cursorPos.Y
 
-	if shieldActive && vmath.EllipseContainsPointF(pos.X, pos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
+	if shieldActive && vmath.EllipseContainsPoint(pos.X, pos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
 		result.ShieldMembers = append(result.ShieldMembers, entity)
 	}
 
