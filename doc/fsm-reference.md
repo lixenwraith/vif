@@ -4,8 +4,9 @@
 
 Entry config search order:
 
-1. `-s <path-or-name>` — file, directory containing `scenario.toml`, or a name
-   resolved as `scenario/<name>/scenario.toml` under the configured roots;
+1. `-s <path-or-name>`, or `[paths] scenario` in `vif.toml` — file, directory
+   containing `scenario.toml`, or a name resolved as `scenario/<name>/scenario.toml`
+   under the configured roots;
 2. `scenario/main/scenario.toml` under `-config-dir <root>`;
 3. the same under the user root, normally `~/.config/vif`;
 4. the same under the checkout's `wad/` for a binary in its `bin/`, then under
@@ -15,36 +16,40 @@ Entry config search order:
 `-d` is mutually exclusive with both `-s` and `-f`; by itself it selects the
 embedded scenario and content corpus. For the runtime design behind this reference, see
 [`doc/fsm-and-configuration.md`](fsm-and-configuration.md). The complete
-cross-resource order and migration policy are in
-[`doc/filesystem-layout.md`](filesystem-layout.md).
+cross-resource order is in [`doc/filesystem-layout.md`](filesystem-layout.md). A bot
+graph is written in this dialect with its own actions and guards
+([Bots](bots.md#writing-a-graph)).
 
 The embedded main campaign is the only shipped source of `main`; `-s main`
 falls back to it. A `scenario/main/` directory is an optional user override.
 
-Region `file` references resolve relative to the entry config's directory and
-cannot escape it (`..` is rejected). Installed layout:
+Region `file` and `macro_files` references resolve relative to the entry config's
+directory and cannot climb out of it. A region file holds only `[states]`, and a
+state defined twice across files fails the load. A scenario is at most 64 `.toml`
+files, 256 KiB each and 1 MiB in all. A joiner plays the coordinator's exact bytes:
+its own copy when the digests match, else the coordinator's, sent under the same
+bounds and held in memory. Installed layout:
 
 ```text
 ~/.config/vif/
 ├── scenario/
-│   ├── main/  # optional override
-│   │   ├── scenario.toml
-│   │   ├── main.toml
-│   │   ├── quasar.toml
-│   │   ├── storm.toml
-│   │   ├── monitor.toml
-│   │   └── tower.toml
-│   ├── blank/
-│   │   └── scenario.toml
+│   ├── main/              # optional override: a copy of internal/asset/scenario/
+│   ├── blank/scenario.toml
+│   ├── kraken/scenario.toml
+│   ├── simon/scenario.toml
 │   └── td/
-│       └── scenario.toml
+│       ├── scenario.toml
+│       ├── td_macros.toml # macro library
+│       └── td_*.toml      # region files
 └── input/
     └── keymap.toml
 ```
 
-`vif -check [-g <name-or-path>]` validates resolved FSM, keymap, audio, and
-content config and exits; all state-level FSM errors are reported in one pass.
-`vif -schema` prints the machine schema (events, guards, actions) as JSON.
+`vif -check [-s <name-or-path>]` validates the resolved settings, scenario (FSM, the
+system names it toggles and the required dependencies a disable strands), keymap,
+audio overrides, content and every bot graph, then exits; all state-level FSM
+errors are reported in one pass. `vif -schema` prints the machine schema (events
+with payload fields, guards, actions, operators and config fields) as JSON.
 
 ---
 
@@ -56,12 +61,16 @@ macro_files = ["macros.toml"]       # Macro libraries, relative to this file
 
 [systems]
 disabled_systems = ["system_name", ...] # Disabled at FSM init
-only_systems = ["system_name", ...]     # Or: every other toggled system disabled
+only_systems = ["system_name", ...]     # Or (not both): every other toggled system disabled
+
+[map]
+min_width = 50                      # Floor under the map's size (optional)
+min_height = 20
 
 [regions.region_name]
 initial = "StateName"               # Initial state (omit for dynamic regions)
 file = "file.toml"                  # External state definitions
-background = true                   # Exclude region from telemetry overlay
+background = true                   # Left out of the status bar's fsm.state summary
 enabled_systems = ["system_name"]   # Enable on region spawn/resume
 disabled_systems = ["system_name"]  # Disable on region spawn/resume
 ```
@@ -72,7 +81,7 @@ disabled_systems = ["system_name"]  # Disable on region spawn/resume
 
 A repeated shape is written once and invoked by name; the loader expands it before
 anything below sees the document. The entry and its `macro_files` define macros,
-and region files invoke them:
+and every scenario file, the entry included, invokes them:
 
 ```toml
 # macros.toml
@@ -115,6 +124,11 @@ transitions = [...]                 # Transition rules
 ```
 
 `Tick` — evaluated every game tick; use with guard to control timing.
+
+A region is shared state, so an event trigger must be one every instance holds: a
+`[local]` event (its class in `internal/event/type.go`) cannot steer a region (D-20).
+The loader accepts one; `TestFSMTriggersAreReplicated` holds the shipped scenarios
+to the rule.
 
 ### Variable Capture from Payloads
 
@@ -194,7 +208,8 @@ transition with a passing guard executes every tick and shadows all outer
 
 `delay_ms` counts down in region time and survives transitions while the
 owning state remains on the active path. Delayed actions are cleared when
-their owning state exits. Transition actions with `delay_ms` are owned by the
+their owning state exits. An action's guard is checked when it is scheduled, not
+when its delay runs out. Transition actions with `delay_ms` are owned by the
 target state; internal-transition actions by the active leaf. Captures store a
 deterministic compiled action identity, so delayed entry, update, and transition
 actions resume the same work after join or correction.
@@ -240,10 +255,17 @@ same boundary.
 ```toml
 { action = "EmitEvent", event = "EventName" }
 { action = "EmitEvent", event = "EventName", payload = { field = value, ... } }
-{ action = "EmitEvent", event = "EventName", payload = { field = 0 }, payload_vars = { field = "var_name" } }
+{ action = "EmitEvent", event = "EventHeatAddRequest", payload = { entity = 0, delta = 0 }, payload_vars = { entity = "player_entity", delta = "bonus" } }
 ```
 
-`payload_vars` — injects FSM variable value into payload field at runtime.
+The event name and payload are compiled at load: an unknown event or a value of the
+wrong type fails it. Without `payload` the event carries its payload type
+zero-valued. `payload_vars` injects an FSM variable's value into a payload field at
+runtime. Supported field kinds: all signed and unsigned integer widths, `float32`,
+`float64`, `bool`, and `string`; a negative value is ignored for an unsigned field.
+A string takes the value's decimal form in place of each `{}`, so
+`payload = { message = "Level {}" }, payload_vars = { message = "level" }` reads
+"Level 3".
 
 ### Region Control
 
@@ -254,6 +276,11 @@ same boundary.
 { action = "ResumeRegion", region = "region_name" }
 ```
 
+`region` must be declared under `[regions]` and `initial_state` must name a state,
+or the load fails. Spawning an active region does nothing; a spawn or resume
+reapplies the region's `enabled_systems`/`disabled_systems`. A paused region keeps
+its state, time and pending delays, runs nothing and drops its events.
+
 ### Variables
 
 ```toml
@@ -262,7 +289,8 @@ same boundary.
 { action = "DecrementVar", payload = { name = "var_name", delta = 1 } }
 ```
 
-`delta` defaults to 1 if omitted.
+`delta` defaults to 1 for `IncrementVar`, `DecrementVar`, `MultiplyVar` and
+`DivideVar` when it is omitted or zero and no `source_var` is given.
 
 ### Arithmetic Actions
 
@@ -274,7 +302,8 @@ same boundary.
 { action = "CopyVar", payload = { name = "dest_var", source_var = "src_var" } }
 ```
 
-Division/modulo by zero is a no-op.
+Division or modulo by zero is a no-op; `ModuloVar` has no default `delta`, so
+omitting it is one too.
 
 ### Variable-to-Variable Operations
 
@@ -308,8 +337,9 @@ Apply bounds with `min`/`max` (optional, independent):
 Sets `name` to a value in `[min, max]` that is a pure function of the run's seed,
 `seed_var` and `index_var`. The same index gives the same value, so a sequence is
 recomputed element by element instead of stored. The run's seed is shared session
-identity and moves on every reset, so every instance draws the same values (D-3).
-`index_var` is required; `seed_var` is optional and reseeds a sequence within a run.
+identity and moves on every reset, so every instance draws the same values (D-8).
+`name` and `index_var` are required; `seed_var` is optional and reseeds a sequence
+within a run. A `max` below `min` fails the load.
 
 ### Config to Variable
 
@@ -349,7 +379,7 @@ struct tag first, then Go field name. Numeric segments index into slices.
 
 The payload slice must be pre-populated in `payload` with the correct number of
 elements. `payload_vars` overwrites individual fields; it does not append
-elements. Flat keys (no dots) behave identically to the original implementation.
+elements. A key without dots names a top-level field.
 
 ### System Control
 
@@ -357,6 +387,13 @@ elements. Flat keys (no dots) behave identically to the original implementation.
 { action = "EnableSystem", payload = { system_name = "name" } }
 { action = "DisableSystem", payload = { system_name = "name" } }
 ```
+
+A disable is dropped while a system the `[systems]` baseline leaves on requires
+it. `ApplyGlobalSystemConfig` disables what that baseline leaves off and
+`ApplyRegionSystemConfigs` reapplies every active region's toggles; the runtime runs
+both after init, reset and an installed capture, and the region pass after each
+`:region` command, so a scenario has no need to. Pausing or terminating a region
+reverts none of its toggles.
 
 ### Status Registry Actions
 
@@ -378,19 +415,24 @@ minus that mark, so a scenario counts kills since its own escalation while
 { action = "EmitEvent", event = "EventDrainPause", reconcile = true } # Persistent local lifecycle only
 ```
 
+An action guard sees no event payload, so a payload guard there is always false.
+
 ## Cursor Lifecycle
 
 The world spawns with no cursor. A configuration must spawn one explicitly:
 
 ```toml
-{ action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true } }
-{ action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { x = 10, y = 5, slot = 1 } }
+{ action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true, heat = 10, energy = 100 } }
+{ action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { x = 10, y = 5, slot = 1, heat = 10, energy = 100 } }
 { action = "EmitEvent", event = "EventCursorDespawnRequest", payload = { all = true } }
 ```
 
-`center` overrides `x`/`y`; `auto` overrides `slot` with the lowest free index.
-`EventCursorSpawned` carries `entity`, `slot`, `x`, `y`; `EventCursorSpawnFailed`
-signals a full roster or a blocked map. A cursor-less configuration is legal.
+`center` overrides `x`/`y`; `auto` overrides `slot` with the lowest free index;
+`heat` and `energy` are the cursor's starting values, zero when omitted, and the
+first spawn's pair is what every joining participant's cursor starts with. A despawn
+names `all`, an `entity` or a `slot`. `EventCursorSpawned` carries `entity`, `slot`,
+`x`, `y`; `EventCursorSpawnFailed` signals a full roster, a taken slot or a blocked
+map. A cursor-less configuration is legal.
 
 Capture the entity to address that cursor in later actions:
 
@@ -424,22 +466,25 @@ Per-cursor state is published under `player.<slot>.<metric>`:
 | `player.<n>.heat.at_max`         | Heat at cap                |
 | `player.<n>.heat.ember`          | Ember decay active         |
 | `player.<n>.shield.active`       | Shield up                  |
+| `player.<n>.boost.active`, `player.<n>.boost.remaining` | Boost up, its time left in ns |
+| `player.<n>.weapon.<kind>`       | Holds `rod`, `launcher`, `disruptor`, `turret`, `emitter` or `gun` |
+| `player.<n>.weapon.orbs`         | Orbs                       |
 | `player.<n>.typing.max_streak`   | Longest correct run        |
 
 `player.count` and `player.local` describe the roster.
 `session.any_defeated` becomes true when any rostered cursor reports zero heat
 and zero energy; all shipped scenarios use it for game over.
-`session.all_defeated` remains available for scenarios requiring unanimous defeat.
+`session.all_defeated` serves a scenario that needs unanimous defeat.
 Both derive from replicated owner reports and are safe shared-region guards.
 Reports carry their production tick; a reset rejects reports from the previous attempt.
 
 The bare keys `energy.current`, `heat.current`, `heat.overheat`, `heat.at_max`,
 `heat.ember`, `shield.active`, `boost.active`, `boost.remaining`, `weapon.rod`,
-`weapon.launcher`, `weapon.disruptor`, `weapon.turret`, `weapon.emitter`, `weapon.orbs`, `typing.max_streak`,
-`player.x`, `player.y` mirror **the slot this instance drives**. That is what
-"the player" means on a status bar or in an operator command, and it is why the
-mirror follows the roster rather than slot 0: slot 0 is the coordinator's cursor,
-so on every guest a slot-0 mirror named a cursor that instance does not author.
+`weapon.launcher`, `weapon.disruptor`, `weapon.turret`, `weapon.emitter`, `weapon.gun`,
+`weapon.orbs`, `typing.max_streak`, `player.x`, `player.y` mirror **the slot this
+instance drives**. That is what "the player" means on a status bar or in an operator
+command. The mirror follows the roster rather than slot 0 because slot 0 is the
+coordinator's cursor, which no guest authors.
 
 They are therefore **instance-local by construction and must not be a guard key
 in a shared region** — a shared region has to take the same transition on every
@@ -450,8 +495,8 @@ instance, where the bare keys are the bot's slot; see
 [Bots](bots.md#writing-a-graph).
 
 Occurrence counters stay roster-wide totals: `typing.correct`, `typing.errors`,
-`shield.shield_hit`, `energy.spend_count`, `energy.crossed_zero_count`,
-`energy.damage_multiplier`.
+`shield.shield_hit`, `energy.spend_count`, `energy.crossed_zero_count`;
+`energy.damage_multiplier` is one value for the session.
 
 ---
 
@@ -461,17 +506,23 @@ Occurrence counters stay roster-wide totals: `typing.correct`, `typing.errors`,
 
 | Guard               | Args                   | Description                          |
 |---------------------|------------------------|--------------------------------------|
-| `StateTimeExceeds`  | `ms`                   | Time in current state ≥ ms           |
-| `StatusBoolEquals`  | `key`, `value`         | Status registry bool equals value    |
+| `StateTimeExceeds`  | `ms`                   | Time in current state ≥ ms; `ms` must be positive |
+| `StatusBoolEquals`  | `key`, `value`         | Status registry bool equals value (default `true`) |
 | `StatusIntCompare`  | `key`, `op`, `value`, `since` | Status registry int comparison; `since` subtracts a variable |
-| `RegionExists`      | `region`               | Region is currently active           |
+| `RegionExists`      | `region`               | Region is spawned, paused or not     |
 | `VarEquals`         | `var`, `value`         | FSM variable equals value            |
 | `VarCompare`        | `var`, `op`, `value`   | FSM variable comparison              |
 | `ConfigIntCompare`  | `field`, `op`, `value` | ConfigResource int field comparison  |
-| `ConfigBoolCompare` | `field`, `value`       | ConfigResource bool field comparison |
+| `ConfigBoolCompare` | `field`, `value`       | ConfigResource bool field equals value (default `true`) |
 | `VarCompareVar`     | `var_a`, `op`, `var_b` | Compare two FSM variables            |
 
-**Operators (`op`):** `eq`, `neq`, `gt`, `gte`, `lt`, `lte`
+**Operators (`op`):** `eq`, `neq`, `gt`, `gte`, `lt`, `lte`. An omitted or
+unrecognized `op` compares `eq`; the loader does not reject one. A status key the
+registry does not hold makes a status guard false.
+
+```toml
+{ trigger = "Tick", target = "Victory", guard = "VarCompareVar", guard_args = { var_a = "kills", op = "gte", var_b = "target_kills" } }
+```
 
 ### Static Guards
 
@@ -500,7 +551,7 @@ Combine multiple guards with logical operators.
 
 ```toml
 { trigger = "Tick", target = "Critical", guard = "Or", guard_args = { guards = [
-    { name = "StatusIntCompare", args = { key = "health", op = "lte", value = 10 } },
+    { name = "StatusIntCompare", args = { key = "player.0.energy.current", op = "lte", value = 10 } },
     { name = "VarEquals", args = { var = "shield_broken", value = 1 } }
 ]}}
 ```
@@ -508,8 +559,8 @@ Combine multiple guards with logical operators.
 ### Not (negates one guard)
 
 ```toml
-{ trigger = "Tick", target = "Seek", guard = "Not", guard_args = { guard =
-    { name = "StatusBoolEquals", args = { key = "boost.active", value = true } } } }
+{ trigger = "Tick", target = "Seek", guard = "Not", guard_args = { guard = {
+    name = "StatusBoolEquals", args = { key = "player.0.boost.active", value = true } } } }
 ```
 
 Compound guards support nesting:
@@ -524,7 +575,7 @@ Compound guards support nesting:
 ]}}
 ```
 
-Empty `guards` array evaluates to `true`.
+An empty or omitted `guards` array evaluates to `true`, for `Or` as for `And`.
 
 ---
 
@@ -543,13 +594,15 @@ struct tag first, then Go field name — identical to `capture_vars` and
 ### PayloadBoolEquals
 
 ```toml
-{ trigger = "EventGamePauseChanged", target = "Paused", guard = "PayloadBoolEquals", guard_args = { field = "paused", value = true } }
+{ trigger = "EventCursorDefeatState", target = "Down", guard = "PayloadBoolEquals", guard_args = { field = "defeated", value = true } }
 ```
+
+`value` defaults to `true`.
 
 ### PayloadStringEquals
 
 ```toml
-{ trigger = "EventNetworkError", target = "ConnectionFailed", guard = "PayloadStringEquals", guard_args = { field = "error", value = "connection failed" } }
+{ trigger = "EventInputPressed", target = "Pressed", guard = "PayloadStringEquals", guard_args = { field = "key", value = "1" } }
 ```
 
 A state that turns keys into buttons captures them for its lifetime and reads each
@@ -581,7 +634,8 @@ that leaves room for its row. `wad/scenario/simon` is the worked example.
 { trigger = "EventGoldCompleted", target = "HasData", guard = "PayloadExists" }
 ```
 
-Payload guards return `false` if:
+`PayloadIntCompare` reads integer and float fields, truncating a float. Payload
+guards return `false` if:
 
 - No payload present (Tick transitions, nil payload)
 - Field does not exist
@@ -590,8 +644,8 @@ Payload guards return `false` if:
 Combine with compound guards:
 
 ```toml
-{ trigger = "EventMetaSystemCommandRequest", target = "EnableMotion", guard = "And", guard_args = { guards = [
-    { name = "PayloadStringEquals", args = { field = "system_name", value = "motion" } },
+{ trigger = "EventMetaSystemCommandRequest", target = "DrainOn", guard = "And", guard_args = { guards = [
+    { name = "PayloadStringEquals", args = { field = "system_name", value = "drain" } },
     { name = "PayloadBoolEquals", args = { field = "enabled", value = true } }
 ]}}
 ```
@@ -601,28 +655,9 @@ Combine with compound guards:
 ## Variables
 
 Variables are **machine-global**: shared across all regions and states.
-They persist across transitions and region spawn/terminate; cleared only on
-FSM init/reset. Regions that respawn must explicitly re-zero their counters
-in the setup state.
-
-`delta` defaults to 1 for `IncrementVar`, `DecrementVar`, `MultiplyVar`,
-`DivideVar`. `ModuloVar` with omitted or zero delta is a no-op.
-
----
-
-## Variable Payload Injection
-
-Inject FSM variable values into event payloads:
-
-```toml
-{ action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 0 }, payload_vars = { delta = "damage_multiplier" } }
-```
-
-Supported field kinds: all signed and unsigned integer widths, `float32`,
-`float64`, `bool`, and `string`. Negative values are ignored for unsigned fields.
-A string takes the value's decimal form in place of each `{}`, so
-`payload = { message = "Level {}" }, payload_vars = { message = "level" }` reads
-"Level 3".
+They persist across transitions and region spawn/terminate; they are cleared on
+FSM init/reset and replaced by an installed capture. Regions that respawn must
+explicitly re-zero their counters in the setup state.
 
 ---
 
@@ -656,17 +691,14 @@ Available fields for `ConfigBoolCompare`:
 |------------------|----------------------|
 | `crop_on_resize` | Resize behavior flag |
 
-### Variable-to-Variable Guard
-
-```toml
-{ trigger = "Tick", target = "Victory", guard = "VarCompareVar", guard_args = { var_a = "kills", op = "gte", var_b = "target_kills" } }
-```
+`color_mode`, `camera_x` and `camera_y` describe this terminal, so they differ
+between instances; the first read of one in a shared session logs a D-14 warning.
 
 ---
 
 ## Game Time
 
-`time.game_elapsed_ms` available via `StatusIntCompare` (resets each game session):
+`time.game_elapsed_ms` available via `StatusIntCompare` (zero again after each reset):
 
 ```toml
 { trigger = "Tick", target = "LateGame", guard = "StatusIntCompare", guard_args = { key = "time.game_elapsed_ms", op = "gte", value = 60000 } }
@@ -676,10 +708,15 @@ Available fields for `ConfigBoolCompare`:
 
 ## Execution Order
 
-1. **FSM Init** — apply `[systems].disabled_systems`, enter initial states
-2. **Region Spawn** — apply region `enabled_systems`/`disabled_systems`
+1. **FSM Init** — enter each region with an `initial` state (in name order), then
+   apply the `[systems]` baseline, then each active region's toggles; a reset first
+   runs every region's `on_exit` (leaf → root)
+2. **Region Spawn** — enter the region, then apply its `enabled_systems`/`disabled_systems`
 3. **Tick** — process delayed actions, execute `on_update` (root → leaf), evaluate transitions (leaf → root, first match wins)
-4. **Transition** — `capture_vars`, `on_exit` (leaf → LCA), transition `actions`, `on_enter` (LCA → leaf)
+4. **Event** — each queued event, including one an action emitted, reaches the FSM
+   before any system handler; each unpaused region takes at most one matching
+   transition (leaf → root, first match wins)
+5. **Transition** — `capture_vars`, `on_exit` (leaf → LCA), transition `actions`, `on_enter` (LCA → leaf)
 
 ---
 
@@ -687,10 +724,14 @@ Available fields for `ConfigBoolCompare`:
 
 - One transition per region per tick or per event; a matching leaf transition
   shadows ancestors
-- Paused regions drop events entirely (no queueing)
 - `Root` lifecycle actions are rejected during loading because `Root` is shared
   by every region; put one-shot setup in a dedicated region's initial state
 - Event payloads are shared compiled templates: handlers must treat them as
   immutable; `payload_vars` produces an isolated copy
 - Region-control actions (`TerminateRegion` on self) are supported in
   `on_enter`/`on_exit`/transition actions; unsupported in `on_update`
+- A key the loader does not read is ignored, not refused, so a misspelled argument
+  reads as absent; only `[map]`, macro definitions and invocations, and the top
+  level of a region or macro file refuse one. `-check` catches unknown event,
+  action, guard, state and config field names, undeclared regions in region
+  actions, and unknown systems in `[systems]` and region lists
