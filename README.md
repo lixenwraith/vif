@@ -28,9 +28,10 @@ configuration, audio policy, and reusable simulation libraries.
 - A typed sparse-set ECS, fixed-step scheduler, bounded event settling,
   spatial grid, composite actors, FSM-owned player cursors, and a single
   explicit world-lock boundary.
-- Four runtime shapes: interactive play, a dedicated host with no terminal and no
-  cursor of its own, deterministic caller-driven or authored-script headless runs,
-  and terminal playback of recorded runs.
+- Five runtime shapes: interactive play, a dedicated host with no terminal and no
+  cursor of its own, deterministic headless runs driven by a caller, a script or a
+  bot, terminal playback of recorded runs, and a script or bot presented on the
+  terminal.
 - TOML-authored hierarchical state machines with parallel regions, dynamic
   encounters, payload capture/injection, guards, delayed actions, and system
   control.
@@ -169,10 +170,10 @@ settings explain why. Rebind the `config_menu` action in the keymap.
 - `-host <bind-address>` hosts a session, `ws://:7777` serving it over WebSocket
   instead of TCP, and `-players <n>` caps the roster, self included; a script or
   bot host given `-players` also holds tick zero until that party is in.
-  `-join <addr>` joins one and adopts the host's seed/config/content identity,
-  where `<addr>` is `host:port`, a `vif://host:port/<name>` link, a `ws(s)://`
-  URL, or a site such as `https://lixen.com`, which creates a session and hands
-  back its link.
+  `-join <addr>` joins one and adopts the host's seed and scenario, keeping its own
+  typing corpus, where `<addr>` is `host:port`, a `vif://host:port/<name>` link, a
+  `ws(s)://` URL, or a site such as `https://lixen.com`, which creates a session and
+  hands back its link.
 - `-name <name>` makes a host answer to that name only, so one address can serve
   several sessions.
 - `-authority host|migrate` decides where authorship goes when the participant
@@ -180,7 +181,8 @@ settings explain why. Rebind the `config_menu` action in the keymap.
   migrate session every guest also binds a port so the session can reach it after a
   handoff: `-listen <addr>` pins one, the default is the host's own port falling
   back to an OS-assigned one, and `-no-advertise` keeps this participant out of the
-  address map, which leaves it playing normally and never elected.
+  address map: it plays normally and is elected only when no participant that
+  advertised survives.
 - `-serve <bind-address>` runs a dedicated host: no terminal, no renderer, no
   audio and no cursor of its own. It starts on its first guest and admits the rest
   as they arrive, where `-players <n>` is a ceiling rather than a requirement.

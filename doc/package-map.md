@@ -73,7 +73,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/converge` | The authority protocol: which generation of the session this instance is part of and who is authoring it, the succession that moves authorship when the author goes, the adaptive per-link correction cadence a host publishes, the selective manifest/page exchange that makes a converged link cost hashes, the install a guest commits between two ticks, slow-participant eviction, the answers a relay serves the participants behind it, and the listening port and succession chain a survivor dials down. It holds no world: `converge.Instance` is the whole of what it asks the run for, and every method on it takes the world lock itself except `CaptureSharedLocked`, which `TickClosed` calls from inside a tick — which is also what lets its own criteria drive it against a stub world instead of a composition root. |
 | `internal/asset` | Every embedded shipped file — fallback scenario, tutorial corpus, default keymap and `vif.toml`, shipped bot graphs, built-in sound and music banks, the source-archive version stamp — plus the splash bitmap font. The only package with an `embed` directive. |
 | `internal/component` | Pure ECS component data, enums/masks and per-kind tables; logic over them lives in the owning system (exceptions in [ECS](ecs-and-events.md#4-component-catalog)). Position is declared here but stored specially by `engine`. |
-| `internal/core` | Small shared value types, entity ID and replication domain, modes, code blocks, the deterministic dependency resolver both `service` and `engine` order with, crash and stderr-capture support. |
+| `internal/core` | Small shared value types, entity ID and replication domain, modes, code blocks, the deterministic dependency resolver `service` orders its lifecycle with and `engine` checks the system graph with, crash and stderr-capture support. |
 | `internal/engine` | World, typed stores, positions/spatial grid, resources, game context/state, pausable/manual clocks, time control, scheduler, locking, world copies, the shared-world state and paged delta a capture is built from, the shared-death prediction ledger, and the roster/control re-derivation an install performs over the cursor store. |
 | `internal/event` | Event catalog/payload registry, replication classes and the wire predicate, producer origins, replay record/anchor schema, the MPSC queue and its wire-sink hooks, crossing frame encoding, handler router, pooled/batched payload support. |
 | `internal/fsm` | Generic hierarchical, parallel-region machine; TOML graph loader with macro expansion; transitions, delayed actions, variables, per-region trigger masks, system policy, capture import/export, and optional transition/region observation hooks. |
@@ -92,7 +92,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/paths` | Platform config-root and user-state discovery, categorized resource names, and the `vif.toml` settings, the one file it reads. |
 | `internal/resource` | Resolve the scenario, keymap, corpus, audio overrides and bot graphs against the config-root precedence rule; read a scenario whole into the digested canonical form a session serves a joiner; and validate what those paths resolve to, every bot graph in the roots and embedded included, for `-check`. |
 | `internal/pattern` | Convert a dual-mode `.vifimg` asset into wall spawn cells. One file, one path, no drawing. |
-| `internal/prof` | Profiler: per-module wall time on the tick, event and render paths, process CPU/memory/GC/I/O sampling, and pprof CPU/heap and execution-trace captures. Publishes into the status registry; one atomic load per timed call while off. |
+| `internal/prof` | Profiler: per-module wall time on the tick, event and render paths, process CPU/memory/GC/I/O sampling, and pprof CPU, heap and mutex profiles and execution-trace captures. Publishes into the status registry; three atomic loads per timed call while off. |
 | `internal/probe` | The supervised run's HTTP endpoint: `/health` and `/metrics`. Standard library and `internal/status` only, and stateless — a snapshot function supplies the run's answer and a status registry supplies the metrics, so the run decides what its words mean and this decides only how to say them. |
 | `internal/profile` | Per-kind tables indexed by kind: the combat attack matrix and species contact damage, collision, homing and mass profiles, and species drop tiers. |
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, renderer interface/orchestrator. |
@@ -177,7 +177,7 @@ Important exceptions:
 
 The practical dependency rules are:
 
-1. `cmd/vif` translates flags into `app.Config` and the option types of the packages it configures (`app`, `bot`, `converge`, `lifecycle`, `network`, `paths`, `resource` and others); nothing imports a `cmd` package.
+1. `cmd/vif` translates flags into `app.Config` and the option types inside it (`converge.SlowPolicy`, `lifecycle.Policy`, `resource.Options`), and calls the `app` entry points and the few operations beside them (`manifest.Schema`, `resource.Check`, `network.RequestSession` for a `-join` site); nothing imports a `cmd` package.
 2. `app` may compose all runtime layers; domain packages should not import it.
 3. `converge` sits between `app` and `snapshot`/`network`: it decides what a session publishes and installs, and asks the run for the world through `converge.Instance` rather than importing `app`. It exports the protocol's own operations and reports and nothing else: a criterion that has to fabricate protocol state belongs in that package, where it can reach the state directly, rather than behind an exported knob.
 4. `snapshot` and `resource` sit below both: the first owns the capture wire model and the comparison surface, the second the config-root precedence rule. Neither imports `app`, and neither acquires the world lock — the surface readers walk a world the caller has already locked, and the wire model reads none at all.
@@ -212,13 +212,14 @@ duplicating version strings that would become stale.
 |---|---|
 | `cmd/ascimage` | Supported image converter/viewer command. |
 | `cmd/soundlab` | Supported audio document editor, REPL/TUI, sequencer audition environment, and script runner. |
-| `script/*` | `test.sh`, the named end-to-end setups ([script/README.md](../script/README.md)), and the sparring host/guest pair of authored `vif -script` schedules they and a person join. |
+| `script/*` | `test.sh`, the named end-to-end setups ([script/README.md](../script/README.md)), and the sparring pair: authored `vif -script` schedules that play a fixed host or guest against a person, and that the setups also run. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
 | `tool/font-editor` | Edit the bitmap splash font. |
 | `tool/hierarchy-map` | Terminal UI that selects Go source subsets as LLM context, indexed by `@lixen:` annotations, local imports and symbol-level coupling. |
 | `tool/http-server` | Minimal static server used by `make serve` for the WASM bundle. |
 | `tool/vif-allocator` | Website-to-K3s session allocator; a host service, not part of the game binary. |
 | `tool/vif-log` | Terminal viewer for the JSONL session log and replay journal, separately or merged; its packages are internal to the tool. |
+| `wad/` | The external payload, laid out as it installs into a `vif/` configuration root: alternate scenarios, a plain-text corpus and a wall image ([filesystem layout](filesystem-layout.md)). |
 | `web/` | The xterm.js page and worker the WASM build runs in. |
-| `deploy/` | The session image, K3s objects, node units and updaters, the LogWisp pipeline, and the packaging files in `deploy/package/`. |
+| `deploy/` | The session image, K3s objects, node units, updaters and runbook, the LogWisp pipeline, the site's log-viewer page, and the packaging files in `deploy/package/` ([deploy/README.md](../deploy/README.md)). |
 | `sandbox/*` | Isolated prototypes, visual/interaction experiments, and the random and render benchmarks; not part of application assembly. |
