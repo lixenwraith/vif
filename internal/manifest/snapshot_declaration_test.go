@@ -7,22 +7,11 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 )
 
-// TestSnapshotDeclarationsMatchImplementations is D-19 made mechanical, and it is
-// the point of the whole declaration.
-//
-// The multiplayer plan's hidden-state survey found that a snapshot must carry
-// everything deciding a future shared outcome, that much of it is not in a
-// component store — RNG positions, a maze generator, EXP3 route weights, genetic
-// populations, a derivation phase, per-system scratch — and, in its own words,
-// that "no inventory exists". An inventory maintained by hand goes stale the
-// first time a system grows a field. So the manifest declares the obligation and
-// this test asserts the declaration against the code: a system declared "state"
-// must implement engine.SharedStateSaver, and a system declared "none" must not.
-//
-// Both directions matter. The first catches a declaration whose implementation
-// was never written. The second catches the more likely drift: a system that
-// grew save/load methods without anyone updating the manifest, which would leave
-// a real piece of shared state out of every capture while looking implemented.
+// TestSnapshotDeclarationsMatchImplementations asserts the manifest's D-19
+// declarations against the code. A capture carries every input to a future shared
+// outcome, much of it outside component stores (a maze generator, EXP3 weights,
+// genetic populations), so a system declared "state" must implement
+// engine.SharedStateSaver and one declared "none" must not.
 func TestSnapshotDeclarationsMatchImplementations(t *testing.T) {
 	w := scratchWorld(t)
 	systems := BuildSystems(w)

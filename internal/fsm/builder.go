@@ -3,7 +3,7 @@ package fsm
 import "fmt"
 
 // AddState adds a node to the machine manually
-// Useful for constructing the graph programmatically or during JSON load
+// Useful for constructing the graph programmatically or during scenario load
 func (m *Machine[T]) AddState(id StateID, name string, parentID StateID) *Node[T] {
 	node := &Node[T]{
 		ID:          id,

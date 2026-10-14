@@ -1,8 +1,3 @@
-// Seeded action generator for deterministic soak and parity tests.
-//
-// Drives a caller-controlled target through a reproducible action sequence.
-// Actions are drawn from the driver's own stream and never from world state, so
-// one seed always produces one sequence.
 package journal
 
 import (
@@ -66,8 +61,9 @@ func DefaultFuzz(seed uint64, steps int) FuzzOptions {
 		Resizes: true, MapSetups: true, RegionSet: EmbeddedRegions}
 }
 
-// FuzzDriver applies a drawn action sequence to one target. Two drivers built
-// from one seed produce identical sequences, which lets instances step in lockstep.
+// FuzzDriver applies a seeded action sequence to one target for soak and parity
+// tests. Actions are drawn from the driver's own stream, never from world state, so
+// two drivers built from one seed produce identical sequences and step in lockstep.
 type FuzzDriver struct {
 	a       FuzzTarget
 	rng     *vmath.FastRand

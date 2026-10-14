@@ -30,7 +30,7 @@ func registerCoreGuards[T any](m *fsm.Machine[T]) {
 		}, nil
 	})
 
-	// RegionExists reports whether a region is currently active
+	// RegionExists reports whether a region is spawned, paused or not
 	m.RegisterGuardFactory("RegionExists", func(machine *fsm.Machine[T], args map[string]any) (fsm.GuardFunc[T], error) {
 		regionName, _ := args["region"].(string)
 		if regionName == "" {

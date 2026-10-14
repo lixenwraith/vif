@@ -442,7 +442,7 @@ func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID State
 		m.delayedActions[region.Name] = remaining
 	}
 
-	// Commit target state before enter phase (D2 fix retained)
+	// Commit the target before the transition and enter actions run
 	region.ActiveStateID = targetID
 	if cap(region.ActivePath) >= len(targetPath) {
 		region.ActivePath = region.ActivePath[:len(targetPath)]

@@ -43,7 +43,8 @@ const journalDrainTimeout = 3 * time.Second
 // emit at LevelInfo, so the level field never collides with trace tooling
 const journalLevel = "info"
 
-// Ordinary policy is measured; the commissioned cap remains provisional until H3.
+// Ordinary policy is measured; the commissioned cap stays provisional until a full
+// fleet roster is measured (doc/kubernetes-fleet.md).
 const (
 	bufferSize            = 8192
 	maxSizeMB             = 64
@@ -171,7 +172,7 @@ func buildLogger(dir, name, levelName string, console bool) (*log.Logger, string
 		FlushIntervalMs(flushIntervalMs).
 		EnablePeriodicSync(true).
 		RetentionPeriodHrs(retention).
-		HeartbeatLevel(1). // drop and rotation counters, one-way into the log
+		HeartbeatLevel(1). // processed and dropped counts, one-way into the log
 		HeartbeatIntervalS(heartbeatS).
 		ContextKeys("sub", "run", "tick").
 		Build()

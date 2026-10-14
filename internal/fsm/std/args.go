@@ -56,9 +56,8 @@ type StatusToVarArgs struct {
 	Name string `toml:"name"`
 }
 
-// ConfigToVarArgs carries a resolved config accessor and its target variable
-// was {Field, Name string} with a runtime switch; the accessor now
-// binds at load, so an unknown field fails -check and evaluation is a direct call
+// ConfigToVarArgs carries a config accessor bound at load and its target variable,
+// so an unknown field fails -check and evaluation is a direct call
 type ConfigToVarArgs[T any] struct {
 	Name     string
 	Accessor func(ctx T) int64

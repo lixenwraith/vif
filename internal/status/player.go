@@ -2,10 +2,10 @@ package status
 
 import "sync/atomic"
 
-// Per-slot metrics, plus a bare key mirroring the slot this instance drives. Slot
-// zero is the coordinator's cursor, so a slot-zero mirror named a cursor no guest
-// authors and never published. The bare key is therefore instance-local and must
-// never be a shared FSM guard input (D-20); a guard names its slot.
+// Per-slot metrics, plus a bare key mirroring the slot this instance drives
+// (SetLocalSlot), not slot zero, which is the coordinator's cursor no guest
+// authors. The bare key therefore differs per instance and must never be a shared
+// FSM guard input (D-20); a guard names its slot.
 
 // PlayerInt binds one per-slot int metric and the bare key the local slot mirrors.
 type PlayerInt struct {

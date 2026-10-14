@@ -38,13 +38,14 @@ type Host[T any] struct {
 	// that plays it; a nil Seed roots every draw at zero
 	Seed func(ctx T) uint64
 
-	// Refuse, when set, fails the load of an action whose hook is nil with this
-	// reason, for an embedder whose scripts must not name what does nothing
+	// Refuse, when set, fails the load of an event or system action whose hook
+	// is nil with this reason, for an embedder whose scripts must not name what
+	// does nothing
 	Refuse string
 }
 
 // Register installs the standard actions and guards on m
-// Must be called before LoadConfig; names are resolved at load time
+// Must be called before a scenario loads; names are resolved at load time
 func Register[T any](m *fsm.Machine[T], h Host[T]) {
 	registerCoreActions(m, h)
 	registerVariableActions(m, h)

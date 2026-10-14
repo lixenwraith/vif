@@ -212,9 +212,7 @@ func registerRegionActions[T any](m *fsm.Machine[T], h Host[T]) {
 		}
 		m.ResumeRegion(rcArgs.RegionName)
 
-		// Re-apply declared system toggles: Pause/Resume bypassed the
-		// reconciliation SpawnRegion performs, leaving a paused region's
-		// systems stuck past resume
+		// Re-apply the region's declared system toggles, as SpawnRegion does
 		applyRegionSystemConfig(ctx, m, h, rcArgs.RegionName)
 	})
 }
@@ -262,7 +260,7 @@ func registerSystemActions[T any](m *fsm.Machine[T], h Host[T]) {
 	})
 
 	// ApplyGlobalSystemConfig applies the root [systems] toggles. Invoked by
-	// name after Init and after Reset, before the per-region pass.
+	// name after init, reset and capture import, before the per-region pass.
 	m.RegisterAction("ApplyGlobalSystemConfig", func(ctx T, args any) {
 		if h.SetSystem == nil {
 			return
@@ -284,10 +282,10 @@ func registerSystemActions[T any](m *fsm.Machine[T], h Host[T]) {
 		}
 	})
 
-	// ApplyRegionSystemConfigs reconciles declared toggles for every
-	// active region. Invoked by name after Init and after Reset, where regions
-	// come up without passing through SpawnRegion.
-	// Runs after ApplyGlobalSystemConfig so per-region declarations win.
+	// ApplyRegionSystemConfigs reconciles declared toggles for every active
+	// region. Invoked by name after init, reset and capture import, following the
+	// global pass so per-region declarations win, and after each :region op that
+	// changes regions; none of these passes through the SpawnRegion action.
 	m.RegisterAction("ApplyRegionSystemConfigs", func(ctx T, args any) {
 		if h.SetSystem == nil {
 			return

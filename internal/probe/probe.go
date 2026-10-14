@@ -30,13 +30,11 @@ const shutdownGrace = time.Second
 // its headers is the cheapest way to hold one.
 const readHeaderTimeout = 5 * time.Second
 
-// Snapshot is what a run reports about itself.
-//
-// Live is the only field the HTTP code carries: it is "should this process still
-// be running", and nothing else is a restart. Ready is "would a dial be admitted
-// right now", which an allocator reads from the body when it is choosing where to
-// send a player — a full or draining session is not broken, and answering it with
-// a failure code would say it was. Reason is for whoever reads the body.
+// Snapshot is what a run reports about itself. Live is the only field the HTTP
+// code carries: whether the process should still run, the one restart question.
+// Ready is whether a dial would be admitted now, which an allocator reads from the
+// body; a full or draining session is not broken, so a failure code would mislead.
+// Reason is for whoever reads the body.
 type Snapshot struct {
 	Live   bool
 	Ready  bool
