@@ -160,9 +160,9 @@ func (o SessionOffer) Validate() error {
 			return errors.New("join offer carries duplicate participant assignment")
 		}
 		ids[p.ID] = true
-		// A cursorless participant holds no slot, so it collides with nobody. Only
-		// the coordinator may be one: every other participant is in the session to
-		// drive a cursor, and one that is not would take an identity and a roster
+		// A cursorless entry holds no slot, so it collides with nobody. Only the
+		// coordinator may be one: every other peer is in the session to drive a
+		// cursor, and one that is not would take an identity and a roster
 		// entry while contributing nothing the roster describes.
 		if p.Slot == parameter.NoPlayerSlot {
 			if cursorless != 0 {
