@@ -1,9 +1,10 @@
 //go:build !wasm && !novlog
 
-// Package vlog is the process's one log sink, written through a handle per runtime.
-// A leaf: it imports only the standard library and lixenwraith/log. Records format
-// asynchronously, up to BufferSize records after the call, so pass primitives and
-// value copies only, never Store.GetPtr pointers, pooled payloads or scratch slices.
+// Package vlog is the process's log facade: one session sink written through a
+// handle per runtime, plus the ungated journal file and standalone snapshot and
+// recorder files. A leaf: it imports only the standard library and lixenwraith/log.
+// Records format asynchronously, up to a full queue after the call, so pass value
+// copies only, never Store.GetPtr pointers, pooled payloads or scratch slices.
 package vlog
 
 import (

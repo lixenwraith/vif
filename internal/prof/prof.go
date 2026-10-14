@@ -1,6 +1,6 @@
 // Package prof measures where a run spends its time and resources: wall time per
 // system, event handler, renderer and engine phase, process CPU, memory, GC and
-// I/O, and pprof captures. Off, a timed call costs one atomic load; on, each
+// I/O, and pprof captures. Off, a timed call costs three atomic loads; on, each
 // window lands in the status registry's activity-gated prof and proc groups.
 package prof
 
