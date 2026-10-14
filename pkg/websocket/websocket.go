@@ -1,8 +1,8 @@
 // Package websocket is RFC 6455 as a byte stream: the version-13 upgrade as client
 // and server, binary data, ping, pong and close. Read returns payload bytes across
 // frames and messages and never holds a whole message; each Write is one binary
-// frame. Text, extensions and subprotocols are refused, and every socket this
-// package owns sets TCP_NODELAY.
+// frame. Text is refused, no extension or subprotocol is negotiated, and every
+// socket this package owns sets TCP_NODELAY.
 package websocket
 
 import (

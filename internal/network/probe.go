@@ -1,20 +1,3 @@
-// Package network: the round trip.
-//
-// Nothing in this protocol used to make one. Every measurement a session had was
-// one-directional — what this instance sent, and how far behind the newest tick
-// it had *heard about* it stood — so there was no way to say how long a link
-// actually took, how much its timing varied, or how much of what was sent had
-// arrived. A cadence chosen from a constant was the only cadence available.
-//
-// The probe is that missing measurement, and where it lives is the design.
-// It lives entirely in the transport: a probe is emitted by the port, answered
-// by the receiving port before the frame ever reaches a tick, and folded into a
-// per-peer estimate the port owns. No game state is read to answer one and no
-// tick has to run for one to complete, which is both why the number is a wire
-// round trip rather than a scheduling artifact and why network timing cannot
-// leak into the simulation through it: the world's only contribution is an
-// opaque LinkReport it publishes when it feels like it, and the only thing it
-// gets back is an estimate it may schedule transport from.
 package network
 
 import (

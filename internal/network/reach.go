@@ -1,8 +1,8 @@
-// Package network: where a participant is reached, so a successor can be dialled.
-//
-// The chain is the whole of it: every participant that bound a port, in join
-// order, with the address it declared. It travels in the offer, the handoff
-// record and MsgPeerList, and succession reads it.
+// Package network is the session transport: framed messages over TCP or WebSocket
+// on a deflate stream each way per link, the join and peer-link handshakes, the
+// per-address admission budget, chunked snapshot framing, the link probe answered
+// inside the port, and the succession chain a handoff reads. See
+// doc/services-and-networking.md.
 package network
 
 import (
