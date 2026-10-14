@@ -16,9 +16,9 @@ each change as a diff first. [The fleet design](kubernetes-fleet.md) holds the
 design and its open work; where each host artifact lands and how to back one out is
 [`deploy/guest/README.md`](../deploy/guest/README.md).
 
-The production node is an Arch Linux guest on a FreeBSD host that owns routing and
-packet filtering. The host, its `pf`, and the site's nginx are site configuration
-kept outside this repository; §2 and §12 state only what they must provide.
+The production node is an Arch Linux guest behind a host that owns routing and
+packet filtering. The host and the site's nginx are site configuration kept outside
+this repository; §2 and §12 state only what they must provide.
 
 ## 0. Decisions
 
@@ -40,9 +40,9 @@ flowchart TD
     Alloc -->|"Job + Service"| API["K3s API"]
     API --> Pod["vif -serve pod"]
     Alloc -->|"health, and each socket's payload"| Pod
-    Term["Player's vif -join"] -->|"raw TCP, no nginx"| PF["host pf rdr"]
-    PF -->|"7777"| Alloc -->|"route frame, then bytes"| Pod
-    PF -->|"NodePort"| NP["NodePort"] --> Pod
+    Term["Player's vif -join"] -->|"raw TCP, no nginx"| Fwd["host forward"]
+    Fwd -->|"7777"| Alloc -->|"route frame, then bytes"| Pod
+    Fwd -->|"NodePort"| NP["NodePort"] --> Pod
     Pod -->|"JSONL through PVC"| Log["Capped tmpfs"]
     Log -->|"read-only files"| Wisp["LogWisp, loopback only"]
     Wisp -->|"SSE bytes"| Alloc
@@ -74,8 +74,8 @@ Site configuration, kept outside this repository. What it must provide:
 | Keep established TCP mappings for a whole match | A session holds one long-lived connection per player, up to the Job's one-hour ceiling, and heartbeats every ten seconds. |
 | Admit the site host to the node's 9080 | The allocator's API and browser route, reached only through the site's nginx (§12). |
 
-Test the public ports from a machine off the host: host-originated traffic bypasses
-a `rdr` and can return an RST that looks like a filter rejection.
+Test the public ports from a machine off the host: host-originated traffic can
+bypass the forward and return an RST that looks like a filter rejection.
 
 ## 3. Node prerequisites
 
@@ -601,7 +601,7 @@ bash -c "</dev/tcp/192.0.2.20/31700"      # node address and NodePort
 bash -c "</dev/tcp/192.0.2.20/7777"       # the front door and the node filter
 ```
 
-From the FreeBSD host, test `192.0.2.20:31700` and `192.0.2.20:7777`. Test the
+From the host that forwards to the node, test `192.0.2.20:31700` and `192.0.2.20:7777`. Test the
 public address only from an off-box machine (§2). A join through 7777 that times out
 while the direct target works is the host's forward, or a node filter older than
 its rule (`./deploy/update.sh --diff filter`); a refusal in words is the front door
@@ -644,4 +644,4 @@ Each row below is a dead end until its meaning is known:
 | `dropped_writes` rises on `/status` with one reader and an idle node. | Records lost from a burst larger than `client_buffer_size`, not backpressure. Keep that queue at or above the `rate_limit` burst (§10). |
 | `Watcher failed … watcher stopped` in LogWisp's journal. | Read only the invocation running the installed binary (§10); earlier entries belong to whatever it replaced. |
 | `curl` to `:9080` is refused right after `systemctl start`. | The refusal is real: `Type=notify` returns only once both listeners are bound. Read the allocator's journal. |
-| Testing the public address from the FreeBSD host returns an immediate RST. | Host-originated traffic bypasses `rdr`. Test from off-box, or test the node address directly (§2). |
+| Testing the public address from the host returns an immediate RST. | Host-originated traffic can bypass the forward. Test from off-box, or test the node address directly (§2). |

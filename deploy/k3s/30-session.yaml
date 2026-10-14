@@ -1,5 +1,5 @@
-# One allocated session: one Job, one pod, one Service. A template: its ${...}
-# placeholders are what tool/vif-allocator/manifest.go and render-session.sh fill.
+# One allocated session: one Job, one pod, one Service. A template render-session.sh
+# fills; tool/vif-allocator/manifest.go builds the same objects in Go.
 # A Job, not a Deployment: a session ends with its process exiting zero, and no
 # replacement pod could inherit the world it held in memory.
 apiVersion: batch/v1
@@ -51,14 +51,13 @@ spec:
         # The same binary validating the same configuration it is about to serve,
         # before anything binds a port. A scenario that does not load is a session
         # that would have accepted players and then failed; this turns it into a
-        # pod that never became ready.
+        # pod that never becomes ready.
         - name: config-check
           image: "${IMAGE}"
           imagePullPolicy: IfNotPresent
-          # The configuration this session will actually serve, not the embedded
-          # one it used to prove instead. A scenario missing from the node volume,
-          # or one naming a system this build does not have, is now a pod that
-          # never became ready rather than a session that accepted players first.
+          # The node volume's tree the session reads, not the embedded one: a
+          # scenario missing from the volume, or one naming a system this build
+          # lacks, fails here.
           args: ["-check", "-config-dir", "/wad", "-s", "${SCENARIO}"]
           volumeMounts:
             # The categories the fleet serves, by subPath. content/ is not one:
@@ -213,8 +212,8 @@ spec:
             readOnly: true
 ---
 # The session's endpoint, one per session: players of one match must reach one
-# process. The probe and WebSocket ports stay off it, reachable only inside the
-# cluster through the pod IP (the kubelet and Prometheus, the node's allocator).
+# process. The probe port stays off it, reachable only inside the cluster through
+# the pod IP (the kubelet, Prometheus and the node's allocator).
 apiVersion: v1
 kind: Service
 metadata:

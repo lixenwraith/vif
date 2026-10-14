@@ -124,7 +124,8 @@ case "$command" in
 			vif-fleet-log-cleanup.timer || true
 		;;
 	blockers)
-		# The assertion the update helpers make before they touch anything.
+		# The assertion update.sh and the image and allocator helpers make before they
+		# replace anything.
 		[ "$#" -eq 1 ] || usage
 		report=$(fleet_report)
 		if [ -z "$report" ]; then
@@ -138,9 +139,8 @@ case "$command" in
 		exit 1
 		;;
 	drain)
-		# The update helpers refuse a non-empty fleet, and the LogWisp gate also
-		# requires an empty tmpfs. This is destructive: snapshot any log evidence
-		# before running it.
+		# update.sh and the image and allocator helpers refuse a non-empty fleet.
+		# This is destructive: snapshot any log evidence before running it.
 		force=false
 		case $# in
 			1) ;;

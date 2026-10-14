@@ -1,5 +1,5 @@
 # Temporary probe that binds both WaitForFirstConsumer claims on a fresh node.
-# Render ${IMAGE}, apply it once, then delete the pod and its JSONL files.
+# Render ${IMAGE} and ${SCENARIO}, apply it once, then delete the pod and its JSONL files.
 # It mounts only the PVCs, never hostPath.
 #
 # One probe for both volumes because they bind for the same reason and a node with

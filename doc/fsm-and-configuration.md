@@ -333,7 +333,7 @@ Comparison operators are `eq`, `neq`, `gt`, `gte`, `lt`, and `lte`; any other
 | Guard | Arguments | Meaning |
 |---|---|---|
 | `StateTimeExceeds` | `ms` | Active leaf time has reached the duration. |
-| `RegionExists` | `region` | Named region is currently active. |
+| `RegionExists` | `region` | Named region is spawned, paused or not. |
 | `VarEquals` | `var`, `value` | FSM variable equality. |
 | `VarCompare` | `var`, `op`, `value` | Variable/literal comparison. |
 | `VarCompareVar` | `var_a`, `op`, `var_b` | Variable/variable comparison. |
@@ -528,6 +528,11 @@ Reading and loading a scenario validates at least:
 - state hierarchy/path validity;
 - `only_systems` beside `disabled_systems`, and, in `resource.ValidateScenario`,
   unknown system names and required dependencies left disabled.
+
+Keys the loader does not read are ignored, not refused, except in `[map]`, in macro
+definitions and invocations, and at the top level of a region or macro file: a
+misspelled key in a state, transition, action, payload or `guard_args` reads as
+absent, so an optional argument silently takes its default.
 
 State compilation accumulates multiple per-state errors where practical, so
 `-check` is more useful than fail-on-first-error parsing. It does not execute a
