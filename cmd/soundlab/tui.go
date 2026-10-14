@@ -178,7 +178,7 @@ func runTUI(s *Session) error {
 		pianoInstr: audio.InstrPiano,
 		pianoLit:   map[rune]int{},
 	}
-	fmt.Fprintln(lb, "soundlab TUI — ':' commands, p piano, b beat(pattern), m/M music, ^S save, ^Q quit")
+	fmt.Fprintln(lb, "soundlab TUI — ':' commands, p piano, b beat(pattern), m music reset, ^S save, ^Q quit")
 	if s.startErr != nil {
 		fmt.Fprintf(lb, "audio backend: %v (silent mode)\n", s.startErr)
 	}
@@ -556,7 +556,7 @@ func (a *tuiApp) assignSlot(slot int) {
 	a.exec(fmt.Sprintf("slot %d %s", slot, n))
 	if slot == 2 && !a.hintedFill {
 		a.hintedFill = true
-		fmt.Fprintln(a.log, "note: slot 2 auto-fill swaps once per phrase — :fill off to pin")
+		fmt.Fprintln(a.log, "note: with :fill on, slot 2 auto-fill swaps once per phrase — :fill off to pin")
 	}
 	if !a.s.eng.IsMusicPlaying() {
 		if a.s.eng.IsMusicMuted() {

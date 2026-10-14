@@ -88,7 +88,7 @@ func RenderVariants(d *SoundDef, p SFXParams) []floatBuffer {
 // variant walk: the editor's per-keystroke path, well under a millisecond for a
 // 200ms spec. Validation runs first, so a mutation that would produce non-finite
 // samples is reported rather than played. The result is the canonical sound, not
-// variant 0: the variants deviate from it either way. RenderVariants plays the set.
+// variant 0: the variants deviate from it either way. RenderVariants renders the set.
 func RenderPreview(d *SoundDef, p SFXParams) ([]float64, error) {
 	if err := ValidateSound(d); err != nil {
 		return nil, err

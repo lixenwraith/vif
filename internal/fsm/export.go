@@ -90,17 +90,11 @@ func (m *Machine[T]) Import(ctx T, state MachineState) error {
 	return err
 }
 
-// ImportReconciled installs a captured runtime position and replays only the
-// lifecycle actions explicitly marked reconcile=true when the import crosses
-// their state boundary. Those actions are restricted at load time to immediate,
-// unguarded ClassLocal EmitEvent actions. One-shot local rewards and presentation
-// bursts therefore remain untouched, while persistent local state follows the
-// Shared FSM position that owns it.
-//
-// Exit actions run against the old variables before the position changes. Entry
-// actions run against the imported variables afterwards. Every old exit precedes
-// every new entry, so an overlapping handoff such as quasar -> storm releases the
-// old hold before taking the new one.
+// ImportReconciled installs a captured position and replays only the reconcile=true
+// lifecycle actions (load restricts them to immediate, unguarded ClassLocal
+// EmitEvent) whose state boundary it crosses, so persistent local state follows the
+// Shared position. Exits run on the old variables and entries on the imported ones,
+// every exit first: quasar -> storm releases the old hold before taking the new.
 func (m *Machine[T]) ImportReconciled(ctx T, state MachineState) (int, error) {
 	return m.importState(ctx, state, true)
 }
