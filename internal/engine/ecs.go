@@ -46,9 +46,8 @@ const (
 )
 
 // SystemDependency names a system another system needs, and how badly.
-// Dependencies order initialization and gate the enable and disable commands.
-// Tick order is Priority()'s business; the two often agree but are not the same
-// relation and neither may be derived from the other.
+// Dependencies gate the enable and disable commands; startup refuses an unknown
+// name or a cycle. Tick order is Priority()'s business and is not derived from them.
 type SystemDependency struct {
 	Name     string
 	Strength DependencyStrength

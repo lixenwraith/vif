@@ -52,10 +52,11 @@ it needs, graded required or optional; the grades gate disabling a system
 future-affecting state. The system type carries none of these: `World.AddSystem`
 takes the domain and dependencies from `manifest.ProfileFor`, also for
 `MetaSystem`, which `manifest.ContextSystems` declares and the app adds once its
-`GameContext` exists. The app then resolves the dependencies through
-`World.SystemInitOrder` (`core.TopoSort`), so an unknown name or a cycle fails
-startup. Systems are constructed, and first initialized, in manifest order;
-neither order is the tick order.
+`GameContext` exists. The app then checks the dependencies through
+`World.CheckSystemDependencies` (`core.TopoSort`), so an unknown name or a cycle
+fails startup. The graph orders nothing: each system initializes itself, in its
+constructor (manifest order) and on `EventGameResetRequest`, and the tick order
+comes from `Priority()`.
 
 ## 2. Entities and typed stores
 
