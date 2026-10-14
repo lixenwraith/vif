@@ -266,8 +266,8 @@ ascimage backdrop.vifimg
 ```
 
 The viewer supports fit/actual size, quadrant/background mode, truecolor/256
-toggle, zoom, pan, and status display. Transparent raster pixels become
-transparent cells in dual output, so they create no wall entity. See
+toggle, zoom, pan, and status display. A cell whose sampled pixels are all
+transparent is stored transparent in dual output, so it creates no wall entity. See
 `cmd/ascimage/README.md` for its complete flag/control reference.
 
 ## 10. Other repository tools

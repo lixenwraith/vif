@@ -110,7 +110,7 @@ not release budgets; toolchain and source changes move them.
 | Full native | 16,580,768 | 15.81 | baseline for native profiles |
 | `vif_noaudio` native | 16,195,744 | 15.45 | 2.32% smaller than full |
 | `vif_headless` native | 15,130,784 | 14.43 | 8.74% smaller than full |
-| Browser (`js/wasm`, `vif_noaudio`) | 28,197,362 | 26.89 | — |
+| Browser (`js/wasm`, `vif_noaudio`) | 28,197,392 | 26.89 | — |
 
 Size is the visible result, not the primary invariant. The stronger checks are
 that these commands print no renderer or audio-engine package:
@@ -149,9 +149,9 @@ The game protocol is a framed byte stream, and a browser has exactly one
 bidirectional byte stream: a WebSocket. It has no arbitrary socket, and `js/wasm`'s
 `net` package is a fake networking surface rather than a way around that. So the
 browser build dials the session's WebSocket route and wraps the browser's
-`WebSocket` object, opened in the program's Worker, as a `net.Conn` — reads block on arriving binary messages,
-writes send one encoded frame each, and deadlines and closure behave as the
-transport already expects. `network.dial` is the only seam; everything above it,
+`WebSocket` object, opened in the program's Worker, as a `net.Conn` — reads block
+on arriving binary messages, writes send one encoded frame each, and deadlines and
+closure behave as the transport already expects. `network.dial` is the only seam; everything above it,
 including `SocketPort`, the handshake, the fences and the snapshot assembly, is the
 code a native client runs.
 
@@ -323,9 +323,9 @@ A browser has no config root: solo, it plays the embedded scenario, content and
 keymap, and CLI arguments alone cannot give it the editable `wad/` tree a native
 build resolves.
 
-A guest already receives custom maps. When its roots hold no scenario with the
-session's digest, the coordinator serves it during the join, between the offer and
-the reply: the canonical `resource.Scenario` container (at most 64 files, 256 KiB a
+A guest already receives custom maps. When the scenario it resolves does not have
+the session's digest, the coordinator serves it during the join, between the offer
+and the reply: the canonical `resource.Scenario` container (at most 64 files, 256 KiB a
 file, 1 MiB in all), deflated, verified against the digest and held in memory for
 the run ([Services §7.2](services-and-networking.md#72-join-identity-and-who-decides-it)).
 A browser guest takes it the same way. Content never travels on the
