@@ -331,18 +331,22 @@ endpoint: an anonymous caller must not end somebody else's match.
 
 ## 12. The site's edge
 
-Site configuration, kept outside this repository.
-[`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example) is the
-reference: the exact `/vif/api/sessions` and `/vif/api/logs` locations, the
-`/vif/ws/<session>` Upgrade location with its rate limits keyed on
-`$proxy_protocol_addr`, and no `/healthz` or `/readyz`. Three properties decide
-whether it works: `Upgrade` and `Connection` forwarded for the browser route,
-buffering off with an hour-long read timeout for the streams, and `Origin`
-untouched — the allocator compares it against `VIF_ALLOCATOR_WEB_ORIGIN`. A
-fourth keys the per-player budgets: `X-Real-IP` overwritten with
-`$proxy_protocol_addr` on the API and browser locations, then named in
-`VIF_ALLOCATOR_CLIENT_ADDRESS_HEADER`; unnamed, those routes charge none. The
-page's `connect-src 'self'` is what permits the same-origin socket.
+Site configuration, kept outside this repository. What the allocator needs from
+the edge in front of 9080:
+
+| Requirement | Why |
+|---|---|
+| Publish only `/vif/api/sessions`, `/vif/api/logs` and `/vif/ws/<session>` | `/healthz`, `/readyz` and any later allocator path stay on the node. |
+| Forward `Upgrade` and `Connection` on `/vif/ws/<session>` | The allocator answers the WebSocket handshake itself and splices the socket to the pod. |
+| Leave `Origin` untouched | The allocator compares it with `VIF_ALLOCATOR_WEB_ORIGIN` and refuses any other. |
+| Limit open sockets and handshakes per player on `/vif/ws/<session>` | The allocator's join budget counts dials a minute and `VIF_ALLOCATOR_ROUTE_MAX` connections a session; neither bounds the sockets one player holds open. |
+| Pass `/vif/api/logs` unbuffered, with an hour-long read timeout | It is one long-lived SSE response; a buffer or a short timeout stalls or truncates it. |
+| Overwrite the header `VIF_ALLOCATOR_CLIENT_ADDRESS_HEADER` names with the player's address | It keys the per-player join and creation budgets; with no header named, the API and browser routes charge none. |
+| Keep any idle-connection bound on the TLS path well above ten seconds | A browser session holds one connection for the whole match, and the game's heartbeat crosses it at least every ten seconds each way. |
+
+The page that opens the socket must permit it; `connect-src 'self'` does.
+[`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example) is a
+reference edge, with placeholder addresses, that meets these.
 
 The launcher is [`web/`](../web), copied to the site as it stands together with the
 `vif.wasm` and `wasm_exec.js` that `make wasm` writes; editing a path in it forks
@@ -601,11 +605,12 @@ bash -c "</dev/tcp/192.0.2.20/31700"      # node address and NodePort
 bash -c "</dev/tcp/192.0.2.20/7777"       # the front door and the node filter
 ```
 
-From the host that forwards to the node, test `192.0.2.20:31700` and `192.0.2.20:7777`. Test the
-public address only from an off-box machine (§2). A join through 7777 that times out
-while the direct target works is the host's forward, or a node filter older than
-its rule (`./deploy/update.sh --diff filter`); a refusal in words is the front door
-answering, and [fleet design §9](kubernetes-fleet.md#9-the-session-routes) names each.
+From the host that forwards to the node, test `192.0.2.20:31700` and
+`192.0.2.20:7777`. Test the public address only from an off-box machine (§2). A
+join through 7777 that times out while the direct target works is the host's
+forward, or a node filter older than its rule (`./deploy/update.sh --diff filter`);
+a refusal in words is the front door answering, and
+[fleet design §9](kubernetes-fleet.md#9-the-session-routes) names each.
 
 When a step does not answer, take counter snapshots immediately before and after
 **exactly one** connection attempt. The last rule whose counter moves names the

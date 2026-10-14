@@ -147,9 +147,9 @@ if sudo test -f "$allocator_env"; then
 	echo "updated $allocator_env"
 fi
 
-# Remove named runtime references only after the new image is imported and the
-# allocator configuration is updated. Shared content still needed by the new
-# image remains in containerd's store.
+# Remove named runtime references, a leftover vif-ws-bridge tag among them, only
+# after the new image is imported and the allocator configuration is updated.
+# Shared content still needed by the new image remains in containerd's store.
 old_runtime_images=$(sudo k3s ctr -n k8s.io images list -q | awk -v keep="$runtime_image" '
 	/^docker[.]io\/library\/vif(-ws-bridge)?:/ && $0 != keep { print }
 ')

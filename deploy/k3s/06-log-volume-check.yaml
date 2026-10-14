@@ -1,10 +1,8 @@
-# Temporary probe that binds both WaitForFirstConsumer claims on a fresh node.
-# Render ${IMAGE} and ${SCENARIO}, apply it once, then delete the pod and its JSONL files.
-# It mounts only the PVCs, never hostPath.
-#
-# One probe for both volumes because they bind for the same reason and a node with
-# one of them is not commissioned: it writes a log record through the log claim and
-# loads a scenario through the wad claim, which is exactly what a session does.
+# Temporary probe that binds both WaitForFirstConsumer claims on a fresh node, as a
+# session does: it writes a log record through the log claim and loads a scenario
+# through the wad claim, mounting only the PVCs, never hostPath. One probe, because a
+# node with one claim bound is not commissioned. Render ${IMAGE} and ${SCENARIO},
+# apply it once, then delete the pod and its JSONL files.
 apiVersion: v1
 kind: Pod
 metadata:
