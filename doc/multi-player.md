@@ -63,14 +63,14 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Crossing ordering | The capture header carries one applied-sequence fence per participant. A receiver removes ordinary frames the installed world already holds — including ones whose nominal receive tick is still ahead — and keeps the ones it does not, including ones whose receive tick is long past. |
 | Local FSM lifecycle | A live install replays only config-marked persistent `ClassLocal` exit/entry events for crossed state paths; staging and all ordinary actions remain side-effect free. |
 | Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. Every host arms the same mid-run gate once its own lobby is done, so a reconnect takes one path whether the session started with `-host`, `-serve`, a script, or `:host`. |
-| Roster | Every admitted peer holds an identity, a term and a vote; a roster slot binds it to a cursor and makes it a participant. The coordinator of a dedicated host holds no slot, so it is a peer and not a participant, and a session of one guest has one participant in a roster of two. |
-| Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed: a join whose link cannot carry one whole world per floor window is refused (`Corrections.AdmitLink`), and a guest already in the session past it reports `snapshot.cadence_floor_breached` (D-24). |
+| Roster | Every admitted peer holds an identity; a roster slot binds it to a cursor and makes it a participant. The coordinator of a dedicated host holds no slot, so it is a peer and not a participant, and a session of one guest has one participant in a roster of two. |
+| Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed: a join whose link cannot carry one whole world per floor window is refused (`Corrections.AdmitLink`). Past admission it is reported as `snapshot.cadence_floor_breached` (D-24): by the authority for a link whose plan cannot hold it, and by a guest no whole world reached within the floor plus its grace. |
 | Playout lead | Per participant (§3.5): a guest's own round trip to the authority plus a jitter allowance and a relay tick, less how late the authority's epochs land on it; behind a relay, the round trip is how long its own epochs take to come back committed. The authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
 | Commit and pacing | The authority commits every guest crossing — as stamped, late at its next tick, or void past `NetworkCommitLateTicks` — and relays only the committed copy. Every guest paces its tick interval so the authority's epochs land inside its band. A participant whose own crossings stay late is evicted by policy (§3.5). |
 | Mesh and relay | Committed epochs, owner state, corrections, and authority records flood with per-source duplicate suppression; a raw epoch travels only toward the authority, and its committed copy floods back through every relay it crossed. A relay serves selective repair to the participants behind it from retained authority content, forwards its own committed copies to them, and names each with the tick it last proved in its own answer, which the authority's floor and flood count as a direct answer. A guest linked to the authority sends it alone its raw epochs and syncs and those it carries, one bundle a tick; the authority takes a participant's raw artifacts on its own link, else its holder's, else — a person behind a relay — on any. |
-| Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is never elected (§5.3). |
+| Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is elected only when the chain names no survivor (§5.1, §5.3). |
 | Host loss | `-authority migrate` (default off `-serve`): **the first survivor in the succession chain** takes the next term, with no vote, because every survivor computes it from state it already holds identically. `-authority host` (default on `-serve`): nobody takes it and every survivor continues alone. |
-| Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, and tick interval, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted rather than compared — `PeerIdentity.SessionFrom` takes the coordinator's, and a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
+| Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, and the seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
 | Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial with `ErrSessionEnding`, distinct from the retryable `ErrSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
 The central choice is that guests keep simulating. Determinism fills time between
@@ -134,9 +134,10 @@ the same lead everywhere instead of on all but one instance.
 
 A latch the barrier feeds needs a second rule: whatever the agreed artifact sets
 must be cleared by the world it rebuilds, not by a later artifact. `MetaSystem`
-clears the defeat latch on the `EventLevelSetup` that carries `clear_entities`,
-because the un-defeat crossing arrives a lead after `MonitorArm` has already
-re-armed the roster — long enough for the guard to fire a second reset.
+clears the defeat latch on the `EventLevelSetup` that carries `clear_entities`
+without `preserve_loot`, and ignores reports produced before it, because the
+un-defeat crossing arrives a lead after `MonitorArm` has already re-armed the
+roster — long enough for the guard to fire a second reset.
 
 Wind start/cancel are the opposite case: they are `ClassShared` outputs suitable
 for a Shared FSM transition. They appear identically in every journal but never
@@ -171,10 +172,10 @@ An install classifies queued and later-arriving frames as follows:
 | Ordinary frame whose source the header does not name | never — nothing is claimed about it |
 | Barrier-bound frame, any source | `frame.ApplyTick <= Header.Tick` |
 
-The sequence rule is evaluated before the tick rule for ordinary frames, and the
-tick rule is the whole rule for barrier-bound ones: they apply at one agreed tick
-on every instance including their producer, so the tick is exact for them and
-nothing else is needed.
+The sequence rule is the whole rule for ordinary frames — the tick never decides
+one — and the tick rule is the whole rule for barrier-bound ones: they apply at one
+agreed tick on every instance including their producer, so the tick is exact for
+them and nothing else is needed.
 
 This closes the guest-action pattern — a correction undoes the player's own
 keystroke, and the next one puts it back a cadence later — because a frame the
@@ -435,10 +436,11 @@ catch-up gap past `NetworkJoinCatchUpTicks`, or one still wider than
 either, since a fresh attempt brings a fresher world.
 
 The session protocol supports a mesh even though the shipped CLI normally builds
-a star, or a two-level tree once a guest seats bots behind it. Each source epoch is
-admitted once within a bounded replay window and forwarded to every neighbour
-except the arrival edge. Corrections retain the authority's term, tick, hashes, and
-chunks across relays.
+a star, or a two-level tree once a guest seats bots behind it, and in a migrate
+session every participant also links to the successor (§5.3). Each committed source
+epoch is admitted once within a bounded replay window and forwarded to every
+neighbour except the arrival edge; a raw one travels only toward the authority.
+Corrections retain the authority's term, tick, hashes, and chunks across relays.
 
 Bot admission declares an independent holder. That identity is retained in the
 roster and Shared cursor across captures, resets and succession. A host's bots dial
@@ -459,7 +461,7 @@ answers:
 
 | Question | Answer |
 |---|---|
-| Who binds a port? | The coordinator always: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`. In a **migrate** session every other participant binds one too — `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one. `-no-advertise`, a bind that fails, a bot, a browser build, and every `-authority host` session leave a participant with no port of its own. |
+| Who binds a port? | The coordinator always: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host` or, to seat bots, on loopback. In a **migrate** session every other participant binds one too — `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one. `-no-advertise`, a bind that fails, a bot, a browser build, and every `-authority host` session leave a participant with no port of its own. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
 | How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions; there is still no discovery and no rendezvous. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
 
@@ -494,10 +496,9 @@ forks.
 
 That determinism *is* the split-brain rule. At most one instance can conclude that
 it is the successor, so at most one can ever claim the term — which is what a
-quorum would buy, and what a quorum cannot buy here. A leaf reaches nobody but the
-authority and can never collect a vote, and a rule requiring a strict majority of
-the closed roster elects nobody in the smallest session: one survivor of a roster
-of two is not a majority of two, and it is the whole session.
+quorum would buy, and what a quorum cannot buy here: a rule requiring a strict
+majority of the closed roster elects nobody in the smallest session, where one
+survivor of a roster of two is not a majority of two, and it is the whole session.
 
 The procedure on each survivor is:
 
@@ -535,9 +536,9 @@ merging is not implemented.
 
 ### 5.2 The roster after a loss
 
-An instance left with **no link at all** — the successor of a star, and every
-survivor that could not reach it — drops every cursor it does not simulate: the
-authority that went, and behind it the guests that were only ever reachable through
+An instance left with **no link at all** — a successor no survivor reached, and
+every survivor that could not reach it — drops every cursor it does not simulate:
+the authority that went, and behind it the guests that were only ever reachable through
 it. Having no link is what makes that exact rather than convenient: a departure is
 produced once at one agreed tick because two instances must destroy the same shared
 entity together, and here there is no second instance. On a fork the removal is
@@ -567,7 +568,7 @@ instance binds it, and authorship never leaves the machine that started the worl
    opens is one somebody already chose to open. A machine already using it — two
    guests on one machine — takes an OS-assigned port instead. `-no-advertise`, a
    failed bind, or `-authority host` leaves a participant a **leaf**: it plays
-   normally, declares nothing and is never elected.
+   normally, declares nothing and is elected only when the chain names no survivor.
 2. The coordinator puts every declared address in the chain and publishes the whole
    chain on `MsgPeerList`, again as the session opens so a participant admitted
    early is not left holding a prefix. It completes a declared `:7777` from the join
@@ -641,14 +642,15 @@ to plan by. Tower is the 239×64 tower region, td the 500×250 `td` scenario.
 | Heap in use per instance | 70 MiB | 90 MiB | 210 MiB | 250 MiB |
 
 Per round the host captures under the world lock (about 1.2 ms tower, 14 ms td),
-then seals and indexes the capture; a keyframe is 80 / 516 kB compressed. The seal,
-the index and a keyframe reuse the bytes and hash of every row whose owned copy still
-compares equal, and navigation rebuilds its wall grid only when a wall moved and
-compares grids only when their generation moved. The table was measured without
-either, so its protocol and td simulation figures are high. With both, at 16 players,
-rounds four ticks apart and on a slower container, the seal costs 1.8 ms on the tower
-map and 5 ms on td, the index 2.4 and 12 ms, a keyframe 7.6 and 58 ms (mostly
-deflate), and a simulation tick 1.1 and 2.6 ms. An install that projects nothing
+seals the capture (9 / 65 ms) and indexes it (4.5 / 30 ms); a keyframe is 80 / 516 kB
+compressed and 9 / 65 ms to encode. The seal, the index and a keyframe reuse the
+bytes and hash of every row whose owned copy still compares equal, and navigation
+rebuilds its wall grid only when a wall moved and compares grids only when their
+generation moved. The table and those seal, index and encode times were measured
+without either, so they and the table's protocol and td simulation figures are high.
+With both, at 16 players, rounds four ticks apart and on a slower container, the seal
+costs 1.8 ms on the tower map and 5 ms on td, the index 2.4 and 12 ms, a keyframe
+7.6 and 58 ms (mostly deflate), and a simulation tick 1.1 and 2.6 ms. An install that projects nothing
 holds the live lock 7–10 / 40–70 ms, and each projected tick adds up to a simulation
 tick. Sealing, indexing and encoding run outside the lock, but on the one thread a
 browser guest has.
