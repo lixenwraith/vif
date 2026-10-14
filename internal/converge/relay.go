@@ -171,18 +171,12 @@ func (c *Corrections) serveRelayed(port engine.NetworkPort, pending pendingReque
 		return true
 	}
 	set.Served = c.inst.LocalParticipant()
-	if bulkHeld(port, pending.from) {
-		return true // superseded by the next forwarded index before it could arrive
-	}
 	body, err := snapshot.EncodeShardSet(set)
 	if err != nil || len(body) > parameter.SnapshotShardBytesMax || len(body) > network.MaxPayloadSize {
 		c.sendUnserved(port, pending.from, req, "the repair is wider than a relayed answer may carry")
 		return true
 	}
-	if port == nil || !port.Send(pending.from, uint8(network.MsgStateShard), body) {
-		c.tel.ShardsRefused.Add(1)
-		return true
-	}
+	c.sendOwed(port, pending.from, owedSend{typ: network.MsgStateShard, frames: [][]byte{body}, tick: req.Tick})
 	m := c.tel
 	m.ShardsSent.Add(int64(pages))
 	m.ShardBytesSent.Add(int64(len(body)))

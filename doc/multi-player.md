@@ -376,12 +376,14 @@ on a run change each end drops what it keyed by tick and refuses an artifact nam
 another run (`Corrections.followRun`). A body leaves in
 `SnapshotCorrectionChunkBytes` chunks while the link's backlog — bytes sent beyond
 what its latest echo reports received — drains within `SnapshotBulkQueue` past the
-round trip, so an epoch waits behind a chunk, not a world. A link still delivering
-one takes no other body, summary or repair, and the round that finds it drained
-sends the newest. A request naming a tick the authority has let go was overtaken by
-the index since and is not answered unless it asks for a whole world; indexes to a
-peer are spaced by its round trip, so a descent's second request finds its tick
-retained. A link that cannot deliver a keyframe within `SnapshotKeyframeDrain` takes
+round trip, so an epoch waits behind a chunk, not a world. What a link still
+delivering one is owed next, whether body, index answer or repair, waits behind it,
+the newest replacing the older and nothing partial replacing a whole world, and
+leaves once the link drains, released between every two ticks rather than by the
+next publication: a late or lost frame costs a round trip, never a stall. A
+request naming a tick the authority has let go was overtaken by the index since and
+is not answered unless it asks for a whole world; indexes to a peer are spaced by
+its round trip, so a descent's second request finds its tick retained. A link that cannot deliver a keyframe within `SnapshotKeyframeDrain` takes
 none on schedule: it meets the floor with proofs, takes a whole world on request and
 reports constrained. Echoes carry the answering side's clock, and delivery rate is
 timed on it, since echoes a stalled path releases together arrive microseconds apart.

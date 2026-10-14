@@ -574,3 +574,24 @@ and then answers nearly every manifest hash-only at 4.8 kB/s, with no late commi
 at most 11 kB queued. `TestASlowLinkCarriesTheTowerWithoutAStandingQueue` fails on
 the old code. A repair set is still one frame of up to 48 kB, and the 20-tick lead
 cap commits a 1.5 s round trip's crossings late whatever the delivery.
+
+## 17. Twelfth round (2026-10-13, a driven correction that never arrived)
+
+`TestTwoLiveParticipantsConvergeOverTCP` failed under `-race` with "a correction for
+tick 12 never reached every guest", in 5 of 20 runs under CPU load once flow fields
+became cheaper, and in none before. Cheaper ticks let the guest's first index
+arrive a tick late. Its off-tick comparison mismatched, and the repair was wider
+than a keyframe, so the host fell back to a whole world and widened the peer. The
+test publishes once, and a driven `Publish` stops the pump. Five paths dropped
+what a busy link was owed: the scheduled body, a descent's index, a repair, a
+relayed repair and the keyframe fallback. Each assumed the next publication would
+send something newer, and only a publication released the chunks still in the
+outbox. Nothing published again, so the exchange stalled with both roots equal.
+
+The defect was older than the flow-field change, which only made a late index
+likely. One mechanism now carries all five. Each peer has a transfer in flight and
+one owed item behind it. The newest replaces an older one, and nothing partial
+displaces a whole world. The owed item leaves whenever the link drains, from a
+publication or from `Apply` between every two ticks, so a late or lost frame costs a
+round trip. `TestWhatABusyLinkIsOwedFollowsWithoutAPublication` fails on the old
+code, and the TCP test passed 40 of 40 under `-race` with the same load.

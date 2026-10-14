@@ -183,9 +183,35 @@ type peerPublisher struct {
 	// idle link's rate understates: what a whole body would drain at.
 	capacity float64
 
-	// outbox is the unsent tail of the body this peer is owed. Its link takes no
-	// other body until it drains, and then takes the newest.
-	outbox [][]byte
+	// flight is the transfer going out to this peer, a frame at a time while its
+	// link drains; owed is what it is owed behind that, newest first. Nothing owed is
+	// dropped for a busy link: it leaves when the link drains, whatever drives the
+	// next round, so a lost or late frame costs a round trip rather than a stall.
+	flight owedSend
+	owed   *owedSend
+}
+
+// owedSend is one thing a peer is owed: a correction body in chunks, or one answer
+// frame. tick orders it against what else is owed, and whole marks a world a
+// partial one may need as its baseline.
+type owedSend struct {
+	typ    network.MessageType
+	frames [][]byte
+	tick   uint64
+	whole  bool
+}
+
+// owe queues s for this peer unless something already going to it supersedes it:
+// a whole world in flight no older than s, or anything owed that is newer. Nothing
+// partial replaces an owed whole world, which it may need as its baseline.
+func (p *peerPublisher) owe(s owedSend) {
+	if f := p.flight; f.whole && len(f.frames) > 0 && s.tick <= f.tick {
+		return
+	}
+	if o := p.owed; o != nil && (o.whole && !s.whole || s.tick < o.tick) {
+		return
+	}
+	p.owed = &s
 }
 
 // drains reports whether this peer's link delivers size bytes within
@@ -326,16 +352,14 @@ func (c *Corrections) publishRound(force bool) error {
 	c.releaseLocked(port)
 
 	keyframe := (!c.haveKey || tick >= c.lastKeyTick+c.keyPeriod) && !c.allProvedLocked(ids, tick)
-	// A link still delivering an earlier body takes no new one, and the round that
-	// finds it drained sends the newest. A keyframe the link could not deliver within
-	// SnapshotKeyframeDrain is not sent on schedule: the index and its pages lead it,
-	// and a whole world goes on request. A keyframe no due link takes waits.
+	// A body owed to a link still delivering waits behind it. A keyframe the link
+	// could not deliver within SnapshotKeyframeDrain is not sent on schedule: the
+	// index and its pages lead it, and a whole world goes on request. A keyframe no
+	// due link takes now waits.
 	keySize := c.sizesLocked().Keyframe
-	takes := func(id uint32, keyframe bool) bool {
-		return !c.busyLocked(port, id) && (!keyframe || c.peers[id].drains(keySize))
-	}
+	drains := func(id uint32) bool { return c.peers[id].drains(keySize) }
 	due := c.dueLocked(ids, tick, force, keyframe)
-	if keyframe && !slices.ContainsFunc(due, func(id uint32) bool { return takes(id, true) }) {
+	if keyframe && !slices.ContainsFunc(due, func(id uint32) bool { return drains(id) && !c.busyLocked(port, id) }) {
 		keyframe, due = false, c.dueLocked(ids, tick, force, false)
 	}
 	if len(due) == 0 {
@@ -379,7 +403,7 @@ func (c *Corrections) publishRound(force bool) error {
 		}
 	}
 
-	bodyPeers = slices.DeleteFunc(slices.Clone(bodyPeers), func(id uint32) bool { return !takes(id, keyframe) })
+	bodyPeers = slices.DeleteFunc(slices.Clone(bodyPeers), func(id uint32) bool { return keyframe && !drains(id) })
 	body, encodeDur, err := c.encodeBodyLocked(cap, keyframe, keyframe || len(bodyPeers) > 0)
 	if err != nil {
 		return err
@@ -402,7 +426,7 @@ func (c *Corrections) publishRound(force bool) error {
 	for _, id := range due {
 		p := c.peers[id]
 		if slices.Contains(bodyPeers, id) && len(chunks) > 0 {
-			p.outbox = slices.Clone(chunks)
+			p.owe(owedSend{typ: network.MsgStateCorrection, frames: chunks, tick: cap.Header.Tick, whole: keyframe})
 			sent++
 		}
 		p.sent++
@@ -521,27 +545,57 @@ func bulkHeld(port engine.NetworkPort, id uint32) bool {
 	return float64(m.Backlog) > limit
 }
 
-// busyLocked reports whether id's link is still delivering a body or a backlog.
+// busyLocked reports whether id's link is still delivering a transfer or a backlog.
 // Caller MUST hold publishMu.
 func (c *Corrections) busyLocked(port engine.NetworkPort, id uint32) bool {
 	p := c.peers[id]
-	return p != nil && len(p.outbox) > 0 || bulkHeld(port, id)
+	return p != nil && len(p.flight.frames) > 0 || bulkHeld(port, id)
 }
 
-// releaseLocked sends every peer as much of its owed body as its link takes now, a
-// chunk at a time while no backlog stands. A refused chunk ends that transfer rather
-// than continuing into a body that can only reassemble truncated; the next correction
-// is self-sufficient, so the refusal is counted and the peer moves on.
-// Caller MUST hold publishMu.
+// sendOwed queues s for one peer and sends what that peer's link takes now.
+func (c *Corrections) sendOwed(port engine.NetworkPort, id uint32, s owedSend) {
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+	if p := c.peerLocked(id); p != nil && port != nil {
+		p.owe(s)
+		c.releaseLocked(port)
+	}
+}
+
+// release sends every peer what its link takes now; it runs between every two ticks,
+// so what a busy link was owed leaves once it drains without waiting on a publication.
+func (c *Corrections) release() {
+	port := c.inst.Transport()
+	if port == nil {
+		return
+	}
+	c.publishMu.Lock()
+	c.releaseLocked(port)
+	c.publishMu.Unlock()
+}
+
+// releaseLocked sends every peer as much of what it is owed as its link takes now,
+// a frame at a time while no backlog stands. A refused frame ends that transfer
+// rather than continuing into a body that can only reassemble truncated; what is
+// owed behind it still goes. Caller MUST hold publishMu.
 func (c *Corrections) releaseLocked(port engine.NetworkPort) {
 	for id, p := range c.peers {
-		for len(p.outbox) > 0 && !bulkHeld(port, id) {
-			if !port.Send(id, uint8(network.MsgStateCorrection), p.outbox[0]) {
-				p.outbox = nil
+		for !bulkHeld(port, id) {
+			if len(p.flight.frames) == 0 {
+				if p.owed == nil {
+					break
+				}
+				p.flight, p.owed = *p.owed, nil
+			}
+			if !port.Send(id, uint8(p.flight.typ), p.flight.frames[0]) {
+				if p.flight.typ == network.MsgStateShard {
+					c.tel.ShardsRefused.Add(1)
+				}
+				p.flight.frames = nil
 				p.refused++
 				break
 			}
-			p.outbox = p.outbox[1:]
+			p.flight.frames = p.flight.frames[1:]
 		}
 	}
 }
@@ -802,7 +856,8 @@ func (c *Corrections) followRunLocked() event.Stamp {
 	c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = snapshot.SharedCapture{}, nil, false, 0
 	c.keyCorrection, c.nextBroadcast = nil, 0
 	for _, p := range c.peers {
-		p.nextTick, p.manifestTick, p.answeredTick, p.converged, p.outbox = 0, 0, 0, false, nil
+		p.nextTick, p.manifestTick, p.answeredTick, p.converged = 0, 0, 0, false
+		p.flight, p.owed = owedSend{}, nil
 	}
 	c.selective.retained = nil
 	c.tel.RelayRetained.Store(0)
@@ -985,6 +1040,7 @@ func (c *Corrections) Apply() {
 	// requests; a guest reaches it the same way and answers manifests.
 	c.serveRequests()
 	c.applySelective()
+	c.release()
 
 	c.inboxMu.Lock()
 	pending := c.inbox

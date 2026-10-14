@@ -200,9 +200,7 @@ func (c *Corrections) sendIndex(port engine.NetworkPort, id uint32, tick uint64)
 	if err != nil || len(body) > network.MaxPayloadSize {
 		return false
 	}
-	if !port.Send(id, uint8(network.MsgStateManifest), body) {
-		return false
-	}
+	c.sendOwed(port, id, owedSend{typ: network.MsgStateManifest, frames: [][]byte{body}, tick: tick})
 	c.tel.ManifestBytesSent.Add(int64(len(body)))
 	return true
 }
@@ -335,8 +333,7 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		}
 		return
 	}
-	// A descent into a link still draining starts again from a later index.
-	if req.Index && !req.Keyframe && (c.busy(port, pending.from) || c.sendIndex(port, pending.from, req.Tick)) {
+	if req.Index && !req.Keyframe && c.sendIndex(port, pending.from, req.Tick) {
 		return
 	}
 
@@ -377,9 +374,6 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	}
 
 	body, err := snapshot.EncodeShardSet(set)
-	if err == nil && c.busy(port, pending.from) {
-		return // superseded by the next index before the link could deliver it
-	}
 	if err != nil || !c.repairIsWorthSending(len(body)) {
 		// A repair this wide is not repairing anything: past the frame bound it does
 		// not fit, and past the measured keyframe size the whole world is smaller.
@@ -391,10 +385,7 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		c.sendKeyframeTo(port, pending.from, req.Tick)
 		return
 	}
-	if port == nil || !port.Send(pending.from, uint8(network.MsgStateShard), body) {
-		m.ShardsRefused.Add(1)
-		return
-	}
+	c.sendOwed(port, pending.from, owedSend{typ: network.MsgStateShard, frames: [][]byte{body}, tick: req.Tick})
 	m.ShardsSent.Add(int64(pages))
 	m.ShardBytesSent.Add(int64(len(body)))
 	c.publishMu.Lock()
@@ -428,13 +419,6 @@ func (c *Corrections) repairIsWorthSending(bytes int) bool {
 	return keyframe == 0 || int64(bytes) < keyframe
 }
 
-// busy is busyLocked for a caller that holds no lock.
-func (c *Corrections) busy(port engine.NetworkPort, id uint32) bool {
-	c.publishMu.Lock()
-	defer c.publishMu.Unlock()
-	return c.busyLocked(port, id)
-}
-
 // countRequestedPages is how many pages a request put in play, which is the unit
 // the shard counters are reported in.
 func countRequestedPages(req snapshot.CorrectionRequest) int {
@@ -455,10 +439,6 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 		return
 	}
 	c.publishMu.Lock()
-	if c.busyLocked(port, id) {
-		c.publishMu.Unlock()
-		return // asked again with the next index once the link drains
-	}
 	c.followRunLocked()
 	if !c.haveKey || c.baseline.Header.Tick < minTick {
 		if _, _, err := c.takeKeyframe(); err != nil {
@@ -482,7 +462,8 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 	// exchange starts again from the state it is about to hold.
 	chunks, err := network.EncodeSnapshotChunksOf(cap.Header.Tick, body, parameter.SnapshotCorrectionChunkBytes)
 	if p := c.peerLocked(id); p != nil && err == nil {
-		p.silence, p.outbox = 0, chunks
+		p.silence = 0
+		p.owe(owedSend{typ: network.MsgStateCorrection, frames: chunks, tick: cap.Header.Tick, whole: true})
 	}
 	c.releaseLocked(port)
 	c.publishMu.Unlock()
