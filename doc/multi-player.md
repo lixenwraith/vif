@@ -18,8 +18,8 @@ Use these terms consistently:
   participant on its far end, so `network.PeerID` is both who and which link, and
   no instance is ever its own peer.
 - The **game host** owns the canonical Shared-domain world, session identity,
-  roster, and correction stream. It is the participant currently authoring,
-  which is participant 1 until a handoff moves authorship.
+  roster, and correction stream. It is the peer currently authoring, which is
+  peer 1 until a handoff moves authorship.
 - A **game guest** runs the same Shared simulation as a predictor and adopts host
   corrections. It is not a thin renderer.
 - A **relay** forwards authoritative artifacts for participants behind it,
@@ -44,7 +44,7 @@ Two numbering spaces, each with its own reserved zero. A **participant identity*
 runs `1..MaxPlayers+1`; zero means *no participant*, which is what makes an absent
 crossing fence, an unused epoch window and every `id == 0` guard answer the same
 way. A **roster slot** runs `0..MaxPlayers-1` and names a cursor, with
-`NoPlayerSlot` for a participant that drives none. Slot zero is the first cursor
+`NoPlayerSlot` for a peer that drives none. Slot zero is the first cursor
 rather than the local one — an instance identifies itself by its participant
 identity, and giving it a second name would cost the identity space its sentinel.
 
@@ -52,7 +52,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 
 | Area | Current behaviour |
 |---|---|
-| Local input | Every crossing applies at one tick on every instance, its producer's included: the producer stamps it with its own lead and the authority commits it (§3.5). The D-18 prediction answers the keystroke and the weapons fire from the predicted cell; the shared store moves when the crossing applies. A typed gold member leaves at its tick like everything else; the typist validates its next keystroke against the run without the members it has already typed. |
+| Local input | The producer stamps every crossing with its own lead and applies its own copy at that tick; the authority commits it there, or at its own next tick when it arrives late, and every other instance applies the committed copy (§3.5, §8 item 5). The D-18 prediction answers the keystroke and the weapons fire from the predicted cell; the shared store moves when the crossing applies. A typed gold member leaves at its tick like everything else; the typist validates its next keystroke against the run without the members it has already typed. |
 | Shared authority | The host's Shared world is canonical. A guest's predicted result is provisional until the next correction. |
 | Player state | Each instance simulates only its Player domain. Owner-authored cursor values have one writer and travel as values; a receiver keeps the values it authors across an install. |
 | Predicted derivations | A shared death a predicting instance derives is stamped `PhasePredicted` and held in a ledger. Presentation follows it; the player-domain rewards behind it are paid once, when an authoritative world proves the entity gone. |
@@ -104,7 +104,10 @@ until `ApplyTick` and is ordered by `(ApplyTick, Source, Seq)`, so the lead is a
 receive buffer for reordered traffic and never a difference between two worlds: a
 producer that applied its own copy at once would have every correction read inside
 the lead undo the kill, rewind the knockback and tear down the region's species,
-then derive them again. Input feel is the D-18 prediction's job, not the store's
+then derive them again. The exception is a crossing that reaches the authority past
+its `ApplyTick`: the authority commits it at its own next tick, or voids it past
+`NetworkCommitLateTicks`, and its producer alone keeps the stamped tick (§3.5, §8
+item 5). Input feel is the D-18 prediction's job, not the store's
 ([D-18](domain-design.md#d-18--local-prediction-is-private)), and for a typed gold
 member it is the typist's own record of what it has typed, which the next keystroke
 validates against.
@@ -848,16 +851,16 @@ the identity an explosion's re-derived hits inherit from it, the knockback windo
 every attacker shares, the one reward a shared death pays however many times a
 rollback makes a guest derive it, the eviction that drops only the participant that
 stays late, the domain a capture's RNG streams may carry, the placement budget and
-the storm burst a shared stream draws before it reads a live position, the owner-state sync an
-install must not stall, the agreed tick a shared-identity crossing waits for on its
-own producer, and the peer link and succession chain rules that make a successor
-reachable. It also forces a capture to enter and retire a quasar while the receiver
-skips the release transition, and round-trips a delayed transition action by
-compiled identity. Run the generation and repository gates after
-focused network tests:
+the storm burst a shared stream draws before it reads a live position, the
+owner-state sync an install must not stall, the agreed tick a shared-identity
+crossing waits for on its own producer, and the peer link and succession chain
+rules that make a successor reachable. It also forces a capture to enter and
+retire a quasar while the receiver skips the release transition, and round-trips a
+delayed transition action by compiled identity. Run the generation and repository
+gates after focused network tests:
 
 ```sh
-go generate ./internal/event ./internal/manifest
+go generate ./internal/manifest
 go test ./...
 go vet ./...
 ```
