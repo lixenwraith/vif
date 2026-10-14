@@ -306,7 +306,7 @@ capacity when shape-compatible.
 | `RouletteSelector` | Score-proportional, min-shifted so negative fitness works. `Floor` keeps the worst member selectable (default `1e-9`). Stateful — not goroutine-safe |
 | `UniformCombiner` | Per-element mix at `MixProbability`; emits up to 2 offspring |
 | `NPointCombiner` | `Points` crossover sites, alternating segments. Keeps a cut-point scratch buffer |
-| `BoundedPerturbator` | Gaussian noise sigma = `strength × (Max-Min)` per gene, returned to `ParameterBounds` by `Boundary`: clamp (default), reflect, or wrap. Genes past `len(Bounds)` are left alone, a NaN draw (non-finite range) leaves the gene untouched, and zero `strength` is a no-op |
+| `BoundedPerturbator` | Gaussian noise sigma = `strength × (Max-Min)` per gene, returned to `ParameterBounds` by `Boundary`: clamp (default), reflect, or wrap. Genes past `len(Bounds)` are left alone, a NaN result (from a non-finite range) leaves the gene untouched, and zero `strength` is a no-op |
 | `GaussianPerturbator` | Unbounded noise for numeric slices |
 | `SliceCloner` | Capacity-reusing copy for `~[]T` |
 | `GeneSpread` | `DiversityFunc` for bounded `[]float64`: mean normalized per-gene standard deviation |
@@ -385,8 +385,8 @@ defer reg.Stop()
 ```
 
 `Register` validates `GeneCount == len(Bounds)` and rejects duplicate ids. Unset
-`TournamentSize` / `MixProbability` / `Name` are filled from package defaults,
-and a positive `PerturbationStdDev` overrides the engine's
+`TournamentSize` / `MixProbability` take the package defaults, an unset `Name`
+becomes `species_<id>`, and a positive `PerturbationStdDev` overrides the engine's
 `PerturbationStrength`. Every species engine runs tournament selection, uniform
 crossover, bounded Gaussian mutation under `Boundary`, and duplicate rejection.
 `Start` is idempotent — it loads and starts only species not already running, so
