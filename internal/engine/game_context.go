@@ -229,7 +229,7 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 	ctx.TimeCtl = NewTimeControl(clock, reg)
 
 	// 4. Config Resource
-	// Initial: Map = Viewport, CropOnResize enabled for backward compat
+	// Initial: Map = Viewport, CropOnResize on until a level setup says otherwise
 	world.Resources.Config = &ConfigResource{
 		MapWidth:       viewportWidth,
 		MapHeight:      viewportHeight,
@@ -528,9 +528,9 @@ func (ctx *GameContext) SetOverlayFilterEditing(editing bool) {
 }
 
 // Session state is operator-owned — mouse free mode, auto-fire, simulation rate,
-// overlay HUD and pins — and survives EventGameResetRequest; anything else is world
-// state. Logging is process configuration and is excluded; pending step requests
-// name what a reset destroys and are cancelled.
+// overlay HUD and pins, standing breakpoints — and survives EventGameResetRequest;
+// anything else is world state. Logging is process configuration and is excluded;
+// pending step requests name what a reset destroys and are cancelled.
 
 // ResetSessionState restores every operator toggle to its startup value.
 // Called only on the purge path, never by a plain reset.

@@ -13,11 +13,11 @@ import (
 	"github.com/lixenwraith/vif/internal/fsm/std"
 )
 
-// SchemaVersion is the FSM schema contract version consumed by the map editor.
+// SchemaVersion is the FSM schema contract version -schema prints.
 const SchemaVersion = 1
 
-// Schema writes the machine schema as JSON for the map editor. It needs no
-// terminal, services or World instance.
+// Schema writes the machine schema as JSON for -schema and authoring tools. It
+// needs no terminal, services or World instance.
 func Schema(w io.Writer) error {
 	event.EnsureRegistry()
 

@@ -560,12 +560,10 @@ func (w *World) copyComponentsIn(c componentCopies) {
 }
 `))
 
-// parseEvents reads the event package and derives the registry from the
-// EventType const block. Payload association comes from the doc comment
-// annotation: "// EventFoo (FooPayload) description".
-//
-// An annotation containing '[' or '.' (BatchPayload[T], core.Entity) denotes a
-// pooled or scalar payload that is not TOML-decodable; it registers as nil.
+// parseEvents derives the registry from the event package's EventType const block.
+// A doc comment annotation names the payload: "// EventFoo (FooPayload) ...". One
+// containing '[' or '.' (BatchPayload[T], core.Entity) is a pooled or scalar
+// payload that is not TOML-decodable, and registers as nil.
 func parseEvents(dir string) EventDefs {
 	files, names := parsePackage(dir)
 
@@ -879,8 +877,7 @@ var systemProfiles = map[string]engine.SystemProfile{
 // systemSnapshots is every system's declared D-19 obligation: whether it holds
 // future-affecting state outside the component stores, and therefore whether it
 // must implement engine.SharedStateSaver. The boundary suite asserts the
-// declaration against the code, which is what turns the hidden-state survey from
-// a list someone maintains into one the build checks.
+// declaration against the code.
 var systemSnapshots = map[string]engine.SnapshotProfile{
 {{- range .Systems }}
 	"{{ .Name }}": engine.{{ .SnapshotConst }},
@@ -1285,21 +1282,11 @@ func {{ .Name }}(a, b *component.{{ .Type }}) bool {
 {{- end }}
 `))
 
-// snapshotPagesTemplate emits the page-level view of a capture's component stores.
-//
-// A capture is partitioned into sections and bounded pages so a correction can
-// prove equality with a hash instead of carrying state. The store inventory that
-// partition is built over has to be the same one the capture is built over, or a
-// component added to the manifest would be captured and never hashed — hashed
-// state the receiver silently never repairs is worse than state nobody carries.
-// So the inventory is generated from manifest.Components beside the capture
-// itself, and there is no second hand-maintained list.
-//
-// Rows are (entity, canonical JSON value) pairs in entity-ascending order. That
-// ordering is the manifest's own and is deliberately not the store's: the dense
-// order a live world holds is an artifact of its insertion history — a reconciled
-// world keeps its own — so two instances holding equal state produce equal page
-// hashes only if the page is read in an order neither of them chose.
+// snapshotPagesTemplate emits the page-level view of a capture's stores from the
+// same manifest.Components inventory the capture uses, so no captured component
+// goes unhashed. Pages read the (entity, canonical JSON value) rows in ascending
+// entity order, not store order: a live world's dense order is its insertion
+// history, so equal state hashes equal only in an order neither instance chose.
 var snapshotPagesTemplate = template.Must(template.New("snapshotPages").Funcs(template.FuncMap{
 	"lower": strings.ToLower,
 	"add1":  func(i int) int { return i + 1 },

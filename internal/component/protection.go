@@ -20,8 +20,8 @@ const (
 	// ProtectFromDeath makes entity immune to death (e.g. out-of-bounds cleanup)
 	ProtectFromDeath
 
-	// ProtectAll makes an entity immune to every protected mechanic and survives a
-	// level clear; World.DestroyEntity does not check it, so its callers must
+	// ProtectAll makes an entity immune to every protected mechanic and lets it
+	// survive a level clear; World.DestroyEntity does not check it, so its callers must
 	ProtectAll ProtectionFlags = 0xFF
 )
 
