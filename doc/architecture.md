@@ -51,7 +51,7 @@ The main architectural planes are:
 | Simulation data | `internal/engine`, `internal/component`, `internal/core`, `internal/parameter`, `internal/profile` | Entity identities, typed sparse-set component stores, singleton resources, spatial indexing, shared time/state, tunables, and per-kind profile tables. |
 | Simulation behavior | `internal/system`, `internal/fsm`, `internal/event` | Per-tick mechanics, event reactions, encounter control, reset, and system enablement. |
 | Interaction | `internal/input`, `internal/mode`, `internal/bot` | Parse terminal events, or step a bot graph, into semantic intents and apply them under the world lock. |
-| Authority and convergence | `internal/converge`, `internal/snapshot` | Hold the session's authority term and run its succession, publish the correction cadence, answer the selective manifest exchange, install what arrives, and keep the links a handoff needs. It reads and writes the live world only through the seam the composition root supplies. |
+| Authority and convergence | `internal/converge`, `internal/snapshot` | Hold the session's authority term and run its succession, publish the correction cadence, answer the selective manifest exchange, install what arrives, and keep the links a handoff needs. `converge` reads and writes the live world only through the seam the composition root supplies; `snapshot` is the capture wire model and comparison surface. |
 | Deterministic run streams | `internal/journal` | Attach recording sinks, capture/load journals, order replay records, generate seeded fuzz input, and execute authored tick scripts through App-independent target contracts. |
 | Presentation | `internal/render`, `internal/render/renderer`, `internal/parameter/visual` | Snapshot frame context, layer cells, apply masks/effects, and flush to the terminal. |
 | I/O boundaries | `internal/service`, `internal/content`, `internal/network`, external modules | Categorized file access, terminal polling, corpus loading, audio device/process management, and framed TCP or WebSocket sessions. |
@@ -67,7 +67,7 @@ See [Package map](package-map.md) for the medium-level dependency view.
 | Shape | I/O and presentation | Clock/owner |
 |---|---|---|
 | `ModePlay` | files, terminal, content, audio, and optional host/join networking, at startup or mid-run; live input and geometry | pause/rate-aware clock; scheduler and event goroutines |
-| `ModeHeadless` | files and content; caller supplies geometry and events; authored scripts and bots may add startup host/join networking | manual clock advanced by a harness, `journal.ScriptDriver` or `bot.Driver` |
+| `ModeHeadless` | files and content; caller supplies geometry and events; authored scripts and bots may add host/join networking | manual clock advanced by a harness, `journal.ScriptDriver` or `bot.Driver` |
 | `ModeReplay` | files, terminal, content, audio; recorded input and geometry | manual clock advanced by `journal.ReplayDriver` |
 | `ModeScript` | files, terminal, content, audio, and the same optional host/join networking as a headless script; scripted input and geometry | manual clock advanced by `journal.ScriptDriver` or a watched `bot.Driver`, wall-paced |
 | `ModeServer` | files, content, and network only; `-size` or first-guest geometry, no input, no local cursor | pause/rate-aware clock; scheduler and event goroutines, as `ModePlay` |
@@ -179,7 +179,8 @@ constant-time lookup and swap-removal while preserving compact iteration.
 Generated component-mask bookkeeping lets destruction skip stores that an
 entity never occupied. Components are pure data: logic over them lives in the
 owning system, and the only functions beside them are reads a renderer or mode
-shares with a system ([ECS and events](ecs-and-events.md#4-component-catalog)).
+shares with a system and the snapshot detach of slice-holding components
+([ECS and events](ecs-and-events.md#4-component-catalog)).
 
 Position is specialized rather than being an ordinary generated store. It also
 maintains a fixed-capacity spatial grid used for cell queries, wall masks,
@@ -203,9 +204,10 @@ Every entity, event and RNG stream carries a replication domain. Shared state
 is identical on every instance and replicated; player state is this instance's
 participant and is never replicated. Systems declare which of the two they read
 and write, and which other systems they need, as `SystemDef` data in
-`internal/manifest/definition.go`; a test checks each declaration against the
-code, and the declared dependencies resolve into a deterministic initialization
-order that is separate from the tick order `Priority()` fixes.
+`internal/manifest/definition.go`; a test checks each domain declaration against
+the code. Startup refuses a dependency on an unknown system or a cycle, and the
+dependencies gate disabling a system; they order nothing, since tick order is
+`Priority()`'s.
 
 See [ECS and events](ecs-and-events.md) and [the domain model](domain-design.md).
 
@@ -315,11 +317,12 @@ matters when reasoning about convergence.
 The generic genetic library offers both classic generational and streaming
 steady-state engines. The game adapter currently evolves eye parameters,
 tracking closest approach and successful self-destruct damage as fitness. The
-adapter uses an in-memory registry: archives survive an in-process `:new`, but
-no persistence store is attached for process-lifetime saves. Multiplayer
-captures use the separate exact-continuation contract, carrying each streaming
-engine's PCG position, proposal/pending work and IDs together with the registry's
-scout stream and the adapter's live fitness accumulators.
+adapter uses an in-memory registry: a population lasts its run, `:new` deregisters
+every declared species so the next declaration starts afresh, and no persistence
+store is attached. Multiplayer captures use the separate exact-continuation
+contract, carrying each streaming engine's PCG position, proposal/pending work and
+IDs together with the registry's scout stream and the adapter's live fitness
+accumulators.
 
 Gameplay motion uses cell-centered `float64` positions, velocities, and
 accelerations. Integer `Point`/`Area` values represent discrete cells, while
@@ -415,13 +418,14 @@ from weakening recovery.
 
 Losing the authority is answered by the session's `-authority` policy. With
 `migrate` the first survivor in the succession chain — the participants that
-advertised an address, in join order, bots excluded — takes the next term; every
-survivor computes it from the chain it holds, so no vote is needed and no two
-instances can claim it. With `host`, which is the default for `-serve`, the
-term never moves and every survivor continues alone. In a migrate session each
-guest binds a port of its own unless `-no-advertise` keeps it a leaf, and the
-chain carries the addresses, so migration moves the session and not only its
-authorship; see
+advertised an address, in join order — takes the next term, or the lowest
+surviving identity when the chain names nobody still present; a bot is never a
+candidate. Every survivor computes it from the roster and chain it holds, so no
+vote is needed and no two instances can claim it. With `host`, which is the
+default for `-serve`, the term never moves and every survivor continues alone. In
+a migrate session each guest but a bot or a browser binds a port of its own unless
+`-no-advertise` keeps it a leaf, and the chain carries the addresses, so migration
+moves the session and not only its authorship; see
 [Multiplayer](multi-player.md) §5.3.
 
 Remaining limitations include unauthenticated links, plaintext wherever no TLS
