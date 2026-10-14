@@ -7,8 +7,9 @@ import "time"
 
 // Game Loop & Engine Timing
 const (
-	// FrameUpdateInterval is the rendering frame rate interval (~60 FPS)
-	FrameUpdateInterval = 16 * time.Millisecond
+	// FrameUpdateInterval is the rendering frame interval, 60 FPS: a third of a tick,
+	// so every tick is drawn for exactly three frames
+	FrameUpdateInterval = GameUpdateInterval / 3
 
 	// GameUpdateInterval is the game logic update interval (clock tick) [game]
 	GameUpdateInterval = 50 * time.Millisecond

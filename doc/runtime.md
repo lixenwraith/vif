@@ -360,7 +360,7 @@ only clock.
 
 | Path | Default interval | Owner | Purpose |
 |---|---:|---|---|
-| Render frame | 16 ms | main goroutine | Snapshot frame state, render, flush, and release the next simulation tick. |
+| Render frame | 16.7 ms (a third of a tick) | main goroutine | Snapshot frame state, render, flush, and release the next simulation tick. |
 | Input tick | 16 ms | main goroutine | Reconcile terminal mouse mode, open the command line after a breakpoint hit, repeat held/automatic fire, and advance macros. |
 | Simulation tick | 50 ms | scheduler goroutine | Advance pause-aware game time, FSM, systems, APM, and telemetry. |
 | Event attempt | 4 ms | event goroutine | Settle queued events between simulation ticks, including while paused. |

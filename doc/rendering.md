@@ -19,9 +19,10 @@ flowchart TD
     Finalize --> Flush["terminal Flush"]
 ```
 
-The app targets a 16 ms frame interval. `RenderOrchestrator` owns one reusable
-`RenderBuffer`, clears it, acquires the world lock, invokes visible renderers in
-ascending priority, and releases the lock. Finalization and terminal flushing
+The app draws a frame every third of a tick, 60 per second, so each tick shows for
+three frames. `RenderOrchestrator` owns one reusable `RenderBuffer`, clears it,
+acquires the world lock, invokes visible renderers in ascending priority, and
+releases the lock. Finalization and terminal flushing
 happen outside the world lock so a stalled host write cannot block game ticks,
 event delivery, or input routing.
 
