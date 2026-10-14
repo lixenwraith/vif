@@ -332,7 +332,7 @@ does not restart evolution from the scored archive.
 | Collision | profile-based impulses, additive/override modes, mass ratio, angle/magnitude variance, offset influence for multi-cell hits |
 | Shapes | ellipse containment with a radial push direction (`CheckSoftCollision`) over `vmath` ellipse/circle tests |
 | Orbital | circular-orbit insertion and attraction, radial damping, equilibrium radius |
-| 3D | gravity with soft repulsion, elastic collision, overlap separation and axis reflection on `vmath.Vec3F` |
+| 3D | gravity with soft repulsion, elastic collision, overlap separation and axis reflection on `vmath.Vec3` |
 
 `IntegrateWithBounce` limits a substep to roughly 0.45 cells to reduce wall
 tunneling, applies acceleration once before selecting the step count, moves one
@@ -383,8 +383,8 @@ precise position in cells, velocity in cells per second, and acceleration in
 cells per second squared, all as `float64`.
 
 Integer `Point` and `Area` values describe discrete grid cells; they are not a
-fixed-point representation. `Point.CenterF` is the sanctioned grid-to-precise
-conversion and adds the half-cell offset, while `PointAtF` uses floor so
+fixed-point representation. `Point.Center` is the sanctioned grid-to-precise
+conversion and adds the half-cell offset, while `PointAt` uses floor so
 negative precise coordinates map to the correct cell. Terminal aspect
 correction remains explicit in Y radii, weighted distances, and projection
 rather than being encoded in the numeric type.

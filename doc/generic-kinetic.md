@@ -48,8 +48,8 @@ result therefore does not depend on how many anti-tunnelling steps were needed.
 ballistic, orbital, spring-follow, and other controller-owned paths.
 
 The integer `PositionComponent` and spatial grid are the collision/rendering
-projection of precise state. `Point.CenterF` converts a cell to precise space and
-`PointAtF` converts back with floor semantics. Y grows downward. Angles therefore
+projection of precise state. `Point.Center` converts a cell to precise space and
+`PointAt` converts back with floor semantics. Y grows downward. Angles therefore
 use the existing terminal-plane convention: 0 points right, π/2 points down, π
 points left, and 3π/2 points up.
 
