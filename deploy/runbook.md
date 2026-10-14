@@ -19,8 +19,10 @@ skipped. Installed lines print green and incoming ones red; a file the update
 removes prints as `deleted <path>`. `image`, `allocator` and `logwisp` need an empty
 fleet and refuse otherwise, naming the components that do not; `filter` and `wad`
 never interrupt a match, since established connections and running pods keep what
-they started with. Each component keeps one `.previous` set,
-and [`guest/README.md`](guest/README.md) restores it. Settings for the allocator are
+they started with. `allocator` and `logwisp` keep one `.previous` set, which
+[`guest/README.md`](guest/README.md) restores; every other component comes back by
+running `update.sh` for it at the earlier revision, which rebuilds the session image
+that `image` removed. Settings for the allocator are
 [`guest/vif-allocator.env`](guest/vif-allocator.env), committed here and never
 edited on the node.
 
@@ -36,11 +38,11 @@ edited on the node.
 finished and is waiting out its `ttlSecondsAfterFinished`, a pod still
 terminating — then the fleet log files and the five units. `blockers` is that
 report as an assertion: `the fleet is empty` and exit 0, or the same annotated
-lines and exit 1. It is the check every update helper runs first, so run it by
-hand to learn why one refused without starting another. `state` prints one line
-of what the fleet reports about one session — phase, roster, clock, tick, the
-window it has left and its join target — and exits non-zero once that session has
-left the fleet.
+lines and exit 1. It is the check `update.sh` and the image and allocator helpers
+make before they replace anything, so run it by hand to learn why one refused
+without starting another. `state` prints one line of what the fleet reports about
+one session — phase, roster, clock, tick, the window it has left and its join
+target — and exits non-zero once that session has left the fleet.
 
 ## Empty the fleet
 
@@ -74,28 +76,31 @@ verdict — so read the session's JSONL before running it, not after:
 ## Ask for a session
 
 The path a player takes, from the node. It prints the identity on stdout and the
-join and direct targets beside it, so a shell can capture one and a person can read
-the other:
+join and direct targets on stderr, with the browser link where one is published, so
+a shell can capture one and a person can read the other:
 
 ```sh
 SESSION_ID=$(./deploy/k3s/session.sh allocate)       # deployment defaults
-SESSION_ID=$(./deploy/k3s/session.sh allocate 1 debug)
+SESSION_ID=$(./deploy/k3s/session.sh allocate 1 debug td)
 ```
 
-Both arguments are optional and bounded by `-players-max` and `-log-level-min`;
-`GET /vif/api/sessions` advertises what this deployment accepts as `limits`.
+The arguments — players, log level, scenario, bots — are optional, in that order,
+and bounded by `-players-max`, `-log-level-min`, the installed scenarios and
+`-bots-max`; `GET /vif/api/sessions` advertises what this deployment accepts as
+`limits`.
 
 ## Why a helper refused
 
 | Message | Cause | Fix |
 |---|---|---|
-| `the fleet is not empty` | Printed by `blockers` above one annotated line per surviving object, then by the helper that called it. A finished Job is the usual cause: it outlives the match by its 120-second `ttlSecondsAfterFinished`, so the public session list is already empty while the update still refuses. | Wait out the TTL the report names, or `./deploy/k3s/session.sh drain`. |
+| `the fleet is not empty` | Printed by `blockers` after one annotated line per surviving object; the helper that called it then names its own refusal. A finished Job is the usual cause: it outlives the match by its 120-second `ttlSecondsAfterFinished`, so the public session list is already empty while the update still refuses. | Wait out the TTL the report names, or `./deploy/k3s/session.sh drain`. |
 | `a fleet object remained after allocation stopped` | A session was created between the first check and the stop. | Re-run `drain`; it waits for the cascade. |
 | `the fleet did not drain` | A pod outlived the background cascade by more than 60 seconds. | `./deploy/k3s/session.sh drain --force` |
 | `the worktree differs from HEAD` | Uncommitted changes. Updates build from HEAD, so they refuse to install something the tree does not describe; `--diff` still runs. | Commit, stash, or check out the revision you mean to deploy. |
 | `empty the fleet first … or update only: …` | `image`, `allocator` or `logwisp` differs while a fleet object exists. | `./deploy/k3s/session.sh drain`, or run only the components it names. |
+| `<component>: could not tell what is installed` | `update.sh` checks every selected component before it changes any, and could not read this one; the line above says why. For `allocator` it is an installed env without `VIF_ALLOCATOR_IMAGE`; for `logwisp`, upstream `main` unreachable. | `./deploy/update.sh image` first, or retry once upstream answers. |
 | `revision is not on LogWisp main` | A revision given to a LogWisp helper names a commit upstream `main` does not contain: a pull-request head a squash merge discarded, or one a rewritten `main` dropped. | Give a commit on `main`, or none for its head. |
-| `logwisp.service must be active before an update` | The updater replaces a running service and keeps one rollback set; it will not install onto a stopped one. | `sudo systemctl start logwisp.service` |
+| `logwisp.service must be active before an update`, `vif-allocator.service must be active …` | The updater replaces a running service and keeps one rollback set; it will not install onto a stopped one. | `sudo systemctl start` the unit it names |
 | `the served stream bounds are not {...}` | The restarted LogWisp is not serving the queue, connection and timeout bounds in `deploy/logwisp/aggregator.toml`, so the install did not take. The previous build is already back. | Compare the message against `curl -fsS http://127.0.0.1:8081/status \| jq .server`. A LogWisp revision that lacks a setting is the usual cause. |
 | `cannot read the sink bounds from ...aggregator.toml` | The HTTP sink block lost one of `client_buffer_size`, `max_connections` or `write_timeout_ms`, which the verification reads from it. | Restore the setting; the updater will not install a configuration it cannot check. |
 | `… must be disabled before the temporary build`, `containerd.service must be inactive …` | Docker is stopped, but a unit the build's cleanup would disable is enabled, or the distribution containerd runs without it. The node baseline keeps all three disabled. | `sudo systemctl disable --now docker.service docker.socket containerd.service` |
@@ -144,8 +149,8 @@ sudo journalctl \
 
 The accepted socket's address is recorded on the node and dropped from the
 published stream, so this answers "where did that player come from" and the SSE
-never can. Only a direct join names the player: one through the front door is
-recorded at the node's address, and a browser at the pod's loopback.
+never can. Only a direct join names the player: one through the front door or the
+browser route is recorded at the node's address, since the allocator dials the pod.
 
 ```sh
 sudo jq -c 'select(.sub == "admit")' '/var/log/vif-fleet/<session-id>.jsonl'
