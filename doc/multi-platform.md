@@ -133,7 +133,7 @@ Both commands should produce no output. The container is one static binary in
 | Linux | Developed and tested | Full audio backend discovery, Unix terminal/crash handling, TCP sessions, dedicated image |
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp` |
 | Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`; audio and logging omitted; published as an untested zip, not a development focus, and may be removed if field reports show it is broken |
-| `js/wasm` | Solo play and session join; a tab that leaves is still being commissioned ([fleet W1](kubernetes-fleet.md#3-work-list)) | xterm.js presentation; no audio, filesystem discovery, process execution, logging sink, or raw sockets. A session is joined over a browser WebSocket (§5), never a socket |
+| `js/wasm` | Solo play and session join; a tab that leaves is still being commissioned ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)) | xterm.js presentation; no audio, filesystem discovery, process execution, logging sink, or raw sockets. A session is joined over a browser WebSocket (§5), never a socket |
 | Other native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 
 The simulation uses `float64` and live sessions include concurrent scheduling.
@@ -402,7 +402,7 @@ node --check web/worker.js
 
 Compilation is not runtime certification. What the browser route still has to
 show is a tab that leaves, hidden or suspended, and a session whose last guest was
-a browser ([fleet W1](kubernetes-fleet.md#3-work-list)). Linux and FreeBSD release
+a browser ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)). Linux and FreeBSD release
 checks should include a real terminal; audio-capable artifacts also need at least
 one real or `null`/WAV backend smoke test. Windows remains an unpromised
 cross-build and has no runtime certification work on the release path.

@@ -8,6 +8,674 @@ code-originated item names its source here.
 Priorities: P0 blocks a release or leads the feature development push, P1 is
 wanted next, P2 is convenient follow-up, and P3 is an idea.
 
+## Suspected bugs to review
+
+The documentation sweep traced each of these to the code without fixing it; those
+marked reproduced also failed in a scratch test. Review an item before other work,
+then fix it, refile it at its real priority under its area, or delete it. Two more
+suspected bugs already have items at their own priority:
+[Drop the kinetic window's dead joiner path](#drop-the-kinetic-windows-dead-joiner-path)
+and [Drop the cursors a linked instance cannot reach](#drop-the-cursors-a-linked-instance-cannot-reach).
+
+### Keep the FSM's region order through an install
+
+- Priority: P0, to review
+- Affected files: `internal/fsm/export.go`, `internal/fsm/machine.go`,
+  `doc/fsm-and-configuration.md`
+
+`Machine.Export` sorts region names (`export.go:51-52`) and `importState` adopts
+that order (`:244-248`), while a live machine runs regions in spawn order
+(`machine.go:137`, `:159`, `:284`). A joiner, each correction and a replay copy
+restored by `Scheduler.CopyIn` therefore run regions in name order where the
+authority runs spawn order, so shared variables and emitted events interleave
+differently (reproduced). Options: export `regionOrder` as it stands, which import
+already keeps; or hold every region in name order, which changes scenario behaviour
+and the spawn-order rule in [FSM and configuration](fsm-and-configuration.md) §3.
+
+### Carry adaptation's tracked routes and pending deaths in the capture
+
+- Priority: P0, to review
+- Affected files: `internal/system/adaptation.go`, `internal/snapshot/capture.go`
+
+`AdaptationSystem.SaveShared` carries only `Resources.Adaptation`
+(`adaptation.go:676-682`). `tracking` (each live eye's route) and `pendingDeaths`
+(scored next tick, `:180`) stay local, though
+[D-19](domain-design.md#d-19--every-future-affecting-shared-value-is-restorable)
+asks that every future-affecting Shared value be restorable, and the genetic carrier
+ships its equivalents (`genetic.go:482-493`). A joiner scores nothing when a pre-join
+eye dies, so its EXP3 weights and the Shared RNG draws in `samplePool` drift from the
+authority's until the next correction. Carry both, sorted by entity, in the
+adaptation record (a capture schema bump).
+
+### Decide how the network badge shows a succession walk
+
+- Priority: P0, to review
+- Affected files: `internal/render/renderer/status_bar.go`,
+  `doc/services-and-networking.md`, `doc/telemetry-reference.md`
+
+`networkBadge` returns `Host lost` before it reads `network.migrating`
+(`status_bar.go:518-530`). The rejoin count rises only on a guest that lost its
+authority link (`converge/reach.go:202-225`), which has `host_lost` set
+(`system/network.go:1396`) until a handoff clears both (`converge/authority.go:649`,
+`reach.go:178`), so the `Migrating k` badge that
+[Services and networking](services-and-networking.md) §9 and the
+[Telemetry reference](telemetry-reference.md) describe is never drawn. Options: show
+the count beside `Host lost`; let `Migrating k` outrank `Host lost` until the walk
+gives up (`authority.go:588-589`); or drop the count from the badge and the docs.
+
+### Keep a watched script in a session to pan and quit
+
+- Priority: P0, to review
+- Affected files: `internal/app/play.go`, `doc/runtime.md`, `doc/input-and-modes.md`
+
+`runPresented` marks a driven run in a session live (`play.go:102`), but `advance`
+and `key` recompute `live` as `p.interactive && sessionTransport() != nil` (`:267`,
+`:609`), and only a bot is interactive (`:110`). A watched script in a session
+therefore takes SPACE . , + - and `:` from its first frame and reports `PLAY`
+instead of `LIVE` (reproduced), where [Runtime](runtime.md) §1.1 and
+[Input and modes](input-and-modes.md) §9 allow only pan and quit. Smallest fix:
+carry a driven flag from `runPresented` into the recompute and give a script the
+bot's unpause and 1x reset (`:268-272`); a replay with a transport stays pausable.
+If a script should keep its keys, the docs change instead.
+
+### Stamp a driven run's journal envelope with its own run and tick
+
+- Priority: P0, to review
+- Affected files: `internal/vlog/vlog.go`, `internal/event/journal_sink.go`,
+  `internal/journal/record.go`, `internal/app/app.go`
+
+`vlog.Journal` stamps the envelope from `defaultLog` (`vlog.go:530-536`), but a
+driven App (script, headless bot, harness) ticks its own `vlog.NewLog` handle
+(`internal/app/app.go:205-211`). Every record of a `-script -j` or
+`-bot -headless -j` journal carries the process default's `run` and `tick`, normally
+0 and 0, beside correct `jrun` and `jtick` (reproduced). `vif-log` reads only the
+envelope (`tool/vif-log/internal/logfile/scan.go:292-295`), so its tick column and
+filters misplace such a journal. Stamp the envelope from the record's `jrun` and
+`jtick`, or give `event.VlogSink` the App's `*Log`.
+
+### Decide whether a reset clears every instance's macros
+
+- Priority: P0, to review
+- Affected files: `internal/mode/commands.go`, `internal/mode/router.go`,
+  `internal/system/meta.go`, `doc/input-and-modes.md`, `doc/runtime.md`
+
+Only a command that replaces the run sets `MacroClearFlag` (`commands.go:366`,
+`:391`, `:1021`, `:1044`, `config_form.go:74`, `:108`), and the router clears that
+instance's registers and playback on its next intent (`router.go:159-164`). A
+coordinator's `:new` resets every participant, but each peer's macros keep playing
+into the new game, and a reset the FSM raises (the default scenario's defeat) clears
+none. [Input and modes](input-and-modes.md) §6 and §9 state the issuer-only rule;
+[Runtime](runtime.md) §10 says both reset forms clear macros and names no instance.
+Options: keep the rule and name the issuer in Runtime §10; set the flag in
+`MetaSystem.handleGameReset` (`meta.go:384`), which already resets mode and captured
+keys everywhere; or keep registers across a plain `:new` and stop only playback.
+
+### Decide what `:new!` sets free mouse, auto-fire and rate to
+
+- Priority: P0, to review
+- Affected files: `internal/engine/game_context.go`, `internal/help/topics.go`,
+  `internal/parameter/gameplay.go`, `internal/app/app.go`, `doc/input-and-modes.md`,
+  `doc/runtime.md`, `doc/telemetry-reference.md`, `doc/term-index.md`
+
+`ResetSessionState` says it restores every operator toggle to its startup value
+(`game_context.go:535`) but stores free mouse off, auto-fire off and 1x
+(`:538-543`). A run starts with free mouse on (`parameter.DefaultMouseFreeMode`),
+auto-fire on both weapons (`:285-286`) and the `-speed` rate
+(`internal/app/app.go:392-395`); [Input and modes](input-and-modes.md) §9,
+[Runtime](runtime.md) §10 and the `:new!` help line (`topics.go:161`) follow the
+code. Options: keep turning them off and correct the comment; or restore the
+startup values, with an auto-fire default in `internal/parameter` and the `-speed`
+rate kept on the context.
+
+### Decide what the session identity is called
+
+- Priority: P0, to review
+- Affected files: `internal/network`, `internal/engine`, `internal/event`,
+  `internal/journal/read.go`, `internal/app`, `internal/converge`,
+  `internal/system/network.go`, `internal/bot/bot.go`, `doc/multi-player.md`,
+  `doc/domain-design.md`, `doc/logging-and-diagnostics.md`, `doc/term-index.md`
+
+[Domain design](domain-design.md) §1 defines a participant as a peer bound to a
+cursor, but about two dozen identifiers and some 250 uses call the identity every
+peer holds, `1..MaxPlayers+1`, a participant: `network.Config.ParticipantID`,
+`NetworkResource.ParticipantID`, `World.LocalParticipant`, `CoordinatorParticipant`,
+`hostParticipantID`, `participantSlots`. Seven names use the cursor sense, among them
+`SessionOffer.ParticipantCount`, `app.Config.Participants` and `remoteParticipants`.
+The senses clash around a dedicated host's cursorless coordinator: `Validate` refuses
+"more than one cursorless participant" (`network/session.go:169,189`), a `:session`
+line reads "peer 2 … following participant 1" (`app/host.go:455`,
+`converge/authority.go:908`), a successor sends `EventParticipantDeparted` with
+`NoPlayerSlot` (`app/session.go:563-574`), and four log records
+(`converge/authority.go:190`, `:248`, `app/seat.go:208`, `:221`) key the identity
+`participant` where [Logging and diagnostics](logging-and-diagnostics.md) asks for
+`peer`. Renaming the event names, the payload key `participant`
+(`event/payload.go:134,145,158`), the offer's `participants` or the journal
+capture's `participant` bumps `ProtocolVersion` and `JournalSchema`, and older
+journals stop replaying; every other name is local. Options:
+
+- Rename the identity in code and docs, local names only or the format keys too,
+  building on `network.PeerID`, which already holds the same number.
+- Keep participant as the code name for the identity every peer holds, the
+  coordinator included, as [Multi-player](multi-player.md) §1 already defines it,
+  define it there only, say that participant counts mean cursors, and change the
+  four log keys to `peer`.
+
+Either way, `CoordinatorParticipant` (`engine/world.go:484`), renamed or not, becomes
+the one constant for identity 1 and replaces `hostParticipantID` and the literals in
+`NewNetworkResource` (`engine/resource.go:1102-1103`).
+
+### Refuse a parent cycle at load
+
+- Priority: P0, to review
+- Affected files: `internal/fsm/builder.go`, `internal/fsm/loader.go`
+
+`CompilePaths` walks each state's parents without a bound (`builder.go:39-51`), and
+the loader checks only that a parent name exists (`loader.go:113`). With
+`A.parent = "B"` and `B.parent = "A"`, or a self parent, the walk never ends and its
+path grows until memory runs out (reproduced), so `-check`, startup and `:bot add`
+(under the world lock) hang. Stop the walk once it passes the node count and return
+an error naming the state.
+
+### Fail a document without `[states]` instead of panicking
+
+- Priority: P0, to review
+- Affected files: `internal/fsm/loader.go`
+
+`LoadScenarioFromMap` writes `config.States["Root"]` (`loader.go:65-67`), and
+`toml.Decode` leaves that map nil when the document has no `[states]`. The file
+loader always adds one (`file_loader.go:103-105`), but `Machine.LoadScenario` and
+`bot.ParseGraph` (through `Graph.machine`, `internal/bot/bot.go:108`) do not, so a
+bot graph with only `[regions]` panics `-check`, `-bot` and `:bot add` (reproduced).
+Make `config.States` when it is nil.
+
+### Let an on_exit terminate its own region, or forbid it
+
+- Priority: P0, to review
+- Affected files: `internal/fsm/machine.go`, `doc/fsm-reference.md`
+
+`TerminateRegion` runs the region's on_exit actions (`machine.go:623-628`) before
+deleting it (`:630`), so an on_exit that terminates its own region reruns itself
+until the stack overflows, whether the exit comes from a transition,
+`TerminateRegion` or `Reset` (`:471-484`; all three reproduced). The Notes of the
+[FSM reference](fsm-reference.md) call it supported; shipped scenarios terminate only
+from on_enter. Options: honour it (a nested call only marks the exiting region, and
+the outer exit deletes it and skips any enter phase); or forbid it
+(`TerminateRegion` returns an error for an exiting region, and the reference says so).
+
+### Let a macro run an ex command, or leave it out of the recording
+
+- Priority: P0, to review
+- Affected files: `internal/mode/router.go`, `internal/mode/macro.go`,
+  `doc/input-and-modes.md`
+
+A recording keeps every intent (`router.go:199-201`), so `qa:auto off<Enter>q`
+stores the `:`, the characters and the confirm. Played back, `:` opens the command
+line (`:626-631`) and Command mode suspends playback (`:1074-1076`, `:1254-1262`):
+the line waits empty, and after Escape the rest plays in Normal mode and does nothing
+(reproduced), though [Input and modes](input-and-modes.md) §6 says macros replay
+commands. Options: record a confirmed command as one step that playback runs through
+`ExecuteCommand`, settling whether `:q` and `:n` may run from a macro; or keep
+Command-mode intents out of a recording and say so in §6.
+
+### Delete search text by rune
+
+- Priority: P0, to review
+- Affected files: `internal/mode/router.go`
+
+Backspace in Search mode cuts one byte (`router.go:745`), though Search takes any
+rune (`internal/input/machine.go:662-682`). After `/é` and Backspace the pattern is
+`"\xc3"` (reproduced), which `PerformSearch` reads as U+FFFD (`search.go:16`) and
+never matches. Command mode (`router.go:747-754`) and the overlay filter
+(`:757-760`) already cut a rune; Search should too.
+
+### Decide which control keys work in an overlay
+
+- Priority: P0, to review
+- Affected files: `internal/input/machine.go`, `internal/asset/input/keymap.toml`,
+  `internal/help/topics.go`, `doc/input-and-modes.md`
+
+`processOverlay` (`internal/input/machine.go:708-723`) reads only the overlay tables:
+it lacks the Ctrl-Space stop the other modes handle (`:220`, `:627`, `:666`, `:689`),
+and `[overlay_keys]` (`keymap.toml:123-134`) binds no `ctrl_q`, `ctrl_c` or
+`ctrl_s`. In help, telemetry or the configuration menu these keys do nothing, yet
+while the telemetry filter is typed, which edits in Search mode
+(`internal/mode/overlay.go:98-105`), they quit, mute and stop, and the help says
+Ctrl+Space works "from any mode" (`topics.go:125`). Options: bind the three keys,
+add the Ctrl-Space branch and update [Input and modes](input-and-modes.md) §4 and
+§6, which say overlay navigation ignores these keys; or keep overlays navigation-only
+and correct the help line.
+
+### Drop or wire the unreachable macro stop-one path
+
+- Priority: P0, to review
+- Affected files: `internal/input/machine.go`, `internal/input/intent.go`,
+  `internal/input/strings_gen.go`, `internal/mode/router.go`,
+  `internal/help/topics.go`, `doc/input-and-modes.md`
+
+Nothing calls `processMacroStopAwait` (`internal/input/machine.go:579-605`; the state
+switch at `:231-252` never reaches it), so `IntentMacroStopOne` (`intent.go:42`) and
+`Router.handleMacroStopOne` (`router.go:1238-1242`) never run. `q` on a playing
+register opens record-await instead (`router.go:184-195`), and recording stops and
+empties it (`:1191-1205`, `macro.go:62-69`), so stopping one register costs its
+contents. Delete the dead path, or give stop-one a sequence that keeps the register.
+`IntentMacroRecordStop` (`intent.go:38`) is never emitted either: `q` while recording
+stops in the router's `IntentMacroRecordToggle` branch (`router.go:184-190`), so
+`handleMacroRecordStop` (`:1207-1212`) is dead the same way.
+
+### Drop `CommandResult.KeepPaused`
+
+- Priority: P0, to review
+- Affected files: `internal/mode/commands.go`, `internal/mode/config_menu.go`,
+  `internal/mode/router.go`
+
+`KeepPaused` (`commands.go:28`) is set 88 times across `commands.go` and
+`config_menu.go` and read nowhere: the router unpauses before every command
+(`router.go:787-791`), and a command that wants the pause requests it again
+(`commands.go:980`, `config_menu.go:245`). Delete the field, its assignments and the
+comment at `router.go:790`.
+
+### Decide whether loads refuse unknown keys and `op` values
+
+- Priority: P0, to review
+- Affected files: `internal/fsm/loader.go`, `internal/fsm/std/guard.go`,
+  `internal/fsm/std/payload.go`, `internal/resource/check.go`, `doc/fsm-reference.md`
+
+The scenario and bot-graph decode (`loader.go:33`) drops keys outside
+`ScenarioDoc`'s tags, so a misspelt `on_entr` loads as absent and `-check` is silent.
+`CompareInt` reads an omitted or unknown `op` as `eq` (`guard.go:232-250`), unchecked
+by the guard factories, while `:d break stat` spells `ne`, `ge`, `le`
+(`internal/mode/commands.go:843-850`), so `op = "ge"` tests equality (reproduced).
+Options: keep this and have `-check` report both; or refuse at load, with the strict
+`Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
+bot graph use only known keys and ops.
+
+### Decide what the cornering threshold gates
+
+- Priority: P0, to review
+- Affected files: `internal/parameter/navigation.go`, `pkg/vmath/physics/steering.go`
+
+`NavCorneringThreshold` is 3.0 (`internal/parameter/navigation.go:21`), but
+`TurnSeverity` compares it with a cosine (`pkg/vmath/physics/steering.go:44-48`), so
+it never gates: above 1 cell/s every drain, swarm, quasar, eye and loot that steers
+(`drain.go:1061`, `swarm.go:699`, `quasar.go:475`, `eye.go:419`, `loot.go:235`, all in
+`internal/system`) brakes at `NavCorneringBrake` × (3 − cos θ), a drain at twice that,
+even heading straight at its target. Options: keep that motion and name it, a constant
+drag plus a turn term; or make the threshold a real cosine and retune. At 0.7
+`internal/system` passes, but eleven `internal/app` tests whose scripted runs depend
+on today's motion fail.
+
+### Put the route bandit's floor and scout rate in parameter
+
+- Priority: P0, to review
+- Affected files: `internal/parameter/adaptation.go`, `internal/system/adaptation.go`
+
+`parameter.RouteMinWeight` (0.05, `internal/parameter/adaptation.go:16`) is
+referenced nowhere; `applyEXP3` floors at an inline `minWeight := 0.005`
+(`internal/system/adaptation.go:487`), the 0.5% that
+[AI, physics and evolution](ai-physics-and-evolution.md) §6 documents. The 10% scout
+rate (`:537`) and the corridor recovery radius 5 (`:350`) are inline too, while the
+genetic scout rate is `parameter.GAScoutRate`. Set `RouteMinWeight` to 0.005 and use
+it, and add the other two beside it; adopting 0.05 instead would retune route
+exploration.
+
+### Move the inline simulation and render tunables into parameter
+
+- Priority: P0, to review
+- Affected files: `internal/engine/position.go`, `internal/profile/homing.go`,
+  `internal/system/genetic.go`, `internal/component/kraken.go`,
+  `internal/system/weapon.go`, `internal/render/renderer/flow_debug.go`,
+  `internal/parameter`, `internal/parameter/visual`, `pkg/vmath`
+
+[Development](development.md) §11 puts tunables in `internal/parameter` or
+`internal/parameter/visual`, never inline. Still inline: the spiral search's default
+radius 20 (`internal/engine/position.go:522`, eight callers); the quasar, snake and
+missile arrival and dead-zone values (`internal/profile/homing.go:27-29,37-39,58-60`;
+loot's are in `parameter`); the type-fitness EMA rate
+(`internal/system/genetic.go:412`); the tentacle factors that shape the Kraken's
+hitbox (`internal/component/kraken.go:41-66`); the gun's lane table
+(`internal/system/weapon.go:1346`); and the flow-field debug colours
+(`internal/render/renderer/flow_debug.go:83-205`). The 7/10 at `position.go:1085`
+approximates 1/√2, a `pkg/vmath` constant if named. Each move keeps its value.
+
+### Move the runtime cadences and bounds into parameter
+
+- Priority: P0, to review
+- Affected files: `internal/engine/sync_std.go`, `internal/app/play.go`,
+  `internal/app/serve.go`, `internal/event/journal.go`, `internal/engine/resource.go`,
+  `internal/resource/scenario.go`, `internal/resource/scenario_test.go`,
+  `internal/system/navigation.go`, `internal/engine/scheduler.go`,
+  `internal/app/play_test.go`, `internal/parameter`, `doc/logging-and-diagnostics.md`,
+  `doc/term-index.md`
+
+Wall-clock, cadence and capacity tunables sit beside their code: `LockHoldWarn`
+(`internal/engine/sync_std.go:15-24`), the replay pan step
+(`internal/app/play.go:22`), the server's report and lifecycle intervals
+(`internal/app/serve.go:16,23`), the journal anchor and digest cadences
+(`internal/event/journal.go:166,173`), the per-group target cap
+(`internal/engine/resource.go:670`) and the scenario size bounds
+(`internal/resource/scenario.go:34-36`). Their peers (`ProfWindow`, the camera
+margins, `NetworkDigestTicks`, `ContentMaxFiles`) live in `internal/parameter`.
+Moving them keeps every value; decide first whether a format bound such as the
+scenario limits counts as a tunable.
+
+### Name the FNV-1a constants in vmath and settle the golden seeds
+
+- Priority: P0, to review
+- Affected files: `pkg/vmath/rand.go`, `internal/manifest/fingerprint.go`,
+  `internal/snapshot/digest.go`, `pkg/audio/sound_render.go`,
+  `pkg/audio/sequencer.go`, `pkg/maze/generator.go`, `pkg/genetic/engine.go`,
+  `doc/package-map.md`
+
+The FNV-1a 64 offset and prime are written out in
+`internal/manifest/fingerprint.go:29-30`, `internal/snapshot/digest.go:16-17`,
+`pkg/audio/sound_render.go:439` and `pkg/vmath/rand.go:107-110`, and `pkg/vmath`
+names neither: export them there and use them in all four. `0x9E3779B97F4A7C15` is
+restated beside `vmath.Golden64` as seeds in `pkg/maze/generator.go:9` and
+`pkg/genetic/engine.go:11`, and as a stream in `pkg/audio/sequencer.go:74`.
+`pkg/audio` can import `vmath`; `pkg/maze` and core `pkg/genetic` are
+standard-library only ([Package map](package-map.md) §5). Options: those two keep a
+local seed as a stated exception, an arbitrary seed not being the SplitMix
+increment; or they import `pkg/vmath` and that coupling rule changes.
+
+### Decide whether a gateway's population ID selects anything
+
+- Priority: P0, to review
+- Affected files: `internal/engine/resource.go`, `internal/system/gateway.go`,
+  `internal/component/gateway.go`, `internal/event/payload.go`,
+  `internal/snapshot/capture.go`, `internal/engine/snapshot_world_gen.go`,
+  `pkg/genetic/registry`
+
+A gateway's `population_id` (`internal/event/payload.go:1318`) is stored in
+`GatewayComponent.PopulationID` (`internal/component/gateway.go:19`), carried in the
+capture and passed to `GeneticResource.Sample` and `SampleScout`
+(`internal/system/gateway.go:264-266`), which ignore it
+(`internal/engine/resource.go:867`); the registry keeps one population per species
+and no scenario sets the key. Options: drop the parameter, field and key (a capture
+schema bump); or give the registry per-island populations for it to select.
+
+### Give walls a write mask so pause dims them
+
+- Priority: P0, to review
+- Affected files: `internal/render/renderer/wall.go`,
+  `internal/parameter/visual/mask.go`, `doc/rendering.md`, `doc/term-index.md`
+
+`WallRenderer.Render` never calls `SetWriteMask`
+(`internal/render/renderer/wall.go:35-61`), so walls take the previous layer's mask:
+`MaskPing` when the crosshair or grid drew this frame (`ping.go:46`), else
+`MaskNone` from `Clear` (`internal/render/buffer.go:97`). Pause dim (`DimMask`,
+`internal/parameter/visual/post_process.go:24`) therefore skips walls unless ping is
+showing (reproduced). Add a wall mask bit (`0x80` is free) and set it in `Render`, or
+set `MaskNone` explicitly if walls are meant to stay bright.
+
+### Read `_duration` keys as nanoseconds in the overlay
+
+- Priority: P0, to review
+- Affected files: `internal/status/format.go`
+
+`status.IntUnit` matches `.duration` as a suffix (`internal/status/format.go:17`,
+commented "also matches .max_duration"), but `fsm.max_duration` and
+`fsm.<region>.max_duration` end in `_duration`, so the telemetry overlay and pinned
+cards show their nanoseconds as plain counts, against the units table in
+[Logging and diagnostics](logging-and-diagnostics.md) §6. The status bar converts
+the summary itself, and vif-log's `DurationUnit` already matches the `_duration`
+segment. Match the trailing `.` or `_` segment as vif-log does, or add `_duration`
+to `intUnits`; either way correct the comment at `format.go:17`.
+
+### Share the scope parser with the novlog build
+
+- Priority: P0, to review
+- Affected files: `internal/vlog/stub.go`, `internal/vlog/scope.go`
+
+In a `wasm` or `novlog` build `ParseScopes` returns `cur, nil` for any spec
+(`internal/vlog/stub.go:110-111`), under a comment saying CLI parsing behaves
+identically, so a malformed `-ls` or `:log scope` passes there and fails in a
+logging build (`internal/vlog/scope.go:130-163`). `Scope`, its constants and the
+parser need only `fmt` and `strings`: move them to an untagged file that both builds
+share, or keep the stub and correct its comment.
+
+### Name the journal's capture, digest and end records in vif-log
+
+- Priority: P0, to review
+- Affected files: `tool/vif-log/internal/logfile/schema.go`,
+  `tool/vif-log/internal/logfile/schema_test.go`, `tool/vif-log/README.md`
+
+`SyntheticMsg` and `syntheticMsgTok`
+(`tool/vif-log/internal/logfile/schema.go:142-159`) name only the `anchor` sub, on
+the comment that it is the only record without msg, type or ev, but the journal
+sink's `capture`, `digest` and `end` records carry none either
+(`internal/event/journal_sink.go:79-102`). vif-log shows them with an empty msg, as
+`tool/vif-log/README.md:25` documents, so a `msg:` filter cannot tell them apart.
+Synthesize theirs from the sub too, and correct the comment, that README line and
+`TestSyntheticMsgNamesOnlyTheAnchor`. `KnownSubs` (`schema.go:170-177`) is
+referenced nowhere and lacks those subs and `net`, `session`, `admit` and
+`converge`; delete it.
+
+### Delete the dead diagnostics entry points
+
+- Priority: P0, to review
+- Affected files: `internal/status/recorder.go`, `internal/vlog/stream.go`,
+  `doc/term-index.md`
+
+The package-level `status.TriggerFSM` (`internal/status/recorder.go:48-56`) has no
+caller (the scheduler uses the `Registry` method,
+`internal/engine/scheduler.go:468`), and neither have `vlog.OpenStream` and
+`vlog.Stream` (`internal/vlog/stream.go`). Delete them, and `vlog.Stream` from the
+term index's **stream** entry. The package-level `status.RecorderActive`
+(`recorder.go:68`) serves only `internal/app/play_test.go:451`, which checks the
+crash path's process-wide recorder; it stays while that assertion does.
+
+### Drop `swarm.player_kills`
+
+- Priority: P0, to review
+- Affected files: `internal/system/swarm.go`, `doc/telemetry-reference.md`
+
+`SwarmSystem` adds to `swarm.player_kills` (`internal/system/swarm.go:107-110`) on
+the same `ResolveCursor` test with which `lifecycle.RecordKill`, one line earlier,
+adds to `swarm.killed_by_player` (`internal/system/telemetry.go:102-108`), so the two
+always agree, and the duplicate is one of the swarm card's 12 entries, of the 15 a
+card may hold (`parameter.OverlayCardMaxEntries`). Remove the counter, its field,
+its key note in the [Telemetry reference](telemetry-reference.md) and its key in
+that page's Swarm row.
+
+### Drop navigation's two unhandled cursor subscriptions
+
+- Priority: P0, to review
+- Affected files: `internal/system/navigation.go`
+
+`NavigationSystem.EventTypes` subscribes `EventCursorMoved` and
+`EventCursorDespawned` (`internal/system/navigation.go:133-134`), but `HandleEvent`
+(`:145-214`) has no case for either, and nothing is missed: `Update` rebuilds group
+0 from the roster every tick (`resolveGroupTargets`, `:323`). Every cursor move is
+still dispatched to a handler that drops it. Remove the two entries.
+
+### Check float telemetry in the reset test
+
+- Priority: P0, to review
+- Affected files: `internal/app/telemetry_test.go`
+
+`persistentTelemetryKey` lists `glyph.density` and `glyph.rate_mult` under `string`
+(`internal/app/telemetry_test.go:109`), but they are floats
+(`internal/system/glyph.go:99-100`), and `TestTelemetrySessionCountersReset` never
+ranges floats, so the entries match nothing and no float is checked across a reset.
+A float pass against the post-reset baseline passes today with the `proc.` prefix
+exemption alone (tried in a scratch test), since the glyph pair resets. Add the float
+pass and delete the two entries.
+
+### Cite D-2 in the snapshot carrier test's failure
+
+- Priority: P0, to review
+- Affected files: `internal/manifest/snapshot_declaration_test.go`
+
+`TestSnapshotCarriersAreSharedOrDual` explains itself through D-2 and D-6
+(`internal/manifest/snapshot_declaration_test.go:86-89`), but its failure message
+cites D-1 and D-6 (`:97`). D-1 governs which domain may read what; D-2 is the rule
+that remote Player-domain state does not exist locally, which is why a capture cannot
+carry it. Cite D-2 in the message.
+
+### Confine a scenario's wall image path to the roots
+
+- Priority: P0, to review
+- Affected files: `internal/service/adapter_file.go`, `pkg/ascimage/dual.go`
+
+`FileService.Open` opens a wall image path as given, cwd-relative or absolute,
+before its escape check and the roots (`internal/service/adapter_file.go:51-58`),
+and refuses only directories (`:86`). So `./test.vifimg` shadows the roots' copy,
+against [Packaging](packaging.md) §1, and a scenario a coordinator serves a joiner
+(`internal/app/session.go:450`) can open `../` paths or `/dev/zero`, which
+`pkg/ascimage/dual.go:421` reads without bound (all three reproduced). Resolve only
+through the roots and require a regular file; decide whether absolute paths stay,
+or stay only for a scenario this run resolved itself.
+
+### Read vif.toml in soundlab
+
+- Priority: P0, to review
+- Affected files: `cmd/soundlab/main.go`, `cmd/soundlab/session.go`
+
+soundlab resolves its audio overrides from its flags alone
+(`cmd/soundlab/main.go:38`, `cmd/soundlab/session.go:45-61`) and never reads
+`vif.toml`, while vif fills `-config-dir` from `[paths] root`
+(`cmd/vif/main.go:112-116,387`). With `root` set, vif reads an override under it
+first while soundlab opens and saves the user root's copy, so a save is not what the
+next run loads, though `cmd/soundlab/README.md:33` says it is; `[audio] buffer_ms` is
+ignored too. Load the settings in soundlab and fill both as vif does.
+
+### Decide how sound includes reach the game
+
+- Priority: P0, to review
+- Affected files: `cmd/soundlab/session.go`, `internal/service/adapter_audio.go`,
+  `internal/resource/check_audio.go`, `pkg/audio/sound_load.go`
+
+soundlab loads a sounds document through `LoadSoundsFS`, keeps its `include` list,
+adopts the user override as clean and writes the list back on save
+(`cmd/soundlab/session.go:128,160-175,254`). The game hands that file to
+`LoadSoundsTOML` (`internal/service/adapter_audio.go:69`, `pkg/audio/engine.go:141`),
+which refuses any include (`pkg/audio/sound_load.go:23-25`), so play ignores the whole
+override and `-check` fails it (`internal/resource/check_audio.go:37`); soundlab
+prints that refusal only at start. Options: the audio service and `-check` resolve
+includes inside the file's directory as soundlab does; or soundlab flattens or
+refuses includes in a file the game reads.
+
+### Build the Makefile's release binaries without CGO
+
+- Priority: P0, to review
+- Affected files: `Makefile`, `doc/packaging.md`
+
+`release`, `headless` and `nolog` run `go build` without `CGO_ENABLED=0`
+(`Makefile:131-141`), so on a host with a C compiler `net` links cgo: a scratch build
+with those flags is dynamically linked against glibc. [Packaging](packaging.md) §1
+promises no CGO, and §4 `depends=()` assumes a static binary; the release workflow,
+the Dockerfile and `make windows` already set the variable. Set `CGO_ENABLED=0` on
+the three recipes and in §4's `go build` line.
+
+### Keep code generation out of the build targets
+
+- Priority: P0, to review
+- Affected files: `Makefile`, `.github/workflows/release.yml`, `doc/development.md`
+
+The binary targets `release`, `headless`, `nolog`, `wasm` and `windows` depend on
+`generate` (`Makefile:121-151`), so a packager's `make release` reruns
+`gen-manifest`, which rewrites ten committed files
+(`internal/gen-manifest/main.go:169-182`), against [Packaging](packaging.md) §1: no
+`go generate` at package time. `.github/workflows/release.yml:45` also names
+`./internal/event`, which has no directive. Keep `generate` on `dev`, `test` and
+`verify` only, and drop `./internal/event` from the workflow.
+
+### Leave no empty stderr capture where redirection fails
+
+- Priority: P0, to review
+- Affected files: `internal/core/dev.go`
+
+`CaptureStderr` creates `vif-stderr-<stamp>.log` (`internal/core/dev.go:59-69`)
+before `dupFD` (`:71`) reports that the build cannot redirect, as every non-unix
+build does (`internal/core/redirect_other.go:9-10`); the error path closes both
+handles and keeps the file. Each `vif -dev` on Windows leaves an empty capture in the
+log directory beside "runtime capture disabled" (`cmd/vif/main.go:259-263`). Call
+`dupFD` before creating the file, or remove the file on that path.
+
+### Pass the image scenario's name and engine to make
+
+- Priority: P0, to review
+- Affected files: `script/test.sh`, `script/README.md`
+
+The `image` scenario passes only `IMAGE_TAG="${IMAGE#*:}"`
+(`script/test.sh:865-866`). An `IMAGE` set in the environment reaches make whole, so
+`IMAGE=reg/vif:x` builds `reg/vif:x:x` (`make -n image` shows it), and
+`reg:5000/vif:x` cuts at the wrong colon. Its check also passes a podman-only machine
+(`:863-864`), where `make image` runs `docker` (`Makefile:10`) unless the caller sets
+`CONTAINER_ENGINE=podman`, as `script/README.md:95` says. Pass `IMAGE` and `IMAGE_TAG`
+split at the last colon, and `CONTAINER_ENGINE`, when unset, set to the engine found.
+
+### Run maxmap under `all`, or list it apart
+
+- Priority: P0, to review
+- Affected files: `script/test.sh`, `script/README.md`
+
+`./script/test.sh list` files `maxmap` under "Automated (assert, and used by `all`)"
+and says `all` runs every automated scenario (`script/test.sh:155-170`), but the
+`all` loop leaves it out (`:871`), as `script/README.md:7,65` state. Options: add it
+to the loop, which holds a 500x250 `td` session for over 40 s, since its guest's
+6000-tick script outlasts `timeout 40` (`script/test.sh:672-674`); or list it outside
+the `all` set as `image` is.
+
+### Drop the fleet grants nothing uses
+
+- Priority: P0, to review
+- Affected files: `deploy/k3s/40-allocator-rbac.yaml`,
+  `deploy/k3s/20-networkpolicy.yaml`, `doc/kube-docker-deploy.md`
+
+The allocator Role grants `get` and `watch` on jobs, services, pods and
+endpointslices, and reads events (`deploy/k3s/40-allocator-rbac.yaml:24-52`), but the
+allocator only lists, creates and deletes (`tool/vif-allocator/kube.go:23-32`),
+against the header's "exactly the verbs it needs". `allow-operator-ports` admits a
+`logstream` port (`deploy/k3s/20-networkpolicy.yaml:62-63`) no container declares
+(`tool/vif-allocator/manifest.go:135-136`). Drop the unused verbs (the `can-i` check
+in [Fleet deploy](kube-docker-deploy.md) §16 then asks `list pods`); decide whether
+the allocator should log why a session ended from events or that rule goes, and
+whether `logstream` goes or a pod declares it.
+
+### Let update.sh check the objects on a fresh cluster
+
+- Priority: P0, to review
+- Affected files: `deploy/update.sh`
+
+`check_objects` runs `kubectl diff` on each object file before anything is applied
+and dies on an exit above 1 (`deploy/update.sh:66-76`). On a cluster without the
+`vif` namespace, where [Fleet deploy](kube-docker-deploy.md) §9 runs
+`./deploy/update.sh objects wad`, the server dry run of every namespaced object
+should be refused as namespace not found, so the first install stops before
+`apply_objects` (inferred, not tried on a cluster). When `kubectl get namespace vif`
+fails, report the objects pending, undiffed.
+
+### Decide fleet log retention against the Job deadline
+
+- Priority: P0, to review
+- Affected files: `deploy/guest/vif-fleet-log-cleanup.py`, `doc/kubernetes-fleet.md`,
+  `doc/kube-docker-deploy.md`, `deploy/guest/var-log-vif\x2dfleet.mount`,
+  `deploy/k3s/05-log-volume.yaml`
+
+The cleanup keeps every session file touched in the last five hours
+(`deploy/guest/vif-fleet-log-cleanup.py:14`), while a session Job ends within one
+(`deploy/k3s/30-session.yaml:25`), so the 256 MiB tmpfs mostly holds ended sessions.
+Ten sessions at the measured 3 KiB/s fill it in about 2.4 h, which
+[Kubernetes fleet](kubernetes-fleet.md) §6 says the cleanup carries, yet nothing is
+stale by then and the lines lost are live sessions'. Options: a stale age just over
+the deadline; five hours under a byte budget that removes ended sessions oldest
+first; or a tmpfs sized for five hours of a full fleet.
+
+### Ship the third-party licence notices
+
+- Priority: P0, to review
+- Affected files: `web/vendor/xterm-5.5`, `wad/content`, `Makefile`,
+  `.github/workflows/release.yml`
+
+None of the six files in `web/vendor/xterm-5.5/` carries xterm.js's copyright or MIT
+notice, which MIT requires in every copy, and the release's web archive copies `web/`
+with no licence file (`.github/workflows/release.yml:74-77`). The corpus files keep
+the Go Authors' header, which points to a LICENSE no install or archive carries
+(`Makefile:217,237` ship only vif's). Add xterm's LICENSE beside it and Go's in
+`wad/content/` (the loader reads only `.txt` and `.toml`,
+`internal/content/load.go:32-35`), and ship both, with vif's, in every archive.
+
 ## Feature development push
 
 Bots come before the Android host. They need no presentation refactor, build on
@@ -34,13 +702,15 @@ guest's bots join and play through its own link. What remains is under
 - Affected files: terminal-shaped input/cell/color values, `internal/app`, host
   entry points
 - Prerequisite: define the minimum visual contract
+- Guide: fleet item H4
 
 Target a minimally polished Android build within one month of development time.
-Move terminal-specific visual and input values behind positive renderer/host
-adapters, add a library entry point, and keep lifecycle, simulation, networking,
-and resource providers common. Touch input maps onto the semantic input bots
-already drive, and [Multi-platform](multi-platform.md) lists the terminal-shaped
-values that remain.
+`vif_headless` already leaves out the renderer and audio packages. Move the
+terminal-shaped key, color, cell and image values still in common packages behind
+positive renderer/host adapters, add a library entry point, and keep lifecycle,
+simulation, networking, resource providers and the simulation fingerprint common
+with clients. Touch input maps onto the semantic input bots already drive, and
+[Multi-platform](multi-platform.md) lists the terminal-shaped values that remain.
 
 ## Bots
 
@@ -361,6 +1031,18 @@ who would rather fetch a scenario than unpack one. What it needs before it is
 written is whose signature makes bytes trustworthy, which origins may serve them,
 and how long a fetched container is kept.
 
+### Let a browser tab leave and come back
+
+- Priority: P2
+- Affected files: `web/terminal.js`, `web/worker.js`, `internal/app/loop.go`,
+  `internal/lifecycle`
+- Guide: [Build profiles](multi-platform.md#a-hidden-tab), fleet item W1
+
+A hidden tab draws nothing and repaints once on return. What remains is a tab that
+leaves: one hidden or suspended for five minutes must cost the other players
+nothing and resume or rejoin on return, and a session whose last guest was a
+browser must end on its own grace.
+
 ## Packaging
 
 Distribution-specific detail lives in [Packaging](packaging.md).
@@ -419,6 +1101,19 @@ rejoining the same session downloads it again. Writing it under the user root
 behind an explicit opt-in would keep it, and needs a trust decision first: the
 bytes came from a peer, and nothing about a plaintext link says they are the
 operator's.
+
+### Promote verified images to the node
+
+- Priority: P2
+- Affected files: `deploy/guest/update-vif-image.sh`, `.github/workflows/release.yml`,
+  `deploy/k3s/30-session.yaml`, `tool/vif-allocator`
+- Guide: [Session fleet](kubernetes-fleet.md#3-work-list) §3, fleet item H16
+
+Nightly CI publishes the headless image to GHCR under moving and commit-addressed
+tags, and the node builds and imports its own. What remains is choosing the
+node's registry and promotion policy, authenticating pulls without a long-lived
+off-node deployment credential, and moving new sessions to a verified digest while
+existing ones finish on theirs.
 
 ## Multiplayer
 
@@ -842,3 +1537,14 @@ of 33 s on 4 cores: each drives a real socket against the shipped wall-clock
 deadlines (heartbeat loss, succession, join readiness), so none can share the
 machine. Test-only deadlines a fraction of the shipped ones, or the in-process mesh
 where a socket is not the rule under test, would cut them.
+
+### Fuzz the join handshake
+
+- Priority: P1
+- Affected files: `internal/network` (join and peer-link handshakes, admission)
+- Guide: [Session fleet](kubernetes-fleet.md#4-security-posture) §4, fleet item H1
+
+The game port is unauthenticated by decision and reachable from the Internet, and
+§4 lists what bounds a stranger on it. What it lacks is a fuzz target in
+`internal/network` for malformed, oversized, replayed and half-open handshakes,
+beside the frame and upgrade targets `pkg/websocket` already has.
