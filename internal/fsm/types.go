@@ -78,9 +78,10 @@ type Machine[T any] struct {
 	// reacts is the union of every node's trigger set, active or not
 	reacts triggerMask
 
-	// OnTransition observes committed state changes. Fires before the exit
-	// phase, so a transition record precedes the records its actions emit.
-	// trigger is EventNone for tick transitions. nil disables.
+	// OnTransition observes every transition; an internal one, or one to the
+	// current state, reports internal=true with from == to. Fires before any of its
+	// actions, so its record precedes theirs. trigger is EventNone for tick
+	// transitions. nil disables.
 	OnTransition func(region string, from, to StateID, trigger event.EventType, internal bool)
 
 	// OnRegion observes region lifecycle: init, spawn, terminate, pause,
@@ -131,7 +132,7 @@ type Action[T any] struct {
 }
 
 type DelayedAction[T any] struct {
-	Remaining time.Duration // Countdown decremented by dt (was TimeInState threshold)
+	Remaining time.Duration // Countdown decremented by dt while its region is unpaused
 	Owner     StateID       // Cleared when owner state exits
 	Action    Action[T]     // Carries the compiled ID used by capture restore
 }
@@ -143,7 +144,7 @@ type GuardFunc[T any] func(ctx T, region *RegionState, payload any) bool
 // ActionFunc executes a side effect
 type ActionFunc[T any] func(ctx T, args any)
 
-// GuardFactoryFunc creates a parameterized guard from JSON args
+// GuardFactoryFunc creates a parameterized guard from its config args
 // Used for configurable guards like StateTimeExceeds with duration parameter
 // Return errors (invalid args surface at load, not panic)
 type GuardFactoryFunc[T any] func(m *Machine[T], args map[string]any) (GuardFunc[T], error)

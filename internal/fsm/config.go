@@ -33,9 +33,9 @@ func (c *SystemsConfig) Enabled(name string) bool {
 type RegionConfig struct {
 	Initial         string   `toml:"initial"`
 	File            string   `toml:"file,omitempty"`             // External file path, relative to the entry's directory
-	Background      bool     `toml:"background,omitempty"`       // Excluded from telemetry
-	EnabledSystems  []string `toml:"enabled_systems,omitempty"`  // Systems to enable when region spawns or resumes
-	DisabledSystems []string `toml:"disabled_systems,omitempty"` // Systems to disable when region spawns or resumes
+	Background      bool     `toml:"background,omitempty"`       // Kept out of the foreground fsm.state summary, not fsm.<region>.*
+	EnabledSystems  []string `toml:"enabled_systems,omitempty"`  // Enabled on spawn and resume, reapplied while the region is active
+	DisabledSystems []string `toml:"disabled_systems,omitempty"` // Disabled on spawn and resume, reapplied while the region is active
 }
 
 // StateConfig represents a single state definition

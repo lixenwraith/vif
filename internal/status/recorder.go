@@ -28,9 +28,9 @@ const (
 	TrigBreak  = "break"
 )
 
-// active is the process-wide recorder, so triggers reach it from packages
-// holding no Registry reference: the update mutex, the stderr drain, the crash
-// hook. One registry exists per process.
+// active is the most recently enabled recorder, for the paths that hold no
+// Registry: the runtime-report drain and the crash flush. Each world owns a
+// registry, and anything holding one triggers through it.
 var active atomic.Pointer[Recorder]
 
 // Trigger requests a flush from any goroutine; the tick goroutine performs it

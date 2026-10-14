@@ -46,8 +46,8 @@ func worldHost() std.Host[*engine.World] {
 			})
 		},
 
-		// A system toggles only if it handles the command, which cursor, camera and
-		// network do not, so an only_systems list cannot strand them
+		// A system toggles only if it handles the command, which cursor, camera, meta
+		// and network do not, so an only_systems list cannot strand them
 		Systems: func(w *engine.World) []string {
 			var names []string
 			for _, sys := range w.Systems() {

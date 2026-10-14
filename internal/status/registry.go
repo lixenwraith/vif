@@ -109,9 +109,10 @@ func (r *Registry) TotalCount() int {
 	return r.Bools.Count() + r.Ints.Count() + r.Floats.Count() + r.Strings.Count()
 }
 
-// Freeze closes the metric set and caches the group index. Called once from
-// Scheduler.Start, after World.Seal and before the first tick: every
-// system and renderer has registered by then and nothing registers later.
+// Freeze closes the metric set and caches the group index. Called from
+// Scheduler.Prepare (Start, RunTicks, and driven and scripted Apps), after
+// World.Seal and before the first tick: every system and renderer has registered
+// by then and nothing registers later.
 func (r *Registry) Freeze() {
 	r.idxMu.Lock()
 	defer r.idxMu.Unlock()
@@ -151,7 +152,8 @@ func (r *Registry) lateCount() int64 {
 }
 
 // EnableRecorder installs a flight recorder of the given tick depth; 0 removes
-// it. Call before Freeze so the ring is laid out with the final metric set.
+// it. Before Freeze the ring is laid out when the set closes; after it (:log rec N)
+// it binds to the frozen set at once.
 func (r *Registry) EnableRecorder(depth int) {
 	if depth <= 0 {
 		// Release the process-wide hook only if this registry still owns it

@@ -6,21 +6,11 @@ import (
 	"time"
 )
 
-// MachineState is the FSM runtime's transfer contract (D-19).
-//
-// The state graph is immutable configuration and travels with the build, so a
-// capture carries only what a run has reached: which state each region is in, how
-// long it has been there, the variables guards read, and the delayed actions
-// still pending. The multiplayer plan's hidden-state survey called this
-// "straightforward, and small", and it is — but omitting it makes an installed
-// world enter its next timed transition on a different tick than the run it
-// reproduces, which is a divergence no component store shows.
-//
-// States and regions are named by string, never by StateID. IDs are assigned by
-// sorting the configuration's state names at load, so they are stable for one
-// configuration and meaningless across a changed one; a name that no longer
-// resolves is an error the receiver can report rather than a silent landing in
-// whichever state now holds that number.
+// MachineState is the FSM runtime's transfer contract (D-19): each region's state,
+// dwell and pause flag, the variables and the pending delayed actions; the graph
+// travels with the build. States and regions travel by name, never StateID, which
+// comes from sorting one configuration's names, so a name a changed configuration
+// lacks is an import error rather than a silent landing in another state.
 type MachineState struct {
 	Regions   []RegionSnapshot   `json:"regions"`
 	Variables []VariableSnapshot `json:"variables"`
