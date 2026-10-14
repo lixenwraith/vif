@@ -56,8 +56,9 @@ A bot belongs to the run that started it, its holder.
 - After a hand-off, a holder that inherited authority admits new bots on a
   loopback listener of its own; a guest keeps seating bots through whoever holds
   authority.
-- A seated bot never advertises, so it is never elected. A watched or headless bot
-  is an independent participant and follows `-no-advertise` like any other.
+- A seated bot belongs to its holder, so it is never elected: succession
+  considers only independent participants. A watched or headless bot is one and
+  follows `-no-advertise` like any other.
 - `:bot drop <slot>` drops one of your bots; the host may drop any bot.
   `:player drop <slot>` (host only) drops a player with all its bots, or one bot.
 - A dropped person starts a new local game without its bots; a dropped watched or
@@ -298,7 +299,8 @@ one. Playback runs to the recorded end, quiet trailing ticks included, and shows
   reproduces a run, and only the front instance has one.
 - Graph state is in no capture: a correction or a reset reaches a graph only
   through the world it reads next.
-- A guest's bot is judged for lateness only through its holder's link.
+- A guest's bot has no link of its own, so it shows no throughput and is not
+  evicted as slow; what it sends counts against its holder's ingress budget.
 - Links are unauthenticated, and every participant needs the same build.
 
 ## Troubleshooting

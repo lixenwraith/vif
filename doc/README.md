@@ -1,10 +1,10 @@
 # vif Engineering Documentation
 
 This directory describes the architecture and design of the current vif
-codebase. It was last audited on 2026-10-14, when every document, the package doc
-comments and the READMEs under pkg/, script/ and tool/ were checked claim by claim
-against the code. The implementation, generated manifest and shipped configuration
-are authoritative where prose disagrees with them.
+codebase. It was last audited on 2026-10-14, when every document but the two
+future designs, every README and the package doc comments were checked claim by
+claim against the code. The implementation, generated manifest and shipped
+configuration are authoritative where prose disagrees with them.
 
 vif is a terminal action game that combines vi-style text navigation,
 typing, shooting, data-driven encounters, adaptive species navigation, procedural

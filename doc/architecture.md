@@ -167,9 +167,10 @@ because it is already held by the application and is non-reentrant.
 
 Reset also has an explicit ownership split. Simulation entities/resources/FSM
 state are rebuilt. Operator-owned free-mouse/auto-fire preferences, time scale,
-and telemetry HUD/pins survive plain `:new`; `:new!` purges them. Replay comparison
-drops that session record plus the exact observer-only keys in
-`internal/snapshot/surface.go` rather than treating whole metric groups as noise.
+telemetry HUD/pins and standing breakpoints survive plain `:new`; `:new!` purges
+them. Replay comparison drops that session record plus the exact observer-only
+keys in `internal/snapshot/surface.go` rather than treating whole metric groups as
+noise.
 
 ## 5. Data-oriented ECS
 
@@ -390,9 +391,11 @@ nothing proves who the peer is. The artifact barrier exchanges crossings without
 a synchronous per-tick round trip, and because every artifact names the absolute
 tick it applies at, the authority commits each one and relays it, so a participant
 reaches instances its producer never linked to. A participant stamps its own
-crossings with the lead its own link asks for, and every instance applies each at
-the tick the authority committed it to; the D-18 prediction is what makes local
-input feel local. See [Multiplayer](multi-player.md) §3.5.
+crossings with the lead its own link asks for and applies each at that tick; every
+other instance applies it at the tick the authority committed it to, which for one
+that missed its lead is later, or never when it is too late to commit, and the
+next correction repairs the producer's early copy. The D-18 prediction is what
+makes local input feel local. See [Multiplayer](multi-player.md) §3.5 and §8.
 
 A participant may also arrive at any tick. `:host <addr>` opens a run that is
 already playing; the joiner receives the shared world as a chunked capture (D-19),

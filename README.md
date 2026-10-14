@@ -26,7 +26,7 @@ configuration, audio policy, and reusable simulation libraries.
   counts, motions, delete operators, find/search repeat, undo, and concurrent
   recorded macros.
 - A typed sparse-set ECS, fixed-step scheduler, bounded event settling,
-  spatial grid, composite actors, FSM-owned player cursors, and a single
+  spatial grid, composite actors, event-driven player cursors, and a single
   explicit world-lock boundary.
 - Five runtime shapes: interactive play, a dedicated host with no terminal and no
   cursor of its own, deterministic headless runs driven by a caller, a script or a
@@ -179,10 +179,10 @@ settings explain why. Rebind the `config_menu` action in the keymap.
 - `-authority host|migrate` decides where authorship goes when the participant
   holding it leaves — default `host` with `-serve`, `migrate` otherwise. In a
   migrate session every guest also binds a port so the session can reach it after a
-  handoff: `-listen <addr>` pins one, the default is the host's own port falling
-  back to an OS-assigned one, and `-no-advertise` keeps this participant out of the
-  address map: it plays normally and is elected only when no participant that
-  advertised survives.
+  handoff: `-listen <addr>` names one and the default is the host's own port, either
+  falling back to an OS-assigned one when it is taken, and `-no-advertise` keeps
+  this participant out of the address map: it plays normally and is elected only
+  when no participant that advertised survives.
 - `-serve <bind-address>` runs a dedicated host: no terminal, no renderer, no
   audio and no cursor of its own. It starts on its first guest and admits the rest
   as they arrive, where `-players <n>` is a ceiling rather than a requirement.

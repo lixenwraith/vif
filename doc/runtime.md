@@ -61,13 +61,15 @@ Four ways to be in a session, which differ in less than the flag names suggest:
 | `:host <addr> [host\|migrate]` | yes | yes | yes | none — the session opens at the tick it is running | the word given, else the run's |
 | `-join <addr>` | in a migrate session, one of its own | yes | yes | waits for the host's start gate | adopted from the offer |
 
-The guest's port is what makes migration mean anything: it is dialled back once to
-confirm it, published to the other participants, and used only after a handoff.
-`-listen <addr>` pins it, the default is the host's own port falling back to an
-OS-assigned one, and `-no-advertise` — or a bind that fails, or an `-authority
-host` session — leaves the participant a leaf that plays normally and, in a
-migrate session, is elected only when the chain names no survivor. See
-[Multiplayer](multi-player.md) §5.3.
+The guest's port is what makes migration mean anything. The coordinator completes
+the declared address from the connection it arrived on and publishes it,
+unconfirmed, in the succession chain; every participant but a seated bot keeps a
+link open to the current successor, so the instance that has to author already has
+one at a handoff. `-listen <addr>` names the port and the default is the host's
+own, either falling back to an OS-assigned one when it is taken; `-no-advertise` —
+or a bind that fails, or an `-authority host` session — leaves the participant a
+leaf that plays normally and, in a migrate session, is elected only when the chain
+names no survivor. See [Multiplayer](multi-player.md) §5.3.
 
 Everything else about the session is one implementation. `-players` is a ceiling
 on every host and unset means the whole roster; the mid-run gate is
@@ -251,8 +253,8 @@ It also outlives its own authority, and that is why `-serve` defaults to
 allocator handed out and what every guest holds, so if the process goes, the answer
 is an orchestrator putting another one at that address and the guests dialling back
 — not a guest declaring itself the host. This is policy, not a limit:
-a migrate session's guests are dialable and its successor is one the session
-confirmed it could reach ([Multiplayer](multi-player.md) §5.3), and
+a migrate session's guests declare ports and its successor is the first surviving
+member of the published chain ([Multiplayer](multi-player.md) §5.1, §5.3), and
 `-serve` still pins authorship because the address it was allocated at is the
 session's identity.
 
@@ -687,9 +689,11 @@ a capture still does not carry is a queued event: one pushed after that settle
 (the session layer's records, an install's re-derivations, a breakpoint's
 pause) or one a settle stopped at its pass cap left behind.
 
-Each completed event-settle group advances the journal `boundary` counter.
-This preserves distinctions between separately injected groups whose system
-events would be ordered differently if merged. See
+Each non-empty explicit settle group (input, wire, the between-tick event loop
+and an injected `Settle`) advances the journal `boundary` counter; a tick's own
+pre, post and close phases and a reset's settles are not groups. This preserves
+distinctions between separately injected groups whose system events would be
+ordered differently if merged. See
 [Logging and diagnostics](logging-and-diagnostics.md) for the complete journal
 stamp lattice.
 
