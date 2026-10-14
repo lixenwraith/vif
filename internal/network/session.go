@@ -162,8 +162,8 @@ func (o SessionOffer) Validate() error {
 		ids[p.ID] = true
 		// A cursorless participant holds no slot, so it collides with nobody. Only
 		// the coordinator may be one: every other participant is in the session to
-		// drive a cursor, and one that is not would take a vote and a roster entry
-		// while contributing nothing the roster describes.
+		// drive a cursor, and one that is not would take an identity and a roster
+		// entry while contributing nothing the roster describes.
 		if p.Slot == parameter.NoPlayerSlot {
 			if cursorless != 0 {
 				return errors.New("join offer carries more than one cursorless participant")

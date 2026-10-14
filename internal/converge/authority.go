@@ -506,11 +506,11 @@ func (u *Authority) restartRun(tick uint64) {
 	}
 }
 
-// trySucceed takes the term, when this instance is the one the succession names.
-// DesignatedSuccessor is a pure function of the roster, the chain and the
-// participant that went, so exactly one instance reaches the publish below and
-// reaches it as soon as it notices — a quorum round would add a trip a star cannot
-// complete. The one self-check is retention: without a baseline it stands down.
+// trySucceed takes the term when the succession names this instance. The successor
+// is a pure function of the roster, the chain and the participant that went, so at
+// most one instance publishes, as soon as it notices. A quorum would add a round
+// trip and elect nobody in a session of two, where one survivor is half the roster.
+// The one self-check is retention: without a baseline it stands down.
 func (u *Authority) trySucceed() {
 	roster := u.currentRoster()
 	u.mu.Lock()
